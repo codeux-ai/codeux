@@ -204,7 +204,7 @@ export const KnowledgePage: FunctionComponent = () => {
             type="button"
             onClick={() => setAddMode("upload")}
             disabled={!pid}
-            className="inline-flex items-center gap-2 rounded-full bg-signal-500 px-5 py-2.5 text-sm font-bold text-slate-900 shadow-lg shadow-signal-500/15 transition-all hover:scale-[1.03] hover:bg-signal-400 disabled:cursor-not-allowed disabled:opacity-50 dark:text-void-900"
+            className="inline-flex items-center gap-2 rounded-full bg-signal-500 px-5 py-2.5 text-sm font-bold text-white shadow-lg shadow-signal-500/15 transition-all hover:scale-[1.03] hover:bg-signal-400 disabled:cursor-not-allowed disabled:opacity-50 dark:text-void-900"
           >
             <Upload className="h-4 w-4" strokeWidth={2.5} />
             Upload
@@ -429,7 +429,7 @@ const KnowledgeSearchBox: FunctionComponent<{ projectId: string; agentPresets: A
           <option value="">Whole library</option>
           {agentPresets.map((preset) => <option key={preset.id} value={preset.id}>{preset.name}'s docs</option>)}
         </select>
-        <button type="button" onClick={run} disabled={searching || !query.trim()} className="inline-flex items-center gap-2 rounded-xl bg-signal-500/90 px-4 py-2.5 text-sm font-bold text-slate-900 hover:bg-signal-400 disabled:opacity-50 dark:text-void-900">
+        <button type="button" onClick={run} disabled={searching || !query.trim()} className="inline-flex items-center gap-2 rounded-xl bg-signal-500/90 px-4 py-2.5 text-sm font-bold text-white hover:bg-signal-400 disabled:opacity-50 dark:text-void-900">
           {searching ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" strokeWidth={2.5} />}
           Search
         </button>
@@ -521,7 +521,7 @@ const PasteModal: FunctionComponent<{ busy: boolean; onClose: () => void; onSubm
           type="button"
           disabled={busy || !title.trim() || !text.trim()}
           onClick={() => onSubmit(title.trim(), text)}
-          className="inline-flex items-center justify-center gap-2 rounded-xl bg-signal-500 px-4 py-2.5 text-sm font-bold text-slate-900 hover:bg-signal-400 disabled:opacity-50 dark:text-void-900"
+          className="inline-flex items-center justify-center gap-2 rounded-xl bg-signal-500 px-4 py-2.5 text-sm font-bold text-white hover:bg-signal-400 disabled:opacity-50 dark:text-void-900"
         >
           {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" strokeWidth={2.5} />}
           Add to library
@@ -551,7 +551,7 @@ const RepoPathModal: FunctionComponent<{ busy: boolean; onClose: () => void; onS
           type="button"
           disabled={busy || !repoPath.trim()}
           onClick={() => onSubmit(repoPath.trim())}
-          className="inline-flex items-center justify-center gap-2 rounded-xl bg-signal-500 px-4 py-2.5 text-sm font-bold text-slate-900 hover:bg-signal-400 disabled:opacity-50 dark:text-void-900"
+          className="inline-flex items-center justify-center gap-2 rounded-xl bg-signal-500 px-4 py-2.5 text-sm font-bold text-white hover:bg-signal-400 disabled:opacity-50 dark:text-void-900"
         >
           {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <FolderGit2 className="h-4 w-4" strokeWidth={2.4} />}
           Ingest
@@ -640,7 +640,7 @@ const ProjectKnowledgeModal: FunctionComponent<{
                 onClick={() => toggle(doc.id)}
                 className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors ${checked ? "bg-signal-500/[0.08]" : "hover:bg-white/60 dark:hover:bg-white/[0.04]"}`}
               >
-                <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-lg ${checked ? "bg-signal-500 text-slate-900 dark:text-void-900" : "bg-black/[0.05] text-slate-400 dark:bg-white/[0.06]"}`}>
+                <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-lg ${checked ? "bg-signal-500 text-white dark:text-void-900" : "bg-black/[0.05] text-slate-400 dark:bg-white/[0.06]"}`}>
                   {checked ? <Check className="h-3.5 w-3.5" strokeWidth={3} /> : <FileText className="h-3.5 w-3.5" />}
                 </span>
                 <span className="min-w-0 flex-1">
@@ -665,7 +665,7 @@ const ProjectKnowledgeModal: FunctionComponent<{
             type="button"
             disabled={busy || !sourceProjectId || selectedIds.size === 0}
             onClick={() => onSubmit(sourceProjectId, [...selectedIds])}
-            className="inline-flex items-center justify-center gap-2 rounded-xl bg-signal-500 px-4 py-2.5 text-sm font-bold text-slate-900 hover:bg-signal-400 disabled:opacity-50 dark:text-void-900"
+            className="inline-flex items-center justify-center gap-2 rounded-xl bg-signal-500 px-4 py-2.5 text-sm font-bold text-white hover:bg-signal-400 disabled:opacity-50 dark:text-void-900"
           >
             {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Copy className="h-4 w-4" strokeWidth={2.4} />}
             Import {selectedIds.size || ""}

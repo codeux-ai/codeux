@@ -1,6 +1,6 @@
 import { RefreshCw, Shapes, Palette } from "lucide-preact";
 import type { AgentAvatarConfig } from "../../types.js";
-import { useState, useEffect } from "preact/hooks";
+import { useState } from "preact/hooks";
 import {
   ROBOT_CHASSIS_OPTIONS,
   ROBOT_EYE_OPTIONS,
@@ -12,6 +12,7 @@ import {
   ROBOT_VISOR_COLOR_OPTIONS,
   generateRandomAgentAvatar,
 } from "../../lib/agent-avatar.js";
+import { INTERACTION_CSS_VARIABLES } from "../../lib/motion/tokens.js";
 
 interface AgentAvatarCustomizerProps {
   config: AgentAvatarConfig;
@@ -51,11 +52,18 @@ function PartPicker<T extends { id: string; label: string }>({
               aria-pressed={selected}
               className={`rounded-xl px-3 py-2 text-[11px] font-bold transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30 disabled:cursor-not-allowed disabled:opacity-50 ${
                 selected
-                  ? "bg-signal-500 text-void-900 shadow-[0_0_14px_rgba(0,224,160,0.25)]"
+                  ? "bg-signal-500 text-white dark:text-void-900 shadow-[0_0_14px_rgba(0,224,160,0.25)]"
                   : "border border-black/[0.06] bg-white/55 text-slate-500 hover:border-signal-500/30 hover:bg-signal-500/[0.08] hover:text-signal-600 dark:border-white/[0.07] dark:bg-white/[0.03] dark:text-slate-300 dark:hover:border-signal-500/30 dark:hover:text-signal-400"
               }`}
+              style={{
+                transitionDuration: INTERACTION_CSS_VARIABLES.selectionMovement.duration,
+                transitionTimingFunction: INTERACTION_CSS_VARIABLES.selectionMovement.ease,
+              }}
             >
               {opt.label}
+              <span className="ml-1 rounded-full border border-current/20 px-1 py-0.5 text-[8px] uppercase tracking-[0.12em]">
+                {selected ? "Selected" : "Option"}
+              </span>
             </button>
           );
         })}
@@ -102,6 +110,7 @@ function ColorSwatchPicker({
               onClick={() => onChange(opt.id)}
               title={opt.label}
               aria-label={opt.label}
+              aria-describedby={selected ? `${label}-${opt.id}-selected` : undefined}
               aria-pressed={selected}
               className={`group relative h-8 w-8 rounded-full shadow-sm transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30 disabled:cursor-not-allowed disabled:opacity-50 ${
                 selected
@@ -113,6 +122,11 @@ function ColorSwatchPicker({
               {selected && (
                 <span className="absolute inset-0 flex items-center justify-center text-[9px] font-black text-white drop-shadow-sm">
                   &#10003;
+                </span>
+              )}
+              {selected && (
+                <span id={`${label}-${opt.id}-selected`} className="sr-only">
+                  Selected {opt.label}
                 </span>
               )}
             </button>
@@ -180,15 +194,30 @@ export function AgentAvatarCustomizer({
         <button
           type="button"
           onClick={handleRandomize}
+          title={disabled ? "Avatar controls are disabled while saving" : "Randomize avatar appearance"}
           disabled={disabled}
           className="group/rnd inline-flex shrink-0 items-center gap-1.5 rounded-full border border-black/[0.06] bg-white/60 px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500 transition-colors hover:bg-signal-500/[0.1] hover:text-signal-600 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/[0.06] dark:bg-white/[0.04] dark:text-slate-400 dark:hover:text-signal-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30"
         >
           <RefreshCw className="h-3 w-3 transition-transform duration-500 group-hover/rnd:rotate-180" strokeWidth={2.4} />
           Randomize
         </button>
-        <span className="sr-only" aria-live="polite">
-          {isRandomizing ? "Avatar randomized" : ""}
-        </span>
+      </div>
+      <div
+        role="status"
+        aria-live="polite"
+        className={`min-h-[2rem] rounded-2xl border px-3 py-2 text-[11px] font-medium ${
+          disabled
+            ? "border-amber-400/20 bg-amber-400/[0.08] text-amber-700 dark:text-amber-300"
+            : isRandomizing
+              ? "border-status-green/20 bg-status-green/[0.08] text-status-green"
+              : "border-black/[0.05] bg-white/35 text-slate-500 dark:border-white/[0.05] dark:bg-white/[0.02] dark:text-slate-400"
+        }`}
+      >
+        {disabled
+          ? "Avatar controls are disabled while this agent is saving."
+          : isRandomizing
+            ? "Avatar randomized. Save Agent to keep it."
+            : "Selected parts are labeled and update the live portrait immediately."}
       </div>
 
       <CustomizerGroup icon={Shapes} title="Form">

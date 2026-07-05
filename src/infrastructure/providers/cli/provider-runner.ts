@@ -7,6 +7,7 @@ import type { McpConnectionInfo } from "../../../contracts/mcp-connection-types.
 import { CliProviderId, enabledCustomServersFor, isOpenCodeNativeSessionId, ProviderCommandSpec, providerSpecs } from "./provider-command-specs.js";
 import { CommandResult, runStreamingCommand } from "../../../services/cli-process-runner.js";
 import type { IDockerRunner } from "./docker-runner.js";
+import type { SnapshotCheckout } from "./workspace-manager.js";
 import { isDockerWorkspaceMountError } from "../../../services/cli-docker-utils.js";
 import { sanitizeInvocationOutputText } from "../../../services/invocation-output-sanitizer.js";
 import * as fs from "fs/promises";
@@ -85,6 +86,7 @@ export interface ProviderRunInput {
   workspaceSessionId?: string;
   workflowSettings: CliWorkflowSettings;
   repoPath: string;
+  snapshotCheckout?: SnapshotCheckout;
   githubToken?: string;
   gitlabToken?: string;
   signal?: AbortSignal;
@@ -130,6 +132,7 @@ export class ProviderRunner implements IProviderRunner {
         cwd: input.cwd,
         repoPath: input.repoPath,
         sessionId: input.workspaceSessionId || input.sessionId,
+        snapshotCheckout: input.snapshotCheckout,
         preserve: preserveSessionWorkspace,
         reuseExisting: preserveSessionWorkspace,
       })
@@ -371,10 +374,23 @@ export class ProviderRunner implements IProviderRunner {
         nativeSessionId,
         sessionId,
         antigravityLogPath,
+        logger: this.logger,
+        ...(workflowSettings.executionMode === "HOST"
+          ? { getCodexLatestSessionJsonMetadata: async () => this.readCodexLatestSessionMetadata() }
+          : {}),
         readClaudeSessionJsonl: async (id) => readClaudeSessionJsonl(cwd, id, workflowSettings.executionMode, this.dockerRunner),
         readCodexLatestSessionJson: async () => readCodexLatestSessionJson(cwd, workflowSettings.executionMode, this.dockerRunner),
+        ...(workflowSettings.executionMode === "HOST"
+          ? { getQwenLogDataMetadata: async () => this.readQwenLogMetadata(sessionId) }
+          : {}),
         readQwenLogData: async () => readQwenLogData(cwd, workflowSettings.executionMode, sessionId, startedMs, this.dockerRunner),
+        ...(workflowSettings.executionMode === "HOST"
+          ? { getAntigravityLogMetadata: async (logPath: string) => this.readFileMetadata(logPath) }
+          : {}),
         parseAntigravityConversationId: async (logPath) => parseAntigravityConversationId(cwd, logPath, workflowSettings.executionMode, this.dockerRunner),
+        ...(workflowSettings.executionMode === "HOST"
+          ? { getAntigravityTranscriptMetadata: async (resolvedId: string) => this.readAntigravityTranscriptMetadata(resolvedId) }
+          : {}),
         readAntigravityTranscript: async (resolvedId) => readAntigravityTranscript(cwd, resolvedId, workflowSettings.executionMode, this.dockerRunner),
         resolveAntigravityDatabase: async (resolvedId, destPath) => this.resolveAntigravityDatabase(cwd, resolvedId, workflowSettings.executionMode, destPath),
       });
@@ -684,6 +700,87 @@ export class ProviderRunner implements IProviderRunner {
     }
 
     return (await fs.readFile(outputPath, "utf8").catch(() => "")).trim();
+  }
+
+  private async readCodexLatestSessionMetadata(): Promise<string | null> {
+    const now = new Date();
+    const year = now.getFullYear().toString();
+    const month = (now.getMonth() + 1).toString().padStart(2, "0");
+    const day = now.getDate().toString().padStart(2, "0");
+    const sessionsDir = path.join(os.homedir(), ".codex", "sessions", year, month, day);
+    try {
+      const files = (await fs.readdir(sessionsDir)).filter(f => f.endsWith(".jsonl"));
+      if (files.length === 0) {
+        return "none";
+      }
+      const withStats = await Promise.all(
+        files.map(async (fileName) => {
+          const filePath = path.join(sessionsDir, fileName);
+          const stat = await fs.stat(filePath).catch(() => null);
+          return {
+            fileName,
+            size: stat?.size ?? 0,
+            mtimeMs: stat?.mtimeMs ?? 0,
+          };
+        }),
+      );
+      withStats.sort((a, b) => b.mtimeMs - a.mtimeMs);
+      const latest = withStats[0];
+      return `${latest.fileName}:${latest.size}:${Math.floor(latest.mtimeMs)}`;
+    } catch {
+      return "missing";
+    }
+  }
+
+  private async readQwenLogMetadata(sessionId: string): Promise<string | null> {
+    const logDir = resolveQwenHostLogDir(sessionId);
+    try {
+      const entries = await fs.readdir(logDir);
+      if (entries.length === 0) {
+        return "none";
+      }
+      const withStats = await Promise.all(
+        entries.map(async (entry) => {
+          const entryPath = path.join(logDir, entry);
+          const stat = await fs.stat(entryPath).catch(() => null);
+          return {
+            entry,
+            size: stat?.size ?? 0,
+            mtimeMs: stat?.mtimeMs ?? 0,
+          };
+        }),
+      );
+      return withStats
+        .sort((a, b) => a.entry.localeCompare(b.entry))
+        .map(entry => `${entry.entry}:${entry.size}:${Math.floor(entry.mtimeMs)}`)
+        .join("|");
+    } catch {
+      return "missing";
+    }
+  }
+
+  private async readAntigravityTranscriptMetadata(conversationId: string): Promise<string | null> {
+    const candidates = [
+      path.join(os.homedir(), ".gemini", "antigravity-cli", "brain", conversationId, ".system_generated", "logs", "transcript.jsonl"),
+      path.join(os.homedir(), ".gemini", "antigravity-cli", "brain", conversationId, ".system_generated", "logs", "overview.txt"),
+      path.join(os.homedir(), ".gemini", "antigravity", "brain", conversationId, ".system_generated", "logs", "transcript.jsonl"),
+      path.join(os.homedir(), ".gemini", "antigravity", "brain", conversationId, ".system_generated", "logs", "overview.txt"),
+    ];
+    for (const candidate of candidates) {
+      const metadata = await this.readFileMetadata(candidate);
+      if (metadata !== "missing") {
+        return metadata;
+      }
+    }
+    return "missing";
+  }
+
+  private async readFileMetadata(filePath: string): Promise<string> {
+    const stat = await fs.stat(filePath).catch(() => null);
+    if (!stat) {
+      return "missing";
+    }
+    return `${stat.size}:${Math.floor(stat.mtimeMs)}`;
   }
 
   /** Reads antigravity's captured log file and extracts only the meaningful failure lines

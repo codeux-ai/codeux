@@ -20,6 +20,8 @@ goal:
 Stabilize the dashboard runtime, reduce noisy retries, and verify health endpoints.
 ```
 
+The sprint title is optional when creating a sprint from the dashboard, MCP, quicksprint, or import flows. If the title is omitted, Code UX stores a deterministic placeholder and the Planning agent may replace it with a generated title after it returns a structured plan. A custom user-supplied title is preserved during planning and replanning.
+
 Task bundles use file markers. Each marker becomes one task, preserving order and dependency keys:
 
 ```md
@@ -58,6 +60,8 @@ Imported issues appear in the sprint composer under the Sprint Prompt field as l
 
 When the sprint is submitted, selected issues are persisted as linked sprint issue records and the sprint prompt receives a structured `Linked Issues` markdown section. Each imported issue is appended with source metadata, labels, assignees, author and timestamps when available, the complete issue body, and the selected conversation context. This gives the Planning agent and task agents the actual issue text instead of only a remote link.
 
+Sprint completion PR descriptions also summarize persisted linked issues in the summary section so the final PR body references the source work being completed. Jira tickets render by their issue key and stored Jira URL, while GitHub and GitLab issues render by their issue key or number and stored issue URL. Sprints without linked issues omit that PR section entirely.
+
 Special imported tasks selected from the same import flows appear in their own composer tray instead of the linked-issue markdown section. Security and quality selections still come from issue search results, but they are created as imported sprint tasks so they bypass planning prose and land directly on the sprint. Merge-conflict and failed-CI selections are also created directly as sprint tasks, using the imported-task endpoint, so they attach to the sprint immediately without being folded into the planning prompt. The composer shows the task kind, source, priority, and removal controls so operators can review remediation work before the sprint is created or updated.
 
 Issue import uses the saved integration tokens:
@@ -70,7 +74,7 @@ When the GitHub token is empty, GitHub issue search, issue context loading, and 
 
 Use `Import -> Jira Issues` to search Jira with guided filters, multi-select issues, and attach them to the sprint composer. The Jira modal keeps Jira-specific controls for project key, exact issue key lookup, free-text search, status, assignee text, reporter text, issue type, priority, labels, updated-date windows, sort controls, bounded result limits, and optional JQL override.
 
-Jira results use selectable issue cards with source links, `Select all visible`, `Clear selection`, bulk conversation selection, and per-card `Append Conversation` toggles. The selected count stays visible while operators choose whether each issue should become linked sprint context or, for detected security and quality follow-ups, a special imported task.
+Jira results use selectable issue cards with source links, `Select all visible`, `Clear selection`, bulk conversation selection, and per-card `Append Conversation` toggles. Selected Jira issues default to linked sprint context. When special task creation is available, operators can explicitly switch the selected Jira issues to security or quality task mode before importing.
 
 The assignee field accepts a Jira user full name, email address, or account ID. It also accepts `me` / `currentUser()` for the connected Jira account and `unassigned` / `empty` for issues without an assignee. The server builds the Jira query from the selected filters, defaults to open issues sorted by recent updates, and uses `Settings -> Integrations -> Jira -> Default project` to prefill the project key when available. Clearing the project key browses all Jira issues the saved credentials can see.
 
@@ -88,7 +92,7 @@ Jira dashboard and MCP importer workflows require those saved Jira settings. The
 
 Selected Jira issues are loaded through the same prompt-context path as GitHub/GitLab imports. The sprint prompt receives the Jira description and, when `Append Conversation` is enabled, Jira comments. Imported Jira cards are persisted as linked sprint issues with provider `jira`, host extracted from the Jira URL, project key, repository fallback, parsed issue number from keys such as `OPS-42`, issue key, labels, assignees, status, source URL, and the selected conversation flag. The import result cards also surface Jira issue type, priority, reporter, assignee, labels, status, updated timestamps, and a description preview when Jira returns those fields.
 
-When the dashboard detects Jira issues that look like security or quality follow-ups, it can emit imported task payloads instead of linked issue contexts. Those special tasks are created directly on the sprint and bypass planning prose, while ordinary Jira issues still become linked issues that feed the sprint prompt and linked issue records.
+When operators mark selected Jira issues as security or quality task mode, the dashboard emits imported task payloads instead of linked issue contexts. Those special tasks are created directly on the sprint and bypass planning prose, while ordinary Jira issues still become linked issues that feed the sprint prompt and linked issue records. Jira issue labels, issue type, priority, title, or description text do not automatically convert an issue into a special task.
 
 The Jira import modal keeps each selected card's stored mode choice across result refreshes and uses that saved mode at import time, so a task that was marked special does not drift back to linked just because the search results were refreshed.
 

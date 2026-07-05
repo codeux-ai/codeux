@@ -16,13 +16,13 @@ export default {
           600: "#2D2822",
           500: "#3D3730",
         },
-        // Signal — single precision accent, luminous jade (replaces dual aura)
+        // Signal — theme-specific primary accent for active, focus, and running states
         signal: {
-          300: "#80FFD6",
-          400: "#33FFB8",
-          500: "#00E0A0",
+          300: "var(--signal-300)",
+          400: "var(--signal-400)",
+          500: "var(--signal-500)",
           600: "var(--signal-600)", // Theme-specific for contrast
-          700: "#008F65",
+          700: "var(--signal-700)",
         },
         // Warm Amber — secondary signal, replaces generic indigo as secondary accent
         ember: {

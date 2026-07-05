@@ -1,9 +1,9 @@
-import type { FunctionComponent } from "preact";
+import type { ComponentChildren, FunctionComponent } from "preact";
 import { memo } from "preact/compat";
 import { useId, useMemo, useState, useLayoutEffect, useRef } from "preact/hooks";
 import gsap from "gsap";
-import { useReducedMotion, useResolvedMotionDuration } from "../../hooks/use-reduced-motion.js";
-import { INTERACTION_TOKENS } from "../../lib/motion/tokens.js";
+import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
+import { useGsapInteractionTokens } from "../../lib/motion/constants.js";
 import { Radio, Bot, CheckCircle2, XCircle, Workflow, ChevronDown, Play, PauseCircle, Clock, RotateCcw } from "lucide-preact";
 import { formatTime } from "../../../lib/time.js";
 import { renderMarkdown } from "../../../lib/markdown.js";
@@ -12,8 +12,17 @@ import { renderMarkdown } from "../../../lib/markdown.js";
 import { HumanInterventionBadge } from "../ui/HumanInterventionBadge.js";
 import { QuotaCountdown, TaskDuration } from "../LiveTaskCard.js";
 import { useExecutionTimeline } from "../../../hooks/ExecutionTimelineContext.js";
+import type { ExecutionSnapshotSurfaceState } from "../../../hooks/ExecutionTimelineContext.js";
 import { findActiveConcurrencyWait } from "../../../lib/task-progress.js";
-import { getLiveActionDisplayProps, getPendingActionState } from "../../lib/live-session-runtime.js";
+import {
+    getLiveActionDisplayProps,
+    getLiveActionDisabledReason,
+    getLiveActionLabel,
+    getLiveActionStatusLabel,
+    getPendingActionState,
+    type LiveActionLabels,
+    type LiveActionState,
+} from "../../lib/live-session-runtime.js";
 
 export const statusTone = (value: string | null): string => {
     if (!value) return "text-slate-400";
@@ -90,6 +99,86 @@ export const shortenRuntimeId = (value: string | null | undefined): string | nul
     value ? value.slice(0, 8) : null
 );
 
+const DEFAULT_RUNTIME_SNAPSHOT_SURFACE: ExecutionSnapshotSurfaceState = {
+    kind: "live",
+    label: "Live",
+    description: "Runtime data is current.",
+    isBusy: false,
+};
+
+export const RuntimeSnapshotSurfaceBadge: FunctionComponent<{
+    surface?: ExecutionSnapshotSurfaceState;
+}> = ({ surface = DEFAULT_RUNTIME_SNAPSHOT_SURFACE }) => {
+    if (surface.kind === "live") {
+        return null;
+    }
+    const toneClass = surface.kind === "stale"
+        ? "border-status-amber/20 bg-status-amber/10 text-status-amber"
+        : "border-signal-500/20 bg-signal-500/10 text-signal-600 dark:text-signal-300";
+
+    return (
+        <span
+            className={`inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.14em] ${toneClass}`}
+            title={surface.description}
+        >
+            <span className="h-1.5 w-1.5 rounded-full bg-current motion-reduce:ring-2 motion-reduce:ring-current/25" aria-hidden="true" />
+            {surface.label}
+            <span className="sr-only">. {surface.description}</span>
+        </span>
+    );
+};
+
+const RuntimeActionButton: FunctionComponent<{
+    actionState: LiveActionState;
+    labels: LiveActionLabels;
+    ariaLabel: string;
+    toneClassName: string;
+    onActivate: () => void;
+    icon: ComponentChildren;
+    disabledReason?: string | null;
+}> = ({ actionState, labels, ariaLabel, toneClassName, onActivate, icon, disabledReason = null }) => {
+    const statusId = useId();
+    const reasonId = useId();
+    const label = getLiveActionLabel(actionState, labels);
+    const statusLabel = getLiveActionStatusLabel(actionState, labels);
+    const unavailableReason = getLiveActionDisabledReason(actionState, labels, disabledReason);
+    const isPending = actionState === "pending";
+    const isUnavailable = isPending || actionState === "disabled";
+    const accessibleLabel = isUnavailable
+        ? `${ariaLabel}. ${unavailableReason ?? statusLabel ?? "Action unavailable."}`
+        : ariaLabel;
+    const describedBy = [
+        statusLabel ? statusId : null,
+        unavailableReason ? reasonId : null,
+    ].filter(Boolean).join(" ") || undefined;
+
+    return (
+        <button
+            type="button"
+            onClick={(event) => {
+                if (isUnavailable) {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    return;
+                }
+                onActivate();
+            }}
+            aria-label={accessibleLabel}
+            aria-describedby={describedBy}
+            title={unavailableReason ?? statusLabel ?? label}
+            {...getLiveActionDisplayProps(actionState, actionState === "disabled", disabledReason)}
+            className={`inline-flex min-h-6 items-center gap-1.5 rounded-md px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.12em] transition-colors aria-disabled:opacity-60 ${toneClassName}`}
+        >
+            {icon}
+            <span>{label}</span>
+            {statusLabel && <span id={statusId} className="text-[8px] normal-case tracking-normal opacity-80">{statusLabel}</span>}
+            {unavailableReason && unavailableReason !== statusLabel && (
+                <span id={reasonId} className={actionState === "disabled" ? "text-[8px] normal-case tracking-normal opacity-80" : "sr-only"}>{unavailableReason}</span>
+            )}
+        </button>
+    );
+};
+
 export const ConnectionRuntimePanel: FunctionComponent<{
     collapsible?: boolean;
     defaultOpen?: boolean;
@@ -97,12 +186,12 @@ export const ConnectionRuntimePanel: FunctionComponent<{
     collapsible = false,
     defaultOpen = true,
 }) => {
-    const { execution: snapshot } = useExecutionTimeline();
+    const { execution: snapshot, snapshotSurface = DEFAULT_RUNTIME_SNAPSHOT_SURFACE } = useExecutionTimeline();
     const [open, setOpen] = useState(defaultOpen);
     const contentId = useId();
     const contentRef = useRef<HTMLDivElement>(null);
     const isReducedMotion = useReducedMotion();
-    const enterDuration = useResolvedMotionDuration(parseFloat(INTERACTION_TOKENS.enterExit.duration) / 1000);
+    const motionTokens = useGsapInteractionTokens();
 
     useLayoutEffect(() => {
         if (!contentRef.current || !collapsible) return;
@@ -112,15 +201,15 @@ export const ConnectionRuntimePanel: FunctionComponent<{
             gsap.killTweensOf(contentRef.current);
             gsap.to(contentRef.current, {
                 height: open ? "auto" : 0,
-                duration: enterDuration,
-                ease: INTERACTION_TOKENS.enterExit.ease,
+                duration: motionTokens.expansionCollapse.duration,
+                ease: motionTokens.expansionCollapse.ease,
                 overwrite: "auto",
                 onComplete: () => {
                     if (open && contentRef.current) gsap.set(contentRef.current, { height: "auto" });
                 }
             });
         }
-    }, [open, isReducedMotion, enterDuration, collapsible]);
+    }, [open, isReducedMotion, motionTokens.expansionCollapse.duration, motionTokens.expansionCollapse.ease, collapsible]);
 
     const { activeConnections, listeningConnections, workerConnections, managerConnections } = useMemo(() => {
         const active = snapshot?.connections.filter((connection) => connection.status !== "offline") ?? [];
@@ -163,6 +252,7 @@ export const ConnectionRuntimePanel: FunctionComponent<{
                     manager {managerConnections.length}
                 </span>
             </div>
+            <RuntimeSnapshotSurfaceBadge surface={snapshotSurface} />
         </div>
     );
 
@@ -181,7 +271,7 @@ export const ConnectionRuntimePanel: FunctionComponent<{
                 >
                     {header}
                     <ChevronDown
-                        className={`h-3.5 w-3.5 shrink-0 text-slate-400 transition-transform duration-[var(--interaction-enter-exit-duration)] ${open ? "rotate-0" : "-rotate-90"}`}
+                        className={`h-3.5 w-3.5 shrink-0 text-slate-400 transition-transform duration-[var(--interaction-expansion-collapse-duration)] ease-[var(--interaction-expansion-collapse-ease)] ${open ? "rotate-0" : "-rotate-90"}`}
                         strokeWidth={2}
                         aria-hidden="true"
                     />
@@ -192,7 +282,11 @@ export const ConnectionRuntimePanel: FunctionComponent<{
                 </div>
             )}
 
-            <div className={collapsible ? `collapsible-section ${open ? "open" : ""}` : ""} id={contentId}>
+            <div
+                className={collapsible ? `collapsible-section ${open ? "open" : ""}` : ""}
+                id={contentId}
+                aria-hidden={collapsible && !open ? "true" : undefined}
+            >
                 <div ref={contentRef} className={collapsible ? "collapsible-content overflow-hidden" : ""}>
                     <div className={`relative z-10 ${collapsible ? "px-5 pb-5 pt-0" : "px-5 pb-5 pt-0"}`}>
                         {snapshot.connections.length === 0 ? (
@@ -200,7 +294,7 @@ export const ConnectionRuntimePanel: FunctionComponent<{
                                 No listeners or workers are connected to the selected project yet.
                             </p>
                         ) : (
-                            <div className="max-h-[50dvh] sm:max-h-72 space-y-2 overflow-y-auto pr-1 dashboard-scrollbar" role="log" aria-live="polite" aria-label="Live connection runtime rows">
+                            <div className="max-h-[50dvh] sm:max-h-72 space-y-2 overflow-y-auto pr-1 dashboard-scrollbar" role="log" aria-live="polite" aria-busy={snapshotSurface.isBusy ? "true" : undefined} aria-label="Live connection runtime rows">
                                 {visibleConnections.map((connection) => (
                                     <div
                                         key={connection.id}
@@ -332,6 +426,7 @@ export const ExecutionRuntimePanel: FunctionComponent<{
         onForceCancelTaskDispatch,
         onRetryTaskDispatch,
         pendingActionIds,
+        snapshotSurface = DEFAULT_RUNTIME_SNAPSHOT_SURFACE,
     } = useExecutionTimeline();
 
     const [open, setOpen] = useState(defaultOpen);
@@ -340,7 +435,7 @@ export const ExecutionRuntimePanel: FunctionComponent<{
 
     const contentRef = useRef<HTMLDivElement>(null);
     const isReducedMotion = useReducedMotion();
-    const enterDuration = useResolvedMotionDuration(parseFloat(INTERACTION_TOKENS.enterExit.duration) / 1000);
+    const motionTokens = useGsapInteractionTokens();
 
     useLayoutEffect(() => {
         if (!contentRef.current || !collapsible) return;
@@ -350,31 +445,24 @@ export const ExecutionRuntimePanel: FunctionComponent<{
             gsap.killTweensOf(contentRef.current);
             gsap.to(contentRef.current, {
                 height: open ? "auto" : 0,
-                duration: enterDuration,
-                ease: INTERACTION_TOKENS.enterExit.ease,
+                duration: motionTokens.expansionCollapse.duration,
+                ease: motionTokens.expansionCollapse.ease,
                 overwrite: "auto",
                 onComplete: () => {
                     if (open && contentRef.current) gsap.set(contentRef.current, { height: "auto" });
                 }
             });
         }
-    }, [open, isReducedMotion, enterDuration, collapsible]);
+    }, [open, isReducedMotion, motionTokens.expansionCollapse.duration, motionTokens.expansionCollapse.ease, collapsible]);
 
-    if (!snapshot) {
-        return (
-            <div role="status" aria-live="polite" aria-busy="true" className="rounded-[1.75rem] border border-black/[0.08] bg-white p-5 text-[11px] font-mono text-slate-400 shadow-sm dark:border-white/[0.08] dark:bg-void-800 dark:text-slate-500">
-                Loading execution runtime.
-            </div>
-        );
-    }
-    const activeSprintRuns = useMemo(() => snapshot.sprintRuns.filter((run) => run.status === "running" || run.status === "queued"), [snapshot.sprintRuns, snapshot.sprintRuns.length]);
-    const activeDispatches = useMemo(() => snapshot.taskDispatches.filter((dispatch) => (
+    const activeSprintRuns = useMemo(() => (snapshot?.sprintRuns ?? []).filter((run) => run.status === "running" || run.status === "queued"), [snapshot?.sprintRuns, snapshot?.sprintRuns?.length]);
+    const activeDispatches = useMemo(() => (snapshot?.taskDispatches ?? []).filter((dispatch) => (
         dispatch.status === "queued" || dispatch.status === "claimed" || dispatch.status === "running"
-    )), [snapshot.taskDispatches, snapshot.taskDispatches.length]);
-    const activeConnections = useMemo(() => snapshot.connections.filter((connection) => connection.status !== "offline"), [snapshot.connections, snapshot.connections.length]);
+    )), [snapshot?.taskDispatches, snapshot?.taskDispatches?.length]);
+    const activeConnections = useMemo(() => (snapshot?.connections ?? []).filter((connection) => connection.status !== "offline"), [snapshot?.connections, snapshot?.connections?.length]);
     const pendingInboxTotal = useMemo(
-        () => snapshot.connections.reduce((sum, connection) => sum + connection.pendingInboxCount, 0),
-        [snapshot.connections, snapshot.connections.length],
+        () => (snapshot?.connections ?? []).reduce((sum, connection) => sum + connection.pendingInboxCount, 0),
+        [snapshot?.connections, snapshot?.connections?.length],
     );
 
     const { queuedWorkers, runningWorkers } = useMemo(() => {
@@ -385,19 +473,28 @@ export const ExecutionRuntimePanel: FunctionComponent<{
         };
     }, [activeDispatches]);
 
-    const visibleSprintRuns = useMemo(() => snapshot.sprintRuns.slice(0, 4), [snapshot.sprintRuns, snapshot.sprintRuns.length]);
-    const visibleTaskDispatches = useMemo(() => snapshot.taskDispatches.slice(0, 8), [snapshot.taskDispatches, snapshot.taskDispatches.length]);
+    const visibleSprintRuns = useMemo(() => (snapshot?.sprintRuns ?? []).slice(0, 4), [snapshot?.sprintRuns, snapshot?.sprintRuns?.length]);
+    const visibleTaskDispatches = useMemo(() => (snapshot?.taskDispatches ?? []).slice(0, 8), [snapshot?.taskDispatches, snapshot?.taskDispatches?.length]);
     const blockedAttentionCount = useMemo(
-        () => snapshot.attentionItems.filter((item) => item.status === "open" || item.status === "claimed").length,
-        [snapshot.attentionItems, snapshot.attentionItems.length],
+        () => (snapshot?.attentionItems ?? []).filter((item) => item.status === "open" || item.status === "claimed").length,
+        [snapshot?.attentionItems, snapshot?.attentionItems?.length],
     );
     const failedTaskCount = useMemo(
-        () => snapshot.taskDispatches.filter((dispatch) => dispatch.status === "failed").length,
-        [snapshot.taskDispatches, snapshot.taskDispatches.length],
+        () => (snapshot?.taskDispatches ?? []).filter((dispatch) => dispatch.status === "failed").length,
+        [snapshot?.taskDispatches, snapshot?.taskDispatches?.length],
     );
+    const runtimeSummary = `${activeSprintRuns.length} active run${activeSprintRuns.length === 1 ? "" : "s"}, ${activeDispatches.length} active dispatch${activeDispatches.length === 1 ? "" : "es"}, ${blockedAttentionCount} attention item${blockedAttentionCount === 1 ? "" : "s"}, ${failedTaskCount} failed dispatch${failedTaskCount === 1 ? "" : "es"}.`;
+
+    if (!snapshot) {
+        return (
+            <div role="status" aria-live="polite" aria-busy="true" className="rounded-[1.75rem] border border-black/[0.08] bg-white p-5 text-[11px] font-mono text-slate-400 shadow-sm dark:border-white/[0.08] dark:bg-void-800 dark:text-slate-500">
+                Loading execution runtime.
+            </div>
+        );
+    }
 
     return (
-        <div role="region" aria-label="Execution runtime" aria-busy={activeSprintRuns.length > 0 || activeDispatches.length > 0 ? "true" : undefined} className="group relative overflow-hidden rounded-[1.75rem] border border-black/[0.08] bg-white shadow-sm dark:border-white/[0.08] dark:bg-void-800">
+        <div role="region" aria-label="Execution runtime" aria-busy={snapshotSurface.isBusy || activeSprintRuns.length > 0 || activeDispatches.length > 0 ? "true" : undefined} className="group relative overflow-hidden rounded-[1.75rem] border border-black/[0.08] bg-white shadow-sm dark:border-white/[0.08] dark:bg-void-800">
 
 
 
@@ -413,25 +510,24 @@ export const ExecutionRuntimePanel: FunctionComponent<{
                         <Workflow className="h-4 w-4 text-signal-500" strokeWidth={1.5} aria-hidden="true" />
                         <span className="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">Execution Runtime</span>
                         <div className="flex flex-wrap items-center gap-2 text-[9px] font-bold uppercase tracking-[0.14em]">
-                            {activeSprintRuns.length > 0 && (
-                                <span className="rounded-md bg-signal-500/10 px-2 py-0.5 font-mono text-signal-500">
-                                    active {activeSprintRuns.length}
-                                </span>
-                            )}
-                            {blockedAttentionCount > 0 && (
-                                <span className="rounded-md bg-status-amber/10 px-2 py-0.5 font-mono text-status-amber">
-                                    attention {blockedAttentionCount}
-                                </span>
-                            )}
-                            {failedTaskCount > 0 && (
-                                <span className="rounded-md bg-status-red/10 px-2 py-0.5 font-mono text-status-red">
-                                    failed {failedTaskCount}
-                                </span>
-                            )}
+                            <span className="rounded-md bg-signal-500/10 px-2 py-0.5 font-mono text-signal-500">
+                                active {activeSprintRuns.length}
+                            </span>
+                            <span className="rounded-md bg-black/[0.03] px-2 py-0.5 font-mono text-slate-500 dark:bg-white/[0.04] dark:text-slate-400">
+                                dispatch {activeDispatches.length}
+                            </span>
+                            <span className="rounded-md bg-status-amber/10 px-2 py-0.5 font-mono text-status-amber">
+                                attention {blockedAttentionCount}
+                            </span>
+                            <span className="rounded-md bg-status-red/10 px-2 py-0.5 font-mono text-status-red">
+                                failed {failedTaskCount}
+                            </span>
                         </div>
+                        <RuntimeSnapshotSurfaceBadge surface={snapshotSurface} />
+                        <span className="sr-only">{runtimeSummary}</span>
                     </div>
                     <ChevronDown
-                        className={`h-3.5 w-3.5 shrink-0 text-slate-400 transition-transform duration-[var(--interaction-enter-exit-duration)] ${open ? "rotate-0" : "-rotate-90"}`}
+                        className={`h-3.5 w-3.5 shrink-0 text-slate-400 transition-transform duration-[var(--interaction-expansion-collapse-duration)] ease-[var(--interaction-expansion-collapse-ease)] ${open ? "rotate-0" : "-rotate-90"}`}
                         strokeWidth={2}
                         aria-hidden="true"
                     />
@@ -448,6 +544,7 @@ export const ExecutionRuntimePanel: FunctionComponent<{
             <div
                 className={collapsible ? `collapsible-section ${open ? "open" : ""}` : ""}
                 id={contentId}
+                aria-hidden={collapsible && !open ? "true" : undefined}
             >
                 <div ref={contentRef} className={collapsible ? "collapsible-content overflow-hidden" : ""}>
                     <div className={`relative z-10 space-y-5 ${collapsible ? "px-5 pb-5 pt-0" : "px-5 pb-5 pt-0"}`}>
@@ -465,7 +562,7 @@ export const ExecutionRuntimePanel: FunctionComponent<{
                                     className="rounded-xl border border-black/[0.04] bg-white/55 px-3 py-2 dark:border-white/[0.06] dark:bg-void-900/30"
                                 >
                                     <div className={`text-[9px] font-bold uppercase tracking-[0.14em] ${accent}`}>{label}</div>
-                                    <div className={`mt-1 font-mono text-lg font-black leading-none ${accent}`}>{value}</div>
+                                    <div className={`mt-1 font-mono text-base font-semibold leading-none ${accent}`}>{value}</div>
                                 </div>
                             ))}
                         </div>
@@ -478,8 +575,14 @@ export const ExecutionRuntimePanel: FunctionComponent<{
                             {snapshot.sprintRuns.length === 0 ? (
                                 <div role="status" aria-live="polite" className="rounded-xl border border-black/[0.04] bg-black/[0.015] p-3 text-[11px] font-mono text-slate-400 dark:border-white/[0.04] dark:bg-white/[0.015] dark:text-slate-500">No sprint runs recorded for the selected project.</div>
                             ) : (
-                                <div className="space-y-2" role="log" aria-live="polite" aria-label="Sprint run status rows">
-                                    {visibleSprintRuns.map((run) => (
+                                <div className="space-y-2" role="log" aria-live="polite" aria-busy={snapshotSurface.isBusy ? "true" : undefined} aria-label="Sprint run status rows">
+                                    {visibleSprintRuns.map((run) => {
+                                        const startActionState = getPendingActionState(pendingActionIds, `sprint-start:${run.sprintId}`);
+                                        const pauseActionState = getPendingActionState(pendingActionIds, `sprint-pause:${run.id}`);
+                                        const cancelActionState = getPendingActionState(pendingActionIds, `sprint-cancel:${run.id}`);
+                                        const forceCancelActionState = getPendingActionState(pendingActionIds, `sprint-force-cancel:${run.id}`);
+                                        const startIdleLabel = run.status === "paused" ? "Resume" : "Run Again";
+                                        return (
                                         <div key={run.id} className={`rounded-r-xl rounded-l-sm border border-l-2 border-black/[0.04] bg-black/[0.015] p-3 pl-3 transition-colors hover:border-signal-500/25 hover:bg-signal-500/[0.035] dark:border-white/[0.04] dark:bg-white/[0.015] ${statusRailTone(run.status)}`}>
                                             <div className="flex items-center justify-between gap-3 min-w-0">
                                                 <div className="min-w-0">
@@ -504,43 +607,34 @@ export const ExecutionRuntimePanel: FunctionComponent<{
                                             </div>
                                             <div className="mt-3 flex flex-wrap gap-2">
                                                 {(run.status === "paused" || run.status === "failed" || run.status === "completed" || run.status === "cancelled") && (
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => getPendingActionState(pendingActionIds, `sprint-start:${run.sprintId}`) === "idle" && onOrchestrateSprint(run.projectId, run.sprintId)}
-                                                        aria-label={`${run.status === "paused" ? "Resume" : "Run again"} sprint ${run.sprintName}`}
-                                                        {...getLiveActionDisplayProps(getPendingActionState(pendingActionIds, `sprint-start:${run.sprintId}`) === "pending", false)}
-                                                        className="inline-flex items-center gap-1.5 rounded-md border border-signal-500/20 bg-signal-500/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.12em] text-signal-600 transition-colors hover:bg-signal-500/15 aria-disabled:opacity-50 dark:text-signal-400"
-                                                        >
-                                                        <Play className="h-3 w-3" strokeWidth={2} aria-hidden="true" />
-                                                        {getPendingActionState(pendingActionIds, `sprint-start:${run.sprintId}`) === "pending" ? "Starting" : (run.status === "paused" ? "Resume" : "Run Again")}
-                                                        {getPendingActionState(pendingActionIds, `sprint-start:${run.sprintId}`) === "pending" && <span className="sr-only">Starting...</span>}
-                                                    </button>
+                                                    <RuntimeActionButton
+                                                        actionState={startActionState}
+                                                        labels={{ idle: startIdleLabel, pending: run.status === "paused" ? "Resuming" : "Starting", success: "Started", error: "Start Failed" }}
+                                                        ariaLabel={`${run.status === "paused" ? "Resume" : "Run again"} sprint ${run.sprintName}`}
+                                                        onActivate={() => onOrchestrateSprint(run.projectId, run.sprintId)}
+                                                        toneClassName="border border-signal-500/20 bg-signal-500/10 text-signal-600 hover:bg-signal-500/15 dark:text-signal-400"
+                                                        icon={<Play className="h-3 w-3" strokeWidth={2} aria-hidden="true" />}
+                                                    />
                                                 )}
                                                 {(run.status === "running" || run.status === "queued") && (
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => getPendingActionState(pendingActionIds, `sprint-pause:${run.id}`) === "idle" && onPauseSprintRun(run.id)}
-                                                        aria-label={`Pause sprint run ${run.sprintName}`}
-                                                        {...getLiveActionDisplayProps(getPendingActionState(pendingActionIds, `sprint-pause:${run.id}`) === "pending", false)}
-                                                        className="inline-flex items-center gap-1.5 rounded-md border border-status-amber/20 bg-status-amber/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.12em] text-status-amber transition-colors hover:bg-status-amber/15 aria-disabled:opacity-50"
-                                                    >
-                                                        <PauseCircle className={`h-3 w-3 ${getPendingActionState(pendingActionIds, `sprint-pause:${run.id}`) === "pending" ? "motion-safe:animate-spin" : ""}`} strokeWidth={2} aria-hidden="true" />
-                                                        {getPendingActionState(pendingActionIds, `sprint-pause:${run.id}`) === "pending" ? "Pausing" : "Pause"}
-                                                        {getPendingActionState(pendingActionIds, `sprint-pause:${run.id}`) === "pending" && <span className="sr-only">Pausing...</span>}
-                                                    </button>
+                                                    <RuntimeActionButton
+                                                        actionState={pauseActionState}
+                                                        labels={{ idle: "Pause", pending: "Pausing", success: "Paused", error: "Pause Failed" }}
+                                                        ariaLabel={`Pause sprint run ${run.sprintName}`}
+                                                        onActivate={() => onPauseSprintRun(run.id)}
+                                                        toneClassName="border border-status-amber/20 bg-status-amber/10 text-status-amber hover:bg-status-amber/15"
+                                                        icon={<PauseCircle className={`h-3 w-3 ${pauseActionState === "pending" ? "motion-safe:animate-spin" : ""}`} strokeWidth={2} aria-hidden="true" />}
+                                                    />
                                                 )}
                                                 {(run.status === "running" || run.status === "queued" || run.status === "paused") && (
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => getPendingActionState(pendingActionIds, `sprint-cancel:${run.id}`) === "idle" && onCancelSprintRun(run.id)}
-                                                        aria-label={`Cancel sprint run ${run.sprintName}`}
-                                                        {...getLiveActionDisplayProps(getPendingActionState(pendingActionIds, `sprint-cancel:${run.id}`) === "pending", false)}
-                                                        className="inline-flex items-center gap-1.5 rounded-md border border-status-red/20 bg-status-red/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.12em] text-status-red transition-colors hover:bg-status-red/15 aria-disabled:opacity-50"
-                                                        >
-                                                        <XCircle className={`h-3 w-3 ${getPendingActionState(pendingActionIds, `sprint-cancel:${run.id}`) === "pending" ? "motion-safe:animate-spin" : ""}`} strokeWidth={2} aria-hidden="true" />
-                                                        {getPendingActionState(pendingActionIds, `sprint-cancel:${run.id}`) === "pending" ? "Cancelling" : "Cancel"}
-                                                        {getPendingActionState(pendingActionIds, `sprint-cancel:${run.id}`) === "pending" && <span className="sr-only">Cancelling...</span>}
-                                                    </button>
+                                                    <RuntimeActionButton
+                                                        actionState={cancelActionState}
+                                                        labels={{ idle: "Cancel", pending: "Cancelling", success: "Cancel Requested", error: "Cancel Failed" }}
+                                                        ariaLabel={`Cancel sprint run ${run.sprintName}`}
+                                                        onActivate={() => onCancelSprintRun(run.id)}
+                                                        toneClassName="border border-status-red/20 bg-status-red/10 text-status-red hover:bg-status-red/15"
+                                                        icon={<XCircle className={`h-3 w-3 ${cancelActionState === "pending" ? "motion-safe:animate-spin" : ""}`} strokeWidth={2} aria-hidden="true" />}
+                                                    />
                                                 )}
                                                 {run.status === "cancel_requested" && (
                                                     <>
@@ -548,17 +642,14 @@ export const ExecutionRuntimePanel: FunctionComponent<{
                                                             <Clock className="h-3 w-3" strokeWidth={2} aria-hidden="true" />
                                                             Stop Pending
                                                         </div>
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => getPendingActionState(pendingActionIds, `sprint-force-cancel:${run.id}`) === "idle" && onForceCancelSprintRun(run.id)}
-                                                            aria-label={`Force cancel sprint run ${run.sprintName}`}
-                                                            {...getLiveActionDisplayProps(getPendingActionState(pendingActionIds, `sprint-force-cancel:${run.id}`) === "pending", false)}
-                                                            className="inline-flex items-center gap-1.5 rounded-md border border-status-red/20 bg-status-red/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.12em] text-status-red transition-colors hover:bg-status-red/15 aria-disabled:opacity-50"
-                                                            >
-                                                            <XCircle className={`h-3 w-3 ${getPendingActionState(pendingActionIds, `sprint-force-cancel:${run.id}`) === "pending" ? "motion-safe:animate-spin" : ""}`} strokeWidth={2} aria-hidden="true" />
-                                                            {getPendingActionState(pendingActionIds, `sprint-force-cancel:${run.id}`) === "pending" ? "Force Cancelling" : "Force Cancel"}
-                                                            {getPendingActionState(pendingActionIds, `sprint-force-cancel:${run.id}`) === "pending" && <span className="sr-only">Force Cancelling...</span>}
-                                                        </button>
+                                                        <RuntimeActionButton
+                                                            actionState={forceCancelActionState}
+                                                            labels={{ idle: "Force Cancel", pending: "Force Cancelling", success: "Force Cancelled", error: "Force Cancel Failed" }}
+                                                            ariaLabel={`Force cancel sprint run ${run.sprintName}`}
+                                                            onActivate={() => onForceCancelSprintRun(run.id)}
+                                                            toneClassName="border border-status-red/20 bg-status-red/10 text-status-red hover:bg-status-red/15"
+                                                            icon={<XCircle className={`h-3 w-3 ${forceCancelActionState === "pending" ? "motion-safe:animate-spin" : ""}`} strokeWidth={2} aria-hidden="true" />}
+                                                        />
                                                     </>
                                                 )}
                                             </div>
@@ -620,7 +711,8 @@ export const ExecutionRuntimePanel: FunctionComponent<{
                                                 </div>
                                             )}
                                         </div>
-                                    ))}
+                                        );
+                                    })}
                                 </div>
                             )}
                         </section>
@@ -633,12 +725,15 @@ export const ExecutionRuntimePanel: FunctionComponent<{
                             {snapshot.taskDispatches.length === 0 ? (
                                 <div role="status" aria-live="polite" className="rounded-xl border border-black/[0.04] bg-black/[0.015] p-3 text-[11px] font-mono text-slate-400 dark:border-white/[0.04] dark:bg-white/[0.015] dark:text-slate-500">No task dispatches yet.</div>
                             ) : (
-                                <div className="max-h-[50dvh] sm:max-h-80 space-y-2 overflow-y-auto pr-1 dashboard-scrollbar" role="log" aria-live="polite" aria-label="Task dispatch status rows">
+                                <div className="max-h-[50dvh] sm:max-h-80 space-y-2 overflow-y-auto pr-1 dashboard-scrollbar" role="log" aria-live="polite" aria-busy={snapshotSurface.isBusy ? "true" : undefined} aria-label="Task dispatch status rows">
                                     {visibleTaskDispatches.map((dispatch) => {
                                         const dispatchEvents = snapshot.recentEvents.filter(
                                             (e) => e.dispatchId === dispatch.id || (e.taskRunId && e.taskRunId === dispatch.taskRunId)
                                         );
                                         const activeCap = findActiveConcurrencyWait(dispatchEvents, dispatch.status);
+                                        const cancelActionState = getPendingActionState(pendingActionIds, `dispatch-cancel:${dispatch.id}`);
+                                        const forceCancelActionState = getPendingActionState(pendingActionIds, `dispatch-force-cancel:${dispatch.id}`);
+                                        const retryActionState = getPendingActionState(pendingActionIds, `dispatch-retry:${dispatch.id}`);
                                         return (
                                             <div key={dispatch.id} className={`rounded-r-xl rounded-l-sm border border-l-2 border-black/[0.04] bg-black/[0.015] p-3 pl-3 transition-colors hover:border-signal-500/25 hover:bg-signal-500/[0.035] dark:border-white/[0.04] dark:bg-white/[0.015] ${statusRailTone(activeCap ? "PENDING" : dispatch.status)}`}>
                                                 <div className="flex items-start justify-between gap-3 min-w-0">
@@ -689,17 +784,14 @@ export const ExecutionRuntimePanel: FunctionComponent<{
                                                 )}
                                             <div className="mt-3 flex flex-wrap gap-2">
                                                 {(dispatch.status === "queued" || dispatch.status === "claimed" || dispatch.status === "running") && (
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => getPendingActionState(pendingActionIds, `dispatch-cancel:${dispatch.id}`) === "idle" && onCancelTaskDispatch(dispatch.id)}
-                                                        aria-label={"Cancel dispatch " + dispatch.id}
-                                                        {...getLiveActionDisplayProps(getPendingActionState(pendingActionIds, `dispatch-cancel:${dispatch.id}`) === "pending", false)}
-                                                        className="inline-flex items-center gap-1.5 rounded-md border border-status-red/20 bg-status-red/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.12em] text-status-red transition-colors hover:bg-status-red/15 aria-disabled:opacity-50"
-                                                        >
-                                                        <XCircle className={`h-3 w-3 ${getPendingActionState(pendingActionIds, `dispatch-cancel:${dispatch.id}`) === "pending" ? "motion-safe:animate-spin" : ""}`} strokeWidth={2} aria-hidden="true" />
-                                                        {getPendingActionState(pendingActionIds, `dispatch-cancel:${dispatch.id}`) === "pending" ? "Cancelling" : "Cancel"}
-                                                        {getPendingActionState(pendingActionIds, `dispatch-cancel:${dispatch.id}`) === "pending" && <span className="sr-only">Cancelling...</span>}
-                                                    </button>
+                                                    <RuntimeActionButton
+                                                        actionState={cancelActionState}
+                                                        labels={{ idle: "Cancel", pending: "Cancelling", success: "Cancel Requested", error: "Cancel Failed" }}
+                                                        ariaLabel={"Cancel dispatch " + dispatch.id}
+                                                        onActivate={() => onCancelTaskDispatch(dispatch.id)}
+                                                        toneClassName="border border-status-red/20 bg-status-red/10 text-status-red hover:bg-status-red/15"
+                                                        icon={<XCircle className={`h-3 w-3 ${cancelActionState === "pending" ? "motion-safe:animate-spin" : ""}`} strokeWidth={2} aria-hidden="true" />}
+                                                    />
                                                 )}
                                                 {dispatch.status === "cancel_requested" && (
                                                     <>
@@ -707,31 +799,25 @@ export const ExecutionRuntimePanel: FunctionComponent<{
                                                             <Clock className="h-3 w-3" strokeWidth={2} aria-hidden="true" />
                                                             Stop Pending
                                                         </div>
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => getPendingActionState(pendingActionIds, `dispatch-force-cancel:${dispatch.id}`) === "idle" && onForceCancelTaskDispatch(dispatch.id)}
-                                                            aria-label={"Force cancel dispatch " + dispatch.id}
-                                                            {...getLiveActionDisplayProps(getPendingActionState(pendingActionIds, `dispatch-force-cancel:${dispatch.id}`) === "pending", false)}
-                                                            className="inline-flex items-center gap-1.5 rounded-md border border-status-red/20 bg-status-red/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.12em] text-status-red transition-colors hover:bg-status-red/15 aria-disabled:opacity-50"
-                                                            >
-                                                            <XCircle className={`h-3 w-3 ${getPendingActionState(pendingActionIds, `dispatch-force-cancel:${dispatch.id}`) === "pending" ? "motion-safe:animate-spin" : ""}`} strokeWidth={2} aria-hidden="true" />
-                                                            {getPendingActionState(pendingActionIds, `dispatch-force-cancel:${dispatch.id}`) === "pending" ? "Force Cancelling" : "Force Cancel"}
-                                                            {getPendingActionState(pendingActionIds, `dispatch-force-cancel:${dispatch.id}`) === "pending" && <span className="sr-only">Force Cancelling...</span>}
-                                                        </button>
+                                                        <RuntimeActionButton
+                                                            actionState={forceCancelActionState}
+                                                            labels={{ idle: "Force Cancel", pending: "Force Cancelling", success: "Force Cancelled", error: "Force Cancel Failed" }}
+                                                            ariaLabel={"Force cancel dispatch " + dispatch.id}
+                                                            onActivate={() => onForceCancelTaskDispatch(dispatch.id)}
+                                                            toneClassName="border border-status-red/20 bg-status-red/10 text-status-red hover:bg-status-red/15"
+                                                            icon={<XCircle className={`h-3 w-3 ${forceCancelActionState === "pending" ? "motion-safe:animate-spin" : ""}`} strokeWidth={2} aria-hidden="true" />}
+                                                        />
                                                     </>
                                                 )}
                                                 {(dispatch.status === "failed" || dispatch.status === "blocked" || dispatch.status === "cancelled") && (
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => getPendingActionState(pendingActionIds, `dispatch-retry:${dispatch.id}`) === "idle" && onRetryTaskDispatch(dispatch.id)}
-                                                        aria-label={"Retry dispatch " + dispatch.id}
-                                                        {...getLiveActionDisplayProps(getPendingActionState(pendingActionIds, `dispatch-retry:${dispatch.id}`) === "pending", false)}
-                                                        className="inline-flex items-center gap-1.5 rounded-md border border-signal-500/20 bg-signal-500/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.12em] text-signal-600 transition-colors hover:bg-signal-500/15 aria-disabled:opacity-50 dark:text-signal-400"
-                                                        >
-                                                        <RotateCcw className={`h-3 w-3 ${getPendingActionState(pendingActionIds, `dispatch-retry:${dispatch.id}`) === "pending" ? "motion-safe:animate-spin" : ""}`} strokeWidth={2} aria-hidden="true" />
-                                                        {getPendingActionState(pendingActionIds, `dispatch-retry:${dispatch.id}`) === "pending" ? "Retrying" : "Retry"}
-                                                        {getPendingActionState(pendingActionIds, `dispatch-retry:${dispatch.id}`) === "pending" && <span className="sr-only">Retrying...</span>}
-                                                    </button>
+                                                    <RuntimeActionButton
+                                                        actionState={retryActionState}
+                                                        labels={{ idle: "Retry", pending: "Retrying", success: "Retry Started", error: "Retry Failed" }}
+                                                        ariaLabel={"Retry dispatch " + dispatch.id}
+                                                        onActivate={() => onRetryTaskDispatch(dispatch.id)}
+                                                        toneClassName="border border-signal-500/20 bg-signal-500/10 text-signal-600 hover:bg-signal-500/15 dark:text-signal-400"
+                                                        icon={<RotateCcw className={`h-3 w-3 ${retryActionState === "pending" ? "motion-safe:animate-spin" : ""}`} strokeWidth={2} aria-hidden="true" />}
+                                                    />
                                                 )}
                                             </div>
                                         </div>

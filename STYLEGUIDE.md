@@ -1,4 +1,4 @@
-# Jules Agent OS — Design System & Styleguide
+# Code UX — Design System & Styleguide
 
 > Version 1.0 — Dashboard V2
 > Stack: Preact · Tailwind CSS v4 · GSAP · Lucide Icons · TanStack Router
@@ -9,13 +9,13 @@
 
 ### "Warm Void"
 
-The Jules Agent OS aesthetic is built on a single tension: **warmth vs. precision**. The darkness is never cold. The light is never sterile. Every surface, animation, and interaction should feel like it exists in a physical space — weighty, responsive, alive.
+The Code UX aesthetic is built on a single tension: **warmth vs. precision**. The darkness is never cold. The light is never sterile. Every surface, animation, and interaction should feel like it exists in a physical space — weighty, responsive, alive.
 
 **Core principles:**
 
 1. **Warmth over cold.** Backgrounds use warm charcoal (`#0E0C0A`), not pure black. Light backgrounds use cream (`#F9F8F4`), not pure white. Every neutral has a warm undertone.
 
-2. **One signal, not noise.** A single luminous accent color — Signal Jade (`#00E0A0`) — carries all primary interactive meaning. Never introduce a new hue for decoration.
+2. **One signal, not noise.** A single semantic signal scale carries primary interactive meaning. Light mode uses a stable blue signal, while dark mode keeps the luminous jade signal. Never introduce a new hue for decoration.
 
 3. **Motion serves meaning.** Every animation exists because it communicates state, response, or data. Gratuitous animation is removed. Purposeful animation is crafted.
 
@@ -48,15 +48,15 @@ The warm dark scale. Used for surfaces, backgrounds, and depth layering.
 
 #### Signal (Primary Accent)
 
-One accent. Always. The entire interactive language speaks in jade.
+One semantic accent. Always. The signal utilities keep the same names across themes, but the actual hue is theme-specific so light and dark surfaces each get the right contrast.
 
-| Token | Hex | Usage |
-|---|---|---|
-| `signal-300` | `#80FFD6` | Very subtle tints, glass highlights |
-| `signal-400` | `#33FFB8` | Hover state of signal, glows |
-| `signal-500` | `#00E0A0` | Primary accent — active states, indicators, focus rings |
-| `signal-600` | `#00B882` | Pressed state, text on light backgrounds |
-| `signal-700` | `#008F65` | High-contrast signal for accessibility |
+| Token | Light | Dark | Usage |
+|---|---|---|---|
+| `signal-300` | `#8FC7FF` | `#80FFD6` | Very subtle tints, glass highlights |
+| `signal-400` | `#2F80D7` | `#33FFB8` | Hover state of signal, glows |
+| `signal-500` | `#005EB8` | `#00E0A0` | Primary accent — active states, indicators, focus rings |
+| `signal-600` | `#004B93` | `#00E0A0` | Text and pressed state |
+| `signal-700` | `#003A70` | `#008F65` | High-contrast signal for accessibility |
 
 **Rule:** Signal is never used for decoration. It appears when something is active, selected, running, or requires the user's attention in a positive way.
 
@@ -115,8 +115,8 @@ Loaded via Google Fonts in `dashboard/index.html`.
 | Role | Class | Notes |
 |---|---|---|
 | Hero headline | `text-5xl` / `text-6xl` / `text-7xl` `font-black tracking-tighter font-display` | Page-level titles only. Leading: `leading-[0.92]` |
-| Section title | `text-2xl` / `text-3xl` `font-black tracking-tighter font-display` | Component section headers |
-| Card label | `text-xl` `font-bold tracking-tight` | Card/item names |
+| Section title | `text-xl` / `text-2xl` `font-semibold tracking-tight font-display` | Component section headers; keep smaller than H1 |
+| Card label | `text-lg` `font-semibold tracking-tight` | Card/item names |
 | UI label | `text-xs` / `text-sm` `font-medium` | Form labels, metadata |
 | Status tag | `text-[10px] font-bold uppercase tracking-widest` | Status badges, category chips |
 | Metric number | `text-[2.25rem] font-semibold font-mono tracking-tighter` | Stat card values |
@@ -236,30 +236,27 @@ The Sparkline SVG sits `absolute bottom-0 left-0 w-full h-20` and uses smooth cu
 
 ### Organic Cells (SourcesGrid / SprintsPage)
 
-The liquid blob pattern uses two elements:
+The liquid blob pattern uses a shared animated shadow underlay and a clipped body:
 
 ```tsx
-{/* 1. Shadow underlay — rendered OUTSIDE the mask, unclipped */}
-<div className="absolute inset-0 shadow-[...] animate-organic pointer-events-none" />
+{/* 1. Animated shadow underlay — shared by project and sprint cells */}
+<div className={`absolute inset-0 ${ORGANIC_CELL_SHADOW_CLASS} animate-organic`} />
 
-{/* 2. Clipped liquid body — WebkitMask clips content to the organic shape */}
+{/* 2. Animated liquid body */}
 <div
     className="absolute inset-0 bg-white/55 dark:bg-void-800/65 backdrop-blur-3xl
                border border-white/70 dark:border-white/[0.06]
-               overflow-hidden animate-organic transform-gpu"
+               overflow-hidden rounded-[inherit] transform-gpu animate-organic"
     style={{ WebkitMaskImage: '-webkit-radial-gradient(white, black)', backfaceVisibility: 'hidden' }}
 >
     {/* Inner inset highlight */}
-    <div className="absolute inset-0 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.5)]
-                    dark:shadow-[inset_0_0_0_1px_rgba(255,255,255,0.04)] animate-organic" />
-    {/* Status ring — only for non-idle states */}
-    {state.ring && (
-        <div className={`absolute inset-0 border-2 animate-[spin_5s_linear_infinite]
-                         scale-105 mix-blend-screen ${state.ring}`}
-             style={{ borderRadius: '40% 60% 70% 30% / 40% 50% 60% 50%', clipPath: 'inset(-10px)' }} />
-    )}
+    <div className="absolute inset-0 rounded-[inherit]
+                    shadow-[inset_0_0_0_1px_rgba(255,255,255,0.5)]
+                    dark:shadow-[inset_0_0_0_1px_rgba(255,255,255,0.04)]" />
 </div>
 ```
+
+Use `ORGANIC_CELL_SHADOW_CLASS` for the ambient sprint/source cell background shadow so `SourceCell` and `SprintCell` stay visually identical. Keep the underlay animated with the same `animate-organic` / `animate-organic-reverse` class as the cell body.
 
 The `WebkitMaskImage: '-webkit-radial-gradient(white, black)'` is what makes `overflow-hidden` respect the organic `border-radius` shape. Without it, the content clips to a rectangle.
 

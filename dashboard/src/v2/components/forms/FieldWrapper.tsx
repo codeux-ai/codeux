@@ -84,6 +84,9 @@ export function FieldWrapper({ label, error, children, htmlFor, required, helper
       if (!control) {
         return;
       }
+      if (!("closest" in control) || typeof control.closest !== "function") {
+        return;
+      }
       const owner = control.closest("form") ?? document;
       const firstInvalid = owner.querySelector<HTMLElement>("[aria-invalid='true']");
       if (firstInvalid === control && typeof control.focus === "function") {
@@ -119,6 +122,7 @@ export function FieldWrapper({ label, error, children, htmlFor, required, helper
   const child = toChildArray(children).map(child => {
     if (!isValidElement(child)) return child;
     const existingOnBlur = (child as any)?.props?.onBlur;
+    const existingOnFocusOut = (child as any)?.props?.onFocusOut;
     const existingDescribedBy = (child as any)?.props?.["aria-describedby"];
     const existingErrorMessage = (child as any)?.props?.["aria-errormessage"];
     const existingInvalid = (child as any)?.props?.["aria-invalid"];
@@ -141,6 +145,10 @@ export function FieldWrapper({ label, error, children, htmlFor, required, helper
       onBlur: (e: any) => {
         setTouched(true);
         existingOnBlur?.(e);
+      },
+      onFocusOut: (e: any) => {
+        setTouched(true);
+        existingOnFocusOut?.(e);
       },
       valid: !error ? (valid ?? (child as any).props.valid) : undefined,
     };
@@ -227,7 +235,7 @@ export function FieldWrapper({ label, error, children, htmlFor, required, helper
             }
           }}
         >
-          {displayedError}
+          {showError && error ? error : displayedError}
         </p>
       </div>
     </div>

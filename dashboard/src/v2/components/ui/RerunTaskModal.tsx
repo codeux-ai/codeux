@@ -1,10 +1,7 @@
 import type { FunctionComponent } from "preact";
-import { useLayoutEffect, useMemo, useRef, useState, useEffect } from "preact/hooks";
-import gsap from "gsap";
-import { AlertTriangle, GitBranch, RotateCcw, Trash2, X } from "lucide-preact";
-import { useFocusTrap } from "../../hooks/use-focus-trap.js";
-import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
-import { MODAL_MOTION } from "../../lib/motion/modal-motion.js";
+import { useMemo, useState, useEffect } from "preact/hooks";
+import { AlertTriangle, GitBranch, Loader2, RotateCcw, Trash2, X } from "lucide-preact";
+import { useActionFeedback } from "../../hooks/use-action-feedback.js";
 import type { Subtask, SystemSettings } from "../../../types.js";
 import { AvantgardeSelect } from "./AvantgardeSelect.js";
 import { fetchSystemSettings } from "../../lib/settings-api.js";
@@ -15,6 +12,7 @@ import {
     providerSupportsModelSelection,
 } from "../../lib/settings-view-models.js";
 import { ProviderBrandIcon } from "../providers/ProviderBrandIcon.js";
+import { ActionFeedbackRegion } from "./ActionFeedbackRegion.js";
 import { Modal } from "./Modal.js";
 
 interface RerunTaskModalProps {
@@ -35,20 +33,31 @@ export const RerunTaskModal: FunctionComponent<RerunTaskModalProps> = ({
     onClose,
     onConfirm,
 }) => {
-    const cardRef = useRef<HTMLDivElement>(null);
-
     const [providerConfigId, setProviderConfigId] = useState("");
     const [clearWorktree, setClearWorktree] = useState(false);
     const [resetDependents, setResetDependents] = useState(false);
     const [undoMerge, setUndoMerge] = useState(Boolean(task.is_merged) || MERGED_TASK_INDICATORS.has(task.merge_indicator || ""));
-
-    const reducedMotion = useReducedMotion();
     const [isSubmitting, setIsSubmitting] = useState(false);
 
     const [systemSettings, setSystemSettings] = useState<SystemSettings | null>(null);
+    const [settingsLoaded, setSettingsLoaded] = useState(false);
+    const { feedback, setPending, setSuccess, setError, clearFeedback, clearError } = useActionFeedback();
 
     useEffect(() => {
-        fetchSystemSettings().then(setSystemSettings).catch(() => {});
+        let active = true;
+        fetchSystemSettings()
+            .then((settings) => {
+                if (!active) return;
+                setSystemSettings(settings);
+                setSettingsLoaded(true);
+            })
+            .catch(() => {
+                if (!active) return;
+                setSettingsLoaded(true);
+            });
+        return () => {
+            active = false;
+        };
     }, []);
 
     const providerOptions = useMemo(() => {
@@ -141,7 +150,9 @@ export const RerunTaskModal: FunctionComponent<RerunTaskModalProps> = ({
 
 
     const handleSubmit = async () => {
+        if (isSubmitting) return;
         setIsSubmitting(true);
+        setPending("Preparing task rerun...");
         try {
             await onConfirm({
                 provider: selectedProvider?.provider,
@@ -152,11 +163,21 @@ export const RerunTaskModal: FunctionComponent<RerunTaskModalProps> = ({
                 undoMerge: taskAlreadyMerged && undoMerge,
             });
             setIsSubmitting(false);
-            handleClose();
+            setSuccess("Task rerun started.", { autoDismiss: false });
+            window.setTimeout(() => onClose(), 700);
         } catch (err) {
             setIsSubmitting(false);
-            throw err;
+            const message = err instanceof Error ? err.message : String(err);
+            setError(message || "Failed to rerun task.", { retryAction: handleSubmit, retryLabel: "Retry", autoDismiss: false });
         }
+    };
+
+    const optionCardClass = (selected: boolean, tone: "amber" | "red" = "amber") => {
+        const selectedClass = tone === "red"
+            ? "border-status-red/40 bg-status-red/10 text-status-red"
+            : "border-status-amber/45 bg-status-amber/10 text-status-amber";
+        const idleClass = "border-black/[0.08] bg-black/[0.02] text-slate-600 hover:border-status-amber/30 dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-slate-300";
+        return `group flex items-start gap-3 rounded-2xl border px-4 py-3 transition-all focus-within:ring-2 focus-within:ring-status-amber cursor-pointer has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-55 ${selected ? selectedClass : idleClass}`;
     };
 
     return (
@@ -164,7 +185,7 @@ export const RerunTaskModal: FunctionComponent<RerunTaskModalProps> = ({
             isOpen={true}
             onClose={handleClose}
             ariaLabelledBy="rerun-modal-title"
-            className="w-full max-w-md !p-0 !rounded-[2rem]"
+            className="w-[calc(100vw-2rem)] sm:w-full max-w-md !p-0 !rounded-[2rem]"
         >
             <div
                 className="w-full cursor-default overflow-hidden bg-white dark:bg-void-900"
@@ -186,6 +207,7 @@ export const RerunTaskModal: FunctionComponent<RerunTaskModalProps> = ({
                         type="button"
                         onClick={handleClose}
                         aria-label="Close dialog"
+                        disabled={isSubmitting}
                         className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-black/[0.04] text-slate-400 hover:text-slate-700 dark:bg-white/[0.04] dark:text-slate-500 dark:hover:text-white transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-status-amber"
                     >
                         <X aria-hidden="true" className="w-3.5 h-3.5" strokeWidth={2} />
@@ -194,6 +216,16 @@ export const RerunTaskModal: FunctionComponent<RerunTaskModalProps> = ({
 
                 {/* Body */}
                 <div className="px-7 pb-6 space-y-5">
+                    <ActionFeedbackRegion
+                        status={feedback.status}
+                        message={feedback.message}
+                        onDismiss={clearFeedback}
+                        clearError={clearError}
+                        autoDismiss={feedback.autoDismiss}
+                        retryAction={feedback.retryAction}
+                        retryLabel={feedback.retryLabel}
+                    />
+
                     <p className="text-[13px] text-slate-500 dark:text-slate-400 leading-relaxed">
                         This will reset <span className="font-semibold text-slate-700 dark:text-slate-200">{task.title}</span> and start a fresh execution.
                     </p>
@@ -216,12 +248,20 @@ export const RerunTaskModal: FunctionComponent<RerunTaskModalProps> = ({
 
                     {/* Provider selector */}
                     <div className="space-y-2">
-                        <span className="text-[11px] font-bold uppercase tracking-[0.14em] text-slate-400">
-                            Provider
-                        </span>
+                        <div className="flex items-center justify-between gap-3">
+                            <span className="text-[11px] font-bold uppercase tracking-[0.14em] text-slate-400">
+                                Provider
+                            </span>
+                            {!settingsLoaded && (
+                                <span role="status" aria-live="polite" className="inline-flex items-center gap-1.5 text-[10px] font-semibold text-status-amber">
+                                    <Loader2 aria-hidden="true" className="h-3 w-3 motion-safe:animate-spin motion-reduce:animate-none" />
+                                    Loading providers
+                                </span>
+                            )}
+                        </div>
                         <AvantgardeSelect
                             aria-label="Provider"
-                            disabled={isSubmitting}
+                            disabled={isSubmitting || !settingsLoaded}
                             value={providerConfigId}
                             onChange={setProviderConfigId}
                             options={providerOptions}
@@ -237,12 +277,19 @@ export const RerunTaskModal: FunctionComponent<RerunTaskModalProps> = ({
 
                     {showModelOverride && (
                         <div className="space-y-2">
-                            <span className="text-[11px] font-bold uppercase tracking-[0.14em] text-slate-400">
-                                Model Override
-                            </span>
+                            <div className="flex items-center justify-between gap-3">
+                                <span className="text-[11px] font-bold uppercase tracking-[0.14em] text-slate-400">
+                                    Model Override
+                                </span>
+                                {modelOptions.length === 0 && (
+                                    <span role="status" aria-live="polite" className="text-[10px] font-semibold text-slate-400">
+                                        Loading models
+                                    </span>
+                                )}
+                            </div>
                             <AvantgardeSelect
                                 aria-label="Model Override"
-                                disabled={isSubmitting}
+                                disabled={isSubmitting || modelOptions.length === 0}
                                 value={model}
                                 onChange={setModel}
                                 options={[
@@ -255,7 +302,7 @@ export const RerunTaskModal: FunctionComponent<RerunTaskModalProps> = ({
                     )}
 
                     {downstreamTasks.length > 0 && (
-                        <label className="flex items-start gap-3 cursor-pointer group">
+                        <label className={optionCardClass(resetDependents)}>
                             <input
                                 type="checkbox"
                                 checked={resetDependents}
@@ -263,7 +310,7 @@ export const RerunTaskModal: FunctionComponent<RerunTaskModalProps> = ({
                                 disabled={isSubmitting}
                                 className="mt-0.5 h-4 w-4 rounded border-black/[0.15] dark:border-white/[0.15] text-status-amber focus:ring-status-amber focus-visible:ring-2 focus-visible:ring-status-amber focus:ring-offset-0 cursor-pointer disabled:opacity-50"
                             />
-                            <div>
+                            <div className="min-w-0 flex-1">
                                 <div className="flex items-center gap-1.5">
                                     <GitBranch className="w-3 h-3 text-slate-400 group-hover:text-status-amber transition-colors" strokeWidth={2} />
                                     <span className="text-[12px] font-semibold text-slate-700 dark:text-slate-200">
@@ -289,7 +336,7 @@ export const RerunTaskModal: FunctionComponent<RerunTaskModalProps> = ({
 
                     {/* Undo merge checkbox */}
                     {taskAlreadyMerged && (
-                        <label className="flex items-start gap-3 cursor-pointer group">
+                        <label className={optionCardClass(undoMerge, "red")}>
                             <input
                                 type="checkbox"
                                 checked={undoMerge}
@@ -297,7 +344,7 @@ export const RerunTaskModal: FunctionComponent<RerunTaskModalProps> = ({
                                 disabled={isSubmitting}
                                 className="mt-0.5 h-4 w-4 rounded border-black/[0.15] dark:border-white/[0.15] text-status-amber focus:ring-status-amber focus-visible:ring-2 focus-visible:ring-status-amber focus:ring-offset-0 cursor-pointer disabled:opacity-50"
                             />
-                            <div>
+                            <div className="min-w-0 flex-1">
                                 <div className="flex items-center gap-1.5">
                                     <RotateCcw className="w-3 h-3 text-slate-400 group-hover:text-status-amber transition-colors" strokeWidth={2} />
                                     <span className="text-[12px] font-semibold text-slate-700 dark:text-slate-200">
@@ -312,7 +359,7 @@ export const RerunTaskModal: FunctionComponent<RerunTaskModalProps> = ({
                     )}
 
                     {/* Clear worktree checkbox */}
-                    <label className="flex items-start gap-3 cursor-pointer group">
+                    <label className={optionCardClass(clearWorktree)}>
                         <input
                             type="checkbox"
                             checked={clearWorktree}
@@ -320,7 +367,7 @@ export const RerunTaskModal: FunctionComponent<RerunTaskModalProps> = ({
                             disabled={isSubmitting}
                             className="mt-0.5 h-4 w-4 rounded border-black/[0.15] dark:border-white/[0.15] text-status-amber focus:ring-status-amber focus-visible:ring-2 focus-visible:ring-status-amber focus:ring-offset-0 cursor-pointer disabled:opacity-50"
                         />
-                        <div>
+                        <div className="min-w-0 flex-1">
                             <div className="flex items-center gap-1.5">
                                 <Trash2 className="w-3 h-3 text-slate-400 group-hover:text-status-amber transition-colors" strokeWidth={2} />
                                 <span className="text-[12px] font-semibold text-slate-700 dark:text-slate-200">

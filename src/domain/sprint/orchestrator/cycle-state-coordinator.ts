@@ -124,6 +124,7 @@ export class CycleStateCoordinator {
     activeMergeConflictTaskIds: Set<string>,
     activeHumanMergeConflictEscalationTaskIds: Set<string>,
     mergeConflictDebouncer?: MergeConflictDebouncer,
+    activeWorkerCiFixTaskIds: Set<string> = new Set(),
   ): void {
     const projectId = args.executionContext.project.id;
     const sprintId = args.executionContext.sprint.id;
@@ -153,6 +154,16 @@ export class CycleStateCoordinator {
       const humanEscalationActive = mergeConflictDetected
         && activeHumanMergeConflictEscalationTaskIds.has(taskId);
       const mergedFeatureTasks = selectMergedFeatureTaskContexts(subtasks, taskId);
+      const attentionType = mergeConflictDetected ? "merge_conflict" : "merge_required";
+      const ownerType: ProjectAttentionOwnerType = "worker";
+      const title = mergeConflictDetected
+        ? `Merge conflict for ${task.id}`
+        : `Merge required for ${task.id}`;
+      const summaryMarkdown = mergeConflictDetected
+        ? buildMergeConflictSummary(task, args, pr || null, mergedFeatureTasks)
+        : task.merge_indicator === "MERGE_BLOCKED"
+          ? `Task \`${task.id}\` is complete but blocked on merge work that could not be resolved automatically.`
+          : `Task \`${task.id}\` is complete and awaiting merge into \`${args.defaultFeatureBranch}\`.`;
 
       if (!humanEscalationActive) {
         itemsToOpen.push(buildTaskAttentionPayload({
@@ -160,15 +171,11 @@ export class CycleStateCoordinator {
           sprintId,
           taskId,
           sprintRunId: sprintRunId || "",
-          attentionType: mergeConflictDetected ? "merge_conflict" : "merge_required",
+          attentionType,
           severity: mergeConflictDetected || task.merge_indicator === "MERGE_BLOCKED" ? "high" : "medium",
-          ownerType: "worker",
-          title: mergeConflictDetected ? `Merge conflict for ${task.id}` : `Merge required for ${task.id}`,
-          summaryMarkdown: mergeConflictDetected
-            ? buildMergeConflictSummary(task, args, pr || null, mergedFeatureTasks)
-            : task.merge_indicator === "MERGE_BLOCKED"
-              ? `Task \`${task.id}\` is complete but blocked on merge work that could not be resolved automatically.`
-              : `Task \`${task.id}\` is complete and awaiting merge into \`${args.defaultFeatureBranch}\`.`,
+          ownerType,
+          title,
+          summaryMarkdown,
           payload: {
             repoPath: args.repoPath,
             workingDirectoryHint: `cd ${args.repoPath}`,
@@ -198,7 +205,9 @@ export class CycleStateCoordinator {
           },
           resolution: {
             status: "resolved",
-            reason: mergeConflictDetected ? "merge_conflict_attention_replaced" : "merge_required_attention_replaced",
+            reason: mergeConflictDetected
+              ? "merge_conflict_attention_replaced"
+              : "merge_required_attention_replaced",
           },
         });
       } else {
@@ -257,7 +266,7 @@ export class CycleStateCoordinator {
     const ciFixTaskIds = new Set<string>();
     for (const task of subtasks) {
       const taskId = task.record_id?.trim();
-      if (taskId && task.merge_indicator === "CI" && task.status === "RUNNING") {
+      if (taskId && task.merge_indicator === "CI" && (task.status === "RUNNING" || task.status === "CODING_COMPLETED")) {
         ciFixTaskIds.add(taskId);
       }
     }
@@ -289,7 +298,7 @@ export class CycleStateCoordinator {
           },
         });
       }
-      if (!ciFixTaskIds.has(taskId)) {
+      if (!ciFixTaskIds.has(taskId) && !activeWorkerCiFixTaskIds.has(taskId)) {
         itemsToResolve.push({
           filter: {
             projectId,
@@ -355,6 +364,19 @@ export function collectActiveWorkerMergeConflictTaskIds(subtasks: Array<{
   return new Set(
     subtasks
       .filter((item) => item.attentionType === "merge_conflict" && item.ownerType === "worker")
+      .map((item) => item.taskId?.trim())
+      .filter((taskId): taskId is string => Boolean(taskId)),
+  );
+}
+
+export function collectActiveWorkerCiFixTaskIds(subtasks: Array<{
+  taskId: string | null;
+  attentionType: string;
+  ownerType: string;
+}>): Set<string> {
+  return new Set(
+    subtasks
+      .filter((item) => item.attentionType === "ci_fix_required" && item.ownerType === "worker")
       .map((item) => item.taskId?.trim())
       .filter((taskId): taskId is string => Boolean(taskId)),
   );
@@ -433,6 +455,8 @@ export function mapSubtaskStatusToPlanningStatus(status: Subtask["status"]): Pla
   switch (status) {
     case "RUNNING":
       return "in_progress";
+    case "CODING_COMPLETED":
+      return "coding_completed";
     case "COMPLETED":
       return "completed";
     case "PENDING":

@@ -171,7 +171,7 @@ export const SprintMarkdownModal: FunctionComponent<SprintMarkdownModalProps> = 
         <div className="flex-1 min-w-0 overflow-hidden bg-white/98 dark:bg-void-800/98 p-8 flex flex-col">
           <div className="flex items-start justify-between mb-8">
             <div>
-              <h2 className="text-[2rem] font-black text-slate-900 dark:text-white tracking-tight font-display leading-none">
+              <h2 className="text-2xl font-semibold text-slate-900 dark:text-white tracking-tight font-display leading-none">
                 {title}
               </h2>
               <p className="text-xs font-medium text-slate-400 mt-2 tracking-wide">
@@ -301,7 +301,7 @@ export const SprintMarkdownModal: FunctionComponent<SprintMarkdownModalProps> = 
                 {mode === "import" && (
                   <button
                     type="submit"
-                    className="group/btn flex items-center gap-2.5 px-6 py-3 bg-signal-500 hover:bg-signal-400 text-void-900 font-bold text-sm rounded-2xl transition-all duration-300 shadow-[0_4px_20px_rgba(0,224,160,0.25)] hover:shadow-[0_8px_32px_rgba(0,224,160,0.4)] hover:-translate-y-px"
+                    className="group/btn flex items-center gap-2.5 px-6 py-3 bg-signal-500 hover:bg-signal-400 text-white dark:text-void-900 font-bold text-sm rounded-2xl transition-all duration-300 shadow-[0_4px_20px_rgba(0,224,160,0.25)] hover:shadow-[0_8px_32px_rgba(0,224,160,0.4)] hover:-translate-y-px"
                   >
                     <Upload className="w-4 h-4" />
                     Import Sprint

@@ -1,11 +1,13 @@
 import { FunctionComponent } from "preact";
-import { useState, useEffect, useLayoutEffect, useRef } from "preact/hooks";
+import { useState, useEffect, useLayoutEffect, useMemo, useRef } from "preact/hooks";
 import { ActionFeedbackRegion } from "../ui/ActionFeedbackRegion.js";
 import { ConfirmDialog } from "../ui/ConfirmDialog.js";
+import { Loader2, Plus, RefreshCw, SearchX } from "lucide-preact";
 
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 import gsap from "gsap";
-import { GSAP_INTERACTION_TOKENS } from "../../lib/motion/constants.js";
+import { useGsapInteractionTokens } from "../../lib/motion/constants.js";
+import { useInteractionTokens } from "../../lib/motion/index.js";
 import { useComputed } from "@preact/signals";
 import { MemoryCard } from "./MemoryCard.js";
 import { clearSelectedMemoryIds, searchQuerySignal, selectVisibleMemoryIds, selectedMemoryIdsSignal, activeTierSignal, memoryMutationsSignal } from "./memoryState.js";
@@ -15,9 +17,14 @@ import type { MemNode } from "../../lib/memory-graph.js";
 export const MemoryList: FunctionComponent<{
     nodes: MemNode[];
     onSelectNode: (idx: number) => void;
-}> = ({ nodes, onSelectNode }) => {
-    const filteredNodes = useComputed(() => {
-        const query = searchQuerySignal.value;
+    refreshing?: boolean;
+    loadError?: string | null;
+    onRetry?: () => void;
+    onAddMemory?: () => void;
+}> = ({ nodes, onSelectNode, refreshing = false, loadError = null, onRetry, onAddMemory }) => {
+    const committedQuery = searchQuerySignal.value;
+    const filteredNodes = useMemo(() => {
+        const query = committedQuery;
         if (!query.trim()) {
             return nodes.map((node, index) => ({ node, index })).filter(({ node }) => node.alive);
         }
@@ -32,36 +39,47 @@ export const MemoryList: FunctionComponent<{
 
                 return node.content.toLowerCase().includes(lower) || node.category.toLowerCase().includes(lower);
             });
-    });
+    }, [committedQuery, nodes]);
 
     const reducedMotion = useReducedMotion();
+    const gsapTokens = useGsapInteractionTokens();
+    const interactionTokens = useInteractionTokens();
     const listRef = useRef<HTMLDivElement>(null);
-    const [renderedNodes, setRenderedNodes] = useState(filteredNodes.value);
+    const selectAllRef = useRef<HTMLButtonElement>(null);
+    const lastUsefulNodes = useRef(filteredNodes);
+    const lastUsefulQuery = useRef(searchQuerySignal.value.trim());
+    const [renderedNodes, setRenderedNodes] = useState(filteredNodes);
     const prevRenderedIds = useRef<Set<string>>(new Set());
     const { isOpen: isConfirmOpen, options: confirmOptions, requestConfirm, handleConfirm, handleCancel } = useConfirmDialog();
 
     useEffect(() => {
+        if (filteredNodes.length > 0) {
+            lastUsefulNodes.current = filteredNodes;
+            lastUsefulQuery.current = searchQuerySignal.value.trim();
+        }
+    }, [filteredNodes]);
+
+    useEffect(() => {
+        const currentQuery = searchQuerySignal.value.trim();
+        const canShowLastUseful = (refreshing || loadError)
+            && filteredNodes.length === 0
+            && lastUsefulNodes.current.length > 0
+            && lastUsefulQuery.current === currentQuery;
+        const nextNodes = canShowLastUseful
+            ? lastUsefulNodes.current
+            : filteredNodes;
+
         if (reducedMotion) {
-            const currentIds = new Set(filteredNodes.value.map((n: { node: MemNode }) => n.node.id));
-            const renderedIds = new Set(renderedNodes.map((n: { node: MemNode }) => n.node.id));
-            const removedIds = Array.from(renderedIds).filter(id => !currentIds.has(id));
-            if (removedIds.length > 0 && listRef.current) {
-                const elementsToRemove = removedIds.map(id => listRef.current?.querySelector(`[data-memory-id="${id}"]`)).filter(Boolean);
-                if (elementsToRemove.length > 0) {
-                    gsap.set(elementsToRemove, {
-                        opacity: 0,
-                        scale: 0.95,
-                        height: 0,
-                        marginBottom: 0,
-                        padding: 0
-                    });
-                }
-            }
-            setRenderedNodes(filteredNodes.value);
+            setRenderedNodes(nextNodes);
             return;
         }
 
-        const currentIds = new Set(filteredNodes.value.map((n: { node: MemNode }) => n.node.id));
+        if (nextNodes.length === 0 && filteredNodes.length === 0 && searchQuerySignal.value.trim()) {
+            setRenderedNodes(nextNodes);
+            return;
+        }
+
+        const currentIds = new Set(nextNodes.map((n: { node: MemNode }) => n.node.id));
         const renderedIds = new Set(renderedNodes.map((n: { node: MemNode }) => n.node.id));
         const removedIds = Array.from(renderedIds).filter(id => !currentIds.has(id));
 
@@ -74,20 +92,25 @@ export const MemoryList: FunctionComponent<{
                     height: 0,
                     marginBottom: 0,
                     padding: 0,
-                    duration: GSAP_INTERACTION_TOKENS.expansionCollapse.duration,
-                    ease: GSAP_INTERACTION_TOKENS.expansionCollapse.ease,
+                    duration: gsapTokens.expansionCollapse.duration,
+                    ease: gsapTokens.expansionCollapse.ease,
                     onComplete: () => {
-                        setRenderedNodes(filteredNodes.value);
+                        setRenderedNodes(nextNodes);
                     }
                 });
                 return;
             }
         }
-        setRenderedNodes(filteredNodes.value);
-    }, [filteredNodes.value, reducedMotion, renderedNodes]);
+        setRenderedNodes(nextNodes);
+    }, [filteredNodes, refreshing, loadError, reducedMotion, renderedNodes, gsapTokens.expansionCollapse.duration, gsapTokens.expansionCollapse.ease]);
 
     useEffect(() => {
-        const visibleIds = new Set(filteredNodes.value.map(({ node }) => node.id));
+        const currentQuery = searchQuerySignal.value.trim();
+        const visibleIds = new Set(
+            (refreshing || loadError) && filteredNodes.length === 0 && lastUsefulQuery.current === currentQuery
+                ? lastUsefulNodes.current.map(({ node }) => node.id)
+                : filteredNodes.map(({ node }) => node.id)
+        );
         const selectedIds = selectedMemoryIdsSignal.value;
         if (selectedIds.length === 0) {
             return;
@@ -97,7 +120,7 @@ export const MemoryList: FunctionComponent<{
         if (nextSelectedIds.length !== selectedIds.length) {
             selectedMemoryIdsSignal.value = nextSelectedIds;
         }
-    }, [filteredNodes.value]);
+    }, [filteredNodes, refreshing, loadError]);
 
     useLayoutEffect(() => {
         if (!listRef.current) return;
@@ -126,24 +149,41 @@ export const MemoryList: FunctionComponent<{
                 }, {
                     opacity: 1,
                     y: 0,
-                    duration: GSAP_INTERACTION_TOKENS.enterExit.duration,
+                    duration: gsapTokens.listReveal.duration,
                     stagger: 0.05,
-                    ease: GSAP_INTERACTION_TOKENS.enterExit.ease,
+                    ease: gsapTokens.listReveal.ease,
                     clearProps: "all"
                 });
             }
         }
 
         prevRenderedIds.current = currentRenderedIds as unknown as Set<string>;
-    }, [renderedNodes, reducedMotion]);
+    }, [renderedNodes, reducedMotion, gsapTokens.listReveal.duration, gsapTokens.listReveal.ease]);
 
     const resultCount = renderedNodes.length;
-    const totalAliveCount = nodes.filter((node) => node.alive).length;
-    const visibleIds = filteredNodes.value.map(({ node }) => node.id);
     const selectedIds = selectedMemoryIdsSignal.value;
     const selectedCount = selectedIds.length;
-    const allVisibleSelected = visibleIds.length > 0 && visibleIds.every((id) => selectedIds.includes(id));
     const activeTier = useComputed(() => activeTierSignal.value);
+    const mutationFeedback = memoryMutationsSignal.value.feedback;
+    const isDeleting = mutationFeedback?.status === "pending" && Boolean(mutationFeedback.message?.toLowerCase().includes("deleting"));
+    const countLabel = `${resultCount} ${resultCount === 1 ? "memory" : "memories"} shown`;
+    const isShowingStaleResults = (refreshing || Boolean(loadError))
+        && filteredNodes.length === 0
+        && renderedNodes.length > 0
+        && lastUsefulQuery.current === searchQuerySignal.value.trim();
+    const query = searchQuerySignal.value.trim();
+    const totalAliveCount = Math.max(
+        nodes.filter((node) => node.alive).length,
+        isShowingStaleResults ? renderedNodes.length : 0,
+    );
+    const visibleIds = (isShowingStaleResults ? renderedNodes : filteredNodes).map(({ node }) => node.id);
+    const allVisibleSelected = visibleIds.length > 0 && visibleIds.every((id) => selectedIds.includes(id));
+    const staleStatusText = loadError
+        ? `Could not refresh memories. Showing the last useful result list. ${loadError}`
+        : "Refreshing memories. Keeping the last useful result list visible.";
+    const selectionLabel = selectedCount > 0
+        ? `${selectedCount} ${selectedCount === 1 ? "memory" : "memories"} selected from ${visibleIds.length} visible ${visibleIds.length === 1 ? "memory" : "memories"}`
+        : "No memories selected";
 
     const handleVisibleSelect = () => {
         selectVisibleMemoryIds(visibleIds);
@@ -164,16 +204,79 @@ export const MemoryList: FunctionComponent<{
             if (!confirmed) return;
         }
 
-        void memoryMutationsSignal.value.removeMemories(selectedIds);
+        const idsToDelete = [...selectedIds];
+        await memoryMutationsSignal.value.removeMemories(idsToDelete);
+        requestAnimationFrame(() => {
+            const target = selectAllRef.current || listRef.current?.querySelector<HTMLElement>('[role="option"]');
+            target?.focus();
+        });
     };
 
     if (renderedNodes.length === 0) {
         const isEmpty = totalAliveCount === 0;
-        const message = isEmpty ? "No memories exist" : "No memories match your search or filters";
+        const message = loadError ? "Memory list could not refresh" : isEmpty ? "No memories exist" : "No memories match your search or filters";
         return (
-            <div className="flex min-h-0 min-w-0 flex-col items-center justify-center p-8 text-center text-slate-400">
-                <div className="sr-only" aria-live="polite" aria-atomic="true">{message}</div>
+            <div
+                id="memory-panel"
+                aria-labelledby={`tab-${activeTier.value}`}
+                className="flex min-h-0 min-w-0 flex-col items-center justify-center p-8 text-center text-slate-400"
+                role="listbox"
+                aria-label="Memory List"
+                aria-busy={refreshing || isDeleting}
+            >
+                <div className="sr-only" aria-live={loadError ? "assertive" : "polite"} aria-atomic="true">
+                    <span>{message}</span>
+                    <span>. Showing 0 of {totalAliveCount} memories.</span>
+                </div>
+                {loadError ? (
+                    <RefreshCw className="mb-2 h-7 w-7 text-status-red/70" aria-hidden="true" />
+                ) : (
+                    <SearchX className="mb-2 h-7 w-7 text-slate-400/70" aria-hidden="true" />
+                )}
                 <p className="max-w-full break-words text-sm font-medium">{message}</p>
+                <p className="mt-2 max-w-full break-words text-xs font-medium text-slate-400 dark:text-slate-500">
+                    {loadError
+                        ? loadError
+                        : isEmpty
+                            ? "Add a memory manually or run a sprint that captures project context."
+                            : `Clear the search or adjust filters to return to the previous result set${query ? ` for "${query}"` : ""}.`}
+                </p>
+                <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
+                    {loadError && onRetry && (
+                        <button
+                            type="button"
+                            onClick={onRetry}
+                            className="inline-flex items-center gap-1.5 rounded-lg border border-status-red/20 bg-status-red/[0.08] px-3 py-1.5 text-[11px] font-bold text-status-red transition-colors hover:bg-status-red/[0.14] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-status-red focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-900"
+                        >
+                            <RefreshCw size={13} aria-hidden="true" />
+                            Retry
+                        </button>
+                    )}
+                    {!loadError && !isEmpty && query && (
+                        <button
+                            type="button"
+                            onClick={() => { searchQuerySignal.value = ""; }}
+                            className="rounded-lg border border-black/[0.06] bg-black/[0.04] px-3 py-1.5 text-[11px] font-bold text-slate-500 transition-colors hover:bg-black/[0.08] hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-300 dark:hover:bg-white/[0.08] dark:hover:text-white dark:focus-visible:ring-offset-void-900"
+                        >
+                            Clear search
+                        </button>
+                    )}
+                    {!loadError && isEmpty && onAddMemory && (
+                        <button
+                            type="button"
+                            onClick={onAddMemory}
+                            className="inline-flex items-center gap-1.5 rounded-lg border border-signal-500/20 bg-signal-500/[0.1] px-3 py-1.5 text-[11px] font-bold text-signal-600 transition-colors hover:bg-signal-500/[0.16] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:text-signal-300 dark:focus-visible:ring-offset-void-900"
+                        >
+                            <Plus size={13} aria-hidden="true" />
+                            Add memory
+                        </button>
+                    )}
+                </div>
+                {!isEmpty && !loadError && (
+                    <p className="mt-2 max-w-full break-words text-xs font-medium text-slate-400 dark:text-slate-500">
+                        Showing 0 of {totalAliveCount} memories{query ? ` for "${query}"` : ""}
+                    </p>
+                )}
             </div>
         );
     }
@@ -185,31 +288,73 @@ export const MemoryList: FunctionComponent<{
             className="flex min-h-0 min-w-0 flex-1 flex-col gap-3 overflow-y-auto overflow-x-hidden p-2 dashboard-scrollbar"
             role="listbox"
             aria-label="Memory List"
+            aria-describedby="memory-list-status memory-list-selection-status"
+            aria-busy={refreshing || isDeleting}
         >
-            <div className="sr-only" aria-live="polite" aria-atomic="true">
-                {resultCount} {resultCount === 1 ? "memory" : "memories"} found
+            <div id="memory-list-status" className="sr-only" aria-live="polite" aria-atomic="true">
+                {countLabel}
+                {searchQuerySignal.value.trim() ? ` for ${searchQuerySignal.value.trim()}` : ""}
+                {refreshing ? ". Refreshing results." : ""}
+                {loadError ? `. Could not refresh results. Showing the last useful result list.` : ""}
+            </div>
+            <div id="memory-list-selection-status" className="sr-only" aria-live="polite" aria-atomic="true">
+                {selectionLabel}
             </div>
             <div className="sticky top-0 z-10 flex min-w-0 flex-col gap-2">
                 <div className="inline-flex max-w-full items-center gap-1.5 self-start rounded-lg border border-black/[0.04] bg-black/[0.02] px-2 py-1 text-xs font-medium text-slate-500 dark:border-white/[0.04] dark:bg-white/[0.02] dark:text-slate-400">
                     <span className="truncate">
                         Showing {resultCount} of {totalAliveCount} memories
+                        {searchQuerySignal.value.trim() ? ` for "${searchQuerySignal.value.trim()}"` : ""}
+                        {isShowingStaleResults ? " (last useful list)" : ""}
                     </span>
                 </div>
+                {(refreshing || loadError || isShowingStaleResults) && (
+                    <div
+                        className={`flex max-w-full items-start gap-2 rounded-lg border px-2.5 py-2 text-[11px] font-semibold leading-4 ${
+                            loadError
+                                ? "border-status-red/20 bg-status-red/[0.08] text-status-red"
+                                : "border-signal-500/18 bg-signal-500/[0.08] text-signal-700 dark:text-signal-300"
+                        }`}
+                        role={loadError ? "alert" : "status"}
+                        aria-live={loadError ? "assertive" : "polite"}
+                    >
+                        <RefreshCw size={13} className={refreshing && !loadError ? "mt-0.5 shrink-0 motion-safe:animate-spin" : "mt-0.5 shrink-0"} aria-hidden="true" />
+                        <span className="min-w-0 break-words">
+                            {staleStatusText}
+                        </span>
+                        {loadError && onRetry && (
+                            <button
+                                type="button"
+                                onClick={onRetry}
+                                className="ml-auto shrink-0 rounded-md border border-status-red/25 px-2 py-0.5 text-[10px] font-bold transition-colors hover:bg-status-red/[0.12] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-status-red focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-900"
+                            >
+                                Retry
+                            </button>
+                        )}
+                    </div>
+                )}
                 <div className="flex min-w-0 flex-wrap items-center gap-2">
                     <button
+                        ref={selectAllRef}
                         type="button"
                         onClick={handleVisibleSelect}
                         disabled={visibleIds.length === 0 || allVisibleSelected}
+                        title={allVisibleSelected ? "All currently visible memories are already selected." : undefined}
                         className="rounded-lg border border-black/[0.06] bg-black/[0.04] px-2.5 py-1 text-[11px] font-semibold text-slate-500 transition-colors duration-150 hover:bg-black/[0.08] hover:text-slate-700 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-300 dark:hover:bg-white/[0.08] dark:hover:text-white"
                     >
-                        {allVisibleSelected ? "All visible selected" : "Select all visible"}
+                        {allVisibleSelected ? `All ${visibleIds.length} visible selected` : `Select all ${visibleIds.length} visible`}
                     </button>
                     {selectedCount > 0 && (
-                        <div className="inline-flex max-w-full items-center gap-2 rounded-lg border border-signal-500/20 bg-signal-500/[0.08] px-2.5 py-1 text-xs font-semibold text-signal-500">
-                            <span>{selectedCount} selected</span>
+                        <div className={`inline-flex max-w-full items-center gap-2 rounded-lg border px-2.5 py-1 text-xs font-semibold ${
+                            isDeleting
+                                ? "border-status-red/20 bg-status-red/[0.08] text-status-red"
+                                : "border-signal-500/20 bg-signal-500/[0.08] text-signal-500"
+                        }`}>
+                            <span>{selectedCount} selected from {visibleIds.length} visible</span>
                             <button
                                 type="button"
                                 onClick={clearSelectedMemoryIds}
+                                disabled={isDeleting}
                                 className="rounded-md px-1.5 py-0.5 text-[11px] font-semibold text-slate-500 transition-colors hover:bg-black/[0.04] hover:text-slate-700 dark:text-slate-300 dark:hover:bg-white/[0.06] dark:hover:text-white"
                             >
                                 Clear
@@ -217,23 +362,34 @@ export const MemoryList: FunctionComponent<{
                             <button
                                 type="button"
                                 onClick={() => { void handleBatchDelete(); }}
-                                className="rounded-md bg-status-red px-2 py-1 text-[11px] font-semibold text-white transition-colors hover:bg-status-red/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-status-red focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-900"
+                                disabled={isDeleting}
+                                aria-describedby="memory-list-selection-status"
+                                className="inline-flex items-center gap-1.5 rounded-md bg-status-red px-2 py-1 text-[11px] font-semibold text-white transition-colors hover:bg-status-red/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-status-red focus-visible:ring-offset-2 disabled:cursor-wait disabled:opacity-70 dark:focus-visible:ring-offset-void-900"
                             >
-                                Delete selected
+                                {isDeleting && <Loader2 size={12} className="motion-safe:animate-spin" aria-hidden="true" />}
+                                {isDeleting ? `Deleting ${selectedCount}...` : selectedCount > 1 ? `Delete ${selectedCount} selected` : "Delete selected"}
                             </button>
                         </div>
                     )}
                 </div>
                 <ActionFeedbackRegion
-                    status={memoryMutationsSignal.value.feedback?.status || "idle"}
-                    message={memoryMutationsSignal.value.feedback?.message}
+                    status={mutationFeedback?.status || "idle"}
+                    message={mutationFeedback?.message}
                     onDismiss={memoryMutationsSignal.value.clearFeedback}
                     clearError={memoryMutationsSignal.value.clearError}
-                    retryAction={memoryMutationsSignal.value.feedback?.retryAction}
-                    retryLabel={memoryMutationsSignal.value.feedback?.retryLabel}
+                    retryAction={mutationFeedback?.retryAction}
+                    retryLabel={mutationFeedback?.retryLabel}
                 />
             </div>
-            <div className="flex min-w-0 flex-col gap-3" ref={listRef}>
+            <div
+                className="flex min-w-0 flex-col gap-3 transition-[gap] motion-reduce:transition-none"
+                style={{
+                    transitionDuration: interactionTokens.listReorder.duration,
+                    transitionTimingFunction: interactionTokens.listReorder.ease,
+                }}
+                ref={listRef}
+                data-reduced-motion={reducedMotion ? "true" : "false"}
+            >
                 {renderedNodes.map(({ node, index }: { node: MemNode; index: number }) => (
                     <div key={node.id} data-memory-id={node.id} className="min-w-0 will-change-transform transform-gpu">
                         <MemoryCard

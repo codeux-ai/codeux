@@ -24,6 +24,8 @@ vi.mock("gsap", () => ({
 }));
 import * as matchers from "@testing-library/jest-dom/matchers";
 expect.extend(matchers);
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { cleanup, render, screen, within } from '@testing-library/preact';
 import { StatsPage } from '../StatsPage.js';
@@ -343,6 +345,11 @@ describe('StatsPage visual tests', () => {
 
     render(<StatsPage />);
 
+    expect(screen.getAllByLabelText('Stats command controls').length).toBeGreaterThanOrEqual(2);
+    expect(screen.getByLabelText('Stats active lens')).toHaveTextContent('Composition');
+    expect(screen.getByLabelText('Stats project context')).toHaveTextContent('Project');
+    expect(screen.getByRole('group', { name: 'Time window presets' })).toBeTruthy();
+
     const modeGroup = screen.getByRole('group', { name: 'Analytics modes' });
     const expectedModes = [
       ['Trend', 'false'],
@@ -356,5 +363,20 @@ describe('StatsPage visual tests', () => {
     for (const [label, pressed] of expectedModes) {
       expect(within(modeGroup).getByRole('button', { name: label })).toHaveAttribute('aria-pressed', pressed);
     }
+  });
+
+  it('keeps the stats hero command band on Warm Void primitives without glass gradients', () => {
+    const css = readFileSync(join(process.cwd(), 'dashboard/src/v2/pages/stats/StatsPage.module.css'), 'utf8');
+    const heroPanelRule = css.match(/\.heroPanel\s*\{(?<body>[^}]*)\}/)?.groups?.body ?? '';
+    const heroControlsRule = css.match(/\.heroControls\s*\{(?<body>[^}]*)\}/)?.groups?.body ?? '';
+    const heroControlSectionRule = css.match(/\.heroControlSection\s*\{(?<body>[^}]*)\}/)?.groups?.body ?? '';
+
+    expect(heroPanelRule).toContain('background: var(--stats-surface-panel)');
+    expect(heroControlsRule).toContain('background: var(--stats-surface-subpanel)');
+    expect(heroPanelRule).not.toContain('linear-gradient');
+    expect(heroControlsRule).not.toContain('linear-gradient');
+    expect(heroControlSectionRule).not.toMatch(/border:\s*1px/);
+    expect(heroControlSectionRule).not.toMatch(/background:/);
+    expect(css).not.toContain('backdrop-blur');
   });
 });

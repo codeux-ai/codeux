@@ -1590,7 +1590,7 @@ describe("ExecutionRepository", () => {
       return text.includes("FROM execution_invocations")
         && text.includes("WHERE execution_invocations.project_id = ?");
     });
-    expect(invocationSnapshotReads).toHaveLength(1);
+    expect(invocationSnapshotReads).toHaveLength(3);
     expect(usageTaskSpy).toHaveBeenCalledTimes(1);
     expect(usageSprintRunSpy).toHaveBeenCalledTimes(1);
     expect(wallTimeTaskSpy).toHaveBeenCalledTimes(1);
@@ -3092,6 +3092,25 @@ describe("ExecutionRepository", () => {
 
       res = executionRepository.queryProjectInvocations({ projectId: project.id, limit: 1, offset: 0 });
       expect(res.items.length).toBe(1);
+    });
+
+    it("does not cap query results when no limit is supplied", async () => {
+      const { projectRepository, executionRepository } = await createRepositories();
+      const project = projectRepository.createProject({ name: "Proj", sourceType: "git", sourceRef: "https://foo" });
+
+      for (let index = 0; index < 105; index += 1) {
+        executionRepository.createExecutionInvocation({
+          projectId: project.id,
+          type: "dashboard_reply",
+          status: "completed",
+          startedAt: new Date(Date.UTC(2026, 2, 10, 12, 0, index)).toISOString(),
+        });
+      }
+
+      const res = executionRepository.queryProjectInvocations({ projectId: project.id });
+
+      expect(res.totalCount).toBe(105);
+      expect(res.items.length).toBe(105);
     });
   });
 

@@ -5,6 +5,7 @@ import { cleanup } from "@testing-library/preact";
 import * as matchers from "@testing-library/jest-dom/matchers";
 expect.extend(matchers);
 import { Table, TableHeader, TableBody, TableRow, TableCell } from "../Table";
+import { ListWindowSelector } from "../ListWindowSelector";
 
 describe("Table component", () => {
   afterEach(() => {
@@ -132,19 +133,36 @@ describe("Table component", () => {
     render(
       <Table>
         <TableHeader>
-          <TableCell isHeader onSort={handleSort} ariaSort="ascending">Sortable Header</TableCell>
+          <TableCell isHeader onSort={handleSort} ariaSort="ascending" sortLabel="Sort by sortable header">Sortable Header</TableCell>
         </TableHeader>
       </Table>
     );
 
-    const header = screen.getByRole("columnheader", { name: "Sortable Header" });
+    const header = screen.getByRole("columnheader", { name: /Sortable Header/ });
     expect(header).toHaveAttribute("aria-sort", "ascending");
 
-    const button = screen.getByRole("button", { name: "Sortable Header" });
+    const button = screen.getByRole("button", { name: "Sort by sortable header, sorted ascending" });
     expect(button).toBeInTheDocument();
+    expect(button).toHaveTextContent("Sortable Header");
+    expect(button).toHaveTextContent("sorted ascending");
 
     button.click();
     expect(handleSort).toHaveBeenCalledTimes(1);
+  });
+
+  it("announces result counts and busy table refresh state when provided", () => {
+    render(
+      <Table ariaLabel="Busy Table" resultCount={3} resultLabel="results" busy>
+        <TableBody>
+          <TableRow>
+            <TableCell>Data</TableCell>
+          </TableRow>
+        </TableBody>
+      </Table>
+    );
+
+    expect(screen.getByRole("table", { name: "Busy Table" })).toHaveAttribute("aria-busy", "true");
+    expect(screen.getByRole("status")).toHaveTextContent("Updating results. 3 results shown.");
   });
 
   it("handles long continuous strings without breaking mobile layout", () => {
@@ -165,5 +183,23 @@ describe("Table component", () => {
 
     const innerContainer = cell.querySelector("div");
     expect(innerContainer).toHaveClass("break-words", "min-w-0", "flex-1", "lg:contents");
+  });
+
+  it("announces list window ranges with reduced-motion-safe transition classes", () => {
+    render(
+      <ListWindowSelector
+        value={20}
+        onChange={vi.fn()}
+        totalItems={45}
+        visibleCount={20}
+        itemLabel="tasks"
+        ariaLabel="Select number of task rows"
+      />
+    );
+
+    expect(screen.getByRole("status")).toHaveTextContent("Showing 1 to 20 of 45 tasks.");
+    const selector = document.querySelector("[data-list-window-selector]") as HTMLElement;
+    expect(selector.style.transitionDuration).toBeTruthy();
+    expect(document.querySelector(".motion-reduce\\:transition-none")).toBeTruthy();
   });
 });

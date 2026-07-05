@@ -9,6 +9,9 @@ import {
   MessageSquare,
   Settings,
   User,
+  AlertTriangle,
+  Inbox,
+  type LucideIcon,
 } from "lucide-preact";
 import type { ExecutionInvocationMessageRecord, ExecutionInvocationRecord } from "../../../../types.js";
 import { fetchInvocationMessages } from "../../../../lib/invocation-api.js";
@@ -20,10 +23,10 @@ interface InvocationMessagesPanelProps {
 }
 
 const ROLE_CARD_CLASS: Record<ExecutionInvocationMessageRecord["role"], string> = {
-  system: `${SUBPANEL_CLASS} p-3`,
-  user: `${SUBPANEL_CLASS} p-3`,
-  assistant: `${SUBPANEL_CLASS} p-3`,
-  tool: `${SUBPANEL_CLASS} p-3 font-mono text-xs`,
+  system: "border-l-[color:var(--stats-detail-color)]",
+  user: "border-l-[color:var(--stats-accent-cyan)]",
+  assistant: "border-l-[color:var(--stats-positive-text)]",
+  tool: "border-l-[color:var(--stats-signal-text)]",
 };
 
 const ROLE_ICON_CLASS: Record<ExecutionInvocationMessageRecord["role"], string> = {
@@ -32,6 +35,44 @@ const ROLE_ICON_CLASS: Record<ExecutionInvocationMessageRecord["role"], string> 
   assistant: STATUS_TONE_CLASS.positive,
   tool: STATUS_TONE_CLASS.signal,
 };
+
+const SUMMARY_ITEM_CLASS = `${CHIP_CLASS} flex min-w-0 items-center gap-2 px-3 py-2`;
+const SUMMARY_LABEL_CLASS = "shrink-0 text-[9px] font-bold uppercase tracking-[0.16em] text-[color:var(--stats-label-color)]";
+const SUMMARY_VALUE_CLASS = "min-w-0 truncate text-xs font-semibold text-[color:var(--stats-value-color)]";
+
+const SystemFeedbackState: FunctionComponent<{
+  icon: LucideIcon;
+  title: string;
+  detail: string;
+  role: "status" | "alert";
+  ariaLabel: string;
+  tone?: keyof typeof STATUS_TONE_CLASS;
+  busy?: boolean;
+}> = ({ icon: Icon, title, detail, role, ariaLabel, tone = "neutral", busy }) => (
+  <div
+    role={role}
+    aria-label={ariaLabel}
+    aria-live={role === "status" ? "polite" : undefined}
+    aria-busy={busy ? "true" : undefined}
+    className={`${SUBPANEL_CLASS} flex min-w-0 items-start gap-3 px-3 py-3 text-sm`}
+  >
+    <div className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-[var(--stats-chip-radius)] ${STATUS_TONE_CLASS[tone]}`}>
+      <Icon className={busy ? "h-4 w-4 motion-safe:animate-spin" : "h-4 w-4"} strokeWidth={2.2} aria-hidden="true" />
+    </div>
+    <div className="min-w-0">
+      <div className="font-bold text-[color:var(--stats-value-color)]">{title}</div>
+      <div className="mt-1 break-words leading-relaxed text-[color:var(--stats-detail-color)] [overflow-wrap:anywhere]">{detail}</div>
+    </div>
+  </div>
+);
+
+function formatRoleLabel(message: ExecutionInvocationMessageRecord, invocation: ExecutionInvocationRecord): string {
+  if (message.role === "assistant") {
+    return invocation.model || "assistant";
+  }
+
+  return message.role;
+}
 
 function formatStatsDurationLabel(invocation: ExecutionInvocationRecord): string {
   if (!invocation.finishedAt) {
@@ -48,7 +89,7 @@ function formatStatsDurationLabel(invocation: ExecutionInvocationRecord): string
 }
 
 function renderStatusChip(status: ExecutionInvocationRecord["status"]): JSX.Element {
-  const baseClass = "inline-flex items-center rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.16em]";
+  const baseClass = `${CHIP_CLASS} inline-flex items-center px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em]`;
 
   switch (status) {
     case "running":
@@ -179,6 +220,26 @@ export const InvocationMessagesPanel: FunctionComponent<InvocationMessagesPanelP
     [messages, showAllMessages],
   );
 
+  const summaryItems = useMemo(() => [
+    { label: "Model", value: invocation.model || "Unknown model" },
+    { label: "Duration", value: formatStatsDurationLabel(invocation) },
+    { label: "Total", value: `${formatTokens(invocation.totalTokens ?? 0)} tokens` },
+    { label: "Flow", value: `${formatTokens(invocation.inputTokens ?? 0)} in / ${formatTokens(invocation.outputTokens ?? 0)} out` },
+    ...(invocation.cachedInputTokens && invocation.cachedInputTokens > 0
+      ? [{ label: "Cached", value: `${formatTokens(invocation.cachedInputTokens)} tokens` }]
+      : []),
+    { label: "Messages", value: messageCount.toLocaleString() },
+  ], [
+    invocation.cachedInputTokens,
+    invocation.finishedAt,
+    invocation.inputTokens,
+    invocation.model,
+    invocation.outputTokens,
+    invocation.startedAt,
+    invocation.totalTokens,
+    messageCount,
+  ]);
+
   const toggleSystemMessage = (messageId: string) => {
     setExpandedSystemMessages((current) => ({
       ...current,
@@ -191,15 +252,17 @@ export const InvocationMessagesPanel: FunctionComponent<InvocationMessagesPanelP
       id={`invocation-messages-${invocation.id}`}
       role="region"
       aria-label={`Invocation ${invocation.id} message transcript`}
-      aria-busy={loading ? "true" : undefined}
+      aria-busy={loading ? "true" : "false"}
       className={`${SUBPANEL_CLASS} mt-2 max-h-[560px] w-full min-w-0 max-w-full space-y-4 overflow-y-auto p-3 text-[color:var(--stats-detail-color)] sm:p-4`}
     >
       {invocation.lastErrorMessage ? (
-        <details className="mb-4 group">
-          <summary className={`cursor-pointer list-none rounded px-1 text-sm font-bold uppercase tracking-[0.16em] text-[color:var(--stats-negative-text)] transition-colors ${CONTROL_FOCUS_CLASS}`}>
-            Error Summary
+        <details className={`${SUBPANEL_CLASS} group p-3`}>
+          <summary className={`flex cursor-pointer list-none items-center justify-between gap-3 rounded-[var(--stats-control-radius)] px-1 text-[11px] font-bold uppercase tracking-[0.16em] text-[color:var(--stats-negative-text)] transition-colors hover:text-[color:var(--stats-value-color)] ${CONTROL_FOCUS_CLASS}`}>
+            <span>Error Summary</span>
+            <span className="text-[9px] text-[color:var(--stats-label-color)] group-open:hidden">Open</span>
+            <span className="hidden text-[9px] text-[color:var(--stats-label-color)] group-open:inline">Close</span>
           </summary>
-          <div className={`mt-2 whitespace-pre-wrap break-words rounded-2xl p-4 text-sm leading-relaxed [overflow-wrap:anywhere] ${STATUS_TONE_CLASS.negative}`}>
+          <div className={`mt-3 whitespace-pre-wrap break-words rounded-[var(--stats-subpanel-radius)] border px-3 py-3 text-sm leading-relaxed [overflow-wrap:anywhere] ${STATUS_TONE_CLASS.negative}`}>
             {invocation.lastErrorMessage}
           </div>
         </details>
@@ -207,68 +270,64 @@ export const InvocationMessagesPanel: FunctionComponent<InvocationMessagesPanelP
 
       <div className="space-y-2">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="min-w-0">
             <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-[color:var(--stats-label-color)]">
-              Message transcript
+              Message Transcript
             </div>
-            <div className="text-[11px] text-[color:var(--stats-detail-color)]">
-              {formatDateTime(invocation.lastMessageAt)}
+            <div className="mt-1 truncate text-[11px] text-[color:var(--stats-detail-color)]">
+              Last message {formatDateTime(invocation.lastMessageAt)}
             </div>
           </div>
           <button
             type="button"
             onClick={() => navigator.clipboard.writeText(JSON.stringify(messages, null, 2))}
             aria-label="Copy as JSON"
-            className={`rounded p-1 text-[color:var(--stats-label-color)] hover:text-[color:var(--stats-value-color)] ${CONTROL_FOCUS_CLASS}`}
+            className={`${CHIP_CLASS} inline-flex h-9 w-9 items-center justify-center text-[color:var(--stats-label-color)] transition-colors hover:bg-[color:var(--stats-surface-chip-hover)] hover:text-[color:var(--stats-value-color)] ${CONTROL_FOCUS_CLASS}`}
           >
             <Clipboard className="h-4 w-4" />
           </button>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2 text-sm">
-          <div className={`${CHIP_CLASS} rounded-full px-2.5 py-1 text-[color:var(--stats-value-color)]`}>
-            {invocation.model || "Unknown model"}
-          </div>
+        <div className="flex flex-wrap items-center gap-2">
           {renderStatusChip(invocation.status)}
-          <div className={`${CHIP_CLASS} rounded-full px-2.5 py-1 text-[color:var(--stats-detail-color)]`}>
-            {formatStatsDurationLabel(invocation)}
-          </div>
-          <div className={`${CHIP_CLASS} rounded-full px-2.5 py-1 text-[color:var(--stats-detail-color)]`}>
-            {formatTokens(invocation.totalTokens ?? 0)} total tokens
-          </div>
-          <div className={`${CHIP_CLASS} rounded-full px-2.5 py-1 text-[color:var(--stats-detail-color)]`}>
-            {formatTokens(invocation.inputTokens ?? 0)} in / {formatTokens(invocation.outputTokens ?? 0)} out
-          </div>
-          {invocation.cachedInputTokens && invocation.cachedInputTokens > 0 ? (
-            <div className={`${CHIP_CLASS} rounded-full px-2.5 py-1 text-[color:var(--stats-detail-color)]`}>
-              {formatTokens(invocation.cachedInputTokens)} cached
-            </div>
-          ) : null}
-          <div className={`${CHIP_CLASS} rounded-full px-2.5 py-1 text-[color:var(--stats-detail-color)]`}>
-            {messageCount.toLocaleString()} messages
+          <div className="grid min-w-0 flex-1 grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+            {summaryItems.map((item) => (
+              <div key={item.label} className={SUMMARY_ITEM_CLASS}>
+                <span className={SUMMARY_LABEL_CLASS}>{item.label}</span>
+                <span className={SUMMARY_VALUE_CLASS}>{item.value}</span>
+              </div>
+            ))}
           </div>
         </div>
-
-        {invocation.lastErrorMessage ? (
-          <div className={`whitespace-pre-wrap break-words rounded-xl px-3 py-2 text-sm leading-relaxed [overflow-wrap:anywhere] ${STATUS_TONE_CLASS.negative}`}>
-            {invocation.lastErrorMessage}
-          </div>
-        ) : null}
       </div>
 
       {loading ? (
-        <div role="status" aria-live="polite" aria-busy="true" className={`${SUBPANEL_CLASS} flex items-center gap-2 px-3 py-3 text-sm text-[color:var(--stats-label-color)]`}>
-          <Loader2 className="h-4 w-4 motion-safe:animate-spin" aria-hidden="true" />
-          Loading messages
-        </div>
+        <SystemFeedbackState
+          icon={Loader2}
+          title="Loading transcript messages"
+          detail="Fetching the recorded message list for this invocation."
+          role="status"
+          ariaLabel="Loading transcript messages"
+          tone="signal"
+          busy
+        />
       ) : error ? (
-        <div role="alert" className={`rounded-xl px-3 py-3 text-sm ${STATUS_TONE_CLASS.negative}`}>
-          Failed to load invocation messages — {error}
-        </div>
+        <SystemFeedbackState
+          icon={AlertTriangle}
+          title="Failed to load invocation messages"
+          detail={error}
+          role="alert"
+          ariaLabel="Transcript messages failed to load"
+          tone="negative"
+        />
       ) : messages.length === 0 ? (
-        <div role="status" aria-live="polite" className={`${SUBPANEL_CLASS} px-3 py-4 text-sm text-[color:var(--stats-label-color)]`}>
-          No messages recorded for this invocation
-        </div>
+        <SystemFeedbackState
+          icon={Inbox}
+          title="No transcript messages recorded"
+          detail="This invocation has no stored message records to inspect."
+          role="status"
+          ariaLabel="No transcript messages"
+        />
       ) : (
         <div className="space-y-3">
           {visibleMessages.map((message, index) => {
@@ -276,6 +335,7 @@ export const InvocationMessagesPanel: FunctionComponent<InvocationMessagesPanelP
             const isExpanded = Boolean(expandedSystemMessages[message.id]);
             const metadataLabels = buildMessageMetadata(message);
             const isErrorMessage = /\berror\b|\bfailed\b|\bexception\b/i.test(message.contentMarkdown);
+            const roleLabel = formatRoleLabel(message, invocation);
             const contentStyle = isSystem && !isExpanded
               ? ({
                 display: "-webkit-box",
@@ -290,11 +350,11 @@ export const InvocationMessagesPanel: FunctionComponent<InvocationMessagesPanelP
               <article
                 key={message.id}
                 aria-label={`${message.role} message ${index + 1}`}
-                className={`${ROLE_CARD_CLASS[message.role]} min-w-0 break-words [overflow-wrap:anywhere] ${isErrorMessage ? "border-l-2 border-l-[color:var(--stats-negative-text)] text-[color:var(--stats-negative-text)]" : ""}`}
+                className={`${SUBPANEL_CLASS} min-w-0 border-l-2 p-3 break-words [overflow-wrap:anywhere] ${ROLE_CARD_CLASS[message.role]} ${isErrorMessage ? "text-[color:var(--stats-negative-text)]" : ""}`}
               >
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="flex min-w-0 items-center gap-2">
-                    <span className={`inline-flex h-7 w-7 items-center justify-center rounded-full ${ROLE_ICON_CLASS[message.role]}`} aria-hidden="true">
+                    <span className={`inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full border ${ROLE_ICON_CLASS[message.role]}`} aria-hidden="true">
                       {message.role === "system" ? <Settings className="h-3.5 w-3.5" /> : null}
                       {message.role === "user" ? <User className="h-3.5 w-3.5" /> : null}
                       {message.role === "assistant" ? <Bot className="h-3.5 w-3.5" /> : null}
@@ -302,7 +362,7 @@ export const InvocationMessagesPanel: FunctionComponent<InvocationMessagesPanelP
                     </span>
                     <div className="min-w-0">
                       <div className="truncate text-[10px] font-bold uppercase tracking-[0.18em] text-[color:var(--stats-label-color)]">
-                        {message.role === "assistant" ? (invocation.model || "ASSISTANT") : message.role.toUpperCase()}
+                        {roleLabel}
                       </div>
                       <div className="mt-1 text-[10px] text-[color:var(--stats-detail-color)]">{formatDateTime(message.createdAt)}</div>
                     </div>
@@ -329,7 +389,7 @@ export const InvocationMessagesPanel: FunctionComponent<InvocationMessagesPanelP
                     onClick={() => toggleSystemMessage(message.id)}
                     aria-expanded={isExpanded}
                     aria-label={`${isExpanded ? "Collapse" : "Expand"} system message ${index + 1}`}
-                    className={`mt-2 inline-flex items-center gap-1.5 rounded px-1 text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--stats-label-color)] transition-colors hover:text-[color:var(--stats-value-color)] ${CONTROL_FOCUS_CLASS}`}
+                    className={`${CHIP_CLASS} mt-2 inline-flex items-center gap-1.5 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--stats-label-color)] transition-colors hover:bg-[color:var(--stats-surface-chip-hover)] hover:text-[color:var(--stats-value-color)] ${CONTROL_FOCUS_CLASS}`}
                   >
                     {isExpanded ? "Show less" : "Show more"}
                   </button>
@@ -342,16 +402,18 @@ export const InvocationMessagesPanel: FunctionComponent<InvocationMessagesPanelP
             <button
               type="button"
               onClick={() => setShowAllMessages(true)}
-              className={`inline-flex items-center gap-2 rounded-xl px-3 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-[color:var(--stats-detail-color)] transition-colors hover:text-[color:var(--stats-value-color)] ${CHIP_CLASS} ${CONTROL_FOCUS_CLASS}`}
+              className={`inline-flex items-center gap-2 px-3 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-[color:var(--stats-detail-color)] transition-colors hover:bg-[color:var(--stats-surface-chip-hover)] hover:text-[color:var(--stats-value-color)] ${CHIP_CLASS} ${CONTROL_FOCUS_CLASS}`}
             >
               <ExternalLink className="h-3.5 w-3.5" />
               Show all {messages.length} messages
             </button>
           ) : null}
 
-          <div className="flex items-center gap-2 text-[11px] text-[color:var(--stats-detail-color)]">
-            <MessageSquare className="h-3.5 w-3.5" />
-            Transcript rendered as plain text for readability and safety.
+          <div className={`${CHIP_CLASS} inline-flex max-w-full items-center gap-2 px-3 py-2 text-[11px] text-[color:var(--stats-detail-color)]`}>
+            <MessageSquare className="h-3.5 w-3.5 shrink-0" />
+            <span className="min-w-0 break-words [overflow-wrap:anywhere]">
+              Transcript rendered as plain text for readability and safety.
+            </span>
           </div>
         </div>
       )}

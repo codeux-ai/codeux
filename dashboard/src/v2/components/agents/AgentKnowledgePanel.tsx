@@ -180,7 +180,7 @@ export const AgentKnowledgePanel: FunctionComponent<{
                   : "border-black/[0.06] bg-white/40 hover:bg-white/70 dark:border-white/[0.06] dark:bg-white/[0.02] dark:hover:bg-white/[0.05]"
               }`}
             >
-              <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ${isSelected ? "bg-signal-500 text-slate-900 dark:text-void-900" : "bg-black/[0.05] text-slate-400 dark:bg-white/[0.06]"}`}>
+              <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ${isSelected ? "bg-signal-500 text-white dark:text-void-900" : "bg-black/[0.05] text-slate-400 dark:bg-white/[0.06]"}`}>
                 {savingId === doc.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : isSelected ? <Check className="h-4 w-4" strokeWidth={3} /> : <FileText className="h-3.5 w-3.5" strokeWidth={2.2} />}
               </span>
               <div className="min-w-0 flex-1">

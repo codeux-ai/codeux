@@ -74,6 +74,18 @@ The dashboard editor now initializes that config from the preset, exposes it thr
 
 Agent labels are still stored in the data model for markdown sync and built-in preset conventions, but the dashboard no longer exposes custom label editing. The Agents page displays computed route-assignment tags from effective project settings instead, including tags for built-in fallback selections on Planning agent, Worker, Project manager, and Quality assurance agent.
 
+Built-in Worker and Project manager presets seed `mcp_access_json` with `code_ux` enabled and the default `playwright` custom MCP server linked. Planning and QA presets do not receive that link by default. Existing agents with a user-edited MCP access payload keep their selections; only newly imported/generated defaults or previously unconfigured built-in Worker/Project manager records receive the seeded link.
+
+## Dashboard Interaction Contract
+
+Agent configuration surfaces expose state directly in the UI without changing the preset API contract or avatar schema:
+
+- Preset saves, creates, imports, deletes, sync operations, memory filter edits, MCP access changes, instruction file saves, and avatar edits use persistent status regions for pending, saved, failed, retry, disabled, and unsaved states.
+- Required preset fields and instruction file content validate on blur and submit. Submit attempts mark fields as touched, show helper or error copy, and focus the first invalid field.
+- Selected agents, instruction files, memory categories, MCP tools, and avatar parts include visible `Selected`, `Enabled`, `Disabled`, or equivalent labels so state is not communicated by color or avatar animation alone.
+- Selection movement uses the dashboard `selectionMovement` interaction token, while reduced-motion users still get static labels and badges.
+- Destructive or discard-style actions ask for confirmation and restore focus to the invoking control when the user cancels.
+
 ## Avatar Rendering Performance
 
 Agent preset avatars have two rendering tiers:

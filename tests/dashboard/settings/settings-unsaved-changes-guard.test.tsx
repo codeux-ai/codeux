@@ -1,7 +1,8 @@
 // @vitest-environment happy-dom
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
-import { cleanup, renderHook, render } from "@testing-library/preact";
+import { cleanup, renderHook, render, screen, fireEvent, waitFor } from "@testing-library/preact";
 import { UnsavedChangesModal } from "../../../dashboard/src/v2/components/ui/UnsavedChangesModal.js";
+import { NumberInput } from "../../../dashboard/src/v2/components/settings/SettingsFormFields.js";
 import { useUnsavedChangesGuard } from "../../../dashboard/src/v2/hooks/useUnsavedChangesGuard.js";
 import { getNavigationBlockerCount } from "../../../dashboard/src/v2/router/navigation-blocker.js";
 
@@ -130,5 +131,27 @@ describe("UnsavedChangesModal rendering", () => {
     buttons.forEach((btn) => {
       expect(btn.className).toContain("w-full");
     });
+  });
+
+  it("reveals locally derived numeric validation after the field is visited", async () => {
+    render(
+      <NumberInput
+        value={0}
+        onChange={vi.fn()}
+        min={1}
+        max={10}
+        aria-label="Retry budget"
+        helperText="Use a value from 1 to 10."
+      />,
+    );
+
+    const input = screen.getByRole("spinbutton", { name: "Retry budget" });
+    expect(input.getAttribute("aria-describedby")).toBeTruthy();
+    expect(screen.queryByRole("alert")).toBeNull();
+
+    fireEvent.input(input, { target: { value: "0" } });
+
+    await waitFor(() => expect(input.getAttribute("aria-invalid")).toBe("true"));
+    expect(screen.getByRole("alert").textContent).toContain("Use a value of at least 1.");
   });
 });

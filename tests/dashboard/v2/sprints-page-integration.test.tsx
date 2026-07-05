@@ -224,7 +224,26 @@ describe("SprintsPage Integration Regressions", () => {
     expect(screen.getByLabelText("Showing 25 of 25 sprints")).toBeInTheDocument();
   });
 
-  it("shows disabled reasons on controls and presents destructive confirmation", async () => {
+  it("shows disabled reasons on controls when action is pending", async () => {
+    vi.mocked(useSprintsPageData).mockReturnValue({
+      ...mockBaseData,
+      sortedSprints: [
+        { id: "sprint-3", number: 3, slug: "spr-03", name: "Sprint 3", status: "paused", tasksCount: 1, completion: 0, createdAt: "2026-06-01T12:00:00Z", updatedAt: "2026-06-01T12:00:00Z", projectId: "proj-1" }
+      ],
+      pendingActionIds: new Set(["sprint-resume:run-123"]),
+      activeRunsBySprintId: new Map(),
+      pauseResumeRunsBySprintId: new Map([["sprint-3", { id: "run-123", status: "paused" }]]),
+    } as any);
+
+    render(<SprintsPage />);
+
+    // SprintControls disable states check
+    const resumeBtn = screen.getByRole('button', { name: /Resume sprint 3 is pending/i });
+    expect(resumeBtn).toBeDisabled();
+    expect(resumeBtn).toHaveAttribute('title', 'Wait for the current sprint action to finish');
+  });
+
+  it("disables the row actions menu trigger when a delete is pending", async () => {
     const handleDeleteSprint = vi.fn();
 
     vi.mocked(useSprintsPageData).mockReturnValue({
@@ -232,21 +251,16 @@ describe("SprintsPage Integration Regressions", () => {
       sortedSprints: [
         { id: "sprint-3", number: 3, slug: "spr-03", name: "Sprint 3", status: "paused", tasksCount: 1, completion: 0, createdAt: "2026-06-01T12:00:00Z", updatedAt: "2026-06-01T12:00:00Z", projectId: "proj-1" }
       ],
-      pendingActionIds: new Set(["sprint-resume:run-123", "sprint-delete:sprint-3"]),
+      pendingActionIds: new Set(["sprint-delete:sprint-3"]),
       activeRunsBySprintId: new Map(),
-      pauseResumeRunsBySprintId: new Map([["sprint-3", { id: "run-123", status: "paused" }]]),
+      pauseResumeRunsBySprintId: new Map(),
       handleDeleteSprint,
     } as any);
 
     render(<SprintsPage />);
 
-    // SprintControls disable states check
-    const resumeBtn = screen.getByRole('button', { name: /Resuming/i });
-    expect(resumeBtn).toBeDisabled();
-    expect(resumeBtn).toHaveAttribute('title', 'Wait for the current action to finish');
-
-    // For the row menu
-    const moreTrigger = screen.getAllByRole("button", { name: /Open actions menu for sprint/i })[0];
+    // For the row menu - when bulk/delete action is pending, name changes to 'Cannot open actions menu...'
+    const moreTrigger = screen.getAllByRole("button", { name: /Cannot open actions menu for sprint/i })[0];
     expect(moreTrigger).toBeDisabled(); // the trigger is disabled when isRowPending (isDeletePending)
   });
 

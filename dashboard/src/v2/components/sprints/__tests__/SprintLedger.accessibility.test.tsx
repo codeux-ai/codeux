@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen } from "@testing-library/preact";
+import { cleanup, render, screen, waitFor } from "@testing-library/preact";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, it, expect, vi } from "vitest";
 import * as matchers from "@testing-library/jest-dom/matchers";
@@ -24,11 +24,12 @@ const mockSprint: Sprint = {
   endDate: null,
   featureBranch: null,
   baseCommitSha: null,
-    latestReview: undefined,
+  latestReview: undefined,
   id: "sprint-1",
   number: 1,
   slug: "spr-1",
   name: "Frontend Onboarding",
+  isGeneratedName: false,
   status: "running",
   goal: "Onboard new developers",
   tasksCount: 10,
@@ -110,7 +111,8 @@ describe("SprintLedger Accessibility", () => {
     expect(menuBtn).toHaveAttribute("aria-expanded", "false");
   });
 
-  it("announces sorting state via aria-sort and sort buttons", () => {
+  it("announces sorting state via aria-sort, sort buttons, and live text", async () => {
+    const user = userEvent.setup();
     render(
       <SprintLedger
         sprints={[mockSprint]}
@@ -135,16 +137,19 @@ describe("SprintLedger Accessibility", () => {
       />
     );
 
-    const createdBtns = screen.getAllByRole("button", { name: /Sort by Created, currently sorted/i });
+    const createdBtns = screen.getAllByRole("button", { name: /Sort by Created/i });
     const createdBtn = createdBtns[0];
     expect(createdBtn).toBeInTheDocument();
 
     const activeCell = createdBtn.closest("th");
     expect(activeCell).toHaveAttribute("aria-sort", "descending");
 
-    const nameBtns = screen.getAllByRole("button", { name: /Sort by Sprint, currently unsorted/i });
+    const nameBtns = screen.getAllByRole("button", { name: /Sort by Sprint/i });
     const inactiveCell = nameBtns[0].closest("th");
-    expect(inactiveCell).not.toHaveAttribute("aria-sort");
+    expect(inactiveCell).toHaveAttribute("aria-sort", "none");
+
+    await user.click(nameBtns[0]);
+    expect(inactiveCell).toHaveAttribute("aria-sort", "ascending");
   });
 
   it("provides explicit names for row controls including the sprint name", () => {
@@ -287,13 +292,17 @@ describe("SprintLedger Accessibility", () => {
     await vi.waitFor(() => expect(screen.getByText(/1 of 1 selected/i)).toBeInTheDocument());
 
     // Click bulk delete
-    const bulkDeleteBtns = screen.getAllByRole("button", { name: /^Delete selected sprints$/i });
+    const bulkDeleteBtns = screen.getAllByRole("button", { name: /Delete 1 selected sprints\. Permanent action\./i });
     const bulkDeleteBtn = bulkDeleteBtns[0];
     await user.click(bulkDeleteBtn);
 
     // Check for confirmation dialog
-    expect(await screen.findByText(/Delete Sprints\?/i)).toBeInTheDocument();
+    expect(await screen.findByText(/Delete 1 Selected Sprint\?/i)).toBeInTheDocument();
+    expect(screen.getByText(/You are deleting 1 selected sprint/i)).toBeInTheDocument();
     expect(screen.getByText(/This action is permanent and will cascade/i)).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    await waitFor(() => expect(bulkDeleteBtn).toHaveFocus());
   });
 
   it("reveals and collapses bulk actions based on selection count", () => {

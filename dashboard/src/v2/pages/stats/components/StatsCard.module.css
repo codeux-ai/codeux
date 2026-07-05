@@ -3,10 +3,8 @@
 .card {
   @apply relative flex min-w-0 flex-col justify-between overflow-visible motion-safe:transform-gpu;
   background:
-    linear-gradient(180deg, color-mix(in srgb, var(--stats-card-bg) 95%, var(--stats-card-accent-fill, transparent) 5%), var(--stats-card-bg)),
+    linear-gradient(180deg, color-mix(in srgb, var(--stats-card-bg) 96%, var(--stats-card-accent-fill, transparent) 4%), var(--stats-card-bg)),
     var(--stats-card-bg);
-  backdrop-filter: blur(var(--stats-surface-blur-panel));
-  -webkit-backdrop-filter: blur(var(--stats-surface-blur-panel));
   border: 1px solid var(--stats-card-border);
   border-radius: var(--stats-card-radius);
   padding: var(--stats-card-padding);
@@ -23,7 +21,7 @@
 .card:hover,
 .card.active {
   background:
-    linear-gradient(180deg, color-mix(in srgb, var(--stats-surface-panel-hover) 92%, var(--stats-card-accent-fill, transparent) 8%), var(--stats-surface-panel-hover)),
+    linear-gradient(180deg, color-mix(in srgb, var(--stats-surface-panel-hover) 94%, var(--stats-card-accent-fill, transparent) 6%), var(--stats-surface-panel-hover)),
     var(--stats-surface-panel-hover);
   border-color: var(--stats-border-strong);
   box-shadow: var(--stats-card-shadow-hover);
@@ -52,13 +50,13 @@
 
 .toneWarm {
   background:
-    linear-gradient(180deg, color-mix(in srgb, var(--stats-surface-panel) 95%, var(--stats-card-accent-fill, transparent) 5%), var(--stats-surface-panel)),
+    linear-gradient(180deg, color-mix(in srgb, var(--stats-surface-panel) 96%, var(--stats-card-accent-fill, transparent) 4%), var(--stats-surface-panel)),
     var(--stats-surface-panel);
 }
 
 .toneMuted {
   background:
-    linear-gradient(180deg, color-mix(in srgb, var(--stats-surface-subpanel) 95%, var(--stats-card-accent-fill, transparent) 5%), var(--stats-surface-subpanel)),
+    linear-gradient(180deg, color-mix(in srgb, var(--stats-surface-subpanel) 96%, var(--stats-card-accent-fill, transparent) 4%), var(--stats-surface-subpanel)),
     var(--stats-surface-subpanel);
 }
 
@@ -134,7 +132,7 @@
 }
 
 .card:hover .tint {
-  opacity: 0.72;
+  opacity: 0.5;
 }
 
 .card > :global(svg.absolute) {

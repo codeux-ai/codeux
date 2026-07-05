@@ -1,4 +1,5 @@
 import type { FunctionComponent, ComponentChildren } from "preact";
+import { useId } from "preact/hooks";
 import type { ProjectSettings, SettingsValueSource, ThinkingMode } from "../../../types.js";
 import { AvantgardeSelect } from "../ui/AvantgardeSelect.js";
 import { TextInput, TextAreaInput, NumberInput, SelectInput, Toggle } from "./SettingsFormFields.js";
@@ -37,6 +38,9 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
 }) => {
   const update = (patch: Partial<ProjectSettings>) => onChange({ ...settings, ...patch });
   const virtualWorkerModeEnabled = settings.workers.executionMode === "VIRTUAL";
+  const localGitModeReasonId = useId();
+  const localGitModeDisabled = settings.git.githubMode === "LOCAL";
+  const localGitModeReason = "Local Git mode keeps orchestration repo-local, so pull request, linked issue, and CI automation controls are disabled until GitHub mode is Remote.";
   const getBadge = (path: string): string | undefined => {
     if (!sources) {
       return undefined;
@@ -146,9 +150,17 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
           </Row>
 
         </div>
-        <Row label="Auto-create PRs" description={settings.git.githubMode === "LOCAL" ? "Open pull requests automatically for remote git workflows. (Disabled in Local mode)" : "Open pull requests automatically for remote git workflows."} badge={getBadge("git.autoCreatePr")}>
-          <Toggle aria-label="Auto-create PRs" aria-description={settings.git.githubMode === "LOCAL" ? "Open pull requests automatically for remote git workflows. (Disabled in Local mode)" : "Open pull requests automatically for remote git workflows."} value={settings.git.githubMode === "LOCAL" ? false : settings.git.autoCreatePr}
-            disabled={settings.git.githubMode === "LOCAL"}
+        {localGitModeDisabled ? (
+          <div
+            id={localGitModeReasonId}
+            className="rounded-xl border border-amber-500/20 bg-amber-500/[0.08] px-3 py-2 text-xs font-semibold leading-relaxed text-amber-700 dark:border-amber-300/20 dark:bg-amber-300/[0.08] dark:text-amber-200"
+          >
+            {localGitModeReason}
+          </div>
+        ) : null}
+        <Row label="Auto-create PRs" description={localGitModeDisabled ? "Open pull requests automatically for remote git workflows. Disabled while GitHub mode is Local." : "Open pull requests automatically for remote git workflows."} badge={getBadge("git.autoCreatePr")}>
+          <Toggle aria-label="Auto-create PRs" aria-description={localGitModeDisabled ? localGitModeReason : "Open pull requests automatically for remote git workflows."} aria-describedby={localGitModeDisabled ? localGitModeReasonId : undefined} value={localGitModeDisabled ? false : settings.git.autoCreatePr}
+            disabled={localGitModeDisabled}
             onChange={(value) => update({
               git: {
                 ...settings.git,
@@ -157,9 +169,9 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
             })}
           />
         </Row>
-        <Row label="Auto-close linked issues" description={settings.git.githubMode === "LOCAL" ? "Close imported GitHub/GitLab issues after the sprint finishes and the main merge gate is complete. (Disabled in Local mode)" : "Close imported GitHub/GitLab issues after the sprint finishes and the main merge gate is complete."} badge={getBadge("git.autoCloseLinkedIssues")}>
-          <Toggle aria-label="Auto-close linked issues" aria-description={settings.git.githubMode === "LOCAL" ? "Close imported GitHub/GitLab issues after the sprint finishes and the main merge gate is complete. (Disabled in Local mode)" : "Close imported GitHub/GitLab issues after the sprint finishes and the main merge gate is complete."} value={settings.git.githubMode === "LOCAL" ? false : settings.git.autoCloseLinkedIssues}
-            disabled={settings.git.githubMode === "LOCAL"}
+        <Row label="Auto-close linked issues" description={localGitModeDisabled ? "Close imported GitHub/GitLab issues after the sprint finishes. Disabled while GitHub mode is Local." : "Close imported GitHub/GitLab issues after the sprint finishes and the main merge gate is complete."} badge={getBadge("git.autoCloseLinkedIssues")}>
+          <Toggle aria-label="Auto-close linked issues" aria-description={localGitModeDisabled ? localGitModeReason : "Close imported GitHub/GitLab issues after the sprint finishes and the main merge gate is complete."} aria-describedby={localGitModeDisabled ? localGitModeReasonId : undefined} value={localGitModeDisabled ? false : settings.git.autoCloseLinkedIssues}
+            disabled={localGitModeDisabled}
             onChange={(value) => update({
               git: {
                 ...settings.git,
@@ -171,9 +183,9 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
       </Card>
 
       <Card
-        title={settings.git.githubMode === "LOCAL" ? "CI Intelligence (Unavailable in Local Mode)" : "CI Intelligence"}
-        description={settings.git.githubMode === "LOCAL" ? "Controls how aggressively the sprint loop waits on checks, comments, and autofix behavior. (Disabled in Local mode)" : "Controls how aggressively the sprint loop waits on checks, comments, and autofix behavior."}
-        badge={settings.git.githubMode === "LOCAL" ? "Disabled in Local Mode" : (ciSource ? sourceLabel(ciSource) : undefined)}
+        title={localGitModeDisabled ? "CI Intelligence (Unavailable in Local Mode)" : "CI Intelligence"}
+        description={localGitModeDisabled ? "Controls how aggressively the sprint loop waits on checks, comments, and autofix behavior. Disabled while GitHub mode is Local." : "Controls how aggressively the sprint loop waits on checks, comments, and autofix behavior."}
+        badge={localGitModeDisabled ? "Disabled in Local Mode" : (ciSource ? sourceLabel(ciSource) : undefined)}
       >
         {[
           ["enabled", "Enable CI intelligence", "Turn CI and PR gate reasoning on for this scope."],
@@ -183,11 +195,10 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
           ["resolveMainMergeFailedChecks", "Fix main merge CI failures", "Dispatch the virtual worker to fix failing CI on the main-branch merge gate before escalating to a human."],
           ["resolveAllCommentsBeforeFeatureMerge", "Resolve comments before feature merge", "Require review comment resolution before feature branch merge."],
           ["resolveMergeConflicts", "Resolve feature merge conflicts", "Escalate feature-branch merge conflicts to the virtual worker with branch and prompt context."],
-          ["waitForJulesCiAutofix", "Wait for Jules autofix", "Allow Jules to attempt CI autofix before escalating."],
         ].map(([field, label, description]) => (
           <Row key={field} label={label} description={description} badge={getBadge(`ciIntelligence.${field}`)}>
-            <Toggle aria-label={label} aria-description={description} value={settings.git.githubMode === "LOCAL" ? false : (settings.ciIntelligence[field as keyof ProjectSettings["ciIntelligence"]] as boolean)}
-              disabled={settings.git.githubMode === "LOCAL"}
+            <Toggle aria-label={label} aria-description={localGitModeDisabled ? localGitModeReason : description} aria-describedby={localGitModeDisabled ? localGitModeReasonId : undefined} value={localGitModeDisabled ? false : (settings.ciIntelligence[field as keyof ProjectSettings["ciIntelligence"]] as boolean)}
+              disabled={localGitModeDisabled}
               onChange={(value) => update({
                 ciIntelligence: {
                   ...settings.ciIntelligence,
@@ -198,24 +209,12 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
           </Row>
         ))}
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
-          <Row label="Autofix max retries" description="Maximum retries before CI autofix escalates to supervision." badge={getBadge("ciIntelligence.julesCiAutofixMaxRetries")}>
-            <NumberInput
-              value={settings.ciIntelligence.julesCiAutofixMaxRetries}
-              min={0}
-              max={20}
-              disabled={settings.git.githubMode === "LOCAL"}
-              onChange={(value) => update({
-                ciIntelligence: {
-                  ...settings.ciIntelligence,
-                  julesCiAutofixMaxRetries: value,
-                },
-              })}
-            />
-          </Row>
           <Row label="Feature PR auto-merge" description="Policy for leaving feature work at PR creation or merging after checks and comments are satisfied." badge={getBadge("ciIntelligence.featurePrAutoMergeMode")}>
             <SelectInput
-              value={settings.git.githubMode === "LOCAL" ? "OFF" : settings.ciIntelligence.featurePrAutoMergeMode}
-              disabled={settings.git.githubMode === "LOCAL"}
+              value={localGitModeDisabled ? "OFF" : settings.ciIntelligence.featurePrAutoMergeMode}
+              disabled={localGitModeDisabled}
+              aria-label="Feature PR auto-merge"
+              aria-describedby={localGitModeDisabled ? localGitModeReasonId : undefined}
               onChange={(value) => update({
                 ciIntelligence: {
                   ...settings.ciIntelligence,
@@ -232,8 +231,10 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
           </Row>
           <Row label="Main branch auto-merge" description="Policy for leaving the final main PR at creation or merging it after checks and comments are satisfied." badge={getBadge("ciIntelligence.mainBranchAutoMergeMode")}>
             <SelectInput
-              value={settings.git.githubMode === "LOCAL" ? "OFF" : settings.ciIntelligence.mainBranchAutoMergeMode}
-              disabled={settings.git.githubMode === "LOCAL"}
+              value={localGitModeDisabled ? "OFF" : settings.ciIntelligence.mainBranchAutoMergeMode}
+              disabled={localGitModeDisabled}
+              aria-label="Main branch auto-merge"
+              aria-describedby={localGitModeDisabled ? localGitModeReasonId : undefined}
               onChange={(value) => update({
                 ciIntelligence: {
                   ...settings.ciIntelligence,

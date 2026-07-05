@@ -71,6 +71,8 @@ describe("PlanningPromptBuilder", () => {
       expect(prompt).toContain("Custom agent instructions.");
       expect(prompt).toContain("Sprint: SPR-1");
       expect(prompt).toContain("Sprint Name: Sprint One");
+      expect(prompt).toContain("Sprint Title Status: custom user title; do not rename it");
+      expect(prompt).toContain("Do not include top-level `title`");
       expect(prompt).toContain("Plan this");
       expect(prompt).toContain("## Constraints");
       expect(prompt).toContain("## Output Rules");
@@ -90,6 +92,21 @@ describe("PlanningPromptBuilder", () => {
       });
 
       expect(prompt).toContain("Sprint: Ad-hoc Sprint");
+    });
+
+    it("allows an optional sprint title only when the current title is generated", () => {
+      const prompt = buildPlanPrompt({
+        projectName: "Test Project",
+        planningAgent: mockAgent,
+        sprintNumber: 1,
+        sprintName: "Untitled sprint 1",
+        canSetSprintTitle: true,
+        goal: "Plan this",
+      });
+
+      expect(prompt).toContain("Sprint Title Status: unset/generated; you may provide a concise title");
+      expect(prompt).toContain("You may include top-level `title`");
+      expect(prompt).toContain('"title":"Optional concise sprint title"');
     });
 
     it("should include memory context and learnings capture", () => {

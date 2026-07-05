@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useRef } from "preact/hooks";
-import type { FunctionComponent } from "preact";
+import type { FunctionComponent, JSX } from "preact";
 import gsap from "gsap";
 
 import type { AgentPreset, ProviderId } from "../../types.js";
@@ -12,6 +12,10 @@ import { QuicksprintBrowseView } from "./QuicksprintBrowseView.js";
 import { QuicksprintEditorView } from "./QuicksprintEditorView.js";
 import { QuicksprintExecutionView } from "./QuicksprintExecutionView.js";
 import { clampSubtaskSliderValue } from "./quicksprint-shared.js";
+import { useGsapInteractionTokens } from "../../lib/motion/constants.js";
+import { useInteractionTokens } from "../../lib/motion/tokens.js";
+import { ConfirmDialog } from "../ui/ConfirmDialog.js";
+import { useConfirmDialog } from "../../hooks/use-confirm-dialog.js";
 
 import {
   getBuiltinTemplates,
@@ -94,11 +98,15 @@ export const QuicksprintPanel: FunctionComponent<QuicksprintPanelProps> = ({
 }) => {
   const cardRef = useRef<HTMLDivElement>(null);
   const fieldsRef = useRef<HTMLDivElement>(null);
+  const gsapTokens = useGsapInteractionTokens();
+  const interactionTokens = useInteractionTokens();
+  const { isOpen: isConfirmOpen, options: confirmOptions, requestConfirm, handleConfirm, handleCancel } = useConfirmDialog();
 
   /* ── Phase / Navigation ─────────────────────────────────────────── */
   const [phase, setPhase] = useState<Phase>("browse");
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
   const [selectedBuiltinPurpose, setSelectedBuiltinPurpose] = useState("");
+  const [phaseStatus, setPhaseStatus] = useState("Choose a quicksprint template.");
 
   /* ── Configure state ────────────────────────────────────────────── */
   const [taskCount, setTaskCount] = useState(5);
@@ -166,6 +174,16 @@ export const QuicksprintPanel: FunctionComponent<QuicksprintPanelProps> = ({
     setModelOverride(null);
     setShowPrompt(false);
     setAdditionalPrompt("");
+    setPhaseStatus(`${t.name} selected. Configure the quicksprint before planning.`);
+  };
+
+  const handleBackToBrowse = () => {
+    setPhase("browse");
+    setPhaseStatus(
+      selectedTemplate
+        ? `Returned to templates. ${selectedTemplate.name} remains selected.`
+        : "Returned to templates.",
+    );
   };
 
   /* ── Hooks ────────────────────────────────────────────── */
@@ -180,16 +198,25 @@ export const QuicksprintPanel: FunctionComponent<QuicksprintPanelProps> = ({
   const wrappedOpenEditor = (t: QuicksprintTemplateRecord | null) => {
     editorState.openEditor(t);
     setPhase("editor");
+    setPhaseStatus(t ? `Editing ${t.name}.` : "Creating a new quicksprint template.");
   };
 
   const handleDeleteTemplate = async (template: QuicksprintTemplateRecord) => {
-    const message = template.isBuiltIn
-      ? `Delete the default template "${template.name}" for this project?`
-      : `Delete the custom template "${template.name}"?`;
-    if (!window.confirm(message)) {
+    const confirmed = await requestConfirm({
+      title: `Delete ${template.name}?`,
+      body: template.isBuiltIn
+        ? "This hides the default template for this project. The shared bundled template remains available outside this project."
+        : "This removes the custom template from this project.",
+      confirmLabel: "Delete Template",
+      cancelLabel: "Keep Template",
+      destructive: true,
+    });
+    if (!confirmed) {
+      setPhaseStatus(`Deletion cancelled for ${template.name}.`);
       return;
     }
     await onDeleteTemplate?.(template.id);
+    setPhaseStatus(`${template.name} deleted from quicksprint templates.`);
   };
 
   const executionState = useQuicksprintExecutionState({
@@ -207,39 +234,58 @@ export const QuicksprintPanel: FunctionComponent<QuicksprintPanelProps> = ({
 
   useEffect(() => {
     return () => {
-      executionState.handleCancelExecute();
+      executionState.detachCurrentRequest();
     };
-  }, [executionState.handleCancelExecute]);
+  }, [executionState.detachCurrentRequest]);
 
   /* ── Animations ─────────────────────────────────────────────────── */
   useEffect(() => {
     if (!cardRef.current) return;
     gsap.fromTo(cardRef.current, { y: 28, opacity: 0, scale: 0.985 }, {
-      y: 0, opacity: 1, scale: 1, duration: 0.72, ease: "power4.out",
+      y: 0, opacity: 1, scale: 1, duration: gsapTokens.enterExit.duration, ease: gsapTokens.enterExit.ease,
     });
-  }, []);
+  }, [gsapTokens.enterExit.duration, gsapTokens.enterExit.ease]);
 
   useEffect(() => {
     if (!fieldsRef.current) return;
     const items = fieldsRef.current.querySelectorAll("[data-qs-stagger]");
     if (!items.length) return;
     gsap.fromTo(items, { y: 18, opacity: 0 }, {
-      y: 0, opacity: 1, stagger: 0.055, duration: 0.5, ease: "power3.out",
-      delay: 0.1,
+      y: 0,
+      opacity: 1,
+      stagger: gsapTokens.listReveal.duration === 0 ? 0 : gsapTokens.controlFeedback.duration / 3,
+      duration: gsapTokens.listReveal.duration,
+      ease: gsapTokens.listReveal.ease,
     });
-  }, [phase, showPrompt]);
+  }, [phase, showPrompt, gsapTokens.listReveal.duration, gsapTokens.listReveal.ease, gsapTokens.controlFeedback.duration]);
 
   const pickerOpen = phase === "editor" && (editorState.showIconPicker || editorState.showColorPicker);
   const overflowClass = pickerOpen ? "" : "overflow-hidden";
   const contentOverflowClass = pickerOpen ? "overflow-visible" : "";
+  const motionStyle = {
+    "--interaction-control-feedback-duration": interactionTokens.controlFeedback.duration,
+    "--interaction-control-feedback-ease": interactionTokens.controlFeedback.ease,
+    "--interaction-enter-exit-duration": interactionTokens.enterExit.duration,
+    "--interaction-enter-exit-ease": interactionTokens.enterExit.ease,
+    "--interaction-expansion-collapse-duration": interactionTokens.expansionCollapse.duration,
+    "--interaction-expansion-collapse-ease": interactionTokens.expansionCollapse.ease,
+    "--interaction-selection-movement-duration": interactionTokens.selectionMovement.duration,
+    "--interaction-selection-movement-ease": interactionTokens.selectionMovement.ease,
+    "--interaction-list-reveal-duration": interactionTokens.listReveal.duration,
+    "--interaction-list-reveal-ease": interactionTokens.listReveal.ease,
+  } as JSX.CSSProperties;
 
   /* ── Render ─────────────────────────────────────────────────── */
   return (
     <section
       ref={cardRef}
       className={`relative w-full rounded-[1.75rem] border border-black/[0.06] bg-white/70 shadow-[0_20px_50px_rgba(15,23,42,0.08)] backdrop-blur-2xl dark:border-white/[0.06] dark:bg-void-800/60 dark:shadow-[0_24px_56px_rgba(0,0,0,0.28)] ${overflowClass}`}
+      style={motionStyle}
     >
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(255,107,0,0.07),transparent_28%),radial-gradient(circle_at_bottom_right,rgba(0,224,160,0.06),transparent_34%)] dark:bg-[radial-gradient(circle_at_top_left,rgba(255,107,0,0.09),transparent_28%),radial-gradient(circle_at_bottom_right,rgba(0,224,160,0.07),transparent_34%)]" />
+      <div className="sr-only" role="status" aria-live="polite" aria-atomic="true">
+        {phaseStatus}
+      </div>
 
       <div className={`relative min-h-[480px] ${contentOverflowClass}`} ref={fieldsRef}>
         {phase === "browse" && (
@@ -248,12 +294,15 @@ export const QuicksprintPanel: FunctionComponent<QuicksprintPanelProps> = ({
             builtinPurposeOptions={builtinPurposeOptions}
             selectedBuiltinPurpose={selectedBuiltinPurpose}
             setSelectedBuiltinPurpose={setSelectedBuiltinPurpose}
+            announcePhaseStatus={setPhaseStatus}
+            phaseStatus={phaseStatus}
             handleSelectTemplate={handleSelectTemplate}
             openEditor={wrappedOpenEditor}
             handleDeleteTemplate={onDeleteTemplate ? (template) => { void handleDeleteTemplate(template); } : undefined}
             activeBuiltinPurpose={activeBuiltinPurpose}
             loading={loading}
             onClose={onClose}
+            selectedTemplateId={selectedTemplateId}
           />
         )}
         {phase === "editor" && (
@@ -267,6 +316,7 @@ export const QuicksprintPanel: FunctionComponent<QuicksprintPanelProps> = ({
         {phase === "configure" && (
           <QuicksprintExecutionView
             setPhase={setPhase}
+            onBackToBrowse={handleBackToBrowse}
             selectedTemplateId={selectedTemplateId}
             selectedTemplate={selectedTemplate}
             taskCount={taskCount} setTaskCount={setTaskCount}
@@ -288,9 +338,16 @@ export const QuicksprintPanel: FunctionComponent<QuicksprintPanelProps> = ({
             defaultModelOptionLabel={defaultModelOptionLabel}
             defaultRouteIconProviderId={defaultRouteIconProviderId}
             planningEta={planningEta}
+            announcePhaseStatus={setPhaseStatus}
           />
         )}
       </div>
+      <ConfirmDialog
+        isOpen={isConfirmOpen}
+        options={confirmOptions}
+        onConfirm={handleConfirm}
+        onCancel={handleCancel}
+      />
     </section>
   );
 };

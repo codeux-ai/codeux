@@ -117,6 +117,7 @@ describe("settings-sanitizer", () => {
     expect(settings.consoleLogMode).toBe("standard");
     expect(settings.automationLevel).toBe("SEMI_AUTO");
     expect(settings.automationInterventions.autoApprovePlan).toBe(true);
+    expect(settings.appearance.navigationMode).toBe("SIDEBAR");
     expect(settings.aiProvider.provider).toBe("jules");
     expect(settings.git.githubMode).toBe("REMOTE");
     expect(settings.ciIntelligence.waitForJulesCiAutofix).toBe(false);
@@ -149,9 +150,22 @@ describe("settings-sanitizer", () => {
     expect(settings.memory.enabled).toBe(true);
   });
 
+  it("dedupes preview container app ports while preserving primary-first order", () => {
+    const settings = sanitizeSettings({
+      sprintPreview: {
+        containerAppPort: 5173,
+        containerAppPorts: [6006, 5173, 7007, 6006, 0, 65536, "9000"],
+      },
+    });
+
+    expect(settings.sprintPreview.containerAppPort).toBe(5173);
+    expect(settings.sprintPreview.containerAppPorts).toEqual([5173, 6006, 7007, 9000]);
+  });
+
   it("preserves valid appearance background image and pattern settings", () => {
     const settings = sanitizeSettings({
       appearance: {
+        navigationMode: "DOCK",
         backgroundMode: "STATIC",
         animatedBackground: "neon-dreams",
         staticBackgroundColor: "#123456",
@@ -160,6 +174,7 @@ describe("settings-sanitizer", () => {
       },
     });
 
+    expect(settings.appearance.navigationMode).toBe("DOCK");
     expect(settings.appearance.backgroundMode).toBe("STATIC");
     expect(settings.appearance.animatedBackground).toBe("neon-dreams");
     expect(settings.appearance.staticBackgroundColor).toBe("#123456");

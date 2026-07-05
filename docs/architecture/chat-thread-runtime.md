@@ -24,11 +24,13 @@ Threads can dynamically shift their underlying execution backend:
 - **Connected MCP Routing (`worker`)**: The conversation maps to an external worker process connected via MCP. `workerEndpointId` binds the thread to that exact worker.
 - **Virtual Routing (`virtual`)**: When no MCP connection is available or a specific provider is chosen, the thread uses the internal virtual worker scheduler. The scheduler reads the `virtualProvider` and model preferences directly from the thread's runtime state and launches short-lived backend processes to handle the chat turn.
 
+For Docker or remote virtual provider runs, dashboard chat turns and chat compaction use the current remote default-branch snapshot for the project. The runtime resolves the project's saved default branch first, then the dashboard default, then `main`, and passes that checkout contract into provider execution so chat answers inspect the latest upstream baseline while preserving the thread's conversation state.
+
 Automatic worker pickup occurs seamlessly. If a project has an inherited worker mode (`VIRTUAL` or `CONNECTED_MCP`), new chat threads inherit this routing configuration automatically.
 
 ### UI State Contracts
 
-UI interactions like invocation stats visibility (`code-ux:invocation-stats-visible`) and optimistic feedback states (e.g., `ActionFeedbackRegion` for refresh/errors and `role='status'` for working bubbles) are explicitly managed and durable across navigation to preserve a responsive, readable chat experience.
+UI interactions like invocation stats visibility (`code-ux:invocation-stats-visible`) and optimistic feedback states (e.g., `ActionFeedbackRegion` for refresh/errors and `role='status'` for working bubbles) are explicitly managed and durable across navigation to preserve a responsive, readable chat experience. The Threads/Invocations mode switch is a keyboard-accessible tablist with arrow/Home/End navigation, visible selected-state cues, count/status copy, and static reduced-motion indicators so selection does not depend on animated movement.
 
 Route resolution now follows this precedence on each posted message:
 - honor an explicit thread-level worker route when the targeted worker endpoint is still live
@@ -41,6 +43,8 @@ This keeps the chat page's explicit route selector authoritative for new-thread 
 Message posting is an awaited runtime operation. `POST /api/projects/:projectId/conversations/messages` waits for the chat runtime to finish routing the dashboard turn before returning the stored dashboard message, so provider/runtime errors are handled inside the same request lifecycle instead of continuing as detached background work.
 
 The dashboard can also cancel the currently running turn for a specific thread through `POST /api/conversations/threads/:threadId/cancel`. That aborts only the matching in-flight thread turn and leaves other thread executions alone.
+
+Thread and invocation controls expose their in-flight state locally. Sending a message, cancelling an active turn, compacting a thread, deleting a thread, cancelling an invocation, and restarting/continuing a failed invocation disable duplicate submissions, announce busy status through button labels/`aria-busy`, and keep retryable feedback in `ActionFeedbackRegion` when the server returns an error. Failed message sends keep the draft restored in the composer; failed invocation restarts preserve the failed invocation transcript and expose the existing sanitized error message with a retry action.
 
 Virtual chat failures are terminal for that dashboard turn:
 - the dashboard message is moved from `pending`/`delivered` to `failed`
@@ -111,3 +115,5 @@ The dashboard invocation rail now inserts an optimistic `dashboard_reply` invoca
 After the send request resolves, the client refreshes project invocations and reconciles/removes the optimistic record by its temporary ID. Failed sends remove the optimistic entry to avoid stale phantom records.
 
 To keep long-running invocation statuses current even when realtime events are delayed, the chat page also runs a bounded polling loop (3s interval) while active/pending invocations exist. The loop is cleaned up on unmount and merges refreshed statuses through the existing invocation snapshot pipeline.
+
+Background refreshes preserve the active detail surface whenever a snapshot is already available. Thread and invocation transcripts remain visible while refreshes run, with a lightweight live status message instead of replacing the region with a spinner-only state. Spinner-only loading is reserved for the initial case where no selected-thread or selected-invocation snapshot exists yet.

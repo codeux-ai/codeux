@@ -26,7 +26,7 @@ function getStatusClass(model: EmbeddingModelWithStatus): string {
 
 const actionLabelClass = "min-w-0 text-center leading-4";
 const baseButtonClass = "inline-flex min-h-9 max-w-full min-w-0 items-center justify-center gap-1.5 rounded-lg px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.1em] transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/45 focus-visible:ring-offset-2 focus-visible:ring-offset-[#F9F8F4] disabled:cursor-not-allowed disabled:opacity-45 dark:focus-visible:ring-offset-void-900";
-const signalButtonClass = `${baseButtonClass} bg-signal-500 text-void-950 shadow-[0_10px_24px_rgba(0,224,160,0.18)] hover:-translate-y-px hover:bg-signal-400 disabled:hover:translate-y-0 disabled:hover:bg-signal-500`;
+const signalButtonClass = `${baseButtonClass} bg-signal-500 text-white dark:text-void-950 shadow-[0_10px_24px_rgba(0,224,160,0.18)] hover:-translate-y-px hover:bg-signal-400 disabled:hover:translate-y-0 disabled:hover:bg-signal-500`;
 const quietSignalButtonClass = `${baseButtonClass} border border-signal-500/20 bg-signal-500/[0.08] text-signal-700 hover:-translate-y-px hover:border-signal-500/35 hover:bg-signal-500/[0.14] dark:text-signal-300 disabled:hover:translate-y-0 disabled:hover:bg-signal-500/[0.08]`;
 const emberButtonClass = `${baseButtonClass} border border-ember-500/25 bg-ember-500/[0.1] text-ember-600 hover:-translate-y-px hover:bg-ember-500/[0.16] dark:text-ember-400 disabled:hover:translate-y-0 disabled:hover:bg-ember-500/[0.1]`;
 const deleteButtonClass = "inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-transparent text-slate-400 transition-all duration-200 hover:border-status-red/20 hover:bg-status-red/[0.08] hover:text-status-red focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-status-red/35 focus-visible:ring-offset-2 focus-visible:ring-offset-[#F9F8F4] disabled:cursor-not-allowed disabled:opacity-35 disabled:hover:border-transparent disabled:hover:bg-transparent disabled:hover:text-slate-400 dark:focus-visible:ring-offset-void-900";
@@ -66,7 +66,7 @@ export const ModelCard: FunctionComponent<{
               {model.error ? <WifiOff className="h-4 w-4" strokeWidth={2.2} /> : <HardDrive className="h-4 w-4" strokeWidth={2.2} />}
             </div>
             <div className="min-w-0">
-              <h3 className="text-sm font-black leading-tight tracking-tight text-slate-900 dark:text-white">
+              <h3 className="text-sm font-semibold leading-tight tracking-tight text-slate-900 dark:text-white">
                 {model.displayName}
               </h3>
               <p className="mt-1.5 line-clamp-2 text-xs leading-5 text-slate-500 dark:text-slate-400">

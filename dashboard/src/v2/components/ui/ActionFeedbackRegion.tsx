@@ -4,8 +4,8 @@ import { X, CheckCircle, AlertTriangle, XCircle, Loader2, RotateCcw } from "luci
 import gsap from "gsap";
 import type { ActionFeedbackStatus } from "../../hooks/use-action-feedback.js";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
-import { MODAL_MOTION } from "../../lib/motion/modal-motion.js";
 import { useGsapInteractionTokens } from "../../lib/motion/constants.js";
+import { useInteractionTokens } from "../../lib/motion/tokens.js";
 
 interface ActionFeedbackRegionProps {
   status: ActionFeedbackStatus;
@@ -14,8 +14,9 @@ interface ActionFeedbackRegionProps {
   className?: string;
   autoDismissMs?: number;
   autoDismiss?: boolean;
-  retryAction?: () => void;
+  retryAction?: () => void | Promise<void>;
   retryLabel?: string;
+  retryPending?: boolean;
   progress?: number;
   clearError?: () => void;
 }
@@ -27,31 +28,42 @@ const statusConfig: Record<Exclude<ActionFeedbackStatus, "idle">, { icon: Functi
   error: { icon: XCircle, colors: "text-status-red border-black/[0.08] dark:border-white/[0.08]", progressColors: "bg-status-red" },
 };
 
-export function ActionFeedbackRegion({ status, message, onDismiss, className = "", autoDismissMs = 5000, autoDismiss, retryAction, retryLabel, progress, clearError }: ActionFeedbackRegionProps) {
+export function ActionFeedbackRegion({ status, message, onDismiss, className = "", autoDismissMs = 5000, autoDismiss, retryAction, retryLabel, retryPending = false, progress, clearError }: ActionFeedbackRegionProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const progressRef = useRef<HTMLDivElement>(null);
   const barRef = useRef<HTMLDivElement>(null);
   const dismissBtnRef = useRef<HTMLButtonElement>(null);
+  const clearBtnRef = useRef<HTMLButtonElement>(null);
   const retryRef = useRef<HTMLButtonElement>(null);
+  const retryPendingRef = useRef(false);
+  const retryStatusIdRef = useRef<string | null>(null);
+  if (retryStatusIdRef.current === null) {
+    retryStatusIdRef.current = `action-feedback-retry-status-${Math.random().toString(36).slice(2)}`;
+  }
   const reducedMotion = useReducedMotion();
   const motionTokens = useGsapInteractionTokens();
+  const cssTokens = useInteractionTokens();
 
   const [isOpen, setIsOpen] = useState(false);
   const [isRendered, setIsRendered] = useState(false);
   const [displayedStatus, setDisplayedStatus] = useState<ActionFeedbackStatus>(status);
   const [displayedMessage, setDisplayedMessage] = useState(message);
+  const [localRetryPending, setLocalRetryPending] = useState(false);
 
   const messageRef = useRef<HTMLDivElement>(null);
 
   useLayoutEffect(() => {
     if (status !== "idle" && message) {
+      if (status !== displayedStatus) {
+        setDisplayedMessage(message);
+      }
       setDisplayedStatus(status);
       setIsRendered(true);
       setIsOpen(true);
     } else {
       setIsOpen(false);
     }
-  }, [status, message]);
+  }, [status, message, displayedStatus]);
 
   useLayoutEffect(() => {
     if (message && status !== "idle" && message !== displayedMessage && isRendered) {
@@ -84,14 +96,14 @@ export function ActionFeedbackRegion({ status, message, onDismiss, className = "
       if (isOpen) {
         gsap.fromTo(
           containerRef.current,
-          { y: reducedMotion ? 0 : MODAL_MOTION.feedback.yStart, opacity: 0, scale: reducedMotion ? 1 : MODAL_MOTION.feedback.scaleStart },
-          { y: MODAL_MOTION.feedback.yEnd, opacity: 1, scale: MODAL_MOTION.feedback.scaleEnd, duration: reducedMotion ? 0 : MODAL_MOTION.feedback.duration, ease: MODAL_MOTION.feedback.ease }
+          { y: reducedMotion ? 0 : 8, opacity: 0, scale: reducedMotion ? 1 : 0.98 },
+          { y: 0, opacity: 1, scale: 1, duration: motionTokens.asyncFeedback.duration, ease: motionTokens.asyncFeedback.ease }
         );
       } else {
         gsap.to(containerRef.current, {
-          y: reducedMotion ? 0 : MODAL_MOTION.feedback.yStart,
+          y: reducedMotion ? 0 : 8,
           opacity: 0,
-          scale: reducedMotion ? 1 : MODAL_MOTION.feedback.scaleStart,
+          scale: reducedMotion ? 1 : 0.98,
           duration: motionTokens.enterExit.duration,
           ease: motionTokens.enterExit.ease,
           onComplete: () => setIsRendered(false)
@@ -100,7 +112,7 @@ export function ActionFeedbackRegion({ status, message, onDismiss, className = "
     });
 
     return () => ctx.revert();
-  }, [isOpen, isRendered, reducedMotion, motionTokens.enterExit.duration, motionTokens.enterExit.ease]);
+  }, [isOpen, isRendered, reducedMotion, motionTokens.asyncFeedback.duration, motionTokens.asyncFeedback.ease, motionTokens.enterExit.duration, motionTokens.enterExit.ease]);
 
   useLayoutEffect(() => {
     if (displayedStatus === "pending" && barRef.current && progress !== undefined) {
@@ -125,6 +137,56 @@ export function ActionFeedbackRegion({ status, message, onDismiss, className = "
     }
   }, [displayedStatus, reducedMotion, motionTokens.controlFeedback.duration, motionTokens.controlFeedback.ease]);
 
+  const moveFocusToFallback = () => {
+    const fallback = document.querySelector<HTMLElement>('[data-feedback-focus-fallback], [data-focus-fallback], [role="main"], main, #root') || document.body;
+    if (fallback.tabIndex < 0) fallback.tabIndex = -1;
+    fallback.focus();
+    if (
+      document.activeElement instanceof HTMLElement &&
+      (document.activeElement === dismissBtnRef.current || document.activeElement === clearBtnRef.current || document.activeElement === retryRef.current)
+    ) {
+      document.activeElement.blur();
+    }
+  };
+
+  const moveFocusToFallbackIfRemoved = (previousActive: Element | null) => {
+    queueMicrotask(() => {
+      const activeElement = document.activeElement;
+      const activeWasRemoved = previousActive instanceof HTMLElement && !previousActive.isConnected;
+      const focusWasLost = activeElement === document.body || activeElement === null;
+      if (activeWasRemoved || focusWasLost) {
+        moveFocusToFallback();
+      }
+    });
+  };
+
+  const handleDismiss = () => {
+    const previousActive = document.activeElement === dismissBtnRef.current ? document.activeElement : null;
+    onDismiss?.();
+    if (previousActive) moveFocusToFallbackIfRemoved(previousActive);
+  };
+
+  const handleClearError = () => {
+    const previousActive = document.activeElement === clearBtnRef.current ? document.activeElement : null;
+    clearError?.();
+    if (previousActive) moveFocusToFallbackIfRemoved(previousActive);
+  };
+
+  const handleRetry = async () => {
+    if (!retryAction || retryPending || localRetryPending || retryPendingRef.current) {
+      return;
+    }
+
+    retryPendingRef.current = true;
+    setLocalRetryPending(true);
+    try {
+      await retryAction();
+    } finally {
+      retryPendingRef.current = false;
+      setLocalRetryPending(false);
+    }
+  };
+
   useEffect(() => {
     if (!isOpen || displayedStatus === "idle" || !displayedMessage || displayedStatus === "error" || displayedStatus === "pending" || !progressRef.current) return;
     if (autoDismiss === false || retryAction) return;
@@ -134,7 +196,7 @@ export function ActionFeedbackRegion({ status, message, onDismiss, className = "
       tl.fromTo(
         progressRef.current,
         { width: "100%" },
-        { width: "0%", duration: autoDismissMs / 1000, ease: "linear" }
+        { width: "0%", duration: autoDismissMs / 1000, ease: motionTokens.asyncFeedback.ease }
       );
       tl.to(
         containerRef.current,
@@ -150,7 +212,7 @@ export function ActionFeedbackRegion({ status, message, onDismiss, className = "
     });
 
     return () => ctx.revert();
-  }, [isOpen, displayedStatus, displayedMessage, autoDismissMs, autoDismiss, retryAction, reducedMotion, motionTokens.enterExit.duration, motionTokens.enterExit.ease]);
+  }, [isOpen, displayedStatus, displayedMessage, autoDismissMs, autoDismiss, retryAction, reducedMotion, motionTokens.asyncFeedback.ease, motionTokens.enterExit.duration, motionTokens.enterExit.ease, onDismiss]);
 
   if (!isRendered || !displayedMessage) return null;
 
@@ -159,6 +221,10 @@ export function ActionFeedbackRegion({ status, message, onDismiss, className = "
 
   const isError = displayedStatus === "error";
   const isPending = displayedStatus === "pending";
+  const isRetryPending = retryPending || localRetryPending;
+  const actionLabel = retryLabel || "Retry";
+  const dismissAriaLabel = "Dismiss";
+  const clearErrorAriaLabel = "Clear error";
   const statusLabel = isPending && progress !== undefined
     ? `pending ${Math.round(progress)} percent complete`
     : displayedStatus;
@@ -170,52 +236,63 @@ export function ActionFeedbackRegion({ status, message, onDismiss, className = "
       aria-live={isError ? "assertive" : isPending ? "polite" : "off"}
       aria-atomic="true"
       aria-busy={isPending ? "true" : undefined}
-      className={`relative overflow-hidden flex items-start gap-3 p-3 rounded-xl shadow-[0_4px_16px_rgba(0,0,0,0.06)] dark:shadow-[0_4px_16px_rgba(0,0,0,0.2)] border ${config.colors} bg-white dark:bg-void-800 ${className}`}
+      className={`relative overflow-hidden grid grid-cols-[1.25rem_minmax(0,1fr)_auto] items-start gap-3 p-3 rounded-xl shadow-[0_4px_16px_rgba(0,0,0,0.06)] dark:shadow-[0_4px_16px_rgba(0,0,0,0.2)] border ${config.colors} bg-white dark:bg-void-800 ${className}`}
+      data-motion-contract="asyncFeedback"
     >
-      <Icon key={displayedStatus} className={`w-5 h-5 shrink-0 ${isPending ? "motion-safe:animate-spin" : ""} motion-safe:animate-[icon-pop_var(--interaction-control-feedback-duration)_var(--interaction-control-feedback-ease)] motion-reduce:animate-none`} />
+      <span className="relative flex h-5 w-5 shrink-0 items-center justify-center">
+        <Icon
+          key={displayedStatus}
+          aria-hidden="true"
+          className={`absolute inset-0 h-5 w-5 ${isPending ? "motion-safe:animate-spin" : ""} motion-safe:animate-[icon-pop_var(--interaction-control-feedback-duration)_var(--interaction-control-feedback-ease)] motion-reduce:animate-none`}
+          style={{ animationDuration: cssTokens.controlFeedback.duration, animationTimingFunction: cssTokens.controlFeedback.ease }}
+        />
+      </span>
       <div className="flex-1 text-sm font-medium mt-0.5 relative">
         <div ref={messageRef}>
           <span className="sr-only">{statusLabel}. </span>
           {displayedMessage}
         </div>
       </div>
-      <div className="shrink-0 flex items-center gap-1">
+      <div className="min-h-8 shrink-0 flex min-w-[2rem] items-center justify-end gap-1">
         {retryAction && (
           <button
             ref={retryRef}
             type="button"
-            onClick={retryAction}
-            aria-label={retryLabel || "Retry"}
-            className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded-md bg-white/50 dark:bg-black/20 hover:bg-white/80 dark:hover:bg-black/40 border border-black/5 dark:border-white/5 transition-colors motion-reduce:transition-none"
+            onClick={() => void handleRetry()}
+            disabled={isRetryPending}
+            aria-busy={isRetryPending ? "true" : undefined}
+            aria-label={actionLabel}
+            aria-describedby={isRetryPending ? retryStatusIdRef.current : undefined}
+            style={{ transitionDuration: cssTokens.controlFeedback.duration, transitionTimingFunction: cssTokens.controlFeedback.ease }}
+            className="flex min-h-7 items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded-md bg-white/50 dark:bg-black/20 hover:bg-white/80 dark:hover:bg-black/40 border border-black/5 dark:border-white/5 transition-colors motion-reduce:transition-none disabled:cursor-not-allowed disabled:opacity-60"
           >
-            <RotateCcw className="w-3.5 h-3.5" />
-            {retryLabel || "Retry"}
+            <RotateCcw className={`w-3.5 h-3.5 ${isRetryPending ? "motion-safe:animate-spin" : ""} motion-reduce:animate-none`} aria-hidden="true" />
+            <span>{actionLabel}</span>
+            <span
+              id={retryStatusIdRef.current}
+              role="status"
+              aria-live="polite"
+              className="sr-only"
+            >
+              {isRetryPending ? `${actionLabel} in progress.` : ""}
+            </span>
           </button>
         )}
         {displayedStatus === "error" && clearError ? (
-          <div className="ml-auto flex items-center gap-2 rounded-full bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 px-3 py-1 text-xs font-medium">
+          <div className="ml-auto flex min-h-7 items-center gap-2 rounded-full bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 px-3 py-1 text-xs font-medium">
             Failed
-            <button className="rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-current" aria-label="Clear error" onClick={clearError}>×</button>
+            <button ref={clearBtnRef} type="button" className="rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-current" aria-label={clearErrorAriaLabel} onClick={handleClearError}>×</button>
           </div>
         ) : onDismiss && (
           <button
             ref={dismissBtnRef}
             type="button"
-            onClick={() => {
-              if (document.activeElement === dismissBtnRef.current) {
-                const fallback = document.body;
-                if (fallback.tabIndex < 0) fallback.tabIndex = -1;
-                fallback.focus();
-                if (document.activeElement === dismissBtnRef.current) {
-                    dismissBtnRef.current?.blur();
-                }
-              }
-              onDismiss?.();
-            }}
-            className="p-1 rounded-md opacity-70 hover:opacity-100 hover:bg-black/5 dark:hover:bg-white/10 transition-colors motion-reduce:transition-none"
-            aria-label="Dismiss"
+            onClick={handleDismiss}
+            style={{ transitionDuration: cssTokens.controlFeedback.duration, transitionTimingFunction: cssTokens.controlFeedback.ease }}
+            className="flex h-7 w-7 items-center justify-center rounded-md opacity-70 hover:opacity-100 hover:bg-black/5 dark:hover:bg-white/10 transition-colors motion-reduce:transition-none"
+            aria-label={dismissAriaLabel}
           >
-            <X className="w-4 h-4" />
+            <X className="w-4 h-4" aria-hidden="true" />
           </button>
         )}
       </div>
@@ -230,6 +307,7 @@ export function ActionFeedbackRegion({ status, message, onDismiss, className = "
         <div
           ref={barRef}
           aria-hidden="true"
+          style={{ width: `${progress}%` }}
           className="absolute bottom-0 left-0 h-1 bg-signal-500 opacity-20"
         />
       )}

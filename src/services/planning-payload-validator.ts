@@ -32,6 +32,13 @@ export class PlanningPayloadValidator {
     }
 
     const goal = String(payloadObj.goal || "");
+    let title: string | undefined;
+    if ("title" in payloadObj && payloadObj.title !== undefined && payloadObj.title !== null) {
+      if (typeof payloadObj.title !== "string") {
+        throw new Error("Planning payload 'title' must be a string when provided.");
+      }
+      title = payloadObj.title.trim() || undefined;
+    }
     const tasks: PlannedTaskDraft[] = [];
     const seenKeys = new Set<string>();
     let expectedTaskNumber = 1;
@@ -82,7 +89,7 @@ export class PlanningPayloadValidator {
       tasks.push(normalizedTask);
     }
 
-    return { goal, tasks };
+    return title ? { goal, title, tasks } : { goal, tasks };
   }
 
   private normalizeTask(raw: unknown, index: number, options: PlanningPayloadValidatorOptions): PlannedTaskDraft {

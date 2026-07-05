@@ -677,6 +677,8 @@ describe("SprintsPage", () => {
 
     const hideGalleryButton = screen.getByRole("button", { name: /hide gallery/i });
     expect(hideGalleryButton).toBeInTheDocument();
+    expect(hideGalleryButton.parentElement?.className).toContain("grid-cols-[minmax(5.5rem,0.85fr)_repeat(3,minmax(0,1fr))]");
+    expect(hideGalleryButton.parentElement?.firstElementChild).toBe(hideGalleryButton);
 
     fireEvent.click(hideGalleryButton);
 
@@ -831,6 +833,178 @@ describe("SprintsPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "Pin 2 selected sprints to showcase" }));
     expect(handleBulkToggleShowcase).toHaveBeenCalledWith(["sprint-3", "sprint-2"], true);
     expect(handleSprintToggle).not.toHaveBeenCalled();
+  });
+
+  it("exposes explicit sprint ledger sort state and stable direction feedback", () => {
+    const sprints = [
+      makeLedgerSprint(1),
+      makeLedgerSprint(2),
+    ];
+
+    vi.mocked(useSprintsPageData).mockReturnValue({
+      selectedProject: { id: "proj-1", name: "Project One" },
+      planningRoute: { available: true, label: "Codex" },
+      sortedSprints: sprints,
+      showcaseSprints: [],
+      activeRunsBySprintId: new Map(),
+      pauseResumeRunsBySprintId: new Map(),
+      interventionBySprintId: new Map(),
+      nextId: "spr-123",
+      virtualProviders: [],
+      pendingActionIds: new Set(),
+      planningPresets: [],
+      quicksprintTemplates: [],
+      showQuicksprint: false,
+      setShowQuicksprint: vi.fn(),
+      showCreateComposer: false,
+      setShowCreateComposer: vi.fn(),
+      editingSprint: null,
+      setEditingSprint: vi.fn(),
+      showImportModal: false,
+      setShowImportModal: vi.fn(),
+      completedCount: 0,
+      inWorkCount: 0,
+      sprintKeyPrefix: "SPR",
+      feedback: { status: "idle", message: null },
+      clearFeedback: vi.fn(),
+      clearError: vi.fn(),
+      handleSprintToggle: vi.fn(),
+      handleSprintPauseResume: vi.fn(),
+      handleToggleShowcase: vi.fn(),
+      handleBulkToggleShowcase: vi.fn(),
+      handleOpenAppendTasks: vi.fn(),
+      handleMarkCompleted: vi.fn(),
+      handleOpenExport: vi.fn(),
+      handleDeleteSprint: vi.fn(),
+    } as any);
+
+    render(<SprintsPage />);
+
+    const createdSort = screen.getByRole("button", { name: "Sort by Created" });
+    expect(createdSort.closest("th")).toHaveAttribute("aria-sort", "descending");
+    expect(createdSort).toHaveTextContent("Desc");
+
+    const sprintSort = screen.getByRole("button", { name: "Sort by Sprint" });
+    expect(sprintSort.closest("th")).toHaveAttribute("aria-sort", "none");
+    expect(sprintSort).toHaveTextContent("None");
+
+    fireEvent.click(sprintSort);
+
+    expect(screen.getByRole("button", { name: "Sort by Sprint" }).closest("th")).toHaveAttribute("aria-sort", "ascending");
+    expect(screen.getByText(/Sorted by Sprint ascending\. 2 sprints visible\. No sprints selected\./)).toBeInTheDocument();
+  });
+
+  it("keeps pending row actions stable with visible disabled reasons", () => {
+    const sprint = { ...makeLedgerSprint(1), status: "running", name: "Running Ledger Sprint" };
+    const activeRunsBySprintId = new Map([["sprint-1", { id: "run-1", status: "running" }]]);
+
+    vi.mocked(useSprintsPageData).mockReturnValue({
+      selectedProject: { id: "proj-1", name: "Project One" },
+      planningRoute: { available: true, label: "Codex" },
+      sortedSprints: [sprint],
+      showcaseSprints: [],
+      activeRunsBySprintId,
+      pauseResumeRunsBySprintId: new Map(),
+      interventionBySprintId: new Map(),
+      nextId: "spr-123",
+      virtualProviders: [],
+      pendingActionIds: new Set(["sprint-stop:run-1"]),
+      planningPresets: [],
+      quicksprintTemplates: [],
+      showQuicksprint: false,
+      setShowQuicksprint: vi.fn(),
+      showCreateComposer: false,
+      setShowCreateComposer: vi.fn(),
+      editingSprint: null,
+      setEditingSprint: vi.fn(),
+      showImportModal: false,
+      setShowImportModal: vi.fn(),
+      completedCount: 0,
+      inWorkCount: 1,
+      sprintKeyPrefix: "SPR",
+      feedback: { status: "idle", message: null },
+      clearFeedback: vi.fn(),
+      clearError: vi.fn(),
+      handleSprintToggle: vi.fn(),
+      handleSprintPauseResume: vi.fn(),
+      handleToggleShowcase: vi.fn(),
+      handleBulkToggleShowcase: vi.fn(),
+      handleOpenAppendTasks: vi.fn(),
+      handleMarkCompleted: vi.fn(),
+      handleOpenExport: vi.fn(),
+      handleDeleteSprint: vi.fn(),
+    } as any);
+
+    render(<SprintsPage />);
+
+    const stopButton = screen.getByRole("button", { name: "Stop Running Ledger Sprint is pending" });
+    expect(stopButton).toBeDisabled();
+    expect(stopButton).toHaveAttribute("aria-busy", "true");
+    expect(stopButton).toHaveTextContent("Stop");
+    expect(screen.getAllByText("Stop pending").length).toBeGreaterThan(0);
+    expect(stopButton).toHaveAttribute("title", "Wait for the current sprint action to finish");
+    expect(screen.getByText("Running")).toBeInTheDocument();
+    expect(screen.getByText("0%")).toBeInTheDocument();
+    expect(stopButton.closest("tr")).toHaveAttribute("aria-busy", "true");
+  });
+
+  it("keeps bulk delete confirmation focus on a safe trigger after cancel", async () => {
+    const sprints = [makeLedgerSprint(1), makeLedgerSprint(2)];
+
+    vi.mocked(useSprintsPageData).mockReturnValue({
+      selectedProject: { id: "proj-1", name: "Project One" },
+      planningRoute: { available: true, label: "Codex" },
+      sortedSprints: sprints,
+      showcaseSprints: [],
+      activeRunsBySprintId: new Map(),
+      pauseResumeRunsBySprintId: new Map(),
+      interventionBySprintId: new Map(),
+      nextId: "spr-123",
+      virtualProviders: [],
+      pendingActionIds: new Set(),
+      planningPresets: [],
+      quicksprintTemplates: [],
+      showQuicksprint: false,
+      setShowQuicksprint: vi.fn(),
+      showCreateComposer: false,
+      setShowCreateComposer: vi.fn(),
+      editingSprint: null,
+      setEditingSprint: vi.fn(),
+      showImportModal: false,
+      setShowImportModal: vi.fn(),
+      completedCount: 0,
+      inWorkCount: 0,
+      sprintKeyPrefix: "SPR",
+      feedback: { status: "idle", message: null },
+      clearFeedback: vi.fn(),
+      clearError: vi.fn(),
+      handleSprintToggle: vi.fn(),
+      handleSprintPauseResume: vi.fn(),
+      handleToggleShowcase: vi.fn(),
+      handleBulkToggleShowcase: vi.fn(),
+      handleOpenAppendTasks: vi.fn(),
+      handleMarkCompleted: vi.fn(),
+      handleOpenExport: vi.fn(),
+      handleDeleteSprint: vi.fn(),
+    } as any);
+
+    render(<SprintsPage />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Select all filtered sprints" }));
+    expect(screen.getByText("2 of 2 selected")).toBeInTheDocument();
+    expect(screen.getByText(/Selected all filtered sprints\. 2 sprints visible\. 2 selected\./)).toBeInTheDocument();
+
+    const deleteButton = screen.getByRole("button", { name: "Delete 2 selected sprints. Permanent action." });
+    fireEvent.click(deleteButton);
+
+    expect(await screen.findByRole("dialog", { name: "Delete 2 Selected Sprints?" })).toBeInTheDocument();
+    expect(screen.getByText(/You are deleting 2 selected sprints/)).toBeInTheDocument();
+
+    const cancelButtons = screen.getAllByRole("button", { name: "Cancel" });
+    fireEvent.click(cancelButtons[cancelButtons.length - 1]);
+
+    await vi.waitFor(() => expect(deleteButton).toHaveFocus());
+    expect(screen.getByText(/Bulk delete canceled\. 2 sprints visible\. 2 selected\./)).toBeInTheDocument();
   });
 
 

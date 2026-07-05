@@ -10,7 +10,6 @@ import { getCurrentMcpAgentId } from "./mcp-agent-context.js";
 import type { Logger } from "../shared/logging/logger.js";
 import type { McpRuntimeRole } from "../contracts/mcp-tool-definitions.js";
 import { getCorrelationId } from "../shared/logging/correlation-id.js";
-import type { ExecutionRepository } from "../repositories/execution-repository.js";
 
 export interface McpRequestRouterArgs {
   server: Server;
@@ -23,7 +22,6 @@ export interface McpRequestRouterArgs {
   logger?: Logger;
   withCorrelationContext?: <T>(request: unknown, operation: () => Promise<T>) => Promise<T>;
   getMcpApprovalTracker?: () => import("../services/mcp-approval-tracker.js").McpApprovalTracker;
-  executionRepository?: ExecutionRepository;
 }
 
 export const registerMcpRequestHandlers = (args: McpRequestRouterArgs): void => {
@@ -77,24 +75,6 @@ export const registerMcpRequestHandlers = (args: McpRequestRouterArgs): void => 
 
       try {
         validateToolArguments(name, toolArgs);
-
-        const isExternalApiCall = (toolName: string, meta?: any) => {
-          if (meta && meta.isExternal !== undefined) return Boolean(meta.isExternal);
-          return ["web_fetch", "google_web_search", "web_extract"].includes(toolName);
-        };
-
-        const execInput = toolArgs as any;
-        if (args.executionRepository && execInput.projectId && execInput.sessionId && execInput.provider && execInput.purpose) {
-            args.executionRepository.createProviderInvocationUsage({
-                projectId: execInput.projectId,
-                sessionId: execInput.sessionId,
-                provider: execInput.provider,
-                purpose: execInput.purpose,
-                invocationSource: isExternalApiCall(name, toolArgs) ? "EXTERNAL_API" : "internal",
-                startedAt: new Date().toISOString(),
-                promptChars: 0,
-            });
-        }
 
         const response = await toolRegistry.dispatch(name, toolArgs);
 

@@ -153,20 +153,20 @@ export function decideTaskStatusDerivation(
   subtasks: Subtask[],
   options: TaskStatusDerivationOptions,
 ): TaskStatusDerivationDecision {
-  if (task.session_state === "QUOTA" || task.session_state === "RATE_LIMITED" || task.status === "QUOTA") {
-    return { status: "QUOTA", resetRuntime: false };
-  }
-
-  if (task.session_state === "BLOCKED") {
-    return { status: "BLOCKED", resetRuntime: false };
-  }
-
   if ((task.session_state === "FAILED" || task.session_state === "CANCELLED") && options.retryFailed) {
     const classification = classifyTaskTransition(task, subtasks, options);
     return {
       status: classification.dependenciesMet ? "PENDING" : "BLOCKED",
       resetRuntime: true,
     };
+  }
+
+  if (task.session_state === "QUOTA" || task.session_state === "RATE_LIMITED" || task.status === "QUOTA") {
+    return { status: "QUOTA", resetRuntime: false };
+  }
+
+  if (task.session_state === "BLOCKED") {
+    return { status: "BLOCKED", resetRuntime: false };
   }
 
   if (task.session_state && options.isActionRequiredState(task.session_state)) {

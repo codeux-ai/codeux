@@ -1,4 +1,4 @@
-import type { FunctionComponent } from "preact";
+import type { FunctionComponent, JSX } from "preact";
 import { useCallback, useEffect, useMemo, useState } from "preact/hooks";
 import {
   CalendarDays,
@@ -126,6 +126,8 @@ const formatTimeLabel = (iso: string): string => (
 const targetLabel = (targetType: ScheduleTargetType): string => (
   targetType === "sprint" ? "Sprint" : targetType === "quicksprint" ? "Quicksprint" : targetType === "memory_remediation" ? "Memory" : "Chat"
 );
+
+const schedulerViewLabel = (view: SchedulerView): string => view === "calendar" ? "Calendar" : "24 Hours";
 
 const recurrenceFrequencyLabel = (frequency: ScheduleRecurrenceRule["frequency"], interval: number): string => {
   if (frequency === "minutely") {
@@ -310,6 +312,36 @@ export const SchedulerPage: FunctionComponent = () => {
       nextOccurrence,
     };
   }, [schedule?.entries, schedule?.occurrences]);
+
+  const scheduleRangeStatus = loading && schedule
+    ? `Updating schedule. Showing cached ${schedulerStats.visibleCount} visible occurrences from ${formatDayLabel(range.from)} to ${formatDayLabel(range.to)}.`
+    : `${schedulerStats.visibleCount} visible occurrences · ${formatDayLabel(range.from)} to ${formatDayLabel(range.to)}`;
+
+  const focusSchedulerView = (nextView: SchedulerView) => {
+    setView(nextView);
+    window.requestAnimationFrame(() => {
+      document.getElementById(`scheduler-view-tab-${nextView}`)?.focus();
+    });
+  };
+
+  const handleSchedulerViewKeyDown = (event: JSX.TargetedKeyboardEvent<HTMLDivElement>) => {
+    const views: SchedulerView[] = ["calendar", "day"];
+    if (!["ArrowRight", "ArrowDown", "ArrowLeft", "ArrowUp", "Home", "End"].includes(event.key)) {
+      return;
+    }
+    event.preventDefault();
+    const currentIndex = views.indexOf(view);
+    if (event.key === "Home") {
+      focusSchedulerView(views[0]!);
+      return;
+    }
+    if (event.key === "End") {
+      focusSchedulerView(views[views.length - 1]!);
+      return;
+    }
+    const delta = event.key === "ArrowRight" || event.key === "ArrowDown" ? 1 : -1;
+    focusSchedulerView(views[(currentIndex + delta + views.length) % views.length]!);
+  };
 
   const startEdit = (entry: SchedulerEntryRecord) => {
     setEditingEntry(entry);
@@ -525,17 +557,27 @@ export const SchedulerPage: FunctionComponent = () => {
           >
             Next
           </Button>
-          <div className="ml-0 flex rounded-full border border-[color:var(--color-border-muted)] bg-white/72 p-1 dark:border-white/[0.06] dark:bg-white/[0.03] backdrop-blur-md lg:ml-2">
+          <div
+            className="ml-0 flex rounded-full border border-[color:var(--color-border-muted)] bg-white/72 p-1 dark:border-white/[0.06] dark:bg-white/[0.03] backdrop-blur-md lg:ml-2"
+            role="tablist"
+            aria-label="Scheduler views"
+            onKeyDown={handleSchedulerViewKeyDown}
+          >
             {(["calendar", "day"] as SchedulerView[]).map((item) => (
               <button
                 key={item}
+                id={`scheduler-view-tab-${item}`}
                 type="button"
+                role="tab"
+                aria-selected={view === item}
+                aria-controls="scheduler-view-panel"
+                tabIndex={view === item ? 0 : -1}
                 onClick={() => setView(item)}
                 className={`min-h-[34px] rounded-full px-4 text-[10px] font-bold uppercase tracking-[0.14em] transition-all duration-150 ${
-                  view === item ? "bg-signal-500 text-void-900 shadow-[0_2px_8px_rgba(0,224,160,0.2)]" : "text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
+                  view === item ? "bg-signal-500 text-white dark:text-void-900 shadow-[0_2px_8px_rgba(0,224,160,0.2)]" : "text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
                 }`}
               >
-                {item === "calendar" ? "Calendar" : "24 Hours"}
+                {schedulerViewLabel(item)}
               </button>
             ))}
           </div>
@@ -560,7 +602,7 @@ export const SchedulerPage: FunctionComponent = () => {
             <div className="flex items-center justify-between gap-4">
               <div className="min-w-0">
                 <div className="text-[10px] font-mono font-bold uppercase tracking-[0.16em] text-slate-400 dark:text-slate-500">{item.label}</div>
-                <div className="mt-1 truncate font-display text-2xl font-black tracking-tight text-slate-900 dark:text-white">{item.value}</div>
+                <div className="mt-1 truncate font-display text-xl font-semibold tracking-tight text-slate-900 dark:text-white">{item.value}</div>
                 <div className="mt-0.5 truncate text-[11px] font-medium text-slate-500 dark:text-slate-400">{item.detail}</div>
               </div>
               <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-black/[0.03] dark:bg-white/[0.03] ${item.tone}`}>
@@ -575,7 +617,7 @@ export const SchedulerPage: FunctionComponent = () => {
         <aside data-testid="scheduler-form-panel" className="rounded-[1.75rem] border border-black/[0.06] bg-white/70 p-5 shadow-[0_2px_20px_rgba(0,0,0,0.04)] backdrop-blur-2xl dark:border-white/[0.06] dark:bg-void-800/60 dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]">
           <div className="mb-5 flex items-center justify-between gap-3">
             <div>
-              <h3 className="font-display text-2xl font-black tracking-tight text-slate-900 dark:text-white">
+              <h3 className="font-display text-xl font-semibold tracking-tight text-slate-900 dark:text-white">
                 {editingEntry ? "Edit entry" : "Add entry"}
               </h3>
               <p className="mt-1 text-xs font-medium text-slate-500 dark:text-slate-400">
@@ -587,12 +629,16 @@ export const SchedulerPage: FunctionComponent = () => {
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-2 gap-2" role="group" aria-label="Schedule target type">
+            <span className="sr-only" aria-live="polite" aria-atomic="true">
+              Selected schedule target: {targetLabel(targetType)}.
+            </span>
             {TARGET_OPTIONS.map((option) => (
               <button
                 key={option.value}
                 type="button"
                 onClick={() => setTargetType(option.value)}
+                aria-pressed={targetType === option.value}
                 className={`min-h-[70px] rounded-2xl border p-3 text-left transition-all duration-150 ${
                   targetType === option.value
                     ? option.activeClassName
@@ -826,14 +872,21 @@ export const SchedulerPage: FunctionComponent = () => {
         </aside>
 
         <div className="min-w-0 space-y-6">
-          <section data-testid="scheduler-calendar-panel" className="rounded-[1.75rem] border border-black/[0.06] bg-white/70 p-4 shadow-[0_2px_20px_rgba(0,0,0,0.04)] backdrop-blur-2xl dark:border-white/[0.06] dark:bg-void-800/60 dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)] md:p-5">
+          <section
+            id="scheduler-view-panel"
+            role="tabpanel"
+            aria-labelledby={`scheduler-view-tab-${view}`}
+            aria-busy={loading ? "true" : undefined}
+            data-testid="scheduler-calendar-panel"
+            className="rounded-[1.75rem] border border-black/[0.06] bg-white/70 p-4 shadow-[0_2px_20px_rgba(0,0,0,0.04)] backdrop-blur-2xl dark:border-white/[0.06] dark:bg-void-800/60 dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)] md:p-5"
+          >
             <div className="mb-4 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
               <div>
-                <h3 className="font-display text-2xl font-black tracking-tight text-slate-900 dark:text-white">
+                <h3 className="font-display text-xl font-semibold tracking-tight text-slate-900 dark:text-white">
                   {view === "calendar" ? "Calendar view" : "24 hour view"}
                 </h3>
-                <p className="text-xs font-medium text-slate-500 dark:text-slate-400">
-                  {loading ? "Refreshing schedule..." : `${schedulerStats.visibleCount} visible occurrences · ${formatDayLabel(range.from)} to ${formatDayLabel(range.to)}`}
+                <p className="text-xs font-medium text-slate-500 dark:text-slate-400" role="status" aria-live="polite" aria-atomic="true">
+                  {scheduleRangeStatus}
                 </p>
               </div>
               <Button
@@ -895,6 +948,8 @@ export const SchedulerPage: FunctionComponent = () => {
                       key={key}
                       type="button"
                       onClick={() => setSelectedDate(day)}
+                      aria-pressed={selected}
+                      aria-label={`${formatDayLabel(day)}, ${dayItems.length} ${dayItems.length === 1 ? "occurrence" : "occurrences"}`}
                       className={`min-h-[13rem] rounded-2xl border p-3.5 text-left transition-all duration-150 ${
                         selected
                           ? "border-signal-500/35 bg-signal-500/[0.08] shadow-[0_4px_16px_rgba(0,224,160,0.08)]"
@@ -903,7 +958,7 @@ export const SchedulerPage: FunctionComponent = () => {
                     >
                       <div className="flex items-center justify-between gap-2">
                         <span className="whitespace-nowrap text-xs font-black uppercase tracking-[0.12em] text-slate-600 dark:text-slate-300">{formatDayLabel(day)}</span>
-                        <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${isToday ? "bg-signal-500 text-void-900 shadow-[0_2px_8px_rgba(0,224,160,0.2)]" : "bg-white/80 text-slate-500 dark:bg-white/[0.06] dark:text-slate-400"}`}>{dayItems.length}</span>
+                        <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${isToday ? "bg-signal-500 text-white dark:text-void-900 shadow-[0_2px_8px_rgba(0,224,160,0.2)]" : "bg-white/80 text-slate-500 dark:bg-white/[0.06] dark:text-slate-400"}`}>{dayItems.length}</span>
                       </div>
                       <div className="mt-3 space-y-2">
                         {dayItems.slice(0, 5).map((occurrence) => {
@@ -989,7 +1044,7 @@ export const SchedulerPage: FunctionComponent = () => {
           <section className="rounded-[1.75rem] border border-black/[0.06] bg-white/70 p-4 shadow-[0_2px_20px_rgba(0,0,0,0.04)] backdrop-blur-2xl dark:border-white/[0.06] dark:bg-void-800/60 dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)] md:p-5">
             <div className="mb-4 flex items-center justify-between gap-3">
               <div>
-                <h3 className="font-display text-2xl font-black tracking-tight text-slate-900 dark:text-white">Scheduled entries</h3>
+                <h3 className="font-display text-xl font-semibold tracking-tight text-slate-900 dark:text-white">Scheduled entries</h3>
                 <p className="text-xs font-medium text-slate-500 dark:text-slate-400">Pause, resume, or remove future automation.</p>
               </div>
               <Check className="h-5 w-5 text-signal-500" />
@@ -1021,7 +1076,7 @@ export const SchedulerPage: FunctionComponent = () => {
                         )}
                         <span className="text-[11px] font-bold text-slate-400">{recurrenceSummary(entry.recurrence)}</span>
                       </div>
-                      <h4 className="mt-2 truncate text-sm font-black text-slate-900 dark:text-white">{entry.title}</h4>
+                      <h4 className="mt-2 truncate text-sm font-semibold text-slate-900 dark:text-white">{entry.title}</h4>
                       <p className="mt-1 text-xs font-medium text-slate-500 dark:text-slate-400">
                         Next run: {entry.nextRunAt ? new Date(entry.nextRunAt).toLocaleString() : "none"}
                         {entry.lastRunAt && ` · Last fired: ${new Date(entry.lastRunAt).toLocaleString()}`}

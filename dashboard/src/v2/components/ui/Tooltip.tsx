@@ -65,7 +65,7 @@ export const Tooltip: FunctionComponent<TooltipProps> = ({
         if (hoverTimeout.current) clearTimeout(hoverTimeout.current);
         hoverTimeout.current = window.setTimeout(() => {
             setIsVisible(false);
-        }, 150);
+        }, Math.round(gsapTokens.controlFeedback.duration * 1000));
     };
 
     useLayoutEffect(() => {
@@ -120,6 +120,8 @@ export const Tooltip: FunctionComponent<TooltipProps> = ({
 
         const handleKeyDown = (e: KeyboardEvent) => {
             if (e.key === "Escape" && isVisible) {
+                e.preventDefault();
+                e.stopPropagation();
                 if (hoverTimeout.current) clearTimeout(hoverTimeout.current);
                 setIsVisible(false);
             }

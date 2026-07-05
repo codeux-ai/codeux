@@ -146,7 +146,7 @@ const DeltaValue: FunctionComponent<{
 
   return (
     <div className="flex items-center gap-2">
-      <span className={`${compact ? "text-xl" : "text-[2rem]"} font-black tracking-tighter text-slate-900 dark:text-white`}>
+      <span className={`${compact ? "text-lg" : "text-2xl"} font-semibold tracking-tight text-slate-900 dark:text-white`}>
         {value}
       </span>
       {delta !== null && delta !== 0 && (
@@ -165,7 +165,7 @@ const SummaryPill: FunctionComponent<Node> = ({ label, value, icon: Icon, accent
       <Icon className="h-3.5 w-3.5 shrink-0" strokeWidth={1.8} aria-hidden="true" />
       <span>{label}</span>
     </div>
-    <div className="break-words font-mono text-xl font-black tracking-tighter text-slate-900 dark:text-white">
+    <div className="break-words font-mono text-lg font-semibold tracking-tight text-slate-900 dark:text-white">
       {value}
     </div>
   </div>
@@ -195,7 +195,7 @@ const StageBand: FunctionComponent<{
       <div className="flex items-start justify-between gap-3">
         <div>
           <div className={`text-[9px] font-bold uppercase tracking-[0.14em] ${meta.tone}`}>{meta.label}</div>
-          <div className="mt-2 text-xl font-black tracking-tight text-slate-900 dark:text-white">
+          <div className="mt-2 text-lg font-semibold tracking-tight text-slate-900 dark:text-white">
             {formatDurationTight(seconds)}
           </div>
         </div>
@@ -326,7 +326,7 @@ export const SprintStatsDeck: FunctionComponent<{
             <Timer className="h-8 w-8" strokeWidth={1.4} aria-hidden="true" />
           </div>
           <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-signal-500">Sprint Stats</div>
-          <h3 className="mt-3 font-display text-3xl font-black tracking-tight text-slate-900 dark:text-white">
+          <h3 className="mt-3 font-display text-2xl font-semibold tracking-tight text-slate-900 dark:text-white">
             The telemetry field wakes up with the sprint.
           </h3>
           <p className="mt-3 max-w-xl text-sm leading-relaxed text-slate-500 dark:text-slate-400">
@@ -361,7 +361,7 @@ export const SprintStatsDeck: FunctionComponent<{
               <Timer className="h-4 w-4" strokeWidth={1.6} aria-hidden="true" />
               Telemetry Field
             </div>
-            <h3 className="mt-2 font-display text-3xl font-black tracking-tight text-slate-900 dark:text-white md:text-[2.35rem]">
+            <h3 className="mt-2 font-display text-2xl font-semibold tracking-tight text-slate-900 dark:text-white md:text-[2rem]">
               Live sprint stats, rendered in the same surface.
             </h3>
             <p className="mt-2 max-w-3xl text-sm leading-relaxed text-slate-500 dark:text-slate-400">
@@ -389,7 +389,7 @@ export const SprintStatsDeck: FunctionComponent<{
               </div>
               <div className="mt-4 flex flex-wrap items-end justify-between gap-4">
                 <div>
-                  <div className="break-words text-[3.5rem] font-black leading-none tracking-[-0.07em] text-slate-900 dark:text-white md:text-[4.6rem]">
+                  <div className="break-words text-4xl font-semibold leading-none tracking-tight text-slate-900 dark:text-white md:text-5xl">
                     {formatDuration(sprintTiming.sprintElapsedSeconds)}
                   </div>
                   <div className="mt-3 text-sm text-slate-500 dark:text-slate-400">
@@ -400,7 +400,7 @@ export const SprintStatsDeck: FunctionComponent<{
                 </div>
                 <div className="rounded-[1rem] border border-signal-500/15 bg-signal-500/8 px-4 py-3 text-right dark:bg-signal-500/10">
                   <div className="text-[9px] font-bold uppercase tracking-[0.14em] text-signal-500">Tracked Tasks</div>
-                  <div className="mt-2 text-2xl font-black tracking-tight text-slate-900 dark:text-white">
+                  <div className="mt-2 text-xl font-semibold tracking-tight text-slate-900 dark:text-white">
                     {sprintTiming.trackedTaskCount}
                   </div>
                 </div>
@@ -408,27 +408,27 @@ export const SprintStatsDeck: FunctionComponent<{
               <div className="mt-5 grid gap-3 md:grid-cols-3">
                 <div className="rounded-[1.75rem] border border-black/[0.06] bg-black/[0.025] p-7 shadow-sm dark:border-white/[0.06] dark:bg-white/[0.03]">
                   <div className="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">Finished</div>
-                  <div className="mt-2 text-lg font-black tracking-tight text-slate-900 dark:text-white">{sprintTiming.completedTaskCount}</div>
+                  <div className="mt-2 text-base font-semibold tracking-tight text-slate-900 dark:text-white">{sprintTiming.completedTaskCount}</div>
                 </div>
                 <div className="rounded-[1.75rem] border border-black/[0.06] bg-black/[0.025] p-7 shadow-sm dark:border-white/[0.06] dark:bg-white/[0.03]">
                   <div className="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">Avg Finish</div>
-                  <div className="mt-2 text-lg font-black tracking-tight text-slate-900 dark:text-white">{formatDurationTight(sprintTiming.averageCompletedTaskSeconds)}</div>
+                  <div className="mt-2 text-base font-semibold tracking-tight text-slate-900 dark:text-white">{formatDurationTight(sprintTiming.averageCompletedTaskSeconds)}</div>
                 </div>
                 <div className="rounded-[1.75rem] border border-black/[0.06] bg-black/[0.025] p-7 shadow-sm dark:border-white/[0.06] dark:bg-white/[0.03]">
                   <div className="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">Accumulated</div>
-                  <div className="mt-2 text-lg font-black tracking-tight text-slate-900 dark:text-white">{formatDuration(totalTrackedStageSeconds)}</div>
+                  <div className="mt-2 text-base font-semibold tracking-tight text-slate-900 dark:text-white">{formatDuration(totalTrackedStageSeconds)}</div>
                 </div>
                 <div className="rounded-[1.75rem] border border-black/[0.06] bg-black/[0.025] p-7 shadow-sm dark:border-white/[0.06] dark:bg-white/[0.03]">
                   <div className="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">Input</div>
-                  <div className="mt-2 text-lg font-black tracking-tight text-slate-900 dark:text-white">{formatTokens(sprintTiming.tokenTotals.inputTokens)}</div>
+                  <div className="mt-2 text-base font-semibold tracking-tight text-slate-900 dark:text-white">{formatTokens(sprintTiming.tokenTotals.inputTokens)}</div>
                 </div>
                 <div className="rounded-[1.75rem] border border-black/[0.06] bg-black/[0.025] p-7 shadow-sm dark:border-white/[0.06] dark:bg-white/[0.03]">
                   <div className="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">Output</div>
-                  <div className="mt-2 text-lg font-black tracking-tight text-slate-900 dark:text-white">{formatTokens(sprintTiming.tokenTotals.outputTokens)}</div>
+                  <div className="mt-2 text-base font-semibold tracking-tight text-slate-900 dark:text-white">{formatTokens(sprintTiming.tokenTotals.outputTokens)}</div>
                 </div>
                 <div className="rounded-[1.75rem] border border-black/[0.06] bg-black/[0.025] p-7 shadow-sm dark:border-white/[0.06] dark:bg-white/[0.03]">
                   <div className="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">Cached</div>
-                  <div className="mt-2 text-lg font-black tracking-tight text-slate-900 dark:text-white">{formatTokens(sprintTiming.tokenTotals.cachedInputTokens)}</div>
+                  <div className="mt-2 text-base font-semibold tracking-tight text-slate-900 dark:text-white">{formatTokens(sprintTiming.tokenTotals.cachedInputTokens)}</div>
                 </div>
               </div>
             </div>

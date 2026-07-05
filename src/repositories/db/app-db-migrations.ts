@@ -148,7 +148,9 @@ export function runMigrations(db: DatabaseAdapter): void {
   ensureColumn(db, "sprints", "showcase_pinned", "INTEGER NOT NULL DEFAULT 0");
   ensureColumn(db, "sprints", "original_prompt", "TEXT");
   ensureColumn(db, "sprints", "base_commit_sha", "TEXT");
+  ensureColumn(db, "sprints", "is_generated_name", "INTEGER NOT NULL DEFAULT 0");
   ensureColumn(db, "tasks", "executor_type", "TEXT NOT NULL DEFAULT 'auto'");
+  ensureColumn(db, "sprint_preview_sessions", "port_mappings_json", "TEXT");
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS sprint_linked_issues (
@@ -214,6 +216,7 @@ export function runMigrations(db: DatabaseAdapter): void {
   ensureUniqueIndex(db, "idx_sprint_linked_issues_unique", "sprint_linked_issues", "sprint_id, provider, host_domain, repository, issue_number");
   ensureIndex(db, "idx_sprint_linked_issues_sprint", "sprint_linked_issues", "project_id, sprint_id, close_state");
   ensureIndex(db, "idx_sprint_runs_project_sprint", "sprint_runs", "project_id, sprint_id, created_at DESC");
+  ensureIndex(db, "idx_sprint_runs_project_status_recency", "sprint_runs", "project_id, status, last_heartbeat_at DESC, updated_at DESC, created_at DESC");
   ensureIndex(db, "idx_tasks_project_sprint_sort", "tasks", "project_id, sprint_id, sort_order ASC, created_at ASC, task_key ASC");
   ensureIndex(db, "idx_task_runs_project_started", "task_runs", "project_id, started_at DESC");
   ensureIndex(db, "idx_task_runs_dispatch", "task_runs", "dispatch_id");
@@ -238,6 +241,8 @@ export function runMigrations(db: DatabaseAdapter): void {
   ensureIndex(db, "idx_task_dispatches_sprint_run", "task_dispatches", "sprint_run_id, status, queued_at ASC");
   ensureIndex(db, "idx_task_dispatches_project_status", "task_dispatches", "project_id, status, priority DESC, queued_at ASC");
   ensureIndex(db, "idx_task_dispatches_task", "task_dispatches", "task_id, created_at DESC");
+  ensureIndex(db, "idx_task_dispatches_project_task_recency", "task_dispatches", "project_id, task_id, last_heartbeat_at DESC, started_at DESC, claimed_at DESC, queued_at DESC");
+  ensureIndex(db, "idx_task_dispatches_project_sprint_run_recency", "task_dispatches", "project_id, sprint_run_id, last_heartbeat_at DESC, started_at DESC, claimed_at DESC, queued_at DESC");
   ensureIndex(db, "idx_execution_leases_scope", "execution_leases", "scope_type, scope_id");
   ensureIndex(db, "idx_task_run_events_task_run_created", "task_run_events", "task_run_id, created_at DESC");
   db.exec(`
@@ -269,12 +274,16 @@ export function runMigrations(db: DatabaseAdapter): void {
       AND EXISTS (SELECT 1 FROM task_runs tr WHERE tr.id = task_run_events.task_run_id)
   `);
   ensureIndex(db, "idx_sprint_run_events_sprint_run_created", "sprint_run_events", "sprint_run_id, created_at DESC");
+  ensureIndex(db, "idx_sprint_run_events_sprint_run_created_id", "sprint_run_events", "sprint_run_id, created_at DESC, id DESC");
   ensureUniqueIndex(db, "idx_sprint_run_events_source_event", "sprint_run_events", "sprint_run_id, source_event_key");
   ensureIndex(db, "idx_execution_invocations_project_started", "execution_invocations", "project_id, started_at DESC");
   ensureIndex(db, "idx_execution_invocations_sprint_started", "execution_invocations", "sprint_id, started_at DESC");
   ensureIndex(db, "idx_execution_invocations_task_started", "execution_invocations", "task_id, started_at DESC");
   ensureIndex(db, "idx_execution_invocations_sprint_run_started", "execution_invocations", "sprint_run_id, started_at DESC");
+  ensureIndex(db, "idx_execution_invocations_project_sprint_started", "execution_invocations", "project_id, sprint_id, started_at DESC");
+  ensureIndex(db, "idx_execution_invocations_project_sprint_run_started", "execution_invocations", "project_id, sprint_run_id, started_at DESC");
   ensureIndex(db, "idx_execution_invocations_task_run_started", "execution_invocations", "task_run_id, started_at DESC");
+  ensureIndex(db, "idx_execution_invocations_status_started", "execution_invocations", "status, started_at DESC");
   ensureIndex(db, "idx_execution_invocation_messages_invocation_created", "execution_invocation_messages", "invocation_id, created_at ASC");
   ensureIndex(db, "idx_dashboard_realtime_events_scope_sequence", "dashboard_realtime_events", "scope_type, scope_id, is_replayable, sequence DESC");
   // Non-replayable snapshot events are no longer persisted (their watermark is tracked in
@@ -337,8 +346,10 @@ export function runMigrations(db: DatabaseAdapter): void {
   ensureIndex(db, "idx_project_worker_assignments_worker_status", "project_worker_assignments", "worker_endpoint_id, status, last_affinity_at DESC");
   ensureIndex(db, "idx_project_attention_items_project_status", "project_attention_items", "project_id, status, opened_at DESC");
   ensureIndex(db, "idx_project_attention_items_project_status_updated", "project_attention_items", "project_id, status, updated_at DESC");
+  ensureIndex(db, "idx_project_attention_items_project_status_updated_opened", "project_attention_items", "project_id, status, updated_at DESC, opened_at DESC, id DESC");
   ensureIndex(db, "idx_project_attention_items_sprint_run_status", "project_attention_items", "sprint_run_id, status, opened_at DESC");
   ensureIndex(db, "idx_project_attention_items_sprint_run_status_updated", "project_attention_items", "sprint_run_id, status, updated_at DESC");
+  ensureIndex(db, "idx_project_attention_items_sprint_run_status_updated_opened", "project_attention_items", "sprint_run_id, status, updated_at DESC, opened_at DESC, id DESC");
   ensureIndex(db, "idx_project_attention_items_dispatch_status", "project_attention_items", "dispatch_id, status, opened_at DESC");
   ensureIndex(db, "idx_sprint_preview_sessions_project_updated", "sprint_preview_sessions", "project_id, updated_at DESC");
   ensureIndex(db, "idx_sprint_preview_sessions_sprint", "sprint_preview_sessions", "sprint_id, updated_at DESC");

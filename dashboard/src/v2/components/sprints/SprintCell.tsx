@@ -29,6 +29,7 @@ import { getSprintStatusPresentation } from "../../lib/sprint-status-presentatio
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 import { MOTION_TOKENS } from "../../lib/motion/tokens.js";
 import { computeSprintActionMenuPosition } from "../../lib/sprint-menu-positioning.js";
+import { ORGANIC_CELL_SHADOW_CLASS } from "../ui/organic-cell-styles.js";
 
 const CARD_DATE_FORMATTER = new Intl.DateTimeFormat("en-US", {
   month: "short",
@@ -195,24 +196,24 @@ export const SprintCell: FunctionComponent<SprintCellProps> = ({
       ref={bubbleRef}
       onMouseEnter={handleHoverEnter}
       onMouseLeave={handleHoverLeave}
-      className={`group relative flex h-72 w-72 shrink-0 cursor-pointer items-center justify-center perspective-1000 lg:h-80 lg:w-80 transition-[box-shadow,transform] duration-150 [@media(hover:hover)]:hover:shadow-[0_4px_12px_rgba(0,0,0,0.12)] [@media(hover:hover)]:hover:-translate-y-px motion-reduce:transition-none motion-reduce:hover:transform-none`}
+      className="group relative flex h-72 w-72 shrink-0 cursor-pointer items-center justify-center perspective-1000 transition-transform duration-150 [@media(hover:hover)]:hover:-translate-y-px motion-reduce:transition-none motion-reduce:hover:transform-none lg:h-80 lg:w-80"
     >
-      <div
-        className={`pointer-events-none absolute inset-0 rounded-[1.75rem] shadow-[0_24px_48px_rgba(0,0,0,0.07)] transition-all duration-700 dark:shadow-[0_24px_48px_rgba(0,0,0,0.5)] ${animationClass} ${isCompleted ? "opacity-80" : ""}`}
-
-      />
+      <div data-organic-cell-shadow className={`pointer-events-none absolute inset-0 ${ORGANIC_CELL_SHADOW_CLASS} transition-all duration-700 ${animationClass}`} />
 
       <div
-        className={`absolute inset-0 rounded-[1.75rem] overflow-hidden border border-white/70 backdrop-blur-md transition-all duration-700 transform-gpu dark:border-white/[0.06] ${animationClass} ${isCompleted ? "opacity-80" : ""} ${isRunning ? "bg-white/72 dark:bg-void-800/82" : "bg-white/55 dark:bg-void-800/65"}`}
-        style={{
-
-          WebkitMaskImage: "-webkit-radial-gradient(white, black)",
-          backfaceVisibility: "hidden",
-        }}
+        className={`absolute inset-0 rounded-[1.75rem] transition-opacity duration-700 transform-gpu ${animationClass} ${isCompleted ? "opacity-80" : ""}`}
       >
-        <div className={`absolute inset-0 pointer-events-none shadow-[inset_0_0_0_1px_rgba(255,255,255,0.5)] dark:shadow-[inset_0_0_0_1px_rgba(255,255,255,0.04)] ${animationClass}`} />
-        <WaveFluid accentHex={state.accentHex} />
-        <BorderTrace accentHex={state.accentHex} />
+        <div
+          className={`absolute inset-0 overflow-hidden rounded-[inherit] border border-white/70 backdrop-blur-md transition-colors duration-700 dark:border-white/[0.06] ${isRunning ? "bg-white/72 dark:bg-void-800/82" : "bg-white/55 dark:bg-void-800/65"}`}
+          style={{
+            WebkitMaskImage: "-webkit-radial-gradient(white, black)",
+            backfaceVisibility: "hidden",
+          }}
+        >
+          <div className="pointer-events-none absolute inset-0 rounded-[inherit] shadow-[inset_0_0_0_1px_rgba(255,255,255,0.5)] dark:shadow-[inset_0_0_0_1px_rgba(255,255,255,0.04)]" />
+          <WaveFluid accentHex={state.accentHex} />
+          <BorderTrace accentHex={state.accentHex} />
+        </div>
       </div>
 
       {state.ring && !isCompleted && (
@@ -292,19 +293,19 @@ export const SprintCell: FunctionComponent<SprintCellProps> = ({
         </div>
 
         <div className="mt-4 flex w-full flex-col items-center justify-center gap-3 px-4 transition-transform duration-300 group-hover:-translate-y-3">
-          <h3 className="font-display text-2xl font-black leading-tight tracking-tight text-[var(--text-primary)]">
+          <h3 className="font-display text-xl font-semibold leading-tight tracking-tight text-[var(--text-primary)]">
             {sprint.name}
           </h3>
         </div>
 
         <div className="mt-6 flex items-center justify-center gap-7 text-center transition-transform duration-300 group-hover:-translate-y-3">
           <div className="flex flex-col items-center">
-            <div className="font-mono text-[2rem] font-black text-[var(--text-primary)]">{sprint.tasksCount}</div>
+            <div className="font-mono text-2xl font-semibold text-[var(--text-primary)]">{sprint.tasksCount}</div>
             <div className="mt-0.5 text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">Tasks</div>
           </div>
           <div className="h-10 w-px bg-black/[0.08] dark:bg-white/[0.08]" />
           <div className="flex flex-col items-center">
-            <div className="font-mono text-[2rem] font-black text-[var(--text-primary)]">{sprint.completion}%</div>
+            <div className="font-mono text-2xl font-semibold text-[var(--text-primary)]">{sprint.completion}%</div>
             <div className="mt-0.5 text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">Done</div>
           </div>
         </div>

@@ -11,6 +11,7 @@ import { AgentPresetSyncService } from "../../../src/services/agent-preset-sync-
 import { QuicksprintService } from "../../../src/services/quicksprint-service.js";
 import { ProjectSetupService } from "../../../src/services/project-setup-service.js";
 import type { IProviderRunner, ProviderRunResult } from "../../../src/infrastructure/providers/cli/provider-runner.js";
+import { DEFAULT_PLAYWRIGHT_MCP_SERVER_ID } from "../../../src/repositories/settings-defaults.js";
 
 const tempDirs: string[] = [];
 
@@ -29,11 +30,13 @@ const usageTelemetry = {
 
 class FakeProviderRunner implements IProviderRunner {
   lastPrompt: string | null = null;
+  lastInput: Parameters<IProviderRunner["runProviderForText"]>[0] | null = null;
 
   constructor(private readonly text: string) {}
 
   async runProvider(input: Parameters<IProviderRunner["runProvider"]>[0]): Promise<ProviderRunResult> {
     this.lastPrompt = input.prompt;
+    this.lastInput = input;
     return {
       ok: true,
       stdout: this.text,
@@ -46,6 +49,7 @@ class FakeProviderRunner implements IProviderRunner {
 
   async runProviderForText(input: Parameters<IProviderRunner["runProviderForText"]>[0]): Promise<ProviderRunResult & { text: string }> {
     this.lastPrompt = input.prompt;
+    this.lastInput = input;
     return {
       ok: true,
       stdout: this.text,
@@ -216,6 +220,8 @@ describe("ProjectSetupService", () => {
       baseColor: "midnight",
     });
     expect(generatedAgent?.avatarConfig).toBeTruthy();
+    expect(generatedAgent?.mcpAccess?.linkedServerIds).toEqual([DEFAULT_PLAYWRIGHT_MCP_SERVER_ID]);
+    expect(setupAgent?.mcpAccess).toBeUndefined();
     await expect(fs.readFile(path.join(repoDir, ".code-ux", "agents", "frontend_runtime_agent.md"), "utf8"))
       .resolves.toContain("\"avatarConfig\"");
 
@@ -298,6 +304,62 @@ describe("ProjectSetupService", () => {
     expect(effective.agents.routing.planning.agentPresetId).not.toBe(setupAgent?.id);
     expect(effective.agents.routing.taskCoding.mode).toBe("ORCHESTRATOR");
     expect(effective.agents.routing.taskCoding.orchestratorAgentPresetIds).toContain(generatedWorker?.id);
+    expect(generatedWorker?.mcpAccess?.linkedServerIds).toEqual([DEFAULT_PLAYWRIGHT_MCP_SERVER_ID]);
+  });
+
+  it("passes a Docker snapshot checkout for the effective default branch", async () => {
+    const repoDir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-project-setup-checkout-"));
+    tempDirs.push(repoDir);
+    await fs.writeFile(path.join(repoDir, "package.json"), JSON.stringify({ scripts: { test: "vitest run" } }, null, 2));
+
+    const storage = new AppDbStorage();
+    const projectManagementRepository = new ProjectManagementRepository(storage);
+    const settingsRepository = new SettingsRepository();
+    const agentPresetRepository = new AgentPresetRepository(storage);
+    const executionRepository = new ExecutionRepository(storage);
+    const agentPresetSyncService = new AgentPresetSyncService({
+      projectManagementRepository,
+      agentPresetRepository,
+      settingsRepository,
+      projectRoot: repoDir,
+    });
+    const project = projectManagementRepository.createProject({
+      name: "Setup Checkout App",
+      sourceType: "local",
+      sourceRef: repoDir,
+      defaultBranch: "stable",
+    });
+    settingsRepository.saveProjectSettings(project.id, {
+      git: { defaultBranch: "develop" },
+      cliWorkflow: { executionMode: "DOCKER" },
+    });
+
+    const providerRunner = new FakeProviderRunner(JSON.stringify({
+      summary: "No artifacts requested.",
+      agents: [],
+      quicksprints: [],
+      previewScript: null,
+      ci: [],
+    }));
+    const service = new ProjectSetupService({
+      projectManagementRepository,
+      settingsRepository,
+      executionRepository,
+      agentPresetSyncService,
+      providerRunner,
+      projectRoot: process.cwd(),
+    });
+
+    await service.setupProject(project.id, {
+      options: { agents: false, quicksprints: false, previewScript: false, ci: false },
+    });
+
+    expect(providerRunner.lastInput).toEqual(expect.objectContaining({
+      repoPath: repoDir,
+      workspaceSessionId: `${project.id}-project-setup`,
+      workflowSettings: expect.objectContaining({ executionMode: "DOCKER" }),
+      snapshotCheckout: { branch: "stable" },
+    }));
   });
 
   it("starts background setup and exposes the invocation id before provider completion", async () => {

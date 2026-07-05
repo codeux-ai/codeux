@@ -1,4 +1,5 @@
 import type { TransportState } from "../../lib/realtime/dashboard-realtime-client.js";
+import type { ExecutionSnapshotSurfaceState } from "../../hooks/ExecutionTimelineContext.js";
 import type {
   DashboardStats,
   ExecutionDashboardSnapshot,
@@ -45,6 +46,7 @@ export interface ScopedLiveSessionRuntime {
 export interface FilteredLiveSessionTasks {
   filteredTasks: Subtask[];
   taskCounts: Record<LiveSessionTaskFilter, number>;
+  announcement: string;
 }
 
 export interface LiveSessionTaskCardItem {
@@ -79,7 +81,7 @@ export interface LiveSessionTaskCardStateInput {
 
 export interface LiveTransportBannerViewModel {
   isVisible: boolean;
-  title: "Connection Error" | "Disconnected" | "Reconnecting" | "Refreshing Live Data" | "Stale Data";
+  title: "Connection Error" | "Disconnected" | "Reconnecting" | "Refreshing Live Data" | "Recovering Live Data" | "Stale Data";
   message: string;
   wrapperClass: string;
   iconClass: string;
@@ -89,6 +91,8 @@ export interface LiveTransportBannerViewModel {
   role: "alert" | "status";
   ariaBusy: boolean;
 }
+
+const LIVE_SNAPSHOT_STALE_MS = 60_000;
 
 const EMPTY_LIVE_SESSION_STATS: DashboardStats = {
   total: 0,
@@ -257,7 +261,15 @@ export function deriveFilteredLiveSessionTasks(
       Failed: stats.failed,
       Pending: pendingCount,
     },
+    announcement: deriveLiveSessionTaskFilterAnnouncement(activeFilter, filteredTasks.length),
   };
+}
+
+export function deriveLiveSessionTaskFilterAnnouncement(
+  activeFilter: LiveSessionTaskFilter,
+  filteredTaskCount: number,
+): string {
+  return `${filteredTaskCount} ${activeFilter.toLowerCase()} task${filteredTaskCount === 1 ? "" : "s"} shown.`;
 }
 
 function buildInvocationIndexes(invocations: ExecutionInvocationRecord[]): {
@@ -372,6 +384,8 @@ export function deriveLiveTransportBannerViewModel(args: {
   transportState: TransportState;
   isRecovering: boolean;
   error: string | null;
+  snapshotUpdatedAt?: string | null;
+  nowMs?: number;
 }): LiveTransportBannerViewModel | null {
   if (args.error) {
     return {
@@ -392,7 +406,7 @@ export function deriveLiveTransportBannerViewModel(args: {
     return {
       isVisible: true,
       title: "Disconnected",
-      message: "Lost connection to the live stream. Retrying...",
+      message: "Lost connection to the live stream. Cached runtime data remains visible while retrying.",
       wrapperClass: "bg-status-red/10 border-status-red/20 text-status-red",
       iconClass: "text-status-red",
       icon: "disconnected",
@@ -407,7 +421,7 @@ export function deriveLiveTransportBannerViewModel(args: {
     return {
       isVisible: true,
       title: "Reconnecting",
-      message: "Attempting to restore connection...",
+      message: "Attempting to restore connection. Cached runtime data remains visible.",
       wrapperClass: "bg-status-amber/10 border-status-amber/20 text-status-amber",
       iconClass: "text-status-amber",
       icon: "reconnecting",
@@ -418,5 +432,88 @@ export function deriveLiveTransportBannerViewModel(args: {
     };
   }
 
+  if (args.transportState === "connected" && args.isRecovering) {
+    return {
+      isVisible: true,
+      title: args.snapshotUpdatedAt ? "Refreshing Live Data" : "Recovering Live Data",
+      message: args.snapshotUpdatedAt
+        ? "Keeping the current runtime snapshot visible while the live stream catches up."
+        : "Waiting for the first runtime snapshot after transport recovery.",
+      wrapperClass: "bg-signal-500/10 border-signal-500/20 text-signal-700 dark:text-signal-300",
+      iconClass: "text-signal-600 dark:text-signal-300",
+      icon: "reconnecting",
+      isUrgent: false,
+      ariaLive: "polite",
+      role: "status",
+      ariaBusy: true,
+    };
+  }
+
+  const snapshotAgeMs = args.snapshotUpdatedAt
+    ? (args.nowMs ?? Date.now()) - new Date(args.snapshotUpdatedAt).getTime()
+    : null;
+  if (
+    args.transportState === "connected"
+    && snapshotAgeMs !== null
+    && Number.isFinite(snapshotAgeMs)
+    && snapshotAgeMs > LIVE_SNAPSHOT_STALE_MS
+  ) {
+    return {
+      isVisible: true,
+      title: "Stale Data",
+      message: "Live runtime content is still visible, but the latest snapshot is more than a minute old.",
+      wrapperClass: "bg-status-amber/10 border-status-amber/20 text-status-amber",
+      iconClass: "text-status-amber",
+      icon: "reconnecting",
+      isUrgent: false,
+      ariaLive: "polite",
+      role: "status",
+      ariaBusy: false,
+    };
+  }
+
   return null;
+}
+
+export function deriveLiveSessionSnapshotSurface(args: {
+  transportState: TransportState;
+  isRecovering: boolean;
+  snapshotUpdatedAt?: string | null;
+  transportBannerTitle?: LiveTransportBannerViewModel["title"] | null;
+}): ExecutionSnapshotSurfaceState {
+  if (args.transportState === "reconnecting" || args.transportState === "disconnected") {
+    return {
+      kind: "reconnecting",
+      label: "Reconnecting",
+      description: "Cached runtime snapshot remains visible while the live stream reconnects.",
+      isBusy: true,
+    };
+  }
+
+  if (args.isRecovering) {
+    return {
+      kind: "recovering",
+      label: args.snapshotUpdatedAt ? "Recovering" : "Awaiting Snapshot",
+      description: args.snapshotUpdatedAt
+        ? "Cached runtime snapshot remains visible while fresh live data is loading."
+        : "Waiting for the first runtime snapshot after transport recovery.",
+      isBusy: true,
+    };
+  }
+
+  if (args.transportBannerTitle === "Stale Data") {
+    return {
+      kind: "stale",
+      label: "Stale Snapshot",
+      description: "Cached runtime snapshot remains visible, but it is more than a minute old.",
+      isBusy: true,
+    };
+  }
+
+  return {
+    kind: "live",
+    label: "Live",
+    description: "Runtime data is current.",
+    isBusy: false,
+  };
 }

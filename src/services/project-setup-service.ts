@@ -32,6 +32,7 @@ import type { AgentPresetRecord } from "../contracts/agent-preset-types.js";
 import type { QuicksprintTemplateRecord } from "../contracts/quicksprint-types.js";
 import type { DashboardRealtimeMutationNotifier } from "./dashboard-realtime-service.js";
 import { resolveAgentAvatarConfig } from "../contracts/agent-avatar-style.js";
+import { defaultCodingAgentMcpAccess } from "./agent-mcp-access.js";
 
 export const PROJECT_SETUP_AGENT_NAME = "Project Setup Agent";
 
@@ -57,6 +58,12 @@ interface ProjectSetupServiceDeps {
 }
 
 type ProjectSetupProviderConfig = ReturnType<ProjectSetupService["resolveProvider"]>;
+
+const resolveEffectiveDefaultBranch = (project: ProjectSummary, settings: DashboardSettings): string => (
+  project.defaultBranch?.trim()
+  || settings.git.defaultBranch?.trim()
+  || "main"
+);
 
 interface PreparedProjectSetupRun {
   project: ProjectSummary;
@@ -238,6 +245,11 @@ export class ProjectSetupService {
     try {
       signal?.throwIfAborted();
       const sessionId = `project-setup-${providerConfig.provider}-${Date.now().toString(36)}-${randomUUID().slice(0, 8)}`;
+      const workflowSettings = {
+        ...DEFAULT_CLI_WORKFLOW_SETTINGS,
+        ...settings.cliWorkflow,
+      };
+      const defaultBranch = resolveEffectiveDefaultBranch(project, settings);
       const result = await this.providerExecutionService.executeProvider({
         projectId,
         purpose: "planning",
@@ -269,10 +281,10 @@ export class ProjectSetupService {
         customModel: providerConfig.customModel,
         sessionId,
         workspaceSessionId: `${projectId}-project-setup`,
-        workflowSettings: {
-          ...DEFAULT_CLI_WORKFLOW_SETTINGS,
-          ...settings.cliWorkflow,
-        },
+        workflowSettings,
+        snapshotCheckout: workflowSettings.executionMode === "DOCKER"
+          ? { branch: defaultBranch }
+          : undefined,
         githubToken: settings.git.githubToken,
         signal,
         expectTextOutput: true,
@@ -524,7 +536,24 @@ export class ProjectSetupService {
     };
     return existing
       ? await this.deps.agentPresetSyncService.updateAgentPreset(existing.id, input)
-      : await this.deps.agentPresetSyncService.createAgentPreset(projectId, input);
+      : await this.deps.agentPresetSyncService.createAgentPreset(projectId, {
+        ...input,
+        ...(this.isGeneratedCodingAgent(agent.name, labels) ? { mcpAccess: defaultCodingAgentMcpAccess() } : {}),
+      });
+  }
+
+  private isGeneratedCodingAgent(name: string, labels: string[]): boolean {
+    const normalizedName = name.trim().toLowerCase();
+    if (
+      normalizedName === PROJECT_SETUP_AGENT_NAME.toLowerCase()
+      || normalizedName === "planning agent"
+      || normalizedName === "project manager"
+      || normalizedName === "quality assurance agent"
+      || normalizedName === "worker"
+    ) {
+      return false;
+    }
+    return labels.includes("worker") || !labels.includes("planning");
   }
 
   private async configureAgentRouting(projectId: string): Promise<void> {

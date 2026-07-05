@@ -1,7 +1,6 @@
 import type { FunctionComponent } from "preact";
 import { useMemo, useRef, useState } from "preact/hooks";
-import gsap from "gsap";
-import { X, ListChecks, Target, Bot, Plus, AlertCircle } from "lucide-preact";
+import { X, ListChecks, Target, Bot, Plus } from "lucide-preact";
 import type { Sprint, Task, TaskExecutorType, TaskPriority, TaskStatus } from "../../types.js";
 import { useActionFeedback } from "../../hooks/use-action-feedback.js";
 import { ActionFeedbackRegion } from "./ActionFeedbackRegion.js";
@@ -37,6 +36,21 @@ const EXECUTOR_OPTIONS: Array<{ value: TaskExecutorType; label: string; descript
   { value: "docker_cli", label: "CLI", description: "Run through the isolated Docker workspace." },
   { value: "jules", label: "Jules", description: "Force remote Jules execution." },
 ];
+
+const choiceBaseClass = "flex items-center gap-2 rounded-xl border px-3.5 py-2 text-[10px] font-bold uppercase tracking-[0.14em] transition-all focus-within:ring-2 disabled:cursor-not-allowed";
+const srOnlyInputClass = "sr-only peer";
+
+function selectedChoiceClass(tone: "signal" | "ember"): string {
+  return tone === "signal"
+    ? "border-signal-500/60 bg-signal-500/[0.12] text-signal-800 shadow-[0_2px_12px_rgba(0,224,160,0.18)] dark:text-signal-200"
+    : "border-ember-500/60 bg-ember-500/[0.12] text-ember-700 shadow-[0_2px_12px_rgba(255,184,0,0.18)] dark:text-ember-300";
+}
+
+function unselectedChoiceClass(tone: "signal" | "ember"): string {
+  return tone === "signal"
+    ? "border-black/[0.08] bg-white/40 text-slate-500 hover:border-signal-500/35 hover:text-slate-800 dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-slate-400 dark:hover:text-slate-200"
+    : "border-black/[0.08] bg-white/40 text-slate-500 hover:border-ember-500/35 hover:text-slate-800 dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-slate-400 dark:hover:text-slate-200";
+}
 
 function focusFirstInvalidField(formId: string, scrollContainerId: string): void {
   const firstInvalid = document.getElementById(formId)?.querySelector('[aria-invalid="true"]');
@@ -106,11 +120,21 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
     });
   }, [availableTasks, initialTask?.recordId, sprintId, dependencySearchQuery]);
 
+  const totalDependencyCount = useMemo(
+    () => availableTasks.filter(t => t.sprintId === sprintId && t.recordId !== initialTask?.recordId).length,
+    [availableTasks, initialTask?.recordId, sprintId],
+  );
+
+  const dependencyLiveMessage = dependencySearchQuery.trim()
+    ? `${dependencyOptions.length} dependency result${dependencyOptions.length === 1 ? "" : "s"} match "${dependencySearchQuery}". ${dependsOnTaskIds.length} selected.`
+    : `${totalDependencyCount} dependency option${totalDependencyCount === 1 ? "" : "s"} available. ${dependsOnTaskIds.length} selected.`;
+
 
   const handleSubmit = async (event: Event) => {
     event.preventDefault();
     if (Object.keys(validationErrors).length > 0) {
       setTouched({ sprintId: true, title: true });
+      setError(`Review required fields: ${Object.values(validationErrors).join(" ")}`, { autoDismiss: false });
       setTimeout(() => focusFirstInvalidField('add-task-form', 'add-task-form-body'), 0);
       return;
     }
@@ -129,9 +153,9 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
         executorType,
         dependsOnTaskIds,
       });
-      setSuccess("Task saved successfully.");
       setIsSubmitting(false);
-      handleClose();
+      setSuccess("Task saved successfully.", { autoDismiss: false });
+      window.setTimeout(() => onClose(), 700);
     } catch (err) {
       setIsSubmitting(false);
       const msg = err instanceof Error ? err.message : String(err);
@@ -181,7 +205,7 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
         <div className="flex-1 bg-white/98 dark:bg-void-800/98 flex flex-col min-w-0">
           <div className="flex items-start justify-between shrink-0 p-5 sm:p-7 lg:px-8 lg:pt-8 lg:pb-6 border-b border-black/[0.04] dark:border-white/[0.04]">
             <div>
-              <h2 id="add-task-modal-title" className="text-[2rem] font-black text-slate-900 dark:text-white tracking-tight font-display leading-none">
+              <h2 id="add-task-modal-title" className="text-2xl font-semibold text-slate-900 dark:text-white tracking-tight font-display leading-none">
                 {initialTask ? "Edit Task." : "Create Task."}
               </h2>
               <p className="text-xs font-medium text-slate-400 mt-2 tracking-wide">
@@ -241,40 +265,48 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
             <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
               <fieldset>
                 <legend className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400 block mb-2.5">Status</legend>
-                <div className="inline-flex p-1 bg-black/[0.04] dark:bg-white/[0.04] rounded-2xl gap-1 flex-wrap">
+                <div role="radiogroup" aria-label="Status" className="inline-flex p-1 bg-black/[0.04] dark:bg-white/[0.04] rounded-2xl gap-1 flex-wrap">
                   {STATUS_OPTIONS.map((option) => (
-                    <button
+                    <label
                       key={option}
-                      type="button"
-                      onClick={() => setStatus(option)}
-                      className={`px-3.5 py-2 rounded-xl text-[10px] font-bold uppercase tracking-[0.14em] transition-all active:scale-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 ${
-                        status === option
-                          ? "bg-signal-500 text-void-900 shadow-[0_2px_12px_rgba(0,224,160,0.3)]"
-                          : "text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200"
-                      }`}
+                      className={`${choiceBaseClass} cursor-pointer focus-within:ring-signal-500 ${status === option ? selectedChoiceClass("signal") : unselectedChoiceClass("signal")} has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-50`}
                     >
+                      <input
+                        type="radio"
+                        name="task-status"
+                        value={option}
+                        checked={status === option}
+                        disabled={isSubmitting}
+                        onChange={() => setStatus(option)}
+                        className={srOnlyInputClass}
+                      />
+                      <span aria-hidden="true" className={`h-2 w-2 rounded-full ${status === option ? "bg-signal-500" : "bg-slate-300 dark:bg-slate-600"}`} />
                       {option.replace("_", " ")}
-                    </button>
+                    </label>
                   ))}
                 </div>
               </fieldset>
 
               <fieldset>
                 <legend className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400 block mb-2.5">Priority</legend>
-                <div className="inline-flex p-1 bg-black/[0.04] dark:bg-white/[0.04] rounded-2xl gap-1 flex-wrap">
+                <div role="radiogroup" aria-label="Priority" className="inline-flex p-1 bg-black/[0.04] dark:bg-white/[0.04] rounded-2xl gap-1 flex-wrap">
                   {PRIORITY_OPTIONS.map((option) => (
-                    <button
+                    <label
                       key={option}
-                      type="button"
-                      onClick={() => setPriority(option)}
-                      className={`px-3.5 py-2 rounded-xl text-[10px] font-bold uppercase tracking-[0.14em] transition-all active:scale-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-ember-500 ${
-                        priority === option
-                          ? "bg-ember-500 text-void-900 shadow-[0_2px_12px_rgba(255,184,0,0.3)]"
-                          : "text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200"
-                      }`}
+                      className={`${choiceBaseClass} cursor-pointer focus-within:ring-ember-500 ${priority === option ? selectedChoiceClass("ember") : unselectedChoiceClass("ember")} has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-50`}
                     >
+                      <input
+                        type="radio"
+                        name="task-priority"
+                        value={option}
+                        checked={priority === option}
+                        disabled={isSubmitting}
+                        onChange={() => setPriority(option)}
+                        className={srOnlyInputClass}
+                      />
+                      <span aria-hidden="true" className={`h-2 w-2 rounded-full ${priority === option ? "bg-ember-500" : "bg-slate-300 dark:bg-slate-600"}`} />
                       {option}
-                    </button>
+                    </label>
                   ))}
                 </div>
               </fieldset>
@@ -285,21 +317,31 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
                 <Bot className="w-3.5 h-3.5 text-signal-500" strokeWidth={2.3} />
                 <span className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400">Executor</span>
               </legend>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+              <div role="radiogroup" aria-label="Executor" className="grid grid-cols-1 md:grid-cols-2 gap-2">
                 {EXECUTOR_OPTIONS.map((option) => (
-                  <button
+                  <label
                     key={option.value}
-                    type="button"
-                    onClick={() => setExecutorType(option.value)}
-                    className={`rounded-2xl border px-4 py-3 text-left transition-all active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 ${
+                    className={`rounded-2xl border px-4 py-3 text-left transition-all focus-within:ring-2 focus-within:ring-signal-500 cursor-pointer has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-50 ${
                       executorType === option.value
-                        ? "border-signal-500/45 bg-signal-500/[0.08] text-signal-700 dark:text-signal-300"
-                        : "border-black/[0.08] dark:border-white/[0.08] bg-black/[0.03] dark:bg-white/[0.03] text-slate-500 dark:text-slate-400"
+                        ? "border-signal-500/50 bg-signal-500/[0.1] text-signal-700 dark:text-signal-300"
+                        : "border-black/[0.08] dark:border-white/[0.08] bg-black/[0.03] dark:bg-white/[0.03] text-slate-500 dark:text-slate-400 hover:border-signal-500/30"
                     }`}
                   >
-                    <div className="text-[10px] font-bold uppercase tracking-[0.14em]">{option.label}</div>
+                    <input
+                      type="radio"
+                      name="task-executor"
+                      value={option.value}
+                      checked={executorType === option.value}
+                      disabled={isSubmitting}
+                      onChange={() => setExecutorType(option.value)}
+                      className={srOnlyInputClass}
+                    />
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="text-[10px] font-bold uppercase tracking-[0.14em]">{option.label}</div>
+                      <span aria-hidden="true" className={`h-3 w-3 rounded-full border ${executorType === option.value ? "border-signal-500 bg-signal-500" : "border-slate-300 dark:border-slate-600"}`} />
+                    </div>
                     <div className="mt-1 text-xs leading-relaxed">{option.description}</div>
-                  </button>
+                  </label>
                 ))}
               </div>
             </fieldset>
@@ -339,31 +381,39 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
                       placeholder="Filter tasks..."
                       value={dependencySearchQuery}
                       onInput={(e) => setDependencySearchQuery((e.target as HTMLInputElement).value)}
+                      aria-describedby="dependency-result-count"
                       className="w-48 bg-black/[0.03] dark:bg-white/[0.03] border border-black/[0.08] dark:border-white/[0.08] px-3 py-1.5 text-xs rounded-xl focus:outline-none focus:border-ember-500 focus-visible:ring-1 focus-visible:ring-ember-500/50"
                     />
                   </div>
                 )}
               </div>
+              <div id="dependency-result-count" role="status" aria-live="polite" aria-atomic="true" className="sr-only">
+                {dependencyLiveMessage}
+              </div>
               {dependencyOptions.length === 0 ? (
                 <div role="status" aria-live="polite" className="rounded-2xl border border-dashed border-black/[0.08] dark:border-white/[0.08] px-4 py-4 text-xs text-slate-400">
-                  No existing tasks in this sprint yet.
+                  {totalDependencyCount === 0 ? "No existing tasks in this sprint yet." : "No dependency results match the current filter."}
                 </div>
               ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-2 max-h-44 overflow-y-auto pr-1">
+                <div role="group" aria-label="Dependency choices" className="grid grid-cols-1 md:grid-cols-2 gap-2 max-h-44 overflow-y-auto pr-1">
                   {dependencyOptions.map((task) => {
                     const active = dependsOnTaskIds.includes(task.recordId);
                     return (
-                      <button
+                      <label
                         key={task.recordId}
-                        type="button"
-                        onClick={() => toggleDependency(task.recordId)}
-                        aria-pressed={active ? "true" : "false"}
-                        className={`flex items-center justify-between gap-3 px-4 py-3 rounded-2xl border text-left transition-all active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-ember-500 ${
+                        className={`flex items-center justify-between gap-3 px-4 py-3 rounded-2xl border text-left transition-all focus-within:ring-2 focus-within:ring-ember-500 cursor-pointer has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-50 ${
                           active
-                            ? "border-ember-500/45 bg-ember-500/[0.08] text-ember-600 dark:text-ember-400"
-                            : "border-black/[0.07] dark:border-white/[0.07] bg-black/[0.02] dark:bg-white/[0.02] text-slate-500"
+                            ? "border-ember-500/50 bg-ember-500/[0.1] text-ember-700 dark:text-ember-300"
+                            : "border-black/[0.07] dark:border-white/[0.07] bg-black/[0.02] dark:bg-white/[0.02] text-slate-500 hover:border-ember-500/30"
                         }`}
                       >
+                        <input
+                          type="checkbox"
+                          checked={active}
+                          disabled={isSubmitting}
+                          onChange={() => toggleDependency(task.recordId)}
+                          className={srOnlyInputClass}
+                        />
                         <div className="min-w-0 flex-1 pr-2">
                           <div className="flex items-center gap-2 mb-1">
                             <span className="text-[10px] font-mono uppercase tracking-[0.14em] text-slate-400">{task.id}</span>
@@ -374,7 +424,7 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
                           <div className="text-sm font-semibold truncate leading-tight">{task.title}</div>
                         </div>
                         <span className={`w-4 h-4 rounded-full border ${active ? "border-ember-500 bg-ember-500" : "border-slate-300 dark:border-slate-600"}`} />
-                      </button>
+                      </label>
                     );
                   })}
                 </div>

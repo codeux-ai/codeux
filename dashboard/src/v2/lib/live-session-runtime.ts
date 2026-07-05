@@ -79,13 +79,59 @@ export function deriveLiveSessionRuntimeState(
   };
 }
 
-export function getPendingActionState(pendingActionIds: Set<string>, actionId: string): "idle" | "pending" {
+export type LiveActionState = "idle" | "pending" | "success" | "error" | "disabled";
+
+export interface LiveActionLabels {
+  idle: string;
+  pending: string;
+  success?: string;
+  error?: string;
+  disabled?: string;
+}
+
+export function getPendingActionState(pendingActionIds: Set<string>, actionId: string): Extract<LiveActionState, "idle" | "pending"> {
   return pendingActionIds.has(actionId) ? "pending" : "idle";
 }
 
-export function getLiveActionDisplayProps(isPending: boolean, isDisabled: boolean) {
+export function getLiveActionLabel(state: LiveActionState, labels: LiveActionLabels): string {
+  if (state === "pending") return labels.pending;
+  if (state === "success") return labels.success ?? labels.idle;
+  if (state === "error") return labels.error ?? `Retry ${labels.idle.toLowerCase()}`;
+  if (state === "disabled") return labels.disabled ?? labels.idle;
+  return labels.idle;
+}
+
+export function getLiveActionStatusLabel(state: LiveActionState, labels: LiveActionLabels): string | null {
+  if (state === "pending") return `${labels.pending} in progress.`;
+  if (state === "success") return `${labels.success ?? labels.idle} succeeded.`;
+  if (state === "error") return `${labels.error ?? labels.idle} failed. Retry when ready.`;
+  if (state === "disabled") return labels.disabled ? `${labels.disabled}.` : "Action unavailable.";
+  return null;
+}
+
+export function getLiveActionDisabledReason(
+  state: LiveActionState,
+  labels: LiveActionLabels,
+  disabledReason?: string | null,
+): string | null {
+  if (state === "pending") return `${labels.pending} is already in progress.`;
+  if (state === "disabled") return disabledReason || labels.disabled || "Action unavailable.";
+  return null;
+}
+
+export function getLiveActionDisplayProps(
+  stateOrPending: LiveActionState | boolean,
+  isDisabled: boolean,
+  disabledReason?: string | null,
+) {
+  const state: LiveActionState = typeof stateOrPending === "boolean"
+    ? (stateOrPending ? "pending" : (isDisabled ? "disabled" : "idle"))
+    : (isDisabled ? "disabled" : stateOrPending);
+  const isPending = state === "pending";
   return {
-    "aria-disabled": isPending || isDisabled,
+    "aria-disabled": isPending || isDisabled || state === "disabled",
     "aria-busy": isPending,
+    "data-action-state": state,
+    ...(disabledReason ? { "data-disabled-reason": disabledReason } : {}),
   };
 }

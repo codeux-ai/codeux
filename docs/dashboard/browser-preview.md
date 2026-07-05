@@ -21,12 +21,18 @@ The browser preview provides an integrated environment for interacting with runn
 - The address form must keep a programmatic label, describe why it is disabled when the preview container is unavailable, and announce submitted navigation attempts while keeping focus in the address field.
 - Session rails must keep horizontal overflow inside the rail, expose the active session state, and remain keyboard reachable at narrow widths.
 - Hidden slider controls must become visible when they or their container receive keyboard focus.
+- Unavailable preview links remain visible and keyboard reachable as disabled link controls. They must not navigate, must keep the safe URL path absent, and must expose a persistent reason through visible copy plus `aria-describedby`.
+- Session removal actions keep the card mounted while removal is pending, set `aria-busy` on the card and remove button, suppress duplicate removal, and describe the pending reason from the disabled control.
+- The active sessions menu opens predictably from hover, click, focus, `Enter`, `Space`, `ArrowDown`, and `ArrowUp`; supports `ArrowUp`/`ArrowDown`/`Home`/`End` within enabled menu items; and restores focus to the trigger after `Escape` or outside-click close.
 - File-browser trees and change lists should expose tree/listbox semantics, selected file state, loading/error/empty regions, and wrapping long paths so keyboard users do not need pointer hover to inspect files or diffs.
 - Rebuild and stop track distinct pending actions. The active operation owns the button label, `aria-busy`, and status text; sibling controls are disabled with visible recovery text instead of relying on click-time announcements.
 - Launch controls set `aria-busy` on both the launch region and launch button while a container is starting. The selected session iframe remains mounted during refresh/starting states when a previous frame exists; do not replace stale preview content with a blank loading placeholder unless no frame exists.
+- Launch pending state keeps the selected sprint value visible, explains the disabled select and launch controls through status text and control titles, and prevents duplicate launch submission until the start request settles.
 - Startup-script saving sets `aria-busy` on the save button and textarea and pauses editing until the save completes. Script save status is a polite live region connected through `aria-describedby`.
 - Container logs keep stale log text mounted during refresh, set `aria-busy` on the log region, and show a visible Ready/Refreshing/Error badge plus polite live-region copy.
 - Navigation pending state is a short client-side command guard. Back, forward, reload, and address submit controls announce that the navigation command is being sent; the iframe bridge does not acknowledge command completion.
+- Multi-port preview sessions render as one persisted browser session with an accessible port tablist in the browser chrome. The first container-to-host port mapping is the primary tab, tabs support pointer and arrow-key selection, and secondary tabs route through the existing selected-port proxy query while preserving a separate current path per selected port.
+- The Live Preview button uses the same mapping model outside the full browser page. Its primary click opens the primary routed port. When the session exposes additional routed ports, the adjacent arrow menu lists each port mapping so operators can open a secondary port directly; mappings that do not yet have a host port stay visible but disabled with their pending reason.
 
 ## Verification Notes
 

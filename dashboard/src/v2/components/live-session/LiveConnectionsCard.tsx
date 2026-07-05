@@ -48,17 +48,15 @@ const ConnectionRow: FunctionComponent<{ connection: ExecutionDashboardSnapshot[
 
     if (hasChanged) {
       if (isReducedMotion) {
-        // No motion emphasis: brief background class toggle
         const el = rowRef.current;
-        el.classList.add("bg-signal-500/10", "border-signal-500/20");
+        el.classList.add("bg-signal-500/10", "border-signal-500/25", "ring-1", "ring-signal-500/20");
         setTimeout(() => {
-          if (el) el.classList.remove("bg-signal-500/10", "border-signal-500/20");
+          if (el) el.classList.remove("bg-signal-500/10", "border-signal-500/25", "ring-1", "ring-signal-500/20");
         }, 500);
       } else {
-        // Motion emphasis: flash using GSAP
         gsap.killTweensOf(rowRef.current);
         gsap.fromTo(rowRef.current,
-          { backgroundColor: "rgba(0, 224, 160, 0.15)", borderColor: "rgba(0, 224, 160, 0.3)" },
+          { backgroundColor: "rgba(0, 224, 160, 0.08)", borderColor: "rgba(0, 224, 160, 0.25)" },
           { backgroundColor: "rgba(0, 0, 0, 0.015)", borderColor: "rgba(0, 0, 0, 0.04)", duration: highlightDuration * 2, ease: "power2.out", overwrite: "auto", clearProps: "backgroundColor,borderColor" }
         );
       }
@@ -82,7 +80,7 @@ const ConnectionRow: FunctionComponent<{ connection: ExecutionDashboardSnapshot[
               {CONNECTION_ROLE_LABELS[connection.role] || connection.role}
             </span>
             {connection.listenMode && (
-              <span className="rounded-full border border-signal-500/20 bg-signal-500/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.14em] text-signal-500">
+              <span className="rounded-full border border-signal-500/20 bg-signal-500/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.14em] text-signal-500 motion-reduce:ring-1 motion-reduce:ring-signal-500/20">
                 Listening
               </span>
             )}
@@ -196,7 +194,7 @@ export const LiveConnectionsCard: FunctionComponent<{
                 <span className="text-[8px] font-bold uppercase tracking-[0.14em] text-slate-400">{tile.label}</span>
                 <span className="text-slate-400">{tile.icon}</span>
               </div>
-              <div className={`mt-1 text-lg font-black leading-none ${tile.tone}`}>{tile.value}</div>
+              <div className={`mt-1 text-base font-semibold leading-none ${tile.tone}`}>{tile.value}</div>
             </div>
           ))}
         </div>

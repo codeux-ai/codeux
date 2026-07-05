@@ -26,6 +26,7 @@ This project is a Model Context Protocol (MCP) server with an integrated dashboa
   - Start dashboard HTTP server.
   - Start MCP stdio transport.
   - Serve cached dashboard live activity and git status via `src/server/activity-cache-service.ts`.
+- Dashboard dependency composition lives in `src/app/dependency-factory/dashboard-factory.ts`. When two dashboard services must be constructed before both concrete instances exist, the factory uses `LateBoundDependency<T>` from `src/shared/late-bound-dependency.ts` and links it synchronously before returning dependencies. Consumers resolve these holders at action time so missing links fail with an explicit late-bound dependency error instead of placeholder objects or private-field mutation.
 
 ### 2. MCP tool handlers
 - `src/mcp/core-tool-handler.ts`
@@ -60,6 +61,7 @@ This project is a Model Context Protocol (MCP) server with an integrated dashboa
 - `src/services/cli-process-runner.ts`
 - `src/services/cli-docker-utils.ts`
 - `src/services/cli-workflow-text-utils.ts`
+- Docker-backed project setup and dashboard chat invocations seed their provider workspace from the effective default branch snapshot. The checkout contract asks `WorkspaceManager` for the configured branch, which prefers `origin/<defaultBranch>` and falls back to the local branch when the remote tracking ref is unavailable; HOST-mode invocations continue to use their existing cwd behavior.
 
 ### 8. Shared logging and correlation
 - `src/shared/logging/logger.ts`
@@ -111,6 +113,7 @@ Priority order:
 - Branch preflight can block plan/orchestrate until local and remote sprint branch exist.
 - Planning preflight can block status/orchestrate until subtask files exist.
 - CI Intelligence settings add protocol-level merge guidance for comments/check gates.
+- `pnpm run ci` starts with the local quality guardrail script, which blocks stale artifacts, unsafe dependency placeholders, realtime snapshot persistence regressions, duplicate optimistic task insertion, and substantial duplicate implementation blocks before broader validation runs.
 
 ## Extensibility Model
 

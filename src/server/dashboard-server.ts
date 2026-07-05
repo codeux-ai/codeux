@@ -112,7 +112,13 @@ import type { EmbeddingModelManager } from "../services/embedding-model-manager.
 import type { EmbeddingService } from "../services/embedding-service.js";
 import type { KnowledgeService } from "../services/knowledge-service.js";
 import type { UpdateStatus } from "../services/update-checker-service.js";
-import { parsePreviewSessionIdFromHost, pipePreviewUpgradeRequest } from "./preview-host-utils.js";
+import {
+  parsePreviewSessionIdFromHost,
+  parseSelectedPreviewPortFromRequest,
+  pipePreviewUpgradeRequest,
+  resolvePreviewHostPort,
+  stripPreviewPortSelectorFromPath,
+} from "./preview-host-utils.js";
 
 export type DashboardDependencies = Omit<
   DashboardServerOptions,
@@ -282,6 +288,7 @@ export interface DashboardServerOptions {
     path: string;
     headers?: Record<string, string | undefined>;
     body?: Buffer;
+    selectedPort?: string | number | null;
   }) => Promise<{ status: number; headers: Record<string, string>; body: Buffer }>;
   listFileBrowserSessions?: (projectId: string) => Promise<FileBrowserSession[]> | FileBrowserSession[];
   startFileBrowserSession?: (projectId: string, sprintId: string) => Promise<FileBrowserSession> | FileBrowserSession;
@@ -444,7 +451,15 @@ export const setupDashboardServer = async (options: DashboardServerOptions): Pro
     void (async () => {
       try {
         const session = await getSprintPreviewSession(sessionId);
-        if (!session?.hostPort) {
+        if (!session) {
+          socket.destroy();
+          return;
+        }
+        const upstreamPort = resolvePreviewHostPort(
+          session,
+          parseSelectedPreviewPortFromRequest(req.url || "/", req.headers["x-code-ux-preview-port"]),
+        );
+        if (!upstreamPort) {
           socket.destroy();
           return;
         }
@@ -452,7 +467,8 @@ export const setupDashboardServer = async (options: DashboardServerOptions): Pro
           req,
           socket,
           head,
-          upstreamPort: session.hostPort,
+          upstreamPort,
+          targetPath: stripPreviewPortSelectorFromPath(req.url || "/"),
         });
       } catch {
         socket.destroy();

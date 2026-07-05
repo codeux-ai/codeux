@@ -47,6 +47,7 @@ const DESCRIPTION_MAX = 180;
 const INSTRUCTION_SOFT_MAX = 8000;
 
 type FormErrors = Partial<Record<"name" | "description" | "instruction" | "memory", string>>;
+type ActionStatus = { tone: "neutral" | "success" | "error" | "pending"; message: string };
 
 export interface AgentProviderOption {
   value: string;
@@ -157,7 +158,7 @@ const SectionCard: FunctionComponent<{
           <span className="text-[9px] font-bold uppercase tracking-[0.2em] text-signal-600 dark:text-signal-400">
             {eyebrow}
           </span>
-          <h3 className="font-display text-lg font-black tracking-tight text-slate-900 dark:text-white">
+          <h3 className="font-display text-base font-semibold tracking-tight text-slate-900 dark:text-white">
             {title}
           </h3>
         </div>
@@ -219,6 +220,10 @@ export const AgentPresetEditorPanel: FunctionComponent<{
   onCancel: () => void;
 }> = ({ preset, saving, defaultMemoryInstruction = "", providerOptions = [], availableMcpServers = [], onSave, onCancel }) => {
   const panelRef = useRef<HTMLFormElement>(null);
+  const nameRef = useRef<HTMLInputElement>(null);
+  const descriptionRef = useRef<HTMLTextAreaElement>(null);
+  const instructionHostRef = useRef<HTMLDivElement>(null);
+  const memoryHostRef = useRef<HTMLDivElement>(null);
 
   const [name, setName] = useState(preset.name);
   const [description, setDescription] = useState(preset.description || "");
@@ -243,6 +248,10 @@ export const AgentPresetEditorPanel: FunctionComponent<{
   const [discardOpen, setDiscardOpen] = useState(false);
   const [avatarExpression, setAvatarExpression] = useState<AgentAvatarExpression>("happy");
   const [knowledgeDirty, setKnowledgeDirty] = useState(false);
+  const [actionStatus, setActionStatus] = useState<ActionStatus>({
+    tone: "neutral",
+    message: "Validation runs after fields are edited or Save Agent is pressed.",
+  });
 
   const setMcpAccessNormalized = (next: AgentMcpAccessConfig): void => setMcpAccess(normalizeAgentMcpAccess(next));
 
@@ -251,6 +260,7 @@ export const AgentPresetEditorPanel: FunctionComponent<{
   const handleRandomizeAvatar = (): void => {
     const seed = Date.now().toString(36) + Math.random().toString(36).substring(2);
     setAvatarConfig(generateRandomAgentAvatar(seed));
+    setActionStatus({ tone: "success", message: "Avatar randomized. Save Agent to keep the new appearance." });
   };
 
   /* Reset when preset switches */
@@ -268,6 +278,7 @@ export const AgentPresetEditorPanel: FunctionComponent<{
     setShowMemoryPanel(false);
     setTouched({});
     setKnowledgeDirty(false);
+    setActionStatus({ tone: "neutral", message: "Validation runs after fields are edited or Save Agent is pressed." });
   }, [preset.id]);
 
   /* Entry animation */
@@ -322,10 +333,37 @@ export const AgentPresetEditorPanel: FunctionComponent<{
   const submitDisabled = saving || hasErrors || !isDirty;
 
   /* Submit */
+  const focusFirstInvalidField = (nextErrors: FormErrors): void => {
+    if (nextErrors.name) {
+      nameRef.current?.focus();
+      return;
+    }
+    if (nextErrors.description) {
+      descriptionRef.current?.focus();
+      return;
+    }
+    if (nextErrors.instruction) {
+      instructionHostRef.current?.querySelector<HTMLElement>("textarea, [contenteditable='true'], button")?.focus();
+      return;
+    }
+    if (nextErrors.memory) {
+      memoryHostRef.current?.querySelector<HTMLElement>("textarea, [contenteditable='true'], button")?.focus();
+    }
+  };
+
   const handleSubmit = (event: Event) => {
     event.preventDefault();
     setTouched({ name: true, description: true, instruction: true, memory: true });
-    if (hasErrors || !isDirty) return;
+    if (hasErrors) {
+      focusFirstInvalidField(errors);
+      setActionStatus({ tone: "error", message: "Fix the highlighted fields, then retry Save Agent." });
+      return;
+    }
+    if (!isDirty) {
+      setActionStatus({ tone: "neutral", message: "No changes to save." });
+      return;
+    }
+    setActionStatus({ tone: "pending", message: "Saving agent changes..." });
     onSave(preset.id, {
       name: name.trim(),
       description: description.trim(),
@@ -400,6 +438,10 @@ export const AgentPresetEditorPanel: FunctionComponent<{
   const activeMcpCount = mcpItems.filter((item) => item.active).length;
 
   const toggleMcpItem = (item: (typeof mcpItems)[number]): void => {
+    setActionStatus({
+      tone: "success",
+      message: `${item.label} ${item.active ? "disabled" : "enabled"} for this agent. Save Agent to persist MCP access.`,
+    });
     if (item.kind === "code_ux") {
       setMcpAccessNormalized({ ...mcpAccess, codeUxEnabled: !item.active });
     } else {
@@ -411,6 +453,13 @@ export const AgentPresetEditorPanel: FunctionComponent<{
       });
     }
   };
+
+  const actionStatusClass = {
+    neutral: "border-black/[0.06] bg-white/50 text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-400",
+    success: "border-status-green/20 bg-status-green/[0.08] text-status-green",
+    error: "border-status-red/20 bg-status-red/[0.08] text-status-red",
+    pending: "border-signal-500/25 bg-signal-500/[0.08] text-signal-600 dark:text-signal-400",
+  }[actionStatus.tone];
 
   return (
     <>
@@ -448,7 +497,7 @@ export const AgentPresetEditorPanel: FunctionComponent<{
                 </span>
               )}
             </div>
-            <h2 className="truncate font-display text-2xl font-black tracking-tight text-slate-900 dark:text-white">
+            <h2 className="truncate font-display text-xl font-semibold tracking-tight text-slate-900 dark:text-white">
               {name.trim() || "Unnamed Agent"}
             </h2>
           </div>
@@ -470,7 +519,7 @@ export const AgentPresetEditorPanel: FunctionComponent<{
               disabled={submitDisabled}
               aria-disabled={submitDisabled}
               aria-busy={saving}
-              className="inline-flex items-center gap-2 rounded-full bg-signal-500 px-5 py-2.5 text-[12px] font-bold uppercase tracking-[0.12em] text-void-900 shadow-[0_0_24px_rgba(0,224,160,0.28)] transition-all hover:scale-[1.03] hover:bg-signal-400 hover:shadow-[0_0_32px_rgba(0,224,160,0.36)] focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400 disabled:shadow-none disabled:hover:scale-100 dark:disabled:bg-white/[0.05] dark:disabled:text-slate-500"
+              className="inline-flex items-center gap-2 rounded-full bg-signal-500 px-5 py-2.5 text-[12px] font-bold uppercase tracking-[0.12em] text-white dark:text-void-900 shadow-[0_0_24px_rgba(0,224,160,0.28)] transition-all hover:scale-[1.03] hover:bg-signal-400 hover:shadow-[0_0_32px_rgba(0,224,160,0.36)] focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400 disabled:shadow-none disabled:hover:scale-100 dark:disabled:bg-white/[0.05] dark:disabled:text-slate-500"
             >
               {saving ? (
                 <RefreshCw className="h-3.5 w-3.5 animate-spin" strokeWidth={2.4} />
@@ -485,6 +534,13 @@ export const AgentPresetEditorPanel: FunctionComponent<{
               {hasErrors ? "Fix errors to save" : "No changes"}
             </p>
           )}
+          <div
+            role={actionStatus.tone === "error" ? "alert" : "status"}
+            aria-live="polite"
+            className={`min-h-[2rem] rounded-full border px-3 py-1.5 text-[11px] font-semibold ${actionStatusClass}`}
+          >
+            {actionStatus.message}
+          </div>
         </div>
 
         {/* ── Body ── */}
@@ -513,6 +569,7 @@ export const AgentPresetEditorPanel: FunctionComponent<{
                 errorId="agent-name-error"
               >
                 <input
+                  ref={nameRef}
                   id="agent-name"
                   type="text"
                   value={name}
@@ -542,6 +599,7 @@ export const AgentPresetEditorPanel: FunctionComponent<{
                 errorId="agent-description-error"
               >
                 <textarea
+                  ref={descriptionRef}
                   id="agent-description"
                   value={description}
                   onInput={(event) => setDescription(event.currentTarget.value)}
@@ -563,7 +621,10 @@ export const AgentPresetEditorPanel: FunctionComponent<{
             <SectionCard icon={Palette} eyebrow="Appearance" title="Customize">
               <AgentAvatarCustomizer
                 config={avatarConfig || {}}
-                onChange={setAvatarConfig}
+                onChange={(next) => {
+                  setAvatarConfig(next);
+                  setActionStatus({ tone: "success", message: "Avatar option changed. Save Agent to persist appearance." });
+                }}
                 disabled={saving}
               />
             </SectionCard>
@@ -580,24 +641,26 @@ export const AgentPresetEditorPanel: FunctionComponent<{
                 error={touched.instruction ? errors.instruction : undefined}
                 errorId="agent-instructions-error"
               >
-                <MarkdownEditorField
-                  key={`instructions-${preset.id}`}
-                  id="agent-instructions"
-                  value={instructionMarkdown}
-                  onChange={setInstructionMarkdown}
-                  onBlur={() => setTouched((t) => ({ ...t, instruction: true }))}
-                  placeholder={"You are a planning specialist. Decompose user goals into clear, testable subtasks…"}
-                  minRows={8}
-                  minHeightClass="min-h-[14rem]"
-                  invalid={touched.instruction && !!errors.instruction}
-                  ariaErrorId={touched.instruction && errors.instruction ? "agent-instructions-error" : undefined}
-                  emptyPreviewHint="No instructions yet — switch to Write to compose the system prompt."
-                  toolbarNote={instructionOver ? (
-                    <span className="inline-flex items-center gap-1 rounded-md border border-amber-400/30 bg-amber-400/10 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-[0.14em] text-amber-600 dark:text-amber-400">
-                      Long
-                    </span>
-                  ) : undefined}
-                />
+                <div ref={instructionHostRef}>
+                  <MarkdownEditorField
+                    key={`instructions-${preset.id}`}
+                    id="agent-instructions"
+                    value={instructionMarkdown}
+                    onChange={setInstructionMarkdown}
+                    onBlur={() => setTouched((t) => ({ ...t, instruction: true }))}
+                    placeholder={"You are a planning specialist. Decompose user goals into clear, testable subtasks…"}
+                    minRows={8}
+                    minHeightClass="min-h-[14rem]"
+                    invalid={touched.instruction && !!errors.instruction}
+                    ariaErrorId={touched.instruction && errors.instruction ? "agent-instructions-error" : undefined}
+                    emptyPreviewHint="No instructions yet — switch to Write to compose the system prompt."
+                    toolbarNote={instructionOver ? (
+                      <span className="inline-flex items-center gap-1 rounded-md border border-amber-400/30 bg-amber-400/10 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-[0.14em] text-amber-600 dark:text-amber-400">
+                        Long
+                      </span>
+                    ) : undefined}
+                  />
+                </div>
                 {instructionOver && !errors.instruction && (
                   <p className="flex items-center gap-1.5 text-[11px] text-amber-600 dark:text-amber-400">
                     <AlertCircle className="h-3.5 w-3.5 shrink-0" strokeWidth={2.4} />
@@ -666,7 +729,10 @@ export const AgentPresetEditorPanel: FunctionComponent<{
                         {!memoryIsDefault && defaultMemoryInstruction.trim().length > 0 && (
                           <button
                             type="button"
-                            onClick={useDefaultMemory}
+                            onClick={() => {
+                              useDefaultMemory();
+                              setActionStatus({ tone: "success", message: "Memory template reset to the project default. Save Agent to persist it." });
+                            }}
                             disabled={saving}
                             className="inline-flex items-center gap-1 rounded-md border border-black/[0.06] bg-white/60 px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.14em] text-slate-500 transition-colors hover:bg-white hover:text-slate-900 dark:border-white/[0.06] dark:bg-white/[0.04] dark:text-slate-400 dark:hover:bg-white/[0.08] dark:hover:text-white"
                           >
@@ -676,19 +742,21 @@ export const AgentPresetEditorPanel: FunctionComponent<{
                         )}
                       </div>
                     </div>
-                    <MarkdownEditorField
-                      key={`memory-${preset.id}`}
-                      id="agent-memory"
-                      value={memoryMarkdown}
-                      onChange={setMemoryMarkdown}
-                      onBlur={() => setTouched((t) => ({ ...t, memory: true }))}
-                      placeholder="Override the default memory prompt template for this agent."
-                      minRows={5}
-                      minHeightClass="min-h-[10rem]"
-                      invalid={touched.memory && !!errors.memory}
-                      ariaErrorId={touched.memory && errors.memory ? "agent-memory-error" : undefined}
-                      emptyPreviewHint="No override yet — switch to Write to compose the memory template."
-                    />
+                    <div ref={memoryHostRef}>
+                      <MarkdownEditorField
+                        key={`memory-${preset.id}`}
+                        id="agent-memory"
+                        value={memoryMarkdown}
+                        onChange={setMemoryMarkdown}
+                        onBlur={() => setTouched((t) => ({ ...t, memory: true }))}
+                        placeholder="Override the default memory prompt template for this agent."
+                        minRows={5}
+                        minHeightClass="min-h-[10rem]"
+                        invalid={touched.memory && !!errors.memory}
+                        ariaErrorId={touched.memory && errors.memory ? "agent-memory-error" : undefined}
+                        emptyPreviewHint="No override yet — switch to Write to compose the memory template."
+                      />
+                    </div>
                     {touched.memory && errors.memory && (
                       <p
                         id="agent-memory-error"
@@ -727,7 +795,10 @@ export const AgentPresetEditorPanel: FunctionComponent<{
                         content={
                           <AgentMemoryConfigPanel
                             value={memoryConfig}
-                            onChange={setMemoryConfig}
+                            onChange={(next) => {
+                              setMemoryConfig(next);
+                              setActionStatus({ tone: "success", message: "Memory filters updated. Save Agent to persist them." });
+                            }}
                             onClose={() => setShowMemoryPanel(false)}
                             disabled={saving}
                           />
@@ -855,7 +926,10 @@ export const AgentPresetEditorPanel: FunctionComponent<{
                         content={(
                           <AgentMcpManagePanel
                             value={mcpAccess}
-                            onChange={setMcpAccessNormalized}
+                            onChange={(next) => {
+                              setMcpAccessNormalized(next);
+                              setActionStatus({ tone: "success", message: "MCP access updated. Save Agent to persist tool access." });
+                            }}
                             availableServers={availableMcpServers}
                             onClose={() => setMcpModalOpen(false)}
                           />
@@ -893,6 +967,9 @@ export const AgentPresetEditorPanel: FunctionComponent<{
                         ? <Check className="h-3 w-3" strokeWidth={3} />
                         : <Plug className="h-3 w-3" strokeWidth={2.4} />}
                       {item.label}
+                      <span className="rounded-full border border-current/20 px-1.5 py-0.5 text-[8px] uppercase tracking-[0.12em]">
+                        {item.active ? "Enabled" : "Disabled"}
+                      </span>
                     </button>
                   ))}
                   {hiddenMcpCount > 0 && (

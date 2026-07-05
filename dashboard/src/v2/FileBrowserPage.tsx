@@ -44,6 +44,19 @@ import { DiffViewer } from "./components/file-browser/DiffViewer.js";
 
 type BrowserMode = "files" | "changes";
 
+const countTreeEntries = (nodes: FileBrowserTreeType["root"], searchTerm: string): number => {
+  const normalizedTerm = searchTerm.trim().toLowerCase();
+  let count = 0;
+  const visit = (node: FileBrowserTreeType["root"][number]) => {
+    if (!normalizedTerm || node.name.toLowerCase().includes(normalizedTerm)) {
+      count += 1;
+    }
+    node.children?.forEach(visit);
+  };
+  nodes.forEach(visit);
+  return count;
+};
+
 const STATUS_PILL: Record<FileBrowserSession["status"], { label: string; dot: string; text: string }> = {
   running: { label: "Running", dot: "bg-status-green shadow-[0_0_8px_rgba(34,197,94,0.7)]", text: "text-status-green" },
   starting: { label: "Starting", dot: "bg-ember-500 animate-pulse", text: "text-ember-500" },
@@ -68,6 +81,7 @@ export const FileBrowserPage: FunctionComponent = () => {
 
   const [tree, setTree] = useState<FileBrowserTreeType | null>(null);
   const [treeLoading, setTreeLoading] = useState(false);
+  const [treeError, setTreeError] = useState<string | null>(null);
 
   const [selectedFilePath, setSelectedFilePath] = useState<string | null>(null);
   const [file, setFile] = useState<FileBrowserFileContent | null>(null);
@@ -76,10 +90,12 @@ export const FileBrowserPage: FunctionComponent = () => {
 
   const [changes, setChanges] = useState<FileBrowserChangeSet | null>(null);
   const [changesLoading, setChangesLoading] = useState(false);
+  const [changesError, setChangesError] = useState<string | null>(null);
   const [selectedChangePath, setSelectedChangePath] = useState<string | null>(null);
   const [diff, setDiff] = useState<FileBrowserDiff | null>(null);
   const [diffLoading, setDiffLoading] = useState(false);
   const [diffError, setDiffError] = useState<string | null>(null);
+  const [actionFeedback, setActionFeedback] = useState<{ tone: "success" | "pending"; message: string } | null>(null);
 
   const autoStartedSprintRef = useRef<string | null>(null);
 
@@ -126,16 +142,20 @@ export const FileBrowserPage: FunctionComponent = () => {
   useEffect(() => {
     if (!runningSession) {
       setTree(null);
+      setTreeError(null);
       return;
     }
     let cancelled = false;
     setTreeLoading(true);
     void fetchFileBrowserTree(runningSession.id)
       .then((data) => {
-        if (!cancelled) setTree(data);
+        if (!cancelled) {
+          setTree(data);
+          setTreeError(null);
+        }
       })
       .catch((err) => {
-        if (!cancelled) setError(err instanceof Error ? err.message : String(err));
+        if (!cancelled) setTreeError(err instanceof Error ? err.message : String(err));
       })
       .finally(() => {
         if (!cancelled) setTreeLoading(false);
@@ -153,6 +173,7 @@ export const FileBrowserPage: FunctionComponent = () => {
     setSelectedChangePath(null);
     setDiff(null);
     setDiffError(null);
+    setChangesError(null);
   }, [runningSession?.id]);
 
   // Load selected file content.
@@ -170,7 +191,6 @@ export const FileBrowserPage: FunctionComponent = () => {
       })
       .catch((err) => {
         if (!cancelled) {
-          setFile(null);
           setFileError(err instanceof Error ? err.message : String(err));
         }
       })
@@ -189,10 +209,12 @@ export const FileBrowserPage: FunctionComponent = () => {
     }
     let cancelled = false;
     setChangesLoading(true);
+    setChangesError(null);
     void fetchFileBrowserChanges(runningSession.id)
       .then((data) => {
         if (cancelled) return;
         setChanges(data);
+        setChangesError(null);
         if (data.files.length > 0) {
           setSelectedChangePath((current) =>
             current && data.files.some((f) => f.path === current) ? current : data.files[0].path,
@@ -203,7 +225,7 @@ export const FileBrowserPage: FunctionComponent = () => {
         }
       })
       .catch((err) => {
-        if (!cancelled) setError(err instanceof Error ? err.message : String(err));
+        if (!cancelled) setChangesError(err instanceof Error ? err.message : String(err));
       })
       .finally(() => {
         if (!cancelled) setChangesLoading(false);
@@ -228,7 +250,6 @@ export const FileBrowserPage: FunctionComponent = () => {
       })
       .catch((err) => {
         if (!cancelled) {
-          setDiff(null);
           setDiffError(err instanceof Error ? err.message : String(err));
         }
       })
@@ -241,49 +262,58 @@ export const FileBrowserPage: FunctionComponent = () => {
   }, [runningSession?.id, selectedChangePath, mode]);
 
   const handleStart = async (sprintId = launchSprintId) => {
-    if (!selectedProject || !sprintId) return;
+    if (!selectedProject || !sprintId || launching) return;
     setLaunching(true);
     setError(null);
+    setActionFeedback({ tone: "pending", message: "Starting file browser container…" });
     try {
       const session = await startFileBrowserSession(selectedProject.id, sprintId);
       setActiveSessionId(session.id);
       await refresh(true);
+      setActionFeedback({ tone: "success", message: "File browser container started." });
     } catch (err) {
       setError(`Failed to start file browser: ${err instanceof Error ? err.message : String(err)}`);
+      setActionFeedback(null);
     } finally {
       setLaunching(false);
     }
   };
 
   const handleRebuild = async () => {
-    if (!selectedSession) return;
+    if (!selectedSession || actionPending) return;
     setActionPending(true);
     setError(null);
+    setActionFeedback({ tone: "pending", message: "Rebuilding file browser container…" });
     try {
       await rebuildFileBrowserSession(selectedSession.id);
       await refresh(true);
+      setActionFeedback({ tone: "success", message: "File browser container rebuilt." });
     } catch (err) {
       setError(`Failed to rebuild: ${err instanceof Error ? err.message : String(err)}`);
+      setActionFeedback(null);
     } finally {
       setActionPending(false);
     }
   };
 
   const handleStop = async () => {
-    if (!selectedSession) return;
+    if (!runningSession || actionPending) return;
     setActionPending(true);
     setError(null);
+    setActionFeedback({ tone: "pending", message: "Stopping file browser container…" });
     try {
-      await stopFileBrowserSession(selectedSession.id);
-      await removeFileBrowserSession(selectedSession.id).catch(() => undefined);
+      await stopFileBrowserSession(runningSession.id);
+      await removeFileBrowserSession(runningSession.id).catch(() => undefined);
       // Keep the auto-start guard set so a manual stop is not immediately undone by
       // the on-visit auto-start. The launch panel offers an explicit restart.
       setActiveSessionId(null);
       setTree(null);
       setChanges(null);
       await refresh(true);
+      setActionFeedback({ tone: "success", message: "File browser container stopped. Use Open file browser to start it again." });
     } catch (err) {
       setError(`Failed to stop: ${err instanceof Error ? err.message : String(err)}`);
+      setActionFeedback(null);
     } finally {
       setActionPending(false);
     }
@@ -301,6 +331,29 @@ export const FileBrowserPage: FunctionComponent = () => {
 
   const statusPill = selectedSession ? STATUS_PILL[selectedSession.status] : null;
   const changeCount = changes?.files.length ?? 0;
+  const visibleFile = file?.path === selectedFilePath ? file : null;
+  const visibleDiff = diff?.path === selectedChangePath ? diff : null;
+  const treeResultCount = tree ? countTreeEntries(tree.root, treeSearch) : 0;
+  const treeResultLabel = tree
+    ? treeSearch.trim()
+      ? `${treeResultCount} matching ${treeResultCount === 1 ? "entry" : "entries"}`
+      : `${tree.fileCount} ${tree.fileCount === 1 ? "file" : "files"} in snapshot`
+    : "No file tree loaded";
+  const modeAnnouncement = mode === "files"
+    ? `Files mode. ${treeResultLabel}. ${selectedFilePath ? `Selected file ${selectedFilePath}.` : "No file selected."}`
+    : `Changes mode. ${changeCount} changed ${changeCount === 1 ? "file" : "files"}. ${selectedChangePath ? `Selected change ${selectedChangePath}.` : "No change selected."}`;
+  const rebuildDisabledReason = actionPending
+    ? "A file browser action is already pending."
+    : !selectedSession
+      ? "Select or start a file browser session before rebuilding."
+      : null;
+  const stopDisabledReason = actionPending
+    ? "A file browser action is already pending."
+    : !runningSession
+      ? selectedSession
+        ? "The selected file browser session is not running."
+        : "Start or select a running file browser session before stopping."
+      : null;
   const workspaceStatusMessage = selectedSession
     ? selectedSession.status === "running"
       ? "File browser container is running."
@@ -338,11 +391,26 @@ export const FileBrowserPage: FunctionComponent = () => {
           {error}
         </div>
       )}
+      {actionFeedback && (
+        <div
+          class={`mb-5 rounded-2xl border px-4 py-3 text-sm ${
+            actionFeedback.tone === "success"
+              ? "border-status-green/25 bg-status-green/[0.12] text-status-green dark:border-status-green/30 dark:bg-status-green/[0.14]"
+              : "border-signal-500/25 bg-signal-500/[0.10] text-signal-700 dark:text-signal-300"
+          }`}
+          role="status"
+          aria-live="polite"
+        >
+          {actionFeedback.message}
+        </div>
+      )}
 
       {/* Control bar */}
       <div class="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-[1.5rem] border border-black/[0.06] bg-white/74 px-4 py-3 shadow-[0_12px_30px_rgba(15,23,42,0.05)] backdrop-blur-md dark:border-white/[0.07] dark:bg-void-900/42" role="region" aria-label="File browser controls">
-        <div class="sr-only" role="status" aria-live="polite">
+        <div class="sr-only" role="status" aria-live="polite" aria-atomic="true">
           {workspaceStatusMessage}
+          {" "}
+          {modeAnnouncement}
           {treeLoading ? " Loading file tree." : ""}
           {fileLoading ? " Loading selected file." : ""}
           {changesLoading ? " Loading changed files." : ""}
@@ -410,27 +478,33 @@ export const FileBrowserPage: FunctionComponent = () => {
           <button
             type="button"
             onClick={handleRebuild}
-            disabled={!selectedSession || actionPending}
-            aria-disabled={!selectedSession || actionPending}
+            disabled={Boolean(rebuildDisabledReason)}
+            aria-disabled={Boolean(rebuildDisabledReason)}
             aria-busy={actionPending}
+            aria-describedby={rebuildDisabledReason ? "file-browser-rebuild-disabled-reason" : undefined}
             aria-label="Rebuild file browser container"
+            title={rebuildDisabledReason ?? "Rebuild file browser container"}
             class="inline-flex h-9 items-center gap-2 rounded-xl border border-black/[0.08] bg-white/75 px-3 text-xs font-semibold text-slate-700 transition hover:-translate-y-px hover:border-black/[0.16] hover:text-slate-900 disabled:cursor-not-allowed disabled:border-black/[0.06] disabled:bg-black/[0.03] disabled:text-slate-400 disabled:opacity-100 dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-slate-200 dark:hover:border-white/[0.16] dark:hover:text-white dark:disabled:bg-white/[0.02] dark:disabled:text-slate-500"
           >
             <RotateCcw class={`h-3.5 w-3.5 ${actionPending ? "animate-spin" : ""}`} strokeWidth={2} />
             Rebuild
           </button>
+          {rebuildDisabledReason && <span id="file-browser-rebuild-disabled-reason" class="sr-only">{rebuildDisabledReason}</span>}
           <button
             type="button"
             onClick={handleStop}
-            disabled={!selectedSession || actionPending}
-            aria-disabled={!selectedSession || actionPending}
+            disabled={Boolean(stopDisabledReason)}
+            aria-disabled={Boolean(stopDisabledReason)}
             aria-busy={actionPending}
+            aria-describedby={stopDisabledReason ? "file-browser-stop-disabled-reason" : undefined}
             aria-label="Stop file browser container"
+            title={stopDisabledReason ?? "Stop file browser container"}
             class="inline-flex h-9 items-center gap-2 rounded-xl border border-black/[0.08] bg-white/75 px-3 text-xs font-semibold text-slate-700 transition hover:-translate-y-px hover:border-status-red/35 hover:text-status-red disabled:cursor-not-allowed disabled:border-black/[0.06] disabled:bg-black/[0.03] disabled:text-slate-400 disabled:opacity-100 dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-slate-200 dark:disabled:bg-white/[0.02] dark:disabled:text-slate-500"
           >
             <Square class="h-3.5 w-3.5" strokeWidth={2} />
             Stop
           </button>
+          {stopDisabledReason && <span id="file-browser-stop-disabled-reason" class="sr-only">{stopDisabledReason}</span>}
         </div>
       </div>
 
@@ -462,12 +536,33 @@ export const FileBrowserPage: FunctionComponent = () => {
                       class="h-9 flex-1 bg-transparent text-[13px] text-slate-700 outline-none placeholder:text-slate-400 dark:text-slate-200"
                     />
                   </div>
+                  <div class="mt-2 flex min-h-4 items-center justify-between gap-2 text-[11px] font-medium text-slate-500 dark:text-slate-400" role="status" aria-live="polite" aria-atomic="true">
+                    <span>{treeResultLabel}</span>
+                    {selectedFilePath && <span class="min-w-0 truncate font-mono">Selected {selectedFilePath}</span>}
+                  </div>
                 </div>
-                <div class="min-h-0 flex-1 p-2">
-                  {treeLoading ? (
+                <div class="relative min-h-0 flex-1 p-2" aria-busy={treeLoading}>
+                  {treeError && tree && (
+                    <div class="mb-2 rounded-xl border border-status-red/25 bg-status-red/[0.10] px-3 py-2 text-xs text-status-red" role="alert">
+                      Failed to refresh file tree. Showing cached tree. {treeError}
+                    </div>
+                  )}
+                  {treeLoading && tree && (
+                    <div class="mb-2 inline-flex items-center gap-2 rounded-full border border-signal-500/20 bg-signal-500/[0.08] px-3 py-1.5 text-[11px] font-semibold text-signal-700 dark:text-signal-300" role="status" aria-live="polite">
+                      <Loader2 class="h-3.5 w-3.5 animate-spin" strokeWidth={2} />
+                      Refreshing file tree
+                    </div>
+                  )}
+                  {treeLoading && !tree ? (
                     <div class="flex h-full items-center justify-center gap-2 text-sm text-slate-500" role="status" aria-live="polite" aria-busy="true">
                       <Loader2 class="h-4 w-4 animate-spin text-signal-500" strokeWidth={2} />
                       Indexing files…
+                    </div>
+                  ) : treeError && !tree ? (
+                    <div class="flex h-full flex-col items-center justify-center gap-2 p-6 text-center text-sm text-status-red" role="alert">
+                      <span class="font-semibold">Failed to load file tree.</span>
+                      <span class="text-xs text-status-red/80">{treeError}</span>
+                      <span class="text-xs text-status-red/80">Use Refresh or Rebuild to try again.</span>
                     </div>
                   ) : tree && tree.root.length > 0 ? (
                     <FileTree
@@ -494,10 +589,24 @@ export const FileBrowserPage: FunctionComponent = () => {
                   <div class="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">
                     Changed files
                   </div>
-                  {changesLoading && <Loader2 class="h-3.5 w-3.5 animate-spin text-signal-500" strokeWidth={2} />}
+                  <div class="inline-flex items-center gap-2 text-[11px] font-medium text-slate-500 dark:text-slate-400" role="status" aria-live="polite" aria-atomic="true">
+                    {changesLoading && <Loader2 class="h-3.5 w-3.5 animate-spin text-signal-500" strokeWidth={2} />}
+                    <span>{changesLoading && changes ? "Refreshing changes" : `${changeCount} changed ${changeCount === 1 ? "file" : "files"}`}</span>
+                  </div>
                 </div>
-                <div class="min-h-0 flex-1">
-                  {changes && !changes.available ? (
+                <div class="min-h-0 flex-1" aria-busy={changesLoading}>
+                  {changesError && changes && (
+                    <div class="m-2 rounded-xl border border-status-red/25 bg-status-red/[0.10] px-3 py-2 text-xs text-status-red" role="alert">
+                      Failed to refresh changed files. Showing cached list. {changesError}
+                    </div>
+                  )}
+                  {changesError && !changes ? (
+                    <div class="flex h-full flex-col items-center justify-center gap-2 p-6 text-center text-sm text-status-red" role="alert">
+                      <span class="font-semibold">Failed to load changed files.</span>
+                      <span class="text-xs text-status-red/80">{changesError}</span>
+                      <span class="text-xs text-status-red/80">Switch modes or refresh the workbench to try again.</span>
+                    </div>
+                  ) : changes && !changes.available ? (
                     <div class="flex h-full items-center justify-center p-6 text-center text-sm text-slate-500" role="status">
                       {changes.reason || "Diff unavailable for this sprint."}
                     </div>
@@ -541,9 +650,9 @@ export const FileBrowserPage: FunctionComponent = () => {
             </div>
             <div class="min-h-0 flex-1">
               {mode === "files" ? (
-                <FileViewer file={file} loading={fileLoading} error={fileError} isDark={isDark} />
+                <FileViewer file={visibleFile} loading={fileLoading} error={fileError} isDark={isDark} />
               ) : (
-                <DiffViewer diff={diff} loading={diffLoading} error={diffError} isDark={isDark} sideBySide={sideBySide} />
+                <DiffViewer diff={visibleDiff} loading={diffLoading} error={diffError} isDark={isDark} sideBySide={sideBySide} />
               )}
             </div>
           </div>
@@ -586,7 +695,7 @@ const LaunchPanel: FunctionComponent<LaunchPanelProps> = ({
       </div>
       <div>
         <div class="text-[10px] font-bold uppercase tracking-[0.2em] text-signal-600 dark:text-signal-400">Workspace Snapshot</div>
-        <h2 id="file-browser-launch-title" class="mt-2 font-display text-3xl font-black tracking-tight text-slate-900 dark:text-white">
+        <h2 id="file-browser-launch-title" class="mt-2 font-display text-2xl font-semibold tracking-tight text-slate-900 dark:text-white">
           {launching ? "Starting file browser…" : "Launch the file browser"}
         </h2>
         <p class="mt-2 text-sm leading-6 text-slate-600 dark:text-slate-300">
@@ -630,7 +739,7 @@ const LaunchPanel: FunctionComponent<LaunchPanelProps> = ({
           aria-busy={launching}
           aria-describedby={launchDisabledReason ? "file-browser-launch-status" : undefined}
           aria-label={launching ? "Starting file browser container" : "Open file browser"}
-          class="inline-flex h-11 items-center justify-center gap-2 rounded-2xl bg-signal-500 px-6 text-sm font-bold text-void-950 shadow-[0_12px_30px_rgba(0,224,160,0.22)] transition hover:-translate-y-px hover:bg-signal-400 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-600 disabled:shadow-none disabled:opacity-100 dark:disabled:bg-slate-700 dark:disabled:text-slate-300"
+          class="inline-flex h-11 items-center justify-center gap-2 rounded-2xl bg-signal-500 px-6 text-sm font-bold text-white dark:text-void-950 shadow-[0_12px_30px_rgba(0,224,160,0.22)] transition hover:-translate-y-px hover:bg-signal-400 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-600 disabled:shadow-none disabled:opacity-100 dark:disabled:bg-slate-700 dark:disabled:text-slate-300"
         >
           <Play class="h-4 w-4" strokeWidth={2.4} />
           Open file browser

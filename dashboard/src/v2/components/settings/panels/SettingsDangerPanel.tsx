@@ -61,13 +61,16 @@ export const SettingsDangerPanel: FunctionComponent<{ state: SettingsPageState }
   const {
     activeScope,
     selectedProject,
+    resettingProject,
     deletingProject,
     resettingDatabase,
     memoryClearBusy,
+    handleResetProject,
     handleDeleteProject,
     handleResetDatabase,
     handleClearMemory,
   } = state;
+  const resetProjectConfirm = useConfirmDialog();
   const projectConfirm = useConfirmDialog();
   const dbConfirm = useConfirmDialog();
   const memoryConfirm = useConfirmDialog();
@@ -92,6 +95,26 @@ export const SettingsDangerPanel: FunctionComponent<{ state: SettingsPageState }
   return (
     <div className="flex flex-col gap-5">
       <SectionCard title="Danger Zone" watermark="DGR" danger icon={<AlertTriangle strokeWidth={2.4} />}>
+        {activeScope === "project" ? (
+          <Row label="Reset project overrides" description="Clear this project's saved settings overrides and inherit the current system defaults again. Project tasks, sprints, memories, and history are kept.">
+            <ActionButton
+              label="Reset Project"
+              onClick={() => resetProjectConfirm.requestConfirm({
+                title: "Reset Project Overrides",
+                body: `Clear saved settings overrides for "${selectedProject?.name}" and inherit system defaults again? Project tasks, sprints, memories, and history will be kept.`,
+                confirmLabel: "Reset Project",
+                destructive: true
+              }).then((confirmed) => {
+                if (confirmed) {
+                  void handleResetProject();
+                }
+              })}
+              tone="danger"
+              busy={resettingProject}
+              disabled={!selectedProject}
+            />
+          </Row>
+        ) : null}
         <Row label="Delete project" description="Permanently delete this project and all of its tasks, sprints, memories, and context history." last>
           <ActionButton
             label="Delete Project"
@@ -166,6 +189,7 @@ export const SettingsDangerPanel: FunctionComponent<{ state: SettingsPageState }
         </SectionCard>
       ) : null}
 
+      <ConfirmDialog isOpen={resetProjectConfirm.isOpen} options={resetProjectConfirm.options} onConfirm={resetProjectConfirm.handleConfirm} onCancel={resetProjectConfirm.handleCancel} />
       <ConfirmDialog isOpen={projectConfirm.isOpen} options={projectConfirm.options} onConfirm={projectConfirm.handleConfirm} onCancel={projectConfirm.handleCancel} />
       <ConfirmDialog isOpen={dbConfirm.isOpen} options={dbConfirm.options} onConfirm={dbConfirm.handleConfirm} onCancel={dbConfirm.handleCancel} />
       <ConfirmDialog isOpen={memoryConfirm.isOpen} options={memoryConfirm.options} onConfirm={memoryConfirm.handleConfirm} onCancel={memoryConfirm.handleCancel} />

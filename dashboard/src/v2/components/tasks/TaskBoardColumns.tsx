@@ -1,0 +1,202 @@
+import type { FunctionComponent } from "preact";
+import { memo } from "preact/compat";
+import type { RefObject } from "preact";
+import type { AgentAvatarConfig, AgentPreset, Task, TaskStatus } from "../../types.js";
+import type { TaskBoardState } from "../../lib/task-board-state.js";
+import type { TaskCardViewModel } from "../../lib/tasks/task-card-view-model.js";
+import { STATUS_CFG } from "../../lib/tasks-constants.js";
+import { getTaskDropFeedback } from "../../lib/tasks/task-board-actions.js";
+import { SkeletonCard, SkeletonLoader } from "../layout/SkeletonLoader.js";
+import { KanbanTaskCard } from "./KanbanTaskCard.js";
+
+const ColumnHeader: FunctionComponent<{ status: TaskStatus; count: number }> = memo(({ status, count }) => {
+  const cfg = STATUS_CFG[status];
+  const Icon = cfg.icon;
+  const headingId = `task-lane-heading-${status}`;
+
+  return (
+    <div className="flex items-center justify-between mb-6" id={headingId}>
+      <div className="flex items-center gap-2.5">
+        <Icon className={`w-5 h-5 ${cfg.color}`} strokeWidth={2} />
+        <h2 className={`font-display text-lg font-bold tracking-tight ${cfg.color}`}>{cfg.label}</h2>
+      </div>
+      <span className={`text-[10px] font-mono font-bold px-2.5 py-1 rounded-lg bg-black/[0.03] dark:bg-white/[0.03] ${cfg.color}`}>
+        <span aria-hidden="true">{count}</span>
+        <span className="sr-only">{count} {count === 1 ? "task" : "tasks"}</span>
+      </span>
+    </div>
+  );
+});
+
+export interface TaskBoardDropTargetContext {
+  status: TaskStatus;
+  index: number;
+}
+
+export interface TaskBoardColumnsProps {
+  boardRef: RefObject<HTMLDivElement>;
+  columns: TaskBoardState["columns"];
+  taskViewModels: Map<string, TaskCardViewModel>;
+  allTasks: Task[];
+  agentPresetsMap: Map<string, AgentPreset>;
+  loading: boolean;
+  showSkeletons: boolean;
+  filterTransitionPending: boolean;
+  statusFilter: "all" | TaskStatus;
+  priorityFilter: "all" | Task["priority"];
+  taskScopeSprintId: string | null;
+  reducedMotion: boolean;
+  draggedTaskId: string | null;
+  dropTargetContext: TaskBoardDropTargetContext | null;
+  listTransitionStyle: {
+    transitionDuration: string;
+    transitionTimingFunction: string;
+  };
+  onDragOver: (status: TaskStatus, index: number, event: DragEvent) => void;
+  onDrop: (status: TaskStatus, event: DragEvent) => void;
+  onDragStart: (taskId: string, event: DragEvent) => void;
+  onDragEnd: () => void;
+  onEditTask: (task: Task) => void;
+  onDeleteTask: (task: Task) => void;
+}
+
+function getAgentPresetName(task: Task, agentPresetsMap: Map<string, AgentPreset>): string | null {
+  return task.agentPresetId ? agentPresetsMap.get(task.agentPresetId)?.name ?? null : null;
+}
+
+function getAgentPresetAvatarConfig(task: Task, agentPresetsMap: Map<string, AgentPreset>): AgentAvatarConfig | undefined {
+  return task.agentPresetId ? agentPresetsMap.get(task.agentPresetId)?.avatarConfig : undefined;
+}
+
+export const TaskBoardColumns: FunctionComponent<TaskBoardColumnsProps> = ({
+  boardRef,
+  columns,
+  taskViewModels,
+  allTasks,
+  agentPresetsMap,
+  loading,
+  showSkeletons,
+  filterTransitionPending,
+  statusFilter,
+  priorityFilter,
+  taskScopeSprintId,
+  reducedMotion,
+  draggedTaskId,
+  dropTargetContext,
+  listTransitionStyle,
+  onDragOver,
+  onDrop,
+  onDragStart,
+  onDragEnd,
+  onEditTask,
+  onDeleteTask,
+}) => (
+  <div
+    ref={boardRef}
+    aria-busy={filterTransitionPending}
+    style={listTransitionStyle}
+    className={`grid gap-6 transition-opacity ${filterTransitionPending ? "opacity-80" : "opacity-100"} ${
+      columns.length === 1 ? "grid-cols-1" :
+      columns.length === 2 ? "grid-cols-1 lg:grid-cols-2" :
+      "grid-cols-1 lg:grid-cols-2 xl:grid-cols-3"
+    }`}
+  >
+    {columns.map(({ status, count, tasks: columnTasks }) => (
+      <section
+        key={status}
+        className="flex flex-col"
+        role="region"
+        aria-labelledby={`task-lane-heading-${status}`}
+        aria-describedby={`task-lane-summary-${status}`}
+        aria-busy={loading || showSkeletons || filterTransitionPending}
+      >
+        <ColumnHeader status={status} count={count} />
+        <p id={`task-lane-summary-${status}`} className="sr-only">
+          {STATUS_CFG[status].label} lane contains {count} {count === 1 ? "task" : "tasks"}.
+        </p>
+        <div
+          className={`flex-1 grid grid-cols-1 grid-rows-1 p-4 rounded-[1.5rem] min-h-[200px] bg-black/[0.015] dark:bg-white/[0.015] border relative transition-colors duration-300 ${dropTargetContext?.status === status ? "border-signal-500/50 bg-signal-500/5" : "border-black/[0.03] dark:border-white/[0.03]"} ${reducedMotion ? "border-dashed" : ""}`}
+          onDragOver={(event) => onDragOver(status, columnTasks.length, event as DragEvent)}
+          onDrop={(event) => onDrop(status, event as DragEvent)}
+          aria-describedby={`task-lane-summary-${status} task-lane-drop-${status}`}
+        >
+          <p id={`task-lane-drop-${status}`} className="sr-only" aria-live="polite" aria-atomic="true">
+            {getTaskDropFeedback({
+              isReducedMotion: reducedMotion,
+              isDragging: draggedTaskId !== null,
+              targetLane: status,
+              currentStatus: draggedTaskId ? allTasks.find((task) => task.recordId === draggedTaskId)?.status : undefined,
+            })}
+          </p>
+          {showSkeletons && (
+            <div role="status" aria-live="polite" className="sr-only">
+              Loading {STATUS_CFG[status].label.toLowerCase()} tasks.
+            </div>
+          )}
+          <SkeletonLoader
+            show={showSkeletons}
+            className="col-start-1 row-start-1"
+            skeleton={(
+              <div className="flex flex-col gap-4">
+                <SkeletonCard />
+                <SkeletonCard />
+                <SkeletonCard />
+              </div>
+            )}
+          >
+            {!loading && columnTasks.length === 0 ? (
+              <div role="status" aria-live="polite" className={`col-start-1 row-start-1 flex items-center justify-center text-center p-6 text-xs font-medium text-slate-400 dark:text-slate-500 border-2 border-dashed rounded-[1.5rem] bg-black/[0.015] dark:bg-white/[0.015] transition-colors ${dropTargetContext?.status === status ? "border-signal-500/30" : "border-black/[0.05] dark:border-white/[0.05]"}`}>
+                No {status.replace("_", " ")} tasks
+                <br />
+                {statusFilter !== "all" || priorityFilter !== "all" ? "matching current filters" : taskScopeSprintId ? "in this sprint" : "in this project"}.
+              </div>
+            ) : !loading ? (
+              <div className="col-start-1 row-start-1 flex flex-col gap-4">
+                {columnTasks.map((task, index) => {
+                  const isDraggedOver = dropTargetContext?.status === status && dropTargetContext?.index === index;
+                  const viewModel = taskViewModels.get(task.recordId);
+                  if (!viewModel) return null;
+
+                  return (
+                    <div key={task.recordId} className="contents">
+                      {isDraggedOver && draggedTaskId !== task.recordId && (
+                        <div className="h-24 mb-4 rounded-[1.5rem] border-2 border-dashed border-signal-500/50 bg-signal-500/10 transition-all duration-300" />
+                      )}
+                      <div
+                        className="task-card-entry"
+                        data-task-id={task.recordId}
+                        onDragOver={(event) => {
+                          event.stopPropagation();
+                          onDragOver(status, index, event as DragEvent);
+                        }}
+                        onDrop={(event) => {
+                          event.stopPropagation();
+                          onDrop(status, event as DragEvent);
+                        }}
+                      >
+                        <KanbanTaskCard
+                          viewModel={viewModel}
+                          index={index}
+                          onEdit={onEditTask}
+                          onDelete={onDeleteTask}
+                          agentPresetName={getAgentPresetName(task, agentPresetsMap)}
+                          agentPresetAvatarConfig={getAgentPresetAvatarConfig(task, agentPresetsMap)}
+                          isDragging={draggedTaskId === task.recordId}
+                          onDragStart={(event) => onDragStart(task.recordId, event)}
+                          onDragEnd={onDragEnd}
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+                {dropTargetContext?.status === status && dropTargetContext?.index === columnTasks.length && (
+                  <div className="h-24 mt-4 rounded-[1.5rem] border-2 border-dashed border-signal-500/50 bg-signal-500/10 transition-all duration-300" />
+                )}
+              </div>
+            ) : null}
+          </SkeletonLoader>
+        </div>
+      </section>
+    ))}
+  </div>
+);

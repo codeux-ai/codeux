@@ -5,15 +5,16 @@ export const ChatRail: FunctionComponent<{
   count: number;
   secondaryTitle?: string;
   secondaryCount?: number;
+  onReachEnd?: () => void;
   children: ComponentChildren;
-}> = ({ title, count, secondaryTitle, secondaryCount, children }) => {
+}> = ({ title, count, secondaryTitle, secondaryCount, onReachEnd, children }) => {
   return (
     <aside aria-label={title} className="flex flex-col overflow-hidden rounded-3xl border border-black/[0.06] bg-white/80 shadow-[0_2px_20px_rgba(0,0,0,0.04)] backdrop-blur-sm dark:border-white/[0.06] dark:bg-void-800/75 dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)] min-h-[16rem] max-h-[40vh] md:min-h-0 md:max-h-none md:h-full">
       <div className="shrink-0 p-5 mb-2">
         <div className="flex items-center justify-between">
           <div>
             <h2 className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">{title}</h2>
-            <div className="mt-1 font-display text-2xl font-black tracking-tight text-slate-900 dark:text-white">
+            <div className="mt-1 font-display text-xl font-semibold tracking-tight text-slate-900 dark:text-white">
               {count}
             </div>
           </div>
@@ -26,7 +27,19 @@ export const ChatRail: FunctionComponent<{
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto min-h-0 px-5 pb-5">
+      <div
+        className="flex-1 overflow-y-auto min-h-0 px-5 pb-5"
+        onScroll={(event) => {
+          if (!onReachEnd) {
+            return;
+          }
+          const element = event.currentTarget;
+          const remaining = element.scrollHeight - element.scrollTop - element.clientHeight;
+          if (remaining < 240) {
+            onReachEnd();
+          }
+        }}
+      >
         {children}
       </div>
     </aside>

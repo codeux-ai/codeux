@@ -30,10 +30,26 @@ test('preserves aria-pressed if caller provides it', () => {
 });
 
 test('handles disabled controls', () => {
-    render(<Toggle value={false} onChange={vi.fn()} aria-label="Toggle Z" disabled />);
+    const onChange = vi.fn();
+    render(<Toggle value={false} onChange={onChange} aria-label="Toggle Z" disabled />);
 
     const toggle = screen.getByRole('switch', { name: 'Toggle Z' });
     expect(toggle).toBeDisabled();
+    fireEvent.click(toggle);
+    expect(onChange).not.toHaveBeenCalled();
+});
+
+test('suppresses aria-disabled activation while preserving the switch name and state', () => {
+    const onChange = vi.fn();
+    render(<Toggle value={false} onChange={onChange} aria-label="Toggle blocked setting" aria-disabled="true" aria-describedby="blocked-toggle-reason" />);
+
+    const toggle = screen.getByRole('switch', { name: 'Toggle blocked setting' });
+    fireEvent.click(toggle);
+    expect(onChange).not.toHaveBeenCalled();
+    expect(toggle).not.toBeDisabled();
+    expect(toggle).toHaveAttribute('aria-disabled', 'true');
+    expect(toggle).toHaveAttribute('aria-describedby', 'blocked-toggle-reason');
+    expect(toggle).toHaveAttribute('aria-checked', 'false');
 });
 
 test('uses signal focus unless danger is requested', () => {
@@ -76,6 +92,13 @@ test('respects reduced motion', () => {
 
     const toggle = screen.getByRole('switch', { name: 'Toggle Reduced' });
     expect(toggle).toBeInTheDocument();
+    expect(toggle).toHaveAttribute('aria-checked', 'true');
+    expect(toggle).toHaveClass('motion-reduce:duration-0');
+    expect(toggle).toHaveStyle({
+        transitionDuration: '0ms',
+        transitionTimingFunction: 'cubic-bezier(0.4, 0, 0.2, 1)'
+    });
+    expect(toggle.querySelector('svg')).toBeInTheDocument();
 
     window.matchMedia = originalMatchMedia;
 });

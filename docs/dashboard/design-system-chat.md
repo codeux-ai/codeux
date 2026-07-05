@@ -27,6 +27,7 @@ The chat and invocation design system for the Code UX dashboard defines the layo
 ## Interaction
 - Seamless mode switching between standard "Threads" (user-facing chat) and "Invocations" (runtime debugging transcript).
 - Consistent padding and gap spacing to prevent layout jitter during these transitions.
+- The invocation rail renders the first 40 newest invocations by default, then lazy-loads additional pages as the user scrolls near the bottom of the rail. The rail header and mode tab use the backend `totalCount`, not the number of loaded rows, so long-running projects show the real invocation total while keeping initial load lightweight.
 
 ## Accessibility
 - **Tab Navigation**: The mode switcher is a `role="tablist"` with unique `id`s for `role="tab"` elements, matching `aria-controls` to the underlying `role="tabpanel"` and `aria-labelledby` back to the tab. Roving `tabIndex` and arrow-key navigation are supported.
@@ -36,3 +37,4 @@ The chat and invocation design system for the Code UX dashboard defines the layo
 
 ## Data Flow and Polling
 - **Active Invocation Polling**: When active invocations exist (running or optimistic), the dashboard actively polls for updates. This polling relies on a stable derived key (`activeInvocationKey`) representing the set of active IDs to prevent unnecessary interval resets when non-ID metadata updates. Stale refreshes are prevented by verifying that both the active project and the selected invocation remain identical to when the polling cycle started.
+- **Invocation Pagination**: The chat page calls the paginated invocation query with `limit=40` for the initial rail load. After more pages are loaded, live refreshes request the currently loaded window size so scroll-expanded history remains present while active invocation metadata updates.

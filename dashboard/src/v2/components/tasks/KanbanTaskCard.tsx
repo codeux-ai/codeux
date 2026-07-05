@@ -1,7 +1,7 @@
-import type { FunctionComponent } from "preact";
+import { Fragment, type FunctionComponent } from "preact";
 import { memo } from "preact/compat";
 import { useRef } from "preact/hooks";
-import { Clock, FolderGit2, GitPullRequest, Settings, Trash2 } from "lucide-preact";
+import { Clock, Eye, FolderGit2, GitPullRequest, Maximize2, RotateCcw, Settings, Trash2 } from "lucide-preact";
 import { WaveFluid } from "../ui/WaveFluid.js";
 import { BorderTrace } from "../ui/BorderTrace.js";
 import type { Task } from "../../types.js";
@@ -11,7 +11,7 @@ import { useInteractionTokens } from "../../lib/motion/tokens.js";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 import { useConfirmDialog } from "../../hooks/use-confirm-dialog.js";
 import { ConfirmDialog } from "../ui/ConfirmDialog.js";
-import { type TaskCardViewModel, formatTimeAgo } from "../../lib/tasks/task-card-view-model.js";
+import { type TaskCardActionDescriptor, type TaskCardViewModel, formatTimeAgo } from "../../lib/tasks/task-card-view-model.js";
 import { useState, useEffect } from "preact/hooks";
 import { DependencyStatusIndicators } from "./DependencyStatusIndicators.js";
 import { LiveDurationBadge } from "../ui/LiveDurationBadge.js";
@@ -19,6 +19,43 @@ import { AgentSelectAvatarIcon } from "../agents/AgentSelectAvatarIcon.js";
 import type { AgentAvatarConfig } from "../../types.js";
 import './kanban-task-card.css';
 import { getSafeUrl } from "../../lib/safe-url.js";
+
+function getQaReviewBadge(task: Task, fallbackLabel: string): { label: string; ariaLabel: string; className: string } {
+  if (!task.latestReview) {
+    return {
+      label: fallbackLabel,
+      ariaLabel: "QA review state: no review recorded.",
+      className: "border-slate-400/20 bg-slate-400/[0.08] text-slate-500 dark:text-slate-300",
+    };
+  }
+
+  const status = task.latestReview.status.toLowerCase();
+  const outcome = task.latestReview.outcome?.toLowerCase() ?? "";
+  const summary = task.latestReview.summary ? ` ${task.latestReview.summary}` : "";
+  const outcomeCopy = task.latestReview.outcome ? ` Review outcome ${task.latestReview.outcome}.` : "";
+
+  if (status === "running" || status === "in_progress") {
+    return {
+      label: fallbackLabel,
+      ariaLabel: `QA review state: in progress.${outcomeCopy}${summary}`,
+      className: "border-signal-500/20 bg-signal-500/[0.08] text-signal-600 dark:text-signal-400",
+    };
+  }
+
+  if (status === "failed" || outcome === "fail" || outcome === "failed" || outcome === "rejected") {
+    return {
+      label: fallbackLabel,
+      ariaLabel: `QA review state: failed.${outcomeCopy}${summary}`,
+      className: "border-status-red/25 bg-status-red/[0.08] text-status-red",
+    };
+  }
+
+  return {
+    label: fallbackLabel,
+    ariaLabel: `QA review state: ${task.latestReview.status}.${outcomeCopy}${summary}`,
+    className: "border-status-green/20 bg-status-green/[0.08] text-status-green",
+  };
+}
 
 export const KanbanTaskCard: FunctionComponent<{
   viewModel: TaskCardViewModel;
@@ -36,16 +73,38 @@ export const KanbanTaskCard: FunctionComponent<{
   const pri = PRIORITY_CFG[task.priority];
   const statusLabel = STATUS_CFG[task.status].label;
   const interactionTokens = useInteractionTokens();
-  const blockerCount = dependencyIndicators.filter((dep) => dep.status !== "completed").length;
+  const blockerCount = dependencyIndicators.filter((dep) => dep.isBlocking ?? dep.status !== "completed").length;
+  const dependencyActionLabel = viewModel.dependencyActionLabel ?? (blockerCount > 0 ? `${blockerCount} dependency ${blockerCount === 1 ? "blocker" : "blockers"}` : "Dependencies clear");
+  const qaReviewLabel = viewModel.qaReviewLabel ?? (task.latestReview ? `QA ${task.latestReview.status}` : "QA no review");
+  const qaReviewBadge = getQaReviewBadge(task, qaReviewLabel);
+  const dragStateLabel = viewModel.dragStateLabel ?? "Pointer drag only; keyboard reordering is not supported";
+  const shouldShowExecutorLabel = viewModel.executorLabel !== "Auto";
+  const cardActions = viewModel.actions ?? [];
+  const hasPullRequestMetadata = viewModel.hasPullRequestMetadata ?? true;
   const dependencySummary = dependencyIndicators.length === 0
     ? "No dependency blockers."
-    : `${dependencyIndicators.length} ${dependencyIndicators.length === 1 ? "dependency" : "dependencies"}; ${blockerCount === 0 ? "no blockers" : `${blockerCount} ${blockerCount === 1 ? "blocker" : "blockers"}`}: ${dependencyIndicators.map((dep) => `${dep.id} ${dep.status.replace(/_/g, " ")}`).join(", ")}.`;
+    : `${dependencyIndicators.length} ${dependencyIndicators.length === 1 ? "dependency" : "dependencies"}; ${blockerCount === 0 ? "no blockers" : `${blockerCount} ${blockerCount === 1 ? "blocker" : "blockers"}`}: ${dependencyIndicators.map((dep) => `${dep.id} ${dep.stateLabel ?? dep.status.replace(/_/g, " ")}`).join(", ")}.`;
   const reviewSummary = task.latestReview
     ? `QA review ${task.latestReview.status}${task.latestReview.outcome ? `, outcome ${task.latestReview.outcome}` : ""}.`
     : "No QA review recorded.";
+  const runtimeSummary = liveRunningTime
+    ? `Live runtime ${liveRunningTime}${sessionState ? `, session ${sessionState}` : ""}.`
+    : sessionState
+      ? `Runtime session ${sessionState}.`
+      : "Runtime not started.";
+  const prSummary = prUrl ? "Pull request available." : hasPullRequestMetadata ? "No pull request available yet." : "Pull request creation disabled.";
   const isReducedMotion = useReducedMotion();
+  const isDragDisabled = isReducedMotion || !!task.isOptimistic;
+  const effectiveIsDragging = isDragging && !isDragDisabled;
+  const savingDescriptionId = task.isOptimistic ? `task-card-saving-${task.recordId}` : undefined;
   const StatusIcon = STATUS_CFG[task.status].icon;
   const { isOpen: isConfirmOpen, options: confirmOptions, requestConfirm, handleConfirm, handleCancel, triggerRef } = useConfirmDialog();
+  const actionIconByKind: Record<TaskCardActionDescriptor["kind"], typeof RotateCcw> = {
+    rerun: RotateCcw,
+    preview: Eye,
+    pull_request: GitPullRequest,
+    live_runtime: Maximize2,
+  };
 
   const [flashTriggerCount, setFlashTriggerCount] = useState(0);
   const prevRunningTimeRef = useRef(liveRunningTime);
@@ -61,18 +120,23 @@ export const KanbanTaskCard: FunctionComponent<{
   }, [liveRunningTime]);
 
   useTaskCardMotion(cardRef, task.status, isReducedMotion, index);
-  useTaskCardDragMotion(cardRef, isDragging, isReducedMotion);
+  useTaskCardDragMotion(cardRef, effectiveIsDragging, isReducedMotion);
 
   return (
     <div
       ref={cardRef}
       tabIndex={0}
-      draggable={!isReducedMotion}
-      onDragStart={!isReducedMotion ? (onDragStart as any) : undefined}
-      onDragEnd={!isReducedMotion ? (onDragEnd as any) : undefined}
-      aria-describedby={`task-card-kbd-${task.recordId}`}
-      aria-label={`Task ${task.id}: ${task.title}. Status ${statusLabel}. Priority ${pri.label}. ${dependencySummary} ${reviewSummary}`}
-      className={`kanban-card group relative flex flex-col bg-white/80 dark:bg-void-800/75 backdrop-blur-sm rounded-[1.75rem] p-7 shadow-[0_2px_20px_rgba(0,0,0,0.04)] dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)] overflow-hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2 ${task.isOptimistic ? "border-dashed border-2 border-slate-300 dark:border-slate-600 opacity-60 pointer-events-none" : "border border-black/[0.06] dark:border-white/[0.06]"} ${isReducedMotion ? 'kanban-card-reduced-motion' : ''} ${isDragging ? 'kanban-card--dragging ring-2 ring-signal-500' : ''}`}
+      draggable={!isDragDisabled}
+      onDragStart={!isDragDisabled ? (onDragStart as any) : undefined}
+      onDragEnd={!isDragDisabled ? (onDragEnd as any) : undefined}
+      aria-describedby={savingDescriptionId ? `task-card-kbd-${task.recordId} ${savingDescriptionId}` : `task-card-kbd-${task.recordId}`}
+      aria-label={`Task ${task.id}: ${task.title}. Status ${statusLabel}. Priority ${pri.label}. ${dependencySummary} ${reviewSummary} ${runtimeSummary} ${prSummary} ${dragStateLabel}.`}
+      data-optimistic={task.isOptimistic ? "true" : undefined}
+      data-blocked={blockerCount > 0 ? "true" : undefined}
+      data-dragging={effectiveIsDragging ? "true" : undefined}
+      data-drag-disabled={isDragDisabled ? "true" : undefined}
+      aria-busy={task.isOptimistic ? "true" : "false"}
+      className={`kanban-card group relative flex flex-col bg-white/80 dark:bg-void-800/75 backdrop-blur-sm rounded-[1.75rem] p-7 shadow-[0_2px_20px_rgba(0,0,0,0.04)] dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)] overflow-hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2 ${task.isOptimistic ? "border-dashed border-2 border-slate-300 dark:border-slate-600 opacity-70" : "border border-black/[0.06] dark:border-white/[0.06]"} ${isReducedMotion ? 'kanban-card-reduced-motion' : ''} ${effectiveIsDragging ? 'kanban-card--dragging ring-2 ring-signal-500' : ''}`}
       style={{
         transformStyle: "preserve-3d",
         willChange: "transform",
@@ -80,12 +144,23 @@ export const KanbanTaskCard: FunctionComponent<{
         "--kanban-card-control-ease": interactionTokens.controlFeedback.ease,
         "--kanban-card-list-duration": interactionTokens.listReorder.duration,
         "--kanban-card-list-ease": interactionTokens.listReorder.ease,
+        "--kanban-card-selection-duration": interactionTokens.selectionMovement.duration,
+        "--kanban-card-selection-ease": interactionTokens.selectionMovement.ease,
       }}
     >
       <span id={`task-card-kbd-${task.recordId}`} className="sr-only">
-        {isReducedMotion ? "Draggable reordering is disabled in reduced motion mode." : "Draggable task. Drag and drop is pointer-only. Keyboard reordering is not supported."}
+        {isReducedMotion
+          ? "Draggable reordering is disabled in reduced motion mode."
+          : task.isOptimistic
+            ? "Draggable reordering is disabled while task changes are saving."
+            : "Draggable task. Drag and drop is pointer-only. Keyboard reordering is not supported."}
       </span>
-      <div className="absolute inset-0 pointer-events-none transition-colors duration-300 group-hover:bg-signal-500/[0.02] dark:group-hover:bg-signal-500/[0.02]" />
+      {savingDescriptionId && (
+        <span id={savingDescriptionId} className="sr-only">
+          Saving task {task.id}; edit, delete, and drag actions are temporarily unavailable.
+        </span>
+      )}
+      <div className="absolute inset-0 pointer-events-none transition-colors duration-[var(--kanban-card-control-duration)] ease-[var(--kanban-card-control-ease)] group-hover:bg-signal-500/[0.02] dark:group-hover:bg-signal-500/[0.02]" />
       <WaveFluid accentHex={STATUS_CFG[task.status].hex} />
       <BorderTrace accentHex={STATUS_CFG[task.status].hex} />
 
@@ -108,16 +183,18 @@ export const KanbanTaskCard: FunctionComponent<{
         </div>
       </div>
 
-      <h4 className={`text-[15px] font-bold tracking-tight leading-snug mb-4 relative z-10 group-hover:translate-x-0.5 transition-transform duration-300 pr-12 break-words whitespace-normal ${
+      <h4 className={`text-[15px] font-bold tracking-tight leading-snug mb-4 relative z-10 group-hover:translate-x-0.5 transition-transform duration-[var(--kanban-card-control-duration)] ease-[var(--kanban-card-control-ease)] pr-12 break-words whitespace-normal ${
         task.status === "completed" ? "text-slate-400 dark:text-slate-500 line-through decoration-slate-300 dark:decoration-slate-700" : "text-slate-900 dark:text-white"
       }`}>
         {task.title}
       </h4>
 
       <div className="relative z-10 mb-4 flex flex-wrap items-center gap-2 text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">
-        <span className="rounded-full border border-black/[0.06] dark:border-white/[0.08] bg-black/[0.03] dark:bg-white/[0.03] px-2.5 py-1 min-w-0 truncate max-w-full">
-          {viewModel.executorLabel}
-        </span>
+        {shouldShowExecutorLabel && (
+          <span className="rounded-full border border-black/[0.06] dark:border-white/[0.08] bg-black/[0.03] dark:bg-white/[0.03] px-2.5 py-1 min-w-0 truncate max-w-full">
+            {viewModel.executorLabel}
+          </span>
+        )}
         {agentPresetName && (
           <span className="inline-flex items-center gap-1 rounded-full border border-black/[0.06] dark:border-white/[0.08] bg-black/[0.03] dark:bg-white/[0.03] px-2 py-0.5 min-w-0 max-w-full">
             <AgentSelectAvatarIcon avatarConfig={agentPresetAvatarConfig} seed={agentPresetName} />
@@ -132,17 +209,25 @@ export const KanbanTaskCard: FunctionComponent<{
           <span className="rounded-full border border-black/[0.06] dark:border-white/[0.08] bg-black/[0.03] dark:bg-white/[0.03] px-2.5 py-1 font-mono min-w-0 break-all max-w-full"><span className="sr-only">Session ID: </span>{sessionId}
           </span>
         )}
-        {task.latestReview && (
-          <span className="rounded-full border border-status-amber/20 bg-status-amber/[0.08] px-2.5 py-1 text-status-amber">
-            QA {task.latestReview.outcome ?? task.latestReview.status}
-            <span className="sr-only">
-              . QA review state: {task.latestReview.status}{task.latestReview.outcome ? `, outcome ${task.latestReview.outcome}` : ""}{task.latestReview.summary ? `. ${task.latestReview.summary}` : ""}.
-            </span>
+        <span
+          className={`rounded-full border px-2.5 py-1 min-w-0 max-w-full truncate ${qaReviewBadge.className}`}
+          aria-label={qaReviewBadge.ariaLabel}
+        >
+          {qaReviewBadge.label}
+        </span>
+        {dependencyIndicators.length > 0 && (
+          <span
+            className={`rounded-full border px-2.5 py-1 ${blockerCount > 0 ? "border-status-amber/25 bg-status-amber/[0.08] text-status-amber" : "border-status-green/20 bg-status-green/[0.08] text-status-green"}`}
+            aria-label={blockerCount > 0 ? `${dependencyActionLabel}. Dependencies blocked.` : `${dependencyActionLabel}. No dependency blockers.`}
+          >
+            {dependencyActionLabel}
           </span>
         )}
-        <span className="rounded-full border border-black/[0.06] dark:border-white/[0.08] bg-black/[0.03] dark:bg-white/[0.03] px-2.5 py-1">
-          {isReducedMotion ? "Drag disabled: reduced motion" : "Pointer drag only"}
-        </span>
+        {task.isOptimistic && (
+          <span className="rounded-full border border-signal-500/20 bg-signal-500/[0.08] px-2.5 py-1 text-signal-600 dark:text-signal-400">
+            {viewModel.optimisticSavingLabel ?? "Saving"}
+          </span>
+        )}
       </div>
 
       <div className="flex items-center gap-3 mt-auto relative z-10 min-w-0">
@@ -166,10 +251,16 @@ export const KanbanTaskCard: FunctionComponent<{
       <DependencyStatusIndicators indicators={dependencyIndicators} />
 
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-0 mt-3 pt-3 border-t border-black/[0.04] dark:border-white/[0.04] relative z-10">
-        <div className="flex items-center gap-3">
-          <div className="flex min-w-0 items-center gap-1.5 text-[10px] text-slate-300 dark:text-slate-600">
+        <div className="kanban-card__meta-slots flex min-w-0 flex-wrap items-center gap-2" aria-busy={task.isOptimistic ? "true" : "false"}>
+          <div
+            className="kanban-card__meta-slot kanban-card__meta-slot--duration flex min-h-7 min-w-0 items-center gap-1.5 rounded-full border border-black/[0.06] bg-black/[0.03] px-2 text-[10px] text-slate-400 dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-slate-500"
+            aria-label={liveRunningTime ? `Live runtime: ${liveRunningTime}` : `Duration: ${task.time ?? "Not started"}`}
+          >
             <Clock className="w-3 h-3 shrink-0" strokeWidth={2} aria-hidden="true" />
-            <span className="sr-only">Duration: </span>
+            <span className="sr-only">{liveRunningTime ? "Live runtime: " : "Duration: "}</span>
+            <span className={`kanban-card__meta-state text-[9px] font-bold uppercase tracking-[0.12em] ${liveRunningTime ? "text-signal-600 dark:text-signal-400" : "text-slate-400 dark:text-slate-500"}`}>
+              {liveRunningTime ? "Live" : "Idle"}
+            </span>
             <span aria-live={liveRunningTime ? "polite" : undefined} aria-atomic="true">
               <LiveDurationBadge
                 durationText={liveRunningTime ?? task.time ?? "Not started"}
@@ -182,50 +273,140 @@ export const KanbanTaskCard: FunctionComponent<{
               href={getSafeUrl(prUrl)}
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-center gap-1 text-[9px] font-mono text-signal-500 hover:text-signal-400 transition-colors"
+              className="kanban-card__meta-slot kanban-card__meta-slot--pr flex min-h-7 items-center gap-1 rounded-full border border-signal-500/20 bg-signal-500/[0.08] px-2 text-[9px] font-bold uppercase tracking-[0.12em] text-signal-600 transition-colors hover:text-signal-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30 dark:text-signal-400 dark:hover:text-signal-300"
               onClick={(e) => e.stopPropagation()}
               aria-label={`Open pull request for task ${task.id}`}
             >
               <GitPullRequest className="w-3 h-3" strokeWidth={2} aria-hidden="true" />
-              <span aria-hidden="true">PR</span><span className="sr-only">Pull request link</span>
+              <span>PR ready</span>
             </a>
           )}
+          {!prUrl && hasPullRequestMetadata && (
+            <span
+              className="kanban-card__meta-slot kanban-card__meta-slot--pr flex min-h-7 items-center rounded-full border border-black/[0.06] bg-black/[0.03] px-2 text-[9px] font-bold uppercase tracking-[0.12em] text-slate-400 dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-slate-500"
+              aria-label={`Pull request pending for task ${task.id}`}
+            >
+              PR pending
+            </span>
+          )}
         </div>
-        <span className="text-[9px] font-mono text-slate-300 dark:text-slate-700">{liveStartedAt ? `· ${formatTimeAgo(liveStartedAt)}` : humanizedCreatedAt}</span>
+        <span
+          className="kanban-card__meta-slot kanban-card__meta-slot--timestamp text-[9px] font-mono text-slate-300 dark:text-slate-700"
+          aria-label={liveStartedAt ? `Live started ${formatTimeAgo(liveStartedAt)}` : `Created ${humanizedCreatedAt}`}
+        >
+          {liveStartedAt ? `· ${formatTimeAgo(liveStartedAt)}` : humanizedCreatedAt}
+        </span>
       </div>
 
-      <div className="kanban-card__actions absolute top-3 right-3 flex items-center gap-1 p-1 bg-white/90 dark:bg-void-700/95 backdrop-blur-md rounded-full shadow-[0_2px_12px_rgba(0,0,0,0.06)] dark:shadow-[0_2px_12px_rgba(0,0,0,0.4)] border border-black/[0.05] dark:border-white/[0.08] z-20">
+      <div className="kanban-card__actions absolute top-3 right-3 flex max-w-[calc(100%-1.5rem)] flex-wrap items-center justify-end gap-1 p-1 bg-white/90 dark:bg-void-700/95 backdrop-blur-md rounded-2xl shadow-[0_2px_12px_rgba(0,0,0,0.06)] dark:shadow-[0_2px_12px_rgba(0,0,0,0.4)] border border-black/[0.05] dark:border-white/[0.08] z-20" aria-label={`Actions for task ${task.id}`}>
+        {cardActions.map((action) => {
+          const ActionIcon = actionIconByKind[action.kind];
+          const actionClassName = `inline-flex min-h-8 items-center gap-1.5 rounded-full px-2 py-1.5 text-[9px] font-bold uppercase tracking-[0.12em] transition-colors active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30 ${
+            action.disabledReason
+              ? "text-slate-400 dark:text-slate-500 cursor-not-allowed"
+              : "text-slate-500 hover:text-signal-600 dark:text-slate-400 dark:hover:text-signal-400"
+          }`;
+
+          if (action.href && !action.disabledReason) {
+            return (
+              <a
+                key={action.kind}
+                href={getSafeUrl(action.href)}
+                target={action.external ? "_blank" : undefined}
+                rel={action.external ? "noopener noreferrer" : undefined}
+                className={actionClassName}
+                title={action.title}
+                aria-label={action.ariaLabel}
+                onClick={(event) => event.stopPropagation()}
+              >
+                <ActionIcon className="w-3 h-3" aria-hidden="true" />
+                <span>{action.label}</span>
+              </a>
+            );
+          }
+
+          const reasonId = `task-card-action-reason-${task.recordId}-${action.kind}`;
+
+          return (
+            <Fragment key={action.kind}>
+              <button
+                type="button"
+                aria-disabled="true"
+                aria-describedby={reasonId}
+                className={actionClassName}
+                title={`${action.title} ${action.disabledReason ?? ""}`.trim()}
+                aria-label={action.ariaLabel}
+                onClick={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                }}
+              >
+                <ActionIcon className="w-3 h-3" aria-hidden="true" />
+                <span>{action.label}</span>
+              </button>
+              <span id={reasonId} className="sr-only">
+                {action.disabledReason ?? "Unavailable"}
+              </span>
+            </Fragment>
+          );
+        })}
         <button
           type="button"
-          className="inline-flex items-center gap-1.5 rounded-full px-2 py-1.5 text-[9px] font-bold uppercase tracking-[0.12em] text-slate-500 transition-colors active:scale-95 hover:text-signal-600 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30 dark:text-slate-400 dark:hover:text-signal-400"
-          title={`Edit task ${task.id}`} aria-label={`Edit task ${task.id}: ${task.title}`}
-          onClick={() => onEdit(task)}
+          aria-disabled={task.isOptimistic ? "true" : undefined}
+          aria-busy={task.isOptimistic ? "true" : undefined}
+          aria-describedby={task.isOptimistic ? `task-card-edit-reason-${task.recordId}` : undefined}
+          className="inline-flex min-h-8 items-center gap-1.5 rounded-full px-2 py-1.5 text-[9px] font-bold uppercase tracking-[0.12em] text-slate-500 transition-colors active:scale-95 hover:text-signal-600 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30 dark:text-slate-400 dark:hover:text-signal-400"
+          title={task.isOptimistic ? `Edit unavailable while task ${task.id} is saving` : `Edit task ${task.id}`} aria-label={`Edit task ${task.id}: ${task.title}`}
+          onClick={(event) => {
+            event.stopPropagation();
+            if (!task.isOptimistic) {
+              onEdit(task);
+            }
+          }}
         >
           <Settings className="w-3 h-3" aria-hidden="true" />
           <span>Edit</span>
         </button>
+        {task.isOptimistic && (
+          <span id={`task-card-edit-reason-${task.recordId}`} className="sr-only">
+            Saving task {task.id}; edit is temporarily unavailable.
+          </span>
+        )}
         <button
           type="button"
           ref={triggerRef as any}
-          className="inline-flex items-center gap-1.5 rounded-full px-2 py-1.5 text-[9px] font-bold uppercase tracking-[0.12em] text-slate-500 transition-colors active:scale-95 hover:text-status-red disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-status-red/30 dark:text-slate-400"
-          title={`Delete task ${task.id}`} aria-label={`Delete task ${task.id}: ${task.title}`}
+          aria-disabled={task.isOptimistic ? "true" : undefined}
+          aria-busy={task.isOptimistic ? "true" : undefined}
+          aria-describedby={task.isOptimistic ? `task-card-delete-reason-${task.recordId}` : undefined}
+          className="inline-flex min-h-8 items-center gap-1.5 rounded-full px-2 py-1.5 text-[9px] font-bold uppercase tracking-[0.12em] text-slate-500 transition-colors active:scale-95 hover:text-status-red disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-status-red/30 dark:text-slate-400"
+          title={task.isOptimistic ? `Delete unavailable while task ${task.id} is saving` : `Delete task ${task.id}`} aria-label={`Delete task ${task.id}: ${task.title}`}
           onClick={async (e) => {
             e.stopPropagation();
+            if (task.isOptimistic) {
+              return;
+            }
             const confirmed = await requestConfirm({
               title: "Delete Task",
-              body: `Are you sure you want to delete "${task.title}"?`,
+              body: `Delete "${task.title}"? This removes the task card and cannot be undone.`,
               confirmLabel: "Delete Task",
               cancelLabel: "Cancel",
               destructive: true
             });
             if (confirmed) {
               onDelete(task);
+            } else {
+              triggerRef.current?.focus({ preventScroll: true });
             }
           }}
         >
           <Trash2 className="w-3 h-3" aria-hidden="true" />
           <span>Delete</span>
         </button>
+        {task.isOptimistic && (
+          <span id={`task-card-delete-reason-${task.recordId}`} className="sr-only">
+            Saving task {task.id}; delete is temporarily unavailable.
+          </span>
+        )}
       </div>
 
       <ConfirmDialog
@@ -243,7 +424,11 @@ export const KanbanTaskCard: FunctionComponent<{
   const tasksEqual = prevTask.recordId === nextTask.recordId &&
          prevTask.status === nextTask.status &&
          prevTask.priority === nextTask.priority &&
-         prevTask.title === nextTask.title;
+         prevTask.title === nextTask.title &&
+         prevTask.isOptimistic === nextTask.isOptimistic &&
+         prevTask.latestReview?.status === nextTask.latestReview?.status &&
+         prevTask.latestReview?.outcome === nextTask.latestReview?.outcome &&
+         prevTask.latestReview?.summary === nextTask.latestReview?.summary;
 
   const depsEqual = prev.viewModel.dependencyIndicators.length === next.viewModel.dependencyIndicators.length &&
          prev.viewModel.dependencyIndicators.every((dep, i) =>
@@ -253,9 +438,14 @@ export const KanbanTaskCard: FunctionComponent<{
 
   return tasksEqual && depsEqual &&
          prev.viewModel.prUrl === next.viewModel.prUrl &&
+         prev.viewModel.hasPullRequestMetadata === next.viewModel.hasPullRequestMetadata &&
          prev.viewModel.sessionId === next.viewModel.sessionId &&
+         prev.viewModel.sessionState === next.viewModel.sessionState &&
          prev.viewModel.liveRunningTime === next.viewModel.liveRunningTime &&
+         prev.viewModel.liveStartedAt === next.viewModel.liveStartedAt &&
+         prev.viewModel.executorLabel === next.viewModel.executorLabel &&
          prev.agentPresetName === next.agentPresetName &&
+         prev.agentPresetAvatarConfig === next.agentPresetAvatarConfig &&
          prev.onEdit === next.onEdit &&
          prev.onDelete === next.onDelete &&
          prev.isDragging === next.isDragging;

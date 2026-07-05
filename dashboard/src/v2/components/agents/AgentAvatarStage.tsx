@@ -78,7 +78,7 @@ export const AgentAvatarStage: FunctionComponent<{
           disabled={disabled}
           title="Randomize appearance"
           aria-label="Randomize appearance"
-          className="group/rnd absolute right-3 top-3 inline-flex h-9 items-center gap-1.5 rounded-full border border-black/[0.06] bg-white/75 px-3 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500 shadow-sm backdrop-blur-md transition-all hover:bg-signal-500 hover:text-void-900 hover:shadow-[0_0_18px_rgba(0,224,160,0.35)] focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/[0.08] dark:bg-white/[0.08] dark:text-slate-300 dark:hover:bg-signal-500 dark:hover:text-void-900"
+          className="group/rnd absolute right-3 top-3 inline-flex h-9 items-center gap-1.5 rounded-full border border-black/[0.06] bg-white/75 px-3 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500 shadow-sm backdrop-blur-md transition-all hover:bg-signal-500 hover:text-white dark:hover:text-void-900 hover:shadow-[0_0_18px_rgba(0,224,160,0.35)] focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/[0.08] dark:bg-white/[0.08] dark:text-slate-300 dark:hover:bg-signal-500"
         >
           <RefreshCw className="h-3.5 w-3.5 transition-transform duration-500 group-hover/rnd:rotate-180" strokeWidth={2.5} />
           Shuffle
@@ -104,7 +104,7 @@ export const AgentAvatarStage: FunctionComponent<{
                   aria-pressed={isActive}
                   className={`flex h-8 w-8 items-center justify-center rounded-full transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/40 ${
                     isActive
-                      ? "bg-signal-500 text-void-900 shadow-[0_0_12px_rgba(0,224,160,0.4)]"
+                      ? "bg-signal-500 text-white dark:text-void-900 shadow-[0_0_12px_rgba(0,224,160,0.4)]"
                       : "text-slate-400 hover:bg-black/[0.04] hover:text-slate-600 dark:text-slate-500 dark:hover:bg-white/[0.06] dark:hover:text-slate-300"
                   }`}
                 >

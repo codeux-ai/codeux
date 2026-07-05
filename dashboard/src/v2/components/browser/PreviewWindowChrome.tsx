@@ -1,5 +1,5 @@
 import type { ComponentChildren, FunctionComponent } from "preact";
-import { useState } from "preact/hooks";
+import { useEffect, useRef, useState } from "preact/hooks";
 import {
   ChevronLeft,
   ChevronRight,
@@ -14,8 +14,9 @@ import {
   AlertCircle,
   Loader2,
 } from "lucide-preact";
-import type { SprintPreviewSession } from "../../../types.js";
+import type { SprintPreviewPortMapping, SprintPreviewSession } from "../../../types.js";
 import { buildInteractionTransition } from "../../lib/motion/tokens.js";
+import { formatPreviewPortTabLabel } from "../../lib/preview-origin.js";
 
 interface PreviewWindowChromeProps {
   session: SprintPreviewSession | null;
@@ -27,6 +28,10 @@ interface PreviewWindowChromeProps {
   onAddressChange: (value: string) => void;
   navigationEnabled?: boolean;
   navigationBusy?: boolean;
+  navigationDisabledReason?: string;
+  portMappings?: SprintPreviewPortMapping[];
+  selectedContainerPort?: number | null;
+  onSelectPort?: (containerPort: number) => void;
   children: ComponentChildren;
 }
 
@@ -59,16 +64,28 @@ export const PreviewWindowChrome: FunctionComponent<PreviewWindowChromeProps> = 
   onAddressChange,
   navigationEnabled = true,
   navigationBusy = false,
+  navigationDisabledReason,
+  portMappings = [],
+  selectedContainerPort = null,
+  onSelectPort,
   children,
 }) => {
   const [windowState, setWindowState] = useState<WindowState>("normal");
   const [navigationAnnouncement, setNavigationAnnouncement] = useState("");
+  const restoreButtonRef = useRef<HTMLButtonElement>(null);
+  const reopenButtonRef = useRef<HTMLButtonElement>(null);
+  const portTabRefs = useRef<Record<number, HTMLButtonElement | null>>({});
+  const isFullscreen = windowState === "fullscreen";
+  const isMinimized = windowState === "minimized";
+  const isClosed = windowState === "closed";
 
   const containerDescriptionId = "preview-address-disabled-description";
   const navigationPendingDescriptionId = "preview-navigation-pending-description";
   const addressLabelId = "preview-address-label";
   const controlsDisabled = !navigationEnabled || navigationBusy;
   const disabledDescriptionId = navigationBusy ? navigationPendingDescriptionId : containerDescriptionId;
+  const sessionName = session?.sprintName || "selected preview";
+  const normalizedPath = addressValue || "/";
   const windowStateMessage = windowState === "normal"
     ? "Preview window is open."
     : windowState === "fullscreen"
@@ -78,11 +95,52 @@ export const PreviewWindowChrome: FunctionComponent<PreviewWindowChromeProps> = 
         : "Preview window is closed. The preview session can keep running in the background.";
   const navigationDescription = navigationBusy
     ? "Preview navigation is sending the previous command. Wait for the control to become available before submitting another navigation command."
-    : "Preview navigation controls are disabled until the selected container is running and has a routed host port.";
+    : navigationDisabledReason || "Preview navigation controls are disabled until the selected container is running and has a routed host port.";
+  const visiblePortMappings = portMappings.length > 1 ? portMappings : [];
 
   const announceNavigation = (message: string) => {
     setNavigationAnnouncement(message);
   };
+
+  const selectPortTab = (mapping: SprintPreviewPortMapping) => {
+    onSelectPort?.(mapping.containerPort);
+    queueMicrotask(() => {
+      portTabRefs.current[mapping.containerPort]?.focus({ preventScroll: true });
+    });
+  };
+
+  const handlePortTabKeyDown = (event: KeyboardEvent, index: number) => {
+    if (visiblePortMappings.length === 0) {
+      return;
+    }
+    let nextIndex: number | null = null;
+    if (event.key === "ArrowRight" || event.key === "ArrowDown") {
+      nextIndex = index === visiblePortMappings.length - 1 ? 0 : index + 1;
+    } else if (event.key === "ArrowLeft" || event.key === "ArrowUp") {
+      nextIndex = index === 0 ? visiblePortMappings.length - 1 : index - 1;
+    } else if (event.key === "Home") {
+      nextIndex = 0;
+    } else if (event.key === "End") {
+      nextIndex = visiblePortMappings.length - 1;
+    }
+    if (nextIndex === null) {
+      return;
+    }
+    event.preventDefault();
+    const nextMapping = visiblePortMappings[nextIndex];
+    if (nextMapping) {
+      selectPortTab(nextMapping);
+    }
+  };
+
+  useEffect(() => {
+    if (isMinimized && !isClosed) {
+      restoreButtonRef.current?.focus({ preventScroll: true });
+    }
+    if (isClosed) {
+      reopenButtonRef.current?.focus({ preventScroll: true });
+    }
+  }, [isClosed, isMinimized]);
 
   if (!session) {
     return (
@@ -99,10 +157,6 @@ export const PreviewWindowChrome: FunctionComponent<PreviewWindowChromeProps> = 
       </div>
     );
   }
-
-  const isFullscreen = windowState === "fullscreen";
-  const isMinimized = windowState === "minimized";
-  const isClosed = windowState === "closed";
 
   return (
     <div className={isFullscreen ? "fixed inset-0 z-50 flex flex-col bg-white dark:bg-[#04070b]" : ""}>
@@ -124,6 +178,7 @@ export const PreviewWindowChrome: FunctionComponent<PreviewWindowChromeProps> = 
             </div>
           </div>
           <button
+            ref={restoreButtonRef}
             type="button"
             onClick={() => setWindowState("normal")}
             aria-label="Restore preview window"
@@ -148,6 +203,7 @@ export const PreviewWindowChrome: FunctionComponent<PreviewWindowChromeProps> = 
               The preview window is closed but the session is still running in the background. Stop the session to end the container, or reopen the window.
             </p>
             <button
+              ref={reopenButtonRef}
               type="button"
               aria-label="Reopen preview window"
               onClick={() => setWindowState("normal")}
@@ -217,6 +273,44 @@ export const PreviewWindowChrome: FunctionComponent<PreviewWindowChromeProps> = 
             {statusLabel[session.status]}
           </div>
         </div>
+        {visiblePortMappings.length > 0 && (
+          <div
+            role="tablist"
+            aria-label={`Preview ports for ${sessionName}`}
+            className="mt-3 flex min-w-0 gap-1 overflow-x-auto rounded-2xl border border-black/[0.06] bg-slate-100/70 p-1 dark:border-white/[0.06] dark:bg-void-950/50"
+          >
+            {visiblePortMappings.map((mapping, index) => {
+              const selected = mapping.containerPort === selectedContainerPort;
+              const label = formatPreviewPortTabLabel(mapping);
+              const routeLabel = mapping.hostPort
+                ? `${label} routed to host port ${mapping.hostPort}`
+                : `${label} waiting for a routed host port`;
+              return (
+                <button
+                  key={mapping.containerPort}
+                  ref={(element) => {
+                    portTabRefs.current[mapping.containerPort] = element;
+                  }}
+                  type="button"
+                  role="tab"
+                  aria-selected={selected}
+                  aria-label={`Select preview port ${routeLabel}`}
+                  tabIndex={selected ? 0 : -1}
+                  onClick={() => selectPortTab(mapping)}
+                  onKeyDown={(event) => handlePortTabKeyDown(event as KeyboardEvent, index)}
+                  className={`inline-flex h-8 shrink-0 items-center rounded-xl px-3 font-mono text-[12px] font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 motion-reduce:transition-none ${
+                    selected
+                      ? "bg-white text-slate-900 shadow-sm dark:bg-white/[0.1] dark:text-white"
+                      : "text-slate-500 hover:bg-white/60 hover:text-slate-800 dark:text-slate-400 dark:hover:bg-white/[0.06] dark:hover:text-slate-100"
+                  }`}
+                  style={{ transition: controlTransition }}
+                >
+                  {label}
+                </button>
+              );
+            })}
+          </div>
+        )}
         <div className="sr-only" role="status" aria-live="polite">
           {navigationAnnouncement}
         </div>
@@ -238,7 +332,7 @@ export const PreviewWindowChrome: FunctionComponent<PreviewWindowChromeProps> = 
             disabled={controlsDisabled}
             aria-disabled={controlsDisabled}
             aria-busy={navigationBusy || (!navigationEnabled && session?.status === 'starting')}
-            aria-label="Go back in preview"
+            aria-label={`Go back in preview session ${sessionName}`}
             aria-describedby={controlsDisabled ? disabledDescriptionId : undefined}
             title={controlsDisabled ? navigationDescription : "Go back"}
             className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-black/[0.08] text-slate-600 transition hover:border-black/[0.16] hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-50 motion-reduce:transition-none dark:border-white/[0.08] dark:text-slate-300 dark:hover:border-white/[0.16] dark:hover:text-white"
@@ -257,7 +351,7 @@ export const PreviewWindowChrome: FunctionComponent<PreviewWindowChromeProps> = 
             disabled={controlsDisabled}
             aria-disabled={controlsDisabled}
             aria-busy={navigationBusy || (!navigationEnabled && session?.status === 'starting')}
-            aria-label="Go forward in preview"
+            aria-label={`Go forward in preview session ${sessionName}`}
             aria-describedby={controlsDisabled ? disabledDescriptionId : undefined}
             title={controlsDisabled ? navigationDescription : "Go forward"}
             className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-black/[0.08] text-slate-600 transition hover:border-black/[0.16] hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-50 motion-reduce:transition-none dark:border-white/[0.08] dark:text-slate-300 dark:hover:border-white/[0.16] dark:hover:text-white"
@@ -276,7 +370,7 @@ export const PreviewWindowChrome: FunctionComponent<PreviewWindowChromeProps> = 
             disabled={controlsDisabled}
             aria-disabled={controlsDisabled}
             aria-busy={navigationBusy || (!navigationEnabled && session?.status === 'starting')}
-            aria-label="Reload preview"
+            aria-label={`Reload preview session ${sessionName} at ${normalizedPath}`}
             aria-describedby={controlsDisabled ? disabledDescriptionId : undefined}
             title={controlsDisabled ? navigationDescription : "Reload preview"}
             className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-black/[0.08] text-slate-600 transition hover:border-black/[0.16] hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-50 motion-reduce:transition-none dark:border-white/[0.08] dark:text-slate-300 dark:hover:border-white/[0.16] dark:hover:text-white"
@@ -295,7 +389,7 @@ export const PreviewWindowChrome: FunctionComponent<PreviewWindowChromeProps> = 
             }}
           >
             <label id={addressLabelId} className="sr-only" htmlFor="preview-address-input">
-              Preview address
+              Preview address for {sessionName}
             </label>
             <input
               id="preview-address-input"
@@ -304,6 +398,7 @@ export const PreviewWindowChrome: FunctionComponent<PreviewWindowChromeProps> = 
               disabled={controlsDisabled}
               aria-disabled={controlsDisabled}
               aria-busy={navigationBusy || (!navigationEnabled && session?.status === 'starting')}
+              aria-label={`Preview address for ${sessionName}`}
               aria-describedby={controlsDisabled ? disabledDescriptionId : undefined}
               title={controlsDisabled ? navigationDescription : "Preview address"}
               placeholder={controlsDisabled ? "Preview navigation unavailable..." : "Enter path..."}
@@ -312,6 +407,11 @@ export const PreviewWindowChrome: FunctionComponent<PreviewWindowChromeProps> = 
             />
           </form>
         </div>
+        {controlsDisabled && (
+          <div className="mt-2 rounded-2xl border border-slate-400/20 bg-slate-500/10 px-3 py-2 text-xs font-medium text-slate-600 dark:border-slate-500/30 dark:bg-slate-500/15 dark:text-slate-300">
+            {navigationDescription}
+          </div>
+        )}
       </div>
       <div
         className={

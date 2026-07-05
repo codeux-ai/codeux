@@ -86,7 +86,8 @@ vi.mock("gsap", () => ({
 
 // Mock Router link
 vi.mock("@tanstack/react-router", () => ({
-    Link: ({ children }: any) => <a href="#">{children}</a>
+    Link: ({ children }: any) => <a href="#">{children}</a>,
+    useRouterState: ({ select }: any) => select({ matches: [{ pathname: "/" }] })
 }));
 
 vi.mock("../../../src/v2/components/top-nav/GlobalSearch.js", () => ({
@@ -162,8 +163,8 @@ describe("TopNav Selectors Accessibility", () => {
         expect(projectBtn).toHaveAttribute("aria-expanded", "false");
         expect(sprintBtn).toHaveAttribute("aria-expanded", "false");
 
-        expect(projectBtn).toHaveAttribute("aria-controls", "project-listbox");
-        expect(sprintBtn).toHaveAttribute("aria-controls", "sprint-listbox");
+        expect(projectBtn).not.toHaveAttribute("aria-controls");
+        expect(sprintBtn).not.toHaveAttribute("aria-controls");
     });
 
     it("renders notification menu trigger regardless of viewport width classes", async () => {
@@ -246,21 +247,19 @@ describe("TopNav Selectors Accessibility", () => {
         expect(options).toHaveLength(2);
 
         await user.keyboard("{End}");
-        expect(document.activeElement).toBe(screen.getByText("Manage Projects").closest("a"));
+        expect(document.activeElement).toBe(screen.getByRole("option", { name: /Project Beta/i }));
 
         await user.keyboard("{Home}");
-        // Focus should move to the filter input actually, because it's focusable
-        const input = screen.getByRole("textbox");
-        expect(document.activeElement).toBe(input);
+        expect(document.activeElement).toBe(screen.getByRole("option", { name: /Project Alpha/i }));
     });
 
     it("announces selected state in aria-label", async () => {
         renderNav();
         const projectBtn = document.getElementById("project-selector-button");
-        expect(projectBtn).toHaveAttribute("aria-label", "Selected project: Project Alpha");
+        expect(projectBtn).toHaveAttribute("aria-label", "Project selector, selected project: Project Alpha");
 
         const sprintBtn = document.getElementById("sprint-selector-button");
-        expect(sprintBtn?.getAttribute("aria-label")).toMatch(/^Selected sprint:/);
+        expect(sprintBtn?.getAttribute("aria-label")).toMatch(/^Sprint selector, selected sprint:/);
     });
 
     it("can select an option using keyboard", async () => {

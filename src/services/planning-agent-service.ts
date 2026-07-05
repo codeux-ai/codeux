@@ -365,6 +365,7 @@ export class PlanningAgentService {
       codingAgentRoster,
       sprintNumber: sprint.number,
       sprintName: sprint.name,
+      canSetSprintTitle: sprint.isGeneratedName,
       goal: sprint.goal,
       memoryContext,
       learningsInstruction,
@@ -403,7 +404,7 @@ export class PlanningAgentService {
           "Please output ONLY the valid JSON sprint definition. Requirements:",
           "- Output raw JSON only — no markdown fences, no commentary, no prose before or after.",
           "- Ensure all string values are properly escaped (especially quotes and newlines inside promptMarkdown).",
-          "- Use the exact schema from the original instructions: {\"goal\":\"...\",\"tasks\":[...]}"
+          "- Use the exact schema from the original instructions: {\"goal\":\"...\",\"tasks\":[...]}, with optional top-level \"title\" only when allowed by those instructions."
         ].join("\n"),
       });
       payload = virtualResult.parsed;
@@ -443,10 +444,16 @@ export class PlanningAgentService {
       this.deps.projectManagementRepository.deleteTasksBySprint(sprintId);
     }
 
+    const sprintUpdate: { name?: string; goal?: string } = {};
+    const plannedTitle = payload.title?.trim();
+    if (plannedTitle && sprint.isGeneratedName) {
+      sprintUpdate.name = plannedTitle;
+    }
     if (payload.goal && payload.goal.trim() && payload.goal.trim() !== sprint.goal.trim()) {
-      this.deps.projectManagementRepository.updateSprint(sprint.id, {
-        goal: payload.goal.trim(),
-      });
+      sprintUpdate.goal = payload.goal.trim();
+    }
+    if (Object.keys(sprintUpdate).length > 0) {
+      this.deps.projectManagementRepository.updateSprint(sprint.id, sprintUpdate);
     }
 
     const { createdTaskIds } = persistPlannedTasks(
@@ -488,7 +495,7 @@ export class PlanningAgentService {
       "",
       "Output the complete valid JSON sprint definition now. Requirements:",
       "- Output raw JSON only — no markdown fences, no commentary, no prose before or after.",
-      "- Use the exact schema from the original planning instructions: {\"goal\":\"...\",\"tasks\":[...]}",
+      "- Use the exact schema from the original planning instructions: {\"goal\":\"...\",\"tasks\":[...]}, with optional top-level \"title\" only when allowed by those instructions.",
       "- Include the full final task list, not a partial diff or summary.",
       "",
       "## Original Planning Instructions",

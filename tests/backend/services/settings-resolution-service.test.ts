@@ -8,7 +8,7 @@ import {
   resolveSprintProjectSettings,
 } from "../../../src/services/settings-resolution-service.js";
 import { ScopedEffectiveSettingsResolver } from "../../../src/repositories/settings-repository.js";
-import { DEFAULT_DASHBOARD_SETTINGS, DEFAULT_SKILLS } from "../../../src/repositories/settings-defaults.js";
+import { DEFAULT_DASHBOARD_SETTINGS, DEFAULT_PLAYWRIGHT_MCP_SERVER_ID, DEFAULT_SKILLS } from "../../../src/repositories/settings-defaults.js";
 import { DEFAULT_INSTRUCTION_TEMPLATES } from "../../../src/instructions/instruction-template-catalog.js";
 import type { SystemSettings, ProjectSettingsOverride } from "../../../src/contracts/settings-scope-types.js";
 
@@ -88,6 +88,7 @@ describe("Settings Resolution Service", () => {
       const settings = sanitizeProjectSettings({});
       expect(settings.automationLevel).toBe(DEFAULT_DASHBOARD_SETTINGS.automationLevel);
       expect(settings.aiProvider.provider).toBe(DEFAULT_DASHBOARD_SETTINGS.aiProvider.provider);
+      expect(settings.appearance.navigationMode).toBe("SIDEBAR");
       expect(settings.skills.length).toBeGreaterThan(0);
       expect(settings.agents.instructionTemplates).toBeDefined();
     });
@@ -308,6 +309,32 @@ describe("Settings Resolution Service", () => {
 
       expect(resolved.settings.mcpTools.find((t) => t.name === "manage_tasks")?.enabled).toBe(false);
       expect(resolved.settings.mcpTools.find((t) => t.name === "manage_projects")?.enabled).toBe(true);
+    });
+
+    it("retains the default Playwright MCP server without duplicating same-name overrides", () => {
+      const systemSettings = sanitizeSystemSettings({
+        customMcpServers: [
+          {
+            id: "custom-playwright",
+            name: "playwright",
+            transport: "stdio",
+            command: "npx",
+            args: ["@playwright/mcp@latest"],
+            enabled: false,
+          },
+        ],
+      } as unknown);
+
+      expect(systemSettings.customMcpServers.filter((server) => server.name === "playwright")).toHaveLength(1);
+      expect(systemSettings.customMcpServers[0]).toMatchObject({
+        id: "custom-playwright",
+        name: "playwright",
+        enabled: false,
+      });
+
+      const resolved = resolveDashboardSettings({ systemSettings });
+      expect(resolved.settings.customMcpServers.filter((server) => server.name === "playwright")).toHaveLength(1);
+      expect(resolved.settings.customMcpServers.some((server) => server.id === DEFAULT_PLAYWRIGHT_MCP_SERVER_ID)).toBe(false);
     });
   });
 

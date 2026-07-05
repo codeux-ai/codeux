@@ -11,7 +11,11 @@ import {
   getSelectedFilteredSprints,
   getLedgerSelectionSummary,
   getLedgerViewStateKey,
+  getLedgerOutcomeMessage,
   getBulkActionMessage,
+  getBulkPendingReason,
+  getSortAriaSort,
+  getSortButtonLabel,
   nextSort,
   formatSprintKey,
   STATUS_LABELS,
@@ -400,6 +404,30 @@ describe("sprint-ledger-state", () => {
       expect(getBulkActionMessage("start", 2, false)).toBe("Start will apply to 2 selected sprints.");
       expect(getBulkActionMessage("delete", 1, true)).toBe("Deleting 1 selected sprint.");
       expect(getBulkActionMessage("unpin", 3, true)).toBe("Unpinning 3 selected sprints.");
+    });
+  });
+
+  describe("ledger operation copy helpers", () => {
+    it("composes concise outcome messages with visible and selected counts", () => {
+      expect(getLedgerOutcomeMessage("Sorted by Sprint ascending.", 3, { selectedCount: 1 })).toBe("Sorted by Sprint ascending. 3 sprints visible. 1 selected.");
+      expect(getLedgerOutcomeMessage("Filter results updated.", 1, { totalCount: 7, selectedCount: 0, removedSelectedCount: 2 })).toBe("Filter results updated. Showing 1 of 7 sprints. No sprints selected. 2 hidden selections removed.");
+    });
+
+    it("explains why pending bulk controls are disabled", () => {
+      expect(getBulkPendingReason("start", 2)).toBe("Bulk controls are disabled while starting 2 selected sprints.");
+      expect(getBulkPendingReason("delete", 1)).toBe("Bulk controls are disabled while deleting 1 selected sprint.");
+      expect(getBulkPendingReason(null, 3)).toBe("Bulk controls are disabled while an action runs for 3 selected sprints.");
+    });
+  });
+
+  describe("sort accessibility helpers", () => {
+    it("returns explicit aria-sort values and stable button labels", () => {
+      const sort = { key: "createdAt", direction: "desc" } as const;
+
+      expect(getSortAriaSort(sort, "createdAt")).toBe("descending");
+      expect(getSortAriaSort(sort, "name")).toBe("none");
+      expect(getSortButtonLabel(sort, "createdAt")).toBe("Sort by Created");
+      expect(getSortButtonLabel(sort, "name")).toBe("Sort by Sprint");
     });
   });
 

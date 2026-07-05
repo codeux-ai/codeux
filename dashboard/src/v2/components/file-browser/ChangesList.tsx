@@ -40,6 +40,9 @@ export const ChangesList: FunctionComponent<ChangesListProps> = ({ files, select
 
   return (
     <div class="flex min-w-0 h-full flex-col overflow-y-auto dashboard-scrollbar p-2" role="listbox" aria-label="Changed files">
+      <div class="sr-only" role="status" aria-live="polite" aria-atomic="true">
+        {files.length} changed {files.length === 1 ? "file" : "files"} available. {selectedPath ? `Selected change ${selectedPath}.` : "No change selected."}
+      </div>
       {files.map((change) => {
         const meta = STATUS_META[change.status];
         const { dir, name } = splitPath(change.path);

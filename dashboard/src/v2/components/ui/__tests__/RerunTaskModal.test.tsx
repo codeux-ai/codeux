@@ -1,0 +1,106 @@
+/** @vitest-environment happy-dom */
+import { h } from "preact";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/preact";
+import { afterEach, describe, expect, test, vi } from "vitest";
+import * as matchers from "@testing-library/jest-dom/matchers";
+import { RerunTaskModal } from "../RerunTaskModal.js";
+
+expect.extend(matchers);
+
+vi.mock("../../../lib/settings-api.js", () => ({
+  fetchSystemSettings: vi.fn(() => new Promise(() => {})),
+}));
+
+describe("RerunTaskModal", () => {
+  const task = {
+    id: "TASK-1",
+    title: "Implement task flow",
+    depends_on: [],
+    status: "COMPLETED",
+    is_merged: true,
+    merge_indicator: "MERGED",
+  };
+  const downstreamTask = {
+    id: "TASK-2",
+    title: "Follow-up validation",
+    depends_on: ["TASK-1"],
+    status: "COMPLETED",
+    is_merged: false,
+    merge_indicator: "",
+  };
+
+  afterEach(() => {
+    cleanup();
+    vi.clearAllMocks();
+  });
+
+  test("announces provider loading and exposes destructive choices as reachable checkboxes", () => {
+    render(
+      <RerunTaskModal
+        task={task as any}
+        allTasks={[task, downstreamTask] as any}
+        currentProvider="auto"
+        onClose={() => {}}
+        onConfirm={() => {}}
+      />,
+    );
+
+    expect(screen.getByRole("status")).toHaveTextContent(/Loading providers/i);
+    expect(screen.getByLabelText(/Provider/i)).toBeDisabled();
+    expect(screen.getByRole("checkbox", { name: /Reset downstream tasks/i })).toBeInTheDocument();
+    expect(screen.getByRole("checkbox", { name: /Undo the Git merge/i })).toBeChecked();
+    expect(screen.getByRole("checkbox", { name: /Clear worktree/i })).toBeInTheDocument();
+  });
+
+  test("keeps the modal open on rerun failure and routes retry through feedback", async () => {
+    const onClose = vi.fn();
+    const onConfirm = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("Rerun failed"))
+      .mockResolvedValueOnce(undefined);
+
+    render(
+      <RerunTaskModal
+        task={task as any}
+        allTasks={[task, downstreamTask] as any}
+        onClose={onClose}
+        onConfirm={onConfirm}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /Rerun Task/i }));
+
+    await waitFor(() => {
+      expect(screen.getByRole("alert")).toHaveTextContent(/Rerun failed/i);
+    });
+    expect(onClose).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: /Retry/i }));
+
+    await waitFor(() => {
+      expect(screen.getByRole("status")).toHaveTextContent(/Task rerun started/i);
+    });
+    expect(onConfirm).toHaveBeenCalledTimes(2);
+  });
+
+  test("disables destructive choices while submitting", async () => {
+    const pendingSubmit = new Promise<void>(() => {});
+
+    render(
+      <RerunTaskModal
+        task={task as any}
+        allTasks={[task, downstreamTask] as any}
+        onClose={() => {}}
+        onConfirm={() => pendingSubmit}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /Rerun Task/i }));
+
+    await waitFor(() => {
+      expect(screen.getByRole("checkbox", { name: /Reset downstream tasks/i })).toBeDisabled();
+      expect(screen.getByRole("checkbox", { name: /Undo the Git merge/i })).toBeDisabled();
+      expect(screen.getByRole("checkbox", { name: /Clear worktree/i })).toBeDisabled();
+    });
+  });
+});

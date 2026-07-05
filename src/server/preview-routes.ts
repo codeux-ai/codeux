@@ -83,6 +83,7 @@ export function registerPreviewRoutes(app: Express, deps: DashboardDependencies)
     const pathWithQuery = req.originalUrl.startsWith(prefix)
       ? req.originalUrl.slice(prefix.length) || "/"
       : "/";
+    const { path: proxiedPath, selectedPort } = parsePreviewProxyPath(pathWithQuery, req.headers["x-code-ux-preview-port"]);
     const body = req.body
       ? Buffer.isBuffer(req.body)
         ? req.body
@@ -94,15 +95,37 @@ export function registerPreviewRoutes(app: Express, deps: DashboardDependencies)
     const proxied = await deps.proxySprintPreviewRequest({
       sessionId,
       method: req.method,
-      path: pathWithQuery,
+      path: proxiedPath,
       headers: Object.fromEntries(
         Object.entries(req.headers).map(([key, value]) => [key, Array.isArray(value) ? value.join(", ") : value]),
       ),
       body,
+      selectedPort,
     });
     for (const [key, value] of Object.entries(proxied.headers)) {
       res.setHeader(key, value);
     }
     res.status(proxied.status).send(proxied.body);
   }));
+}
+
+function parsePreviewProxyPath(
+  pathWithQuery: string,
+  headerValue: string | string[] | undefined,
+): { path: string; selectedPort: string | null } {
+  const normalizedPath = pathWithQuery.startsWith("/") ? pathWithQuery : `/${pathWithQuery}`;
+  const url = new URL(normalizedPath, "http://preview.local");
+  const querySelectedPort = url.searchParams.get("previewPort")
+    ?? url.searchParams.get("containerPort")
+    ?? url.searchParams.get("hostPort");
+  url.searchParams.delete("previewPort");
+  url.searchParams.delete("containerPort");
+  url.searchParams.delete("hostPort");
+  const headerSelectedPort = Array.isArray(headerValue) ? headerValue[0] : headerValue;
+  const selectedPort = querySelectedPort ?? headerSelectedPort ?? null;
+  const query = url.searchParams.toString();
+  return {
+    path: `${url.pathname}${query ? `?${query}` : ""}`,
+    selectedPort,
+  };
 }

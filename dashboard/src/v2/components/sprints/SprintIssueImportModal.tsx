@@ -1001,7 +1001,7 @@ export const SprintIssueImportModal: FunctionComponent<SprintIssueImportModalPro
                     onClick={() => { void handleImportLinkedIssues(); }}
                     disabled={!anySelected || importing}
                     aria-label={importLinkedLabel}
-                    className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-[1rem] bg-signal-500 px-4 py-2.5 text-xs font-black uppercase tracking-[0.14em] text-slate-950 transition-all hover:-translate-y-px hover:bg-signal-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30 disabled:cursor-not-allowed disabled:opacity-50"
+                    className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-[1rem] bg-signal-500 px-4 py-2.5 text-xs font-black uppercase tracking-[0.14em] text-white transition-all hover:-translate-y-px hover:bg-signal-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30 disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     {importing ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <CheckSquare className="h-4 w-4" aria-hidden="true" />}
                     Import as linked issues

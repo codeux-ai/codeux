@@ -98,7 +98,19 @@ describe("Knowledge Base Navigation", () => {
 
         const knowledgeLink = screen.getByRole("link", { name: "Knowledge" });
         expect(knowledgeLink).toHaveAttribute("aria-current", "page");
+        expect(knowledgeLink).toHaveAttribute("data-active", "true");
+        expect(screen.getByText("Active route: Knowledge")).toBeInTheDocument();
         expect(screen.getByRole("link", { name: "Files" })).not.toHaveClass("text-violet-400");
         expect(screen.getByRole("link", { name: "Live" })).not.toHaveClass("text-status-red");
+    });
+
+    it("keeps mobile dock active state semantic for nested routes", () => {
+        vi.mocked(useRouterState).mockReturnValue([{ pathname: "/sprints/active" }] as any);
+
+        render(<KineticDock />);
+
+        expect(screen.getByRole("link", { name: "Sprints" })).toHaveAttribute("aria-current", "page");
+        expect(screen.getByRole("link", { name: "Sprints" })).toHaveAttribute("data-active", "true");
+        expect(screen.getByRole("link", { name: "Overview" })).toHaveAttribute("data-active", "false");
     });
 });

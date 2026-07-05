@@ -4,7 +4,7 @@ import gsap from "gsap";
 import { ArrowLeft, Key, Plug, Plus, Settings2 } from "lucide-preact";
 import type { SettingsPageState, IntegrationId } from "../../../hooks/use-settings-page-state.js";
 import { NoticePanel, ActionButton } from "../SettingsSurface.js";
-import { ProviderLogo, Row, SecretInput, TextInput, Toggle } from "../SettingsFormFields.js";
+import { NumberInput, PillChoiceGroup, ProviderLogo, Row, SecretInput, TextInput, Toggle } from "../SettingsFormFields.js";
 import { ProviderBrandIcon } from "../../providers/ProviderBrandIcon.js";
 import { ProviderInstanceCard } from "../ProviderInstanceCard.js";
 import { JiraIcon } from "../../icons/JiraIcon.js";
@@ -363,6 +363,90 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
     });
   };
 
+  const renderJulesAutomationSettings = () => {
+    const localGitMode = editableSettings.git.githubMode === "LOCAL";
+
+    return (
+      <SectionCard title="Jules Automation" watermark="JLS" icon={<Settings2 strokeWidth={2.4} />} badge={getBadge("automationInterventions", "ciIntelligence")}>
+        <Row label="Auto-answer clarifications" description="Answer routine clarification requests automatically when the configured template is sufficient." badge={getFieldBadge("automationInterventions.autoAnswerClarification")}>
+          <Toggle
+            aria-label="Toggle setting"
+            value={editableSettings.automationInterventions.autoAnswerClarification}
+            onChange={() => updateEditableSettings((current) => ({
+              ...current,
+              automationInterventions: {
+                ...current.automationInterventions,
+                autoAnswerClarification: !current.automationInterventions.autoAnswerClarification,
+              },
+            }))}
+          />
+        </Row>
+        {editableSettings.automationInterventions.autoAnswerClarification ? (
+          <Row label="Clarification answer mode" description="Choose whether to use a static template or let a worker generate a contextual answer." badge={getFieldBadge("automationInterventions.autoAnswerClarificationMode")}>
+            <PillChoiceGroup
+              value={editableSettings.automationInterventions.autoAnswerClarificationMode}
+              onChange={(value) => updateEditableSettings((current) => ({
+                ...current,
+                automationInterventions: {
+                  ...current.automationInterventions,
+                  autoAnswerClarificationMode: value as ProjectSettings["automationInterventions"]["autoAnswerClarificationMode"],
+                },
+              }))}
+              options={[
+                { value: "TEMPLATE", label: "Template", hint: "Fast static reply." },
+                { value: "WORKER", label: "Worker", hint: "Contextual provider-generated reply." },
+              ]}
+            />
+          </Row>
+        ) : null}
+        {(!editableSettings.automationInterventions.autoAnswerClarification || editableSettings.automationInterventions.autoAnswerClarificationMode === "TEMPLATE") ? (
+          <Row label="Clarification answer template" description="Template used when Jules asks for routine clarification and template mode is active." badge={getFieldBadge("automationInterventions.clarificationAnswerTemplate")}>
+            <TextInput
+              value={editableSettings.automationInterventions.clarificationAnswerTemplate}
+              onChange={(value) => updateEditableSettings((current) => ({
+                ...current,
+                automationInterventions: {
+                  ...current.automationInterventions,
+                  clarificationAnswerTemplate: value,
+                },
+              }))}
+              placeholder="Respond with the usual clarification template..."
+            />
+          </Row>
+        ) : null}
+        <Row label="Jules CI autofix" description={localGitMode ? "Allow Jules to attempt CI autofixes before escalating to a worker. (Disabled in Local mode)" : "Allow Jules to attempt CI autofixes before escalating to a worker."} badge={getFieldBadge("ciIntelligence.waitForJulesCiAutofix")}>
+          <Toggle
+            aria-label="Toggle setting"
+            value={localGitMode ? false : editableSettings.ciIntelligence.waitForJulesCiAutofix}
+            disabled={localGitMode}
+            onChange={() => updateEditableSettings((current) => ({
+              ...current,
+              ciIntelligence: {
+                ...current.ciIntelligence,
+                waitForJulesCiAutofix: !current.ciIntelligence.waitForJulesCiAutofix,
+              },
+            }))}
+          />
+        </Row>
+        <Row label="Jules CI autofix max retries" description={localGitMode ? "Maximum Jules CI autofix attempts before guardrail escalation. (Disabled in Local mode)" : "Maximum Jules CI autofix attempts before guardrail escalation."} badge={getFieldBadge("ciIntelligence.julesCiAutofixMaxRetries")} last>
+          <NumberInput
+            value={editableSettings.ciIntelligence.julesCiAutofixMaxRetries}
+            min={0}
+            max={20}
+            disabled={localGitMode}
+            onChange={(value) => updateEditableSettings((current) => ({
+              ...current,
+              ciIntelligence: {
+                ...current.ciIntelligence,
+                julesCiAutofixMaxRetries: value,
+              },
+            }))}
+          />
+        </Row>
+      </SectionCard>
+    );
+  };
+
   const renderIntegrationDetail = () => {
     const integrationId = activeIntegrationDetail || selectedIntegration;
     if (!integrationId) return null;
@@ -555,6 +639,7 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
       return (
         <>
           {backButton}
+          {providerId === "jules" ? renderJulesAutomationSettings() : null}
           <SectionCard title={`${getProviderTypeLabel(providerId)} Integration`} watermark={getProviderWatermark(providerId)} icon={<Plug strokeWidth={2.4} />}>
             <NoticePanel title="System-owned credentials">
               Provider credentials and auth-copy mounts are managed per instance at system scope. This keeps multiple named providers independent across every route.
@@ -570,6 +655,7 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
     return (
       <>
         {backButton}
+        {providerId === "jules" ? renderJulesAutomationSettings() : null}
         <SectionCard title={`${getProviderTypeLabel(providerId)} Credentials`} watermark={getProviderWatermark(providerId)} icon={<Key strokeWidth={2.4} />}>
           <div className="relative overflow-hidden rounded-[1.45rem] border border-black/[0.06] bg-[linear-gradient(135deg,rgba(255,255,255,0.9),rgba(248,250,252,0.62))] px-5 py-4 shadow-[0_14px_34px_rgba(15,23,42,0.045)] dark:border-white/[0.06] dark:bg-[linear-gradient(135deg,rgba(255,255,255,0.065),rgba(255,255,255,0.025))]">
             <div aria-hidden className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-signal-500/35 to-transparent" />

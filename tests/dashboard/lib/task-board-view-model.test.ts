@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
-import { buildTaskBoardViewModel } from "../../../dashboard/src/v2/lib/tasks/task-board-view-model.js";
-import type { Task } from "../../../dashboard/src/v2/types.js";
+import { buildTaskBoardSprintScopeState, buildTaskBoardViewModel } from "../../../dashboard/src/v2/lib/tasks/task-board-view-model.js";
+import type { Sprint, Task } from "../../../dashboard/src/v2/types.js";
 import type { ExecutionTaskDispatchSummary, Subtask } from "../../../dashboard/src/types.js";
 
 function createMockTask(id: string, overrides: Partial<Task> = {}): Task {
@@ -53,6 +53,27 @@ test("buildTaskBoardViewModel combines optimistic and normal tasks, filters, and
   expect(vm1?.task.id).toBe("t1");
 });
 
+test("buildTaskBoardViewModel passes task PR availability into card view models", () => {
+  const task = createMockTask("t1", { status: "pending" });
+
+  const vm = buildTaskBoardViewModel({
+    tasks: [task],
+    optimisticTasks: [],
+    statusFilter: "all",
+    priorityFilter: "all",
+    listWindow: 50,
+    taskScopeSprintId: null,
+    taskDispatches: [],
+    recentEvents: [],
+    subtasks: [],
+    taskPullRequestsEnabled: false,
+  });
+
+  const taskVm = vm.taskViewModels.get("t1");
+  expect(taskVm?.hasPullRequestMetadata).toBe(false);
+  expect(taskVm?.actions?.some((action) => action.kind === "pull_request")).toBe(false);
+});
+
 test("buildTaskBoardViewModel applies sprint scope correctly", () => {
   const t1 = createMockTask("t1", { sprintId: "sprint-1" });
   const d1: ExecutionTaskDispatchSummary = { id: "d1", sprintId: "sprint-1", executionId: "", taskId: "t1", status: "completed", queuedAt: "", workerBranch: "b" };
@@ -100,7 +121,11 @@ test("buildTaskBoardViewModel applies status and priority filters and column ord
 
 test("buildTaskBoardViewModel gives optimistic task precedence", () => {
   const normalTask = createMockTask("t1", { title: "Old Title", status: "pending" });
-  const optimisticTask = createMockTask("t1", { title: "New Title", status: "in_progress" });
+  const optimisticTask = createMockTask("t1", {
+    title: "New Title",
+    status: "in_progress",
+    isOptimistic: true,
+  });
 
   const vm = buildTaskBoardViewModel({
     tasks: [normalTask],
@@ -114,12 +139,23 @@ test("buildTaskBoardViewModel gives optimistic task precedence", () => {
     subtasks: [],
   });
 
-  // Map will have the last one set, which depends on order.
-  // [...optimistic, ...tasks] means normalTask overwrites optimisticTask if they share the same ID.
-  // Wait, optimistic tasks typically have the same ID.
-  // In the real implementation: `allTasks = [...optimisticTasks, ...tasks]`.
-  // Wait, if it's [...optimistic, ...normal], the map would end up with normal.
-  // Let's verify how it handles map collision.
+  expect(vm.boardState.filteredTasks).toHaveLength(1);
+  expect(vm.boardState.filteredTasks[0]).toMatchObject({
+    recordId: "t1",
+    title: "New Title",
+    status: "in_progress",
+    isOptimistic: true,
+  });
+  expect(vm.boardState.stats).toMatchObject({
+    total: 1,
+    inProgress: 1,
+  });
+  expect(vm.boardState.columns.find((column) => column.status === "pending")?.count).toBe(0);
+  expect(vm.boardState.columns.find((column) => column.status === "in_progress")?.count).toBe(1);
+
+  const taskVm = vm.taskViewModels.get("t1");
+  expect(taskVm?.task.title).toBe("New Title");
+  expect(taskVm?.task.status).toBe("in_progress");
 });
 
 test("buildTaskBoardViewModel handles empty states", () => {
@@ -138,7 +174,11 @@ test("buildTaskBoardViewModel handles empty states", () => {
   expect(vm.boardState.filteredTasks).toHaveLength(0);
   expect(vm.boardState.stats.total).toBe(0);
   expect(vm.taskViewModels.size).toBe(0);
-  expect(vm.boardState.columns).toHaveLength(3); // BOARD_LANES
+  expect(vm.boardState.columns).toEqual([
+    { status: "pending", count: 0, tasks: [] },
+    { status: "in_progress", count: 0, tasks: [] },
+    { status: "completed", count: 0, tasks: [] },
+  ]);
 });
 
 test("buildTaskBoardViewModel carries dependency blockers and live duration into card view models", () => {
@@ -209,8 +249,50 @@ test("buildTaskBoardViewModel carries dependency blockers and live duration into
       id: "dep-1",
       title: "Prepare contract",
       status: "pending",
+      isKnown: true,
+      stateLabel: "Blocked",
+      stateDescription: "Dependency is waiting to start",
+      isBlocking: true,
     },
   ]);
   expect(taskVm?.liveRunningTime).toBe("2m 5s");
   expect(taskVm?.liveStartedAt).toBe("2026-07-03T10:00:00.000Z");
+  expect(taskVm?.dependencyActionLabel).toBe("1 dependency blocker");
+  expect(taskVm?.actions.find((action) => action.kind === "live_runtime")).toMatchObject({
+    href: "/live",
+    label: "Live",
+  });
+});
+
+test("buildTaskBoardSprintScopeState exposes selected, loading, and empty scope states", () => {
+  const sprints = [
+    { id: "sprint-1", number: 1, name: "Sprint One", date: "Jan 1", tasksCount: 2, completion: 50, status: "running" },
+  ] as Sprint[];
+
+  expect(buildTaskBoardSprintScopeState({
+    sprints,
+    selectedSprintId: "sprint-1",
+    selectedSprintLabel: "SPR-1: Sprint One",
+    loading: false,
+  })).toEqual({
+    label: "SPR-1: Sprint One",
+    description: "Task board scoped to SPR-1: Sprint One.",
+    isScoped: true,
+    isLoading: false,
+    isEmpty: false,
+  });
+
+  expect(buildTaskBoardSprintScopeState({
+    sprints: [],
+    selectedSprintId: null,
+    selectedSprintLabel: null,
+    loading: true,
+  })).toMatchObject({ label: "Loading sprints", isLoading: true });
+
+  expect(buildTaskBoardSprintScopeState({
+    sprints: [],
+    selectedSprintId: null,
+    selectedSprintLabel: null,
+    loading: false,
+  })).toMatchObject({ label: "No sprints", isEmpty: true });
 });

@@ -326,13 +326,18 @@ export class CommandRunner {
   }
 
   private getSpawner(): CommandSpawnerClient | null {
-    if (!CommandRunner.spawnerEnabled) {
+    if (!CommandRunner.spawnerEnabled || isRuntimeShutdownInProgress()) {
       return null;
     }
     if (!this.spawner) {
       this.spawner = new CommandSpawnerClient();
     }
     return this.spawner.isAvailable() ? this.spawner : null;
+  }
+
+  dispose(): void {
+    this.spawner?.dispose();
+    this.spawner = null;
   }
 
   private validateSpawnCommand(command: string): SpawnCommand {
@@ -852,3 +857,7 @@ export class CommandRunner {
  * Singleton instance of CommandRunner for project-wide use.
  */
 export const commandRunner = new CommandRunner();
+
+export function disposeCommandSpawner(): void {
+  commandRunner.dispose();
+}

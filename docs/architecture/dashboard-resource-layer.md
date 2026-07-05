@@ -22,6 +22,7 @@ Data fetching is governed by a unified resource layer rather than ad-hoc `useEff
 - Live payloads use a bounded LRU cache bounded by project ID to prevent memory leaks during long-running sessions, and invalidate explicitly when project context drops.
 - Stale data is preserved during background refreshes to prevent UI flashing.
 - Live runtime polling keeps the last non-empty sprint status and execution snapshot while active work is still present, preventing the live page from flashing into the empty "Awaiting sprint decomposition" state during transient refresh gaps.
+- Live runtime websocket payloads are stabilized before state comparison: unchanged execution/status sub-collections keep their prior references, assembly-only timestamps are ignored for equality, and real status, execution, git, project, or selected-sprint scope changes still replace the snapshot.
 - Live runtime status aggregation and task activity hydration run through the same `processDashboardTasks` projection so counters, task cards, and race placement stay phase-consistent during post-coding polling.
 - Live task cards, DAG nodes, filter counts, and timing summaries now share one runtime projection that merges stable project task structure with `/api/status`, execution dispatches, and terminal runtime events before rendering.
 - Active status refreshes preserve prior session/provider/branch/PR metadata when a transient `/api/status` poll returns the same task without those ephemeral runtime fields, preventing live cards from dropping context between updates.

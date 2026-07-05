@@ -47,6 +47,7 @@ import { SettingsActions } from "./management/settings-actions.js";
 import { AgentActions } from "./management/agent-actions.js";
 import { MemoryActions } from "./management/memory-actions.js";
 import { formatManagementErrorEnvelope } from "./management/payload-parsers.js";
+import { resolveLateBoundDependency, type LateBoundOrValue } from "../shared/late-bound-dependency.js";
 
 export interface ManagementToolHandlerDeps {
   sprintPreviewService: SprintPreviewService;
@@ -54,54 +55,69 @@ export interface ManagementToolHandlerDeps {
   getDashboardSettings: () => DashboardSettings;
   projectManagementRepository: ProjectManagementRepository;
   executionControlService: ExecutionControlService;
-  taskRerunService: TaskRerunService;
+  taskRerunService: LateBoundOrValue<TaskRerunService>;
   settingsRepository: SettingsRepository;
   agentPresetSyncService: AgentPresetSyncService;
   memoryService: MemoryService;
   memoryPromotionService: MemoryPromotionService;
   embeddingModelManager: EmbeddingModelManager;
   knowledgeService: KnowledgeService;
-  planningAgentService: PlanningAgentService;
-  projectSetupService?: ProjectSetupService;
+  planningAgentService: LateBoundOrValue<PlanningAgentService>;
+  projectSetupService?: LateBoundOrValue<ProjectSetupService>;
   sprintIssueService: SprintIssueService;
-  quicksprintService?: QuicksprintService;
-  schedulerService?: SchedulerService;
+  quicksprintService?: LateBoundOrValue<QuicksprintService>;
+  schedulerService?: LateBoundOrValue<SchedulerService>;
 }
 
 export class ManagementToolHandler {
-  private readonly sprintActions: SprintActions;
-  private readonly taskActions: TaskActions;
+  private sprintActions: SprintActions | null = null;
+  private taskActions: TaskActions | null = null;
   private readonly settingsActions: SettingsActions;
   private readonly agentActions: AgentActions;
   private readonly memoryActions: MemoryActions;
   private readonly previewActions: PreviewActions;
 
   constructor(private readonly deps: ManagementToolHandlerDeps) {
-    this.sprintActions = new SprintActions(deps);
-    this.taskActions = new TaskActions(
-      deps.projectManagementRepository,
-      deps.executionControlService,
-      deps.executionRepository,
-      deps.taskRerunService
-    );
     this.settingsActions = new SettingsActions(deps.settingsRepository);
     this.agentActions = new AgentActions(deps.agentPresetSyncService);
     this.memoryActions = new MemoryActions(deps.memoryService, deps.memoryPromotionService, deps.embeddingModelManager);
     this.previewActions = new PreviewActions(deps.sprintPreviewService);
   }
 
+  private getSprintActions(): SprintActions {
+    if (!this.sprintActions) {
+      this.sprintActions = new SprintActions({
+        ...this.deps,
+        planningAgentService: resolveLateBoundDependency(this.deps.planningAgentService),
+      });
+    }
+    return this.sprintActions;
+  }
+
+  private getTaskActions(): TaskActions {
+    if (!this.taskActions) {
+      this.taskActions = new TaskActions(
+        this.deps.projectManagementRepository,
+        this.deps.executionControlService,
+        this.deps.executionRepository,
+        resolveLateBoundDependency(this.deps.taskRerunService)
+      );
+    }
+    return this.taskActions;
+  }
+
   private getQuicksprintActions(): QuicksprintActions {
     if (!this.deps.quicksprintService) {
       throw new Error("Quicksprint service is not enabled.");
     }
-    return new QuicksprintActions(this.deps.quicksprintService);
+    return new QuicksprintActions(resolveLateBoundDependency(this.deps.quicksprintService));
   }
 
   private getSchedulerActions(): SchedulerActions {
     if (!this.deps.schedulerService) {
       throw new Error("Scheduler service is not enabled.");
     }
-    return new SchedulerActions(this.deps.schedulerService);
+    return new SchedulerActions(resolveLateBoundDependency(this.deps.schedulerService));
   }
 
   private resolveGithubToken(): string | undefined {
@@ -159,13 +175,13 @@ export class ManagementToolHandler {
           this.deps.projectManagementRepository,
           args.domain,
           args.approval,
-          this.deps.projectSetupService,
+          this.deps.projectSetupService ? resolveLateBoundDependency(this.deps.projectSetupService) : undefined,
           (input) => this.createProject(input)
         );
       } else if (args.domain === "sprints") {
-        envelope = await this.sprintActions.handleSprintAction(args);
+        envelope = await this.getSprintActions().handleSprintAction(args);
       } else if (args.domain === "tasks") {
-        envelope = await this.taskActions.handleTaskAction(args);
+        envelope = await this.getTaskActions().handleTaskAction(args);
       } else if (args.domain === "quicksprints") {
         envelope = await this.getQuicksprintActions().handleQuicksprintAction(args);
       } else if (args.domain === "scheduler") {
@@ -215,7 +231,7 @@ export class ManagementToolHandler {
         this.deps.projectManagementRepository,
         "projects",
         args.approval,
-        this.deps.projectSetupService,
+        this.deps.projectSetupService ? resolveLateBoundDependency(this.deps.projectSetupService) : undefined,
         (input) => this.createProject(input)
       );
       return { content: [{ type: "text", text: JSON.stringify(envelope, null, 2) }] };
@@ -226,7 +242,7 @@ export class ManagementToolHandler {
 
   async handleManageSprints(args: ManageSprintsArgs): Promise<{ content: Array<{ type: string; text: string }> }> {
     try {
-      const envelope = await this.sprintActions.handleSprintAction({ domain: "sprints", action: args.action, payload: args as unknown as Record<string, unknown>, approval: args.approval });
+      const envelope = await this.getSprintActions().handleSprintAction({ domain: "sprints", action: args.action, payload: args as unknown as Record<string, unknown>, approval: args.approval });
       return { content: [{ type: "text", text: JSON.stringify(envelope, null, 2) }] };
     } catch (error) {
       return this.formatError("sprints", args.action, error);
@@ -235,7 +251,7 @@ export class ManagementToolHandler {
 
   async handleManageTasks(args: ManageTasksArgs): Promise<{ content: Array<{ type: string; text: string }> }> {
     try {
-      const envelope = await this.taskActions.handleTaskAction({ domain: "tasks", action: args.action, payload: args as unknown as Record<string, unknown>, approval: args.approval });
+      const envelope = await this.getTaskActions().handleTaskAction({ domain: "tasks", action: args.action, payload: args as unknown as Record<string, unknown>, approval: args.approval });
       return { content: [{ type: "text", text: JSON.stringify(envelope, null, 2) }] };
     } catch (error) {
       return this.formatError("tasks", args.action, error);

@@ -72,7 +72,7 @@ describe("WorkspaceArtifactService", () => {
     const service = new WorkspaceArtifactService(workspaceManager);
     const patchText = await service.exportBinaryPatch("workspace", baseRef);
 
-    expect(seenOptions).toEqual([{ trimOutput: false }, { trimOutput: false }]);
+    expect(seenOptions.some((options) => options.trimOutput === false && options.env?.GIT_INDEX_FILE)).toBe(true);
     expect(patchText).toContain("+   \n");
 
     const result = await service.applyPatchToBranch({
@@ -247,7 +247,8 @@ describe("WorkspaceArtifactService", () => {
     await runGit(hostRepoPath, ["config", "user.email", "code-ux@example.com"]);
     await runGit(hostRepoPath, ["checkout", "-b", "main"]);
     await fs.writeFile(path.join(hostRepoPath, "existing.txt"), "hello\n", "utf8");
-    await runGit(hostRepoPath, ["add", "existing.txt"]);
+    await fs.writeFile(path.join(hostRepoPath, ".gitignore"), ".pnpm-store\n", "utf8");
+    await runGit(hostRepoPath, ["add", "existing.txt", ".gitignore"]);
     await runGit(hostRepoPath, ["commit", "-m", "base"]);
     await runGit(hostRepoPath, ["push", "-u", "origin", "main"]);
 
@@ -269,6 +270,12 @@ describe("WorkspaceArtifactService", () => {
     );
     await fs.writeFile(path.join(workspaceRepoPath, "new-component.tsx"), "export const value = 1;\n", "utf8");
     await fs.writeFile(path.join(workspaceRepoPath, ".task-learnings.md"), "## Category: learning\n- Do not commit this file.\n", "utf8");
+    await fs.mkdir(path.join(workspaceRepoPath, ".pnpm-store", "v10", "files", "00"), { recursive: true });
+    await fs.writeFile(
+      path.join(workspaceRepoPath, ".pnpm-store", "v10", "files", "00", "cache-object"),
+      "cached dependency artifact\n",
+      "utf8",
+    );
     await fs.mkdir(path.join(workspaceRepoPath, "logs", "openai"), { recursive: true });
     await fs.writeFile(path.join(workspaceRepoPath, "logs", "openai", "openai-123.json"), "{}", "utf8");
     await fs.writeFile(path.join(workspaceRepoPath, "logs", "openai", "request.log"), "log", "utf8");
@@ -291,6 +298,7 @@ describe("WorkspaceArtifactService", () => {
     expect(patchText).toContain("diff --git a/new-component.tsx b/new-component.tsx");
     expect(patchText).not.toContain(".task-learnings.md");
     expect(patchText).not.toContain(".code-ux-home");
+    expect(patchText).not.toContain(".pnpm-store");
     expect(patchText).not.toContain("logs/openai");
 
     const result = await service.applyPatchToBranch({
@@ -310,10 +318,68 @@ describe("WorkspaceArtifactService", () => {
       .rejects.toThrow();
     await expect(runGit(hostRepoPath, ["show", "refs/heads/worker/test:.code-ux-home/.cache/node-gyp/header.h"]))
       .rejects.toThrow();
+    await expect(runGit(hostRepoPath, ["show", "refs/heads/worker/test:.pnpm-store/v10/files/00/cache-object"]))
+      .rejects.toThrow();
     await expect(runGit(hostRepoPath, ["show", "refs/heads/worker/test:logs/openai/openai-123.json"]))
       .rejects.toThrow();
     await expect(runGit(hostRepoPath, ["show", "refs/heads/worker/test:logs/openai/request.log"]))
       .rejects.toThrow();
+  });
+
+  it("batches git-discovered untracked export paths instead of passing them all through one argv", async () => {
+    const untrackedPaths = Array.from({ length: 1_201 }, (_, index) => `src/generated/file-${index}.ts`);
+    const gitCalls: string[][] = [];
+
+    const workspaceManager = {
+      runWorkspaceCommand: async (
+        _worktreePath: string,
+        command: string,
+        args: string[],
+      ) => {
+        if (command === "git") {
+          gitCalls.push(args);
+        }
+        if (command === "git" && args[0] === "ls-files") {
+          return {
+            ok: true,
+            code: 0,
+            stdout: `${untrackedPaths.join("\0")}\0`,
+            stderr: "",
+          };
+        }
+        if (command === "git" && args[0] === "diff") {
+          return {
+            ok: true,
+            code: 0,
+            stdout: "diff --git a/src/generated/file-0.ts b/src/generated/file-0.ts\n",
+            stderr: "",
+          };
+        }
+        return {
+          ok: true,
+          code: 0,
+          stdout: "",
+          stderr: "",
+        };
+      },
+    } as IWorkspaceManager;
+
+    const service = new WorkspaceArtifactService(workspaceManager);
+    const patchText = await service.exportBinaryPatch("workspace", "HEAD");
+
+    expect(patchText).toContain("diff --git");
+    const lsFilesCall = gitCalls.find((args) => args[0] === "ls-files");
+    expect(lsFilesCall).toEqual(expect.arrayContaining(["ls-files", "--others", "--exclude-standard", "-z", "--", "."]));
+    const addCalls = gitCalls.filter((args) => args[0] === "add");
+    expect(addCalls).toHaveLength(5);
+    for (const addCall of addCalls) {
+      expect(addCall).toEqual(expect.arrayContaining(["add", "--intent-to-add", "--"]));
+      expect(addCall.length).toBeLessThanOrEqual(253);
+      expect(addCall).not.toContain(".");
+    }
+    for (const untrackedPath of untrackedPaths) {
+      expect(addCalls.some((args) => args.includes(untrackedPath))).toBe(true);
+    }
   });
 
   it("excludes stale Code UX export index files from preserved workspaces", async () => {
@@ -391,8 +457,8 @@ describe("WorkspaceArtifactService", () => {
 
     // Simulate opencode's snapshot store: a bare git repo (HEAD/objects/refs laid
     // out directly, no nested `.git`) full of loose objects living under the
-    // provider sprint HOME. Without scoping the scan, `git ls-files --others`
-    // walks every one of these and the volume of output corrupts the export.
+    // provider sprint HOME. Without shared excludes, Git would mark every one of
+    // these objects as intent-to-add and they would enter the exported patch.
     const snapshotRepo = path.join(
       workspaceRepoPath,
       ".code-ux-home", ".local", "share", "opencode", "snapshot", "a".repeat(40), "b".repeat(40),
@@ -409,6 +475,7 @@ describe("WorkspaceArtifactService", () => {
 
     await fs.writeFile(path.join(workspaceRepoPath, "new-component.tsx"), "export const value = 1;\n", "utf8");
 
+    const addArgs: string[][] = [];
     const lsFilesArgs: string[][] = [];
     const workspaceManager = {
       runWorkspaceCommand: async (
@@ -420,6 +487,9 @@ describe("WorkspaceArtifactService", () => {
         if (command === "git" && args[0] === "ls-files") {
           lsFilesArgs.push(args);
         }
+        if (command === "git" && args[0] === "add") {
+          addArgs.push(args);
+        }
         return await runCommandStrict(command, args, workspaceRepoPath, options.env ?? process.env, {
           trimOutput: options.trimOutput,
           signal: options.signal,
@@ -430,11 +500,12 @@ describe("WorkspaceArtifactService", () => {
     const service = new WorkspaceArtifactService(workspaceManager);
     const patchText = await service.exportBinaryPatch("workspace", baseRef);
 
-    // The scan must constrain itself with the same excludes the diff uses, so the
-    // snapshot store is never enumerated in the first place.
     expect(lsFilesArgs).toHaveLength(1);
     expect(lsFilesArgs[0]).toContain(":(exclude).code-ux-home");
     expect(lsFilesArgs[0]).toContain(":(exclude).code-ux-home/**");
+    expect(addArgs).toHaveLength(1);
+    expect(addArgs[0]).not.toContain(":(exclude).code-ux-home");
+    expect(addArgs[0]).not.toContain(":(exclude).code-ux-home/**");
 
     expect(patchText).toContain("diff --git a/new-component.tsx b/new-component.tsx");
     expect(patchText).not.toContain(".code-ux-home");

@@ -3,7 +3,7 @@ import { h, Fragment } from "preact";
 /** @jsx h */
 /** @jsxFrag Fragment */
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen } from "@testing-library/preact";
+import { cleanup, fireEvent, render, screen } from "@testing-library/preact";
 import * as matchers from "@testing-library/jest-dom/matchers";
 
 expect.extend(matchers);
@@ -15,6 +15,12 @@ import gsap from "gsap";
 
 vi.mock("../../../../../dashboard/src/hooks/ExecutionTimelineContext.js", () => ({
   useExecutionTimeline: vi.fn(),
+  LIVE_EXECUTION_SNAPSHOT_SURFACE: {
+    kind: "live",
+    label: "Live",
+    description: "Runtime data is current.",
+    isBusy: false,
+  },
 }));
 
 vi.mock("../../../../../dashboard/src/v2/hooks/use-reduced-motion.js", () => ({
@@ -115,13 +121,19 @@ describe("InvocationFeedPanel", () => {
     render(<InvocationFeedPanel />);
 
     expect(screen.getByText("Invocation Feed")).toBeInTheDocument();
+    expect(screen.getByText("3 total")).toBeInTheDocument();
     expect(screen.getByText("1 live")).toBeInTheDocument();
+    expect(screen.getByText("1 done")).toBeInTheDocument();
+    expect(screen.getByText("1 failed")).toBeInTheDocument();
     expect(screen.getByText("Running")).toBeInTheDocument();
     expect(screen.getByText("Failed")).toBeInTheDocument();
     expect(screen.getByText("Task Coding")).toBeInTheDocument();
     expect(screen.getByText("QA Review")).toBeInTheDocument();
     expect(screen.getByText("Provider timed out")).toBeInTheDocument();
+    expect(screen.getByText("1 invocation failed. Open the transcript for details.")).toHaveAttribute("role", "alert");
+    expect(screen.getAllByText("3 invocations shown: 0 new or queued, 1 running, 1 completed, 1 failed.").length).toBeGreaterThan(0);
     expect(screen.getByText("Invocation status: running.")).toBeInTheDocument();
+    expect(document.querySelector(".motion-reduce\\:ring-2")).toBeInTheDocument();
 
     const feed = screen.getByRole("log", { name: "Live invocation feed" });
     expect(feed).toHaveAttribute("aria-live", "polite");
@@ -186,6 +198,51 @@ describe("InvocationFeedPanel", () => {
 
     expect(gsap.fromTo).not.toHaveBeenCalled();
     expect(screen.getByText("completed")).toBeInTheDocument();
+    expect(document.querySelector(".motion-reduce\\:ring-status-green\\/25")).toBeInTheDocument();
+    vi.runOnlyPendingTimers();
+    vi.useRealTimers();
+  });
+
+  it("exposes collapsible feed state and preserves focus in reduced motion", () => {
+    vi.mocked(useExecutionTimeline).mockReturnValue({
+      execution: createSnapshot([createInvocation({ status: "completed", finishedAt: "2024-01-01T10:02:00.000Z" })]),
+    } as never);
+
+    render(<InvocationFeedPanel collapsible defaultOpen={false} />);
+
+    const toggle = screen.getByRole("button", { name: /Invocation Feed/i });
+    const panelId = toggle.getAttribute("aria-controls");
+    expect(toggle.tagName).toBe("BUTTON");
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    expect(panelId).toBeTruthy();
+    expect(document.getElementById(panelId ?? "")).toHaveAttribute("aria-hidden", "true");
+    expect(gsap.set).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ height: 0, overflow: "hidden" }));
+
+    toggle.focus();
+    fireEvent.click(toggle);
+
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    expect(document.activeElement).toBe(toggle);
+    expect(screen.getByText("Invocation feed is current.")).toHaveAttribute("role", "status");
+  });
+
+  it("announces invocation row status changes without depending on animation", () => {
+    vi.useFakeTimers();
+    vi.mocked(useExecutionTimeline).mockReturnValue({
+      execution: createSnapshot([]),
+    } as never);
+
+    const { rerender } = render(<InvocationFeedPanel invocations={[
+      createInvocation({ id: "xi-status-change", status: "running" }),
+    ]} />);
+
+    rerender(<InvocationFeedPanel invocations={[
+      createInvocation({ id: "xi-status-change", status: "failed", lastErrorMessage: "Provider returned a non-zero exit code" }),
+    ]} />);
+
+    expect(screen.getByText("Invocation status changed from running to failed.")).toBeInTheDocument();
+    expect(screen.getByText("Provider returned a non-zero exit code")).toHaveAttribute("role", "alert");
+    expect(gsap.fromTo).not.toHaveBeenCalled();
     vi.runOnlyPendingTimers();
     vi.useRealTimers();
   });

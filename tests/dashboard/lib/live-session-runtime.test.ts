@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { deriveLiveSessionRuntimeState, resolveLiveSessionSprintScopeId, getPendingActionState, getLiveActionDisplayProps } from "../../../dashboard/src/v2/lib/live-session-runtime.js";
+import {
+  deriveLiveSessionRuntimeState,
+  resolveLiveSessionSprintScopeId,
+  getPendingActionState,
+  getLiveActionDisplayProps,
+  getLiveActionDisabledReason,
+} from "../../../dashboard/src/v2/lib/live-session-runtime.js";
 import type { DashboardStatus, ExecutionDashboardSnapshot } from "../../../dashboard/src/types.js";
 
 function createStatus(overrides: Partial<DashboardStatus> = {}): DashboardStatus {
@@ -376,9 +382,24 @@ describe("live session runtime state", () => {
     });
 
     it("getLiveActionDisplayProps returns correct aria attributes", () => {
-      expect(getLiveActionDisplayProps(true, false)).toEqual({ "aria-disabled": true, "aria-busy": true });
-      expect(getLiveActionDisplayProps(false, true)).toEqual({ "aria-disabled": true, "aria-busy": false });
-      expect(getLiveActionDisplayProps(false, false)).toEqual({ "aria-disabled": false, "aria-busy": false });
+      expect(getLiveActionDisplayProps(true, false)).toEqual({ "aria-disabled": true, "aria-busy": true, "data-action-state": "pending" });
+      expect(getLiveActionDisplayProps(false, true)).toEqual({ "aria-disabled": true, "aria-busy": false, "data-action-state": "disabled" });
+      expect(getLiveActionDisplayProps(false, false)).toEqual({ "aria-disabled": false, "aria-busy": false, "data-action-state": "idle" });
+      expect(getLiveActionDisplayProps("disabled", true, "Task is already complete.")).toEqual({
+        "aria-disabled": true,
+        "aria-busy": false,
+        "data-action-state": "disabled",
+        "data-disabled-reason": "Task is already complete.",
+      });
+    });
+
+    it("getLiveActionDisabledReason explains pending and disabled suppression", () => {
+      const labels = { idle: "Retry", pending: "Retrying", disabled: "Retry unavailable" };
+
+      expect(getLiveActionDisabledReason("pending", labels)).toBe("Retrying is already in progress.");
+      expect(getLiveActionDisabledReason("disabled", labels, "Dispatch is already running.")).toBe("Dispatch is already running.");
+      expect(getLiveActionDisabledReason("disabled", labels)).toBe("Retry unavailable");
+      expect(getLiveActionDisabledReason("idle", labels)).toBeNull();
     });
   });
 

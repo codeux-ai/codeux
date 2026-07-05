@@ -40,7 +40,7 @@ export const OverviewTelemetry: FunctionComponent = () => {
 
   return (
     <aside className="sticky top-24 flex h-[calc(100vh-7rem)] min-h-[34rem] flex-col overflow-hidden group">
-      <h3 className="mb-7 flex items-center gap-4 font-display text-3xl font-black tracking-tighter text-slate-900 dark:text-white">
+      <h3 className="mb-7 flex items-center gap-4 font-display text-2xl font-semibold tracking-tighter text-slate-900 dark:text-white">
         <div className="relative flex items-center justify-center">
           <div className={`w-3.5 h-3.5 rounded-full relative z-10 shadow-sm ${
             hasActiveProjects
@@ -85,19 +85,19 @@ export const OverviewTelemetry: FunctionComponent = () => {
             <div className="grid shrink-0 grid-cols-2 gap-3 sm:grid-cols-4">
               <div className="rounded-2xl border border-status-green/15 bg-status-green/[0.06] p-4">
                 <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-status-green">Active</div>
-                <div className="mt-1.5 font-mono text-2xl font-black text-slate-900 dark:text-white">{telemetry?.activeProjects?.length ?? 0}</div>
+                <div className="mt-1.5 font-mono text-xl font-semibold text-slate-900 dark:text-white">{telemetry?.activeProjects?.length ?? 0}</div>
               </div>
               <div className="rounded-2xl border border-signal-500/15 bg-signal-500/[0.06] p-4">
                 <div className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-[0.14em] text-signal-600 dark:text-signal-400"><Zap className="h-3 w-3" strokeWidth={2.4} aria-hidden="true" />Running</div>
-                <div className="mt-1.5 font-mono text-2xl font-black text-slate-900 dark:text-white">{totalRunningDispatches}</div>
+                <div className="mt-1.5 font-mono text-xl font-semibold text-slate-900 dark:text-white">{totalRunningDispatches}</div>
               </div>
               <div className="rounded-2xl border border-status-amber/15 bg-status-amber/[0.07] p-4">
                 <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-status-amber">Attention</div>
-                <div className="mt-1.5 font-mono text-2xl font-black text-slate-900 dark:text-white">{telemetry?.attentionProjects?.length ?? 0}</div>
+                <div className="mt-1.5 font-mono text-xl font-semibold text-slate-900 dark:text-white">{telemetry?.attentionProjects?.length ?? 0}</div>
               </div>
               <div className="rounded-2xl border border-black/[0.05] bg-black/[0.02] p-4 dark:border-white/[0.06] dark:bg-white/[0.02]">
                 <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Events</div>
-                <div className="mt-1.5 font-mono text-2xl font-black text-slate-900 dark:text-white">{telemetry?.recentEvents?.length ?? 0}</div>
+                <div className="mt-1.5 font-mono text-xl font-semibold text-slate-900 dark:text-white">{telemetry?.recentEvents?.length ?? 0}</div>
               </div>
             </div>
 

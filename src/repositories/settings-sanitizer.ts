@@ -8,7 +8,7 @@ import type {
   SkillToggle,
 } from "../contracts/app-types.js";
 import { readBoolean, readPort, readString } from "../shared/config/value-readers.js";
-import { sanitizeCustomMcpServers, sanitizeMcpToolToggles } from "../mcp/mcp-tool-availability.js";
+import { sanitizeCustomMcpServersWithDefaults, sanitizeMcpToolToggles } from "../mcp/mcp-tool-availability.js";
 import { sanitizeAiProvider } from "../domain/settings/settings-sanitizers/ai-provider-sanitizer.js";
 import { sanitizeGit } from "../domain/settings/settings-sanitizers/git-sanitizer.js";
 import { sanitizeJira } from "../domain/settings/settings-sanitizers/jira-sanitizer.js";
@@ -57,6 +57,19 @@ const readRuntimeLogLevel = (value: unknown, fallback: RuntimeLogLevel): Runtime
 const readConsoleLogMode = (value: unknown, fallback: ConsoleLogMode): ConsoleLogMode => (
   value === "full" ? "full" : fallback
 );
+
+const sanitizePreviewPortList = (value: unknown, primaryPort: number): number[] => {
+  const ports = [primaryPort];
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const port = readPort(item, -1);
+      if (port > 0) {
+        ports.push(port);
+      }
+    }
+  }
+  return [...new Set(ports)];
+};
 
 const sanitizeSkills = (value: unknown): SkillToggle[] => {
   if (!Array.isArray(value)) return DEFAULT_SKILLS.map((skill) => ({ ...skill }));
@@ -314,7 +327,7 @@ export const sanitizeSettings = (value: unknown, externalHints?: ExternalSetting
     ? appearanceInput.zoomLevel
     : DEFAULT_DASHBOARD_SETTINGS.appearance.zoomLevel;
   const appearance = {
-    navigationMode: appearanceInput.navigationMode === "SIDEBAR" ? "SIDEBAR" : "DOCK" as "DOCK" | "SIDEBAR",
+    navigationMode: appearanceInput.navigationMode === "DOCK" ? "DOCK" : "SIDEBAR" as "DOCK" | "SIDEBAR",
     theme: appearanceInput.theme === "LIGHT" || appearanceInput.theme === "DARK" ? appearanceInput.theme : "SYSTEM" as "LIGHT" | "DARK" | "SYSTEM",
     reducedMotion: appearanceInput.reducedMotion === "REDUCE" || appearanceInput.reducedMotion === "NONE" ? appearanceInput.reducedMotion : "AUTO" as "AUTO" | "REDUCE" | "NONE",
     backgroundMode: appearanceInput.backgroundMode === "STATIC" ? "STATIC" : "ANIMATED" as "ANIMATED" | "STATIC",
@@ -370,6 +383,10 @@ export const sanitizeSettings = (value: unknown, externalHints?: ExternalSetting
   const sprintPreviewInput = (input.sprintPreview && typeof input.sprintPreview === "object"
     ? input.sprintPreview
     : {}) as Partial<DashboardSettings["sprintPreview"]>;
+  const containerAppPort = readPort(
+    sprintPreviewInput.containerAppPort,
+    DEFAULT_DASHBOARD_SETTINGS.sprintPreview.containerAppPort,
+  );
   const sprintPreview = {
     enabled: readBoolean(
       sprintPreviewInput.enabled,
@@ -410,11 +427,8 @@ export const sanitizeSettings = (value: unknown, externalHints?: ExternalSetting
         ? Math.round(sprintPreviewInput.hostPortRangeEnd)
         : DEFAULT_DASHBOARD_SETTINGS.sprintPreview.hostPortRangeEnd
     )),
-    containerAppPort: Math.max(1, Math.min(65535,
-      typeof sprintPreviewInput.containerAppPort === "number" && Number.isFinite(sprintPreviewInput.containerAppPort)
-        ? Math.round(sprintPreviewInput.containerAppPort)
-        : DEFAULT_DASHBOARD_SETTINGS.sprintPreview.containerAppPort
-    )),
+    containerAppPort,
+    containerAppPorts: sanitizePreviewPortList(sprintPreviewInput.containerAppPorts, containerAppPort),
     startupScriptPath: (() => {
       const raw = readString(
         sprintPreviewInput.startupScriptPath,
@@ -454,7 +468,10 @@ export const sanitizeSettings = (value: unknown, externalHints?: ExternalSetting
 
   const normalizedSkills = enforceGitManagerSkillset(sanitizeSkills(input.skills), git.githubMode);
   const mcpTools = sanitizeMcpTools(input.mcpTools);
-  const customMcpServers = sanitizeCustomMcpServers(input.customMcpServers);
+  const customMcpServers = sanitizeCustomMcpServersWithDefaults(
+    input.customMcpServers,
+    DEFAULT_DASHBOARD_SETTINGS.customMcpServers,
+  );
   const memory = sanitizeMemory(input);
   const modelPricing = sanitizeModelPricing(input.modelPricing);
 

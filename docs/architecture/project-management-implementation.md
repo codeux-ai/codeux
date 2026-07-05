@@ -143,6 +143,7 @@ Current behavior:
 - The Live page now follows that selected sprint for display scope, but runtime execution still resolves from active sprint runs so the header selection does not interfere with parallel sprint execution
 - Projects page creates, lists, selects, and deletes projects
 - Sprints page creates and lists sprints for the selected project
+- Sprint creation accepts an optional title. Untitled sprints are stored with a deterministic generated placeholder such as `Untitled sprint 3` because the sqlite schema requires `sprints.name`, and sprint records expose whether that name is generated so planning can replace it safely.
 - Sprint list/status views derive their effective sprint state from the latest `sprint_run`, so paused or cancelled runs do not continue to render as running
 - Sprints page run controls now operate on project-scoped execution data and update sprint cards optimistically while the execution snapshot refreshes
 - Sprints page can import markdown bundles and export DB-backed sprint/task markdown bundles
@@ -155,6 +156,7 @@ Current behavior:
 - Chat page lists sqlite-backed conversation threads/messages for the selected project
 - Dashboard messages are queued for listeners through the same sqlite model
 - planning flows include interactive, background-safe, and dismissible planning overlays with cancellation support
+- Planning agent output may include a concise top-level sprint `title` only for sprints whose current title is unset/generated. Replanning and imported-issue planning preserve custom user-provided sprint titles.
 - quicksprint execution flows are now mutually exclusive with composer create/edit states to maintain focus
 - quicksprint built-ins are now grouped by purpose in the dashboard, with `Fullstack JS App` as the initial default template set
 - the sprint ledger uses a refreshed glass ledger row treatment with explicit filter controls for status, showcase, and QA alongside real-time client-side search

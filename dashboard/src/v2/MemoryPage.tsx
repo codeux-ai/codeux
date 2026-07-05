@@ -268,6 +268,7 @@ export const MemoryPage: FunctionComponent = () => {
 
     const {
         loading,
+        loadError,
         records,
         memoryCount,
         setMemoryCount,
@@ -313,6 +314,13 @@ export const MemoryPage: FunctionComponent = () => {
         };
     }, [lobotomize]);
     const inspectorOpen = activeMemoryIdSignal.value !== null;
+    const activeMemory = activeMemoryIdSignal.value
+        ? S.current.graph.nodes.find((node) => node.id === activeMemoryIdSignal.value && node.alive)
+        : null;
+    const activeMemoryCategory = activeMemory ? (CAT[activeMemory.category] || CAT.context).label : null;
+    const selectionStatus = activeMemory
+        ? `Selected ${activeMemoryCategory} memory: ${activeMemory.content}`
+        : "No memory selected";
 
     /* ── Fetch agent presets on project change ─────────────── */
     useEffect(() => {
@@ -865,21 +873,27 @@ export const MemoryPage: FunctionComponent = () => {
             await downloadEmbeddingModel(modelId);
             const updated = await listEmbeddingModels();
             setModels(updated);
-        } catch { /* ignore */ }
+        } catch (error) {
+            throw error;
+        }
     }, []);
     const handleSelectModel = useCallback(async (modelId: string) => {
         try {
             await selectEmbeddingModel(modelId);
             const updated = await listEmbeddingModels();
             setModels(updated);
-        } catch { /* ignore */ }
+        } catch (error) {
+            throw error;
+        }
     }, []);
     const handleDeleteModel = useCallback(async (modelId: string) => {
         try {
             await deleteEmbeddingModel(modelId);
             const updated = await listEmbeddingModels();
             setModels(updated);
-        } catch { /* ignore */ }
+        } catch (error) {
+            throw error;
+        }
     }, []);
     const handleReembed = useCallback(async () => {
         if (!pid) return;
@@ -892,7 +906,9 @@ export const MemoryPage: FunctionComponent = () => {
             if (!progress.active) {
                 loadData();
             }
-        } catch { /* ignore */ }
+        } catch (error) {
+            throw error;
+        }
     }, [pid, loadData]);
     const handleSelectModelWithStats = useCallback(async (modelId: string) => {
         try {
@@ -903,7 +919,9 @@ export const MemoryPage: FunctionComponent = () => {
             ]);
             setModels(updated);
             setStats(updatedStats);
-        } catch { /* ignore */ }
+        } catch (error) {
+            throw error;
+        }
     }, [pid, stats]);
 
         const onSelectNode = useCallback((idx: number) => {
@@ -971,7 +989,7 @@ export const MemoryPage: FunctionComponent = () => {
                     <AlertTriangle className="w-4 h-4 shrink-0" strokeWidth={2.5} />
                     <p className="text-xs font-bold">
                         <span className="uppercase tracking-[0.14em]">Warning — Lobotomize mode active.</span>
-                        {" "}Single-click a graph node to delete it immediately. Inspector and sidebar delete buttons also skip confirmation.
+                        {" "}Single-click a graph node to delete it immediately. Inspector deletion is immediate; sidebar cards must be armed before deleting.
                     </p>
                 </div>
             )}
@@ -1008,6 +1026,30 @@ export const MemoryPage: FunctionComponent = () => {
                     ))}
                     </div>
 
+                    <div
+                        className={`absolute z-20 max-w-[min(100%-2rem,26rem)] rounded-xl border px-3 py-2 text-xs font-semibold shadow-[0_8px_24px_rgba(15,23,42,0.08)] backdrop-blur-2xl ${
+                            activeMemory
+                                ? "border-signal-500/25 bg-signal-500/[0.12] text-signal-700 dark:text-signal-300"
+                                : "border-black/[0.06] bg-white/75 text-slate-500 dark:border-white/[0.06] dark:bg-void-800/75 dark:text-slate-300"
+                        } ${
+                            inspectorOpen
+                                ? "left-4 top-16 lg:left-5 lg:top-5"
+                                : "left-5 top-5"
+                        }`}
+                        role="status"
+                        aria-live="polite"
+                        aria-atomic="true"
+                    >
+                        <span className="block text-[9px] font-bold uppercase tracking-[0.14em] opacity-70">
+                            Selection
+                        </span>
+                        <span className="mt-0.5 line-clamp-2 break-words">
+                            {activeMemory
+                                ? `${activeMemoryCategory}: ${activeMemory.content}`
+                                : "No memory selected"}
+                        </span>
+                    </div>
+
                     {/* Legend */}
                     <div
                         className={`absolute z-20 flex max-w-[min(100%-2rem,48rem)] flex-wrap gap-x-4 gap-y-1.5 ${
@@ -1038,13 +1080,14 @@ export const MemoryPage: FunctionComponent = () => {
                     <span className="text-[9px] font-mono text-slate-300 dark:text-slate-600">
                         {memoryCount} nodes
                     </span>
+                    <span className="sr-only">{selectionStatus}</span>
                     </div>
 
                 {/* Empty state */}
                 {!loading && memoryCount === 0 && (
                     <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 pointer-events-none z-20">
                         <Brain className="w-12 h-12 text-signal-500/20" strokeWidth={1.5} />
-                        <p className="text-lg font-black font-display tracking-tight text-slate-400/60">
+                        <p className="text-base font-semibold font-display tracking-tight text-slate-400/60">
                             No memories yet
                         </p>
                         <p className="text-xs font-mono text-slate-400/50">
@@ -1054,8 +1097,16 @@ export const MemoryPage: FunctionComponent = () => {
                 )}
 
                 {loading && (
-                    <div className="absolute inset-0 flex items-center justify-center z-20 pointer-events-none">
-                        <Loader2 className="w-8 h-8 text-signal-500/40 animate-spin" strokeWidth={1.5} />
+                    <div
+                        className="absolute inset-0 z-20 flex items-center justify-center pointer-events-none"
+                        role="status"
+                        aria-live="polite"
+                        aria-atomic="true"
+                    >
+                        <div className="flex items-center gap-3 rounded-xl border border-signal-500/15 bg-white/75 px-4 py-3 text-xs font-bold text-signal-700 shadow-[0_10px_28px_rgba(15,23,42,0.08)] backdrop-blur-2xl dark:bg-void-800/75 dark:text-signal-300">
+                            <Loader2 className="w-4 h-4 text-signal-500/70 motion-safe:animate-spin" strokeWidth={1.8} aria-hidden="true" />
+                            <span>{memoryCount > 0 ? "Refreshing memory map. Current memories remain visible." : "Loading memory map..."}</span>
+                        </div>
                     </div>
                 )}
 
@@ -1072,6 +1123,10 @@ export const MemoryPage: FunctionComponent = () => {
                 <MemorySidebar
                     nodes={S.current.graph.nodes}
                     onSelectNode={onSelectNode}
+                    refreshing={loading}
+                    loadError={loadError}
+                    onRetry={loadData}
+                    onAddMemory={() => setShowAddModal(true)}
                 />
             </div>
 

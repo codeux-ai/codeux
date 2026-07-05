@@ -6,6 +6,7 @@ import gsap from "gsap";
 import { calculatePosition, Position, Alignment } from "../../lib/positioning/index.js";
 import { useGsapInteractionTokens } from "../../lib/motion/constants.js";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
+import { restoreFocusSafely } from "../../hooks/use-focus-trap.js";
 
 interface DropdownMenuProps {
   children: ComponentChildren;
@@ -36,9 +37,32 @@ interface DropdownMenuProps {
   menuAriaLabel?: string;
 }
 
-export const DropdownMenuItem = ({ children, className = "", ...props }: JSX.HTMLAttributes<HTMLButtonElement> & { children?: ComponentChildren }) => {
+type DropdownMenuItemProps = JSX.HTMLAttributes<HTMLButtonElement> & {
+  children?: ComponentChildren;
+  disabled?: boolean;
+};
+
+export const DropdownMenuItem = ({ children, className = "", onClick, ...props }: DropdownMenuItemProps) => {
+  const isAriaDisabled = props["aria-disabled"] === true || props["aria-disabled"] === "true";
+  const isDisabled = !!props.disabled || isAriaDisabled;
+
   return (
-    <button role="menuitem" data-dropdown-item="true" className={className} {...props}>
+    <button
+      role="menuitem"
+      data-dropdown-item="true"
+      className={className}
+      {...props}
+      disabled={props.disabled}
+      aria-disabled={isDisabled}
+      onClick={(event) => {
+        if (isDisabled) {
+          event.preventDefault();
+          event.stopPropagation();
+          return;
+        }
+        onClick?.(event);
+      }}
+    >
       {children}
     </button>
   );
@@ -55,6 +79,11 @@ function assignRef<T>(ref: unknown, value: T | null): void {
 
 function focusMenuItem(item: HTMLElement | undefined): void {
   item?.focus({ preventScroll: true });
+}
+
+function getEnabledMenuItems(menu: HTMLElement | null): HTMLElement[] {
+  if (!menu) return [];
+  return Array.from(menu.querySelectorAll<HTMLElement>('[role="menuitem"]:not([disabled]):not([aria-disabled="true"]):not([hidden]):not([aria-hidden="true"])'));
 }
 
 export const DropdownMenu = ({
@@ -110,6 +139,11 @@ export const DropdownMenu = ({
 
   const enhancedContent = enhanceContent(content);
 
+  const restoreFocus = useCallback(() => {
+    restoreFocusSafely(previousFocusRef.current, triggerRef.current);
+    previousFocusRef.current = null;
+  }, [triggerRef]);
+
   const updatePosition = useCallback(() => {
     if (!triggerRef.current || !menuRef.current) return;
 
@@ -147,22 +181,10 @@ export const DropdownMenu = ({
     if (isOpen) {
       setIsRendered(true);
       previousFocusRef.current = document.activeElement as HTMLElement | null;
-    } else if (isRendered) { // Only restore if it was previously open
-      // Restore focus on close
-      if (
-        !document.activeElement ||
-        document.activeElement === document.body ||
-        (menuRef.current && menuRef.current.contains(document.activeElement))
-      ) {
-        if (previousFocusRef.current?.isConnected) {
-          previousFocusRef.current.focus({ preventScroll: true });
-          previousFocusRef.current = null;
-        } else if (triggerRef.current?.isConnected) {
-          triggerRef.current.focus({ preventScroll: true });
-        }
-      }
+    } else if (isRendered) {
+      restoreFocus();
     }
-  }, [isOpen]);
+  }, [isOpen, isRendered, restoreFocus]);
 
   useLayoutEffect(() => {
     if (isOpen && isRendered) updatePosition();
@@ -188,7 +210,7 @@ export const DropdownMenu = ({
 
 
     if (isOpen) {
-      const itemCount = menuRef.current?.querySelectorAll('[data-dropdown-item]').length || 0;
+      const itemCount = getEnabledMenuItems(menuRef.current).length;
 
       gsap.fromTo(
         menuRef.current,
@@ -201,14 +223,14 @@ export const DropdownMenu = ({
           opacity: 1,
           scale: 1,
           y: 0,
-          duration: isReducedMotion ? 0 : gsapTokens.enterExit.duration,
+          duration: gsapTokens.enterExit.duration,
           ease: gsapTokens.enterExit.ease,
         }
       );
 
       if (!isReducedMotion && itemCount > 0) {
         gsap.fromTo(
-          menuRef.current?.querySelectorAll('[data-dropdown-item]') || [],
+          getEnabledMenuItems(menuRef.current),
           { opacity: 0, y: 4 },
           {
             opacity: 1,
@@ -222,7 +244,7 @@ export const DropdownMenu = ({
       }
 
       requestAnimationFrame(() => {
-        const items = Array.from(menuRef.current?.querySelectorAll<HTMLElement>('[role="menuitem"]:not([disabled]):not([aria-disabled="true"])') || []);
+        const items = getEnabledMenuItems(menuRef.current);
         if (items.length > 0) {
           if (lastInteractionType.current === 'ArrowUp') {
             items[items.length - 1]?.focus({ preventScroll: true });
@@ -237,12 +259,12 @@ export const DropdownMenu = ({
         opacity: 0,
         scale: 0.95,
         y: position === "bottom" ? -5 : position === "top" ? 5 : 0,
-        duration: isReducedMotion ? 0 : gsapTokens.enterExit.duration,
+        duration: gsapTokens.enterExit.duration,
         ease: gsapTokens.enterExit.ease,
         onComplete: () => setIsRendered(false),
       });
     }
-  }, [isOpen, isRendered, position, isReducedMotion]);
+  }, [isOpen, isRendered, position, isReducedMotion, gsapTokens.enterExit.duration, gsapTokens.enterExit.ease, gsapTokens.listReveal.duration, gsapTokens.listReveal.ease]);
 
   useEffect(() => {
     const handleOutsideClick = (e: MouseEvent) => {
@@ -250,8 +272,7 @@ export const DropdownMenu = ({
         isOpen &&
         menuRef.current &&
         !menuRef.current.contains(e.target as Node) &&
-        triggerRef.current &&
-        !triggerRef.current.contains(e.target as Node)
+        (!triggerRef.current || !triggerRef.current.contains(e.target as Node))
       ) {
         onOpenChange(false);
       }
@@ -261,13 +282,15 @@ export const DropdownMenu = ({
       if (!isOpen) return;
 
       if (e.key === "Escape") {
+        e.preventDefault();
+        e.stopPropagation();
         onOpenChange(false);
         return;
       }
 
       if (!menuRef.current) return;
 
-      const items = Array.from(menuRef.current.querySelectorAll<HTMLElement>('[role="menuitem"]:not([disabled]):not([aria-disabled="true"])')) as HTMLElement[];
+      const items = getEnabledMenuItems(menuRef.current);
       if (items.length === 0) return;
 
       const currentIndex = items.findIndex((item) => item === document.activeElement);
@@ -323,18 +346,23 @@ export const DropdownMenu = ({
         onClick: (e: MouseEvent) => {
           lastInteractionType.current = 'click';
           e.stopPropagation();
-          if (!(children.props as any).disabled) {
-            onOpenChange(!isOpen);
+          const isTriggerDisabled = !!(children.props as any).disabled || (children.props as any)["aria-disabled"] === true || (children.props as any)["aria-disabled"] === "true";
+          if (isTriggerDisabled) {
+            e.preventDefault();
+            return;
           }
+          onOpenChange(!isOpen);
           if ((children.props as any).onClick) (children.props as any).onClick(e);
         },
         onKeyDown: (e: KeyboardEvent) => {
           if (e.key === 'ArrowUp' || e.key === 'ArrowDown' || e.key === 'Enter' || e.key === ' ') {
             lastInteractionType.current = e.key;
             e.preventDefault();
-            if (!(children.props as any).disabled) {
-              onOpenChange(e.key === 'Enter' || e.key === ' ' ? !isOpen : true);
+            const isTriggerDisabled = !!(children.props as any).disabled || (children.props as any)["aria-disabled"] === true || (children.props as any)["aria-disabled"] === "true";
+            if (isTriggerDisabled) {
+              return;
             }
+            onOpenChange(e.key === 'Enter' || e.key === ' ' ? !isOpen : true);
           }
           if ((children.props as any).onKeyDown) (children.props as any).onKeyDown(e);
         },

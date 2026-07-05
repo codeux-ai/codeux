@@ -1,12 +1,12 @@
 import type { FunctionComponent } from "preact";
-import { useEffect, useRef, useState, useLayoutEffect } from "preact/hooks";
+import { useEffect, useMemo, useRef, useState, useLayoutEffect } from "preact/hooks";
 import gsap from "gsap";
 import { Search, X, Layers, Activity, Cpu, Box, Inbox, Loader2, FileX, ArrowDownUp, CornerDownLeft, Sparkles } from "lucide-preact";
 import { useNavigate, Link } from "@tanstack/react-router";
 import { SearchResultRow } from "./SearchResultRow";
-import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 import { useFocusTrap } from "../../hooks/use-focus-trap.js";
-import { MODAL_MOTION } from "../../lib/motion/modal-motion.js";
+import { useGsapInteractionTokens } from "../../lib/motion/constants.js";
+import { useInteractionTokens } from "../../lib/motion/tokens.js";
 import type { AgentAvatarConfig } from "../../types.js";
 
 
@@ -52,6 +52,48 @@ type CategorizedSearchItem =
     | (AgentSearchItem & { category: "agents" })
     | (ContainerSearchItem & { category: "containers" });
 
+const inactiveResultStatuses = new Set(["unavailable", "disabled"]);
+const searchResultViewportPadding = 8;
+
+function isResultInactive(item: SearchItem): boolean {
+    return Boolean(item.status && inactiveResultStatuses.has(item.status));
+}
+
+function findNextActiveIndex(items: CategorizedSearchItem[], startIndex: number, direction: 1 | -1): number {
+    if (items.length === 0) return -1;
+
+    let index = startIndex;
+    for (let checked = 0; checked < items.length; checked += 1) {
+        if (index < 0) index = items.length - 1;
+        if (index >= items.length) index = 0;
+        if (!isResultInactive(items[index])) return index;
+        index += direction;
+    }
+
+    return 0;
+}
+
+function getNextKeyboardIndex(items: CategorizedSearchItem[], currentIndex: number, direction: 1 | -1): number {
+    if (items.length === 0) return -1;
+    const startIndex = direction === 1
+        ? currentIndex < items.length - 1 ? currentIndex + 1 : 0
+        : currentIndex > 0 ? currentIndex - 1 : items.length - 1;
+    return findNextActiveIndex(items, startIndex, direction);
+}
+
+function scrollResultIntoContainerView(container: HTMLElement, row: HTMLElement): void {
+    const containerRect = container.getBoundingClientRect();
+    const rowRect = row.getBoundingClientRect();
+    const bottomOverflow = rowRect.bottom - containerRect.bottom + searchResultViewportPadding;
+    const topOverflow = containerRect.top - rowRect.top + searchResultViewportPadding;
+
+    if (bottomOverflow > 0) {
+        container.scrollTop += bottomOverflow;
+    } else if (topOverflow > 0) {
+        container.scrollTop -= topOverflow;
+    }
+}
+
 export interface SearchResults {
     sprints: SprintSearchItem[];
     tasks: TaskSearchItem[];
@@ -73,16 +115,26 @@ interface SearchOverlayProps {
 export const SearchOverlay: FunctionComponent<SearchOverlayProps> = ({ anchorRef, isOpen, onClose, searchQuery, onSearchChange, results, isLoading, hasProjectData = true }) => {
     const overlayRef = useRef<HTMLDivElement>(null);
     const inputRef = useRef<HTMLInputElement>(null);
-    const triggerElementRef = useRef<HTMLElement | null>(null);
+    const resultsRegionRef = useRef<HTMLDivElement>(null);
     const containerRef = useFocusTrap(isOpen, {
         onClose,
         initialFocusRef: inputRef,
         restoreFocus: true
     }) as preact.RefObject<HTMLDivElement>;
     const [focusedIndex, setFocusedIndex] = useState(-1);
-            const navigate = useNavigate();
+    const navigate = useNavigate();
+    const gsapTokens = useGsapInteractionTokens();
+    const interactionTokens = useInteractionTokens();
+    const enterExitDuration = gsapTokens.enterExit.duration;
+    const enterExitEase = gsapTokens.enterExit.ease;
+    const controlFeedbackDuration = gsapTokens.controlFeedback.duration;
+    const controlFeedbackEase = gsapTokens.controlFeedback.ease;
+    const listRevealDuration = gsapTokens.listReveal.duration;
+    const listRevealEase = gsapTokens.listReveal.ease;
 
     const handleSelect = (selectedItem: CategorizedSearchItem) => {
+        if (isResultInactive(selectedItem)) return;
+
         if (selectedItem) {
             if (selectedItem.category === 'sprints') {
                 navigate({ to: '/sprints', search: { sprintId: selectedItem.routeSprintId, sprintKey: selectedItem.sprintKey } as any });
@@ -101,8 +153,24 @@ export const SearchOverlay: FunctionComponent<SearchOverlayProps> = ({ anchorRef
         { id: 'containers', title: 'Preview Containers', icon: Box, items: results?.containers || [] }
     ];
 
-    const allItems: CategorizedSearchItem[] = CATEGORIES.flatMap(c => c.items?.map(item => ({ ...item, category: c.id } as CategorizedSearchItem)));
-    const reducedMotion = useReducedMotion();
+    const allItems: CategorizedSearchItem[] = useMemo(
+        () => CATEGORIES.flatMap(c => c.items?.map(item => ({ ...item, category: c.id } as CategorizedSearchItem))),
+        [results?.sprints, results?.tasks, results?.agents, results?.containers]
+    );
+    const activeItem = focusedIndex >= 0 ? allItems[focusedIndex] : undefined;
+    const activeDescendantId = activeItem ? `search-result-${activeItem.id}` : undefined;
+    const hasResults = allItems.length > 0;
+    const hasStaleResults = Boolean(isLoading && hasResults);
+    const resultsDescriptionId = hasStaleResults ? "search-results-refreshing-note" : "search-status-message";
+    const statusMessage = searchQuery.length === 0
+        ? ''
+        : isLoading
+            ? hasResults
+                ? `Updating results for '${searchQuery}'. ${allItems.length} current results remain available.`
+                : 'Searching workspace'
+            : allItems.length === 0
+                ? (!hasProjectData ? `Project data unavailable for '${searchQuery}'` : `No results found for '${searchQuery}'`)
+                : `${allItems.length} results available`;
 
     const [modalStyle, setModalStyle] = useState({});
     const [isMobileFallback, setIsMobileFallback] = useState(false);
@@ -162,28 +230,25 @@ export const SearchOverlay: FunctionComponent<SearchOverlayProps> = ({ anchorRef
         gsap.killTweensOf(containerRef.current);
 
         if (isOpen) {
-            if (!triggerElementRef.current) {
-                triggerElementRef.current = document.activeElement as HTMLElement;
-            }
             gsap.set(overlayRef.current, { display: 'flex' });
 
             const tl = gsap.timeline();
 
             tl.fromTo(overlayRef.current,
                 { opacity: 0 },
-                { opacity: 1, duration: reducedMotion ? 0 : MODAL_MOTION.overlay.entry, ease: MODAL_MOTION.overlay.entryEase }
+                { opacity: 1, duration: enterExitDuration, ease: enterExitEase }
             );
 
             tl.fromTo(containerRef.current,
-                { y: reducedMotion ? 0 : -20, opacity: 0 },
+                { y: listRevealDuration === 0 ? 0 : -20, opacity: 0 },
                 {
                     y: 0,
                     opacity: 1,
-                    duration: reducedMotion ? 0 : MODAL_MOTION.overlay.cardEntry,
-                    ease: MODAL_MOTION.overlay.cardEntryEase,
+                    duration: listRevealDuration,
+                    ease: listRevealEase,
                     onComplete: () => inputRef.current?.focus()
                 },
-                reducedMotion ? 0 : "-=0.2"
+                controlFeedbackDuration === 0 ? 0 : `-=${controlFeedbackDuration}`
             );
         } else {
             const tl = gsap.timeline({
@@ -191,42 +256,60 @@ export const SearchOverlay: FunctionComponent<SearchOverlayProps> = ({ anchorRef
                     if (overlayRef.current) {
                         gsap.set(overlayRef.current, { display: 'none' });
                     }
-                    triggerElementRef.current = null;
                 }
             });
 
             if (containerRef.current) {
-                tl.to(containerRef.current, { y: reducedMotion ? 0 : -20, opacity: 0, duration: reducedMotion ? 0 : MODAL_MOTION.overlay.exit, ease: MODAL_MOTION.overlay.exitEase });
+                tl.to(containerRef.current, {
+                    y: enterExitDuration === 0 ? 0 : -20,
+                    opacity: 0,
+                    duration: enterExitDuration,
+                    ease: enterExitEase
+                });
             }
-            tl.to(overlayRef.current, { opacity: 0, duration: reducedMotion ? 0 : MODAL_MOTION.overlay.exit, ease: MODAL_MOTION.overlay.exitEase }, reducedMotion ? 0 : "-=0.1");
+            tl.to(overlayRef.current, {
+                opacity: 0,
+                duration: controlFeedbackDuration,
+                ease: controlFeedbackEase
+            }, controlFeedbackDuration === 0 ? 0 : `-=${controlFeedbackDuration}`);
 
             setFocusedIndex(-1);
         }
-    }, [isOpen, reducedMotion]);
+    }, [isOpen, enterExitDuration, enterExitEase, controlFeedbackDuration, controlFeedbackEase, listRevealDuration, listRevealEase]);
+
+    useEffect(() => {
+        setFocusedIndex(prev => {
+            if (allItems.length === 0) return -1;
+            if (prev >= allItems.length) return findNextActiveIndex(allItems, allItems.length - 1, -1);
+            if (prev >= 0 && isResultInactive(allItems[prev])) return findNextActiveIndex(allItems, prev + 1, 1);
+            return prev;
+        });
+    }, [allItems]);
 
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
             if (!isOpen) return;
+            const itemCount = allItems.length;
 
             if (e.key === 'Escape') {
                 e.preventDefault();
                 onClose();
             } else if (e.key === 'Home') {
                 e.preventDefault();
-                setFocusedIndex(0);
+                setFocusedIndex(findNextActiveIndex(allItems, 0, 1));
             } else if (e.key === 'End') {
                 e.preventDefault();
-                setFocusedIndex((allItems?.length || 0) - 1);
+                setFocusedIndex(findNextActiveIndex(allItems, itemCount - 1, -1));
             } else if (e.key === 'ArrowDown') {
                 e.preventDefault();
-                setFocusedIndex(prev => (prev < (allItems?.length || 0) - 1 ? prev + 1 : 0));
+                setFocusedIndex(prev => getNextKeyboardIndex(allItems, prev, 1));
             } else if (e.key === 'ArrowUp') {
                 e.preventDefault();
-                setFocusedIndex(prev => (prev > 0 ? prev - 1 : (allItems?.length || 0) - 1));
+                setFocusedIndex(prev => getNextKeyboardIndex(allItems, prev, -1));
             } else if (e.key === 'Enter' && focusedIndex >= 0) {
                 e.preventDefault();
                 const selectedItem = allItems[focusedIndex];
-                if (selectedItem) {
+                if (selectedItem && !isResultInactive(selectedItem)) {
                     handleSelect(selectedItem);
                 }
             }
@@ -234,27 +317,16 @@ export const SearchOverlay: FunctionComponent<SearchOverlayProps> = ({ anchorRef
 
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [isOpen, focusedIndex, allItems?.length || 0, onClose]);
+    }, [isOpen, focusedIndex, allItems, onClose]);
 
-    // Track active item ref to ensure it's in view
     const activeItemRef = useRef<HTMLAnchorElement>(null);
     useEffect(() => {
-        if (activeItemRef.current && typeof activeItemRef.current.closest === 'function') {
-            const el = activeItemRef.current;
-            const container = el.closest('.overflow-y-auto') as HTMLElement;
-            if (container) {
-                const containerRect = container.getBoundingClientRect();
-                const elRect = el.getBoundingClientRect();
-                if (elRect.bottom > containerRect.bottom) {
-                    container.scrollTop += (elRect.bottom - containerRect.bottom);
-                } else if (elRect.top < containerRect.top) {
-                    container.scrollTop -= (containerRect.top - elRect.top);
-                }
-            } else if (typeof el.scrollIntoView === 'function') {
-                el.scrollIntoView({ block: 'nearest' });
-            }
+        const el = (activeDescendantId ? document.getElementById(activeDescendantId) as HTMLAnchorElement | null : null) ?? activeItemRef.current;
+        const container = resultsRegionRef.current;
+        if (el && container && typeof el.getBoundingClientRect === 'function') {
+            scrollResultIntoContainerView(container, el);
         }
-    }, [focusedIndex]);
+    }, [focusedIndex, activeDescendantId]);
 
 
     let globalItemIndex = 0;
@@ -295,7 +367,8 @@ export const SearchOverlay: FunctionComponent<SearchOverlayProps> = ({ anchorRef
                             aria-autocomplete="list"
                             aria-expanded={isOpen}
                             aria-controls="search-results-list"
-                            aria-activedescendant={!isLoading && focusedIndex >= 0 ? `search-result-${allItems[focusedIndex]?.id}` : undefined}
+                            aria-activedescendant={activeDescendantId}
+                            aria-busy={isLoading ? "true" : undefined}
                             aria-label="Global search"
                             placeholder="Find sprints, tasks, agents, previews..."
                             value={searchQuery}
@@ -303,22 +376,29 @@ export const SearchOverlay: FunctionComponent<SearchOverlayProps> = ({ anchorRef
                             className="w-full min-w-0 border-none bg-transparent text-base font-semibold text-slate-900 outline-none placeholder:font-medium placeholder:text-slate-400 dark:text-white dark:placeholder:text-slate-500 sm:text-lg"
                         />
                     </div>
-                    {isLoading && <Loader2 className="mr-1 h-5 w-5 shrink-0 animate-spin text-slate-400" aria-label="Searching" />}
+                    {isLoading && <Loader2 className="mr-1 h-5 w-5 shrink-0 animate-spin text-slate-400 motion-reduce:animate-none" aria-label={hasStaleResults ? "Updating search results" : "Searching"} />}
                     <button
                         onClick={onClose}
                         aria-label="Close search"
+                        style={{ transitionDuration: interactionTokens.controlFeedback.duration, transitionTimingFunction: interactionTokens.controlFeedback.ease }}
                         className="ml-0 flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-xl text-slate-400 transition-colors hover:bg-black/[0.05] hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 dark:hover:bg-white/[0.06] dark:hover:text-slate-100"
                     >
                         <X className="h-[18px] w-[18px]" aria-hidden="true" />
                     </button>
                 </div>
 
-                <div className="sr-only" role="status" aria-live="polite">
-                    {searchQuery.length === 0 ? '' : isLoading ? 'Searching...' : allItems.length === 0 ? (!hasProjectData ? `Project data unavailable for '${searchQuery}'` : `No results found for '${searchQuery}'`) : `${allItems.length} results available`}
+                <div id="search-status-message" className="sr-only" role="status" aria-live="polite" aria-atomic="true">
+                    {statusMessage}
                 </div>
 
                 {/* Results Area */}
-                <div className="dashboard-scrollbar min-h-0 flex-1 overflow-y-auto p-3 sm:p-4">
+                <div
+                    ref={resultsRegionRef}
+                    className="dashboard-scrollbar min-h-0 flex-1 overflow-y-auto p-3 transition-[background-color,filter] sm:p-4"
+                    aria-busy={isLoading ? "true" : undefined}
+                    aria-describedby={searchQuery.length > 0 ? resultsDescriptionId : undefined}
+                    style={{ transitionDuration: interactionTokens.controlFeedback.duration, transitionTimingFunction: interactionTokens.controlFeedback.ease }}
+                >
                     {searchQuery.length === 0 ? (
                         <div className="flex flex-col gap-4">
                             <div className="rounded-[1.25rem] border border-black/[0.06] bg-black/[0.025] p-4 dark:border-white/[0.06] dark:bg-white/[0.035]">
@@ -359,7 +439,7 @@ export const SearchOverlay: FunctionComponent<SearchOverlayProps> = ({ anchorRef
                         </div>
                     ) : isLoading && allItems.length === 0 ? (
                         <div className="flex min-h-52 flex-col items-center justify-center rounded-[1.25rem] border border-black/[0.06] bg-black/[0.025] px-6 py-12 text-center text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.035] dark:text-slate-400" aria-live="polite" role="status">
-                            <Loader2 className="mb-4 h-8 w-8 animate-spin text-slate-400" aria-hidden="true" />
+                            <Loader2 className="mb-4 h-8 w-8 animate-spin text-slate-400 motion-reduce:animate-none" aria-hidden="true" />
                             <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">Searching workspace</span>
                             <span className="mt-1 max-w-sm text-xs leading-5 text-slate-500 dark:text-slate-400">Checking sprints, tasks, agents, and preview containers.</span>
                         </div>
@@ -378,7 +458,27 @@ export const SearchOverlay: FunctionComponent<SearchOverlayProps> = ({ anchorRef
                             </div>
                         )
                     ) : (
-                        <div id="search-results-list" role="listbox" className={`grid grid-cols-1 gap-3 transition-opacity duration-200 lg:grid-cols-2 ${isLoading ? 'opacity-55 pointer-events-none' : ''}`}>
+                        <div
+                            id="search-results-list"
+                            role="listbox"
+                            aria-busy={isLoading ? "true" : undefined}
+                            aria-describedby={hasStaleResults ? "search-results-refreshing-note" : undefined}
+                            aria-label="Search results"
+                            style={{
+                                transitionDuration: hasStaleResults ? interactionTokens.controlFeedback.duration : interactionTokens.listReveal.duration,
+                                transitionTimingFunction: hasStaleResults ? interactionTokens.controlFeedback.ease : interactionTokens.listReveal.ease
+                            }}
+                            className={`relative grid grid-cols-1 gap-3 transition-[filter,opacity] lg:grid-cols-2 ${hasStaleResults ? 'opacity-[0.78] saturate-[0.82]' : ''}`}
+                        >
+                            {hasStaleResults && (
+                                <div
+                                    id="search-results-refreshing-note"
+                                    className="pointer-events-none absolute right-1 top-1 z-10 inline-flex items-center gap-1.5 rounded-full border border-signal-500/20 bg-white/88 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.12em] text-signal-700 shadow-sm backdrop-blur-xl dark:bg-void-800/88 dark:text-signal-400"
+                                >
+                                    <Loader2 className="h-3 w-3 animate-spin motion-reduce:animate-none" aria-hidden="true" />
+                                    Updating visible results
+                                </div>
+                            )}
                             {CATEGORIES.map((category) => {
                                 if (category.items?.length === 0) return null;
                                 return (
@@ -407,7 +507,9 @@ export const SearchOverlay: FunctionComponent<SearchOverlayProps> = ({ anchorRef
                                                         searchQuery={searchQuery}
                                                         globalItemIndex={currentIndex}
                                                         isFocused={isFocused}
-                                                        onFocus={() => setFocusedIndex(currentIndex)}
+                                                        onFocus={() => {
+                                                            if (!isResultInactive(item)) setFocusedIndex(currentIndex);
+                                                        }}
                                                         activeItemRef={isFocused ? activeItemRef : null}
                                                         onClick={() => handleSelect({ ...item, category: category.id } as CategorizedSearchItem)}
                                                     />

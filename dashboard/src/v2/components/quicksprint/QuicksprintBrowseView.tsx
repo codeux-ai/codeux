@@ -72,6 +72,7 @@ type TemplateRailProps = {
   onSelectTemplate: (template: QuicksprintTemplateRecord) => void;
   onEditTemplate?: (template: QuicksprintTemplateRecord) => void;
   onDeleteTemplate?: (template: QuicksprintTemplateRecord) => void;
+  selectedTemplateId?: string | null;
 };
 
 const TemplateRail: FunctionComponent<TemplateRailProps> = ({
@@ -81,6 +82,7 @@ const TemplateRail: FunctionComponent<TemplateRailProps> = ({
   onSelectTemplate,
   onEditTemplate,
   onDeleteTemplate,
+  selectedTemplateId = null,
 }) => {
   const scrollRef = useRef<HTMLDivElement>(null);
   const hasPotentialOverflow = templates.length > RAIL_ROWS;
@@ -235,6 +237,7 @@ const TemplateRail: FunctionComponent<TemplateRailProps> = ({
             onSelect={() => onSelectTemplate(template)}
             onEdit={onEditTemplate ? () => onEditTemplate(template) : undefined}
             onDelete={onDeleteTemplate ? () => onDeleteTemplate(template) : undefined}
+            selected={template.id === selectedTemplateId}
           />
         ))}
       </div>
@@ -247,25 +250,39 @@ export const QuicksprintBrowseView: FunctionComponent<{
   builtinPurposeOptions: BuiltinPurposeOption[];
   selectedBuiltinPurpose: string;
   setSelectedBuiltinPurpose: (purpose: string) => void;
+  announcePhaseStatus?: (message: string) => void;
+  phaseStatus?: string;
   handleSelectTemplate: (t: QuicksprintTemplateRecord) => void;
   openEditor: (t: QuicksprintTemplateRecord | null) => void;
   handleDeleteTemplate?: (t: QuicksprintTemplateRecord) => void;
   activeBuiltinPurpose: BuiltinPurposeOption | null;
   loading: boolean;
   onClose: () => void;
+  selectedTemplateId?: string | null;
 }> = ({
   templates,
   builtinPurposeOptions,
   selectedBuiltinPurpose,
   setSelectedBuiltinPurpose,
+  announcePhaseStatus,
+  phaseStatus = "Choose a quicksprint template.",
   handleSelectTemplate,
   activeBuiltinPurpose,
   loading,
   openEditor,
   handleDeleteTemplate,
   onClose,
+  selectedTemplateId = null,
 }) => {
   const hasTemplates = templates.length > 0;
+  const headingRef = useRef<HTMLHeadingElement>(null);
+
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => {
+      headingRef.current?.focus({ preventScroll: true });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, []);
 
   return (
     <div className="p-6 sm:p-8 lg:p-10">
@@ -277,11 +294,18 @@ export const QuicksprintBrowseView: FunctionComponent<{
             Quicksprint
           </div>
           <div className="space-y-3">
-            <h2 className="font-display text-[2rem] font-black leading-none tracking-tight text-slate-900 dark:text-white sm:text-[2.35rem]">
+            <h2
+              ref={headingRef}
+              tabIndex={-1}
+              className="font-display text-2xl font-semibold leading-none tracking-tight text-slate-900 outline-none dark:text-white sm:text-3xl"
+            >
               Launch A Quicksprint.
             </h2>
             <p className="max-w-2xl text-sm leading-relaxed text-slate-500 dark:text-slate-400 sm:text-[15px]">
               Browse default and custom templates together to spin up a focused sprint fast.
+            </p>
+            <p className="max-w-2xl rounded-[1.1rem] border border-black/[0.06] bg-black/[0.025] px-4 py-3 text-xs font-semibold leading-relaxed text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-400">
+              {phaseStatus}
             </p>
           </div>
         </div>
@@ -318,7 +342,11 @@ export const QuicksprintBrowseView: FunctionComponent<{
                       aria-label="Default template purpose"
                       variant="compact"
                       value={activeBuiltinPurpose?.value || ""}
-                      onChange={setSelectedBuiltinPurpose}
+                      onChange={(purpose) => {
+                        setSelectedBuiltinPurpose(purpose);
+                        const option = builtinPurposeOptions.find((item) => item.value === purpose);
+                        announcePhaseStatus?.(`Default template purpose changed to ${option?.label || "General"}.`);
+                      }}
                       options={builtinPurposeOptions.map((option) => ({
                         value: option.value,
                         label: option.label,
@@ -364,6 +392,7 @@ export const QuicksprintBrowseView: FunctionComponent<{
                 onSelectTemplate={handleSelectTemplate}
                 onEditTemplate={openEditor}
                 onDeleteTemplate={handleDeleteTemplate}
+                selectedTemplateId={selectedTemplateId}
               />
             )}
           </div>

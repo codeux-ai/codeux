@@ -8,7 +8,7 @@ The dashboard shows a first-run onboarding flow in the browser until the operato
 
 The browser-local key `codeux:onboarding-complete:v1` is still written for compatibility, but onboarding visibility is owned by the persisted user-preferences state so refreshes and sign-in sessions do not reopen onboarding after complete or cancel.
 
-The onboarding shell uses the same animated dashboard background and modal motion system as the Import and Add Project overlays. Onboarding forces the shared background into its dark palette and applies quieter color grading so the setup UI remains legible while still feeling integrated with the app. The shell is viewport-bounded, with the step body owning its own scrollbar for long provider configuration forms.
+The onboarding shell uses the same animated dashboard background and modal motion system as the Import and Add Project overlays. Onboarding forces the shared background into its dark palette and applies quieter color grading so the setup UI remains legible while still feeling integrated with the app. The shell is viewport-bounded, with the step body owning its own scrollbar for long provider configuration forms. Step entry, shortcut movement, progress feedback, and inline validation use the shared `enterExit`, `selectionMovement`, and `inlineValidation` motion contracts; reduced-motion users receive static state changes, progress labels, and visible focus/selection states instead of animation-dependent cues.
 
 ## Component Structure
 
@@ -88,9 +88,15 @@ Provider choices update:
 - Legacy container auth-copy fields under `defaults.cliWorkflow` for compatibility
 - Git onboarding mode under `defaults.cliWorkflow.gitMode`, which toggles the remote GitHub/GitLab setup cards and keeps git identity controls available in both modes
 
-Appearance choices update `defaults.appearance`, which is also used by the Settings page. The root dashboard shell listens for settings updates and Settings-page preview events, then reapplies theme, reduced-motion, navigation, background mode/style/color, uploaded image, and pattern preferences without a page reload. New installs start with the pattern overlay set to `None`.
+Appearance choices update `defaults.appearance`, which is also used by the Settings page. The root dashboard shell listens for settings updates and Settings-page preview events, then reapplies theme, reduced-motion, navigation, background mode/style/color, uploaded image, and pattern preferences without a page reload. New installs start with sidebar navigation and the pattern overlay set to `None`.
 
 Operators can reopen onboarding from `Settings -> General -> Onboarding`. The action resets the persisted onboarding completion state and clears the browser-local marker; it does not reset saved system or project settings.
+
+## Validation And Feedback
+
+Onboarding forms keep changes in a local settings draft until the final save. The footer exposes a live status that distinguishes draft-ready, runtime-readiness checking, pending save, and retryable save-error states. The Installation step disables and renames the Recheck action while readiness is pending, while Finish changes to a disabled Saving action during persistence.
+
+Validation runs when the operator tries to continue from steps that need complete field groups. For example, partially configured Jira credentials require both the site URL and API token, while the Defaults step requires at least one enabled provider instance before defaults can be selected. Invalid submits render a focusable alert inside the scrollable step body, move keyboard focus to that alert, and scroll it into view without relying on motion.
 
 
 ## Settings Draft Management
@@ -119,5 +125,4 @@ The guide covers:
 - Active Sessions: preview containers and browser sessions
 - Each navigation destination: Chat, Overview, Sprints, Tasks, Agents, Stats, Memory, Knowledge, Browser, Live, and Settings/Config
 
-The tour card includes previous/next controls, a hide action, the current step count, and an auto-advance progress bar. Hidden state is stored in the browser under `codeux:dashboard-tour-hidden:v1`.
-p count, and an auto-advance progress bar. Hidden state is stored in the browser under `codeux:dashboard-tour-hidden:v1`.
+The tour card includes previous/next controls, a skip action, the current step count, and an auto-advance progress bar. Keyboard users can use Escape to close the tour, ArrowLeft/ArrowRight to move between steps, and the primary Next/Done control receives focus as the step changes. Closing the tour through Escape, Skip, or Done restores focus to the control that started the tour when possible. Reduced-motion users see static progress state instead of auto-advance motion. Hidden state is stored in the browser under `codeux:dashboard-tour-hidden:v1`.

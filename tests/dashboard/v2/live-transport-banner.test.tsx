@@ -52,6 +52,7 @@ describe("LiveTransportBanner", () => {
     expect(screen.getByText("Connection Error")).toBeInTheDocument();
     expect(screen.getByText("Unable to connect to Orchestrator API")).toBeInTheDocument();
     expect(screen.getByText("Live transport state: Connection Error")).toBeInTheDocument();
+    expect(screen.getByRole("alert")).toHaveAttribute("aria-live", "assertive");
   });
 
   it("renders Reconnecting when transportState is reconnecting", () => {
@@ -64,7 +65,24 @@ describe("LiveTransportBanner", () => {
       />
     );
     expect(screen.getByText("Reconnecting")).toBeInTheDocument();
+    expect(screen.getByText("Attempting to restore connection. Cached runtime data remains visible.")).toBeInTheDocument();
     expect(screen.getByRole("status")).toHaveAttribute("aria-live", "polite");
+    expect(screen.getByText("Live transport state: Reconnecting")).toBeInTheDocument();
+  });
+
+  it("keeps reduced-motion reconnect affordances static and textual", () => {
+    render(
+      <LiveTransportBanner
+        transportState="reconnecting"
+        isRecovering={true}
+        snapshotUpdatedAt={new Date().toISOString()}
+        error={null}
+      />
+    );
+
+    expect(screen.getByText("Reconnecting")).toBeInTheDocument();
+    expect(document.querySelector(".motion-reduce\\:ring-2")).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("Cached runtime data remains visible");
   });
 
   it("renders polite reconnect messaging while recovering cached live data", () => {
@@ -84,8 +102,8 @@ describe("LiveTransportBanner", () => {
     expect(banner).toHaveAttribute("aria-busy", "true");
   });
 
-  it("renders nothing while recovering (transient state must not flash/shift layout)", () => {
-    const { container } = render(
+  it("renders recovering state while waiting for the first snapshot", () => {
+    render(
       <LiveTransportBanner
         transportState="connected"
         isRecovering={true}
@@ -93,9 +111,12 @@ describe("LiveTransportBanner", () => {
         error={null}
       />
     );
-    expect(container.firstChild).toHaveClass("overflow-hidden");
-    expect(container.firstChild).toBeEmptyDOMElement();
-    expect(screen.queryByText("Recovering State")).not.toBeInTheDocument();
+
+    const banner = screen.getByRole("status");
+    expect(screen.getByText("Recovering Live Data")).toBeInTheDocument();
+    expect(screen.getByText(/Waiting for the first runtime snapshot/)).toBeInTheDocument();
+    expect(banner).toHaveAttribute("aria-live", "polite");
+    expect(banner).toHaveAttribute("aria-busy", "true");
   });
 
   it("renders nothing while connecting (initial connect resolves near-instantly)", () => {

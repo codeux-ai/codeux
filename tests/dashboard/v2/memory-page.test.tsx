@@ -183,7 +183,7 @@ describe("MemoryPage destructive mode", () => {
             expect(screen.getByText("1 nodes")).toBeInTheDocument();
         });
 
-        await userEvent.click(screen.getByRole("button", { name: "Toggle Danger Delete Mode" }));
+        await userEvent.click(screen.getByRole("button", { name: "Enable danger delete mode" }));
 
         await waitFor(() => {
             expect(lobotomizeModeSignal.value).toBe(true);

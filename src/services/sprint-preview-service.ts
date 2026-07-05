@@ -9,6 +9,7 @@ import { fileURLToPath } from "url";
 import type {
   CliWorkflowSettings,
   SprintPreviewScript,
+  SprintPreviewPortMapping,
   SprintPreviewSession,
   SprintPreviewSettings,
 } from "../contracts/app-types.js";
@@ -145,13 +146,20 @@ export class SprintPreviewService {
 
       await this.enforceMaxConcurrentContainers(projectId, settings.maxConcurrentContainers, existing?.id || null);
 
-      const hostPort = existing?.hostPort || await this.findFreePort(settings);
+      const portMappings = await this.allocatePortMappings(settings, existing);
+      const primaryPortMapping = this.getPrimaryPortMapping(portMappings);
+      const hostPort = primaryPortMapping.hostPort;
+      if (hostPort === null) {
+        throw new Error("Preview session did not receive an assigned host port.");
+      }
 
       const session = existing || this.deps.sprintPreviewRepository.createSession({
         projectId,
         sprintId,
         status: "starting",
         containerAppPort: settings.containerAppPort,
+        hostPort,
+        portMappings,
         startupScriptPath: preparedScript.scriptPath,
         startupMode: preparedScript.mode,
         installCommand: effectiveInstallCommand,
@@ -166,6 +174,7 @@ export class SprintPreviewService {
         status: "starting" as const,
         hostPort,
         containerAppPort: settings.containerAppPort,
+        portMappings,
         startupScriptPath: preparedScript.scriptPath,
         startupMode: preparedScript.mode,
         installCommand: effectiveInstallCommand,
@@ -270,6 +279,7 @@ export class SprintPreviewService {
               containerName,
               hostPort,
               containerAppPort: settings.containerAppPort,
+              portMappings,
               containerWorkspacePath,
               containerRuntimeHome,
               volumeName,
@@ -325,6 +335,7 @@ export class SprintPreviewService {
           ...sessionBasePatch,
           status: "error",
           hostPort: null,
+          portMappings: this.clearPortMappingHostPorts(portMappings),
           containerId: null,
           containerName: null,
           healthStatus: "unreachable",
@@ -417,6 +428,9 @@ export class SprintPreviewService {
       }
       this.deps.sprintPreviewRepository.updateSession(session.id, {
         status: "stopped",
+        hostPort: session.hostPort,
+        containerAppPort: session.containerAppPort,
+        portMappings: this.getEffectivePortMappings(session),
         containerId: null,
         containerName: null,
         healthStatus: "unknown",
@@ -446,6 +460,9 @@ export class SprintPreviewService {
       await this.lifecycle.removeContainerIfPresent(containerRef, process.cwd());
       return this.deps.sprintPreviewRepository.updateSession(sessionId, {
         status: "stopped",
+        hostPort: session.hostPort,
+        containerAppPort: session.containerAppPort,
+        portMappings: this.getEffectivePortMappings(session),
         containerId: null,
         containerName: null,
         healthStatus: "unknown",
@@ -534,6 +551,7 @@ export class SprintPreviewService {
     path: string;
     headers?: Record<string, string | undefined>;
     body?: Buffer;
+    selectedPort?: string | number | null;
   }): Promise<SprintPreviewProxyResponse> {
     if (args.body && args.body.length > 5 * 1024 * 1024) {
       throw new Error("Request body exceeds maximum allowed size for proxied preview");
@@ -543,8 +561,12 @@ export class SprintPreviewService {
     if (!refreshed.hostPort) {
       throw new Error("Preview session does not have an active host port.");
     }
+    const selectedMapping = this.resolveSelectedPortMapping(refreshed, args.selectedPort);
+    if (!selectedMapping.hostPort) {
+      throw new Error("Selected preview port is not active for this session.");
+    }
 
-    const upstreamUrl = new URL(normalizePreviewPath(args.path), `http://127.0.0.1:${refreshed.hostPort}`);
+    const upstreamUrl = new URL(normalizePreviewPath(args.path), `http://127.0.0.1:${selectedMapping.hostPort}`);
     let response: Response;
     try {
       response = await fetch(upstreamUrl, {
@@ -766,7 +788,9 @@ export class SprintPreviewService {
       });
     }
 
-    const hostPort = session.hostPort || container.hostPort || null;
+    const portMappings = this.mergeContainerHostPort(this.getEffectivePortMappings(session), container.hostPort || null);
+    const primaryMapping = this.getPrimaryPortMapping(portMappings);
+    const hostPort = primaryMapping.hostPort;
 
     const adoptedSession = session.containerId === container.id && session.containerName === container.name && session.hostPort === hostPort
       ? session
@@ -774,6 +798,8 @@ export class SprintPreviewService {
         containerId: container.id,
         containerName: container.name,
         hostPort,
+        containerAppPort: primaryMapping.containerPort,
+        portMappings,
       });
 
     if (container.status !== "running") {
@@ -1311,13 +1337,125 @@ export class SprintPreviewService {
     });
   }
 
-  private async findFreePort(settings: SprintPreviewSettings): Promise<number> {
-    const candidates: number[] = [];
-    for (let port = settings.hostPortRangeStart; port <= settings.hostPortRangeEnd; port += 1) {
-      candidates.push(port);
+  private getOrderedContainerPorts(settings: SprintPreviewSettings): number[] {
+    const ports = [
+      settings.containerAppPort,
+      ...settings.containerAppPorts,
+    ].filter((port) => Number.isInteger(port) && port >= 1 && port <= 65535);
+    return [...new Set(ports)];
+  }
+
+  private async allocatePortMappings(
+    settings: SprintPreviewSettings,
+    existing?: SprintPreviewSession | null,
+  ): Promise<SprintPreviewPortMapping[]> {
+    const containerPorts = this.getOrderedContainerPorts(settings);
+    const usedHostPorts = new Set<number>();
+    const existingByContainerPort = new Map(
+      this.getEffectivePortMappings(existing)
+        .filter((mapping) => mapping.hostPort !== null)
+        .map((mapping) => [mapping.containerPort, mapping.hostPort as number]),
+    );
+    const mappings: SprintPreviewPortMapping[] = [];
+
+    for (const [index, containerPort] of containerPorts.entries()) {
+      const preservedHostPort = existingByContainerPort.get(containerPort);
+      const validPreservedHostPort = preservedHostPort !== undefined
+        && preservedHostPort >= settings.hostPortRangeStart
+        && preservedHostPort <= settings.hostPortRangeEnd
+        && !usedHostPorts.has(preservedHostPort);
+      const preservedPortAvailable = validPreservedHostPort
+        ? await this.checkPortAvailable(preservedHostPort)
+        : false;
+      const existingContainerMayOwnPort = Boolean(existing?.containerId || existing?.containerName);
+      const canPreserve = validPreservedHostPort
+        && (preservedPortAvailable || existingContainerMayOwnPort);
+      const hostPort = canPreserve
+        ? preservedHostPort
+        : await this.findFreePort(settings, usedHostPorts);
+
+      usedHostPorts.add(hostPort);
+      mappings.push({
+        containerPort,
+        hostPort,
+        ...(index === 0 ? { isPrimary: true } : {}),
+      });
     }
-    const randomized = candidates.sort(() => Math.random() - 0.5);
-    for (const port of randomized) {
+
+    return mappings;
+  }
+
+  private clearPortMappingHostPorts(mappings: SprintPreviewPortMapping[]): SprintPreviewPortMapping[] {
+    return mappings.map((mapping) => ({
+      ...mapping,
+      hostPort: null,
+    }));
+  }
+
+  private mergeContainerHostPort(
+    mappings: SprintPreviewPortMapping[],
+    containerHostPort: number | null,
+  ): SprintPreviewPortMapping[] {
+    if (!containerHostPort || mappings.some((mapping) => mapping.isPrimary === true && mapping.hostPort)) {
+      return mappings;
+    }
+    return mappings.map((mapping, index) => index === 0
+      ? { ...mapping, hostPort: containerHostPort, isPrimary: true }
+      : mapping);
+  }
+
+  private getPrimaryPortMapping(mappings: SprintPreviewPortMapping[]): SprintPreviewPortMapping {
+    return mappings.find((mapping) => mapping.isPrimary === true) ?? mappings[0] ?? {
+      containerPort: 3000,
+      hostPort: null,
+      isPrimary: true,
+    };
+  }
+
+  private getEffectivePortMappings(session: Pick<SprintPreviewSession, "containerAppPort" | "hostPort" | "portMappings"> | null | undefined): SprintPreviewPortMapping[] {
+    if (session && Array.isArray(session.portMappings) && session.portMappings.length > 0) {
+      return session.portMappings;
+    }
+    if (!session) {
+      return [];
+    }
+    return [{
+      containerPort: session.containerAppPort,
+      hostPort: session.hostPort,
+      isPrimary: true,
+    }];
+  }
+
+  private resolveSelectedPortMapping(
+    session: SprintPreviewSession,
+    selectedPort?: string | number | null,
+  ): SprintPreviewPortMapping {
+    const portMappings = this.getEffectivePortMappings(session);
+    const primary = this.getPrimaryPortMapping(portMappings);
+    if (selectedPort === undefined || selectedPort === null || selectedPort === "") {
+      return primary;
+    }
+    const parsedPort = typeof selectedPort === "number"
+      ? selectedPort
+      : Number.parseInt(selectedPort, 10);
+    const normalizedPort = typeof selectedPort === "string" ? selectedPort.trim() : String(selectedPort);
+    if (!/^\d+$/.test(normalizedPort) || !Number.isInteger(parsedPort) || parsedPort < 1 || parsedPort > 65535) {
+      throw new Error("Selected preview port is invalid.");
+    }
+    const mapping = portMappings.find((candidate) =>
+      candidate.containerPort === parsedPort || candidate.hostPort === parsedPort
+    );
+    if (!mapping) {
+      throw new Error("Selected preview port is not available for this session.");
+    }
+    return mapping;
+  }
+
+  private async findFreePort(settings: SprintPreviewSettings, excludedPorts = new Set<number>()): Promise<number> {
+    for (let port = settings.hostPortRangeStart; port <= settings.hostPortRangeEnd; port += 1) {
+      if (excludedPorts.has(port)) {
+        continue;
+      }
       const available = await this.checkPortAvailable(port);
       if (available) {
         return port;

@@ -41,6 +41,7 @@ export const defaultOnboardingReadiness: OnboardingRuntimeReadiness = {
 export interface OnboardingFlowState {
   open: boolean;
   activeStep: number;
+  lastStep: number;
   readiness: OnboardingRuntimeReadiness;
   settings: SystemSettings | null;
   selectedProviders: ProviderId[];
@@ -70,6 +71,7 @@ const clampStep = (step: number): number => Math.min(onboardingSteps.length - 1,
 export const createInitialOnboardingFlowState = (): OnboardingFlowState => ({
   open: false,
   activeStep: 0,
+  lastStep: 0,
   readiness: defaultOnboardingReadiness,
   settings: null,
   selectedProviders: [],
@@ -87,15 +89,15 @@ export const onboardingFlowReducer = (
     case "set-open":
       return { ...state, open: action.open };
     case "reset-and-open":
-      return { ...state, open: true, activeStep: 0 };
+      return { ...state, open: true, activeStep: 0, lastStep: state.activeStep };
     case "close":
       return { ...state, open: false };
     case "set-active-step":
-      return { ...state, activeStep: clampStep(action.step) };
+      return { ...state, lastStep: state.activeStep, activeStep: clampStep(action.step) };
     case "go-next":
-      return { ...state, activeStep: clampStep(state.activeStep + 1) };
+      return { ...state, lastStep: state.activeStep, activeStep: clampStep(state.activeStep + 1) };
     case "go-previous":
-      return { ...state, activeStep: clampStep(state.activeStep - 1) };
+      return { ...state, lastStep: state.activeStep, activeStep: clampStep(state.activeStep - 1) };
     case "load-success":
       return {
         ...state,

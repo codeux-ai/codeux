@@ -1,6 +1,6 @@
 import type { FunctionComponent } from "preact";
 import { memo } from "preact/compat";
-import { useEffect, useMemo, useState, useCallback } from "preact/hooks";
+import { useEffect, useMemo, useRef, useState, useCallback } from "preact/hooks";
 import {
   ArrowDown,
   ArrowUp,
@@ -26,9 +26,13 @@ import {
   getSelectedFilteredSprints,
   getLedgerSelectionSummary,
   getLedgerViewStateKey,
+  getSortAriaSort,
+  getSortButtonLabel,
+  getLedgerOutcomeMessage,
   type BulkLedgerAction,
   nextSort,
   DEFAULT_LEDGER_FILTERS,
+  SPRINT_TABLE_SORT_LABELS,
   type LedgerSort,
   type LedgerFilters,
   type SprintTableSortKey,
@@ -99,6 +103,9 @@ const SprintLedgerComponent: FunctionComponent<SprintLedgerProps> = ({
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [lastBulkAction, setLastBulkAction] = useState<BulkLedgerAction>(null);
   const { isOpen, options, requestConfirm, handleConfirm, handleCancel } = useConfirmDialog();
+  const bulkDeleteButtonRef = useRef<HTMLButtonElement>(null);
+  const ledgerFocusRef = useRef<HTMLDivElement>(null);
+  const [ledgerAnnouncement, setLedgerAnnouncement] = useState("Sorted by Created descending. Showing all sprints. No sprints selected.");
 
   useEffect(() => {
     if (initialQuery !== undefined) {
@@ -139,14 +146,56 @@ const SprintLedgerComponent: FunctionComponent<SprintLedgerProps> = ({
     return map;
   }, [sprints, interventionBySprintId]);
 
-  // Prune selection when filter changes
+  const announceLedgerOutcome = useCallback((
+    outcome: string,
+    visibleCount: number,
+    selectedCount: number,
+    options?: { totalCount?: number; removedSelectedCount?: number },
+  ) => {
+    setLedgerAnnouncement(getLedgerOutcomeMessage(outcome, visibleCount, {
+      totalCount: options?.totalCount,
+      selectedCount,
+      removedSelectedCount: options?.removedSelectedCount,
+    }));
+  }, []);
+
+  const handleFiltersChange = useCallback((nextFilters: LedgerFilters) => {
+    const nextFiltered = filterSprints(sprints, nextFilters, sprintKeyPrefix);
+    const nextLedgerSprints = sortSprints(nextFiltered, sort, sprintKeyPrefix);
+    const nextSelectedIds = pruneSelection(selectedIds, nextLedgerSprints);
+    const removedCount = selectedIds.size - nextSelectedIds.size;
+
+    setFilters(nextFilters);
+    if (removedCount > 0) {
+      setSelectedIds(nextSelectedIds);
+    }
+    announceLedgerOutcome(
+      nextFilters.query.trim() || nextFilters.qa !== "all" || nextFilters.showcase !== "all" || nextFilters.status !== "all"
+        ? "Filters updated."
+        : "Filters cleared.",
+      nextLedgerSprints.length,
+      nextSelectedIds.size,
+      { totalCount: sprints.length, removedSelectedCount: removedCount },
+    );
+  }, [announceLedgerOutcome, selectedIds, sort, sprintKeyPrefix, sprints]);
+
+  // Prune selection when the backing sprint list changes under the current filters.
   useEffect(() => {
     setSelectedIds((current) => {
       if (current.size === 0) return current;
       const pruned = pruneSelection(current, filteredSprints);
+      const removedCount = current.size - pruned.size;
+      if (removedCount > 0) {
+        announceLedgerOutcome(
+          "Selection updated after ledger data changed.",
+          filteredSprints.length,
+          pruned.size,
+          { totalCount: sprints.length, removedSelectedCount: removedCount },
+        );
+      }
       return pruned.size === current.size ? current : pruned;
     });
-  }, [filteredSprints]);
+  }, [announceLedgerOutcome, filteredSprints, sprints.length]);
 
   const selectedFiltered = useMemo(
     () => getSelectedFilteredSprints(selectedIds, ledgerSprints),
@@ -208,62 +257,117 @@ const SprintLedgerComponent: FunctionComponent<SprintLedgerProps> = ({
     transitionDuration: interactionTokens.listReorder.duration,
     transitionTimingFunction: interactionTokens.listReorder.ease,
   };
+  const controlFeedbackStyle = {
+    transitionDuration: interactionTokens.controlFeedback.duration,
+    transitionTimingFunction: interactionTokens.controlFeedback.ease,
+  };
+  const selectionMovementStyle = {
+    transitionDuration: interactionTokens.selectionMovement.duration,
+    transitionTimingFunction: interactionTokens.selectionMovement.ease,
+  };
 
   const handleSort = (key: SprintTableSortKey) => {
-    setSort((current) => nextSort(current, key));
+    setSort((current) => {
+      const next = nextSort(current, key);
+      const nextLedgerSprints = sortSprints(filteredSprints, next, sprintKeyPrefix);
+      announceLedgerOutcome(
+        `Sorted by ${SPRINT_TABLE_SORT_LABELS[next.key]} ${next.direction === "asc" ? "ascending" : "descending"}.`,
+        nextLedgerSprints.length,
+        selectedFiltered.length,
+      );
+      return next;
+    });
   };
 
   const handleToggleSelectAll = () => {
     if (selectionSummary.allSelected) {
       setSelectedIds(new Set());
+      announceLedgerOutcome("Deselected all filtered sprints.", ledgerSprints.length, 0);
     } else {
       const next = new Set(selectedIds);
       for (const sprint of ledgerSprints) {
         next.add(sprint.id);
       }
       setSelectedIds(next);
+      announceLedgerOutcome("Selected all filtered sprints.", ledgerSprints.length, ledgerSprints.length);
     }
   };
 
   const handleToggleRow = useCallback((id: string) => {
-    setSelectedIds((current) => toggleSelection(current, id));
-  }, []);
+    const sprint = ledgerSprints.find((item) => item.id === id);
+    setSelectedIds((current) => {
+      const next = toggleSelection(current, id);
+      const selected = next.has(id);
+      announceLedgerOutcome(
+        `${selected ? "Selected" : "Deselected"} sprint ${sprint?.name ?? id}.`,
+        ledgerSprints.length,
+        getLedgerSelectionSummary(next, ledgerSprints).selectedCount,
+      );
+      return next;
+    });
+  }, [announceLedgerOutcome, ledgerSprints]);
 
   const handleClearSelection = useCallback(() => {
     setSelectedIds(deselectAll());
     setLastBulkAction(null);
+    announceLedgerOutcome("Sprint selection cleared.", ledgerSprints.length, 0);
+  }, [announceLedgerOutcome, ledgerSprints.length]);
+
+  const restoreBulkDeleteFocus = useCallback(() => {
+    const focusTarget = () => {
+      if (bulkDeleteButtonRef.current && !bulkDeleteButtonRef.current.disabled) {
+        bulkDeleteButtonRef.current.focus();
+      } else {
+        ledgerFocusRef.current?.focus();
+      }
+    };
+    window.setTimeout(focusTarget, 0);
+    window.setTimeout(focusTarget, 75);
   }, []);
 
   const handleBulkStart = useCallback(() => {
+    if (isBulkPending || selectedFiltered.length === 0) return;
     setLastBulkAction("start");
+    announceLedgerOutcome("Starting selected sprints.", ledgerSprints.length, selectedFiltered.length);
     onBulkStart(selectedFiltered.map((s) => s.id));
-  }, [onBulkStart, selectedFiltered]);
+  }, [announceLedgerOutcome, isBulkPending, ledgerSprints.length, onBulkStart, selectedFiltered]);
 
   const handleBulkDelete = useCallback(async () => {
+    if (isBulkPending || selectedFiltered.length === 0) return;
+    const selectedCount = selectedFiltered.length;
     const confirmed = await requestConfirm({
-      title: "Delete Sprints?",
-      body: `Delete ${selectedFiltered.length} selected sprint${selectedFiltered.length === 1 ? "" : "s"} from the current filtered ledger result? This action is permanent and will cascade to all downstream tasks, logs, and associated git artifacts. Please ensure you have cleaned up your repository branches if needed before proceeding.`,
-      confirmLabel: "Delete Sprints",
+      title: `Delete ${selectedCount} Selected Sprint${selectedCount === 1 ? "" : "s"}?`,
+      body: `You are deleting ${selectedCount} selected sprint${selectedCount === 1 ? "" : "s"} from the current filtered ledger result. This action is permanent and will cascade to all downstream tasks, logs, and associated git artifacts. Please ensure you have cleaned up your repository branches if needed before proceeding.`,
+      confirmLabel: `Delete ${selectedCount} Sprint${selectedCount === 1 ? "" : "s"}`,
       cancelLabel: "Cancel",
       destructive: true,
     });
 
     if (confirmed) {
       setLastBulkAction("delete");
+      announceLedgerOutcome("Deleting selected sprints.", ledgerSprints.length, selectedCount);
       onBulkDelete(selectedFiltered.map((s) => s.id));
+      restoreBulkDeleteFocus();
       // Selection clears naturally as items are removed, keeping the pending state visible
+    } else {
+      announceLedgerOutcome("Bulk delete canceled.", ledgerSprints.length, selectedCount);
+      restoreBulkDeleteFocus();
     }
-  }, [onBulkDelete, selectedFiltered, requestConfirm]);
+  }, [announceLedgerOutcome, isBulkPending, ledgerSprints.length, onBulkDelete, selectedFiltered, requestConfirm, restoreBulkDeleteFocus]);
 
   const handleBulkShowcaseEnable = useCallback(() => {
+    if (isBulkPending || selectedFiltered.length === 0) return;
     setLastBulkAction("pin");
+    announceLedgerOutcome("Pinning selected sprints.", ledgerSprints.length, selectedFiltered.length);
     onBulkShowcaseEnable(selectedFiltered.map((s) => s.id));
-  }, [onBulkShowcaseEnable, selectedFiltered]);
+  }, [announceLedgerOutcome, isBulkPending, ledgerSprints.length, onBulkShowcaseEnable, selectedFiltered]);
 
   const handleBulkShowcaseDisable = useCallback(() => {
+    if (isBulkPending || selectedFiltered.length === 0) return;
     setLastBulkAction("unpin");
+    announceLedgerOutcome("Unpinning selected sprints.", ledgerSprints.length, selectedFiltered.length);
     onBulkShowcaseDisable(selectedFiltered.map((s) => s.id));
-  }, [onBulkShowcaseDisable, selectedFiltered]);
+  }, [announceLedgerOutcome, isBulkPending, ledgerSprints.length, onBulkShowcaseDisable, selectedFiltered]);
 
 
   // Memoize stable handlers to pass to memoized SprintLedgerRow
@@ -282,11 +386,60 @@ const SprintLedgerComponent: FunctionComponent<SprintLedgerProps> = ({
 
   const renderSortIndicator = (key: SprintTableSortKey) => {
     if (sort.key !== key) {
-      return <ArrowUpDown aria-hidden="true" className="h-3 w-3 text-slate-300 opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100 dark:text-slate-600" strokeWidth={2.2} style={{ transitionDuration: typeof sortDuration === 'number' ? `${sortDuration}s` : sortDuration, transitionTimingFunction: sortEase }} />;
+      return (
+        <span className="inline-flex min-w-[2.75rem] items-center justify-end gap-1 text-[10px] font-bold uppercase text-slate-400 dark:text-slate-500" aria-hidden="true">
+          <ArrowUpDown className="h-3 w-3 transition-transform" strokeWidth={2.2} style={{ transitionDuration: typeof sortDuration === 'number' ? `${sortDuration}s` : sortDuration, transitionTimingFunction: sortEase }} />
+          None
+        </span>
+      );
     }
     return sort.direction === "asc"
-      ? <ArrowUp aria-hidden="true" className="h-3 w-3 text-signal-500 opacity-100 transition-transform" strokeWidth={2.2} style={{ transitionDuration: typeof sortDuration === 'number' ? `${sortDuration}s` : sortDuration, transitionTimingFunction: sortEase }} />
-      : <ArrowDown aria-hidden="true" className="h-3 w-3 text-signal-500 opacity-100 transition-transform" strokeWidth={2.2} style={{ transitionDuration: typeof sortDuration === 'number' ? `${sortDuration}s` : sortDuration, transitionTimingFunction: sortEase }} />;
+      ? (
+        <span className="inline-flex min-w-[2.75rem] items-center justify-end gap-1 text-[10px] font-bold uppercase text-signal-600 dark:text-signal-300" aria-hidden="true">
+          <ArrowUp className="h-3 w-3 transition-transform" strokeWidth={2.2} style={{ transitionDuration: typeof sortDuration === 'number' ? `${sortDuration}s` : sortDuration, transitionTimingFunction: sortEase }} />
+          Asc
+        </span>
+      )
+      : (
+        <span className="inline-flex min-w-[2.75rem] items-center justify-end gap-1 text-[10px] font-bold uppercase text-signal-600 dark:text-signal-300" aria-hidden="true">
+          <ArrowDown className="h-3 w-3 transition-transform" strokeWidth={2.2} style={{ transitionDuration: typeof sortDuration === 'number' ? `${sortDuration}s` : sortDuration, transitionTimingFunction: sortEase }} />
+          Desc
+        </span>
+      );
+  };
+
+  const renderSortHeader = (key: SprintTableSortKey, options?: { align?: "left" | "right"; className?: string; isLast?: boolean }) => {
+    const label = SPRINT_TABLE_SORT_LABELS[key];
+    const alignRight = options?.align === "right";
+    return (
+      <TableCell
+        isHeader
+        align={options?.align}
+        isLast={options?.isLast}
+        className={`group ${options?.className ?? ""}`}
+        ariaSort={getSortAriaSort(sort, key)}
+      >
+        <button
+          type="button"
+          onClick={() => handleSort(key)}
+          className={`inline-flex w-full items-center gap-2 rounded-lg transition-colors hover:text-slate-700 focus-visible:ring-2 focus-visible:ring-signal-500/30 dark:hover:text-slate-200 ${alignRight ? "justify-end" : "justify-start"}`}
+          style={controlFeedbackStyle}
+          aria-label={getSortButtonLabel(sort, key)}
+        >
+          {alignRight ? (
+            <>
+              {renderSortIndicator(key)}
+              <span>{label}</span>
+            </>
+          ) : (
+            <>
+              <span>{label}</span>
+              {renderSortIndicator(key)}
+            </>
+          )}
+        </button>
+      </TableCell>
+    );
   };
 
   return (
@@ -300,7 +453,7 @@ const SprintLedgerComponent: FunctionComponent<SprintLedgerProps> = ({
         listWindow={listWindow}
         onListWindowChange={onListWindowChange}
         filters={filters}
-        onFiltersChange={setFilters}
+        onFiltersChange={handleFiltersChange}
         transitionStyle={listReorderStyle}
       />
 
@@ -317,6 +470,8 @@ const SprintLedgerComponent: FunctionComponent<SprintLedgerProps> = ({
         onBulkShowcaseEnable={handleBulkShowcaseEnable}
         onBulkShowcaseDisable={handleBulkShowcaseDisable}
         onClearSelection={handleClearSelection}
+        controlTransitionStyle={controlFeedbackStyle}
+        deleteButtonRef={bulkDeleteButtonRef}
       />
 
       <ConfirmDialog
@@ -327,6 +482,8 @@ const SprintLedgerComponent: FunctionComponent<SprintLedgerProps> = ({
       />
 
       <div
+        ref={ledgerFocusRef}
+        tabIndex={-1}
         className="min-h-[20rem] px-3 py-4 transition-[opacity,transform] sm:px-4 lg:px-5"
         data-ledger-view-state={viewStateKey}
         style={listReorderStyle}
@@ -342,6 +499,7 @@ const SprintLedgerComponent: FunctionComponent<SprintLedgerProps> = ({
                 disabled={windowedSprints.length === 0 || isAnyBulkPending}
                 onClick={handleToggleSelectAll}
                 className="inline-flex h-8 w-8 items-center justify-center rounded-xl text-slate-400 transition-colors hover:bg-black/[0.04] hover:text-slate-700 focus-visible:ring-2 focus-visible:ring-signal-500/30 dark:hover:bg-white/[0.05] dark:hover:text-slate-200 disabled:cursor-not-allowed disabled:opacity-50"
+                style={selectionMovementStyle}
                 title={isAnyBulkPending ? "Bulk action in progress for selected sprints" : selectionSummary.allSelected ? "Deselect all filtered sprints" : "Select all filtered sprints"}
                 aria-label={selectionSummary.allSelected ? "Deselect all filtered sprints" : "Select all filtered sprints"}
                 aria-pressed={selectionSummary.allSelected}
@@ -351,83 +509,13 @@ const SprintLedgerComponent: FunctionComponent<SprintLedgerProps> = ({
                   : <Square className="h-4 w-4" strokeWidth={2.2} />}
               </button>
             </TableCell>
-            <TableCell isHeader className="group w-[80px] min-w-[80px]" ariaSort={sort.key === "showcasePinned" ? (sort.direction === "asc" ? "ascending" : "descending") : undefined}>
-              <button
-                type="button"
-                onClick={() => handleSort("showcasePinned")}
-                className="inline-flex items-center gap-2 rounded-lg transition-colors hover:text-slate-700 focus-visible:ring-2 focus-visible:ring-signal-500/30 dark:hover:text-slate-200"
-                aria-label={`Sort by Showcase, currently ${sort.key === "showcasePinned" ? (sort.direction === "asc" ? "sorted ascending" : "sorted descending") : "unsorted"}. Click to sort by Showcase in ${sort.key === "showcasePinned" && sort.direction === "asc" ? "descending" : "ascending"} order.`}
-              >
-                Showcase
-                {renderSortIndicator("showcasePinned")}
-              </button>
-            </TableCell>
-            <TableCell isHeader className="group w-[120px] min-w-[120px]" ariaSort={sort.key === "sprintKey" ? (sort.direction === "asc" ? "ascending" : "descending") : undefined}>
-              <button
-                type="button"
-                onClick={() => handleSort("sprintKey")}
-                className="inline-flex items-center gap-2 rounded-lg transition-colors hover:text-slate-700 focus-visible:ring-2 focus-visible:ring-signal-500/30 dark:hover:text-slate-200"
-                aria-label={`Sort by Sprint ID, currently ${sort.key === "sprintKey" ? (sort.direction === "asc" ? "sorted ascending" : "sorted descending") : "unsorted"}. Click to sort by Sprint ID in ${sort.key === "sprintKey" && sort.direction === "asc" ? "descending" : "ascending"} order.`}
-              >
-                Sprint ID
-                {renderSortIndicator("sprintKey")}
-              </button>
-            </TableCell>
-            <TableCell isHeader className="group w-[220px] min-w-[220px]" ariaSort={sort.key === "name" ? (sort.direction === "asc" ? "ascending" : "descending") : undefined}>
-              <button
-                type="button"
-                onClick={() => handleSort("name")}
-                className="inline-flex items-center gap-2 rounded-lg transition-colors hover:text-slate-700 focus-visible:ring-2 focus-visible:ring-signal-500/30 dark:hover:text-slate-200"
-                aria-label={`Sort by Sprint, currently ${sort.key === "name" ? (sort.direction === "asc" ? "sorted ascending" : "sorted descending") : "unsorted"}. Click to sort by Sprint in ${sort.key === "name" && sort.direction === "asc" ? "descending" : "ascending"} order.`}
-              >
-                Sprint
-                {renderSortIndicator("name")}
-              </button>
-            </TableCell>
-            <TableCell isHeader className="group w-[120px] min-w-[120px]" ariaSort={sort.key === "status" ? (sort.direction === "asc" ? "ascending" : "descending") : undefined}>
-              <button
-                type="button"
-                onClick={() => handleSort("status")}
-                className="inline-flex items-center gap-2 rounded-lg transition-colors hover:text-slate-700 focus-visible:ring-2 focus-visible:ring-signal-500/30 dark:hover:text-slate-200"
-                aria-label={`Sort by Status, currently ${sort.key === "status" ? (sort.direction === "asc" ? "sorted ascending" : "sorted descending") : "unsorted"}. Click to sort by Status in ${sort.key === "status" && sort.direction === "asc" ? "descending" : "ascending"} order.`}
-              >
-                Status
-                {renderSortIndicator("status")}
-              </button>
-            </TableCell>
-            <TableCell isHeader align="right" className="group w-[100px] min-w-[100px]" ariaSort={sort.key === "tasksCount" ? (sort.direction === "asc" ? "ascending" : "descending") : undefined}>
-              <button
-                type="button"
-                onClick={() => handleSort("tasksCount")}
-                className="inline-flex w-full items-center justify-end gap-2 rounded-lg transition-colors hover:text-slate-700 focus-visible:ring-2 focus-visible:ring-signal-500/30 dark:hover:text-slate-200"
-                aria-label={`Sort by Tasks, currently ${sort.key === "tasksCount" ? (sort.direction === "asc" ? "sorted ascending" : "sorted descending") : "unsorted"}. Click to sort by Tasks in ${sort.key === "tasksCount" && sort.direction === "asc" ? "descending" : "ascending"} order.`}
-              >
-                {renderSortIndicator("tasksCount")}
-                Tasks
-              </button>
-            </TableCell>
-            <TableCell isHeader align="right" className="group w-[140px] min-w-[140px]" ariaSort={sort.key === "completion" ? (sort.direction === "asc" ? "ascending" : "descending") : undefined}>
-              <button
-                type="button"
-                onClick={() => handleSort("completion")}
-                className="inline-flex w-full items-center justify-end gap-2 rounded-lg transition-colors hover:text-slate-700 focus-visible:ring-2 focus-visible:ring-signal-500/30 dark:hover:text-slate-200"
-                aria-label={`Sort by Completion, currently ${sort.key === "completion" ? (sort.direction === "asc" ? "sorted ascending" : "sorted descending") : "unsorted"}. Click to sort by Completion in ${sort.key === "completion" && sort.direction === "asc" ? "descending" : "ascending"} order.`}
-              >
-                {renderSortIndicator("completion")}
-                Completion
-              </button>
-            </TableCell>
-            <TableCell isHeader className="group w-[120px] min-w-[120px]" ariaSort={sort.key === "createdAt" ? (sort.direction === "asc" ? "ascending" : "descending") : undefined}>
-              <button
-                type="button"
-                onClick={() => handleSort("createdAt")}
-                className="inline-flex items-center gap-2 rounded-lg transition-colors hover:text-slate-700 focus-visible:ring-2 focus-visible:ring-signal-500/30 dark:hover:text-slate-200"
-                aria-label={`Sort by Created, currently ${sort.key === "createdAt" ? (sort.direction === "asc" ? "sorted ascending" : "sorted descending") : "unsorted"}. Click to sort by Created in ${sort.key === "createdAt" && sort.direction === "asc" ? "descending" : "ascending"} order.`}
-              >
-                Created
-                {renderSortIndicator("createdAt")}
-              </button>
-            </TableCell>
+            {renderSortHeader("showcasePinned", { className: "w-[80px] min-w-[80px]" })}
+            {renderSortHeader("sprintKey", { className: "w-[120px] min-w-[120px]" })}
+            {renderSortHeader("name", { className: "w-[220px] min-w-[220px]" })}
+            {renderSortHeader("status", { className: "w-[120px] min-w-[120px]" })}
+            {renderSortHeader("tasksCount", { align: "right", className: "w-[100px] min-w-[100px]" })}
+            {renderSortHeader("completion", { align: "right", className: "w-[140px] min-w-[140px]" })}
+            {renderSortHeader("createdAt", { className: "w-[120px] min-w-[120px]" })}
             <TableCell isHeader align="right" isLast className="w-[140px] min-w-[140px] pr-6">Controls</TableCell>
           </TableHeader>
           <TableBody>
@@ -473,6 +561,8 @@ const SprintLedgerComponent: FunctionComponent<SprintLedgerProps> = ({
                   pendingActionIds={pendingActionIds}
                   isAnyBulkPending={isAnyBulkPending}
                   transitionStyle={listReorderStyle}
+                  controlTransitionStyle={controlFeedbackStyle}
+                  selectionTransitionStyle={selectionMovementStyle}
                   onToggleRow={handleToggleRow}
                   onToggleShowcase={stableOnToggleShowcase}
                   onSprintToggle={stableOnSprintToggle}
@@ -490,6 +580,9 @@ const SprintLedgerComponent: FunctionComponent<SprintLedgerProps> = ({
             </Table>
           </div>
         </div>
+      </div>
+      <div className="sr-only" aria-live="polite" aria-atomic="true">
+        {ledgerAnnouncement}
       </div>
     </div>
   );

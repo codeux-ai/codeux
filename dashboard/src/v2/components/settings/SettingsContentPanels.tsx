@@ -10,14 +10,19 @@ import { SettingsMemoryPanel } from "./panels/SettingsMemoryPanel.js";
 import { SettingsIntegrationsPanel } from "./panels/SettingsIntegrationsPanel.js";
 import { SettingsMcpPanel } from "./panels/SettingsMcpPanel.js";
 import { SettingsDangerPanel } from "./panels/SettingsDangerPanel.js";
+import { ActionFeedbackRegion } from "../ui/ActionFeedbackRegion.js";
+import { useInteractionTokens } from "../../lib/motion/tokens.js";
 
 export const SettingsContentPanels: FunctionComponent<{
   state: SettingsPageState;
 }> = ({ state }) => {
-  const { activeCategory, activeDirty, activeSaving, error, saveMessage, loading } = state;
+  const { activeCategory, activeDirty, activeSaving, error, saveMessage, loading, resettingProject } = state;
+  const tokens = useInteractionTokens();
 
   const panelStatus = error
     ? `Settings blocked: ${error}`
+    : resettingProject
+      ? "Project override reset is pending."
     : activeSaving
       ? "Settings save is pending."
       : saveMessage
@@ -54,11 +59,26 @@ export const SettingsContentPanels: FunctionComponent<{
   };
 
   return (
-    <div aria-busy={activeSaving || loading ? "true" : undefined} data-settings-state={error ? "error" : activeSaving ? "saving" : activeDirty ? "dirty" : "saved"}>
+    <div aria-busy={activeSaving || loading ? "true" : undefined} data-reset-busy={resettingProject ? "true" : undefined} data-settings-state={error ? "error" : resettingProject ? "resetting" : activeSaving ? "saving" : activeDirty ? "dirty" : "saved"}>
       <div role={error ? "alert" : "status"} aria-live={error ? "assertive" : "polite"} aria-atomic="true" className="sr-only">
         {panelStatus}
       </div>
-      {renderPanel()}
+      <ActionFeedbackRegion
+        status={error ? "error" : loading || activeSaving || resettingProject ? "pending" : saveMessage ? "success" : activeDirty ? "warning" : "idle"}
+        message={error || (loading ? "Loading settings without clearing current values..." : resettingProject ? "Resetting project overrides. Current values remain visible." : activeSaving ? "Saving settings. Current values remain visible." : saveMessage || (activeDirty ? "You have unsaved changes in this settings scope." : null))}
+        autoDismiss={false}
+      />
+      <div
+        key={activeCategory}
+        data-active-category={activeCategory}
+        className="mt-3 motion-safe:animate-form-slide-down motion-reduce:animate-none"
+        style={{
+          transitionDuration: tokens.enterExit.duration,
+          transitionTimingFunction: tokens.enterExit.ease,
+        }}
+      >
+        {renderPanel()}
+      </div>
     </div>
   );
 };

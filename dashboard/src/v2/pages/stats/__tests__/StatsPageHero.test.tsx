@@ -155,12 +155,20 @@ describe('StatsPageHero', () => {
       />,
     );
 
+    expect(screen.getByRole('heading', { name: 'Stats' })).toBeTruthy();
+    expect(screen.getByLabelText('Stats active lens')).toHaveTextContent('Window');
+    expect(screen.getByLabelText('Stats active lens')).toHaveTextContent('24h');
+    expect(screen.getByLabelText('Stats active lens')).toHaveTextContent('Mode');
+    expect(screen.getByLabelText('Stats active lens')).toHaveTextContent('Models');
+    expect(screen.getByLabelText('Stats project context')).toHaveTextContent('Project');
+    expect(screen.getByLabelText('Stats project context')).toHaveTextContent('Project 1');
     expect(screen.getByRole('group', { name: 'Time window presets' })).toBeTruthy();
     expect(screen.getByRole('button', { name: '24h' })).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByRole('button', { name: 'Custom' })).toHaveAttribute('aria-pressed', 'false');
 
     expect(screen.getByRole('group', { name: 'Analytics modes' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Models' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: 'Models' })).toHaveAttribute('aria-controls', 'stats-analysis-panel');
     expect(screen.getByRole('button', { name: 'Trend' })).toHaveAttribute('aria-pressed', 'false');
     expect(screen.getByText('Model activity, latency, cache behavior, and reliability signals.')).toBeTruthy();
     expect(screen.queryByLabelText('Executive summary')).toBeNull();
@@ -281,7 +289,8 @@ describe('StatsPageHero', () => {
     );
 
     let applyBtn = screen.getAllByRole('button', { name: 'Apply' })[0] as HTMLButtonElement;
-    expect(applyBtn.disabled).toBe(true);
+    expect(applyBtn.disabled).toBe(false);
+    expect(applyBtn).toHaveAttribute('aria-disabled', 'true');
 
     rerender(
       <StatsPageHero
@@ -301,6 +310,7 @@ describe('StatsPageHero', () => {
 
     applyBtn = screen.getAllByRole('button', { name: 'Apply' })[0] as HTMLButtonElement;
     expect(applyBtn.disabled).toBe(false);
+    expect(applyBtn).not.toHaveAttribute('aria-disabled');
   });
 
   it('reveals custom dates from the Custom preset without applying the range', () => {
@@ -385,11 +395,12 @@ describe('StatsPageHero', () => {
     );
 
     const applyBtn = screen.getByRole('button', { name: 'Apply' }) as HTMLButtonElement;
-    expect(applyBtn.disabled).toBe(true);
+    expect(applyBtn.disabled).toBe(false);
+    expect(applyBtn).toHaveAttribute('aria-disabled', 'true');
     expect(screen.getByRole('alert')).toHaveTextContent('End date must be after start date.');
-    expect(screen.getByLabelText('Custom start date')).toHaveAttribute('aria-invalid', 'true');
+    expect(screen.getByLabelText('Custom start date')).toHaveAttribute('aria-invalid', 'false');
     expect(screen.getByLabelText('Custom end date')).toHaveAttribute('aria-invalid', 'true');
-    expect(screen.getByLabelText('Custom start date')).toHaveAttribute('aria-errormessage', 'stats-custom-range-error');
+    expect(screen.getByLabelText('Custom start date')).not.toHaveAttribute('aria-errormessage');
     expect(screen.getByLabelText('Custom end date')).toHaveAttribute('aria-errormessage', 'stats-custom-range-error');
     expect(screen.getByLabelText('Custom start date')).toHaveAttribute('aria-describedby', expect.stringContaining('stats-custom-range-error'));
     expect(screen.getByLabelText('Custom end date')).toHaveAttribute('aria-describedby', expect.stringContaining('stats-custom-range-error'));

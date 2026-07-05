@@ -167,13 +167,13 @@ describe("InvocationsTable", () => {
         createdAt: "2024-06-03T10:00:05Z",
       } as any,
     ]);
-    const { getByText, queryByText, getAllByRole } = render(<Harness />);
+    const { getByText, queryByText, getAllByRole, getByRole, queryByRole } = render(<Harness />);
 
     const expandButton = getAllByRole("button", { name: "Expand invocation inv-1" })[0];
     fireEvent.click(expandButton);
     expect(expandButton).toHaveAttribute("aria-expanded", "true");
     await waitFor(() => {
-      expect(getByText("Loading messages")).toBeTruthy();
+      expect(getByRole("status", { name: "Loading transcript messages" })).toBeTruthy();
     });
     await waitFor(() => {
       expect(getByText("Telemetry summary ready.")).toBeTruthy();
@@ -182,7 +182,7 @@ describe("InvocationsTable", () => {
     fireEvent.click(expandButton);
     expect(expandButton).toHaveAttribute("aria-expanded", "false");
     await waitFor(() => {
-      expect(queryByText("Loading messages")).toBeNull();
+      expect(queryByRole("status", { name: "Loading transcript messages" })).toBeNull();
     });
     expect(queryByText("Telemetry summary ready.")).toBeNull();
   });
@@ -193,11 +193,11 @@ describe("InvocationsTable", () => {
     // initial window is 20, so we should see 20 instances of gemini-1.5-pro
     expect(queryAllByText("gemini-1.5-pro").length).toBe(20);
 
-    const revealBtn = getByRole("button", { name: "Show more invocations" });
+    const revealBtn = getByRole("button", { name: /^Show more invocations/ });
     fireEvent.click(revealBtn);
 
     expect(queryAllByText("gemini-1.5-pro").length).toBe(40);
-    expect(queryByRole("button", { name: "Show more invocations" })).toBeNull();
+    expect(queryByRole("button", { name: /^Show more invocations/ })).toBeNull();
   });
 
   it("preserves expanded invocation even if outside initial window", () => {
@@ -210,19 +210,21 @@ describe("InvocationsTable", () => {
   });
 
   it("renders loading skeleton", () => {
-    const { container } = render(<Harness loading={true} />);
-    expect(container.querySelectorAll(".motion-safe\\:animate-pulse").length).toBe(6);
+    render(<Harness invocations={[]} loading={true} />);
+    expect(screen.getByRole("status", { name: "Loading invocation records" })).toBeTruthy();
+    expect(screen.getByText("Refreshing the ledger rows and transcript expansion targets.")).toBeTruthy();
   });
 
   it("renders empty state", () => {
-    const { getByText } = render(<Harness invocations={[]} />);
-    expect(getByText("No invocations match the current filters")).toBeTruthy();
+    render(<Harness invocations={[]} />);
+    expect(screen.getByRole("status", { name: "No invocation records" })).toBeTruthy();
+    expect(screen.getByText("No invocation records to show")).toBeTruthy();
   });
 
   it("renders error state", () => {
-    const { getByRole, getByText } = render(<Harness error="network offline" />);
-    expect(getByRole("alert")).toBeTruthy();
-    expect(getByText("Failed to load invocation records")).toBeTruthy();
-    expect(getByText("network offline")).toBeTruthy();
+    render(<Harness error="network offline" />);
+    expect(screen.getByRole("alert", { name: "Invocation records failed to load" })).toBeTruthy();
+    expect(screen.getByText("Failed to load invocation records")).toBeTruthy();
+    expect(screen.getByText("network offline")).toBeTruthy();
   });
 });

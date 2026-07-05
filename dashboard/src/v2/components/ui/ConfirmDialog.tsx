@@ -5,7 +5,8 @@ import gsap from "gsap";
 import { useFocusTrap } from "../../hooks/use-focus-trap.js";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 import { MODAL_MOTION } from "../../lib/motion/modal-motion.js";
-import { useGsapInteractionTokens } from "../../lib/motion/constants.js";
+import { GSAP_INTERACTION_TOKENS, useGsapInteractionTokens } from "../../lib/motion/constants.js";
+import { useInteractionTokens } from "../../lib/motion/tokens.js";
 import type { ConfirmDialogOptions } from "../../hooks/use-confirm-dialog.js";
 
 import { Loader2, AlertTriangle, CheckCircle2, CircleAlert, Info, XCircle } from "lucide-preact";
@@ -32,7 +33,9 @@ function DestructiveConfirmButton({
   const [progress, setProgress] = useState(0);
   const reducedMotion = useReducedMotion();
   const gsapTokens = useGsapInteractionTokens();
+  const cssTokens = useInteractionTokens();
   const progressId = "destructive-confirm-progress";
+  const progressBarId = "destructive-confirm-progressbar";
 
   const holdDuration = 1000;
   const holdTimerRef = useRef<number | null>(null);
@@ -116,7 +119,7 @@ function DestructiveConfirmButton({
           { x: 0, duration: gsapTokens.inlineValidation.duration, ease: gsapTokens.inlineValidation.ease }
         );
       }
-      const resetDelay = tokenSecondsToMs(gsapTokens.controlFeedback.duration);
+      const resetDelay = tokenSecondsToMs(gsapTokens.controlFeedback.duration || GSAP_INTERACTION_TOKENS.controlFeedback.duration);
       if (resetDelay === 0) {
         setConfirmState("idle");
       } else {
@@ -189,7 +192,7 @@ function DestructiveConfirmButton({
       onPointerCancel={handlePointerCancel}
       onContextMenu={(e) => e.preventDefault()}
       className={`relative overflow-hidden ${className}`}
-      style={{ userSelect: 'none', WebkitUserSelect: 'none' }}
+      style={{ userSelect: 'none', WebkitUserSelect: 'none', transitionDuration: cssTokens.controlFeedback.duration, transitionTimingFunction: cssTokens.controlFeedback.ease }}
       aria-busy={isLoading ? "true" : undefined}
       disabled={isLoading}
       aria-label={isLoading ? `Completing ${label}` : `Hold to ${label}`}
@@ -198,13 +201,19 @@ function DestructiveConfirmButton({
       {(confirmState === "holding" || confirmState === "complete") && (
         <div
           ref={barRef}
+          id={progressBarId}
+          role="progressbar"
+          aria-label="Hold confirmation progress"
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={Math.round(progress)}
           className="absolute inset-0 bg-black/20 dark:bg-white/20 origin-left"
           style={{ width: "0%" }}
         />
       )}
 
       <span className="relative z-10 flex items-center justify-center gap-2">
-        {isLoading && <><Loader2 aria-hidden="true" className="h-4 w-4 animate-spin" /><span className="sr-only">Processing, please wait</span></>}
+        {isLoading && <><Loader2 aria-hidden="true" className="h-4 w-4 animate-spin motion-reduce:animate-none" /><span className="sr-only">Processing, please wait</span></>}
         {isLoading ? "Completing..." : confirmState === "complete" ? "Confirmed" : confirmState === "cancelled" ? "Release canceled" : confirmState === "holding" ? `Hold to ${label}` : label}
         {confirmState === "holding" && (
           <span aria-hidden="true" className="tabular-nums opacity-85">
@@ -242,6 +251,11 @@ export function ConfirmDialog({ isOpen, options, onConfirm, onCancel }: ConfirmD
   const trapRef = useFocusTrap(shouldRender && !isClosing, { onClose: () => handleClose(onCancel), restoreFocus: true });
   const reducedMotion = useReducedMotion();
   const gsapTokens = useGsapInteractionTokens();
+  const cssTokens = useInteractionTokens();
+  const controlTransitionStyle = {
+    transitionDuration: cssTokens.controlFeedback.duration,
+    transitionTimingFunction: cssTokens.controlFeedback.ease,
+  };
 
   useEffect(() => {
     if (isOpen) {
@@ -263,7 +277,7 @@ export function ConfirmDialog({ isOpen, options, onConfirm, onCancel }: ConfirmD
         );
       }
     }
-  }, [shouldRender, isClosing, reducedMotion]);
+  }, [shouldRender, isClosing, reducedMotion, gsapTokens.enterExit.duration, gsapTokens.enterExit.ease]);
 
   const handleClose = async (callback: () => void | Promise<void>) => {
     if (isClosing || isProcessing) return;
@@ -303,7 +317,7 @@ export function ConfirmDialog({ isOpen, options, onConfirm, onCancel }: ConfirmD
         onExitComplete();
       }
     }
-  }, [isClosing, reducedMotion]);
+  }, [isClosing, reducedMotion, gsapTokens.enterExit.duration, gsapTokens.enterExit.ease]);
 
   if (!shouldRender || !options) return null;
 
@@ -372,7 +386,7 @@ export function ConfirmDialog({ isOpen, options, onConfirm, onCancel }: ConfirmD
             </div>
             <div className="min-w-0 flex-1">
               <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-300">Confirm Runtime Action</p>
-              <h2 id="confirm-dialog-title" className="mt-1 text-lg font-black leading-tight tracking-tight text-void-900 dark:text-slate-50">
+              <h2 id="confirm-dialog-title" className="mt-1 text-base font-semibold leading-tight tracking-tight text-void-900 dark:text-slate-50">
                 {title}
               </h2>
             </div>
@@ -397,7 +411,8 @@ export function ConfirmDialog({ isOpen, options, onConfirm, onCancel }: ConfirmD
             type="button"
             onClick={() => handleClose(onCancel)}
             disabled={isProcessing}
-            className="inline-flex min-h-10 items-center justify-center rounded-xl border border-black/[0.08] bg-white px-4 py-2 text-sm font-bold text-slate-600 transition-all duration-200 hover:bg-black/[0.035] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 motion-safe:active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/[0.14] dark:bg-white/[0.08] dark:text-slate-100 dark:hover:bg-white/[0.12]"
+            style={controlTransitionStyle}
+            className="inline-flex min-h-10 items-center justify-center rounded-xl border border-black/[0.08] bg-white px-4 py-2 text-sm font-bold text-slate-600 transition-all duration-[var(--interaction-control-feedback-duration)] ease-[var(--interaction-control-feedback-ease)] hover:bg-black/[0.035] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 motion-safe:active:scale-[0.98] motion-reduce:duration-0 motion-reduce:ease-none disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/[0.14] dark:bg-white/[0.08] dark:text-slate-100 dark:hover:bg-white/[0.12]"
           >
             {cancelLabel}
           </button>
@@ -406,7 +421,7 @@ export function ConfirmDialog({ isOpen, options, onConfirm, onCancel }: ConfirmD
               onConfirm={() => handleClose(onConfirm)}
               label={confirmLabel}
               isLoading={isProcessing}
-              className={`inline-flex min-h-10 items-center justify-center rounded-xl px-4 py-2 text-sm font-black transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50 ${toneStyles.confirm}`}
+              className={`inline-flex min-h-10 items-center justify-center rounded-xl px-4 py-2 text-sm font-semibold transition-all duration-[var(--interaction-control-feedback-duration)] ease-[var(--interaction-control-feedback-ease)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 motion-safe:active:scale-[0.98] motion-reduce:duration-0 motion-reduce:ease-none disabled:cursor-not-allowed disabled:opacity-50 ${toneStyles.confirm}`}
             />
           ) : (
             <button
@@ -414,9 +429,10 @@ export function ConfirmDialog({ isOpen, options, onConfirm, onCancel }: ConfirmD
               onClick={() => handleClose(onConfirm)}
               disabled={isProcessing}
               aria-busy={isProcessing}
-              className={`inline-flex min-h-10 items-center justify-center gap-2 rounded-xl px-4 py-2 text-sm font-black transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 motion-safe:active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50 ${toneStyles.confirm} ${confirmFlash ? '!bg-status-green !text-white !border-transparent' : ''}`}
+              style={controlTransitionStyle}
+              className={`inline-flex min-h-10 items-center justify-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold transition-all duration-[var(--interaction-control-feedback-duration)] ease-[var(--interaction-control-feedback-ease)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 motion-safe:active:scale-[0.98] motion-reduce:duration-0 motion-reduce:ease-none disabled:cursor-not-allowed disabled:opacity-50 ${toneStyles.confirm} ${confirmFlash ? '!bg-status-green !text-white !border-transparent' : ''}`}
             >
-              {isProcessing && <><Loader2 aria-hidden="true" className="h-4 w-4 animate-spin" /><span className="sr-only">Processing, please wait</span></>}
+              {isProcessing && <><Loader2 aria-hidden="true" className="h-4 w-4 animate-spin motion-reduce:animate-none" /><span className="sr-only">Processing, please wait</span></>}
               {isProcessing ? "Processing..." : confirmLabel}
             </button>
           )}

@@ -1,4 +1,5 @@
 import type { FunctionComponent } from "preact";
+import { useState } from "preact/hooks";
 import { AlertTriangle, Boxes, CheckCircle2, Loader2, RefreshCw } from "lucide-react";
 import type { EmbeddingModelWithStatus, MemoryStats, ReembedProgress } from "../../lib/memory-api.js";
 import { ModelCard } from "./ModelCard.js";
@@ -7,10 +8,10 @@ interface EmbeddingModelCatalogProps {
   models: EmbeddingModelWithStatus[];
   stats: MemoryStats;
   reembed: ReembedProgress | null;
-  onDownload: (id: string) => void;
-  onSelect: (id: string) => void;
-  onDelete: (id: string) => void;
-  onReembed: () => void;
+  onDownload: (id: string) => void | Promise<void>;
+  onSelect: (id: string) => void | Promise<void>;
+  onDelete: (id: string) => void | Promise<void>;
+  onReembed: () => void | Promise<void>;
 }
 
 export const EmbeddingModelCatalog: FunctionComponent<EmbeddingModelCatalogProps> = ({
@@ -22,14 +23,31 @@ export const EmbeddingModelCatalog: FunctionComponent<EmbeddingModelCatalogProps
   onDelete,
   onReembed,
 }) => {
+  const [actionStatus, setActionStatus] = useState<{ status: "idle" | "pending" | "success" | "error"; message: string | null }>({ status: "idle", message: null });
   const downloadedCount = models.filter((model) => model.downloaded).length;
   const downloadingCount = models.filter((model) => model.downloading).length;
   const activeModel = models.find((model) => model.active);
+  const catalogStatus = `${models.length} models available. ${downloadedCount} downloaded. ${downloadingCount} downloading. ${activeModel ? `${activeModel.displayName} active.` : "No active model."}`;
+  const runModelAction = async (message: string, successMessage: string, action: () => void | Promise<void>): Promise<void> => {
+    setActionStatus({ status: "pending", message });
+    try {
+      await action();
+      setActionStatus({ status: "success", message: successMessage });
+    } catch (error) {
+      setActionStatus({
+        status: "error",
+        message: error instanceof Error ? error.message : "Model action failed. Try again."
+      });
+    }
+  };
 
   return (
-    <section aria-labelledby="embedding-model-catalog-title" className="relative overflow-hidden rounded-[1.75rem] border border-black/[0.06] bg-white/72 p-4 shadow-[0_14px_38px_rgba(15,23,42,0.06)] backdrop-blur-2xl dark:border-white/[0.06] dark:bg-void-800/62 dark:shadow-[0_16px_42px_rgba(0,0,0,0.28)] md:p-5">
+    <section aria-labelledby="embedding-model-catalog-title" aria-describedby="embedding-model-catalog-status" className="relative overflow-hidden rounded-[1.75rem] border border-black/[0.06] bg-white/72 p-4 shadow-[0_14px_38px_rgba(15,23,42,0.06)] backdrop-blur-2xl dark:border-white/[0.06] dark:bg-void-800/62 dark:shadow-[0_16px_42px_rgba(0,0,0,0.28)] md:p-5">
       <div aria-hidden className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-signal-500/35 to-transparent" />
       <div className="relative z-10 flex flex-col gap-5">
+        <p id="embedding-model-catalog-status" className="sr-only" aria-live="polite" aria-atomic="true">
+          {catalogStatus}
+        </p>
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div className="flex min-w-0 gap-3">
             <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-signal-500/20 bg-signal-500/[0.1] text-signal-600 shadow-[0_0_24px_rgba(0,224,160,0.12)] dark:text-signal-300">
@@ -39,7 +57,7 @@ export const EmbeddingModelCatalog: FunctionComponent<EmbeddingModelCatalogProps
               <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-signal-600 dark:text-signal-400">
                 Local embeddings
               </p>
-              <h2 id="embedding-model-catalog-title" className="mt-1 text-lg font-black tracking-tight text-slate-900 dark:text-white">
+              <h2 id="embedding-model-catalog-title" className="mt-1 text-base font-semibold tracking-tight text-slate-900 dark:text-white">
                 Embedding model catalog
               </h2>
               <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500 dark:text-slate-400">
@@ -76,6 +94,29 @@ export const EmbeddingModelCatalog: FunctionComponent<EmbeddingModelCatalogProps
             <p className="text-xs font-bold">
               {downloadingCount} {downloadingCount === 1 ? "model is" : "models are"} downloading.
             </p>
+          </div>
+        )}
+
+        {actionStatus.message && (
+          <div
+            className={`flex items-center gap-3 rounded-2xl border px-4 py-3 ${
+              actionStatus.status === "error"
+                ? "border-status-red/20 bg-status-red/[0.08] text-status-red"
+                : "border-signal-500/18 bg-signal-500/[0.07] text-signal-700 dark:text-signal-300"
+            }`}
+            role={actionStatus.status === "error" ? "alert" : "status"}
+            aria-live={actionStatus.status === "error" ? "assertive" : "polite"}
+            aria-atomic="true"
+            aria-busy={actionStatus.status === "pending"}
+          >
+            {actionStatus.status === "pending" ? (
+              <Loader2 className="h-4 w-4 shrink-0 animate-spin" strokeWidth={2.4} />
+            ) : actionStatus.status === "success" ? (
+              <CheckCircle2 className="h-4 w-4 shrink-0" strokeWidth={2.4} />
+            ) : (
+              <AlertTriangle className="h-4 w-4 shrink-0" strokeWidth={2.4} />
+            )}
+            <p className="text-xs font-bold">{actionStatus.message}</p>
           </div>
         )}
 
@@ -119,17 +160,29 @@ export const EmbeddingModelCatalog: FunctionComponent<EmbeddingModelCatalogProps
         <div className="grid grid-cols-1 items-stretch gap-3 xl:grid-cols-2">
           {models.map((model) => (
             <ModelCard key={model.id} model={model}
-              onDownload={onDownload}
-              onSelect={onSelect}
-              onDelete={onDelete}
-              onReembed={onReembed}
+              onDownload={(id) => {
+                const selected = models.find((item) => item.id === id);
+                void runModelAction(`Downloading ${selected?.displayName ?? "embedding model"}...`, `${selected?.displayName ?? "Embedding model"} download started.`, () => onDownload(id));
+              }}
+              onSelect={(id) => {
+                const selected = models.find((item) => item.id === id);
+                void runModelAction(`Activating ${selected?.displayName ?? "embedding model"}...`, `${selected?.displayName ?? "Embedding model"} is active.`, () => onSelect(id));
+              }}
+              onDelete={(id) => {
+                const selected = models.find((item) => item.id === id);
+                void runModelAction(`Deleting ${selected?.displayName ?? "embedding model"}...`, `${selected?.displayName ?? "Embedding model"} deleted.`, () => onDelete(id));
+              }}
+              onReembed={() => {
+                void runModelAction("Starting memory re-embedding...", "Memory re-embedding started.", onReembed);
+              }}
               reembedding={!!reembed?.active}
               staleCount={stats.staleEmbeddings} />
           ))}
           {models.length === 0 && (
-            <p className="rounded-[1.5rem] border border-dashed border-black/[0.08] bg-black/[0.02] px-6 py-12 text-center text-sm font-medium text-slate-400 dark:border-white/[0.08] dark:bg-white/[0.02] lg:col-span-2">
-              Loading embedding models...
-            </p>
+            <div className="rounded-[1.5rem] border border-dashed border-black/[0.08] bg-black/[0.02] px-6 py-12 text-center text-sm font-medium text-slate-400 dark:border-white/[0.08] dark:bg-white/[0.02] lg:col-span-2" role="status" aria-live="polite">
+              <p>Embedding models are not available yet.</p>
+              <p className="mt-2 text-xs text-slate-400 dark:text-slate-500">Refresh the catalog or check the local embedding runtime if this panel stays empty.</p>
+            </div>
           )}
         </div>
       </div>

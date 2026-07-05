@@ -101,6 +101,20 @@ vi.mock("../../../dashboard/src/v2/lib/browser-api.js", () => ({
 
 vi.mock("../../../dashboard/src/v2/lib/preview-origin.js", () => ({
     buildPreviewUrl: vi.fn((sessionId, path) => `http://preview-${sessionId}.localhost${path || "/"}`),
+    getPrimaryPreviewPortMapping: vi.fn((session) => (
+        session?.portMappings?.find((mapping: any) => mapping.isPrimary)
+        ?? session?.portMappings?.[0]
+        ?? { containerPort: session?.containerAppPort, hostPort: session?.hostPort, isPrimary: true }
+    )),
+    formatPreviewPortMappingsSummary: vi.fn((session) => {
+        const mappings = session?.portMappings?.length
+            ? session.portMappings
+            : [{ containerPort: session?.containerAppPort, hostPort: session?.hostPort, isPrimary: true }];
+        return mappings.map((mapping: any) => {
+            const label = mapping.label ? `${mapping.label} :${mapping.containerPort}` : `:${mapping.containerPort}`;
+            return `${label} -> ${mapping.hostPort ? `:${mapping.hostPort}` : "pending"}`;
+        }).join(" · ");
+    }),
 }));
 
 vi.mock("@tanstack/react-router", () => ({
@@ -184,6 +198,21 @@ describe("BrowserSessionsMenu", () => {
         expect(button).toBeInTheDocument();
     });
 
+    it("does not open from focus alone", () => {
+        vi.mocked(useProjectData).mockReturnValue({
+            selectedProject: null,
+        } as any);
+
+        render(<BrowserSessionsMenu />);
+
+        const button = screen.getByRole("button", { name: /Browser Sessions:/i });
+        button.focus();
+
+        expect(button).toHaveFocus();
+        expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+        expect(button).toHaveAttribute("aria-expanded", "false");
+    });
+
     it("shows polite empty state when no project is selected", async () => {
         vi.mocked(useProjectData).mockReturnValue({
             selectedProject: null,
@@ -260,10 +289,9 @@ describe("BrowserSessionsMenu", () => {
             expect(screen.getByText("Update dashboard")).toBeInTheDocument();
         });
 
-        // Check ports based on new format: `:${session.containerAppPort} ➔ :${session.hostPort}`
-        expect(screen.getByText(/:3000 ➔ :8080/)).toBeInTheDocument();
+        expect(screen.getByText(/:3000 -> :8080/)).toBeInTheDocument();
         // Since session-2 doesn't have hostPort it shows pending port format
-        expect(screen.getByText(/:5173 ➔ pending/)).toBeInTheDocument();
+        expect(screen.getByText(/:5173 -> pending/)).toBeInTheDocument();
 
         // Check link generation
         const links = screen.getAllByRole("menuitem");
@@ -272,10 +300,45 @@ describe("BrowserSessionsMenu", () => {
         expect(links[0]).toHaveAttribute("href", "http://preview-sess-1.localhost/login");
         expect(links[0]).toHaveAttribute("target", "_blank");
 
-        expect(links[1]).toHaveAttribute("href", "http://preview-sess-2.localhost/");
-        expect(links[1]).toHaveAttribute("target", "_blank");
+        expect(links[1]).not.toHaveAttribute("href");
+        expect(links[1]).toHaveAttribute("aria-disabled", "true");
 
         expect(browserApi.fetchPreviewSessions).toHaveBeenCalledWith("proj-1");
+    });
+
+    it("shows compact multi-port summaries in the sessions menu", async () => {
+        vi.mocked(useProjectData).mockReturnValue({
+            selectedProject: { id: "proj-1" },
+        } as any);
+
+        vi.mocked(browserApi.fetchPreviewSessions).mockResolvedValue([
+            {
+                id: "sess-multi",
+                sprintId: "sprint-1",
+                projectId: "proj-1",
+                sprintName: "Multi preview",
+                status: "running",
+                healthStatus: "healthy",
+                containerAppPort: 3000,
+                hostPort: 8080,
+                portMappings: [
+                    { containerPort: 3000, hostPort: 8080, isPrimary: true },
+                    { containerPort: 5173, hostPort: 8081, label: "Vite" },
+                    { containerPort: 6006, hostPort: null, label: "Storybook" },
+                ],
+                lastKnownPath: "/",
+            },
+        ] as any);
+
+        render(<BrowserSessionsMenu />);
+
+        fireEvent.click(screen.getByRole("button", { name: /Browser Sessions:/i }));
+
+        await waitFor(() => {
+            expect(screen.getByText("Multi preview")).toBeInTheDocument();
+        });
+
+        expect(screen.getByText(":3000 -> :8080 · Vite :5173 -> :8081 · Storybook :6006 -> pending")).toBeInTheDocument();
     });
 
     it("restores focus to trigger on escape and toggles aria-expanded", async () => {
@@ -321,7 +384,7 @@ describe("BrowserSessionsMenu", () => {
 
         const mockSessions = [
             { id: "sess-1", sprintId: "sprint-1", sprintName: "Add auth", status: "running", containerAppPort: 3000, hostPort: 8080 },
-            { id: "sess-2", sprintId: "sprint-2", sprintName: "Update dashboard", status: "running", containerAppPort: 5173 }
+            { id: "sess-2", sprintId: "sprint-2", sprintName: "Update dashboard", status: "running", containerAppPort: 5173, hostPort: 8081 }
         ];
 
         vi.mocked(browserApi.fetchPreviewSessions).mockResolvedValue(mockSessions as any);
@@ -366,6 +429,137 @@ describe("BrowserSessionsMenu", () => {
             fireEvent.keyDown(menu, { key: "ArrowUp" });
         });
         expect(document.activeElement).toBe(links[1]);
+
+        await act(async () => {
+            fireEvent.keyDown(menu, { key: "Home" });
+        });
+        expect(document.activeElement).toBe(links[0]);
+
+        await act(async () => {
+            fireEvent.keyDown(menu, { key: "End" });
+        });
+        expect(document.activeElement).toBe(links[1]);
+    });
+
+    it("skips disabled session items during Home End and arrow navigation", async () => {
+        vi.mocked(useProjectData).mockReturnValue({
+            selectedProject: { id: "proj-1" },
+        } as any);
+
+        vi.mocked(browserApi.fetchPreviewSessions).mockResolvedValue([
+            { id: "sess-disabled", sprintId: "sprint-0", sprintName: "Pending route", status: "starting", healthStatus: "unknown", containerAppPort: 3000, hostPort: null },
+            { id: "sess-1", sprintId: "sprint-1", sprintName: "Runnable one", status: "running", healthStatus: "healthy", containerAppPort: 3000, hostPort: 8080 },
+            { id: "sess-2", sprintId: "sprint-2", sprintName: "Runnable two", status: "running", healthStatus: "healthy", containerAppPort: 5173, hostPort: 8081 },
+        ] as any);
+
+        render(<BrowserSessionsMenu />);
+
+        const button = screen.getByRole("button", { name: /Browser Sessions:/i });
+        button.focus();
+        fireEvent.keyDown(button, { key: "Enter" });
+
+        await waitFor(() => {
+            expect(screen.getAllByRole("menuitem")).toHaveLength(3);
+        });
+
+        const menu = screen.getByRole("menu");
+        const items = screen.getAllByRole("menuitem");
+        expect(items[0]).toHaveAttribute("aria-disabled", "true");
+
+        await waitFor(() => {
+            expect(document.activeElement).toBe(items[1]);
+        });
+
+        fireEvent.keyDown(menu, { key: "End" });
+        expect(document.activeElement).toBe(items[2]);
+
+        fireEvent.keyDown(menu, { key: "ArrowDown" });
+        expect(document.activeElement).toBe(items[1]);
+
+        fireEvent.keyDown(menu, { key: "Home" });
+        expect(document.activeElement).toBe(items[1]);
+    });
+
+    it("restores trigger focus after outside click closes the menu", async () => {
+        vi.mocked(useProjectData).mockReturnValue({
+            selectedProject: null,
+        } as any);
+
+        render(
+            <div>
+                <BrowserSessionsMenu />
+                <button type="button">Outside target</button>
+            </div>
+        );
+
+        const button = screen.getByRole("button", { name: /Browser Sessions:/i });
+        fireEvent.click(button);
+
+        await waitFor(() => {
+            expect(screen.getByRole("menu")).toBeInTheDocument();
+        });
+
+        fireEvent.mouseDown(screen.getByRole("button", { name: "Outside target" }));
+
+        await waitFor(() => {
+            expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+            expect(document.activeElement).toBe(button);
+        });
+    });
+
+    it("keeps stale sessions visible while refresh is pending and downgrades refresh errors to polite status", async () => {
+        vi.mocked(useProjectData).mockReturnValue({
+            selectedProject: { id: "proj-1" },
+        } as any);
+
+        const firstSessions = [
+            {
+                id: "sess-1",
+                sprintId: "sprint-1",
+                projectId: "proj-1",
+                sprintName: "Cached preview",
+                status: "running",
+                healthStatus: "healthy",
+                containerAppPort: 3000,
+                hostPort: 8080,
+                lastKnownPath: "/"
+            }
+        ];
+        let rejectRefresh: ((error: Error) => void) | null = null;
+        vi.mocked(browserApi.fetchPreviewSessions)
+            .mockResolvedValueOnce(firstSessions as any)
+            .mockImplementationOnce(() => new Promise((_resolve, reject) => {
+                rejectRefresh = reject;
+            }));
+
+        render(<BrowserSessionsMenu />);
+
+        const button = screen.getByRole("button", { name: /Browser Sessions:/i });
+        fireEvent.click(button);
+
+        await waitFor(() => {
+            expect(screen.getByText("Cached preview")).toBeInTheDocument();
+        });
+
+        fireEvent.keyDown(document, { key: "Escape" });
+        await waitFor(() => {
+            expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+        });
+
+        fireEvent.click(button);
+        await waitFor(() => {
+            expect(screen.getByText("Cached preview")).toBeInTheDocument();
+            expect(screen.getByRole("menu")).toHaveAttribute("aria-busy", "true");
+            expect(screen.getByRole("status")).toHaveTextContent("Refreshing sessions. Current sessions remain available.");
+        });
+
+        rejectRefresh?.(new Error("refresh failed"));
+
+        await waitFor(() => {
+            expect(screen.getByText("Cached preview")).toBeInTheDocument();
+            expect(screen.getByRole("status")).toHaveTextContent("Could not refresh sessions. Showing last loaded sessions. refresh failed");
+            expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+        });
     });
 });
 

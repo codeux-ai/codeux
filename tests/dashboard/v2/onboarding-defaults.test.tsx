@@ -143,4 +143,8 @@ describe("Onboarding automation defaults", () => {
   it("defaults the appearance pattern overlay to none", () => {
     expect(DEFAULT_DASHBOARD_SETTINGS.appearance.backgroundPattern).toBe("NONE");
   });
+
+  it("defaults navigation to the sidebar", () => {
+    expect(DEFAULT_DASHBOARD_SETTINGS.appearance.navigationMode).toBe("SIDEBAR");
+  });
 });

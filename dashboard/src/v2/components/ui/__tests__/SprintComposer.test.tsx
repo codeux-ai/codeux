@@ -116,7 +116,7 @@ describe("SprintComposer", () => {
 
     // Expect to see the error message after rejection
     await waitFor(() => {
-        expect(screen.queryAllByText("Network failure").length).toBeGreaterThan(0);
+        expect(screen.queryAllByText(/Network failure/).length).toBeGreaterThan(0);
         expect(screen.queryByRole("button", { name: "Retry Improve" })).not.toBeNull();
     }, { timeout: 3000 });
   });
@@ -157,6 +157,44 @@ describe("SprintComposer", () => {
     fireEvent.click(cancelBtn);
 
     expect(onCancelMock).toHaveBeenCalled();
+  });
+
+  it("starts a new sprint from a minimized planning overlay without cancelling the active request", async () => {
+    let capturedShouldHandleResult: (() => boolean) | undefined;
+    const onSubmit = vi.fn((payload: { shouldHandleResult?: () => boolean }) => {
+      capturedShouldHandleResult = payload.shouldHandleResult;
+      return new Promise<void>(() => {});
+    });
+    const onCancelMock = vi.fn();
+    const onStartNewSprint = vi.fn();
+
+    renderWithContext(
+      <SprintComposer
+        {...defaultProps}
+        onSubmit={onSubmit}
+        onCancelPlanningRequest={onCancelMock}
+        onStartNewSprint={onStartNewSprint}
+      />,
+    );
+
+    fireEvent.input(screen.getByRole("textbox", { name: "Sprint Name" }), {
+      target: { value: "Next runtime sweep" },
+    });
+    fireEvent.input(screen.getByPlaceholderText(/Describe the outcome/), {
+      target: { value: "Plan the next independent sprint." },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Plan & Start" }));
+
+    await waitFor(() => {
+      expect(screen.getByRole("progressbar")).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Minimize" }));
+    fireEvent.click(screen.getByRole("button", { name: "New Sprint" }));
+
+    expect(onStartNewSprint).toHaveBeenCalled();
+    expect(onCancelMock).not.toHaveBeenCalled();
+    expect(capturedShouldHandleResult?.()).toBe(false);
   });
 
 });

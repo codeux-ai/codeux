@@ -11,8 +11,8 @@ expect.extend(matchers);
 describe("LiveTransportBanner", () => {
   afterEach(() => cleanup());
 
-  it("does not render a stale-data warning for an old connected snapshot, but keeps the live region in the DOM", async () => {
-    const staleTimestamp = new Date(Date.now() - 60_000).toISOString();
+  it("renders stale-data status for an old connected snapshot and keeps the live region in the DOM", () => {
+    const staleTimestamp = new Date(Date.now() - 61_000).toISOString();
 
     render(
       <LiveTransportBanner
@@ -23,13 +23,13 @@ describe("LiveTransportBanner", () => {
       />,
     );
 
-    // Give it a moment to complete any layout effects, though it should be synchronous for connected.
-    // However, it starts disconnected? No, it mounts as "connected".
-    // Wait, the role is determined by "isUrgent". `isUrgent` defaults to true in the code.
-    // If transportState is "connected", `isUrgent` falls back to true, and `role="alert"`. Let's check.
-    const alertRegion = document.querySelector('[role="alert"]') || document.querySelector('[role="status"]');
-    expect(alertRegion).toBeInTheDocument();
-    expect(screen.queryByText("Stale Data")).not.toBeInTheDocument();
+    const liveRegion = screen.getByRole("status");
+    expect(liveRegion).toBeInTheDocument();
+    expect(liveRegion).toHaveAttribute("aria-live", "polite");
+    expect(liveRegion).toHaveAttribute("aria-busy", "false");
+    expect(screen.getByText("Stale Data")).toBeInTheDocument();
+    expect(screen.getByText("Live runtime content is still visible, but the latest snapshot is more than a minute old.")).toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
     expect(screen.queryByText("Disconnected")).not.toBeInTheDocument();
   });
 
@@ -58,9 +58,27 @@ describe("LiveTransportBanner", () => {
     );
 
     expect(screen.getByText("Reconnecting")).toBeInTheDocument();
-    expect(screen.getByText("Attempting to restore connection...")).toBeInTheDocument();
+    expect(screen.getByText("Attempting to restore connection. Cached runtime data remains visible.")).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveAttribute("aria-live", "polite");
     const spinner = document.querySelector('.motion-safe\\:animate-spin');
     expect(spinner).toBeInTheDocument();
+  });
+
+  it("uses assertive feedback for blocking disconnects while saying cached data remains visible", () => {
+    render(
+      <LiveTransportBanner
+        transportState="disconnected"
+        isRecovering={true}
+        snapshotUpdatedAt="2026-03-27T10:03:00.000Z"
+        error={null}
+      />,
+    );
+
+    const banner = screen.getByRole("alert");
+    expect(screen.getByText("Disconnected")).toBeInTheDocument();
+    expect(screen.getByText("Lost connection to the live stream. Cached runtime data remains visible while retrying.")).toBeInTheDocument();
+    expect(banner).toHaveAttribute("aria-live", "assertive");
+    expect(banner).toHaveAttribute("aria-busy", "true");
   });
 
   it("renders LiveTransportBanner with wrapping on small viewports", () => {

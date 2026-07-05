@@ -1,9 +1,11 @@
 import { FunctionComponent } from "preact";
 import { useLayoutEffect, useRef } from "preact/hooks";
-import { X } from "lucide-react";
+import { X } from "lucide-preact";
 import gsap from "gsap";
 import type { MemNode, Edge } from "../../lib/memory-graph.js";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
+import { useInteractionTokens } from "../../lib/motion/index.js";
+import { useGsapInteractionTokens } from "../../lib/motion/constants.js";
 
 const CAT: Record<string, { label: string; hex: string; r: number; g: number; b: number }> = {
     architecture: { label: "Architecture", hex: "#00E0A0", r: 0,   g: 224, b: 160 },
@@ -18,17 +20,21 @@ const CAT: Record<string, { label: string; hex: string; r: number; g: number; b:
 
 export const Inspector: FunctionComponent<{
     node: MemNode | null;
+    missingSelectedMemoryId?: string | null;
     allNodes: MemNode[];
     edges: Edge[];
     lobotomize: boolean;
     onClose: () => void;
     onDelete: (id: string) => void;
-}> = ({ node, allNodes, edges, lobotomize, onClose, onDelete }) => {
+}> = ({ node, missingSelectedMemoryId = null, allNodes, edges, lobotomize, onClose, onDelete }) => {
     const contentRef = useRef<HTMLDivElement>(null);
     const reducedMotion = useReducedMotion();
+    const interactionTokens = useInteractionTokens();
+    const gsapTokens = useGsapInteractionTokens();
+    const isOpen = Boolean(node || missingSelectedMemoryId);
 
     useLayoutEffect(() => {
-        if (!contentRef.current || !node) return;
+        if (!contentRef.current || !isOpen) return;
         if (reducedMotion) {
             gsap.set(contentRef.current, { opacity: 1, clearProps: "all" });
             return;
@@ -40,11 +46,11 @@ export const Inspector: FunctionComponent<{
         }, {
             opacity: 1,
             y: 0,
-            duration: 0.2,
-            ease: "power2.out",
+            duration: gsapTokens.selectionMovement.duration,
+            ease: gsapTokens.selectionMovement.ease,
             clearProps: "all"
         });
-    }, [node?.id, reducedMotion]);
+    }, [node?.id, missingSelectedMemoryId, isOpen, reducedMotion, gsapTokens.selectionMovement.duration, gsapTokens.selectionMovement.ease]);
 
     const handleDeleteClick = () => {
         if (!node) return;
@@ -64,15 +70,19 @@ export const Inspector: FunctionComponent<{
 
     return (
         <div
+            role="region"
+            aria-label={node ? "Selected memory details" : missingSelectedMemoryId ? "Selected memory unavailable" : "Memory inspector"}
+            aria-live="polite"
             className="absolute inset-x-0 bottom-0 z-30 flex h-[min(56dvh,34rem)] w-full flex-col gap-4 overflow-hidden rounded-t-[1.5rem]
                        border-t border-black/[0.06] bg-white/90 p-5 pt-12 shadow-[0_-24px_70px_rgba(0,0,0,0.12)]
                        backdrop-blur-3xl transition-transform duration-500 dark:border-white/[0.06] dark:bg-void-800/88
                        lg:inset-y-0 lg:left-auto lg:right-0 lg:h-full lg:w-[300px] lg:rounded-none lg:border-l lg:border-t-0
                        lg:p-6 lg:pt-12 lg:shadow-[-20px_0_60px_rgba(0,0,0,0.08)] dark:lg:shadow-[-20px_0_60px_rgba(0,0,0,0.4)]"
             style={{
-                transform: `translateX(${node ? "0" : "100%"})`,
-                transitionTimingFunction: "cubic-bezier(0.33, 1, 0.68, 1)",
-                pointerEvents: node ? "auto" : "none",
+                transform: `translateX(${isOpen ? "0" : "100%"})`,
+                transitionDuration: interactionTokens.selectionMovement.duration,
+                transitionTimingFunction: interactionTokens.selectionMovement.ease,
+                pointerEvents: isOpen ? "auto" : "none",
             }}
         >
             <button
@@ -86,8 +96,31 @@ export const Inspector: FunctionComponent<{
             >
                 <X className="w-3.5 h-3.5 text-slate-500" strokeWidth={2} />
             </button>
+            {!node && (
+                <p className="sr-only">No memory selected. Select a memory from the graph or list to inspect its details.</p>
+            )}
+            {!node && missingSelectedMemoryId && (
+                <div ref={contentRef} className="flex min-h-0 flex-col gap-4 overflow-y-auto pr-1 dashboard-scrollbar">
+                    <div className="rounded-xl border border-ember-500/20 bg-ember-500/[0.08] px-3 py-2 text-[11px] font-bold leading-4 text-ember-600 dark:text-ember-400">
+                        Selected memory is no longer in the current result set.
+                    </div>
+                    <p className="text-sm font-medium leading-6 text-slate-600 dark:text-slate-300">
+                        Refreshing, deleting, or changing filters can make an open memory unavailable. Close the inspector, retry the current filter, or choose another memory from the graph or list.
+                    </p>
+                    <button
+                        type="button"
+                        onClick={onClose}
+                        className="mt-2 inline-flex w-full items-center justify-center rounded-xl border border-black/[0.06] bg-black/[0.04] px-4 py-2.5 text-xs font-bold text-slate-600 transition-colors hover:bg-black/[0.08] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-300 dark:hover:bg-white/[0.08] dark:focus-visible:ring-offset-void-900"
+                    >
+                        Close inspector
+                    </button>
+                </div>
+            )}
             {node && (
                 <div ref={contentRef} className="flex min-h-0 flex-col gap-4 overflow-y-auto overflow-x-hidden pr-1 will-change-[opacity,transform] dashboard-scrollbar">
+                    <div className="rounded-xl border border-signal-500/20 bg-signal-500/[0.08] px-3 py-2 text-[11px] font-bold text-signal-700 dark:text-signal-300">
+                        Selected memory open in inspector
+                    </div>
                     <div className="flex items-center gap-2 pt-1">
                         <div className="w-2.5 h-2.5 rounded-full" style={{ background: cat.hex, boxShadow: `0 0 10px ${cat.hex}` }} />
                         <span className="text-[10px] font-bold uppercase tracking-[0.2em] font-mono" style={{ color: cat.hex }}>
@@ -146,9 +179,14 @@ export const Inspector: FunctionComponent<{
                         </div>
                     )}
                     {lobotomize && (
+                        <div className="mt-auto flex flex-col gap-2">
+                        <p className="rounded-xl border border-status-red/20 bg-status-red/[0.07] px-3 py-2 text-[11px] font-semibold leading-4 text-status-red">
+                            Danger delete is armed. Deleting this memory happens immediately without another confirmation.
+                        </p>
                         <button
                             type="button"
                             onClick={handleDeleteClick}
+                            aria-describedby="inspector-danger-delete-copy"
                             className="mt-auto flex w-full items-center justify-center gap-2 rounded-xl py-3
                                        bg-status-red text-white font-bold text-xs cursor-pointer
                                        shadow-[0_0_20px_rgba(227,0,15,0.3)] hover:bg-status-red/90 hover:shadow-[0_0_30px_rgba(227,0,15,0.5)]
@@ -156,6 +194,8 @@ export const Inspector: FunctionComponent<{
                             <X className="w-3.5 h-3.5" strokeWidth={2.5} />
                             Delete Immediately
                         </button>
+                        <span id="inspector-danger-delete-copy" className="sr-only">Danger delete is armed. This action deletes immediately without confirmation.</span>
+                        </div>
                     )}
                 </div>
             )}

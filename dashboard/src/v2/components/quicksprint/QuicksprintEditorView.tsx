@@ -1,9 +1,10 @@
-import type { FunctionComponent } from "preact";
+import type { FunctionComponent, JSX } from "preact";
 import { ChevronLeft, Compass, Palette, Smile, Trash2, Settings2, Zap } from "lucide-preact";
 import type { AgentPreset } from "../../types.js";
 import { AvantgardeSelect } from "../ui/AvantgardeSelect.js";
 import { SubtaskSlider, TAG_STYLES, ICON_OPTIONS, IconMap, getTagStyles } from "./quicksprint-shared.js";
 import type { QuicksprintTemplateRecord } from "../../../../../src/contracts/quicksprint-types.js";
+import { useInteractionTokens } from "../../lib/motion/tokens.js";
 
 export const QuicksprintEditorView: FunctionComponent<{
   agentPresets: AgentPreset[];
@@ -50,6 +51,20 @@ export const QuicksprintEditorView: FunctionComponent<{
   cardRef,
 }) => {
   const SelectedIcon = IconMap[edIcon] || Compass;
+  const interactionTokens = useInteractionTokens();
+  const iconPickerId = "quicksprint-template-icon-picker";
+  const colorPickerId = "quicksprint-template-color-picker";
+  const pickerMotionStyle = {
+    "--qs-picker-enter-duration": interactionTokens.enterExit.duration,
+    "--qs-picker-enter-ease": interactionTokens.enterExit.ease,
+    "--qs-picker-control-duration": interactionTokens.controlFeedback.duration,
+    "--qs-picker-control-ease": interactionTokens.controlFeedback.ease,
+  } as JSX.CSSProperties;
+  const pickerPositionStyle = {
+    top: pickerPos.top,
+    left: pickerPos.left,
+    ...pickerMotionStyle,
+  };
 
   return (
     <>
@@ -76,7 +91,7 @@ export const QuicksprintEditorView: FunctionComponent<{
                 value={edName}
                 onInput={(e) => setEdName((e.target as HTMLInputElement).value)}
                 placeholder="API Integration Tests"
-                className="w-full rounded-[1rem] border border-black/[0.06] bg-transparent px-4 py-3 font-display text-[1.65rem] font-black leading-none tracking-tight text-slate-900 outline-none transition-colors placeholder:text-slate-200 focus:ring-4 focus:ring-signal-500/20 focus:border-signal-500 dark:border-white/[0.08] dark:text-white dark:placeholder:text-slate-700 sm:text-[1.9rem]"
+                className="w-full rounded-[1rem] border border-black/[0.06] bg-transparent px-4 py-3 font-display text-xl font-semibold leading-none tracking-tight text-slate-900 outline-none transition-colors placeholder:text-slate-200 focus:ring-4 focus:ring-signal-500/20 focus:border-signal-500 dark:border-white/[0.08] dark:text-white dark:placeholder:text-slate-700 sm:text-[1.9rem]"
                 autoFocus
               />
             </label>
@@ -101,6 +116,9 @@ export const QuicksprintEditorView: FunctionComponent<{
                   {/* Icon picker trigger */}
                   <button
                     type="button"
+                    aria-label={`Pick template icon, current icon ${edIcon}`}
+                    aria-expanded={showIconPicker}
+                    aria-controls={iconPickerId}
                     onClick={(e) => {
                       const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
                       const container = cardRef.current?.getBoundingClientRect() || { top: 0, left: 0 };
@@ -108,7 +126,8 @@ export const QuicksprintEditorView: FunctionComponent<{
                       setShowIconPicker(!showIconPicker);
                       setShowColorPicker(false);
                     }}
-                    className="flex min-h-[44px] min-w-[44px] h-10 w-10 flex-shrink-0 cursor-pointer items-center justify-center rounded-xl border border-black/[0.08] bg-white/80 text-slate-600 shadow-sm transition-all duration-200 hover:scale-105 hover:shadow-md hover:border-ember-500/30 hover:text-ember-500 active:scale-95 dark:border-white/[0.08] dark:bg-white/[0.05] dark:text-slate-300 dark:hover:text-ember-400"
+                    className="flex min-h-[44px] min-w-[44px] h-10 w-10 flex-shrink-0 cursor-pointer items-center justify-center rounded-xl border border-black/[0.08] bg-white/80 text-slate-600 shadow-sm transition-[background-color,border-color,box-shadow,color,transform] duration-[var(--qs-picker-control-duration)] ease-[var(--qs-picker-control-ease)] hover:border-ember-500/30 hover:text-ember-500 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ember-500/40 focus-visible:ring-offset-2 motion-safe:hover:scale-[1.03] motion-safe:active:scale-[0.97] motion-reduce:transition-none dark:border-white/[0.08] dark:bg-white/[0.05] dark:text-slate-300 dark:hover:text-ember-400"
+                    style={pickerMotionStyle}
                     title="Pick icon"
                   >
                     {(() => { const Ic = IconMap[edIcon] || Zap; return <Ic className="h-5 w-5" />; })()}
@@ -117,6 +136,9 @@ export const QuicksprintEditorView: FunctionComponent<{
                   {/* Color dot picker trigger */}
                   <button
                     type="button"
+                    aria-label={`Pick template tag color, current color ${edCategoryColor}`}
+                    aria-expanded={showColorPicker}
+                    aria-controls={colorPickerId}
                     onClick={(e) => {
                       const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
                       const container = cardRef.current?.getBoundingClientRect() || { top: 0, left: 0 };
@@ -124,11 +146,12 @@ export const QuicksprintEditorView: FunctionComponent<{
                       setShowColorPicker(!showColorPicker);
                       setShowIconPicker(false);
                     }}
-                    className="flex min-h-[44px] min-w-[44px] h-10 w-10 flex-shrink-0 cursor-pointer items-center justify-center rounded-xl border border-black/[0.08] bg-white/80 shadow-sm transition-all duration-200 hover:scale-105 hover:shadow-md active:scale-95 dark:border-white/[0.08] dark:bg-white/[0.05]"
+                    className="flex min-h-[44px] min-w-[44px] h-10 w-10 flex-shrink-0 cursor-pointer items-center justify-center rounded-xl border border-black/[0.08] bg-white/80 shadow-sm transition-[background-color,border-color,box-shadow,transform] duration-[var(--qs-picker-control-duration)] ease-[var(--qs-picker-control-ease)] hover:border-ember-500/30 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ember-500/40 focus-visible:ring-offset-2 motion-safe:hover:scale-[1.03] motion-safe:active:scale-[0.97] motion-reduce:transition-none dark:border-white/[0.08] dark:bg-white/[0.05]"
+                    style={pickerMotionStyle}
                     title="Pick tag color"
                   >
                     <span
-                      className={`block h-5 w-5 rounded-full shadow-[inset_0_1px_2px_rgba(255,255,255,0.4),0_0_0_2px_rgba(0,0,0,0.06)] transition-transform duration-200 ${getTagStyles(edCategoryColor).dot}`}
+                      className={`block h-5 w-5 rounded-full shadow-[inset_0_1px_2px_rgba(255,255,255,0.4),0_0_0_2px_rgba(0,0,0,0.06)] transition-transform duration-[var(--qs-picker-control-duration)] ease-[var(--qs-picker-control-ease)] motion-reduce:transition-none ${getTagStyles(edCategoryColor).dot}`}
                       style={getTagStyles(edCategoryColor).style?.["--accent"] ? { backgroundColor: "var(--accent)", ...getTagStyles(edCategoryColor).style } : undefined}
                     />
                   </button>
@@ -171,11 +194,12 @@ export const QuicksprintEditorView: FunctionComponent<{
               <div className="fixed inset-0 z-[9998] cursor-pointer" onClick={() => setShowIconPicker(false)} aria-hidden="true" />
               <div
                 ref={iconPickerRef}
+                id={iconPickerId}
                 role="dialog"
                 aria-modal="true"
                 aria-label="Icon picker"
-                className="absolute z-[9999] w-[17rem] rounded-2xl border border-white/[0.08] p-3 shadow-2xl backdrop-blur-2xl bg-[#1a1d24]/95"
-                style={{ top: pickerPos.top, left: pickerPos.left, animation: "qs-picker-in 0.2s cubic-bezier(0.22,1,0.36,1)" }}
+                className="absolute z-[9999] w-[17rem] rounded-2xl border border-white/[0.08] p-3 shadow-2xl backdrop-blur-2xl bg-[#1a1d24]/95 transition-[opacity,transform] duration-[var(--qs-picker-enter-duration)] ease-[var(--qs-picker-enter-ease)] motion-reduce:transition-none"
+                style={pickerPositionStyle}
               >
                 <div className="grid grid-cols-6 gap-1">
                   {ICON_OPTIONS.map((opt) => {
@@ -184,13 +208,16 @@ export const QuicksprintEditorView: FunctionComponent<{
                       <button
                         key={opt.value}
                         type="button"
+                        aria-label={`Use ${opt.value} icon`}
+                        aria-pressed={isActive}
                         onClick={() => { setEdIcon(opt.value); setShowIconPicker(false); }}
                         title={opt.value}
-                        className={`flex min-h-[44px] min-w-[44px] h-9 w-9 cursor-pointer items-center justify-center rounded-xl transition-all duration-150 ${
+                        className={`flex min-h-[44px] min-w-[44px] h-9 w-9 cursor-pointer items-center justify-center rounded-xl border transition-[background-color,border-color,box-shadow,color,transform] duration-[var(--qs-picker-control-duration)] ease-[var(--qs-picker-control-ease)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ember-400/50 motion-reduce:transition-none ${
                           isActive
-                            ? "bg-ember-500/20 text-ember-500 shadow-[0_0_10px_rgba(255,107,0,0.15)] scale-110"
-                            : "text-slate-400 hover:bg-white/[0.08] hover:text-white hover:scale-110"
+                            ? "border-ember-400/40 bg-ember-500/20 text-ember-300 shadow-[0_0_0_1px_rgba(255,107,0,0.24),0_0_10px_rgba(255,107,0,0.15)] motion-safe:scale-[1.04]"
+                            : "border-transparent text-slate-400 hover:border-white/[0.12] hover:bg-white/[0.08] hover:text-white motion-safe:hover:scale-[1.04]"
                         }`}
+                        style={pickerMotionStyle}
                       >
                         <opt.Icon className="h-4 w-4" />
                       </button>
@@ -204,11 +231,12 @@ export const QuicksprintEditorView: FunctionComponent<{
               <div className="fixed inset-0 z-[9998] cursor-pointer" onClick={() => setShowColorPicker(false)} aria-hidden="true" />
               <div
                 ref={colorPickerRef}
+                id={colorPickerId}
                 role="dialog"
                 aria-modal="true"
                 aria-label="Color picker"
-                className="absolute z-[9999] w-52 rounded-2xl border border-white/[0.08] p-3 shadow-2xl backdrop-blur-2xl bg-[#1a1d24]/95"
-                style={{ top: pickerPos.top, left: pickerPos.left, animation: "qs-picker-in 0.2s cubic-bezier(0.22,1,0.36,1)" }}
+                className="absolute z-[9999] w-52 rounded-2xl border border-white/[0.08] p-3 shadow-2xl backdrop-blur-2xl bg-[#1a1d24]/95 transition-[opacity,transform] duration-[var(--qs-picker-enter-duration)] ease-[var(--qs-picker-enter-ease)] motion-reduce:transition-none"
+                style={pickerPositionStyle}
               >
                 <div className="grid grid-cols-5 gap-2">
                   {TAG_STYLES.map(({ value, dot }) => {
@@ -217,11 +245,16 @@ export const QuicksprintEditorView: FunctionComponent<{
                       <button
                         key={value}
                         type="button"
+                        aria-label={`Use ${value} tag color`}
+                        aria-pressed={isActive}
                         onClick={() => { setEdCategoryColor(value); setShowColorPicker(false); }}
-                        className="group flex min-h-[44px] min-w-[44px] h-8 w-8 cursor-pointer items-center justify-center rounded-full transition-all duration-200 hover:scale-125 active:scale-95"
+                        className={`group flex min-h-[44px] min-w-[44px] h-8 w-8 cursor-pointer items-center justify-center rounded-full border transition-[background-color,border-color,box-shadow,transform] duration-[var(--qs-picker-control-duration)] ease-[var(--qs-picker-control-ease)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ember-400/50 motion-safe:hover:scale-[1.08] motion-safe:active:scale-[0.97] motion-reduce:transition-none ${
+                          isActive ? "border-white/30 bg-white/[0.08] shadow-[0_0_0_1px_rgba(255,255,255,0.16)]" : "border-transparent hover:border-white/[0.12] hover:bg-white/[0.06]"
+                        }`}
+                        style={pickerMotionStyle}
                       >
                         <span
-                          className={`block rounded-full transition-all duration-200 ${dot}`}
+                          className={`block rounded-full transition-[height,width,box-shadow] duration-[var(--qs-picker-control-duration)] ease-[var(--qs-picker-control-ease)] motion-reduce:transition-none ${dot}`}
                           style={{
                             width: isActive ? "1.5rem" : "1.25rem",
                             height: isActive ? "1.5rem" : "1.25rem",

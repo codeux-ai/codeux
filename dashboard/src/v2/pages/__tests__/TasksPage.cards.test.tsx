@@ -1,7 +1,7 @@
 /** @vitest-environment jsdom */
 /// <reference types="@testing-library/jest-dom" />
-import { describe, it, expect, afterEach, vi } from "vitest";
-import { render, cleanup, screen } from "@testing-library/preact";
+import { describe, it, expect, afterEach, beforeEach, vi } from "vitest";
+import { render, cleanup, screen, waitFor } from "@testing-library/preact";
 import * as matchers from "@testing-library/jest-dom/matchers";
 import userEvent from "@testing-library/user-event";
 import { createContext } from "preact";
@@ -9,14 +9,23 @@ import { TasksPage } from "../../TasksPage.js";
 import { useProjectData, ProjectDataContext } from "../../context/project-data.js";
 import { useSprints } from "../../../hooks/useSprints.js";
 import { useProjectTasks } from "../../hooks/use-project-tasks.js";
+import { useProjectEffectiveSettings } from "../../hooks/use-project-effective-settings.js";
+import { deleteTask } from "../../lib/project-api.js";
 import { createMockTask } from "../../components/tasks/__tests__/fixtures/tasks.fixture.js";
 
 expect.extend(matchers);
 
+const routerState = vi.hoisted(() => ({
+  searchStr: "",
+}));
+
 // Mock react-router
 vi.mock("@tanstack/react-router", () => ({
   Link: (props: any) => <a {...props}>{props.children}</a>,
-  useRouterState: vi.fn(() => ({ location: { searchStr: "" } })),
+  useRouterState: vi.fn((options?: { select?: (state: { location: { searchStr: string } }) => unknown }) => {
+    const state = { location: { searchStr: routerState.searchStr } };
+    return options?.select ? options.select(state) : state;
+  }),
 }));
 
 // Mock GSAP
@@ -58,6 +67,14 @@ vi.mock("../../../hooks/use-dashboard-runtime-data.js", () => ({
 vi.mock("../../hooks/use-project-tasks.js", () => ({
   useProjectTasks: vi.fn(),
 }));
+vi.mock("../../hooks/use-project-effective-settings.js", () => ({
+  useProjectEffectiveSettings: vi.fn(),
+}));
+vi.mock("../../lib/project-api.js", () => ({
+  createTask: vi.fn(),
+  deleteTask: vi.fn(),
+  updateTask: vi.fn(),
+}));
 
 // Need to mock user interaction resize observers usually present in Kanban rendering
 global.ResizeObserver = class MockResizeObserver {
@@ -67,6 +84,24 @@ global.ResizeObserver = class MockResizeObserver {
 } as any;
 
 describe("TasksPage.cards Integration", () => {
+  beforeEach(() => {
+    routerState.searchStr = "";
+    (useProjectEffectiveSettings as unknown as any).mockReturnValue({
+      data: {
+        settings: {
+          git: {
+            autoCreatePr: true,
+            githubMode: "REMOTE",
+            sprintKeyPrefix: "SPR",
+          },
+        },
+      },
+      loading: false,
+      error: null,
+      refresh: vi.fn(),
+    });
+  });
+
   afterEach(() => {
     cleanup();
     vi.clearAllMocks();
@@ -117,15 +152,15 @@ describe("TasksPage.cards Integration", () => {
       refresh: vi.fn(),
     });
 
-    const { getByText, getAllByText } = render(
+    const { getAllByText } = render(
       <ProjectDataContext.Provider value={{ projects: [{ id: "proj_1", name: "Project Alpha" } as any], selectedProject: { id: "proj_1", name: "Project Alpha" } as any } as any}>
         <TasksPage />
       </ProjectDataContext.Provider>
     );
 
     // Assert that the page rendered both tasks
-    expect(getByText("Foundation Setup")).toBeInTheDocument();
-    expect(getByText("Dependent Feature")).toBeInTheDocument();
+    expect(screen.getAllByText("Foundation Setup").length).toBeGreaterThan(0);
+    expect(screen.getByText("Dependent Feature")).toBeInTheDocument();
 
     // Since T-101 depends on T-100, the task mapping logic in TasksPage should map "task_rec_1" to T-100's title
     // Then pass it down into KanbanTaskCard via TaskCardViewModel.
@@ -138,10 +173,135 @@ describe("TasksPage.cards Integration", () => {
     expect(instancesOfT100.length).toBe(2);
 
     // Additional dependency text verification
-    expect(getByText("Foundation Setup")).toBeInTheDocument();
+    expect(screen.getAllByText("Foundation Setup").length).toBeGreaterThan(0);
     expect(screen.getByRole("region", { name: /in progress/i })).toHaveAccessibleDescription(/In Progress lane contains 1 task/i);
     expect(screen.getByRole("region", { name: /completed/i })).toHaveAccessibleDescription(/Completed lane contains 1 task/i);
     expect(screen.getByRole("button", { name: /Task sprint scope: SPR-1: Sprint One/i })).toHaveAttribute("aria-expanded", "false");
+  });
+
+  it("suppresses pending PR card UI when project settings disable task pull requests", () => {
+    (useProjectEffectiveSettings as unknown as any).mockReturnValue({
+      data: {
+        settings: {
+          git: {
+            autoCreatePr: false,
+            githubMode: "REMOTE",
+            sprintKeyPrefix: "CUX",
+          },
+        },
+      },
+      loading: false,
+      error: null,
+      refresh: vi.fn(),
+    });
+    (useProjectData as unknown as any).mockReturnValue({
+      projects: [{ id: "proj_1", name: "Project Alpha" }],
+      selectedProject: { id: "proj_1", name: "Project Alpha" },
+    });
+    (useSprints as unknown as any).mockReturnValue({
+      data: [{ id: "sprint_1", number: 1, name: "Sprint One", status: "running", date: "Jan 1", tasksCount: 1, completion: 0, active: true }],
+      loading: false,
+      selectedSprintId: "sprint_1",
+      selectSprint: vi.fn(),
+      refetch: vi.fn(),
+    });
+    (useProjectTasks as any).mockReturnValue({
+      tasks: [
+        createMockTask({
+          recordId: "task_rec_1",
+          id: "T-100",
+          title: "Foundation Setup",
+          status: "pending",
+          priority: "high",
+          assignee: "Alice",
+          dependsOnTaskIds: [],
+          executorType: "jules",
+        }),
+      ],
+      loading: false,
+      error: null,
+      refresh: vi.fn(),
+    });
+
+    render(
+      <ProjectDataContext.Provider value={{ projects: [{ id: "proj_1", name: "Project Alpha" } as any], selectedProject: { id: "proj_1", name: "Project Alpha" } as any } as any}>
+        <TasksPage />
+      </ProjectDataContext.Provider>
+    );
+
+    expect(screen.getByText("Foundation Setup")).toBeInTheDocument();
+    expect(screen.queryByText("PR pending")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Open pull request for task T-100: Foundation Setup/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Task sprint scope: CUX-1: Sprint One/i })).toBeInTheDocument();
+  });
+
+  it("applies the same PR availability settings on sprint-scoped task routes", () => {
+    routerState.searchStr = "?sprintId=sprint_2";
+    const selectSprint = vi.fn();
+    (useProjectEffectiveSettings as unknown as any).mockReturnValue({
+      data: {
+        settings: {
+          git: {
+            autoCreatePr: true,
+            githubMode: "LOCAL",
+            sprintKeyPrefix: "CUX",
+          },
+        },
+      },
+      loading: false,
+      error: null,
+      refresh: vi.fn(),
+    });
+    (useProjectData as unknown as any).mockReturnValue({
+      projects: [{ id: "proj_1", name: "Project Alpha" }],
+      selectedProject: { id: "proj_1", name: "Project Alpha" },
+    });
+    (useSprints as unknown as any).mockReturnValue({
+      data: [
+        { id: "sprint_1", number: 1, name: "Sprint One", status: "idle", date: "Jan 1", tasksCount: 0, completion: 0, active: false },
+        { id: "sprint_2", number: 2, name: "Sprint Two", status: "running", date: "Jan 2", tasksCount: 1, completion: 0, active: true },
+      ],
+      loading: false,
+      selectedSprintId: "sprint_1",
+      selectSprint,
+      refetch: vi.fn(),
+    });
+    (useProjectTasks as any).mockReturnValue({
+      tasks: [
+        createMockTask({
+          recordId: "task_rec_2",
+          id: "T-200",
+          title: "Sprint Scoped Task",
+          status: "pending",
+          priority: "medium",
+          assignee: "Bob",
+          sprintId: "sprint_2",
+          dependsOnTaskIds: [],
+          executorType: "jules",
+        }),
+      ],
+      loading: false,
+      error: null,
+      refresh: vi.fn(),
+    });
+
+    render(
+      <ProjectDataContext.Provider value={{ projects: [{ id: "proj_1", name: "Project Alpha" } as any], selectedProject: { id: "proj_1", name: "Project Alpha" } as any } as any}>
+        <TasksPage />
+      </ProjectDataContext.Provider>
+    );
+
+    expect(useProjectTasks).toHaveBeenCalledWith(
+      "proj_1",
+      [{ id: "proj_1", name: "Project Alpha" }],
+      expect.any(Array),
+      "sprint_2",
+    );
+    expect(selectSprint).toHaveBeenCalledWith("sprint_2");
+    expect(screen.getByText("Sprint Scoped Task")).toBeInTheDocument();
+    expect(screen.queryByText("PR pending")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Open pull request for task T-200: Sprint Scoped Task/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Task sprint scope: CUX-2: Sprint Two/i })).toBeInTheDocument();
   });
 
   it("supports keyboard operation in the sprint scope selector", async () => {
@@ -183,10 +343,90 @@ describe("TasksPage.cards Integration", () => {
     expect(listbox).toBeInTheDocument();
     expect(screen.getByRole("option", { name: /All Sprints/i })).toHaveAttribute("aria-selected", "false");
     expect(screen.getByRole("option", { name: /SPR-1: Sprint One/i })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getAllByText("Selected").length).toBeGreaterThan(0);
 
     await user.keyboard("{End}{Enter}");
     expect(selectSprint).toHaveBeenCalledWith("sprint_2");
-    expect(trigger).toHaveFocus();
+    await waitFor(() => expect(trigger).toHaveFocus());
+  });
+
+  it("keeps task board filters and create/edit/delete interactions wired through the page", async () => {
+    const user = userEvent.setup();
+    const refreshTasks = vi.fn();
+    const refreshSprints = vi.fn();
+    const task = createMockTask({
+      recordId: "task_rec_1",
+      id: "T-100",
+      title: "Foundation Setup",
+      status: "pending",
+      priority: "critical",
+      assignee: "Alice",
+      dependsOnTaskIds: [],
+      executorType: "jules",
+    });
+    const completedTask = createMockTask({
+      recordId: "task_rec_2",
+      id: "T-101",
+      title: "Release Notes",
+      status: "completed",
+      priority: "low",
+      assignee: "Bob",
+      dependsOnTaskIds: [],
+      executorType: "jules",
+    });
+
+    (deleteTask as unknown as any).mockResolvedValue(undefined);
+    (useProjectData as unknown as any).mockReturnValue({
+      projects: [{ id: "proj_1", name: "Project Alpha" }],
+      selectedProject: { id: "proj_1", name: "Project Alpha" },
+    });
+    (useSprints as unknown as any).mockReturnValue({
+      data: [{ id: "sprint_1", number: 1, name: "Sprint One", status: "running", date: "Jan 1", tasksCount: 1, completion: 0, active: true }],
+      loading: false,
+      selectedSprintId: "sprint_1",
+      selectSprint: vi.fn(),
+      refetch: refreshSprints,
+    });
+    (useProjectTasks as any).mockReturnValue({
+      tasks: [task, completedTask],
+      loading: false,
+      error: null,
+      refresh: refreshTasks,
+    });
+
+    render(
+      <ProjectDataContext.Provider value={{ projects: [{ id: "proj_1", name: "Project Alpha" } as any], selectedProject: { id: "proj_1", name: "Project Alpha" } as any } as any}>
+        <TasksPage />
+      </ProjectDataContext.Provider>
+    );
+
+    await user.click(screen.getByRole("tab", { name: "Done" }));
+    await waitFor(() => expect(screen.getByText("Release Notes")).toBeInTheDocument());
+    expect(screen.queryByText("Foundation Setup")).not.toBeInTheDocument();
+    expect(screen.getByText(/Filtered to show completed status and any priority/i)).toBeInTheDocument();
+
+    await user.click(screen.getByRole("tab", { name: "All" }));
+    await waitFor(() => expect(screen.getByText("Foundation Setup")).toBeInTheDocument());
+    await user.click(screen.getByRole("tab", { name: "Critical" }));
+    await waitFor(() => expect(screen.queryByText("Release Notes")).not.toBeInTheDocument());
+    expect(screen.getByText("Foundation Setup")).toBeInTheDocument();
+    expect(screen.getByText(/Filtered to show all status and critical priority/i)).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "New Task" }));
+    expect(screen.getByText("Create A New Task.")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Close task composer" }));
+
+    await user.click(screen.getByRole("button", { name: /Edit task T-100: Foundation Setup/i }));
+    expect(screen.getByText("Refine The Task.")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("Foundation Setup")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Close task composer" }));
+
+    await user.click(screen.getByRole("button", { name: /Delete task T-100: Foundation Setup/i }));
+    expect(screen.getByText(/Delete "Foundation Setup"/i)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Delete Task" }));
+    await waitFor(() => expect(deleteTask).toHaveBeenCalledWith("task_rec_1"));
+    expect(refreshTasks).toHaveBeenCalled();
+    expect(refreshSprints).toHaveBeenCalled();
   });
 
   it("verifies optimistic task rendering and layout stability", () => {
@@ -225,7 +465,7 @@ describe("TasksPage.cards Integration", () => {
     expect(getByText("Optimistic Title")).toBeInTheDocument();
     const card = container.querySelector(".kanban-card");
     expect(card).toHaveClass("border-dashed");
-    expect(card).toHaveClass("opacity-60");
-    expect(card).toHaveClass("pointer-events-none");
+    expect(card).toHaveClass("opacity-70");
+    expect(card).toHaveTextContent("Saving task changes");
   });
 });

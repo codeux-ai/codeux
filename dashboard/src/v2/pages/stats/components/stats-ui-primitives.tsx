@@ -46,6 +46,7 @@ import {
   createSeries,
   getPurposeConfig,
 } from "../stats-utils.js";
+import { useInteractionTokens } from "../../../lib/motion/tokens.js";
 
 import type { DonutSliceGeometry, ChartPoint } from "./stats-geometry.js";
 export type StatsVisualMode = "trend" | "composition" | "models" | "reliability" | "ledgers" | "system";
@@ -99,7 +100,7 @@ export const CHART_SERIES: ChartSeriesDefinition[] = [
   {
     id: "tokens",
     label: "Tokens",
-    accentHex: "#00E0A0",
+    accentHex: "var(--stats-accent-signal)",
     accessor: (bucket) => bucket.usage.totalTokens,
     formatter: formatTokens,
     signalLabel: "Throughput",
@@ -198,7 +199,9 @@ export const ViewToggle: FunctionComponent<{
   onChange: (value: StatsVisualMode) => void;
   ariaLabel?: string;
   className?: string;
-}> = ({ value, onChange, ariaLabel = "Analytics modes", className = "" }) => {
+  controlsId?: string;
+}> = ({ value, onChange, ariaLabel = "Analytics modes", className = "", controlsId }) => {
+  const tokens = useInteractionTokens();
   const buttonRefs = useRef<Partial<Record<StatsVisualMode, HTMLButtonElement | null>>>({});
   const modes: Array<{ id: StatsVisualMode; label: string; accessibleLabel: string; icon: LucideIcon }> = [
     { id: "trend", label: "Trend", accessibleLabel: "Trend", icon: BarChart3 },
@@ -262,13 +265,19 @@ export const ViewToggle: FunctionComponent<{
             }}
             onClick={() => onChange(mode.id)}
             aria-pressed={selected}
+            aria-controls={controlsId}
             aria-label={mode.accessibleLabel}
             title={mode.label}
+            data-selection-motion="selectionMovement"
             className={`${CONTROL_BASE_CLASS} min-h-10 min-w-10 flex-[1_1_calc(33.333%-0.25rem)] gap-2 px-2 py-2 sm:min-w-[7rem] sm:flex-[1_1_auto] sm:px-4 ${
               selected
                 ? CONTROL_ACTIVE_CLASS
                 : CONTROL_IDLE_CLASS
             }`}
+            style={{
+              transitionDuration: tokens.selectionMovement.duration,
+              transitionTimingFunction: tokens.selectionMovement.ease,
+            }}
           >
             <Icon className="h-3.5 w-3.5 shrink-0" strokeWidth={2} aria-hidden="true" />
             <span className="hidden min-w-0 truncate sm:inline">{mode.label}</span>
@@ -297,7 +306,7 @@ export const SignalMetricCard: FunctionComponent<{
       </div>
     }
     // We map hex to known accent if possible, or just pass children
-    accent={accentHex === "#00E0A0" ? "signal" : accentHex === "#FFB800" ? "amber" : "cyan"}
+    accent={accentHex === "var(--stats-accent-signal)" ? "signal" : accentHex === "#FFB800" ? "amber" : "cyan"}
   >
     <div className="relative z-10 mt-4 h-16 rounded-[var(--stats-control-radius)]">
       <Sparkline points={sparkline} color={accentHex} className="absolute inset-0 h-full w-full pointer-events-none" />
@@ -316,12 +325,12 @@ export const TokenChip: FunctionComponent<{
   value: number | string;
   tone: string;
 }> = ({ icon: Icon, label, value, tone }) => (
-  <div className={`relative inline-flex min-w-0 items-center gap-2 overflow-hidden rounded-[var(--stats-chip-radius)] border px-3 py-1.5 shadow-[var(--stats-subpanel-shadow)] backdrop-blur-md transition-[background-color,border-color,color,box-shadow] duration-200 motion-reduce:transition-none ${tone}`}>
+  <div className={`relative inline-flex min-w-0 items-center gap-2 overflow-hidden rounded-[var(--stats-chip-radius)] border px-3 py-1.5 shadow-[var(--stats-subpanel-shadow)] transition-[background-color,border-color,color,box-shadow] duration-200 motion-reduce:transition-none ${tone}`}>
     <div className="relative flex min-w-0 items-center gap-1.5 opacity-85">
       <Icon className="h-3.5 w-3.5" strokeWidth={2.5} aria-hidden="true" />
       <span className="truncate text-[10px] font-bold uppercase tracking-[0.14em]">{label}</span>
     </div>
-    <div className="relative shrink-0 text-[11px] font-black text-[color:var(--stats-value-color)]">
+    <div className="relative shrink-0 text-[11px] font-semibold text-[color:var(--stats-value-color)]">
       {typeof value === "number" ? formatTokens(value) : value}
     </div>
   </div>
@@ -402,7 +411,7 @@ export const SeriesLegendButton: FunctionComponent<{
     className={`rounded-[1.25rem] border px-4 py-3 text-left transition-[background-color,border-color,box-shadow,opacity] duration-200 motion-reduce:transition-none ${CONTROL_FOCUS_CLASS} ${
       active
         ? `${SUBPANEL_CLASS} border-[color:var(--stats-control-border-active)]`
-        : "border-[color:var(--stats-border-hairline)] bg-[color:var(--stats-surface-subpanel)] opacity-75 shadow-[var(--stats-subpanel-shadow)] backdrop-blur-xl hover:border-[color:var(--stats-border-strong)] hover:bg-[color:var(--stats-surface-subpanel-hover)] hover:opacity-100"
+        : "border-[color:var(--stats-border-hairline)] bg-[color:var(--stats-surface-subpanel)] opacity-75 shadow-[var(--stats-subpanel-shadow)] hover:border-[color:var(--stats-border-strong)] hover:bg-[color:var(--stats-surface-subpanel-hover)] hover:opacity-100"
     } ${disabled ? "cursor-not-allowed opacity-60" : ""}`}
   >
     <div className="flex items-center gap-3">
@@ -410,7 +419,7 @@ export const SeriesLegendButton: FunctionComponent<{
       <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-[color:var(--stats-label-color)]">{series.label}</span>
     </div>
     <div className="mt-3 flex items-end justify-between gap-4">
-      <div className="text-lg font-black text-[color:var(--stats-value-color)]">{series.formatter(currentValue)}</div>
+      <div className="text-base font-semibold text-[color:var(--stats-value-color)]">{series.formatter(currentValue)}</div>
       <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--stats-detail-color)]">{series.signalLabel}</div>
     </div>
   </button>
@@ -488,7 +497,7 @@ export const DonutCard: FunctionComponent<{
       <div className="relative flex h-full flex-col gap-6">
         <div>
           <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-[color:var(--stats-label-color)]">{eyebrow}</div>
-          <div className="mt-2 text-2xl font-black tracking-tight text-[color:var(--stats-value-color)]">{title}</div>
+          <div className="mt-2 text-xl font-semibold tracking-tight text-[color:var(--stats-value-color)]">{title}</div>
           <div className="mt-2 text-sm leading-relaxed text-[color:var(--stats-detail-color)]">{description}</div>
         </div>
         <div className="grid gap-6 lg:grid-cols-[240px_minmax(0,1fr)] lg:items-center">
@@ -536,9 +545,9 @@ export const DonutCard: FunctionComponent<{
                   );
                 })}
               </svg>
-              <div className="pointer-events-none absolute inset-[24%] rounded-full border border-[color:var(--stats-card-border)] bg-[color:var(--stats-surface-panel)] shadow-[var(--stats-subpanel-shadow)] backdrop-blur-xl" />
+              <div className="pointer-events-none absolute inset-[24%] rounded-full border border-[color:var(--stats-card-border)] bg-[color:var(--stats-surface-panel)] shadow-[var(--stats-subpanel-shadow)]" />
               <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
-                <div className="text-3xl font-black tracking-tight text-[color:var(--stats-value-color)]">
+                <div className="text-xl font-semibold tracking-tight text-[color:var(--stats-value-color)]">
                   {activeSegment ? formatTokens(activeSegment.value) : centerValue}
                 </div>
                 <div className="mt-1 max-w-[7.5rem] break-words text-center text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--stats-label-color)]">
@@ -568,7 +577,7 @@ export const DonutCard: FunctionComponent<{
                     <div className="min-w-0">
                       <div className="flex items-center gap-2">
                         <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: segment.color }} />
-                        <span className="text-[10px] font-black uppercase tracking-[0.14em] text-[color:var(--stats-label-color)]">#{index + 1}</span>
+                        <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[color:var(--stats-label-color)]">#{index + 1}</span>
                         <span className={`min-w-0 break-words text-sm font-semibold ${segment.textClassName}`} title={segment.label}>{segment.label}</span>
                       </div>
                       <div className="mt-1 text-[11px] font-mono text-[color:var(--stats-detail-color)]">
@@ -576,7 +585,7 @@ export const DonutCard: FunctionComponent<{
                       </div>
                     </div>
                     <div className="text-right">
-                      <div className="text-sm font-black text-[color:var(--stats-value-color)]">{formatTokens(segment.value)}</div>
+                      <div className="text-sm font-semibold text-[color:var(--stats-value-color)]">{formatTokens(segment.value)}</div>
                       <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-[color:var(--stats-label-color)]">tokens</div>
                     </div>
                   </div>
@@ -637,7 +646,7 @@ export const PurposeRibbon: FunctionComponent<{
           <div key={purpose.id} className={`${SUBPANEL_CLASS} flex min-h-[9rem] flex-col justify-between p-4`}>
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
-                <div className="break-words text-sm font-black capitalize text-[color:var(--stats-value-color)]" title={purpose.label.replace(/_/g, " ")}>
+                <div className="break-words text-sm font-semibold capitalize text-[color:var(--stats-value-color)]" title={purpose.label.replace(/_/g, " ")}>
                   {purpose.label.replace(/_/g, " ")}
                 </div>
                 <div className="mt-1 text-[10px] font-bold uppercase tracking-[0.14em] text-[color:var(--stats-label-color)]">
@@ -651,7 +660,7 @@ export const PurposeRibbon: FunctionComponent<{
             <div>
               <div className="mt-4 flex flex-wrap items-end justify-between gap-2">
                 <div>
-                  <div className="text-xl font-black text-[color:var(--stats-value-color)]">{formatTokens(purpose.usage.totalTokens)}</div>
+                  <div className="text-lg font-semibold text-[color:var(--stats-value-color)]">{formatTokens(purpose.usage.totalTokens)}</div>
                   <div className="mt-1 text-[10px] font-bold uppercase tracking-[0.14em] text-[color:var(--stats-label-color)]">
                     {tokenShare !== null ? `${formatPercent(tokenShare)} token share` : "No token share"}
                   </div>
@@ -686,7 +695,7 @@ export const StudioHeader: FunctionComponent<{
     </div>
     <div className="min-w-0">
       <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-[color:var(--stats-label-color)]">{eyebrow}</div>
-      <div className="mt-1 break-words text-2xl font-black tracking-tight text-[color:var(--stats-value-color)]">{title}</div>
+      <div className="mt-1 break-words text-xl font-semibold tracking-tight text-[color:var(--stats-value-color)]">{title}</div>
       <div className="mt-2 text-sm leading-relaxed text-[color:var(--stats-detail-color)]">{description}</div>
     </div>
   </div>
@@ -698,11 +707,14 @@ export const SortButton: FunctionComponent<{
   active: boolean;
   direction?: "asc" | "desc" | null;
   onClick: () => void;
-}> = ({ label, active, direction = null, onClick }) => (
+}> = ({ label, active, direction = null, onClick }) => {
+  const directionLabel = active && direction ? `, sorted ${direction === "asc" ? "ascending" : "descending"}` : ", not sorted";
+  return (
   <button
     type="button"
     onClick={onClick}
     aria-pressed={active}
+    aria-label={`${label}${directionLabel}`}
     className={`${CONTROL_BASE_CLASS} gap-1 px-3 py-2 text-[10px] tracking-[0.16em] ${
       active
         ? CONTROL_ACTIVE_STRONG_CLASS
@@ -712,8 +724,10 @@ export const SortButton: FunctionComponent<{
     {label}
     {active && direction ? (
       direction === "desc"
-        ? <ArrowDown className="h-3 w-3" strokeWidth={2.6} />
-        : <ArrowUp className="h-3 w-3" strokeWidth={2.6} />
+        ? <ArrowDown className="h-3 w-3" strokeWidth={2.6} aria-hidden="true" />
+        : <ArrowUp className="h-3 w-3" strokeWidth={2.6} aria-hidden="true" />
     ) : null}
+    <span className="sr-only">{directionLabel}</span>
   </button>
-);
+  );
+};

@@ -68,7 +68,8 @@ export const ActionButton: FunctionComponent<{
   tone?: "primary" | "secondary" | "danger" | "success" | "warning";
   busy?: boolean;
   disabled?: boolean;
-}> = ({ label, onClick, tone = "secondary", busy = false, disabled = false }) => {
+  disabledReason?: string;
+}> = ({ label, onClick, tone = "secondary", busy = false, disabled = false, disabledReason }) => {
   let toneClass = "border border-[color:var(--border-hairline)] bg-[var(--surface-glass)] text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white";
 
   if (tone === "primary") {
@@ -94,6 +95,9 @@ export const ActionButton: FunctionComponent<{
       disabled={disabled}
       aria-disabled={disabled || busy}
       aria-busy={busy}
+      aria-label={label}
+      aria-description={disabled && disabledReason ? disabledReason : undefined}
+      title={disabled && disabledReason ? disabledReason : undefined}
       className={`inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 text-xs font-bold relative overflow-hidden ${SHARED_INTERACTION_CLASSES} ${toneClass}`}
     >
       <div className={`flex items-center justify-center gap-2 transition-opacity duration-200 ${busy ? "opacity-0" : "opacity-100"}`}>
@@ -102,6 +106,7 @@ export const ActionButton: FunctionComponent<{
       {busy && (
         <div className="absolute inset-0 flex items-center justify-center">
           <RefreshCw className="h-4 w-4 animate-spin" strokeWidth={2.2} />
+          <span className="sr-only">{label} in progress</span>
         </div>
       )}
     </button>
@@ -122,7 +127,7 @@ export const SettingsHeader: FunctionComponent<{
         <Icon className="h-3.5 w-3.5" strokeWidth={2.3} />
         {eyebrow}
       </div>
-      <h2 className="mt-3 font-display text-4xl font-black tracking-tight text-slate-900 dark:text-white">
+      <h2 className="mt-3 font-display text-2xl font-semibold tracking-tight text-slate-900 dark:text-white">
         {title}
       </h2>
       <p className="mt-2 max-w-3xl text-sm font-medium leading-relaxed text-slate-500 dark:text-slate-400">
@@ -150,8 +155,11 @@ export const SettingsBody: FunctionComponent<{
       <ActionFeedbackRegion
         status={error ? "error" : loading || saving ? "pending" : message ? "success" : dirty ? "warning" : "idle"}
         message={error || (loading ? loadingLabel : saving ? (savingLabel || "Saving...") : message ? (successLabel || message) : dirty ? (dirtyLabel || "You have unsaved changes.") : null)}
+        autoDismiss={false}
       />
     )}
-    {!loading && children}
+    <div aria-busy={loading || saving ? "true" : undefined} className={loading ? "opacity-70" : undefined}>
+      {children}
+    </div>
   </div>
 );

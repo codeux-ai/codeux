@@ -103,7 +103,7 @@ export const SprintJiraImportModal = ({
   ), [results, selectedKeys]);
 
   const getIssueImportMode = (issue: JiraIssueSearchResult): ImportedTaskMode => (
-    importModes[issue.key] ?? inferImportedTaskMode(issue, Boolean(onImportSpecialTasks))
+    importModes[issue.key] ?? "linked"
   );
 
   const selectedLinkedIssues = useMemo(() => (
@@ -269,12 +269,6 @@ export const SprintJiraImportModal = ({
       return;
     }
 
-    if (onImportSpecialTasks) {
-      setImportModes((currentModes) => ({
-        ...currentModes,
-        [issue.key]: inferImportedTaskMode(issue, true),
-      }));
-    }
   };
 
   const toggleConversation = (issue: JiraIssueSearchResult): void => {
@@ -308,6 +302,23 @@ export const SprintJiraImportModal = ({
     setSelectedKeys(new Set());
     setConversationDisabledKeys(new Set());
     setImportModes({});
+  };
+
+  const setImportModeForSelected = (mode: ImportedTaskMode): void => {
+    if (selectedKeys.size === 0) {
+      return;
+    }
+    setImportModes((currentModes) => {
+      const next = { ...currentModes };
+      for (const key of selectedKeys) {
+        if (mode === "linked") {
+          delete next[key];
+        } else {
+          next[key] = mode;
+        }
+      }
+      return next;
+    });
   };
 
   const setConversationForAllSelected = (enabled: boolean): void => {
@@ -394,7 +405,7 @@ export const SprintJiraImportModal = ({
                         }
                       }}
                       placeholder="OPS"
-                      className="h-12 rounded-[1.1rem] border border-black/[0.07] bg-white px-4 text-sm font-black uppercase tracking-[0.08em] text-slate-700 outline-none transition-colors focus:border-[#0052CC] focus-visible:ring-2 focus-visible:ring-[#0052CC]/20 dark:border-white/[0.08] dark:bg-white/[0.035] dark:text-slate-200"
+                      className="h-12 rounded-[1.1rem] border border-black/[0.07] bg-white px-4 text-sm font-semibold uppercase tracking-[0.08em] text-slate-700 outline-none transition-colors focus:border-[#0052CC] focus-visible:ring-2 focus-visible:ring-[#0052CC]/20 dark:border-white/[0.08] dark:bg-white/[0.035] dark:text-slate-200"
                       aria-label="Jira project key"
                     />
                   </LabeledControl>
@@ -666,6 +677,38 @@ export const SprintJiraImportModal = ({
                   <MessageSquare className="h-3.5 w-3.5" strokeWidth={2.1} />
                   Append conversation to all selected
                 </label>
+                {onImportSpecialTasks && (
+                  <div
+                    className="flex flex-wrap items-center gap-1 rounded-[1rem] border border-black/[0.06] bg-white p-1 dark:border-white/[0.08] dark:bg-white/[0.05]"
+                    role="group"
+                    aria-label="Jira import mode for selected issues"
+                  >
+                    {([
+                      ["linked", "Linked"],
+                      ["security", "Security task"],
+                      ["quality", "Quality task"],
+                    ] as Array<[ImportedTaskMode, string]>).map(([mode, label]) => {
+                      const selectedMode = selectedIssues.length > 0
+                        && selectedIssues.every((issue) => getIssueImportMode(issue) === mode);
+                      return (
+                        <button
+                          key={mode}
+                          type="button"
+                          onClick={() => setImportModeForSelected(mode)}
+                          disabled={selectedIssues.length === 0}
+                          aria-pressed={selectedMode}
+                          className={`rounded-[0.8rem] px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.12em] transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
+                            selectedMode
+                              ? "bg-[#0052CC] text-white dark:bg-[#4C9AFF] dark:text-slate-950"
+                              : "text-slate-500 hover:bg-black/[0.04] hover:text-slate-900 dark:text-slate-300 dark:hover:bg-white/[0.08] dark:hover:text-white"
+                          }`}
+                        >
+                          {label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
                 <div className="flex items-center justify-end gap-3">
                   <button
                     type="button"
@@ -678,7 +721,7 @@ export const SprintJiraImportModal = ({
                     type="button"
                     onClick={() => { void handleImport(); }}
                     disabled={selectedIssues.length === 0 || importing}
-                    className="rounded-[1rem] bg-[#0052CC] px-5 py-3 text-sm font-black text-white shadow-[0_12px_28px_rgba(0,82,204,0.2)] transition-all hover:-translate-y-px hover:bg-[#0047b3] disabled:cursor-not-allowed disabled:opacity-50 dark:bg-[#4C9AFF] dark:text-slate-900 dark:hover:bg-[#3b85e0]"
+                    className="rounded-[1rem] bg-[#0052CC] px-5 py-3 text-sm font-semibold text-white shadow-[0_12px_28px_rgba(0,82,204,0.2)] transition-all hover:-translate-y-px hover:bg-[#0047b3] disabled:cursor-not-allowed disabled:opacity-50 dark:bg-[#4C9AFF] dark:text-slate-900 dark:hover:bg-[#3b85e0]"
                     aria-label={selectedIssues.length === 0 ? "Import issues disabled until Jira issues are selected" : "Import issues"}
                   >
                     {importing ? "Importing..." : "Import Issues"}
@@ -785,39 +828,6 @@ function normalizeOptionalText(value: string | undefined): string {
 
 function normalizeOptionalDate(value: string | undefined): string {
   return typeof value === "string" ? value.trim() : "";
-}
-
-function inferImportedTaskMode(issue: JiraIssueSearchResult, allowSpecialTasks: boolean): ImportedTaskMode {
-  if (!allowSpecialTasks) {
-    return "linked";
-  }
-
-  const normalizedLabels = (issue.labels || []).map((label) => label.trim().toLowerCase());
-  const normalizedType = (issue.issueType || "").trim().toLowerCase();
-  const normalizedPriority = (issue.priority || "").trim().toLowerCase();
-  const normalizedText = [issue.title, issue.bodyPreview]
-    .join(" ")
-    .trim()
-    .toLowerCase();
-
-  if (
-    normalizedLabels.some((label: string) => ["security", "sec", "vulnerability", "vuln"].includes(label))
-    || ["security", "vulnerability", "incident"].some((term) => normalizedType.includes(term))
-    || ["security", "vulnerability", "cve", "secret", "secrets"].some((term) => normalizedText.includes(term))
-  ) {
-    return "security";
-  }
-
-  if (
-    normalizedLabels.some((label: string) => ["quality", "bug", "regression", "defect", "test"].includes(label))
-    || ["bug", "regression", "defect", "quality"].some((term) => normalizedType.includes(term))
-    || ["bug", "regression", "defect", "quality"].some((term) => normalizedText.includes(term))
-    || ["highest", "critical"].includes(normalizedPriority)
-  ) {
-    return "quality";
-  }
-
-  return "linked";
 }
 
 function buildImportedTaskPayload(

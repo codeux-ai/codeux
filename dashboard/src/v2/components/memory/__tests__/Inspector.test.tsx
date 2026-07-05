@@ -9,7 +9,8 @@ import type { Edge, MemNode } from "../../../lib/memory-graph.js";
 expect.extend(matchers);
 
 vi.mock("../../../hooks/use-reduced-motion.js", () => ({
-    useReducedMotion: () => false
+    useReducedMotion: () => false,
+    useResolvedMotionDuration: (duration: string | number) => duration,
 }));
 
 const buildNode = (overrides: Partial<MemNode> = {}): MemNode => ({
@@ -54,9 +55,49 @@ describe("Inspector", () => {
             />
         );
 
+        expect(getByRole("region", { name: "Selected memory details" })).toBeInTheDocument();
+        expect(getByText("Selected memory open in inspector")).toBeInTheDocument();
         expect(getByRole("button", { name: "Close memory inspector" })).toBeInTheDocument();
         expect(getByText("Beta related memory")).toBeInTheDocument();
         expect(getByText("Codebase")).toBeInTheDocument();
         expect(getByText("82%")).toBeInTheDocument();
+    });
+
+    test("danger delete mode explains immediate inspector deletion", () => {
+        const { getByRole, getByText } = render(
+            <Inspector
+                node={buildNode()}
+                allNodes={[buildNode()]}
+                edges={[]}
+                lobotomize={true}
+                onClose={vi.fn()}
+                onDelete={vi.fn()}
+            />
+        );
+
+        expect(getByText("Danger delete is armed. Deleting this memory happens immediately without another confirmation.")).toBeInTheDocument();
+        expect(getByRole("button", { name: "Delete Immediately" })).toHaveAccessibleDescription("Danger delete is armed. This action deletes immediately without confirmation.");
+    });
+
+    test("shows a recovery state when the selected memory is unavailable", () => {
+        const onClose = vi.fn();
+        const { getByRole, getByText } = render(
+            <Inspector
+                node={null}
+                missingSelectedMemoryId="memory-missing"
+                allNodes={[]}
+                edges={[]}
+                lobotomize={false}
+                onClose={onClose}
+                onDelete={vi.fn()}
+            />
+        );
+
+        expect(getByRole("region", { name: "Selected memory unavailable" })).toBeInTheDocument();
+        expect(getByText("Selected memory is no longer in the current result set.")).toBeInTheDocument();
+
+        getByRole("button", { name: "Close inspector" }).click();
+
+        expect(onClose).toHaveBeenCalledTimes(1);
     });
 });

@@ -7,7 +7,7 @@ import { ChatRuntimeBadge } from "./ChatRuntimeBadge.js";
 import { useInteractionTokens } from "../../lib/motion/tokens.js";
 
 const statusTone = (pendingCount: number): string => (
-  pendingCount > 0 ? "text-status-amber animate-pulse" : "text-slate-400 dark:text-slate-500"
+  pendingCount > 0 ? "text-status-amber animate-pulse motion-reduce:animate-none" : "text-slate-400 dark:text-slate-500"
 );
 
 const STATUS_PILL: Record<string, { dot: string; text: string; bg: string; border: string }> = {
@@ -95,7 +95,7 @@ export const ThreadListCard: FunctionComponent<{
                       )}
                       {isActive && (
                         <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-[0.14em] ${STATUS_PILL.active.bg} ${STATUS_PILL.active.text} border ${STATUS_PILL.active.border}`}>
-                          <span className={`inline-block w-1.5 h-1.5 rounded-full ${STATUS_PILL.active.dot}`} />
+                          <span className={`inline-block w-1.5 h-1.5 rounded-full ${STATUS_PILL.active.dot} motion-reduce:animate-none`} />
                           <Activity className="h-2.5 w-2.5" />
                           Active
                         </span>
@@ -103,7 +103,7 @@ export const ThreadListCard: FunctionComponent<{
                     </div>
 
                     {/* Title */}
-                    <h3 className="font-display text-lg font-black tracking-tight text-slate-900 dark:text-white leading-snug truncate">
+                    <h3 className="font-display text-base font-semibold tracking-tight text-slate-900 dark:text-white leading-snug truncate">
                       {thread.title}
                     </h3>
 
@@ -118,7 +118,7 @@ export const ThreadListCard: FunctionComponent<{
                 <div className="shrink-0 flex flex-col items-end gap-1.5 pt-0.5">
                   <div className={`text-[10px] font-bold uppercase tracking-[0.14em] ${statusTone(thread.pendingMessageCount)}`}>
                     {thread.pendingMessageCount > 0 ? (
-                      <span className="flex items-center gap-1.5"><span className="h-1.5 w-1.5 rounded-full bg-signal-500 animate-pulse" /> pending</span>
+                      <span className="flex items-center gap-1.5"><span className="h-1.5 w-1.5 rounded-full bg-signal-500 animate-pulse motion-reduce:animate-none" /> pending</span>
                     ) : (
                       "synced"
                     )}
@@ -145,7 +145,8 @@ export const ThreadListCard: FunctionComponent<{
                 onDelete(thread.id);
               }}
               disabled={deletingThreadId === thread.id}
-              aria-label={`Delete ${thread.title}`}
+              aria-label={deletingThreadId === thread.id ? `Deleting ${thread.title}` : `Delete ${thread.title}`}
+              aria-busy={deletingThreadId === thread.id}
               style={{
                 transitionProperty: "all",
                 transitionDuration: interactionTokens.controlFeedback.duration,
@@ -154,7 +155,7 @@ export const ThreadListCard: FunctionComponent<{
               className={`absolute inset-y-0 right-0 flex w-14 translate-x-full items-center justify-center rounded-r-[1.75rem] border-l border-status-red/15 bg-status-red/10 text-status-red opacity-0 group-hover:translate-x-0 group-hover:opacity-100 group-focus-within:translate-x-0 group-focus-within:opacity-100 ${deletingThreadId === thread.id ? "translate-x-0 opacity-100 cursor-wait" : ""}`}
             >
               {deletingThreadId === thread.id
-                ? <RefreshCw className="h-4 w-4 animate-spin" strokeWidth={2.1} />
+                ? <RefreshCw className="h-4 w-4 animate-spin motion-reduce:animate-none" strokeWidth={2.1} />
                 : <Trash2 className="h-4 w-4" strokeWidth={2.1} />}
             </button>
           </div>

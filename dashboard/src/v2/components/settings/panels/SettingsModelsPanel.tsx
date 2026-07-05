@@ -15,10 +15,12 @@ import type {
 } from "../../../../types.js";
 import {
   getEligibleProviders,
+  getConfiguredProviderModel,
   getProviderInstanceLabel,
   getProviderInstanceModelOptions,
   getProviderModelOptions,
   getProviderTypeLabel,
+  getSystemIntegrationProviders,
   providerSupportsModelSelection,
   providerSupportsThinkingMode,
   resolveRouteDisplayProviderPool,
@@ -115,7 +117,7 @@ const RouteFlowStep: FunctionComponent<{
       </span>
       <span className="text-[9px] font-bold uppercase tracking-[0.16em] text-slate-400">{label}</span>
     </div>
-    <div className={`mt-1 truncate text-sm font-black ${tone === "signal" ? "text-signal-700 dark:text-signal-200" : "text-slate-900 dark:text-white"}`}>
+    <div className={`mt-1 truncate text-sm font-semibold ${tone === "signal" ? "text-signal-700 dark:text-signal-200" : "text-slate-900 dark:text-white"}`}>
       {value}
     </div>
   </div>
@@ -174,6 +176,29 @@ export const SettingsModelsPanel: FunctionComponent<{ state: SettingsPageState }
   const workerModelOptions = workerProviderSettings
     ? getProviderInstanceModelOptions(editableSettings.workers.virtualWorkerProvider, workerProviderSettings, systemSettings)
     : getProviderModelOptions(workerProviderType);
+  const systemIntegrationProviders = getSystemIntegrationProviders(systemSettings);
+  const getEffectiveProviderDisplayModel = (
+    providerConfigId: ProviderConfigId,
+    provider: ProjectSettings["aiProvider"]["providers"][ProviderConfigId],
+    modelOverride?: string | null,
+  ): string => {
+    const fallbackModel = modelOverride?.trim() || provider.model;
+    return getConfiguredProviderModel(provider.provider, systemIntegrationProviders[providerConfigId], fallbackModel)
+      || fallbackModel;
+  };
+  const globalProviderDisplayModel = globalProviderSettings && editableSettings.aiProvider.provider
+    ? getEffectiveProviderDisplayModel(editableSettings.aiProvider.provider, globalProviderSettings)
+    : null;
+  const workerProviderDisplayModel = workerProviderSettings
+    ? getEffectiveProviderDisplayModel(editableSettings.workers.virtualWorkerProvider, workerProviderSettings)
+    : null;
+  const workerDefaultDisplayModel = workerProviderSettings
+    ? getEffectiveProviderDisplayModel(
+      editableSettings.workers.virtualWorkerProvider,
+      workerProviderSettings,
+      editableSettings.workers.model === "default" ? workerProviderSettings.model : editableSettings.workers.model,
+    )
+    : null;
 
   const updateProviderSettings = (
     providerConfigId: ProviderConfigId,
@@ -326,7 +351,7 @@ export const SettingsModelsPanel: FunctionComponent<{ state: SettingsPageState }
               <Route className="h-3.5 w-3.5" strokeWidth={2.4} />
               AI routing console
             </div>
-            <h3 className="mt-3 font-display text-3xl font-black tracking-tight text-slate-950 dark:text-white">Provider defaults, route decisions, and runtime capacity in one place.</h3>
+            <h3 className="mt-3 font-display text-2xl font-semibold tracking-tight text-slate-950 dark:text-white">Provider defaults, route decisions, and runtime capacity in one place.</h3>
             <p className="mt-2 max-w-3xl text-sm leading-relaxed text-slate-500 dark:text-slate-400">
               Global and worker anchors define the inherited defaults. Base provider configuration defines each instance. Route mapping decides how work is assigned.
             </p>
@@ -337,7 +362,7 @@ export const SettingsModelsPanel: FunctionComponent<{ state: SettingsPageState }
                   <div className="min-w-0">
                     <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Global anchor</div>
                     <div className="mt-1 truncate text-sm font-semibold text-slate-900 dark:text-white">{globalProviderSettings ? getProviderInstanceLabel(globalProviderSettings) : "None"}</div>
-                    <div className="mt-1 truncate text-xs text-slate-500 dark:text-slate-400">{globalProviderSettings?.model || "default"}</div>
+                    <div className="mt-1 truncate text-xs text-slate-500 dark:text-slate-400">{globalProviderDisplayModel || "default"}</div>
                   </div>
                 </div>
               </div>
@@ -347,7 +372,7 @@ export const SettingsModelsPanel: FunctionComponent<{ state: SettingsPageState }
                   <div className="min-w-0">
                     <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Worker anchor</div>
                     <div className="mt-1 truncate text-sm font-semibold text-slate-900 dark:text-white">{workerProviderSettings ? getProviderInstanceLabel(workerProviderSettings) : "None"}</div>
-                    <div className="mt-1 truncate text-xs text-slate-500 dark:text-slate-400">{editableSettings.workers.model === "default" ? `Default (${workerProviderSettings?.model || "default"})` : editableSettings.workers.model}</div>
+                    <div className="mt-1 truncate text-xs text-slate-500 dark:text-slate-400">{editableSettings.workers.model === "default" ? `Default (${workerProviderDisplayModel || "default"})` : workerDefaultDisplayModel || editableSettings.workers.model}</div>
                   </div>
                 </div>
               </div>
@@ -357,21 +382,21 @@ export const SettingsModelsPanel: FunctionComponent<{ state: SettingsPageState }
             <div className="rounded-[1.25rem] border border-black/[0.06] bg-black/[0.025] p-4 dark:border-white/[0.06] dark:bg-white/[0.035]">
               <div className="flex items-center justify-between gap-3">
                 <Cpu className="h-4 w-4 text-slate-400" />
-                <span className="text-2xl font-black text-slate-900 dark:text-white">{providerEntries.length}</span>
+                <span className="text-xl font-semibold text-slate-900 dark:text-white">{providerEntries.length}</span>
               </div>
               <div className="mt-2 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Provider instances</div>
             </div>
             <div className="rounded-[1.25rem] border border-black/[0.06] bg-black/[0.025] p-4 dark:border-white/[0.06] dark:bg-white/[0.035]">
               <div className="flex items-center justify-between gap-3">
                 <SlidersHorizontal className="h-4 w-4 text-slate-400" />
-                <span className="text-2xl font-black text-slate-900 dark:text-white">{enabledProviderCount}</span>
+                <span className="text-xl font-semibold text-slate-900 dark:text-white">{enabledProviderCount}</span>
               </div>
               <div className="mt-2 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Eligible by default</div>
             </div>
             <div className="rounded-[1.25rem] border border-black/[0.06] bg-black/[0.025] p-4 dark:border-white/[0.06] dark:bg-white/[0.035]">
               <div className="flex items-center justify-between gap-3">
                 <GitBranch className="h-4 w-4 text-slate-400" />
-                <span className="text-2xl font-black text-slate-900 dark:text-white">{invocationRouteDefinitions.length}</span>
+                <span className="text-xl font-semibold text-slate-900 dark:text-white">{invocationRouteDefinitions.length}</span>
               </div>
               <div className="mt-2 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Invocation routes</div>
             </div>
@@ -450,7 +475,7 @@ export const SettingsModelsPanel: FunctionComponent<{ state: SettingsPageState }
               },
             }))}
             options={[
-              { value: "default", label: `Default (${workerProviderSettings?.model || "default"})` },
+              { value: "default", label: `Default (${workerProviderDisplayModel || "default"})` },
               ...workerModelOptions,
             ]}
           />
@@ -477,6 +502,7 @@ export const SettingsModelsPanel: FunctionComponent<{ state: SettingsPageState }
           {providerEntries.map(([providerConfigId, provider]) => {
             const expanded = !!expandedProviderCards[providerConfigId];
             const detailsId = `base-provider-details-${providerConfigId}`;
+            const displayModel = getEffectiveProviderDisplayModel(providerConfigId, provider);
             return (
             <div key={`base-${providerConfigId}`} className={`relative overflow-hidden rounded-[1.35rem] border p-4 shadow-[0_14px_32px_rgba(15,23,42,0.035)] transition-colors dark:shadow-[0_16px_34px_rgba(0,0,0,0.18)] ${
               provider.enabled
@@ -516,22 +542,22 @@ export const SettingsModelsPanel: FunctionComponent<{ state: SettingsPageState }
                     <div className="text-[9px] font-bold uppercase tracking-[0.14em] text-signal-700/70 dark:text-signal-200/80">Model</div>
                     <Cpu className="h-3 w-3 text-signal-600/70 dark:text-signal-300/70" strokeWidth={2.4} />
                   </div>
-                  <div className="mt-1 truncate font-mono text-sm font-bold text-slate-900 dark:text-white" title={providerSupportsModelSelection(provider.provider) ? provider.model : undefined}>
-                    {providerSupportsModelSelection(provider.provider) ? provider.model : "Managed by provider"}
+                  <div className="mt-1 truncate font-mono text-sm font-bold text-slate-900 dark:text-white" title={providerSupportsModelSelection(provider.provider) ? displayModel : undefined}>
+                    {providerSupportsModelSelection(provider.provider) ? displayModel : "Managed by provider"}
                   </div>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                   <div className="rounded-xl border border-black/[0.05] bg-black/[0.025] px-3 py-2 dark:border-white/[0.05] dark:bg-white/[0.035]">
                     <div className="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">Weight</div>
-                    <div className="mt-1 text-sm font-black text-slate-900 dark:text-white">{provider.weight}</div>
+                    <div className="mt-1 text-sm font-semibold text-slate-900 dark:text-white">{provider.weight}</div>
                   </div>
                   <div className="rounded-xl border border-black/[0.05] bg-black/[0.025] px-3 py-2 dark:border-white/[0.05] dark:bg-white/[0.035]">
                     <div className="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">Thinking</div>
-                    <div className="mt-1 truncate text-sm font-black text-slate-900 dark:text-white">{provider.provider === "jules" ? "n/a" : provider.thinkingMode}</div>
+                    <div className="mt-1 truncate text-sm font-semibold text-slate-900 dark:text-white">{provider.provider === "jules" ? "n/a" : provider.thinkingMode}</div>
                   </div>
                   <div className="rounded-xl border border-black/[0.05] bg-black/[0.025] px-3 py-2 dark:border-white/[0.05] dark:bg-white/[0.035]">
                     <div className="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">Cap</div>
-                    <div className="mt-1 text-sm font-black text-slate-900 dark:text-white">{provider.maxConcurrentTasks || "∞"}</div>
+                    <div className="mt-1 text-sm font-semibold text-slate-900 dark:text-white">{provider.maxConcurrentTasks || "∞"}</div>
                   </div>
                 </div>
               </div>
@@ -655,7 +681,7 @@ export const SettingsModelsPanel: FunctionComponent<{ state: SettingsPageState }
                 {routeResolvedDefault ? <ProviderLogo providerId={routeResolvedDefault.provider} disabled={!routeResolvedDefault.enabled} /> : null}
                 <div className="min-w-0">
                   <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-signal-600 dark:text-signal-300">Active route</div>
-                  <div className="mt-1 text-xl font-black text-slate-950 dark:text-white">{activeRouteDefinition.label}</div>
+                  <div className="mt-1 text-lg font-semibold text-slate-950 dark:text-white">{activeRouteDefinition.label}</div>
                   <div className="mt-1 max-w-2xl text-sm leading-relaxed text-slate-500 dark:text-slate-400">{activeRouteDefinition.description}</div>
                   <div className="mt-2 text-xs text-slate-500 dark:text-slate-400">
                     Inherits from <span className="font-semibold text-slate-700 dark:text-slate-200">{routeResolvedDefault ? getProviderInstanceLabel(routeResolvedDefault) : "no configured provider"}</span>
@@ -821,7 +847,8 @@ export const SettingsModelsPanel: FunctionComponent<{ state: SettingsPageState }
                 const cardKey = `${activeRouteDefinition.id}-${providerConfigId}`;
                 const expanded = !!expandedRouteOverrideCards[cardKey];
                 const detailsId = `route-override-details-${cardKey}`;
-                const effectiveModel = override.model || provider.model;
+                const effectiveModel = getEffectiveProviderDisplayModel(providerConfigId, provider, override.model || provider.model);
+                const inheritedModel = getEffectiveProviderDisplayModel(providerConfigId, provider);
                 const effectiveThinking = (override.thinkingMode || provider.thinkingMode) as string;
                 const effectiveWeight = override.weight ?? provider.weight;
                 const supportsModel = providerSupportsModelSelection(provider.provider);
@@ -888,15 +915,15 @@ export const SettingsModelsPanel: FunctionComponent<{ state: SettingsPageState }
                       <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                         <div className="rounded-xl border border-black/[0.05] bg-black/[0.025] px-3 py-2 dark:border-white/[0.05] dark:bg-white/[0.035]">
                           <div className="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">Weight</div>
-                          <div className="mt-1 text-sm font-black text-slate-900 dark:text-white">{effectiveWeight}</div>
+                          <div className="mt-1 text-sm font-semibold text-slate-900 dark:text-white">{effectiveWeight}</div>
                         </div>
                         <div className="rounded-xl border border-black/[0.05] bg-black/[0.025] px-3 py-2 dark:border-white/[0.05] dark:bg-white/[0.035]">
                           <div className="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">Thinking</div>
-                          <div className="mt-1 truncate text-sm font-black text-slate-900 dark:text-white">{provider.provider === "jules" ? "n/a" : effectiveThinking}</div>
+                          <div className="mt-1 truncate text-sm font-semibold text-slate-900 dark:text-white">{provider.provider === "jules" ? "n/a" : effectiveThinking}</div>
                         </div>
                         <div className="rounded-xl border border-black/[0.05] bg-black/[0.025] px-3 py-2 dark:border-white/[0.05] dark:bg-white/[0.035]">
                           <div className="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">Cap</div>
-                          <div className="mt-1 text-sm font-black text-slate-900 dark:text-white">{provider.maxConcurrentTasks || "∞"}</div>
+                          <div className="mt-1 text-sm font-semibold text-slate-900 dark:text-white">{provider.maxConcurrentTasks || "∞"}</div>
                         </div>
                       </div>
                     </div>
@@ -906,7 +933,7 @@ export const SettingsModelsPanel: FunctionComponent<{ state: SettingsPageState }
                             <Toggle aria-label={`Enable ${provider.name} for ${activeRouteDefinition.label}`} value={override.enabled ?? provider.enabled} onChange={(value) => updateRouteProviderOverride(activeRouteDefinition.id, providerConfigId, { enabled: value })} />
                         </Row>
                         {supportsModel ? (
-                          <Row label="Model override" description={`Inherited: ${provider.model}`}>
+                          <Row label="Model override" description={`Inherited: ${inheritedModel}`}>
                               <SelectInput
                                 value={override.model || provider.model}
                                 aria-label={`${provider.name} model override for ${activeRouteDefinition.label}`}
