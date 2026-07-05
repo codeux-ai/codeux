@@ -40,6 +40,112 @@ afterEach(async () => {
 });
 
 describe("ProjectRuntimeRepository", () => {
+  it("syncs and projects runtime status against a repeatedly migrated database", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-runtime-migrated-"));
+    tempDirs.push(dir);
+    const dbPath = path.join(dir, "app.db");
+    new AppDbStorage(dbPath);
+    const storage = new AppDbStorage(dbPath);
+    const projectRepository = new ProjectManagementRepository(storage);
+    const runtimeRepository = new ProjectRuntimeRepository(storage);
+
+    const project = projectRepository.createProject({
+      name: "Migrated Runtime Project",
+      sourceType: "local",
+      sourceRef: "/workspace/migrated-runtime",
+    });
+    const sprint = projectRepository.createSprint(project.id, {
+      name: "Migrated Runtime Sprint",
+      number: 9,
+      status: "running",
+    });
+    const task = projectRepository.createTask(project.id, {
+      sprintId: sprint.id,
+      taskKey: "R01",
+      title: "Project runtime projection",
+      promptMarkdown: "Persist and read runtime status.",
+      status: "pending",
+    });
+
+    runtimeRepository.syncDashboardStatus({
+      project_id: project.id,
+      sprint_id: sprint.id,
+      sprint_number: 9,
+      repo_path: "/workspace/migrated-runtime",
+      feature_branch: "feature/migrated-runtime",
+      subtasks: [
+        {
+          id: "R01",
+          record_id: task.id,
+          title: task.title,
+          prompt: task.promptMarkdown,
+          depends_on: [],
+          is_independent: true,
+          status: "RUNNING",
+          session_id: "runtime-migrated-session",
+          session_name: "sessions/runtime-migrated-session",
+          provider: "codex",
+          worker_branch: "worker/R01",
+        },
+      ],
+      reportText: "Runtime schema is queryable.",
+      timestamp: "2026-05-02T12:00:00.000Z",
+    });
+
+    projectRepository.setSelectedProjectId(project.id);
+    projectRepository.setSelectedSprintId(project.id, sprint.id);
+
+    const status = runtimeRepository.getSelectedProjectStatus();
+    expect(status).toMatchObject({
+      sprint_id: sprint.id,
+      sprint_number: 9,
+      repo_path: "/workspace/migrated-runtime",
+      feature_branch: "feature/migrated-runtime",
+      reportText: "Runtime schema is queryable.",
+    });
+    expect(status.subtasks[0]).toMatchObject({
+      id: "R01",
+      record_id: task.id,
+      status: "RUNNING",
+      session_id: "runtime-migrated-session",
+      session_name: "sessions/runtime-migrated-session",
+      provider: "codex",
+      worker_branch: "worker/R01",
+    });
+
+    const runRow = storage.getDatabase().prepare(`
+      SELECT project_id, sprint_id, task_id, state, provider, session_id
+      FROM task_runs
+      WHERE task_id = ?
+    `).get(task.id) as {
+      project_id: string;
+      sprint_id: string;
+      task_id: string;
+      state: string;
+      provider: string | null;
+      session_id: string | null;
+    } | undefined;
+    expect(runRow).toMatchObject({
+      project_id: project.id,
+      sprint_id: sprint.id,
+      task_id: task.id,
+      state: "RUNNING",
+      provider: "codex",
+      session_id: "runtime-migrated-session",
+    });
+
+    const eventRow = storage.getDatabase().prepare(`
+      SELECT tre.project_id, tre.event_type
+      FROM task_run_events tre
+      INNER JOIN task_runs tr ON tr.id = tre.task_run_id
+      WHERE tr.task_id = ?
+    `).get(task.id) as { project_id: string | null; event_type: string } | undefined;
+    expect(eventRow).toMatchObject({
+      project_id: project.id,
+      event_type: "status_sync",
+    });
+  });
+
   it("rolls back transaction on error", async () => {
     const { projectRepository, runtimeRepository } = await createRepositories();
     const project = projectRepository.createProject({

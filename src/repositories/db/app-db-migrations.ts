@@ -239,6 +239,7 @@ export function runMigrations(db: DatabaseAdapter): void {
   ensureIndex(db, "idx_provider_invocations_task_run", "provider_invocations", "task_run_id, started_at DESC");
   ensureIndex(db, "idx_provider_invocations_attention", "provider_invocations", "attention_item_id, started_at DESC");
   ensureIndex(db, "idx_provider_invocations_session", "provider_invocations", "session_id, started_at DESC");
+  ensureIndex(db, "idx_provider_invocations_status_provider_started", "provider_invocations", "status, provider, started_at DESC");
   ensureIndex(db, "idx_qa_review_runs_task_started", "qa_review_runs", "task_id, started_at DESC");
   ensureIndex(db, "idx_qa_review_runs_sprint_started", "qa_review_runs", "sprint_id, started_at DESC");
   ensureIndex(db, "idx_qa_review_runs_run_status", "qa_review_runs", "status, started_at DESC");

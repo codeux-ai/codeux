@@ -176,6 +176,198 @@ describe("ExecutionRepository", () => {
     expect(wallTimeSprintRunSpy).not.toHaveBeenCalled();
   });
 
+  it("queries execution snapshots and provider usage against a repeatedly migrated database", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-execution-migrated-"));
+    tempDirs.push(dir);
+    const dbPath = path.join(dir, "app.db");
+    new AppDbStorage(dbPath);
+    const storage = new AppDbStorage(dbPath);
+    const projectRepository = new ProjectManagementRepository(storage);
+    const executionRepository = new ExecutionRepository(storage);
+
+    const project = projectRepository.createProject({
+      name: "Migrated Execution Project",
+      sourceType: "local",
+      sourceRef: "/workspace/migrated-execution",
+    });
+    const sprint = projectRepository.createSprint(project.id, {
+      name: "Migrated Execution Sprint",
+      number: 8,
+      status: "running",
+    });
+    const task = projectRepository.createTask(project.id, {
+      sprintId: sprint.id,
+      taskKey: "M01",
+      title: "Exercise migrated query paths",
+      promptMarkdown: "Use the migrated execution schema.",
+      status: "in_progress",
+    });
+    const sprintRun = executionRepository.createSprintRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      status: "running",
+      startedAt: "2026-05-01T10:00:00.000Z",
+    });
+    const dispatch = executionRepository.createTaskDispatch({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      sprintRunId: sprintRun.id,
+      executorType: "docker_cli",
+      status: "running",
+      queuedAt: "2026-05-01T10:01:00.000Z",
+      startedAt: "2026-05-01T10:02:00.000Z",
+    });
+    const taskRun = executionRepository.createTaskRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      sprintRunId: sprintRun.id,
+      dispatchId: dispatch.id,
+      provider: "codex",
+      mode: "docker_cli",
+      sessionId: "migrated-session",
+      sessionName: "sessions/migrated-session",
+      state: "RUNNING",
+      startedAt: "2026-05-01T10:02:00.000Z",
+    });
+    executionRepository.appendTaskRunEvent(taskRun.id, "provider_activity", "codex", {
+      message: "provider emitted telemetry",
+    }, {
+      createdAt: "2026-05-01T10:03:00.000Z",
+      sourceEventKey: "provider-activity:1",
+    });
+
+    const runningUsage = executionRepository.createProviderInvocationUsage({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      sprintRunId: sprintRun.id,
+      dispatchId: dispatch.id,
+      taskRunId: taskRun.id,
+      sessionId: "migrated-running-session",
+      provider: "codex",
+      purpose: "task_coding",
+      status: "running",
+      startedAt: "2026-05-01T10:03:00.000Z",
+    });
+    const rawRunningUsage = storage.getDatabase().prepare(`
+      SELECT token_accounting_version, tool_call_count
+      FROM provider_invocations
+      WHERE id = ?
+    `).get(runningUsage.id) as { token_accounting_version: number; tool_call_count: number };
+    expect(rawRunningUsage).toEqual({
+      token_accounting_version: 2,
+      tool_call_count: 0,
+    });
+    const completedUsage = executionRepository.createProviderInvocationUsage({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      sprintRunId: sprintRun.id,
+      dispatchId: dispatch.id,
+      taskRunId: taskRun.id,
+      sessionId: "migrated-session",
+      provider: "codex",
+      purpose: "task_coding",
+      status: "running",
+      model: "gpt-5-codex",
+      startedAt: "2026-05-01T10:04:00.000Z",
+    });
+    executionRepository.updateProviderInvocationUsage(completedUsage.id, {
+      status: "completed",
+      finishedAt: "2026-05-01T10:08:00.000Z",
+      inputTokens: 100,
+      cachedInputTokens: 20,
+      outputTokens: 40,
+      reasoningOutputTokens: 5,
+      totalTokens: 165,
+      toolCallCount: 3,
+      usageSource: "reported",
+    });
+    const invocation = executionRepository.createExecutionInvocation({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      sprintRunId: sprintRun.id,
+      dispatchId: dispatch.id,
+      taskRunId: taskRun.id,
+      providerInvocationId: completedUsage.id,
+      type: "cli_task_coding",
+      status: "completed",
+      provider: "codex",
+      model: "gpt-5-codex",
+      startedAt: "2026-05-01T10:04:00.000Z",
+      finishedAt: "2026-05-01T10:08:00.000Z",
+    });
+
+    const latestBySession = executionRepository.getLatestProviderInvocationUsageBySession("sessions/migrated-session", "task_coding");
+    expect(latestBySession?.id).toBe(completedUsage.id);
+    expect(executionRepository.listRunningProviderInvocationUsages(["codex"]).map((usage) => usage.id)).toEqual([runningUsage.id]);
+    expect(executionRepository.listProviderInvocationsForTask(project.id, task.id).map((usage) => usage.id)).toEqual([
+      runningUsage.id,
+      completedUsage.id,
+    ]);
+    expect(executionRepository.listProviderInvocationsForSprint(project.id, sprint.id, "task_coding")).toHaveLength(2);
+    const codexUsageGroup = executionRepository.getTaskUsageGroups(project.id, task.id)
+      .find((group) => group.provider === "codex" && group.model === "gpt-5-codex");
+    expect(codexUsageGroup).toMatchObject({
+      provider: "codex",
+      model: "gpt-5-codex",
+      usage: {
+        invocationCount: 1,
+        inputTokens: 100,
+        cachedInputTokens: 20,
+        outputTokens: 40,
+        reasoningOutputTokens: 5,
+        totalTokens: 165,
+        toolCallCount: 3,
+      },
+    });
+
+    const snapshot = executionRepository.getProjectExecutionSnapshot(project.id, {
+      selectedSprintId: sprint.id,
+    });
+
+    expect(snapshot.sprintRuns[0]).toMatchObject({
+      id: sprintRun.id,
+      sprintId: sprint.id,
+      usage: {
+        invocationCount: 2,
+        inputTokens: 100,
+        cachedInputTokens: 20,
+        outputTokens: 40,
+        reasoningOutputTokens: 5,
+        totalTokens: 165,
+        toolCallCount: 3,
+        reportedInvocationCount: 1,
+        unavailableInvocationCount: 1,
+      },
+    });
+    expect(snapshot.taskDispatches[0]).toMatchObject({
+      id: dispatch.id,
+      taskId: task.id,
+      taskRunId: taskRun.id,
+      provider: "codex",
+      sessionId: "migrated-session",
+      usage: {
+        invocationCount: 2,
+        totalTokens: 165,
+      },
+    });
+    expect(snapshot.recentEvents.map((event) => event.eventType)).toContain("provider_activity");
+    expect(snapshot.recentInvocations?.find((item) => item.id === invocation.id)).toMatchObject({
+      id: invocation.id,
+      providerInvocationId: completedUsage.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      taskKey: task.taskKey,
+      inputTokens: 100,
+      outputTokens: 40,
+      totalTokens: 165,
+    });
+  });
+
   it("only treats queued dispatches as pending virtual-worker candidates", async () => {
     const { projectRepository, executionRepository } = await createRepositories();
     const project = projectRepository.createProject({
