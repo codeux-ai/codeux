@@ -10,6 +10,7 @@ import {
 import type { IWorkspaceManager } from "./workspace-manager.js";
 
 const TEMP_EXPORT_PATHSPEC = ":(exclude).code-ux-export-*";
+const MAX_INTENT_TO_ADD_PATHS_PER_BATCH = 250;
 
 export interface AppliedWorkspacePatchResult {
   hasChanges: boolean;
@@ -24,6 +25,13 @@ export interface AppliedWorkspacePatchResult {
 export interface GitCommitIdentity {
   name: string;
   email: string;
+}
+
+function parseNullDelimitedPaths(output: string): string[] {
+  if (!output) {
+    return [];
+  }
+  return output.split("\0").filter((entry) => entry.length > 0);
 }
 
 const buildCommitIdentityEnv = (
@@ -81,12 +89,25 @@ export class WorkspaceArtifactService {
         ["read-tree", "HEAD"],
         { env: tempIndexEnv },
       );
-      await this.workspaceManager.runWorkspaceCommand(
+      const untrackedResult = await this.workspaceManager.runWorkspaceCommand(
         workspaceRef,
         "git",
-        ["add", "--intent-to-add", "--", ".", ...excludePathspecs],
-        { env: tempIndexEnv },
+        ["ls-files", "--others", "--exclude-standard", "-z", "--", ".", ...excludePathspecs],
+        { env: tempIndexEnv, trimOutput: false },
       );
+      const untrackedPaths = parseNullDelimitedPaths(untrackedResult.stdout);
+      for (let index = 0; index < untrackedPaths.length; index += MAX_INTENT_TO_ADD_PATHS_PER_BATCH) {
+        const batch = untrackedPaths.slice(index, index + MAX_INTENT_TO_ADD_PATHS_PER_BATCH);
+        if (batch.length === 0) {
+          continue;
+        }
+        await this.workspaceManager.runWorkspaceCommand(
+          workspaceRef,
+          "git",
+          ["add", "--intent-to-add", "--", ...batch],
+          { env: tempIndexEnv },
+        );
+      }
       const result = await this.workspaceManager.runWorkspaceCommand(
         workspaceRef,
         "git",
