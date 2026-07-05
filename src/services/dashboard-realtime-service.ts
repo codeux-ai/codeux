@@ -12,6 +12,7 @@ import {
   DashboardRealtimeEventRepository,
   type AppendDashboardRealtimeEventInput,
 } from "../repositories/dashboard-realtime-event-repository.js";
+import { getDashboardRealtimePayloadFingerprint } from "./dashboard-realtime-payload-fingerprint.js";
 
 type MaybePromise<T> = T | Promise<T>;
 
@@ -55,7 +56,6 @@ export interface DashboardRealtimeMutationNotifier {
 }
 
 type DashboardRealtimeListener = (event: DashboardRealtimeEvent) => void;
-type SnapshotObject = Record<string, unknown>;
 
 const DEFAULT_FLUSH_DELAY_MS = 75;
 // The live snapshot is the heaviest realtime payload (~480KB: full execution tree + runtime event
@@ -433,7 +433,7 @@ export class DashboardRealtimeService implements DashboardRealtimeMutationNotifi
         let payloadSizeBytes: number | undefined;
 
         if (options.cacheKey && options.skipDuplicate) {
-          const fingerprint = this.getDeduplicationFingerprint(options.eventType, payload);
+          const fingerprint = getDashboardRealtimePayloadFingerprint(options.eventType, payload);
           if (this.lastPayloadFingerprints.get(options.cacheKey) === fingerprint) {
             this.logger.debug("skipping_duplicate_realtime_snapshot", {
               type: options.eventType,
@@ -448,7 +448,7 @@ export class DashboardRealtimeService implements DashboardRealtimeMutationNotifi
             payloadSizeBytes = Buffer.byteLength(fingerprint, "utf8");
           }
         } else if (options.logPayloadSize) {
-          const fingerprint = this.getDeduplicationFingerprint(options.eventType, payload);
+          const fingerprint = getDashboardRealtimePayloadFingerprint(options.eventType, payload);
           payloadSizeBytes = Buffer.byteLength(fingerprint, "utf8");
         }
 
@@ -537,6 +537,8 @@ export class DashboardRealtimeService implements DashboardRealtimeMutationNotifi
         entityType: "project_collection",
         entityId: (id: string) => "projects",
         loader: () => loaders.getProjectsSnapshot(),
+        cacheKey: (id: string) => `${id}:projects.updated`,
+        skipDuplicate: true,
         lastPublishedAt: (id: string) => this.projectsPublishedAt,
         logType: "realtime_background_refresh" as const,
         onPublished: (id: string, publishedAt: number) => {
@@ -628,6 +630,8 @@ export class DashboardRealtimeService implements DashboardRealtimeMutationNotifi
         entityId: (projectId: string) => projectId,
         projectId: (projectId: string) => projectId,
         loader: (projectId: string) => loaders.getProjectStatusSnapshot(projectId),
+        cacheKey: (projectId: string) => `project:${projectId}:project.runtime_status.updated`,
+        skipDuplicate: true,
         lastPublishedAt: (projectId: string) => this.projectRuntimeStatusPublishedAt.get(projectId) ?? 0,
         onPublished: (projectId: string, publishedAt: number) => {
           this.projectRuntimeStatusPublishedAt.set(projectId, publishedAt);
@@ -752,299 +756,6 @@ export class DashboardRealtimeService implements DashboardRealtimeMutationNotifi
       });
       return true;
     }
-  }
-
-  private getDeduplicationFingerprint(eventType: string, payload: unknown): string {
-    return this.getSemanticSnapshotSignature(eventType, payload) ?? this.getFingerprint(payload);
-  }
-
-  private getSemanticSnapshotSignature(eventType: string, payload: unknown): string | null {
-    if (eventType === "project.execution.updated") {
-      return this.getExecutionSnapshotSignature(payload);
-    }
-    if (eventType === "project.live.updated") {
-      return this.getLiveSnapshotSignature(payload);
-    }
-    return null;
-  }
-
-  private getLiveSnapshotSignature(payload: unknown): string | null {
-    if (!this.isObject(payload)) {
-      return null;
-    }
-
-    const executionSignature = this.getExecutionSnapshotSignature(payload.execution);
-    const statusSignature = this.getDashboardStatusSignature(payload.status);
-    if (!executionSignature || !statusSignature) {
-      return null;
-    }
-
-    return this.joinSignatureParts([
-      "project.live.updated",
-      this.signatureValue(payload.projectId),
-      this.signatureValue(payload.selectedSprintId),
-      statusSignature,
-      executionSignature,
-      this.getGitStatusSignature(payload.gitStatus),
-      this.signatureValue(payload.gitStatusError),
-    ]);
-  }
-
-  private getExecutionSnapshotSignature(payload: unknown): string | null {
-    if (!this.isObject(payload)) {
-      return null;
-    }
-
-    const sprintRuns = this.arrayField(payload, "sprintRuns");
-    const taskDispatches = this.arrayField(payload, "taskDispatches");
-    const connections = this.arrayField(payload, "connections");
-    const overflowAssignedWorkers = this.arrayField(payload, "overflowAssignedWorkers");
-    const attentionItems = this.arrayField(payload, "attentionItems");
-    const recentEvents = this.arrayField(payload, "recentEvents");
-    if (!sprintRuns || !taskDispatches || !connections || !overflowAssignedWorkers || !attentionItems || !recentEvents) {
-      return null;
-    }
-
-    const recentInvocations = Array.isArray(payload.recentInvocations)
-      ? payload.recentInvocations
-      : [];
-
-    return this.joinSignatureParts([
-      "project.execution.updated",
-      this.signatureValue(payload.projectId),
-      this.signatureValue(payload.projectName),
-      this.signatureCollection(sprintRuns, (item) => this.getSprintRunSignature(item)),
-      this.signatureCollection(taskDispatches, (item) => this.getTaskDispatchSignature(item)),
-      this.signatureCollection(connections, (item) => this.getConnectionSignature(item)),
-      this.getAssignedWorkerSignature(payload.primaryAssignedWorker),
-      this.signatureCollection(overflowAssignedWorkers, (item) => this.getAssignedWorkerSignature(item)),
-      this.signatureCollection(attentionItems, (item) => this.getAttentionItemSignature(item)),
-      this.signatureCollection(recentEvents, (item) => this.getRuntimeEventSignature(item)),
-      this.signatureCollection(recentInvocations, (item) => this.getInvocationSignature(item)),
-    ]);
-  }
-
-  private getDashboardStatusSignature(payload: unknown): string | null {
-    if (!this.isObject(payload)) {
-      return null;
-    }
-    const subtasks = this.arrayField(payload, "subtasks");
-    if (!subtasks) {
-      return null;
-    }
-    return this.joinSignatureParts([
-      "status",
-      this.signatureValue(payload.project_id),
-      this.signatureValue(payload.sprint_id),
-      this.signatureValue(payload.sprint_number),
-      this.signatureValue(payload.source_id),
-      this.signatureValue(payload.repo_path),
-      this.signatureValue(payload.feature_branch),
-      this.signatureCollection(subtasks, (item) => this.getSubtaskSignature(item)),
-    ]);
-  }
-
-  private getSprintRunSignature(item: unknown): string {
-    const value = this.objectOrEmpty(item);
-    return this.joinSignatureParts([
-      this.signatureValue(value.id),
-      this.signatureValue(value.sprintId),
-      this.signatureValue(value.status),
-      this.signatureValue(value.lastHeartbeatAt),
-      this.signatureValue(value.activeLeaseOwnerKey),
-      this.signatureValue(value.activeLeaseExpiresAt),
-      this.signatureValue(value.finishedAt),
-      this.getHumanInterventionSignature(value.humanIntervention),
-    ]);
-  }
-
-  private getTaskDispatchSignature(item: unknown): string {
-    const value = this.objectOrEmpty(item);
-    return this.joinSignatureParts([
-      this.signatureValue(value.id),
-      this.signatureValue(value.sprintRunId),
-      this.signatureValue(value.taskId),
-      this.signatureValue(value.status),
-      this.signatureValue(value.taskRunState),
-      this.signatureValue(value.provider),
-      this.signatureValue(value.sessionId),
-      this.signatureValue(value.workerBranch),
-      this.signatureValue(value.prUrl),
-      this.signatureValue(value.lastHeartbeatAt),
-      this.signatureValue(value.activeLeaseOwnerKey),
-      this.signatureValue(value.activeLeaseExpiresAt),
-      this.signatureValue(value.errorMessage),
-    ]);
-  }
-
-  private getConnectionSignature(item: unknown): string {
-    const value = this.objectOrEmpty(item);
-    return this.joinSignatureParts([
-      this.signatureValue(value.id),
-      this.signatureValue(value.status),
-      this.signatureValue(value.lastHeartbeatAt),
-      this.signatureValue(value.activeDispatchCount),
-      this.signatureValue(value.pendingInboxCount),
-      this.signatureValue(value.tasksRunCount),
-      this.signatureValue(value.messageCount),
-    ]);
-  }
-
-  private getAssignedWorkerSignature(item: unknown): string {
-    const value = this.objectOrEmpty(item);
-    return this.joinSignatureParts([
-      this.signatureValue(value.assignmentId),
-      this.signatureValue(value.workerEndpointId),
-      this.signatureValue(value.status),
-      this.signatureValue(value.lastAffinityAt),
-      this.signatureValue(value.workerStatus),
-    ]);
-  }
-
-  private getAttentionItemSignature(item: unknown): string {
-    const value = this.objectOrEmpty(item);
-    return this.joinSignatureParts([
-      this.signatureValue(value.id),
-      this.signatureValue(value.sprintId),
-      this.signatureValue(value.taskId),
-      this.signatureValue(value.sprintRunId),
-      this.signatureValue(value.dispatchId),
-      this.signatureValue(value.attentionType),
-      this.signatureValue(value.severity),
-      this.signatureValue(value.ownerType),
-      this.signatureValue(value.status),
-      this.signatureValue(value.claimedAt),
-      this.signatureValue(value.resolvedAt),
-    ]);
-  }
-
-  private getHumanInterventionSignature(item: unknown): string {
-    const value = this.objectOrEmpty(item);
-    return this.joinSignatureParts([
-      this.signatureValue(value.title),
-      this.signatureValue(value.reason),
-      this.signatureValue(value.attentionType),
-      this.signatureValue(value.severity),
-      this.signatureValue(value.ownerType),
-    ]);
-  }
-
-  private getRuntimeEventSignature(item: unknown): string {
-    const value = this.objectOrEmpty(item);
-    return this.joinSignatureParts([
-      this.signatureValue(value.id),
-      this.signatureValue(value.scopeType),
-      this.signatureValue(value.taskRunId),
-      this.signatureValue(value.sprintRunId),
-      this.signatureValue(value.dispatchId),
-      this.signatureValue(value.eventType),
-      this.signatureValue(value.sourceEventKey),
-      this.signatureValue(value.sessionId),
-      this.signatureValue(value.createdAt),
-    ]);
-  }
-
-  private getInvocationSignature(item: unknown): string {
-    const value = this.objectOrEmpty(item);
-    return this.joinSignatureParts([
-      this.signatureValue(value.id),
-      this.signatureValue(value.providerInvocationId),
-      this.signatureValue(value.sprintRunId),
-      this.signatureValue(value.dispatchId),
-      this.signatureValue(value.taskRunId),
-      this.signatureValue(value.attentionItemId),
-      this.signatureValue(value.type),
-      this.signatureValue(value.status),
-      this.signatureValue(value.provider),
-      this.signatureValue(value.model),
-      this.signatureValue(value.startedAt),
-      this.signatureValue(value.finishedAt),
-      this.signatureValue(value.lastMessageAt),
-      this.signatureValue(value.messageCount),
-    ]);
-  }
-
-  private getSubtaskSignature(item: unknown): string {
-    const value = this.objectOrEmpty(item);
-    return this.joinSignatureParts([
-      this.signatureValue(value.id),
-      this.signatureValue(value.record_id),
-      this.signatureValue(value.status),
-      this.signatureValue(value.session_id),
-      this.signatureValue(value.session_name),
-      this.signatureValue(value.session_state),
-      this.signatureValue(value.provider),
-      this.signatureValue(value.model),
-      this.signatureValue(value.worker_branch),
-      this.signatureValue(value.pr_url),
-      this.signatureValue(value.merge_indicator),
-      this.signatureValue(value.intervention_owner),
-    ]);
-  }
-
-  private getGitStatusSignature(payload: unknown): string {
-    if (payload === null || payload === undefined) {
-      return this.signatureValue(payload);
-    }
-    if (!this.isObject(payload)) {
-      return this.signatureValue(payload);
-    }
-    return this.joinSignatureParts([
-      this.signatureValue(payload.mode),
-      this.signatureValue(payload.branch),
-      this.signatureValue(payload.defaultBranch),
-      this.signatureValue(payload.headSha),
-      this.signatureValue(payload.upstreamSha),
-      this.signatureValue(payload.hasUncommittedChanges),
-      this.signatureValue(payload.ciStatus),
-      this.signatureValue(payload.prUrl),
-    ]);
-  }
-
-  private signatureCollection(items: unknown[], summarize: (item: unknown) => string): string {
-    return this.joinSignatureParts([String(items.length), ...items.map((item) => summarize(item))]);
-  }
-
-  private signatureValue(value: unknown): string {
-    if (value === null) {
-      return "null";
-    }
-    if (value === undefined) {
-      return "undefined";
-    }
-    if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
-      return `${typeof value}:${String(value)}`;
-    }
-    if (this.isObject(value)) {
-      return `object:${Object.keys(value).sort().join(",")}`;
-    }
-    return `${typeof value}:${String(value)}`;
-  }
-
-  private joinSignatureParts(parts: string[]): string {
-    return parts.map((part) => `${part.length}:${part}`).join("|");
-  }
-
-  private arrayField(payload: SnapshotObject, key: string): unknown[] | null {
-    const value = payload[key];
-    return Array.isArray(value) ? value : null;
-  }
-
-  private objectOrEmpty(value: unknown): SnapshotObject {
-    return this.isObject(value) ? value : {};
-  }
-
-  private isObject(value: unknown): value is SnapshotObject {
-    return typeof value === "object" && value !== null && !Array.isArray(value);
-  }
-
-  private getFingerprint(payload: unknown): string {
-    return JSON.stringify(payload, (key, value) => {
-      if (key === "updatedAt" || key === "timestamp") {
-        return undefined;
-      }
-      return value;
-    });
   }
 
   private broadcast(event: DashboardRealtimeEvent): void {
