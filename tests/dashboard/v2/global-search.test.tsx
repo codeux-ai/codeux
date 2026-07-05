@@ -282,6 +282,47 @@ describe("Global Search", () => {
             expect(onClose).toHaveBeenCalled();
         });
 
+        it("keeps a stable active descendant when every result is inactive without navigating on Enter", () => {
+            const onClose = vi.fn();
+            render(
+                <SearchOverlay
+                    isOpen={true}
+                    onClose={onClose}
+                    searchQuery="offline"
+                    onSearchChange={vi.fn()}
+                    results={{
+                        sprints: [
+                            { id: "sprint-disabled", title: "Offline Sprint", displayKey: "SPR-0", sprintKey: "SPR-0", routeSprintId: "sprint-disabled", status: "unavailable" }
+                        ],
+                        tasks: [
+                            { id: "task-disabled", title: "Disabled Task", routeTaskId: "task-disabled", routeSprintId: "sprint-disabled", status: "disabled" }
+                        ],
+                        agents: [],
+                        containers: []
+                    }}
+                    isLoading={false}
+                />
+            );
+
+            const combobox = screen.getByRole("combobox", { hidden: true });
+
+            fireEvent.keyDown(window, { key: "Home" });
+            expect(combobox).toHaveAttribute("aria-activedescendant", "search-result-sprint-disabled");
+
+            fireEvent.keyDown(window, { key: "End" });
+            expect(combobox).toHaveAttribute("aria-activedescendant", "search-result-sprint-disabled");
+
+            fireEvent.keyDown(window, { key: "ArrowDown" });
+            expect(combobox).toHaveAttribute("aria-activedescendant", "search-result-sprint-disabled");
+
+            fireEvent.keyDown(window, { key: "ArrowUp" });
+            expect(combobox).toHaveAttribute("aria-activedescendant", "search-result-sprint-disabled");
+
+            fireEvent.keyDown(window, { key: "Enter" });
+            expect(mockNavigate).not.toHaveBeenCalled();
+            expect(onClose).not.toHaveBeenCalled();
+        });
+
         it("updates active descendant and keeps focused results within the result scroller", async () => {
             render(
                 <SearchOverlay

@@ -8,10 +8,12 @@ import { expect, describe, it, vi, beforeEach, afterEach } from "vitest";
 
 expect.extend(matchers);
 
-const gsapFromTo = vi.fn();
-const gsapTo = vi.fn();
-const gsapSet = vi.fn();
-const gsapKillTweensOf = vi.fn();
+const { gsapFromTo, gsapTo, gsapSet, gsapKillTweensOf } = vi.hoisted(() => ({
+    gsapFromTo: vi.fn(),
+    gsapTo: vi.fn(),
+    gsapSet: vi.fn(),
+    gsapKillTweensOf: vi.fn(),
+}));
 
 // Mock GSAP to prevent animation issues in test environment
 vi.mock("gsap", () => ({
@@ -26,9 +28,9 @@ vi.mock("gsap", () => ({
 }));
 
 // Mock use-reduced-motion to return true so tests don't wait for animations
-vi.mock("../../hooks/use-reduced-motion.js", () => ({
+vi.mock("../../../hooks/use-reduced-motion.js", () => ({
     useReducedMotion: () => true,
-    useResolvedMotionDuration: () => 0,
+    useResolvedMotionDuration: (duration: number | string) => typeof duration === "number" ? 0 : "0ms",
 }));
 
 // Provide mocked components
@@ -357,7 +359,7 @@ describe("SearchOverlay Accessibility", () => {
         combobox.focus();
         await user.keyboard("{ArrowDown}{Enter}");
 
-        expect(combobox).not.toHaveAttribute("aria-activedescendant");
+        expect(combobox).toHaveAttribute("aria-activedescendant", "search-result-spr-offline");
         expect(mockOnClose).not.toHaveBeenCalled();
     });
 
