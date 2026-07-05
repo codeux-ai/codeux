@@ -237,6 +237,17 @@ Why this is worth it:
 
 This is better than relying only on in-memory broadcasting.
 
+Heavy dashboard snapshot events are the exception to payload persistence. Events such as
+`project.live.updated`, `project.execution.updated`, `project.runtime_status.updated`,
+`projects.updated`, and `overview.telemetry.updated` are non-replayable: the realtime repository
+advances the in-memory sequence watermark and broadcasts the event, but does not write the heavy
+`payload_json` to `dashboard_realtime_events`. A reconnect that missed one of these sequence markers
+must receive `snapshot_required` and reload the authoritative REST snapshot instead of replaying a
+large stale payload.
+
+Replayable domain events remain valid for small append-style facts, such as conversation or runtime
+events that can be safely restored from the durable replay log.
+
 ## Subscription Model
 
 ### Overview scope
@@ -535,3 +546,24 @@ To maintain reliability under heavy load, the internal realtime publisher tracks
 - `failures`: The number of times a snapshot loader or publisher pipeline threw an unhandled error during the publish task.
 
 These metrics ensure we can verify backpressure logic (such as coalescing high-frequency execution refreshes) functions smoothly without impacting client contracts.
+
+## Snapshot Fingerprints
+
+Snapshot publish tasks use `getDashboardRealtimePayloadFingerprint` from
+`src/services/dashboard-realtime-payload-fingerprint.ts` instead of direct
+`JSON.stringify(payload)` comparisons. The helper builds semantic fingerprints for known dashboard
+snapshot event types and falls back to bounded stable serialization only for unknown shapes.
+
+The semantic fingerprints intentionally ignore timestamp-only churn where the timestamp is fetch or
+projection metadata rather than visible product state. Examples include snapshot `updatedAt` fields
+and runtime status timestamps. Visible fields such as status, branch, task progress, run state,
+connection counters, attention items, PR links, and recent invocation state remain part of the
+fingerprint, so meaningful dashboard changes still publish.
+
+Guardrails in `scripts/check-quality-guardrails.mjs` protect this contract:
+
+- realtime hot-path files must use the shared fingerprint helper instead of full-payload
+  `JSON.stringify(payload)` fingerprinting or size estimates
+- heavy snapshot publish tasks must call `publishRawEvent` with `replayable: false`
+- `dashboard_realtime_events` inserts must remain gated behind `replayable`, so non-replayable
+  snapshots cannot persist their payloads
