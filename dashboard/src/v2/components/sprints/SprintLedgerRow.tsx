@@ -162,6 +162,7 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
     : (pauseResumeRun ? `sprint-pause:${pauseResumeRun.id}` : "");
   const pinActionId = `sprint-showcase:${sprint.id}`;
   const deleteActionId = `sprint-delete:${sprint.id}`;
+  const markCompletedActionId = `sprint-mark-completed:${sprint.id}`;
   const isCompleted = sprint.status === "completed";
   const statusPresentation = getSprintStatusPresentation({
     state: sprint.status,
@@ -179,8 +180,9 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
   const isPauseResumePending = pendingPauseResumeActionId.length > 0 && pendingActionIds.has(pendingPauseResumeActionId);
   const isPinPending = pendingActionIds.has(pinActionId);
   const isDeletePending = pendingActionIds.has(deleteActionId);
+  const isMarkCompletedPending = pendingActionIds.has(markCompletedActionId);
   // The menu icon only needs to show a loader if deleting/pinning. toggle and pause are shown in their own controls.
-  const isRowPending = isPinPending || isDeletePending;
+  const isRowPending = isPinPending || isDeletePending || isMarkCompletedPending;
 
   const rowTone = isSelected
     ? "border-signal-500/35 bg-signal-500/[0.08] shadow-[0_18px_44px_rgba(0,224,160,0.12)]"
@@ -214,7 +216,7 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
 
   const pendingRowClass = isDeletePending
     ? "bg-status-red/5 ring-2 ring-inset ring-status-red/20"
-    : isPinPending || isTogglePending || isPauseResumePending
+    : isPinPending || isTogglePending || isPauseResumePending || isMarkCompletedPending
       ? "bg-signal-500/5 ring-2 ring-inset ring-signal-500/20"
       : isAnyBulkPending
         ? "border-slate-400/25 bg-slate-900/[0.03] ring-2 ring-inset ring-slate-400/20 dark:bg-white/[0.03]"
@@ -224,6 +226,8 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
     ? "Delete pending"
     : isPinPending
       ? "Pin update pending"
+      : isMarkCompletedPending
+        ? "Completion pending"
       : isTogglePending
         ? activeRun ? "Stop pending" : "Start pending"
         : isPauseResumePending
@@ -426,7 +430,8 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
                 disabled
                 title="Pause and resume are disabled while a bulk action is in progress"
                 aria-label={`Cannot ${sprint.status === "paused" ? "resume" : "pause"} ${sprint.name} while a bulk action is in progress`}
-                className="inline-flex min-h-8 min-w-0 flex-1 flex-wrap items-center justify-center gap-2 rounded-lg border border-slate-300/40 bg-slate-100/70 px-3 py-1.5 text-xs font-bold leading-tight text-slate-500 transition-colors focus-visible:ring-2 focus-visible:ring-signal-500/30 disabled:cursor-not-allowed dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-400 sm:flex-none"
+                aria-busy="true"
+                className="inline-flex min-h-8 min-w-[6.75rem] flex-1 flex-nowrap items-center justify-center gap-2 rounded-lg border border-slate-300/40 bg-slate-100/70 px-3 py-1.5 text-xs font-bold leading-tight text-slate-500 transition-colors focus-visible:ring-2 focus-visible:ring-signal-500/30 disabled:cursor-not-allowed dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-400 sm:flex-none"
                 style={controlTransitionStyle}
               >
                 {sprint.status === "paused" ? <Play className="h-3.5 w-3.5" fill="currentColor" /> : <Pause className="h-3.5 w-3.5" fill="currentColor" />}
@@ -437,7 +442,8 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
                 disabled
                 title="Start and stop are disabled while a bulk action is in progress"
                 aria-label={`Cannot ${activeRun ? "stop" : "start"} ${sprint.name} while a bulk action is in progress`}
-                className="inline-flex min-h-8 min-w-0 flex-1 flex-wrap items-center justify-center gap-2 rounded-lg border border-slate-300/40 bg-slate-100/70 px-3 py-1.5 text-xs font-bold leading-tight text-slate-500 transition-colors focus-visible:ring-2 focus-visible:ring-signal-500/30 disabled:cursor-not-allowed dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-400 sm:flex-none"
+                aria-busy="true"
+                className="inline-flex min-h-8 min-w-[6.75rem] flex-1 flex-nowrap items-center justify-center gap-2 rounded-lg border border-slate-300/40 bg-slate-100/70 px-3 py-1.5 text-xs font-bold leading-tight text-slate-500 transition-colors focus-visible:ring-2 focus-visible:ring-signal-500/30 disabled:cursor-not-allowed dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-400 sm:flex-none"
                 style={controlTransitionStyle}
               >
                 {activeRun ? <Square className="h-3.5 w-3.5" fill="currentColor" /> : <Play className="h-3.5 w-3.5" fill="currentColor" />}
@@ -497,7 +503,7 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
                   sprint={sprint}
                   isCompleted={isCompleted}
                   showcaseBusy={isPinPending}
-                  markCompletedDisabled={false}
+                  markCompletedDisabled={isMarkCompletedPending || isDeletePending || isAnyBulkPending}
                   deleteBusy={isDeletePending}
                   onToggleShowcase={() => onToggleShowcase(sprint)}
                   onClose={() => setMenuOpen(false)}
