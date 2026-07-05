@@ -128,11 +128,13 @@ pnpm run typecheck:dashboard
 
 Tests are expected to pass on Windows, macOS, and Linux. Keep fixtures and assertions portable:
 
+- Vitest pins deterministic runtime defaults before tests run: `TZ=UTC`, `LANG=C.UTF-8`, `LC_ALL=C.UTF-8`, `VITEST_IN_MEMORY_DB=true`, `LOG_LEVEL=error`, and `CODEUX_FORCE_LOG_LEVEL=error`. Do not rely on the host timezone, locale, or persisted dashboard log settings in assertions.
 - Use Node-powered subprocess fixtures instead of shell-specific commands such as `sh`, `sleep`, or POSIX-only `echo` behavior.
 - Normalize path separators in assertions when the app behavior is not explicitly testing native path rendering.
 - Normalize Git working-tree text fixtures for CRLF when assertions only care about logical file contents.
-- Stub both `HOME` and `USERPROFILE` when tests need to control `os.homedir()` across platforms.
+- Tests start with `HOME`, `USERPROFILE`, and XDG config/state/cache paths pointed at a temporary Vitest home. When a test needs its own `os.homedir()` sandbox, use `withIsolatedTestHome` from `tests/setup/runtime-warning-filter.ts`; it stubs both `HOME` and `USERPROFILE`, updates the XDG paths, restores the previous values, and removes the temporary directory after the callback finishes.
 - Pin date, time, and number formatting to an explicit locale and time zone for UI text that is asserted in tests.
+- Fake timers are not enabled globally. Tests that call `vi.useFakeTimers()` must call `vi.useRealTimers()` during cleanup; the shared setup restores leaked fake timers at test-file boundaries and fails loudly so the next test cannot inherit a mocked clock.
 - Close SQLite databases before cleanup when possible. Windows can briefly hold SQLite sidecar files open during teardown, so the Vitest setup tolerates transient temp-directory `EBUSY` and `EPERM` removal errors without weakening application lifecycle cleanup.
 - When PowerShell execution policy blocks package-manager scripts, run commands through `pnpm.cmd` on Windows.
 
