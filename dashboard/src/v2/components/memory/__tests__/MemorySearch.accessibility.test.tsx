@@ -63,8 +63,8 @@ describe("MemorySearch Accessibility", () => {
         await fireEvent.input(input, { target: { value: "test query" } });
 
         expect(input).toHaveAttribute("aria-busy", "true");
-        expect(getByText("Applying search...")).toBeInTheDocument();
-        expect(getByText("Applying search")).toBeInTheDocument();
+        expect(getByText("Typing. Search applies after a short pause.")).toBeInTheDocument();
+        expect(getByText("Pending")).toBeInTheDocument();
     });
 
     test("typing debounces writes to the memory search signal and announces committed search", async () => {

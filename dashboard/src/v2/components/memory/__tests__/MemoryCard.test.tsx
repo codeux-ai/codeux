@@ -39,10 +39,10 @@ describe("MemoryCard", () => {
         expect(getByText("test-content")).toBeInTheDocument();
     });
 
-    test("shows Danger button when lobotomizeModeSignal is true and deletes on click", async () => {
+    test("shows danger warning and requires arming before deleting", async () => {
         lobotomizeModeSignal.value = true;
 
-        const { getByRole, getAllByText } = render(
+        const { getByRole, getByText } = render(
             <MemoryCard
                 id="test-id"
                 content="test-content"
@@ -52,19 +52,28 @@ describe("MemoryCard", () => {
             />
         );
 
-        const deleteButton = getByRole("button", { name: /Delete Context memory: test-content/i });
-        expect(deleteButton).toBeInTheDocument();
+        expect(getByText("Danger delete mode is on. Arm this card before deleting it.")).toBeInTheDocument();
+        const armButton = getByRole("button", { name: /Arm delete for Context memory: test-content/i });
+        expect(armButton).toHaveAttribute("aria-pressed", "false");
 
-        fireEvent.click(deleteButton);
+        fireEvent.click(armButton);
+
+        expect(mockRemoveMemory).not.toHaveBeenCalled();
+        expect(getByText("Delete is armed for this memory. Confirm delete now or cancel.")).toBeInTheDocument();
+
+        const confirmButton = getByRole("button", { name: /Confirm delete Context memory: test-content/i });
+        expect(confirmButton).toHaveAttribute("aria-pressed", "true");
+
+        fireEvent.click(confirmButton);
 
         expect(mockRemoveMemory).toHaveBeenCalledWith("test-id");
     });
 
-    test("delete click does not also select the card", () => {
+    test("armed delete click does not also select the card", () => {
         lobotomizeModeSignal.value = true;
         const onClick = vi.fn();
 
-        const { getByRole, getByText } = render(
+        const { getByRole } = render(
             <MemoryCard
                 id="test-id"
                 content="test-content"
@@ -74,10 +83,31 @@ describe("MemoryCard", () => {
             />
         );
 
-        fireEvent.click(getByRole("button", { name: /Delete Context memory: test-content/i }));
+        fireEvent.click(getByRole("button", { name: /Arm delete for Context memory: test-content/i }));
+        fireEvent.click(getByRole("button", { name: /Confirm delete Context memory: test-content/i }));
 
         expect(mockRemoveMemory).toHaveBeenCalledWith("test-id");
         expect(onClick).not.toHaveBeenCalled();
+    });
+
+    test("cancel clears armed danger delete state", () => {
+        lobotomizeModeSignal.value = true;
+
+        const { getByRole } = render(
+            <MemoryCard
+                id="test-id"
+                content="test-content"
+                category="context"
+                strength={0.8}
+                onClick={vi.fn()}
+            />
+        );
+
+        fireEvent.click(getByRole("button", { name: /Arm delete for Context memory: test-content/i }));
+        fireEvent.click(getByRole("button", { name: "Cancel delete for Context memory" }));
+
+        expect(mockRemoveMemory).not.toHaveBeenCalled();
+        expect(getByRole("button", { name: /Arm delete for Context memory: test-content/i })).toHaveAttribute("aria-pressed", "false");
     });
 
     test("open details action selects the card once", () => {
@@ -111,7 +141,7 @@ describe("MemoryCard", () => {
             />
         );
 
-        expect(queryByRole("button", { name: /Delete Context memory: test-content/i })).not.toBeInTheDocument();
+        expect(queryByRole("button", { name: /Arm delete for Context memory: test-content/i })).not.toBeInTheDocument();
     });
 
     test("exposes a batch selection toggle with an accessible name", () => {
