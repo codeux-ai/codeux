@@ -68,6 +68,8 @@ export const ChatPage: FunctionComponent = () => {
     setChatMode,
     threads,
     invocations,
+    invocationTotalCount,
+    hasMoreInvocations,
     selectedThreadId,
     selectedInvocationId,
     messages,
@@ -89,7 +91,9 @@ export const ChatPage: FunctionComponent = () => {
     connections,
     invocationsLoading,
     invocationMessagesLoading,
+    invocationsLoadingMore,
     refreshThreads,
+    loadMoreInvocations,
     activateThread,
     activateInvocation,
     handleCompactThread,
@@ -114,6 +118,7 @@ export const ChatPage: FunctionComponent = () => {
   const effectiveSettings = useProjectEffectiveSettings(selectedProject?.id ?? null);
   const sprintKeyPrefix = effectiveSettings.data?.settings?.git?.sprintKeyPrefix || "SPR";
   const projectThreads = useMemo(() => threads.filter((thread) => thread.scope === "project"), [threads]);
+  const displayedInvocationTotal = invocationTotalCount ?? invocations.length;
   const runningInvocationCount = useMemo(
     () => invocations.filter((invocation) => invocation.status === "running" || invocation.id.startsWith("optimistic:")).length,
     [invocations],
@@ -274,7 +279,12 @@ export const ChatPage: FunctionComponent = () => {
     return (
       <ChatRail
         title="Invocations"
-        count={invocations.length}
+        count={displayedInvocationTotal}
+        onReachEnd={() => {
+          if (chatMode === "invocations" && hasMoreInvocations && !invocationsLoadingMore) {
+            void loadMoreInvocations();
+          }
+        }}
       >
         {invocationsLoading ? (
           <LoadingChat label="Loading invocations" />
@@ -295,6 +305,15 @@ export const ChatPage: FunctionComponent = () => {
               void activateInvocation(invocationId, { preferredInvocation });
             }}
           />
+        )}
+        {invocations.length > 0 && (
+          <div className="mt-4 rounded-2xl border border-black/[0.06] bg-black/[0.025] px-3 py-2 text-center text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-400 dark:border-white/[0.06] dark:bg-white/[0.025]">
+            {invocationsLoadingMore
+              ? "Loading more invocations..."
+              : hasMoreInvocations
+                ? `Showing ${invocations.length} of ${invocationTotalCount}`
+                : `Showing all ${displayedInvocationTotal}`}
+          </div>
         )}
       </ChatRail>
     );
@@ -721,7 +740,7 @@ export const ChatPage: FunctionComponent = () => {
         onCreateThread={() => void createThreadForCompose()}
         pendingDashboardMessages={pendingDashboardMessages}
         threadCount={projectThreads.length}
-        invocationCount={invocations.length}
+        invocationCount={displayedInvocationTotal}
         runningInvocationCount={runningInvocationCount}
         error={error}
         railSlot={(
@@ -752,7 +771,7 @@ export const ChatPage: FunctionComponent = () => {
       onCreateThread={() => void createThreadForCompose()}
       pendingDashboardMessages={pendingDashboardMessages}
       threadCount={projectThreads.length}
-      invocationCount={invocations.length}
+      invocationCount={displayedInvocationTotal}
       runningInvocationCount={runningInvocationCount}
       error={error}
       railSlot={renderRail()}

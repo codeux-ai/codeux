@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useState } from "preact/hooks";
+import { useCallback, useEffect, useRef, useState } from "preact/hooks";
 import type { MutableRef } from "preact/hooks";
 import type { AgentConnection, ChatThread, ExecutionInvocationRecord, ExecutionInvocationMessageRecord, ChatMessageRecord } from "../types.js";
 import type { DashboardRealtimeServerMessage, ExecutionDashboardSnapshot, ExecutionConnectionSummary } from "../../types.js";
 import { useMessageCache } from "./useMessageCache.js";
 import { fetchConversationThreads, fetchProjectConnections } from "../lib/connection-api.js";
 import { fetchProjectInvocations } from "../lib/invocation-api.js";
+import type { ProjectInvocationsQueryResult } from "../types.js";
 import { resolveSelectedItemId } from "../lib/chat-page-state-utils.js";
 import { subscribeToDashboardRealtime } from "../../lib/realtime/dashboard-realtime-client.js";
 import { upsertChatThread } from "../lib/chat-thread-utils.js";
@@ -12,6 +13,7 @@ import { removeThread, upsertMessage } from "./use-chat-thread-data.js";
 import { fetchAgentPresets } from "../lib/agent-preset-api.js";
 import type { AgentPresetRecord } from "../types.js";
 import { toChatTimestampMs } from "../lib/chat-time.js";
+import { CHAT_INVOCATION_PAGE_SIZE } from "./use-invocation-pane-data.js";
 
 export const areConnectionsEqual = (left: AgentConnection[], right: AgentConnection[]): boolean => (
   left.length === right.length
@@ -57,6 +59,39 @@ export const toAgentConnection = (connection: ExecutionConnectionSummary): Agent
   activeDispatchCount: connection.activeDispatchCount,
 });
 
+const normalizeInvocationResult = (
+  response: ExecutionInvocationRecord[] | ProjectInvocationsQueryResult,
+): { items: ExecutionInvocationRecord[]; totalCount: number } => (
+  Array.isArray(response)
+    ? { items: response, totalCount: response.length }
+    : { items: response.items, totalCount: response.totalCount }
+);
+
+const mergeInvocationPages = (
+  current: ExecutionInvocationRecord[],
+  nextPage: ExecutionInvocationRecord[],
+): ExecutionInvocationRecord[] => {
+  if (current.length === 0) {
+    return nextPage;
+  }
+  const seen = new Set(current.map((invocation) => invocation.id));
+  const merged = [...current];
+  for (const invocation of nextPage) {
+    if (!seen.has(invocation.id)) {
+      seen.add(invocation.id);
+      merged.push(invocation);
+    }
+  }
+  return merged;
+};
+
+const invocationListQuery = (limit: number, offset = 0) => ({
+  limit,
+  offset,
+  sortKey: "startedAt" as const,
+  sortDir: "desc" as const,
+});
+
 export const useChatPageResources = (options: {
   selectedProject: { id: string } | null;
   cache: ReturnType<typeof useMessageCache>;
@@ -74,7 +109,10 @@ export const useChatPageResources = (options: {
   };
   invocationData: {
     selectedInvocationIdRef: MutableRef<string | null>;
-    setInvocationsSnapshot: (invs: ExecutionInvocationRecord[]) => void;
+    serverInvocationsRef?: MutableRef<ExecutionInvocationRecord[]>;
+    serverInvocationCount?: number;
+    hasMoreInvocations?: boolean;
+    setInvocationsSnapshot: (invs: ExecutionInvocationRecord[], totalCount?: number) => void;
     setInvocationMessagesSnapshot: (messages: ExecutionInvocationMessageRecord[]) => void;
     setSelectedInvocationId: (id: string | null) => void;
     setError: (error: string | null) => void;
@@ -88,6 +126,8 @@ export const useChatPageResources = (options: {
   const [agentPresets, setAgentPresets] = useState<AgentPresetRecord[]>([]);
   const [loading, setLoading] = useState(false);
   const [manualRefreshing, setManualRefreshing] = useState(false);
+  const [invocationsLoadingMore, setInvocationsLoadingMore] = useState(false);
+  const invocationsLoadingMoreRef = useRef(false);
 
   const setConnectionsSnapshot = useCallback((nextConnections: AgentConnection[]): void => {
     setConnections((current) => areConnectionsEqual(current, nextConnections) ? current : nextConnections);
@@ -117,7 +157,7 @@ export const useChatPageResources = (options: {
     const refreshMode = refreshOptions?.mode || (refreshOptions?.manual ? chatMode : "both");
 
     try {
-      const fetchPromises: Promise<ChatThread[] | AgentConnection[] | ExecutionInvocationRecord[]>[] = [];
+      const fetchPromises: Promise<ChatThread[] | AgentConnection[] | ExecutionInvocationRecord[] | ProjectInvocationsQueryResult>[] = [];
       let fetchThreadsIndex = -1;
       let fetchConnectionsIndex = -1;
       let fetchInvocationsIndex = -1;
@@ -131,7 +171,8 @@ export const useChatPageResources = (options: {
 
       if (refreshMode === "both" || refreshMode === "invocations") {
         fetchInvocationsIndex = fetchPromises.length;
-        fetchPromises.push(fetchProjectInvocations(selectedProject.id));
+        const invocationLimit = Math.max(CHAT_INVOCATION_PAGE_SIZE, invocationData.serverInvocationsRef?.current.length ?? 0);
+        fetchPromises.push(fetchProjectInvocations(selectedProject.id, invocationListQuery(invocationLimit)));
       }
 
       const results = await Promise.all(fetchPromises);
@@ -156,10 +197,11 @@ export const useChatPageResources = (options: {
       }
 
       if (fetchInvocationsIndex !== -1) {
-        const nextInvocations = results[fetchInvocationsIndex] as ExecutionInvocationRecord[];
+        const invocationResult = normalizeInvocationResult(results[fetchInvocationsIndex] as ExecutionInvocationRecord[] | ProjectInvocationsQueryResult);
+        const nextInvocations = invocationResult.items;
 
         cache.setInvocations(selectedProject.id, nextInvocations);
-        invocationData.setInvocationsSnapshot(nextInvocations);
+        invocationData.setInvocationsSnapshot(nextInvocations, invocationResult.totalCount);
 
         const nextSelectedInvocationId = resolveSelectedItemId(nextInvocations, invocationData.selectedInvocationIdRef.current);
         const nextSelectedInvocation = nextInvocations.find((inv) => inv.id === nextSelectedInvocationId) || null;
@@ -195,11 +237,42 @@ export const useChatPageResources = (options: {
     invocationData.setError,
     invocationData.setInvocationMessagesSnapshot,
     invocationData.setInvocationsSnapshot,
+    invocationData.serverInvocationsRef,
     invocationData.setSelectedInvocationId,
     threadData.setSelectedThreadId,
     threadData.setError,
     threadData.setMessagesSnapshot,
     threadData.setThreadsSnapshot,
+  ]);
+
+  const loadMoreInvocations = useCallback(async (): Promise<void> => {
+    if (!selectedProject || invocationsLoadingMoreRef.current || !invocationData.hasMoreInvocations) {
+      return;
+    }
+
+    invocationsLoadingMoreRef.current = true;
+    setInvocationsLoadingMore(true);
+    try {
+      const currentInvocations = invocationData.serverInvocationsRef?.current ?? [];
+      const response = await fetchProjectInvocations(
+        selectedProject.id,
+        invocationListQuery(CHAT_INVOCATION_PAGE_SIZE, currentInvocations.length),
+      );
+      const invocationResult = normalizeInvocationResult(response);
+      const nextInvocations = mergeInvocationPages(currentInvocations, invocationResult.items);
+      cache.setInvocations(selectedProject.id, nextInvocations);
+      invocationData.setInvocationsSnapshot(nextInvocations, invocationResult.totalCount);
+      invocationData.setError(null);
+    } catch (fetchError) {
+      invocationData.setError(fetchError instanceof Error ? fetchError.message : String(fetchError));
+    } finally {
+      invocationsLoadingMoreRef.current = false;
+      setInvocationsLoadingMore(false);
+    }
+  }, [
+    cache,
+    invocationData,
+    selectedProject,
   ]);
 
   const projectId = selectedProject?.id;
@@ -393,6 +466,8 @@ export const useChatPageResources = (options: {
     agentPresets,
     loading,
     manualRefreshing,
+    invocationsLoadingMore,
     refreshThreads,
+    loadMoreInvocations,
   };
 };

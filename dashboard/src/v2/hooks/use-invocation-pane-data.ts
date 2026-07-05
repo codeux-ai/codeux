@@ -5,6 +5,8 @@ import { fetchInvocationMessages, fetchProjectInvocations } from "../lib/invocat
 import { buildInvocationIndex } from "../lib/chat-entity-index.js";
 import { isDeepEqual } from "../lib/resource-equality.js";
 
+export const CHAT_INVOCATION_PAGE_SIZE = 40;
+
 export const areInvocationsEqual = (left: ExecutionInvocationRecord[], right: ExecutionInvocationRecord[]): boolean => (
   left.length === right.length
   && left.every((invocation, index) => {
@@ -41,6 +43,7 @@ export const useInvocationPaneData = (options: {
   const { selectedProject, cache, agentPresets = [] } = options;
 
   const [invocations, setInvocations] = useState<ExecutionInvocationRecord[]>([]);
+  const [invocationTotalCount, setInvocationTotalCount] = useState(0);
   const [optimisticInvocations, setOptimisticInvocations] = useState<ExecutionInvocationRecord[]>([]);
   const [selectedInvocationId, setSelectedInvocationId] = useState<string | null>(null);
   const [invocationMessages, setInvocationMessages] = useState<ExecutionInvocationMessageRecord[]>([]);
@@ -51,8 +54,13 @@ export const useInvocationPaneData = (options: {
   const selectedInvocationRefreshIdRef = useRef<string | null>(null);
   const selectedInvocationSummaryRef = useRef<string | null>(null);
   const selectedInvocationStatusRef = useRef<ExecutionInvocationRecord["status"] | null>(null);
+  const serverInvocationsRef = useRef<ExecutionInvocationRecord[]>([]);
   const inflightInvocationFetchesRef = useRef(new Map<string, Promise<ExecutionInvocationMessageRecord[]>>());
   const activationTokenRef = useRef(0);
+
+  useEffect(() => {
+    serverInvocationsRef.current = invocations;
+  }, [invocations]);
 
   useEffect(() => {
     selectedInvocationIdRef.current = selectedInvocationId;
@@ -100,8 +108,9 @@ export const useInvocationPaneData = (options: {
     ].join("|");
   }, [selectedInvocation]);
 
-  const setInvocationsSnapshot = useCallback((nextInvocations: ExecutionInvocationRecord[]): void => {
+  const setInvocationsSnapshot = useCallback((nextInvocations: ExecutionInvocationRecord[], totalCount = nextInvocations.length): void => {
     setInvocations((current) => areInvocationsEqual(current, nextInvocations) ? current : nextInvocations);
+    setInvocationTotalCount(totalCount);
     setOptimisticInvocations((current) => current.filter((optimistic) => {
       const optimisticCreatedAtMs = Date.parse(optimistic.createdAt);
       return !nextInvocations.some((confirmed) => {
@@ -170,9 +179,16 @@ export const useInvocationPaneData = (options: {
     messageCreatedAt?: string | null;
   }): Promise<void> => {
     const { optimisticId, projectId, messageCreatedAt } = input;
-    const nextInvocations = await fetchProjectInvocations(projectId);
+    const response = await fetchProjectInvocations(projectId, {
+      limit: Math.max(CHAT_INVOCATION_PAGE_SIZE, serverInvocationsRef.current.length),
+      offset: 0,
+      sortKey: "startedAt",
+      sortDir: "desc",
+    });
+    const nextInvocations = Array.isArray(response) ? response : response.items;
+    const nextTotalCount = Array.isArray(response) ? response.length : response.totalCount;
     cache.setInvocations(projectId, nextInvocations);
-    setInvocationsSnapshot(nextInvocations);
+    setInvocationsSnapshot(nextInvocations, nextTotalCount);
 
     const createdAtMs = messageCreatedAt ? Date.parse(messageCreatedAt) : NaN;
     const matched = nextInvocations.find((candidate) => {
@@ -340,6 +356,10 @@ export const useInvocationPaneData = (options: {
 
   return {
     invocations: mergedInvocations,
+    serverInvocationCount: invocations.length,
+    invocationTotalCount,
+    hasMoreInvocations: invocations.length < invocationTotalCount,
+    serverInvocationsRef,
     setInvocationsSnapshot,
     addOptimisticInvocation,
     clearOptimisticInvocation,

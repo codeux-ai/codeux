@@ -423,17 +423,27 @@ export function queryProjectInvocations(
     errorsByCategory
   };
 
-  const limit = params.limit ?? 100;
-  const offset = params.offset ?? 0;
+  const limit = typeof params.limit === "number" && Number.isFinite(params.limit) && params.limit > 0
+    ? Math.floor(params.limit)
+    : null;
+  const offset = typeof params.offset === "number" && Number.isFinite(params.offset) && params.offset > 0
+    ? Math.floor(params.offset)
+    : 0;
+  const paginationSql = limit === null
+    ? (offset > 0 ? "LIMIT -1 OFFSET ?" : "")
+    : "LIMIT ? OFFSET ?";
   const sql = `
     SELECT${INVOCATION_SELECT}
     FROM execution_invocations${INVOCATION_JOINS}
     WHERE ${conditions.join(" AND ")}
     ${orderBy}
-    LIMIT ? OFFSET ?
+    ${paginationSql}
   `;
 
-  const rows = db.prepare(sql).all(...values, limit, offset) as import("./execution-repository-types.js").ExecutionInvocationRow[];
+  const paginationValues = limit === null
+    ? (offset > 0 ? [offset] : [])
+    : [limit, offset];
+  const rows = db.prepare(sql).all(...values, ...paginationValues) as import("./execution-repository-types.js").ExecutionInvocationRow[];
   const items = rows.map(mapExecutionInvocationRow);
 
   return { items, totalCount, summary, availablePurposes, availableProviders };
