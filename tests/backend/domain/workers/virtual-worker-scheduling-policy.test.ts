@@ -189,9 +189,9 @@ describe("Virtual Worker Scheduling Policy", () => {
       expect(peekNextWorkerAttention([item], () => mockSettings({ ciIntelligence: { resolveMergeConflicts: true } }))).toBe(item);
     });
 
-    it("handles ci_fix_required based on settings", () => {
+    it("handles ci_fix_required independently from the Jules notification setting", () => {
       const item = { ownerType: "worker", status: "open", summaryMarkdown: "", attentionType: "ci_fix_required" } as ProjectAttentionItemRecord;
-      expect(peekNextWorkerAttention([item], () => mockSettings({ ciIntelligence: { waitForJulesCiAutofix: false } }))).toBeNull();
+      expect(peekNextWorkerAttention([item], () => mockSettings({ ciIntelligence: { waitForJulesCiAutofix: false } }))).toBe(item);
       expect(peekNextWorkerAttention([item], () => mockSettings({ ciIntelligence: { waitForJulesCiAutofix: true } }))).toBe(item);
     });
 

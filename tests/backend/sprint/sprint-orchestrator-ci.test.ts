@@ -661,4 +661,110 @@ describe("SprintOrchestrator CI logic", () => {
     await fs.rm(tmpRoot, { recursive: true, force: true });
   });
 
+  it("dispatches worker CI fix when the Jules notification wait is disabled", async () => {
+    const { deps, listSessions, subtaskRepository } = buildDeps();
+    deps.getDashboardSettings = () => ({
+      ...DEFAULT_DASHBOARD_SETTINGS,
+      ciIntelligence: {
+        ...DEFAULT_DASHBOARD_SETTINGS.ciIntelligence,
+        featurePrAutoMergeMode: "WHEN_GREEN",
+        waitForJulesCiAutofix: false,
+      },
+    });
+    deps.getCiStatusForScope = vi.fn().mockResolvedValue({
+      mode: "REMOTE",
+      available: true,
+      repositoryRoot: "/tmp/repo",
+      branch: "feature/sprint1-implementation",
+      hasRemote: true,
+      dirty: false,
+      openPullRequests: [
+        {
+          number: 21,
+          title: "Task PR",
+          url: "https://example.com/pr/21",
+          state: "OPEN",
+          isDraft: false,
+          headRefName: "worker/task-21",
+          baseRefName: "feature/sprint1-implementation",
+          mergeStateStatus: null,
+          reviewDecision: null,
+          updatedAt: null,
+          comments: 0,
+          checks: [{ name: "ci", status: "completed", conclusion: "failure" }],
+        },
+      ],
+      ciRuns: [],
+      mergedPullRequests: [],
+      tracking: { scope: "FEATURE_PR_CI", label: "Feature PR CI", branch: "feature/sprint1-implementation" },
+      warnings: [],
+      lastUpdated: new Date().toISOString(),
+    });
+
+    const orchestrator = new SprintOrchestrator(deps as any);
+    const tmpRoot = await fs.mkdtemp(path.join(os.tmpdir(), "sprint-orch-failed-ci-no-autofix-"));
+    const subtasksDir = path.join(tmpRoot, ".code-ux", "sprints", "sprint1-subtasks");
+    await fs.mkdir(subtasksDir, { recursive: true });
+    await fs.writeFile(path.join(subtasksDir, "01-task.md"), "title: test\nprompt:\nDo it\n", "utf-8");
+
+    subtaskRepository.loadSubtasks.mockResolvedValue([
+      {
+        id: "01-task",
+        record_id: "rec-01-task",
+        project_id: "project-1",
+        sprint_id: "sprint-1",
+        title: "Test task",
+        prompt: "Do it",
+        depends_on: [],
+        is_independent: true,
+        pr_url: "https://example.com/pr/21",
+      },
+    ]);
+    listSessions.mockResolvedValue({
+      sessions: [
+        {
+          id: "abc123",
+          name: "sessions/abc123",
+          title: `Sprint 1: ${buildTaskRunTag(tmpRoot, 1, "01-task")} [01-task] Test task`,
+          state: "COMPLETED",
+          provider: "jules",
+          prompt: "x",
+          outputs: [{ pullRequest: { url: "https://example.com/pr/21" } }],
+        },
+      ],
+    });
+
+    const result = await orchestrator.execute({
+      sprint_number: 1,
+      repo_path: tmpRoot,
+      source_id: "sources/123",
+      action: "status",
+      wait: false,
+    });
+
+    const text = result.content[0].text as string;
+    expect(text).toContain("CI/Review Autofix Wait");
+    expect(text).toContain("PR #21");
+    expect(text).toContain("Worker CI fix dispatched");
+    expect(text).toContain("`RUNNING`");
+    expect(deps.sendSessionMessage).not.toHaveBeenCalled();
+    expect(deps.projectAttentionService.openItems).toHaveBeenCalledWith([
+      expect.objectContaining({
+        attentionType: "ci_fix_required",
+        ownerType: "worker",
+        taskId: "rec-01-task",
+        payload: expect.objectContaining({
+          prNumber: 21,
+          taskKey: "01-task",
+        }),
+      }),
+    ]);
+    expect(deps.projectManagementRepository.updateTask).toHaveBeenCalledWith("rec-01-task", expect.objectContaining({
+      status: "in_progress",
+      mergeIndicator: "CI",
+    }));
+
+    await fs.rm(tmpRoot, { recursive: true, force: true });
+  });
+
 });

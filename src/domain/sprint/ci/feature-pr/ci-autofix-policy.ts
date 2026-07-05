@@ -128,6 +128,7 @@ export interface CiAutofixEscalationArgs {
   repoPath: string;
   featureBranch: string;
   defaultBranch: string;
+  allowJulesSessionNotification?: boolean;
   hasActiveWorkerCiFixAttempt?: (task: Subtask, prNumber: number) => boolean;
 }
 
@@ -174,29 +175,30 @@ export async function handleCiAutofixEscalation(args: CiAutofixEscalationArgs): 
     return { reportTextAddition, workerCiFixRequired: false, workerCiFixPayload: null };
   }
 
-  // For Jules-managed tasks, try the Jules session notification path first.
-  const notifyResult = await notifyJulesAboutFailedCi({
-    task: args.task,
-    prNumber: args.prNumber,
-    prUrl: args.prUrl,
-    branchName: args.branchName,
-    failedChecks: args.failedChecks,
-    failedRuns: args.failedRuns,
-    attempt: currentRetries + 1,
-    maxRetries: cap,
-    isJulesApiConfigured: args.isJulesApiConfigured,
-    sendSessionMessage: args.sendSessionMessage,
-  });
+  if (args.allowJulesSessionNotification !== false) {
+    const notifyResult = await notifyJulesAboutFailedCi({
+      task: args.task,
+      prNumber: args.prNumber,
+      prUrl: args.prUrl,
+      branchName: args.branchName,
+      failedChecks: args.failedChecks,
+      failedRuns: args.failedRuns,
+      attempt: currentRetries + 1,
+      maxRetries: cap,
+      isJulesApiConfigured: args.isJulesApiConfigured,
+      sendSessionMessage: args.sendSessionMessage,
+    });
 
-  if (notifyResult.sent) {
-    recordCiFix();
-    reportTextAddition += `   - Jules session notified to fix CI and continue work (attempt ${
-      currentRetries + 1
-    }/${capLabel}).\n`;
-    return { reportTextAddition, workerCiFixRequired: false, workerCiFixPayload: null };
+    if (notifyResult.sent) {
+      recordCiFix();
+      reportTextAddition += `   - Jules session notified to fix CI and continue work (attempt ${
+        currentRetries + 1
+      }/${capLabel}).\n`;
+      return { reportTextAddition, workerCiFixRequired: false, workerCiFixPayload: null };
+    }
   }
 
-  // Task is not Jules-managed or notification failed — dispatch to a worker.
+  // Task is not using the Jules notification path, or notification failed — dispatch to a worker.
   const payload = buildWorkerCiFixPayload({
     task: args.task,
     prNumber: args.prNumber,

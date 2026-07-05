@@ -119,6 +119,26 @@ describe("handleCiAutofixEscalation", () => {
     expect(record).not.toHaveBeenCalled();
   });
 
+  it("dispatches to a worker without notifying Jules when the Jules notification path is disabled", async () => {
+    const task = makeTask({ session_id: "s1" });
+    const { service, record } = makeGuardrail(allow(0, 3));
+    const sendSessionMessage = vi.fn();
+
+    const result = await handleCiAutofixEscalation({
+      ...baseArgs,
+      task,
+      guardrailService: service,
+      sendSessionMessage,
+      allowJulesSessionNotification: false,
+    });
+
+    expect(sendSessionMessage).not.toHaveBeenCalled();
+    expect(result.workerCiFixRequired).toBe(true);
+    expect(result.workerCiFixPayload).toBeTruthy();
+    expect(result.reportTextAddition).toContain("Worker CI fix dispatched");
+    expect(record).not.toHaveBeenCalled();
+  });
+
   it("dispatches to a worker for non-Jules-managed tasks without recording", async () => {
     const task = makeTask({ provider: "gemini" });
     const { service, record } = makeGuardrail(allow(0, 3));

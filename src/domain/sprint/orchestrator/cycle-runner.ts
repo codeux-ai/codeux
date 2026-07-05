@@ -291,7 +291,9 @@ export class CycleRunner {
               ? "completed"
               : task.status === "CODING_COMPLETED"
                 ? "coding_completed"
-                : undefined,
+                : task.status === "RUNNING"
+                  ? "in_progress"
+                  : undefined,
           });
         },
         executionRepository: this.deps.executionRepository,
