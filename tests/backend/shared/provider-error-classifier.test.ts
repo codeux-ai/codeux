@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeAll, afterAll } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import {
   classifyProviderError,
   computeResetAfterFromClockTime,
@@ -29,12 +29,12 @@ const withMorningClock = (fn: () => void): void => {
 };
 
 describe("classifyProviderError", () => {
-  beforeAll(() => {
+  beforeEach(() => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date(2026, 5, 2, 1, 0, 0, 0));
   });
 
-  afterAll(() => {
+  afterEach(() => {
     vi.useRealTimers();
   });
 
