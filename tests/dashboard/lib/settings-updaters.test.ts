@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildGitHubModeProjectSettingsOverride,
   updateAiProvider,
   updateCiIntelligence,
   updateCliWorkflow,
@@ -75,6 +76,24 @@ describe("dashboard settings updater helpers", () => {
     expect(getSkillEnabled(next.skills, "git_manager")).toBe(true);
     expect(getSkillEnabled(settings.skills, "git_manager_remote")).toBe(true);
     expect(getSkillEnabled(settings.skills, "git_manager_local")).toBe(false);
+  });
+
+  it("builds a local git-mode project override with synchronized internal skills", () => {
+    const override = buildGitHubModeProjectSettingsOverride("LOCAL");
+
+    expect(override.git?.githubMode).toBe("LOCAL");
+    expect(getSkillEnabled(override.skills || [], "git_manager_remote")).toBe(false);
+    expect(getSkillEnabled(override.skills || [], "git_manager_local")).toBe(true);
+    expect(getSkillEnabled(override.skills || [], "git_manager")).toBe(true);
+  });
+
+  it("builds a remote git-mode project override without local skill drift", () => {
+    const override = buildGitHubModeProjectSettingsOverride("REMOTE");
+
+    expect(override.git?.githubMode).toBe("REMOTE");
+    expect(getSkillEnabled(override.skills || [], "git_manager_remote")).toBe(true);
+    expect(getSkillEnabled(override.skills || [], "git_manager_local")).toBe(false);
+    expect(getSkillEnabled(override.skills || [], "git_manager")).toBe(true);
   });
 
   it("updates ci, sprint loop, and cli workflow sections immutably", () => {

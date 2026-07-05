@@ -47,6 +47,7 @@ import {
   deleteCustomQuicksprintTemplate,
 } from "../../lib/quicksprint-api.js";
 import { SprintPageActionRunner } from "../../lib/sprint-page-action-runner.js";
+import { buildGitHubModeProjectSettingsOverride } from "../../../lib/settings-updaters.js";
 
 export interface SprintsPageActionsDeps {
   selectedProject: any;
@@ -730,13 +731,15 @@ export function useSprintsPageActions({
   const handleAddProject = useCallback(
     async (project: AddProjectModalSubmission): Promise<void> => {
       if (project.type === "new_project") {
+        const isLocalProject = project.initMode === "new-local";
         await createProject({
           name: project.name,
-          sourceType: project.initMode === "new-local" ? "local" : "git",
-          sourceRef: project.path || project.name,
+          sourceType: isLocalProject ? "local" : "git",
+          sourceRef: isLocalProject ? (project.path || project.name) : (project.repoSlug || project.name),
           initMode: project.initMode,
           remoteProvider: project.remoteProvider,
           isPrivate: project.isPrivate,
+          ...(isLocalProject ? { settingsOverrides: buildGitHubModeProjectSettingsOverride("LOCAL") } : {}),
         });
         return;
       }
@@ -746,6 +749,7 @@ export function useSprintsPageActions({
         sourceType: project.type,
         sourceRef: project.path,
         cloneDir: project.cloneDir,
+        ...(project.type === "local" ? { settingsOverrides: buildGitHubModeProjectSettingsOverride("LOCAL") } : {}),
       });
     },
     [createProject],
