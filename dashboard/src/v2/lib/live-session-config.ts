@@ -130,6 +130,18 @@ export const getExecutionEventText = (event: ExecutionRuntimeEventSummary): stri
             return `Session ${String(payload.sessionState || event.taskRunState || "updated").toLowerCase()}`;
         case "provider_activity":
             return getProviderActivityText(payload);
+        case "container_build_progress":
+        case "setup_image_build_progress":
+        case "login_image_build_progress": {
+            const message = typeof payload.message === "string" && payload.message.trim().length > 0
+                ? payload.message
+                : null;
+            if (message) return message;
+            const stepText = typeof payload.stepText === "string" && payload.stepText.trim().length > 0
+                ? payload.stepText
+                : null;
+            return stepText ? `Container image build: ${stepText}` : "Container image build progress";
+        }
         case "dispatch_failed":
             return String(payload.error || "Dispatch failed");
         case "cli_prepare_started":

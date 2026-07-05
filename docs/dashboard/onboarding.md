@@ -111,7 +111,7 @@ Onboarding settings state is managed purely without component side effects by he
 Dashboard-guided provider login sessions now use an explicit lifecycle protocol to prevent orphaned Docker login containers after browser interruptions.
 
 - On dashboard startup, Code UX starts a best-effort background prewarm for the pinned login base image (`node:24-bookworm-slim` plus curl and keyring prerequisites). Startup does not wait for this image build, and provider login still retries image preparation on demand if Docker is unavailable or the prewarm fails.
-- The first interactive login after a fresh install may still wait while Docker builds or verifies the login base image. Later login sessions reuse the content-addressed cached image unless the Dockerfile content changes.
+- The first interactive login after a fresh install may still wait while Docker builds or verifies the login base image. When the terminal start contract or WebSocket stream includes the structured container build progress object (`kind`, `imageTag`, `baseImage`, `message`, optional `progressPercent`, and optional `stepText`), the login modal shows a persistent build status infobox before the terminal becomes active. The copy explains that the container needs to be built, the first build can take time, and future login sessions reuse the cached image unless the Dockerfile content changes.
 - The client sends periodic terminal session heartbeats while the login modal is active.
 - The client emits a termination signal on `beforeunload`, `pagehide`, and hidden visibility transitions to handle refresh, tab close, and window close.
 - The server finalizes sessions idempotently when it receives explicit finalize requests.
@@ -120,6 +120,8 @@ Dashboard-guided provider login sessions now use an explicit lifecycle protocol 
 ## First-Run Container Setup Images
 
 When the CLI workflow runs in Docker with setup-image caching enabled, Code UX builds a content-addressed setup image from the configured base image and container setup script. A cache miss now reports that the first build can take a few minutes, streams Docker build step output, and exposes bounded progress so users can distinguish a real build from a stalled provider launch. Once the image is built, future provider sessions and preview starts reuse the cached image for the same base image, setup script content, and Playwright-browser setting.
+
+The Live runtime panels consume the same structured progress object from session activity, runtime event payloads, and invocation metadata. Build waiting and build-running states render a persistent infobox with the current step and a semantic progress bar; completion swaps the copy to a cached-image success state, while fallback reports that runtime setup is being used. Cached-image reuse without a build progress object stays quiet so users are not warned during normal fast starts.
 
 ## Post-Onboarding Tour
 
