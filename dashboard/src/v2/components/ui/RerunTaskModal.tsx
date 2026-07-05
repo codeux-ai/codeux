@@ -1,5 +1,5 @@
 import type { FunctionComponent } from "preact";
-import { useMemo, useState, useEffect, useRef } from "preact/hooks";
+import { useMemo, useState, useEffect } from "preact/hooks";
 import { AlertTriangle, GitBranch, Loader2, RotateCcw, Trash2, X } from "lucide-preact";
 import { useActionFeedback } from "../../hooks/use-action-feedback.js";
 import type { Subtask, SystemSettings } from "../../../types.js";
@@ -33,7 +33,6 @@ export const RerunTaskModal: FunctionComponent<RerunTaskModalProps> = ({
     onClose,
     onConfirm,
 }) => {
-    const cancelButtonRef = useRef<HTMLButtonElement>(null);
     const [providerConfigId, setProviderConfigId] = useState("");
     const [clearWorktree, setClearWorktree] = useState(false);
     const [resetDependents, setResetDependents] = useState(false);
@@ -59,13 +58,6 @@ export const RerunTaskModal: FunctionComponent<RerunTaskModalProps> = ({
         return () => {
             active = false;
         };
-    }, []);
-
-    useEffect(() => {
-        const timer = window.setTimeout(() => {
-            cancelButtonRef.current?.focus({ preventScroll: true });
-        }, 0);
-        return () => window.clearTimeout(timer);
     }, []);
 
     const providerOptions = useMemo(() => {
@@ -193,7 +185,6 @@ export const RerunTaskModal: FunctionComponent<RerunTaskModalProps> = ({
             isOpen={true}
             onClose={handleClose}
             ariaLabelledBy="rerun-modal-title"
-            initialFocusRef={cancelButtonRef}
             className="w-[calc(100vw-2rem)] sm:w-full max-w-md !p-0 !rounded-[2rem]"
         >
             <div
@@ -393,9 +384,7 @@ export const RerunTaskModal: FunctionComponent<RerunTaskModalProps> = ({
                 {/* Footer */}
                 <div className="flex items-center justify-end gap-3 px-7 py-4 border-t border-black/[0.05] dark:border-white/[0.05] bg-black/[0.01] dark:bg-white/[0.01]">
                     <button
-                        ref={cancelButtonRef}
                         type="button"
-                        autoFocus
                         onClick={handleClose}
                         disabled={isSubmitting}
                         className="px-4 py-2 rounded-xl text-[12px] font-bold text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-status-amber focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-void-800 disabled:opacity-50"

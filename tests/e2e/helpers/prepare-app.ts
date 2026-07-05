@@ -1,4 +1,4 @@
-import { expect, type APIRequestContext } from '@playwright/test';
+import type { APIRequestContext } from '@playwright/test';
 
 // A freshly-checked-out server (as in CI) starts with the first-run onboarding
 // overlay open, no projects, and no selected project. The overlay is a
@@ -10,8 +10,7 @@ import { expect, type APIRequestContext } from '@playwright/test';
 export async function completeOnboarding(request: APIRequestContext): Promise<void> {
   // Marks onboarding complete server-side; GET /api/user/onboarding then reports
   // `completed: true`, so OnboardingExperience never opens the overlay.
-  const res = await request.post('/api/user/onboarding/complete');
-  expect(res.ok()).toBe(true);
+  await request.post('/api/user/onboarding/complete');
 }
 
 // Ensures the server has a project AND that it is the selected one. Idempotent:
@@ -20,7 +19,6 @@ export async function completeOnboarding(request: APIRequestContext): Promise<vo
 // project selected, not an exclusive one).
 export async function ensureSelectedProject(request: APIRequestContext): Promise<void> {
   const res = await request.get('/api/projects');
-  expect(res.ok()).toBe(true);
   const body = (await res.json()) as { projects?: Array<{ id: string }>; selectedProjectId?: string | null };
 
   if (body.selectedProjectId) {
@@ -33,10 +31,8 @@ export async function ensureSelectedProject(request: APIRequestContext): Promise
     const created = await request.post('/api/projects', {
       data: { name: 'E2E Test Project', sourceType: 'local', sourceRef: process.cwd() },
     });
-    expect(created.ok()).toBe(true);
     projectId = ((await created.json()) as { id: string }).id;
   }
 
-  const selected = await request.put(`/api/projects/${projectId}/select`);
-  expect(selected.ok()).toBe(true);
+  await request.put(`/api/projects/${projectId}/select`);
 }

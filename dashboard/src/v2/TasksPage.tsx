@@ -47,7 +47,6 @@ import { Button } from "./components/ui/Button.js";
 import { fetchAgentPresets } from "./lib/agent-preset-api.js";
 import type { AgentPreset } from "./types.js";
 import { STATUS_CFG } from "./lib/tasks-constants.js";
-import { buildTaskCardViewModel } from "./lib/tasks/task-card-view-model.js";
 import {
   buildTaskBoardSprintScopeState,
   buildTaskBoardViewModel,
@@ -550,6 +549,10 @@ export const TasksPage: FunctionComponent = () => {
   );
   const settings = useProjectEffectiveSettings(projectId);
   const sprintKeyPrefix = settings.data?.settings?.git?.sprintKeyPrefix || "SPR";
+  const gitSettings = settings.data?.settings?.git;
+  const taskPullRequestsEnabled = gitSettings
+    ? gitSettings.githubMode !== "LOCAL" && gitSettings.autoCreatePr === true
+    : true;
   const [agentPresetsMap, setAgentPresetsMap] = useState<Map<string, AgentPreset>>(new Map());
   useEffect(() => {
     if (!projectId) return;
@@ -721,6 +724,7 @@ export const TasksPage: FunctionComponent = () => {
       taskDispatches: execution.taskDispatches,
       recentEvents: execution.recentEvents,
       subtasks: status.subtasks ?? [],
+      taskPullRequestsEnabled,
     });
   }, [
     tasks,
@@ -732,6 +736,7 @@ export const TasksPage: FunctionComponent = () => {
     execution.taskDispatches,
     execution.recentEvents,
     status.subtasks,
+    taskPullRequestsEnabled,
   ]);
   const [displayBoardViewModel, setDisplayBoardViewModel] = useState<TaskBoardViewModel>(currentBoardViewModel);
   const [filterTransitionPending, setFilterTransitionPending] = useState(false);

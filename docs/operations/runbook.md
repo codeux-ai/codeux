@@ -10,12 +10,11 @@ Database maintenance runs automatically during normal startup. Operators can exp
 - `dbRetentionDays`: Bounded to a safe range (1-3650 days). Negative or zero values will be clamped.
 - Startup logs will show a structured result detailing counts of pruned elements, failed vacuums, and WAL checkpoint failures (`checkpointFailures`). WAL checkpoint failures are non-fatal, busy checkpoints are safe to retry later.
 
-1. Confirm provider credentials or host login state are available when the selected provider requires them. Startup is allowed without provider keys so settings can be completed from the dashboard.
-2. Start the server from source with `pnpm run dev`, or start the compiled build with `pnpm start` after `pnpm run build`.
-   - `pnpm run dev` runs the TypeScript entrypoint through the repository development script.
-   - `pnpm start` runs `node dist/index.js`.
+1. Confirm API key source is available (recommended, but startup is allowed without key).
+2. Start server (`npm run dev` or `npm start`).
+   - `npm run dev` runs the TypeScript entrypoint through Node's `ts-node` ESM register hook.
 3. Open dashboard and verify settings.
-4. Confirm `/health`, `/api/status`, and `/api/git-status` are responding.
+4. Confirm `/api/status` and `/api/git-status` are responding.
 
 If started without key:
 - Configure `JULES_API_KEY` in `.env`, or `julesApiKey` in `.jules-subagents/settings.json`, or set it in dashboard settings.
@@ -56,7 +55,6 @@ Checks:
 - Is server process running?
 - Is configured dashboard port free?
 - Any startup warning for `EADDRINUSE`?
-- Does `curl http://localhost:4444/health` return a liveness response? Playwright uses `/health` for startup because `/ready` requires project live-status state in a clean checkout.
 
 ### 1a. Dashboard loads slowly or live view feels stale during a sprint
 Checks:
@@ -72,7 +70,6 @@ Checks:
 - `/api/system/update-status` reports the running Code UX version plus the latest published npm version. It caches the npm lookup briefly, so repeated dashboard refreshes should not hammer the registry, and the dashboard logs a single startup notice when a newer release is available.
 - The dashboard title bar shows a small "Update available" badge next to the version label whenever `/api/system/update-status` reports a newer published version. If the badge is missing, the check either found no newer release or the lookup failed and was suppressed.
 - If the dashboard still degrades under load, inspect `runtime.debugLogFileLevel`; file logging defaults to `error` and uses async streams, but sustained log volume is still a useful signal that a hot loop is too noisy.
-- For request-level traceability, send or copy the `x-correlation-id` response header and search structured logs by `correlationId`. Dashboard request logs are normally hidden in `standard` console mode but can be enabled with `full` console visibility.
 
 ### 2. No PR/CI data in remote mode
 Checks:
@@ -194,15 +191,13 @@ Checks:
 - For CLI-backed tasks, inspect the latest dispatch error. Code UX now treats unrecoverable Git auth/config failures as hard blockers instead of retryable failures.
   - Examples: unset GitHub token, `fatal: could not read Username for 'https://github.com'`, `Authentication failed`, or similar remote permission/auth errors during push/PR flow.
   - Expected behavior: the task run moves to `BLOCKED`, the sprint pauses, and the watch loop stops consuming tokens until credentials are fixed and the task or sprint is resumed manually.
-- For Docker-backed provider runs that fail with `invalid mount config for type "bind"` or mount permission errors, check the provider activity stream. When the prepared workspace exists locally, Code UX records a path-visibility mismatch hint so operators can distinguish a Docker daemon mount-path problem from a missing local workspace.
-- For tasks shown as `QUOTA`, inspect the dispatch error and retry-after metadata. Code UX preserves quota/rate-limit dispatch errors during session sync; exact Codex reset hints are honored when the provider returns a concrete reset time, while ambiguous clock-only hints fall back to a bounded 30-minute retry. The active retry timestamp is surfaced through execution invocation rows, system messages, and `cli_provider_quota_wait` task-run events; if no active retry timestamp remains, the task is requeued instead of staying in `QUOTA`. Cancelling a task-backed quota invocation from Chat -> Invocations closes the linked dispatch as `cancelled`, marks the task run with the retryable blocked sentinel, and resets the project task to `pending`, so the next sprint cycle can dispatch it again with current provider routing. If Code UX was offline while a provider invocation was waiting for a quota reset or rate-limit retry, startup recovery closes that stale running invocation as `cancelled` and requeues task-backed work so the recovered sprint loop can start a fresh continuation. Repeated quota failures without a reset timer are still bounded by `cliWorkflow.maxQuotaRetriesWithoutTimer`.
+- For tasks shown as `QUOTA`, inspect the dispatch error and retry-after metadata. Code UX preserves quota/rate-limit dispatch errors during session sync; exact Codex reset hints are honored when the provider returns a concrete reset time, while ambiguous clock-only hints fall back to a bounded 30-minute retry. The active retry timestamp is surfaced through execution invocation rows, system messages, and `cli_provider_quota_wait` task-run events; if no active retry timestamp remains, the task is requeued instead of staying in `QUOTA`. Cancelling a task-backed quota invocation from Chat -> Invocations closes the linked dispatch as `cancelled`, marks the task run with the retryable blocked sentinel, resets the project task to `pending`, and the next sprint cycle can dispatch it again with the current provider routing. If Code UX was offline while a provider invocation was waiting for a quota reset or rate-limit retry, startup recovery closes that stale running invocation as `cancelled` and requeues task-backed work so the recovered sprint loop can start a fresh continuation. Repeated quota failures without a reset timer are still bounded by `cliWorkflow.maxQuotaRetriesWithoutTimer`.
 - For tasks stuck in a CI/QA gate after QA requested fixes, compare the latest `qa_review_runs` row with later `execution_invocations` for the same task run. A completed `cli_task_followup` after the latest `changes_requested` QA result should trigger a verification QA run on the next orchestration cycle; if no follow-up exists, the task is intentionally waiting on fix work or human intervention.
 - For tasks stuck at `CODING_COMPLETED` with merge indicator `CI`, inspect the feature PR checks. Completed failed checks should move the task back to `RUNNING` and open a worker-owned `ci_fix_required` item until the CI-fix guardrail is reached. The `waitForJulesCiAutofix` toggle only controls whether Code UX first sends failed-check context to an existing Jules session; when it is disabled, Code UX should skip Jules and dispatch a worker CI fix instead. Human/agent intervention should appear only after the guardrail is exhausted.
 - Do not treat a later full task run as task-QA follow-up work. Task QA fixes should continue the same task session and branch through `cli_task_followup`; sprint-review failures create follow-up tasks instead.
 - For tasks showing `QA_PENDING` with a `running` `qa_review_runs` row but no matching provider container, check the latest `qa_review` row in `execution_invocations`. Code UX now fails stale running QA rows automatically when the invocation never linked provider runtime or when its Docker-backed `provider_invocations.session_id` is absent from running `code-ux.session-id` container labels; the next cycle should enqueue a fresh QA review.
 - For Jules-backed tasks stuck in `RUNNING`, compare the recorded task session with the live Jules API. If the session is absent from both the list snapshot and a direct `getSession` lookup returns not found, session sync now fails the stale provider/execution/task-run rows and requeues the task when failed-task retry is enabled.
 - If provider concurrency repeatedly logs that the cap is reached but no provider containers are running, inspect `provider_invocations` for old `status = running` rows. Code UX now reconciles stale rows via a shared recovery helper during provider slot waits and startup so orphaned provider slots are failed and new work can claim the slot. Recovery waits for linked execution activity to go idle, so a newly claimed provider slot is not failed merely because its container has not appeared yet.
-- Provider invocation diagnostics are split between `provider_invocations` rows for status, duration, token, model, and execution metadata, and `execution_invocation_messages` rows for replayable prompt/transcript/tool/failure content. Inspect both when investigating missing telemetry or transcript rendering.
 
 ### 8. Tasks completed but pipeline not progressing
 Checks:
@@ -283,11 +278,6 @@ Failure Modes & Rollback Notes:
   4. If exposing Code UX to the network is required, **front it with a reverse proxy** (e.g., Nginx, Traefik, Caddy) that enforces authentication (such as Basic Auth, mTLS, or an OAuth proxy).
   5. For the MCP HTTP gateway, ensure `--mcp-http-auth-token` is configured when binding beyond loopback.
 
-Validation:
-- Run `pnpm run audit` before release or deployment validation; CI enforces `pnpm audit --audit-level=high`.
-- Review logs and invocation messages for redaction before sharing diagnostics. Provider output, environment-style tokens, authorization headers, auth paths, and credential-bearing URLs should be represented as `[REDACTED]`.
-- Keep dashboard and MCP listeners on loopback unless an authenticated reverse proxy or MCP HTTP token is in place.
-
 ### Subprocess Execution Limits
 
 Subprocess execution restricts accumulated `stdout` (default 5MB) and `stderr` (default 4KB) memory growth by slicing long outputs and prepending `"..."`. Streaming callbacks (e.g., `onStdoutLine`, `onStderrLine`) still process the full, untruncated line output regardless of this cap, avoiding memory bloat while preserving line-by-line inspection. These bounds can be overridden via `maxStdoutChars` and `maxStderrChars` in command options.
@@ -295,20 +285,11 @@ Subprocess execution restricts accumulated `stdout` (default 5MB) and `stderr` (
 ## Useful Commands
 
 ```bash
-pnpm run lint
-pnpm run test:backend
-pnpm run test:dashboard
-pnpm run test:backend:coverage
+pnpm test
 pnpm run build
-pnpm run ci
-pnpm exec playwright test
-pnpm run audit
-curl http://localhost:4444/health
 curl http://localhost:4444/api/status
 curl http://localhost:4444/api/git-status
 ```
-
-Local CI runs `pnpm run audit`, `pnpm run lint`, `pnpm run test:backend:coverage`, `pnpm run test:dashboard`, and `pnpm run build`. The Playwright workflow is separate, targets `dev` and `main` pushes and pull requests, cancels superseded runs for the same branch or PR, builds first, installs Chromium, and starts `node dist/index.js` against `/health`.
 
 ## Escalation Notes
 

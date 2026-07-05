@@ -112,17 +112,6 @@ export interface IProviderRunner {
   runProviderForText(input: ProviderRunInput): Promise<ProviderRunResult & { text: string }>;
 }
 
-const sanitizeUsageTelemetry = (telemetry: ProviderUsageTelemetry): ProviderUsageTelemetry => ({
-  ...telemetry,
-  transcriptText: sanitizeInvocationOutputText(telemetry.transcriptText),
-  conversation: telemetry.conversation.map((turn) => ({
-    ...turn,
-    text: sanitizeInvocationOutputText(turn.text || ""),
-    toolArguments: turn.toolArguments === undefined ? undefined : sanitizeInvocationOutputText(turn.toolArguments),
-    toolOutput: turn.toolOutput === undefined ? undefined : sanitizeInvocationOutputText(turn.toolOutput),
-  })),
-});
-
 export class ProviderRunner implements IProviderRunner {
     private readonly logger: Logger;
 
@@ -328,14 +317,13 @@ export class ProviderRunner implements IProviderRunner {
     // the rollout file isn't yet readable.
     let accumulatedRawStdout = "";
     const trackingOnActivity = (desc: string, originator?: string) => {
-      const sanitizedDesc = sanitizeInvocationOutputText(desc);
       if (originator === "agent") {
-        accumulatedStdout += sanitizedDesc + "\n";
+        accumulatedStdout += desc + "\n";
         accumulatedRawStdout += desc + "\n";
       } else if (originator === "provider") {
-        accumulatedStderr += sanitizedDesc + "\n";
+        accumulatedStderr += desc + "\n";
       }
-      onActivity(sanitizedDesc, originator);
+      onActivity(desc, originator);
     };
 
     const runCmd = async () => {
@@ -380,7 +368,7 @@ export class ProviderRunner implements IProviderRunner {
         startedMs,
         workflowSettings,
         signal,
-        onTelemetry: (telemetry) => input.onTelemetry?.(sanitizeUsageTelemetry(telemetry)),
+        onTelemetry: input.onTelemetry,
         getAccumulatedRawStdout: () => accumulatedRawStdout,
         getAccumulatedStderr: () => accumulatedStderr,
         nativeSessionId,
@@ -522,7 +510,7 @@ export class ProviderRunner implements IProviderRunner {
         }
       }
 
-      const usageTelemetry = sanitizeUsageTelemetry(await collectProviderUsageTelemetry({
+      const usageTelemetry = await collectProviderUsageTelemetry({
         provider,
         model: runModel,
         prompt,
@@ -542,11 +530,9 @@ export class ProviderRunner implements IProviderRunner {
         antigravityTranscriptJsonl,
         opencodeExportJson,
         opencodeBaselineUsage: input.openCodeBaselineUsage,
-      }));
+      });
       return {
         ...result,
-        stdout: sanitizeInvocationOutputText(result.stdout || ""),
-        stderr: sanitizeInvocationOutputText(result.stderr || ""),
         usageTelemetry,
         nativeSessionId: usageTelemetry.nativeSessionId || resolvedNativeSessionId || nativeSessionId,
       };

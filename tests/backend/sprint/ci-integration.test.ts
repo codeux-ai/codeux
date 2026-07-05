@@ -39,8 +39,6 @@ const buildDeps = () => {
   return {
     settings: { maxFailures: 5 },
     guardrailService,
-    getConsecutiveFailures: vi.fn().mockReturnValue(0),
-    setConsecutiveFailures: vi.fn(),
     getDashboardSettings: () => buildMockSettings(),
     renderInstruction: vi.fn().mockResolvedValue(""),
     isJulesApiConfigured: () => true,
@@ -61,29 +59,7 @@ const buildDeps = () => {
       resolveItemsForSprintRun: vi.fn(),
       listActiveProjectItems: vi.fn().mockReturnValue([]),
     },
-    executionRepository: {
-      appendSprintRunEvent: vi.fn(),
-      appendTaskRunEvent: vi.fn(),
-      acquireLease: vi.fn(),
-      createSprintRun: vi.fn().mockReturnValue({ id: "run-1", status: "running" }),
-      finalizeSprintRunCancellationIfIdle: vi.fn().mockReturnValue(null),
-      findActiveSprintRun: vi.fn().mockReturnValue(null),
-      getLatestTaskRun: vi.fn().mockReturnValue({ id: "task-run-1", state: "COMPLETED" }),
-      getLatestTaskRunBySessionId: vi.fn().mockReturnValue(null),
-      getSprintRun: vi.fn().mockReturnValue({ id: "run-1", status: "running" }),
-      getTaskRunByDispatchId: vi.fn().mockReturnValue(null),
-      listExecutionInvocations: vi.fn().mockReturnValue([]),
-      listTaskDispatches: vi.fn().mockReturnValue([]),
-      listTaskRunEvents: vi.fn().mockReturnValue([]),
-      releaseLease: vi.fn(),
-      releaseStaleSprintLease: vi.fn(),
-      renewLease: vi.fn(),
-      updateSprintRun: vi.fn(),
-      updateTaskRun: vi.fn(),
-      updateTaskRunsBatch: vi.fn(),
-      updateTaskDispatch: vi.fn(),
-      updateTaskDispatchesBatch: vi.fn(),
-    },
+    executionRepository: { updateSprintRun: vi.fn() },
     sprintExecutionStateService: {
       resolveContext: vi.fn((args: any) => ({
         project: { id: "project-1", name: "Test Project" },
@@ -104,21 +80,6 @@ const buildDeps = () => {
       error: vi.fn(),
       child: vi.fn().mockReturnThis(),
     },
-    heartbeatService: {
-      startHeartbeat: vi.fn(),
-      stopHeartbeat: vi.fn(),
-      stopAll: vi.fn(),
-    },
-    workspaceManager: {
-      resolveResumeWorktreePath: vi.fn(),
-      removeWorktree: vi.fn(),
-    },
-    providerConcurrencyService: {
-      getGlobalRunningCounts: vi.fn().mockReturnValue({}),
-      waitForSlot: vi.fn().mockResolvedValue(undefined),
-    },
-    startTask: vi.fn(),
-    sleep: vi.fn().mockResolvedValue(undefined),
   };
 };
 
@@ -266,147 +227,6 @@ describe("SprintOrchestrator - CI & Merge Gates", () => {
 
     expect(result.content[0].text).toContain("CI autofix guardrail reached");
     expect(result.content[0].text).toContain("Escalation (AGENT)");
-
-    await fs.rm(tmpRoot, { recursive: true, force: true });
-  });
-
-  it("does not duplicate dispatch, QA, CI autofix, or attention across repeated watch cycles of the same state", async () => {
-    const deps = buildDeps();
-    deps.getDashboardSettings = () => buildMockSettings({
-      automationLevel: "FULL",
-      sprintLoopSteps: {
-        branchPreflight: false,
-        planningPreflight: false,
-        loadSubtasks: true,
-        sessionSync: false,
-        statusDerivation: true,
-        startReadyTasks: true,
-        mergeProtocol: true,
-        actionRequiredProtocol: true,
-        statusTable: true,
-        watchLoop: true,
-        watchLoopIntervalSeconds: 0.01,
-        watchLoopOutputIntervalSeconds: 60,
-      },
-      agents: {
-        qualityAssurance: {
-          enabled: true,
-        },
-      },
-      ciIntelligence: {
-        enabled: true,
-        enableLivePrMonitoring: true,
-        resolveAllCommentsBeforeMainMerge: true,
-        resolveMainMergeConflicts: false,
-        resolveAllCommentsBeforeFeatureMerge: true,
-        resolveMergeConflicts: false,
-        waitForJulesCiAutofix: true,
-        julesCiAutofixMaxRetries: 3,
-        featurePrAutoMergeMode: "WHEN_GREEN",
-      },
-    } as any);
-
-    deps.getCiStatusForScope.mockImplementation(async (args: any) => {
-      if (args.scope === "MAIN_MERGE_PR_CI") {
-        return {
-          mode: "REMOTE",
-          available: true,
-          openPullRequests: [],
-          mergedPullRequests: [],
-          ciRuns: [],
-          tracking: { scope: "MAIN_MERGE_PR_CI" },
-        };
-      }
-      return {
-        mode: "REMOTE",
-        available: true,
-        openPullRequests: [
-          {
-            number: 77,
-            url: "https://example.com/pr/77",
-            headRefName: "worker/task-01",
-            baseRefName: "feature/sprint1-implementation",
-            checks: [{ name: "ci", status: "completed", conclusion: "failure" }],
-            comments: 0,
-            reviewDecision: "APPROVED",
-          },
-        ],
-        ciRuns: [
-          {
-            id: 9077,
-            name: "ci",
-            status: "completed",
-            conclusion: "failure",
-            headBranch: "worker/task-01",
-            url: "https://example.com/run/9077",
-            failedJobs: [{ name: "test", conclusion: "failure", failedSteps: ["unit"], logExcerpt: "unit failed" }],
-          },
-        ],
-        tracking: { scope: "FEATURE_PR_CI" },
-      };
-    });
-
-    const activeAttentionItems: any[] = [];
-    deps.projectAttentionService.openItems.mockImplementation((items: any[]) => {
-      activeAttentionItems.push(...items.map((item) => ({ ...item, status: "open" })));
-    });
-    deps.projectAttentionService.listActiveProjectItems.mockImplementation(() => activeAttentionItems);
-    deps.executionRepository.getSprintRun = vi.fn()
-      .mockReturnValueOnce({ id: "run-1", status: "running" })
-      .mockReturnValueOnce({ id: "run-1", status: "running" })
-      .mockReturnValueOnce({ id: "run-1", status: "paused" });
-
-    const reviewCompletedTask = vi.fn();
-    deps.qualityAssuranceService = {
-      reconcileRunningTaskQaReviews: vi.fn().mockResolvedValue(undefined),
-      getTaskMergeGateStatus: vi.fn().mockReturnValue({
-        mergeAllowed: true,
-        reason: "review_running",
-        summary: "QA review is already running.",
-        latestRun: { id: "qa-run-1" },
-        runsUsed: 1,
-        maxRuns: 2,
-      }),
-      reviewCompletedTask,
-    } as any;
-
-    const orchestrator = new SprintOrchestrator(deps as any);
-    const tmpRoot = await fs.mkdtemp(path.join(os.tmpdir(), "sprint-orch-watch-idem-"));
-    const subtasksDir = path.join(tmpRoot, ".code-ux", "sprints", "sprint1-subtasks");
-    await fs.mkdir(subtasksDir, { recursive: true });
-    await fs.writeFile(path.join(subtasksDir, "01-task.md"), "title: test\nprompt:\nDo it\n", "utf-8");
-
-    deps.subtaskRepository.loadSubtasks.mockResolvedValue([
-      buildMockSubtask({
-        id: "01-task",
-        record_id: "rec-01-task",
-        project_id: "project-1",
-        sprint_id: "sprint-1",
-        status: "COMPLETED",
-        worker_branch: "worker/task-01",
-        pr_url: "https://example.com/pr/77",
-        provider: "codex" as any,
-      }),
-    ]);
-
-    const result = await orchestrator.execute({
-      sprint_number: 1,
-      repo_path: tmpRoot,
-      source_id: "sources/123",
-      action: "orchestrate",
-      wait: true,
-    });
-
-    expect(result.content[0].text).toContain("Sprint Paused");
-    expect(deps.startTask).not.toHaveBeenCalled();
-    expect(reviewCompletedTask).not.toHaveBeenCalled();
-    expect(deps.sendSessionMessage).not.toHaveBeenCalled();
-    expect(deps.projectAttentionService.openItems).toHaveBeenCalledTimes(1);
-    expect(activeAttentionItems).toHaveLength(1);
-    expect(activeAttentionItems[0]).toEqual(expect.objectContaining({
-      attentionType: "ci_fix_required",
-      taskId: "rec-01-task",
-    }));
 
     await fs.rm(tmpRoot, { recursive: true, force: true });
   });

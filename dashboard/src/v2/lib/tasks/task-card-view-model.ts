@@ -25,6 +25,7 @@ export interface TaskCardViewModel {
   actions?: TaskCardActionDescriptor[];
   sessionId?: string;
   sessionState?: string;
+  hasPullRequestMetadata?: boolean;
   prUrl?: string;
   liveRunningTime?: string;
   liveStartedAt?: string | null;
@@ -40,6 +41,10 @@ export interface TaskCardActionDescriptor {
   href?: string;
   external?: boolean;
   disabledReason?: string;
+}
+
+export interface TaskCardViewModelOptions {
+  taskPullRequestsEnabled?: boolean;
 }
 
 const EXECUTOR_LABEL: Record<TaskExecutorType, string> = {
@@ -141,9 +146,14 @@ function buildQaReviewLabel(task: Task): string {
   return `QA ${task.latestReview.status}${outcomeLabel}`;
 }
 
-function buildTaskCardActions(task: Task, prUrl?: string, hasLiveRuntime = false): TaskCardActionDescriptor[] {
+function buildTaskCardActions(
+  task: Task,
+  prUrl?: string,
+  hasLiveRuntime = false,
+  taskPullRequestsEnabled = true,
+): TaskCardActionDescriptor[] {
   const target = `task ${task.id}: ${task.title}`;
-  return [
+  const actions: TaskCardActionDescriptor[] = [
     {
       kind: "rerun",
       label: "Rerun",
@@ -159,7 +169,10 @@ function buildTaskCardActions(task: Task, prUrl?: string, hasLiveRuntime = false
       href: task.sprintId ? `/browser?sprintId=${encodeURIComponent(task.sprintId)}` : undefined,
       disabledReason: task.sprintId ? undefined : `Task ${task.id} has no sprint preview.`,
     },
-    {
+  ];
+
+  if (taskPullRequestsEnabled || prUrl) {
+    actions.push({
       kind: "pull_request",
       label: prUrl ? "PR" : "PR pending",
       ariaLabel: `Open pull request for ${target}`,
@@ -167,7 +180,10 @@ function buildTaskCardActions(task: Task, prUrl?: string, hasLiveRuntime = false
       href: prUrl,
       external: true,
       disabledReason: prUrl ? undefined : `No pull request is available for task ${task.id} yet.`,
-    },
+    });
+  }
+
+  actions.push(
     {
       kind: "live_runtime",
       label: hasLiveRuntime ? "Live" : "Live idle",
@@ -176,13 +192,16 @@ function buildTaskCardActions(task: Task, prUrl?: string, hasLiveRuntime = false
       href: hasLiveRuntime ? "/live" : undefined,
       disabledReason: hasLiveRuntime ? undefined : `Live runtime has not started for task ${task.id}.`,
     },
-  ];
+  );
+
+  return actions;
 }
 
 export function buildTaskCardViewModel(
   task: Task,
   taskLookup: Map<string, Task>,
-  liveEnrichment?: LiveTaskEnrichment
+  liveEnrichment?: LiveTaskEnrichment,
+  options: TaskCardViewModelOptions = {},
 ): TaskCardViewModel {
   const dependencyIndicators: DependencyIndicator[] = (task.dependsOnTaskIds || []).map(depId => {
     const depTask = taskLookup.get(depId);
@@ -212,6 +231,8 @@ export function buildTaskCardViewModel(
     : undefined;
   const hasLiveRuntime = Boolean(liveEnrichment?.sessionId || liveEnrichment?.sessionState || liveRunningTime);
   const prUrl = liveEnrichment?.prUrl || undefined;
+  const taskPullRequestsEnabled = options.taskPullRequestsEnabled ?? true;
+  const hasPullRequestMetadata = Boolean(prUrl || taskPullRequestsEnabled);
 
   return {
     task,
@@ -224,9 +245,10 @@ export function buildTaskCardViewModel(
     dragStateLabel: task.isOptimistic
       ? "Pointer drag disabled while task changes are saving; keyboard reordering is not supported"
       : "Pointer drag only; keyboard reordering is not supported",
-    actions: buildTaskCardActions(task, prUrl, hasLiveRuntime),
+    actions: buildTaskCardActions(task, prUrl, hasLiveRuntime, taskPullRequestsEnabled),
     sessionId: liveEnrichment?.sessionId,
     sessionState: liveEnrichment?.sessionState,
+    hasPullRequestMetadata,
     prUrl,
     liveRunningTime,
     liveStartedAt: liveEnrichment?.liveStartedAt,

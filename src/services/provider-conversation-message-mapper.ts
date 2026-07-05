@@ -31,7 +31,7 @@ export function conversationTurnToMessage(
   );
 
   const capPayload = (value: string | null | undefined): string | null =>
-    value == null ? null : truncateForStorage(sanitizeInvocationOutputText(value), MAX_TOOL_PAYLOAD_CHARS);
+    value == null ? null : truncateForStorage(value, MAX_TOOL_PAYLOAD_CHARS);
 
   switch (turn.kind) {
     case "injected_context":

@@ -99,20 +99,12 @@
 }
 
 .kanban-card__actions {
-  opacity: 0.94;
+  opacity: 1;
   pointer-events: auto;
   transform: translateY(0);
   transition:
     opacity var(--kanban-card-control-duration, var(--interaction-control-feedback-duration)) var(--kanban-card-control-ease, var(--interaction-control-feedback-ease)),
     transform var(--kanban-card-control-duration, var(--interaction-control-feedback-duration)) var(--kanban-card-control-ease, var(--interaction-control-feedback-ease));
-}
-
-.kanban-card:hover .kanban-card__actions,
-.kanban-card:focus .kanban-card__actions,
-.kanban-card:focus-visible .kanban-card__actions,
-.kanban-card:focus-within .kanban-card__actions {
-  opacity: 1;
-  transform: translateY(0);
 }
 
 .kanban-card__actions button,
@@ -130,8 +122,17 @@
   cursor: not-allowed;
 }
 
-@media (any-pointer: coarse) {
+@media (any-pointer: fine) and (hover: hover) {
   .kanban-card__actions {
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(-0.25rem);
+  }
+
+  .kanban-card:hover .kanban-card__actions,
+  .kanban-card:focus .kanban-card__actions,
+  .kanban-card:focus-visible .kanban-card__actions,
+  .kanban-card:focus-within .kanban-card__actions {
     opacity: 1;
     pointer-events: auto;
     transform: translateY(0);

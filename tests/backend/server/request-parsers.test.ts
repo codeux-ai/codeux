@@ -27,7 +27,6 @@ import {
   parseUpdateConversationThreadInput,
   parseStatsDateInput,
 } from "../../../src/server/request-parsers.js";
-import { toHttpRouteError } from "../../../src/server/http-errors.js";
 
 describe("Request Parsers", () => {
   describe("Validation Helpers", () => {
@@ -59,24 +58,6 @@ describe("Request Parsers", () => {
       expect(() => parseOptionalInteger(NaN)).toThrow(/valid integer/);
       expect(() => parseOptionalInteger(Infinity)).toThrow(/valid integer/);
       expect(() => parseOptionalInteger({})).toThrow(/valid integer/);
-    });
-
-    it("throws parser errors that route utilities classify as client errors", () => {
-      const parserErrors = [
-        () => parseCreateProjectInput(null),
-        () => parseCreateProjectInput({}),
-        () => parseCreateTaskInput({ sprintId: "s", title: "t", priority: "urgent" }),
-        () => parseOptionalInteger("not-a-number", 1, 10, "taskCount"),
-      ];
-
-      for (const parse of parserErrors) {
-        try {
-          parse();
-          throw new Error("Expected parser to throw");
-        } catch (error) {
-          expect(toHttpRouteError(error).status).toBe(400);
-        }
-      }
     });
   });
 

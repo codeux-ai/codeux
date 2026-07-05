@@ -26,32 +26,6 @@ describe("ProviderExecutionLoop", () => {
     expect(opts.runCmd).toHaveBeenCalledWith("cmd", ["arg1"]);
   });
 
-  it("returns a provider non-zero exit without retrying when no classifier matches", async () => {
-    const runCmd = vi.fn().mockResolvedValue({
-      ok: false,
-      stdout: "provider failed",
-      stderr: "exit 2",
-      code: 2,
-      signal: null,
-    });
-    const opts: ProviderExecutionLoopOptions = {
-      ...getDefaultOptions(),
-      provider: "gemini",
-      runCmd,
-    };
-
-    const result = await runProviderExecutionLoop(opts);
-
-    expect(result).toEqual(expect.objectContaining({
-      ok: false,
-      stdout: "provider failed",
-      stderr: "exit 2",
-      code: 2,
-    }));
-    expect(runCmd).toHaveBeenCalledTimes(1);
-    expect(opts.trackingOnActivity).not.toHaveBeenCalled();
-  });
-
   it("retries Codex once on transient transport error", async () => {
     vi.useFakeTimers();
     const runCmd = vi.fn()

@@ -78,7 +78,9 @@ export const KanbanTaskCard: FunctionComponent<{
   const qaReviewLabel = viewModel.qaReviewLabel ?? (task.latestReview ? `QA ${task.latestReview.status}` : "QA no review");
   const qaReviewBadge = getQaReviewBadge(task, qaReviewLabel);
   const dragStateLabel = viewModel.dragStateLabel ?? "Pointer drag only; keyboard reordering is not supported";
+  const shouldShowExecutorLabel = viewModel.executorLabel !== "Auto";
   const cardActions = viewModel.actions ?? [];
+  const hasPullRequestMetadata = viewModel.hasPullRequestMetadata ?? true;
   const dependencySummary = dependencyIndicators.length === 0
     ? "No dependency blockers."
     : `${dependencyIndicators.length} ${dependencyIndicators.length === 1 ? "dependency" : "dependencies"}; ${blockerCount === 0 ? "no blockers" : `${blockerCount} ${blockerCount === 1 ? "blocker" : "blockers"}`}: ${dependencyIndicators.map((dep) => `${dep.id} ${dep.stateLabel ?? dep.status.replace(/_/g, " ")}`).join(", ")}.`;
@@ -90,7 +92,7 @@ export const KanbanTaskCard: FunctionComponent<{
     : sessionState
       ? `Runtime session ${sessionState}.`
       : "Runtime not started.";
-  const prSummary = prUrl ? "Pull request available." : "No pull request available yet.";
+  const prSummary = prUrl ? "Pull request available." : hasPullRequestMetadata ? "No pull request available yet." : "Pull request creation disabled.";
   const isReducedMotion = useReducedMotion();
   const isDragDisabled = isReducedMotion || !!task.isOptimistic;
   const effectiveIsDragging = isDragging && !isDragDisabled;
@@ -188,9 +190,11 @@ export const KanbanTaskCard: FunctionComponent<{
       </h4>
 
       <div className="relative z-10 mb-4 flex flex-wrap items-center gap-2 text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">
-        <span className="rounded-full border border-black/[0.06] dark:border-white/[0.08] bg-black/[0.03] dark:bg-white/[0.03] px-2.5 py-1 min-w-0 truncate max-w-full">
-          {viewModel.executorLabel}
-        </span>
+        {shouldShowExecutorLabel && (
+          <span className="rounded-full border border-black/[0.06] dark:border-white/[0.08] bg-black/[0.03] dark:bg-white/[0.03] px-2.5 py-1 min-w-0 truncate max-w-full">
+            {viewModel.executorLabel}
+          </span>
+        )}
         {agentPresetName && (
           <span className="inline-flex items-center gap-1 rounded-full border border-black/[0.06] dark:border-white/[0.08] bg-black/[0.03] dark:bg-white/[0.03] px-2 py-0.5 min-w-0 max-w-full">
             <AgentSelectAvatarIcon avatarConfig={agentPresetAvatarConfig} seed={agentPresetName} />
@@ -211,15 +215,14 @@ export const KanbanTaskCard: FunctionComponent<{
         >
           {qaReviewBadge.label}
         </span>
-        <span className="rounded-full border border-black/[0.06] dark:border-white/[0.08] bg-black/[0.03] dark:bg-white/[0.03] px-2.5 py-1">
-          {isReducedMotion ? "Drag disabled: reduced motion" : task.isOptimistic ? "Drag disabled: saving" : "Pointer drag only"}
-        </span>
-        <span
-          className={`rounded-full border px-2.5 py-1 ${blockerCount > 0 ? "border-status-amber/25 bg-status-amber/[0.08] text-status-amber" : "border-status-green/20 bg-status-green/[0.08] text-status-green"}`}
-          aria-label={blockerCount > 0 ? `${dependencyActionLabel}. Dependencies blocked.` : `${dependencyActionLabel}. No dependency blockers.`}
-        >
-          {dependencyActionLabel}
-        </span>
+        {dependencyIndicators.length > 0 && (
+          <span
+            className={`rounded-full border px-2.5 py-1 ${blockerCount > 0 ? "border-status-amber/25 bg-status-amber/[0.08] text-status-amber" : "border-status-green/20 bg-status-green/[0.08] text-status-green"}`}
+            aria-label={blockerCount > 0 ? `${dependencyActionLabel}. Dependencies blocked.` : `${dependencyActionLabel}. No dependency blockers.`}
+          >
+            {dependencyActionLabel}
+          </span>
+        )}
         {task.isOptimistic && (
           <span className="rounded-full border border-signal-500/20 bg-signal-500/[0.08] px-2.5 py-1 text-signal-600 dark:text-signal-400">
             {viewModel.optimisticSavingLabel ?? "Saving"}
@@ -278,7 +281,7 @@ export const KanbanTaskCard: FunctionComponent<{
               <span>PR ready</span>
             </a>
           )}
-          {!prUrl && (
+          {!prUrl && hasPullRequestMetadata && (
             <span
               className="kanban-card__meta-slot kanban-card__meta-slot--pr flex min-h-7 items-center rounded-full border border-black/[0.06] bg-black/[0.03] px-2 text-[9px] font-bold uppercase tracking-[0.12em] text-slate-400 dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-slate-500"
               aria-label={`Pull request pending for task ${task.id}`}
@@ -435,6 +438,7 @@ export const KanbanTaskCard: FunctionComponent<{
 
   return tasksEqual && depsEqual &&
          prev.viewModel.prUrl === next.viewModel.prUrl &&
+         prev.viewModel.hasPullRequestMetadata === next.viewModel.hasPullRequestMetadata &&
          prev.viewModel.sessionId === next.viewModel.sessionId &&
          prev.viewModel.sessionState === next.viewModel.sessionState &&
          prev.viewModel.liveRunningTime === next.viewModel.liveRunningTime &&

@@ -127,8 +127,8 @@ describe("TaskRow QA review indicator", () => {
     render(<KanbanTaskCard viewModel={viewModel} onEdit={vi.fn()} onDelete={vi.fn()} />);
 
     expect(screen.getByText("Blocked: 1 dependency needs completion")).toBeVisible();
-    expect(screen.getByText("1 dependency blocker")).toBeVisible();
-    expect(screen.getByText("Drag disabled: reduced motion")).toBeVisible();
+    expect(screen.getByText("Draggable reordering is disabled in reduced motion mode.")).toHaveClass("sr-only");
+    expect(screen.queryByText("Drag disabled: reduced motion")).not.toBeInTheDocument();
     expect(screen.getByLabelText(/^Task T1: Reviewed task/i)).toHaveAttribute("draggable", "false");
   });
 

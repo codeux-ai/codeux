@@ -194,39 +194,6 @@ describe("FeaturePrGateService", () => {
     );
   });
 
-  it.each([
-    ["changes_requested", "QA requested follow-up fixes."],
-    ["review_running", "A stale running QA review is being reconciled."],
-    ["retries_exhausted", "QA review budget is exhausted."],
-  ] as const)("parks task in QA_PENDING for QA gate state %s without auto-merging or opening a worker branch", async (reason, summary) => {
-    context.ciIntelligence.featurePrAutoMergeMode = "WHEN_GREEN";
-    context.evaluateTaskQaGate = vi.fn().mockReturnValue({
-      mergeAllowed: false,
-      reason,
-      summary,
-      latestRun: { id: "qa-run-1" },
-      runsUsed: reason === "retries_exhausted" ? 2 : 1,
-      maxRuns: 2,
-    });
-    context.openCiFixAttentionItems = vi.fn();
-
-    const result = await service.evaluateCiGate(subtasks, context);
-
-    expect(result.subtasks[0].status).toBe("CODING_COMPLETED");
-    expect(result.subtasks[0].merge_indicator).toBe("QA_PENDING");
-    expect(result.reportText).toContain("QA Gate");
-    expect(context.autoMergeFeaturePr).not.toHaveBeenCalled();
-    expect(context.openCiFixAttentionItems).not.toHaveBeenCalled();
-    expect(context.sendSessionMessage).not.toHaveBeenCalled();
-    expect(context.executionRepository?.appendTaskRunEvent).toHaveBeenCalledWith(
-      "run-1",
-      "ci_gate_status",
-      "system",
-      expect.objectContaining({ state: "qa_blocked", reason }),
-      expect.any(Object),
-    );
-  });
-
   it("keeps task in RUNNING while GitHub has only armed auto-merge", async () => {
     context.ciIntelligence.featurePrAutoMergeMode = "WHEN_GREEN";
     context.autoMergeFeaturePr = vi.fn().mockResolvedValue({

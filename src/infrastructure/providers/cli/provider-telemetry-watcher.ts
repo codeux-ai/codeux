@@ -11,7 +11,6 @@ import {
   QwenUsageTotals,
   ParsedConversationTurn,
 } from "./provider-usage.js";
-import { sanitizeInvocationOutputText } from "../../../services/invocation-output-sanitizer.js";
 
 export interface TelemetryWatcherOptions {
   provider: CliProviderId;
@@ -150,7 +149,9 @@ export class ProviderTelemetryWatcher {
           antigravityTranscriptJsonl,
         });
 
-        this.opts.onTelemetry(this.sanitizeUsageTelemetry(telemetry));
+        if (this.opts.onTelemetry) {
+          this.opts.onTelemetry(telemetry);
+        }
         this.lastTelemetrySourceSignature = sourceSignature;
         this.lastPreReadSourceSignature = preReadSourceSignature;
         this.readFailureCount = 0;
@@ -289,26 +290,19 @@ export class ProviderTelemetryWatcher {
         sessionId: this.opts.sessionId,
         nativeSessionId: this.resolvedNativeSessionId || this.opts.nativeSessionId || undefined,
         failureCount: this.readFailureCount,
-        error: sanitizeInvocationOutputText(err instanceof Error ? err.message : String(err)),
+        error: err instanceof Error ? err.message : String(err),
       });
     }
   }
 
-  private sanitizeUsageTelemetry(telemetry: ProviderUsageTelemetry): ProviderUsageTelemetry {
-    return {
-      ...telemetry,
-      transcriptText: sanitizeInvocationOutputText(telemetry.transcriptText),
-      conversation: telemetry.conversation.map((turn) => ({
-        ...turn,
-        text: sanitizeInvocationOutputText(turn.text || ""),
-        toolArguments: turn.toolArguments === undefined ? undefined : sanitizeInvocationOutputText(turn.toolArguments),
-        toolOutput: turn.toolOutput === undefined ? undefined : sanitizeInvocationOutputText(turn.toolOutput),
-      })),
-    };
-  }
-
   private shouldLogFailureWarning(): boolean {
-    return this.readFailureCount === 2 && this.lastFailureWarningCount !== this.readFailureCount;
+    if (this.readFailureCount < 2) {
+      return false;
+    }
+    if (this.readFailureCount <= 5) {
+      return this.lastFailureWarningCount !== this.readFailureCount;
+    }
+    return this.readFailureCount % 10 === 0 && this.lastFailureWarningCount !== this.readFailureCount;
   }
 
   private async wait(ms: number): Promise<void> {

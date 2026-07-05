@@ -96,10 +96,7 @@ That endpoint:
 ## Error Handling
 
 - Axios errors are unwrapped for user-friendly API messages.
-- Disabled or unknown tools are rejected with MCP `MethodNotFound`.
-- Schema validation failures are rejected with MCP `InvalidParams` before the management handler runs.
-- Router-level unexpected failures are returned as safe `isError: true` responses with `Internal Server Error`; when a correlation ID is active, the response includes that ID for traceability.
-- Tool failure logs include the requested `toolName` and sanitized error metadata, but do not include raw MCP argument values.
+- Generic errors are returned as text with `isError: true`.
 - Server-level uncaught MCP errors are logged via `server.onerror`.
 
 ## Shutdown Behavior

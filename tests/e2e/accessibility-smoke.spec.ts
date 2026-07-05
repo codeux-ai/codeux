@@ -20,20 +20,20 @@ test('Dashboard accessibility smoke test', async ({ page }) => {
   await expect(skipLink).toBeFocused();
 
   // 2. Primary Navigation
-  const nav = page.getByRole('navigation', { name: /Primary navigation/i });
-  await expect(nav).toBeVisible({ timeout: 15_000 });
+  const nav = page.getByRole('navigation', { name: /Dock navigation/i });
+  await expect(nav).toBeVisible();
 
   // 3. Global Search
-  const searchTrigger = page.getByRole('button', { name: /Search workspace|Open search/i });
-  await expect(searchTrigger).toBeVisible({ timeout: 15_000 });
+  const searchTrigger = page.getByRole('button', { name: 'Search' });
+  await expect(searchTrigger).toBeVisible();
 
   // 4. Notification trigger
   const notificationTrigger = page.getByRole('button', { name: 'Notifications' });
-  await expect(notificationTrigger).toBeVisible({ timeout: 15_000 });
+  await expect(notificationTrigger).toBeVisible();
 
   // 5. Project Selector
   const projectSelector = page.getByRole('button', { name: /Project/i });
-  await expect(projectSelector).toBeVisible({ timeout: 15_000 });
+  await expect(projectSelector).toBeVisible();
 
   // 6. Stats Chart (if visible)
   const statsChart = page.getByRole('region', { name: /Statistics|Chart/i }).first();
@@ -42,18 +42,24 @@ test('Dashboard accessibility smoke test', async ({ page }) => {
   }
 
   // 7. Open Dialog
-  await searchTrigger.press('Enter');
+  await searchTrigger.click();
   const dialog = page.getByRole('dialog', { name: 'Search' });
-  await expect(dialog).toBeVisible({ timeout: 15_000 });
+  await expect(dialog).toBeVisible();
   const searchInput = dialog.getByPlaceholder('Find sprints, tasks, agents, previews...');
-  await expect(searchInput).toBeFocused({ timeout: 15_000 });
+  await expect(searchInput).toBeFocused();
   await page.keyboard.press('Escape');
-  await expect(dialog).toBeHidden({ timeout: 15_000 });
+  await expect(dialog).toBeHidden();
 
   // 8. Sprint Ledger
   await page.goto('/sprints');
   await page.waitForURL('**/sprints');
 
+  // Wait for loading indicator to be hidden if it exists
+  const loadingElement = page.getByText(/loading/i).first();
+  if (await loadingElement.isVisible()) {
+    await expect(loadingElement).toBeHidden();
+  }
+
   const sprintLedger = page.getByRole('region', { name: 'Sprint Ledger' });
-  await expect(sprintLedger).toBeVisible({ timeout: 15_000 });
+  await expect(sprintLedger).toBeVisible();
 });

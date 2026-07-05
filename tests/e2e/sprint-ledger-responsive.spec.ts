@@ -1,13 +1,9 @@
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect } from '@playwright/test';
 import { completeOnboarding, ensureSelectedProject } from './helpers/prepare-app';
 
-async function ensureProjectSelected(page: Page): Promise<void> {
-  const projectButton = page.getByRole('button', { name: /Project selector/i }).first();
-  if (await projectButton.count() === 0) {
-    return;
-  }
-
-  await expect(projectButton).toBeVisible({ timeout: 15_000 });
+async function ensureProjectSelected(page) {
+  const projectButton = page.locator('[data-tour-id="project-selector"]');
+  await expect(projectButton).toBeVisible();
   const text = await projectButton.innerText();
   if (text.includes('Select Project') || text.includes('Loading...')) {
     await projectButton.click();
@@ -59,11 +55,12 @@ test.describe('Sprint Ledger Responsive Layout E2E Tests', () => {
 
     // 4. Test Mobile Viewport Layout (width 375px)
     await page.setViewportSize({ width: 375, height: 812 });
+    await page.waitForTimeout(500); // Allow layout transition
 
     // On mobile, the field labels (e.g. "Sprint ID", "Completion", "Controls") should be visible
-    const mobileIdLabels = page.locator('td span.lg\\:hidden[aria-hidden]', { hasText: 'Sprint ID' });
-    const mobileCompletionLabels = page.locator('td span.lg\\:hidden[aria-hidden]', { hasText: 'Completion' });
-    const mobileControlsLabels = page.locator('td span.lg\\:hidden[aria-hidden]', { hasText: 'Controls' });
+    const mobileIdLabels = page.locator('span:has-text("Sprint ID")');
+    const mobileCompletionLabels = page.locator('span:has-text("Completion")');
+    const mobileControlsLabels = page.locator('span:has-text("Controls")');
 
     // Assert that at least one of each mobile label is visible in the list
     await expect(mobileIdLabels.first()).toBeVisible();
@@ -72,10 +69,11 @@ test.describe('Sprint Ledger Responsive Layout E2E Tests', () => {
 
     // 5. Test Desktop Viewport Layout (width 1280px)
     await page.setViewportSize({ width: 1280, height: 800 });
+    await page.waitForTimeout(500); // Allow layout transition
 
     // On desktop, the mobile field labels should be hidden
-    await expect(mobileIdLabels.first()).toBeHidden();
-    await expect(mobileCompletionLabels.first()).toBeHidden();
-    await expect(mobileControlsLabels.first()).toBeHidden();
+    await expect(mobileIdLabels.first()).not.toBeVisible();
+    await expect(mobileCompletionLabels.first()).not.toBeVisible();
+    await expect(mobileControlsLabels.first()).not.toBeVisible();
   });
 });

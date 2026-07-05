@@ -1989,7 +1989,6 @@ describe("VirtualWorkerService", () => {
         hasAvailableCapacity: vi.fn().mockResolvedValue(true),
       } as any,
     });
-    vi.spyOn((virtualWorkerService as any).dockerService, "isAvailable").mockResolvedValue(true);
     return { ...deps, virtualWorkerService };
   }
 

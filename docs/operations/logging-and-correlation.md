@@ -7,9 +7,8 @@ This project now uses a shared structured logger and request correlation context
 - `src/shared/logging/logger.ts`
   - Dependency-free structured logger.
   - Supports levels: `debug`, `info`, `warn`, `error`.
-  - Classifies records by purpose so console output can be scanned by runtime concern. Current labels include `DASH`, `GEN`, `INT`, `INVK`, `LIFE`, `MCP`, `ORCH`, `HTTP`, `RUN`, `CONF`, `DATA`, `LIVE`, and `SEC`.
+  - Classifies records by purpose (`HTTP`, `INVK`, `ORCH`, `MCP`, `LIVE`, `CONF`, `RUNTIME`, etc.) so console output can be scanned by runtime concern.
   - Accepts metadata objects.
-  - Redacts sensitive metadata before serialization.
   - Output mode:
     - `NODE_ENV=production`: JSON log records.
     - other environments: colored human-readable single-line logs when stderr is a TTY.
@@ -26,7 +25,7 @@ This project now uses a shared structured logger and request correlation context
 - `src/shared/logging/correlation-id.ts`
   - Correlation ID context backed by `AsyncLocalStorage`.
   - Exposes helpers to generate/resolve/get IDs and run code in a correlation scope.
-  - Provides Express middleware that reads `x-correlation-id` or `x-request-id`, sets `x-correlation-id` on the response, and scopes downstream route logs to that ID.
+  - Provides Express middleware that reads/sets `x-correlation-id`.
 
 ## Dashboard API Correlation Flow
 
@@ -48,8 +47,6 @@ The Dashboard General settings page stores separate system runtime settings for 
 - `LOG_LEVEL` remains the environment fallback for console severity when a logger is created without an explicit console level.
 - `DEBUG_LOG_FILE_LEVEL` can provide a file severity fallback for standalone logger construction.
 
-Debug log file level is independent from console visibility. A record hidden from the console by `standard` mode can still be written to `.code-ux/debug.log` when its severity meets `runtime.debugLogFileLevel`.
-
 ## MCP Correlation Flow
 
 1. `src/server/code-ux-server.ts` passes a correlation wrapper to `registerMcpRequestHandlers`.
@@ -57,17 +54,6 @@ Debug log file level is independent from console visibility. A record hidden fro
    - correlation ID is read from request metadata/arguments when present,
    - otherwise generated.
 3. Dispatch runs inside `AsyncLocalStorage`, so logs from the dispatch path include the same correlation ID.
-
-## Provider Invocation Telemetry
-
-Provider observability has two persistence layers:
-
-- `provider_invocations` stores invocation status, timing, provider/model identity, token counts, execution mode, source, and other usage metadata.
-- `execution_invocation_messages` stores replayable prompt, assistant, reasoning, tool, transcript, and failure messages for the invocation ledger.
-
-CLI provider runners may read raw provider stdout/stderr or provider-specific transcript artifacts inside the runner so parsers can reconstruct usage accurately. Before telemetry crosses callback or persistence boundaries, output is sanitized through the shared invocation-output sanitizer and sensitive values are redacted. Provider invocation warnings and classified failure summaries should be sanitized before they are logged or persisted.
-
-Provider logs should use the `invocation` purpose where possible so they render with the `INVK` label in development output and remain easy to filter in JSON logs.
 
 ## Dependency Injection
 
@@ -77,7 +63,6 @@ Provider logs should use the `invocation` purpose where possible so they render 
 
 - For cross-system tracing, pass `x-correlation-id` on dashboard requests.
 - In production, parse log lines as JSON and index `correlationId` for request-level traceability.
-- Treat `.code-ux/debug.log` as sanitized operational telemetry, not as a secret store. Do not log provider keys, tokens, auth paths, raw prompts containing credentials, or customer identifiers.
 - The CLI entrypoint installs a bootstrap warning filter before server modules load, suppressing Node's SQLite experimental warning. Dotenv is loaded in quiet mode so startup output is owned by the structured logger.
 
 ### Dashboard Realtime Telemetry
