@@ -6,17 +6,22 @@ import type {
   GitTrackingStatus,
 } from "../../contracts/app-types.js";
 import type { ProjectManagementRepository } from "../../repositories/project-management-repository.js";
-import type { ProjectRuntimeRepository } from "../../repositories/project-runtime-repository.js";
 import type { ProjectExecutionSnapshotOptions } from "../../repositories/execution/project-execution-snapshot-query.js";
 import type { Logger } from "../../shared/logging/logger.js";
 
+type MaybePromise<T> = T | Promise<T>;
+
+interface ProjectLiveSnapshotRuntimeRepository {
+  getProjectStatus(projectId: string, explicitSprintId?: string | null): MaybePromise<DashboardStatus>;
+}
+
 export interface ProjectLiveSnapshotDeps {
   projectManagementRepository: ProjectManagementRepository;
-  projectRuntimeRepository: ProjectRuntimeRepository;
+  projectRuntimeRepository: ProjectLiveSnapshotRuntimeRepository;
   getProjectExecutionSnapshot: (
     projectId: string,
     options?: ProjectExecutionSnapshotOptions,
-  ) => ExecutionDashboardSnapshot;
+  ) => MaybePromise<ExecutionDashboardSnapshot>;
   getGitStatus: () => Promise<GitTrackingStatus>;
   logger: Logger;
 }
@@ -27,6 +32,19 @@ function monotonicNowMs(): number {
 
 function elapsedMs(startedAt: number): number {
   return Math.max(0, Math.round(monotonicNowMs() - startedAt));
+}
+
+interface TimedRead<T> {
+  value: T;
+  durationMs: number;
+}
+
+async function runTimedRead<T>(read: () => MaybePromise<T>): Promise<TimedRead<T>> {
+  const startedAt = monotonicNowMs();
+  return {
+    value: await Promise.resolve().then(read),
+    durationMs: elapsedMs(startedAt),
+  };
 }
 
 /**
@@ -96,26 +114,31 @@ export async function getProjectLiveSnapshot(
     : true;
   const projectMgmtMs = elapsedMs(tMgmt);
 
-  const tGit = monotonicNowMs();
-  const gitStatusPromise: Promise<{ result: GitTrackingStatus | null; error: string | null }> = includeGit
-    ? deps.getGitStatus()
-        .then((result) => ({ result, error: null }))
-        .catch((error) => ({
-          result: null,
-          error: error instanceof Error ? error.message : "Unable to load git/ci/pr tracking.",
-        }))
-    : Promise.resolve({ result: null, error: null });
+  const gitStatusPromise: Promise<TimedRead<{ result: GitTrackingStatus | null; error: string | null }>> = includeGit
+    ? runTimedRead(async () => {
+        try {
+          return { result: await deps.getGitStatus(), error: null };
+        } catch (error) {
+          return {
+            result: null,
+            error: error instanceof Error ? error.message : "Unable to load git/ci/pr tracking.",
+          };
+        }
+      })
+    : Promise.resolve({ value: { result: null, error: null }, durationMs: 0 });
+  const statusPromise = runTimedRead(() => deps.projectRuntimeRepository.getProjectStatus(projectId, selectedSprintId));
+  const executionPromise = runTimedRead(() => deps.getProjectExecutionSnapshot(projectId, { selectedSprintId }));
 
-  const tRuntime = monotonicNowMs();
-  const status = deps.projectRuntimeRepository.getProjectStatus(projectId, selectedSprintId);
-  const runtimeMs = elapsedMs(tRuntime);
-
-  const tExecution = monotonicNowMs();
-  const execution = deps.getProjectExecutionSnapshot(projectId, { selectedSprintId });
-  const executionMs = elapsedMs(tExecution);
-
-  const { result: gitStatus, error: gitStatusError } = await gitStatusPromise;
-  const gitMs = elapsedMs(tGit);
+  const [
+    { value: status, durationMs: runtimeMs },
+    { value: execution, durationMs: executionMs },
+    { value: gitStatusResult, durationMs: gitMs },
+  ] = await Promise.all([
+    statusPromise,
+    executionPromise,
+    gitStatusPromise,
+  ]);
+  const { result: gitStatus, error: gitStatusError } = gitStatusResult;
 
   if (!selectedSprintId && execution.sprintRuns.some(r => r.status === 'running' || r.status === 'queued')) {
     deps.logger.warn("selected_sprint_missing_while_active", {
