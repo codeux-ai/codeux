@@ -77,6 +77,13 @@ Dashboard HTTP requests handled by `syncRoute` or `asyncRoute` automatically map
 - `ValidationError` maps to `400 Bad Request`.
 - Request parser exceptions (errors with messages starting with "Invalid " or "Missing ") map to `400 Bad Request`.
 - `EntityNotFoundError` maps to `404 Not Found`.
+- Explicit `HttpRouteError` instances preserve their status and public message.
 - Unexpected or unhandled exceptions map to `500 Internal Server Error`, hiding internal details from the client response.
 
 When a `500 Internal Server Error` occurs (and headers haven't already been sent), the response will be safely formatted and sent, and the original error will then be delegated to Express error handlers via `next(error)` so that it can be logged and appropriately traced.
+
+The route status mapping is regression-tested for both synchronous and asynchronous dashboard route wrappers, including validation failures, parser-prefix failures, missing entities, explicit route errors, and unexpected exceptions. Run the focused check with:
+
+```bash
+pnpm run test:backend -- tests/backend/server/route-utils.test.ts tests/backend/server/dashboard-routes-error.test.ts
+```
