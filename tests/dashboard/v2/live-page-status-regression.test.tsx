@@ -59,10 +59,102 @@ vi.mock("../../../dashboard/src/v2/hooks/use-live-session-actions.js", () => ({
 }));
 
 describe("LiveSessionPage Status Regression", () => {
+  const baseRuntimeData = (overrides: Record<string, unknown> = {}) => ({
+    error: null,
+    gitStatus: null,
+    gitStatusError: null,
+    initialLoadComplete: true,
+    transportState: "connected",
+    isRecovering: false,
+    snapshotUpdatedAt: new Date().toISOString(),
+    refreshGitStatus: vi.fn(),
+    refreshRuntimeStatus: vi.fn(),
+    selectedSprintId: "sprint-1",
+    status: { subtasks: [], timestamp: new Date().toISOString(), project_id: "proj-1", sprint_id: "sprint-1" },
+    execution: {
+      projectId: "proj-1",
+      projectName: "Project 1",
+      sprintRuns: [],
+      taskDispatches: [],
+      connections: [],
+      primaryAssignedWorker: null,
+      overflowAssignedWorkers: [],
+      attentionItems: [],
+      recentEvents: [],
+      updatedAt: new Date().toISOString(),
+    },
+    stats: { total: 0 } as any,
+    tasksWithLiveActivities: [],
+    ...overrides,
+  } as any);
+
   beforeEach(() => {
     cleanup();
     vi.clearAllMocks();
     vi.mocked(useProjectData).mockReturnValue({ selectedProjectId: "proj-1" } as any);
+  });
+
+  it("exposes the first-load state as a busy live session region", () => {
+    vi.mocked(useDashboardRuntimeData).mockReturnValue(baseRuntimeData({
+      initialLoadComplete: false,
+      selectedSprintId: null,
+      status: { subtasks: [], timestamp: new Date().toISOString(), project_id: "proj-1", sprint_id: null },
+    }));
+
+    render(<LiveSessionPage />);
+
+    expect(screen.getByLabelText("Live Session")).toHaveAttribute("aria-busy", "true");
+    expect(screen.getByRole("status", { name: "Loading live session telemetry" })).toHaveTextContent("Loading live session telemetry.");
+  });
+
+  it("announces transport errors with alert semantics", () => {
+    vi.mocked(useDashboardRuntimeData).mockReturnValue(baseRuntimeData({
+      error: "Runtime stream failed.",
+      transportState: "disconnected",
+      isRecovering: true,
+    }));
+
+    render(<LiveSessionPage />);
+
+    const alert = screen.getByRole("alert");
+    expect(alert).toHaveTextContent("Connection Error");
+    expect(alert).toHaveTextContent("Runtime stream failed.");
+    expect(alert).toHaveAttribute("aria-busy", "true");
+  });
+
+  it("announces the empty live-session state after loading completes", () => {
+    vi.mocked(useDashboardRuntimeData).mockReturnValue(baseRuntimeData());
+
+    render(<LiveSessionPage />);
+
+    expect(screen.getByLabelText("Live Session")).not.toHaveAttribute("aria-busy");
+    expect(screen.getByRole("status", { name: /Waiting for Sprint Start/i })).toHaveTextContent("Launch a sprint to activate live task telemetry");
+  });
+
+  it("keeps recovered live task data in the task pipeline", () => {
+    vi.mocked(useDashboardRuntimeData).mockReturnValue(baseRuntimeData({
+      tasksWithLiveActivities: [
+        {
+          id: "T-100",
+          record_id: "task-100",
+          title: "Recovered implementation task",
+          prompt: "Implement the recovered task state.",
+          status: "RUNNING",
+          sprint_id: "sprint-1",
+          depends_on: [],
+          is_independent: true,
+        },
+      ],
+      execution: {
+        ...baseRuntimeData().execution,
+        sprintRuns: [createSprintRunFixture({ status: "running" })],
+      },
+    }));
+
+    render(<LiveSessionPage />);
+
+    expect(screen.getByText("Recovered implementation task")).toBeInTheDocument();
+    expect(screen.getAllByRole("status").some((status) => status.textContent?.includes("DAG view selected."))).toBe(true);
   });
 
   it("shows manual pause copy and intervention badge when manually paused", () => {

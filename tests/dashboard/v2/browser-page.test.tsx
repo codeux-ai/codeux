@@ -6,6 +6,7 @@ import { render, screen, fireEvent, act, cleanup, waitFor } from "@testing-libra
 import userEvent from "@testing-library/user-event";
 import * as matchers from "@testing-library/jest-dom/matchers";
 import { BrowserPage } from "../../../dashboard/src/v2/BrowserPage.js";
+import { useProjectData } from "../../../dashboard/src/v2/context/project-data.js";
 import { usePreviewSessions } from "../../../dashboard/src/v2/hooks/use-preview-sessions.js";
 import { fetchPreviewLogs, fetchPreviewScript, savePreviewScript } from "../../../dashboard/src/v2/lib/browser-api.js";
 
@@ -30,6 +31,21 @@ const mockRefreshSessions = vi.fn().mockResolvedValue(undefined);
 const { mockStartPreviewSession, mockRemovePreviewSession } = vi.hoisted(() => ({
   mockStartPreviewSession: vi.fn().mockResolvedValue({ id: "sess-1" }),
   mockRemovePreviewSession: vi.fn().mockResolvedValue(undefined),
+}));
+const effectiveSettingsMock = vi.hoisted(() => ({
+  value: {
+    data: {
+      settings: {
+        sprintPreview: {
+          enabled: true,
+          showInAppBrowser: true,
+        },
+      },
+    },
+    loading: false,
+    error: null,
+    refresh: vi.fn(),
+  },
 }));
 
 const buildDefaultPreviewSessionsResult = () => ({
@@ -78,19 +94,7 @@ vi.mock("../../../dashboard/src/v2/hooks/use-preview-sessions.js", () => ({
 }));
 
 vi.mock("../../../dashboard/src/v2/hooks/use-project-effective-settings.js", () => ({
-  useProjectEffectiveSettings: vi.fn(() => ({
-    data: {
-      settings: {
-        sprintPreview: {
-          enabled: true,
-          showInAppBrowser: true,
-        },
-      },
-    },
-    loading: false,
-    error: null,
-    refresh: vi.fn(),
-  })),
+  useProjectEffectiveSettings: vi.fn(() => effectiveSettingsMock.value),
 }));
 
 vi.mock("../../../dashboard/src/v2/components/browser/PreviewSessionSlider.js", () => ({
@@ -230,6 +234,46 @@ afterEach(() => {
 });
 
 describe("BrowserPage", () => {
+  afterEach(() => {
+    vi.mocked(useProjectData).mockReturnValue({
+      selectedProject: { id: "p1", name: "Project 1" },
+    } as any);
+    effectiveSettingsMock.value = {
+      data: {
+        settings: {
+          sprintPreview: {
+            enabled: true,
+            showInAppBrowser: true,
+          },
+        },
+      },
+      loading: false,
+      error: null,
+      refresh: vi.fn(),
+    };
+  });
+
+  it("announces the no-project empty state as a status", () => {
+    vi.mocked(useProjectData).mockReturnValue({ selectedProject: null } as any);
+
+    render(<BrowserPage />);
+
+    expect(screen.getByRole("status")).toHaveTextContent("Select a project first.");
+  });
+
+  it("marks preview session refresh as a busy page status", () => {
+    vi.mocked(usePreviewSessions).mockImplementation(() => ({
+      ...buildDefaultPreviewSessionsResult(),
+      loading: true,
+    }));
+
+    render(<BrowserPage />);
+
+    expect(screen.getByTestId("browser-page-root")).toHaveAttribute("aria-busy", "true");
+    expect(screen.getAllByRole("status").some((status) => (
+      status.getAttribute("aria-busy") === "true" && status.textContent?.includes("Refreshing preview sessions.")
+    ))).toBe(true);
+  });
 
   it("shows loading state overlay when navigation is disabled", async () => {
     vi.mocked(usePreviewSessions).mockImplementation(() => ({
@@ -263,6 +307,7 @@ describe("BrowserPage", () => {
     render(<BrowserPage />);
 
     expect(screen.getByText("Container starting...")).toBeInTheDocument();
+    expect(screen.getAllByRole("status").some((status) => status.textContent?.includes("Preview container is starting."))).toBe(true);
   });
 
   it("shows loading state overlay when session is stopped", async () => {
@@ -297,6 +342,28 @@ describe("BrowserPage", () => {
     render(<BrowserPage />);
 
     expect(screen.getByText("Waiting for connection...")).toBeInTheDocument();
+    expect(screen.getAllByRole("status").some((status) => status.textContent?.includes("Preview container is stopped."))).toBe(true);
+  });
+
+  it("announces disabled browser preview settings as status states", () => {
+    effectiveSettingsMock.value = {
+      data: {
+        settings: {
+          sprintPreview: {
+            enabled: false,
+            showInAppBrowser: true,
+          },
+        },
+      },
+      loading: false,
+      error: null,
+      refresh: vi.fn(),
+    };
+
+    render(<BrowserPage />);
+
+    const disabledMessage = screen.getByText("Preview runtime is disabled.");
+    expect(disabledMessage.closest('[role="status"]')).toBeInTheDocument();
   });
 
   afterEach(() => {
