@@ -123,6 +123,10 @@ pnpm run typecheck:dashboard
 - Backend-only behavior changes: run the narrowest relevant backend tests first, then `pnpm run test:backend`, `pnpm run lint`, and `pnpm run build` when contracts, repositories, scripts, or app startup paths changed.
 - Dashboard-only behavior changes: run the narrowest relevant dashboard tests first, then `pnpm run test:dashboard`, `pnpm run typecheck:dashboard`, and `pnpm run build` for route-level, resource, accessibility, or user-facing changes.
 - Documentation-only changes: run commands requested by the task. When the docs describe scripts, CI, contracts, or generated types, also run `pnpm run lint` so markdown-adjacent package and TypeScript references stay consistent.
+- Cross-platform repository cleanup regressions: use `tests/backend/repositories/sqlite-cleanup-test-helper.ts` for file-backed SQLite tests that need temporary homes. The helper creates unique temp roots, closes tracked Vitest SQLite adapters before teardown, asserts WAL/SHM sidecars are gone after close, and removes temp roots through the test harness where transient Windows temp lock errors are tolerated. Production SQLite open/close paths should continue to throw real errors.
+```bash
+pnpm run test:backend -- tests/backend/repositories/sqlite-connection.test.ts tests/backend/repositories/app-db-storage.test.ts
+```
 
 ## Cross-Platform Test Expectations
 
