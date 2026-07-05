@@ -183,6 +183,7 @@ export const SprintsPage: FunctionComponent = () => {
     clearFeedback: clearImportedTaskFeedback,
     clearError: clearImportedTaskFeedbackError,
   } = useActionFeedback();
+  const previousSelectedProjectIdRef = useRef<string | null>(null);
   const [rowMenu, setRowMenu] = useState<{
     sprintId: string;
     top: number;
@@ -313,6 +314,29 @@ export const SprintsPage: FunctionComponent = () => {
   useEffect(() => {
     storeSprintGalleryVisibility(showSprintGallery);
   }, [showSprintGallery]);
+
+  useEffect(() => {
+    const currentProjectId = selectedProject?.id || null;
+    const previousProjectId = previousSelectedProjectIdRef.current;
+    previousSelectedProjectIdRef.current = currentProjectId;
+
+    if (previousProjectId === null || previousProjectId === currentProjectId) {
+      return;
+    }
+
+    setShowCreateComposer(false);
+    setEditingSprint(null);
+    setShowQuicksprint(false);
+    setRowMenu(null);
+    setLinkedIssues([]);
+    clearImportedTaskDrafts();
+  }, [
+    clearImportedTaskDrafts,
+    selectedProject?.id,
+    setEditingSprint,
+    setShowCreateComposer,
+    setShowQuicksprint,
+  ]);
 
   // A `?sprintKey=` deep-link (from global search / invocation feed links) seeds
   // the ledger search once so you land on that sprint. We read it straight from

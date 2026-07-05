@@ -139,7 +139,7 @@ export function useQuicksprintExecutionState({
     [onExecute, selectedTemplate, executingMode, taskCount, noTaskLimit, additionalPrompt, routeOverride, modelOverride, onClose],
   );
 
-  const handleNewQuicksprint = useCallback(() => {
+  const detachCurrentRequest = useCallback(() => {
     if (activeRequestRef.current) {
       activeRequestRef.current.detached = true;
     }
@@ -148,6 +148,10 @@ export function useQuicksprintExecutionState({
     setExecutingMode(null);
     setIsOverlayDismissed(true);
   }, []);
+
+  const handleNewQuicksprint = useCallback(() => {
+    detachCurrentRequest();
+  }, [detachCurrentRequest]);
 
   const handleCancelExecute = useCallback(() => {
     if (abortControllerRef.current) {
@@ -164,7 +168,7 @@ export function useQuicksprintExecutionState({
     executingMode, setExecutingMode,
     elapsedMs, setElapsedMs,
     isOverlayDismissed, setIsOverlayDismissed,
-    handleExecute, handleCancelExecute, handleNewQuicksprint,
+    handleExecute, handleCancelExecute, handleNewQuicksprint, detachCurrentRequest,
     routeOptions, modelOptions, combinedPrompt,
     abortControllerRef, activeRequestRef, requestCounterRef
   };

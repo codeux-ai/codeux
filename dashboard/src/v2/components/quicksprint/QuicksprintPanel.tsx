@@ -234,9 +234,9 @@ export const QuicksprintPanel: FunctionComponent<QuicksprintPanelProps> = ({
 
   useEffect(() => {
     return () => {
-      executionState.handleCancelExecute();
+      executionState.detachCurrentRequest();
     };
-  }, [executionState.handleCancelExecute]);
+  }, [executionState.detachCurrentRequest]);
 
   /* ── Animations ─────────────────────────────────────────────────── */
   useEffect(() => {
