@@ -88,7 +88,7 @@ export const HighlightTile: FunctionComponent<{
       <Icon className="h-3.5 w-3.5" strokeWidth={2.2} />
       {label}
     </div>
-    <div className={`mt-3 break-words text-lg font-black ${TEXT_VALUE_CLASS}`}>
+    <div className={`mt-3 break-words text-base font-semibold ${TEXT_VALUE_CLASS}`}>
       {highlight ? highlight.model.label : "—"}
     </div>
     <div className={`mt-1 text-xs font-medium ${TEXT_DETAIL_CLASS}`}>
@@ -105,7 +105,7 @@ export const ModelMetric: FunctionComponent<{
 }> = ({ label, value, detail }) => (
   <div className={`${SUBPANEL_CLASS} p-4`}>
     <div className={`text-[10px] font-bold uppercase tracking-[0.16em] ${TEXT_LABEL_CLASS}`}>{label}</div>
-    <div className={`mt-2 text-lg font-black ${value === "—" ? TEXT_DETAIL_CLASS : TEXT_VALUE_CLASS}`}>{value}</div>
+    <div className={`mt-2 text-base font-semibold ${value === "—" ? TEXT_DETAIL_CLASS : TEXT_VALUE_CLASS}`}>{value}</div>
     {detail ? <div className={`mt-1 text-[10px] font-bold uppercase tracking-[0.14em] ${TEXT_LABEL_CLASS}`}>{detail}</div> : null}
   </div>
 );
@@ -241,7 +241,7 @@ export const ModelCard: FunctionComponent<{
       <div className="mt-5 grid grid-cols-1 gap-3 lg:grid-cols-[0.85fr_1.15fr]">
         <div className={`${SUBPANEL_CLASS} p-4`}>
           <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--stats-label-color)]">Outcome Mix</div>
-          <div className="mt-2 text-sm font-black text-[color:var(--stats-value-color)]">{statusSummary}</div>
+          <div className="mt-2 text-sm font-semibold text-[color:var(--stats-value-color)]">{statusSummary}</div>
           <div className="mt-1 text-[10px] font-bold uppercase tracking-[0.14em] text-[color:var(--stats-label-color)]">
             Last active {formatDateTime(model.lastActivityAt)}
           </div>
@@ -306,7 +306,7 @@ export const ModelsStudio: FunctionComponent<{
           <div className={`mx-auto flex h-12 w-12 items-center justify-center rounded-2xl border border-[color:var(--stats-card-border)] bg-[color:var(--stats-surface-chip)] ${TEXT_LABEL_CLASS}`}>
             <Cpu className="h-5 w-5" strokeWidth={2.2} />
           </div>
-          <div className="mt-4 text-lg font-black text-[color:var(--stats-value-color)]">No model telemetry yet</div>
+          <div className="mt-4 text-base font-semibold text-[color:var(--stats-value-color)]">No model telemetry yet</div>
           <div className="mx-auto mt-2 max-w-xl text-sm leading-relaxed text-[color:var(--stats-detail-color)]">
             This window has no model entries, so volume, latency, cache, and reasoning comparisons will appear after provider invocations are recorded.
           </div>
@@ -371,7 +371,7 @@ export const ModelsStudio: FunctionComponent<{
                 <Activity className="h-3.5 w-3.5 text-[color:var(--stats-signal-text)]" strokeWidth={2.2} />
                 Window Volume
               </div>
-              <div className="mt-4 text-3xl font-black text-[color:var(--stats-value-color)]">{formatTokens(totalTokens)}</div>
+              <div className="mt-4 text-2xl font-semibold text-[color:var(--stats-value-color)]">{formatTokens(totalTokens)}</div>
               <div className="mt-1 text-xs font-bold uppercase tracking-[0.14em] text-[color:var(--stats-label-color)]">tokens ranked by model volume</div>
               <div className="mt-5 grid grid-cols-2 gap-3">
                 <ModelMetric label="Calls" value={totalCalls.toLocaleString()} detail={totalCalls < LOW_SAMPLE_THRESHOLD ? "sparse sample" : "invocations"} />

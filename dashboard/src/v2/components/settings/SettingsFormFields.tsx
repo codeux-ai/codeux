@@ -441,7 +441,7 @@ export const Card: FunctionComponent<{ title: string; description: string; badge
   <section className="rounded-[2rem] border border-[color:var(--border-hairline)] bg-[var(--surface-glass)] p-6 shadow-[var(--elevation-base)] backdrop-blur-2xl">
     <div className="mb-5 flex flex-wrap items-start justify-between gap-3 border-b border-[color:var(--border-hairline)] pb-4">
       <div>
-        <h3 className="font-display text-2xl font-black tracking-tight text-slate-900 dark:text-white">{title}</h3>
+        <h3 className="font-display text-xl font-semibold tracking-tight text-slate-900 dark:text-white">{title}</h3>
         <p className="mt-1 max-w-2xl text-sm font-medium text-slate-500 dark:text-slate-400">{description}</p>
       </div>
       {badge ? (

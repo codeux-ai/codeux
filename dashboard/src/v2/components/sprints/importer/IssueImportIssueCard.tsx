@@ -72,7 +72,7 @@ export const IssueImportIssueCard: FunctionComponent<IssueImportIssueCardProps> 
             )}
           </div>
 
-          <div className="mt-1 text-sm font-black leading-snug text-slate-900 dark:text-white">
+          <div className="mt-1 text-sm font-semibold leading-snug text-slate-900 dark:text-white">
             {title}
           </div>
 

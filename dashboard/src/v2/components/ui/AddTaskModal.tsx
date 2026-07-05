@@ -205,7 +205,7 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
         <div className="flex-1 bg-white/98 dark:bg-void-800/98 flex flex-col min-w-0">
           <div className="flex items-start justify-between shrink-0 p-5 sm:p-7 lg:px-8 lg:pt-8 lg:pb-6 border-b border-black/[0.04] dark:border-white/[0.04]">
             <div>
-              <h2 id="add-task-modal-title" className="text-[2rem] font-black text-slate-900 dark:text-white tracking-tight font-display leading-none">
+              <h2 id="add-task-modal-title" className="text-2xl font-semibold text-slate-900 dark:text-white tracking-tight font-display leading-none">
                 {initialTask ? "Edit Task." : "Create Task."}
               </h2>
               <p className="text-xs font-medium text-slate-400 mt-2 tracking-wide">

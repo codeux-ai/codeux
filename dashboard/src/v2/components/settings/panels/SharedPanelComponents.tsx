@@ -139,7 +139,7 @@ export const Card: FunctionComponent<{ title: string; description: string; badge
             : "border-[color:var(--border-hairline)]"
       }`}>
         <div>
-          <h3 className="font-display text-2xl font-black tracking-tight text-slate-900 dark:text-white">{title}</h3>
+          <h3 className="font-display text-xl font-semibold tracking-tight text-slate-900 dark:text-white">{title}</h3>
           <p className="mt-1 max-w-2xl text-sm font-medium text-slate-500 dark:text-slate-400">{description}</p>
         </div>
         {badge ? (

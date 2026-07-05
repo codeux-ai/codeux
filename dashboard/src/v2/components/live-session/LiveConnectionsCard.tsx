@@ -194,7 +194,7 @@ export const LiveConnectionsCard: FunctionComponent<{
                 <span className="text-[8px] font-bold uppercase tracking-[0.14em] text-slate-400">{tile.label}</span>
                 <span className="text-slate-400">{tile.icon}</span>
               </div>
-              <div className={`mt-1 text-lg font-black leading-none ${tile.tone}`}>{tile.value}</div>
+              <div className={`mt-1 text-base font-semibold leading-none ${tile.tone}`}>{tile.value}</div>
             </div>
           ))}
         </div>

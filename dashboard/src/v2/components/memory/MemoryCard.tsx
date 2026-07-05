@@ -120,7 +120,7 @@ export const MemoryCard: FunctionComponent<MemoryCardProps> = memo(({
                             {strengthPercent}%
                         </span>
                         {(isSelected.value || isBatchSelected.value) && (
-                            <span className={`rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.12em] ${isSelected.value ? "bg-signal-500 text-void-950" : "bg-signal-500/[0.12] text-signal-600 dark:text-signal-300"}`}>
+                            <span className={`rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.12em] ${isSelected.value ? "bg-signal-500 text-white dark:text-void-950" : "bg-signal-500/[0.12] text-signal-600 dark:text-signal-300"}`}>
                                 {isSelected.value ? "Open" : "Selected"}
                             </span>
                         )}
@@ -160,7 +160,7 @@ export const MemoryCard: FunctionComponent<MemoryCardProps> = memo(({
                         }}
                         className={`inline-flex h-7 min-w-0 items-center gap-1.5 rounded-md border px-2 text-[11px] font-semibold transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-900
                             ${isBatchSelected.value
-                                ? "border-signal-500 bg-signal-500 text-void-950 shadow-[0_4px_14px_rgba(0,224,160,0.18)]"
+                                ? "border-signal-500 bg-signal-500 text-white dark:text-void-950 shadow-[0_4px_14px_rgba(0,224,160,0.18)]"
                                 : "border-black/[0.06] bg-black/[0.03] text-slate-500 hover:border-signal-500/45 hover:bg-signal-500/[0.08] hover:text-signal-600 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-300 dark:hover:text-signal-400"
                             }`}
                     >

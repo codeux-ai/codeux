@@ -35,7 +35,7 @@ export const OnboardingProvidersStep: FunctionComponent<OnboardingProvidersStepP
         <div className="flex items-start gap-3">
           <KeyRound className="mt-0.5 h-5 w-5 shrink-0 text-signal-600 dark:text-signal-300" />
           <div>
-            <h3 className="text-sm font-black text-slate-900 dark:text-white">Provider Tools</h3>
+            <h3 className="text-sm font-semibold text-slate-900 dark:text-white">Provider Tools</h3>
             <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
               Select which AI provider CLIs you want to use. We have detected credentials on your system for some of these tools.
               You can use local auth-copy, API keys, or both. The next step lets you add multiple named instances for each provider.

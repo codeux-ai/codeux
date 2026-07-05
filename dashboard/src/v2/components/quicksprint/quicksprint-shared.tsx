@@ -120,7 +120,7 @@ export const TemplateCard: FunctionComponent<{
           <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--stats-label-color)]">
             {sourceDetail}
           </div>
-          <h3 className="mt-2 line-clamp-3 min-w-0 text-[1.2rem] font-black leading-[1.08] tracking-tight text-[color:var(--stats-value-color)]">
+          <h3 className="mt-2 line-clamp-3 min-w-0 text-base font-semibold leading-[1.08] tracking-tight text-[color:var(--stats-value-color)]">
             {template.name}
           </h3>
         </div>

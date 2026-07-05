@@ -303,7 +303,7 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
       </TableCell>
       <TableCell className={`min-w-0 max-w-full lg:w-[220px] lg:min-w-[220px] ${desktopCellTone}`} mobileLabel="Sprint">
         <div className="flex flex-wrap items-center gap-2">
-          <div className={`font-display text-lg font-black leading-tight break-words ${isCompleted ? "text-slate-700 dark:text-slate-300" : "text-[var(--text-primary)]"}`}>{sprint.name}</div>
+          <div className={`font-display text-base font-semibold leading-tight break-words ${isCompleted ? "text-slate-700 dark:text-slate-300" : "text-[var(--text-primary)]"}`}>{sprint.name}</div>
           {isSelected ? (
             <span className="inline-flex items-center rounded-full border border-signal-500/25 bg-signal-500/10 px-2.5 py-1 text-[10px] font-bold uppercase text-signal-700 dark:text-signal-300">
               Selected
@@ -379,7 +379,7 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
             <ListChecks className="h-4 w-4" strokeWidth={2.2} />
           </div>
           <div>
-            <div className="font-mono text-lg font-bold text-[var(--text-primary)]">{sprint.tasksCount}</div>
+            <div className="font-mono text-base font-semibold text-[var(--text-primary)]">{sprint.tasksCount}</div>
             <div className="text-[11px] text-slate-400">planned tasks</div>
           </div>
         </div>

@@ -25,7 +25,7 @@ export const UsageSeriesSidebar: FunctionComponent<{
               <span className="min-w-0 break-words text-[10px] font-bold uppercase leading-snug tracking-[0.14em] text-[var(--stats-label-color)]">{s.label}</span>
             </div>
             <div className="mt-3 grid grid-cols-[minmax(0,1fr)_auto] items-end gap-3">
-              <div className="min-w-0 break-words text-lg font-black leading-tight text-[var(--stats-value-color)]">{s.formatter(currentValue)}</div>
+              <div className="min-w-0 break-words text-base font-semibold leading-tight text-[var(--stats-value-color)]">{s.formatter(currentValue)}</div>
               <div className="text-right text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--stats-detail-color)] opacity-80">{s.signalLabel || 'Metric'}</div>
             </div>
           </div>

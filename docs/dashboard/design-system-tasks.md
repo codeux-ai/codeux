@@ -22,7 +22,7 @@ The Tasks page and Kanban board should feel like a 'Refined Production Board'. I
 *   **Unified Status System:** All task-related metadata—priority, dependencies, and execution state—must share a consistent visual language.
 *   **Dependencies:**
     *   Completed: Green accent (`bg-status-green/[0.08] text-status-green`).
-    *   In Progress/Ready: Signal (cyan) accent (`bg-signal-500/[0.08] text-signal-500`).
+    *   In Progress/Ready: theme-specific signal accent (`bg-signal-500/[0.08] text-signal-500`).
     *   Blocked/Pending: Muted slate (`bg-slate-400/[0.08] text-slate-500`).
     *   Unknown dependency records must render a visible `Unknown` label with dashed neutral styling, not only a missing color state.
     *   QA-failed dependencies must use error semantics and visible `QA failed` copy, while pending dependencies use a visible `Blocked` label and warning semantics.

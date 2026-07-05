@@ -725,7 +725,7 @@ export const OnboardingExperience: FunctionComponent = () => {
               <Compass className="h-5 w-5 text-signal-300" />
             </div>
             <div data-sidebar-copy className="mt-8 text-[10px] font-bold uppercase tracking-[0.24em] text-signal-300">Code UX Setup</div>
-            <h2 data-sidebar-copy id="onboarding-title" className="mt-3 font-display text-5xl font-black leading-[0.9] tracking-tight text-white">
+            <h2 data-sidebar-copy id="onboarding-title" className="mt-3 font-display text-4xl font-semibold leading-[0.95] tracking-tight text-white">
               Make the runtime ready.
             </h2>
             <div data-sidebar-copy className="mt-5 text-sm font-medium leading-relaxed text-slate-300">
@@ -734,7 +734,7 @@ export const OnboardingExperience: FunctionComponent = () => {
             <div data-sidebar-copy className="mt-6 grid grid-cols-2 gap-2">
               <div className="rounded-2xl border border-white/10 bg-white/[0.06] p-3">
                 <div className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400">Providers</div>
-                <div className="mt-1 text-2xl font-black text-white">{selectedProviders.length}</div>
+                <div className="mt-1 text-xl font-semibold text-white">{selectedProviders.length}</div>
               </div>
               <div className="rounded-2xl border border-white/10 bg-white/[0.06] p-3">
                 <div className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400">Cluster</div>
@@ -836,7 +836,7 @@ export const OnboardingExperience: FunctionComponent = () => {
                   : activeStep >= 3 && activeStep <= 6 ? `Step 4 of 6 (${activeStep - 2}/4)`
                   : `Step ${activeStep - 2} of 6`}
               </div>
-              <h3 className="mt-1 font-display text-2xl font-black tracking-tight text-slate-900 dark:text-white">{active.label}</h3>
+              <h3 className="mt-1 font-display text-xl font-semibold tracking-tight text-slate-900 dark:text-white">{active.label}</h3>
               <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-slate-200 dark:bg-white/[0.08]" role="progressbar" aria-label={stepProgressLabel} aria-valuemin={1} aria-valuemax={steps.length} aria-valuenow={activeStep + 1}>
                 <div
                   className="h-full rounded-full bg-signal-500 transition-[width] motion-reduce:transition-none"
@@ -889,7 +889,7 @@ export const OnboardingExperience: FunctionComponent = () => {
                       {clusterReady ? <Check className="h-6 w-6" /> : <Info className="h-6 w-6" />}
                     </div>
                     <div aria-live="polite">
-                      <div className="text-lg font-black text-slate-900 dark:text-white">{readiness.cluster.label}</div>
+                      <div className="text-base font-semibold text-slate-900 dark:text-white">{readiness.cluster.label}</div>
                       <div className="mt-1 text-sm leading-relaxed text-slate-500 dark:text-slate-400">{readiness.cluster.detail}</div>
                     </div>
                   </div>
@@ -965,7 +965,7 @@ export const OnboardingExperience: FunctionComponent = () => {
                       <Sparkles className="h-3.5 w-3.5" strokeWidth={2.4} />
                       Agentic runtime
                     </div>
-                    <h4 className="mt-4 font-display text-3xl font-black leading-none tracking-tight text-slate-950 dark:text-white">Welcome to Code UX.</h4>
+                    <h4 className="mt-4 font-display text-2xl font-semibold leading-none tracking-tight text-slate-950 dark:text-white">Welcome to Code UX.</h4>
                     <p className="mt-3 text-sm font-medium leading-relaxed text-slate-600 dark:text-slate-300">
                       Code UX is an advanced containerized agentic workspace for turning projects into guided sprints, executable tasks, live previews, and measurable delivery. It coordinates provider CLIs inside isolated Docker runtimes, keeps credentials inside the intended tools, and gives you one polished control surface for agents, memory, knowledge base, browser sessions, and automation.
                     </p>
@@ -1015,7 +1015,7 @@ export const OnboardingExperience: FunctionComponent = () => {
                     <div className="flex flex-wrap items-center justify-between gap-3">
                       <div className="flex items-center gap-2">
                         <ShieldCheck className="h-4 w-4 text-signal-600 dark:text-signal-300" strokeWidth={2.4} />
-                        <div className="text-sm font-black uppercase tracking-[0.16em] text-slate-700 dark:text-slate-200">License</div>
+                        <div className="text-sm font-semibold uppercase tracking-[0.16em] text-slate-700 dark:text-slate-200">License</div>
                       </div>
                       <a
                         href={getSafeUrl(`${CODEUX_REPO_URL}/blob/main/LICENSE`)}
@@ -1328,7 +1328,7 @@ export const OnboardingExperience: FunctionComponent = () => {
                     <h4 className="text-xs font-black uppercase tracking-[0.2em] text-signal-400">Core Display</h4>
 
                     <div className="rounded-3xl border border-black/[0.06] bg-white/75 p-5 shadow-[0_16px_42px_rgba(15,23,42,0.04)] dark:border-white/[0.06] dark:bg-white/[0.04]">
-                      <div className="text-sm font-black text-slate-900 dark:text-white">Theme</div>
+                      <div className="text-sm font-semibold text-slate-900 dark:text-white">Theme</div>
                       <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">Select light, dark, or sync with your system.</div>
                       <div className="mt-4">
                         <PillChoiceGroup
@@ -1344,7 +1344,7 @@ export const OnboardingExperience: FunctionComponent = () => {
                     </div>
 
                     <div className="rounded-3xl border border-black/[0.06] bg-white/75 p-5 shadow-[0_16px_42px_rgba(15,23,42,0.04)] dark:border-white/[0.06] dark:bg-white/[0.04]">
-                      <div className="text-sm font-black text-slate-900 dark:text-white">Navigation Mode</div>
+                      <div className="text-sm font-semibold text-slate-900 dark:text-white">Navigation Mode</div>
                       <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">Choose between floating dock or sidebar.</div>
                       <div className="mt-4">
                         <PillChoiceGroup
@@ -1359,7 +1359,7 @@ export const OnboardingExperience: FunctionComponent = () => {
                     </div>
 
                     <div className="rounded-3xl border border-black/[0.06] bg-white/75 p-5 shadow-[0_16px_42px_rgba(15,23,42,0.04)] dark:border-white/[0.06] dark:bg-white/[0.04]">
-                      <div className="text-sm font-black text-slate-900 dark:text-white">Reduced Motion</div>
+                      <div className="text-sm font-semibold text-slate-900 dark:text-white">Reduced Motion</div>
                       <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">Limit interface animations.</div>
                       <div className="mt-4">
                         <PillChoiceGroup
@@ -1376,7 +1376,7 @@ export const OnboardingExperience: FunctionComponent = () => {
 
                     {typeof window !== "undefined" && Boolean(window.codeUxDesktop?.setZoom) && (
                       <div className="rounded-3xl border border-black/[0.06] bg-white/75 p-5 shadow-[0_16px_42px_rgba(15,23,42,0.04)] dark:border-white/[0.06] dark:bg-white/[0.04]">
-                        <div className="text-sm font-black text-slate-900 dark:text-white">Zoom Level</div>
+                        <div className="text-sm font-semibold text-slate-900 dark:text-white">Zoom Level</div>
                         <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">Scale the desktop interface size.</div>
                         <div className="mt-4">
                           <SelectInput
@@ -1403,7 +1403,7 @@ export const OnboardingExperience: FunctionComponent = () => {
                     <h4 className="text-xs font-black uppercase tracking-[0.2em] text-signal-400">Background & Styling</h4>
 
                     <div className="rounded-3xl border border-black/[0.06] bg-white/75 p-5 shadow-[0_16px_42px_rgba(15,23,42,0.04)] dark:border-white/[0.06] dark:bg-white/[0.04]">
-                      <div className="text-sm font-black text-slate-900 dark:text-white">Background Mode</div>
+                      <div className="text-sm font-semibold text-slate-900 dark:text-white">Background Mode</div>
                       <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">Select animated textures or a flat color.</div>
                       <div className="mt-4">
                         <PillChoiceGroup
@@ -1419,7 +1419,7 @@ export const OnboardingExperience: FunctionComponent = () => {
 
                     {(settings.defaults.appearance.backgroundMode || "ANIMATED") === "STATIC" && (
                       <div className="rounded-3xl border border-black/[0.06] bg-white/75 p-5 shadow-[0_16px_42px_rgba(15,23,42,0.04)] dark:border-white/[0.06] dark:bg-white/[0.04]">
-                        <div className="text-sm font-black text-slate-900 dark:text-white">Static Color</div>
+                        <div className="text-sm font-semibold text-slate-900 dark:text-white">Static Color</div>
                         <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">Choose a solid solid back color.</div>
                         <div className="mt-4 flex items-center gap-3">
                           <input
@@ -1499,7 +1499,7 @@ export const OnboardingExperience: FunctionComponent = () => {
                             <div className="flex min-w-0 items-center gap-3">
                               <ProviderBrandIcon id={provider.provider} />
                               <div className="min-w-0">
-                                <div className="truncate text-sm font-black text-slate-900 dark:text-white">{provider.name}</div>
+                                <div className="truncate text-sm font-semibold text-slate-900 dark:text-white">{provider.name}</div>
                                 <div className="mt-0.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">{getProviderTypeLabel(provider.provider)}</div>
                               </div>
                             </div>
@@ -1594,7 +1594,7 @@ const Choice: FunctionComponent<{
   onChange: (value: string) => void;
 }> = ({ title, value, options, onChange }) => (
   <div data-onboarding-card className="rounded-3xl border border-black/[0.06] bg-white/75 p-5 shadow-[0_16px_42px_rgba(15,23,42,0.04)] dark:border-white/[0.06] dark:bg-white/[0.04]">
-    <div className="text-sm font-black text-slate-900 dark:text-white">{title}</div>
+    <div className="text-sm font-semibold text-slate-900 dark:text-white">{title}</div>
     <div className="mt-4 flex flex-wrap gap-2">
       {options.map(([optionValue, label]) => (
         <button
@@ -1619,7 +1619,7 @@ const ToggleRow: FunctionComponent<{
 }> = ({ title, description, checked, onChange }) => (
   <div data-onboarding-card className="flex items-center justify-between gap-4 rounded-3xl border border-black/[0.06] bg-white/75 p-5 shadow-[0_16px_42px_rgba(15,23,42,0.04)] dark:border-white/[0.06] dark:bg-white/[0.04]">
     <div>
-      <div className="text-sm font-black text-slate-900 dark:text-white">{title}</div>
+      <div className="text-sm font-semibold text-slate-900 dark:text-white">{title}</div>
       <div className="mt-1 text-xs leading-relaxed text-slate-500 dark:text-slate-400">{description}</div>
     </div>
     <button

@@ -35,7 +35,7 @@ export const UsageGraphHeader: FunctionComponent<{
           <Activity className="h-3.5 w-3.5 text-[color:var(--stats-signal-text)]" strokeWidth={2.2} />
           Usage Graph
           </div>
-          <div className="mt-3 text-2xl font-black leading-tight text-[var(--stats-value-color)] md:text-3xl">
+          <div className="mt-3 text-xl font-semibold leading-tight text-[var(--stats-value-color)] md:text-3xl">
             {title}
           </div>
           <div className="mt-2 max-w-3xl text-sm leading-relaxed text-[var(--stats-detail-color)]">

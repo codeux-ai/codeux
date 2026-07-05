@@ -17,7 +17,7 @@ export const OnboardingIntroductionStep: FunctionComponent<OnboardingIntroductio
             <span>Local AI Orchestration</span>
           </div>
 
-          <h4 className="mt-4 font-display text-3xl font-black leading-none tracking-tight text-slate-950 dark:text-white">Welcome to Code UX.</h4>
+          <h4 className="mt-4 font-display text-2xl font-semibold leading-none tracking-tight text-slate-950 dark:text-white">Welcome to Code UX.</h4>
           <p className="mt-3 text-sm font-medium leading-relaxed text-slate-600 dark:text-slate-300">
             Code UX is an advanced containerized agentic workspace for turning projects into guided sprints, executable tasks, live previews, and measurable delivery. It coordinates provider CLIs inside isolated Docker runtimes, keeps credentials inside the intended tools, and gives you one polished control surface for agents, memory, knowledge base, browser sessions, and automation.
           </p>
@@ -69,7 +69,7 @@ export const OnboardingIntroductionStep: FunctionComponent<OnboardingIntroductio
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-2">
               <ShieldCheck className="h-4 w-4 text-signal-600 dark:text-signal-300" strokeWidth={2.4} />
-              <div className="text-sm font-black uppercase tracking-[0.16em] text-slate-700 dark:text-slate-200">License</div>
+              <div className="text-sm font-semibold uppercase tracking-[0.16em] text-slate-700 dark:text-slate-200">License</div>
             </div>
             <a
               href={getSafeUrl(`${CODEUX_REPO_URL}/blob/main/LICENSE`)}

@@ -35,7 +35,7 @@ export const IssueImportSummaryRail: FunctionComponent<IssueImportSummaryRailPro
         <Filter className="h-3.5 w-3.5" strokeWidth={2.2} aria-hidden="true" />
         {eyebrow}
       </div>
-      <h2 className="mt-6 font-display text-4xl font-black leading-[0.95] tracking-tight">
+      <h2 className="mt-6 font-display text-2xl font-semibold leading-[0.95] tracking-tight">
         {title}
       </h2>
       <p className="mt-4 text-sm leading-relaxed text-white/52">

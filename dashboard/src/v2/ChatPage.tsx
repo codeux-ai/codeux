@@ -451,8 +451,8 @@ export const ChatPage: FunctionComponent = () => {
                     !selectedProject || (!input.trim() && !sending)
                       ? "cursor-not-allowed bg-black/[0.06] text-slate-400 shadow-none dark:bg-white/[0.06]"
                       : sending
-                        ? "cursor-wait bg-signal-500/50 text-void-900 shadow-none scale-95"
-                        : "bg-signal-500 text-void-900 shadow-[0_0_24px_rgba(0,224,160,0.28)] hover:bg-signal-400 hover:scale-105 active:scale-95"
+                        ? "cursor-wait bg-signal-500/50 text-white dark:text-void-900 shadow-none scale-95"
+                        : "bg-signal-500 text-white dark:text-void-900 shadow-[0_0_24px_rgba(0,224,160,0.28)] hover:bg-signal-400 hover:scale-105 active:scale-95"
                   }`}
                 >
                   {sending ? <RefreshCw className="h-4 w-4 animate-spin text-void-900/70 motion-reduce:animate-none" /> : <ArrowUp className="h-5 w-5" strokeWidth={2.5} />}

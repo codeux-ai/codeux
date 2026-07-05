@@ -135,7 +135,7 @@ export const TaskComposer: FunctionComponent<TaskComposerProps> = ({
                 {state.isEditing ? "Edit Task" : "Task Composer"}
               </div>
               <div className="space-y-3">
-                <h2 className="font-display text-[2rem] font-black leading-none tracking-tight text-slate-900 dark:text-white sm:text-[2.35rem]">
+                <h2 className="font-display text-2xl font-semibold leading-none tracking-tight text-slate-900 dark:text-white sm:text-3xl">
                   {state.isEditing ? "Refine The Task." : "Create A New Task."}
                 </h2>
                 <p className="max-w-2xl text-sm leading-relaxed text-slate-500 dark:text-slate-400 sm:text-[15px]">
@@ -186,7 +186,7 @@ export const TaskComposer: FunctionComponent<TaskComposerProps> = ({
                     onClick={() => state.setStatus(option)}
                     className={`px-3 py-1.5 rounded-xl text-[10px] font-bold uppercase tracking-[0.14em] transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 focus-visible:ring-offset-1 focus-visible:ring-offset-white dark:focus-visible:ring-offset-void-900 ${
                       state.status === option
-                        ? "bg-signal-500 text-void-900 shadow-[0_2px_12px_rgba(0,224,160,0.3)]"
+                        ? "bg-signal-500 text-white dark:text-void-900 shadow-[0_2px_12px_rgba(0,224,160,0.3)]"
                         : "text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200"
                     }`}
                   >
@@ -206,7 +206,7 @@ export const TaskComposer: FunctionComponent<TaskComposerProps> = ({
                 onInput={(event) => state.setTitle((event.target as HTMLInputElement).value)}
                 onBlur={() => state.setFieldTouched('title')}
                 placeholder="Fix navigation layout shift"
-                className="w-full border-0 border-b-2 bg-transparent pb-3 font-display text-[1.65rem] font-black leading-none tracking-tight text-slate-900 outline-none transition-colors placeholder:text-slate-200 focus:border-signal-500 dark:text-white dark:placeholder:text-slate-700 sm:text-[1.9rem] border-black/[0.08] dark:border-white/[0.08]"
+                className="w-full border-0 border-b-2 bg-transparent pb-3 font-display text-xl font-semibold leading-none tracking-tight text-slate-900 outline-none transition-colors placeholder:text-slate-200 focus:border-signal-500 dark:text-white dark:placeholder:text-slate-700 sm:text-[1.9rem] border-black/[0.08] dark:border-white/[0.08]"
                 required
                 autoFocus
               />

@@ -562,7 +562,7 @@ export const ExecutionRuntimePanel: FunctionComponent<{
                                     className="rounded-xl border border-black/[0.04] bg-white/55 px-3 py-2 dark:border-white/[0.06] dark:bg-void-900/30"
                                 >
                                     <div className={`text-[9px] font-bold uppercase tracking-[0.14em] ${accent}`}>{label}</div>
-                                    <div className={`mt-1 font-mono text-lg font-black leading-none ${accent}`}>{value}</div>
+                                    <div className={`mt-1 font-mono text-base font-semibold leading-none ${accent}`}>{value}</div>
                                 </div>
                             ))}
                         </div>

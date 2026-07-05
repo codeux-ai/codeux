@@ -46,7 +46,7 @@ const StudioMetricTile: FunctionComponent<{
       <div className={`text-[10px] font-bold uppercase tracking-[0.18em] ${toneClass}`}>{label}</div>
       {Icon ? <Icon className={`h-3.5 w-3.5 ${toneClass}`} strokeWidth={2.2} aria-hidden="true" /> : null}
     </div>
-    <div className={`mt-2 text-xl font-black ${TEXT_VALUE_CLASS}`}>{value}</div>
+    <div className={`mt-2 text-lg font-semibold ${TEXT_VALUE_CLASS}`}>{value}</div>
     <div className={`mt-1 text-[10px] font-bold uppercase tracking-[0.14em] ${TEXT_LABEL_CLASS}`}>{detail}</div>
   </div>
 );
@@ -191,11 +191,11 @@ export const CompositionStudio: FunctionComponent<{
               <div className="flex items-center justify-between gap-4">
                 <div>
                   <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--stats-detail-color)]">Active Time</div>
-                  <div className="mt-2 text-lg font-black text-[color:var(--stats-value-color)]">{formatStatsDuration(stats.usage.activeTimeMs)}</div>
+                  <div className="mt-2 text-base font-semibold text-[color:var(--stats-value-color)]">{formatStatsDuration(stats.usage.activeTimeMs)}</div>
                 </div>
                 <div className="text-right">
                   <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--stats-detail-color)]">Wall Time</div>
-                  <div className="mt-2 text-lg font-black text-[color:var(--stats-value-color)]">{formatStatsDuration(stats.usage.wallTimeMs ?? 0)}</div>
+                  <div className="mt-2 text-base font-semibold text-[color:var(--stats-value-color)]">{formatStatsDuration(stats.usage.wallTimeMs ?? 0)}</div>
                 </div>
               </div>
               <div className="mt-3 text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--stats-label-color)]">
@@ -207,7 +207,7 @@ export const CompositionStudio: FunctionComponent<{
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div>
                 <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-[color:var(--stats-label-color)]">Flight Legend</div>
-                <div className="mt-2 text-3xl font-black text-[color:var(--stats-value-color)]">{cacheRate !== null ? cacheRate.toFixed(1) : "—"}%</div>
+                <div className="mt-2 text-2xl font-semibold text-[color:var(--stats-value-color)]">{cacheRate !== null ? cacheRate.toFixed(1) : "—"}%</div>
                 <div className="mt-1 text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--stats-signal-text)]">
                   {stats.usage.cachedInputTokens > 0 ? `~${formatTokens(stats.usage.cachedInputTokens)} cached input` : "No cache savings recorded"}
                 </div>
@@ -215,7 +215,7 @@ export const CompositionStudio: FunctionComponent<{
               {hasCost ? (
                 <div className="text-right">
                   <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--stats-label-color)]">Cost</div>
-                  <div className="mt-2 text-lg font-black text-[color:var(--stats-value-color)]">{formatCost(stats.usage.totalCostUsd)}</div>
+                  <div className="mt-2 text-base font-semibold text-[color:var(--stats-value-color)]">{formatCost(stats.usage.totalCostUsd)}</div>
                 </div>
               ) : null}
             </div>

@@ -64,7 +64,7 @@ export const LedgerSummaryTile: FunctionComponent<{
       <Icon className={`h-3.5 w-3.5 ${tone}`} strokeWidth={2.2} />
       {label}
     </div>
-    <div className="mt-2 text-xl font-black tracking-tight text-[color:var(--stats-value-color)]">{value}</div>
+    <div className="mt-2 text-lg font-semibold tracking-tight text-[color:var(--stats-value-color)]">{value}</div>
     <div className="mt-1 text-[10px] font-bold uppercase tracking-[0.14em] text-[color:var(--stats-label-color)]">{detail}</div>
   </div>
 );
@@ -276,7 +276,7 @@ export const TelemetryLedger: FunctionComponent<{
         <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
           <div>
             <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-[color:var(--stats-label-color)]">{eyebrow}</div>
-            <div className="mt-2 text-2xl font-black tracking-tight text-[color:var(--stats-value-color)]">{title}</div>
+            <div className="mt-2 text-xl font-semibold tracking-tight text-[color:var(--stats-value-color)]">{title}</div>
             <div className="mt-2 max-w-3xl text-sm text-[color:var(--stats-detail-color)]">
               Search, sort, and compare {kindLabel} by recency, tokens, active time, and directional token flow.
             </div>
@@ -486,27 +486,27 @@ export const TelemetryLedger: FunctionComponent<{
                         <div className="grid w-full grid-cols-2 gap-3 sm:grid-cols-3 xl:w-auto xl:min-w-[46rem] xl:grid-cols-6 xl:text-right">
                           <div>
                             <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--stats-label-color)]">Tokens</div>
-                            <div className="mt-1 text-lg font-black tracking-tight text-[color:var(--stats-value-color)]">{formatTokens(item.usage.totalTokens)}</div>
+                            <div className="mt-1 text-base font-semibold tracking-tight text-[color:var(--stats-value-color)]">{formatTokens(item.usage.totalTokens)}</div>
                           </div>
                           <div>
                             <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--stats-label-color)]">Active</div>
-                            <div className="mt-1 text-lg font-black tracking-tight text-[color:var(--stats-value-color)]">{formatStatsDuration(item.usage.activeTimeMs)}</div>
+                            <div className="mt-1 text-base font-semibold tracking-tight text-[color:var(--stats-value-color)]">{formatStatsDuration(item.usage.activeTimeMs)}</div>
                           </div>
                           <div>
                             <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--stats-label-color)]">Calls</div>
-                            <div className="mt-1 text-lg font-black tracking-tight text-[color:var(--stats-value-color)]">{item.usage.invocationCount.toLocaleString()}</div>
+                            <div className="mt-1 text-base font-semibold tracking-tight text-[color:var(--stats-value-color)]">{item.usage.invocationCount.toLocaleString()}</div>
                           </div>
                           <div>
                             <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--stats-label-color)]">Share</div>
-                            <div className="mt-1 text-lg font-black tracking-tight text-[color:var(--stats-value-color)]">{formatPercent(shareOfTotal)}</div>
+                            <div className="mt-1 text-base font-semibold tracking-tight text-[color:var(--stats-value-color)]">{formatPercent(shareOfTotal)}</div>
                           </div>
                           <div>
                             <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--stats-label-color)]">Leader</div>
-                            <div className="mt-1 text-lg font-black tracking-tight text-[color:var(--stats-value-color)]">{formatPercent(shareOfLeader)}</div>
+                            <div className="mt-1 text-base font-semibold tracking-tight text-[color:var(--stats-value-color)]">{formatPercent(shareOfLeader)}</div>
                           </div>
                           <div>
                             <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--stats-label-color)]">Cost</div>
-                            <div className="mt-1 text-lg font-black tracking-tight text-[color:var(--stats-value-color)]">{formatCost(item.usage.totalCostUsd)}</div>
+                            <div className="mt-1 text-base font-semibold tracking-tight text-[color:var(--stats-value-color)]">{formatCost(item.usage.totalCostUsd)}</div>
                           </div>
                         </div>
                       </div>

@@ -54,7 +54,7 @@ export const AgentsHero: FunctionComponent<{
               type="button"
               onClick={onCreate}
               disabled={!selectedProject}
-              className="group/btn inline-flex items-center gap-2 rounded-full bg-signal-500 px-5 py-2.5 text-[11px] font-bold uppercase tracking-[0.14em] text-void-900 shadow-[0_0_24px_rgba(0,224,160,0.28)] transition-all hover:scale-[1.03] hover:bg-signal-400 hover:shadow-[0_0_32px_rgba(0,224,160,0.36)] focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:scale-100"
+              className="group/btn inline-flex items-center gap-2 rounded-full bg-signal-500 px-5 py-2.5 text-[11px] font-bold uppercase tracking-[0.14em] text-white dark:text-void-900 shadow-[0_0_24px_rgba(0,224,160,0.28)] transition-all hover:scale-[1.03] hover:bg-signal-400 hover:shadow-[0_0_32px_rgba(0,224,160,0.36)] focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:scale-100"
             >
               <Plus className="h-3.5 w-3.5 transition-transform group-hover/btn:rotate-90" strokeWidth={2.5} />
               New Agent

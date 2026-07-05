@@ -319,7 +319,7 @@ const StudioMetricTile: FunctionComponent<{
       <div className={`text-[10px] font-bold uppercase tracking-[0.18em] ${toneClass}`}>{label}</div>
       {Icon ? <Icon className={`h-3.5 w-3.5 ${toneClass}`} strokeWidth={2.2} aria-hidden="true" /> : null}
     </div>
-    <div className="mt-2 break-words text-xl font-black text-[color:var(--stats-value-color)]">{value}</div>
+    <div className="mt-2 break-words text-lg font-semibold text-[color:var(--stats-value-color)]">{value}</div>
     <div className="mt-1 text-[10px] font-bold uppercase tracking-[0.14em] text-[color:var(--stats-label-color)]">{detail}</div>
   </div>
 );
@@ -329,7 +329,7 @@ const EmptyTelemetryPanel: FunctionComponent<{
   detail: string;
 }> = ({ title, detail }) => (
   <div className={`${SUBPANEL_CLASS} border-dashed px-4 py-10 text-center`}>
-    <div className="text-sm font-black text-[color:var(--stats-value-color)]">{title}</div>
+    <div className="text-sm font-semibold text-[color:var(--stats-value-color)]">{title}</div>
     <div className="mx-auto mt-2 max-w-2xl text-sm leading-relaxed text-[color:var(--stats-detail-color)]">{detail}</div>
   </div>
 );
@@ -349,7 +349,7 @@ const SourceCountCard: FunctionComponent<{
           {row.share !== null ? formatPercent(row.share * 100) : "—"}
         </div>
       </div>
-      <div className="mt-3 text-2xl font-black text-[color:var(--stats-value-color)]">{row.count.toLocaleString()}</div>
+      <div className="mt-3 text-xl font-semibold text-[color:var(--stats-value-color)]">{row.count.toLocaleString()}</div>
       <div className="mt-1 text-[10px] font-bold uppercase tracking-[0.14em] text-[color:var(--stats-label-color)]">{row.detail}</div>
       <div className={`mt-3 h-1.5 overflow-hidden rounded-full ${TRACK_CLASS}`}>
         <div
@@ -440,7 +440,7 @@ const ProviderReliabilityCard: FunctionComponent<{
             <ShieldCheck className="h-3.5 w-3.5 text-[color:var(--stats-label-color)]" strokeWidth={2.2} aria-hidden="true" />
           </div>
           <div className="mt-2">
-            <span className={`inline-flex rounded-full border px-3 py-1.5 text-lg font-black ${SUCCESS_TONE_CLASS[successTone]}`}>
+            <span className={`inline-flex rounded-full border px-3 py-1.5 text-base font-semibold ${SUCCESS_TONE_CLASS[successTone]}`}>
               {formatSuccessRate(row.successRate)}
             </span>
           </div>
@@ -493,7 +493,7 @@ const ProviderReliabilityCard: FunctionComponent<{
         {row.sourceRows.map((sourceRow) => (
           <div key={sourceRow.source} className={`rounded-[var(--stats-chip-radius)] border px-3 py-2 ${SOURCE_TONE_CLASS[sourceRow.tone]}`}>
             <div className="text-[9px] font-bold uppercase tracking-[0.14em]">{sourceRow.label}</div>
-            <div className="mt-1 text-sm font-black">{sourceRow.count.toLocaleString()}</div>
+            <div className="mt-1 text-sm font-semibold">{sourceRow.count.toLocaleString()}</div>
           </div>
         ))}
       </div>
@@ -546,7 +546,7 @@ export const ReliabilityStudio: FunctionComponent<{
             </div>
             <div className="min-w-0">
               <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-[color:var(--stats-label-color)]">Reliability Mode</div>
-              <div className="mt-1 break-words text-2xl font-black tracking-tight text-[color:var(--stats-value-color)]">Provider confidence & failure risk</div>
+              <div className="mt-1 break-words text-xl font-semibold tracking-tight text-[color:var(--stats-value-color)]">Provider confidence & failure risk</div>
               <div className="mt-2 text-sm leading-relaxed text-[color:var(--stats-detail-color)]">
                 Telemetry confidence, source mix, provider health, fallback usage, and failure pressure for the selected Stats window.
               </div>
@@ -613,7 +613,7 @@ export const ReliabilityStudio: FunctionComponent<{
         ) : (
           <div className={`${PANEL_CLASS} p-6`}>
             <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-[color:var(--stats-label-color)]">Source Confidence</div>
-            <div className="mt-2 text-2xl font-black tracking-tight text-[color:var(--stats-value-color)]">Telemetry Source Mix</div>
+            <div className="mt-2 text-xl font-semibold tracking-tight text-[color:var(--stats-value-color)]">Telemetry Source Mix</div>
             <div className="mt-2 text-sm leading-relaxed text-[color:var(--stats-detail-color)]">
               Reported, estimated, unavailable, unsupported, and unknown invocation-source counts across this window.
             </div>
@@ -637,7 +637,7 @@ export const ReliabilityStudio: FunctionComponent<{
         ) : (
           <div className={`${PANEL_CLASS} p-6`}>
             <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-[color:var(--stats-label-color)]">Volume Context</div>
-            <div className="mt-2 text-2xl font-black tracking-tight text-[color:var(--stats-value-color)]">Provider Share</div>
+            <div className="mt-2 text-xl font-semibold tracking-tight text-[color:var(--stats-value-color)]">Provider Share</div>
             <div className="mt-2 text-sm leading-relaxed text-[color:var(--stats-detail-color)]">
               Token volume by provider appears here when the selected window includes provider segments.
             </div>
