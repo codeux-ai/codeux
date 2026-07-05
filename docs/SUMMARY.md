@@ -58,6 +58,7 @@
     - [Dashboard Interaction Verification](./dashboard/interaction-patterns.md#verification-guidance)
 - [Shared Primitive Design System](./dashboard/design-system-shared-primitives.md)
   - [Shared Data Interaction Primitives](./dashboard/design-system-shared-primitives.md#data-interaction-primitives)
+- [Sprints Design System](./dashboard/design-system-sprints.md)
 - [Stats & Analytics Design System](./dashboard/design-system-stats.md) - Warm Void analytics surfaces and System administration
 - [Dashboard Onboarding](./dashboard/onboarding.md)
 - [Project Initialization](./dashboard/project-initialization.md)

@@ -18,6 +18,7 @@ Use this page as the main entrypoint.
 4.3. [Stats & Analytics Design System](./dashboard/design-system-stats.md) - Warm Void analytics surfaces and System administration
 4.4. [Shared Primitive Design System](./dashboard/design-system-shared-primitives.md)
 4.4.1. [Shared Data Interaction Primitives](./dashboard/design-system-shared-primitives.md#data-interaction-primitives)
+4.5. [Sprints Design System](./dashboard/design-system-sprints.md)
 5. [Sprint Imports](./dashboard/sprint-imports.md)
 5. [Project Initialization](./dashboard/project-initialization.md)
 6. [Quicksprint Templates](./dashboard/quicksprint-templates.md)
@@ -141,6 +142,7 @@ Use this page as the main entrypoint.
   - [Dashboard Interaction Verification](./dashboard/interaction-patterns.md#verification-guidance)
 - [Shared Primitive Design System](./dashboard/design-system-shared-primitives.md)
   - [Shared Data Interaction Primitives](./dashboard/design-system-shared-primitives.md#data-interaction-primitives)
+- [Sprints Design System](./dashboard/design-system-sprints.md)
 - [Stats & Analytics Design System](./dashboard/design-system-stats.md) - Warm Void analytics surfaces and System administration
 - [Dashboard Onboarding](./dashboard/onboarding.md)
 - [Project Initialization](./dashboard/project-initialization.md)

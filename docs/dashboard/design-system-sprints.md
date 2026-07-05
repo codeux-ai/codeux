@@ -15,7 +15,7 @@ This document outlines the design system for the Sprints page and related planni
 *   The header should establish the workspace context clearly.
 *   Gallery visibility controls should be easily accessible but not dominate the primary actions. The gallery toggle belongs at the far left of the top header action row, before the sprint summary pills, while import/quicksprint/new commands sit in the lower command row on narrow screens.
 *   Empty states and placeholders must guide users toward the next logical step (e.g., selecting a project, creating a sprint) with a polished, on-brand visual treatment.
-*   Organic sprint gallery cells use a shape-following `drop-shadow` on the same animated shell that owns the biomorphic radius. Do not add wrapper `box-shadow` or separate rectangular shadow underlays around sprint cells; shadows, review outlines, and status glows must follow the animated rounded shape.
+*   Organic sprint gallery cells use the same shared ambient shadow underlay as dashboard project cells: `ORGANIC_CELL_SHADOW_CLASS` from `dashboard/src/v2/components/ui/organic-cell-styles.ts`. Keep the underlay animated with the same organic motion class as the cell body so the sprint and project gallery cells keep identical background depth.
 
 ### Sprint Ledger (Table/List)
 

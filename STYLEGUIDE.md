@@ -236,27 +236,27 @@ The Sparkline SVG sits `absolute bottom-0 left-0 w-full h-20` and uses smooth cu
 
 ### Organic Cells (SourcesGrid / SprintsPage)
 
-The liquid blob pattern uses a shape-following shadow shell and a clipped body:
+The liquid blob pattern uses a shared animated shadow underlay and a clipped body:
 
 ```tsx
-{/* 1. Animated shell — owns the organic radius and shape-following shadow */}
-<div className="absolute inset-0 drop-shadow-[...] animate-organic">
-    {/* 2. Clipped liquid body — inherits the shell radius */}
-    <div
-        className="absolute inset-0 bg-white/55 dark:bg-void-800/65 backdrop-blur-3xl
-                   border border-white/70 dark:border-white/[0.06]
-                   overflow-hidden rounded-[inherit] transform-gpu"
-        style={{ WebkitMaskImage: '-webkit-radial-gradient(white, black)', backfaceVisibility: 'hidden' }}
-    >
-        {/* Inner inset highlight */}
-        <div className="absolute inset-0 rounded-[inherit]
-                        shadow-[inset_0_0_0_1px_rgba(255,255,255,0.5)]
-                        dark:shadow-[inset_0_0_0_1px_rgba(255,255,255,0.04)]" />
-    </div>
+{/* 1. Animated shadow underlay — shared by project and sprint cells */}
+<div className={`absolute inset-0 ${ORGANIC_CELL_SHADOW_CLASS} animate-organic`} />
+
+{/* 2. Animated liquid body */}
+<div
+    className="absolute inset-0 bg-white/55 dark:bg-void-800/65 backdrop-blur-3xl
+               border border-white/70 dark:border-white/[0.06]
+               overflow-hidden rounded-[inherit] transform-gpu animate-organic"
+    style={{ WebkitMaskImage: '-webkit-radial-gradient(white, black)', backfaceVisibility: 'hidden' }}
+>
+    {/* Inner inset highlight */}
+    <div className="absolute inset-0 rounded-[inherit]
+                    shadow-[inset_0_0_0_1px_rgba(255,255,255,0.5)]
+                    dark:shadow-[inset_0_0_0_1px_rgba(255,255,255,0.04)]" />
 </div>
 ```
 
-Use `drop-shadow` for the ambient sprint/source cell shadow. A separate `box-shadow` underlay draws around the rectangular bounds and will not match the animated organic corners.
+Use `ORGANIC_CELL_SHADOW_CLASS` for the ambient sprint/source cell background shadow so `SourceCell` and `SprintCell` stay visually identical. Keep the underlay animated with the same `animate-organic` / `animate-organic-reverse` class as the cell body.
 
 The `WebkitMaskImage: '-webkit-radial-gradient(white, black)'` is what makes `overflow-hidden` respect the organic `border-radius` shape. Without it, the content clips to a rectangle.
 
