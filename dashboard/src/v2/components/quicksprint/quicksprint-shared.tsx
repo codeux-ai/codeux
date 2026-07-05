@@ -2,6 +2,7 @@ import type { FunctionComponent } from "preact";
 import { Sparkles, ShieldCheck, Accessibility, Zap, Bug, Code2, Database, FileSearch, FlaskConical, GitBranch, Globe, Hammer, Heart, Layers, LayoutGrid, Lock, Microscope, Monitor, Paintbrush, RefreshCw, Search, Server, Shield, Terminal, TestTube2, Wrench, Settings2, Trash2 } from "lucide-preact";
 import type { LucideProps } from "lucide-preact";
 import type { QuicksprintTemplateRecord } from "../../../../../src/contracts/quicksprint-types.js";
+import { buildInteractionTransition, useInteractionTokens } from "../../lib/motion/tokens.js";
 import { CHIP_CLASS, CONTROL_FOCUS_CLASS, PANEL_CLASS } from "../../pages/stats/components/stats-ui-primitives.js";
 
 export const SUBTASK_SLIDER_MIN = 1;
@@ -201,9 +202,21 @@ export const SubtaskSlider: FunctionComponent<{
 }> = ({ value, onChange, disabled = false }) => {
   const displayValue = clampSubtaskSliderValue(value);
   const pct = ((displayValue - SUBTASK_SLIDER_MIN) / (SUBTASK_SLIDER_MAX - SUBTASK_SLIDER_MIN)) * 100;
+  const interactionTokens = useInteractionTokens();
+  const sliderMotionStyle = {
+    "--interaction-control-feedback-duration": interactionTokens.controlFeedback.duration,
+    "--interaction-control-feedback-ease": interactionTokens.controlFeedback.ease,
+    "--interaction-selection-movement-duration": interactionTokens.selectionMovement.duration,
+    "--interaction-selection-movement-ease": interactionTokens.selectionMovement.ease,
+    "--qs-slider-track-transition": buildInteractionTransition("selectionMovement", "width"),
+    "--qs-slider-track-color-transition": buildInteractionTransition("controlFeedback", "background-color"),
+    "--qs-slider-thumb-transition": buildInteractionTransition("selectionMovement", "left"),
+    "--qs-slider-notch-transition": buildInteractionTransition("controlFeedback", "background-color, height, width"),
+    "--qs-slider-feedback-transition": buildInteractionTransition("controlFeedback", "box-shadow, border-color, background-color, opacity, transform"),
+  } as import("preact").JSX.CSSProperties;
 
   return (
-    <div className={`select-none ${disabled ? "opacity-55" : ""}`}>
+    <div className={`select-none ${disabled ? "opacity-55" : ""}`} style={sliderMotionStyle}>
       {/* Large number display */}
       <div className="flex items-baseline gap-2 mb-6">
         <span className={`font-mono text-[3.5rem] font-black leading-none tracking-tighter tabular-nums ${
@@ -233,10 +246,10 @@ export const SubtaskSlider: FunctionComponent<{
           className="absolute inset-0 z-10 h-full w-full cursor-pointer opacity-0 disabled:cursor-not-allowed"
         />
         {/* Background track */}
-        <div className="pointer-events-none absolute top-1/2 left-0 right-0 h-2 -translate-y-1/2 overflow-hidden rounded-full bg-black/[0.06] dark:bg-white/[0.06]">
+        <div className="pointer-events-none absolute top-1/2 left-0 right-0 h-2 -translate-y-1/2 overflow-hidden rounded-full bg-black/[0.06] [transition:var(--qs-slider-track-color-transition)] dark:bg-white/[0.06] motion-reduce:transition-none">
           {/* Fill */}
           <div
-            className="absolute inset-y-0 left-0 rounded-full bg-gradient-to-r from-ember-500 to-ember-400 transition-[width] duration-75"
+            className="absolute inset-y-0 left-0 rounded-full bg-gradient-to-r from-ember-500 to-ember-400 [transition:var(--qs-slider-track-transition)] motion-reduce:transition-none"
             style={{ width: `${pct}%` }}
           />
         </div>
@@ -250,7 +263,7 @@ export const SubtaskSlider: FunctionComponent<{
             return (
               <div
                 key={n}
-                className={`rounded-full transition-all ${
+                className={`rounded-full [transition:var(--qs-slider-notch-transition)] motion-reduce:transition-none ${
                   isMajor ? "h-3 w-1" : "h-1.5 w-0.5"
                 } ${isActive ? "bg-ember-500/60" : "bg-black/[0.08] dark:bg-white/[0.08]"}`}
               />
@@ -260,14 +273,18 @@ export const SubtaskSlider: FunctionComponent<{
 
         {/* Thumb */}
         <div
-          className="pointer-events-none absolute top-1/2 -translate-y-1/2 -translate-x-1/2 transition-[left] duration-75"
+          className="pointer-events-none absolute top-1/2 -translate-y-1/2 -translate-x-1/2 [transition:var(--qs-slider-thumb-transition)] motion-reduce:transition-none"
           style={{ left: `${pct}%` }}
         >
           <div className="relative">
-            <div className={`h-6 w-6 rounded-full border-[3px] bg-white shadow-[0_0_12px_rgba(255,107,0,0.3)] dark:bg-void-800 ${
+            <div className={`h-6 w-6 rounded-full border-[3px] bg-white shadow-[0_0_12px_rgba(255,107,0,0.3)] [transition:var(--qs-slider-feedback-transition)] dark:bg-void-800 motion-reduce:transition-none ${
               disabled ? "border-slate-300 dark:border-slate-600" : "border-ember-500"
             }`} />
-            <div className="absolute -inset-2 rounded-full bg-ember-500/10 animate-pulse" style={{ animationDuration: "2s" }} />
+            <div
+              className={`absolute -inset-2 rounded-full bg-ember-500/10 [transition:var(--qs-slider-feedback-transition)] motion-reduce:transition-none ${
+                disabled ? "opacity-0" : "opacity-100"
+              }`}
+            />
           </div>
         </div>
       </div>
