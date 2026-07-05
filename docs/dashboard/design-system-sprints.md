@@ -13,8 +13,9 @@ This document outlines the design system for the Sprints page and related planni
 ### Sprints Page Header & Layout
 
 *   The header should establish the workspace context clearly.
-*   Gallery visibility controls should be easily accessible but not dominate the primary actions.
+*   Gallery visibility controls should be easily accessible but not dominate the primary actions. The gallery toggle belongs at the far left of the top header action row, before the sprint summary pills, while import/quicksprint/new commands sit in the lower command row on narrow screens.
 *   Empty states and placeholders must guide users toward the next logical step (e.g., selecting a project, creating a sprint) with a polished, on-brand visual treatment.
+*   Organic sprint gallery cells use a shape-following `drop-shadow` on the same animated shell that owns the biomorphic radius. Do not add wrapper `box-shadow` or separate rectangular shadow underlays around sprint cells; shadows, review outlines, and status glows must follow the animated rounded shape.
 
 ### Sprint Ledger (Table/List)
 
