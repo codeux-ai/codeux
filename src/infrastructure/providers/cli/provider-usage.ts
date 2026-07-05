@@ -1,4 +1,5 @@
 import * as fs from "fs/promises";
+import { createHash } from "crypto";
 import * as os from "os";
 import * as path from "path";
 import { countTokens as countAnthropicTokens } from "@anthropic-ai/tokenizer";
@@ -123,39 +124,81 @@ interface NormalizedUsageCounts {
 
 type TiktokenEncoding = ReturnType<typeof encodingForModel>;
 
+const CODEX_ENCODING_CACHE_LIMIT = 8;
 const CODEX_TOKEN_CACHE_LIMIT = 768;
 const codexEncodingCache = new Map<string, TiktokenEncoding>();
 const codexTokenCountCache = new Map<string, number>();
+let codexTokenCountCacheHits = 0;
+let codexTokenCountCacheMisses = 0;
 
-function fastHashString(value: string): string {
-  let hash = 2166136261;
-  for (let index = 0; index < value.length; index += 1) {
-    hash ^= value.charCodeAt(index);
-    hash = Math.imul(hash, 16777619);
+function rememberBoundedCacheEntry<Key, Value>(
+  cache: Map<Key, Value>,
+  cacheKey: Key,
+  value: Value,
+  limit: number,
+): Value {
+  if (cache.has(cacheKey)) {
+    cache.delete(cacheKey);
   }
-  return (hash >>> 0).toString(36);
+  while (cache.size >= limit) {
+    const oldest = cache.keys().next();
+    if (oldest.done) {
+      break;
+    }
+    cache.delete(oldest.value);
+  }
+  cache.set(cacheKey, value);
+  return value;
 }
 
-function rememberCodexTokenCount(cacheKey: string, count: number): number {
-  if (codexTokenCountCache.size >= CODEX_TOKEN_CACHE_LIMIT) {
-    const oldestKey = codexTokenCountCache.keys().next().value as string | undefined;
-    if (oldestKey) {
-      codexTokenCountCache.delete(oldestKey);
-    }
-  }
-  codexTokenCountCache.set(cacheKey, count);
-  return count;
+function hashCodexTokenCacheText(value: string): string {
+  return createHash("sha256").update(value).digest("base64url");
+}
+
+function buildCodexTokenCountCacheKey(model: string, text: string): string {
+  return `${model}:${text.length}:${hashCodexTokenCacheText(text)}`;
 }
 
 function getCodexEncoding(model: string): TiktokenEncoding {
   const cached = codexEncodingCache.get(model);
   if (cached) {
+    codexEncodingCache.delete(model);
+    codexEncodingCache.set(model, cached);
     return cached;
   }
   const encoding = encodingForModel(model as Parameters<typeof encodingForModel>[0]);
-  codexEncodingCache.set(model, encoding);
-  return encoding;
+  return rememberBoundedCacheEntry(codexEncodingCache, model, encoding, CODEX_ENCODING_CACHE_LIMIT);
 }
+
+export const codexTokenEstimationCacheTestHooks = {
+  stats(): {
+    encodingCacheLimit: number;
+    tokenCountCacheLimit: number;
+    encodingCacheSize: number;
+    tokenCountCacheSize: number;
+    tokenCountCacheHits: number;
+    tokenCountCacheMisses: number;
+    encodingCacheKeys: string[];
+    tokenCountCacheKeys: string[];
+  } {
+    return {
+      encodingCacheLimit: CODEX_ENCODING_CACHE_LIMIT,
+      tokenCountCacheLimit: CODEX_TOKEN_CACHE_LIMIT,
+      encodingCacheSize: codexEncodingCache.size,
+      tokenCountCacheSize: codexTokenCountCache.size,
+      tokenCountCacheHits: codexTokenCountCacheHits,
+      tokenCountCacheMisses: codexTokenCountCacheMisses,
+      encodingCacheKeys: [...codexEncodingCache.keys()],
+      tokenCountCacheKeys: [...codexTokenCountCache.keys()],
+    };
+  },
+  reset(): void {
+    codexEncodingCache.clear();
+    codexTokenCountCache.clear();
+    codexTokenCountCacheHits = 0;
+    codexTokenCountCacheMisses = 0;
+  },
+};
 
 function normalizeUsageCounts(
   usage: Record<string, unknown>,
@@ -178,18 +221,20 @@ function normalizeUsageCounts(
 
 function tokenizeWithCodexModel(model: string | null | undefined, text: string): number {
   const normalized = typeof model === "string" && model.trim().length > 0 ? model.trim() : "gpt-4o";
-  const cacheKey = `${normalized}:${text.length}:${fastHashString(text)}`;
+  const cacheKey = buildCodexTokenCountCacheKey(normalized, text);
   const cached = codexTokenCountCache.get(cacheKey);
   if (cached !== undefined) {
+    codexTokenCountCacheHits += 1;
     codexTokenCountCache.delete(cacheKey);
     codexTokenCountCache.set(cacheKey, cached);
     return cached;
   }
+  codexTokenCountCacheMisses += 1;
 
   try {
-    return rememberCodexTokenCount(cacheKey, getCodexEncoding(normalized).encode(text).length);
+    return rememberBoundedCacheEntry(codexTokenCountCache, cacheKey, getCodexEncoding(normalized).encode(text).length, CODEX_TOKEN_CACHE_LIMIT);
   } catch {
-    return rememberCodexTokenCount(cacheKey, getCodexEncoding("gpt-4o").encode(text).length);
+    return rememberBoundedCacheEntry(codexTokenCountCache, cacheKey, getCodexEncoding("gpt-4o").encode(text).length, CODEX_TOKEN_CACHE_LIMIT);
   }
 }
 
