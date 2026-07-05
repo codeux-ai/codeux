@@ -403,6 +403,18 @@ function sanitizeSprintPreviewSettings(value: unknown): ProjectSettings["sprintP
   const hostPortRangeEndCandidate = typeof input.hostPortRangeEnd === "number" && Number.isFinite(input.hostPortRangeEnd)
     ? Math.max(1, Math.min(65535, Math.round(input.hostPortRangeEnd)))
     : defaults.hostPortRangeEnd;
+  const containerAppPort = typeof input.containerAppPort === "number" && Number.isFinite(input.containerAppPort)
+    ? Math.max(1, Math.min(65535, Math.round(input.containerAppPort)))
+    : defaults.containerAppPort;
+  const containerAppPorts = [
+    containerAppPort,
+    ...(Array.isArray(input.containerAppPorts)
+      ? input.containerAppPorts
+        .filter((port): port is number => typeof port === "number" && Number.isFinite(port))
+        .map((port) => Math.round(port))
+        .filter((port) => port >= 1 && port <= 65535)
+      : []),
+  ];
 
   return {
     enabled: typeof input.enabled === "boolean"
@@ -428,9 +440,8 @@ function sanitizeSprintPreviewSettings(value: unknown): ProjectSettings["sprintP
       : defaults.maxConcurrentContainers,
     hostPortRangeStart,
     hostPortRangeEnd: Math.max(hostPortRangeStart, hostPortRangeEndCandidate),
-    containerAppPort: typeof input.containerAppPort === "number" && Number.isFinite(input.containerAppPort)
-      ? Math.max(1, Math.min(65535, Math.round(input.containerAppPort)))
-      : defaults.containerAppPort,
+    containerAppPort,
+    containerAppPorts: [...new Set(containerAppPorts)],
     startupScriptPath: (() => {
       const raw = typeof input.startupScriptPath === "string" && input.startupScriptPath.trim().length > 0
         ? input.startupScriptPath.trim()

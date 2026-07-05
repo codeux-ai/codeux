@@ -31,7 +31,7 @@ Key rules:
 - every sprint preview runs from a dedicated exported branch snapshot under the preview runtime root, not a registered git worktree
 - host runtime paths and in-container paths are kept separate for cross-platform Docker Desktop support: Windows/macOS/Linux host paths are mounted into the Linux container at `/code-ux-preview-runtime`, and preview `HOME`, `--workdir`, npm cache paths, and `SPRINT_PREVIEW_WORKSPACE` use POSIX container paths only
 - the preview container reuses the same Docker bootstrap and can reuse an already-built cached setup image, but preview startup no longer builds setup-cache images inline or runs the full worker setup script at runtime
-- the app inside the container listens on `sprintPreview.containerAppPort`
+- the primary app inside the container listens on `sprintPreview.containerAppPort`; `sprintPreview.containerAppPorts` records the primary port first plus any additional container ports that a preview-aware worker may expose later
 - the host-facing port is allocated from `sprintPreview.hostPortRangeStart..hostPortRangeEnd`
 - host ports bind to `127.0.0.1` only
 - preview startup injects `HOST`, `PORT`, `DASHBOARD_HOST`, `DASHBOARD_PORT`, and `SPRINT_PREVIEW_WORKSPACE` so containerized apps can bind to the published preview port and boot from the exported snapshot directory
@@ -49,7 +49,7 @@ Preview runtime state is stored in the Code UX app database table:
 The table stores:
 - project/sprint identity
 - preview status and health
-- host/container port mapping
+- host/container port mapping, including the compatibility `hostPort` / `containerAppPort` fields and the canonical `portMappings` JSON list for multiple routed container ports
 - container id/name
 - preview workspace path and feature branch
 - resolved startup mode and detected commands
@@ -143,7 +143,14 @@ Current preview controls include:
 - `hostPortRangeStart`
 - `hostPortRangeEnd`
 - `containerAppPort`
+- `containerAppPorts`
 - `startupScriptPath`
+
+Preview session records expose:
+- `hostPort` and `containerAppPort` for existing dashboard and API callers
+- `portMappings`, an ordered list of `{ containerPort, hostPort, label?, isPrimary? }` entries
+
+The primary mapping populates the legacy fields. Existing rows without `portMappings` are read as a single primary mapping from `hostPort` and `containerAppPort`, so older sessions keep serializing with the same single-port values. The current Docker startup path still creates one localhost-bound preview route; this contract change only makes the persisted session data ready for multiple routed container ports.
 
 Startup hygiene:
 - Docker session lifecycle management (such as `docker ps` parsing, lock acquisition for atomic container operations, container removal, and name sanitization) has been extracted to `DockerSessionLifecycle` in `src/services/docker-session-lifecycle.ts` so both preview and file-browser share identical mechanics without diverging.

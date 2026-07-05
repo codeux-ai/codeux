@@ -109,6 +109,7 @@ function makePreviewSettings(overrides: Record<string, unknown> = {}) {
     hostPortRangeStart: 5555,
     hostPortRangeEnd: 5560,
     containerAppPort: 3000,
+    containerAppPorts: [3000],
     startupScriptPath: ".code-ux/browser/start-preview.sh",
     ...overrides,
   };
@@ -125,6 +126,7 @@ function makeSession(overrides: Partial<SprintPreviewSession> = {}): SprintPrevi
     status: "running",
     hostPort: 5555,
     containerAppPort: 3000,
+    portMappings: [{ containerPort: 3000, hostPort: 5555, isPrimary: true }],
     containerId: "abc123",
     containerName: "code-ux-preview-test",
     worktreePath: "/workspace",

@@ -52,6 +52,25 @@ describe("validateSettingsPayload", () => {
     expect(result.data.ciIntelligence.featurePrAutoMergeMode).toBe("CREATE_PR");
   });
 
+  it("rejects invalid sprint preview container ports", () => {
+    const payload = cloneDefaults({
+      env: {},
+      settingsJson: {},
+      resolved: {},
+    });
+    payload.sprintPreview.containerAppPort = 70000;
+    payload.sprintPreview.containerAppPorts = [3000, 0, 65536];
+
+    const result = validateSettingsPayload(payload);
+
+    expect(result.success).toBe(false);
+    expect(result.issues).toEqual(expect.arrayContaining([
+      { path: "sprintPreview.containerAppPort", message: "Expected a port number between 1 and 65535" },
+      { path: "sprintPreview.containerAppPorts.1", message: "Expected a port number between 1 and 65535" },
+      { path: "sprintPreview.containerAppPorts.2", message: "Expected a port number between 1 and 65535" },
+    ]));
+  });
+
   it("rejects non-object payloads early", () => {
     const result = validateSettingsPayload("invalid");
 

@@ -58,6 +58,19 @@ const readConsoleLogMode = (value: unknown, fallback: ConsoleLogMode): ConsoleLo
   value === "full" ? "full" : fallback
 );
 
+const sanitizePreviewPortList = (value: unknown, primaryPort: number): number[] => {
+  const ports = [primaryPort];
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const port = readPort(item, -1);
+      if (port > 0) {
+        ports.push(port);
+      }
+    }
+  }
+  return [...new Set(ports)];
+};
+
 const sanitizeSkills = (value: unknown): SkillToggle[] => {
   if (!Array.isArray(value)) return DEFAULT_SKILLS.map((skill) => ({ ...skill }));
   const validSkills = value
@@ -370,6 +383,10 @@ export const sanitizeSettings = (value: unknown, externalHints?: ExternalSetting
   const sprintPreviewInput = (input.sprintPreview && typeof input.sprintPreview === "object"
     ? input.sprintPreview
     : {}) as Partial<DashboardSettings["sprintPreview"]>;
+  const containerAppPort = readPort(
+    sprintPreviewInput.containerAppPort,
+    DEFAULT_DASHBOARD_SETTINGS.sprintPreview.containerAppPort,
+  );
   const sprintPreview = {
     enabled: readBoolean(
       sprintPreviewInput.enabled,
@@ -410,11 +427,8 @@ export const sanitizeSettings = (value: unknown, externalHints?: ExternalSetting
         ? Math.round(sprintPreviewInput.hostPortRangeEnd)
         : DEFAULT_DASHBOARD_SETTINGS.sprintPreview.hostPortRangeEnd
     )),
-    containerAppPort: Math.max(1, Math.min(65535,
-      typeof sprintPreviewInput.containerAppPort === "number" && Number.isFinite(sprintPreviewInput.containerAppPort)
-        ? Math.round(sprintPreviewInput.containerAppPort)
-        : DEFAULT_DASHBOARD_SETTINGS.sprintPreview.containerAppPort
-    )),
+    containerAppPort,
+    containerAppPorts: sanitizePreviewPortList(sprintPreviewInput.containerAppPorts, containerAppPort),
     startupScriptPath: (() => {
       const raw = readString(
         sprintPreviewInput.startupScriptPath,
