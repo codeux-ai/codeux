@@ -467,11 +467,11 @@ describe("QuicksprintPanel", () => {
     fireEvent.click(within(templateRail).getByRole("button", { name: "Delete Custom Sprint Flow template" }));
 
     expect(getByRole("dialog", { name: "Delete Custom Sprint Flow?" })).toBeInTheDocument();
-    expect(getByText("This removes the custom template from this project.")).toBeInTheDocument();
-    expect(getByRole("button", { name: "Keep Template" })).toBeInTheDocument();
+    expect(getByText("Delete Custom Sprint Flow from this project's custom templates.")).toBeInTheDocument();
+    expect(getByRole("button", { name: "Cancel" })).toBeInTheDocument();
     expect(window.confirm).not.toHaveBeenCalled();
 
-    fireEvent.click(getByRole("button", { name: "Keep Template" }));
+    fireEvent.click(getByRole("button", { name: "Cancel" }));
     await waitFor(() => {
       expect(queryByRole("dialog", { name: "Delete Custom Sprint Flow?" })).not.toBeInTheDocument();
     });
@@ -479,14 +479,18 @@ describe("QuicksprintPanel", () => {
 
     fireEvent.click(within(templateRail).getByRole("button", { name: "Delete API Tests template" }));
     expect(getByRole("dialog", { name: "Delete API Tests?" })).toBeInTheDocument();
-    expect(getByText("This hides the default template for this project. The shared bundled template remains available outside this project.")).toBeInTheDocument();
+    expect(getByText("Delete API Tests from this project by hiding the default template. The shared bundled template remains available outside this project.")).toBeInTheDocument();
 
-    const confirmButton = getByRole("button", { name: "Hold to Delete Template" });
+    const confirmButton = getByRole("button", { name: "Hold to Delete API Tests" });
     fireEvent.pointerDown(confirmButton, { button: 0, pointerId: 1 });
     vi.advanceTimersByTime(1000);
     await waitFor(() => {
       expect(onDeleteTemplate).toHaveBeenCalledWith("tpl-1");
     });
+    await waitFor(() => {
+      expect(queryByRole("dialog", { name: "Delete API Tests?" })).not.toBeInTheDocument();
+    });
+    expect(document.activeElement).toBe(within(templateRail).getByRole("button", { name: "Delete API Tests template" }));
     expect(window.confirm).not.toHaveBeenCalled();
     vi.useRealTimers();
   });
@@ -554,8 +558,8 @@ describe("QuicksprintPanel", () => {
     });
 
     expect(getByRole("button", { name: "Plan & Start" })).toBeDisabled();
-    expect(getByRole("button", { name: "Planning Only" })).toBeDisabled();
-    expect(getByRole("button", { name: "Planning Only" })).toHaveAttribute("aria-describedby", "quicksprint-submit-blocked-tpl-1");
+    expect(getByRole("button", { name: "Plan Only" })).toBeDisabled();
+    expect(getByRole("button", { name: "Plan Only" })).toHaveAttribute("aria-describedby", "quicksprint-submit-blocked-tpl-1");
     expect(getByText("A quicksprint planning request is already running. Cancel it or wait for it to finish before submitting again.")).toBeInTheDocument();
     expect(getByRole("button", { name: "Back to quicksprint templates" })).toBeDisabled();
     expect(getByRole("textbox")).toBeDisabled();

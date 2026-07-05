@@ -15,7 +15,7 @@ import { clampSubtaskSliderValue } from "./quicksprint-shared.js";
 import { useGsapInteractionTokens } from "../../lib/motion/constants.js";
 import { useInteractionTokens } from "../../lib/motion/tokens.js";
 import { ConfirmDialog } from "../ui/ConfirmDialog.js";
-import { useConfirmDialog } from "../../hooks/use-confirm-dialog.js";
+import type { ConfirmDialogOptions } from "../../hooks/use-confirm-dialog.js";
 
 import {
   getBuiltinTemplates,
@@ -100,13 +100,16 @@ export const QuicksprintPanel: FunctionComponent<QuicksprintPanelProps> = ({
   const fieldsRef = useRef<HTMLDivElement>(null);
   const gsapTokens = useGsapInteractionTokens();
   const interactionTokens = useInteractionTokens();
-  const { isOpen: isConfirmOpen, options: confirmOptions, requestConfirm, handleConfirm, handleCancel } = useConfirmDialog();
+  const deleteFallbackRef = useRef<HTMLElement | null>(null);
+  const deleteTriggerRef = useRef<HTMLElement | null>(null);
 
   /* ── Phase / Navigation ─────────────────────────────────────────── */
   const [phase, setPhase] = useState<Phase>("browse");
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
   const [selectedBuiltinPurpose, setSelectedBuiltinPurpose] = useState("");
   const [phaseStatus, setPhaseStatus] = useState("Choose a quicksprint template.");
+  const [blockingStatus, setBlockingStatus] = useState("");
+  const [deleteTarget, setDeleteTarget] = useState<QuicksprintTemplateRecord | null>(null);
 
   /* ── Configure state ────────────────────────────────────────────── */
   const [taskCount, setTaskCount] = useState(5);
@@ -166,6 +169,7 @@ export const QuicksprintPanel: FunctionComponent<QuicksprintPanelProps> = ({
 
   /* ── Handlers ────────────────────────────────────────────── */
   const handleSelectTemplate = (t: QuicksprintTemplateRecord) => {
+    setBlockingStatus("");
     setSelectedTemplateId(t.id);
     setTaskCount(clampSubtaskSliderValue(t.defaultTaskCount || 5));
     setNoTaskLimit(false);
@@ -178,6 +182,7 @@ export const QuicksprintPanel: FunctionComponent<QuicksprintPanelProps> = ({
   };
 
   const handleBackToBrowse = () => {
+    setBlockingStatus("");
     setPhase("browse");
     setPhaseStatus(
       selectedTemplate
@@ -192,31 +197,69 @@ export const QuicksprintPanel: FunctionComponent<QuicksprintPanelProps> = ({
     onCreateTemplate,
     onUpdateTemplate,
     onDeleteTemplate,
-    onCancel: () => setPhase("browse"),
+    onCancel: () => {
+      setPhase("browse");
+      setPhaseStatus("Returned to templates.");
+    },
+    onStatus: setPhaseStatus,
+    onError: setBlockingStatus,
   });
 
   const wrappedOpenEditor = (t: QuicksprintTemplateRecord | null) => {
+    setBlockingStatus("");
     editorState.openEditor(t);
     setPhase("editor");
     setPhaseStatus(t ? `Editing ${t.name}.` : "Creating a new quicksprint template.");
   };
 
-  const handleDeleteTemplate = async (template: QuicksprintTemplateRecord) => {
-    const confirmed = await requestConfirm({
-      title: `Delete ${template.name}?`,
-      body: template.isBuiltIn
-        ? "This hides the default template for this project. The shared bundled template remains available outside this project."
-        : "This removes the custom template from this project.",
-      confirmLabel: "Delete Template",
-      cancelLabel: "Keep Template",
-      destructive: true,
+  const restoreDeleteFocus = () => {
+    const focusTarget = () => {
+      if (deleteTriggerRef.current?.isConnected) {
+        deleteTriggerRef.current.focus({ preventScroll: true });
+        return;
+      }
+      deleteFallbackRef.current?.focus({ preventScroll: true });
+    };
+    focusTarget();
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => {
+        focusTarget();
+      });
     });
-    if (!confirmed) {
-      setPhaseStatus(`Deletion cancelled for ${template.name}.`);
-      return;
+  };
+
+  const handleDeleteTemplate = (template: QuicksprintTemplateRecord, trigger?: HTMLElement | null) => {
+    setBlockingStatus("");
+    deleteTriggerRef.current = trigger || null;
+    setDeleteTarget(template);
+    setPhaseStatus(`Confirm deletion for ${template.name}.`);
+  };
+
+  const confirmDeleteTemplate = async () => {
+    if (!deleteTarget) return;
+    const template = deleteTarget;
+    setPhaseStatus(`Deleting ${template.name} from quicksprint templates.`);
+    try {
+      await onDeleteTemplate?.(template.id);
+      setPhaseStatus(`${template.name} deleted from quicksprint templates.`);
+      setDeleteTarget(null);
+    } catch (error) {
+      console.error("Failed to delete quicksprint template", error);
+      setBlockingStatus(`Could not delete ${template.name}. Try again or check the project template files.`);
+      setPhaseStatus(`Deletion failed for ${template.name}.`);
+      setDeleteTarget(null);
+    } finally {
+      restoreDeleteFocus();
     }
-    await onDeleteTemplate?.(template.id);
-    setPhaseStatus(`${template.name} deleted from quicksprint templates.`);
+  };
+
+  const cancelDeleteTemplate = () => {
+    const templateName = deleteTarget?.name;
+    setDeleteTarget(null);
+    if (templateName) {
+      setPhaseStatus(`Deletion cancelled for ${templateName}.`);
+    }
+    restoreDeleteFocus();
   };
 
   const executionState = useQuicksprintExecutionState({
@@ -230,6 +273,10 @@ export const QuicksprintPanel: FunctionComponent<QuicksprintPanelProps> = ({
     noTaskLimit,
     agentPresets,
     onClose,
+    onError: (message) => {
+      setBlockingStatus(message);
+      setPhaseStatus(message);
+    },
   });
 
   useEffect(() => {
@@ -273,18 +320,39 @@ export const QuicksprintPanel: FunctionComponent<QuicksprintPanelProps> = ({
     "--interaction-selection-movement-ease": interactionTokens.selectionMovement.ease,
     "--interaction-list-reveal-duration": interactionTokens.listReveal.duration,
     "--interaction-list-reveal-ease": interactionTokens.listReveal.ease,
+    "--interaction-list-reorder-duration": interactionTokens.listReorder.duration,
+    "--interaction-list-reorder-ease": interactionTokens.listReorder.ease,
+    "--interaction-inline-validation-duration": interactionTokens.inlineValidation.duration,
+    "--interaction-inline-validation-ease": interactionTokens.inlineValidation.ease,
+    "--interaction-async-feedback-duration": interactionTokens.asyncFeedback.duration,
+    "--interaction-async-feedback-ease": interactionTokens.asyncFeedback.ease,
   } as JSX.CSSProperties;
+  const deleteConfirmOptions: ConfirmDialogOptions | null = deleteTarget
+    ? {
+      title: `Delete ${deleteTarget.name}?`,
+      body: deleteTarget.isBuiltIn
+        ? `Delete ${deleteTarget.name} from this project by hiding the default template. The shared bundled template remains available outside this project.`
+        : `Delete ${deleteTarget.name} from this project's custom templates.`,
+      confirmLabel: `Delete ${deleteTarget.name}`,
+      cancelLabel: "Cancel",
+      destructive: true,
+    }
+    : null;
 
   /* ── Render ─────────────────────────────────────────────────── */
   return (
     <section
       ref={cardRef}
+      data-motion-contract="enterExit"
       className={`relative w-full rounded-[1.75rem] border border-black/[0.06] bg-white/70 shadow-[0_20px_50px_rgba(15,23,42,0.08)] backdrop-blur-2xl dark:border-white/[0.06] dark:bg-void-800/60 dark:shadow-[0_24px_56px_rgba(0,0,0,0.28)] ${overflowClass}`}
       style={motionStyle}
     >
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(255,107,0,0.07),transparent_28%),radial-gradient(circle_at_bottom_right,rgba(0,224,160,0.06),transparent_34%)] dark:bg-[radial-gradient(circle_at_top_left,rgba(255,107,0,0.09),transparent_28%),radial-gradient(circle_at_bottom_right,rgba(0,224,160,0.07),transparent_34%)]" />
       <div className="sr-only" role="status" aria-live="polite" aria-atomic="true">
         {phaseStatus}
+      </div>
+      <div className="sr-only" role="alert" aria-live="assertive" aria-atomic="true">
+        {blockingStatus}
       </div>
 
       <div className={`relative min-h-[480px] ${contentOverflowClass}`} ref={fieldsRef}>
@@ -296,9 +364,10 @@ export const QuicksprintPanel: FunctionComponent<QuicksprintPanelProps> = ({
             setSelectedBuiltinPurpose={setSelectedBuiltinPurpose}
             announcePhaseStatus={setPhaseStatus}
             phaseStatus={phaseStatus}
+            fallbackFocusRef={deleteFallbackRef}
             handleSelectTemplate={handleSelectTemplate}
             openEditor={wrappedOpenEditor}
-            handleDeleteTemplate={onDeleteTemplate ? (template) => { void handleDeleteTemplate(template); } : undefined}
+            handleDeleteTemplate={onDeleteTemplate ? handleDeleteTemplate : undefined}
             activeBuiltinPurpose={activeBuiltinPurpose}
             loading={loading}
             onClose={onClose}
@@ -308,7 +377,13 @@ export const QuicksprintPanel: FunctionComponent<QuicksprintPanelProps> = ({
         {phase === "editor" && (
           <QuicksprintEditorView
             agentPresets={agentPresets}
-            setPhase={setPhase}
+            setPhase={(nextPhase) => {
+              setBlockingStatus("");
+              setPhase(nextPhase);
+              if (nextPhase === "browse") {
+                setPhaseStatus("Returned to templates.");
+              }
+            }}
             cardRef={cardRef}
             {...editorState}
           />
@@ -343,10 +418,11 @@ export const QuicksprintPanel: FunctionComponent<QuicksprintPanelProps> = ({
         )}
       </div>
       <ConfirmDialog
-        isOpen={isConfirmOpen}
-        options={confirmOptions}
-        onConfirm={handleConfirm}
-        onCancel={handleCancel}
+        isOpen={deleteTarget !== null}
+        options={deleteConfirmOptions}
+        onConfirm={confirmDeleteTemplate}
+        onCancel={cancelDeleteTemplate}
+        restoreFocus={false}
       />
     </section>
   );
