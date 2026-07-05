@@ -20,7 +20,7 @@ import {
 import { CONTAINER_SETUP_SCRIPT } from "../../../services/cli-workflow-utils.js";
 import { DockerBootstrapBuilder } from "./docker-bootstrap-builder.js";
 import { DockerCredentialMountBuilder } from "./docker-credential-mount-builder.js";
-import { DockerSetupImageCache } from "./docker-setup-image-cache.js";
+import { DockerSetupImageCache, type DockerSetupImageCacheProgress } from "./docker-setup-image-cache.js";
 import { resolveDockerRuntimeRoot } from "./docker-runtime-paths.js";
 import { buildRuntimeVolumeName, WorkspaceManager, type SnapshotCheckout } from "./workspace-manager.js";
 import { workspaceVolumeHelperPool, type WorkspaceVolumeHelperPool } from "./workspace-volume-helper.js";
@@ -58,6 +58,7 @@ export interface IDockerRunner {
     providerAuthPath?: string;
     signal?: AbortSignal;
     onActivity: (desc: string, originator?: string) => void;
+    onSetupImageProgress?: (progress: DockerSetupImageCacheProgress) => void;
     mcpConnection?: McpConnectionInfo | null;
     customMcpServers?: CustomMcpServer[];
   }): Promise<CommandResult>;
@@ -115,6 +116,7 @@ export class DockerRunner implements IDockerRunner {
     providerAuthPath?: string;
     signal?: AbortSignal;
     onActivity: (desc: string, originator?: string) => void;
+    onSetupImageProgress?: (progress: DockerSetupImageCacheProgress) => void;
     mcpConnection?: McpConnectionInfo | null;
     customMcpServers?: CustomMcpServer[];
   }): Promise<CommandResult> {
@@ -144,6 +146,7 @@ export class DockerRunner implements IDockerRunner {
         repoPath,
         signal,
         onActivity,
+        onProgress: input.onSetupImageProgress,
         mapSourcePathForDaemon: (sourcePath, label) =>
           this.mapDockerSourcePathForDaemon(sourcePath, repoPath, sessionId, label, onActivity),
       });

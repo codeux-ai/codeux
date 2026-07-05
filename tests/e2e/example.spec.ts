@@ -1,18 +1,22 @@
 import { test, expect } from '@playwright/test';
+import { completeOnboarding, ensureSelectedProject } from './helpers/prepare-app';
 
-test('has title', async ({ page }) => {
-  await page.goto('https://playwright.dev/');
-
-  // Expect a title "to contain" a substring.
-  await expect(page).toHaveTitle(/Playwright/);
+test.beforeEach(async ({ request }, testInfo) => {
+  await completeOnboarding(request);
+  await ensureSelectedProject(request, { testInfo, fixtureKey: 'app-smoke' });
 });
 
-test('get started link', async ({ page }) => {
-  await page.goto('https://playwright.dev/');
+test('loads the Code UX dashboard shell', async ({ page }) => {
+  await page.goto('/');
 
-  // Click the get started link.
-  await page.getByRole('link', { name: 'Get started' }).click();
+  await expect(page).toHaveTitle(/Code UX/i);
+  await expect(page.getByRole('navigation', { name: /Workspace navigation/i })).toBeVisible();
+  await expect(page.getByRole('button', { name: /Project/i })).toBeVisible();
+});
 
-  // Expects page to have a heading with the name of Installation.
-  await expect(page.getByRole('heading', { name: 'Installation' })).toBeVisible();
+test('opens the sprint ledger inside the local app', async ({ page }) => {
+  await page.goto('/sprints');
+
+  await expect(page).toHaveURL(/\/sprints$/);
+  await expect(page.getByRole('region', { name: 'Sprint Ledger' })).toBeVisible();
 });

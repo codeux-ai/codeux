@@ -13,6 +13,7 @@ import { HumanInterventionBadge } from "../ui/HumanInterventionBadge.js";
 import { QuotaCountdown, TaskDuration } from "../LiveTaskCard.js";
 import { useExecutionTimeline } from "../../../hooks/ExecutionTimelineContext.js";
 import type { ExecutionSnapshotSurfaceState } from "../../../hooks/ExecutionTimelineContext.js";
+import { findLatestContainerBuildProgressFromEvents, findLatestContainerBuildProgressFromInvocations } from "../../../lib/activity.js";
 import { findActiveConcurrencyWait } from "../../../lib/task-progress.js";
 import {
     getLiveActionDisplayProps,
@@ -24,6 +25,7 @@ import {
     type LiveActionState,
 } from "../../lib/live-session-runtime.js";
 import { deriveExecutionRuntimeViewModel } from "../../lib/live-session/execution-runtime-view-model.js";
+import { ContainerBuildStatusInfobox } from "./ContainerBuildStatusInfobox.js";
 
 export const statusTone = (value: string | null): string => {
     if (!value) return "text-slate-400";
@@ -496,6 +498,11 @@ export const ExecutionRuntimePanel: FunctionComponent<{
             snapshot?.recentEvents,
         ],
     );
+    const containerBuildProgress = useMemo(
+        () => findLatestContainerBuildProgressFromEvents(snapshot?.recentEvents)
+            ?? findLatestContainerBuildProgressFromInvocations(snapshot?.recentInvocations),
+        [snapshot?.recentEvents, snapshot?.recentInvocations],
+    );
 
     if (!snapshot) {
         return (
@@ -576,6 +583,7 @@ export const ExecutionRuntimePanel: FunctionComponent<{
                 <div ref={contentRef} className={collapsible ? "collapsible-content overflow-hidden" : ""}>
                     <div className={`relative z-10 space-y-5 ${collapsible ? "px-5 pb-5 pt-0" : "px-5 pb-5 pt-0"}`}>
                         <RuntimeSnapshotSurfaceNotice surface={snapshotSurface} panelLabel="Execution runtime" />
+                        <ContainerBuildStatusInfobox progress={containerBuildProgress} />
                         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
                             {[
                                 { label: "Active Runs", value: activeSprintRuns.length, accent: "text-signal-500" },

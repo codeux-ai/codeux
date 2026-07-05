@@ -1,4 +1,5 @@
-import type { DashboardSettings, ProviderId } from "../types.js";
+import type { DashboardSettings, ProjectSettingsOverride, ProviderId } from "../types.js";
+import { cloneDefaultSettings } from "./settings.js";
 import { sanitizeSystemProviderConfig } from "../v2/lib/provider-runtime-preview.js";
 
 const syncGitManagerSkills = (
@@ -17,6 +18,11 @@ const syncGitManagerSkills = (
     }
     return skill;
   });
+};
+
+type GitHubModeSettings = {
+  git: DashboardSettings["git"];
+  skills: DashboardSettings["skills"];
 };
 
 export const updateAiProvider = (
@@ -70,9 +76,32 @@ export const updateGitHubMode = (
   settings: DashboardSettings,
   githubMode: DashboardSettings["git"]["githubMode"]
 ): DashboardSettings => {
+  return updateGitHubModeForSettings(settings, githubMode);
+};
+
+export const updateGitHubModeForSettings = <TSettings extends GitHubModeSettings>(
+  settings: TSettings,
+  githubMode: DashboardSettings["git"]["githubMode"],
+): TSettings => {
   return {
-    ...updateGitSettings(settings, { githubMode }),
+    ...settings,
+    git: {
+      ...settings.git,
+      githubMode,
+    },
     skills: syncGitManagerSkills(settings.skills, githubMode),
+  };
+};
+
+export const buildGitHubModeProjectSettingsOverride = (
+  githubMode: DashboardSettings["git"]["githubMode"],
+): ProjectSettingsOverride => {
+  const settings = updateGitHubMode(cloneDefaultSettings(), githubMode);
+  return {
+    git: {
+      githubMode: settings.git.githubMode,
+    } as ProjectSettingsOverride["git"],
+    skills: settings.skills,
   };
 };
 

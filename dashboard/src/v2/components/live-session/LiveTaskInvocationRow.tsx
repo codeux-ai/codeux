@@ -3,8 +3,10 @@ import { memo } from "preact/compat";
 import { ExternalLink, MessageSquareText, Timer } from "lucide-preact";
 
 import { formatTime } from "../../../lib/time.js";
+import { getInvocationContainerBuildProgress } from "../../../lib/activity.js";
 import type { ExecutionInvocationRecord } from "../../../types.js";
 import { formatInvocationDuration, formatInvocationPurpose } from "../chat/invocation-display.js";
+import { ContainerBuildStatusInfobox } from "./ContainerBuildStatusInfobox.js";
 
 const INVOCATION_STATUS_DOT: Record<string, string> = {
   running: "bg-signal-500 shadow-[0_0_8px_rgba(0,224,160,0.55)] motion-reduce:ring-2 motion-reduce:ring-signal-500/25 motion-reduce:shadow-none",
@@ -37,6 +39,7 @@ export const LiveTaskInvocationRow: FunctionComponent<{
   const tokenTotal = invocation.totalTokens ?? ((invocation.inputTokens ?? 0) + (invocation.outputTokens ?? 0));
   const statusDot = INVOCATION_STATUS_DOT[invocation.status] || "bg-slate-400";
   const statusText = INVOCATION_STATUS_TEXT[invocation.status] || "text-slate-500";
+  const containerBuildProgress = getInvocationContainerBuildProgress(invocation);
 
   return (
     <div className="rounded-xl border border-black/[0.04] bg-white/60 p-3 transition-colors duration-[var(--interaction-list-reveal-duration)] ease-[var(--interaction-list-reveal-ease)] motion-reduce:transition-none dark:border-white/[0.05] dark:bg-void-900/25">
@@ -66,6 +69,8 @@ export const LiveTaskInvocationRow: FunctionComponent<{
           </div>
         </div>
       </div>
+
+      <ContainerBuildStatusInfobox progress={containerBuildProgress} className="mt-3" />
 
       <div className="mt-3 flex flex-wrap items-center gap-2">
         <span className="inline-flex items-center gap-1 rounded-md border border-black/[0.05] px-2 py-0.5 text-[10px] font-mono text-slate-500 dark:border-white/[0.06] dark:text-slate-400">

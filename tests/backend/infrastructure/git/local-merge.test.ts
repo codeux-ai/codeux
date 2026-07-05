@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -64,6 +64,69 @@ describe("local-merge helpers", () => {
     expect(files).toContain("work.txt");
   });
 
+  it("merges a sprint feature branch into a local-only default branch without a remote", async () => {
+    await git(repo, "checkout", "feature");
+    await commitFile(repo, "feature.txt", "feature\n", "feat: sprint work");
+    await git(repo, "checkout", "feature");
+
+    const original = await getCheckedOutRef(repo);
+    const result = await mergeBranchLocally({
+      repoPath: repo,
+      targetBranch: "main",
+      sourceBranch: "feature",
+      commitMessage: "Merge branch 'feature' into main",
+    });
+    await restoreCheckedOutRef(repo, original);
+
+    expect(result.ok).toBe(true);
+    expect(result.conflict).toBe(false);
+    const files = (await git(repo, "ls-tree", "--name-only", "main")).stdout;
+    expect(files).toContain("feature.txt");
+    expect(await currentBranch()).toBe("feature");
+  });
+
+  it("creates a missing unborn local default branch from the source branch", async () => {
+    const unbornRepo = await mkdtemp(path.join(tmpdir(), "local-merge-unborn-"));
+    try {
+      await git(unbornRepo, "init", "-b", "main");
+      await git(unbornRepo, "config", "user.email", "test@example.com");
+      await git(unbornRepo, "config", "user.name", "Test");
+      await git(unbornRepo, "checkout", "--orphan", "feature");
+      await commitFile(unbornRepo, "first.txt", "first\n", "feat: first local work");
+
+      const result = await mergeBranchLocally({
+        repoPath: unbornRepo,
+        targetBranch: "main",
+        sourceBranch: "feature",
+        commitMessage: "Merge branch 'feature' into main",
+      });
+
+      expect(result.ok).toBe(true);
+      expect(result.conflict).toBe(false);
+      const mainHead = (await git(unbornRepo, "rev-parse", "main")).stdout.trim();
+      const featureHead = (await git(unbornRepo, "rev-parse", "feature")).stdout.trim();
+      expect(mainHead).toBe(featureHead);
+    } finally {
+      await rm(unbornRepo, { recursive: true, force: true });
+    }
+  });
+
+  it("treats already-merged source branches as a successful no-op", async () => {
+    const mainBefore = (await git(repo, "rev-parse", "main")).stdout.trim();
+
+    const result = await mergeBranchLocally({
+      repoPath: repo,
+      targetBranch: "main",
+      sourceBranch: "feature",
+      commitMessage: "Merge branch 'feature' into main",
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.conflict).toBe(false);
+    const mainAfter = (await git(repo, "rev-parse", "main")).stdout.trim();
+    expect(mainAfter).toBe(mainBefore);
+  });
+
   it("restores the originally checked-out branch after a merge", async () => {
     await git(repo, "checkout", "feature");
     await git(repo, "checkout", "-b", "worker");
@@ -122,23 +185,38 @@ describe("local-merge helpers", () => {
     });
 
     expect(result.ok).toBe(false);
-    expect(result.conflict).toBe(true); // merge invocation failed
+    expect(result.conflict).toBe(false);
+    expect(result.error).toContain("does-not-exist");
     // A failed merge still aborts cleanly, leaving no half-merged state.
     const status = (await git(repo, "status", "--porcelain")).stdout.trim();
     expect(status).toBe("");
   });
 
   it("returns a non-conflict error when the target branch cannot be checked out", async () => {
+    const runner = vi.fn(async (_command: string, args: string[], _cwd: string) => {
+      if (args[0] === "rev-parse") {
+        return { ok: true, code: 0, stdout: "abc123\n", stderr: "" };
+      }
+      if (args[0] === "show-ref") {
+        return { ok: true, code: 0, stdout: "", stderr: "" };
+      }
+      if (args[0] === "checkout") {
+        throw new Error("checkout failed");
+      }
+      return { ok: true, code: 0, stdout: "", stderr: "" };
+    });
+
     const result = await mergeBranchLocally({
       repoPath: repo,
-      targetBranch: "missing-target",
+      targetBranch: "feature",
       sourceBranch: "feature",
       commitMessage: "Merge branch 'feature' into missing-target",
+      runner,
     });
 
     expect(result.ok).toBe(false);
     expect(result.conflict).toBe(false);
-    expect(result.error).toBeTruthy();
+    expect(result.error).toContain("checkout failed");
   });
 });
 

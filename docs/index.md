@@ -24,7 +24,8 @@ Use this page as the main entrypoint.
 6. [Quicksprint Templates](./dashboard/quicksprint-templates.md)
 7. [Scheduler](./dashboard/scheduler.md)
 8. [Memory Architecture and Search](./dashboard/memory.md)
-9. [Glossary](./reference/glossary.md)
+9. [Testing and Quality](./development/testing-and-quality.md)
+10. [Glossary](./reference/glossary.md)
 
 ### Path 2: Building or modifying orchestration behavior
 1. [System Overview](./architecture/system-overview.md)
@@ -84,6 +85,11 @@ Use this page as the main entrypoint.
 7. [Logging and Correlation IDs](./operations/logging-and-correlation.md)
 8. [CLI Commands Reference](./reference/cli-commands.md) - `codeux` management syntax, aliases, prompting, JSON payloads, and approvals
 9. [CLI Management Surface](./operations/management-cli.md)
+
+### Path 4: Development and validation
+1. [Repository Map](./architecture/repository-map.md)
+2. [Testing and Quality](./development/testing-and-quality.md)
+3. [Documentation Standards](./development/documentation-standards.md)
 
 ## Full Table of Contents
 

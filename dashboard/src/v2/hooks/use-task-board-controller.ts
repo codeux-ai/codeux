@@ -4,6 +4,7 @@ import type { RefObject } from "preact";
 import { useDashboardRuntimeData } from "../../hooks/use-dashboard-runtime-data.js";
 import { useSprints } from "../../hooks/useSprints.js";
 import type { AddProjectModalSubmission } from "../components/ui/AddProjectModal.js";
+import { buildGitHubModeProjectSettingsOverride } from "../../lib/settings-updaters.js";
 import type {
   TaskBoardPriorityFilter,
   TaskBoardStatusFilter,
@@ -436,17 +437,19 @@ export function useTaskBoardController(): TaskBoardController {
 
   const handleAddProject = useCallback(async (project: AddProjectModalSubmission) => {
     if (project.type === "new_project") {
+      const isLocalProject = project.initMode === "new-local";
       const sourceRef = project.initMode === "new-local"
         ? (project.path || project.name)
         : (project.repoSlug || project.name);
 
       await createProject({
         name: project.name,
-        sourceType: project.initMode === "new-local" ? "local" : "git",
+        sourceType: isLocalProject ? "local" : "git",
         sourceRef,
         initMode: project.initMode,
         remoteProvider: project.remoteProvider,
         isPrivate: project.isPrivate,
+        ...(isLocalProject ? { settingsOverrides: buildGitHubModeProjectSettingsOverride("LOCAL") } : {}),
       });
       return;
     }
@@ -456,6 +459,7 @@ export function useTaskBoardController(): TaskBoardController {
       sourceType: project.type,
       sourceRef: project.path,
       cloneDir: project.cloneDir,
+      ...(project.type === "local" ? { settingsOverrides: buildGitHubModeProjectSettingsOverride("LOCAL") } : {}),
     });
   }, [createProject]);
 

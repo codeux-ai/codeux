@@ -5,6 +5,7 @@ This guide describes how to validate changes safely.
 Test files are organized under `tests/`:
 - `tests/backend/**`
 - `tests/dashboard/**`
+- `tests/e2e/**`
 
 
 ## Local Scratch Files
@@ -49,19 +50,46 @@ pnpm run ci
 
 `pnpm run ci` starts with `pnpm run quality:guardrails`, then runs audit, lint, backend coverage, dashboard tests, and build. Run `pnpm run quality:guardrails` directly after changes that affect shared implementation structure, large modules, duplicate logic, dependency factory wiring, realtime snapshot persistence, optimistic task insertion, or the guardrail script itself. Treat blocking guardrail output as CI-equivalent; advisory oversized-file and broad-`any` reports identify cleanup targets but do not fail the command.
 
-- Run Playwright E2E browser tests
+- Run Playwright release E2E browser tests
 ```bash
-pnpm exec playwright test
+pnpm run test:e2e
 ```
 
-GitHub Actions optimization notes:
-- The CI pipeline is split into three parallel, concurrent jobs: `Typecheck & Lint`, `Unit & Integration Tests`, and `Playwright E2E Tests` for maximum speed and fast feedback.
-- Restores and saves Vite, Vitest, and TypeScript compiler increment caches across runs.
-- Caches Playwright browser binaries (`~/.cache/ms-playwright`) to avoid downloading browsers on every run, dramatically reducing E2E setup time.
-- Uses `fullyParallel` execution in `playwright.config.ts` on CI to harness all available CPU cores.
-- Seamlessly integrates browser-level E2E tests for WebGL visual rendering, failure fallbacks, and mobile/desktop responsive layout breakpoints, removing mock-heavy DOM stubs from Unit tests.
-- Uses the GitHub Actions reporter to publish Playwright test failures inline on pull request checks.
-- Cancels superseded runs for the same branch or PR to conserve resources.
+`pnpm run test:e2e` delegates to Playwright and uses the root `playwright.config.ts`. The configured web server starts the compiled normal web app with `node dist/index.js`, waits for `http://127.0.0.1:4444/health`, and sets both `HOME` and `USERPROFILE` to a temp app home so SQLite state, runtime files, and first-run flags stay isolated from the developer's real Code UX profile. Build first with `pnpm run build` when `dist/index.js` is not present or may be stale.
+
+Focused examples:
+```bash
+pnpm run test:e2e -- tests/e2e/sprint-task-lifecycle.spec.ts
+pnpm run test:e2e -- tests/e2e/app-release-smoke.spec.ts
+pnpm run test:e2e -- tests/e2e/app-release-smoke.spec.ts -g "normal app shell"
+```
+
+### Playwright Release E2E
+
+The release E2E suite lives under `tests/e2e` and exercises the production-style dashboard served by the compiled server. It is not a provider orchestration test suite: specs must avoid provider credentials, Docker provider startup, project setup automation, worker dispatch, and sprint execution endpoints. The current release coverage includes:
+
+- `tests/e2e/app-release-smoke.spec.ts`, which verifies the normal app shell, core dashboard routes, responsive task-board behavior, route landmarks, and unexpected browser errors.
+- `tests/e2e/sprint-task-lifecycle.spec.ts`, which verifies draft sprint and implementation task create/edit/delete behavior through the visible dashboard flows and collection API assertions.
+- `tests/e2e/helpers/prepare-app.ts`, which prepares deterministic app state through dashboard HTTP APIs for onboarding, local project selection, draft sprint setup, task setup, updates, deletes, and cleanup.
+
+`playwright.config.ts` uses Chromium, `http://127.0.0.1:4444`, `fullyParallel: true`, CI retries, and the GitHub plus HTML reporters in CI. It checks `/health` instead of `/ready` because a clean release smoke run may not have project live-status activity, while liveness is enough to know the compiled web app accepted the browser session.
+
+### E2E Authoring Rules
+
+Root E2E specs should prepare normal app state through `tests/e2e/helpers/prepare-app.ts` before loading pages that depend on onboarding, project selection, sprints, or tasks. The helper layer uses the dashboard HTTP APIs, not direct database writes or shell commands, and creates per-run local project fixtures under the OS temp directory with names prefixed by the Playwright worker and a timestamp-safe run suffix.
+
+- Use `completeOnboarding`, `ensureSelectedProject`, `createDraftSprint`, and `createTaskInSprint` for setup instead of hand-writing setup requests in each spec.
+- Use unique fixture keys and generated names from the helper utilities so parallel workers and retries do not collide.
+- Prefer role-based locators, accessible names, landmarks, and stable `data-testid` roots over CSS shape or timing assertions.
+- Build paths with Node `os`, `path`, and `fs` APIs so fixtures remain portable on Windows, macOS, and Linux.
+- Clean up created sprints and tasks with `deleteTask`, `deleteSprint`, or `cleanupSprintFixture` in `afterEach` when a spec mutates persistent app state.
+- Use the exported update/delete helpers to mutate or clean sprint/task records during a spec. Keep setup deterministic and local to the web app contract.
+
+### GitHub Actions E2E Policy
+
+The Playwright workflow is `.github/workflows/playwright.yml`. It runs only on `push` to `main` and `workflow_dispatch`, so release E2E coverage executes after changes merge to the release branch or when someone starts the workflow manually. Pull requests rely on the normal lint, unit, integration, coverage, and build checks unless a maintainer explicitly dispatches E2E.
+
+The workflow matrix covers `ubuntu-latest`, `macos-latest`, and `windows-latest`. It installs dependencies with pnpm 10.33.0 on Node 22, builds the server and dashboard before Playwright starts `node dist/index.js`, caches browser binaries under `.cache/ms-playwright`, installs Linux Chromium system dependencies only on Linux runners, and runs the same `pnpm run test:e2e` script used locally.
 
 - Build backend and dashboard
 ```bash

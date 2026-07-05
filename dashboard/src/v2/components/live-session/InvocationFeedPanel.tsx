@@ -8,8 +8,10 @@ import { ChevronDown, Cpu, ExternalLink, MessageSquareText, Timer } from "lucide
 import { formatTime } from "../../../lib/time.js";
 import { useExecutionTimeline } from "../../../hooks/ExecutionTimelineContext.js";
 import type { ExecutionInvocationRecord } from "../../../types.js";
+import { findLatestContainerBuildProgressFromEvents, findLatestContainerBuildProgressFromInvocations } from "../../../lib/activity.js";
 import { formatInvocationDuration, formatInvocationPurpose, InvocationContextChips } from "../chat/invocation-display.js";
 import { RuntimeSnapshotSurfaceBadge, RuntimeSnapshotSurfaceNotice, statusRailTone, statusTone, shortenRuntimeId } from "./ExecutionRuntimePanel.js";
+import { ContainerBuildStatusInfobox } from "./ContainerBuildStatusInfobox.js";
 
 const INVOCATION_STATUS_DOT: Record<string, string> = {
   running: "bg-signal-500 shadow-[0_0_8px_rgba(0,224,160,0.35)] motion-reduce:ring-2 motion-reduce:ring-signal-500/30 motion-reduce:shadow-none",
@@ -195,6 +197,11 @@ export const InvocationFeedPanel: FunctionComponent<{
     [invocations],
   );
   const invocationSummary = `${invocations.length} invocation${invocations.length === 1 ? "" : "s"} shown: ${newCount} new or queued, ${runningCount} running, ${completedCount} completed, ${failedCount} failed.`;
+  const containerBuildProgress = useMemo(
+    () => findLatestContainerBuildProgressFromInvocations(invocations)
+      ?? findLatestContainerBuildProgressFromEvents(snapshot?.recentEvents),
+    [invocations, snapshot?.recentEvents],
+  );
 
   if (!snapshot) {
     return (
@@ -256,6 +263,7 @@ export const InvocationFeedPanel: FunctionComponent<{
         <div ref={contentRef} className={collapsible ? "collapsible-content overflow-hidden" : ""}>
           <div className="relative z-10 space-y-3 px-5 pb-5 pt-0">
             <RuntimeSnapshotSurfaceNotice surface={snapshotSurface} panelLabel="Invocation feed" />
+            <ContainerBuildStatusInfobox progress={containerBuildProgress} className="mb-3" />
             <div className="mb-3 grid grid-cols-3 gap-2">
               {[
                 { label: "Running", value: runningCount, tone: "text-signal-500" },
