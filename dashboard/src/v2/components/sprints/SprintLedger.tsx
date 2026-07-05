@@ -105,6 +105,8 @@ const SprintLedgerComponent: FunctionComponent<SprintLedgerProps> = ({
   const { isOpen, options, requestConfirm, handleConfirm, handleCancel } = useConfirmDialog();
   const bulkDeleteButtonRef = useRef<HTMLButtonElement>(null);
   const ledgerFocusRef = useRef<HTMLDivElement>(null);
+  const previousBulkPendingRef = useRef(false);
+  const bulkPendingSummaryRef = useRef<{ action: BulkLedgerAction; count: number } | null>(null);
   const [ledgerAnnouncement, setLedgerAnnouncement] = useState("Sorted by Created descending. Showing all sprints. No sprints selected.");
 
   useEffect(() => {
@@ -245,6 +247,46 @@ const SprintLedgerComponent: FunctionComponent<SprintLedgerProps> = ({
   }, [selectedFiltered, ledgerSprints, activeRunsBySprintId, pendingActionIds]);
 
   const isBulkPending = isAnyBulkPending;
+  const isBulkOperationPending = isBulkPending && lastBulkAction !== null;
+
+  useEffect(() => {
+    if (isBulkOperationPending) {
+      previousBulkPendingRef.current = true;
+      bulkPendingSummaryRef.current = {
+        action: lastBulkAction,
+        count: selectedFiltered.length,
+      };
+      return;
+    }
+
+    if (!previousBulkPendingRef.current) {
+      return;
+    }
+
+    previousBulkPendingRef.current = false;
+    const summary = bulkPendingSummaryRef.current;
+    bulkPendingSummaryRef.current = null;
+    const completedAction = summary?.action;
+    const completedCount = summary?.count ?? selectedFiltered.length;
+    const actionLabel = completedAction === "delete"
+      ? "Delete"
+      : completedAction === "start"
+        ? "Start"
+        : completedAction === "pin"
+          ? "Pin"
+          : completedAction === "unpin"
+            ? "Unpin"
+            : "Bulk action";
+
+    announceLedgerOutcome(
+      `${actionLabel} completed for ${completedCount} selected sprint${completedCount === 1 ? "" : "s"}.`,
+      ledgerSprints.length,
+      selectedFiltered.length,
+      { totalCount: sprints.length },
+    );
+    setLastBulkAction(null);
+  }, [announceLedgerOutcome, isBulkOperationPending, lastBulkAction, ledgerSprints.length, selectedFiltered.length, sprints.length]);
+
   const viewStateKey = useMemo(
     () => getLedgerViewStateKey(filters, sort, listWindow),
     [filters, sort, listWindow],
@@ -345,12 +387,12 @@ const SprintLedgerComponent: FunctionComponent<SprintLedgerProps> = ({
 
     if (confirmed) {
       setLastBulkAction("delete");
-      announceLedgerOutcome("Deleting selected sprints.", ledgerSprints.length, selectedCount);
+      announceLedgerOutcome("Bulk delete confirmed. Deleting selected sprints.", ledgerSprints.length, selectedCount);
       onBulkDelete(selectedFiltered.map((s) => s.id));
       restoreBulkDeleteFocus();
       // Selection clears naturally as items are removed, keeping the pending state visible
     } else {
-      announceLedgerOutcome("Bulk delete canceled.", ledgerSprints.length, selectedCount);
+      announceLedgerOutcome("Bulk delete canceled. Selected sprints were not deleted.", ledgerSprints.length, selectedCount);
       restoreBulkDeleteFocus();
     }
   }, [announceLedgerOutcome, isBulkPending, ledgerSprints.length, onBulkDelete, selectedFiltered, requestConfirm, restoreBulkDeleteFocus]);
