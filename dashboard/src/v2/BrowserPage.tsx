@@ -21,7 +21,15 @@ import {
   startPreviewSession,
   stopPreviewSession,
 } from "./lib/browser-api.js";
-import { normalizePath, buildPreviewOrigin } from "./lib/preview-origin.js";
+import {
+  buildPreviewOrigin,
+  buildPreviewUrl,
+  formatPreviewPortMapping,
+  formatPreviewPortMappingsSummary,
+  getPreviewPortMappings,
+  getPrimaryPreviewPortMapping,
+  normalizePath,
+} from "./lib/preview-origin.js";
 import { usePreviewSessions } from "./hooks/use-preview-sessions.js";
 import { useProjectEffectiveSettings } from "./hooks/use-project-effective-settings.js";
 import { PreviewSessionSlider } from "./components/browser/PreviewSessionSlider.js";
@@ -36,20 +44,7 @@ import { getSafeUrl } from "./lib/safe-url.js";
 const PREVIEW_MESSAGE_TYPE = "sprint-preview:state";
 const PREVIEW_NAVIGATION_TYPE = "sprint-preview:navigate";
 
-const formatPortMapping = (session: SprintPreviewSession): string => {
-  const sourcePort = typeof session.containerAppPort === "number" ? session.containerAppPort : null;
-  const routedPort = typeof session.hostPort === "number" ? session.hostPort : null;
-  if (sourcePort && routedPort) {
-    return `:${sourcePort} -> :${routedPort}`;
-  }
-  if (sourcePort) {
-    return `:${sourcePort} -> pending`;
-  }
-  if (routedPort) {
-    return `pending -> :${routedPort}`;
-  }
-  return "port pending";
-};
+const getSessionPortPathKey = (sessionId: string, containerPort: number): string => `${sessionId}:${containerPort}`;
 
 export const BrowserPage: FunctionComponent = () => {
   const frameRef = useRef<HTMLIFrameElement>(null);
@@ -78,6 +73,7 @@ export const BrowserPage: FunctionComponent = () => {
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [launchSprintId, setLaunchSprintId] = useState("");
   const [frameSrc, setFrameSrc] = useState("");
+  const [selectedPortBySessionId, setSelectedPortBySessionId] = useState<Record<string, number>>({});
 
   const browserFeedback = useActionFeedback();
   const navigationPendingTimerRef = useRef<number | null>(null);
@@ -87,6 +83,8 @@ export const BrowserPage: FunctionComponent = () => {
   const savingScriptRef = useRef(false);
   const removingSessionIdsRef = useRef<Set<string>>(new Set());
   const logsCacheRef = useRef<Map<string, string>>(new Map());
+  const pathBySessionPortRef = useRef<Map<string, string>>(new Map());
+  const selectedPortPathKeyRef = useRef<string | null>(null);
 
   const { sessions, selectedSession, loading, error: fetchError, refresh: refreshSessions } = usePreviewSessions({
     projectId: selectedProject?.id || null,
@@ -120,7 +118,24 @@ export const BrowserPage: FunctionComponent = () => {
   const visibleSelectedSession = selectedSession && !removingSessionIdSet.has(selectedSession.id)
     ? selectedSession
     : null;
-  const navigationEnabled = Boolean(visibleSelectedSession && visibleSelectedSession.status === "running" && visibleSelectedSession.hostPort);
+  const portMappings = useMemo(() => getPreviewPortMappings(visibleSelectedSession), [visibleSelectedSession]);
+  const primaryPortMapping = useMemo(() => getPrimaryPreviewPortMapping(visibleSelectedSession), [visibleSelectedSession]);
+  const selectedPortMapping = useMemo(() => {
+    if (!visibleSelectedSession) {
+      return null;
+    }
+    const selectedContainerPort = selectedPortBySessionId[visibleSelectedSession.id] ?? primaryPortMapping?.containerPort;
+    return portMappings.find((mapping) => mapping.containerPort === selectedContainerPort)
+      ?? primaryPortMapping
+      ?? portMappings[0]
+      ?? null;
+  }, [portMappings, primaryPortMapping, selectedPortBySessionId, visibleSelectedSession]);
+  const selectedHostPort = selectedPortMapping?.hostPort ?? null;
+  const selectedContainerPort = selectedPortMapping?.containerPort ?? null;
+  const selectedUrlContainerPort = portMappings.length > 1 && selectedContainerPort !== primaryPortMapping?.containerPort
+    ? selectedContainerPort
+    : null;
+  const navigationEnabled = Boolean(visibleSelectedSession && visibleSelectedSession.status === "running" && selectedHostPort);
   const sessionCards = sessions.filter((session) =>
     (!selectedProject || session.projectId === selectedProject.id) && !removingSessionIdSet.has(session.id)
   );
@@ -134,8 +149,10 @@ export const BrowserPage: FunctionComponent = () => {
           ? `Preview navigation is disabled because the selected container is in an error state${visibleSelectedSession.lastError ? `: ${visibleSelectedSession.lastError}` : "."}`
           : visibleSelectedSession.status !== "running"
             ? "Preview navigation is disabled because the selected container is stopped. Start or rebuild the container to navigate."
-            : !visibleSelectedSession.hostPort
-              ? "Preview navigation is disabled until the running container receives a routed host port."
+            : !selectedHostPort
+              ? selectedContainerPort
+                ? `Preview navigation is disabled until port :${selectedContainerPort} receives a routed host port.`
+                : "Preview navigation is disabled until the running container receives a routed host port."
               : "";
   const previewStatusMessage = visibleSelectedSession
     ? visibleSelectedSession.status === "running"
@@ -175,17 +192,37 @@ export const BrowserPage: FunctionComponent = () => {
 
   useEffect(() => {
     if (visibleSelectedSession) {
+      const nextPrimary = getPrimaryPreviewPortMapping(visibleSelectedSession);
+      if (nextPrimary) {
+        setSelectedPortBySessionId((current) => (
+          current[visibleSelectedSession.id] ? current : { ...current, [visibleSelectedSession.id]: nextPrimary.containerPort }
+        ));
+      }
+    }
+  }, [visibleSelectedSession?.id]);
+
+  useEffect(() => {
+    if (visibleSelectedSession && selectedPortMapping) {
       setActiveSessionId(visibleSelectedSession.id);
-      const nextPath = normalizePath(visibleSelectedSession.lastKnownPath || "/");
+      const pathKey = getSessionPortPathKey(visibleSelectedSession.id, selectedPortMapping.containerPort);
+      selectedPortPathKeyRef.current = pathKey;
+      const fallbackPath = selectedPortMapping.isPrimary || selectedPortMapping.containerPort === primaryPortMapping?.containerPort
+        ? visibleSelectedSession.lastKnownPath || "/"
+        : "/";
+      const nextPath = normalizePath(pathBySessionPortRef.current.get(pathKey) ?? fallbackPath);
       currentPathRef.current = nextPath;
       setCurrentPath(nextPath);
       setAddressValue(nextPath);
-      setFrameSrc(`${buildPreviewOrigin(visibleSelectedSession.id)}${nextPath}`);
+      const nextUrlContainerPort = portMappings.length > 1 && selectedPortMapping.containerPort !== primaryPortMapping?.containerPort
+        ? selectedPortMapping.containerPort
+        : null;
+      setFrameSrc(buildPreviewUrl(visibleSelectedSession.id, nextPath, nextUrlContainerPort));
 
       return;
     }
+    selectedPortPathKeyRef.current = null;
     setFrameSrc("");
-  }, [visibleSelectedSession?.id]);
+  }, [primaryPortMapping?.containerPort, selectedPortMapping?.containerPort, visibleSelectedSession?.id]);
 
   useEffect(() => {
     currentPathRef.current = currentPath;
@@ -195,9 +232,9 @@ export const BrowserPage: FunctionComponent = () => {
     if (!visibleSelectedSession || !frameSrc) {
       return;
     }
-    setFrameSrc(`${buildPreviewOrigin(visibleSelectedSession.id)}${normalizePath(currentPathRef.current)}`);
+    setFrameSrc(buildPreviewUrl(visibleSelectedSession.id, normalizePath(currentPathRef.current), selectedUrlContainerPort));
 
-  }, [visibleSelectedSession?.status, visibleSelectedSession?.hostPort]);
+  }, [selectedHostPort, selectedUrlContainerPort, visibleSelectedSession?.status]);
 
   const refreshLogsForSession = async (session: SprintPreviewSession, announce = false) => {
     if (announce) {
@@ -366,6 +403,9 @@ export const BrowserPage: FunctionComponent = () => {
         return;
       }
       const nextPath = normalizePath(payload.path || "/");
+      if (selectedPortPathKeyRef.current) {
+        pathBySessionPortRef.current.set(selectedPortPathKeyRef.current, nextPath);
+      }
       setCurrentPath(nextPath);
       setAddressValue(nextPath);
     };
@@ -389,8 +429,22 @@ export const BrowserPage: FunctionComponent = () => {
     if (!visibleSelectedSession) {
       return;
     }
-    setFrameSrc(`${buildPreviewOrigin(visibleSelectedSession.id)}${normalizePath(path)}`);
+    setFrameSrc(buildPreviewUrl(visibleSelectedSession.id, normalizePath(path), selectedUrlContainerPort));
 
+  };
+
+  const handleSelectPort = (containerPort: number) => {
+    if (!visibleSelectedSession || containerPort === selectedContainerPort) {
+      return;
+    }
+    if (selectedPortPathKeyRef.current) {
+      pathBySessionPortRef.current.set(selectedPortPathKeyRef.current, normalizePath(currentPathRef.current));
+    }
+    setSelectedPortBySessionId((current) => ({
+      ...current,
+      [visibleSelectedSession.id]: containerPort,
+    }));
+    browserFeedback.setSuccess(`Selected preview port :${containerPort} for ${visibleSelectedSession.sprintName}`);
   };
 
   const markNavigationPending = () => {
@@ -431,8 +485,12 @@ export const BrowserPage: FunctionComponent = () => {
     try {
       const session = await startPreviewSession(selectedProject.id, sprintId);
       setActiveSessionId(session.id);
+      const nextPrimary = getPrimaryPreviewPortMapping(session);
+      if (nextPrimary) {
+        setSelectedPortBySessionId((current) => ({ ...current, [session.id]: nextPrimary.containerPort }));
+      }
       await refreshSessions(true);
-      setFrameSrc(`${buildPreviewOrigin(session.id)}${normalizePath(currentPathRef.current)}`);
+      setFrameSrc(buildPreviewUrl(session.id, normalizePath(currentPathRef.current)));
 
       browserFeedback.setSuccess("Container launched successfully");
     } catch (actionError) {
@@ -536,6 +594,9 @@ export const BrowserPage: FunctionComponent = () => {
     const nextPath = normalizePath(addressValue);
     browserFeedback.setPending(`Navigating preview to ${nextPath}...`);
     markNavigationPending();
+    if (selectedPortPathKeyRef.current) {
+      pathBySessionPortRef.current.set(selectedPortPathKeyRef.current, nextPath);
+    }
     setCurrentPath(nextPath);
     setAddressValue(nextPath);
     postNavigationCommand("push", nextPath);
@@ -668,6 +729,9 @@ export const BrowserPage: FunctionComponent = () => {
           navigationEnabled={navigationEnabled}
           navigationBusy={navigationPending}
           navigationDisabledReason={navigationDisabledReason}
+          portMappings={portMappings}
+          selectedContainerPort={selectedContainerPort}
+          onSelectPort={handleSelectPort}
         >
           <div aria-live="polite" role="status" className="sr-only">
             {previewStatusMessage}
@@ -693,7 +757,7 @@ export const BrowserPage: FunctionComponent = () => {
               <iframe
                 key={visibleSelectedSession.id}
                 ref={frameRef}
-                title={`Preview: ${selectedProject?.name || 'Unknown Project'} - ${visibleSelectedSession.sprintName}`}
+                title={`Preview: ${selectedProject?.name || 'Unknown Project'} - ${visibleSelectedSession.sprintName}${selectedContainerPort ? ` on port ${selectedContainerPort}` : ""}`}
                 src={frameSrc}
                 className="h-full w-full border-0 bg-white"
               />
@@ -734,7 +798,12 @@ export const BrowserPage: FunctionComponent = () => {
               {visibleSelectedSession && (
                 <div className="rounded-2xl border border-sky-500/20 bg-sky-500/10 px-4 py-3 dark:border-sky-500/25 dark:bg-sky-500/12">
                   <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Port routing</div>
-                  <div className="mt-1 font-mono text-[12px] text-slate-700 dark:text-slate-300">{formatPortMapping(visibleSelectedSession)}</div>
+                  <div className="mt-1 font-mono text-[12px] text-slate-700 dark:text-slate-300">{formatPreviewPortMappingsSummary(visibleSelectedSession)}</div>
+                  {selectedPortMapping && (
+                    <div className="mt-1 text-[11px] font-semibold text-slate-500 dark:text-slate-400">
+                      Selected {formatPreviewPortMapping(selectedPortMapping)}
+                    </div>
+                  )}
                 </div>
               )}
               <div className="rounded-2xl border border-ember-500/20 bg-ember-500/10 px-4 py-3 dark:border-ember-500/25 dark:bg-ember-500/12">
@@ -771,7 +840,7 @@ export const BrowserPage: FunctionComponent = () => {
                   {pendingSessionAction === "stop" ? "Stopping..." : "Stop"}
                 </button>
                 <a
-                  href={visibleSelectedSession ? getSafeUrl(`${buildPreviewOrigin(visibleSelectedSession.id)}${normalizePath(currentPath)}`) : undefined}
+                  href={visibleSelectedSession ? getSafeUrl(buildPreviewUrl(visibleSelectedSession.id, normalizePath(currentPath), selectedUrlContainerPort)) : undefined}
                   target="_blank"
                   rel="noopener noreferrer"
                   aria-disabled={!visibleSelectedSession}
