@@ -124,6 +124,19 @@ export const BrowserPage: FunctionComponent = () => {
   const sessionCards = sessions.filter((session) =>
     (!selectedProject || session.projectId === selectedProject.id) && !removingSessionIdSet.has(session.id)
   );
+  const navigationDisabledReason = navigationPending
+    ? "Preview navigation is sending the previous command. Wait for the control to become available before submitting another navigation command."
+    : !visibleSelectedSession
+      ? "Select or launch a preview session before using browser navigation."
+      : visibleSelectedSession.status === "starting"
+        ? "Preview navigation is disabled while the selected container is starting and waiting for a routed host port."
+        : visibleSelectedSession.status === "error"
+          ? `Preview navigation is disabled because the selected container is in an error state${visibleSelectedSession.lastError ? `: ${visibleSelectedSession.lastError}` : "."}`
+          : visibleSelectedSession.status !== "running"
+            ? "Preview navigation is disabled because the selected container is stopped. Start or rebuild the container to navigate."
+            : !visibleSelectedSession.hostPort
+              ? "Preview navigation is disabled until the running container receives a routed host port."
+              : "";
   const previewStatusMessage = visibleSelectedSession
     ? visibleSelectedSession.status === "running"
       ? "Preview container is running."
@@ -186,6 +199,48 @@ export const BrowserPage: FunctionComponent = () => {
 
   }, [visibleSelectedSession?.status, visibleSelectedSession?.hostPort]);
 
+  const refreshLogsForSession = async (session: SprintPreviewSession, announce = false) => {
+    if (announce) {
+      browserFeedback.setPending(`Refreshing logs for ${session.sprintName}...`);
+    }
+    setLogsLoading(true);
+    setLogsError(null);
+    try {
+      const result = await fetchPreviewLogs(session.id, 160);
+      const nextLogs = result.logs;
+      if (nextLogs) {
+        logsCacheRef.current.set(session.id, nextLogs);
+        setLogs(nextLogs);
+        setLogsSessionId(session.id);
+        setLogsStale(false);
+      } else {
+        const cachedLogs = logsCacheRef.current.get(session.id);
+        if (cachedLogs) {
+          setLogs(cachedLogs);
+          setLogsSessionId(session.id);
+          setLogsStale(true);
+        } else {
+          setLogs((current) => current || "");
+          setLogsSessionId((current) => current || session.id);
+          setLogsStale(Boolean(logs));
+        }
+      }
+      setLogsError(null);
+      if (announce) {
+        browserFeedback.setSuccess(nextLogs ? "Preview logs refreshed" : "No new log output. Showing last available logs.");
+      }
+    } catch (fetchLogsError) {
+      const message = fetchLogsError instanceof Error ? fetchLogsError.message : "Unknown log error";
+      setLogsError(message);
+      setLogsStale(Boolean(logs || logsCacheRef.current.get(session.id)));
+      if (announce) {
+        browserFeedback.setError(`Failed to refresh logs: ${message}`);
+      }
+    } finally {
+      setLogsLoading(false);
+    }
+  };
+
   useEffect(() => {
     if (!selectedProject || !scriptTargetSprint) {
       setScript(null);
@@ -243,28 +298,30 @@ export const BrowserPage: FunctionComponent = () => {
     const deferredFetch = window.setTimeout(() => {
       void fetchPreviewLogs(visibleSelectedSession.id, 160)
         .then((result) => {
-          if (!cancelled) {
-            const nextLogs = result.logs;
-            if (nextLogs) {
-              logsCacheRef.current.set(visibleSelectedSession.id, nextLogs);
-              setLogs(nextLogs);
-              setLogsSessionId(visibleSelectedSession.id);
-              setLogsStale(false);
-            } else if (!logsCacheRef.current.has(visibleSelectedSession.id)) {
-              setLogs((current) => current || "");
-              setLogsSessionId((current) => current || visibleSelectedSession.id);
-              setLogsStale(Boolean(logs));
-            } else {
-              setLogs(logsCacheRef.current.get(visibleSelectedSession.id) || "");
-              setLogsSessionId(visibleSelectedSession.id);
-              setLogsStale(true);
-            }
-            setLogsError(null);
+          if (cancelled) {
+            return;
           }
+          const nextLogs = result.logs;
+          if (nextLogs) {
+            logsCacheRef.current.set(visibleSelectedSession.id, nextLogs);
+            setLogs(nextLogs);
+            setLogsSessionId(visibleSelectedSession.id);
+            setLogsStale(false);
+          } else if (!logsCacheRef.current.has(visibleSelectedSession.id)) {
+            setLogs((current) => current || "");
+            setLogsSessionId((current) => current || visibleSelectedSession.id);
+            setLogsStale(Boolean(logs));
+          } else {
+            setLogs(logsCacheRef.current.get(visibleSelectedSession.id) || "");
+            setLogsSessionId(visibleSelectedSession.id);
+            setLogsStale(true);
+          }
+          setLogsError(null);
         })
         .catch((fetchLogsError) => {
           if (!cancelled) {
             setLogsError(fetchLogsError instanceof Error ? fetchLogsError.message : "Unknown log error");
+            setLogsStale(Boolean(logs || logsCacheRef.current.get(visibleSelectedSession.id)));
           }
         })
         .finally(() => {
@@ -284,29 +341,7 @@ export const BrowserPage: FunctionComponent = () => {
       return;
     }
     const timer = window.setInterval(() => {
-      setLogsLoading(true);
-      setLogsError(null);
-      void fetchPreviewLogs(visibleSelectedSession.id, 160)
-        .then((result) => {
-          if (result.logs) {
-            logsCacheRef.current.set(visibleSelectedSession.id, result.logs);
-            setLogs(result.logs);
-            setLogsSessionId(visibleSelectedSession.id);
-            setLogsStale(false);
-          } else {
-            const cachedLogs = logsCacheRef.current.get(visibleSelectedSession.id);
-            if (cachedLogs) {
-              setLogs(cachedLogs);
-              setLogsSessionId(visibleSelectedSession.id);
-              setLogsStale(true);
-            }
-          }
-          setLogsError(null);
-        })
-        .catch((fetchLogsError) => {
-          setLogsError(fetchLogsError instanceof Error ? fetchLogsError.message : "Unknown log error");
-        })
-        .finally(() => setLogsLoading(false));
+      void refreshLogsForSession(visibleSelectedSession);
     }, 8000);
     return () => window.clearInterval(timer);
   }, [visibleSelectedSession?.id]);
@@ -632,6 +667,7 @@ export const BrowserPage: FunctionComponent = () => {
           onAddressSubmit={(_value) => navigate()}
           navigationEnabled={navigationEnabled}
           navigationBusy={navigationPending}
+          navigationDisabledReason={navigationDisabledReason}
         >
           <div aria-live="polite" role="status" className="sr-only">
             {previewStatusMessage}
@@ -640,7 +676,7 @@ export const BrowserPage: FunctionComponent = () => {
             {savingScript ? " Saving preview script." : ""}
             {launching ? " Launching preview container." : ""}
             {navigationPending ? " Preview navigation command is being sent." : ""}
-            {!navigationEnabled && visibleSelectedSession ? " Navigation controls are disabled until the container is running." : ""}
+            {!navigationEnabled && navigationDisabledReason ? ` ${navigationDisabledReason}` : ""}
           </div>
           {visibleSelectedSession && frameSrc ? (
             <div className="relative h-full w-full">
@@ -812,14 +848,34 @@ export const BrowserPage: FunctionComponent = () => {
           <div className="rounded-[1.75rem] border border-black/[0.06] bg-white/72 p-5 shadow-[0_18px_48px_rgba(15,23,42,0.06)] backdrop-blur-xl dark:border-white/[0.06] dark:bg-void-900/45 dark:shadow-[0_20px_60px_rgba(0,0,0,0.24)]">
             <div className="mb-3 flex items-center justify-between gap-3">
               <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">Container logs</div>
-              <div className={`rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.14em] ${
-                logsError
-                  ? "border-status-red/30 bg-status-red/10 text-status-red"
-                  : logsLoading
-                    ? "border-ember-500/30 bg-ember-500/10 text-ember-600 dark:text-ember-400"
-                    : "border-signal-500/30 bg-signal-500/10 text-signal-600 dark:text-signal-400"
-              }`}>
-                {logsError ? "Error" : logsLoading ? "Refreshing" : "Ready"}
+              <div className="flex items-center gap-2">
+                <div className={`rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.14em] ${
+                  logsError
+                    ? "border-status-red/30 bg-status-red/10 text-status-red"
+                    : logsLoading
+                      ? "border-ember-500/30 bg-ember-500/10 text-ember-600 dark:text-ember-400"
+                      : logsStale
+                        ? "border-slate-400/30 bg-slate-500/10 text-slate-600 dark:text-slate-300"
+                        : "border-signal-500/30 bg-signal-500/10 text-signal-600 dark:text-signal-400"
+                }`}>
+                  {logsError ? "Error" : logsLoading ? "Refreshing" : logsStale ? "Stale" : "Ready"}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (visibleSelectedSession && !logsLoading) {
+                      void refreshLogsForSession(visibleSelectedSession, true);
+                    }
+                  }}
+                  disabled={!visibleSelectedSession || logsLoading}
+                  aria-disabled={!visibleSelectedSession || logsLoading}
+                  aria-busy={logsLoading}
+                  aria-label={logsLoading ? "Refreshing preview logs" : "Refresh preview logs"}
+                  className="inline-flex h-8 items-center gap-1.5 rounded-xl border border-black/[0.08] px-2.5 text-[11px] font-semibold text-slate-600 transition hover:border-black/[0.16] hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-50 motion-reduce:transition-none dark:border-white/[0.08] dark:text-slate-300 dark:hover:border-white/[0.16] dark:hover:text-white"
+                >
+                  <RefreshCw className={`h-3.5 w-3.5 ${logsLoading ? "animate-spin motion-reduce:animate-none" : ""}`} strokeWidth={2.2} />
+                  Refresh
+                </button>
               </div>
             </div>
             <div className="sr-only" role="status" aria-live="polite">{logsStatusMessage}</div>

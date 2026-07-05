@@ -122,6 +122,7 @@ vi.mock("../../../dashboard/src/v2/components/browser/PreviewWindowChrome.js", (
     onReload,
     navigationEnabled = true,
     navigationBusy = false,
+    navigationDisabledReason,
     children,
   }: {
     addressValue: string;
@@ -130,6 +131,7 @@ vi.mock("../../../dashboard/src/v2/components/browser/PreviewWindowChrome.js", (
     onReload: () => void;
     navigationEnabled?: boolean;
     navigationBusy?: boolean;
+    navigationDisabledReason?: string;
     children: ComponentChildren;
   }) => (
     <div>
@@ -145,6 +147,9 @@ vi.mock("../../../dashboard/src/v2/components/browser/PreviewWindowChrome.js", (
       <button type="button" disabled={!navigationEnabled || navigationBusy} onClick={() => onAddressSubmit(addressValue)}>
         Navigate preview
       </button>
+      {(!navigationEnabled || navigationBusy) && navigationDisabledReason ? (
+        <div role="status">{navigationDisabledReason}</div>
+      ) : null}
       {children}
     </div>
   ),
@@ -382,6 +387,39 @@ describe("BrowserPage", () => {
     }
   });
 
+  it("keeps stale logs visible when a polling refresh fails", async () => {
+    vi.useFakeTimers();
+    vi.mocked(fetchPreviewLogs)
+      .mockResolvedValueOnce({ logs: "last useful log line" })
+      .mockRejectedValueOnce(new Error("container unavailable"));
+
+    try {
+      render(<BrowserPage />);
+
+      await act(async () => {
+        vi.advanceTimersByTime(250);
+        await Promise.resolve();
+      });
+
+      await waitFor(() => {
+        expect(screen.getByLabelText("Preview container logs")).toHaveTextContent("last useful log line");
+      });
+
+      await act(async () => {
+        vi.advanceTimersByTime(8000);
+        await Promise.resolve();
+      });
+
+      await waitFor(() => {
+        expect(screen.getByLabelText("Preview container logs")).toHaveTextContent("last useful log line");
+      });
+      expect(screen.getAllByText("Preview logs could not be refreshed: container unavailable. Showing last available logs.").length).toBeGreaterThan(0);
+      expect(screen.getByText("Error")).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("suppresses duplicate reload navigation while navigation is pending", async () => {
     vi.useFakeTimers();
     try {
@@ -532,6 +570,7 @@ describe("BrowserPage", () => {
     expect(iframe).toBeInTheDocument();
     expect(iframe).toHaveAttribute("src", `${protocol}//preview-sess-2.localhost${port ? `:${port}` : ""}/`);
     expect(screen.getByDisplayValue("/")).toBeDisabled();
+    expect(screen.getAllByText("Preview navigation is disabled because the selected container is stopped. Start or rebuild the container to navigate.").length).toBeGreaterThan(0);
   });
 
   it("launches a container from the placeholder card for any sprint", async () => {

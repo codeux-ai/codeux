@@ -184,6 +184,21 @@ describe("BrowserSessionsMenu", () => {
         expect(button).toBeInTheDocument();
     });
 
+    it("does not open from focus alone", () => {
+        vi.mocked(useProjectData).mockReturnValue({
+            selectedProject: null,
+        } as any);
+
+        render(<BrowserSessionsMenu />);
+
+        const button = screen.getByRole("button", { name: /Browser Sessions:/i });
+        button.focus();
+
+        expect(button).toHaveFocus();
+        expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+        expect(button).toHaveAttribute("aria-expanded", "false");
+    });
+
     it("shows polite empty state when no project is selected", async () => {
         vi.mocked(useProjectData).mockReturnValue({
             selectedProject: null,
@@ -376,6 +391,45 @@ describe("BrowserSessionsMenu", () => {
             fireEvent.keyDown(menu, { key: "End" });
         });
         expect(document.activeElement).toBe(links[1]);
+    });
+
+    it("skips disabled session items during Home End and arrow navigation", async () => {
+        vi.mocked(useProjectData).mockReturnValue({
+            selectedProject: { id: "proj-1" },
+        } as any);
+
+        vi.mocked(browserApi.fetchPreviewSessions).mockResolvedValue([
+            { id: "sess-disabled", sprintId: "sprint-0", sprintName: "Pending route", status: "starting", healthStatus: "unknown", containerAppPort: 3000, hostPort: null },
+            { id: "sess-1", sprintId: "sprint-1", sprintName: "Runnable one", status: "running", healthStatus: "healthy", containerAppPort: 3000, hostPort: 8080 },
+            { id: "sess-2", sprintId: "sprint-2", sprintName: "Runnable two", status: "running", healthStatus: "healthy", containerAppPort: 5173, hostPort: 8081 },
+        ] as any);
+
+        render(<BrowserSessionsMenu />);
+
+        const button = screen.getByRole("button", { name: /Browser Sessions:/i });
+        button.focus();
+        fireEvent.keyDown(button, { key: "Enter" });
+
+        await waitFor(() => {
+            expect(screen.getAllByRole("menuitem")).toHaveLength(3);
+        });
+
+        const menu = screen.getByRole("menu");
+        const items = screen.getAllByRole("menuitem");
+        expect(items[0]).toHaveAttribute("aria-disabled", "true");
+
+        await waitFor(() => {
+            expect(document.activeElement).toBe(items[1]);
+        });
+
+        fireEvent.keyDown(menu, { key: "End" });
+        expect(document.activeElement).toBe(items[2]);
+
+        fireEvent.keyDown(menu, { key: "ArrowDown" });
+        expect(document.activeElement).toBe(items[1]);
+
+        fireEvent.keyDown(menu, { key: "Home" });
+        expect(document.activeElement).toBe(items[1]);
     });
 
     it("restores trigger focus after outside click closes the menu", async () => {

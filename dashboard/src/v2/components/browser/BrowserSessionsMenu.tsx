@@ -9,7 +9,7 @@ import type { SprintPreviewSession } from "../../../types.js";
 import { getSafeUrl } from "../../lib/safe-url.js";
 import { buildInteractionTransition } from "../../lib/motion/tokens.js";
 
-type InteractionState = 'closed' | 'hover' | 'open';
+type InteractionState = 'closed' | 'open';
 
 const statusLabel: Record<SprintPreviewSession["status"], string> = {
     starting: "Starting",
@@ -36,8 +36,6 @@ export const BrowserSessionsMenu: FunctionComponent<{ enabled?: boolean }> = ({ 
     const containerRef = useRef<HTMLDivElement>(null);
     const triggerRef = useRef<HTMLButtonElement>(null);
     const pendingMenuFocusRef = useRef<"first" | "last" | null>(null);
-    const pointerActivationRef = useRef(false);
-    const suppressNextFocusOpenRef = useRef(false);
     const [menuId] = useState(() => `browser-menu-${Math.random().toString(36).substr(2, 9)}`);
 
     const isMenuVisible = interactionState !== 'closed';
@@ -54,7 +52,6 @@ export const BrowserSessionsMenu: FunctionComponent<{ enabled?: boolean }> = ({ 
     const restoreTriggerFocus = useCallback(() => {
         const trigger = triggerRef.current;
         if (trigger && !trigger.disabled && trigger.isConnected) {
-            suppressNextFocusOpenRef.current = true;
             trigger.focus({ preventScroll: true });
             return;
         }
@@ -94,27 +91,6 @@ export const BrowserSessionsMenu: FunctionComponent<{ enabled?: boolean }> = ({ 
         }
     }, [isMenuVisible, loadSessions]);
 
-    const handleMouseEnter = () => {
-        if (interactionState === 'closed') {
-            setInteractionState('hover');
-        }
-    };
-
-    const handleMouseLeave = () => {
-        setInteractionState((prev) => (prev === 'hover' ? 'closed' : prev));
-    };
-
-    const handleFocus = () => {
-        if (suppressNextFocusOpenRef.current) {
-            suppressNextFocusOpenRef.current = false;
-            return;
-        }
-        if (pointerActivationRef.current) {
-            return;
-        }
-        setInteractionState('open');
-    };
-
     const handleBlur = (e: FocusEvent) => {
         if (!containerRef.current?.contains(e.relatedTarget as Node)) {
             closeMenu(false);
@@ -122,14 +98,17 @@ export const BrowserSessionsMenu: FunctionComponent<{ enabled?: boolean }> = ({ 
     };
 
     const toggleMenu = () => {
-        pointerActivationRef.current = false;
-        setInteractionState((prev) => (prev === 'closed' || prev === 'hover' ? 'open' : 'closed'));
+        setInteractionState((prev) => (prev === 'closed' ? 'open' : 'closed'));
     };
 
-    const focusMenuItem = (position: "first" | "last") => {
+    const focusMenuItem = (position: "first" | "last"): boolean => {
         const items = getEnabledMenuItems();
         const item = position === "first" ? items[0] : items[items.length - 1];
-        item?.focus({ preventScroll: true });
+        if (!item) {
+            return false;
+        }
+        item.focus({ preventScroll: true });
+        return true;
     };
 
     const openMenuFromKeyboard = (position: "first" | "last") => {
@@ -183,9 +162,12 @@ export const BrowserSessionsMenu: FunctionComponent<{ enabled?: boolean }> = ({ 
             return;
         }
         const position = pendingMenuFocusRef.current;
-        pendingMenuFocusRef.current = null;
-        queueMicrotask(() => focusMenuItem(position));
-    }, [isMenuVisible, sessions, getEnabledMenuItems]);
+        queueMicrotask(() => {
+            if (focusMenuItem(position)) {
+                pendingMenuFocusRef.current = null;
+            }
+        });
+    }, [isMenuVisible, sessions, loading, getEnabledMenuItems]);
 
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
@@ -223,8 +205,6 @@ export const BrowserSessionsMenu: FunctionComponent<{ enabled?: boolean }> = ({ 
         <div
             className="relative hidden md:block"
             ref={containerRef}
-            onMouseEnter={handleMouseEnter}
-            onMouseLeave={handleMouseLeave}
             onBlur={handleBlur}
             onKeyDown={handleMenuKeyDown as any}
         >
@@ -232,11 +212,7 @@ export const BrowserSessionsMenu: FunctionComponent<{ enabled?: boolean }> = ({ 
                 ref={triggerRef}
                 type="button"
                 data-tour-id="active-sessions"
-                onMouseDown={() => {
-                    pointerActivationRef.current = true;
-                }}
                 onClick={toggleMenu}
-                onFocus={handleFocus}
                 onKeyDown={handleTriggerKeyDown as any}
                 aria-haspopup="menu"
                 aria-expanded={isMenuVisible}
