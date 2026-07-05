@@ -55,6 +55,7 @@
     "smoketest:codex": "node --import ./scripts/tsnode-register.mjs tests/smoketest/codex.smoketest.ts",
     "test:backend": "vitest run tests/backend",
     "test:dashboard": "vitest run tests/dashboard",
+    "test:e2e": "playwright test",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "test:backend:coverage": "vitest run tests/backend --coverage",
