@@ -15,6 +15,12 @@ import gsap from "gsap";
 
 vi.mock("../../../../../dashboard/src/hooks/ExecutionTimelineContext.js", () => ({
   useExecutionTimeline: vi.fn(),
+  LIVE_EXECUTION_SNAPSHOT_SURFACE: {
+    kind: "live",
+    label: "Live",
+    description: "Runtime data is current.",
+    isBusy: false,
+  },
 }));
 
 vi.mock("../../../../../dashboard/src/v2/hooks/use-reduced-motion.js", () => ({
@@ -206,6 +212,7 @@ describe("InvocationFeedPanel", () => {
 
     const toggle = screen.getByRole("button", { name: /Invocation Feed/i });
     const panelId = toggle.getAttribute("aria-controls");
+    expect(toggle.tagName).toBe("BUTTON");
     expect(toggle).toHaveAttribute("aria-expanded", "false");
     expect(panelId).toBeTruthy();
     expect(document.getElementById(panelId ?? "")).toHaveAttribute("aria-hidden", "true");
@@ -217,5 +224,26 @@ describe("InvocationFeedPanel", () => {
     expect(toggle).toHaveAttribute("aria-expanded", "true");
     expect(document.activeElement).toBe(toggle);
     expect(screen.getByText("Invocation feed is current.")).toHaveAttribute("role", "status");
+  });
+
+  it("announces invocation row status changes without depending on animation", () => {
+    vi.useFakeTimers();
+    vi.mocked(useExecutionTimeline).mockReturnValue({
+      execution: createSnapshot([]),
+    } as never);
+
+    const { rerender } = render(<InvocationFeedPanel invocations={[
+      createInvocation({ id: "xi-status-change", status: "running" }),
+    ]} />);
+
+    rerender(<InvocationFeedPanel invocations={[
+      createInvocation({ id: "xi-status-change", status: "failed", lastErrorMessage: "Provider returned a non-zero exit code" }),
+    ]} />);
+
+    expect(screen.getByText("Invocation status changed from running to failed.")).toBeInTheDocument();
+    expect(screen.getByText("Provider returned a non-zero exit code")).toHaveAttribute("role", "alert");
+    expect(gsap.fromTo).not.toHaveBeenCalled();
+    vi.runOnlyPendingTimers();
+    vi.useRealTimers();
   });
 });

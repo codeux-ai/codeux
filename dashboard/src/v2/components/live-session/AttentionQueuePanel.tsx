@@ -7,6 +7,7 @@ import { AttentionLedger } from "../AttentionLedger.js";
 import { AlertTriangle, CheckCircle2, ChevronDown } from "lucide-preact";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 import { useGsapInteractionTokens } from "../../lib/motion/constants.js";
+import { RuntimeSnapshotSurfaceBadge } from "./ExecutionRuntimePanel.js";
 
 export const AttentionQueuePanel: FunctionComponent<{
     collapsible?: boolean;
@@ -15,7 +16,7 @@ export const AttentionQueuePanel: FunctionComponent<{
     collapsible = false,
     defaultOpen = true,
 }) => {
-    const { execution } = useExecutionTimeline();
+    const { execution, snapshotSurface } = useExecutionTimeline();
     const [openState, setOpenState] = useState(defaultOpen);
     const contentId = useId();
     const contentRef = useRef<HTMLDivElement>(null);
@@ -70,6 +71,7 @@ export const AttentionQueuePanel: FunctionComponent<{
                 <span className="rounded-md bg-status-green/10 px-2 py-0.5 font-mono text-status-green">resolved {resolved}</span>
                 <span className="rounded-md bg-black/[0.03] px-2 py-0.5 font-mono text-slate-500 dark:bg-white/[0.04] dark:text-slate-400">cleared {dismissed}</span>
             </div>
+            <RuntimeSnapshotSurfaceBadge surface={snapshotSurface} />
             <span className="sr-only">{summary}</span>
         </div>
     );
@@ -110,7 +112,7 @@ export const AttentionQueuePanel: FunctionComponent<{
     );
 
     return (
-        <div role="region" aria-label="Attention queue status" aria-busy={claimed > 0 ? "true" : undefined} className="group relative overflow-hidden rounded-[1.75rem] border border-black/[0.08] bg-white shadow-sm dark:border-white/[0.08] dark:bg-void-800">
+        <div role="region" aria-label="Attention queue status" aria-busy={snapshotSurface?.isBusy || claimed > 0 ? "true" : undefined} className="group relative overflow-hidden rounded-[1.75rem] border border-black/[0.08] bg-white shadow-sm dark:border-white/[0.08] dark:bg-void-800">
             {collapsible ? (
                 <button
                     type="button"
