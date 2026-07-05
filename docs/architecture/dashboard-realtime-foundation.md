@@ -88,6 +88,11 @@ July 4, 2026 refinement:
 - The optimized path still ignores volatile `updatedAt` and status `timestamp` churn, so timestamp-only reassembly does not broadcast or append a non-replayable marker. Meaningful sprint run, dispatch, attention, runtime event, or invocation changes still publish.
 - Unknown payload shapes, and known event types whose snapshot shape is incomplete, still fall back to the existing normalized full-payload fingerprint. Replayable raw events published through `publishRawEvent` are unchanged and are not deduplicated by snapshot signatures.
 
+July 5, 2026 helper contract:
+
+- Dashboard realtime payload fingerprinting is available as a standalone backend helper in `src/services/dashboard-realtime-payload-fingerprint.ts`. The helper has no Express, WebSocket, repository, or persistence dependency, so realtime publishing code can consume it without coupling deduplication logic to transport concerns.
+- The helper covers the common snapshot events (`project.live.updated`, `project.execution.updated`, `project.runtime_status.updated`, `projects.updated`, `project.git.updated`, and `overview.telemetry.updated`) using stable high-signal fields. Unknown payloads use deterministic key-sorted fallback serialization that omits fetch timestamps and bounds depth, array length, object keys, and string length so unusually large feeds cannot dominate the realtime flush cycle.
+
 ### Dashboard websocket endpoint
 
 The dashboard server now exposes:
