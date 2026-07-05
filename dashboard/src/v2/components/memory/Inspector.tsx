@@ -32,6 +32,14 @@ export const Inspector: FunctionComponent<{
     const interactionTokens = useInteractionTokens();
     const gsapTokens = useGsapInteractionTokens();
     const isOpen = Boolean(node || missingSelectedMemoryId);
+    const controlTransitionStyle = {
+        transitionDuration: interactionTokens.controlFeedback.duration,
+        transitionTimingFunction: interactionTokens.controlFeedback.ease,
+    };
+    const asyncTransitionStyle = {
+        transitionDuration: interactionTokens.asyncFeedback.duration,
+        transitionTimingFunction: interactionTokens.asyncFeedback.ease,
+    };
 
     useLayoutEffect(() => {
         if (!contentRef.current || !isOpen) return;
@@ -75,7 +83,7 @@ export const Inspector: FunctionComponent<{
             aria-live="polite"
             className="absolute inset-x-0 bottom-0 z-30 flex h-[min(56dvh,34rem)] w-full flex-col gap-4 overflow-hidden rounded-t-[1.5rem]
                        border-t border-black/[0.06] bg-white/90 p-5 pt-12 shadow-[0_-24px_70px_rgba(0,0,0,0.12)]
-                       backdrop-blur-3xl transition-transform duration-500 dark:border-white/[0.06] dark:bg-void-800/88
+                       backdrop-blur-3xl transition-transform dark:border-white/[0.06] dark:bg-void-800/88
                        lg:inset-y-0 lg:left-auto lg:right-0 lg:h-full lg:w-[300px] lg:rounded-none lg:border-l lg:border-t-0
                        lg:p-6 lg:pt-12 lg:shadow-[-20px_0_60px_rgba(0,0,0,0.08)] dark:lg:shadow-[-20px_0_60px_rgba(0,0,0,0.4)]"
             style={{
@@ -91,8 +99,9 @@ export const Inspector: FunctionComponent<{
                 aria-label="Close memory inspector"
                 title="Close memory inspector"
                 className="absolute right-4 top-4 flex h-8 w-8 items-center justify-center rounded-full
-                           bg-black/[0.04] text-slate-500 transition-colors duration-200 hover:bg-black/[0.08] hover:text-slate-700
+                           bg-black/[0.04] text-slate-500 transition-colors hover:bg-black/[0.08] hover:text-slate-700
                            focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:bg-white/[0.04] dark:text-slate-400 dark:hover:bg-white/[0.08] dark:hover:text-white dark:focus-visible:ring-offset-void-900"
+                style={controlTransitionStyle}
             >
                 <X className="w-3.5 h-3.5 text-slate-500" strokeWidth={2} />
             </button>
@@ -111,6 +120,7 @@ export const Inspector: FunctionComponent<{
                         type="button"
                         onClick={onClose}
                         className="mt-2 inline-flex w-full items-center justify-center rounded-xl border border-black/[0.06] bg-black/[0.04] px-4 py-2.5 text-xs font-bold text-slate-600 transition-colors hover:bg-black/[0.08] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-300 dark:hover:bg-white/[0.08] dark:focus-visible:ring-offset-void-900"
+                        style={controlTransitionStyle}
                     >
                         Close inspector
                     </button>
@@ -138,8 +148,8 @@ export const Inspector: FunctionComponent<{
                             <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Strength</span>
                             <div className="flex items-center gap-2">
                                 <div className="w-20 h-1.5 rounded-full bg-black/[0.06] dark:bg-white/[0.06] overflow-hidden">
-                                    <div className="h-full rounded-full transition-all duration-700"
-                                        style={{ width: `${node.strength * 100}%`, background: cat.hex }} />
+                                    <div className="h-full rounded-full transition-[width]"
+                                        style={{ ...asyncTransitionStyle, width: `${node.strength * 100}%`, background: cat.hex }} />
                                 </div>
                                 <span className="text-[10px] font-mono text-slate-400">{Math.round(node.strength * 100)}%</span>
                             </div>
@@ -187,10 +197,11 @@ export const Inspector: FunctionComponent<{
                             type="button"
                             onClick={handleDeleteClick}
                             aria-describedby="inspector-danger-delete-copy"
+                            style={controlTransitionStyle}
                             className="mt-auto flex w-full items-center justify-center gap-2 rounded-xl py-3
                                        bg-status-red text-white font-bold text-xs cursor-pointer
                                        shadow-[0_0_20px_rgba(227,0,15,0.3)] hover:bg-status-red/90 hover:shadow-[0_0_30px_rgba(227,0,15,0.5)]
-                                       transition-[background-color,box-shadow,color] duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-status-red focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-900">
+                                       transition-[background-color,box-shadow,color] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-status-red focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-900">
                             <X className="w-3.5 h-3.5" strokeWidth={2.5} />
                             Delete Immediately
                         </button>

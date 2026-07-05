@@ -39,21 +39,36 @@ Live runtime implementation must also follow the bounded live snapshot, indexed 
 
 By adhering to these rules, the Live page remains a focused, professional workspace.
 
+## Snapshot Preservation
+
+- Runtime panels must preserve the last useful execution snapshot during reconnecting transport, first-snapshot recovery, stale snapshots, background refresh, and retryable load failures. Do not replace existing sprint runs, dispatches, invocations, connections, or attention items with spinner-only states while cached data exists.
+- Each affected panel should show `RuntimeSnapshotSurfaceBadge` in the header and a visible `RuntimeSnapshotSurfaceNotice` near the panel content. The notice is a polite live region and should explain whether the panel is refreshing cached data or showing a stale snapshot.
+- Set `aria-busy="true"` on affected runtime regions/logs while the snapshot surface is reconnecting, recovering, or stale. The busy state marks the surface as updating, but the useful cached rows remain readable and keyboard reachable.
+- Initial loading copy is still valid when no execution snapshot exists. Once a snapshot has rendered, recovery and stale states are additive overlays, not replacements.
+
 ## Interaction And Notification Contracts
 
 - Use `controlFeedback` for runtime action buttons, attention queue controls, connection controls, compact filter buttons, and local status icon/message changes.
 - Use `enterExit` for transport banners, confirmation dialogs, popovers, dropdowns, and runtime notification panels entering or leaving the view.
-- Use `selectionMovement` for active runtime row emphasis, selected feed rows, and small status/detail refreshes that orient the operator without changing the reading order.
-- Use `listReveal` when invocation, dispatch, attention, or event-feed rows first appear.
-- Use `listReorder` when queue/feed rows move after resolve, dismiss, filtering, sorting, or removal.
+- Use `selectionMovement` for filter selection, active runtime row emphasis, selected feed rows, and small status/detail refreshes that orient the operator without changing the reading order.
+- Use `listReveal` when invocation, dispatch, attention, connection, or event-feed rows first appear. Reduced-motion mode should snap rows to the final state while retaining static rails, status dots, badges, and live-region copy.
+- Use `listReorder` when queue/feed rows move after resolve, dismiss, filtering, sorting, or removal. Filtered task lists should preserve focus and use tokenized reorder timing rather than changing reading order through animation-only cues.
 - Use `inlineValidation` for destructive-hold cancellation or validation-style nudges in runtime controls.
 - Use `asyncFeedback` for non-blocking runtime notifications, reconnect progress, stale-snapshot messaging, and long-running operation results.
 - `LiveTransportBanner` derives disconnected/recovering/error state from the live transport view model and adds UI-only stale-snapshot messaging from `snapshotUpdatedAt`. Refreshing and stale banners are polite and keep cached runtime panels visible. Disconnected transport and blocking connection errors are urgent and assertive.
 - Runtime panels should not use animation as the only notification. Loading, running, stale, empty, reconnecting, and error states need visible text or badges plus live-region semantics.
 - Runtime action buttons use `aria-disabled` for optimistic pending states when focus should remain stable, suppress activation while pending or unavailable, and expose the current reason through the visible label, `title`, or screen-reader status text.
+- Reconnect, retry, claim, release/resolve, dismiss, filter, and invocation-detail controls must be target-specific. Accessible names should identify the sprint, dispatch, attention item, filter, or invocation; pending controls must suppress duplicate activation and expose `aria-busy`, `aria-disabled`, and a reason such as "already in progress."
 - Collapsible connection, execution, and invocation panels use `expansionCollapse` and keep their headings/buttons keyboard reachable. Collapsed content must have `aria-expanded`/`aria-controls`; reduced motion snaps height changes while preserving status rows and labels.
 - Container-first image builds use the shared container build progress infobox. It consumes the backend progress contract (`kind`, `imageTag`, `baseImage`, `message`, optional `progressPercent`, optional `stepText`) from runtime events, invocation metadata, session activity, or interactive-login messages. Waiting and building states stay visible until superseded; `build_success` becomes a cached-image success state and `build_failure_fallback` becomes an amber fallback alert. Reused cached images do not render this infobox unless a progress object is present.
 - The build infobox must include visible explanatory copy, the current step text or message, and `role="progressbar"`. Set bounded `aria-valuenow` only when `progressPercent` is known; otherwise omit it and show visible fallback text such as `Progress is not available yet.` Do not rely on color alone for build, success, or fallback state.
+
+## Transport, Invocations, And Attention Queue
+
+- Transport recovery is a page-level state. The banner announces disconnected transport and blocking connection errors assertively; reconnecting, refreshing, and stale states are polite and do not interrupt the operator's current task.
+- Invocation feeds should keep existing rows during refresh, expose a polite feed summary, and use assertive copy only for operator-level blocking failures. Transcript links should include the invocation purpose and a shortened invocation ID so repeated transcript controls are distinguishable.
+- Attention queues should keep open, claimed, resolved, and cleared counts visible through refresh. Claim, resolve/release, and dismiss actions stay focus-stable while pending and report outcome or in-progress feedback without causing repeated submissions.
+- Routine polling ticks should not create new announcements. Announce meaningful operator outcomes: disconnect, recovery state changes, failed invocation summaries, action pending/success/error states, and filter result changes.
 
 ## Accessibility Rules
 

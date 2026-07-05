@@ -32,6 +32,7 @@ export function useQuicksprintExecutionState({
   noTaskLimit,
   agentPresets,
   onClose,
+  onError,
 }: {
   onExecute: (templateId: string, taskCount: number, submitMode: "plan_only" | "plan_and_start", additionalPrompt?: string, routeOverride?: PlanningRouteOption | null, modelOverride?: string | null, signal?: AbortSignal, options?: QuicksprintExecutionOptions) => Promise<void>;
   virtualProviders: VirtualProviderOption[];
@@ -43,6 +44,7 @@ export function useQuicksprintExecutionState({
   noTaskLimit: boolean;
   agentPresets: AgentPreset[];
   onClose: () => void;
+  onError?: (message: string) => void;
 }) {
   const [executingMode, setExecutingMode] = useState<"plan_only" | "plan_and_start" | null>(null);
   const [elapsedMs, setElapsedMs] = useState(0);
@@ -118,9 +120,11 @@ export function useQuicksprintExecutionState({
         if (activeRequestRef.current?.id === reqId && !activeRequestRef.current.detached && !activeRequestRef.current.cancelled) {
           onClose();
         }
-      } catch (err: any) {
-        if (err.name !== "AbortError") {
+      } catch (err: unknown) {
+        if (!(err instanceof DOMException && err.name === "AbortError")) {
           console.error("Quicksprint execute failed:", err);
+          const templateName = selectedTemplate.name;
+          onError?.(`Planning failed for ${templateName}. Review the route and try again.`);
         }
       } finally {
         clearInterval(timer);
@@ -136,7 +140,7 @@ export function useQuicksprintExecutionState({
         }
       }
     },
-    [onExecute, selectedTemplate, executingMode, taskCount, noTaskLimit, additionalPrompt, routeOverride, modelOverride, onClose],
+    [onExecute, selectedTemplate, executingMode, taskCount, noTaskLimit, additionalPrompt, routeOverride, modelOverride, onClose, onError],
   );
 
   const detachCurrentRequest = useCallback(() => {

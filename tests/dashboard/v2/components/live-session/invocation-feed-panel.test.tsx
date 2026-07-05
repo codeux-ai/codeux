@@ -139,7 +139,7 @@ describe("InvocationFeedPanel", () => {
     expect(feed).toHaveAttribute("aria-live", "polite");
     expect(feed).toHaveAttribute("aria-busy", "true");
 
-    expect(screen.getByRole("link", { name: "Open transcript for Task Coding" }))
+    expect(screen.getByRole("link", { name: "Open transcript for Task Coding invocation xi-live-" }))
       .toHaveAttribute("href", "/chat?mode=invocations&invocation=xi-live-1");
   });
 
@@ -178,7 +178,7 @@ describe("InvocationFeedPanel", () => {
 
     expect(screen.getByText("scoped-provider")).toBeInTheDocument();
     expect(screen.queryByText("raw-provider")).not.toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Open transcript for Task Coding" }))
+    expect(screen.getByRole("link", { name: "Open transcript for Task Coding invocation xi-scope" }))
       .toHaveAttribute("href", "/chat?mode=invocations&invocation=xi-scoped");
   });
 

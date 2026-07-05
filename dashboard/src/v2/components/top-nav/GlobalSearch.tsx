@@ -9,6 +9,7 @@ import type { SprintPreviewSession } from "../../../types.js";
 import type { Task, Source, Sprint, AgentPreset } from "../../types.js";
 import { fetchAgentPresets } from "../../lib/agent-preset-api.js";
 import { useGsapInteractionTokens } from "../../lib/motion/constants.js";
+import { useInteractionTokens } from "../../lib/motion/tokens.js";
 import { formatSprintDisplay, formatSprintTitle } from "../../lib/format-sprint.js";
 import { formatSprintKey } from "../../lib/sprint-ledger-state.js";
 
@@ -29,6 +30,7 @@ export const GlobalSearch: FunctionComponent<GlobalSearchProps> = ({ projectId, 
     const [agentPresets, setAgentPresets] = useState<AgentPreset[]>([]);
 
     const gsapTokens = useGsapInteractionTokens();
+    const interactionTokens = useInteractionTokens();
     const searchDebounceMs = Math.round(gsapTokens.controlFeedback.duration * 1000);
     const { tasks } = useProjectTasks(projectId, selectedProject ? [selectedProject] : [], sprints, null, {
         enabled: isSearchOpen,
@@ -174,7 +176,12 @@ export const GlobalSearch: FunctionComponent<GlobalSearchProps> = ({ projectId, 
     return (
         <>
             {/* Search Bar */}
-            <div ref={searchBarContainerRef} role="search" className="group relative hidden w-full max-w-[168px] rounded-xl md:block lg:max-w-[260px]">
+            <div
+                ref={searchBarContainerRef}
+                role="search"
+                style={{ transitionDuration: interactionTokens.controlFeedback.duration, transitionTimingFunction: interactionTokens.controlFeedback.ease }}
+                className="group relative hidden w-full max-w-[168px] rounded-xl transition-[box-shadow,transform] md:block lg:max-w-[260px]"
+            >
                 <div className="pointer-events-none absolute inset-y-0 left-0 z-10 flex items-center pl-3.5">
                     <Search aria-hidden="true" className="h-3.5 w-3.5 text-slate-500 transition-colors group-focus-within:text-signal-500 dark:text-slate-400" strokeWidth={2} />
                 </div>
@@ -186,6 +193,7 @@ export const GlobalSearch: FunctionComponent<GlobalSearchProps> = ({ projectId, 
                     onMouseLeave={handleSearchLeave}
                     onFocus={handleSearchEnter}
                     onBlur={handleSearchLeave}
+                    style={{ transitionDuration: interactionTokens.controlFeedback.duration, transitionTimingFunction: interactionTokens.controlFeedback.ease }}
                     className="relative z-0 flex h-9 w-full items-center rounded-xl border border-black/[0.08] bg-white/88 pl-9 pr-12 text-left text-sm font-medium text-slate-600 shadow-[inset_0_1px_0_rgba(255,255,255,0.82),0_1px_10px_rgba(15,23,42,0.05)] backdrop-blur-xl transition-colors hover:border-black/[0.12] hover:bg-white focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 dark:border-white/[0.1] dark:bg-white/[0.11] dark:text-slate-200 dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.08),0_8px_24px_rgba(0,0,0,0.2)] dark:hover:border-white/[0.16] dark:hover:bg-white/[0.15]"
                     aria-expanded={isSearchOpen}
                     aria-haspopup="dialog"
@@ -205,6 +213,7 @@ export const GlobalSearch: FunctionComponent<GlobalSearchProps> = ({ projectId, 
                 aria-label="Open search"
                 aria-expanded={isSearchOpen}
                 aria-haspopup="dialog"
+                style={{ transitionDuration: interactionTokens.controlFeedback.duration, transitionTimingFunction: interactionTokens.controlFeedback.ease }}
                 className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-black/[0.08] bg-white/88 shadow-sm backdrop-blur-xl transition-colors hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 dark:border-white/[0.1] dark:bg-white/[0.11] dark:hover:bg-white/[0.15] md:hidden"
             >
                 <Search aria-hidden="true" className="h-4 w-4 text-slate-600 dark:text-slate-300" strokeWidth={2} />
@@ -212,6 +221,7 @@ export const GlobalSearch: FunctionComponent<GlobalSearchProps> = ({ projectId, 
 
             <SearchOverlay
                 anchorRef={searchBarContainerRef}
+                committedSearchQuery={debouncedQuery}
                 isOpen={isSearchOpen}
                 onClose={() => setIsSearchOpen(false)}
                 searchQuery={searchQuery}

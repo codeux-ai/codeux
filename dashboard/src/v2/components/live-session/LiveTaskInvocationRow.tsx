@@ -9,11 +9,11 @@ import { formatInvocationDuration, formatInvocationPurpose } from "../chat/invoc
 import { ContainerBuildStatusInfobox } from "./ContainerBuildStatusInfobox.js";
 
 const INVOCATION_STATUS_DOT: Record<string, string> = {
-  running: "bg-signal-500 shadow-[0_0_8px_rgba(0,224,160,0.55)]",
-  completed: "bg-status-green",
-  failed: "bg-status-red shadow-[0_0_8px_rgba(227,0,15,0.35)]",
+  running: "bg-signal-500 shadow-[0_0_8px_rgba(0,224,160,0.55)] motion-reduce:ring-2 motion-reduce:ring-signal-500/25 motion-reduce:shadow-none",
+  completed: "bg-status-green motion-reduce:ring-2 motion-reduce:ring-status-green/25",
+  failed: "bg-status-red shadow-[0_0_8px_rgba(227,0,15,0.35)] motion-reduce:ring-2 motion-reduce:ring-status-red/25 motion-reduce:shadow-none",
   cancelled: "bg-slate-400",
-  paused: "bg-status-amber shadow-[0_0_8px_rgba(245,158,11,0.35)]",
+  paused: "bg-status-amber shadow-[0_0_8px_rgba(245,158,11,0.35)] motion-reduce:ring-2 motion-reduce:ring-status-amber/25 motion-reduce:shadow-none",
 };
 
 const INVOCATION_STATUS_TEXT: Record<string, string> = {
@@ -42,11 +42,12 @@ export const LiveTaskInvocationRow: FunctionComponent<{
   const containerBuildProgress = getInvocationContainerBuildProgress(invocation);
 
   return (
-    <div className="rounded-xl border border-black/[0.04] bg-white/60 p-3 dark:border-white/[0.05] dark:bg-void-900/25">
+    <div className="rounded-xl border border-black/[0.04] bg-white/60 p-3 transition-colors duration-[var(--interaction-list-reveal-duration)] ease-[var(--interaction-list-reveal-ease)] motion-reduce:transition-none dark:border-white/[0.05] dark:bg-void-900/25">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="flex min-w-0 items-center gap-2">
-            <span className={`h-2 w-2 shrink-0 rounded-full ${statusDot} ${invocation.status === "running" ? "motion-safe:animate-pulse motion-reduce:ring-2 motion-reduce:ring-signal-500/25" : ""}`} />
+            <span className={`h-2 w-2 shrink-0 rounded-full ${statusDot} ${invocation.status === "running" ? "motion-safe:animate-pulse" : ""}`} aria-hidden="true" />
+            <span className="sr-only">Invocation status: {invocation.status}.</span>
             <span className="truncate text-xs font-semibold text-slate-700 dark:text-slate-300">
               {purposeLabel}
             </span>
@@ -73,12 +74,12 @@ export const LiveTaskInvocationRow: FunctionComponent<{
 
       <div className="mt-3 flex flex-wrap items-center gap-2">
         <span className="inline-flex items-center gap-1 rounded-md border border-black/[0.05] px-2 py-0.5 text-[10px] font-mono text-slate-500 dark:border-white/[0.06] dark:text-slate-400">
-          <MessageSquareText className="h-3 w-3" strokeWidth={2} />
+          <MessageSquareText className="h-3 w-3" strokeWidth={2} aria-hidden="true" />
           {invocation.messageCount}
         </span>
         {duration && (
           <span className="inline-flex items-center gap-1 rounded-md border border-black/[0.05] px-2 py-0.5 text-[10px] font-mono text-slate-500 dark:border-white/[0.06] dark:text-slate-400">
-            <Timer className="h-3 w-3" strokeWidth={2} />
+            <Timer className="h-3 w-3" strokeWidth={2} aria-hidden="true" />
             {duration}
           </span>
         )}
@@ -89,16 +90,16 @@ export const LiveTaskInvocationRow: FunctionComponent<{
         )}
         <a
           href={buildInvocationHref(invocation.id)}
-          aria-label={`Open transcript for ${purposeLabel}`}
+          aria-label={`Open transcript for ${purposeLabel} invocation ${shortenInvocationId(invocation.id)}`}
           className="inline-flex items-center gap-1 rounded-md border border-signal-500/20 bg-signal-500/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.12em] text-signal-600 transition-colors hover:bg-signal-500/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:text-signal-400 dark:focus-visible:ring-offset-void-800"
         >
-          <ExternalLink className="h-3 w-3" strokeWidth={2} />
+          <ExternalLink className="h-3 w-3" strokeWidth={2} aria-hidden="true" />
           Transcript
         </a>
       </div>
 
       {invocation.lastErrorMessage && (
-        <p className="mt-2 line-clamp-2 text-[11px] leading-relaxed text-status-red">
+        <p role="alert" className="mt-2 line-clamp-2 text-[11px] leading-relaxed text-status-red">
           {invocation.lastErrorMessage}
         </p>
       )}

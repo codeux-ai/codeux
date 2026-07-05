@@ -1,5 +1,6 @@
 import type { FunctionComponent, JSX } from "preact";
 import { ChevronLeft, Compass, Palette, Smile, Trash2, Settings2, Zap } from "lucide-preact";
+import { useEffect } from "preact/hooks";
 import type { AgentPreset } from "../../types.js";
 import { AvantgardeSelect } from "../ui/AvantgardeSelect.js";
 import { SubtaskSlider, TAG_STYLES, ICON_OPTIONS, IconMap, getTagStyles } from "./quicksprint-shared.js";
@@ -25,6 +26,7 @@ export const QuicksprintEditorView: FunctionComponent<{
   edAgentPresetId: string; setEdAgentPresetId: (v: string) => void;
   edSaving: boolean;
   edConfirmDelete: boolean;
+  setEdConfirmDelete: (v: boolean) => void;
   handleEditorSave: () => void;
   handleEditorDelete: () => void;
   cardRef: any;
@@ -46,6 +48,7 @@ export const QuicksprintEditorView: FunctionComponent<{
   edAgentPresetId, setEdAgentPresetId,
   edSaving,
   edConfirmDelete,
+  setEdConfirmDelete,
   handleEditorSave,
   handleEditorDelete,
   cardRef,
@@ -65,6 +68,21 @@ export const QuicksprintEditorView: FunctionComponent<{
     left: pickerPos.left,
     ...pickerMotionStyle,
   };
+  const deleteTargetName = editorTemplate?.name || "template";
+
+  useEffect(() => {
+    if (!edConfirmDelete) {
+      return;
+    }
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        setEdConfirmDelete(false);
+      }
+    };
+    document.addEventListener("keydown", handleEscape);
+    return () => document.removeEventListener("keydown", handleEscape);
+  }, [edConfirmDelete, setEdConfirmDelete]);
 
   return (
     <>
@@ -308,18 +326,37 @@ export const QuicksprintEditorView: FunctionComponent<{
             <div data-qs-stagger className="mt-8 flex items-center justify-between">
               <div>
                 {editorTemplate && !editorTemplate.isBuiltIn && (
-                  <button
-                    type="button"
-                    onClick={handleEditorDelete}
-                    className={`inline-flex min-h-[44px] items-center gap-1.5 rounded-full px-3.5 py-2 text-[10px] font-bold uppercase tracking-[0.14em] transition-colors ${
-                      edConfirmDelete
-                        ? "bg-red-600 text-white hover:bg-red-500"
-                        : "text-red-400 hover:text-red-300 hover:bg-red-500/10"
-                    }`}
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                    {edConfirmDelete ? "Confirm Delete" : "Delete"}
-                  </button>
+                  <div className="flex flex-wrap items-center gap-2" aria-busy={edSaving && edConfirmDelete ? "true" : "false"}>
+                    <button
+                      type="button"
+                      onClick={handleEditorDelete}
+                      disabled={edSaving}
+                      aria-describedby={edConfirmDelete ? "quicksprint-editor-delete-confirmation" : undefined}
+                      className={`inline-flex min-h-[44px] items-center gap-1.5 rounded-full px-3.5 py-2 text-[10px] font-bold uppercase tracking-[0.14em] transition-colors disabled:cursor-not-allowed disabled:opacity-55 ${
+                        edConfirmDelete
+                          ? "bg-red-600 text-white hover:bg-red-500"
+                          : "text-red-400 hover:text-red-300 hover:bg-red-500/10"
+                      }`}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                      {edSaving && edConfirmDelete ? `Deleting ${deleteTargetName}` : edConfirmDelete ? `Delete ${deleteTargetName}` : "Delete"}
+                    </button>
+                    {edConfirmDelete && (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => setEdConfirmDelete(false)}
+                          disabled={edSaving}
+                          className="inline-flex min-h-[44px] items-center rounded-full border border-black/[0.08] px-3.5 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500 transition-colors hover:bg-black/[0.04] disabled:cursor-not-allowed disabled:opacity-55 dark:border-white/[0.08] dark:text-slate-300 dark:hover:bg-white/[0.06]"
+                        >
+                          Cancel
+                        </button>
+                        <p id="quicksprint-editor-delete-confirmation" className="basis-full text-xs font-semibold leading-relaxed text-status-amber">
+                          Confirm deletion for {deleteTargetName}. Press Escape or Cancel to keep it.
+                        </p>
+                      </>
+                    )}
+                  </div>
                 )}
               </div>
               <button

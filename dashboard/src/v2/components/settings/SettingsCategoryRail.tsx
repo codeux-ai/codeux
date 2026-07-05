@@ -125,6 +125,7 @@ export const SettingsCategoryRail: FunctionComponent<SettingsCategoryRailProps> 
       aria-label="Settings categories"
       onScroll={updateRailMetrics}
       style={railHeightStyle}
+      data-motion-contract="selectionMovement"
       className="scrollbar-hide flex min-w-0 flex-col gap-3 rounded-[1.75rem] border border-[color:var(--border-hairline)] bg-[var(--surface-glass)] p-3 backdrop-blur-2xl shadow-[var(--elevation-base)] lg:sticky lg:top-16 lg:max-h-[var(--settings-category-rail-available-height)] lg:overflow-y-auto lg:overscroll-contain"
     >
       <div
@@ -168,6 +169,7 @@ export const SettingsCategoryRail: FunctionComponent<SettingsCategoryRailProps> 
             aria-disabled={disabled}
             aria-describedby={[instructionsId, disabled && disabledCategoryReason ? disabledReasonId : undefined].filter(Boolean).join(" ") || undefined}
             aria-busy={isPending ? "true" : undefined}
+            data-motion-contract="selectionMovement"
             title={disabled && disabledCategoryReason ? disabledCategoryReason : undefined}
             style={selectionTransitionStyle}
             className={`group relative flex w-full min-w-0 items-center gap-3.5 rounded-[1.1rem] px-4 py-3.5 text-left transition-[background-color,border-color,box-shadow,color,transform] motion-reduce:transition-none disabled:cursor-not-allowed disabled:opacity-60 ${SHARED_INTERACTION_CLASSES} ${isDanger ? "focus-visible:ring-status-red" : ""} ${

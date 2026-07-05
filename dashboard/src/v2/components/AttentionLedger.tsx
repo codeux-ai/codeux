@@ -336,6 +336,12 @@ export const AttentionLedger: FunctionComponent<AttentionLedgerProps> = memo(({
                                     const claimActionId = `attention-claim:${item.id}`;
                                     const resolveActionId = `attention-resolve:${item.id}`;
                                     const dismissActionId = `attention-dismiss:${item.id}`;
+                                    const claimActionState = getPendingActionState(pendingActionIds, claimActionId);
+                                    const resolveActionState = getPendingActionState(pendingActionIds, resolveActionId);
+                                    const dismissActionState = getPendingActionState(pendingActionIds, dismissActionId);
+                                    const claimPendingReason = `Claiming attention item ${item.title} is already in progress.`;
+                                    const resolvePendingReason = `Resolving attention item ${item.title} is already in progress.`;
+                                    const dismissPendingReason = `Dismissing attention item ${item.title} is already in progress.`;
 
                                     return (
                                         <div
@@ -401,40 +407,64 @@ export const AttentionLedger: FunctionComponent<AttentionLedgerProps> = memo(({
                                                 {canClaim && snapshot.projectId && (
                                                     <button
                                                         type="button"
-                                                        onClick={() => getPendingActionState(pendingActionIds, claimActionId) === "idle" && onClaimAttentionItem(snapshot.projectId!, item.id)}
-                                                        {...getLiveActionDisplayProps(getPendingActionState(pendingActionIds, claimActionId) === "pending", false)}
+                                                        onClick={(event) => {
+                                                            if (claimActionState === "pending") {
+                                                                event.preventDefault();
+                                                                event.stopPropagation();
+                                                                return;
+                                                            }
+                                                            onClaimAttentionItem(snapshot.projectId!, item.id);
+                                                        }}
+                                                        {...getLiveActionDisplayProps(claimActionState === "pending", false, claimActionState === "pending" ? claimPendingReason : null)}
                                                         className="inline-flex items-center gap-1.5 rounded-md border border-signal-500/20 bg-signal-500/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.12em] text-signal-600 transition-colors hover:bg-signal-500/15 aria-disabled:opacity-50 dark:text-signal-400"
-                                                        aria-label={"Claim attention item: " + item.title}
+                                                        aria-label={claimActionState === "pending" ? `Claim attention item: ${item.title}. ${claimPendingReason}` : `Claim attention item: ${item.title}`}
+                                                        title={claimActionState === "pending" ? claimPendingReason : `Claim attention item: ${item.title}`}
                                                     >
-                                                        <Bot className={`h-3 w-3 ${getPendingActionState(pendingActionIds, claimActionId) === "pending" ? "motion-safe:animate-pulse" : ""}`} strokeWidth={2} aria-hidden="true" />
-                                                        {getPendingActionState(pendingActionIds, claimActionId) === "pending" ? "Claiming" : "Claim"}
-                                                        {getPendingActionState(pendingActionIds, claimActionId) === "pending" && <span className="sr-only">Claiming...</span>}
+                                                        <Bot className={`h-3 w-3 ${claimActionState === "pending" ? "motion-safe:animate-pulse" : ""}`} strokeWidth={2} aria-hidden="true" />
+                                                        {claimActionState === "pending" ? "Claiming" : "Claim"}
+                                                        {claimActionState === "pending" && <span className="sr-only">Claiming attention item in progress.</span>}
                                                     </button>
                                                 )}
                                                 {snapshot.projectId && (
                                                     <button
                                                         type="button"
-                                                        onClick={() => getPendingActionState(pendingActionIds, resolveActionId) === "idle" && onResolveAttentionItem(snapshot.projectId!, item.id)}
-                                                        {...getLiveActionDisplayProps(getPendingActionState(pendingActionIds, resolveActionId) === "pending", false)}
+                                                        onClick={(event) => {
+                                                            if (resolveActionState === "pending") {
+                                                                event.preventDefault();
+                                                                event.stopPropagation();
+                                                                return;
+                                                            }
+                                                            onResolveAttentionItem(snapshot.projectId!, item.id);
+                                                        }}
+                                                        {...getLiveActionDisplayProps(resolveActionState === "pending", false, resolveActionState === "pending" ? resolvePendingReason : null)}
                                                         className="inline-flex items-center gap-1.5 rounded-md border border-status-green/20 bg-status-green/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.12em] text-status-green transition-colors hover:bg-status-green/15 aria-disabled:opacity-50"
-                                                        aria-label={"Resolve attention item: " + item.title}
+                                                        aria-label={resolveActionState === "pending" ? `Resolve attention item: ${item.title}. ${resolvePendingReason}` : `Resolve attention item: ${item.title}`}
+                                                        title={resolveActionState === "pending" ? resolvePendingReason : `Resolve attention item: ${item.title}`}
                                                     >
-                                                        <CheckCircle2 className={`h-3 w-3 ${getPendingActionState(pendingActionIds, resolveActionId) === "pending" ? "motion-safe:animate-spin" : ""}`} strokeWidth={2} aria-hidden="true" />
-                                                        {getPendingActionState(pendingActionIds, resolveActionId) === "pending" ? "Resolving" : "Resolve"}
-                                                        {getPendingActionState(pendingActionIds, resolveActionId) === "pending" && <span className="sr-only">Resolving...</span>}
+                                                        <CheckCircle2 className={`h-3 w-3 ${resolveActionState === "pending" ? "motion-safe:animate-spin" : ""}`} strokeWidth={2} aria-hidden="true" />
+                                                        {resolveActionState === "pending" ? "Resolving" : "Resolve"}
+                                                        {resolveActionState === "pending" && <span className="sr-only">Resolving attention item in progress.</span>}
                                                     </button>
                                                 )}
                                                 {snapshot.projectId && (
                                                     <button
                                                         type="button"
-                                                        onClick={() => getPendingActionState(pendingActionIds, dismissActionId) === "idle" && onDismissAttentionItem(snapshot.projectId!, item.id)}
-                                                        {...getLiveActionDisplayProps(getPendingActionState(pendingActionIds, dismissActionId) === "pending", false)}
+                                                        onClick={(event) => {
+                                                            if (dismissActionState === "pending") {
+                                                                event.preventDefault();
+                                                                event.stopPropagation();
+                                                                return;
+                                                            }
+                                                            onDismissAttentionItem(snapshot.projectId!, item.id);
+                                                        }}
+                                                        {...getLiveActionDisplayProps(dismissActionState === "pending", false, dismissActionState === "pending" ? dismissPendingReason : null)}
                                                         className="inline-flex items-center gap-1.5 rounded-md border border-black/[0.05] px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.12em] text-slate-500 transition-colors hover:bg-black/[0.035] aria-disabled:opacity-50 dark:border-white/[0.06] dark:text-slate-400 dark:hover:bg-white/[0.04]"
-                                                        aria-label={"Dismiss attention item: " + item.title}
+                                                        aria-label={dismissActionState === "pending" ? `Dismiss attention item: ${item.title}. ${dismissPendingReason}` : `Dismiss attention item: ${item.title}`}
+                                                        title={dismissActionState === "pending" ? dismissPendingReason : `Dismiss attention item: ${item.title}`}
                                                     >
-                                                        <XCircle className={`h-3 w-3 ${getPendingActionState(pendingActionIds, dismissActionId) === "pending" ? "motion-safe:animate-spin" : ""}`} strokeWidth={2} aria-hidden="true" />
-                                                        {getPendingActionState(pendingActionIds, dismissActionId) === "pending" ? "Dismissing" : "Dismiss"}
-                                                        {getPendingActionState(pendingActionIds, dismissActionId) === "pending" && <span className="sr-only">Dismissing...</span>}
+                                                        <XCircle className={`h-3 w-3 ${dismissActionState === "pending" ? "motion-safe:animate-spin" : ""}`} strokeWidth={2} aria-hidden="true" />
+                                                        {dismissActionState === "pending" ? "Dismissing" : "Dismiss"}
+                                                        {dismissActionState === "pending" && <span className="sr-only">Dismissing attention item in progress.</span>}
                                                     </button>
                                                 )}
                                             </div>

@@ -70,6 +70,14 @@ import {
 
 const CODEUX_REPO_URL = "https://github.com/codeux-ai/codeux";
 
+type OnboardingValidationResult = {
+  valid: true;
+} | {
+  valid: false;
+  message: string;
+  focusSelector?: string;
+};
+
 const LICENSE_TEXT = `MIT License
 
 Copyright (c) 2026 Pierre Voss
@@ -196,6 +204,7 @@ export const OnboardingExperience: FunctionComponent = () => {
   const shellRef = useRef<HTMLElement>(null);
   const sideRef = useRef<HTMLElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
+  const stepHeadingRef = useRef<HTMLHeadingElement>(null);
   const {
     dispatch,
     open,
@@ -346,6 +355,15 @@ export const OnboardingExperience: FunctionComponent = () => {
   useEffect(() => {
     setValidationMessage(null);
   }, [activeStep]);
+
+  useEffect(() => {
+    if (!open || introPhase !== "onboarding") {
+      return;
+    }
+    window.setTimeout(() => {
+      stepHeadingRef.current?.focus({ preventScroll: true });
+    }, 0);
+  }, [activeStep, introPhase, open]);
 
   const readinessByProvider = useMemo(
     () => Object.fromEntries(readiness.providers.map((provider) => [provider.provider, provider])) as Partial<Record<ProviderId, OnboardingProviderCredentialStatus>>,
@@ -526,27 +544,50 @@ export const OnboardingExperience: FunctionComponent = () => {
       .filter(([, provider]) => provider.enabled)
     : [];
 
-  const validateActiveStep = (): boolean => {
+  const getValidationResult = (): OnboardingValidationResult => {
     if (!settings) {
-      return true;
+      return { valid: true };
     }
-    let message: string | null = null;
     if (active.id === "jira") {
       const jiraHasAnyValue = Boolean(jiraSettings.host.trim() || jiraSettings.email.trim() || jiraSettings.apiToken.trim() || jiraSettings.defaultProject.trim());
-      const jiraMissingRequiredPair = jiraHasAnyValue && (!jiraSettings.host.trim() || !jiraSettings.apiToken.trim());
-      if (jiraMissingRequiredPair) {
-        message = "Enter both Jira site URL and API token, or clear the Jira fields to configure it later.";
+      if (jiraHasAnyValue && !jiraSettings.host.trim()) {
+        return {
+          valid: false,
+          message: "Enter a Jira site URL, or clear the Jira fields to configure it later.",
+          focusSelector: '[aria-label="Jira site URL"]',
+        };
+      }
+      if (jiraHasAnyValue && !jiraSettings.apiToken.trim()) {
+        return {
+          valid: false,
+          message: "Enter a Jira API token, or clear the Jira fields to configure it later.",
+          focusSelector: '[aria-label="Jira API token"]',
+        };
       }
     } else if (active.id === "defaults" && enabledProviderInstances.length === 0) {
-      message = "Enable at least one provider instance before choosing defaults.";
+      return {
+        valid: false,
+        message: "Enable at least one provider instance before choosing defaults.",
+        focusSelector: '[aria-label="Go to Providers"]',
+      };
     }
-    if (!message) {
+    return { valid: true };
+  };
+
+  const validateActiveStep = (): boolean => {
+    const result = getValidationResult();
+    if (result.valid) {
       return true;
     }
-    setValidationMessage(message);
+    setValidationMessage(result.message);
     window.setTimeout(() => {
-      validationRef.current?.focus({ preventScroll: true });
-      validationRef.current?.scrollIntoView?.({ block: "nearest", behavior: reducedMotion ? "auto" : "smooth" });
+      const focusTarget = result.focusSelector
+        ? contentRef.current?.querySelector<HTMLElement>(result.focusSelector)
+          || shellRef.current?.querySelector<HTMLElement>(result.focusSelector)
+        : null;
+      const target = focusTarget || validationRef.current;
+      target?.focus({ preventScroll: true });
+      target?.scrollIntoView?.({ block: "nearest", behavior: reducedMotion ? "auto" : "smooth" });
     }, 0);
     return false;
   };
@@ -682,6 +723,10 @@ export const OnboardingExperience: FunctionComponent = () => {
     "--onboarding-selection-ease": interactionTokens.selectionMovement.ease,
     "--onboarding-validation-duration": interactionTokens.inlineValidation.duration,
     "--onboarding-validation-ease": interactionTokens.inlineValidation.ease,
+    "--onboarding-control-duration": interactionTokens.controlFeedback.duration,
+    "--onboarding-control-ease": interactionTokens.controlFeedback.ease,
+    "--onboarding-async-duration": interactionTokens.asyncFeedback.duration,
+    "--onboarding-async-ease": interactionTokens.asyncFeedback.ease,
   };
 
   return (
@@ -814,6 +859,7 @@ export const OnboardingExperience: FunctionComponent = () => {
                     className={`group flex w-full items-center gap-3 rounded-2xl border px-3 py-3 text-left transition-[background-color,border-color,transform] hover:translate-x-1 ${
                       activeItem ? "border-white/30 bg-white text-slate-950 shadow-[0_16px_40px_rgba(0,0,0,0.18)]" : "border-white/0 text-slate-300 hover:border-white/10 hover:bg-white/8 hover:text-white"
                     }`}
+                    style={{ transitionDuration: "var(--onboarding-selection-duration)", transitionTimingFunction: "var(--onboarding-selection-ease)" }}
                   >
                     <span className={`flex h-8 w-8 items-center justify-center rounded-xl ${activeItem ? "bg-signal-500/14 text-signal-700" : complete ? "bg-signal-400/15 text-signal-300" : "bg-white/8 text-slate-300"}`}>
                       {complete ? <Check className="h-4 w-4" /> : <StepIcon className="h-4 w-4" />}
@@ -836,7 +882,7 @@ export const OnboardingExperience: FunctionComponent = () => {
                   : activeStep >= 3 && activeStep <= 6 ? `Step 4 of 6 (${activeStep - 2}/4)`
                   : `Step ${activeStep - 2} of 6`}
               </div>
-              <h3 className="mt-1 font-display text-xl font-semibold tracking-tight text-slate-900 dark:text-white">{active.label}</h3>
+              <h3 ref={stepHeadingRef} tabIndex={-1} className="mt-1 font-display text-xl font-semibold tracking-tight text-slate-900 outline-none focus-visible:ring-2 focus-visible:ring-signal-500/40 dark:text-white">{active.label}</h3>
               <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-slate-200 dark:bg-white/[0.08]" role="progressbar" aria-label={stepProgressLabel} aria-valuemin={1} aria-valuemax={steps.length} aria-valuenow={activeStep + 1}>
                 <div
                   className="h-full rounded-full bg-signal-500 transition-[width] motion-reduce:transition-none"
@@ -873,7 +919,7 @@ export const OnboardingExperience: FunctionComponent = () => {
                 ref={validationRef}
                 tabIndex={-1}
                 role="alert"
-                className="mb-4 rounded-2xl border border-status-red/25 bg-status-red/10 px-4 py-3 text-sm font-semibold text-status-red outline-none focus-visible:ring-2 focus-visible:ring-status-red/40"
+                className="mb-4 rounded-2xl border border-status-red/25 bg-status-red/10 px-4 py-3 text-sm font-semibold text-status-red outline-none transition-[border-color,background-color,box-shadow] focus-visible:ring-2 focus-visible:ring-status-red/40"
                 style={{ transitionDuration: "var(--onboarding-validation-duration)", transitionTimingFunction: "var(--onboarding-validation-ease)" }}
               >
                 {validationMessage}
@@ -1058,11 +1104,14 @@ export const OnboardingExperience: FunctionComponent = () => {
                     return (
                       <button
                         data-onboarding-card
-                        key={providerId}
-                        type="button"
-                        onClick={() => toggleProvider(providerId)}
-                        className={`group relative overflow-hidden rounded-3xl border p-4 text-left shadow-[0_14px_34px_rgba(15,23,42,0.04)] transition-[border-color,background-color,transform,box-shadow] hover:-translate-y-1 ${selected ? "border-signal-500/30 bg-signal-500/10 shadow-[0_18px_46px_rgba(0,224,160,0.08)]" : "border-black/[0.06] bg-white/75 hover:border-black/[0.12] dark:border-white/[0.06] dark:bg-white/[0.04]"}`}
-                      >
+	                        key={providerId}
+	                        type="button"
+	                        aria-pressed={selected}
+	                        aria-label={`${selected ? "Deselect" : "Select"} ${providerLabels[providerId]} provider`}
+	                        onClick={() => toggleProvider(providerId)}
+	                        className={`group relative overflow-hidden rounded-3xl border p-4 text-left shadow-[0_14px_34px_rgba(15,23,42,0.04)] transition-[border-color,background-color,transform,box-shadow] hover:-translate-y-1 ${selected ? "border-signal-500/30 bg-signal-500/10 shadow-[0_18px_46px_rgba(0,224,160,0.08)]" : "border-black/[0.06] bg-white/75 hover:border-black/[0.12] dark:border-white/[0.06] dark:bg-white/[0.04]"}`}
+	                        style={{ transitionDuration: "var(--onboarding-selection-duration)", transitionTimingFunction: "var(--onboarding-selection-ease)" }}
+	                      >
                         <div aria-hidden className={`absolute left-0 top-4 bottom-4 w-1 rounded-r-full transition-opacity ${selected ? "bg-signal-500 opacity-100" : "bg-slate-300 opacity-0 group-hover:opacity-100 dark:bg-slate-600"}`} />
                         <div className="flex items-center justify-between gap-3">
                           <div className="flex items-center gap-3">
@@ -1109,11 +1158,13 @@ export const OnboardingExperience: FunctionComponent = () => {
                             </div>
                           </div>
                         </div>
-                        <button
-                          type="button"
-                          onClick={() => addProviderInstance(providerId)}
-                          className="inline-flex items-center gap-2 rounded-2xl border border-signal-500/20 bg-signal-500/10 px-3 py-2 text-xs font-bold uppercase tracking-[0.14em] text-signal-700 hover:bg-signal-500/15 dark:text-signal-200"
-                        >
+	                        <button
+	                          type="button"
+	                          aria-label={`Add ${providerLabels[providerId]} provider instance`}
+	                          onClick={() => addProviderInstance(providerId)}
+	                          className="inline-flex items-center gap-2 rounded-2xl border border-signal-500/20 bg-signal-500/10 px-3 py-2 text-xs font-bold uppercase tracking-[0.14em] text-signal-700 hover:bg-signal-500/15 dark:text-signal-200"
+	                          style={{ transitionDuration: "var(--onboarding-control-duration)", transitionTimingFunction: "var(--onboarding-control-ease)" }}
+	                        >
                           <Plus className="h-3.5 w-3.5" />
                           Add instance
                         </button>
@@ -1187,20 +1238,22 @@ export const OnboardingExperience: FunctionComponent = () => {
                     <div data-onboarding-card>
                       <SectionCard title="GitHub" watermark="GIT" icon={<Github strokeWidth={2.4} />}>
                         <Row label="GitHub token" description="System token used for GitHub repository, pull request, and CI integration.">
-                          <TextInput
-                            value={settings.integrations.githubToken || ""}
+	                          <TextInput
+	                            aria-label="GitHub token"
+	                            value={settings.integrations.githubToken || ""}
                             onChange={(value) => updateSettings((current) => ({ ...current, integrations: { ...current.integrations, githubToken: value } }))}
                             mono
                           />
                         </Row>
                         <Row label="Mount GitHub auth" description="Copy the host `gh` credential directory into Docker.">
-                          <Toggle aria-label="Toggle setting"                             value={settings.defaults.cliWorkflow.containerMountGithubAuth}
+	                          <Toggle aria-label="Mount GitHub auth"                             value={settings.defaults.cliWorkflow.containerMountGithubAuth}
                             onChange={() => updateCliWorkflow({ containerMountGithubAuth: !settings.defaults.cliWorkflow.containerMountGithubAuth })}
                           />
                         </Row>
                         <Row label="GitHub auth path" description="Host path copied into the Docker runtime for GitHub CLI auth." last>
-                          <TextInput
-                            value={settings.defaults.cliWorkflow.containerGithubAuthPath}
+	                          <TextInput
+	                            aria-label="GitHub auth path"
+	                            value={settings.defaults.cliWorkflow.containerGithubAuthPath}
                             onChange={(value) => updateCliWorkflow({ containerGithubAuthPath: value })}
                             disabled={!settings.defaults.cliWorkflow.containerMountGithubAuth}
                             mono
@@ -1211,8 +1264,9 @@ export const OnboardingExperience: FunctionComponent = () => {
                     <div data-onboarding-card>
                       <SectionCard title="GitLab" watermark="GLB" icon={<GitBranch strokeWidth={2.4} />}>
                         <Row label="GitLab token" description="System token used for GitLab repository, merge request, and CI integration." last>
-                          <TextInput
-                            value={settings.integrations.gitlabToken || ""}
+	                          <TextInput
+	                            aria-label="GitLab token"
+	                            value={settings.integrations.gitlabToken || ""}
                             onChange={(value) => updateSettings((current) => ({ ...current, integrations: { ...current.integrations, gitlabToken: value } }))}
                             mono
                           />
@@ -1224,22 +1278,24 @@ export const OnboardingExperience: FunctionComponent = () => {
                 <div data-onboarding-card>
                   <SectionCard title="Git identity" watermark="ID" icon={<GitBranch strokeWidth={2.4} />}>
                     <Row label="Copy local git config" description="Use the host `.gitconfig` in Docker instead of the configured Code UX git identity." last={settings.defaults.cliWorkflow.containerMountGitConfig}>
-                      <Toggle aria-label="Toggle setting"                         value={settings.defaults.cliWorkflow.containerMountGitConfig}
+	                      <Toggle aria-label="Copy local git config"                         value={settings.defaults.cliWorkflow.containerMountGitConfig}
                         onChange={() => updateCliWorkflow({ containerMountGitConfig: !settings.defaults.cliWorkflow.containerMountGitConfig })}
                       />
                     </Row>
                     {!settings.defaults.cliWorkflow.containerMountGitConfig ? (
                       <>
                         <Row label="Git user name" description="Git author name configured inside provider containers.">
-                          <TextInput
-                            value={settings.defaults.cliWorkflow.containerGitUserName}
+	                          <TextInput
+	                            aria-label="Git user name"
+	                            value={settings.defaults.cliWorkflow.containerGitUserName}
                             onChange={(value) => updateCliWorkflow({ containerGitUserName: value })}
                             placeholder="Code UX"
                           />
                         </Row>
                         <Row label="Git email" description="Git author email configured inside provider containers." last>
-                          <TextInput
-                            value={settings.defaults.cliWorkflow.containerGitUserEmail}
+	                          <TextInput
+	                            aria-label="Git email"
+	                            value={settings.defaults.cliWorkflow.containerGitUserEmail}
                             onChange={(value) => updateCliWorkflow({ containerGitUserEmail: value })}
                             placeholder="agents@codeux.ai"
                             mono
@@ -1285,7 +1341,7 @@ export const OnboardingExperience: FunctionComponent = () => {
                       <TextInput aria-label="Jira close transition" value={jiraSettings.closeTransitionName} onChange={(value) => updateJira({ closeTransitionName: value })} />
                     </Row>
                     <Row label="Auto-close Jira issues" description="Move linked Jira issues through the configured transition after the sprint completes." last>
-                      <Toggle aria-label="Toggle setting" value={jiraSettings.autoCloseLinkedIssues} onChange={() => updateJira({ autoCloseLinkedIssues: !jiraSettings.autoCloseLinkedIssues })} />
+	                      <Toggle aria-label="Auto-close Jira issues" value={jiraSettings.autoCloseLinkedIssues} onChange={() => updateJira({ autoCloseLinkedIssues: !jiraSettings.autoCloseLinkedIssues })} />
                     </Row>
                   </SectionCard>
                 </div>
@@ -1546,13 +1602,14 @@ export const OnboardingExperience: FunctionComponent = () => {
                 { active: activeStep === 7, onClick: () => setActiveStep(7), label: "Automation" },
                 { active: activeStep === 8, onClick: () => setActiveStep(8), label: "Appearance" },
               ].map((dot, idx) => (
-                <button
-                  key={`dot-${idx}`}
-                  type="button"
-                  aria-label={`Go to ${dot.label}`}
-                  onClick={dot.onClick}
-                  className={`h-2 rounded-full transition-all motion-reduce:transition-none focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 ${dot.active ? "w-8 bg-signal-500" : "w-2 bg-slate-300 dark:bg-slate-700"}`}
-                />
+	                <button
+	                  key={`dot-${idx}`}
+	                  type="button"
+	                  aria-label={`Go to ${dot.label}`}
+	                  onClick={dot.onClick}
+	                  className={`h-2 rounded-full transition-all motion-reduce:transition-none focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 ${dot.active ? "w-8 bg-signal-500" : "w-2 bg-slate-300 dark:bg-slate-700"}`}
+	                  style={{ transitionDuration: "var(--onboarding-selection-duration)", transitionTimingFunction: "var(--onboarding-selection-ease)" }}
+	                />
               ))}
             </div>
             {activeStep === steps.length - 1 ? (
@@ -1563,7 +1620,7 @@ export const OnboardingExperience: FunctionComponent = () => {
                 aria-describedby="onboarding-status"
                 className="inline-flex items-center gap-2 rounded-2xl bg-slate-900 px-5 py-2.5 text-sm font-bold text-white shadow-[0_12px_28px_rgba(15,23,42,0.18)] transition-colors hover:bg-slate-700 disabled:opacity-60 dark:bg-white dark:text-void-900"
               >
-                {saving ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
+	                {saving ? <RefreshCw className="h-4 w-4 animate-spin motion-reduce:animate-none" /> : <Check className="h-4 w-4" />}
                 {saving ? "Saving" : "Finish"}
               </button>
             ) : (
@@ -1595,13 +1652,15 @@ const Choice: FunctionComponent<{
 }> = ({ title, value, options, onChange }) => (
   <div data-onboarding-card className="rounded-3xl border border-black/[0.06] bg-white/75 p-5 shadow-[0_16px_42px_rgba(15,23,42,0.04)] dark:border-white/[0.06] dark:bg-white/[0.04]">
     <div className="text-sm font-semibold text-slate-900 dark:text-white">{title}</div>
-    <div className="mt-4 flex flex-wrap gap-2">
+    <div className="mt-4 flex flex-wrap gap-2" aria-label={title}>
       {options.map(([optionValue, label]) => (
         <button
           key={optionValue}
           type="button"
+          aria-pressed={value === optionValue}
           onClick={() => onChange(optionValue)}
           className={`inline-flex items-center gap-2 rounded-2xl border px-3 py-2 text-xs font-bold transition-colors ${value === optionValue ? "border-signal-500/30 bg-signal-500/12 text-signal-700 dark:text-signal-200" : "border-black/[0.06] bg-white text-slate-500 hover:text-slate-800 dark:border-white/[0.06] dark:bg-white/[0.04] dark:text-slate-300"}`}
+          style={{ transitionDuration: "var(--onboarding-selection-duration)", transitionTimingFunction: "var(--onboarding-selection-ease)" }}
         >
           {value === optionValue ? <Check className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
           {label}
@@ -1624,9 +1683,11 @@ const ToggleRow: FunctionComponent<{
     </div>
     <button
       type="button"
+      aria-label={title}
       onClick={() => onChange(!checked)}
       className={`relative h-7 w-12 shrink-0 overflow-hidden rounded-full border transition-colors ${checked ? "border-signal-500/30 bg-signal-500" : "border-black/[0.12] bg-slate-200 dark:border-white/[0.12] dark:bg-white/[0.08]"}`}
       aria-pressed={checked}
+      style={{ transitionDuration: "var(--onboarding-control-duration)", transitionTimingFunction: "var(--onboarding-control-ease)" }}
     >
       <span className={`absolute left-1 top-1 block h-5 w-5 rounded-full bg-white shadow transition-transform ${checked ? "translate-x-5" : "translate-x-0"}`} />
     </button>
