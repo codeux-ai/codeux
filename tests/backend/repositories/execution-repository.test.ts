@@ -1590,7 +1590,7 @@ describe("ExecutionRepository", () => {
       return text.includes("FROM execution_invocations")
         && text.includes("WHERE execution_invocations.project_id = ?");
     });
-    expect(invocationSnapshotReads).toHaveLength(3);
+    expect(invocationSnapshotReads).toHaveLength(4);
     expect(usageTaskSpy).toHaveBeenCalledTimes(1);
     expect(usageSprintRunSpy).toHaveBeenCalledTimes(1);
     expect(wallTimeTaskSpy).toHaveBeenCalledTimes(1);
