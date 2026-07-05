@@ -230,6 +230,8 @@ export function runMigrations(db: DatabaseAdapter): void {
   ensureColumn(db, "provider_invocations", "token_accounting_version", "INTEGER NOT NULL DEFAULT 1");
   backfillTokenAccountingV2(db);
   ensureIndex(db, "idx_provider_invocations_project_started", "provider_invocations", "project_id, started_at DESC");
+  ensureIndex(db, "idx_provider_invocations_project_sprint_started", "provider_invocations", "project_id, sprint_id, started_at DESC");
+  ensureIndex(db, "idx_provider_invocations_project_sprint_run_started", "provider_invocations", "project_id, sprint_run_id, started_at DESC");
   ensureIndex(db, "idx_provider_invocations_sprint_started", "provider_invocations", "sprint_id, started_at DESC");
   ensureIndex(db, "idx_provider_invocations_task_started", "provider_invocations", "task_id, started_at DESC");
   ensureIndex(db, "idx_provider_invocations_task_run", "provider_invocations", "task_run_id, started_at DESC");
@@ -284,6 +286,7 @@ export function runMigrations(db: DatabaseAdapter): void {
   ensureIndex(db, "idx_execution_invocations_project_sprint_run_started", "execution_invocations", "project_id, sprint_run_id, started_at DESC");
   ensureIndex(db, "idx_execution_invocations_task_run_started", "execution_invocations", "task_run_id, started_at DESC");
   ensureIndex(db, "idx_execution_invocations_status_started", "execution_invocations", "status, started_at DESC");
+  ensureIndex(db, "idx_execution_invocations_provider_invocation", "execution_invocations", "provider_invocation_id");
   ensureIndex(db, "idx_execution_invocation_messages_invocation_created", "execution_invocation_messages", "invocation_id, created_at ASC");
   ensureIndex(db, "idx_dashboard_realtime_events_scope_sequence", "dashboard_realtime_events", "scope_type, scope_id, is_replayable, sequence DESC");
   // Non-replayable snapshot events are no longer persisted (their watermark is tracked in

@@ -43,7 +43,7 @@ function insertInvocation(
   storage: AppDbStorage,
   params: {
     id: string;
-    sprintId: string;
+    sprintId?: string | null;
     sprintRunId?: string | null;
     startedAt: string;
     providerInvocationId?: string | null;
@@ -57,7 +57,7 @@ function insertInvocation(
     VALUES (?, 'project-1', ?, ?, ?, 'cli_task_coding', 'completed', 'codex', ?, 1, 'internal', ?, ?)
   `).run(
     params.id,
-    params.sprintId,
+    params.sprintId ?? null,
     params.sprintRunId ?? null,
     params.providerInvocationId ?? null,
     params.startedAt,
@@ -152,6 +152,76 @@ describe("execution snapshot invocation slices", () => {
 
     expect(invocations.map((invocation) => invocation.id)).toContain("inv-selected-inactive");
     expect(invocations).toHaveLength(25);
+  });
+
+  it("keeps selected sprint-run invocations outside project-recent and expanded-run slices", async () => {
+    const storage = await createStorage();
+    seedProject(storage);
+    const db = storage.getDatabase();
+
+    db.prepare(`
+      INSERT INTO sprint_runs (id, project_id, sprint_id, status, trigger_type, executor_mode, created_at, updated_at)
+      VALUES ('run-inactive-selected', 'project-1', 'sprint-inactive', 'completed', 'dashboard', 'mixed', '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z')
+    `).run();
+    db.prepare(`
+      INSERT INTO provider_invocations (
+        id, project_id, sprint_id, sprint_run_id, session_id, provider, purpose, status,
+        started_at, input_tokens, cached_input_tokens, output_tokens, total_tokens,
+        created_at, updated_at
+      )
+      VALUES (
+        'provider-selected-fallback', 'project-1', 'sprint-inactive', 'run-inactive-selected', 'session-selected', 'codex', 'coding', 'completed',
+        '2026-01-01T09:01:00.000Z', 4, 1, 8, 12,
+        '2026-01-01T09:01:00.000Z', '2026-01-01T09:01:00.000Z'
+      )
+    `).run();
+
+    for (let i = 0; i < 30; i += 1) {
+      insertInvocation(storage, {
+        id: `inv-newer-other-${String(i).padStart(2, "0")}`,
+        sprintId: "sprint-other",
+        sprintRunId: "run-quiet",
+        startedAt: `2026-01-01T11:${String(i).padStart(2, "0")}:00.000Z`,
+      });
+    }
+    insertInvocation(storage, {
+      id: "inv-expanded-active",
+      sprintId: "sprint-active",
+      sprintRunId: "run-active",
+      startedAt: "2026-01-01T12:00:00.000Z",
+    });
+    insertInvocation(storage, {
+      id: "inv-selected-direct",
+      sprintId: "sprint-inactive",
+      sprintRunId: "run-inactive-selected",
+      startedAt: "2026-01-01T09:00:00.000Z",
+    });
+    insertInvocation(storage, {
+      id: "inv-selected-provider-fallback",
+      sprintId: null,
+      sprintRunId: null,
+      providerInvocationId: "provider-selected-fallback",
+      startedAt: "2026-01-01T09:01:00.000Z",
+    });
+
+    const invocations = queryProjectExecutionSnapshotInvocations(storage.getDatabase(), {
+      projectId: "project-1",
+      sprintRunIds: ["run-active", "run-quiet"],
+      selectedSprintId: "sprint-inactive",
+    });
+    const invocationIds = invocations.map((invocation) => invocation.id);
+
+    expect(invocationIds).toContain("inv-expanded-active");
+    expect(invocationIds).toContain("inv-selected-direct");
+    expect(invocationIds).toContain("inv-selected-provider-fallback");
+    expect(invocations.find((invocation) => invocation.id === "inv-selected-provider-fallback")).toMatchObject({
+      sprintId: "sprint-inactive",
+      sprintRunId: "run-inactive-selected",
+      inputTokens: 4,
+      cachedInputTokens: 1,
+      outputTokens: 8,
+      totalTokens: 12,
+    });
   });
 });
 
