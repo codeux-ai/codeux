@@ -102,11 +102,12 @@ Disabled native buttons do not fire activation handlers. Disabled reasons theref
 
 ## Reduced Motion
 
-All interaction timings automatically respect the user's system preferences or dashboard settings for reduced motion (`prefers-reduced-motion: reduce`).
+All interaction timings automatically respect the user's system preferences or dashboard settings for reduced motion (`prefers-reduced-motion: reduce` or the dashboard-managed `html[data-reduced-motion]` attribute).
 
 **How it works:**
 - When a user prefers reduced motion, the aforementioned hooks (`useInteractionTokens`, `useGsapInteractionTokens`) automatically resolve all duration values to `0` or `"0ms"`.
 - This ensures visual state changes happen instantly while preserving logical flows and React/Preact lifecycle events that depend on state transitions.
+- The root CSS guard also treats explicit app settings (`data-reduced-motion="true"` and the legacy preview value `"REDUCE"`) like the OS media query, so Tailwind animation utilities such as spin, pulse, ping, bounce, and skeleton shimmer collapse to static states outside hook-driven components.
 - Do not hardcode custom fallback logic for `duration`. Use the hooks, and the components will naturally skip the animation timing.
 - Decorative or continuous animations (e.g., GSAP, SVG `<animate>`, Tailwind flow) must be explicitly disabled. State-communicating animations must be replaced with static visual equivalents (like badges or colored shadows) rather than simply being removed, to preserve state comprehension.
 - Shared visual primitives use tokenized static cues in reduced motion: status dots retain semantic halos, active wave fills remain visible without drifting, sparklines render as static lines, and live duration flashes use an instant inset Signal Jade highlight.
