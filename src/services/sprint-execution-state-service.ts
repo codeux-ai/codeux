@@ -33,7 +33,7 @@ export class SprintExecutionStateService {
       throw new Error(`Sprint ${sprint.id} has no number configured. Assign a sprint number in the dashboard before starting orchestration.`);
     }
 
-    const repoPath = path.resolve((args.repo_path && args.repo_path.trim()) || project.baseDir);
+    const repoPath = this.resolveRepoPath(project, args);
     const defaultBranch = settings.git.defaultBranch || "main";
     const featureBranch = args.feature_branch?.trim()
       || sprint.featureBranch?.trim()
@@ -120,6 +120,29 @@ export class SprintExecutionStateService {
     }
 
     throw new Error("No project scope could be resolved. Provide `project_id`, `repo_path`, or select a project in the dashboard.");
+  }
+
+  private resolveRepoPath(project: ProjectSummary, args: SprintAgentArgs): string {
+    const projectBaseDir = path.resolve(project.baseDir);
+    const requestedRepoPath = args.repo_path?.trim();
+    if (!requestedRepoPath) {
+      return projectBaseDir;
+    }
+
+    const requestedPath = path.resolve(requestedRepoPath);
+    if (requestedPath === projectBaseDir) {
+      return requestedPath;
+    }
+
+    // Containerized resume/startup paths can replay `/workspace` even when the
+    // project scope is already known. Once a project_id resolved the project,
+    // the host-side orchestrator must use the registered host checkout path for
+    // local git operations such as final merges.
+    if (typeof args.project_id === "string" && args.project_id.trim().length > 0) {
+      return projectBaseDir;
+    }
+
+    return requestedPath;
   }
 
   private resolveSprint(project: ProjectSummary, args: SprintAgentArgs): SprintRecord {

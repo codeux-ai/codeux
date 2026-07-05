@@ -125,6 +125,36 @@ async function gitRefExists(
   }
 }
 
+async function ensureLocalBranchExists(
+  repoPath: string,
+  branch: string,
+  fallbackBranches: string[],
+  runner: LocalMergeRunner,
+): Promise<void> {
+  if (await gitRefExists(repoPath, `refs/heads/${branch}`, runner)) {
+    return;
+  }
+
+  const candidateBranches = Array.from(new Set([
+    branch,
+    ...fallbackBranches,
+  ].map((candidate) => candidate.trim()).filter(Boolean)));
+
+  for (const candidate of candidateBranches) {
+    const candidateRefs = [
+      `refs/remotes/origin/${candidate}`,
+      `refs/heads/${candidate}`,
+    ];
+    for (const ref of candidateRefs) {
+      if (ref === `refs/heads/${branch}` || !(await gitRefExists(repoPath, ref, runner))) {
+        continue;
+      }
+      await runner("git", ["branch", branch, ref], repoPath);
+      return;
+    }
+  }
+}
+
 async function gitRevListCount(
   repoPath: string,
   range: string,
@@ -238,10 +268,12 @@ export async function mergeBranchLocally(args: {
   targetBranch: string;
   sourceBranch: string;
   commitMessage: string;
+  fallbackTargetBranches?: string[];
   runner?: LocalMergeRunner;
 }): Promise<LocalMergeResult> {
   const runner = args.runner ?? defaultRunner;
   try {
+    await ensureLocalBranchExists(args.repoPath, args.targetBranch, args.fallbackTargetBranches ?? [], runner);
     await runner("git", ["checkout", args.targetBranch], args.repoPath);
   } catch (err) {
     return { ok: false, conflict: false, error: err instanceof Error ? err.message : String(err) };

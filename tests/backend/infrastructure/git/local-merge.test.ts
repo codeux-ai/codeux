@@ -140,6 +140,25 @@ describe("local-merge helpers", () => {
     expect(result.conflict).toBe(false);
     expect(result.error).toBeTruthy();
   });
+
+  it("creates a missing configured target branch from a fallback branch before merging", async () => {
+    await git(repo, "checkout", "feature");
+    await commitFile(repo, "work.txt", "work\n", "feat: work");
+    await git(repo, "checkout", "main");
+
+    const result = await mergeBranchLocally({
+      repoPath: repo,
+      targetBranch: "dev",
+      sourceBranch: "feature",
+      commitMessage: "Merge branch 'feature' into dev",
+      fallbackTargetBranches: ["main"],
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.conflict).toBe(false);
+    expect((await git(repo, "rev-parse", "--verify", "dev")).stdout.trim()).toBeTruthy();
+    expect((await git(repo, "ls-tree", "--name-only", "dev")).stdout).toContain("work.txt");
+  });
 });
 
 describe("findRecoverableWorkerBranch", () => {

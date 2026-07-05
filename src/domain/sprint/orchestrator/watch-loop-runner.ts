@@ -721,6 +721,11 @@ export class WatchLoopRunner {
             targetBranch: defaultBranch,
             sourceBranch: defaultFeatureBranch,
             commitMessage: `Merge branch '${defaultFeatureBranch}' into ${defaultBranch}`,
+            fallbackTargetBranches: [
+              scopedExecutionContext.project.defaultBranch || "",
+              "main",
+              "master",
+            ],
           });
           await restoreCheckedOutRef(repoPath, originalRef);
 
