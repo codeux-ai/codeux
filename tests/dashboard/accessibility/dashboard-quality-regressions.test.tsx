@@ -638,7 +638,7 @@ describe("dashboard accessibility quality regressions", () => {
     expect(quicksprint).toMatch(/aria-describedby=\{isSubmitBlocked \? duplicateSubmitDescriptionId : undefined\}/);
 
     const settings = readSource("dashboard/src/v2/components/settings/SettingsContentPanels.tsx");
-    expect(settings).toMatch(/aria-busy=\{activeSaving \|\| loading \? "true" : undefined\}/);
+    expect(settings).toMatch(/aria-busy=\{activeSaving \|\| loading \|\| resettingProject \? "true" : undefined\}/);
     expect(settings).toMatch(/role=\{error \? "alert" : "status"\}/);
     expect(settings).toMatch(/Current values remain visible/);
 
