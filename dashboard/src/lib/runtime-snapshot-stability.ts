@@ -176,6 +176,53 @@ const isRecentInvocationEquivalent = (left: RecentInvocation, right: RecentInvoc
   && left?.lastMessageAt === right?.lastMessageAt
 );
 
+function areStringListsEquivalent(left: readonly string[] | undefined, right: readonly string[] | undefined): boolean {
+  const leftList = left ?? [];
+  const rightList = right ?? [];
+  if (leftList.length !== rightList.length) {
+    return false;
+  }
+  for (let index = 0; index < leftList.length; index += 1) {
+    if (leftList[index] !== rightList[index]) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function areTaskReviewSummariesEquivalent(
+  left: Subtask["latestReview"],
+  right: Subtask["latestReview"],
+): boolean {
+  if (left === right) {
+    return true;
+  }
+  if (!left || !right) {
+    return false;
+  }
+  return (
+    left.status === right.status
+    && left.outcome === right.outcome
+    && left.summary === right.summary
+    && left.reviewer === right.reviewer
+    && left.finishedAt === right.finishedAt
+    && areStringListsEquivalent(left.findings, right.findings)
+  );
+}
+
+function areTaskQaReviewSummariesEquivalent(
+  left: Subtask["qa_review"],
+  right: Subtask["qa_review"],
+): boolean {
+  if (left === right) {
+    return true;
+  }
+  if (!left || !right) {
+    return false;
+  }
+  return left.error_reason === right.error_reason;
+}
+
 function leftDefined<T>(left: T, right: T): boolean {
   return left != null && right != null;
 }
@@ -231,7 +278,32 @@ export function areExecutionSnapshotsEquivalent(
   );
 }
 
-const areSubtasksEquivalent = (left: Subtask, right: Subtask): boolean => isDeepEqual(left, right);
+const areSubtasksEquivalent = (left: Subtask, right: Subtask): boolean => (
+  leftDefined(left, right)
+  && left.record_id === right.record_id
+  && left.project_id === right.project_id
+  && left.sprint_id === right.sprint_id
+  && left.id === right.id
+  && left.title === right.title
+  && left.prompt === right.prompt
+  && areStringListsEquivalent(left.depends_on, right.depends_on)
+  && left.status === right.status
+  && left.session_id === right.session_id
+  && left.session_name === right.session_name
+  && left.session_state === right.session_state
+  && left.provider === right.provider
+  && left.model === right.model
+  && left.agentPresetId === right.agentPresetId
+  && left.worker_branch === right.worker_branch
+  && left.pr_url === right.pr_url
+  && left.is_independent === right.is_independent
+  && left.is_merged === right.is_merged
+  && left.merge_indicator === right.merge_indicator
+  && left.intervention_owner === right.intervention_owner
+  && left.intervention_hint === right.intervention_hint
+  && areTaskReviewSummariesEquivalent(left.latestReview, right.latestReview)
+  && areTaskQaReviewSummariesEquivalent(left.qa_review, right.qa_review)
+);
 
 export function areStatusSnapshotsEquivalent(
   left: DashboardStatus,
