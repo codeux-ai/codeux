@@ -17,7 +17,7 @@ export interface ActionFeedbackState extends ActionFeedbackOptions {
 
 export function useActionFeedback(autoDismissMs: number = 5000) {
   const [feedback, setFeedback] = useState<ActionFeedbackState>({ status: "idle", message: null });
-  const timerRef = useRef<number | null>(null);
+  const timerRef = useRef<ReturnType<typeof globalThis.setTimeout> | null>(null);
   const retryPendingRef = useRef(false);
 
   const clearTimer = useCallback(() => {
