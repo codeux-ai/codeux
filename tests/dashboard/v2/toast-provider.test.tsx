@@ -38,6 +38,24 @@ function ToastHarness() {
   );
 }
 
+function RetryToastHarness({ onRetry }: { onRetry: () => Promise<void> }) {
+  const { addToast } = useToast();
+  return (
+    <div>
+      <main data-feedback-focus-fallback tabIndex={-1}>Toast fallback</main>
+      <button
+        type="button"
+        onClick={() => addToast({ type: "error", message: "Retryable failure", retryAction: onRetry })}
+      >
+        Add retry error
+      </button>
+      <button type="button" onClick={() => addToast({ type: "success", message: "Saved with dismiss" })}>
+        Add dismissible success
+      </button>
+    </div>
+  );
+}
+
 describe("ToastProvider async feedback", () => {
   beforeEach(() => {
     cleanup();
@@ -78,5 +96,52 @@ describe("ToastProvider async feedback", () => {
     expect(screen.getAllByText("Save failed").length).toBeGreaterThan(0);
     expect(screen.getByRole("alert")).toHaveAttribute("aria-live", "assertive");
     vi.useRealTimers();
+  });
+
+  it("keeps retry button name-stable and suppresses duplicate retry while pending", async () => {
+    let resolveRetry = () => {};
+    const retryAction = vi.fn(() => new Promise<void>((resolve) => {
+      resolveRetry = resolve;
+    }));
+
+    render(
+      <ToastProvider>
+        <RetryToastHarness onRetry={retryAction} />
+      </ToastProvider>,
+    );
+
+    fireEvent.click(screen.getByText("Add retry error"));
+    const retryButton = screen.getByRole("button", { name: "Retry" });
+
+    fireEvent.click(retryButton);
+    fireEvent.click(retryButton);
+
+    expect(retryAction).toHaveBeenCalledTimes(1);
+    expect(retryButton).toBeDisabled();
+    expect(retryButton).toHaveAttribute("aria-busy", "true");
+    expect(retryButton).toHaveAccessibleName("Retry");
+    expect(retryButton).toHaveAccessibleDescription("Retry in progress.");
+
+    resolveRetry();
+    await waitFor(() => expect(retryButton).not.toBeDisabled());
+    expect(retryButton).toHaveAccessibleName("Retry");
+  });
+
+  it("moves focus to the existing fallback after dismissing a focused toast control", async () => {
+    render(
+      <ToastProvider>
+        <RetryToastHarness onRetry={() => Promise.resolve()} />
+      </ToastProvider>,
+    );
+
+    fireEvent.click(screen.getByText("Add dismissible success"));
+    const fallback = screen.getByRole("main");
+    const dismissButton = screen.getByRole("button", { name: "Dismiss toast" });
+
+    dismissButton.focus();
+    expect(document.activeElement).toBe(dismissButton);
+
+    fireEvent.click(dismissButton);
+    await waitFor(() => expect(document.activeElement).toBe(fallback));
   });
 });

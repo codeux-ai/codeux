@@ -2,7 +2,7 @@
  * @vitest-environment jsdom
  */
 import { render, screen, cleanup, waitFor } from "@testing-library/preact";
-import userEvent from "@testing-library/user-event";
+import { fireEvent } from "@testing-library/preact";
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { ProjectSettingsEditor } from "../../dashboard/src/v2/components/settings/ProjectSettingsEditor.jsx";
 import { TextInput } from "../../dashboard/src/v2/components/settings/SettingsFormFields.js";
@@ -61,8 +61,7 @@ describe("ProjectSettingsEditor", () => {
 
     expect(input).toBeInTheDocument();
 
-    await userEvent.clear(input!);
-    await userEvent.type(input!, "5");
+    fireEvent.input(input!, { target: { value: "5" } });
 
     expect(mockOnChange).toHaveBeenCalledWith(expect.objectContaining({
         cliWorkflow: expect.objectContaining({ maxParsingRetries: 5 })

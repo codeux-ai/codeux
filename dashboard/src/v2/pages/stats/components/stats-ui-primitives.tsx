@@ -46,6 +46,7 @@ import {
   createSeries,
   getPurposeConfig,
 } from "../stats-utils.js";
+import { useInteractionTokens } from "../../../lib/motion/tokens.js";
 
 import type { DonutSliceGeometry, ChartPoint } from "./stats-geometry.js";
 export type StatsVisualMode = "trend" | "composition" | "models" | "reliability" | "ledgers" | "system";
@@ -200,6 +201,7 @@ export const ViewToggle: FunctionComponent<{
   className?: string;
   controlsId?: string;
 }> = ({ value, onChange, ariaLabel = "Analytics modes", className = "", controlsId }) => {
+  const tokens = useInteractionTokens();
   const buttonRefs = useRef<Partial<Record<StatsVisualMode, HTMLButtonElement | null>>>({});
   const modes: Array<{ id: StatsVisualMode; label: string; accessibleLabel: string; icon: LucideIcon }> = [
     { id: "trend", label: "Trend", accessibleLabel: "Trend", icon: BarChart3 },
@@ -266,11 +268,16 @@ export const ViewToggle: FunctionComponent<{
             aria-controls={controlsId}
             aria-label={mode.accessibleLabel}
             title={mode.label}
+            data-selection-motion="selectionMovement"
             className={`${CONTROL_BASE_CLASS} min-h-10 min-w-10 flex-[1_1_calc(33.333%-0.25rem)] gap-2 px-2 py-2 sm:min-w-[7rem] sm:flex-[1_1_auto] sm:px-4 ${
               selected
                 ? CONTROL_ACTIVE_CLASS
                 : CONTROL_IDLE_CLASS
             }`}
+            style={{
+              transitionDuration: tokens.selectionMovement.duration,
+              transitionTimingFunction: tokens.selectionMovement.ease,
+            }}
           >
             <Icon className="h-3.5 w-3.5 shrink-0" strokeWidth={2} aria-hidden="true" />
             <span className="hidden min-w-0 truncate sm:inline">{mode.label}</span>

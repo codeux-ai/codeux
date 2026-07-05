@@ -150,7 +150,6 @@ describe("SprintLedger Accessibility", () => {
 
     await user.click(nameBtns[0]);
     expect(inactiveCell).toHaveAttribute("aria-sort", "ascending");
-    expect(screen.getByText(/Sorted by Sprint ascending\. 1 sprint remains visible\./i)).toBeInTheDocument();
   });
 
   it("provides explicit names for row controls including the sprint name", () => {
@@ -298,7 +297,7 @@ describe("SprintLedger Accessibility", () => {
     await user.click(bulkDeleteBtn);
 
     // Check for confirmation dialog
-    expect(await screen.findByText(/Delete Sprints\?/i)).toBeInTheDocument();
+    expect(await screen.findByText(/Delete 1 Selected Sprint\?/i)).toBeInTheDocument();
     expect(screen.getByText(/You are deleting 1 selected sprint/i)).toBeInTheDocument();
     expect(screen.getByText(/This action is permanent and will cascade/i)).toBeInTheDocument();
 

@@ -32,7 +32,7 @@ describe("DependencyStatusIndicators", () => {
     expect(getByText("Blocked: 5 dependencies need completion")).toBeTruthy();
 
     // Verify explicit accessible text
-    expect(getByText("Depends on task TASK-1, resolved. Dependency completed. Status: completed. Title: Test task 1")).toBeTruthy();
+    expect(getByText("Depends on task TASK-1, resolved. Resolved dependency. Dependency completed. Status: completed. Title: Test task 1")).toBeTruthy();
 
     // Verify sr-only accessible text
     const srText = getByText((content, element) => {
@@ -43,16 +43,20 @@ describe("DependencyStatusIndicators", () => {
     // Check specific styling classes for visual feedback states
     const completedIndicator = getByTitle(/Depends on Test task 1 \(Resolved; completed\)/);
     expect(completedIndicator.className).toContain("text-status-green");
+    expect(completedIndicator).toHaveAttribute("data-dependency-state", "resolved");
 
     const pendingIndicator = getByTitle(/Depends on Test task 2 \(Blocked; pending\)/);
     expect(pendingIndicator.className).toContain("text-status-amber");
     expect(pendingIndicator.className).not.toContain("border-dashed");
+    expect(pendingIndicator).toHaveAttribute("data-dependency-state", "blocked");
 
     const blockedIndicator = getByTitle(/Depends on Test task 3 \(QA failed; QA REVIEW FAILED\)/i);
     expect(blockedIndicator.className).toContain("text-status-red");
+    expect(blockedIndicator).toHaveAttribute("data-dependency-state", "qa_failed");
 
     const inProgressIndicator = getByTitle(/Depends on Test task 4 \(In progress; in progress\)/i);
     expect(inProgressIndicator.className).toContain("text-signal-600");
+    expect(inProgressIndicator).toHaveAttribute("data-dependency-state", "in_progress");
     expect(getByText("In progress")).toBeTruthy();
 
     const codingCompleteIndicator = getByTitle(/Depends on Test task 4B \(Ready for QA; coding completed\)/i);
@@ -61,6 +65,7 @@ describe("DependencyStatusIndicators", () => {
 
     const unknownIndicator = getByTitle(/Depends on Unknown Task \(missing\) \(Unknown; pending\)/i);
     expect(unknownIndicator.className).toContain("border-dashed");
+    expect(unknownIndicator).toHaveAttribute("data-dependency-state", "unknown");
     expect(getByText("Unknown")).toBeTruthy();
     expect(container.querySelector('[role="list"]')).toHaveAccessibleName("Blocked: 5 dependencies need completion. Task dependencies");
   });

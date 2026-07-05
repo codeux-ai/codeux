@@ -1,8 +1,9 @@
 import { FunctionComponent } from "preact";
 import { memo } from "preact/compat";
+import { useEffect, useState } from "preact/hooks";
 import { activeMemoryIdSignal, hoveredMemoryIdSignal, lobotomizeModeSignal, memoryMutationsSignal, selectedMemoryIdsSignal, toggleSelectedMemoryId } from "./memoryState.js";
 import { useComputed } from "@preact/signals";
-import { ArrowUpRight, Check, X } from "lucide-preact";
+import { AlertTriangle, ArrowUpRight, Check, Trash2, X } from "lucide-preact";
 import { useInteractionTokens } from "../../lib/motion/index.js";
 import type { MemoryScope } from "../../memory-types.js";
 
@@ -38,13 +39,23 @@ export const MemoryCard: FunctionComponent<MemoryCardProps> = memo(({
     const isSelected = useComputed(() => activeMemoryIdSignal.value === id);
     const isBatchSelected = useComputed(() => selectedMemoryIdsSignal.value.includes(id));
     const interactionTokens = useInteractionTokens();
+    const [deleteArmed, setDeleteArmed] = useState(false);
     const scopeLabel = scope || "unknown";
     const strengthPercent = Math.round(strength * 100);
     const selectedState = isSelected.value ? "Currently open in inspector." : isBatchSelected.value ? "Selected for batch action." : "Not selected.";
 
+    useEffect(() => {
+        setDeleteArmed(false);
+    }, [id, lobotomizeModeSignal.value]);
+
     const handleDelete = (e: Event) => {
         e.stopPropagation();
+        if (!deleteArmed) {
+            setDeleteArmed(true);
+            return;
+        }
         memoryMutationsSignal.value.removeMemory(id);
+        setDeleteArmed(false);
     };
 
     const handleOpen = (e: Event) => {
@@ -120,6 +131,24 @@ export const MemoryCard: FunctionComponent<MemoryCardProps> = memo(({
                     {content}
                 </p>
 
+                {lobotomizeModeSignal.value && (
+                    <div
+                        id={`danger-delete-${id}`}
+                        className={`flex min-w-0 items-start gap-2 rounded-lg border px-2.5 py-2 text-[11px] font-semibold leading-4 ${
+                            deleteArmed
+                                ? "border-status-red/35 bg-status-red/[0.12] text-status-red"
+                                : "border-status-red/20 bg-status-red/[0.07] text-status-red"
+                        }`}
+                    >
+                        <AlertTriangle size={14} className="mt-0.5 shrink-0" aria-hidden="true" />
+                        <span className="min-w-0 break-words">
+                            {deleteArmed
+                                ? "Delete is armed for this memory. Confirm delete now or cancel."
+                                : "Danger delete mode is on. Arm this card before deleting it."}
+                        </span>
+                    </div>
+                )}
+
                 <div className="flex min-w-0 flex-wrap items-center justify-between gap-2 border-t border-black/[0.05] pt-2 dark:border-white/[0.06]">
                     <button
                         type="button"
@@ -149,23 +178,42 @@ export const MemoryCard: FunctionComponent<MemoryCardProps> = memo(({
                             <ArrowUpRight size={13} strokeWidth={2.5} aria-hidden="true" />
                         </button>
                         {lobotomizeModeSignal.value && (
-                            <button
-                                type="button"
-                                aria-label={`Delete ${cat.label} memory: ${content.substring(0, 30)}...`}
-                                aria-describedby={`danger-delete-${id}`}
-                                onClick={handleDelete}
-                                className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-status-red/30 bg-status-red/[0.08] text-status-red transition-colors duration-150 hover:border-status-red hover:bg-status-red hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-status-red focus-visible:ring-offset-2 active:bg-status-red/90 dark:focus-visible:ring-offset-void-900"
-                            >
-                                <X size={14} strokeWidth={2.5} aria-hidden="true" />
-                            </button>
+                            <div className="flex shrink-0 items-center gap-1.5">
+                                {deleteArmed && (
+                                    <button
+                                        type="button"
+                                        aria-label={`Cancel delete for ${cat.label} memory`}
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            setDeleteArmed(false);
+                                        }}
+                                        className="inline-flex h-7 items-center gap-1 rounded-md border border-black/[0.06] bg-black/[0.03] px-2 text-[11px] font-semibold text-slate-500 transition-colors duration-150 hover:bg-black/[0.06] hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-300 dark:hover:bg-white/[0.08] dark:hover:text-white dark:focus-visible:ring-offset-void-900"
+                                    >
+                                        <X size={13} strokeWidth={2.5} aria-hidden="true" />
+                                        Cancel
+                                    </button>
+                                )}
+                                <button
+                                    type="button"
+                                    aria-label={deleteArmed ? `Confirm delete ${cat.label} memory: ${content.substring(0, 30)}...` : `Arm delete for ${cat.label} memory: ${content.substring(0, 30)}...`}
+                                    aria-describedby={`danger-delete-${id}`}
+                                    aria-pressed={deleteArmed}
+                                    onClick={handleDelete}
+                                    className={`inline-flex h-7 items-center gap-1 rounded-md border px-2 text-[11px] font-semibold transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-status-red focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-900 ${
+                                        deleteArmed
+                                            ? "border-status-red bg-status-red text-white hover:bg-status-red/90"
+                                            : "border-status-red/30 bg-status-red/[0.08] text-status-red hover:border-status-red hover:bg-status-red/[0.14]"
+                                    }`}
+                                >
+                                    <Trash2 size={13} strokeWidth={2.5} aria-hidden="true" />
+                                    {deleteArmed ? "Delete now" : "Arm delete"}
+                                </button>
+                            </div>
                         )}
                     </div>
                 </div>
             </div>
             <span className="sr-only">Press Enter to open details.</span>
-            {lobotomizeModeSignal.value && (
-                <span id={`danger-delete-${id}`} className="sr-only">Danger delete is armed. This deletes immediately without confirmation.</span>
-            )}
         </div>
     );
 }, (prevProps, nextProps) => {

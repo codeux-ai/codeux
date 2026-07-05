@@ -1,5 +1,5 @@
 import type { FunctionComponent, ComponentType } from "preact";
-import { useEffect, useState } from "preact/hooks";
+import { useEffect, useRef, useState } from "preact/hooks";
 import {
   BarChart3,
   CalendarDays,
@@ -123,14 +123,20 @@ export const StatsPageHero: FunctionComponent<StatsPageHeroProps> = ({
   setVisualMode,
 }) => {
   const [customRangeError, setCustomRangeError] = useState<string>("");
+  const [customRangeStatus, setCustomRangeStatus] = useState<string>("");
+  const [customRangeAttempted, setCustomRangeAttempted] = useState(activeQuery.window === "custom");
   const [customControlsOpen, setCustomControlsOpen] = useState(activeQuery.window === "custom");
+  const customFromRef = useRef<HTMLInputElement>(null);
+  const customToRef = useRef<HTMLInputElement>(null);
 
-  const customRangeMessage = customControlsOpen ? getCustomRangeMessage(customFrom, customTo) : "";
+  const customRangeMessage = customControlsOpen && customRangeAttempted ? getCustomRangeMessage(customFrom, customTo) : "";
   const rangeMessage = customRangeError || customRangeMessage;
   const rangeHasError = Boolean(rangeMessage);
+  const startHasError = rangeHasError && !customFrom;
+  const endHasError = rangeHasError && (!customTo || Boolean(customFrom && customTo && !isValidCustomRange(customFrom, customTo)));
   const customRangeDescriptionIds = rangeHasError
-    ? "stats-custom-range-help stats-custom-range-error"
-    : "stats-custom-range-help";
+    ? "stats-custom-range-help stats-custom-range-error stats-custom-range-status"
+    : "stats-custom-range-help stats-custom-range-status";
   const canApplyCustomRange = isValidCustomRange(customFrom, customTo);
   const selectedProjectLabel = selectedProject?.name || "No project selected";
   const rangeScopeLabel = stats?.range?.label || formatWindowLabel(activeQuery);
@@ -140,21 +146,33 @@ export const StatsPageHero: FunctionComponent<StatsPageHeroProps> = ({
   useEffect(() => {
     if (activeQuery.window === "custom") {
       setCustomControlsOpen(true);
+      setCustomRangeAttempted(true);
     }
   }, [activeQuery.window]);
 
   const handleApplyCustom = () => {
     if (!canApplyCustomRange) {
-      setCustomRangeError(rangeMessage);
+      const nextMessage = getCustomRangeMessage(customFrom, customTo);
+      setCustomRangeAttempted(true);
+      setCustomRangeError(nextMessage);
+      setCustomRangeStatus("");
+      if (!customFrom) {
+        customFromRef.current?.focus();
+        return;
+      }
+      customToRef.current?.focus();
       return;
     }
 
     setCustomRangeError("");
+    setCustomRangeAttempted(true);
+    setCustomRangeStatus(`Custom range applied: ${customFrom} to ${customTo}.`);
     applyCustomRange();
   };
 
   const handlePresetClick = (window: typeof WINDOW_PRESETS[number]) => {
     setCustomRangeError("");
+    setCustomRangeStatus("");
 
     if (window === "custom") {
       setCustomControlsOpen(true);
@@ -162,6 +180,8 @@ export const StatsPageHero: FunctionComponent<StatsPageHeroProps> = ({
     }
 
     setCustomControlsOpen(false);
+    setCustomRangeAttempted(false);
+    setCustomRangeStatus(`Time window changed to ${window === "all" ? "All time" : window}.`);
     applyPresetWindow(window);
   };
 
@@ -256,16 +276,18 @@ export const StatsPageHero: FunctionComponent<StatsPageHeroProps> = ({
                   <span className={styles.customRangeLabel}>Start</span>
                   <input
                     id="stats-custom-start"
+                    ref={customFromRef}
                     type="date"
                     aria-label="Custom start date"
                     value={customFrom}
                     onInput={(event) => {
                       setCustomFrom((event.currentTarget as HTMLInputElement).value);
                       setCustomRangeError("");
+                      setCustomRangeStatus("");
                     }}
                     className={`${INPUT_CLASS} !h-10 w-full !px-3 !text-[12px]`}
-                    aria-invalid={rangeHasError ? "true" : "false"}
-                    aria-errormessage={rangeHasError ? "stats-custom-range-error" : undefined}
+                    aria-invalid={startHasError ? "true" : "false"}
+                    aria-errormessage={startHasError ? "stats-custom-range-error" : undefined}
                     aria-describedby={customRangeDescriptionIds}
                   />
                 </label>
@@ -273,23 +295,24 @@ export const StatsPageHero: FunctionComponent<StatsPageHeroProps> = ({
                   <span className={styles.customRangeLabel}>End</span>
                   <input
                     id="stats-custom-end"
+                    ref={customToRef}
                     type="date"
                     aria-label="Custom end date"
                     value={customTo}
                     onInput={(event) => {
                       setCustomTo((event.currentTarget as HTMLInputElement).value);
                       setCustomRangeError("");
+                      setCustomRangeStatus("");
                     }}
                     className={`${INPUT_CLASS} !h-10 w-full !px-3 !text-[12px]`}
-                    aria-invalid={rangeHasError ? "true" : "false"}
-                    aria-errormessage={rangeHasError ? "stats-custom-range-error" : undefined}
+                    aria-invalid={endHasError ? "true" : "false"}
+                    aria-errormessage={endHasError ? "stats-custom-range-error" : undefined}
                     aria-describedby={customRangeDescriptionIds}
                   />
                 </label>
                 <button
                   type="button"
                   onClick={handleApplyCustom}
-                  disabled={!canApplyCustomRange}
                   aria-disabled={!canApplyCustomRange ? "true" : undefined}
                   className={styles.customRangeApply}
                 >
@@ -306,6 +329,15 @@ export const StatsPageHero: FunctionComponent<StatsPageHeroProps> = ({
                 </div>
               </div>
             ) : null}
+            <div
+              id="stats-custom-range-status"
+              className={styles.customRangeStatus}
+              role={customRangeStatus ? "status" : undefined}
+              aria-live="polite"
+              aria-atomic="true"
+            >
+              {customRangeStatus}
+            </div>
           </div>
 
           <div className={`${styles.heroControlSection} ${styles.heroModeSection}`}>

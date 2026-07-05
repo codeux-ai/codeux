@@ -250,6 +250,8 @@ export const QuicksprintBrowseView: FunctionComponent<{
   builtinPurposeOptions: BuiltinPurposeOption[];
   selectedBuiltinPurpose: string;
   setSelectedBuiltinPurpose: (purpose: string) => void;
+  announcePhaseStatus?: (message: string) => void;
+  phaseStatus?: string;
   handleSelectTemplate: (t: QuicksprintTemplateRecord) => void;
   openEditor: (t: QuicksprintTemplateRecord | null) => void;
   handleDeleteTemplate?: (t: QuicksprintTemplateRecord) => void;
@@ -262,6 +264,8 @@ export const QuicksprintBrowseView: FunctionComponent<{
   builtinPurposeOptions,
   selectedBuiltinPurpose,
   setSelectedBuiltinPurpose,
+  announcePhaseStatus,
+  phaseStatus = "Choose a quicksprint template.",
   handleSelectTemplate,
   activeBuiltinPurpose,
   loading,
@@ -300,6 +304,9 @@ export const QuicksprintBrowseView: FunctionComponent<{
             <p className="max-w-2xl text-sm leading-relaxed text-slate-500 dark:text-slate-400 sm:text-[15px]">
               Browse default and custom templates together to spin up a focused sprint fast.
             </p>
+            <p className="max-w-2xl rounded-[1.1rem] border border-black/[0.06] bg-black/[0.025] px-4 py-3 text-xs font-semibold leading-relaxed text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-400">
+              {phaseStatus}
+            </p>
           </div>
         </div>
         <button
@@ -335,7 +342,11 @@ export const QuicksprintBrowseView: FunctionComponent<{
                       aria-label="Default template purpose"
                       variant="compact"
                       value={activeBuiltinPurpose?.value || ""}
-                      onChange={setSelectedBuiltinPurpose}
+                      onChange={(purpose) => {
+                        setSelectedBuiltinPurpose(purpose);
+                        const option = builtinPurposeOptions.find((item) => item.value === purpose);
+                        announcePhaseStatus?.(`Default template purpose changed to ${option?.label || "General"}.`);
+                      }}
                       options={builtinPurposeOptions.map((option) => ({
                         value: option.value,
                         label: option.label,

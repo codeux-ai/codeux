@@ -234,6 +234,7 @@
 
 .heroControlDescription {
   max-width: 100%;
+  min-height: 2.35em;
   margin-top: 0.1875rem;
   color: var(--stats-detail-color);
   font-size: 0.78125rem;
@@ -426,6 +427,10 @@
   transform: none;
 }
 
+.customRangeApply[aria-disabled="true"] {
+  opacity: 0.72;
+}
+
 .customRangeHelp {
   min-width: 0;
   min-height: 1.125rem;
@@ -438,6 +443,15 @@
 .customRangeError {
   color: var(--stats-negative-text);
   font-weight: 600;
+}
+
+.customRangeStatus {
+  min-height: 1.125rem;
+  color: var(--stats-positive-text);
+  font-size: 0.75rem;
+  font-weight: 650;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
 }
 
 .heroViewToggle {
@@ -829,7 +843,8 @@
 
 @media (prefers-reduced-motion: reduce) {
   .heroPresetButton,
-  .customRangeApply {
+  .customRangeApply,
+  .heroViewToggle > button {
     transition: none;
   }
 

@@ -53,11 +53,8 @@ export function useTaskCardDragMotion(ref: RefObject<HTMLElement>, isDragging: b
     if (!ref.current) return;
 
     if (isReducedMotion) {
-      if (isDragging) {
-        gsap.set(ref.current, { opacity: 0.72, boxShadow: DRAG_SHADOW });
-      } else {
-        gsap.set(ref.current, { clearProps: 'boxShadow,opacity' });
-      }
+      gsap.killTweensOf(ref.current);
+      gsap.set(ref.current, { opacity: 1, scale: 1, clearProps: 'boxShadow,transform,opacity' });
       return;
     }
 

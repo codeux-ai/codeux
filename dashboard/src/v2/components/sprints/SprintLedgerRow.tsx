@@ -217,7 +217,7 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
     : isPinPending || isTogglePending || isPauseResumePending
       ? "bg-signal-500/5 ring-2 ring-inset ring-signal-500/20"
       : isAnyBulkPending
-        ? "bg-slate-900/[0.03] grayscale-[0.2] dark:bg-white/[0.03]"
+        ? "border-slate-400/25 bg-slate-900/[0.03] ring-2 ring-inset ring-slate-400/20 dark:bg-white/[0.03]"
         : "";
   const rowBusy = isRowPending || isTogglePending || isPauseResumePending || Boolean(isAnyBulkPending);
   const pendingLabel = isDeletePending
@@ -304,6 +304,11 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
       <TableCell className={`min-w-0 max-w-full lg:w-[220px] lg:min-w-[220px] ${desktopCellTone}`} mobileLabel="Sprint">
         <div className="flex flex-wrap items-center gap-2">
           <div className={`font-display text-lg font-black leading-tight break-words ${isCompleted ? "text-slate-700 dark:text-slate-300" : "text-[var(--text-primary)]"}`}>{sprint.name}</div>
+          {isSelected ? (
+            <span className="inline-flex items-center rounded-full border border-signal-500/25 bg-signal-500/10 px-2.5 py-1 text-[10px] font-bold uppercase text-signal-700 dark:text-signal-300">
+              Selected
+            </span>
+          ) : null}
           {pendingLabel ? (
             <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[10px] font-bold uppercase ${
               isDeletePending

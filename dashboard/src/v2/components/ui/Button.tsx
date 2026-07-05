@@ -16,6 +16,7 @@ export interface ButtonProps extends ComponentProps<"button"> {
   pending?: boolean;
   isLoading?: boolean;
   icon?: any;
+  disabledReason?: string;
   variant?: "primary" | "secondary" | "danger" | "ghost" | "signal";
   size?: "sm" | "md" | "lg";
 }
@@ -43,6 +44,7 @@ export const Button: FunctionComponent<ButtonProps> = memo(({
   isLoading = false,
   success = false,
   disabled,
+  disabledReason,
   icon: Icon,
   onClick,
   ...props
@@ -65,6 +67,15 @@ export const Button: FunctionComponent<ButtonProps> = memo(({
   const labelRef = useRef<HTMLSpanElement>(null);
   const spinnerRef = useRef<HTMLDivElement>(null);
   const lastIdleWidthRef = useRef<number | null>(null);
+  const activationPendingRef = useRef(false);
+  const disabledReasonIdRef = useRef<string | null>(null);
+  if (disabledReasonIdRef.current === null) {
+    disabledReasonIdRef.current = `button-disabled-reason-${Math.random().toString(36).slice(2)}`;
+  }
+  const describedBy = [
+    props["aria-describedby"],
+    disabledReason ? disabledReasonIdRef.current : null,
+  ].filter(Boolean).join(" ") || undefined;
 
   useMagnetic(buttonRef, contentRef, { enabled: variant === "primary" || variant === "signal" });
 
@@ -175,7 +186,7 @@ export const Button: FunctionComponent<ButtonProps> = memo(({
 
   const handleClick = useCallback(
     (e: any) => {
-      if (disabled || isPending || isAriaDisabled) {
+      if (disabled || isPending || isAriaDisabled || activationPendingRef.current) {
         e?.preventDefault();
         e?.stopPropagation();
         return;
@@ -184,10 +195,15 @@ export const Button: FunctionComponent<ButtonProps> = memo(({
 
       const result = (onClick as any)(e);
       if (result && typeof result === "object" && "then" in result && typeof result.then === "function") {
+        activationPendingRef.current = true;
         setPending("");
         result
-          .then(() => setSuccess(""))
+          .then(() => {
+            activationPendingRef.current = false;
+            setSuccess("");
+          })
           .catch((err: unknown) => {
+            activationPendingRef.current = false;
             setError("");
             throw err;
           });
@@ -208,41 +224,46 @@ export const Button: FunctionComponent<ButtonProps> = memo(({
   if (variant === "danger") overrideClasses += " focus-visible:ring-[var(--focus-ring-danger)]";
 
   return (
-    <button
-      {...props}
-      style={{ transitionDuration: tokens.controlFeedback.duration, transitionTimingFunction: tokens.controlFeedback.ease, ...(typeof props.style === "object" ? props.style : {}) }}
-      ref={buttonRef}
-      onClick={handleClick}
-      disabled={disabled}
-      aria-disabled={disabled || isPending || isAriaDisabled}
-      aria-busy={isPending}
-      className={`${baseClasses} ${variantClasses} ${sizeClasses} ${overrideClasses} relative overflow-hidden ${className}`}
-    >
+    <>
+      <button
+        {...props}
+        style={{ transitionDuration: tokens.controlFeedback.duration, transitionTimingFunction: tokens.controlFeedback.ease, ...(typeof props.style === "object" ? props.style : {}) }}
+        ref={buttonRef}
+        onClick={handleClick}
+        disabled={disabled}
+        aria-disabled={disabled || isPending || isAriaDisabled}
+        aria-describedby={describedBy}
+        aria-busy={isPending}
+        title={props.title || disabledReason}
+        className={`${baseClasses} ${variantClasses} ${sizeClasses} ${overrideClasses} relative overflow-hidden ${className}`}
+      >
 
-      <div ref={contentRef} className="flex min-w-0 max-w-full items-center justify-center gap-2">
-        {(Icon || isSuccess || isError) && (
-          <div ref={iconContainerRef} className="relative flex items-center justify-center w-4 h-4 shrink-0">
-            <div data-active={!isPending && !isSuccess && !isError} className={`absolute inset-0 flex items-center justify-center transition-all  ${isPending || isSuccess || isError ? "scale-0 opacity-0 pointer-events-none" : "scale-100 opacity-100"}`}
-              style={{ transitionDuration: tokens.controlFeedback.duration, transitionTimingFunction: tokens.controlFeedback.ease }}>
-              {Icon && <Icon className="w-4 h-4" aria-hidden="true" />}
+        <div ref={contentRef} className="flex min-w-0 max-w-full items-center justify-center gap-2">
+          {(Icon || isSuccess || isError) && (
+            <div ref={iconContainerRef} className="relative flex items-center justify-center w-4 h-4 shrink-0">
+              <div data-active={!isPending && !isSuccess && !isError} className={`absolute inset-0 flex items-center justify-center transition-all  ${isPending || isSuccess || isError ? "scale-0 opacity-0 pointer-events-none" : "scale-100 opacity-100"}`}
+                style={{ transitionDuration: tokens.controlFeedback.duration, transitionTimingFunction: tokens.controlFeedback.ease }}>
+                {Icon && <Icon className="w-4 h-4" aria-hidden="true" />}
+              </div>
+              <div key={`success-${feedback.status}`} data-active={isSuccess} className={`absolute inset-0 flex items-center justify-center transition-all  ${isSuccess ? "scale-100 opacity-100" : "scale-0 opacity-0 pointer-events-none"}`}
+                style={{ transitionDuration: tokens.controlFeedback.duration, transitionTimingFunction: tokens.controlFeedback.ease }}>
+                <Check className="w-4 h-4" strokeWidth={3} aria-hidden="true" />
+              </div>
+              <div key={`error-${feedback.status}`} data-active={isError} className={`absolute inset-0 flex items-center justify-center transition-all  ${isError ? "scale-100 opacity-100" : "scale-0 opacity-0 pointer-events-none"}`}
+                style={{ transitionDuration: tokens.controlFeedback.duration, transitionTimingFunction: tokens.controlFeedback.ease }}>
+                <X className="w-4 h-4" strokeWidth={3} aria-hidden="true" />
+              </div>
             </div>
-            <div key={`success-${feedback.status}`} data-active={isSuccess} className={`absolute inset-0 flex items-center justify-center transition-all  ${isSuccess ? "scale-100 opacity-100" : "scale-0 opacity-0 pointer-events-none"}`}
-              style={{ transitionDuration: tokens.controlFeedback.duration, transitionTimingFunction: tokens.controlFeedback.ease }}>
-              <Check className="w-4 h-4" strokeWidth={3} aria-hidden="true" />
+          )}
+          <div className="relative flex min-w-0 max-w-full items-center justify-center">
+            <span ref={labelRef} className="flex min-w-0 max-w-full items-center justify-center gap-2 truncate" style={{ opacity: isPending ? 0 : 1 }}>{children}</span>
+            <div ref={spinnerRef} className="absolute inset-0 flex items-center justify-center pointer-events-none text-current" style={{ opacity: isPending ? 1 : 0, transform: isPending ? "scale(1)" : "scale(0.7)", transitionDuration: tokens.controlFeedback.duration, transitionTimingFunction: tokens.controlFeedback.ease }}>
+              <Loader2 className="w-4 h-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
             </div>
-            <div key={`error-${feedback.status}`} data-active={isError} className={`absolute inset-0 flex items-center justify-center transition-all  ${isError ? "scale-100 opacity-100" : "scale-0 opacity-0 pointer-events-none"}`}
-              style={{ transitionDuration: tokens.controlFeedback.duration, transitionTimingFunction: tokens.controlFeedback.ease }}>
-              <X className="w-4 h-4" strokeWidth={3} aria-hidden="true" />
-            </div>
-          </div>
-        )}
-        <div className="relative flex min-w-0 max-w-full items-center justify-center">
-          <span ref={labelRef} className="flex min-w-0 max-w-full items-center justify-center gap-2 truncate" style={{ opacity: isPending ? 0 : 1 }}>{children}</span>
-          <div ref={spinnerRef} className="absolute inset-0 flex items-center justify-center pointer-events-none text-current" style={{ opacity: isPending ? 1 : 0, transform: isPending ? "scale(1)" : "scale(0.7)", transitionDuration: tokens.controlFeedback.duration, transitionTimingFunction: tokens.controlFeedback.ease }}>
-            <Loader2 className="w-4 h-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
           </div>
         </div>
-      </div>
-    </button>
+      </button>
+      {disabledReason && <span id={disabledReasonIdRef.current ?? undefined} className="sr-only">{disabledReason}</span>}
+    </>
   );
 });

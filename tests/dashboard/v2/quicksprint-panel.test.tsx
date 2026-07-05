@@ -143,6 +143,7 @@ describe("QuicksprintPanel", () => {
     expect(queryByText("Launch A Quicksprint.")).not.toBeInTheDocument();
     expect(getByText("Configure Quicksprint")).toBeInTheDocument();
     expect(getByText("Plan & Start")).toBeInTheDocument();
+    expect(getByText("API Tests selected. Configure the quicksprint before planning.", { selector: "p" })).toBeInTheDocument();
   });
 
   it("keeps template selection context and restores focus when returning to browse", async () => {
@@ -162,11 +163,11 @@ describe("QuicksprintPanel", () => {
       expect(document.activeElement).toBe(browseHeading);
     });
     expect(getByRole("button", { name: "API Tests" })).toHaveAttribute("aria-pressed", "true");
-    expect(getByText("Returned to templates. API Tests remains selected.")).toBeInTheDocument();
+    expect(getByText("Returned to templates. API Tests remains selected.", { selector: "p" })).toBeInTheDocument();
   });
 
   it("exposes stable prompt preview expansion semantics", () => {
-    const { getByRole } = render(<QuicksprintPanel {...defaultProps} />);
+    const { getByRole, getByText } = render(<QuicksprintPanel {...defaultProps} />);
 
     fireEvent.click(getByRole("button", { name: "API Tests" }));
 
@@ -177,12 +178,18 @@ describe("QuicksprintPanel", () => {
     const promptRegion = getByRole("region", { name: "Combined quicksprint prompt" });
     expect(promptRegion).toHaveAttribute("id", "quicksprint-combined-prompt-tpl-1");
     expect(promptRegion).toHaveClass("max-h-0");
+    expect(promptRegion).toHaveAttribute("data-motion-contract", "expansionCollapse");
 
     fireEvent.click(toggle);
 
     expect(toggle).toHaveAttribute("aria-expanded", "true");
     expect(promptRegion).toHaveClass("max-h-[600px]");
     expect(promptRegion.textContent).toContain("Write tests");
+    expect(getByText("Combined prompt preview expanded.", { selector: "p" })).toBeInTheDocument();
+
+    fireEvent.click(toggle);
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    expect(getByText("Combined prompt preview collapsed.", { selector: "p" })).toBeInTheDocument();
   });
 
   it("clamps oversized template defaults when the subtask slider loads", async () => {
@@ -242,7 +249,7 @@ describe("QuicksprintPanel", () => {
     expect(mockOnExecute.mock.calls[0]?.[7]).toMatchObject({ noTaskLimit: true });
   });
 
-  it("renders provider instance route labels, default models, and brand icons", async () => {
+  it("announces provider route and model override changes", async () => {
     const { getByText, queryByText } = render(
       <QuicksprintPanel
         {...defaultProps}
@@ -273,6 +280,24 @@ describe("QuicksprintPanel", () => {
       expect(getByText("Codex Primary")).toBeInTheDocument();
     });
     expect(document.body.querySelectorAll('img[src="/lobe-icons/codex-color.svg"]').length).toBeGreaterThan(1);
+
+    fireEvent.click(getByText("Codex Primary"));
+
+    await waitFor(() => {
+      expect(getByText("Planning route changed to Codex Primary.", { selector: "p" })).toBeInTheDocument();
+    });
+
+    const modelTrigger = getByText("Default (gpt-5.5)");
+    expect(modelTrigger).toBeInTheDocument();
+    fireEvent.click(modelTrigger);
+    await waitFor(() => {
+      expect(getByText("gpt-5.4")).toBeInTheDocument();
+    });
+    fireEvent.click(getByText("gpt-5.4"));
+
+    await waitFor(() => {
+      expect(getByText("Model override changed to gpt-5.4.", { selector: "p" })).toBeInTheDocument();
+    });
   });
 
   it("filters default templates by purpose", async () => {
@@ -288,6 +313,7 @@ describe("QuicksprintPanel", () => {
       expect(getByText("Python Service Audit")).toBeInTheDocument();
     });
     expect(queryByText("API Tests")).not.toBeInTheDocument();
+    expect(getByText("Default template purpose changed to Python Service.", { selector: "p" })).toBeInTheDocument();
   });
 
   it("renders the large default template catalog in an accessible scroll rail", () => {
@@ -479,7 +505,7 @@ describe("QuicksprintPanel", () => {
     resolveExecute!();
   });
 
-  it("disables conflicting controls during planning and announces cancellation", async () => {
+  it("blocks duplicate planning submissions and announces cancellation", async () => {
     let capturedSignal: AbortSignal | null = null;
     const executePromise = new Promise<void>(() => undefined);
     const mockOnExecute = vi.fn((_templateId, _taskCount, _mode, _prompt, _route, _model, signal: AbortSignal) => {
@@ -502,6 +528,8 @@ describe("QuicksprintPanel", () => {
 
     expect(getByRole("button", { name: "Plan & Start" })).toBeDisabled();
     expect(getByRole("button", { name: "Planning Only" })).toBeDisabled();
+    expect(getByRole("button", { name: "Planning Only" })).toHaveAttribute("aria-describedby", "quicksprint-submit-blocked-tpl-1");
+    expect(getByText("A quicksprint planning request is already running. Cancel it or wait for it to finish before submitting again.")).toBeInTheDocument();
     expect(getByRole("button", { name: "Back to quicksprint templates" })).toBeDisabled();
     expect(getByRole("textbox")).toBeDisabled();
     expect(getByRole("checkbox", { name: /no limit/i })).toBeDisabled();
@@ -513,8 +541,9 @@ describe("QuicksprintPanel", () => {
     await waitFor(() => {
       expect(capturedSignal?.aborted).toBe(true);
     });
-    expect(getByText("Cancelled plan only request for API Tests.", { selector: "div:not(.sr-only)" })).toBeInTheDocument();
+    expect(getByText("Cancelled plan only request for API Tests.", { selector: "p" })).toBeInTheDocument();
     expect(queryByText("Planning only")).not.toBeInTheDocument();
+    expect(document.activeElement).toBe(getByRole("heading", { name: "API Tests" }));
   });
 
   it("opens tokenized reduced-motion-safe template pickers with accessible options", async () => {
@@ -585,6 +614,11 @@ describe("QuicksprintPanel", () => {
       const tweenVars = call[2] as { duration?: number };
       return tweenVars.duration === 0;
     })).toBe(true);
+    const panel = document.querySelector("section");
+    expect(panel).toHaveStyle({
+      "--interaction-list-reveal-duration": "0ms",
+      "--interaction-expansion-collapse-duration": "0ms",
+    });
   });
 
   it("opens a fresh quicksprint without cancelling the previous planning request", async () => {
@@ -619,6 +653,7 @@ describe("QuicksprintPanel", () => {
     fireEvent.click(getByText("New Quicksprint"));
 
     expect(firstSignal.aborted).toBe(false);
+    expect(getByText("Opened a new quicksprint while the previous plan and start request continues in the background.", { selector: "p" })).toBeInTheDocument();
     expect(getByText("Launch A Quicksprint.")).toBeInTheDocument();
 
     fireEvent.click(getByText("API Tests"));

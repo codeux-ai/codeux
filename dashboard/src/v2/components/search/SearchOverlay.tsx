@@ -53,6 +53,7 @@ type CategorizedSearchItem =
     | (ContainerSearchItem & { category: "containers" });
 
 const inactiveResultStatuses = new Set(["unavailable", "disabled"]);
+const searchResultViewportPadding = 8;
 
 function isResultInactive(item: SearchItem): boolean {
     return Boolean(item.status && inactiveResultStatuses.has(item.status));
@@ -70,6 +71,27 @@ function findNextActiveIndex(items: CategorizedSearchItem[], startIndex: number,
     }
 
     return 0;
+}
+
+function getNextKeyboardIndex(items: CategorizedSearchItem[], currentIndex: number, direction: 1 | -1): number {
+    if (items.length === 0) return -1;
+    const startIndex = direction === 1
+        ? currentIndex < items.length - 1 ? currentIndex + 1 : 0
+        : currentIndex > 0 ? currentIndex - 1 : items.length - 1;
+    return findNextActiveIndex(items, startIndex, direction);
+}
+
+function scrollResultIntoContainerView(container: HTMLElement, row: HTMLElement): void {
+    const containerRect = container.getBoundingClientRect();
+    const rowRect = row.getBoundingClientRect();
+    const bottomOverflow = rowRect.bottom - containerRect.bottom + searchResultViewportPadding;
+    const topOverflow = containerRect.top - rowRect.top + searchResultViewportPadding;
+
+    if (bottomOverflow > 0) {
+        container.scrollTop += bottomOverflow;
+    } else if (topOverflow > 0) {
+        container.scrollTop -= topOverflow;
+    }
 }
 
 export interface SearchResults {
@@ -139,6 +161,7 @@ export const SearchOverlay: FunctionComponent<SearchOverlayProps> = ({ anchorRef
     const activeDescendantId = activeItem ? `search-result-${activeItem.id}` : undefined;
     const hasResults = allItems.length > 0;
     const hasStaleResults = Boolean(isLoading && hasResults);
+    const resultsDescriptionId = hasStaleResults ? "search-results-refreshing-note" : "search-status-message";
     const statusMessage = searchQuery.length === 0
         ? ''
         : isLoading
@@ -279,10 +302,10 @@ export const SearchOverlay: FunctionComponent<SearchOverlayProps> = ({ anchorRef
                 setFocusedIndex(findNextActiveIndex(allItems, itemCount - 1, -1));
             } else if (e.key === 'ArrowDown') {
                 e.preventDefault();
-                setFocusedIndex(prev => findNextActiveIndex(allItems, prev < itemCount - 1 ? prev + 1 : 0, 1));
+                setFocusedIndex(prev => getNextKeyboardIndex(allItems, prev, 1));
             } else if (e.key === 'ArrowUp') {
                 e.preventDefault();
-                setFocusedIndex(prev => findNextActiveIndex(allItems, prev > 0 ? prev - 1 : itemCount - 1, -1));
+                setFocusedIndex(prev => getNextKeyboardIndex(allItems, prev, -1));
             } else if (e.key === 'Enter' && focusedIndex >= 0) {
                 e.preventDefault();
                 const selectedItem = allItems[focusedIndex];
@@ -296,21 +319,12 @@ export const SearchOverlay: FunctionComponent<SearchOverlayProps> = ({ anchorRef
         return () => window.removeEventListener('keydown', handleKeyDown);
     }, [isOpen, focusedIndex, allItems, onClose]);
 
-    // Track active item ref to ensure it's in view
     const activeItemRef = useRef<HTMLAnchorElement>(null);
     useEffect(() => {
         const el = (activeDescendantId ? document.getElementById(activeDescendantId) as HTMLAnchorElement | null : null) ?? activeItemRef.current;
-        if (el && typeof el.closest === 'function') {
-            const container = resultsRegionRef.current;
-            if (container) {
-                const containerRect = container.getBoundingClientRect();
-                const elRect = el.getBoundingClientRect();
-                if (elRect.bottom > containerRect.bottom) {
-                    container.scrollTop += (elRect.bottom - containerRect.bottom);
-                } else if (elRect.top < containerRect.top) {
-                    container.scrollTop -= (containerRect.top - elRect.top);
-                }
-            }
+        const container = resultsRegionRef.current;
+        if (el && container && typeof el.getBoundingClientRect === 'function') {
+            scrollResultIntoContainerView(container, el);
         }
     }, [focusedIndex, activeDescendantId]);
 
@@ -380,9 +394,10 @@ export const SearchOverlay: FunctionComponent<SearchOverlayProps> = ({ anchorRef
                 {/* Results Area */}
                 <div
                     ref={resultsRegionRef}
-                    className="dashboard-scrollbar min-h-0 flex-1 overflow-y-auto p-3 sm:p-4"
+                    className="dashboard-scrollbar min-h-0 flex-1 overflow-y-auto p-3 transition-[background-color,filter] sm:p-4"
                     aria-busy={isLoading ? "true" : undefined}
-                    aria-describedby={searchQuery.length > 0 ? "search-status-message" : undefined}
+                    aria-describedby={searchQuery.length > 0 ? resultsDescriptionId : undefined}
+                    style={{ transitionDuration: interactionTokens.controlFeedback.duration, transitionTimingFunction: interactionTokens.controlFeedback.ease }}
                 >
                     {searchQuery.length === 0 ? (
                         <div className="flex flex-col gap-4">
@@ -447,18 +462,21 @@ export const SearchOverlay: FunctionComponent<SearchOverlayProps> = ({ anchorRef
                             id="search-results-list"
                             role="listbox"
                             aria-busy={isLoading ? "true" : undefined}
-                            aria-live="polite"
+                            aria-describedby={hasStaleResults ? "search-results-refreshing-note" : undefined}
                             aria-label="Search results"
                             style={{
-                                transitionDuration: interactionTokens.listReveal.duration,
-                                transitionTimingFunction: interactionTokens.listReveal.ease
+                                transitionDuration: hasStaleResults ? interactionTokens.controlFeedback.duration : interactionTokens.listReveal.duration,
+                                transitionTimingFunction: hasStaleResults ? interactionTokens.controlFeedback.ease : interactionTokens.listReveal.ease
                             }}
-                            className={`relative grid grid-cols-1 gap-3 transition-[filter,opacity] lg:grid-cols-2 ${hasStaleResults ? 'opacity-75 saturate-[0.82]' : ''}`}
+                            className={`relative grid grid-cols-1 gap-3 transition-[filter,opacity] lg:grid-cols-2 ${hasStaleResults ? 'opacity-[0.78] saturate-[0.82]' : ''}`}
                         >
                             {hasStaleResults && (
-                                <div className="pointer-events-none absolute right-1 top-1 z-10 inline-flex items-center gap-1.5 rounded-full border border-signal-500/20 bg-white/88 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.12em] text-signal-700 shadow-sm backdrop-blur-xl dark:bg-void-800/88 dark:text-signal-400">
+                                <div
+                                    id="search-results-refreshing-note"
+                                    className="pointer-events-none absolute right-1 top-1 z-10 inline-flex items-center gap-1.5 rounded-full border border-signal-500/20 bg-white/88 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.12em] text-signal-700 shadow-sm backdrop-blur-xl dark:bg-void-800/88 dark:text-signal-400"
+                                >
                                     <Loader2 className="h-3 w-3 animate-spin motion-reduce:animate-none" aria-hidden="true" />
-                                    Updating
+                                    Updating visible results
                                 </div>
                             )}
                             {CATEGORIES.map((category) => {

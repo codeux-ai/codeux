@@ -12,6 +12,7 @@ import { renderMarkdown } from "../../../lib/markdown.js";
 import { HumanInterventionBadge } from "../ui/HumanInterventionBadge.js";
 import { QuotaCountdown, TaskDuration } from "../LiveTaskCard.js";
 import { useExecutionTimeline } from "../../../hooks/ExecutionTimelineContext.js";
+import type { ExecutionSnapshotSurfaceState } from "../../../hooks/ExecutionTimelineContext.js";
 import { findActiveConcurrencyWait } from "../../../lib/task-progress.js";
 import {
     getLiveActionDisplayProps,
@@ -98,6 +99,35 @@ export const shortenRuntimeId = (value: string | null | undefined): string | nul
     value ? value.slice(0, 8) : null
 );
 
+const DEFAULT_RUNTIME_SNAPSHOT_SURFACE: ExecutionSnapshotSurfaceState = {
+    kind: "live",
+    label: "Live",
+    description: "Runtime data is current.",
+    isBusy: false,
+};
+
+export const RuntimeSnapshotSurfaceBadge: FunctionComponent<{
+    surface?: ExecutionSnapshotSurfaceState;
+}> = ({ surface = DEFAULT_RUNTIME_SNAPSHOT_SURFACE }) => {
+    if (surface.kind === "live") {
+        return null;
+    }
+    const toneClass = surface.kind === "stale"
+        ? "border-status-amber/20 bg-status-amber/10 text-status-amber"
+        : "border-signal-500/20 bg-signal-500/10 text-signal-600 dark:text-signal-300";
+
+    return (
+        <span
+            className={`inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.14em] ${toneClass}`}
+            title={surface.description}
+        >
+            <span className="h-1.5 w-1.5 rounded-full bg-current motion-reduce:ring-2 motion-reduce:ring-current/25" aria-hidden="true" />
+            {surface.label}
+            <span className="sr-only">. {surface.description}</span>
+        </span>
+    );
+};
+
 const RuntimeActionButton: FunctionComponent<{
     actionState: LiveActionState;
     labels: LiveActionLabels;
@@ -114,6 +144,9 @@ const RuntimeActionButton: FunctionComponent<{
     const unavailableReason = getLiveActionDisabledReason(actionState, labels, disabledReason);
     const isPending = actionState === "pending";
     const isUnavailable = isPending || actionState === "disabled";
+    const accessibleLabel = isUnavailable
+        ? `${ariaLabel}. ${unavailableReason ?? statusLabel ?? "Action unavailable."}`
+        : ariaLabel;
     const describedBy = [
         statusLabel ? statusId : null,
         unavailableReason ? reasonId : null,
@@ -130,7 +163,7 @@ const RuntimeActionButton: FunctionComponent<{
                 }
                 onActivate();
             }}
-            aria-label={ariaLabel}
+            aria-label={accessibleLabel}
             aria-describedby={describedBy}
             title={unavailableReason ?? statusLabel ?? label}
             {...getLiveActionDisplayProps(actionState, actionState === "disabled", disabledReason)}
@@ -153,7 +186,7 @@ export const ConnectionRuntimePanel: FunctionComponent<{
     collapsible = false,
     defaultOpen = true,
 }) => {
-    const { execution: snapshot } = useExecutionTimeline();
+    const { execution: snapshot, snapshotSurface = DEFAULT_RUNTIME_SNAPSHOT_SURFACE } = useExecutionTimeline();
     const [open, setOpen] = useState(defaultOpen);
     const contentId = useId();
     const contentRef = useRef<HTMLDivElement>(null);
@@ -219,6 +252,7 @@ export const ConnectionRuntimePanel: FunctionComponent<{
                     manager {managerConnections.length}
                 </span>
             </div>
+            <RuntimeSnapshotSurfaceBadge surface={snapshotSurface} />
         </div>
     );
 
@@ -260,7 +294,7 @@ export const ConnectionRuntimePanel: FunctionComponent<{
                                 No listeners or workers are connected to the selected project yet.
                             </p>
                         ) : (
-                            <div className="max-h-[50dvh] sm:max-h-72 space-y-2 overflow-y-auto pr-1 dashboard-scrollbar" role="log" aria-live="polite" aria-label="Live connection runtime rows">
+                            <div className="max-h-[50dvh] sm:max-h-72 space-y-2 overflow-y-auto pr-1 dashboard-scrollbar" role="log" aria-live="polite" aria-busy={snapshotSurface.isBusy ? "true" : undefined} aria-label="Live connection runtime rows">
                                 {visibleConnections.map((connection) => (
                                     <div
                                         key={connection.id}
@@ -392,6 +426,7 @@ export const ExecutionRuntimePanel: FunctionComponent<{
         onForceCancelTaskDispatch,
         onRetryTaskDispatch,
         pendingActionIds,
+        snapshotSurface = DEFAULT_RUNTIME_SNAPSHOT_SURFACE,
     } = useExecutionTimeline();
 
     const [open, setOpen] = useState(defaultOpen);
@@ -459,7 +494,7 @@ export const ExecutionRuntimePanel: FunctionComponent<{
     }
 
     return (
-        <div role="region" aria-label="Execution runtime" aria-busy={activeSprintRuns.length > 0 || activeDispatches.length > 0 ? "true" : undefined} className="group relative overflow-hidden rounded-[1.75rem] border border-black/[0.08] bg-white shadow-sm dark:border-white/[0.08] dark:bg-void-800">
+        <div role="region" aria-label="Execution runtime" aria-busy={snapshotSurface.isBusy || activeSprintRuns.length > 0 || activeDispatches.length > 0 ? "true" : undefined} className="group relative overflow-hidden rounded-[1.75rem] border border-black/[0.08] bg-white shadow-sm dark:border-white/[0.08] dark:bg-void-800">
 
 
 
@@ -488,6 +523,7 @@ export const ExecutionRuntimePanel: FunctionComponent<{
                                 failed {failedTaskCount}
                             </span>
                         </div>
+                        <RuntimeSnapshotSurfaceBadge surface={snapshotSurface} />
                         <span className="sr-only">{runtimeSummary}</span>
                     </div>
                     <ChevronDown
@@ -539,7 +575,7 @@ export const ExecutionRuntimePanel: FunctionComponent<{
                             {snapshot.sprintRuns.length === 0 ? (
                                 <div role="status" aria-live="polite" className="rounded-xl border border-black/[0.04] bg-black/[0.015] p-3 text-[11px] font-mono text-slate-400 dark:border-white/[0.04] dark:bg-white/[0.015] dark:text-slate-500">No sprint runs recorded for the selected project.</div>
                             ) : (
-                                <div className="space-y-2" role="log" aria-live="polite" aria-label="Sprint run status rows">
+                                <div className="space-y-2" role="log" aria-live="polite" aria-busy={snapshotSurface.isBusy ? "true" : undefined} aria-label="Sprint run status rows">
                                     {visibleSprintRuns.map((run) => {
                                         const startActionState = getPendingActionState(pendingActionIds, `sprint-start:${run.sprintId}`);
                                         const pauseActionState = getPendingActionState(pendingActionIds, `sprint-pause:${run.id}`);
@@ -689,7 +725,7 @@ export const ExecutionRuntimePanel: FunctionComponent<{
                             {snapshot.taskDispatches.length === 0 ? (
                                 <div role="status" aria-live="polite" className="rounded-xl border border-black/[0.04] bg-black/[0.015] p-3 text-[11px] font-mono text-slate-400 dark:border-white/[0.04] dark:bg-white/[0.015] dark:text-slate-500">No task dispatches yet.</div>
                             ) : (
-                                <div className="max-h-[50dvh] sm:max-h-80 space-y-2 overflow-y-auto pr-1 dashboard-scrollbar" role="log" aria-live="polite" aria-label="Task dispatch status rows">
+                                <div className="max-h-[50dvh] sm:max-h-80 space-y-2 overflow-y-auto pr-1 dashboard-scrollbar" role="log" aria-live="polite" aria-busy={snapshotSurface.isBusy ? "true" : undefined} aria-label="Task dispatch status rows">
                                     {visibleTaskDispatches.map((dispatch) => {
                                         const dispatchEvents = snapshot.recentEvents.filter(
                                             (e) => e.dispatchId === dispatch.id || (e.taskRunId && e.taskRunId === dispatch.taskRunId)

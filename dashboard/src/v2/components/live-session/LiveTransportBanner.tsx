@@ -73,19 +73,19 @@ export const LiveTransportBanner: FunctionComponent<LiveTransportBannerProps> = 
   }, [isVisible, shouldRender, isReducedMotion, motionTokens.enterExit.duration, motionTokens.enterExit.ease]);
 
   const icon = bannerState?.icon === "error"
-    ? <Zap className="w-5 h-5 shrink-0" aria-hidden="true" />
+    ? <Zap className="w-5 h-5 shrink-0 motion-reduce:rounded-full motion-reduce:ring-2 motion-reduce:ring-current/25" aria-hidden="true" />
     : bannerState?.icon === "reconnecting"
       ? <RefreshCcw className="w-5 h-5 shrink-0 motion-safe:animate-spin motion-reduce:rounded-full motion-reduce:ring-2 motion-reduce:ring-current/25" aria-hidden="true" />
-      : <WifiOff className="w-5 h-5 shrink-0" aria-hidden="true" />;
+      : <WifiOff className="w-5 h-5 shrink-0 motion-reduce:rounded-full motion-reduce:ring-2 motion-reduce:ring-current/25" aria-hidden="true" />;
 
   return (
     <div
       ref={containerRef}
       className={shouldRender && bannerState ? `flex flex-col sm:flex-row sm:items-center gap-4 rounded-2xl border backdrop-blur-md overflow-hidden ${bannerState.wrapperClass}` : "overflow-hidden hidden"}
-      role={bannerState?.role ?? "status"}
-      aria-live={bannerState?.ariaLive ?? "polite"}
-      aria-atomic="true"
-      aria-busy={bannerState?.ariaBusy ?? isRecovering}
+      role={shouldRender && bannerState ? bannerState.role : undefined}
+      aria-live={shouldRender && bannerState ? bannerState.ariaLive : undefined}
+      aria-atomic={shouldRender && bannerState ? "true" : undefined}
+      aria-busy={shouldRender && bannerState ? bannerState.ariaBusy : undefined}
       style={{ padding: isReducedMotion && isVisible ? "16px 20px" : 0, marginBottom: isReducedMotion && isVisible ? 24 : 0 }}
     >
       {shouldRender && bannerState && (
