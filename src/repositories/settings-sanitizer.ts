@@ -8,7 +8,7 @@ import type {
   SkillToggle,
 } from "../contracts/app-types.js";
 import { readBoolean, readPort, readString } from "../shared/config/value-readers.js";
-import { sanitizeCustomMcpServers, sanitizeMcpToolToggles } from "../mcp/mcp-tool-availability.js";
+import { sanitizeCustomMcpServersWithDefaults, sanitizeMcpToolToggles } from "../mcp/mcp-tool-availability.js";
 import { sanitizeAiProvider } from "../domain/settings/settings-sanitizers/ai-provider-sanitizer.js";
 import { sanitizeGit } from "../domain/settings/settings-sanitizers/git-sanitizer.js";
 import { sanitizeJira } from "../domain/settings/settings-sanitizers/jira-sanitizer.js";
@@ -468,7 +468,10 @@ export const sanitizeSettings = (value: unknown, externalHints?: ExternalSetting
 
   const normalizedSkills = enforceGitManagerSkillset(sanitizeSkills(input.skills), git.githubMode);
   const mcpTools = sanitizeMcpTools(input.mcpTools);
-  const customMcpServers = sanitizeCustomMcpServers(input.customMcpServers);
+  const customMcpServers = sanitizeCustomMcpServersWithDefaults(
+    input.customMcpServers,
+    DEFAULT_DASHBOARD_SETTINGS.customMcpServers,
+  );
   const memory = sanitizeMemory(input);
   const modelPricing = sanitizeModelPricing(input.modelPricing);
 

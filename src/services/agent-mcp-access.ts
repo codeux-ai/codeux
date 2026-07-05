@@ -2,6 +2,7 @@ import type { AgentMcpAccessConfig } from "../contracts/agent-preset-types.js";
 import type { CustomMcpServer, McpToolToggle } from "../contracts/app-types.js";
 import { TOOL_DEFINITIONS } from "../contracts/mcp-tool-definitions.js";
 import type { McpConnectionInfo } from "../contracts/mcp-connection-types.js";
+import { DEFAULT_PLAYWRIGHT_MCP_SERVER_ID } from "../repositories/settings-defaults.js";
 
 const VALID_TOOL_NAMES = new Set<string>(TOOL_DEFINITIONS.map((tool) => tool.name));
 
@@ -9,6 +10,15 @@ export const defaultAgentMcpAccess = (): AgentMcpAccessConfig => ({
   codeUxEnabled: true,
   codeUxToolToggles: [],
   linkedServerIds: [],
+});
+
+export const defaultCodingAgentLinkedServerIds = (): string[] => [
+  DEFAULT_PLAYWRIGHT_MCP_SERVER_ID,
+];
+
+export const defaultCodingAgentMcpAccess = (): AgentMcpAccessConfig => ({
+  ...defaultAgentMcpAccess(),
+  linkedServerIds: defaultCodingAgentLinkedServerIds(),
 });
 
 const sanitizeToolToggles = (value: unknown): McpToolToggle[] => {

@@ -151,6 +151,7 @@ Behavior:
 7. The provider returns strict JSON containing selected artifacts.
 8. Code UX writes agents through `AgentPresetSyncService`, quicksprints through `QuicksprintService`, preview startup to `.code-ux/browser/start-preview.sh`, and CI files to the returned GitHub/GitLab paths.
 9. Agent routing preserves the existing Planning agent default and updates generated worker specialists into the task-coding orchestrator roster.
+10. Newly generated coding specialists that are added to the orchestrator roster are created with `code_ux` MCP enabled and the default `playwright` custom MCP server linked. Updating an existing generated specialist preserves its current MCP access selection.
 
 Generated agents keep persisted avatar metadata. Existing generated agents that predate avatar persistence receive a stable avatar the next time Project Setup Agent updates them.
 

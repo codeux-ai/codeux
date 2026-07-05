@@ -74,6 +74,8 @@ The dashboard editor now initializes that config from the preset, exposes it thr
 
 Agent labels are still stored in the data model for markdown sync and built-in preset conventions, but the dashboard no longer exposes custom label editing. The Agents page displays computed route-assignment tags from effective project settings instead, including tags for built-in fallback selections on Planning agent, Worker, Project manager, and Quality assurance agent.
 
+Built-in Worker and Project manager presets seed `mcp_access_json` with `code_ux` enabled and the default `playwright` custom MCP server linked. Planning and QA presets do not receive that link by default. Existing agents with a user-edited MCP access payload keep their selections; only newly imported/generated defaults or previously unconfigured built-in Worker/Project manager records receive the seeded link.
+
 ## Dashboard Interaction Contract
 
 Agent configuration surfaces expose state directly in the UI without changing the preset API contract or avatar schema:

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { DEFAULT_DASHBOARD_SETTINGS } from "../../../src/repositories/settings-repository.js";
-import { getEnabledToolDefinitions, isToolEnabled, sanitizeCustomMcpServers, sanitizeMcpToolToggles } from "../../../src/mcp/mcp-tool-availability.js";
+import { DEFAULT_PLAYWRIGHT_MCP_SERVER_ID } from "../../../src/repositories/settings-defaults.js";
+import { getEnabledToolDefinitions, isToolEnabled, sanitizeCustomMcpServers, sanitizeCustomMcpServersWithDefaults, sanitizeMcpToolToggles } from "../../../src/mcp/mcp-tool-availability.js";
 
 describe("tool availability", () => {
   it("exposes the project-manager MCP tool surface", () => {
@@ -76,6 +77,20 @@ describe("tool availability", () => {
 });
 
 describe("sanitizeCustomMcpServers", () => {
+  it("includes the default Playwright MCP server for coding providers", () => {
+    const playwright = DEFAULT_DASHBOARD_SETTINGS.customMcpServers.find((server) => server.id === DEFAULT_PLAYWRIGHT_MCP_SERVER_ID);
+
+    expect(playwright).toMatchObject({
+      id: "playwright",
+      name: "playwright",
+      enabled: true,
+      transport: "stdio",
+      command: "npx",
+      args: ["@playwright/mcp@latest"],
+      providers: ["gemini", "codex", "claude-code", "qwen-code", "opencode", "antigravity"],
+    });
+  });
+
   it("keeps valid HTTP servers and normalizes optional fields", () => {
     const result = sanitizeCustomMcpServers([
       {
@@ -129,6 +144,34 @@ describe("sanitizeCustomMcpServers", () => {
     expect(sanitizeCustomMcpServers(undefined)).toEqual([]);
     expect(sanitizeCustomMcpServers(null)).toEqual([]);
     expect(sanitizeCustomMcpServers({})).toEqual([]);
+  });
+
+  it("seeds defaults without duplicating servers that match by id or name", () => {
+    const byId = sanitizeCustomMcpServersWithDefaults([
+      {
+        id: "playwright",
+        name: "playwright",
+        transport: "stdio",
+        command: "npx",
+        args: ["@playwright/mcp@latest"],
+        enabled: false,
+      },
+    ], DEFAULT_DASHBOARD_SETTINGS.customMcpServers);
+    expect(byId.filter((server) => server.name === "playwright")).toHaveLength(1);
+    expect(byId.find((server) => server.id === "playwright")?.enabled).toBe(false);
+
+    const byName = sanitizeCustomMcpServersWithDefaults([
+      {
+        id: "custom-playwright",
+        name: "playwright",
+        transport: "stdio",
+        command: "npx",
+        args: ["@playwright/mcp@latest"],
+        enabled: true,
+      },
+    ], DEFAULT_DASHBOARD_SETTINGS.customMcpServers);
+    expect(byName.filter((server) => server.name === "playwright")).toHaveLength(1);
+    expect(byName.find((server) => server.name === "playwright")?.id).toBe("custom-playwright");
   });
 
   it("accepts stdio servers and infers transport from command when unset", () => {

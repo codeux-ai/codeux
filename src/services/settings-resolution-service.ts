@@ -32,7 +32,7 @@ import {
   buildDefaultIntegrationProviders,
   normalizeSystemIntegrationProviders,
 } from "../domain/settings/provider-config-utils.js";
-import { sanitizeCustomMcpServers, sanitizeMcpToolToggles } from "../mcp/mcp-tool-availability.js";
+import { sanitizeCustomMcpServersWithDefaults, sanitizeMcpToolToggles } from "../mcp/mcp-tool-availability.js";
 import { DEFAULT_INSTRUCTION_TEMPLATES, INSTRUCTION_TEMPLATE_IDS, type InstructionTemplateId } from "../instructions/instruction-template-catalog.js";
 import { DEFAULT_DASHBOARD_SETTINGS, DEFAULT_SKILLS, INTERNAL_SKILL_NAMES, INTERNAL_SKILL_SET } from "../repositories/settings-defaults.js";
 
@@ -112,16 +112,7 @@ function resolveEffectiveCustomMcpServers(
   systemServers: CustomMcpServer[],
   override?: CustomMcpServer[],
 ): CustomMcpServer[] {
-  const byId = new Map<string, CustomMcpServer>();
-  for (const server of sanitizeCustomMcpServers(systemServers)) {
-    byId.set(server.id, server);
-  }
-  if (Array.isArray(override)) {
-    for (const server of sanitizeCustomMcpServers(override)) {
-      byId.set(server.id, server);
-    }
-  }
-  return Array.from(byId.values());
+  return sanitizeCustomMcpServersWithDefaults(override, systemServers);
 }
 
 function cloneInstructionTemplates(
@@ -548,7 +539,10 @@ export function buildDefaultSystemSettings(externalHints?: ExternalSettingsHints
     },
     defaults: buildDefaultProjectSettings(externalHints),
     mcpTools: cloneMcpTools(DEFAULT_DASHBOARD_SETTINGS.mcpTools),
-    customMcpServers: sanitizeCustomMcpServers(DEFAULT_DASHBOARD_SETTINGS.customMcpServers),
+    customMcpServers: sanitizeCustomMcpServersWithDefaults(
+      DEFAULT_DASHBOARD_SETTINGS.customMcpServers,
+      DEFAULT_DASHBOARD_SETTINGS.customMcpServers,
+    ),
     modelPricing: { overrides: { ...DEFAULT_DASHBOARD_SETTINGS.modelPricing.overrides } },
   };
 }
@@ -668,7 +662,12 @@ export function sanitizeProjectSettings(value: unknown, externalHints?: External
     },
     skills: sanitizeSkills(input.skills, git.githubMode),
     ...(Array.isArray(input.mcpTools) ? { mcpTools: sanitizeMcpToolToggles(input.mcpTools) } : {}),
-    ...(Array.isArray(input.customMcpServers) ? { customMcpServers: sanitizeCustomMcpServers(input.customMcpServers) } : {}),
+    ...(Array.isArray(input.customMcpServers) ? {
+      customMcpServers: sanitizeCustomMcpServersWithDefaults(
+        input.customMcpServers,
+        DEFAULT_DASHBOARD_SETTINGS.customMcpServers,
+      ),
+    } : {}),
     memory: sanitizeMemory(input as Partial<DashboardSettings>),
   };
 }
@@ -749,7 +748,10 @@ export function sanitizeSystemSettings(value: unknown, externalHints?: ExternalS
     },
     defaults: defaultsInput,
     mcpTools: sanitizeMcpToolToggles(input.mcpTools ?? defaults.mcpTools).map((tool) => ({ ...tool })),
-    customMcpServers: sanitizeCustomMcpServers(input.customMcpServers ?? defaults.customMcpServers),
+    customMcpServers: sanitizeCustomMcpServersWithDefaults(
+      input.customMcpServers,
+      defaults.customMcpServers,
+    ),
     modelPricing: sanitizeModelPricing(input.modelPricing ?? defaults.modelPricing),
   };
 }
