@@ -9,7 +9,7 @@ import { getEnabledToolDefinitions, isToolEnabled } from "../mcp/mcp-tool-availa
 import { getCurrentMcpAgentId } from "./mcp-agent-context.js";
 import type { Logger } from "../shared/logging/logger.js";
 import type { McpRuntimeRole } from "../contracts/mcp-tool-definitions.js";
-import { getCorrelationId } from "../shared/logging/correlation-id.js";
+import { generateCorrelationId, getCorrelationId } from "../shared/logging/correlation-id.js";
 import type { ExecutionRepository } from "../repositories/execution-repository.js";
 
 export interface McpRequestRouterArgs {
@@ -103,7 +103,7 @@ export const registerMcpRequestHandlers = (args: McpRequestRouterArgs): void => 
             const parsed = JSON.parse(response.content[0].text);
             if (parsed && parsed.approvalRequired) {
               const req = request as { id?: string | number };
-              const correlationId = getCorrelationId() ?? String(req.id || Date.now());
+              const correlationId = getCorrelationId() ?? (req.id !== undefined ? String(req.id) : generateCorrelationId());
               args.getMcpApprovalTracker?.()?.setPending(correlationId, {
                 action: toolArgs as any,
                 approvalMessage: parsed.approvalMessage || "Action requires approval",
@@ -120,13 +120,23 @@ export const registerMcpRequestHandlers = (args: McpRequestRouterArgs): void => 
       } catch (error: unknown) {
         logger?.error("MCP tool request failed", {
           toolName: name,
-          error,
+          errorName: error instanceof Error ? error.name : typeof error,
+          errorCode: error instanceof McpError ? error.code : undefined,
         });
 
+        if (error instanceof McpError) {
+          throw error;
+        }
         if (error instanceof Error && error.message.startsWith("Tool not found:")) {
           throw new McpError(ErrorCode.MethodNotFound, error.message);
         }
-        return args.formatError(error);
+
+        const correlationId = getCorrelationId();
+        return args.formatError(new Error(
+          correlationId
+            ? `Internal Server Error (correlationId: ${correlationId})`
+            : "Internal Server Error",
+        ));
       }
     };
 

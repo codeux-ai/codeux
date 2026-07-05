@@ -25,6 +25,7 @@ describe("TaskReviewPanel", () => {
     const panel = screen.getByTestId("task-review-panel");
     const reason = screen.getByTestId("qa-error-reason");
     expect(panel).toBeInTheDocument();
+    expect(screen.getByRole("alert", { name: "QA Review Failed" })).toHaveAttribute("aria-live", "assertive");
     expect(reason).toHaveTextContent("Review parsing failed");
   });
 

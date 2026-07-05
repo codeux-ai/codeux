@@ -1,9 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import {
+  claimAttentionItem,
   fetchLivePayload,
   getCachedLivePayload,
   clearLivePayloadCacheForTests,
   invalidateLivePayloadCache,
+  orchestrateSprint,
+  rerunTask,
 } from "../../../dashboard/src/lib/api/dashboard-api.js";
 import * as fetchJsonModule from "../../../dashboard/src/lib/api/fetch-json.js";
 
@@ -76,6 +79,51 @@ describe("Dashboard API Cache", () => {
     invalidateLivePayloadCache("p1");
     expect(getCachedLivePayload("p1")).toBeNull();
     expect(getCachedLivePayload("p2")).not.toBeNull();
+  });
+
+  it("invalidates project-scoped live payloads after project mutations", async () => {
+    await fetchLivePayload("p1");
+    await fetchLivePayload("p2");
+    expect(getCachedLivePayload("p1")).not.toBeNull();
+    expect(getCachedLivePayload("p2")).not.toBeNull();
+
+    await orchestrateSprint("p1", "s1");
+
+    expect(getCachedLivePayload("p1")).toBeNull();
+    expect(getCachedLivePayload("p2")).not.toBeNull();
+    expect(fetchJsonModule.fetchJson).toHaveBeenCalledWith(
+      "/api/projects/p1/sprints/s1/orchestrate",
+      { method: "POST" },
+    );
+  });
+
+  it("invalidates all live payload scopes after mutations without project identity", async () => {
+    await fetchLivePayload("p1");
+    await fetchLivePayload("p2", { scopeKey: "live-panel" });
+    expect(getCachedLivePayload("p1")).not.toBeNull();
+    expect(getCachedLivePayload("p2", { scopeKey: "live-panel" })).not.toBeNull();
+
+    await rerunTask("task-1", { clearWorktree: true });
+
+    expect(getCachedLivePayload("p1")).toBeNull();
+    expect(getCachedLivePayload("p2", { scopeKey: "live-panel" })).toBeNull();
+    expect(fetchJsonModule.fetchJson).toHaveBeenCalledWith(
+      "/api/tasks/task-1/rerun",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ clearWorktree: true }),
+      },
+    );
+  });
+
+  it("keeps live payload caches when a mutation fails before state changes", async () => {
+    await fetchLivePayload("p1");
+    vi.mocked(fetchJsonModule.fetchJson).mockRejectedValueOnce(new Error("claim failed"));
+
+    await expect(claimAttentionItem("p1", "attention-1")).rejects.toThrow("claim failed");
+
+    expect(getCachedLivePayload("p1")).not.toBeNull();
   });
 
   it("should support clearLivePayloadCacheForTests", async () => {

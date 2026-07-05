@@ -610,7 +610,11 @@ export class ProviderExecutionService {
         return providerResult;
       }
 
-      const classification = classifyProviderError(args.provider, providerResult);
+      const rawClassification = classifyProviderError(args.provider, providerResult);
+      const classification = {
+        ...rawClassification,
+        userMessage: sanitizeInvocationOutputText(rawClassification.userMessage),
+      };
       const retryDecision = resolveProviderRetryDecision(classification, args.workflowSettings);
       const retryAfterIso = retryDecision
         && !(retryDecision.kind === "rate_limit" && rateLimitRetryCount >= args.workflowSettings.maxRateLimitRetries)
@@ -627,7 +631,7 @@ export class ProviderExecutionService {
           contentMarkdown: `Provider error (${classification.category}): ${classification.userMessage}`,
           metadata: {
             provider: args.provider,
-            model: args.model,
+            model: effectiveModel,
             errorCategory: classification.category,
             retryAfterIso,
           },
@@ -660,7 +664,7 @@ export class ProviderExecutionService {
               contentMarkdown: retryMessage,
               metadata: {
                 provider: args.provider,
-                model: args.model,
+                model: effectiveModel,
                 errorCategory: classification.category,
                 retryAfterIso,
               },
@@ -672,7 +676,7 @@ export class ProviderExecutionService {
           if (args.taskRunId) {
             this.deps.executionRepository?.appendTaskRunEvent(args.taskRunId, "cli_provider_quota_wait", "system", {
               provider: args.provider,
-              model: args.model,
+              model: effectiveModel,
               purpose: args.purpose,
               kind: retryDecision.kind,
               errorCategory: classification.category,

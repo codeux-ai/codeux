@@ -13,6 +13,7 @@ import {
   getTaskProgressPhase,
   type TaskProgressPhase,
 } from "../../lib/task-progress.js";
+import { getTaskCfg } from "./live-session-config.js";
 import type { LiveTaskTimingSummary } from "./live-stats.js";
 import {
   buildIndexedExecutionHistory,
@@ -90,6 +91,21 @@ export interface LiveTransportBannerViewModel {
   ariaBusy: boolean;
 }
 
+export interface LiveSessionTaskListStateViewModel {
+  kind: "loading" | "error" | "idle" | "empty-filter" | "ready";
+  isVisible: boolean;
+  message: string | null;
+  role: "status" | "alert" | null;
+  ariaLive: "polite" | "assertive" | null;
+  ariaBusy: boolean;
+}
+
+export interface LiveTaskStatusIndicatorViewModel {
+  label: string;
+  className: string;
+  srText: string;
+  motionEnabled: boolean;
+}
 const LIVE_SNAPSHOT_STALE_MS = 60_000;
 
 const EMPTY_LIVE_SESSION_STATS: DashboardStats = {
@@ -107,6 +123,13 @@ const EMPTY_LIVE_SESSION_STATS: DashboardStats = {
 };
 
 const EMPTY_RUNTIME_EVENTS: ExecutionRuntimeEventSummary[] = [];
+
+function removeAnimationClasses(className: string): string {
+  return className
+    .split(/\s+/)
+    .filter((part) => part && !part.startsWith("animate-") && !part.startsWith("motion-safe:animate-"))
+    .join(" ");
+}
 
 function addToIndex<K, V>(index: Map<K, V[]>, key: K | null | undefined, value: V): void {
   if (!key) {
@@ -259,6 +282,82 @@ export function deriveFilteredLiveSessionTasks(
       Failed: stats.failed,
       Pending: pendingCount,
     },
+  };
+}
+
+export function deriveLiveSessionTaskListState(args: {
+  hasSprintContext: boolean;
+  initialLoadComplete: boolean;
+  activeFilter: LiveSessionTaskFilter;
+  taskCount: number;
+  error: string | null;
+}): LiveSessionTaskListStateViewModel {
+  if (args.error) {
+    return {
+      kind: "error",
+      isVisible: true,
+      message: args.error,
+      role: "alert",
+      ariaLive: "assertive",
+      ariaBusy: false,
+    };
+  }
+
+  if (!args.hasSprintContext && !args.initialLoadComplete) {
+    return {
+      kind: "loading",
+      isVisible: true,
+      message: "Loading live session runtime.",
+      role: "status",
+      ariaLive: "polite",
+      ariaBusy: true,
+    };
+  }
+
+  if (!args.hasSprintContext) {
+    return {
+      kind: "idle",
+      isVisible: true,
+      message: "Launch a sprint to activate live task telemetry, protocol output, and runtime activity for this project.",
+      role: "status",
+      ariaLive: "polite",
+      ariaBusy: false,
+    };
+  }
+
+  if (args.taskCount === 0) {
+    return {
+      kind: "empty-filter",
+      isVisible: true,
+      message: args.activeFilter === "All"
+        ? "Awaiting sprint decomposition..."
+        : `No ${args.activeFilter.toLowerCase()} tasks.`,
+      role: "status",
+      ariaLive: "polite",
+      ariaBusy: false,
+    };
+  }
+
+  return {
+    kind: "ready",
+    isVisible: false,
+    message: null,
+    role: null,
+    ariaLive: null,
+    ariaBusy: false,
+  };
+}
+
+export function deriveLiveTaskStatusIndicatorViewModel(
+  phase: TaskProgressPhase,
+  prefersReducedMotion: boolean,
+): LiveTaskStatusIndicatorViewModel {
+  const cfg = getTaskCfg(phase);
+  return {
+    label: cfg.label,
+    className: prefersReducedMotion ? removeAnimationClasses(cfg.dot) : cfg.dot,
+    srText: `Task status: ${cfg.label}`,
+    motionEnabled: !prefersReducedMotion && cfg.dot.includes("animate-"),
   };
 }
 

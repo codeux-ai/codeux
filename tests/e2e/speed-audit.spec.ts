@@ -1,4 +1,5 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type Locator, type Page } from '@playwright/test';
+import { completeOnboarding, ensureSelectedProject } from './helpers/prepare-app';
 
 const routes = [
   '/',
@@ -14,6 +15,50 @@ const routes = [
   '/browser',
   '/files',
 ];
+
+const routeReadyTimeoutMs = 15_000;
+
+function locatorForRouteReady(page: Page, route: string): Locator {
+  const mainHeading = (name: string): Locator => page.locator('main h1:visible', { hasText: name });
+
+  switch (route) {
+    case '/':
+      return mainHeading('Overview');
+    case '/sprints':
+      return page.getByRole('region', { name: 'Sprint Ledger' });
+    case '/tasks':
+      return mainHeading('Task Board');
+    case '/projects':
+      return mainHeading('Manage Projects');
+    case '/chat':
+      return mainHeading('Project Conversations');
+    case '/agents':
+      return mainHeading('Your Workforce');
+    case '/stats':
+      return mainHeading('Stats');
+    case '/scheduler':
+      return page.getByTestId('scheduler-page-root');
+    case '/config':
+      return mainHeading('Settings & Integration');
+    case '/memory':
+      return mainHeading('Memory Map');
+    case '/browser':
+      return page.getByTestId('browser-page-root');
+    case '/files':
+      return page.getByTestId('file-browser-page-root');
+    default:
+      throw new Error(`No route readiness locator configured for ${route}`);
+  }
+}
+
+test.beforeEach(async ({ page, request }) => {
+  await completeOnboarding(request);
+  await ensureSelectedProject(request);
+
+  await page.addInitScript(() => {
+    localStorage.setItem('codeux:dashboard-tour-hidden:v1', 'true');
+  });
+});
 
 test('Benchmark Page Load & Fast Navigation', async ({ page }) => {
   const consoleMessages: { type: string; text: string }[] = [];
@@ -47,8 +92,7 @@ test('Benchmark Page Load & Fast Navigation', async ({ page }) => {
   console.log('\n--- 1. Initial Page Load Audit ---');
   const loadStart = Date.now();
   await page.goto('/');
-  // Wait for the app to settle
-  await page.waitForLoadState('networkidle');
+  await expect(locatorForRouteReady(page, '/')).toBeVisible({ timeout: routeReadyTimeoutMs });
   const initialLoadTime = Date.now() - loadStart;
   console.log(`Initial load duration: ${initialLoadTime}ms`);
 
@@ -69,9 +113,7 @@ test('Benchmark Page Load & Fast Navigation', async ({ page }) => {
   for (const route of routes) {
     const navStart = Date.now();
     await page.goto(route);
-    await page.waitForLoadState('domcontentloaded');
-    // Wait for any skeletons or spinners to disappear if they exist
-    await page.waitForTimeout(500); // 500ms stabilization buffer
+    await expect(locatorForRouteReady(page, route)).toBeVisible({ timeout: routeReadyTimeoutMs });
     const duration = Date.now() - navStart;
     navigationTimes[route] = duration;
     console.log(`Route navigation to ${route}: ${duration}ms`);

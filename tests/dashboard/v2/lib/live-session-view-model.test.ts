@@ -8,7 +8,9 @@ import type {
 } from "../../../../dashboard/src/types.js";
 import {
   deriveFilteredLiveSessionTasks,
+  deriveLiveSessionTaskListState,
   deriveLiveSessionStats,
+  deriveLiveTaskStatusIndicatorViewModel,
   deriveLiveSessionTaskCardItems,
   deriveLiveTransportBannerViewModel,
   deriveProjectedLiveSessionTasks,
@@ -371,5 +373,65 @@ describe("live-session-view-model", () => {
     expect(rolledBackItem?.phase).toBe("RUNNING");
     expect(rolledBackItem?.isForceCompleting).toBe(false);
     expect(rolledBackItem?.forceCompleteError).toBe("force complete failed");
+  });
+
+  it("derives accessible async task-list states for loading, errors, and empty payloads", () => {
+    expect(deriveLiveSessionTaskListState({
+      hasSprintContext: false,
+      initialLoadComplete: false,
+      activeFilter: "All",
+      taskCount: 0,
+      error: null,
+    })).toMatchObject({
+      kind: "loading",
+      message: "Loading live session runtime.",
+      role: "status",
+      ariaLive: "polite",
+      ariaBusy: true,
+    });
+
+    expect(deriveLiveSessionTaskListState({
+      hasSprintContext: true,
+      initialLoadComplete: true,
+      activeFilter: "Running",
+      taskCount: 0,
+      error: null,
+    })).toMatchObject({
+      kind: "empty-filter",
+      message: "No running tasks.",
+      role: "status",
+      ariaLive: "polite",
+      ariaBusy: false,
+    });
+
+    expect(deriveLiveSessionTaskListState({
+      hasSprintContext: true,
+      initialLoadComplete: true,
+      activeFilter: "All",
+      taskCount: 2,
+      error: "Unable to connect to Orchestrator API",
+    })).toMatchObject({
+      kind: "error",
+      message: "Unable to connect to Orchestrator API",
+      role: "alert",
+      ariaLive: "assertive",
+      ariaBusy: false,
+    });
+  });
+
+  it("keeps static status cues when reduced motion disables live task animation", () => {
+    const animated = deriveLiveTaskStatusIndicatorViewModel("RUNNING", false);
+    expect(animated.label).toBe("Running");
+    expect(animated.className).toContain("animate-pulse");
+    expect(animated.srText).toBe("Task status: Running");
+    expect(animated.motionEnabled).toBe(true);
+
+    const reduced = deriveLiveTaskStatusIndicatorViewModel("RUNNING", true);
+    expect(reduced.label).toBe("Running");
+    expect(reduced.className).not.toContain("animate-pulse");
+    expect(reduced.className).toContain("bg-status-green");
+    expect(reduced.className).toContain("shadow-[0_0_10px_rgba(0,171,132,0.7)]");
+    expect(reduced.srText).toBe("Task status: Running");
+    expect(reduced.motionEnabled).toBe(false);
   });
 });

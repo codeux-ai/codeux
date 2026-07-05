@@ -125,6 +125,12 @@ export const clearLivePayloadCacheForTests = (): void => {
 };
 
 export const invalidateLivePayloadCache = (projectId?: string | null): void => {
+  if (projectId === undefined || projectId === null) {
+    livePayloadCache.clear();
+    livePayloadInflight.clear();
+    livePayloadProjectIndex.clear();
+    return;
+  }
   const projectKey = getProjectCacheKey(projectId);
   const indexedKey = getLatestProjectScopedCacheKey(projectKey);
   for (const key of Array.from(livePayloadCache.keys())) {
@@ -254,6 +260,7 @@ export const rerunTask = async (taskId: string, options?: RerunTaskOptions): Pro
     headers: options ? { "Content-Type": "application/json" } : undefined,
     body: options ? JSON.stringify(options) : undefined,
   });
+  invalidateLivePayloadCache();
 };
 
 export const orchestrateSprint = async (projectId: string, sprintId: string): Promise<void> => {
@@ -261,48 +268,56 @@ export const orchestrateSprint = async (projectId: string, sprintId: string): Pr
     `/api/projects/${encodeURIComponent(projectId)}/sprints/${encodeURIComponent(sprintId)}/orchestrate`,
     { method: "POST" },
   );
+  invalidateLivePayloadCache(projectId);
 };
 
 export const pauseSprintRun = async (sprintRunId: string): Promise<void> => {
   await fetchJson(`/api/sprint-runs/${encodeURIComponent(sprintRunId)}/pause`, {
     method: "POST",
   });
+  invalidateLivePayloadCache();
 };
 
 export const resumeSprintRun = async (sprintRunId: string): Promise<void> => {
   await fetchJson(`/api/sprint-runs/${encodeURIComponent(sprintRunId)}/resume`, {
     method: "POST",
   });
+  invalidateLivePayloadCache();
 };
 
 export const cancelSprintRun = async (sprintRunId: string): Promise<void> => {
   await fetchJson(`/api/sprint-runs/${encodeURIComponent(sprintRunId)}/cancel`, {
     method: "POST",
   });
+  invalidateLivePayloadCache();
 };
 
 export const forceCancelSprintRun = async (sprintRunId: string): Promise<void> => {
   await fetchJson(`/api/sprint-runs/${encodeURIComponent(sprintRunId)}/force-cancel`, {
     method: "POST",
   });
+  invalidateLivePayloadCache();
 };
 
 export const cancelTaskDispatch = async (dispatchId: string): Promise<void> => {
   await fetchJson(`/api/task-dispatches/${encodeURIComponent(dispatchId)}/cancel`, {
     method: "POST",
   });
+  invalidateLivePayloadCache();
 };
 
 export const forceCancelTaskDispatch = async (dispatchId: string): Promise<void> => {
   await fetchJson(`/api/task-dispatches/${encodeURIComponent(dispatchId)}/force-cancel`, {
     method: "POST",
   });
+  invalidateLivePayloadCache();
 };
 
 export const retryTaskDispatch = async (dispatchId: string): Promise<void> => {
   await fetchJson(`/api/task-dispatches/${encodeURIComponent(dispatchId)}/retry`, {
     method: "POST",
   });
+  invalidateLivePayloadCache();
 };
 
 export const claimAttentionItem = async (
@@ -317,7 +332,10 @@ export const claimAttentionItem = async (
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(input || {}),
     },
-  );
+  ).then((summary) => {
+    invalidateLivePayloadCache(projectId);
+    return summary;
+  });
 };
 
 export const resolveAttentionItem = async (
@@ -332,5 +350,8 @@ export const resolveAttentionItem = async (
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(input || {}),
     },
-  );
+  ).then((summary) => {
+    invalidateLivePayloadCache(projectId);
+    return summary;
+  });
 };

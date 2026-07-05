@@ -32,6 +32,7 @@ import { formatInvocationRetryAt } from "./lib/invocation-retry-time.js";
 import type { ExecutionInvocationRecord } from "./types.js";
 import { cancelExecutionInvocation, restartExecutionInvocation, type InvocationRestartMode } from "./lib/invocation-api.js";
 import { useActionFeedback } from "./hooks/use-action-feedback.js";
+import { useConfirmDialog } from "./hooks/use-confirm-dialog.js";
 import {
   formatTokenCount,
   mergeInvocationToolMessages
@@ -62,6 +63,7 @@ export const ChatPage: FunctionComponent = () => {
   const [restartingInvocation, setRestartingInvocation] = useState<{ id: string; mode: InvocationRestartMode } | null>(null);
   const [cancellingInvocationId, setCancellingInvocationId] = useState<string | null>(null);
   const invocationFeedback = useActionFeedback();
+  const invocationConfirm = useConfirmDialog();
 
   const {
     chatMode,
@@ -164,6 +166,43 @@ export const ChatPage: FunctionComponent = () => {
       setCancellingInvocationId(null);
     }
   }, [activateInvocation, cancellingInvocationId, invocationFeedback, refreshThreads, restartingInvocation, selectedInvocation]);
+
+  const requestRestartInvocation = useCallback(async (mode: InvocationRestartMode) => {
+    if (!selectedInvocation || selectedInvocation.status !== "failed") {
+      return;
+    }
+    const confirmed = await invocationConfirm.requestConfirm({
+      title: mode === "continue_session" ? "Continue Invocation?" : "Restart Invocation?",
+      body: mode === "continue_session"
+        ? "Continue this failed planning invocation from the preserved session context?"
+        : "Restart this failed planning invocation from the original prompt?",
+      confirmLabel: mode === "continue_session" ? "Continue" : "Restart",
+      cancelLabel: "Keep Failed Invocation",
+      tone: mode === "continue_session" ? "default" : "warning",
+    });
+    if (!confirmed) {
+      return;
+    }
+    await handleRestartInvocation(mode);
+  }, [handleRestartInvocation, invocationConfirm, selectedInvocation]);
+
+  const requestCancelInvocation = useCallback(async () => {
+    if (!selectedInvocation || selectedInvocation.status !== "running") {
+      return;
+    }
+    const confirmed = await invocationConfirm.requestConfirm({
+      title: "Cancel Invocation?",
+      body: "Request cancellation for this running invocation and stop any associated runtime work?",
+      confirmLabel: "Cancel Invocation",
+      cancelLabel: "Keep Running",
+      destructive: true,
+      tone: "danger",
+    });
+    if (!confirmed) {
+      return;
+    }
+    await handleCancelInvocation();
+  }, [handleCancelInvocation, invocationConfirm, selectedInvocation]);
 
   // Build lookups from agentPresets
   const presetIdMap = useMemo(() => {
@@ -495,6 +534,12 @@ export const ChatPage: FunctionComponent = () => {
             />
           </div>
         )}
+        <ConfirmDialog
+          isOpen={invocationConfirm.isOpen}
+          options={invocationConfirm.options}
+          onConfirm={invocationConfirm.handleConfirm}
+          onCancel={invocationConfirm.handleCancel}
+        />
         <div className="shrink-0 border-b border-black/[0.05] px-6 py-6 dark:border-white/[0.05]">
           <div className="flex items-start gap-4">
             {/* Agent avatar or provider icon */}
@@ -528,7 +573,7 @@ export const ChatPage: FunctionComponent = () => {
                     {canCancelInvocation && (
                       <button
                         type="button"
-                        onClick={() => void handleCancelInvocation()}
+                        onClick={() => void requestCancelInvocation()}
                         disabled={cancellingInvocationId === inv.id}
                         aria-busy={cancellingInvocationId === inv.id}
                         aria-label={cancellingInvocationId === inv.id ? "Cancelling invocation" : "Cancel invocation"}
@@ -542,7 +587,7 @@ export const ChatPage: FunctionComponent = () => {
                       <>
                     <button
                       type="button"
-                      onClick={() => void handleRestartInvocation("retry_full_prompt")}
+                      onClick={() => void requestRestartInvocation("retry_full_prompt")}
                       disabled={restartingInvocation?.id === inv.id}
                       aria-busy={restartingInvocation?.id === inv.id && restartingInvocation.mode === "retry_full_prompt"}
                       aria-label={restartingInvocation?.id === inv.id && restartingInvocation.mode === "retry_full_prompt" ? "Restarting invocation" : "Restart invocation"}
@@ -553,7 +598,7 @@ export const ChatPage: FunctionComponent = () => {
                     </button>
                     <button
                       type="button"
-                      onClick={() => void handleRestartInvocation("continue_session")}
+                      onClick={() => void requestRestartInvocation("continue_session")}
                       disabled={restartingInvocation?.id === inv.id}
                       aria-busy={restartingInvocation?.id === inv.id && restartingInvocation.mode === "continue_session"}
                       aria-label={restartingInvocation?.id === inv.id && restartingInvocation.mode === "continue_session" ? "Continuing invocation" : "Continue invocation"}

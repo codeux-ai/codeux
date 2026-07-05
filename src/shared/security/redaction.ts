@@ -1,8 +1,8 @@
 const SENSITIVE_KEYS_LIST = [
   "apiKey", "token", "authorization", "password", "secret",
-  "githubToken", "gitlabToken", "jiraToken",
+  "githubToken", "gitlabToken", "jiraToken", "authPath", "providerAuthPath",
   "ANTHROPIC_API_KEY", "OPENAI_API_KEY", "GEMINI_API_KEY",
-  "GH_TOKEN", "GITLAB_TOKEN"
+  "GH_TOKEN", "GITLAB_TOKEN", "CODEX_AUTH_PATH", "CLAUDE_CONFIG_DIR", "QWEN_AUTH_PATH", "OPENCODE_AUTH_PATH"
 ];
 
 const SENSITIVE_KEYS = new Set(SENSITIVE_KEYS_LIST.map((key) => key.toLowerCase()));

@@ -1,8 +1,9 @@
 import { defineConfig, devices } from '@playwright/test';
+import fs from 'fs';
 import os from 'os';
 import path from 'path';
 
-const tempHome = path.join(os.tmpdir(), 'codeux-e2e-home');
+const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'codeux-e2e-home-'));
 
 /**
  * Read environment variables from file.
@@ -23,8 +24,8 @@ export default defineConfig({
   forbidOnly: !!process.env.CI,
   /* Retry on CI only */
   retries: process.env.CI ? 2 : 0,
-  /* Opt out of parallel tests on CI. */
-  workers: process.env.CI ? '100%' : undefined,
+  /* Keep CI serial so the shared temp home and dashboard server stay deterministic. */
+  workers: process.env.CI ? 1 : undefined,
   /* Reporter to use. See https://playwright.dev/docs/test-reporters */
   reporter: process.env.CI ? 'github' : 'html',
   /* Shared settings for all the projects below. See https://playwright.dev/docs/api/class-testoptions. */
@@ -34,13 +35,24 @@ export default defineConfig({
 
     /* Collect trace when retrying the failed test. See https://playwright.dev/docs/trace-viewer */
     trace: 'on-first-retry',
+    screenshot: 'only-on-failure',
+    video: 'retain-on-failure',
   },
 
   /* Configure projects for major browsers */
   projects: [
     {
-      name: 'chromium',
+      name: 'chromium-desktop',
       use: { ...devices['Desktop Chrome'] },
+    },
+    {
+      name: 'chromium-mobile',
+      use: {
+        ...devices['Desktop Chrome'],
+        viewport: { width: 390, height: 844 },
+        isMobile: true,
+        hasTouch: true,
+      },
     },
   ],
 
@@ -51,7 +63,7 @@ export default defineConfig({
     // /ready only returns 200 once a project has a live-status timestamp, which
     // never happens in a clean CI checkout, so it would hang until timeout.
     url: 'http://127.0.0.1:4444/health',
-    reuseExistingServer: !process.env.CI,
+    reuseExistingServer: false,
     timeout: 30000,
     stdout: 'pipe',
     stderr: 'pipe',

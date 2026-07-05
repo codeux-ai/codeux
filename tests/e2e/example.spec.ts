@@ -1,18 +1,24 @@
 import { test, expect } from '@playwright/test';
+import { completeOnboarding, ensureSelectedProject } from './helpers/prepare-app';
 
-test('has title', async ({ page }) => {
-  await page.goto('https://playwright.dev/');
+test.beforeEach(async ({ page, request }) => {
+  await completeOnboarding(request);
+  await ensureSelectedProject(request);
 
-  // Expect a title "to contain" a substring.
-  await expect(page).toHaveTitle(/Playwright/);
+  await page.addInitScript(() => {
+    localStorage.setItem('codeux:dashboard-tour-hidden:v1', 'true');
+  });
 });
 
-test('get started link', async ({ page }) => {
-  await page.goto('https://playwright.dev/');
+test('loads the local Code UX shell from a prepared app state', async ({ page, request }) => {
+  const health = await request.get('/health');
+  expect(health.ok()).toBe(true);
+  expect(await health.json()).toEqual(expect.objectContaining({ status: 'UP' }));
 
-  // Click the get started link.
-  await page.getByRole('link', { name: 'Get started' }).click();
+  await page.goto('/');
 
-  // Expects page to have a heading with the name of Installation.
-  await expect(page.getByRole('heading', { name: 'Installation' })).toBeVisible();
+  await expect(page).toHaveTitle('Code UX', { timeout: 15_000 });
+  await expect(page.getByRole('navigation', { name: /Primary navigation/i })).toBeVisible({ timeout: 15_000 });
+  await expect(page.locator('[aria-label="Dashboard Overview"]')).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByRole('button', { name: /Project/i })).toBeVisible({ timeout: 15_000 });
 });

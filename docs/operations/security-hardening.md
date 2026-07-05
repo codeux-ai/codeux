@@ -35,7 +35,7 @@ While Code UX trusts the developer and any connected systems, several specific p
 - **Preview CORS Compatibility:** Preview-host traffic answers CORS preflights and overrides upstream `Access-Control-*` headers at the proxy boundary. The dashboard API origin keeps its CSRF guard; only preview-host origins get permissive local-app CORS behavior.
 
 ### Redaction
-- **Log and Output Filtering:** Internal API keys, credentials, and sensitive configurations are actively scrubbed and redacted from application logs, debug outputs, and exported execution traces.
+- **Log and Output Filtering:** Internal API keys, credentials, Git host tokens, provider auth paths, and sensitive configurations are actively scrubbed and redacted from application logs, debug outputs, provider activity streams, invocation transcripts, telemetry callbacks, and exported execution traces.
 - **Settings Secret Inputs:** Dashboard settings fields that store provider API keys, Git host tokens, Jira API tokens, and external embedding API keys render as masked secret inputs by default. Operators must explicitly use the reveal control to inspect a value.
 - **Docker Secret Transport:** Provider and preview Docker launches write selected host/provider environment variables to temporary `0600` env-files and pass those files via `--env-file`. This keeps API keys and Git tokens out of the host `docker run` argv visible through process listings while preserving the same container environment.
 
