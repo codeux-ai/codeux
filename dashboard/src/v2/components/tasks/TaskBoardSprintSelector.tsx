@@ -32,6 +32,9 @@ export const TaskBoardSprintSelector: FunctionComponent<TaskBoardSprintSelectorP
   const statusId = "tasks-sprint-selector-status";
   const selected = selectedId ? sprints.find((sprint: Sprint) => sprint.id === selectedId) : null;
   const selectedLabel = selected ? formatSprintDisplay(selected, sprintKeyPrefix) : null;
+  const selectedAnnouncement = selectedLabel
+    ? `Selected sprint scope changed to ${selectedLabel}.`
+    : "Selected sprint scope changed to All Sprints.";
   const scopeState = buildTaskBoardSprintScopeState({
     sprints,
     selectedSprintId: selectedId,
@@ -161,9 +164,26 @@ export const TaskBoardSprintSelector: FunctionComponent<TaskBoardSprintSelectorP
   };
 
   return (
-    <div className="relative" ref={rootRef}>
+    <div
+      className="relative"
+      ref={rootRef}
+      style={{
+        "--task-sprint-control-duration": interactionTokens.controlFeedback.duration,
+        "--task-sprint-control-ease": interactionTokens.controlFeedback.ease,
+        "--task-sprint-selection-duration": interactionTokens.selectionMovement.duration,
+        "--task-sprint-selection-ease": interactionTokens.selectionMovement.ease,
+        "--task-sprint-list-reveal-duration": interactionTokens.listReveal.duration,
+        "--task-sprint-list-reveal-ease": interactionTokens.listReveal.ease,
+        "--task-sprint-list-reorder-duration": interactionTokens.listReorder.duration,
+        "--task-sprint-list-reorder-ease": interactionTokens.listReorder.ease,
+      }}
+      data-motion-control="controlFeedback"
+      data-motion-selection="selectionMovement"
+      data-motion-list-reveal="listReveal"
+      data-motion-list-reorder="listReorder"
+    >
       <div id={statusId} className="sr-only" aria-live="polite" aria-atomic="true">
-        {open ? `Sprint scope list open. ${scopeState.description}` : scopeState.description}
+        {open ? `Sprint scope list open. ${scopeState.description}` : `${selectedAnnouncement} ${scopeState.description}`}
       </div>
       <button
         ref={triggerRef}
@@ -212,8 +232,9 @@ export const TaskBoardSprintSelector: FunctionComponent<TaskBoardSprintSelectorP
           aria-label="Task sprint scope"
           aria-activedescendant={`tasks-sprint-option-${activeIndex}`}
           aria-busy={loading}
-          style={{ transitionDuration: interactionTokens.selectionMovement.duration, transitionTimingFunction: interactionTokens.selectionMovement.ease }}
-          className="absolute left-0 top-full mt-2 w-80 max-w-[calc(100vw-2rem)] z-50 bg-white/95 dark:bg-void-800/95 backdrop-blur-2xl border border-black/[0.06] dark:border-white/[0.08] rounded-2xl shadow-[0_20px_40px_rgba(0,0,0,0.12)] dark:shadow-[0_20px_40px_rgba(0,0,0,0.4)] overflow-hidden flex flex-col max-h-[60vh]"
+          style={{ transitionDuration: interactionTokens.listReveal.duration, transitionTimingFunction: interactionTokens.listReveal.ease }}
+          className="absolute left-0 top-full mt-2 w-80 max-w-[calc(100vw-2rem)] z-50 bg-white/95 dark:bg-void-800/95 backdrop-blur-2xl border border-black/[0.06] dark:border-white/[0.08] rounded-2xl shadow-[0_20px_40px_rgba(0,0,0,0.12)] dark:shadow-[0_20px_40px_rgba(0,0,0,0.4)] overflow-hidden flex flex-col max-h-[60vh] motion-reduce:transition-none"
+          data-motion-contract="listReveal"
         >
           <button
             id="tasks-sprint-option-0"
@@ -239,7 +260,11 @@ export const TaskBoardSprintSelector: FunctionComponent<TaskBoardSprintSelectorP
 
           <div className="h-px bg-black/[0.04] dark:bg-white/[0.04] shrink-0" />
 
-          <div className="overflow-y-auto min-h-0">
+          <div
+            className="overflow-y-auto min-h-0"
+            style={{ transitionDuration: interactionTokens.listReorder.duration, transitionTimingFunction: interactionTokens.listReorder.ease }}
+            data-motion-contract="listReorder"
+          >
             {loading && (
               <div role="status" className="px-5 py-3 text-[10px] font-bold uppercase tracking-[0.14em] text-signal-600 dark:text-signal-400">
                 Loading sprint scopes
