@@ -144,9 +144,10 @@ export interface ManageAgentsArgs {
 }
 
 export interface ManageMemoryArgs {
-  action: "search" | "list" | "get" | "create" | "update" | "delete" | "promote" | "start_reembed" | "get_map" | "count" | "model_status";
+  action: "search" | "list" | "get" | "create" | "update" | "delete" | "promote" | "start_reembed" | "get_map" | "count" | "model_status" | "create_claim" | "list_claims" | "get_claim" | "update_claim" | "add_claim_evidence" | "deprecate_claim";
   projectId?: string;
   memoryId?: string;
+  claimId?: string;
   query?: string;
   scope?: string;
   sprintId?: string;
@@ -154,8 +155,19 @@ export interface ManageMemoryArgs {
   limit?: number;
   minSimilarity?: number;
   content?: string;
+  claim?: string;
   category?: string;
   strength?: number;
+  confidence?: number;
+  durability?: number;
+  status?: string;
+  tags?: string[];
+  appliesToPaths?: string[];
+  sourceMemoryId?: string;
+  supersedesClaimId?: string | null;
+  supportType?: string;
+  weight?: number;
+  evidenceWeight?: number;
   memoryIds?: string[];
   reason?: string;
   topKPerNode?: number;

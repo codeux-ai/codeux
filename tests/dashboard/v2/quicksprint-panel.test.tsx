@@ -51,15 +51,31 @@ describe("QuicksprintPanel", () => {
         dispatchEvent: vi.fn(),
       })),
     });
+    const requestAnimationFrame = (callback: FrameRequestCallback): number => {
+      callback(Date.now());
+      return 0;
+    };
+    const cancelAnimationFrame = () => undefined;
+
+    Object.defineProperty(globalThis, "requestAnimationFrame", {
+      configurable: true,
+      writable: true,
+      value: requestAnimationFrame,
+    });
+    Object.defineProperty(globalThis, "cancelAnimationFrame", {
+      configurable: true,
+      writable: true,
+      value: cancelAnimationFrame,
+    });
     Object.defineProperty(window, "requestAnimationFrame", {
       configurable: true,
       writable: true,
-      value: (callback: FrameRequestCallback) => window.setTimeout(() => callback(Date.now()), 0),
+      value: requestAnimationFrame,
     });
     Object.defineProperty(window, "cancelAnimationFrame", {
       configurable: true,
       writable: true,
-      value: (id: number) => window.clearTimeout(id),
+      value: cancelAnimationFrame,
     });
   });
 

@@ -134,6 +134,10 @@ export type MemoryClaimStatus = "active" | "superseded" | "deprecated";
 export type MemoryClaimSourceType = "promotion" | "manual" | "remediation";
 export type MemoryClaimEvidenceSupport = "supports" | "contradicts" | "supersedes";
 
+export const MEMORY_CLAIM_STATUSES: MemoryClaimStatus[] = ["active", "superseded", "deprecated"];
+export const MEMORY_CLAIM_SOURCE_TYPES: MemoryClaimSourceType[] = ["promotion", "manual", "remediation"];
+export const MEMORY_CLAIM_EVIDENCE_SUPPORTS: MemoryClaimEvidenceSupport[] = ["supports", "contradicts", "supersedes"];
+
 export interface MemoryClaimRecord {
   id: string;
   projectId: string;

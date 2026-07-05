@@ -2,9 +2,27 @@ import type { ManageCodeUxArgs, ManagementResponseEnvelope } from "../../contrac
 import type { MemoryService } from "../../services/memory-service.js";
 import type { MemoryPromotionService } from "../../services/memory-promotion-service.js";
 import type { EmbeddingModelManager } from "../../services/embedding-model-manager.js";
-import { type MemoryScope, type MemoryCategory, MEMORY_SCOPES, MEMORY_CATEGORIES } from "../../contracts/memory-types.js";
-import type { UpdateMemoryInput } from "../../contracts/memory-types.js";
-import { parseRequiredString, parseOptionalString, parseOptionalNumber, parseOptionalStringArray, parseOptionalEnum } from "./payload-parsers.js";
+import {
+  type MemoryScope,
+  type MemoryCategory,
+  type MemoryClaimStatus,
+  type MemoryClaimEvidenceSupport,
+  MEMORY_SCOPES,
+  MEMORY_CATEGORIES,
+  MEMORY_CLAIM_STATUSES,
+  MEMORY_CLAIM_EVIDENCE_SUPPORTS,
+} from "../../contracts/memory-types.js";
+import type { AddMemoryClaimEvidenceInput, CreateMemoryClaimInput, UpdateMemoryClaimInput, UpdateMemoryInput } from "../../contracts/memory-types.js";
+import {
+  managementValidationError,
+  parseRequiredString,
+  parseOptionalString,
+  parseOptionalNumber,
+  parseOptionalStringArray,
+  parseOptionalEnum,
+  parseOptionalEnumStrict,
+  parseOptionalNullableString,
+} from "./payload-parsers.js";
 
 
 export class MemoryActions {
@@ -40,6 +58,18 @@ export class MemoryActions {
         return this.countMemories(payload);
       case "model_status":
         return this.modelStatus();
+      case "create_claim":
+        return this.createClaim(payload);
+      case "list_claims":
+        return this.listClaims(payload);
+      case "get_claim":
+        return this.getClaim(payload);
+      case "update_claim":
+        return this.updateClaim(payload);
+      case "add_claim_evidence":
+        return this.addClaimEvidence(payload);
+      case "deprecate_claim":
+        return this.deprecateClaim(args, payload);
       default:
         throw new Error(`Unknown memory action: ${args.action}`);
     }
@@ -190,4 +220,121 @@ export class MemoryActions {
     const status = this.embeddingModelManager.getStatuses();
     return { result: { status } };
   }
+
+  private async createClaim(payload: Record<string, unknown>): Promise<ManagementResponseEnvelope> {
+    const projectId = parseRequiredString(payload, "projectId");
+    const category = parseOptionalEnumStrict<MemoryCategory>(payload, "category", MEMORY_CATEGORIES) ?? "context";
+    const sourceMemoryId = parseOptionalString(payload, "sourceMemoryId");
+    const supportType = parseOptionalEnumStrict<MemoryClaimEvidenceSupport>(payload, "supportType", MEMORY_CLAIM_EVIDENCE_SUPPORTS);
+    const evidenceWeight = parseOptionalClaimScore(payload, "weight") ?? parseOptionalClaimScore(payload, "evidenceWeight");
+
+    const input: CreateMemoryClaimInput = {
+      claim: parseRequiredString(payload, "claim"),
+      category,
+      confidence: parseOptionalClaimScore(payload, "confidence") ?? 0.8,
+      durability: parseOptionalClaimScore(payload, "durability") ?? 0.8,
+      tags: parseOptionalStringArray(payload, "tags"),
+      appliesToPaths: parseOptionalStringArray(payload, "appliesToPaths"),
+      sourceType: "manual",
+      sourceMemoryId,
+      supersedesClaimId: parseOptionalString(payload, "supersedesClaimId"),
+    };
+
+    const evidence: Omit<AddMemoryClaimEvidenceInput, "claimId"> | undefined = sourceMemoryId
+      ? { memoryId: sourceMemoryId, supportType, weight: evidenceWeight }
+      : undefined;
+
+    const result = await this.memoryService.createProjectMemoryClaim(projectId, input, evidence);
+    return { result };
+  }
+
+  private listClaims(payload: Record<string, unknown>): ManagementResponseEnvelope {
+    const projectId = parseRequiredString(payload, "projectId");
+    const status = parseOptionalEnumStrict<MemoryClaimStatus>(payload, "status", MEMORY_CLAIM_STATUSES);
+    const category = parseOptionalEnumStrict<MemoryCategory>(payload, "category", MEMORY_CATEGORIES);
+    const limit = parseOptionalNumber(payload, "limit");
+
+    const claims = this.memoryService.listMemoryClaims(projectId, { status, category, limit });
+    return { result: { claims } };
+  }
+
+  private getClaim(payload: Record<string, unknown>): ManagementResponseEnvelope {
+    const projectId = parseRequiredString(payload, "projectId");
+    const claimId = parseRequiredString(payload, "claimId");
+
+    const claim = this.memoryService.getMemoryClaim(projectId, claimId);
+    return { result: { claim } };
+  }
+
+  private updateClaim(payload: Record<string, unknown>): ManagementResponseEnvelope {
+    const projectId = parseRequiredString(payload, "projectId");
+    const claimId = parseRequiredString(payload, "claimId");
+
+    const updateInput: UpdateMemoryClaimInput = {};
+    const claim = parseOptionalString(payload, "claim");
+    if ("claim" in payload && !claim) {
+      throw managementValidationError("claim is required", "claim");
+    }
+    if (claim !== undefined) updateInput.claim = claim;
+
+    const category = parseOptionalEnumStrict<MemoryCategory>(payload, "category", MEMORY_CATEGORIES);
+    if (category) updateInput.category = category;
+
+    const confidence = parseOptionalClaimScore(payload, "confidence");
+    if (confidence !== undefined) updateInput.confidence = confidence;
+
+    const durability = parseOptionalClaimScore(payload, "durability");
+    if (durability !== undefined) updateInput.durability = durability;
+
+    const status = parseOptionalEnumStrict<MemoryClaimStatus>(payload, "status", MEMORY_CLAIM_STATUSES);
+    if (status) updateInput.status = status;
+
+    const tags = parseOptionalStringArray(payload, "tags");
+    if (tags) updateInput.tags = tags;
+
+    const appliesToPaths = parseOptionalStringArray(payload, "appliesToPaths");
+    if (appliesToPaths) updateInput.appliesToPaths = appliesToPaths;
+
+    const supersedesClaimId = parseOptionalNullableString(payload, "supersedesClaimId");
+    if (supersedesClaimId !== undefined) updateInput.supersedesClaimId = supersedesClaimId;
+
+    const updated = this.memoryService.updateMemoryClaim(projectId, claimId, updateInput);
+    return { result: { claim: updated } };
+  }
+
+  private addClaimEvidence(payload: Record<string, unknown>): ManagementResponseEnvelope {
+    const projectId = parseRequiredString(payload, "projectId");
+    const input: AddMemoryClaimEvidenceInput = {
+      claimId: parseRequiredString(payload, "claimId"),
+      memoryId: parseRequiredString(payload, "memoryId"),
+      supportType: parseOptionalEnumStrict<MemoryClaimEvidenceSupport>(payload, "supportType", MEMORY_CLAIM_EVIDENCE_SUPPORTS),
+      weight: parseOptionalClaimScore(payload, "weight"),
+    };
+
+    const evidence = this.memoryService.addMemoryClaimEvidence(projectId, input);
+    return { result: { evidence } };
+  }
+
+  private deprecateClaim(args: ManageCodeUxArgs, payload: Record<string, unknown>): ManagementResponseEnvelope {
+    const projectId = parseRequiredString(payload, "projectId");
+    const claimId = parseRequiredString(payload, "claimId");
+
+    if (args.approval?.confirmed !== true) {
+      return { approvalRequired: true, approvalMessage: `Are you sure you want to deprecate memory claim ${claimId}?` };
+    }
+
+    const claim = this.memoryService.deprecateMemoryClaim(projectId, claimId);
+    return { result: { success: true, claim } };
+  }
+}
+
+function parseOptionalClaimScore(payload: Record<string, unknown>, key: string): number | undefined {
+  if (!(key in payload) || payload[key] === undefined || payload[key] === null) {
+    return undefined;
+  }
+  const value = parseOptionalNumber(payload, key, 0, 1);
+  if (value === undefined) {
+    throw managementValidationError(`Invalid value for ${key}. Must be a number between 0 and 1.`, key);
+  }
+  return value;
 }

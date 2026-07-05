@@ -752,6 +752,39 @@ export class MemoryRepository {
     return rows.map((row) => this.mapEvidenceRow(row));
   }
 
+  listClaimMirrorMemories(projectId: string, claimId: string): MemoryRecord[] {
+    const rows = this.db.prepare(`
+      SELECT * FROM memories
+      WHERE project_id = ? AND scope = 'project' AND source_json LIKE ?
+      ORDER BY updated_at DESC
+    `).all(projectId, `%${claimId}%`) as unknown as MemoryRow[];
+
+    return rows
+      .map((row) => this.mapRow(row))
+      .filter((memory) => memory.source.originType === "memory_claim" && memory.source.originId === claimId);
+  }
+
+  deprecateMemoryClaim(projectId: string, claimId: string): MemoryClaimRecord | null {
+    try {
+      const now = new Date().toISOString();
+      const result = this.db.prepare(`
+        UPDATE memory_claims
+        SET status = 'deprecated', updated_at = ?
+        WHERE id = ? AND project_id = ? AND status != 'deprecated'
+      `).run(now, claimId, projectId);
+
+      if (result.changes === 0) {
+        return null;
+      }
+
+      return requireRecord(this.getMemoryClaim(claimId), "Memory claim", claimId);
+    } catch (error) {
+      if (error instanceof RepositoryError) throw error;
+      this.logger.error("Operation failed", { error, projectId, claimId });
+      throw new RepositoryError(error instanceof Error ? error.message : "Operation failed", error);
+    }
+  }
+
   // --- Embedding model status ---
 
   getModelStatus(modelId: EmbeddingModelId): EmbeddingModelStatus | null {

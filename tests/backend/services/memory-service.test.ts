@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { MemoryService } from "../../../src/services/memory-service.js";
 import type {
   MemoryRecord,
+  MemoryClaimRecord,
   CreateMemoryInput,
   UpdateMemoryInput,
   EmbeddingModelId,
@@ -23,6 +24,27 @@ function makeMemoryRecord(overrides: Partial<MemoryRecord> = {}): MemoryRecord {
     embeddingBlob: null,
     promotedFromId: null,
     promotionReason: null,
+    createdAt: "2026-01-01T00:00:00Z",
+    updatedAt: "2026-01-01T00:00:00Z",
+    ...overrides,
+  };
+}
+
+function makeClaimRecord(overrides: Partial<MemoryClaimRecord> = {}): MemoryClaimRecord {
+  return {
+    id: "claim-1",
+    projectId: "proj-1",
+    claim: "Use durable project memory.",
+    fingerprint: "use durable project memory",
+    category: "learning",
+    confidence: 0.8,
+    durability: 0.8,
+    status: "active",
+    tags: [],
+    appliesToPaths: [],
+    sourceType: "manual",
+    sourceMemoryId: null,
+    supersedesClaimId: null,
     createdAt: "2026-01-01T00:00:00Z",
     updatedAt: "2026-01-01T00:00:00Z",
     ...overrides,
@@ -51,8 +73,14 @@ describe("MemoryService", () => {
     listByAgent: vi.fn(),
     loadEmbeddingsForScope: vi.fn(),
     saveEmbedding: vi.fn(),
+    createMemoryClaim: vi.fn(),
     getMemoryClaim: vi.fn(),
+    listMemoryClaims: vi.fn(),
+    updateMemoryClaim: vi.fn(),
+    addMemoryClaimEvidence: vi.fn(),
     listMemoryClaimEvidence: vi.fn(),
+    listClaimMirrorMemories: vi.fn(),
+    deprecateMemoryClaim: vi.fn(),
     countByScope: vi.fn(),
     countStaleEmbeddings: vi.fn(),
   };
@@ -305,6 +333,148 @@ describe("MemoryService", () => {
     it("passes through to repository", () => {
       service.deleteMemory("mem-1");
       expect(mockRepo.deleteMemory).toHaveBeenCalledWith("mem-1");
+    });
+  });
+
+  describe("memory claim management", () => {
+    it("creates a canonical claim and project-scope mirror memory", async () => {
+      const claim = makeClaimRecord({
+        confidence: 0.9,
+        durability: 0.7,
+        category: "patterns",
+        sourceMemoryId: "mem-source",
+      });
+      const sourceMemory = makeMemoryRecord({ id: "mem-source", projectId: "proj-1" });
+      const mirrorMemory = makeMemoryRecord({
+        id: "mem-claim-1",
+        scope: "project",
+        content: claim.claim,
+        category: "patterns",
+        strength: 0.9,
+        source: { type: "manual", originType: "memory_claim", originId: claim.id },
+      });
+      const evidence = { claimId: claim.id, memoryId: sourceMemory.id, supportType: "supports", weight: 0.95, createdAt: "2026-01-01T00:00:00Z" };
+
+      mockRepo.getMemory.mockReturnValue(sourceMemory);
+      mockRepo.createMemoryClaim.mockReturnValue(claim);
+      mockRepo.getMemoryClaim.mockReturnValue(claim);
+      mockRepo.createMemory.mockReturnValue(mirrorMemory);
+      mockRepo.addMemoryClaimEvidence.mockReturnValue(evidence);
+      mockEmbeddingService.isLoaded.mockReturnValue(false);
+
+      const result = await service.createProjectMemoryClaim(
+        "proj-1",
+        {
+          claim: claim.claim,
+          category: "patterns",
+          confidence: 0.9,
+          durability: 0.7,
+          sourceMemoryId: sourceMemory.id,
+        },
+        { memoryId: sourceMemory.id, supportType: "supports", weight: 0.95 },
+      );
+
+      expect(mockRepo.createMemoryClaim).toHaveBeenCalledWith("proj-1", {
+        claim: claim.claim,
+        category: "patterns",
+        confidence: 0.9,
+        durability: 0.7,
+        sourceMemoryId: sourceMemory.id,
+        sourceType: "manual",
+      });
+      expect(mockRepo.createMemory).toHaveBeenCalledWith("proj-1", {
+        scope: "project",
+        content: claim.claim,
+        category: "patterns",
+        strength: 0.9,
+        source: { type: "manual", originType: "memory_claim", originId: claim.id },
+      });
+      expect(mockRepo.addMemoryClaimEvidence).toHaveBeenCalledWith({
+        claimId: claim.id,
+        memoryId: sourceMemory.id,
+        supportType: "supports",
+        weight: 0.95,
+      });
+      expect(result).toEqual({ claim, mirrorMemory, evidence });
+    });
+
+    it("rejects source evidence outside the project before creating a claim", async () => {
+      mockRepo.getMemory.mockReturnValue(makeMemoryRecord({ id: "mem-other", projectId: "other-project" }));
+
+      await expect(service.createProjectMemoryClaim("proj-1", {
+        claim: "Scoped claim",
+        category: "learning",
+        confidence: 0.8,
+        durability: 0.8,
+        sourceMemoryId: "mem-other",
+      })).rejects.toThrow("Memory not found: mem-other");
+
+      expect(mockRepo.createMemoryClaim).not.toHaveBeenCalled();
+      expect(mockRepo.createMemory).not.toHaveBeenCalled();
+    });
+
+    it("lists and gets claims through the repository with project scoping", () => {
+      const claim = makeClaimRecord();
+      mockRepo.listMemoryClaims.mockReturnValue([claim]);
+      mockRepo.getMemoryClaim.mockReturnValue(claim);
+
+      expect(service.listMemoryClaims("proj-1", { status: "active", limit: 5 })).toEqual([claim]);
+      expect(mockRepo.listMemoryClaims).toHaveBeenCalledWith("proj-1", { status: "active", limit: 5 });
+      expect(service.getMemoryClaim("proj-1", "claim-1")).toEqual(claim);
+    });
+
+    it("rejects get for claims outside the requested project", () => {
+      mockRepo.getMemoryClaim.mockReturnValue(makeClaimRecord({ projectId: "other-project" }));
+
+      expect(() => service.getMemoryClaim("proj-1", "claim-1")).toThrow("Memory claim not found: claim-1");
+    });
+
+    it("updates claim mirror memories when a claim changes", () => {
+      const current = makeClaimRecord();
+      const updated = makeClaimRecord({ claim: "Updated durable project memory.", category: "decision", confidence: 0.6, durability: 0.9 });
+      const mirror = makeMemoryRecord({
+        id: "mem-claim-1",
+        scope: "project",
+        source: { type: "manual", originType: "memory_claim", originId: "claim-1" },
+      });
+      const updatedMirror = makeMemoryRecord({ id: mirror.id, scope: "project", content: updated.claim, category: "decision", strength: 0.9 });
+
+      mockRepo.getMemoryClaim.mockReturnValue(current);
+      mockRepo.updateMemoryClaim.mockReturnValue(updated);
+      mockRepo.listClaimMirrorMemories.mockReturnValue([mirror]);
+      mockRepo.updateMemory.mockReturnValue(updatedMirror);
+      mockEmbeddingService.isLoaded.mockReturnValue(false);
+
+      expect(service.updateMemoryClaim("proj-1", "claim-1", { claim: updated.claim })).toEqual(updated);
+      expect(mockRepo.updateMemory).toHaveBeenCalledWith(mirror.id, {
+        content: updated.claim,
+        category: "decision",
+        strength: 0.9,
+      });
+    });
+
+    it("adds evidence only when claim and memory belong to the project", () => {
+      const claim = makeClaimRecord();
+      const memory = makeMemoryRecord({ id: "mem-1", projectId: "proj-1" });
+      const evidence = { claimId: claim.id, memoryId: memory.id, supportType: "contradicts", weight: 0.4, createdAt: "2026-01-01T00:00:00Z" };
+
+      mockRepo.getMemoryClaim.mockReturnValue(claim);
+      mockRepo.getMemory.mockReturnValue(memory);
+      mockRepo.addMemoryClaimEvidence.mockReturnValue(evidence);
+
+      expect(service.addMemoryClaimEvidence("proj-1", {
+        claimId: claim.id,
+        memoryId: memory.id,
+        supportType: "contradicts",
+        weight: 0.4,
+      })).toEqual(evidence);
+    });
+
+    it("does not report destructive claim success when no row changed", () => {
+      mockRepo.getMemoryClaim.mockReturnValue(makeClaimRecord({ status: "deprecated" }));
+      mockRepo.deprecateMemoryClaim.mockReturnValue(null);
+
+      expect(() => service.deprecateMemoryClaim("proj-1", "claim-1")).toThrow("Memory claim was not changed: claim-1");
     });
   });
 
