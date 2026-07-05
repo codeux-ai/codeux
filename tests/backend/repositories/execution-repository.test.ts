@@ -83,6 +83,93 @@ afterEach(async () => {
       expect(snapshot).toBeDefined();
     });
 
+    it("logs provider invocation usage update shape without raw usage or secret-like values", async () => {
+      const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-execution-repo-"));
+      tempDirs.push(dir);
+      const storage = new AppDbStorage(path.join(dir, "app.db"));
+      const logger = {
+        debug: vi.fn(),
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+        child: vi.fn(),
+      };
+      logger.child.mockReturnValue(logger);
+      const projectRepository = new ProjectManagementRepository(storage);
+      const executionRepository = new ExecutionRepository(storage, undefined, logger as any);
+      const project = projectRepository.createProject({
+        name: "Telemetry Update Shape Project",
+        sourceType: "local",
+        sourceRef: "/workspace/telemetry-update-shape",
+      });
+      const usage = executionRepository.createProviderInvocationUsage({
+        projectId: project.id,
+        sessionId: "telemetry-session-1",
+        provider: "codex",
+        purpose: "task_coding",
+        status: "running",
+        startedAt: "2026-01-01T00:00:00.000Z",
+      });
+
+      const updated = executionRepository.updateProviderInvocationUsage(usage.id, {
+        status: "running",
+        model: "gpt-test",
+        nativeSessionId: "native-1",
+        durationMs: 1200,
+        transcriptChars: 48,
+        inputTokens: 10,
+        cachedInputTokens: 2,
+        outputTokens: 4,
+        reasoningOutputTokens: 1,
+        totalTokens: 17,
+        toolCallCount: 3,
+        usageSource: "reported",
+        rawUsageJson: { apiKey: "super-secret", transcript: "raw provider transcript" },
+      });
+
+      expect(updated.rawUsageJson).toEqual({ apiKey: "super-secret", transcript: "raw provider transcript" });
+      expect(logger.info).toHaveBeenCalledWith("Provider invocation usage updated", expect.objectContaining({
+        logPurpose: "invocation",
+        eventType: "provider_invocation_usage_updated",
+        providerInvocationId: usage.id,
+        projectId: project.id,
+        sessionId: "telemetry-session-1",
+        nativeSessionId: "native-1",
+        provider: "codex",
+        purpose: "task_coding",
+        status: "running",
+        model: "gpt-test",
+        durationMs: 1200,
+        transcriptChars: 48,
+        inputTokens: 10,
+        cachedInputTokens: 2,
+        outputTokens: 4,
+        reasoningOutputTokens: 1,
+        totalTokens: 17,
+        toolCallCount: 3,
+        usageSource: "reported",
+        rawUsageJsonPresent: true,
+        updatedFields: [
+          "cachedInputTokens",
+          "durationMs",
+          "inputTokens",
+          "model",
+          "nativeSessionId",
+          "outputTokens",
+          "rawUsageJson",
+          "reasoningOutputTokens",
+          "status",
+          "toolCallCount",
+          "totalTokens",
+          "transcriptChars",
+          "usageSource",
+        ],
+      }));
+      const loggedMetadata = JSON.stringify(logger.info.mock.calls);
+      expect(loggedMetadata).not.toContain("super-secret");
+      expect(loggedMetadata).not.toContain("raw provider transcript");
+    });
+
     it("claims provider invocation slots through the repository facade", async () => {
       const { projectRepository, executionRepository } = await createRepositories();
       const project = projectRepository.createProject({

@@ -59,6 +59,24 @@ The Dashboard General settings page stores separate system runtime settings for 
 
 `src/app/dependency-factory.ts` creates the root logger once and injects scoped child loggers into runtime services (core tool handler, activity cache, task rerun, CLI workflow, and router/dashboard paths).
 
+## Provider Telemetry Events
+
+Provider runtime telemetry is purpose-classified as `invocation`/`INVK` and must remain metadata-only. Logs can include provider, purpose, Code UX session id, execution invocation id, provider invocation id, native provider session id, token counters, transcript character count, usage source, and active `correlationId`. Logs must not include raw provider transcript text, API keys, provider environment values, or raw usage JSON payloads.
+
+Expected provider telemetry event types:
+
+- `provider_telemetry_poll_succeeded`: A watcher tick parsed reported provider usage and emitted deterministic counters.
+- `provider_telemetry_poll_partial`: A watcher tick emitted estimated or otherwise partial usage while the provider run is still active.
+- `provider_telemetry_poll_no_new_data`: Source metadata matched the previous successful tick, so the watcher skipped expensive transcript/database reads.
+- `provider_telemetry_poll_failed`: A watcher tick failed to read or parse provider telemetry; the error message is redacted and logged with invocation context.
+- `provider_invocation_usage_updated`: A provider invocation usage row was updated; logs include the update shape and summary counters, not raw usage payloads.
+
+Focused verification:
+
+```bash
+pnpm run test:backend -- tests/backend/infrastructure/providers/cli/provider-telemetry-watcher.test.ts tests/backend/repositories/execution-repository.test.ts
+```
+
 ## Operational Notes
 
 - For cross-system tracing, pass `x-correlation-id` on dashboard requests.
