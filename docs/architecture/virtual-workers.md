@@ -118,6 +118,7 @@ For merge conflicts, Code UX:
 
 - prepares an isolated Docker workspace on the PR source branch
 - seeds that Docker workspace from an exact-ref Git bundle fetch instead of cloning the bundle, using a private bootstrap `HEAD` ref so checked-out default branches cannot block the fetch; merge-conflict preparation passes the task source branch as the checkout branch and the feature target branch as the companion seed branch, fetching both into host `refs/remotes/origin/*` refs before bundling so the container can merge `origin/<targetBranch>` without falling back to stale or missing local refs
+- creates local branch aliases inside the Docker volume for requested branches that were available only as `origin/*` refs, so LOCAL-mode final merge repair can still run helper Git commands such as `git merge dev` against the configured default branch
 - configures a workspace-local Git identity and injects fallback author/committer environment variables for Docker-volume helper Git commands, so merge preparation and final merge commits do not depend on global container config
 - runs the helper Git/inspection commands inside that workspace as the same UID:GID that owns the volume so Git does not reject the repo as an unsafe `root` checkout
 - merges the target branch into it

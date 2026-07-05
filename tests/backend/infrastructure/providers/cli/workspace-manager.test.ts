@@ -444,6 +444,45 @@ describe("WorkspaceManager", () => {
     ]);
   });
 
+  it("creates local branch aliases in Docker prepare worktrees for requested remote-only refs", async () => {
+    vi.mocked(runCommandStrict).mockImplementation(async (command, args) => {
+      if (command === "git" && args[0] === "rev-parse" && args[1] === "--show-toplevel") {
+        return { ok: true, stdout: "/repo/project\n", stderr: "" } as any;
+      }
+      if (command === "git" && args[0] === "remote" && args[1] === "get-url") {
+        return { ok: true, stdout: "https://github.com/example/project.git\n", stderr: "" } as any;
+      }
+      if (command === "git" && args[0] === "fetch") {
+        return { ok: true, stdout: "", stderr: "" } as any;
+      }
+      if (command === "git" && args[0] === "show-ref") {
+        if (args.includes("refs/remotes/origin/feature/sprint-1") || args.includes("refs/remotes/origin/dev")) {
+          return { ok: true, stdout: "", stderr: "" } as any;
+        }
+        throw new Error("missing ref");
+      }
+      if (command === "docker" && args[0] === "volume" && args[1] === "inspect") {
+        throw new Error("missing");
+      }
+      return { ok: true, stdout: "", stderr: "", code: 0, signal: null } as any;
+    });
+
+    await manager.prepareWorktree(
+      "/repo/project",
+      "docker-volume://code-ux-project-abcd1234ef56-session-1",
+      "feature/sprint-1",
+      "dev",
+    );
+
+    const seedCall = vi.mocked(runCommandStrict).mock.calls.find((call) =>
+      call[0] === "docker"
+      && call[1].includes("--entrypoint")
+      && call[1].includes("sh")
+      && call[1].some((arg) => typeof arg === "string" && arg.includes("update-ref 'refs/heads/dev' 'refs/remotes/origin/dev'"))
+    );
+    expect(seedCall).toBeDefined();
+  });
+
   it("prefers the exact remote worker ref over a local worker ref", async () => {
     vi.mocked(runCommandStrict).mockImplementation(async (command, args) => {
       if (command === "git" && args[0] === "rev-parse" && args[1] === "--show-toplevel") {
