@@ -30,10 +30,13 @@ export async function evaluateInProgressState(args: {
   defaultBranch: string;
   hasActiveWorkerCiFixAttempt?: (task: Subtask, prNumber: number) => boolean;
 }): Promise<InProgressResult> {
-  args.task.status = "RUNNING";
+  const shouldKeepPolling =
+    args.hasPendingChecks ||
+    args.hasFailedChecks;
+  args.task.status = shouldKeepPolling ? "RUNNING" : "CODING_COMPLETED";
   args.task.merge_indicator = args.hasReviewBlockers && !args.hasFailedChecks && !args.hasPendingChecks ? "MERGE_BLOCKED" : "CI";
   const ciStateLabel = args.hasFailedChecks ? "failed" : args.hasPendingChecks ? "pending" : "green";
-  const header = args.ciIntelligence.waitForJulesCiAutofix ? "CI/Review Autofix Wait" : "CI/Review Merge Gate";
+  const header = args.hasFailedChecks ? "CI/Review Autofix Wait" : "CI/Review Merge Gate";
   const branchName = args.workerBranch || args.featureBranch;
 
   let reportText = buildInProgressText(args.task.id, args.pr.number, args.pr.url, branchName, ciStateLabel, header);
@@ -49,28 +52,27 @@ export async function evaluateInProgressState(args: {
 
     reportText += buildFailedChecksText(branchName, failedChecks, failedRuns, failedJobLabels);
 
-    if (args.ciIntelligence.waitForJulesCiAutofix) {
-      const escalation = await handleCiAutofixEscalation({
-        task: args.task,
-        prNumber: args.pr.number,
-        prUrl: args.pr.url,
-        branchName,
-        failedChecks,
-        failedRuns,
-        failedJobLabels,
-        automationLevel: args.automationLevel,
-        guardrailService: args.guardrailService,
-        isJulesApiConfigured: args.isJulesApiConfigured,
-        sendSessionMessage: args.sendSessionMessage,
-        repoPath: args.repoPath,
-        featureBranch: args.featureBranch,
-        defaultBranch: args.defaultBranch,
-        hasActiveWorkerCiFixAttempt: args.hasActiveWorkerCiFixAttempt,
-      });
-      reportText += escalation.reportTextAddition;
-      workerCiFixRequired = escalation.workerCiFixRequired;
-      workerCiFixPayload = escalation.workerCiFixPayload;
-    }
+    const escalation = await handleCiAutofixEscalation({
+      task: args.task,
+      prNumber: args.pr.number,
+      prUrl: args.pr.url,
+      branchName,
+      failedChecks,
+      failedRuns,
+      failedJobLabels,
+      automationLevel: args.automationLevel,
+      guardrailService: args.guardrailService,
+      isJulesApiConfigured: args.isJulesApiConfigured,
+      sendSessionMessage: args.sendSessionMessage,
+      repoPath: args.repoPath,
+      featureBranch: args.featureBranch,
+      defaultBranch: args.defaultBranch,
+      allowJulesSessionNotification: args.ciIntelligence.waitForJulesCiAutofix,
+      hasActiveWorkerCiFixAttempt: args.hasActiveWorkerCiFixAttempt,
+    });
+    reportText += escalation.reportTextAddition;
+    workerCiFixRequired = escalation.workerCiFixRequired;
+    workerCiFixPayload = escalation.workerCiFixPayload;
   }
 
   if (args.hasReviewBlockers) {
