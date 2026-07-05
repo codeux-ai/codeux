@@ -16,10 +16,11 @@ The script is deterministic, uses only Node built-ins, and does not read build o
 - Blocking: placeholder dependency wiring in `src/app/dependency-factory/**/*.ts`, including empty-object casts such as `{} as any`, `{} as unknown`, double casts through `any` or `unknown`, and empty objects cast directly to service-like dependency types.
 - Blocking: replayable persistence regressions for heavy dashboard snapshot events. The realtime event repository must only insert replayable events into `dashboard_realtime_events`, and snapshot publish tasks for `project.live.updated`, `project.execution.updated`, `project.runtime_status.updated`, `projects.updated`, and `overview.telemetry.updated` must publish with `replayable: false`.
 - Blocking: duplicate adjacent optimistic task insertion calls in `dashboard/src/v2/TasksPage.tsx` or the task board action helper. New task creation should insert one optimistic record and remove it after the confirmed refresh.
+- Blocking: substantial duplicate implementation blocks across production TypeScript and TSX. The duplicate scanner normalizes formatting, ignores imports and type-only declarations, and suppresses common JSX/Tailwind class fragments before comparing blocks.
 - Advisory: production TypeScript or TSX files above the configured line threshold.
 - Advisory: broad `any` patterns such as `: any`, `as any`, `Array<any>`, and `Record<..., any>`.
 
-The script exits nonzero for high-confidence stale artifacts and the blocking regression patterns above. Oversized files and existing broad `any` usage are reported as hotspots so maintainers can improve them during nearby work without breaking CI on accepted legacy debt.
+The script exits nonzero for high-confidence stale artifacts, duplicate implementation blocks, and the blocking regression patterns above. Oversized files and existing broad `any` usage are reported as hotspots so maintainers can improve them during nearby work without breaking CI on accepted legacy debt.
 
 ## Regression Rationale
 
@@ -31,7 +32,7 @@ The Tasks page uses optimistic records to make task creation feel immediate befo
 
 ## Manual Regression Checks
 
-There is no dedicated Vitest harness for `scripts/check-quality-guardrails.mjs` today. When changing the script, verify it directly:
+The duplicate-code detector has focused Vitest coverage under `tests/backend/scripts/quality-guardrails.test.ts`. When changing the full guardrail script, also verify it directly:
 
 ```bash
 pnpm run quality:guardrails
@@ -51,6 +52,8 @@ Current defaults:
 | --- | ---: | --- |
 | `CODEUX_GUARDRAIL_MAX_LINES` | `800` | Maximum advisory line count for production TypeScript and scripts. |
 | `CODEUX_GUARDRAIL_DASHBOARD_MAX_LINES` | `800` | Dashboard-specific advisory line count. |
+| `CODEUX_GUARDRAIL_DUPLICATE_MIN_LINES` | `80` | Minimum normalized implementation lines before a duplicated block can fail the guardrail. |
+| `CODEUX_GUARDRAIL_DUPLICATE_MIN_TOKENS` | `700` | Minimum normalized token count before a duplicated block can fail the guardrail. |
 | `CODEUX_GUARDRAIL_REPORT_LIMIT` | `20` | Maximum entries shown per advisory section. |
 
 Tune thresholds by raising or lowering the environment variables when running the script. Do not lower expectations by hiding risky files permanently; if a threshold needs to change, keep it paired with a rationale and a plan to reduce oversized modules or broad `any` usage over time.

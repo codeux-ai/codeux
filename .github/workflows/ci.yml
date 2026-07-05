@@ -49,6 +49,9 @@ jobs:
           path: .cache/tsc
           key: ${{ runner.os }}-tsc-${{ hashFiles('package.json', 'pnpm-lock.yaml', 'tsconfig.json', 'dashboard/tsconfig.json') }}
 
+      - name: Run Quality Guardrails
+        run: pnpm run quality:guardrails
+
       - name: Typecheck Backend & CLI
         run: pnpm run typecheck
 
