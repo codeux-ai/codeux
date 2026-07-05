@@ -7,10 +7,15 @@ import type {
   MemorySearchQuery,
   MemorySearchResult,
   MemoryClaimSearchResult,
+  MemoryClaimRecord,
+  MemoryClaimEvidenceLink,
   EmbeddingModelId,
   MemorySettings,
   MemoryClearTier,
   MemoryClearResult,
+  CreateMemoryClaimInput,
+  UpdateMemoryClaimInput,
+  AddMemoryClaimEvidenceInput,
 } from "../contracts/memory-types.js";
 import { MemoryRepository } from "../repositories/memory-repository.js";
 import { EmbeddingService } from "./embedding-service.js";
@@ -229,6 +234,89 @@ export class MemoryService {
 
   deleteMemory(memoryId: string): void {
     this.memoryRepository.deleteMemory(memoryId);
+  }
+
+  async createProjectMemoryClaim(
+    projectId: string,
+    input: CreateMemoryClaimInput,
+    evidence?: Omit<AddMemoryClaimEvidenceInput, "claimId">,
+  ): Promise<{ claim: MemoryClaimRecord; mirrorMemory: MemoryRecord; evidence?: MemoryClaimEvidenceLink }> {
+    for (const memoryId of [input.sourceMemoryId, evidence?.memoryId]) {
+      if (!memoryId) {
+        continue;
+      }
+      const memory = this.memoryRepository.getMemory(memoryId);
+      if (!memory || memory.projectId !== projectId) {
+        throw new Error(`Memory not found: ${memoryId}`);
+      }
+    }
+    this.configureEmbeddingProvider(projectId);
+    const claim = this.memoryRepository.createMemoryClaim(projectId, { ...input, sourceType: input.sourceType ?? "manual" });
+    const mirrorMemory = await this.createMemory(projectId, {
+      scope: "project",
+      content: claim.claim,
+      category: claim.category,
+      strength: Math.max(claim.confidence, claim.durability),
+      source: {
+        type: "manual",
+        originType: "memory_claim",
+        originId: claim.id,
+      },
+    });
+
+    const evidenceLink = evidence
+      ? this.addMemoryClaimEvidence(projectId, { ...evidence, claimId: claim.id })
+      : input.sourceMemoryId
+        ? this.addMemoryClaimEvidence(projectId, { claimId: claim.id, memoryId: input.sourceMemoryId, supportType: "supports", weight: 1 })
+        : undefined;
+
+    return { claim, mirrorMemory, evidence: evidenceLink };
+  }
+
+  listMemoryClaims(
+    projectId: string,
+    options: { status?: MemoryClaimRecord["status"]; category?: MemoryCategory; limit?: number } = {},
+  ): MemoryClaimRecord[] {
+    return this.memoryRepository.listMemoryClaims(projectId, options);
+  }
+
+  getMemoryClaim(projectId: string, claimId: string): MemoryClaimRecord {
+    const claim = this.memoryRepository.getMemoryClaim(claimId);
+    if (!claim || claim.projectId !== projectId) {
+      throw new Error(`Memory claim not found: ${claimId}`);
+    }
+    return claim;
+  }
+
+  updateMemoryClaim(projectId: string, claimId: string, input: UpdateMemoryClaimInput): MemoryClaimRecord {
+    this.getMemoryClaim(projectId, claimId);
+    const claim = this.memoryRepository.updateMemoryClaim(claimId, input);
+    for (const mirror of this.memoryRepository.listClaimMirrorMemories(projectId, claim.id)) {
+      this.updateMemory(mirror.id, {
+        content: claim.claim,
+        category: claim.category,
+        strength: Math.max(claim.confidence, claim.durability),
+      });
+    }
+    return claim;
+  }
+
+  addMemoryClaimEvidence(projectId: string, input: AddMemoryClaimEvidenceInput): MemoryClaimEvidenceLink {
+    this.getMemoryClaim(projectId, input.claimId);
+    const memory = this.memoryRepository.getMemory(input.memoryId);
+    if (!memory || memory.projectId !== projectId) {
+      throw new Error(`Memory not found: ${input.memoryId}`);
+    }
+    return this.memoryRepository.addMemoryClaimEvidence(input);
+  }
+
+  deprecateMemoryClaim(projectId: string, claimId: string): MemoryClaimRecord {
+    this.getMemoryClaim(projectId, claimId);
+    const claim = this.memoryRepository.deprecateMemoryClaim(projectId, claimId);
+    if (!claim) {
+      throw new Error(`Memory claim was not changed: ${claimId}`);
+    }
+    return claim;
   }
 
   /**

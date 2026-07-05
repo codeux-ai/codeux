@@ -620,6 +620,45 @@ describe("MemoryRepository", () => {
       });
       expect(repo.getMemory(promoted.id)).toEqual(promoted);
     });
+
+    it("lists project-scoped mirror memories for a claim", () => {
+      const claim = repo.createMemoryClaim(projectId, {
+        claim: "Direct project claim",
+        category: "learning",
+        confidence: 0.8,
+        durability: 0.8,
+      });
+      const mirror = repo.createMemory(projectId, makeInput({
+        scope: "project",
+        content: claim.claim,
+        category: claim.category,
+        source: { type: "manual", originType: "memory_claim", originId: claim.id },
+      }));
+      repo.createMemory(projectId, makeInput({
+        scope: "project",
+        content: "Unrelated project memory",
+        source: { type: "manual" },
+      }));
+
+      expect(repo.listClaimMirrorMemories(projectId, claim.id)).toEqual([mirror]);
+    });
+
+    it("deprecates a claim only when the project and status match", () => {
+      const claim = repo.createMemoryClaim(projectId, {
+        claim: "Claim to deprecate",
+        category: "learning",
+        confidence: 0.8,
+        durability: 0.8,
+      });
+      const otherProjectId = createTestProject(storage);
+
+      expect(repo.deprecateMemoryClaim(otherProjectId, claim.id)).toBeNull();
+
+      const deprecated = repo.deprecateMemoryClaim(projectId, claim.id);
+      expect(deprecated).toMatchObject({ id: claim.id, status: "deprecated" });
+      expect(repo.getMemoryClaim(claim.id)!.status).toBe("deprecated");
+      expect(repo.deprecateMemoryClaim(projectId, claim.id)).toBeNull();
+    });
   });
 
   describe("deleteSprintMemories", () => {

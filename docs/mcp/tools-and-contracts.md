@@ -191,6 +191,36 @@ For payload normalization in management tools, Code UX centralizes parsing behav
 
 The dedicated management tools (`manage_sprints`, `manage_tasks`, `manage_quicksprints`, `manage_scheduler`, `manage_settings`) and the legacy `manage_code_ux` dispatcher share the same action handlers.
 
+### `manage_memory` claim actions
+
+`manage_memory` supports durable long-term memory claim management in addition to raw memory actions. Project managers can create canonical project claims directly without a sprint ID:
+
+```json
+{
+  "action": "create_claim",
+  "projectId": "project-123",
+  "claim": "Use dependency factory composition for service wiring.",
+  "category": "patterns",
+  "confidence": 0.9,
+  "durability": 0.85,
+  "tags": ["architecture"],
+  "appliesToPaths": ["src/services"],
+  "sourceMemoryId": "mem-123"
+}
+```
+
+`create_claim` writes the canonical `memory_claims` row and a project-scoped mirror memory whose source metadata uses `originType: "memory_claim"` and `originId` equal to the claim ID. This preserves compatibility with semantic claim search, which retrieves project memories first and hydrates active claims from that source metadata. When `sourceMemoryId` is provided, the action also links it as supporting evidence unless a more specific `supportType` and `weight` are supplied.
+
+Available claim actions:
+- `create_claim`: requires `projectId` and non-blank `claim`; accepts `category`, `confidence`, `durability`, `tags`, `appliesToPaths`, `sourceMemoryId`, and `supersedesClaimId`.
+- `list_claims`: requires `projectId`; accepts `status`, `category`, and `limit`.
+- `get_claim`: requires `projectId` and `claimId`.
+- `update_claim`: requires `projectId` and `claimId`; accepts updated claim fields and keeps project mirror memories in sync.
+- `add_claim_evidence`: requires `projectId`, `claimId`, and `memoryId`; accepts `supportType` (`supports`, `contradicts`, or `supersedes`) and `weight`.
+- `deprecate_claim`: requires `projectId`, `claimId`, and explicit `approval.confirmed: true`. The first unconfirmed call returns the standard `approvalRequired` envelope and does not mutate state.
+
+Claim reads and writes remain project-scoped. A claim ID or evidence memory outside the provided project is rejected instead of being linked across project boundaries.
+
 For sprint create/update calls:
 - `name` is the canonical repository field.
 - `title` is accepted as a public MCP alias for `name`.
