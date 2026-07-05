@@ -77,6 +77,58 @@ describe("local directory routes", () => {
     expect(response.body.error).toBe("Access denied");
   });
 
+  it("rejects encoded traversal that resolves outside allowed roots", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-local-directories-"));
+    tempDirs.push(dir);
+    const encodedTraversal = `${dir}/%2e%2e/%2e%2e`;
+
+    const response = await request(createApp()).get(`/api/local-directories?path=${encodedTraversal}`);
+
+    expect(response.status).toBe(403);
+    expect(response.body.error).toBe("Access denied");
+    expect(response.text).not.toContain(dir);
+  });
+
+  it("rejects Windows-style separator traversal attempts without listing directories", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-local-directories-"));
+    tempDirs.push(dir);
+    const windowsTraversal = `${dir}\\..\\..`;
+
+    const response = await request(createApp()).get("/api/local-directories").query({ path: windowsTraversal });
+
+    expect(response.status).not.toBe(200);
+    expect(response.body.error).toMatch(/Access denied|Path does not exist|Failed to list directories/);
+  });
+
+  it("rejects absolute paths outside the allowed roots", async () => {
+    const outsideRoot = path.parse(process.cwd()).root;
+
+    const response = await request(createApp()).get("/api/local-directories").query({ path: outsideRoot });
+
+    expect(response.status).toBe(403);
+    expect(response.body.error).toBe("Access denied");
+  });
+
+  it("rejects symlink escapes outside allowed roots", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-local-directories-"));
+    tempDirs.push(dir);
+    const symlinkPath = path.join(dir, "outside-root");
+
+    try {
+      await fs.symlink(path.parse(process.cwd()).root, symlinkPath, "dir");
+    } catch (error: any) {
+      if (error?.code === "EPERM" || error?.code === "EACCES" || error?.code === "ENOTSUP") {
+        return;
+      }
+      throw error;
+    }
+
+    const response = await request(createApp()).get("/api/local-directories").query({ path: symlinkPath });
+
+    expect(response.status).toBe(403);
+    expect(response.body.error).toBe("Access denied");
+  });
+
   it("rejects file paths with sanitized error", async () => {
     const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-local-directories-"));
     tempDirs.push(dir);

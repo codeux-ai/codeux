@@ -1,5 +1,15 @@
-import { describe, it, expect } from "vitest";
+import { afterEach, describe, it, expect, vi } from "vitest";
 import { McpApprovalTracker } from "../../../src/services/mcp-approval-tracker.js";
+
+afterEach(() => {
+  vi.useRealTimers();
+});
+
+const createApproval = (message = "Requires approval.") => ({
+  action: { domain: "sprints", action: "delete", payload: { sprintId: "s1" } },
+  approvalMessage: message,
+  proposedAt: "2026-04-06T12:00:00Z",
+});
 
 describe("McpApprovalTracker", () => {
   it("should store and retrieve a pending approval", () => {
@@ -21,16 +31,53 @@ describe("McpApprovalTracker", () => {
     expect(tracker.takePending("req2")).toBeNull();
   });
 
+  it("should not return an approval for a mismatched correlation id", () => {
+    const tracker = new McpApprovalTracker();
+    const approval = createApproval();
+
+    tracker.setPending("req-expected", approval);
+
+    expect(tracker.takePending("req-other")).toBeNull();
+    expect(tracker.takePending("req-expected")).toEqual(approval);
+  });
+
   it("should clear pending approval after take", () => {
     const tracker = new McpApprovalTracker();
-    tracker.setPending("req3", {
-      action: { domain: "projects", action: "delete", payload: { id: "p1" } },
-      approvalMessage: "Requires approval.",
-      proposedAt: "2026-04-06T12:00:00Z",
-    });
+    tracker.setPending("req3", createApproval());
 
     expect(tracker.takePending("req3")).not.toBeNull();
     expect(tracker.takePending("req3")).toBeNull();
+  });
+
+  it("should reject duplicate approval attempts after the first take", () => {
+    const tracker = new McpApprovalTracker();
+    const approval = createApproval("Approve once.");
+    tracker.setPending("req-duplicate", approval);
+
+    expect(tracker.takePending("req-duplicate")).toEqual(approval);
+    expect(tracker.takePending("req-duplicate")).toBeNull();
+  });
+
+  it("should expire pending approvals after five minutes", () => {
+    vi.useFakeTimers();
+    const tracker = new McpApprovalTracker();
+    tracker.setPending("req-expired", createApproval());
+
+    vi.advanceTimersByTime((5 * 60 * 1000) + 1);
+
+    expect(tracker.takePending("req-expired")).toBeNull();
+  });
+
+  it("should ignore malformed approval correlation ids without clearing valid state", () => {
+    const tracker = new McpApprovalTracker();
+    const approval = createApproval("Valid approval.");
+    tracker.setPending("req-valid", approval);
+
+    tracker.setPending("" as unknown as string, createApproval("Malformed approval."));
+
+    expect(tracker.takePending({ value: "req-valid" } as unknown as string)).toBeNull();
+    expect(tracker.takePending(" " as unknown as string)).toBeNull();
+    expect(tracker.takePending("req-valid")).toEqual(approval);
   });
 
   it("should overwrite previous pending with latest for same id", () => {
