@@ -31,7 +31,10 @@ describe("RuntimeEventFeed", () => {
         render(<RuntimeEventFeed events={mockEvents} />);
 
         expect(screen.getAllByText("test event").length).toBeGreaterThan(0);
-        expect(document.querySelector('[role="log"][aria-label="Runtime feed"]')).toBeInTheDocument();
+        const feed = screen.getByRole("log", { name: "Runtime feed" });
+        expect(feed).toHaveAttribute("aria-live", "polite");
+        expect(feed).toHaveAttribute("aria-relevant", "additions text");
+        expect(feed).toHaveAttribute("aria-busy", "false");
         expect(screen.getByLabelText(/Runtime event: test event from System/i)).toBeInTheDocument();
         expect(gsap.fromTo).toHaveBeenCalled();
     });
@@ -40,6 +43,16 @@ describe("RuntimeEventFeed", () => {
         render(<RuntimeEventFeed events={[]} />);
         expect(screen.getByText("No runtime events yet")).toBeInTheDocument();
         expect(screen.getByRole("status")).toHaveAttribute("aria-live", "polite");
+        expect(screen.getByRole("status")).toHaveAttribute("aria-busy", "false");
+    });
+
+    it("announces loading state before events are available", () => {
+        render(<RuntimeEventFeed events={undefined} />);
+
+        const status = screen.getByRole("status");
+        expect(status).toHaveAttribute("aria-live", "polite");
+        expect(status).toHaveAttribute("aria-busy", "true");
+        expect(status).toHaveTextContent("Loading runtime events");
     });
 
     it("animates only new elements on same-length replacement", () => {
@@ -61,6 +74,7 @@ describe("RuntimeEventFeed", () => {
         vi.spyOn(useReducedMotionModule, 'useReducedMotion').mockReturnValue(true);
         render(<RuntimeEventFeed events={mockEvents} />);
         expect(screen.getAllByText("test event")[0]).toBeInTheDocument();
+        expect(screen.getByRole("log", { name: "Runtime feed" })).toHaveAttribute("aria-busy", "false");
         expect(gsap.fromTo).not.toHaveBeenCalled();
         vi.spyOn(useReducedMotionModule, 'useReducedMotion').mockReturnValue(false); // reset
     });
@@ -78,6 +92,7 @@ describe("RuntimeEventFeed", () => {
     it("handles undefined events gracefully", () => {
         render(<RuntimeEventFeed events={undefined} />);
         expect(gsap.fromTo).not.toHaveBeenCalled();
+        expect(screen.getByRole("status")).toHaveTextContent("Runtime feed status remains available while activity loads.");
     });
 
 });

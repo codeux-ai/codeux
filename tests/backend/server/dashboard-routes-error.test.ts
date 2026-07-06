@@ -84,6 +84,18 @@ describe("dashboard route handlers", () => {
       expectedNextError: null,
     },
     {
+      label: "explicit forbidden HttpRouteError",
+      route: "/api/status",
+      deps: {
+        getStatus: () => {
+          throw new HttpRouteError(403, "Forbidden request");
+        },
+      },
+      status: 403,
+      body: { error: "Forbidden request" },
+      expectedNextError: null,
+    },
+    {
       label: "unexpected sync error",
       route: "/api/status",
       deps: {

@@ -5,7 +5,14 @@ import { requireTrimmedString } from "./request-parsers.js";
 import { normalizeAndValidatePath } from "../services/file-browser-scan-policy.js";
 
 function requireValidatedFileBrowserPath(value: unknown): string {
-  return normalizeAndValidatePath(requireTrimmedString(value, "path"));
+  try {
+    return normalizeAndValidatePath(requireTrimmedString(value, "path"));
+  } catch (error) {
+    if (error instanceof URIError) {
+      throw new Error("Invalid file path: malformed encoding");
+    }
+    throw error;
+  }
 }
 
 export function registerFileBrowserRoutes(app: Express, deps: DashboardDependencies): void {

@@ -27,6 +27,24 @@ describe("CommandRunner", () => {
     await expect(runner.run("bad/command", [])).rejects.toThrow(/Unsafe command name/);
   });
 
+  it("keeps provider-like command names behind validation unless a test explicitly launches them", async () => {
+    vi.resetModules();
+    const spawn = vi.fn();
+    vi.doMock("child_process", () => ({ spawn }));
+
+    try {
+      const { CommandRunner: IsolatedCommandRunner } = await import("../../../../src/shared/subprocess/command-runner.js");
+      const isolatedRunner = new IsolatedCommandRunner();
+
+      await expect(isolatedRunner.run("codex exec", ["--help"])).rejects.toThrow(/Unsafe command name/);
+      await expect(isolatedRunner.run("docker run", ["hello-world"])).rejects.toThrow(/Unsafe command name/);
+      expect(spawn).not.toHaveBeenCalled();
+    } finally {
+      vi.doUnmock("child_process");
+      vi.resetModules();
+    }
+  });
+
   it("rejects null bytes in command arguments before spawning", async () => {
     await expect(runner.run(node, ["ok\0bad"])).rejects.toThrow(/null bytes/);
   });
