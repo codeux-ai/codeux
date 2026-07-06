@@ -38,6 +38,7 @@ Related docs: [Live Runtime Contract](./live-runtime-contract.md), [Execution Da
 
 - Add new execution fields by extending the relevant slice query and mapper, not by adding dashboard-side joins or polling extra endpoints from the Live page.
 - Keep slices visibly bounded: project-recent rows, selected-sprint rows, expanded sprint-run rows, and final payload caps should be explicit in the query module.
+- Cap owner slices before enrichment: active sprint-run discovery, expanded-run task dispatches, selected-sprint events, invocation fallback rows, and active attention rows must all have SQL-visible limits before usage or wall-time rollups run.
 - Use indexed scalar columns for hot filters and recency ordering. Avoid indexes over prompt text, transcripts, markdown, large JSON payloads, or provider output blobs.
 - When enriching usage, wall time, or invocation data, deduplicate ID sets first and use chunked `IN` queries through existing repository helpers.
 

@@ -6,6 +6,8 @@ import { ProjectAttentionSummaryRow } from "./execution-repository-types.js";
 import { ExecutionRuntimeEventSummaryRow } from "./execution-repository-types.js";
 import { getErrorMessage } from "../../shared/providers/provider-error-classifier.js";
 
+const ACTIVE_ATTENTION_PROJECT_LIMIT = 120;
+
 export function isOperatorInterventionAttentionRow(row: ProjectAttentionSummaryRow): boolean {
   return [
     "merge_required",
@@ -298,7 +300,8 @@ export function listActiveAttentionRowsForProject(db: Database, projectId: strin
     WHERE project_id = ?
       AND status IN ('open', 'claimed')
     ORDER BY updated_at DESC, opened_at DESC, id DESC
-  `).all(projectId) as unknown as ProjectAttentionSummaryRow[];
+    LIMIT ?
+  `).all(projectId, ACTIVE_ATTENTION_PROJECT_LIMIT) as unknown as ProjectAttentionSummaryRow[];
 }
 
 export function listActiveAttentionRowsForSprintRuns(storage: AppDbStorage, sprintRunIds: string[]): ProjectAttentionSummaryRow[] {
