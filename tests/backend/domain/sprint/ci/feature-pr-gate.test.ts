@@ -354,6 +354,51 @@ jobs:
     }
   });
 
+  it("skips stale empty CI waiting for an old clean PR with no checks or runs", async () => {
+    const repoPath = await createTempRepoWithWorkflow(`
+name: CI
+
+on:
+  pull_request:
+    branches: [feature/sprint1]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo ok
+    `);
+    context.repoPath = repoPath;
+    context.gitStatus.openPullRequests[0].checks = [];
+    context.gitStatus.openPullRequests[0].mergeStateStatus = "CLEAN";
+    context.gitStatus.openPullRequests[0].updatedAt = "2000-01-01T00:00:00Z";
+    context.gitStatus.ciRuns = [];
+    context.autoMergeFeaturePr = undefined;
+
+    try {
+      const result = await service.evaluateCiGate(subtasks, context);
+
+      expect(result.subtasks[0].status).toBe("CODING_COMPLETED");
+      expect(result.subtasks[0].merge_indicator).toBeUndefined();
+      expect(result.reportText).toContain("Feature PR Ready");
+      expect(result.reportText).toContain("CI wait skipped for base `feature/sprint1`");
+      expect(result.reportText).toContain("no PR checks or tracked CI runs appeared within 10 minutes");
+      expect(context.executionRepository?.appendTaskRunEvent).toHaveBeenCalledWith(
+        "run-1",
+        "ci_gate_status",
+        "system",
+        expect.objectContaining({
+          state: "ready_for_merge",
+          prNumber: 101,
+          ciWaitSkipped: true,
+        }),
+        expect.any(Object),
+      );
+    } finally {
+      await rm(repoPath, { recursive: true, force: true });
+    }
+  });
+
   it("auto-merges in always mode even while checks are pending", async () => {
     context.ciIntelligence.featurePrAutoMergeMode = "ALWAYS";
     context.gitStatus.openPullRequests[0].checks = [
