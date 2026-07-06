@@ -62,7 +62,7 @@ describe("QuicksprintPanel", () => {
     );
 
     fireEvent.click(screen.getByRole("button", { name: "Template 1" }));
-    fireEvent.click(screen.getByRole("button", { name: "Plan & Start" }));
+    fireEvent.click(screen.getAllByRole("button", { name: "Plan & Start" }).pop()!);
 
     await waitFor(() => {
       expect(screen.getByRole("progressbar")).toBeInTheDocument();
@@ -74,5 +74,54 @@ describe("QuicksprintPanel", () => {
     expect(capturedSignal?.aborted).toBe(false);
     expect(capturedShouldHandleResult?.()).toBe(false);
     expect(screen.getByRole("button", { name: "Template 1" })).toBeInTheDocument();
+  });
+
+  it("schedules a configured quicksprint with an after-sprint-end anchor", async () => {
+    const onSchedule = vi.fn().mockResolvedValue(undefined);
+
+    render(
+      <ExecutionTimelineProvider execution={null}>
+        <QuicksprintPanel
+          projectId="project-1"
+          onClose={vi.fn()}
+          onExecute={vi.fn()}
+          onSchedule={onSchedule}
+          scheduleAnchorSprintOptions={[{ id: "source-sprint-1", label: "Release prep" }]}
+          templates={[makeTemplate("1")]}
+          loading={false}
+        />
+      </ExecutionTimelineProvider>,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Template 1" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: /no limit/i }));
+    fireEvent.input(screen.getByPlaceholderText(/Add extra context or requirements/i), {
+      target: { value: "Only include deployment follow-ups." },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Plan Later" }));
+    fireEvent.click(screen.getByRole("button", { name: "After End" }));
+    fireEvent.click(screen.getByRole("button", { name: /quicksprint source sprint/i }));
+    fireEvent.click(screen.getByText("Release prep"));
+    fireEvent.input(screen.getByRole("spinbutton", { name: /offset minutes/i }), { target: { value: "30" } });
+
+    fireEvent.click(screen.getByRole("button", { name: "Schedule" }));
+
+    await waitFor(() => {
+      expect(onSchedule).toHaveBeenCalledTimes(1);
+    });
+    expect(onSchedule.mock.calls[0]?.[0]).toMatchObject({
+      templateId: "1",
+      taskCount: 5,
+      noTaskLimit: true,
+      submitMode: "plan_only",
+      additionalPrompt: "Only include deployment follow-ups.",
+      schedule: {
+        scheduleAnchor: {
+          mode: "after_sprint_end",
+          sourceSprintId: "source-sprint-1",
+          offsetMinutes: 30,
+        },
+      },
+    });
   });
 });

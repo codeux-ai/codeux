@@ -228,6 +228,7 @@ export const SprintsPage: FunctionComponent = () => {
     quicksprintLoading,
     agentPresets,
     handleQuicksprintExecute,
+    handleQuicksprintSchedule,
     handleCreateQuicksprintTemplate,
     handleUpdateQuicksprintTemplate,
     handleDeleteQuicksprintTemplate,
@@ -255,6 +256,16 @@ export const SprintsPage: FunctionComponent = () => {
   const activeRowMenuSprint = useMemo(() => rowMenu
     ? sortedSprints.find((sprint) => sprint.id === rowMenu.sprintId) || null
     : null, [rowMenu, sortedSprints]);
+
+  const scheduleAnchorSprintOptions = useMemo(
+    () => sortedSprints
+      .filter((sprint) => sprint.id !== editingSprint?.id)
+      .map((sprint) => ({
+        id: sprint.id,
+        label: sprint.name,
+      })),
+    [editingSprint?.id, sortedSprints],
+  );
 
   const mergeImportedTasks = useCallback((tasks: SprintImportedTaskInput[]) => {
     setPendingImportedTasks((current) => dedupeImportedTasks([...current, ...tasks]));
@@ -800,6 +811,7 @@ export const SprintsPage: FunctionComponent = () => {
                     defaultAgentRoutingMode={defaultAgentRoutingMode}
                     defaultWorkerAgentPresetId={defaultWorkerAgentPresetId}
                     planningEta={planningEta}
+                    scheduleAnchorSprintOptions={scheduleAnchorSprintOptions}
                     onClose={() => {
                       setShowCreateComposer(false);
                       setEditingSprint(null);
@@ -858,6 +870,8 @@ export const SprintsPage: FunctionComponent = () => {
                         animateLatestCell();
                       }
                     }}
+                    onSchedule={handleQuicksprintSchedule}
+                    scheduleAnchorSprintOptions={scheduleAnchorSprintOptions}
                     onCreateTemplate={handleCreateQuicksprintTemplate}
                     onUpdateTemplate={handleUpdateQuicksprintTemplate}
                     onDeleteTemplate={handleDeleteQuicksprintTemplate}
