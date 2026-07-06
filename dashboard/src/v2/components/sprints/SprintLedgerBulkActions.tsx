@@ -221,7 +221,7 @@ export const SprintLedgerBulkActions: FunctionComponent<SprintLedgerBulkActionsP
           </button>
         </div>
       </div>
-      <div className="sr-only">
+      <div className="sr-only" role="status" aria-live="polite" aria-atomic="true">
         {selectedCount === 0 && prevSelectedCount.current > 0 ? "Selection cleared" : feedbackMessage}
       </div>
     </div>
