@@ -68,7 +68,7 @@ The persistence and runtime layers live in:
 
 The dashboard API routes are:
 - `GET /api/projects/:projectId/scheduler?from=<iso>&to=<iso>`
-  - Returns persisted entries and expanded occurrences for the requested window.
+  - Returns persisted entries and expanded occurrences for the requested window. Anchored entries stay in `entries` but do not appear in `occurrences` until the source sprint reaches a terminal state; once resolved, the occurrence starts at the terminal sprint timestamp plus any configured offset.
 - `POST /api/projects/:projectId/scheduler`
   - Creates a scheduler entry.
   - Absolute entries use `scheduledFor`; anchored entries use `scheduleAnchor`.

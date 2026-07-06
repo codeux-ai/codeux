@@ -67,7 +67,13 @@ export class SchedulerService {
     const entries = this.deps.schedulerRepository.listEntries(projectId);
     return {
       entries,
-      occurrences: buildSchedulerOccurrences(entries, fromIso, toIso),
+      occurrences: buildSchedulerOccurrences(
+        entries,
+        fromIso,
+        toIso,
+        new Date().toISOString(),
+        (entry) => this.resolveAnchorOccurrenceStart(entry),
+      ),
       from: new Date(fromIso).toISOString(),
       to: new Date(toIso).toISOString(),
     };
@@ -331,6 +337,17 @@ export class SchedulerService {
     }
     const dueAt = new Date(anchorTime.getTime() + ((entry.scheduleAnchor.offsetMinutes ?? 0) * 60_000));
     return dueAt.getTime() <= now.getTime() ? dueAt.toISOString() : null;
+  }
+
+  private resolveAnchorOccurrenceStart(entry: SchedulerEntryRecord): string | null {
+    if (!entry.scheduleAnchor) {
+      return entry.scheduledFor;
+    }
+    const anchorTime = this.resolveAnchorSprintEndTime(entry.projectId, entry.scheduleAnchor);
+    if (!anchorTime) {
+      return null;
+    }
+    return new Date(anchorTime.getTime() + ((entry.scheduleAnchor.offsetMinutes ?? 0) * 60_000)).toISOString();
   }
 
   private resolveAnchorSprintEndTime(projectId: string, anchor: ScheduleAnchor): Date | null {
