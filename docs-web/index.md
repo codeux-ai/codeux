@@ -5,7 +5,7 @@
 > reviewed through Git and CI, and tracked in a live local dashboard — across hosted providers (like Jules)
 > and local CLI/Docker providers (like Gemini, Codex, Claude Code, Qwen Code, OpenCode, and Antigravity).
 
-This site is the canonical reference for installing, operating, integrating, and extending Code UX.
+This site is the public publication and reference mirror for installing, operating, integrating, and extending Code UX. Canonical docs live in `docs/`.
 
 ---
 
@@ -41,6 +41,4 @@ This site is the canonical reference for installing, operating, integrating, and
 
 ## Versioning and license
 
-This documentation tracks the current release line of the
-[`@codeuxai/codeux`](https://www.npmjs.com/package/@codeuxai/codeux) npm package. Code UX is released
-under the [MIT License](https://github.com/codeux-ai/codeux/blob/main/LICENSE).
+Code UX is released under the [MIT License](https://github.com/codeux-ai/codeux/blob/main/LICENSE).
