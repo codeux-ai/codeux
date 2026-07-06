@@ -43,6 +43,16 @@ pnpm run test:coverage
 pnpm run test:backend:coverage
 ```
 
+- Run focused persistence repository coverage after changing schema migrations,
+  SQLite storage lifecycle, or scoped settings resolution
+```bash
+pnpm run test:backend -- tests/backend/repositories/db/app-db-schema.test.ts tests/backend/repositories/app-db-storage.test.ts tests/backend/repositories/settings-repository.test.ts
+pnpm run test:backend:coverage
+pnpm run lint
+```
+
+Persistence migrations must be replay-safe: startup can execute `runMigrations()` repeatedly against an existing database without duplicating indexes, dropping migrated columns/tables, or damaging legacy rows. Tests for these paths should use `:memory:` databases or temporary homes, seed legacy table/payload shapes behaviorally, and close all SQLite handles before removing temporary paths.
+
 - Run the local fast CI mirror (strict TS validation plus tests)
 ```bash
 pnpm run ci

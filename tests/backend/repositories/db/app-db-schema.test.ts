@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { AppDbStorage } from "../../../../src/repositories/app-db-storage.js";
 import { SqliteDatabaseAdapter } from "../../../../src/repositories/db/sqlite-database-adapter.js";
 import { APP_DB_SCHEMA_TABLES } from "../../../../src/repositories/db/app-db-schema.js";
+import { runMigrations } from "../../../../src/repositories/db/app-db-migrations.js";
 import * as fs from "fs/promises";
 import * as os from "os";
 import * as path from "path";
@@ -60,44 +61,93 @@ describe("AppDbSchema", () => {
   it("initializes the database with all requested indexes", async () => {
     const dir = await fs.mkdtemp(path.join(os.tmpdir(), "db-schema-test-"));
     const adapter = new SqliteDatabaseAdapter(path.join(dir, "app.db"));
+    try {
+      adapter.exec(APP_DB_SCHEMA_TABLES);
 
-    adapter.exec(APP_DB_SCHEMA_TABLES);
+      const getIndex = (name: string) => {
+        return adapter.prepare("SELECT name FROM sqlite_master WHERE type='index' AND name=?").get(name);
+      };
+      const getIndexColumns = (name: (typeof liveSnapshotIndexNames)[number]) => {
+        return (adapter.prepare(`PRAGMA index_info('${name}')`).all() as Array<{ name: string }>)
+          .map((row) => row.name);
+      };
 
-    const getIndex = (name: string) => {
-      return adapter.prepare("SELECT name FROM sqlite_master WHERE type='index' AND name=?").get(name);
-    };
-    const getIndexColumns = (name: (typeof liveSnapshotIndexNames)[number]) => {
-      return (adapter.prepare(`PRAGMA index_info('${name}')`).all() as Array<{ name: string }>)
-        .map((row) => row.name);
-    };
-
-    expect(getIndex("idx_provider_invocations_provider_status")).toBeDefined();
-    expect(getIndex("idx_task_dispatches_project_executor_status_priority")).toBeDefined();
-    expect(getIndex("idx_task_runs_task_sprint_session")).toBeDefined();
-    expect(getIndex("idx_project_attention_items_project_owner_status")).toBeDefined();
-    expect(getIndex("idx_execution_invocations_provider_invocation")).toBeDefined();
-    for (const indexName of liveSnapshotIndexNames) {
-      expect(getIndex(indexName)).toBeDefined();
-      expect(getIndexColumns(indexName)).toEqual(liveSnapshotIndexColumns[indexName]);
+      expect(getIndex("idx_provider_invocations_provider_status")).toBeDefined();
+      expect(getIndex("idx_task_dispatches_project_executor_status_priority")).toBeDefined();
+      expect(getIndex("idx_task_runs_task_sprint_session")).toBeDefined();
+      expect(getIndex("idx_project_attention_items_project_owner_status")).toBeDefined();
+      expect(getIndex("idx_execution_invocations_provider_invocation")).toBeDefined();
+      for (const indexName of liveSnapshotIndexNames) {
+        expect(getIndex(indexName)).toBeDefined();
+        expect(getIndexColumns(indexName)).toEqual(liveSnapshotIndexColumns[indexName]);
+      }
+    } finally {
+      adapter.close();
+      await fs.rm(dir, { recursive: true, force: true });
     }
-
-    adapter.close();
   });
 
   it("creates execution snapshot indexes during in-memory startup migrations", () => {
     const storage = new AppDbStorage(":memory:");
-    const db = storage.getDatabase();
-    const getIndexColumns = (name: (typeof liveSnapshotIndexNames)[number]) => {
-      return (db.prepare(`PRAGMA index_info('${name}')`).all() as Array<{ name: string }>)
-        .map((row) => row.name);
-    };
+    try {
+      const db = storage.getDatabase();
+      const getIndexColumns = (name: (typeof liveSnapshotIndexNames)[number]) => {
+        return (db.prepare(`PRAGMA index_info('${name}')`).all() as Array<{ name: string }>)
+          .map((row) => row.name);
+      };
 
-    for (const indexName of liveSnapshotIndexNames) {
-      const row = db.prepare("SELECT name FROM sqlite_master WHERE type='index' AND name=?").get(indexName);
-      expect(row).toBeDefined();
-      expect(getIndexColumns(indexName)).toEqual(liveSnapshotIndexColumns[indexName]);
+      for (const indexName of liveSnapshotIndexNames) {
+        const row = db.prepare("SELECT name FROM sqlite_master WHERE type='index' AND name=?").get(indexName);
+        expect(row).toBeDefined();
+        expect(getIndexColumns(indexName)).toEqual(liveSnapshotIndexColumns[indexName]);
+      }
+    } finally {
+      storage.close();
     }
+  });
 
-    storage.close();
+  it("replays startup migrations without duplicating indexes or dropping migrated columns", () => {
+    const storage = new AppDbStorage(":memory:");
+    try {
+      const db = storage.getDatabase();
+
+      for (let replay = 0; replay < 3; replay += 1) {
+        runMigrations(db);
+      }
+
+      const getTable = (name: string) => db.prepare(`
+        SELECT name
+        FROM sqlite_master
+        WHERE type = 'table' AND name = ?
+      `).get(name);
+      const getColumnNames = (tableName: string) => (
+        db.prepare(`PRAGMA table_info(${tableName})`).all() as Array<{ name: string }>
+      ).map((row) => row.name);
+      const getIndexCount = (indexName: string) => {
+        const row = db.prepare(`
+          SELECT COUNT(*) AS count
+          FROM sqlite_master
+          WHERE type = 'index' AND name = ?
+        `).get(indexName) as { count: number };
+        return row.count;
+      };
+
+      expect(getTable("memory_claims")).toBeDefined();
+      expect(getTable("knowledge_documents")).toBeDefined();
+      expect(getTable("sprint_file_browser_sessions")).toBeDefined();
+      expect(getColumnNames("provider_invocations")).toEqual(expect.arrayContaining([
+        "tool_call_count",
+        "execution_mode",
+        "jules_tokens",
+        "invocation_source",
+        "token_accounting_version",
+      ]));
+      expect(getColumnNames("task_run_events")).toContain("project_id");
+      expect(getIndexCount("idx_task_run_events_project_created")).toBe(1);
+      expect(getIndexCount("idx_guardrail_ledger_task_purpose")).toBe(1);
+      expect(getIndexCount("idx_memory_claims_project_fingerprint_active")).toBe(1);
+    } finally {
+      storage.close();
+    }
   });
 });
