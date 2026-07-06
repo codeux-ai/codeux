@@ -210,6 +210,7 @@ describe("sanitizeCustomMcpServers", () => {
   it("drops HTTP servers targeting unsafe or ambiguous network destinations", () => {
     const result = sanitizeCustomMcpServers([
       { id: "metadata", name: "metadata", url: "http://169.254.169.254/latest/meta-data", transport: "http" },
+      { id: "mapped-metadata", name: "mapped_metadata", url: "http://[::ffff:169.254.169.254]/mcp", transport: "http" },
       { id: "metadata-host", name: "metadata_host", url: "http://metadata.google.internal/computeMetadata/v1", transport: "http" },
       { id: "link-local-v6", name: "link_local_v6", url: "http://[fe80::1]/mcp", transport: "http" },
       { id: "multicast-v4", name: "multicast_v4", url: "http://224.0.0.1/mcp", transport: "http" },
@@ -222,10 +223,11 @@ describe("sanitizeCustomMcpServers", () => {
       { id: "localhost", name: "localhost", url: "http://localhost:3000/mcp", transport: "http" },
       { id: "ipv4-loopback", name: "ipv4_loopback", url: "http://127.0.0.1:3000/mcp", transport: "http" },
       { id: "ipv6-loopback", name: "ipv6_loopback", url: "http://[::1]:3000/mcp", transport: "http" },
+      { id: "mapped-loopback", name: "mapped_loopback", url: "http://[::ffff:127.0.0.1]:3000/mcp", transport: "http" },
       { id: "remote", name: "remote", url: "https://mcp.example.com/sse", transport: "http" },
     ]);
 
-    expect(result.map((s) => s.id)).toEqual(["localhost", "ipv4-loopback", "ipv6-loopback", "remote"]);
+    expect(result.map((s) => s.id)).toEqual(["localhost", "ipv4-loopback", "ipv6-loopback", "mapped-loopback", "remote"]);
   });
 
   it("sanitizes headers to drop invalid names and control chars in values", () => {
