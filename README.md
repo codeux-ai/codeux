@@ -361,6 +361,11 @@ GitHub Actions also runs the high-severity dependency audit after the consolidat
 pnpm run audit
 ```
 
+Additional GitHub Actions behavior:
+
+- Playwright E2E runs only on pushes to `main` and pull requests targeting `main`.
+- The models.dev catalogue workflow runs on pushes to `main` and `dev`. When upstream catalogue data changes, it uses the built-in `GITHUB_TOKEN` to push a `chore/models-catalog-<branch>` update branch and open a PR. The repository or organization must allow GitHub Actions to create pull requests, and the workflow grants `contents: write` plus `pull-requests: write`.
+
 ## Contributing
 
 Code UX is open source and contributions are welcome. Open an
