@@ -76,12 +76,14 @@ pnpm run test:e2e -- tests/e2e/app-release-smoke.spec.ts -g "normal app shell"
 
 The release-style E2E suite lives under `tests/e2e` and exercises the production-style dashboard served by the compiled server. It is not a provider orchestration test suite: specs must avoid provider credentials, Docker provider startup, project setup automation, worker dispatch, and sprint execution endpoints. The current coverage includes:
 
-- `tests/e2e/app-release-smoke.spec.ts`, which verifies the normal app shell, core dashboard routes, responsive task-board behavior, route landmarks, and unexpected browser errors.
+- `tests/e2e/app-release-smoke.spec.ts`, which verifies the normal app shell, local startup health, core dashboard routes, responsive task-board behavior, route landmarks, and unexpected browser errors.
 - `tests/e2e/project-setup-release.spec.ts`, which verifies first-run onboarding completion, visible Add Project modal behavior for a credential-free local directory under the OS temp path, dashboard project selection, `/projects` landmarks, `/tasks` navigation, loading/error checks, and desktop/mobile overflow checks without provider secrets or orchestration endpoints.
 - `tests/e2e/sprint-task-lifecycle.spec.ts`, which verifies draft sprint and implementation task create/edit/delete behavior through the visible dashboard flows and collection API assertions.
-- `tests/e2e/helpers/prepare-app.ts`, which prepares deterministic app state through dashboard HTTP APIs for onboarding, local project selection, draft sprint setup, task setup, updates, deletes, and cleanup.
+- `tests/e2e/helpers/prepare-app.ts`, which prepares deterministic app state through dashboard HTTP APIs for onboarding, local project selection, draft sprint setup, task setup, updates, deletes, cleanup, local startup assertions, local-only navigation assertions, and per-worker/retry fixture isolation assertions.
 
-`playwright.config.ts` uses Chromium, `http://127.0.0.1:4444`, `fullyParallel: false`, CI retries, and the GitHub plus HTML reporters in CI. It checks `/health` instead of `/ready` because a clean run may not have project live-status activity, while liveness is enough to know the compiled web app accepted the browser session.
+`playwright.config.ts` uses Chromium, `http://127.0.0.1:4444`, `fullyParallel: false`, `workers: 1`, `reuseExistingServer: false`, CI retries, and the GitHub plus HTML reporters in CI. It checks `/health` instead of `/ready` because a clean run may not have project live-status activity, while liveness is enough to know the compiled web app accepted the browser session. The config retains traces and videos on failure, captures screenshots only on failure, writes Playwright output to `test-results/`, writes the HTML report to `playwright-report/`, starts only the compiled server with `node dist/index.js`, and injects the same temporary `HOME` and `USERPROFILE` into the web server process.
+
+The root smoke helpers assert these guarantees directly: `expectLocalAppReady` calls `/health`, verifies the `UP` liveness payload, loads the dashboard shell from `baseURL`, and checks the shell title. `installLocalNavigationGuard` records main-frame navigations and fails the spec if a test leaves the configured local origin. Fixture helpers derive project names and paths from a sanitized run id plus Playwright worker, repeat, retry, and fixture key, so retries stay deterministic while each worker/retry uses a distinct temp project path.
 
 ### E2E Authoring Rules
 
@@ -89,6 +91,7 @@ Root E2E specs should prepare normal app state through `tests/e2e/helpers/prepar
 
 - Use `completeOnboarding`, `ensureSelectedProject`, `createDraftSprint`, and `createTaskInSprint` for setup instead of hand-writing setup requests in each spec.
 - Use unique fixture keys and generated names from the helper utilities so parallel workers and retries do not collide.
+- Assert desktop and mobile behavior in release-style specs when layout or accessibility can regress across viewports. Use `page.setViewportSize` inside the existing Chromium project instead of adding broad parallel browser projects.
 - Prefer role-based locators, accessible names, landmarks, and stable `data-testid` roots over CSS shape or timing assertions.
 - For live-updating menus or dropdowns, keep helper clicks idempotent: reopen the menu and retry if a located item detaches between visibility and click, while still asserting the accessible action is visible before each attempt.
 - Build paths with Node `os`, `path`, and `fs` APIs so fixtures remain portable on Windows, macOS, and Linux.
@@ -100,7 +103,7 @@ Root E2E specs should prepare normal app state through `tests/e2e/helpers/prepar
 
 The Playwright workflow is `.github/workflows/playwright.yml`. It runs on pushes and pull requests targeting `main`, keeping the heavyweight OS-matrix E2E lane on the release path while `dev` remains gated by core CI.
 
-The workflow matrix covers `ubuntu-latest`, `macos-latest`, and `windows-latest`. It installs dependencies with pnpm 10.33.0 on Node 22, builds the server and dashboard before Playwright starts `node dist/index.js`, caches browser binaries under `.cache/ms-playwright`, installs Linux Chromium system dependencies only on Linux runners, and runs the same `pnpm run test:e2e` script used locally. Linux and macOS restore a `node_modules` cache for speed; Windows intentionally skips that cache and performs a clean pnpm install so pnpm's nested package links are regenerated instead of reusing a stale symlink tree. It uploads `test-results/` and `playwright-report/` as the `playwright-artifacts` workflow artifact for seven days, with empty uploads ignored so successful runs do not fail if no failure artifacts were produced.
+The workflow matrix covers `ubuntu-latest`, `macos-latest`, and `windows-latest`. It installs dependencies with pnpm 10.33.0 on Node 22, builds the server and dashboard before Playwright starts `node dist/index.js`, caches browser binaries under `.cache/ms-playwright`, installs Linux Chromium system dependencies only on Linux runners, always runs `pnpm exec playwright install chromium` after restoring the browser cache, and runs the same `pnpm run test:e2e` script used locally. Linux and macOS restore a `node_modules` cache for speed; Windows intentionally skips that cache and performs a clean pnpm install so pnpm's nested package links are regenerated instead of reusing a stale symlink tree. It uploads `test-results/` and `playwright-report/` as `playwright-artifacts-<os>` artifacts for seven days, with empty uploads ignored so successful runs do not fail if no failure artifacts were produced.
 
 This lane is credential-free. It validates the compiled dashboard and server, including project setup coverage through `tests/e2e/project-setup-release.spec.ts`, without provider keys, Docker provider startup, project setup automation, sprint orchestration, or real project state.
 

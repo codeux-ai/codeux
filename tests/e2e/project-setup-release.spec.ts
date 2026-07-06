@@ -3,7 +3,12 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import type { ProjectSummary } from '../../src/contracts/project-management-types.js';
-import { completeOnboarding, createE2eFixturePrefix, fetchProjectsViaApi } from './helpers/prepare-app';
+import {
+  completeOnboarding,
+  createE2eFixturePrefix,
+  fetchProjectsViaApi,
+  installLocalNavigationGuard,
+} from './helpers/prepare-app';
 import { deleteProjectViaApi } from './helpers/e2e-api';
 
 const benignConsoleErrorPatterns = [
@@ -112,9 +117,13 @@ test.describe('credential-free project setup release flow', () => {
 
   test('adds an isolated local project through the dashboard and keeps shell navigation stable', async ({ page, request }, testInfo) => {
     const errors = installErrorCapture(page);
+    const assertNoExternalNavigation = installLocalNavigationGuard(page, testInfo);
     const prefix = createE2eFixturePrefix({ testInfo, fixtureKey: 'project-setup-release' });
     const projectName = `${prefix} local project`;
     const projectDir = path.join(os.tmpdir(), 'codeux-e2e-project-setup', prefix);
+    expect(prefix).toContain(`e2e-w${testInfo.workerIndex}-r${testInfo.repeatEachIndex}-try${testInfo.retry}-`);
+    expect(projectName).toContain(prefix);
+    expect(projectDir).toContain(prefix);
     await fs.mkdir(projectDir, { recursive: true });
 
     await completeOnboarding(request);
@@ -162,5 +171,6 @@ test.describe('credential-free project setup release flow', () => {
     await expectProjectSelectedInShell(page, projectName);
     await expectNoHorizontalOverflow(page);
     await expectNoCapturedErrors(errors);
+    assertNoExternalNavigation();
   });
 });
