@@ -4,8 +4,11 @@ import { describe, expect, it } from "vitest";
 
 const WORKFLOWS = {
   ci: ".github/workflows/ci.yml",
+  desktopRelease: ".github/workflows/desktop-release.yml",
+  release: ".github/workflows/release.yml",
   playwright: ".github/workflows/playwright.yml",
   releaseChecks: ".github/workflows/release-checks.yml",
+  openrouterSprintE2e: ".github/workflows/openrouter-sprint-e2e.yml",
 } as const;
 
 const PLAYWRIGHT_CONFIG = "playwright.config.ts";
@@ -95,6 +98,23 @@ function expectWorkflowStepAfter(workflow: string, firstStepName: string, second
   expectCommandBefore(workflow, `- name: ${firstStepName}`, `- name: ${secondStepName}`);
 }
 
+function expectPinnedMajorActionVersions(workflow: string, label: string): void {
+  const actionUses = workflow.match(/uses:\s*[^@\s]+@[^\s]+/g) ?? [];
+
+  expect(actionUses.length, `${label} should use GitHub Actions`).toBeGreaterThan(0);
+  for (const actionUse of actionUses) {
+    expect(actionUse, `${label} should pin action versions to an explicit major version`).toMatch(/@v\d+$/);
+  }
+}
+
+function expectNoBroadWorkflowPermissions(workflow: string, label: string): void {
+  expect(workflow, `${label} should declare explicit workflow or job permissions`).toContain("permissions:");
+  expect(workflow, `${label} should not request write-all permissions`).not.toMatch(/permissions:\s*write-all/);
+  expect(workflow, `${label} should not grant actions write permissions`).not.toMatch(/actions:\s*write/);
+  expect(workflow, `${label} should not grant packages write permissions`).not.toMatch(/packages:\s*write/);
+  expect(workflow, `${label} should not grant pull request write permissions`).not.toMatch(/pull-requests:\s*write/);
+}
+
 describe("GitHub workflow health", () => {
   it("keeps package toolchain policy pinned to pnpm 10.33.0 and Node 22", async () => {
     const packageJson = JSON.parse(await readRepoFile("package.json")) as PackageJson;
@@ -124,6 +144,44 @@ describe("GitHub workflow health", () => {
     expect(getJobBlock(ci, "test-backend")).toContain("pnpm run test:backend:coverage");
     expect(getJobBlock(ci, "test-dashboard")).toContain("pnpm run test:dashboard");
     expect(getJobBlock(ci, "build")).toContain("pnpm run build");
+  });
+
+  it("keeps security-relevant workflows on least-privilege permissions and pinned major actions", async () => {
+    const workflows = await Promise.all(
+      Object.entries(WORKFLOWS).map(async ([label, workflowPath]) => [
+        label,
+        await readRepoFile(workflowPath),
+      ] as const),
+    );
+
+    for (const [label, workflow] of workflows) {
+      expectPinnedMajorActionVersions(workflow, label);
+      expectNoBroadWorkflowPermissions(workflow, label);
+    }
+
+    expect(await readRepoFile(WORKFLOWS.release)).toMatch(/permissions:\n      contents: read\n      id-token: write/);
+    expect(await readRepoFile(WORKFLOWS.desktopRelease)).toMatch(/permissions:\n  contents: write/);
+  });
+
+  it("keeps dependency-risk workflows running audit after script-free installs", async () => {
+    const [ci, release, releaseChecks, desktopRelease] = await Promise.all([
+      readRepoFile(WORKFLOWS.ci),
+      readRepoFile(WORKFLOWS.release),
+      readRepoFile(WORKFLOWS.releaseChecks),
+      readRepoFile(WORKFLOWS.desktopRelease),
+    ]);
+
+    expect(getJobBlock(ci, "security-audit")).toContain("run: pnpm run audit");
+
+    for (const [label, workflow] of [
+      ["release", release],
+      ["releaseChecks", releaseChecks],
+      ["desktopRelease", desktopRelease],
+    ] as const) {
+      expect(workflow, `${label} should install dependencies without lifecycle scripts`).toContain(REQUIRED_INSTALL);
+      expect(workflow, `${label} should audit release dependencies`).toContain("run: pnpm run audit");
+      expectCommandBefore(workflow, "run: pnpm install --frozen-lockfile --ignore-scripts", "run: pnpm run audit");
+    }
   });
 
   it("keeps CI cache keys stable and tied to dependency and config hashes", async () => {
@@ -197,7 +255,9 @@ describe("GitHub workflow health", () => {
     expect(releaseChecks).toContain("workflow_dispatch:");
     expect(releaseChecks).toContain("pnpm run build");
     expect(releaseChecks).toContain("node scripts/verify-release-install.mjs");
+    expectCommandBefore(releaseChecks, "run: pnpm run audit", "run: pnpm run build");
     expect(releaseChecks).toContain("pnpm run electron:install-deps");
+    expectCommandBefore(releaseChecks, "run: pnpm install --frozen-lockfile --ignore-scripts", "run: pnpm run electron:install-deps");
     expect(releaseChecks).toContain("pnpm run ${{ matrix.electron-script }} -- --publish never");
     expectCacheKey(releaseChecks, "-release-checks-", [
       "package.json",

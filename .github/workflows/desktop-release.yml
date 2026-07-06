@@ -86,7 +86,10 @@ jobs:
           sudo apt-get install --no-install-recommends -y libopenjp2-tools
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: pnpm install --frozen-lockfile --ignore-scripts
+
+      - name: Run Security Audit
+        run: pnpm run audit
 
       - name: Rebuild Electron native dependencies
         run: pnpm run electron:install-deps

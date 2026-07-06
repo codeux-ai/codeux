@@ -8,6 +8,25 @@ Dependency vulnerability scanning is enforced via our CI/CD pipeline.
 
 During the CI process, dependencies are evaluated with `pnpm run audit` (which enforces `pnpm audit --audit-level=high`) alongside normal tests and builds. The process respects the frozen lockfile installation structure and blocks builds with high-severity risks.
 
+Release publishing, release checks, and desktop packaging workflows also run `pnpm run audit` after dependency installation and before packaging or publishing artifacts. This keeps dependency risk evaluation on every artifact-producing path, not only on pull request CI.
+
+## Supply-Chain Workflow Guardrails
+
+Automated guardrails enforce the repository's dependency and workflow security posture:
+
+- GitHub Actions dependency installs must use `pnpm install --frozen-lockfile --ignore-scripts`. Packaging workflows that need native Electron rebuilds keep the install script-free and run the explicit rebuild step (`pnpm run electron:install-deps`) afterward.
+- Security-relevant workflows declare explicit least-privilege `permissions` and pin action references to the major action versions already used by the project.
+- `scripts/check-quality-guardrails.mjs` scans production code and scripts for `curl | bash`, `wget | sh`, `eval`, shell-enabled child process execution, and Docker `--privileged` usage.
+- Known provider CLI fallback installers are narrowly allowlisted by exact source line and rationale. They remain bounded to documented provider hosts, run inside provider containers, and are used only when the expected provider command is absent.
+
+Local verification:
+
+```bash
+pnpm run test:backend -- tests/backend/scripts/quality-guardrails.test.ts tests/backend/ci/workflow-health.test.ts
+pnpm run quality:guardrails
+pnpm run audit
+```
+
 ## Implemented Protections
 
 While Code UX trusts the developer and any connected systems, several specific protections constrain the application attack surface, primarily against cross-site attacks, path escapes, and SSRF risks if the application is bound to accessible network interfaces.
