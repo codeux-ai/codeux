@@ -24,6 +24,7 @@ While Code UX trusts the developer and any connected systems, several specific p
 ### MCP Gateway
 - **Session Hardening & Bearer Auth:** The Model Context Protocol (MCP) HTTP gateway implements robust session and lifecycle constraints. When the MCP service is configured for non-loopback access, it mandates HTTP Bearer token authentication to proceed. Unauthenticated external access will result in an immediate rejection (`401 Unauthorized`).
 - **MCP Config Validation:** The gateway rigorously validates all incoming configurations and payloads against the Model Context Protocol schemas, ensuring only properly structured instructions are executed.
+- **Approval Correlation Guard:** MCP approval tracking accepts only bounded correlation ID shapes and rejects malformed, path-like, or token-like values without clearing valid pending approvals.
 
 ### Preview & File Capabilities
 - **File-Browser Path Constraints:** The file-browser strictly enforces directory containment. Path traversal attempts (using `..` or null-byte injections) are validated out; the service prevents any reading or exploration of directories outside the target workspace.
@@ -35,7 +36,7 @@ While Code UX trusts the developer and any connected systems, several specific p
 - **Preview CORS Compatibility:** Preview-host traffic answers CORS preflights and overrides upstream `Access-Control-*` headers at the proxy boundary. The dashboard API origin keeps its CSRF guard; only preview-host origins get permissive local-app CORS behavior.
 
 ### Redaction
-- **Log and Output Filtering:** Internal API keys, credentials, and sensitive configurations are actively scrubbed and redacted from application logs, debug outputs, and exported execution traces.
+- **Log and Output Filtering:** Internal API keys, credentials, and sensitive configurations are actively scrubbed and redacted from application logs, debug outputs, and exported execution traces. The shared redactor covers provider API keys, OpenAI-compatible key shapes, GitHub/GitLab/Jira tokens, bearer/basic authorization headers, URL credentials, nested arrays, and error messages/stacks.
 - **Settings Secret Inputs:** Dashboard settings fields that store provider API keys, Git host tokens, Jira API tokens, and external embedding API keys render as masked secret inputs by default. Operators must explicitly use the reveal control to inspect a value.
 - **Docker Secret Transport:** Provider and preview Docker launches write selected host/provider environment variables to temporary `0600` env-files and pass those files via `--env-file`. This keeps API keys and Git tokens out of the host `docker run` argv visible through process listings while preserving the same container environment.
 

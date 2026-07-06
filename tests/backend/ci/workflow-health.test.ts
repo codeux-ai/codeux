@@ -18,6 +18,7 @@ type PackageJson = {
   engines?: {
     node?: string;
   };
+  scripts?: Record<string, string>;
 };
 
 async function readRepoFile(path: string): Promise<string> {
@@ -40,6 +41,15 @@ function expectWorkflowToolchain(workflow: string, label: string): void {
   expect(workflow, `${label} should pin setup-node`).toMatch(/uses: actions\/setup-node@v\d+/);
   expect(workflow, `${label} should pin Node 22`).toMatch(/node-version: 22/);
   expect(workflow, `${label} should use frozen lockfile installs without lifecycle scripts`).toContain(REQUIRED_INSTALL);
+}
+
+function expectJobToolchain(job: string, label: string): void {
+  expect(job, `${label} should pin pnpm/action-setup`).toMatch(/uses: pnpm\/action-setup@v\d+/);
+  expect(job, `${label} should pin pnpm version`).toMatch(/version: 10\.33\.0/);
+  expect(job, `${label} should disable action-driven installs`).toContain("run_install: false");
+  expect(job, `${label} should pin setup-node`).toMatch(/uses: actions\/setup-node@v\d+/);
+  expect(job, `${label} should pin Node 22`).toMatch(/node-version: 22/);
+  expect(job, `${label} should use frozen lockfile installs without lifecycle scripts`).toContain(REQUIRED_INSTALL);
 }
 
 function expectConcurrencyCancellation(workflow: string, label: string): void {
@@ -68,6 +78,10 @@ function expectJobRunsCommandIndependently(workflow: string, jobName: string, co
   expect(job, `${jobName} should be an independent job without a needs dependency`).not.toMatch(/^    needs:/m);
 }
 
+function expectJobDoesNotRunCommand(workflow: string, jobName: string, command: string): void {
+  expect(getJobBlock(workflow, jobName), `${jobName} should not run ${command}`).not.toContain(`run: ${command}`);
+}
+
 function expectCommandBefore(workflow: string, before: string, after: string): void {
   const beforeIndex = workflow.indexOf(before);
   const afterIndex = workflow.indexOf(after);
@@ -87,6 +101,7 @@ describe("GitHub workflow health", () => {
 
     expect(packageJson.packageManager).toBe(`pnpm@${PACKAGE_MANAGER_VERSION}`);
     expect(packageJson.engines?.node).toBe(`>=${NODE_VERSION}`);
+    expect(packageJson.scripts?.audit).toBe("pnpm audit --audit-level=high");
   });
 
   it("keeps core CI split into auditable jobs with independent security audit", async () => {
@@ -100,6 +115,10 @@ describe("GitHub workflow health", () => {
     }
 
     expectJobRunsCommandIndependently(ci, "security-audit", "pnpm run audit");
+    expectJobToolchain(getJobBlock(ci, "security-audit"), "CI security audit");
+    for (const jobName of ["typecheck", "test-backend", "test-dashboard", "build"]) {
+      expectJobDoesNotRunCommand(ci, jobName, "pnpm run audit");
+    }
     expect(getJobBlock(ci, "typecheck")).toContain("pnpm run quality:guardrails");
     expect(getJobBlock(ci, "typecheck")).toContain("pnpm run typecheck");
     expect(getJobBlock(ci, "test-backend")).toContain("pnpm run test:backend:coverage");
