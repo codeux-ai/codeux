@@ -301,12 +301,8 @@ export const SprintActionMenu: FunctionComponent<SprintActionMenuProps> = ({
         type="button"
         role={role}
         onClick={() => {
-          void confirmMenuAction({
-            title: "Delete Sprint",
-            body: `Delete sprint "${sprint.name}" and its tasks? This action cannot be undone.`,
-            confirmLabel: "Delete",
-            destructive: true,
-          }, onDelete);
+          onClose?.();
+          onDelete?.();
         }}
         disabled={deleteBusy}
         aria-busy={deleteBusy}

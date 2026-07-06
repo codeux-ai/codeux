@@ -2,7 +2,7 @@
 /** @vitest-environment happy-dom */
 import { h } from "preact";
 import { afterEach, describe, it, expect, vi } from "vitest";
-import { act, cleanup, render, screen, fireEvent, waitFor } from "@testing-library/preact";
+import { cleanup, render, screen, fireEvent, waitFor } from "@testing-library/preact";
 import { within } from "@testing-library/preact";
 import { SprintControls } from "../../../dashboard/src/v2/components/sprints/SprintControls.js";
 import { SprintActionMenu } from "../../../dashboard/src/v2/components/sprints/SprintActionMenu.js";
@@ -119,7 +119,7 @@ describe("SprintActionMenu confirmation gates", () => {
     });
   });
 
-  it("does not stop or delete a sprint on cancel and deletes only after hold confirmation", async () => {
+  it("does not stop a sprint on cancel and forwards delete to the page-level confirmation flow", async () => {
     const onPrimaryAction = vi.fn();
     const onDelete = vi.fn();
 
@@ -140,21 +140,7 @@ describe("SprintActionMenu confirmation gates", () => {
     expect(onPrimaryAction).not.toHaveBeenCalled();
 
     fireEvent.click(screen.getByRole("button", { name: "Delete sprint Sprint Alpha" }));
-    expect(onDelete).not.toHaveBeenCalled();
-    expect(screen.getByRole("dialog", { name: "Delete Sprint" }).textContent).toContain("cannot be undone");
-
-    vi.useFakeTimers();
-    const confirmButton = screen.getByRole("button", { name: "Hold to Delete" });
-    fireEvent.pointerDown(confirmButton, { button: 0, pointerId: 1 });
-    await act(async () => {
-      vi.advanceTimersByTime(1000);
-      await Promise.resolve();
-    });
-    vi.useRealTimers();
-
-    await waitFor(() => {
-      expect(onDelete).toHaveBeenCalledTimes(1);
-    });
+    expect(onDelete).toHaveBeenCalledTimes(1);
     expect(onPrimaryAction).not.toHaveBeenCalled();
   });
 });
