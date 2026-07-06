@@ -16,6 +16,7 @@ While Code UX trusts the developer and any connected systems, several specific p
 - **Trusted-Host Enforcement:** The dashboard strictly validates `Host` and `X-Forwarded-Host` headers against the configured allowed hosts to prevent host header injection attacks.
 - **Origin/Fetch-Metadata Checks:** Dashboard endpoints employ strict `Sec-Fetch-Site` checks and explicit `Origin` validation. API modifications from external, untrusted browser origins are rejected to prevent CSRF vectors.
 - **Strict Parsing:** Incoming request payloads are validated using strict parsing schemas to reject malformed data, unexpected types, or excessive sizes before processing.
+- **Project-Scoped Knowledge Objects:** Knowledge document read, delete, re-embed, and project-import endpoints verify document ownership against the requested project before returning content or mutating data. Cross-project document IDs are reported as not found, and import errors never include foreign document text.
 - **Rate Limiting:** Critical API endpoints apply rate limiting to prevent abuse and mitigate denial-of-service risks.
 - **Security Headers:** HTTP responses enforce rigorous security headers (e.g., `X-Content-Type-Options: nosniff`, restrictive `Content-Security-Policy`, and explicit frame-ancestor rules) to protect the dashboard context.
 - **Websocket Origin Checks:** The core WebSocket connections similarly validate origins to prevent blind websocket hijacking from hostile origins.
