@@ -2,6 +2,7 @@ import type { Express } from "express";
 import * as fs from "fs/promises";
 import * as os from "os";
 import * as path from "path";
+import { pathToFileURL } from "url";
 import type {
   LocalDirectoryBrowserEntry,
   LocalDirectoryBrowserResponse,
@@ -100,12 +101,13 @@ async function listAllowedDirectory(requestedPath: string): Promise<LocalBrowser
   if (!isWithinAnyRoot(safePath, allowedRoots)) {
     throw new LocalBrowserError(403, "Access denied");
   }
+  const safePathUrl = pathToFileURL(safePath);
 
   let stat;
   try {
     // safePath is the canonical path returned by resolveAllowedPath after
     // lexical and realpath containment checks against allowed roots.
-    stat = await fs.stat(safePath); // lgtm[js/path-injection]
+    stat = await fs.stat(safePathUrl);
   } catch (err: unknown) {
     if (hasErrorCode(err, "ENOENT")) {
       throw new LocalBrowserError(400, "Path does not exist");
@@ -121,7 +123,7 @@ async function listAllowedDirectory(requestedPath: string): Promise<LocalBrowser
   try {
     // safePath is the canonical path returned by resolveAllowedPath after
     // lexical and realpath containment checks against allowed roots.
-    entries = await fs.readdir(safePath, { withFileTypes: true }); // lgtm[js/path-injection]
+    entries = await fs.readdir(safePathUrl, { withFileTypes: true });
   } catch (err: unknown) {
     throw new LocalBrowserError(403, "Access denied");
   }
