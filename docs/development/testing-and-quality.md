@@ -61,6 +61,7 @@ Focused examples:
 ```bash
 pnpm run test:e2e -- tests/e2e/sprint-task-lifecycle.spec.ts
 pnpm run test:e2e -- tests/e2e/app-release-smoke.spec.ts
+pnpm run test:e2e -- tests/e2e/project-setup-release.spec.ts
 pnpm run test:e2e -- tests/e2e/app-release-smoke.spec.ts -g "normal app shell"
 ```
 
@@ -93,6 +94,8 @@ The Playwright workflow is `.github/workflows/playwright.yml`. It runs only on `
 
 The workflow matrix covers `ubuntu-latest`, `macos-latest`, and `windows-latest`. It installs dependencies with pnpm 10.33.0 on Node 22, builds the server and dashboard before Playwright starts `node dist/index.js`, caches browser binaries under `.cache/ms-playwright`, installs Linux Chromium system dependencies only on Linux runners, and runs the same `pnpm run test:e2e` script used locally.
 
+This lane is credential-free. It validates the compiled dashboard and server, including project setup coverage through `tests/e2e/project-setup-release.spec.ts`, without provider keys, Docker provider startup, project setup automation, sprint orchestration, or real project state.
+
 - Run the local release install verifier
 ```bash
 node scripts/verify-release-install.mjs
@@ -102,9 +105,59 @@ The release install verifier builds the workspace, creates a local npm tarball w
 
 ### GitHub Actions Release Checks Policy
 
-The no-secret release validation workflow is `.github/workflows/release-checks.yml`. It runs only on `push` to `main` and `workflow_dispatch`, and it uses a native Linux, macOS, and Windows matrix to prove the project can install dependencies, build, install from its packed npm tarball, run the installed CLI help command, and build the platform desktop package without provider credentials or publishing credentials.
+The no-secret release validation workflow is `.github/workflows/release-checks.yml`. It runs only on `push` to `main` and `workflow_dispatch`, and it uses a native Linux, macOS, and Windows matrix to prove the project can install dependencies, build from source, install from its packed npm tarball, run the installed CLI help command, and build the platform desktop package without provider credentials or publishing credentials.
 
-Each job uses pnpm 10.33.0 and Node 22, runs `pnpm install --frozen-lockfile`, `pnpm run build`, `node scripts/verify-release-install.mjs`, rebuilds Electron native dependencies, and then runs the matching Electron distribution script for the runner platform. Electron packaging sets `CSC_IDENTITY_AUTO_DISCOVERY=false` so CI builds remain unsigned, and generated installer/package files under `release/electron/` are uploaded as workflow artifacts only.
+Each job uses pnpm 10.33.0 and Node 22, runs `pnpm install --frozen-lockfile`, `pnpm run build`, `node scripts/verify-release-install.mjs`, rebuilds Electron native dependencies with `pnpm run electron:install-deps`, and then runs the matching Electron distribution script for the runner platform:
+
+- Linux: `pnpm run electron:dist:linux`
+- macOS: `pnpm run electron:dist:mac`
+- Windows: `pnpm run electron:dist:win`
+
+`node scripts/verify-release-install.mjs` builds the workspace, creates a local npm tarball with `npm pack --ignore-scripts`, installs that tarball into a temporary npm project, and runs the installed `codeux --help` CLI smoke command. Electron packaging sets `CSC_IDENTITY_AUTO_DISCOVERY=false` so CI builds remain unsigned, and generated installer/package files under `release/electron/` are uploaded as workflow artifacts only.
+
+Together, `.github/workflows/release-checks.yml` and `.github/workflows/playwright.yml` are the push-to-main credential-free release validation lanes. The former checks source build, package installability, CLI help, and desktop package creation; the latter checks the compiled app in Chromium across Linux, macOS, and Windows, including project setup coverage.
+
+Local reproduction commands:
+
+```bash
+pnpm run build
+node scripts/verify-release-install.mjs
+pnpm run test:e2e -- tests/e2e/project-setup-release.spec.ts
+```
+
+Build first before Playwright because `playwright.config.ts` starts `node dist/index.js`.
+
+### OpenRouter Sprint Validation Policy
+
+The optional credentialed sprint validation workflow is `.github/workflows/openrouter-sprint-e2e.yml`. It runs on `push` to `main` and `workflow_dispatch` on `ubuntu-latest`, installs with pnpm 10.33.0 on Node 22, builds the compiled runtime, and invokes `node scripts/e2e/run-openrouter-sprint-validation.mjs`.
+
+This lane only performs real provider-backed sprint validation when the repository secret `OPENROUTER_API_KEY` is configured. If the secret is absent, the runner prints `Skipping OpenRouter sprint validation: OPENROUTER_API_KEY is not set.` and exits with status 0; the workflow is then a successful skip, not a provider validation pass. The workflow sets `CODEUX_E2E_OPENROUTER_MODEL` from the optional repository variable of the same name, defaulting to `openai/gpt-5-mini`.
+
+The runner uses the existing `codex` provider configured with OpenRouter-compatible settings, isolated app home directories, and temporary local git repositories. It executes three scenarios by default:
+
+- `smoke`: a three-task dependency-chain sprint.
+- `ci-repair`: a one-task deterministic CI failure repair sprint.
+- `conflict-dag`: a five-task merge-conflict DAG sprint.
+
+Artifacts are written under `.cache/e2e-openrouter/<run-id>/` and uploaded by the workflow as `openrouter-sprint-e2e-artifacts` when validation fails or artifacts exist. The artifact upload includes hidden files because the root is under `.cache/e2e-openrouter/`; retention is 5 days.
+
+Expected failure semantics are strict after the secret is present: unknown scenarios, missing `dist/index.js`, server readiness failures, scenario timeouts, non-terminal tasks, failed task statuses, or failed child commands return a non-zero exit code. Summaries and logs redact provider keys and authorization headers.
+
+Local skip check, which does not require `dist/index.js`:
+
+```bash
+node scripts/e2e/run-openrouter-sprint-validation.mjs
+```
+
+Local credentialed validation:
+
+```bash
+pnpm run build
+OPENROUTER_API_KEY=... node scripts/e2e/run-openrouter-sprint-validation.mjs
+OPENROUTER_API_KEY=... CODEUX_E2E_OPENROUTER_MODEL=openai/gpt-5-mini node scripts/e2e/run-openrouter-sprint-validation.mjs --scenario smoke
+```
+
+Set `CODEUX_E2E_OPENROUTER_MODEL` only when validating a different OpenRouter model intentionally.
 
 - Build backend and dashboard
 ```bash
