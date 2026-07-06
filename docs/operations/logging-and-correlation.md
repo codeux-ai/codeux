@@ -55,7 +55,8 @@ Callers should pass `logPurpose` when the purpose is known. An explicit `logPurp
 2. Incoming `x-correlation-id` is reused when present, otherwise a new ID is generated.
 3. Response always includes `x-correlation-id`.
 4. Request-completion logs are emitted through the shared logger and include the active correlation ID.
-5. Dashboard HTTP request logs are purpose-classified as `request`/`HTTP` and only print to the server console when Console Visibility is `full`.
+5. Malformed dashboard JSON request bodies are rejected by the shared pre-route middleware with `400` and `{ "error": "Invalid JSON request body." }`. The response and structured logs do not include the raw body.
+6. Dashboard HTTP request logs are purpose-classified as `request`/`HTTP` and only print to the server console when Console Visibility is `full`.
 
 ## Runtime Log Levels
 
@@ -150,6 +151,8 @@ Dashboard HTTP requests handled by `syncRoute` or `asyncRoute` automatically map
 - `EntityNotFoundError` maps to `404 Not Found`.
 - Explicit `HttpRouteError` instances preserve their status and public message.
 - Unexpected or unhandled exceptions map to `500 Internal Server Error`, hiding internal details from the client response.
+
+Malformed JSON is handled before route dispatch and uses the same correlation header and request logging path as normal dashboard API requests. Route handlers should validate body values through shared parsers or throw `HttpRouteError`/repository errors so status mapping remains centralized instead of adding one-off response formatting.
 
 When a `500 Internal Server Error` occurs (and headers haven't already been sent), the response will be safely formatted and sent, and the original error will then be delegated to Express error handlers via `next(error)` so that it can be logged and appropriately traced.
 

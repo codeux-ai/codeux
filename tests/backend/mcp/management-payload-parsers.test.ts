@@ -6,6 +6,8 @@ import {
   parseOptionalNumber,
   parseOptionalBoolean,
   parseOptionalObject,
+  parseRequiredObject,
+  parseRequiredPresentValue,
   parseOptionalEnum,
   parseOptionalEnumStrict,
   parseOptionalIntegerStrict,
@@ -22,8 +24,22 @@ describe("Payload Parsers", () => {
   });
 
   it("parseRequiredString treats null and non-string values as validation errors", () => {
-    expect(() => parseRequiredString({ foo: null }, "foo")).toThrow("foo is required");
-    expect(() => parseRequiredString({ foo: 42 }, "foo")).toThrow("foo is required");
+    for (const payload of [
+      { foo: null },
+      { foo: undefined },
+      { foo: 42 },
+      { foo: ["secret-value"] },
+      { foo: { token: "secret-value" } },
+    ]) {
+      expect(() => parseRequiredString(payload, "foo")).toThrow("foo is required");
+      try {
+        parseRequiredString(payload, "foo");
+      } catch (error) {
+        expect(error).toBeInstanceOf(ManagementValidationError);
+        expect((error as ManagementValidationError).field).toBe("foo");
+        expect((error as Error).message).not.toContain("secret-value");
+      }
+    }
   });
 
   it("parseOptionalString", () => {
@@ -45,6 +61,14 @@ describe("Payload Parsers", () => {
     expect(parseOptionalNumber({ foo: 42 }, "foo", 0, 40)).toBeUndefined();
     expect(parseOptionalNumber({ foo: NaN }, "foo")).toBeUndefined();
     expect(parseOptionalNumber({}, "foo")).toBeUndefined();
+  });
+
+  it("parseOptionalNumber rejects invalid numeric shapes and ranges without coercion", () => {
+    expect(parseOptionalNumber({ foo: "42" }, "foo")).toBeUndefined();
+    expect(parseOptionalNumber({ foo: Infinity }, "foo")).toBeUndefined();
+    expect(parseOptionalNumber({ foo: -1 }, "foo", 0)).toBeUndefined();
+    expect(parseOptionalNumber({ foo: 101 }, "foo", 0, 100)).toBeUndefined();
+    expect(parseOptionalNumber({ foo: 100 }, "foo", 0, 100)).toBe(100);
   });
 
   it("parseOptionalBoolean", () => {
@@ -71,6 +95,7 @@ describe("Payload Parsers", () => {
     const valid = ["yes", "no"] as const;
     expect(parseOptionalEnum({ foo: " YES " }, "foo", valid)).toBe("yes");
     expect(parseOptionalEnum({ foo: "maybe" }, "foo", valid)).toBeUndefined();
+    expect(parseOptionalEnum({ foo: ["yes"] }, "foo", valid)).toBeUndefined();
     expect(parseOptionalEnum({}, "foo", valid)).toBeUndefined();
   });
 
@@ -80,6 +105,33 @@ describe("Payload Parsers", () => {
     expect(parseOptionalEnumStrict({}, "foo", valid)).toBeUndefined();
     expect(() => parseOptionalEnumStrict({ foo: "maybe" }, "foo", valid))
       .toThrow("Invalid value for foo. Must be one of: yes, no");
+    expect(() => parseOptionalEnumStrict({ foo: ["yes"] }, "foo", valid))
+      .toThrow("Invalid value for foo. Must be one of: yes, no");
+  });
+
+  it("parseRequiredObject rejects unexpected payload shapes", () => {
+    expect(parseRequiredObject({ approval: { confirmed: true } }, "approval")).toEqual({ confirmed: true });
+    for (const payload of [
+      {},
+      { approval: null },
+      { approval: [] },
+      { approval: "confirmed=true" },
+    ]) {
+      expect(() => parseRequiredObject(payload, "approval")).toThrow("approval object is required");
+      try {
+        parseRequiredObject(payload, "approval");
+      } catch (error) {
+        expect(error).toBeInstanceOf(ManagementValidationError);
+        expect((error as ManagementValidationError).field).toBe("approval");
+      }
+    }
+  });
+
+  it("parseRequiredPresentValue distinguishes missing fields from explicit null approval values", () => {
+    expect(parseRequiredPresentValue({ confirmed: null }, "confirmed")).toBeNull();
+    expect(parseRequiredPresentValue({ confirmed: false }, "confirmed")).toBe(false);
+    expect(() => parseRequiredPresentValue({}, "confirmed"))
+      .toThrow("confirmed is required");
   });
 
   it("parseOptionalIntegerStrict", () => {
@@ -116,5 +168,23 @@ describe("Payload Parsers", () => {
         errorType: "runtime",
       },
     });
+  });
+
+  it("formats approval validation failures as sanitized validation envelopes", () => {
+    const secret = "approval-secret-token";
+    const error = new ManagementValidationError("approval object is required", "approval");
+    const envelope = formatManagementErrorEnvelope("settings", "replace_system_settings", error);
+
+    expect(envelope).toEqual({
+      result: {
+        status: "error",
+        domain: "settings",
+        action: "replace_system_settings",
+        message: "approval object is required",
+        errorType: "validation",
+        field: "approval",
+      },
+    });
+    expect(JSON.stringify(envelope)).not.toContain(secret);
   });
 });
