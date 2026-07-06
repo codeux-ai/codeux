@@ -15,7 +15,7 @@ While Code UX trusts the developer and any connected systems, several specific p
 ### Dashboard & API Access
 - **Trusted-Host Enforcement:** The dashboard strictly validates `Host` and `X-Forwarded-Host` headers against the configured allowed hosts to prevent host header injection attacks.
 - **Origin/Fetch-Metadata Checks:** Dashboard endpoints employ strict `Sec-Fetch-Site` checks and explicit `Origin` validation. API modifications from external, untrusted browser origins are rejected to prevent CSRF vectors.
-- **Strict Parsing:** Incoming request payloads are validated using strict parsing schemas to reject malformed data, unexpected types, or excessive sizes before processing.
+- **Strict Parsing:** Incoming request payloads are validated using strict parsing schemas to reject malformed data, unexpected types, or excessive sizes before processing. Dashboard JSON parsing is route-aware: normal `/api` mutations use a 1 MB JSON body limit, while the 25 MB allowance is reserved for settings save routes (`PUT /api/system-settings`, `PUT /api/projects/:projectId/settings`, and `PUT /api/sprints/:sprintId/settings`) that can carry appearance background-image data URLs. Multipart knowledge uploads and preview proxy requests bypass the dashboard JSON parser so their route-specific handlers keep ownership of body processing.
 - **Project-Scoped Knowledge Objects:** Knowledge document read, delete, re-embed, and project-import endpoints verify document ownership against the requested project before returning content or mutating data. Cross-project document IDs are reported as not found, and import errors never include foreign document text.
 - **Rate Limiting:** Critical API endpoints apply rate limiting to prevent abuse and mitigate denial-of-service risks.
 - **Security Headers:** HTTP responses enforce rigorous security headers (e.g., `X-Content-Type-Options: nosniff`, restrictive `Content-Security-Policy`, and explicit frame-ancestor rules) to protect the dashboard context.
@@ -23,7 +23,9 @@ While Code UX trusts the developer and any connected systems, several specific p
 - **Local Binding Default:** The dashboard binds exclusively to the loopback interface (`127.0.0.1`) by default.
 
 ### MCP Gateway
-- **Session Hardening & Bearer Auth:** The Model Context Protocol (MCP) HTTP gateway implements robust session and lifecycle constraints. When the MCP service is configured for non-loopback access, it mandates HTTP Bearer token authentication to proceed. Unauthenticated external access will result in an immediate rejection (`401 Unauthorized`).
+- **Session Hardening & Bearer Auth:** The Model Context Protocol (MCP) HTTP gateway implements robust session and lifecycle constraints. When the MCP service is configured for non-loopback access (`0.0.0.0`, `::`, or a LAN address), startup fails unless a non-empty HTTP Bearer token is configured. Loopback-only development binds (`127.0.0.1`, `localhost`, or `::1`) may remain unauthenticated.
+- **MCP Header Preflight:** The MCP HTTP gateway normalizes and validates `Authorization`, `mcp-session-id`, and `x-code-ux-agent` headers before any session lookup. Missing or malformed bearer credentials return a sanitized `401 Unauthorized`; malformed session or agent identifiers return a sanitized `400 Bad Request`; inactive session ids use a generic invalid-session response.
+- **MCP Session Limits:** The gateway allows at most 100 active Streamable HTTP sessions and closes sessions idle for more than one hour before accepting a new initialize request. Session-cap logs include bounded operational metadata only, such as request method, path, active count, and maximum count.
 - **MCP Config Validation:** The gateway rigorously validates all incoming configurations and payloads against the Model Context Protocol schemas, ensuring only properly structured instructions are executed.
 - **Approval Correlation Guard:** MCP approval tracking accepts only bounded correlation ID shapes and rejects malformed, path-like, or token-like values without clearing valid pending approvals.
 
@@ -38,6 +40,7 @@ While Code UX trusts the developer and any connected systems, several specific p
 
 ### Redaction
 - **Log and Output Filtering:** Internal API keys, credentials, and sensitive configurations are actively scrubbed and redacted from application logs, debug outputs, and exported execution traces. The shared redactor covers provider API keys, OpenAI-compatible key shapes, GitHub/GitLab/Jira tokens, bearer/basic authorization headers, URL credentials, nested arrays, and error messages/stacks.
+- **MCP Gateway Log Hygiene:** Unauthorized, invalid-header, inactive-session, and session-cap gateway logs omit bearer values, supplied session ids, and supplied agent ids. They retain only correlation-safe metadata needed for operations.
 - **Settings Secret Inputs:** Dashboard settings fields that store provider API keys, Git host tokens, Jira API tokens, and external embedding API keys render as masked secret inputs by default. Operators must explicitly use the reveal control to inspect a value.
 - **Docker Secret Transport:** Provider and preview Docker launches write selected host/provider environment variables to temporary `0600` env-files and pass those files via `--env-file`. This keeps API keys and Git tokens out of the host `docker run` argv visible through process listings while preserving the same container environment.
 
