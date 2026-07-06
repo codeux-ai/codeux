@@ -60,7 +60,7 @@ pnpm run ci
 
 `pnpm run ci` starts with `pnpm run quality:guardrails`, then runs audit, lint, backend coverage, dashboard tests, and build. Run `pnpm run quality:guardrails` directly after changes that affect shared implementation structure, large modules, duplicate logic, dependency factory wiring, realtime snapshot persistence, optimistic task insertion, or the guardrail script itself. Treat blocking guardrail output as CI-equivalent; advisory oversized-file and broad-`any` reports identify cleanup targets but do not fail the command.
 
-GitHub Actions runs the same signals as separate jobs so a vulnerability finding does not obscure compile, test, or build failures. The `Security Audit` job runs `pnpm run audit` independently, while `Typecheck & Lint`, `Backend Tests & Coverage`, `Dashboard Tests`, and `Build` run the repository quality, TypeScript, Vitest, and bundle checks on Node 22 with pnpm 10.33.0.
+GitHub Actions runs the same signals as separate jobs so a vulnerability finding does not obscure compile, test, or build failures. The `Security Audit` job runs `pnpm run audit` independently, while `Typecheck & Lint`, `Backend Tests & Coverage`, `Dashboard Tests`, and `Build` run the repository quality, TypeScript, Vitest, and bundle checks on Node 22 with pnpm 10.33.0. Workflow health tests under `tests/backend/ci/workflow-health.test.ts` assert this split, the pinned `pnpm/action-setup` and `actions/setup-node` versions, frozen `pnpm install --frozen-lockfile --ignore-scripts` installs, concurrency cancellation, and cache keys that include runner OS, Node 22, pnpm 10.33.0, and dependency/config hash inputs.
 The quality guardrail script also audits `vitest.config.ts` directly. It fails if `coverage.include` stops observing `src/**/*.ts`, if any global coverage threshold drops below the locked floors (`lines: 77.4`, `functions: 71.5`, `branches: 66.1`, `statements: 76.0`), if the `src/server/activity-cache-service.ts` line threshold is missing, malformed, below 80%, or if that file is excluded from coverage observability. This check is file-based and deterministic; it does not run Vitest coverage internally. Guardrail failures name the exact configured value, required minimum, and remediation command. After intentionally raising or restoring thresholds, run:
 
 ```bash
@@ -91,14 +91,12 @@ pnpm run test:e2e -- tests/e2e/app-release-smoke.spec.ts -g "normal app shell"
 
 The release-style E2E suite lives under `tests/e2e` and exercises the production-style dashboard served by the compiled server. It is not a provider orchestration test suite: specs must avoid provider credentials, Docker provider startup, project setup automation, worker dispatch, and sprint execution endpoints. The current coverage includes:
 
-- `tests/e2e/app-release-smoke.spec.ts`, which verifies the normal app shell, local startup health, core dashboard routes, responsive task-board behavior, route landmarks, and unexpected browser errors.
+- `tests/e2e/app-release-smoke.spec.ts`, which verifies the normal app shell, core dashboard routes, responsive task-board behavior, route landmarks, and unexpected browser errors.
 - `tests/e2e/project-setup-release.spec.ts`, which verifies first-run onboarding completion, visible Add Project modal behavior for a credential-free local directory under the OS temp path, dashboard project selection, `/projects` landmarks, `/tasks` navigation, loading/error checks, and desktop/mobile overflow checks without provider secrets or orchestration endpoints.
 - `tests/e2e/sprint-task-lifecycle.spec.ts`, which verifies draft sprint and implementation task create/edit/delete behavior through the visible dashboard flows and collection API assertions.
-- `tests/e2e/helpers/prepare-app.ts`, which prepares deterministic app state through dashboard HTTP APIs for onboarding, local project selection, draft sprint setup, task setup, updates, deletes, cleanup, local startup assertions, local-only navigation assertions, and per-worker/retry fixture isolation assertions.
+- `tests/e2e/helpers/prepare-app.ts`, which prepares deterministic app state through dashboard HTTP APIs for onboarding, local project selection, draft sprint setup, task setup, updates, deletes, and cleanup.
 
-`playwright.config.ts` uses Chromium, `http://127.0.0.1:4444`, `fullyParallel: false`, `workers: 1`, `reuseExistingServer: false`, CI retries, and the GitHub plus HTML reporters in CI. It checks `/health` instead of `/ready` because a clean run may not have project live-status activity, while liveness is enough to know the compiled web app accepted the browser session. The config retains traces and videos on failure, captures screenshots only on failure, writes Playwright output to `test-results/`, writes the HTML report to `playwright-report/`, starts only the compiled server with `node dist/index.js`, and injects the same temporary `HOME` and `USERPROFILE` into the web server process.
-
-The root smoke helpers assert these guarantees directly: `expectLocalAppReady` calls `/health`, verifies the `UP` liveness payload, loads the dashboard shell from `baseURL`, and checks the shell title. `installLocalNavigationGuard` records main-frame navigations and fails the spec if a test leaves the configured local origin. Fixture helpers derive project names and paths from a sanitized run id plus Playwright worker, repeat, retry, and fixture key, so retries stay deterministic while each worker/retry uses a distinct temp project path.
+`playwright.config.ts` uses Chromium, `http://127.0.0.1:4444`, `fullyParallel: false`, CI retries, and the GitHub plus HTML reporters in CI. It checks `/health` instead of `/ready` because a clean run may not have project live-status activity, while liveness is enough to know the compiled web app accepted the browser session.
 
 ### E2E Authoring Rules
 
@@ -106,7 +104,6 @@ Root E2E specs should prepare normal app state through `tests/e2e/helpers/prepar
 
 - Use `completeOnboarding`, `ensureSelectedProject`, `createDraftSprint`, and `createTaskInSprint` for setup instead of hand-writing setup requests in each spec.
 - Use unique fixture keys and generated names from the helper utilities so parallel workers and retries do not collide.
-- Assert desktop and mobile behavior in release-style specs when layout or accessibility can regress across viewports. Use `page.setViewportSize` inside the existing Chromium project instead of adding broad parallel browser projects.
 - Prefer role-based locators, accessible names, landmarks, and stable `data-testid` roots over CSS shape or timing assertions.
 - For live-updating menus or dropdowns, keep helper clicks idempotent: reopen the menu and retry if a located item detaches between visibility and click, while still asserting the accessible action is visible before each attempt.
 - Build paths with Node `os`, `path`, and `fs` APIs so fixtures remain portable on Windows, macOS, and Linux.
@@ -118,7 +115,7 @@ Root E2E specs should prepare normal app state through `tests/e2e/helpers/prepar
 
 The Playwright workflow is `.github/workflows/playwright.yml`. It runs on pushes and pull requests targeting `main`, keeping the heavyweight OS-matrix E2E lane on the release path while `dev` remains gated by core CI.
 
-The workflow matrix covers `ubuntu-latest`, `macos-latest`, and `windows-latest`. It installs dependencies with pnpm 10.33.0 on Node 22, builds the server and dashboard before Playwright starts `node dist/index.js`, caches browser binaries under `.cache/ms-playwright`, installs Linux Chromium system dependencies only on Linux runners, always runs `pnpm exec playwright install chromium` after restoring the browser cache, and runs the same `pnpm run test:e2e` script used locally. Linux and macOS restore a `node_modules` cache for speed; Windows intentionally skips that cache and performs a clean pnpm install so pnpm's nested package links are regenerated instead of reusing a stale symlink tree. It uploads `test-results/` and `playwright-report/` as `playwright-artifacts-<os>` artifacts for seven days, with empty uploads ignored so successful runs do not fail if no failure artifacts were produced.
+The workflow matrix covers `ubuntu-latest`, `macos-latest`, and `windows-latest`. It installs dependencies with pnpm 10.33.0 on Node 22 using `pnpm install --frozen-lockfile --ignore-scripts`, builds the server and dashboard before Playwright starts `node dist/index.js`, caches browser binaries under `.cache/ms-playwright`, restores that cache before installing Chromium, installs Linux Chromium system dependencies only on Linux runners, and runs the same `pnpm run test:e2e` script used locally. Linux and macOS restore a `node_modules` cache for speed; Windows intentionally skips that cache and performs a clean pnpm install so pnpm's nested package links are regenerated instead of reusing a stale symlink tree. It uploads `test-results/` and `playwright-report/` as the `playwright-artifacts` workflow artifact with `if: always()` for seven days, with empty uploads ignored so successful runs do not fail if no failure artifacts were produced.
 
 This lane is credential-free. It validates the compiled dashboard and server, including project setup coverage through `tests/e2e/project-setup-release.spec.ts`, without provider keys, Docker provider startup, project setup automation, sprint orchestration, or real project state.
 
@@ -133,7 +130,7 @@ The release install verifier builds the workspace, creates a local npm tarball w
 
 The no-secret release validation workflow is `.github/workflows/release-checks.yml`. It runs on pull requests targeting `main` and on manual `workflow_dispatch`, and it uses a native Linux, macOS, and Windows matrix to prove a release candidate can install dependencies, build from source, install from its packed npm tarball, run the installed CLI help command, and build the platform desktop package without provider credentials or publishing credentials.
 
-Each job uses pnpm 10.33.0 and Node 22, runs `pnpm install --frozen-lockfile`, `pnpm run build`, `node scripts/verify-release-install.mjs`, rebuilds Electron native dependencies with `pnpm run electron:install-deps`, and then runs the matching Electron distribution script for the runner platform:
+Each job uses pnpm 10.33.0 and Node 22, runs `pnpm install --frozen-lockfile --ignore-scripts`, `pnpm run build`, `node scripts/verify-release-install.mjs`, rebuilds Electron native dependencies with `pnpm run electron:install-deps`, and then runs the matching Electron distribution script for the runner platform:
 
 - Linux: `pnpm run electron:dist:linux`
 - macOS: `pnpm run electron:dist:mac`
@@ -234,23 +231,7 @@ pnpm run typecheck:dashboard
 - Interaction behavior tests should verify pointer cursors, focus management, overlay dismissibility, and reduced-motion states for animated components.
 - Flow-specific tests (like destructive actions) must assert that confirmation dialogs appear and that side-effect actions (like "Reset downstream tasks") are triggered correctly based on user selection.
 
-### Orchestration Gate Regressions
-
-Use the focused orchestration regression set when changing the sprint watch loop, task dispatch/session sync, CI gates, or QA review gates:
-
-```bash
-pnpm run test:backend -- tests/backend/sprint/watch-loop-core.test.ts tests/backend/sprint/status-derivation-step.test.ts tests/backend/sprint/session-sync-step.test.ts tests/backend/sprint/sprint-orchestrator-ci.test.ts tests/backend/domain/sprint/ci/feature-pr-gate.test.ts tests/backend/domain/sprint/ci/main-merge-gate.test.ts tests/backend/domain/qa-review/qa-review-runner.test.ts
-```
-
-These tests are intentionally network-free. They mock provider sessions, CI status, PR metadata, QA reviewers, and dispatch rows so repeated watch-loop cycles can be checked deterministically. When one fails, triage in this order:
-
-- Duplicate dispatch or dependency unlock failures: inspect `runStatusDerivationStep`, `runStartReadyTasksStep`, and active dispatch lookups before changing DAG semantics.
-- CI gate failures: compare the structured gate state (`waiting_checks`, `ready_for_merge`, `failed_checks`, `missing_pr`, stale-empty-check skip) with the mocked PR/check/run timestamps.
-- QA gate failures: distinguish a running review, a recovered stale review, an errored review, and `QA_REVIEW_FAILED`; parked QA tasks must not be restarted by the generic start-ready pass.
-- Provider failure failures: verify task runs, task dispatches, provider invocations, and task-run events all settle together instead of leaving `running` rows behind.
-
-### Focused dashboard quality lane
-
+Focused dashboard quality lane:
 ```bash
 pnpm run test:dashboard -- tests/dashboard/accessibility/dashboard-quality-regressions.test.tsx tests/dashboard/components/ui/ActionFeedbackRegion.test.tsx tests/dashboard/v2/settings-danger-panel.test.tsx tests/dashboard/v2/settings-page-state.test.tsx tests/dashboard/v2/runtime-event-feed.test.tsx tests/dashboard/v2/use-project-effective-settings.test.tsx tests/dashboard/hooks/use-realtime-resource.test.tsx dashboard/src/v2/components/__tests__/NotificationPanel.test.tsx dashboard/src/v2/lib/__tests__/motion/interaction-tokens.test.tsx
 ```

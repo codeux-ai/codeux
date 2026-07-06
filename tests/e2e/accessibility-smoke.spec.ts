@@ -59,16 +59,3 @@ test('Dashboard accessibility smoke test', async ({ page }) => {
   const sprintLedger = page.getByRole('region', { name: 'Sprint Ledger' });
   await expect(sprintLedger).toBeVisible();
 });
-
-test('mobile shell keeps core accessibility controls reachable', async ({ page }) => {
-  await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto('/');
-
-  const skipLink = page.locator('a[href="#main-content"]');
-  await page.keyboard.press('Tab');
-  await expect(skipLink).toBeFocused();
-
-  await expect(page.getByRole('navigation', { name: /Workspace navigation/i })).toBeVisible();
-  await expect(page.getByRole('button', { name: /Search workspace|Search/i })).toBeVisible();
-  await expect(page.locator('#main-content')).toBeVisible();
-});

@@ -4,14 +4,6 @@ import os from 'os';
 import path from 'path';
 
 const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'codeux-e2e-home-'));
-const runId = (process.env.CODEUX_E2E_RUN_ID
-  ?? process.env.GITHUB_RUN_ID
-  ?? `local-${new Date().toISOString()}`)
-  .replace(/[^a-zA-Z0-9_-]+/g, '-')
-  .replace(/^-+|-+$/g, '')
-  .toLowerCase();
-
-process.env.CODEUX_E2E_RUN_ID = runId;
 
 /**
  * Read environment variables from file.
@@ -73,7 +65,6 @@ export default defineConfig({
     env: {
       HOME: tempHome,
       USERPROFILE: tempHome,
-      CODEUX_E2E_RUN_ID: runId,
     },
   },
 });

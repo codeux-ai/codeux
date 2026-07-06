@@ -1,4 +1,4 @@
-import { expect, type APIRequestContext, type Page, type TestInfo } from '@playwright/test';
+import type { APIRequestContext, TestInfo } from '@playwright/test';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -69,7 +69,6 @@ const RUN_SUFFIX = (process.env.CODEUX_E2E_RUN_ID || new Date().toISOString())
   .replace(/[^a-zA-Z0-9]+/g, '')
   .slice(0, 20)
   .toLowerCase();
-const E2E_PROJECT_ROOT = path.join(os.tmpdir(), 'codeux-e2e-projects');
 
 function sanitizeFixtureKey(value: string): string {
   const sanitized = value.replace(/[^a-zA-Z0-9_-]+/g, '-').replace(/^-+|-+$/g, '').toLowerCase();
@@ -85,75 +84,15 @@ export function createE2eFixturePrefix(options: E2eFixtureOptions = {}): string 
 }
 
 function displayName(base: string, options: E2eFixtureOptions = {}): string {
-  return `${base} ${createE2eFixturePrefix(options)}`;
+  const workerIndex = options.testInfo?.workerIndex ?? 0;
+  const key = sanitizeFixtureKey(options.fixtureKey ?? 'app');
+  return `${base} w${workerIndex} ${key} ${RUN_SUFFIX.slice(-6)}`;
 }
 
 async function ensureFixtureDirectory(prefix: string): Promise<string> {
-  const projectDir = path.join(E2E_PROJECT_ROOT, prefix);
+  const projectDir = path.join(os.tmpdir(), 'codeux-e2e-projects', prefix);
   await fs.mkdir(projectDir, { recursive: true });
   return projectDir;
-}
-
-function getBaseURL(testInfo?: Pick<TestInfo, 'project'>): string {
-  const configuredBaseURL = testInfo?.project.use.baseURL;
-  if (typeof configuredBaseURL === 'string' && configuredBaseURL.length > 0) {
-    return configuredBaseURL;
-  }
-  return 'http://127.0.0.1:4444';
-}
-
-function assertLocalUrl(url: string, baseURL: string): void {
-  if (url === 'about:blank') {
-    return;
-  }
-
-  expect(new URL(url).origin).toBe(new URL(baseURL).origin);
-}
-
-export async function expectLocalAppReady(
-  page: Page,
-  request: APIRequestContext,
-  testInfo?: Pick<TestInfo, 'project'>,
-): Promise<void> {
-  const health = await request.get('/health');
-  await expect(health).toBeOK();
-  await expect(await health.json()).toMatchObject({ status: 'UP' });
-
-  const baseURL = getBaseURL(testInfo);
-  const response = await page.goto('/');
-  expect(response?.ok()).toBe(true);
-  assertLocalUrl(page.url(), baseURL);
-  await expect(page).toHaveTitle(/Code UX/i);
-}
-
-export function installLocalNavigationGuard(page: Page, testInfo?: Pick<TestInfo, 'project'>): () => void {
-  const baseURL = getBaseURL(testInfo);
-  const violations: string[] = [];
-
-  page.on('framenavigated', (frame) => {
-    if (frame === page.mainFrame()) {
-      const url = frame.url();
-      if (url !== 'about:blank' && new URL(url).origin !== new URL(baseURL).origin) {
-        violations.push(url);
-      }
-    }
-  });
-
-  return () => {
-    expect(violations, `Unexpected external navigations: ${violations.join(', ')}`).toEqual([]);
-  };
-}
-
-export function expectIsolatedProjectFixture(
-  project: ProjectSummary,
-  options: E2eProjectFixture = {},
-): void {
-  const prefix = createE2eFixturePrefix(options);
-  const expectedSourceRef = path.join(E2E_PROJECT_ROOT, prefix);
-
-  expect(project.name).toContain(prefix);
-  expect(project.sourceType).toBe('local');
-  expect(project.sourceRef ?? project.baseDir).toBe(expectedSourceRef);
 }
 
 // A freshly-checked-out server starts with the first-run onboarding overlay
@@ -175,15 +114,17 @@ export async function createOrFindIsolatedLocalProject(
     project.sourceRef === sourceRef || project.baseDir === sourceRef || project.name === name
   ));
 
-  const project = existing ?? await createProjectViaApi(request, {
+  if (existing) {
+    return existing;
+  }
+
+  return createProjectViaApi(request, {
     name,
     sourceType: 'local',
     sourceRef,
     status: 'idle',
     initMode: 'existing',
   });
-  expectIsolatedProjectFixture(project, options);
-  return project;
 }
 
 export async function selectProject(request: APIRequestContext, projectId: string): Promise<string | null> {

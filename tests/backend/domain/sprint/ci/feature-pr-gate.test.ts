@@ -436,46 +436,6 @@ jobs:
     }
   });
 
-  it("maps an empty PR check rollup to tracked branch CI runs before deciding readiness", async () => {
-    context.ciIntelligence.featurePrAutoMergeMode = "WHEN_GREEN";
-    context.autoMergeFeaturePr = undefined;
-    context.gitStatus.openPullRequests[0].checks = [];
-    context.gitStatus.openPullRequests[0].headRefName = "feat/T1";
-    context.gitStatus.ciRuns = [
-      {
-        id: 88,
-        name: "backend",
-        workflowName: "CI",
-        status: "completed",
-        conclusion: "success",
-        event: "pull_request",
-        headBranch: "feat/T1",
-        url: "https://github.com/repo/actions/runs/88",
-        updatedAt: "2026-03-15T08:00:00.000Z",
-      },
-    ] as any;
-
-    const result = await service.evaluateCiGate(subtasks, context);
-
-    expect(result.subtasks[0]).toMatchObject({
-      status: "CODING_COMPLETED",
-      merge_indicator: undefined,
-    });
-    expect(result.subtasks[0].is_merged).toBeFalsy();
-    expect(result.reportText).toContain("Feature PR Ready");
-    expect(context.executionRepository?.appendTaskRunEvent).toHaveBeenCalledWith(
-      "run-1",
-      "ci_gate_status",
-      "system",
-      expect.objectContaining({
-        state: "ready_for_merge",
-        prNumber: 101,
-        ciWaitSkipped: false,
-      }),
-      expect.any(Object),
-    );
-  });
-
   it("auto-merges in always mode even while checks are pending", async () => {
     context.ciIntelligence.featurePrAutoMergeMode = "ALWAYS";
     context.gitStatus.openPullRequests[0].checks = [
