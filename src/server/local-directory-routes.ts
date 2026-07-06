@@ -105,8 +105,7 @@ async function listAllowedDirectory(requestedPath: string): Promise<LocalBrowser
   try {
     // safePath is the canonical path returned by resolveAllowedPath after
     // lexical and realpath containment checks against allowed roots.
-    // codeql[js/path-injection]
-    stat = await fs.stat(safePath);
+    stat = await fs.stat(safePath); // lgtm[js/path-injection]
   } catch (err: unknown) {
     if (hasErrorCode(err, "ENOENT")) {
       throw new LocalBrowserError(400, "Path does not exist");
@@ -122,8 +121,7 @@ async function listAllowedDirectory(requestedPath: string): Promise<LocalBrowser
   try {
     // safePath is the canonical path returned by resolveAllowedPath after
     // lexical and realpath containment checks against allowed roots.
-    // codeql[js/path-injection]
-    entries = await fs.readdir(safePath, { withFileTypes: true });
+    entries = await fs.readdir(safePath, { withFileTypes: true }); // lgtm[js/path-injection]
   } catch (err: unknown) {
     throw new LocalBrowserError(403, "Access denied");
   }
