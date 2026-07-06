@@ -1,6 +1,6 @@
 # User Guide
 
-Welcome to Code UX — the open-source, container-first agentic coding runtime. This section is for
+Welcome to Code UX — a local-first, container-first multi-provider runtime. This section is for
 people running sprints, whether from the local dashboard or an MCP client.
 
 New here? Start with [Introduction](./introduction.md) for the concepts, then
@@ -27,7 +27,7 @@ can read on demand.
 - **Project** — a managed Git repository, with its own settings, sprints, agents, and memory.
 - **Sprint** — a bounded unit of work on a feature branch, containing dependency-aware tasks.
 - **Task** — a single delegated coding job within a sprint, with explicit dependencies.
-- **Provider** — an agent backend (Jules, Claude Code, Codex, Gemini, Qwen Code, OpenCode, Antigravity).
+- **Provider** — an agent backend, either hosted (like Jules) or local CLI/Docker (like Gemini, Codex, Claude Code, Qwen Code, OpenCode, Antigravity).
 - **Worker** — the execution context that runs a provider for a task, in Docker (default) or on the host.
 - **Agent preset** — a reusable persona (instructions, routing hints) a worker adopts for an invocation type.
 - **Memory** — short-term sprint memory and long-term project memory, scoped into prompts.
