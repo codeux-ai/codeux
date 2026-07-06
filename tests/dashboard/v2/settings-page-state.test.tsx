@@ -340,6 +340,8 @@ describe("useSettingsPageState", () => {
     root.append(valid, invalid, laterInvalid);
     document.body.append(root);
     const invalidFocus = vi.spyOn(invalid, "focus");
+    const invalidScroll = vi.fn();
+    invalid.scrollIntoView = invalidScroll;
     const laterFocus = vi.spyOn(laterInvalid, "focus");
 
     const message = focusFirstInvalidSettingsControl(root);
@@ -347,7 +349,25 @@ describe("useSettingsPageState", () => {
     expect(message).toBeTruthy();
     expect(invalid.getAttribute("aria-invalid")).toBe("true");
     expect(invalidFocus).toHaveBeenCalled();
+    expect(invalidScroll).toHaveBeenCalledWith({ block: "center", inline: "nearest", behavior: "auto" });
     expect(laterFocus).not.toHaveBeenCalled();
+    root.remove();
+  });
+
+  it("uses owned validation copy when focusing an invalid settings field", () => {
+    const root = document.createElement("div");
+    const invalid = document.createElement("input");
+    const error = document.createElement("span");
+    error.id = "custom-error";
+    error.textContent = "Use a port between 1 and 65535.";
+    invalid.setAttribute("aria-invalid", "true");
+    invalid.setAttribute("aria-errormessage", "custom-error");
+    invalid.scrollIntoView = vi.fn();
+    root.append(invalid, error);
+    document.body.append(root);
+
+    expect(focusFirstInvalidSettingsControl(root)).toBe("Use a port between 1 and 65535.");
+
     root.remove();
   });
 
