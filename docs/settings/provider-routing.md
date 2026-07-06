@@ -104,8 +104,8 @@ To prevent conflicting generated runtime configuration and credential leakage, C
    - The `apiKey` field is cleared.
    - Any custom model provider base URL (`customBaseUrl`) or custom model slug (`customModel`) overrides are cleared and ignored.
    - Provider-instance credentials remain isolated by exact instance id. A custom endpoint configured on a separate instance such as `Codex Local` is not inherited by `Codex Primary`, and mounted-auth runs ignore stale custom model fields even if an older settings row still contains them.
-   - For **Qwen Code**, forces `qwenAuthMode` to `LOCAL_AUTH` and clears all custom API-key sub-mode fields (`qwenRegion`, `qwenBaseUrl`, `qwenEnvKey`, `qwenModelId`, `qwenProtocol`, `qwenAdditionalModelProviders`).
-   - For **OpenCode**, forces `openCodeAuthMode` to `LOCAL_AUTH` and clears all custom API-key sub-mode fields (`openCodeProviderId`, `openCodeModelId`, `openCodeBaseUrl`, `openCodeEnvKey`, `openCodePackage`).
+   - For **Qwen Code**, forces `qwenAuthMode` to `LOCAL_AUTH` (other modes: `ALIBABA_CODING_PLAN`, `MODEL_PROVIDER`) and clears all custom API-key sub-mode fields (`qwenRegion`, `qwenBaseUrl`, `qwenEnvKey`, `qwenModelId`, `qwenProtocol`, `qwenAdditionalModelProviders`).
+   - For **OpenCode**, forces `openCodeAuthMode` to `LOCAL_AUTH` (other modes: `ENV_KEY`, `CUSTOM_PROVIDER`) and clears all custom API-key sub-mode fields (`openCodeProviderId`, `openCodeModelId`, `openCodeBaseUrl`, `openCodeEnvKey`, `openCodePackage`).
    - For **Codex**, ensures that no stale API key or custom model-provider overrides are passed to the child process environment (`withProviderEnv`) or command construction arguments.
 
 ## Current Defaults

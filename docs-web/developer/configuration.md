@@ -58,12 +58,14 @@ Files inside the directory:
 
 | File | Contents |
 | --- | --- |
-| `settings.json` | Provider keys, override settings (read-only / informational; primary settings live in the DB). |
+| `settings.json` | Provider keys, override settings (read-only / informational; primary settings live in the SQLite DB `settings.db`). |
 | `config.json` | Dashboard port and other runtime config. |
 | `agents/<id>.md` | Agent preset markdown sources. |
 | `sprints/sprint-<n>/` | Sprint markdown directory. |
 | `sprints/sprint-<n>/<task>.md` | Subtask markdown files. |
-| `sprints/sprint-<n>/preview.sh` | Preview container startup script. |
+| `sprints/sprint-<n>/preview.sh` | Preview container startup script. Default is `.code-ux/browser/start-preview.sh`. |
+
+Note: `git.defaultBranch` defaults to `main` but resolves through scoped overrides (project/sprint).
 
 ## Resolution rules
 
