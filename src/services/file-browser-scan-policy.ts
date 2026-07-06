@@ -23,26 +23,33 @@ export function isPrunedPath(relPath: string): boolean {
 }
 
 export function normalizeAndValidatePath(requestedPath: string): string {
-  const trimmed = (requestedPath || "").trim().replace(/\\/g, "/");
+  const trimmed = (requestedPath || "").trim();
 
   if (!trimmed) {
     throw new Error(`Invalid file path: path cannot be empty`);
-  }
-
-  const decoded = decodeURIComponent(trimmed);
-  if (decoded.includes("../") || decoded.includes("..\\") || decoded === "..") {
-    throw new Error(`Invalid file path: encoded traversal is not allowed`);
-  }
-
-  if (/^[a-zA-Z]:[\\\/]/.test(trimmed) || trimmed.startsWith("/")) {
-    throw new Error(`Invalid file path: absolute paths are not allowed`);
   }
 
   if (/[\x00-\x1F\x7F]/.test(trimmed)) {
     throw new Error(`Invalid file path: control characters are not allowed`);
   }
 
-  const withoutLeading = trimmed.replace(/^\.\//, "").replace(/^\/+/, "");
+  const decoded = decodeRepeatedly(trimmed);
+  const slashNormalized = decoded.replace(/\\/g, "/");
+
+  if (/[\x00-\x1F\x7F]/.test(decoded)) {
+    throw new Error(`Invalid file path: control characters are not allowed`);
+  }
+
+  if (/^[a-zA-Z]:/.test(decoded) || slashNormalized.startsWith("/") || slashNormalized.startsWith("//")) {
+    throw new Error(`Invalid file path: absolute paths are not allowed`);
+  }
+
+  const decodedParts = slashNormalized.split("/");
+  if (decodedParts.includes("..")) {
+    throw new Error(`Invalid file path: encoded traversal is not allowed`);
+  }
+
+  const withoutLeading = slashNormalized.replace(/^\.\//, "");
   const normalized = pathPosix.normalize(withoutLeading);
 
   if (!normalized || normalized === "." || normalized === ".." || normalized.startsWith("../") || normalized.includes("../")) {
@@ -54,4 +61,16 @@ export function normalizeAndValidatePath(requestedPath: string): string {
   }
 
   return normalized;
+}
+
+function decodeRepeatedly(value: string): string {
+  let current = value;
+  for (let i = 0; i < 4; i += 1) {
+    const decoded = decodeURIComponent(current);
+    if (decoded === current) {
+      return decoded;
+    }
+    current = decoded;
+  }
+  return current;
 }
