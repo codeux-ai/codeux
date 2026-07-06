@@ -93,6 +93,14 @@ export const NotificationPanel: FunctionComponent<{
     queueMicrotask(focusPanel);
   }, [focusPanel]);
 
+  const focusPanelIfTargetRemoved = useCallback((target: HTMLElement | null) => {
+    queueMicrotask(() => {
+      if (target && !target.isConnected) {
+        focusPanel();
+      }
+    });
+  }, [focusPanel]);
+
   const handleRefresh = useCallback(async (): Promise<void> => {
     if (isRefreshing) {
       return;
@@ -127,16 +135,19 @@ export const NotificationPanel: FunctionComponent<{
     }
   }, [focusPanelAfterUpdate, isMarkingAllRead, onMarkAllRead, unreadCount]);
 
-  const handleMarkRead = useCallback(async (notification: DashboardNotification): Promise<void> => {
+  const handleMarkRead = useCallback(async (notification: DashboardNotification, focusTarget?: HTMLElement | null): Promise<void> => {
     if (!notification.unread || pendingReadIdsRef.current.has(notification.id)) {
       return;
     }
 
+    const target = focusTarget ?? (document.activeElement instanceof HTMLElement ? document.activeElement : null);
+    let markedRead = false;
     pendingReadIdsRef.current.add(notification.id);
     setPendingReadIds((previous) => new Set(previous).add(notification.id));
     setAnnouncement(`Marking ${notification.title} read.`);
     try {
       await onMarkRead(notification.id);
+      markedRead = true;
       setAnnouncement(`${notification.title} marked read.`);
     } finally {
       pendingReadIdsRef.current.delete(notification.id);
@@ -145,9 +156,11 @@ export const NotificationPanel: FunctionComponent<{
         next.delete(notification.id);
         return next;
       });
-      focusPanelAfterUpdate();
+      if (markedRead) {
+        focusPanelIfTargetRemoved(target);
+      }
     }
-  }, [focusPanelAfterUpdate, onMarkRead]);
+  }, [focusPanelIfTargetRemoved, onMarkRead]);
 
   useLayoutEffect(() => {
     if (!panelRef.current) return;
@@ -296,8 +309,8 @@ export const NotificationPanel: FunctionComponent<{
               data-notification-item
               data-motion-contract="listReorder"
               tabIndex={0}
-              onFocus={() => {
-                void handleMarkRead(notification);
+              onFocus={(event) => {
+                void handleMarkRead(notification, event.currentTarget);
               }}
               aria-busy={itemBusy ? "true" : "false"}
               className="group relative mb-2 rounded-2xl border border-black/[0.05] bg-white/75 p-3 text-left transition-colors motion-reduce:transition-none hover:border-black/[0.1] hover:bg-black/[0.025] last:mb-0 dark:border-white/[0.06] dark:bg-white/[0.04] dark:hover:border-white/[0.1] dark:hover:bg-white/[0.06]"
@@ -333,8 +346,8 @@ export const NotificationPanel: FunctionComponent<{
                   <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
                     <button
                       type="button"
-                      onClick={() => {
-                        void handleMarkRead(notification);
+                      onClick={(event) => {
+                        void handleMarkRead(notification, event.currentTarget);
                       }}
                       disabled={isMarkingRead || !notification.unread}
                       className="rounded-full px-2 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400 hover:bg-black/[0.04] hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 disabled:cursor-not-allowed disabled:opacity-55 dark:hover:bg-white/[0.06] dark:hover:text-slate-200"

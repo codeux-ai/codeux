@@ -51,7 +51,7 @@ export const InteractiveUsageChart: FunctionComponent<{
   const { isFiltersOpen, toggleFilters, closeFilters } = useUsageFilters();
   const gsapTokens = useGsapInteractionTokens();
   const interactionTokens = useInteractionTokens();
-  const [chartStatus, setChartStatus] = useState("Usage chart ready.");
+  const [chartStatus, setChartStatus] = useState("Trend telemetry ready.");
 
   const handleSliderChange = (e: JSX.TargetedEvent<HTMLInputElement>) => {
     const val = parseInt(e.currentTarget.value, 10);
@@ -251,6 +251,8 @@ export const InteractiveUsageChart: FunctionComponent<{
       setChartStatus(`Trend telemetry error: ${error}`);
     } else if (loading) {
       setChartStatus("Refreshing trend telemetry from cache. Existing chart data remains visible.");
+    } else {
+      setChartStatus("Trend telemetry ready.");
     }
   }, [error, loading]);
 
