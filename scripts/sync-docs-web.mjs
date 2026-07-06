@@ -309,12 +309,50 @@ function writeIfChanged(filePath, content, { dryRun, changed }) {
   }
 }
 
+function removeIfPresent(filePath, { dryRun, changed }) {
+  if (!fs.existsSync(filePath)) return;
+  changed.push(filePath);
+  if (!dryRun) {
+    fs.rmSync(filePath);
+  }
+}
+
+function pruneStaleGeneratedFiles({ contentDir, routesDir, docs, dryRun, changed }) {
+  const expectedContentFiles = new Set([
+    "index.ts",
+    "registry.ts",
+    ...docs.map((doc) => `${doc.id}.mdx`),
+  ]);
+  if (fs.existsSync(contentDir)) {
+    for (const entry of fs.readdirSync(contentDir, { withFileTypes: true })) {
+      if (!entry.isFile()) continue;
+      if (!entry.name.endsWith(".mdx") && entry.name !== "registry.ts" && entry.name !== "index.ts") continue;
+      if (!expectedContentFiles.has(entry.name)) {
+        removeIfPresent(path.join(contentDir, entry.name), { dryRun, changed });
+      }
+    }
+  }
+
+  const expectedRouteFiles = new Set(docs.map((doc) => `docs.${doc.id}.lazy.tsx`));
+  if (fs.existsSync(routesDir)) {
+    for (const entry of fs.readdirSync(routesDir, { withFileTypes: true })) {
+      if (!entry.isFile()) continue;
+      if (!/^docs\..+\.lazy\.tsx$/.test(entry.name)) continue;
+      if (!expectedRouteFiles.has(entry.name)) {
+        removeIfPresent(path.join(routesDir, entry.name), { dryRun, changed });
+      }
+    }
+  }
+}
+
 function main() {
   const options = parseArgs(process.argv.slice(2));
   const docs = buildDocs();
   const contentDir = path.join(options.marketingSrc, "content", "docs");
   const routesDir = path.join(options.marketingSrc, "routes");
   const changed = [];
+
+  pruneStaleGeneratedFiles({ contentDir, routesDir, docs, dryRun: options.dryRun, changed });
 
   for (const doc of docs) {
     writeIfChanged(path.join(contentDir, `${doc.id}.mdx`), doc.markdown, { dryRun: options.dryRun, changed });
