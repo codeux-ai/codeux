@@ -23,6 +23,7 @@ describe("preview-host-utils", () => {
           "authorization": "Bearer token",
           "cookie": "session=123",
           "connection": "keep-alive",
+          "set-cookie": "server-only=true",
           "upgrade": "websocket",
           "transfer-encoding": "chunked",
           "x-code-ux-test": "test",
@@ -45,6 +46,7 @@ describe("preview-host-utils", () => {
       expect(result["cookie"]).toBe("session=123");
       // Hop-by-hop and transport headers must still be stripped for correct proxying.
       expect(result["connection"]).toBeUndefined();
+      expect(result["set-cookie"]).toBeUndefined();
       expect(result["upgrade"]).toBeUndefined();
       expect(result["transfer-encoding"]).toBeUndefined();
       expect(result["x-code-ux-test"]).toBeUndefined();
