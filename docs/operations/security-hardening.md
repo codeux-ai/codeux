@@ -22,7 +22,9 @@ While Code UX trusts the developer and any connected systems, several specific p
 - **Local Binding Default:** The dashboard binds exclusively to the loopback interface (`127.0.0.1`) by default.
 
 ### MCP Gateway
-- **Session Hardening & Bearer Auth:** The Model Context Protocol (MCP) HTTP gateway implements robust session and lifecycle constraints. When the MCP service is configured for non-loopback access, it mandates HTTP Bearer token authentication to proceed. Unauthenticated external access will result in an immediate rejection (`401 Unauthorized`).
+- **Session Hardening & Bearer Auth:** The Model Context Protocol (MCP) HTTP gateway implements robust session and lifecycle constraints. When the MCP service is configured for non-loopback access (`0.0.0.0`, `::`, or a LAN address), startup fails unless a non-empty HTTP Bearer token is configured. Loopback-only development binds (`127.0.0.1`, `localhost`, or `::1`) may remain unauthenticated.
+- **MCP Header Preflight:** The MCP HTTP gateway normalizes and validates `Authorization`, `mcp-session-id`, and `x-code-ux-agent` headers before any session lookup. Missing or malformed bearer credentials return a sanitized `401 Unauthorized`; malformed session or agent identifiers return a sanitized `400 Bad Request`; inactive session ids use a generic invalid-session response.
+- **MCP Session Limits:** The gateway allows at most 100 active Streamable HTTP sessions and closes sessions idle for more than one hour before accepting a new initialize request. Session-cap logs include bounded operational metadata only, such as request method, path, active count, and maximum count.
 - **MCP Config Validation:** The gateway rigorously validates all incoming configurations and payloads against the Model Context Protocol schemas, ensuring only properly structured instructions are executed.
 - **Approval Correlation Guard:** MCP approval tracking accepts only bounded correlation ID shapes and rejects malformed, path-like, or token-like values without clearing valid pending approvals.
 
@@ -37,6 +39,7 @@ While Code UX trusts the developer and any connected systems, several specific p
 
 ### Redaction
 - **Log and Output Filtering:** Internal API keys, credentials, and sensitive configurations are actively scrubbed and redacted from application logs, debug outputs, and exported execution traces. The shared redactor covers provider API keys, OpenAI-compatible key shapes, GitHub/GitLab/Jira tokens, bearer/basic authorization headers, URL credentials, nested arrays, and error messages/stacks.
+- **MCP Gateway Log Hygiene:** Unauthorized, invalid-header, inactive-session, and session-cap gateway logs omit bearer values, supplied session ids, and supplied agent ids. They retain only correlation-safe metadata needed for operations.
 - **Settings Secret Inputs:** Dashboard settings fields that store provider API keys, Git host tokens, Jira API tokens, and external embedding API keys render as masked secret inputs by default. Operators must explicitly use the reveal control to inspect a value.
 - **Docker Secret Transport:** Provider and preview Docker launches write selected host/provider environment variables to temporary `0600` env-files and pass those files via `--env-file`. This keeps API keys and Git tokens out of the host `docker run` argv visible through process listings while preserving the same container environment.
 

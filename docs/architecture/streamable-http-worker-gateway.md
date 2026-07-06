@@ -127,7 +127,8 @@ Behavior:
 - disabled by default
 - automatically disabled for `worker_host`
 - defaults to `dashboardPort + 1` when `--mcp-http` is set without an explicit HTTP port
-- requires an auth token when binding to a non-loopback host
+- fails startup when binding to any non-loopback host such as `0.0.0.0`, `::`, or a LAN address without a non-empty auth token
+- preserves unauthenticated loopback-only development binds on `127.0.0.1`, `localhost`, and `::1`
 
 Default path:
 
@@ -169,7 +170,19 @@ The worker gateway supports bearer authentication:
 
 - `Authorization: Bearer <token>`
 
-If the gateway is exposed on anything other than loopback, Code UX now requires a configured auth token at startup.
+If the gateway is exposed on anything other than loopback, Code UX requires a configured auth token at startup. Code UX does not generate a replacement token for non-loopback binds because operators need to know and distribute the bearer value to workers explicitly.
+
+The request preflight validates security-sensitive headers before any session lookup:
+
+- malformed or missing bearer auth for a token-protected gateway returns the same sanitized `401 Unauthorized` JSON-RPC envelope
+- malformed `mcp-session-id` or `x-code-ux-agent` headers return a sanitized `400 Bad Request` JSON-RPC envelope
+- inactive session ids return a generic invalid-session response and logs do not include the supplied session id or bearer value
+
+Session lifecycle limits are enforced at the gateway:
+
+- at most 100 active Streamable HTTP sessions are accepted at once
+- sessions idle for more than one hour are closed and removed before a new initialize request is evaluated against the active-session cap
+- active-session cap failures are logged with bounded metadata such as method, path, active count, and maximum count, not bearer tokens or session ids
 
 This is a minimal transport guard, not the final worker identity model.
 
