@@ -98,7 +98,7 @@ Root E2E specs should prepare normal app state through `tests/e2e/helpers/prepar
 
 ### GitHub Actions E2E Policy
 
-The Playwright workflow is `.github/workflows/playwright.yml`. It runs on pushes and pull requests targeting `main` or `dev`, keeping release and publish workflows separate from validation.
+The Playwright workflow is `.github/workflows/playwright.yml`. It runs on pushes and pull requests targeting `main`, keeping the heavyweight OS-matrix E2E lane on the release path while `dev` remains gated by core CI.
 
 The workflow matrix covers `ubuntu-latest`, `macos-latest`, and `windows-latest`. It installs dependencies with pnpm 10.33.0 on Node 22, builds the server and dashboard before Playwright starts `node dist/index.js`, caches browser binaries under `.cache/ms-playwright`, installs Linux Chromium system dependencies only on Linux runners, and runs the same `pnpm run test:e2e` script used locally. Linux and macOS restore a `node_modules` cache for speed; Windows intentionally skips that cache and performs a clean pnpm install so pnpm's nested package links are regenerated instead of reusing a stale symlink tree. It uploads `test-results/` and `playwright-report/` as the `playwright-artifacts` workflow artifact for seven days, with empty uploads ignored so successful runs do not fail if no failure artifacts were produced.
 
@@ -124,6 +124,10 @@ Each job uses pnpm 10.33.0 and Node 22, runs `pnpm install --frozen-lockfile`, `
 `node scripts/verify-release-install.mjs` builds the workspace, creates a local npm tarball with `npm pack --ignore-scripts`, installs that tarball into a temporary npm project, and runs the installed `codeux --help` CLI smoke command. Electron packaging sets `CSC_IDENTITY_AUTO_DISCOVERY=false` so CI builds remain unsigned, and generated installer/package files under `release/electron/` are uploaded as workflow artifacts only.
 
 Together, `.github/workflows/release-checks.yml` and `.github/workflows/playwright.yml` are the push-to-main credential-free release validation lanes. The former checks source build, package installability, CLI help, and desktop package creation; the latter checks the compiled app in Chromium across Linux, macOS, and Windows, including project setup coverage.
+
+### Main Release Version Gate
+
+The `CI` workflow includes a `Release Version Bump` job for pull requests targeting `main`. It compares `package.json` on the PR head with the target `main` commit and fails unless the head version is a valid semver patch/minor/major increase. This keeps release promotions from merging to `main` without a package version bump while leaving ordinary `dev` integration PRs unaffected.
 
 Local reproduction commands:
 

@@ -11,6 +11,52 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  release-version-bump:
+    name: Release Version Bump
+    if: github.event_name == 'pull_request' && github.base_ref == 'main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Verify package version was bumped
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          base_version="$(git show "${BASE_SHA}:package.json" | node -e "const fs = require('node:fs'); console.log(JSON.parse(fs.readFileSync(0, 'utf8')).version)")"
+          head_version="$(git show "${HEAD_SHA}:package.json" | node -e "const fs = require('node:fs'); console.log(JSON.parse(fs.readFileSync(0, 'utf8')).version)")"
+
+          echo "Base package version: ${base_version}"
+          echo "Head package version: ${head_version}"
+
+          node - "${base_version}" "${head_version}" <<'NODE'
+          const [, , baseVersion, headVersion] = process.argv;
+          const semverPattern = /^(\d+)\.(\d+)\.(\d+)(?:[-+][0-9A-Za-z.-]+)?$/;
+
+          function parseVersion(value, label) {
+            const match = semverPattern.exec(value);
+            if (!match) {
+              throw new Error(`${label} package.json version is not valid semver: ${value}`);
+            }
+            return match.slice(1, 4).map(Number);
+          }
+
+          const base = parseVersion(baseVersion, 'Base');
+          const head = parseVersion(headVersion, 'Head');
+          const isGreater = head[0] > base[0]
+            || (head[0] === base[0] && head[1] > base[1])
+            || (head[0] === base[0] && head[1] === base[1] && head[2] > base[2]);
+
+          if (!isGreater) {
+            throw new Error(`Main release PRs must bump package.json version above ${baseVersion}; found ${headVersion}.`);
+          }
+          NODE
+
   typecheck:
     name: Typecheck & Lint
     runs-on: ubuntu-latest
