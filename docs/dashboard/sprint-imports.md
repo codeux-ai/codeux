@@ -76,9 +76,11 @@ When the GitHub token is empty, GitHub issue search, issue context loading, and 
 
 ## Jira Issue Import
 
-Use `Import -> Jira Issues` to search Jira with guided filters, multi-select issues, and attach them to the sprint composer. The Jira modal keeps Jira-specific controls for project key, exact issue key lookup, free-text search, status, assignee text, reporter text, issue type, priority, labels, updated-date windows, sort controls, bounded result limits, and optional JQL override.
+Use `Import -> Jira Issues` to search Jira with guided filters, multi-select issues, and attach them to the sprint composer. The Jira modal opens on the common search path first: project key, exact issue key lookup, free-text search, status, sort field, sort direction, and a bounded result limit. The default view calls out the normal open-issues, recently-updated-first behavior, active filters, visible result count, selected linked count, and selected special-task count.
 
-Jira results use selectable issue cards with source links, `Select all visible`, `Clear selection`, bulk conversation selection, and per-card `Append Conversation` toggles. Selected Jira issues default to linked sprint context. When special task creation is available, operators can explicitly switch the selected Jira issues to security or quality task mode before importing.
+Advanced Jira filters are grouped behind an `Advanced Jira filters` toggle. People filters hold assignee and reporter text, classification filters hold issue type, priority, and labels, the updated window uses date inputs, and the explicit JQL override uses a textarea. Project and issue-key inputs are normalized to uppercase, labels use the shared multi-select control, and the advanced JQL override remains optional.
+
+Jira results use compact selectable issue cards with source links, a visible per-card import mode label, `Select all visible`, `Clear selection`, bulk conversation selection, and per-card `Append Conversation` toggles. Selected Jira issues default to linked sprint context. When special task creation is available, operators can explicitly switch the selected Jira issues to security or quality task mode before importing.
 
 The assignee field accepts a Jira user full name, email address, or account ID. It also accepts `me` / `currentUser()` for the connected Jira account and `unassigned` / `empty` for issues without an assignee. The server builds the Jira query from the selected filters, defaults to open issues sorted by recent updates, and uses `Settings -> Integrations -> Jira -> Default project` to prefill the project key when available. Clearing the project key browses all Jira issues the saved credentials can see.
 
