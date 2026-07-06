@@ -30,6 +30,8 @@ const DEFAULT_JIRA_SETTINGS: SystemSettings["integrations"]["jira"] = {
   host: "",
   email: "",
   apiToken: "",
+  autoTransitionLinkedIssuesOnImport: true,
+  importTransitionName: "In Work",
   autoCloseLinkedIssues: false,
   defaultProject: "",
   closeTransitionName: "Done",
@@ -573,8 +575,8 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
 
     if (integrationId === "jira") {
       const jiraSettings = activeScope === "system"
-        ? (systemSettings.integrations.jira || DEFAULT_JIRA_SETTINGS)
-        : (editableSettings.jira || DEFAULT_JIRA_SETTINGS);
+        ? { ...DEFAULT_JIRA_SETTINGS, ...(systemSettings.integrations.jira || {}) }
+        : { ...DEFAULT_JIRA_SETTINGS, ...(editableSettings.jira || {}) };
       const updateJira = (updates: Partial<SystemSettings["integrations"]["jira"]>): void => {
         if (activeScope === "system") {
           updateSystem((current) => ({
@@ -618,6 +620,16 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
             </Row>
             <Row label="Default project" description="Project key used to prefill the Jira import JQL." badge={activeScope === "system" ? undefined : getFieldBadge("jira.defaultProject")}>
               <TextInput value={jiraSettings.defaultProject} onChange={(value) => updateJira({ defaultProject: value.toUpperCase() })} mono />
+            </Row>
+            <Row label="Import transition" description="Transition name used when linked Jira issues are imported into a sprint. The default moves issues to In Work." badge={activeScope === "system" ? undefined : getFieldBadge("jira.importTransitionName")}>
+              <TextInput value={jiraSettings.importTransitionName} onChange={(value) => updateJira({ importTransitionName: value })} />
+            </Row>
+            <Row label="Move Jira issues on import" description="Move linked Jira issues through the import transition as they are attached to a sprint." badge={activeScope === "system" ? undefined : getFieldBadge("jira.autoTransitionLinkedIssuesOnImport")}>
+              <Toggle
+                aria-label="Toggle setting"
+                value={jiraSettings.autoTransitionLinkedIssuesOnImport}
+                onChange={() => updateJira({ autoTransitionLinkedIssuesOnImport: !jiraSettings.autoTransitionLinkedIssuesOnImport })}
+              />
             </Row>
             <Row label="Close transition" description="Transition name used when auto-closing linked Jira issues after sprint completion." badge={activeScope === "system" ? undefined : getFieldBadge("jira.closeTransitionName")}>
               <TextInput value={jiraSettings.closeTransitionName} onChange={(value) => updateJira({ closeTransitionName: value })} />
