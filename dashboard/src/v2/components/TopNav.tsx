@@ -182,6 +182,27 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
     const isNotificationMenuVisible = notificationInteractionState !== 'closed';
     const notificationHoverTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
     const notificationContainerRef = useRef<HTMLDivElement>(null);
+    const notificationTriggerRef = useRef<HTMLButtonElement>(null);
+    const suppressNotificationFocusOpenRef = useRef(false);
+
+    const restoreNotificationFocus = useCallback(() => {
+        const trigger = notificationTriggerRef.current;
+        if (trigger && !trigger.disabled && trigger.isConnected) {
+            suppressNotificationFocusOpenRef.current = true;
+            trigger.focus({ preventScroll: true });
+            return;
+        }
+        const fallback = document.querySelector<HTMLElement>('[data-overlay-focus-fallback], [data-focus-fallback], main, [role="main"], #root') || document.body;
+        fallback.focus?.({ preventScroll: true });
+    }, []);
+
+    const closeNotificationMenu = useCallback((restoreFocus = true) => {
+        if (notificationHoverTimeout.current) clearTimeout(notificationHoverTimeout.current);
+        setNotificationInteractionState('closed');
+        if (restoreFocus) {
+            queueMicrotask(restoreNotificationFocus);
+        }
+    }, [restoreNotificationFocus]);
 
     const handleNotificationMouseEnter = () => {
         if (notificationHoverTimeout.current) clearTimeout(notificationHoverTimeout.current);
@@ -199,13 +220,17 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
     };
 
     const handleNotificationFocus = () => {
+        if (suppressNotificationFocusOpenRef.current) {
+            suppressNotificationFocusOpenRef.current = false;
+            return;
+        }
         if (notificationHoverTimeout.current) clearTimeout(notificationHoverTimeout.current);
         setNotificationInteractionState('open');
     };
 
     const handleNotificationBlur = (e: FocusEvent) => {
         if (!notificationContainerRef.current?.contains(e.relatedTarget as Node)) {
-            setNotificationInteractionState('closed');
+            closeNotificationMenu();
         }
     };
 
@@ -217,24 +242,23 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
             if (e.key === 'Escape' && isNotificationMenuVisible) {
-                setNotificationInteractionState('closed');
-                const triggerBtn = notificationContainerRef.current?.querySelector('button');
-                setTimeout(() => triggerBtn?.focus(), 0);
+                e.preventDefault();
+                closeNotificationMenu();
             }
         };
         document.addEventListener('keydown', handleKeyDown);
         return () => document.removeEventListener('keydown', handleKeyDown);
-    }, [isNotificationMenuVisible]);
+    }, [closeNotificationMenu, isNotificationMenuVisible]);
 
     useEffect(() => {
         const handleClickOutside = (e: MouseEvent) => {
             if (isNotificationMenuVisible && notificationContainerRef.current && !notificationContainerRef.current.contains(e.target as Node)) {
-                setNotificationInteractionState('closed');
+                closeNotificationMenu();
             }
         };
         document.addEventListener('mousedown', handleClickOutside);
         return () => document.removeEventListener('mousedown', handleClickOutside);
-    }, [isNotificationMenuVisible]);
+    }, [closeNotificationMenu, isNotificationMenuVisible]);
     const [sprintFilter, setSprintFilter] = useState('');
     const [sprintDropdownOpen, setSprintDropdownOpen] = useState(false);
     const sprintDropdownRef = useRef<HTMLDivElement>(null);
@@ -624,6 +648,7 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
                 >
                     <Tooltip content="Notifications">
                         <button
+                            ref={notificationTriggerRef}
                             type="button"
                             onClick={toggleNotificationMenu}
                             onFocus={handleNotificationFocus}

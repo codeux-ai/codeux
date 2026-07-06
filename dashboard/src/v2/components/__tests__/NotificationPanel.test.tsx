@@ -188,6 +188,39 @@ describe("NotificationPanel", () => {
     expect(screen.getByRole("button", { name: "Mark read Startup checks blocked" })).toBeInTheDocument();
   });
 
+  it("suppresses duplicate mark-read activation while the row is pending", async () => {
+    let resolveMarkRead: () => void = () => undefined;
+    const onMarkRead = vi.fn(() => new Promise<void>((resolve) => {
+      resolveMarkRead = resolve;
+    }));
+
+    render(
+      <NotificationPanel
+        unreadCount={1}
+        notifications={[makeNotification({ title: "Startup checks blocked" })]}
+        onMarkAllRead={vi.fn()}
+        onMarkRead={onMarkRead}
+        onDismiss={vi.fn()}
+        onRefresh={vi.fn()}
+      />,
+    );
+
+    const markRead = screen.getByRole("button", { name: "Mark read Startup checks blocked" });
+    fireEvent.click(markRead);
+    fireEvent.click(markRead);
+
+    expect(onMarkRead).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole("listitem")).toHaveAttribute("aria-busy", "true");
+    expect(screen.getByRole("button", { name: "Marking read Startup checks blocked" })).toBeDisabled();
+    expect(screen.getAllByText("Marking read")).toHaveLength(2);
+
+    resolveMarkRead();
+
+    await waitFor(() => {
+      expect(screen.getByRole("listitem")).toHaveAttribute("aria-busy", "false");
+    });
+  });
+
   it("compacts lists immediately under reduced motion while preserving critical items first", () => {
     const warning = makeNotification({
       id: "warning",
