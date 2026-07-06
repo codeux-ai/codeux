@@ -1044,4 +1044,186 @@ describe("SprintIssueService", () => {
     expect(result.closed).toBe(0);
     expect(result.failed).toBe(1);
   });
+
+  it("transitions imported Jira linked issues through the configured transition", async () => {
+    const linkedIssue: SprintLinkedIssueRecord = {
+      id: "issue-1",
+      projectId: project.id,
+      sprintId: "sprint-1",
+      provider: "jira",
+      hostDomain: "acme.atlassian.net",
+      repository: "OPS",
+      issueNumber: 42,
+      issueKey: "OPS-42",
+      title: "Ship Jira import",
+      url: "https://acme.atlassian.net/browse/OPS-42",
+      state: "To Do",
+      labels: [],
+      assignees: [],
+      closeState: "open",
+      closeError: null,
+      closedAt: null,
+      createdAt: "2026-05-17T00:00:00.000Z",
+    };
+    const replaceSprintLinkedIssues = vi.fn(() => [linkedIssue]);
+    const jiraApiClient = {
+      getTransitions: vi.fn(async () => [{ id: "31", name: "in work" }]),
+      transitionIssue: vi.fn(async () => undefined),
+    };
+
+    const service = new SprintIssueService({
+      projectManagementRepository: {
+        replaceSprintLinkedIssues,
+      } as any,
+      getDashboardSettings: () => ({
+        ...DEFAULT_DASHBOARD_SETTINGS,
+        jira: {
+          ...DEFAULT_DASHBOARD_SETTINGS.jira,
+          host: "https://acme.atlassian.net",
+          email: "",
+          apiToken: "jira-token",
+          importTransitionName: "In Work",
+        },
+      }),
+      jiraApiClient: jiraApiClient as any,
+    });
+
+    const result = await service.importLinkedIssues("sprint-1", project.id, [{
+      provider: "jira",
+      hostDomain: "acme.atlassian.net",
+      repository: "OPS",
+      issueNumber: 42,
+      issueKey: "OPS-42",
+      title: "Ship Jira import",
+      url: "https://acme.atlassian.net/browse/OPS-42",
+    }]);
+
+    expect(replaceSprintLinkedIssues).toHaveBeenCalledWith(project.id, "sprint-1", [expect.objectContaining({
+      provider: "jira",
+      issueKey: "OPS-42",
+    })]);
+    expect(jiraApiClient.getTransitions).toHaveBeenCalledWith(
+      "https://acme.atlassian.net",
+      "",
+      "jira-token",
+      "OPS-42",
+    );
+    expect(jiraApiClient.transitionIssue).toHaveBeenCalledWith(
+      "https://acme.atlassian.net",
+      "",
+      "jira-token",
+      "OPS-42",
+      "31",
+    );
+    expect(result).toEqual({ linkedIssues: [linkedIssue], warnings: [] });
+  });
+
+  it("skips imported Jira transitions when the import transition setting is disabled", async () => {
+    const linkedIssue = {
+      id: "issue-1",
+      provider: "jira",
+      issueKey: "OPS-42",
+    } as SprintLinkedIssueRecord;
+    const jiraApiClient = {
+      getTransitions: vi.fn(),
+      transitionIssue: vi.fn(),
+    };
+
+    const service = new SprintIssueService({
+      projectManagementRepository: {
+        replaceSprintLinkedIssues: vi.fn(() => [linkedIssue]),
+      } as any,
+      getDashboardSettings: () => ({
+        ...DEFAULT_DASHBOARD_SETTINGS,
+        jira: {
+          ...DEFAULT_DASHBOARD_SETTINGS.jira,
+          autoTransitionLinkedIssuesOnImport: false,
+          host: "https://acme.atlassian.net",
+          apiToken: "jira-token",
+        },
+      }),
+      jiraApiClient: jiraApiClient as any,
+    });
+
+    const result = await service.importLinkedIssues("sprint-1", project.id, []);
+
+    expect(jiraApiClient.getTransitions).not.toHaveBeenCalled();
+    expect(jiraApiClient.transitionIssue).not.toHaveBeenCalled();
+    expect(result).toEqual({ linkedIssues: [linkedIssue], warnings: [] });
+  });
+
+  it("keeps imported Jira linked issues when the configured import transition is missing", async () => {
+    const linkedIssue = {
+      id: "issue-1",
+      provider: "jira",
+      issueKey: "OPS-42",
+    } as SprintLinkedIssueRecord;
+    const logger = {
+      warn: vi.fn(),
+      info: vi.fn(),
+      error: vi.fn(),
+      debug: vi.fn(),
+      child: vi.fn(),
+    };
+    const jiraApiClient = {
+      getTransitions: vi.fn(async () => [{ id: "41", name: "Done" }]),
+      transitionIssue: vi.fn(),
+    };
+
+    const service = new SprintIssueService({
+      projectManagementRepository: {
+        replaceSprintLinkedIssues: vi.fn(() => [linkedIssue]),
+      } as any,
+      getDashboardSettings: () => ({
+        ...DEFAULT_DASHBOARD_SETTINGS,
+        jira: {
+          ...DEFAULT_DASHBOARD_SETTINGS.jira,
+          host: "https://acme.atlassian.net",
+          apiToken: "jira-token",
+          importTransitionName: "In Work",
+        },
+      }),
+      jiraApiClient: jiraApiClient as any,
+      logger: logger as any,
+    });
+
+    const result = await service.importLinkedIssues("sprint-1", project.id, []);
+
+    expect(jiraApiClient.transitionIssue).not.toHaveBeenCalled();
+    expect(result.linkedIssues).toEqual([linkedIssue]);
+    expect(result.warnings).toEqual([{
+      issueId: "issue-1",
+      issueKey: "OPS-42",
+      message: "Transition 'In Work' not found for Jira issue OPS-42",
+    }]);
+    expect(logger.warn).toHaveBeenCalledWith("Failed to transition imported Jira issue", expect.objectContaining({
+      issueKey: "OPS-42",
+      error: "Transition 'In Work' not found for Jira issue OPS-42",
+    }));
+  });
+
+  it("does not transition GitHub or GitLab linked issues during import", async () => {
+    const linkedIssues = [
+      { id: "issue-1", provider: "github", issueKey: "#42" },
+      { id: "issue-2", provider: "gitlab", issueKey: "!7" },
+    ] as SprintLinkedIssueRecord[];
+    const jiraApiClient = {
+      getTransitions: vi.fn(),
+      transitionIssue: vi.fn(),
+    };
+
+    const service = new SprintIssueService({
+      projectManagementRepository: {
+        replaceSprintLinkedIssues: vi.fn(() => linkedIssues),
+      } as any,
+      getDashboardSettings: vi.fn(() => DEFAULT_DASHBOARD_SETTINGS),
+      jiraApiClient: jiraApiClient as any,
+    });
+
+    const result = await service.importLinkedIssues("sprint-1", project.id, []);
+
+    expect(jiraApiClient.getTransitions).not.toHaveBeenCalled();
+    expect(jiraApiClient.transitionIssue).not.toHaveBeenCalled();
+    expect(result).toEqual({ linkedIssues, warnings: [] });
+  });
 });

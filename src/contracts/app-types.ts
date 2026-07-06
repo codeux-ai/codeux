@@ -778,6 +778,8 @@ export interface JiraSettings {
   host: string;               // e.g. "https://company.atlassian.net"
   email: string;              // used for Basic Auth on Jira Cloud
   apiToken: string;
+  autoTransitionLinkedIssuesOnImport: boolean;
+  importTransitionName: string; // transition name for imports, default "In Work"
   autoCloseLinkedIssues: boolean;
   defaultProject: string;     // default project key shown in import modal
   closeTransitionName: string; // transition name for closing, default "Done"

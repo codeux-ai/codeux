@@ -185,8 +185,8 @@ export const replaceSprintLinkedIssues = async (
   sprintId: string,
   projectId: string,
   issues: SprintLinkedIssueInput[],
-): Promise<SprintLinkedIssueRecord[]> => {
-  return fetchJson<SprintLinkedIssueRecord[]>(
+): Promise<{ linkedIssues: SprintLinkedIssueRecord[]; warnings: Array<{ issueId: string; issueKey: string; message: string }> }> => {
+  return fetchJson<{ linkedIssues: SprintLinkedIssueRecord[]; warnings: Array<{ issueId: string; issueKey: string; message: string }> }>(
     `/api/sprints/${encodeURIComponent(sprintId)}/linked-issues`,
     {
       method: "PUT",

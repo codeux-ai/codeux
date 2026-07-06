@@ -328,6 +328,12 @@ const validateJiraSettings = (
   if (typeof value.apiToken !== "string") {
     issues.push({ path: `${path}.apiToken`, message: "Expected a string" });
   }
+  if (typeof value.autoTransitionLinkedIssuesOnImport !== "boolean") {
+    issues.push({ path: `${path}.autoTransitionLinkedIssuesOnImport`, message: "Expected a boolean" });
+  }
+  if (typeof value.importTransitionName !== "string") {
+    issues.push({ path: `${path}.importTransitionName`, message: "Expected a string" });
+  }
   if (typeof value.autoCloseLinkedIssues !== "boolean") {
     issues.push({ path: `${path}.autoCloseLinkedIssues`, message: "Expected a boolean" });
   }

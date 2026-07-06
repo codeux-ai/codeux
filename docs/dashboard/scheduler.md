@@ -23,6 +23,12 @@ The Sprint Composer also exposes a `Schedule` execution mode. That path saves th
 
 The Quicksprint configure view exposes the same scheduler timing model. Scheduling a quicksprint serializes the selected template, subtask count, `No limit` state, additional prompt, planning route/model override, and scheduled submit mode into `quicksprintTarget`, then creates a scheduler entry without launching the quicksprint immediately.
 
+Sprint and quicksprint entries support two dashboard timing modes:
+- **Absolute date/time** keeps the existing date-time picker, quick presets, timezone capture, and recurrence controls. This is the only timing mode available for chat and memory remediation entries.
+- **After another sprint ends** stores the shared `scheduleAnchor = { mode: "after_sprint_end", sourceSprintId, offsetMinutes? }` payload. Operators choose a source sprint from the project sprint list and may add a non-negative offset in minutes. These entries are one-time only, so the dashboard disables recurrence and explains that a sprint cannot be anchored to its own completion.
+
+Anchored entries in the scheduled-entry list are summarized as relative timing, for example `After Release Prep ends + 15 minutes`, instead of showing a misleading fixed `Next run` time while the scheduler is still waiting for the source sprint to finish.
+
 The Memory settings panel can also manage one project-scoped long-term remediation entry. That entry is marked with `memoryRemediationTarget.source = "memory_settings"` so the settings shortcut does not overwrite manually created Scheduler page remediation entries.
 
 Scheduler target selectors, recurrence indicators, and repeating-count summary icons use the dashboard signal jade palette for interactive accents. Sprint and next-run status tones remain differentiated with their existing ember/status colors.

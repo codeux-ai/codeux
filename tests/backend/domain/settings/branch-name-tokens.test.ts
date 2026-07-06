@@ -112,6 +112,8 @@ function makeBasePayload() {
       host: "jira.com",
       email: "a@b.com",
       apiToken: "...",
+      autoTransitionLinkedIssuesOnImport: true,
+      importTransitionName: "In Work",
       autoCloseLinkedIssues: true,
       defaultProject: "PROJ",
       closeTransitionName: "Done",
