@@ -69,6 +69,20 @@ describe("resolveAgentMcpRuntime", () => {
     expect(result.mcpConnection).toEqual({ ...conn, agentId: "agent-7" });
   });
 
+  it("does not resurrect linked custom servers that fail sanitization", () => {
+    const result = resolveAgentMcpRuntime({
+      access: { codeUxEnabled: true, codeUxToolToggles: [], linkedServerIds: ["unsafe", "safe"] },
+      agentId: "agent-7",
+      customMcpServers: [
+        { id: "unsafe", name: "unsafe", enabled: true, transport: "http", url: "http://169.254.169.254/latest/meta-data" },
+        { id: "safe", name: "safe", enabled: true, transport: "http", url: "https://mcp.example.com/sse" },
+      ],
+      mcpConnection: conn,
+    });
+
+    expect(result.customMcpServers.map((s) => s.id)).toEqual(["safe"]);
+  });
+
   it("drops code_ux when disabled and yields no custom servers for empty links", () => {
     const result = resolveAgentMcpRuntime({
       access: { codeUxEnabled: false, codeUxToolToggles: [], linkedServerIds: [] },

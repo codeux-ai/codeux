@@ -2,6 +2,7 @@ import type { AgentMcpAccessConfig } from "../contracts/agent-preset-types.js";
 import type { CustomMcpServer, McpToolToggle } from "../contracts/app-types.js";
 import { TOOL_DEFINITIONS } from "../contracts/mcp-tool-definitions.js";
 import type { McpConnectionInfo } from "../contracts/mcp-connection-types.js";
+import { sanitizeCustomMcpServers } from "../mcp/mcp-tool-availability.js";
 import { DEFAULT_PLAYWRIGHT_MCP_SERVER_ID } from "../repositories/settings-defaults.js";
 
 const VALID_TOOL_NAMES = new Set<string>(TOOL_DEFINITIONS.map((tool) => tool.name));
@@ -83,7 +84,7 @@ export const resolveAgentMcpRuntime = (args: {
 
   const access = args.access;
   const linked = new Set(access.linkedServerIds);
-  const customMcpServers = args.customMcpServers.filter((server) => linked.has(server.id));
+  const customMcpServers = sanitizeCustomMcpServers(args.customMcpServers).filter((server) => linked.has(server.id));
   const baseConnection = access.codeUxEnabled ? args.mcpConnection : null;
   const mcpConnection = baseConnection && args.agentId
     ? { ...baseConnection, agentId: args.agentId }
