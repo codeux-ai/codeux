@@ -330,6 +330,38 @@ describe("DockerRunner", () => {
     expect(argvWrite?.[1]).toContain(`plan ${"x".repeat(1024)}`);
     expect(argvWrite?.[1]).toContain(" with ");
     expect(argvWrite?.[1]).toContain("'\"'\"'quotes'\"'\"'");
+    expect(argvWrite?.[2]).toEqual(expect.objectContaining({ mode: 0o600 }));
+  });
+
+  it("sanitizes streamed Docker provider output before activity callbacks", async () => {
+    const rawSecret = "glpat-12345678901234567890";
+    vi.mocked(runStreamingCommand).mockImplementationOnce(async (_command, _args, _cwd, _env, options: any) => {
+      options.onStdoutLine?.(`stdout ${rawSecret}`);
+      options.onStderrLine?.(`Authorization: Bearer ${rawSecret}`);
+      return { ok: true, stdout: `stdout ${rawSecret}`, stderr: "", code: 0, signal: null } as any;
+    });
+    const onActivity = vi.fn();
+
+    await runner.runProviderInDocker({
+      command: "gemini",
+      args: ["--prompt", "plan"],
+      cwd: "docker-volume://workspace-1",
+      providerEnv: {},
+      sessionId: "session-1",
+      providerLabel: "gemini",
+      workflowSettings: {
+        executionMode: "DOCKER",
+        containerImage: "node:24",
+        containerSetupScriptPath: "",
+        containerCacheSetupScriptImage: false,
+      } as any,
+      repoPath: "/repo/project",
+      onActivity,
+    });
+
+    const activityText = JSON.stringify(onActivity.mock.calls);
+    expect(activityText).not.toContain(rawSecret);
+    expect(activityText).toContain("[REDACTED]");
   });
 
   it("passes provider environment through an env-file so API keys do not enter docker argv", async () => {
@@ -369,6 +401,43 @@ describe("DockerRunner", () => {
     expect(envWrite?.[2]).toEqual(expect.objectContaining({ mode: 0o600 }));
     expect(JSON.stringify(onActivity.mock.calls)).not.toContain("secret-key-value");
     expect(JSON.stringify(onActivity.mock.calls)).not.toContain("ghp-secret-value");
+  });
+
+  it("keeps MCP authorization tokens out of Docker command labels while writing restrictive mounted config", async () => {
+    const rawMcpToken = "fixtureMcpBearerToken1234567890";
+    await runner.runProviderInDocker({
+      command: "codex",
+      args: ["exec", "--yolo", "plan"],
+      cwd: "docker-volume://workspace-1",
+      providerEnv: {},
+      sessionId: "session-1",
+      providerLabel: "codex",
+      workflowSettings: {
+        executionMode: "DOCKER",
+        containerImage: "node:24",
+        containerSetupScriptPath: "",
+        containerCacheSetupScriptImage: false,
+      } as any,
+      repoPath: "/repo/project",
+      onActivity: vi.fn(),
+      mcpConnection: {
+        url: "https://example.invalid/mcp",
+        authToken: rawMcpToken,
+      },
+    });
+
+    const dockerArgs = vi.mocked(runStreamingCommand).mock.calls[0]?.[1] as string[];
+    const dockerArgText = dockerArgs.join(" ");
+    expect(dockerArgText).not.toContain(rawMcpToken);
+    expect(dockerArgText).not.toContain("Authorization");
+    expect(dockerArgs).toEqual(expect.arrayContaining([
+      "--label",
+      "code-ux.args-count=3",
+    ]));
+
+    const configWrite = vi.mocked(fs.writeFile).mock.calls.find(([file]) => String(file).endsWith("codex-config.toml"));
+    expect(configWrite?.[1]).toContain(rawMcpToken);
+    expect(configWrite?.[2]).toEqual(expect.objectContaining({ mode: 0o600 }));
   });
 
   it("stages generated Gemini MCP config outside runtime home and copies it during bootstrap", async () => {

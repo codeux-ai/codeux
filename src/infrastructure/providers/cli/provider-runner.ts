@@ -10,6 +10,7 @@ import type { IDockerRunner } from "./docker-runner.js";
 import type { SnapshotCheckout } from "./workspace-manager.js";
 import { isDockerWorkspaceMountError } from "../../../services/cli-docker-utils.js";
 import { sanitizeInvocationOutputText } from "../../../services/invocation-output-sanitizer.js";
+import { redactMetadata } from "../../../shared/security/redaction.js";
 import * as fs from "fs/promises";
 import * as os from "os";
 import * as path from "path";
@@ -323,13 +324,14 @@ export class ProviderRunner implements IProviderRunner {
     // the rollout file isn't yet readable.
     let accumulatedRawStdout = "";
     const trackingOnActivity = (desc: string, originator?: string) => {
+      const sanitizedDesc = sanitizeInvocationOutputText(desc);
       if (originator === "agent") {
-        accumulatedStdout += desc + "\n";
+        accumulatedStdout += sanitizedDesc + "\n";
         accumulatedRawStdout += desc + "\n";
       } else if (originator === "provider") {
-        accumulatedStderr += desc + "\n";
+        accumulatedStderr += sanitizedDesc + "\n";
       }
-      onActivity(desc, originator);
+      onActivity(sanitizedDesc, originator);
     };
 
     const runCmd = async () => {
@@ -544,8 +546,8 @@ export class ProviderRunner implements IProviderRunner {
         opencodeBaselineUsage: input.openCodeBaselineUsage,
       });
       return {
-        ...result,
-        usageTelemetry,
+        ...this.sanitizeCommandResult(result),
+        usageTelemetry: this.sanitizeUsageTelemetry(usageTelemetry),
         nativeSessionId: usageTelemetry.nativeSessionId || resolvedNativeSessionId || nativeSessionId,
       };
     } finally {
@@ -562,6 +564,28 @@ export class ProviderRunner implements IProviderRunner {
       });
     }
   }
+
+  private sanitizeCommandResult(result: CommandResult): CommandResult {
+    return {
+      ...result,
+      stdout: sanitizeInvocationOutputText(result.stdout || ""),
+      stderr: sanitizeInvocationOutputText(result.stderr || ""),
+    };
+  }
+
+  private sanitizeUsageTelemetry(usageTelemetry: ProviderUsageTelemetry): ProviderUsageTelemetry {
+    const rawUsageJson = redactMetadata(usageTelemetry.rawUsageJson) as Record<string, unknown> | null;
+    return {
+      ...usageTelemetry,
+      rawUsageJson,
+      transcriptText: sanitizeInvocationOutputText(usageTelemetry.transcriptText || ""),
+      conversation: usageTelemetry.conversation.map((turn) => ({
+        ...turn,
+        text: sanitizeInvocationOutputText(turn.text || ""),
+      })),
+    };
+  }
+
   private async performCleanup(opts: {
     watcher: ProviderTelemetryWatcher | null;
     tempDbPath: string | null;
@@ -698,7 +722,10 @@ export class ProviderRunner implements IProviderRunner {
     const safeSessionId = sessionId.replace(/[^a-zA-Z0-9_.-]/g, "-");
     const configPath = path.join(getRepoCodeUxPath(repoPath, "tmp"), `opencode-config-${safeSessionId}.json`);
     await fs.mkdir(path.dirname(configPath), { recursive: true });
-    await fs.writeFile(configPath, `${content}\n`, "utf8");
+    await fs.writeFile(configPath, `${content}\n`, { encoding: "utf8", mode: 0o600 });
+    if (process.platform !== "win32") {
+      await fs.chmod(configPath, 0o600);
+    }
     return configPath;
   }
 
@@ -1288,7 +1315,10 @@ export class ProviderRunner implements IProviderRunner {
     }
 
     await fs.mkdir(dirPath, { recursive: true });
-    await fs.writeFile(configPath, artifact.content);
+    await fs.writeFile(configPath, artifact.content, { encoding: "utf8", mode: 0o600 });
+    if (process.platform !== "win32") {
+      await fs.chmod(configPath, 0o600);
+    }
     return [{ path: configPath, originalContent }];
   }
 }

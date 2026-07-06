@@ -92,6 +92,76 @@ describe("ProviderRunner", () => {
     expect(result.text).toBe("keep this line");
   });
 
+  it("sanitizes host provider activity callbacks and returned command output", async () => {
+    const rawSecret = "sk-or-v1-providerRunnerHostSecret1234567890";
+    const onActivity = vi.fn();
+    vi.mocked(runStreamingCommand).mockImplementationOnce(async (_command, _args, _cwd, _env, options: any) => {
+      options.onStdoutLine?.(`stdout OPENROUTER_API_KEY=${rawSecret}`);
+      options.onStderrLine?.(`stderr Authorization: Bearer ${rawSecret}`);
+      return {
+        ok: true,
+        stdout: `stdout OPENROUTER_API_KEY=${rawSecret}`,
+        stderr: `stderr Authorization: Bearer ${rawSecret}`,
+        code: 0,
+        signal: null,
+      };
+    });
+
+    const result = await runner.runProvider({
+      provider: "codex",
+      prompt: "hello",
+      cwd: "/repo",
+      model: "default",
+      apiKey: "key",
+      sessionId: "session-1",
+      workflowSettings: { executionMode: "HOST" } as any,
+      repoPath: "/repo",
+      onActivity,
+    });
+
+    const activityText = JSON.stringify(onActivity.mock.calls);
+    expect(activityText).not.toContain(rawSecret);
+    expect(activityText).toContain("[REDACTED]");
+    expect(result.stdout).not.toContain(rawSecret);
+    expect(result.stderr).not.toContain(rawSecret);
+    expect(result.stdout).toContain("OPENROUTER_API_KEY=[REDACTED]");
+    expect(result.stderr).toContain("Authorization: Bearer [REDACTED]");
+  });
+
+  it("sanitizes Docker provider activity callbacks and returned command output", async () => {
+    const rawSecret = "github_pat_1234567890abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_1234567890";
+    const onActivity = vi.fn();
+    dockerRunner.runProviderInDocker.mockImplementationOnce(async ({ onActivity: emit }: any) => {
+      emit(`cloned with ${rawSecret}`, "agent");
+      emit(`provider Authorization: Bearer ${rawSecret}`, "provider");
+      return {
+        ok: true,
+        stdout: `stdout ${rawSecret}`,
+        stderr: `stderr Authorization: Bearer ${rawSecret}`,
+        code: 0,
+        signal: null,
+      };
+    });
+
+    const result = await runner.runProvider({
+      provider: "gemini",
+      prompt: "hello",
+      cwd: "/repo",
+      model: "gemini-2.5-pro",
+      apiKey: "key",
+      sessionId: "session-1",
+      workflowSettings: { executionMode: "DOCKER" } as any,
+      repoPath: "/repo",
+      onActivity,
+    });
+
+    const activityText = JSON.stringify(onActivity.mock.calls);
+    expect(activityText).not.toContain(rawSecret);
+    expect(activityText).toContain("[REDACTED]");
+    expect(result.stdout).not.toContain(rawSecret);
+    expect(result.stderr).not.toContain(rawSecret);
+  });
+
   it("persists the fresh Claude session id after missing-conversation fallback", async () => {
     const oldNativeSessionId = "66e95743-e82e-445d-891a-ac01b27ddcb9";
     dockerRunner.readWorkspaceFile.mockResolvedValue("");
@@ -1120,6 +1190,8 @@ describe("ProviderRunner MCP config generation", () => {
     mockReadFile.mockResolvedValue(null as any);
     const mockWriteFile = vi.spyOn(fs, 'writeFile');
     mockWriteFile.mockResolvedValue(undefined);
+    const mockChmod = vi.spyOn(fs, 'chmod');
+    mockChmod.mockResolvedValue(undefined);
   });
 
   const writeConfig = (conn: any, cwd: string, provider: any, qwenSettings?: string, customServers: any[] = []) =>
