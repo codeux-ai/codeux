@@ -643,6 +643,76 @@ describe("setupDashboardServer", () => {
     expect(response.status).not.toBe(403);
   });
 
+  it("rejects API requests with comma-separated forwarded hosts", async () => {
+    const app = express();
+    configureDashboardApp(buildDashboardTestOptions({ app }));
+
+    const response = await httpRequestMock(app)
+      .post("/api/settings")
+      .set("Host", "localhost:3000")
+      .set("X-Forwarded-Host", "localhost:3000, evil.com")
+      .set("Origin", "http://localhost:3000")
+      .send({ settings: {} });
+
+    expect(response.status).toBe(403);
+    expect(response.body).toEqual({ error: "Forbidden: Untrusted host." });
+  });
+
+  it("rejects runtime requests with non-local preview host spoofing", async () => {
+    const app = express();
+    configureDashboardApp(buildDashboardTestOptions({ app }));
+
+    const response = await httpRequestMock(app)
+      .post("/api/settings")
+      .set("Host", "preview-test-session.evil.example:3000")
+      .set("Origin", "http://preview-test-session.evil.example:3000")
+      .send({ settings: {} });
+
+    expect(response.status).toBe(403);
+    expect(response.body).toEqual({ error: "Forbidden: Untrusted host." });
+  });
+
+  it("rejects hostile browser origins on runtime probe routes", async () => {
+    const app = express();
+    configureDashboardApp(buildDashboardTestOptions({ app }));
+
+    const response = await httpRequestMock(app)
+      .post("/ready")
+      .set("Host", "localhost:3000")
+      .set("Origin", "https://evil.example")
+      .send({});
+
+    expect(response.status).toBe(403);
+    expect(response.body).toEqual({ error: "Forbidden: Cross-site requests are not allowed." });
+  });
+
+  it("rejects malformed referers on runtime probe routes", async () => {
+    const app = express();
+    configureDashboardApp(buildDashboardTestOptions({ app }));
+
+    const response = await httpRequestMock(app)
+      .post("/health")
+      .set("Host", "localhost:3000")
+      .set("Referer", "not a valid referer")
+      .send({});
+
+    expect(response.status).toBe(403);
+    expect(response.body).toEqual({ error: "Forbidden: Cross-site requests are not allowed." });
+  });
+
+  it("allows IPv6 loopback dashboard origins", async () => {
+    const app = express();
+    configureDashboardApp(buildDashboardTestOptions({ app }));
+
+    const response = await httpRequestMock(app)
+      .post("/api/settings")
+      .set("Host", "[::1]:4444")
+      .set("Origin", "http://[::1]:4444")
+      .send({ settings: {} });
+
+    expect(response.status).not.toBe(403);
+  });
+
   it("rejects cross-site POST requests with a 403 status", async () => {
     const app = express();
     const handle = await setupDashboardServer({

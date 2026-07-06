@@ -4,7 +4,12 @@ import * as path from "path";
 import type { IncomingMessage } from "http";
 import type { Logger } from "../shared/logging/logger.js";
 import { correlationIdMiddleware } from "../shared/logging/correlation-id.js";
-import { applyDashboardSecurityHeaders, isHostileBrowserOrigin, isTrustedDashboardHost } from "./dashboard-security.js";
+import {
+  applyDashboardSecurityHeaders,
+  isHostileBrowserOrigin,
+  isTrustedDashboardHost,
+  isTrustedDashboardPreviewHost,
+} from "./dashboard-security.js";
 import { createPreviewHostMiddleware } from "./preview-host-middleware.js";
 import { parsePreviewSessionIdFromHost } from "./preview-host-utils.js";
 import { createHttpRateLimiter } from "../shared/http/rate-limit.js";
@@ -56,14 +61,12 @@ export const applyDashboardPreRouteMiddleware = (
     next();
   });
 
-  app.use(createPreviewHostMiddleware(options));
-
   app.use((req, res, next) => {
     const isRuntimeDataPath = req.path.startsWith("/api/")
       || req.path === "/health"
       || req.path === "/ready";
 
-    if (isRuntimeDataPath && !isTrustedDashboardHost(req.headers.host)) {
+    if (isRuntimeDataPath && !isTrustedDashboardHost(req.headers.host, req.headers["x-forwarded-host"])) {
       dashboardLogger.warn("Blocked runtime request with untrusted Host header", {
         logPurpose: "security",
         method: req.method,
@@ -74,7 +77,7 @@ export const applyDashboardPreRouteMiddleware = (
       return;
     }
 
-    if (isRuntimeDataPath && isHostileBrowserOrigin(req)) {
+    if (isRuntimeDataPath && !isTrustedDashboardPreviewHost(req.headers.host) && isHostileBrowserOrigin(req)) {
       dashboardLogger.warn("Blocked hostile cross-site browser request", {
         logPurpose: "security",
         method: req.method,
@@ -86,6 +89,8 @@ export const applyDashboardPreRouteMiddleware = (
     }
     next();
   });
+
+  app.use(createPreviewHostMiddleware(options));
 
   // Settings payloads can embed a base64 background-image data URL, which the
   // dashboard warns about past ~5MB. base64 inflates bytes by ~33%, so allow
