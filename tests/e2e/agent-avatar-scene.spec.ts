@@ -1,6 +1,10 @@
 import { test, expect } from '@playwright/test';
 import { completeOnboarding, createE2EAgentPreset, ensureSelectedProject } from './helpers/prepare-app';
 
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 test.describe('AgentAvatarScene E2E Tests', () => {
   let agentName: string;
 
@@ -15,11 +19,9 @@ test.describe('AgentAvatarScene E2E Tests', () => {
 
   test('should render the WebGL canvas when WebGL is supported', async ({ page }) => {
     await page.goto('/agents');
-    await page.getByRole('button', { name: new RegExp(agentName) }).click();
+    await page.getByRole('button', { name: new RegExp(escapeRegExp(agentName)) }).click();
 
-    // The 3D scene is lazy-loaded when its portrait host intersects the
-    // viewport. Bring the host into view before asserting the WebGL renderer.
-    await page.locator('[data-testid="lazy-agent-avatar-scene"]').first().scrollIntoViewIfNeeded();
+    await expect(page.locator('h2').filter({ hasText: agentName })).toBeVisible();
 
     // Assert that the 3D scene container is rendered and contains a canvas
     const avatarScene = page.locator('[data-testid="agent-avatar-scene"]');
@@ -43,7 +45,7 @@ test.describe('AgentAvatarScene E2E Tests', () => {
     });
 
     await page.goto('/agents');
-    await page.getByRole('button', { name: new RegExp(agentName) }).click();
+    await page.getByRole('button', { name: new RegExp(escapeRegExp(agentName)) }).click();
 
     // Verify that the fallback SVG container is rendered instead of the WebGL canvas
     const fallbackSvg = page.locator('[data-testid="agent-avatar-fallback"]');
