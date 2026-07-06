@@ -102,7 +102,6 @@ import type {
   SchedulerOccurrence,
   ScheduleAnchor,
   ScheduleRecurrenceRule,
-  ScheduleAnchor,
   ScheduleTargetType,
   UpdateSchedulerEntryInput,
 } from "../../../src/contracts/scheduler-types.js";
@@ -296,7 +295,6 @@ export type {
   SchedulerOccurrence,
   ScheduleAnchor,
   ScheduleRecurrenceRule,
-  ScheduleAnchor,
   ScheduleTargetType,
   UpdateSchedulerEntryInput,
 };
