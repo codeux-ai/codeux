@@ -37,6 +37,44 @@ test('applies pending width adjustments correctly via style', () => {
     expect(btn).toHaveTextContent('Fixed width check');
 });
 
+test('keeps measured width stable across pending and success feedback states', () => {
+    const offsetWidthSpy = vi.spyOn(HTMLElement.prototype, 'offsetWidth', 'get').mockReturnValue(144);
+
+    const { rerender } = render(
+        <ProjectDataProvider>
+            <Button>Stable feedback width</Button>
+        </ProjectDataProvider>
+    );
+
+    const btn = screen.getByRole('button', { name: /Stable feedback width/i });
+    expect(btn).not.toHaveStyle('width: 144px');
+
+    rerender(
+        <ProjectDataProvider>
+            <Button pending>Stable feedback width</Button>
+        </ProjectDataProvider>
+    );
+    expect(btn).toHaveStyle('width: 144px');
+    expect(btn).toHaveTextContent('Stable feedback width');
+
+    rerender(
+        <ProjectDataProvider>
+            <Button success>Stable feedback width</Button>
+        </ProjectDataProvider>
+    );
+    expect(btn).toHaveStyle('width: 144px');
+    expect(btn).toHaveTextContent('Stable feedback width');
+
+    rerender(
+        <ProjectDataProvider>
+            <Button>Stable feedback width</Button>
+        </ProjectDataProvider>
+    );
+    expect(btn).not.toHaveStyle('width: 144px');
+
+    offsetWidthSpy.mockRestore();
+});
+
 test('renders custom icon', () => {
     render(
         <ProjectDataProvider>
@@ -115,6 +153,7 @@ test('reduced motion snaps pending feedback while preserving static cues', () =>
 
     const btn = screen.getByRole('button', { name: /Sync project/i });
     expect(btn).toHaveAttribute('aria-busy', 'true');
+    expect(btn).toHaveTextContent('Sync project');
     expect(btn).toHaveStyle({
         transitionDuration: '0ms',
         transitionTimingFunction: 'cubic-bezier(0.4, 0, 0.2, 1)'
