@@ -96,6 +96,8 @@ Provider invocation usage rows preserve the operational fields needed for dashbo
 
 Provider telemetry warning logs intentionally do not include raw provider read error messages. They include `errorName`, invocation identifiers, `failureCount`, and correlation context so operators can identify the failing invocation without risking transcript fragments in log metadata.
 
+Provider invocation lifecycle logs (`Provider invocation started`, `Provider invocation finished`, `Provider invocation crashed`, and cancellation logs) carry `logPurpose: "invocation"` plus the active `correlationId` when one is present. Crash and cleanup logs include `errorName` and bounded identifiers instead of raw `Error` objects, command argv, prompts, provider env values, or subprocess/Docker failure payloads.
+
 Expected provider telemetry event types:
 
 - `provider_telemetry_poll_succeeded`: A watcher tick parsed reported provider usage and emitted deterministic counters.
@@ -132,6 +134,7 @@ Realtime logs must use `logPurpose: "realtime"` unless they are security rejecti
 - `project_live_snapshot_assembled`: Logs the build time and byte size of an assembled project live snapshot.
 - `realtime_snapshot_published`: Logs the published realtime snapshot event and size.
 - `realtime_background_refresh`: Logs scheduled background dashboard refreshes, such as overview telemetry.
+- `dashboard_realtime_event_write_failed`: Logs bounded event metadata and `errorName` when a realtime event cannot be written. The event publisher defaults event `correlationId` from the active correlation context when the caller did not provide one.
 - `websocket_recovery_snapshot_required`: Emitted when a client reconnects and needs a full snapshot payload. Metadata includes the recovery reason (`non_replayable_event_missed`, `replay_window_exceeded`, or `invalid_client_message`) and the active correlation id when one was provided on the websocket upgrade.
 - `repeated_unhealthy_recovery_patterns`: Emitted when a websocket client repeatedly requires recovery snapshots within a short window.
 - `dashboard_realtime_websocket_backpressure_disconnect`: Emitted when a slow client is disconnected before the server buffers unbounded realtime frames.

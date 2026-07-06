@@ -12,6 +12,7 @@ import type { CliProviderId } from "../infrastructure/providers/cli/provider-com
 import type { ParsedConversationTurn, ProviderUsageTelemetry } from "../infrastructure/providers/cli/provider-usage.js";
 import type { AppendExecutionInvocationMessageInput } from "../contracts/invocation-types.js";
 import type { Logger } from "../shared/logging/logger.js";
+import { getCorrelationId } from "../shared/logging/correlation-id.js";
 import type { ProviderConcurrencyService } from "./provider-concurrency-service.js";
 import { isReadFileNotFoundToolError, buildReadFileRetryPrompt } from "./cli-workflow-text-utils.js";
 import { classifyProviderError, ProviderQuotaError } from "../shared/providers/provider-error-classifier.js";
@@ -324,6 +325,7 @@ export class ProviderExecutionService {
       const startedMs = Date.now();
       this.deps.logger?.info("Provider invocation started", {
         logPurpose: "invocation",
+        correlationId: getCorrelationId(),
         invocationId: execInvocationId,
         providerInvocationId: invocation?.id,
         projectId: args.projectId,
@@ -458,6 +460,7 @@ export class ProviderExecutionService {
           }
           const logFields = {
             logPurpose: "invocation" as const,
+            correlationId: getCorrelationId(),
             invocationId: execInvocationId,
             providerInvocationId: invocation?.id,
             projectId: args.projectId,
@@ -466,8 +469,9 @@ export class ProviderExecutionService {
             provider: args.provider,
             model: effectiveModel,
             purpose: args.purpose,
+            executionMode: args.workflowSettings.executionMode,
             durationMs: Date.now() - startedMs,
-            error,
+            errorName: error instanceof Error ? error.name : "Error",
           };
           if (wasCancelled) {
             this.deps.logger?.info("Provider invocation cancelled", logFields);
@@ -524,6 +528,7 @@ export class ProviderExecutionService {
 
       this.deps.logger?.info("Provider invocation finished", {
         logPurpose: "invocation",
+        correlationId: getCorrelationId(),
         invocationId: execInvocationId,
         providerInvocationId: invocation?.id,
         projectId: args.projectId,
