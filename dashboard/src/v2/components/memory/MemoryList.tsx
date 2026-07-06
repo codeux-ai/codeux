@@ -10,7 +10,7 @@ import { useGsapInteractionTokens } from "../../lib/motion/constants.js";
 import { useInteractionTokens } from "../../lib/motion/index.js";
 import { useComputed } from "@preact/signals";
 import { MemoryCard } from "./MemoryCard.js";
-import { clearSelectedMemoryIds, searchQuerySignal, selectVisibleMemoryIds, selectedMemoryIdsSignal, activeTierSignal, memoryMutationsSignal } from "./memoryState.js";
+import { clearSelectedMemoryIds, searchQuerySignal, selectVisibleMemoryIds, selectedMemoryIdsSignal, activeTierSignal, memoryMutationsSignal, selectedAgentPresetIdSignal, selectedSprintIdSignal } from "./memoryState.js";
 import { useConfirmDialog } from "../../hooks/use-confirm-dialog.js";
 import type { MemNode } from "../../lib/memory-graph.js";
 
@@ -40,6 +40,12 @@ export const MemoryList: FunctionComponent<{
                 return node.content.toLowerCase().includes(lower) || node.category.toLowerCase().includes(lower);
             });
     }, [committedQuery, nodes]);
+    const currentContextKey = JSON.stringify({
+        tier: activeTierSignal.value,
+        sprintId: selectedSprintIdSignal.value ?? null,
+        agentPresetId: selectedAgentPresetIdSignal.value ?? null,
+        query: committedQuery.trim(),
+    });
 
     const reducedMotion = useReducedMotion();
     const gsapTokens = useGsapInteractionTokens();
@@ -47,7 +53,7 @@ export const MemoryList: FunctionComponent<{
     const listRef = useRef<HTMLDivElement>(null);
     const selectAllRef = useRef<HTMLButtonElement>(null);
     const lastUsefulNodes = useRef(filteredNodes);
-    const lastUsefulQuery = useRef(searchQuerySignal.value.trim());
+    const lastUsefulContextKey = useRef(currentContextKey);
     const [renderedNodes, setRenderedNodes] = useState(filteredNodes);
     const [batchDeletePending, setBatchDeletePending] = useState(false);
     const [retryPending, setRetryPending] = useState(false);
@@ -65,21 +71,25 @@ export const MemoryList: FunctionComponent<{
     useEffect(() => {
         if (filteredNodes.length > 0) {
             lastUsefulNodes.current = filteredNodes;
-            lastUsefulQuery.current = searchQuerySignal.value.trim();
+            lastUsefulContextKey.current = currentContextKey;
         }
-    }, [filteredNodes]);
+    }, [currentContextKey, filteredNodes]);
 
     useEffect(() => {
-        const currentQuery = searchQuerySignal.value.trim();
         const canShowLastUseful = (refreshing || loadError)
             && filteredNodes.length === 0
             && lastUsefulNodes.current.length > 0
-            && lastUsefulQuery.current === currentQuery;
+            && lastUsefulContextKey.current === currentContextKey;
         const nextNodes = canShowLastUseful
             ? lastUsefulNodes.current
             : filteredNodes;
 
         if (reducedMotion) {
+            setRenderedNodes(nextNodes);
+            return;
+        }
+
+        if (filteredNodes.length === 0 && lastUsefulContextKey.current !== currentContextKey) {
             setRenderedNodes(nextNodes);
             return;
         }
@@ -112,12 +122,11 @@ export const MemoryList: FunctionComponent<{
             }
         }
         setRenderedNodes(nextNodes);
-    }, [filteredNodes, refreshing, loadError, reducedMotion, renderedNodes, gsapTokens.expansionCollapse.duration, gsapTokens.expansionCollapse.ease]);
+    }, [currentContextKey, filteredNodes, refreshing, loadError, reducedMotion, renderedNodes, gsapTokens.expansionCollapse.duration, gsapTokens.expansionCollapse.ease]);
 
     useEffect(() => {
-        const currentQuery = searchQuerySignal.value.trim();
         const visibleIds = new Set(
-            (refreshing || loadError) && filteredNodes.length === 0 && lastUsefulQuery.current === currentQuery
+            (refreshing || loadError) && filteredNodes.length === 0 && lastUsefulContextKey.current === currentContextKey
                 ? lastUsefulNodes.current.map(({ node }) => node.id)
                 : filteredNodes.map(({ node }) => node.id)
         );
@@ -130,7 +139,7 @@ export const MemoryList: FunctionComponent<{
         if (nextSelectedIds.length !== selectedIds.length) {
             selectedMemoryIdsSignal.value = nextSelectedIds;
         }
-    }, [filteredNodes, refreshing, loadError]);
+    }, [currentContextKey, filteredNodes, refreshing, loadError]);
 
     useLayoutEffect(() => {
         if (!listRef.current) return;
@@ -174,13 +183,15 @@ export const MemoryList: FunctionComponent<{
     const selectedIds = selectedMemoryIdsSignal.value;
     const selectedCount = selectedIds.length;
     const activeTier = useComputed(() => activeTierSignal.value);
+    const selectedSprintId = selectedSprintIdSignal.value;
+    const selectedAgentPresetId = selectedAgentPresetIdSignal.value;
     const mutationFeedback = memoryMutationsSignal.value.feedback;
     const isDeleting = batchDeletePending || (mutationFeedback?.status === "pending" && Boolean(mutationFeedback.message?.toLowerCase().includes("deleting")));
     const countLabel = `${resultCount} ${resultCount === 1 ? "memory" : "memories"} shown`;
     const isShowingStaleResults = (refreshing || Boolean(loadError))
         && filteredNodes.length === 0
         && renderedNodes.length > 0
-        && lastUsefulQuery.current === searchQuerySignal.value.trim();
+        && lastUsefulContextKey.current === currentContextKey;
     const query = searchQuerySignal.value.trim();
     const totalAliveCount = Math.max(
         nodes.filter((node) => node.alive).length,
@@ -194,6 +205,15 @@ export const MemoryList: FunctionComponent<{
     const selectionLabel = selectedCount > 0
         ? `${selectedCount} ${selectedCount === 1 ? "memory" : "memories"} selected from ${visibleIds.length} visible ${visibleIds.length === 1 ? "memory" : "memories"}`
         : "No memories selected";
+    const visibleScopeParts = [
+        activeTier.value === "short_term" ? "Short Term" : "Long Term",
+        activeTier.value === "short_term"
+            ? (selectedSprintId ? `sprint ${selectedSprintId}` : "all sprints")
+            : "project memories",
+        selectedAgentPresetId ? `agent ${selectedAgentPresetId}` : "all agents",
+        query ? `search "${query}"` : "no search",
+    ];
+    const visibleScopeLabel = visibleScopeParts.join(", ");
 
     const handleVisibleSelect = () => {
         if (allVisibleSelected || visibleIds.length === 0 || isDeleting) {
@@ -220,7 +240,7 @@ export const MemoryList: FunctionComponent<{
 
         const confirmed = await requestConfirm({
             title: "Delete Selected Memories",
-            body: `Delete ${selectedCount} selected ${selectedCount === 1 ? "memory" : "memories"}? This action cannot be undone.`,
+            body: `Delete ${selectedCount} selected ${selectedCount === 1 ? "memory" : "memories"} from the visible scope: ${visibleScopeLabel}. This action cannot be undone.`,
             confirmLabel: selectedCount === 1 ? "Delete Memory" : "Delete Memories",
             cancelLabel: "Cancel",
             destructive: true,
