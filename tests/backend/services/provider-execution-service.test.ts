@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { ProviderExecutionService } from "../../../src/services/provider-execution-service.js";
 import { ProviderQuotaError } from "../../../src/shared/providers/provider-error-classifier.js";
 import { runWithCorrelationId } from "../../../src/shared/logging/correlation-id.js";
@@ -112,6 +112,10 @@ describe("ProviderExecutionService", () => {
       },
       nativeSessionId: "native-1",
     };
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it("Happy path: returns ok: true, creates invocation and usage", async () => {
@@ -712,6 +716,11 @@ describe("ProviderExecutionService", () => {
       kind: "quota_reset",
       delayMs: 1000,
       retryAtIso: "2026-06-01T12:30:00.000Z",
+    });
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-01T12:29:59.000Z"));
+    vi.mocked(sleepWithSignal).mockImplementation(async (delayMs: number) => {
+      vi.setSystemTime(new Date(Date.now() + delayMs));
     });
 
     const result = await service.executeProvider({ ...defaultArgs, taskRunId: "run-1" });
