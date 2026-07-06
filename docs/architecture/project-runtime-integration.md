@@ -51,7 +51,7 @@ Sprint matching:
 Task matching:
 - prefers DB task record id when present
 - otherwise matches by `task_key`
-- session and PR artifacts are accepted only when they are unowned or already owned by the same project, sprint, and task. This prevents two projects that point at repositories with the same basename from sharing a Jules run-key match such as `codeux/s4/t02`.
+- session and PR artifacts are accepted only when they are unowned or already owned by the same project, sprint, and task. This prevents two projects that point at repositories with the same basename from sharing a provider run-key match such as `codeux/s4/t02`.
 
 Legacy cleanup:
 - unscoped project-level runtime rows from the pre-multi-sprint bridge are treated as deprecated
@@ -70,12 +70,12 @@ Current limitations:
 Recent tightening:
 - dashboard rerun no longer rewrites the selected-project runtime snapshot optimistically
 - dashboard cancel no longer patches selected-project subtasks directly
-- task planning status is now updated from execution owners (`cli_workflow`, worker dispatch completion, and Jules session sync) instead of relying only on snapshot mirroring
+- task planning status is now updated from execution owners (`cli_workflow`, worker dispatch completion, and provider session sync) instead of relying only on snapshot mirroring
 - recent provider activity is now persisted into `task_run_events` and projected back into `/api/status`, so legacy task cards and the Live page no longer need a second live-activities fetch to show real provider messages
-- Jules session sync and legacy status mirroring reject foreign runtime artifacts before mutating `task_runs` or planning status. A status payload that contains a session id or PR URL already persisted under another project, sprint, or task is treated as stale and cannot create a new task run in the selected sprint.
+- provider session sync and legacy status mirroring reject foreign runtime artifacts before mutating `task_runs` or planning status. A status payload that contains a session id or PR URL already persisted under another project, sprint, or task is treated as stale and cannot create a new task run in the selected sprint.
 - Completed or merged task rows now win over stale failed or blocked task-run and dispatch rows during `/api/status` and execution snapshot projection. This prevents old retry/interruption records from reappearing as failed indicators after a task has merged.
-- When a paused sprint is resumed into a fresh sprint run, Jules session sync reattaches the persisted task run, dispatch, and provider invocation for the matched session before writing the latest remote state. Durable Jules sessions that complete while Code UX is paused therefore do not stay frozen on the older paused sprint run.
-- Duplicate Jules clarification auto-replies no longer keep a task hidden as indefinitely running. Duplicates are suppressed for the same latest Jules request, user replies after that request keep the task agent-owned while Jules processes the response, and an unchanged `AWAITING_USER_FEEDBACK` state without a later user reply remains `BLOCKED` after the configured cooldown.
+- When a paused sprint is resumed into a fresh sprint run, provider session sync reattaches the persisted task run, dispatch, and provider invocation for the matched session before writing the latest remote state. Durable hosted provider sessions that complete while Code UX is paused therefore do not stay frozen on the older paused sprint run.
+- Duplicate hosted provider clarification auto-replies no longer keep a task hidden as indefinitely running. Duplicates are suppressed for the same latest hosted provider request, user replies after that request keep the task agent-owned while hosted provider processes the response, and an unchanged `AWAITING_USER_FEEDBACK` state without a later user reply remains `BLOCKED` after the configured cooldown.
 
 ## Why This Matters
 

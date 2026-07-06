@@ -127,7 +127,7 @@ It supports:
 - auto-stop when a sprint becomes terminal
 
 Rebuild behaviors:
-- Preview start and rebuild now use the shared branch-sync rule. In `REMOTE` git mode, Code UX refreshes `origin` before exporting the preview workspace so remote changes (such as those pushed by Jules workers) are reflected in the container. In `LOCAL` git mode, preview export stays local-only.
+- Preview start and rebuild now use the shared branch-sync rule. In `REMOTE` git mode, Code UX refreshes `origin` before exporting the preview workspace so remote changes (such as those pushed by hosted provider workers) are reflected in the container. In `LOCAL` git mode, preview export stays local-only.
 - Preview workspace export no longer depends on a host `tar` executable. Code UX writes the Git archive on the host, then extracts it through a small Docker helper container so packaged Windows Electron builds use the same extraction path as Linux/macOS.
 
 These behaviors are controlled through scoped settings under `sprintPreview`.
