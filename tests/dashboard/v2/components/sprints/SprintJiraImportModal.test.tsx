@@ -93,6 +93,11 @@ describe("SprintJiraImportModal", () => {
       expect(searchJiraIssues).toHaveBeenCalled();
     });
 
+    fireEvent.click(screen.getByRole("button", { name: /advanced jira filters/i }));
+    expect(screen.getByText("People")).toBeInTheDocument();
+    expect(screen.getByText("Classification")).toBeInTheDocument();
+    expect(screen.getByText("Advanced JQL Override")).toBeInTheDocument();
+
     fireEvent.input(screen.getByPlaceholderText("OPS-42"), { target: { value: "OPS-77" } });
     fireEvent.input(screen.getByPlaceholderText("Search title, description, or key"), {
       target: { value: "backlog" },
@@ -114,7 +119,6 @@ describe("SprintJiraImportModal", () => {
     fireEvent.change(screen.getByLabelText("Sort field"), { target: { value: "priority" } });
     fireEvent.change(screen.getByLabelText("Sort direction"), { target: { value: "asc" } });
 
-    fireEvent.click(screen.getByText("Advanced JQL override"));
     fireEvent.input(screen.getByPlaceholderText("project = OPS AND labels in (security)"), {
       target: { value: "project = OPS AND labels in (security)" },
     });
