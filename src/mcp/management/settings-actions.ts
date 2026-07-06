@@ -3,6 +3,7 @@ import type { SettingsRepository } from "../../repositories/settings-repository.
 import { SettingsPathUpdater } from "../../services/settings-path-updater.js";
 import type { SystemSettings, ProjectSettingsOverride, SprintSettingsOverride } from "../../contracts/settings-scope-types.js";
 import {
+  buildMcpApprovalFingerprint,
   parseRequiredObject,
   parseRequiredPresentValue,
   parseRequiredString as readRequiredString,
@@ -15,46 +16,6 @@ const SETTINGS_APPROVAL_MESSAGE = [
   "DO NOT call this settings endpoint again with approval.confirmed: true unless the user explicitly confirms.",
   "This approval is one-use, bound to this exact action and payload, and expires in 15 minutes.",
 ].join(" ");
-
-function normalizeForApproval(value: unknown): unknown {
-  if (Array.isArray(value)) {
-    return value.map((item) => normalizeForApproval(item));
-  }
-  if (typeof value === "object" && value !== null) {
-    return Object.keys(value as Record<string, unknown>)
-      .sort()
-      .reduce<Record<string, unknown>>((normalized, key) => {
-        const nextValue = (value as Record<string, unknown>)[key];
-        if (nextValue !== undefined) {
-          normalized[key] = normalizeForApproval(nextValue);
-        }
-        return normalized;
-      }, {});
-  }
-  return value;
-}
-
-function normalizeSettingsPayloadForApproval(payload: Record<string, unknown>): Record<string, unknown> {
-  const normalized: Record<string, unknown> = {};
-  for (const key of Object.keys(payload).sort()) {
-    if (key === "action" || key === "approval" || key === "domain") {
-      continue;
-    }
-    const value = payload[key];
-    if (value !== undefined) {
-      normalized[key] = normalizeForApproval(value);
-    }
-  }
-  return normalized;
-}
-
-function buildSettingsApprovalFingerprint(action: string, payload: Record<string, unknown>): string {
-  return JSON.stringify({
-    domain: "settings",
-    action,
-    payload: normalizeSettingsPayloadForApproval(payload),
-  });
-}
 
 export class SettingsActions {
   private readonly pendingSettingsApprovals = new Map<string, number>();
@@ -108,7 +69,7 @@ export class SettingsActions {
       }
     }
 
-    const fingerprint = buildSettingsApprovalFingerprint(args.action, payload);
+    const fingerprint = buildMcpApprovalFingerprint({ domain: "settings", action: args.action, payload });
     const pendingCreatedAt = this.pendingSettingsApprovals.get(fingerprint);
     if (args.approval?.confirmed === true && pendingCreatedAt !== undefined && now - pendingCreatedAt <= SETTINGS_APPROVAL_TTL_MS) {
       this.pendingSettingsApprovals.delete(fingerprint);
