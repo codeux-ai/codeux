@@ -46,9 +46,9 @@ Supported task fields include `title`, `depends_on`, `is_independent`, `merged` 
 
 ## GitHub/GitLab Issue Import
 
-Use `Import -> GitHub Issues` or `Import -> GitLab Issues` to browse the selected project's remote backlog. Each provider has its own menu entry, and the entry opens the shared issue importer with that provider selected. Operators can still switch providers inside the modal, override the repository, search by text, filter by state, labels, assignee, author, milestone, exact issue number, created or updated date windows, sort order, and bounded result limit.
+Use `Import -> GitHub Issues` or `Import -> GitLab Issues` to browse the selected project's remote backlog. Each provider has its own menu entry, and the entry opens the shared issue importer with that provider selected. Operators can still switch providers inside the modal, override the host and repository, search by text, choose state, sort order, direction, and bounded result limit from the default screen. Labels, assignee, author, milestone, updated-date windows, and quick presets live behind the advanced filter toggle so the first view stays focused on the target, search, ordering, and results.
 
-The importer result list supports multi-select, `Select all visible results`, `Clear selection`, and per-card `Append Conversation` controls. The footer keeps the selected count visible and lets operators import selected issues as linked sprint issues or, when available, route selected issues into special remediation tasks.
+The importer result list shows the current sort, active filter chips, visible result count, multi-select controls, `Select all visible results`, `Clear selection`, and per-card `Append Conversation` controls. The footer keeps the selected count visible and lets operators import selected issues as linked sprint issues or, when available, route selected issues into special remediation tasks.
 
 Result cards preserve the imported issue title, preview body, repository, issue key, labels, assignees, source link, and provider metadata such as authors, milestones, timestamps, and comment counts when the provider returns those fields.
 
