@@ -36,7 +36,10 @@ test.describe('Sprint Ledger Responsive Layout E2E Tests', () => {
     sprintName = sprint.name;
   });
 
-  test('adapts layout and displays correct labels on mobile vs desktop', async ({ page }) => {
+  test('adapts layout and displays correct labels on mobile vs desktop', async ({ page, request }) => {
+    const health = await request.get('/health');
+    await expect(health).toBeOK();
+
     // 1. Navigate to sprints page
     await page.goto('/sprints');
 

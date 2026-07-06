@@ -96,7 +96,7 @@ The release-style E2E suite lives under `tests/e2e` and exercises the production
 - `tests/e2e/sprint-task-lifecycle.spec.ts`, which verifies draft sprint and implementation task create/edit/delete behavior through the visible dashboard flows and collection API assertions.
 - `tests/e2e/helpers/prepare-app.ts`, which prepares deterministic app state through dashboard HTTP APIs for onboarding, local project selection, draft sprint setup, task setup, updates, deletes, and cleanup.
 
-`playwright.config.ts` uses Chromium, `http://127.0.0.1:4444`, `fullyParallel: false`, CI retries, and the GitHub plus HTML reporters in CI. It checks `/health` instead of `/ready` because a clean run may not have project live-status activity, while liveness is enough to know the compiled web app accepted the browser session.
+`playwright.config.ts` uses Chromium, `http://127.0.0.1:4444`, `fullyParallel: false`, CI retries, and the GitHub plus HTML reporters in CI. It checks `/health` instead of `/ready` because a clean run may not have project live-status activity, while liveness is enough to know the compiled web app accepted the browser session. The default desktop Chromium project runs the full E2E suite, and the mobile Chromium project is scoped to the responsive sprint ledger spec so mobile viewport coverage stays explicit without requiring every release-path test to support a narrow layout.
 
 ### E2E Authoring Rules
 
