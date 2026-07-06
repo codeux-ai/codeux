@@ -115,6 +115,7 @@ Checks:
 Checks:
 - The Models Catalog workflow runs on pushes to `main` and `dev`, fetches `models.dev`, and compares the result with `assets/models-dev/catalog.json`.
 - When the catalog changes, the workflow must not push directly back to `main` or `dev`; branch protection requires PR-based changes. It pushes `chore/models-catalog-<target-branch>` instead and opens or updates a PR against the branch that triggered the workflow.
+- Catalog update commits must not include `[skip ci]` or another GitHub Actions skip marker. These PRs only carry `assets/models-dev/catalog.json` changes, but the normal pull request CI still needs to run before merge.
 - If the job reports a push rejection for `refs/heads/main` or `refs/heads/dev`, the workflow is running an older definition. Re-run it after the branch includes the PR-based catalog update workflow.
 - If PR creation fails, check the workflow token permissions include both `contents: write` and `pull-requests: write`.
 
