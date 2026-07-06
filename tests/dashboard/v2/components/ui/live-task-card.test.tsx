@@ -224,6 +224,32 @@ describe("LiveTaskCard", () => {
       .toBe("/chat?mode=invocations&invocation=xi-task-1");
   });
 
+  it("suppresses force-complete activation while pending and exposes task-specific feedback", () => {
+    const task = getMockTask("RUNNING");
+    const onForceComplete = vi.fn();
+
+    render(
+      <LiveTaskCard
+        task={task}
+        allTasks={[task]}
+        onRerun={vi.fn()}
+        onEdit={vi.fn()}
+        onForceComplete={onForceComplete}
+        isRerunning={false}
+        isForceCompleting
+      />,
+    );
+
+    const forceCompleteButton = screen.getByRole("button", { name: /Force complete task test-task/i });
+    fireEvent.click(forceCompleteButton);
+
+    expect(forceCompleteButton.getAttribute("aria-disabled")).toBe("true");
+    expect(forceCompleteButton.getAttribute("aria-busy")).toBe("true");
+    expect(forceCompleteButton.textContent).toContain("Force completing");
+    expect(screen.getAllByText(/Marking this task complete/).length).toBeGreaterThan(0);
+    expect(onForceComplete).not.toHaveBeenCalled();
+  });
+
   it("renders invocation row labels, fallback metadata, and encoded transcript links", () => {
     render(
       <LiveTaskInvocationRow

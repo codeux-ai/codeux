@@ -195,7 +195,7 @@ describe("live task card actions", () => {
       expect(refreshRuntimeStatusMock).toHaveBeenCalled();
       expect(refreshGitStatusMock).toHaveBeenCalled();
     });
-    expect(await screen.findByText("Task marked as completed.")).toBeInTheDocument();
+    expect(await screen.findByText('Task "Ship task controls" marked as completed.')).toBeInTheDocument();
   });
 
   it("shows inline optimistic pending feedback and suppresses duplicate force-complete activation", async () => {
