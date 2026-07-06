@@ -75,8 +75,16 @@ export class KnowledgeService {
     return this.repository.getDocument(documentId);
   }
 
+  getDocumentForProject(projectId: string, documentId: string): KnowledgeDocumentRecord | null {
+    return this.repository.getDocumentForProject(projectId, documentId);
+  }
+
   deleteDocument(documentId: string): void {
     this.repository.deleteDocument(documentId);
+  }
+
+  deleteDocumentForProject(projectId: string, documentId: string): boolean {
+    return this.repository.deleteDocumentForProject(projectId, documentId);
   }
 
   isModelLoaded(): boolean {
@@ -198,14 +206,25 @@ export class KnowledgeService {
     const requestedIds = Array.isArray(documentIds) && documentIds.length > 0
       ? new Set(documentIds)
       : null;
-    const sourceDocs = this.repository.listDocuments(sourceProjectId)
-      .filter((doc) => !requestedIds || requestedIds.has(doc.id));
+    const sourceDocs = this.repository.listDocuments(sourceProjectId);
+    const selectedSourceDocs = requestedIds
+      ? sourceDocs.filter((doc) => requestedIds.has(doc.id))
+      : sourceDocs;
 
     const documents: KnowledgeDocumentSummary[] = [];
     const errors: Array<{ fileName: string; error: string }> = [];
 
-    for (const sourceDoc of sourceDocs) {
-      const full = this.repository.getDocument(sourceDoc.id);
+    if (requestedIds) {
+      const sourceIds = new Set(sourceDocs.map((doc) => doc.id));
+      for (const documentId of requestedIds) {
+        if (!sourceIds.has(documentId)) {
+          errors.push({ fileName: documentId, error: "Document not found in source project" });
+        }
+      }
+    }
+
+    for (const sourceDoc of selectedSourceDocs) {
+      const full = this.repository.getDocumentForProject(sourceProjectId, sourceDoc.id);
       if (!full) {
         continue;
       }
@@ -273,6 +292,13 @@ export class KnowledgeService {
 
   async reembedDocument(documentId: string): Promise<void> {
     await this.embedDocument(documentId);
+  }
+
+  async reembedDocumentForProject(projectId: string, documentId: string): Promise<KnowledgeDocumentRecord | null> {
+    const doc = this.repository.getDocumentForProject(projectId, documentId);
+    if (!doc) return null;
+    await this.embedDocument(doc.id);
+    return this.repository.getDocumentForProject(projectId, documentId);
   }
 
   // --- Search ---

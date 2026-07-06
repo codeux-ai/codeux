@@ -76,6 +76,42 @@ describe("KnowledgeService", () => {
     expect(service.listDocuments(projectId)).toHaveLength(1);
   });
 
+  it("returns documents only when the requested project owns them", async () => {
+    const otherProjectId = projects.createProject({ name: "Other KB", sourceType: "local", sourceRef: "/tmp/other-kb" }).id;
+    const doc = await service.ingestDocument(projectId, { title: "Private", sourceType: "paste", text: "alpha private notes" });
+
+    expect(service.getDocumentForProject(projectId, doc.id)?.title).toBe("Private");
+    expect(service.getDocumentForProject(otherProjectId, doc.id)).toBeNull();
+    expect(service.getDocumentForProject(projectId, "missing-doc")).toBeNull();
+  });
+
+  it("deletes documents only when the requested project owns them", async () => {
+    const otherProjectId = projects.createProject({ name: "Other KB", sourceType: "local", sourceRef: "/tmp/other-kb" }).id;
+    const doc = await service.ingestDocument(projectId, { title: "Delete Me", sourceType: "paste", text: "alpha delete notes" });
+
+    expect(service.deleteDocumentForProject(otherProjectId, doc.id)).toBe(false);
+    expect(service.getDocument(doc.id)).not.toBeNull();
+
+    expect(service.deleteDocumentForProject(projectId, doc.id)).toBe(true);
+    expect(service.getDocument(doc.id)).toBeNull();
+    expect(service.deleteDocumentForProject(projectId, "missing-doc")).toBe(false);
+  });
+
+  it("re-embeds documents only when the requested project owns them", async () => {
+    const otherProjectId = projects.createProject({ name: "Other KB", sourceType: "local", sourceRef: "/tmp/other-kb" }).id;
+    const doc = await service.ingestDocument(projectId, { title: "Reembed Me", sourceType: "paste", text: "alpha beta reembed notes" });
+
+    await expect(service.reembedDocumentForProject(otherProjectId, doc.id)).resolves.toBeNull();
+
+    const updated = await service.reembedDocumentForProject(projectId, doc.id);
+    expect(updated).toMatchObject({
+      id: doc.id,
+      projectId,
+      status: "ready",
+    });
+    await expect(service.reembedDocumentForProject(projectId, "missing-doc")).resolves.toBeNull();
+  });
+
   it("imports selected knowledge documents from another project", async () => {
     const sourceProjectId = projects.createProject({ name: "Source KB", sourceType: "local", sourceRef: "/tmp/source-kb" }).id;
     const targetProjectId = projects.createProject({ name: "Target KB", sourceType: "local", sourceRef: "/tmp/target-kb" }).id;
@@ -92,6 +128,34 @@ describe("KnowledgeService", () => {
       sourceRef: `project:${sourceProjectId}/Runbook`,
     });
     expect(service.listDocuments(targetProjectId)).toHaveLength(1);
+  });
+
+  it("reports selected import IDs that do not belong to the source project without copying foreign content", async () => {
+    const sourceProjectId = projects.createProject({ name: "Source KB", sourceType: "local", sourceRef: "/tmp/source-kb" }).id;
+    const foreignProjectId = projects.createProject({ name: "Foreign KB", sourceType: "local", sourceRef: "/tmp/foreign-kb" }).id;
+    const targetProjectId = projects.createProject({ name: "Target KB", sourceType: "local", sourceRef: "/tmp/target-kb" }).id;
+    const source = await service.ingestDocument(sourceProjectId, { title: "Source Runbook", sourceType: "paste", text: "alpha deploy notes" });
+    const foreign = await service.ingestDocument(foreignProjectId, {
+      title: "Foreign Secret",
+      sourceType: "paste",
+      text: "foreign confidential content",
+    });
+
+    const result = await service.importDocumentsFromProject(targetProjectId, sourceProjectId, [
+      source.id,
+      foreign.id,
+      "missing-doc",
+    ]);
+
+    expect(result.documents).toHaveLength(1);
+    expect(result.documents[0].title).toBe("Source Runbook");
+    expect(result.errors).toEqual([
+      { fileName: foreign.id, error: "Document not found in source project" },
+      { fileName: "missing-doc", error: "Document not found in source project" },
+    ]);
+    expect(JSON.stringify(result.errors)).not.toContain("Foreign Secret");
+    expect(JSON.stringify(result.errors)).not.toContain("foreign confidential content");
+    expect(service.listDocuments(targetProjectId).map((doc) => doc.title)).toEqual(["Source Runbook"]);
   });
 
   it("ranks search results by relevance within a document set", async () => {

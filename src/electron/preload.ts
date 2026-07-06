@@ -14,12 +14,14 @@ export interface WindowState {
 // Under WSL the GPU is software-rasterized (WebGL2 is blocklisted) and requestAnimationFrame has
 // no vsync to pace it, so animated WebGL/canvas backgrounds busy-spin and peg the renderer. Report
 // a low-power profile so the dashboard falls back to a static background and avoids the freeze.
-const isWsl = Boolean(process.env.WSL_DISTRO_NAME)
-  || Boolean(process.env.WSL_INTEROP)
-  || /microsoft|wsl/i.test(process.env.WSL_DISTRO_NAME || "");
+const preloadProcess = typeof process === "object" ? process : undefined;
+const preloadEnv = preloadProcess?.env ?? {};
+const isWsl = Boolean(preloadEnv.WSL_DISTRO_NAME)
+  || Boolean(preloadEnv.WSL_INTEROP)
+  || /microsoft|wsl/i.test(preloadEnv.WSL_DISTRO_NAME || "");
 
 contextBridge.exposeInMainWorld("codeUxDesktop", {
-  platform: process.platform,
+  platform: preloadProcess?.platform ?? "linux",
   renderProfile: isWsl ? "low-power" : "standard",
   pickDirectory: (defaultPath?: string): Promise<PickDirectoryResult> => {
     return ipcRenderer.invoke("codeux:pick-directory", defaultPath);
@@ -39,4 +41,3 @@ contextBridge.exposeInMainWorld("codeUxDesktop", {
     },
   },
 });
-

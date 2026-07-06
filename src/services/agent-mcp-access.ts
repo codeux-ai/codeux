@@ -2,7 +2,9 @@ import type { AgentMcpAccessConfig } from "../contracts/agent-preset-types.js";
 import type { CustomMcpServer, McpToolToggle } from "../contracts/app-types.js";
 import { TOOL_DEFINITIONS } from "../contracts/mcp-tool-definitions.js";
 import type { McpConnectionInfo } from "../contracts/mcp-connection-types.js";
+import { sanitizeCustomMcpServers } from "../mcp/mcp-tool-availability.js";
 import { DEFAULT_PLAYWRIGHT_MCP_SERVER_ID } from "../repositories/settings-defaults.js";
+import type { AgentCodeUxToolAccess } from "../mcp/mcp-tool-availability.js";
 
 const VALID_TOOL_NAMES = new Set<string>(TOOL_DEFINITIONS.map((tool) => tool.name));
 
@@ -83,7 +85,7 @@ export const resolveAgentMcpRuntime = (args: {
 
   const access = args.access;
   const linked = new Set(access.linkedServerIds);
-  const customMcpServers = args.customMcpServers.filter((server) => linked.has(server.id));
+  const customMcpServers = sanitizeCustomMcpServers(args.customMcpServers).filter((server) => linked.has(server.id));
   const baseConnection = access.codeUxEnabled ? args.mcpConnection : null;
   const mcpConnection = baseConnection && args.agentId
     ? { ...baseConnection, agentId: args.agentId }
@@ -92,13 +94,26 @@ export const resolveAgentMcpRuntime = (args: {
   return { customMcpServers, mcpConnection };
 };
 
+export const toAgentCodeUxToolAccess = (
+  access: Pick<AgentMcpAccessConfig, "codeUxEnabled" | "codeUxToolToggles">,
+): AgentCodeUxToolAccess => ({
+  codeUxEnabled: access.codeUxEnabled,
+  codeUxToolToggles: access.codeUxToolToggles,
+});
+
 /** Merge per-agent code_ux tool toggles over the system-level toggles. */
 export const mergeCodeUxToolToggles = (
   base: McpToolToggle[],
-  agentToggles: McpToolToggle[] | null | undefined,
+  agentToggles: McpToolToggle[] | AgentCodeUxToolAccess | null | undefined,
 ): McpToolToggle[] => {
-  if (!agentToggles || agentToggles.length === 0) return base;
-  const overrides = new Map(agentToggles.map((toggle) => [toggle.name, toggle.enabled]));
+  if (agentToggles && !Array.isArray(agentToggles) && !agentToggles.codeUxEnabled) {
+    return base.map((toggle) => ({ ...toggle, enabled: false }));
+  }
+  const toggles = Array.isArray(agentToggles)
+    ? agentToggles
+    : agentToggles?.codeUxToolToggles;
+  if (!toggles || toggles.length === 0) return base;
+  const overrides = new Map(toggles.map((toggle) => [toggle.name, toggle.enabled]));
   return base.map((toggle) =>
     overrides.has(toggle.name) ? { ...toggle, enabled: overrides.get(toggle.name)! } : toggle,
   );

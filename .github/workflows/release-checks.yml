@@ -81,6 +81,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile --ignore-scripts
 
+      - name: Run Security Audit
+        run: pnpm run audit
+
       - name: Build
         run: pnpm run build
 

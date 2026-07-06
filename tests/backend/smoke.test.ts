@@ -17,7 +17,7 @@ describe("Smoke Test", () => {
     const projectRoot = path.resolve(__dirname, "../../");
     
     // Mock argv to avoid interference with the test runner
-    const argv = ["node", "dist/index.js"];
+    const argv = ["node", "dist/index.js", "--no-mcp-https"];
     
     const appConfig = loadAppConfig(argv, projectRoot);
     
