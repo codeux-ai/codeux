@@ -68,8 +68,18 @@ describe("Dashboard Security Helper", () => {
       expect(isHostileBrowserOrigin(req)).toBe(true);
     });
 
+    it("should reject malformed Origin on sensitive mutations", () => {
+      const req = createReq({ headers: { origin: "not a valid origin", host: "localhost:3000" } });
+      expect(isHostileBrowserOrigin(req)).toBe(true);
+    });
+
     it("should reject hostile Referer when Origin is missing", () => {
       const req = createReq({ headers: { referer: "https://evil.com/page", host: "localhost:3000" } });
+      expect(isHostileBrowserOrigin(req)).toBe(true);
+    });
+
+    it("should reject malformed Referer when Origin is missing", () => {
+      const req = createReq({ headers: { referer: "not a valid referer", host: "localhost:3000" } });
       expect(isHostileBrowserOrigin(req)).toBe(true);
     });
 

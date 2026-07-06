@@ -104,15 +104,15 @@ export const TasksList: FunctionComponent<{ pageData: ReturnType<typeof import("
             </div>
 
             {/* Task rows */}
-            <div ref={listRef} className="flex flex-col w-full space-y-3" role="region" aria-label="Active stream tasks">
+            <div ref={listRef} className="flex flex-col w-full space-y-3" role="region" aria-label="Active stream tasks" aria-busy={isLoading ? "true" : undefined}>
                 {isLoading ? (
-                    <>
+                    <div role="status" aria-live="polite" aria-busy="true" aria-label="Loading active stream tasks">
                         <SkeletonRow />
                         <SkeletonRow />
                         <SkeletonRow />
                         <SkeletonRow />
                         <SkeletonRow />
-                    </>
+                    </div>
                 ) : filteredTasks.length > 0 ? (
                     sprintGroups.flatMap((group) => [
                         group.sprint ? (
@@ -137,7 +137,7 @@ export const TasksList: FunctionComponent<{ pageData: ReturnType<typeof import("
                         )),
                     ])
                 ) : (
-                    <div data-flip-id="empty-state">
+                    <div data-flip-id="empty-state" role="status" aria-label="No Active Streams" aria-live="polite">
                         <EmptyState
                             title="No Active Streams"
                             description="There are no tasks currently matching the selected filter in active sprints."

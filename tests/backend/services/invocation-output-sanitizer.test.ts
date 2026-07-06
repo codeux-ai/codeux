@@ -74,4 +74,25 @@ describe("sanitizeInvocationOutputText", () => {
     const input = 'Authorization: Basic some-base64-string';
     expect(sanitizeInvocationOutputText(input)).toBe('Authorization: Basic [REDACTED]');
   });
+
+  it("removes secret-looking values from mixed invocation output", () => {
+    const rawApiKey = "sk-test-value-12345";
+    const rawGithubToken = "ghp_123456789012345678901234567890123456";
+    const rawUrlPassword = "fixture-pass";
+    const input = [
+      `OPENAI_API_KEY=${rawApiKey}`,
+      `metadata={"githubToken": "${rawGithubToken}", "safe": "value"}`,
+      `fetch https://user:${rawUrlPassword}@example.invalid/repo.git`,
+      "done",
+    ].join("\n");
+
+    const sanitized = sanitizeInvocationOutputText(input);
+
+    expect(sanitized).not.toContain(rawApiKey);
+    expect(sanitized).not.toContain(rawGithubToken);
+    expect(sanitized).not.toContain(rawUrlPassword);
+    expect(sanitized).toContain("OPENAI_API_KEY=[REDACTED]");
+    expect(sanitized).toContain('"githubToken": "[REDACTED]"');
+    expect(sanitized).toContain("https://[REDACTED]@example.invalid/repo.git");
+  });
 });

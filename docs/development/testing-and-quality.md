@@ -33,7 +33,7 @@ pnpm run test:dashboard
 
 Use focused dashboard tests first when changing pure view-model helpers, resource hooks, page state, or components under `dashboard/src/`. Broaden to `pnpm run test:dashboard` for user-facing Live, Tasks, Stats, settings, accessibility, or realtime behavior.
 
-- Run coverage report (verifies 80% global thresholds)
+- Run coverage report (verifies the configured global and per-file thresholds)
 ```bash
 pnpm run test:coverage
 ```
@@ -50,12 +50,19 @@ pnpm run ci
 
 `pnpm run ci` starts with `pnpm run quality:guardrails`, then runs audit, lint, backend coverage, dashboard tests, and build. Run `pnpm run quality:guardrails` directly after changes that affect shared implementation structure, large modules, duplicate logic, dependency factory wiring, realtime snapshot persistence, optimistic task insertion, or the guardrail script itself. Treat blocking guardrail output as CI-equivalent; advisory oversized-file and broad-`any` reports identify cleanup targets but do not fail the command.
 
-- Run Playwright release E2E browser tests
+GitHub Actions runs the same signals as separate jobs so a vulnerability finding does not obscure compile, test, or build failures. The `Security Audit` job runs `pnpm run audit` independently, while `Typecheck & Lint`, `Backend Tests & Coverage`, `Dashboard Tests`, and `Build` run the repository quality, TypeScript, Vitest, and bundle checks on Node 22 with pnpm 10.33.0.
+The quality guardrail script also audits `vitest.config.ts` directly. It fails if any global coverage threshold drops below the locked floors (`lines: 77.4`, `functions: 71.5`, `branches: 66.1`, `statements: 76.0`) or if the `src/server/activity-cache-service.ts` line threshold is missing or below 80%. This check is file-based and deterministic; it does not run Vitest coverage.
+
+- Run Playwright E2E browser tests
 ```bash
 pnpm run test:e2e
 ```
-
-`pnpm run test:e2e` delegates to Playwright and uses the root `playwright.config.ts`. The configured web server starts the compiled normal web app with `node dist/index.js`, waits for `http://127.0.0.1:4444/health`, and sets both `HOME` and `USERPROFILE` to a temp app home so SQLite state, runtime files, and first-run flags stay isolated from the developer's real Code UX profile. Build first with `pnpm run build` when `dist/index.js` is not present or may be stale.
+Build first when running E2E from a clean checkout:
+```bash
+pnpm run build
+pnpm exec playwright test
+```
+The Playwright config starts `node dist/index.js`, waits on the local `/health` liveness probe, and runs against a temporary HOME/USERPROFILE so the suite does not depend on a developer's browser cache, onboarding state, selected project, or real Code UX database. The E2E suite is local-only: tests must navigate through `baseURL` routes or local API probes, not external websites. Failure artifacts are retained under `test-results/`, and the HTML report is written to `playwright-report/`; CI uploads both paths after every run so traces, videos, screenshots, and reports are available when failures occur.
 
 Focused examples:
 ```bash
@@ -67,14 +74,14 @@ pnpm run test:e2e -- tests/e2e/app-release-smoke.spec.ts -g "normal app shell"
 
 ### Playwright Release E2E
 
-The release E2E suite lives under `tests/e2e` and exercises the production-style dashboard served by the compiled server. It is not a provider orchestration test suite: specs must avoid provider credentials, Docker provider startup, project setup automation, worker dispatch, and sprint execution endpoints. The current release coverage includes:
+The release-style E2E suite lives under `tests/e2e` and exercises the production-style dashboard served by the compiled server. It is not a provider orchestration test suite: specs must avoid provider credentials, Docker provider startup, project setup automation, worker dispatch, and sprint execution endpoints. The current coverage includes:
 
 - `tests/e2e/app-release-smoke.spec.ts`, which verifies the normal app shell, core dashboard routes, responsive task-board behavior, route landmarks, and unexpected browser errors.
 - `tests/e2e/project-setup-release.spec.ts`, which verifies first-run onboarding completion, visible Add Project modal behavior for a credential-free local directory under the OS temp path, dashboard project selection, `/projects` landmarks, `/tasks` navigation, loading/error checks, and desktop/mobile overflow checks without provider secrets or orchestration endpoints.
 - `tests/e2e/sprint-task-lifecycle.spec.ts`, which verifies draft sprint and implementation task create/edit/delete behavior through the visible dashboard flows and collection API assertions.
 - `tests/e2e/helpers/prepare-app.ts`, which prepares deterministic app state through dashboard HTTP APIs for onboarding, local project selection, draft sprint setup, task setup, updates, deletes, and cleanup.
 
-`playwright.config.ts` uses Chromium, `http://127.0.0.1:4444`, `fullyParallel: true`, CI retries, and the GitHub plus HTML reporters in CI. It checks `/health` instead of `/ready` because a clean release smoke run may not have project live-status activity, while liveness is enough to know the compiled web app accepted the browser session.
+`playwright.config.ts` uses Chromium, `http://127.0.0.1:4444`, `fullyParallel: false`, CI retries, and the GitHub plus HTML reporters in CI. It checks `/health` instead of `/ready` because a clean run may not have project live-status activity, while liveness is enough to know the compiled web app accepted the browser session.
 
 ### E2E Authoring Rules
 
@@ -90,9 +97,9 @@ Root E2E specs should prepare normal app state through `tests/e2e/helpers/prepar
 
 ### GitHub Actions E2E Policy
 
-The Playwright workflow is `.github/workflows/playwright.yml`. It runs only on `push` to `main` and `workflow_dispatch`, so release E2E coverage executes after changes merge to the release branch or when someone starts the workflow manually. Pull requests rely on the normal lint, unit, integration, coverage, and build checks unless a maintainer explicitly dispatches E2E.
+The Playwright workflow is `.github/workflows/playwright.yml`. It runs on pushes and pull requests targeting `main` or `dev`, keeping release and publish workflows separate from validation.
 
-The workflow matrix covers `ubuntu-latest`, `macos-latest`, and `windows-latest`. It installs dependencies with pnpm 10.33.0 on Node 22, builds the server and dashboard before Playwright starts `node dist/index.js`, caches browser binaries under `.cache/ms-playwright`, installs Linux Chromium system dependencies only on Linux runners, and runs the same `pnpm run test:e2e` script used locally.
+The workflow matrix covers `ubuntu-latest`, `macos-latest`, and `windows-latest`. It installs dependencies with pnpm 10.33.0 on Node 22, builds the server and dashboard before Playwright starts `node dist/index.js`, caches browser binaries under `.cache/ms-playwright`, installs Linux Chromium system dependencies only on Linux runners, and runs the same `pnpm run test:e2e` script used locally. It uploads `test-results/` and `playwright-report/` as the `playwright-artifacts` workflow artifact for seven days, with empty uploads ignored so successful runs do not fail if no failure artifacts were produced.
 
 This lane is credential-free. It validates the compiled dashboard and server, including project setup coverage through `tests/e2e/project-setup-release.spec.ts`, without provider keys, Docker provider startup, project setup automation, sprint orchestration, or real project state.
 
@@ -103,7 +110,7 @@ node scripts/verify-release-install.mjs
 
 The release install verifier builds the workspace, creates a local npm tarball with `npm pack --ignore-scripts`, installs that tarball into a temporary isolated npm project, and runs the installed `codeux --help`. Set `CODE_UX_KEEP_RELEASE_INSTALL_TEMP=1` when diagnosing a failed run and you need to inspect the temporary package or install directory.
 
-### GitHub Actions Release Checks Policy
+### Release Checks Policy
 
 The no-secret release validation workflow is `.github/workflows/release-checks.yml`. It runs only on `push` to `main` and `workflow_dispatch`, and it uses a native Linux, macOS, and Windows matrix to prove the project can install dependencies, build from source, install from its packed npm tarball, run the installed CLI help command, and build the platform desktop package without provider credentials or publishing credentials.
 
@@ -212,20 +219,27 @@ pnpm run typecheck:dashboard
 ## Change-Specific Validation
 
 - Quality guardrail changes: run `pnpm run quality:guardrails`, the focused guardrail tests under `tests/backend/scripts/quality-guardrails.test.ts`, `pnpm run lint`, and `pnpm run build` if package scripts or shared TypeScript imports changed.
+- Coverage threshold changes: run `pnpm run quality:guardrails`, `pnpm run test:backend -- tests/backend/scripts/quality-guardrails.test.ts`, `pnpm run lint`, and the relevant coverage command (`pnpm run test:coverage` or `pnpm run test:backend:coverage`) before proposing an increase. Never lower the global threshold floors or the `src/server/activity-cache-service.ts` 80% line gate.
 - Execution snapshot or Live runtime performance changes: run focused backend repository/service tests for the changed query or websocket path, focused dashboard hook/view-model tests for stabilization behavior, `pnpm run quality:guardrails`, `pnpm run lint`, and `pnpm run build`.
 - Backend-only behavior changes: run the narrowest relevant backend tests first, then `pnpm run test:backend`, `pnpm run lint`, and `pnpm run build` when contracts, repositories, scripts, or app startup paths changed.
 - Dashboard-only behavior changes: run the narrowest relevant dashboard tests first, then `pnpm run test:dashboard`, `pnpm run typecheck:dashboard`, and `pnpm run build` for route-level, resource, accessibility, or user-facing changes.
 - Documentation-only changes: run commands requested by the task. When the docs describe scripts, CI, contracts, or generated types, also run `pnpm run lint` so markdown-adjacent package and TypeScript references stay consistent.
+- Cross-platform repository cleanup regressions: use `tests/backend/repositories/sqlite-cleanup-test-helper.ts` for file-backed SQLite tests that need temporary homes. The helper creates unique temp roots, closes tracked Vitest SQLite adapters before teardown, asserts WAL/SHM sidecars are gone after close, and removes temp roots through the test harness where transient Windows temp lock errors are tolerated. Production SQLite open/close paths should continue to throw real errors.
+```bash
+pnpm run test:backend -- tests/backend/repositories/sqlite-connection.test.ts tests/backend/repositories/app-db-storage.test.ts
+```
 
 ## Cross-Platform Test Expectations
 
 Tests are expected to pass on Windows, macOS, and Linux. Keep fixtures and assertions portable:
 
+- Vitest pins deterministic runtime defaults before tests run: `TZ=UTC`, `LANG=C.UTF-8`, `LC_ALL=C.UTF-8`, `VITEST_IN_MEMORY_DB=true`, `LOG_LEVEL=error`, and `CODEUX_FORCE_LOG_LEVEL=error`. Do not rely on the host timezone, locale, or persisted dashboard log settings in assertions.
 - Use Node-powered subprocess fixtures instead of shell-specific commands such as `sh`, `sleep`, or POSIX-only `echo` behavior.
 - Normalize path separators in assertions when the app behavior is not explicitly testing native path rendering.
 - Normalize Git working-tree text fixtures for CRLF when assertions only care about logical file contents.
-- Stub both `HOME` and `USERPROFILE` when tests need to control `os.homedir()` across platforms.
+- Tests start with `HOME`, `USERPROFILE`, and XDG config/state/cache paths pointed at a temporary Vitest home. When a test needs its own `os.homedir()` sandbox, use `withIsolatedTestHome` from `tests/setup/runtime-warning-filter.ts`; it stubs both `HOME` and `USERPROFILE`, updates the XDG paths, restores the previous values, and removes the temporary directory after the callback finishes.
 - Pin date, time, and number formatting to an explicit locale and time zone for UI text that is asserted in tests.
+- Fake timers are not enabled globally. Tests that call `vi.useFakeTimers()` must call `vi.useRealTimers()` during cleanup; the shared setup restores leaked fake timers at test-file boundaries and fails loudly so the next test cannot inherit a mocked clock.
 - Close SQLite databases before cleanup when possible. Windows can briefly hold SQLite sidecar files open during teardown, so the Vitest setup tolerates transient temp-directory `EBUSY` and `EPERM` removal errors without weakening application lifecycle cleanup.
 - When PowerShell execution policy blocks package-manager scripts, run commands through `pnpm.cmd` on Windows.
 

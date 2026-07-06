@@ -3,6 +3,21 @@ import type { Logger } from "../../../shared/logging/logger.js";
 
 const DEFAULT_ACTIVITY_FETCH_TIMEOUT_MS = 30_000;
 
+const describeFetchError = (error: unknown): Record<string, unknown> => {
+  if (error instanceof Error) {
+    return {
+      error,
+      errorName: error.name,
+      errorMessage: error.message,
+    };
+  }
+  return {
+    error,
+    errorName: typeof error,
+    errorMessage: String(error),
+  };
+};
+
 const withTimeout = async <T>(
   promise: Promise<T>,
   timeoutMs: number,
@@ -44,11 +59,19 @@ export const fetchActivitiesBounded = async (
     while (currentIndex < sessionNames.length) {
       const index = currentIndex++;
       const sessionName = sessionNames[index];
+      const startedAt = Date.now();
       try {
         const activities = await withTimeout(fetchRecentActivities(sessionName, pageSize), timeoutMs, sessionName);
         results.set(sessionName, activities);
       } catch (err) {
-        logger.warn("Could not fetch activities for session", { sessionName, error: err });
+        logger.warn("Could not fetch activities for session", {
+          sessionName,
+          pageSize,
+          concurrency,
+          timeoutMs,
+          elapsedMs: Date.now() - startedAt,
+          ...describeFetchError(err),
+        });
         results.set(sessionName, []);
       }
     }

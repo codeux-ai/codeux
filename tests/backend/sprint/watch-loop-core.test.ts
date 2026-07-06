@@ -518,6 +518,101 @@ describe("WatchLoopRunner", () => {
     nowSpy.mockRestore();
   });
 
+  it("keeps the loop running while a dependent task is still blocked by an unsettled gate", async () => {
+    const deps = buildDeps();
+    const cycleRunner = buildCycleRunner();
+    const nowValues = [0, 1_000, 2_000, 3_000, 61_000];
+    const nowSpy = vi.spyOn(Date, "now").mockImplementation(() => nowValues.shift() ?? 61_000);
+
+    deps.renderInstruction.mockImplementation(async (id) => id === "watchHeader" ? "HEADER" : "");
+    deps.executionRepository.getSprintRun = vi.fn()
+      .mockReturnValueOnce({ status: "running" })
+      .mockReturnValueOnce({ status: "running" })
+      .mockReturnValueOnce({ status: "running" });
+
+    cycleRunner.run
+      .mockResolvedValueOnce({
+        subtasks: [
+          buildMockSubtask({
+            id: "T1",
+            status: "RUNNING",
+            merge_indicator: "CI",
+            is_merged: false,
+            worker_branch: "worker/T1",
+            pr_url: "https://example.com/pr/101",
+          }),
+          buildMockSubtask({
+            id: "T2",
+            status: "BLOCKED",
+            is_independent: false,
+            depends_on: ["T1"],
+          }),
+        ],
+        reportText: "REPORT_WAIT",
+        statusTable: "TABLE_WAIT",
+        instructions: "",
+        awaitingMerge: [],
+        manualMergeTasks: [],
+        workerEscalatedMergeConflictTasks: [],
+      })
+      .mockResolvedValueOnce({
+        subtasks: [
+          buildMockSubtask({ id: "T1", status: "COMPLETED", is_merged: true }),
+          buildMockSubtask({ id: "T2", status: "COMPLETED", is_merged: true, is_independent: false, depends_on: ["T1"] }),
+        ],
+        reportText: "REPORT_DONE",
+        statusTable: "TABLE_DONE",
+        instructions: "",
+        awaitingMerge: [],
+        manualMergeTasks: [],
+        workerEscalatedMergeConflictTasks: [],
+      });
+
+    const runner = new WatchLoopRunner(deps as any, cycleRunner as any, vi.fn().mockResolvedValue({
+      text: "",
+      state: "ready_for_merge",
+      prNumber: null,
+      prUrl: null,
+      hasMergeConflict: false,
+      mergeStateStatus: null,
+      hasFailedChecks: false,
+      hasPendingChecks: false,
+      hasReviewBlockers: false,
+      failedChecks: [],
+    }));
+
+    const result = await runner.run({
+      args: { sprint_number: 1, action: "orchestrate" } as any,
+      executionContext: {
+        project: { id: "project-1", name: "Test Project" },
+        sprint: { id: "sprint-1", name: "Sprint 1" },
+        sprintNumber: 1,
+        repoPath: "/tmp",
+        featureBranch: "feat",
+        defaultBranch: "main",
+      },
+      repoPath: "/tmp",
+      defaultFeatureBranch: "feat",
+      defaultBranch: "main",
+      githubMode: "LOCAL",
+      retryFailed: false,
+      loopSteps: { watchLoopOutputIntervalSeconds: 60, watchLoopIntervalSeconds: 1 } as any,
+      ciIntelligence: {} as any,
+      automationLevel: "SEMI_AUTO",
+      automationInterventions: {} as any,
+      dashboardPort: 4444,
+      sprintRunId: "run-1",
+    });
+
+    expect(cycleRunner.run).toHaveBeenCalledTimes(2);
+    expect(result).toContain("Sprint Execution Finished");
+    expect(result).toContain("REPORT_DONE");
+    expect(deps.projectAttentionService.openItems).not.toHaveBeenCalledWith(expect.arrayContaining([expect.objectContaining({
+      attentionType: "manual_attention",
+    })]));
+    nowSpy.mockRestore();
+  });
+
   it("clears stale main-merge human escalation items once the main PR conflict is gone", async () => {
     const deps = buildDeps();
     const cycleRunner = buildCycleRunner();

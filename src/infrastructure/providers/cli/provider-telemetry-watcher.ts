@@ -4,6 +4,8 @@ import * as fs from "fs/promises";
 import { randomUUID } from "crypto";
 import { CliWorkflowSettings } from "../../../contracts/app-types.js";
 import type { Logger } from "../../../shared/logging/logger.js";
+import { getCorrelationId } from "../../../shared/logging/correlation-id.js";
+import { redactText } from "../../../shared/security/redaction.js";
 import { CliProviderId } from "./provider-command-specs.js";
 import {
   collectProviderUsageTelemetry,
@@ -20,8 +22,11 @@ export interface TelemetryWatcherOptions {
   startedMs: number;
   workflowSettings: CliWorkflowSettings;
   signal?: AbortSignal;
-  logger?: Pick<Logger, "warn">;
+  logger?: Pick<Logger, "debug" | "warn">;
   onTelemetry: (telemetry: ProviderUsageTelemetry) => void;
+  invocationId?: string | null;
+  providerInvocationId?: string | null;
+  purpose?: string | null;
   getAccumulatedRawStdout: () => string;
   getAccumulatedStderr: () => string;
   nativeSessionId: string | null;
@@ -172,6 +177,9 @@ export class ProviderTelemetryWatcher {
           && this.lastTelemetrySourceSignature
           && preReadSourceSignature === this.lastEmittedPreReadSourceSignature
         ) {
+          this.logPollEvent("provider_telemetry_poll_no_new_data", {
+            nativeSessionId: this.resolvedNativeSessionId || this.opts.nativeSessionId || undefined,
+          });
           await this.wait(1500);
           continue;
         }
@@ -205,6 +213,9 @@ export class ProviderTelemetryWatcher {
                 this.lastTelemetrySourceSignature
                 && resolvedPreReadSourceSignature === this.lastEmittedPreReadSourceSignature
               ) {
+                this.logPollEvent("provider_telemetry_poll_no_new_data", {
+                  nativeSessionId: resolvedNativeSessionId || this.opts.nativeSessionId || undefined,
+                });
                 await this.wait(1500);
                 continue;
               }
@@ -234,6 +245,9 @@ export class ProviderTelemetryWatcher {
         if (sourceSignature === this.lastTelemetrySourceSignature) {
           this.lastEmittedPreReadSourceSignature = preReadSourceSignature;
           this.resetReadFailures();
+          this.logPollEvent("provider_telemetry_poll_no_new_data", {
+            nativeSessionId: resolvedNativeSessionId || this.opts.nativeSessionId || undefined,
+          });
           await this.wait(1500);
           continue;
         }
@@ -260,6 +274,19 @@ export class ProviderTelemetryWatcher {
         if (this.opts.onTelemetry) {
           this.opts.onTelemetry(telemetry);
         }
+        this.logPollEvent(this.getTelemetryPollEventType(telemetry), {
+          nativeSessionId: telemetry.nativeSessionId || resolvedNativeSessionId || this.opts.nativeSessionId || undefined,
+          usageSource: telemetry.usageSource,
+          transcriptChars: telemetry.transcriptText.length,
+          conversationTurnCount: telemetry.conversation?.length ?? 0,
+          toolCallCount: telemetry.conversation?.filter((turn) => turn.kind === "tool_call").length ?? 0,
+          inputTokens: telemetry.inputTokens,
+          cachedInputTokens: telemetry.cachedInputTokens,
+          outputTokens: telemetry.outputTokens,
+          reasoningOutputTokens: telemetry.reasoningOutputTokens,
+          totalTokens: telemetry.totalTokens,
+          hasRawUsageJson: Boolean(telemetry.rawUsageJson),
+        });
         this.lastTelemetrySourceSignature = sourceSignature;
         this.lastEmittedPreReadSourceSignature = preReadSourceSignature;
         this.resetReadFailures();
@@ -334,14 +361,39 @@ export class ProviderTelemetryWatcher {
     if (this.shouldLogFailureWarning()) {
       this.lastFailureWarningCount = this.readFailureCount;
       this.opts.logger?.warn("Provider telemetry watcher read failed", {
-        logPurpose: "runtime",
+        logPurpose: "invocation",
+        eventType: "provider_telemetry_poll_failed",
         provider: this.opts.provider,
+        purpose: this.opts.purpose || undefined,
         sessionId: this.opts.sessionId,
+        invocationId: this.opts.invocationId || undefined,
+        providerInvocationId: this.opts.providerInvocationId || undefined,
         nativeSessionId: this.resolvedNativeSessionId || this.opts.nativeSessionId || undefined,
+        correlationId: getCorrelationId(),
         failureCount: this.readFailureCount,
-        error: err instanceof Error ? err.message : String(err),
+        error: redactText(err instanceof Error ? err.message : String(err)),
       });
     }
+  }
+
+  private getTelemetryPollEventType(telemetry: ProviderUsageTelemetry): string {
+    return telemetry.usageSource === "reported"
+      ? "provider_telemetry_poll_succeeded"
+      : "provider_telemetry_poll_partial";
+  }
+
+  private logPollEvent(eventType: string, metadata: Record<string, unknown>): void {
+    this.opts.logger?.debug("Provider telemetry watcher poll", {
+      logPurpose: "invocation",
+      eventType,
+      provider: this.opts.provider,
+      purpose: this.opts.purpose || undefined,
+      sessionId: this.opts.sessionId,
+      invocationId: this.opts.invocationId || undefined,
+      providerInvocationId: this.opts.providerInvocationId || undefined,
+      correlationId: getCorrelationId(),
+      ...metadata,
+    });
   }
 
   private shouldLogFailureWarning(): boolean {

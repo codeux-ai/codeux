@@ -46,10 +46,67 @@ describe("RerunTaskModal", () => {
     );
 
     expect(screen.getByRole("status")).toHaveTextContent(/Loading providers/i);
+    expect(screen.getByRole("dialog", { name: /Rerun Task/i })).toBeInTheDocument();
     expect(screen.getByLabelText(/Provider/i)).toBeDisabled();
     expect(screen.getByRole("checkbox", { name: /Reset downstream tasks/i })).toBeInTheDocument();
     expect(screen.getByRole("checkbox", { name: /Undo the Git merge/i })).toBeChecked();
     expect(screen.getByRole("checkbox", { name: /Clear worktree/i })).toBeInTheDocument();
+  });
+
+  test("does not call rerun confirmation when canceled, closed, escaped, or backdrop-dismissed", async () => {
+    const onClose = vi.fn();
+    const onConfirm = vi.fn();
+    const { rerender } = render(
+      <RerunTaskModal
+        task={task as any}
+        allTasks={[task, downstreamTask] as any}
+        onClose={onClose}
+        onConfirm={onConfirm}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(onConfirm).not.toHaveBeenCalled();
+
+    rerender(
+      <RerunTaskModal
+        task={task as any}
+        allTasks={[task, downstreamTask] as any}
+        onClose={onClose}
+        onConfirm={onConfirm}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Close dialog" }));
+    expect(onClose).toHaveBeenCalledTimes(2);
+    expect(onConfirm).not.toHaveBeenCalled();
+
+    rerender(
+      <RerunTaskModal
+        task={task as any}
+        allTasks={[task, downstreamTask] as any}
+        onClose={onClose}
+        onConfirm={onConfirm}
+      />,
+    );
+    fireEvent.keyDown(document, { key: "Escape" });
+    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(3));
+    expect(onConfirm).not.toHaveBeenCalled();
+
+    rerender(
+      <RerunTaskModal
+        task={task as any}
+        allTasks={[task, downstreamTask] as any}
+        onClose={onClose}
+        onConfirm={onConfirm}
+      />,
+    );
+    const dialog = screen.getByRole("dialog", { name: /Rerun Task/i });
+    const backdrop = dialog.parentElement?.firstElementChild as HTMLElement | undefined;
+    expect(backdrop).toBeTruthy();
+    fireEvent.click(backdrop!);
+    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(4));
+    expect(onConfirm).not.toHaveBeenCalled();
   });
 
   test("keeps the modal open on rerun failure and routes retry through feedback", async () => {

@@ -151,6 +151,52 @@ describe("parseOpenCodeJsonLines", () => {
     expect(result.outputTokens).toBe(3);
     expect(result.nativeSessionId).toBe("ses_nested");
   });
+
+  it("skips partial and unknown stream events while preserving recoverable terminal records", () => {
+    const stream = [
+      "{\"type\":\"step-finish\",\"part\":{\"tokens\":{\"input\":999},\"api_key\":\"sk-test-secret\"",
+      JSON.stringify({ type: "session.idle", properties: { sessionID: "session_unknown" } }),
+      JSON.stringify({ type: "text", part: { type: "text", sessionID: "ses_recover", text: "final text" } }),
+      JSON.stringify({
+        type: "tool",
+        part: {
+          type: "tool",
+          sessionID: "ses_recover",
+          tool: "bash",
+          callID: "call_partial",
+          state: { status: "failed", output: "command failed before input was logged" },
+        },
+      }),
+      JSON.stringify({
+        type: "step-finish",
+        part: {
+          type: "step-finish",
+          sessionID: "ses_recover",
+          tokens: { input: "30", output: -4, cache: { read: 5 } },
+          cost: -0.5,
+        },
+      }),
+    ].join("\n");
+
+    const result = parseOpenCodeJsonLines(stream);
+
+    expect(result.nativeSessionId).toBe("ses_recover");
+    expect(result.usage).toEqual({
+      inputTokens: 25,
+      cachedInputTokens: 5,
+      outputTokens: 0,
+      reasoningOutputTokens: 0,
+      cost: 0,
+    });
+    expect(result.transcriptText).toBe("final text");
+    expect(result.conversation.find((turn) => turn.kind === "tool_call")).toMatchObject({
+      toolName: "bash",
+      toolCallId: "call_partial",
+      toolOutput: "command failed before input was logged",
+      toolStatus: "failed",
+    });
+    expect(JSON.stringify(result)).not.toContain("sk-test-secret");
+  });
 });
 
 describe("parseOpenCodeExport", () => {
@@ -198,6 +244,11 @@ describe("parseOpenCodeExport", () => {
   it("returns null when the export carries no usable token counts", () => {
     const empty = JSON.stringify({ info: { tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } } }, messages: [] });
     expect(parseOpenCodeExport(empty)).toBeNull();
+  });
+
+  it("returns null for truncated exports without leaking raw fragments", () => {
+    const usage = parseOpenCodeExport("prefix {\"info\":{\"tokens\":{\"input\":99},\"api_key\":\"sk-test-secret\"");
+    expect(usage).toBeNull();
   });
 });
 
