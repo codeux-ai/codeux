@@ -69,6 +69,7 @@ pnpm run test:e2e -- tests/e2e/app-release-smoke.spec.ts -g "normal app shell"
 The release E2E suite lives under `tests/e2e` and exercises the production-style dashboard served by the compiled server. It is not a provider orchestration test suite: specs must avoid provider credentials, Docker provider startup, project setup automation, worker dispatch, and sprint execution endpoints. The current release coverage includes:
 
 - `tests/e2e/app-release-smoke.spec.ts`, which verifies the normal app shell, core dashboard routes, responsive task-board behavior, route landmarks, and unexpected browser errors.
+- `tests/e2e/project-setup-release.spec.ts`, which verifies first-run onboarding completion, visible Add Project modal behavior for a credential-free local directory under the OS temp path, dashboard project selection, `/projects` landmarks, `/tasks` navigation, loading/error checks, and desktop/mobile overflow checks without provider secrets or orchestration endpoints.
 - `tests/e2e/sprint-task-lifecycle.spec.ts`, which verifies draft sprint and implementation task create/edit/delete behavior through the visible dashboard flows and collection API assertions.
 - `tests/e2e/helpers/prepare-app.ts`, which prepares deterministic app state through dashboard HTTP APIs for onboarding, local project selection, draft sprint setup, task setup, updates, deletes, and cleanup.
 
@@ -82,6 +83,7 @@ Root E2E specs should prepare normal app state through `tests/e2e/helpers/prepar
 - Use unique fixture keys and generated names from the helper utilities so parallel workers and retries do not collide.
 - Prefer role-based locators, accessible names, landmarks, and stable `data-testid` roots over CSS shape or timing assertions.
 - Build paths with Node `os`, `path`, and `fs` APIs so fixtures remain portable on Windows, macOS, and Linux.
+- For credential-free project setup coverage, drive the visible Add Project UI and disable the Project Setup Agent option before submitting so the test does not call provider orchestration, Docker provider startup, worker dispatch, or sprint execution endpoints.
 - Clean up created sprints and tasks with `deleteTask`, `deleteSprint`, or `cleanupSprintFixture` in `afterEach` when a spec mutates persistent app state.
 - Use the exported update/delete helpers to mutate or clean sprint/task records during a spec. Keep setup deterministic and local to the web app contract.
 
