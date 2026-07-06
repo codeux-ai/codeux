@@ -180,6 +180,7 @@ describe("TasksPage.cards Integration", () => {
     expect(screen.getAllByText("Foundation Setup").length).toBeGreaterThan(0);
     expect(screen.getByRole("region", { name: /in progress/i })).toHaveAccessibleDescription(/In Progress lane contains 1 task/i);
     expect(screen.getByRole("region", { name: /completed/i })).toHaveAccessibleDescription(/Completed lane contains 1 task/i);
+    expect(screen.getByText("Task filters changed. Status All. Priority Any Priority. Showing 20 tasks per lane.")).toHaveClass("sr-only");
     expect(screen.getByRole("button", { name: /Task sprint scope: SPR-1: Sprint One/i })).toHaveAttribute("aria-expanded", "false");
   });
 
@@ -457,14 +458,14 @@ describe("TasksPage.cards Integration", () => {
       </ProjectDataContext.Provider>
     );
 
-    await user.click(screen.getByRole("tab", { name: "Done" }));
+    await user.click(screen.getByRole("tab", { name: "Show completed tasks" }));
     await waitFor(() => expect(screen.getByText("Release Notes")).toBeInTheDocument());
     await waitFor(() => expect(screen.queryByText("Foundation Setup")).not.toBeInTheDocument());
     expect(screen.getByText(/Filtered to show completed status and any priority/i)).toBeInTheDocument();
 
-    await user.click(screen.getByRole("tab", { name: "All" }));
+    await user.click(screen.getByRole("tab", { name: "Show all task statuses" }));
     await waitFor(() => expect(screen.getByText("Foundation Setup")).toBeInTheDocument());
-    await user.click(screen.getByRole("tab", { name: "Critical" }));
+    await user.click(screen.getByRole("tab", { name: "Show critical priority tasks" }));
     await waitFor(() => expect(screen.queryByText("Release Notes")).not.toBeInTheDocument());
     expect(screen.getByText("Foundation Setup")).toBeInTheDocument();
     expect(screen.getByText(/Filtered to show all status and critical priority/i)).toBeInTheDocument();

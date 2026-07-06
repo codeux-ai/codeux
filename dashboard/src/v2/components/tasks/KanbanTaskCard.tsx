@@ -117,6 +117,15 @@ export const KanbanTaskCard: FunctionComponent<{
     pull_request: GitPullRequest,
     live_runtime: Maximize2,
   };
+  const unavailableActionSummary = task.isOptimistic
+    ? `Saving task ${task.id}; actions are paused.`
+    : cardActions
+      .filter((action) => action.disabledReason)
+      .map((action) => action.label)
+      .join(", ");
+  const unavailableActionSummaryText = unavailableActionSummary && !task.isOptimistic
+    ? `Unavailable: ${unavailableActionSummary}.`
+    : unavailableActionSummary;
 
   const [flashTriggerCount, setFlashTriggerCount] = useState(0);
   const prevRunningTimeRef = useRef(liveRunningTime);
@@ -320,6 +329,11 @@ export const KanbanTaskCard: FunctionComponent<{
       </div>
 
       <div className="kanban-card__actions absolute top-3 right-3 flex max-w-[calc(100%-1.5rem)] flex-wrap items-center justify-end gap-1 p-1 bg-white/90 dark:bg-void-700/95 backdrop-blur-md rounded-2xl shadow-[0_2px_12px_rgba(0,0,0,0.06)] dark:shadow-[0_2px_12px_rgba(0,0,0,0.4)] border border-black/[0.05] dark:border-white/[0.08] z-20" aria-label={`Actions for task ${task.id}`} data-motion-contract="controlFeedback">
+        {unavailableActionSummaryText && (
+          <span className="kanban-card__action-reason-summary" aria-hidden="true">
+            {unavailableActionSummaryText}
+          </span>
+        )}
         {cardActions.map((action) => {
           const ActionIcon = actionIconByKind[action.kind];
           const disabledReason = task.isOptimistic

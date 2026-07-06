@@ -515,6 +515,7 @@ describe("KanbanTaskCard Integration", () => {
     expect(getByRole("button", { name: /Rerun task TASK-123: Implement new feature/i })).toHaveAccessibleDescription("Open Live to rerun task TASK-123.");
     expect(getByRole("button", { name: /Open pull request for task TASK-123: Implement new feature/i })).toHaveAccessibleDescription("No pull request is available for task TASK-123 yet.");
     expect(getByRole("button", { name: /Open live runtime for task TASK-123: Implement new feature/i })).toHaveAccessibleDescription("Live runtime has not started for task TASK-123.");
+    expect(getByText("Unavailable: Rerun, PR pending, Live idle.")).toBeVisible();
     expect(getByText("1 dependency blocker")).toBeInTheDocument();
     expect(getByText("QA no review")).toBeInTheDocument();
   });
@@ -537,12 +538,13 @@ describe("KanbanTaskCard Integration", () => {
       optimisticSavingLabel: "Saving task changes",
     };
 
-    const { getByRole } = render(<KanbanTaskCard viewModel={optimisticViewModel} onEdit={vi.fn()} onDelete={vi.fn()} />);
+    const { getByRole, getByText } = render(<KanbanTaskCard viewModel={optimisticViewModel} onEdit={vi.fn()} onDelete={vi.fn()} />);
 
     const liveAction = getByRole("button", { name: /Open live runtime for task TASK-123: Implement new feature/i });
     expect(liveAction).toHaveAttribute("aria-disabled", "true");
     expect(liveAction).toHaveAttribute("aria-busy", "true");
     expect(liveAction).toHaveAccessibleDescription("Saving task TASK-123; Live is temporarily unavailable.");
+    expect(getByText("Saving task TASK-123; actions are paused.")).toBeVisible();
   });
 
   it("prevents long metadata strings from overflowing the card horizontally", () => {
