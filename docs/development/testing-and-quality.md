@@ -113,7 +113,7 @@ The release install verifier builds the workspace, creates a local npm tarball w
 
 ### Release Checks Policy
 
-The no-secret release validation workflow is `.github/workflows/release-checks.yml`. It runs only on `push` to `main` and `workflow_dispatch`, and it uses a native Linux, macOS, and Windows matrix to prove the project can install dependencies, build from source, install from its packed npm tarball, run the installed CLI help command, and build the platform desktop package without provider credentials or publishing credentials.
+The no-secret release validation workflow is `.github/workflows/release-checks.yml`. It runs on pull requests targeting `main` and on manual `workflow_dispatch`, and it uses a native Linux, macOS, and Windows matrix to prove a release candidate can install dependencies, build from source, install from its packed npm tarball, run the installed CLI help command, and build the platform desktop package without provider credentials or publishing credentials.
 
 Each job uses pnpm 10.33.0 and Node 22, runs `pnpm install --frozen-lockfile`, `pnpm run build`, `node scripts/verify-release-install.mjs`, rebuilds Electron native dependencies with `pnpm run electron:install-deps`, and then runs the matching Electron distribution script for the runner platform:
 
@@ -121,9 +121,9 @@ Each job uses pnpm 10.33.0 and Node 22, runs `pnpm install --frozen-lockfile`, `
 - macOS: `pnpm run electron:dist:mac`
 - Windows: `pnpm run electron:dist:win`
 
-`node scripts/verify-release-install.mjs` builds the workspace, creates a local npm tarball with `npm pack --ignore-scripts`, installs that tarball into a temporary npm project, and runs the installed `codeux --help` CLI smoke command. Electron packaging sets `CSC_IDENTITY_AUTO_DISCOVERY=false` so CI builds remain unsigned, and generated installer/package files under `release/electron/` are uploaded as workflow artifacts only.
+`node scripts/verify-release-install.mjs` builds the workspace, creates a local npm tarball with `npm pack --ignore-scripts`, installs that tarball into a temporary npm project, and runs the installed `codeux --help` CLI smoke command. Electron packaging sets `CSC_IDENTITY_AUTO_DISCOVERY=false` so CI builds remain unsigned, and release-check Electron commands pass `--publish never` so generated installer/package files under `release/electron/` are uploaded as workflow artifacts only.
 
-Together, `.github/workflows/release-checks.yml` and `.github/workflows/playwright.yml` are the push-to-main credential-free release validation lanes. The former checks source build, package installability, CLI help, and desktop package creation; the latter checks the compiled app in Chromium across Linux, macOS, and Windows, including project setup coverage.
+Together, `.github/workflows/release-checks.yml` and `.github/workflows/playwright.yml` are the pull-request-to-main credential-free release validation lanes. The former checks source build, package installability, CLI help, and desktop package creation; the latter checks the compiled app in Chromium across Linux, macOS, and Windows, including project setup coverage.
 
 ### Main Release Version Gate
 
