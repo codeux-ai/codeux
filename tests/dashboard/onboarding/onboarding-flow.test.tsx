@@ -456,7 +456,7 @@ describe("OnboardingExperience integration", () => {
     expect(screen.getByRole("dialog")).not.toBeNull();
   });
 
-  it("focuses a retryable validation error when Jira fields are partially configured", async () => {
+  it("focuses the first invalid Jira field when Jira fields are partially configured", async () => {
     const systemSettings = createSystemSettings();
     vi.mocked(settingsApi.fetchSystemSettings).mockResolvedValue(systemSettings);
     vi.mocked(settingsApi.saveSystemSettings).mockResolvedValue(systemSettings);
@@ -486,8 +486,8 @@ describe("OnboardingExperience integration", () => {
     await userEvent.click(screen.getByRole("button", { name: "Next" }));
 
     const alert = await screen.findByRole("alert");
-    expect(alert.textContent).toContain("Enter both Jira site URL and API token");
-    await waitFor(() => expect(document.activeElement).toBe(alert));
+    expect(alert.textContent).toContain("Enter a Jira API token");
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByLabelText("Jira API token")));
   });
 
   it("announces pending save state on the final onboarding action", async () => {

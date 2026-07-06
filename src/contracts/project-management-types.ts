@@ -289,6 +289,7 @@ export interface CreateProjectInput {
   initMode?: ProjectInitMode;           // omitted = "existing" (backward compat)
   isPrivate?: boolean;                  // new-remote: repo visibility, default true
   remoteProvider?: "github" | "gitlab"; // new-remote: which hosting provider
+  settingsOverrides?: ProjectSettingsOverride;
 }
 
 export interface UpdateProjectInput {

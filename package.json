@@ -1,6 +1,6 @@
 {
   "name": "@codeuxai/codeux",
-  "version": "0.9.0",
+  "version": "0.9.1",
   "description": "Containerized environment for running and managing AI sub-agents",
   "author": "Pierre Voss <p.voss@codeux.ai>",
   "license": "MIT",
@@ -55,6 +55,7 @@
     "smoketest:codex": "node --import ./scripts/tsnode-register.mjs tests/smoketest/codex.smoketest.ts",
     "test:backend": "vitest run tests/backend",
     "test:dashboard": "vitest run tests/dashboard",
+    "test:e2e": "playwright test",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "test:backend:coverage": "vitest run tests/backend --coverage",

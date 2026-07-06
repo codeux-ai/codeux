@@ -66,8 +66,11 @@ describe("DependencyStatusIndicators", () => {
     const unknownIndicator = getByTitle(/Depends on Unknown Task \(missing\) \(Unknown; pending\)/i);
     expect(unknownIndicator.className).toContain("border-dashed");
     expect(unknownIndicator).toHaveAttribute("data-dependency-state", "unknown");
+    expect(unknownIndicator).toHaveAttribute("data-blocking", "true");
     expect(getByText("Unknown")).toBeTruthy();
     expect(container.querySelector('[role="list"]')).toHaveAccessibleName("Blocked: 5 dependencies need completion. Task dependencies");
+    expect(container.querySelector('[data-motion-control="controlFeedback"]')).toBeTruthy();
+    expect(container.querySelector('[data-motion-list-reorder="listReorder"]')).toBeTruthy();
   });
 
   it("summarizes resolved dependencies without implying blockers", () => {
@@ -81,6 +84,8 @@ describe("DependencyStatusIndicators", () => {
 
     expect(getByText("Dependencies resolved: 1 clear")).toBeTruthy();
     expect(getByRole("list")).toHaveAccessibleName("Dependencies resolved: 1 clear. Task dependencies");
+    expect(getByText("Dependency blockers resolved. 1 dependency is clear.")).toHaveClass("sr-only");
+    expect(getByRole("listitem", { name: /Depends on task TASK-1/i })).toHaveAttribute("data-blocking", "false");
   });
 
   it("returns null when no indicators provided", () => {

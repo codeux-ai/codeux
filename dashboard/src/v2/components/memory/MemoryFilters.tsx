@@ -52,6 +52,14 @@ export const MemoryFilters: FunctionComponent<{
         transitionDuration: interactionTokens.controlFeedback.duration,
         transitionTimingFunction: interactionTokens.controlFeedback.ease,
     };
+    const selectionTransitionStyle = {
+        transitionDuration: interactionTokens.selectionMovement.duration,
+        transitionTimingFunction: interactionTokens.selectionMovement.ease,
+    };
+    const inlineValidationStyle = {
+        transitionDuration: interactionTokens.inlineValidation.duration,
+        transitionTimingFunction: interactionTokens.inlineValidation.ease,
+    };
 
     useEffect(() => {
         setAnnouncement(`${activeTierLabel} tier selected. ${activeTierCount} ${activeTierCount === 1 ? "memory" : "memories"}.`);
@@ -101,13 +109,13 @@ export const MemoryFilters: FunctionComponent<{
                             id={`tab-${tab.key}`}
                             role="tab"
                             aria-selected={activeTier === tab.key}
+                            aria-current={activeTier === tab.key ? "page" : undefined}
                             aria-controls="memory-panel"
                             aria-describedby={`tab-${tab.key}-count`}
                             tabIndex={activeTier === tab.key ? 0 : -1}
                             style={{
-                                transitionProperty: "background-color, border-color, color, box-shadow",
-                                transitionDuration: interactionTokens.controlFeedback.duration,
-                                transitionTimingFunction: interactionTokens.controlFeedback.ease,
+                                transitionProperty: "background-color, border-color, color, box-shadow, transform",
+                                ...selectionTransitionStyle,
                             }}
                             className={`min-w-0 rounded-full border px-3.5 py-1.5 text-[10px] font-bold font-mono leading-tight whitespace-normal cursor-pointer motion-reduce:duration-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-900
                             ${activeTier === tab.key
@@ -247,6 +255,7 @@ export const MemoryFilters: FunctionComponent<{
             <p
                 id="danger-delete-mode-copy"
                 className={`w-full text-left text-[11px] font-semibold leading-snug md:text-right ${lobotomize ? "text-status-red" : "text-slate-400"}`}
+                style={inlineValidationStyle}
             >
                 {lobotomize
                     ? "Danger delete mode is armed. Single-memory deletes skip confirmation until turned off."

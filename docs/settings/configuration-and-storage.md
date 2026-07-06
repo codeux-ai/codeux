@@ -185,6 +185,7 @@ The effective endpoints return:
 
 Dashboard behavior:
 - project settings now render a per-setting override badge only when a control is actually overridden at project scope
+- settings UI path pickers can browse allowed local roots for custom container setup script paths. The local browser APIs are limited to the home directory, current working directory, and `CODE_UX_DIRECTORY_BROWSER_ROOTS`; `/api/local-files` returns navigation metadata plus directory and file names/absolute paths only, never file contents.
 - sprint override dialogs use the same field-level source metadata and show override badges only for sprint-local overrides
 - the v2 settings page includes a quick-find field (keyboard shortcut `/`) that filters categories without changing the scoped settings model. Smart Find uses a centralized typed settings search index spanning category metadata, provider and integration labels, invocation routes, instruction templates, and important field synonyms, so provider searches such as `claude` surface both AI model routing and Integrations matches with visible match context. The search UI announces live result counts, active-category match previews, no-match recovery suggestions, and keyboard-friendly quick category chips.
 - settings scope selection is a radiogroup with explicit selected state and disabled project-scope guidance when no project is selected. Save, project reset, dirty, saved, and error states are announced in the active settings panel while visible form values stay mounted during pending operations.
@@ -308,15 +309,18 @@ Dashboard behavior:
   - `exhaustionPolicy` (default `FINISH_TASK` for new or unset settings)
   - `taskCompletion`
     - `enabled`
+    - `agentPresetIds` (ordered list of review agent preset IDs; empty means the built-in/default QA agent fallback)
     - `agentPresetId`
   - `sprintCompletion`
     - `enabled`
+    - `agentPresetIds` (ordered list of review agent preset IDs; empty means the built-in/default QA agent fallback)
     - `agentPresetId`
   - `completedTaskWithoutPr`
     - `enabled`
+    - `agentPresetIds` (ordered list of review agent preset IDs; empty means the built-in/default QA agent fallback)
     - `agentPresetId`
 
-Quality assurance settings are project-scoped today and are edited from `Settings -> Sprint & Git`, immediately below `Merge Gates & Autofix`. When task-level QA is enabled, successful CLI task runs preserve their worktree long enough for a QA follow-up pass to resume the same session/worktree if fixes are required.
+Quality assurance settings are project-scoped today and are edited from `Settings -> Sprint & Git`, immediately below `Merge Gates & Autofix`. Each QA trigger can persist multiple review agent presets in `agentPresetIds`; Code UX still accepts the legacy single `agentPresetId` field and mirrors it to the first selected ID in sanitized and effective settings for compatibility. When task-level QA is enabled, successful CLI task runs preserve their worktree long enough for a QA follow-up pass to resume the same session/worktree if fixes are required.
 
 QA merge-gate notes:
 - task QA now runs on code-complete tasks before Code UX auto-merges their feature PRs
@@ -349,7 +353,9 @@ QA merge-gate notes:
   - `executionMode` (`HOST|DOCKER`)
 - Docker runtime config:
   - `containerImage`
-  - `containerSetupScriptPath` (optional; when set to a relative path, runtime checks both sprint repo root and current server working directory)
+  - `containerSetupScriptPath` (optional; saved as a string and not required to exist when settings are saved)
+    - the dashboard picker is a convenience for selecting local absolute paths from allowed host roots
+    - manually entered relative paths remain supported; Docker runtime resolves them later against the sprint repo root and current server working directory
     - if empty, Code UX first seeds missing bundled defaults into `~/.code-ux`, then falls back to `.code-ux/container/setup.sh` in repo root, then home directory, then the bundled Code UX default script
   - `containerCacheSetupScriptImage` (default `true`)
     - when enabled, Docker runtime builds and reuses a derived image keyed by the base image plus setup script contents
@@ -454,7 +460,7 @@ Container execution notes:
   - `"CREATE_PR"`: open or reuse the feature PR, then stop before auto-merge and mark the task settled with `PR_ONLY`
   - `"WHEN_GREEN"`: auto-merge when merge gates are clear, including green or confidently-not-applicable CI
   - `"ALWAYS"`: attempt auto-merge without waiting for CI, while still respecting merge conflicts and configured review-comment blockers
-- `mainBranchAutoMergeMode` (default `"CREATE_PR"`):
+- `mainBranchAutoMergeMode` (default `"ALWAYS"`):
   - `"OFF"`: Code UX does not automatically open or merge the final `feature -> default` PR
   - `"CREATE_PR"`: when sprint work is complete, Code UX opens or resolves the main PR but does not auto-merge it; the sprint run pauses until a human merges the PR and resumes the sprint
   - `"WHEN_GREEN"`: when sprint work is complete, Code UX opens or resolves the main PR if needed, auto-merges after the main merge gate is green, and keeps the sprint active until GitHub reports the PR as merged

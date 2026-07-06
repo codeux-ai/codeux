@@ -1,9 +1,108 @@
-import type { FunctionComponent } from "preact";
+import type { ComponentChildren, FunctionComponent } from "preact";
 import type { ProjectSettings } from "../../../../types.js";
 import { SelectInput, Toggle, NumberInput } from "../SettingsFormFields.js";
 import { SectionCard, Row } from "./SharedPanelComponents.js";
 import { ShieldCheck } from "lucide-preact";
 import { DEFAULT_DASHBOARD_SETTINGS } from "../../../../lib/settings.js";
+
+type QaPresetOption = {
+  value: string;
+  label: string;
+  icon?: ComponentChildren | (() => ComponentChildren);
+};
+
+type QaTriggerSettings = ProjectSettings["agents"]["qualityAssurance"]["taskCompletion"];
+
+const normalizeAgentPresetIds = (trigger: QaTriggerSettings): string[] => {
+  const sourceIds = Array.isArray(trigger.agentPresetIds)
+    ? trigger.agentPresetIds
+    : trigger.agentPresetId
+      ? [trigger.agentPresetId]
+      : [];
+  return [...new Set(sourceIds.map((id) => id.trim()).filter(Boolean))];
+};
+
+const withAgentPresetIds = (trigger: QaTriggerSettings, nextIds: string[]): QaTriggerSettings => {
+  const agentPresetIds = [...new Set(nextIds.map((id) => id.trim()).filter(Boolean))];
+  return {
+    ...trigger,
+    agentPresetIds,
+    agentPresetId: agentPresetIds[0] ?? null,
+  };
+};
+
+const renderOptionIcon = (icon: QaPresetOption["icon"]): ComponentChildren => (
+  typeof icon === "function" ? icon() : icon
+);
+
+const QaAgentPresetChecklist: FunctionComponent<{
+  label: string;
+  value: string[];
+  options: QaPresetOption[];
+  disabled: boolean;
+  onChange: (ids: string[]) => void;
+}> = ({ label, value, options, disabled, onChange }) => {
+  const selectedIds = new Set(value);
+  const selectedCount = value.length;
+  const fallbackText = disabled
+    ? "Built-in QA agent fallback is active. Select a project to choose custom QA agents."
+    : selectedCount === 0
+      ? "Built-in QA agent fallback is active."
+      : `${selectedCount} custom QA ${selectedCount === 1 ? "agent" : "agents"} selected.`;
+
+  const toggleId = (id: string, checked: boolean): void => {
+    if (checked) {
+      onChange([...value, id]);
+      return;
+    }
+    onChange(value.filter((selectedId) => selectedId !== id));
+  };
+
+  return (
+    <fieldset
+      disabled={disabled}
+      className="min-w-0 flex-1 rounded-[1rem] border border-black/[0.06] bg-white/65 p-3 dark:border-white/[0.06] dark:bg-white/[0.04]"
+    >
+      <legend className="sr-only">{label}</legend>
+      <div className="mb-2 text-xs font-semibold leading-relaxed text-slate-500 dark:text-slate-400" role="status">
+        {fallbackText}
+      </div>
+      {options.length > 0 ? (
+        <div className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-[repeat(auto-fit,minmax(min(100%,180px),1fr))]">
+          {options.map((option) => {
+            const checked = selectedIds.has(option.value);
+            return (
+              <label
+                key={option.value}
+                className={`flex min-w-0 cursor-pointer items-center gap-2 rounded-[0.85rem] border px-3 py-2 text-sm font-semibold transition-all ${
+                  checked
+                    ? "border-signal-500/35 bg-signal-500/[0.1] text-signal-800 dark:border-signal-400/35 dark:bg-signal-400/[0.12] dark:text-signal-100"
+                    : "border-black/[0.06] bg-black/[0.02] text-slate-700 hover:border-black/[0.12] hover:bg-black/[0.04] dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-300 dark:hover:border-white/[0.12] dark:hover:bg-white/[0.07]"
+                } has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-50`}
+              >
+                <input
+                  type="checkbox"
+                  checked={checked}
+                  disabled={disabled}
+                  onChange={(event) => toggleId(option.value, event.currentTarget.checked)}
+                  className="h-4 w-4 shrink-0 rounded border-black/20 text-signal-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-focus-ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:border-white/20 dark:bg-white/[0.08] dark:focus-visible:ring-offset-void-900"
+                />
+                {option.icon ? (
+                  <span className="shrink-0" aria-hidden="true">{renderOptionIcon(option.icon)}</span>
+                ) : null}
+                <span className="min-w-0 break-words">{option.label}</span>
+              </label>
+            );
+          })}
+        </div>
+      ) : (
+        <div className="rounded-[0.85rem] border border-dashed border-black/[0.06] bg-black/[0.02] px-3 py-2 text-xs leading-relaxed text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.02] dark:text-slate-400">
+          No custom QA agents are available for this project.
+        </div>
+      )}
+    </fieldset>
+  );
+};
 
 // Shared QA section rendered by the settings panels that own QA configuration.
 export const QAPanel: FunctionComponent<{
@@ -11,7 +110,7 @@ export const QAPanel: FunctionComponent<{
   update: (patch: Partial<ProjectSettings["agents"]["qualityAssurance"]>) => void;
   getBadge: (path: string) => string | undefined;
   sectionBadge: string | undefined;
-  presetOptions: Array<{ value: string; label: string }>;
+  presetOptions: QaPresetOption[];
   selectorsDisabled: boolean;
   selectedProjectName?: string;
   activeScope?: string;
@@ -101,17 +200,16 @@ export const QAPanel: FunctionComponent<{
                     },
                   })}
                 />
-                <SelectInput
-                  value={settings.taskCompletion.agentPresetId || ""}
-                  onChange={(value) => update({
-                    taskCompletion: {
-                      ...settings.taskCompletion,
-                      agentPresetId: value || null,
-                    },
-                  })}
+                <QaAgentPresetChecklist
+                  label="Task completion QA agent presets"
+                  value={normalizeAgentPresetIds(settings.taskCompletion)}
                   options={presetOptions}
                   disabled={selectorsDisabled}
-                  aria-label="Task completion QA agent preset"
+                  onChange={(agentPresetIds) => update({
+                    taskCompletion: {
+                      ...withAgentPresetIds(settings.taskCompletion, agentPresetIds),
+                    },
+                  })}
                 />
               </div>
             </Row>
@@ -130,17 +228,16 @@ export const QAPanel: FunctionComponent<{
                     },
                   })}
                 />
-                <SelectInput
-                  value={settings.sprintCompletion.agentPresetId || ""}
-                  onChange={(value) => update({
-                    sprintCompletion: {
-                      ...settings.sprintCompletion,
-                      agentPresetId: value || null,
-                    },
-                  })}
+                <QaAgentPresetChecklist
+                  label="Sprint completion QA agent presets"
+                  value={normalizeAgentPresetIds(settings.sprintCompletion)}
                   options={presetOptions}
                   disabled={selectorsDisabled}
-                  aria-label="Sprint completion QA agent preset"
+                  onChange={(agentPresetIds) => update({
+                    sprintCompletion: {
+                      ...withAgentPresetIds(settings.sprintCompletion, agentPresetIds),
+                    },
+                  })}
                 />
               </div>
             </Row>
@@ -160,17 +257,16 @@ export const QAPanel: FunctionComponent<{
                     },
                   })}
                 />
-                <SelectInput
-                  value={settings.completedTaskWithoutPr.agentPresetId || ""}
-                  onChange={(value) => update({
-                    completedTaskWithoutPr: {
-                      ...settings.completedTaskWithoutPr,
-                      agentPresetId: value || null,
-                    },
-                  })}
+                <QaAgentPresetChecklist
+                  label="No PR QA agent presets"
+                  value={normalizeAgentPresetIds(settings.completedTaskWithoutPr)}
                   options={presetOptions}
                   disabled={selectorsDisabled}
-                  aria-label="No PR QA agent preset"
+                  onChange={(agentPresetIds) => update({
+                    completedTaskWithoutPr: {
+                      ...withAgentPresetIds(settings.completedTaskWithoutPr, agentPresetIds),
+                    },
+                  })}
                 />
               </div>
             </Row>

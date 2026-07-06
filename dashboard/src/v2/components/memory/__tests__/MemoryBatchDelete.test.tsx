@@ -139,6 +139,31 @@ describe("Memory batch delete", () => {
         expect(getAllByRole("option")).toHaveLength(2);
     });
 
+    test("confirms single selected memory deletion before mutating", async () => {
+        const removeMemories = vi.fn().mockResolvedValue([]);
+        memoryMutationsSignal.value.removeMemories = removeMemories;
+
+        const { getByRole } = render(
+            <MemoryList
+                nodes={[buildNode({ id: "memory-1", content: "Alpha project memory" })]}
+                onSelectNode={vi.fn()}
+            />
+        );
+
+        fireEvent.click(getByRole("button", { name: "Select all 1 visible" }));
+        fireEvent.click(getByRole("button", { name: "Delete selected" }));
+
+        expect(screen.getByRole("dialog", { name: "Delete Selected Memories" })).toBeInTheDocument();
+        expect(screen.getByText("Delete 1 selected memory? This action cannot be undone.")).toBeInTheDocument();
+        expect(removeMemories).not.toHaveBeenCalled();
+
+        fireEvent.click(getByRole("button", { name: "Delete Memory" }));
+
+        await waitFor(() => {
+            expect(removeMemories).toHaveBeenCalledWith(["memory-1"]);
+        });
+    });
+
     test("shows pending mutation feedback while deleting selected memories", () => {
         memoryMutationsSignal.value = {
             ...memoryMutationsSignal.value,

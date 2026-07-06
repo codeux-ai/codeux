@@ -362,6 +362,17 @@ describe("live-session-view-model", () => {
       transportState: "connected",
       isRecovering: false,
       snapshotUpdatedAt: "2026-03-27T10:03:00.000Z",
+      error: "Network failure",
+    })).toMatchObject({
+      kind: "recovering",
+      label: "Retrying Load",
+      isBusy: true,
+    });
+
+    expect(deriveLiveSessionSnapshotSurface({
+      transportState: "connected",
+      isRecovering: false,
+      snapshotUpdatedAt: "2026-03-27T10:03:00.000Z",
       transportBannerTitle: "Stale Data",
     })).toMatchObject({
       kind: "stale",

@@ -220,7 +220,7 @@ describe("LiveTaskCard", () => {
     expect(scoped.getByRole("log", { name: "Invocation feed for task test-task" })).toBeTruthy();
     expect(scoped.getByText("Task Invocations")).toBeTruthy();
     expect(scoped.getByText("Task Coding")).toBeTruthy();
-    expect(scoped.getByRole("link", { name: "Open transcript for Task Coding" }).getAttribute("href"))
+    expect(scoped.getByRole("link", { name: "Open transcript for Task Coding invocation xi-task-" }).getAttribute("href"))
       .toBe("/chat?mode=invocations&invocation=xi-task-1");
   });
 
@@ -247,7 +247,7 @@ describe("LiveTaskCard", () => {
     expect(screen.getByText("model pending")).toBeTruthy();
     expect(screen.getByText("12 tok")).toBeTruthy();
     expect(screen.getByText("Provider returned an error")).toBeTruthy();
-    expect(screen.getByRole("link", { name: "Open transcript for QA Review" }).getAttribute("href"))
+    expect(screen.getByRole("link", { name: "Open transcript for QA Review invocation xi task/" }).getAttribute("href"))
       .toBe("/chat?mode=invocations&invocation=xi%20task%2Fwith%20space");
   });
 });

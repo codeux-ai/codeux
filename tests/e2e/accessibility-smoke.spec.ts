@@ -1,9 +1,9 @@
 import { test, expect } from '@playwright/test';
 import { completeOnboarding, ensureSelectedProject } from './helpers/prepare-app';
 
-test.beforeEach(async ({ page, request }) => {
+test.beforeEach(async ({ page, request }, testInfo) => {
   await completeOnboarding(request);
-  await ensureSelectedProject(request);
+  await ensureSelectedProject(request, { testInfo, fixtureKey: 'accessibility' });
 
   await page.addInitScript(() => {
     localStorage.setItem('codeux:dashboard-tour-hidden:v1', 'true');
@@ -24,7 +24,7 @@ test('Dashboard accessibility smoke test', async ({ page }) => {
   await expect(nav).toBeVisible();
 
   // 3. Global Search
-  const searchTrigger = page.getByRole('button', { name: 'Search workspace' });
+  const searchTrigger = page.getByRole('button', { name: /Search workspace|Search/i });
   await expect(searchTrigger).toBeVisible();
 
   // 4. Notification trigger

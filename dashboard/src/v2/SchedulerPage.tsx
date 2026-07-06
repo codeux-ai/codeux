@@ -520,14 +520,14 @@ export const SchedulerPage: FunctionComponent = () => {
 
   if (!selectedProject) {
     return (
-      <PageContainer padding="standard" className="gap-8">
+      <PageContainer aria-label="Scheduler" padding="standard" className="gap-8">
         <ProjectPlaceholder />
       </PageContainer>
     );
   }
 
   return (
-    <PageContainer padding="standard" className="gap-8" data-testid="scheduler-page-root">
+    <PageContainer aria-label="Scheduler" padding="standard" className="gap-8" data-testid="scheduler-page-root">
       <PageHeader
         data-testid="scheduler-primary-header"
         icon={CalendarDays}

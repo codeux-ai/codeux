@@ -9,6 +9,7 @@ describe("update status routes", () => {
       currentVersion: "0.8.9",
       latestVersion: "0.9.0",
       updateAvailable: true,
+      releaseUrl: "https://github.com/codeux-ai/codeux/releases/tag/v0.9.0",
       checkedAt: "2026-07-02T00:00:00.000Z",
     });
 
@@ -22,6 +23,7 @@ describe("update status routes", () => {
       currentVersion: "0.8.9",
       latestVersion: "0.9.0",
       updateAvailable: true,
+      releaseUrl: "https://github.com/codeux-ai/codeux/releases/tag/v0.9.0",
       checkedAt: "2026-07-02T00:00:00.000Z",
     });
     expect(getUpdateStatus).toHaveBeenCalledTimes(1);

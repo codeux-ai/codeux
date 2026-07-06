@@ -1,6 +1,7 @@
 import { app, BrowserWindow, dialog, ipcMain, nativeImage, session, shell } from "electron";
 import * as fs from "fs";
 import Module from "module";
+import * as os from "os";
 import * as path from "path";
 import { fileURLToPath } from "url";
 import { isDashboardRuntimeDataUrl, shouldAddRuntimeNoCacheRequestHeaders } from "./dashboard-network-policy.js";
@@ -352,9 +353,10 @@ ipcMain.handle("codeux:pick-directory", async (event, defaultPath?: string) => {
     properties: ["openDirectory"],
   };
 
-  if (typeof defaultPath === "string" && defaultPath.trim().length > 0) {
-    options.defaultPath = defaultPath.trim();
-  }
+  const trimmedDefaultPath = typeof defaultPath === "string" ? defaultPath.trim() : "";
+  options.defaultPath = trimmedDefaultPath
+    ? (path.isAbsolute(trimmedDefaultPath) ? trimmedDefaultPath : path.resolve(os.homedir(), trimmedDefaultPath))
+    : os.homedir();
 
   const result = parentWindow
     ? await dialog.showOpenDialog(parentWindow, options)

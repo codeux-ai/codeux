@@ -239,16 +239,17 @@ interface ConfirmDialogProps {
   options: ConfirmDialogOptions | null;
   onConfirm: () => void | Promise<void>;
   onCancel: () => void;
+  restoreFocus?: boolean;
 }
 
-export function ConfirmDialog({ isOpen, options, onConfirm, onCancel }: ConfirmDialogProps) {
+export function ConfirmDialog({ isOpen, options, onConfirm, onCancel, restoreFocus = true }: ConfirmDialogProps) {
   const [shouldRender, setShouldRender] = useState(isOpen);
   const [isClosing, setIsClosing] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [confirmFlash, setConfirmFlash] = useState(false);
 
   const cardRef = useRef<HTMLDivElement>(null);
-  const trapRef = useFocusTrap(shouldRender && !isClosing, { onClose: () => handleClose(onCancel), restoreFocus: true });
+  const trapRef = useFocusTrap(shouldRender && !isClosing, { onClose: () => handleClose(onCancel), restoreFocus });
   const reducedMotion = useReducedMotion();
   const gsapTokens = useGsapInteractionTokens();
   const cssTokens = useInteractionTokens();

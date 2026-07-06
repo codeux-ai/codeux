@@ -122,7 +122,7 @@ describe("settings-sanitizer", () => {
     expect(settings.git.githubMode).toBe("REMOTE");
     expect(settings.ciIntelligence.waitForJulesCiAutofix).toBe(false);
     expect(settings.ciIntelligence.featurePrAutoMergeMode).toBe("ALWAYS");
-    expect(settings.ciIntelligence.mainBranchAutoMergeMode).toBe("CREATE_PR");
+    expect(settings.ciIntelligence.mainBranchAutoMergeMode).toBe("ALWAYS");
     expect(settings.ciIntelligence.resolveMergeConflicts).toBe(true);
     expect(settings.ciIntelligence.resolveMainMergeConflicts).toBe(true);
     expect(settings.sprintLoopSteps.watchLoopIntervalSeconds).toBe(10);
@@ -138,16 +138,49 @@ describe("settings-sanitizer", () => {
     expect(settings.agents.qualityAssurance.maxSprintReviewRuns).toBe(3);
     expect(settings.agents.qualityAssurance.exhaustionPolicy).toBe("FINISH_TASK");
     expect(settings.agents.qualityAssurance.taskCompletion.enabled).toBe(true);
+    expect(settings.agents.qualityAssurance.taskCompletion.agentPresetIds).toEqual([]);
     expect(settings.agents.qualityAssurance.taskCompletion.agentPresetId).toBe(null);
     expect(settings.agents.qualityAssurance.sprintCompletion.enabled).toBe(true);
+    expect(settings.agents.qualityAssurance.sprintCompletion.agentPresetIds).toEqual([]);
     expect(settings.agents.qualityAssurance.sprintCompletion.agentPresetId).toBe(null);
     expect(settings.agents.qualityAssurance.completedTaskWithoutPr.enabled).toBe(true);
+    expect(settings.agents.qualityAssurance.completedTaskWithoutPr.agentPresetIds).toEqual([]);
     expect(settings.agents.qualityAssurance.completedTaskWithoutPr.agentPresetId).toBe(null);
     expect(settings.skills.find((skill) => skill.name === "git_manager_remote")?.enabled).toBe(true);
     expect(settings.skills.find((skill) => skill.name === "git_manager_local")?.enabled).toBe(false);
     expect(settings.skills.find((skill) => skill.name === "custom-skill")?.isInternal).toBe(false);
     expect(settings.mcpTools.find((tool) => tool.name === "manage_tasks")?.enabled).toBe(false);
     expect(settings.memory.enabled).toBe(true);
+  });
+
+  it("normalizes QA trigger agent preset ids from legacy and multi-agent settings", () => {
+    const settings = sanitizeSettings({
+      agents: {
+        qualityAssurance: {
+          taskCompletion: {
+            enabled: true,
+            agentPresetId: " qa-legacy ",
+          },
+          sprintCompletion: {
+            enabled: true,
+            agentPresetIds: [" qa-1 ", "", "qa-2", "qa-1", 42, "qa-2 "],
+            agentPresetId: "qa-legacy-ignored",
+          },
+          completedTaskWithoutPr: {
+            enabled: true,
+            agentPresetIds: [],
+            agentPresetId: "qa-legacy-ignored",
+          },
+        },
+      },
+    });
+
+    expect(settings.agents.qualityAssurance.taskCompletion.agentPresetIds).toEqual(["qa-legacy"]);
+    expect(settings.agents.qualityAssurance.taskCompletion.agentPresetId).toBe("qa-legacy");
+    expect(settings.agents.qualityAssurance.sprintCompletion.agentPresetIds).toEqual(["qa-1", "qa-2"]);
+    expect(settings.agents.qualityAssurance.sprintCompletion.agentPresetId).toBe("qa-1");
+    expect(settings.agents.qualityAssurance.completedTaskWithoutPr.agentPresetIds).toEqual([]);
+    expect(settings.agents.qualityAssurance.completedTaskWithoutPr.agentPresetId).toBe(null);
   });
 
   it("dedupes preview container app ports while preserving primary-first order", () => {

@@ -612,6 +612,17 @@ const validateAgents = (
     if (trigger.agentPresetId !== null && trigger.agentPresetId !== undefined && typeof trigger.agentPresetId !== "string") {
       issues.push({ path: `${path}.qualityAssurance.${triggerId}.agentPresetId`, message: "Expected null or a string" });
     }
+    if (trigger.agentPresetIds !== undefined) {
+      if (!Array.isArray(trigger.agentPresetIds)) {
+        issues.push({ path: `${path}.qualityAssurance.${triggerId}.agentPresetIds`, message: "Expected an array of strings" });
+      } else {
+        trigger.agentPresetIds.forEach((entry, index) => {
+          if (typeof entry !== "string") {
+            issues.push({ path: `${path}.qualityAssurance.${triggerId}.agentPresetIds.${index}`, message: "Expected a string" });
+          }
+        });
+      }
+    }
   }
 };
 

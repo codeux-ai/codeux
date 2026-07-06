@@ -21,6 +21,7 @@ import { ProviderPanel } from "./panels/ProviderPanel.js";
 import { WorkerPanel } from "./panels/WorkerPanel.js";
 import { InfoIconPopover } from "../ui/InfoIconPopover.js";
 import { BranchNameSchemeEditor } from "./BranchNameSchemeEditor.js";
+import { LocalFilePickerField } from "./LocalFilePickerField.js";
 
 
 export interface ProjectSettingsEditorProps {
@@ -213,6 +214,7 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
             <SelectInput
               value={localGitModeDisabled ? "OFF" : settings.ciIntelligence.featurePrAutoMergeMode}
               disabled={localGitModeDisabled}
+              disabledReason={localGitModeDisabled ? localGitModeReason : undefined}
               aria-label="Feature PR auto-merge"
               aria-describedby={localGitModeDisabled ? localGitModeReasonId : undefined}
               onChange={(value) => update({
@@ -233,6 +235,7 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
             <SelectInput
               value={localGitModeDisabled ? "OFF" : settings.ciIntelligence.mainBranchAutoMergeMode}
               disabled={localGitModeDisabled}
+              disabledReason={localGitModeDisabled ? localGitModeReason : undefined}
               aria-label="Main branch auto-merge"
               aria-describedby={localGitModeDisabled ? localGitModeReasonId : undefined}
               onChange={(value) => update({
@@ -346,7 +349,8 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
             />
           </Row>
           <Row label="Setup script path" description="Optional bootstrap script relative to the repo or runtime root." badge={getBadge("cliWorkflow.containerSetupScriptPath")}>
-            <TextInput
+            <LocalFilePickerField
+              label="Setup script path"
               value={settings.cliWorkflow.containerSetupScriptPath}
               onChange={(value) => update({
                 cliWorkflow: {
@@ -354,7 +358,8 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
                   containerSetupScriptPath: value,
                 },
               })}
-              mono
+              helperText="Type a relative path or browse to an absolute local script."
+              placeholder=".code-ux/container/setup.sh"
             />
           </Row>
           <Row label="Cache setup as image" description="Build and reuse a derived Docker image keyed by the base image and setup script contents." badge={getBadge("cliWorkflow.containerCacheSetupScriptImage")}>

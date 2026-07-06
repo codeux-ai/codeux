@@ -7,7 +7,7 @@ import { render, screen, cleanup, fireEvent, waitFor } from "@testing-library/pr
 import "@testing-library/jest-dom/vitest";
 import { BranchNameSchemeEditor } from "../BranchNameSchemeEditor";
 import { SprintKeyEditor } from "../SprintKeyEditor";
-import { TextInput, SecretInput, NumberInput, TextAreaInput, PillChoiceGroup } from "../SettingsFormFields";
+import { TextInput, SecretInput, NumberInput, TextAreaInput, PillChoiceGroup, SelectInput } from "../SettingsFormFields";
 
 
 import { SettingsCategoryRail } from "../SettingsCategoryRail";
@@ -18,6 +18,7 @@ import type { SettingsSearchMatches } from "../../../lib/settings-search-index";
 import userEvent from "@testing-library/user-event";
 import { SettingsContentPanels } from "../SettingsContentPanels";
 import { UnsavedChangesModal } from "../../ui/UnsavedChangesModal";
+import { ProviderInstanceCard } from "../ProviderInstanceCard";
 
 const defaultInnerHeight = window.innerHeight;
 
@@ -211,6 +212,26 @@ vi.mock("../panels/SettingsGeneralPanel", () => ({
     expect(screen.getByText("Disabled")).toBeInTheDocument();
   });
 
+  it("SettingsCategoryRail marks category movement with the selectionMovement contract", () => {
+    cleanup();
+    const mockCategories = [
+      { id: "general" as const, num: "01", label: "General", icon: SlidersHorizontal, description: "Test" }
+    ];
+
+    render(
+      <SettingsCategoryRail
+        filteredCategories={mockCategories}
+        activeCategory="general"
+        settingsSearch=""
+        settingsSearchMatches={{}}
+        onSwitchCategory={() => {}}
+      />
+    );
+
+    expect(screen.getByRole("navigation", { name: "Settings categories" })).toHaveAttribute("data-motion-contract", "selectionMovement");
+    expect(screen.getByRole("button", { name: /General/ })).toHaveAttribute("data-motion-contract", "selectionMovement");
+  });
+
   it("PillChoiceGroup exposes radio semantics for the selected option", () => {
     render(
       <PillChoiceGroup
@@ -227,6 +248,27 @@ vi.mock("../panels/SettingsGeneralPanel", () => ({
     expect(screen.getByRole("radiogroup", { name: "Scope choice" })).toBeInTheDocument();
     expect(screen.getByRole("radio", { name: "System" })).toHaveAttribute("aria-checked", "true");
     expect(screen.getByRole("radio", { name: "Project" })).toHaveAttribute("aria-checked", "false");
+  });
+
+  it("SelectInput keeps disabled reason visible and described by the control", () => {
+    render(
+      <SelectInput
+        value="off"
+        onChange={() => {}}
+        disabled
+        disabledReason="Switch GitHub mode to Remote to use this policy."
+        aria-label="Feature PR auto-merge"
+        options={[
+          { value: "off", label: "Off" },
+          { value: "green", label: "When green" },
+        ]}
+      />
+    );
+
+    const trigger = screen.getByRole("button", { name: "Feature PR auto-merge" });
+    const reason = screen.getByText("Switch GitHub mode to Remote to use this policy.");
+    expect(reason.id).toBeTruthy();
+    expect(trigger).toHaveAccessibleDescription("Switch GitHub mode to Remote to use this policy.");
   });
 
   it("ActionButton provides busy state feedback", () => {
@@ -486,6 +528,9 @@ describe("SettingsControls Accessibility", () => {
 
     expect(screen.getByText("You have unsaved changes in this settings scope.")).toBeInTheDocument();
     expect(screen.getByText("General panel values stay mounted")).toBeInTheDocument();
+    expect(screen.getByText("General")).toBeInTheDocument();
+    expect(screen.getByText("Unsaved changes")).toBeInTheDocument();
+    expect(screen.getByText("General panel values stay mounted").parentElement).toHaveAttribute("data-motion-contract", "enterExit");
     expect(screen.getByText("General panel values stay mounted").parentElement).toHaveClass("motion-reduce:animate-none");
 
     rerender(
@@ -502,6 +547,7 @@ describe("SettingsControls Accessibility", () => {
       />
     );
     await waitFor(() => expect(screen.getByText("Saving settings. Current values remain visible.")).toBeInTheDocument());
+    expect(screen.getByText("Saving")).toBeInTheDocument();
     expect(screen.getByText("General panel values stay mounted")).toBeInTheDocument();
 
     rerender(
@@ -518,6 +564,7 @@ describe("SettingsControls Accessibility", () => {
       />
     );
     await waitFor(() => expect(screen.getAllByText("Settings saved.").length).toBeGreaterThan(0));
+    expect(screen.getByText("Saved")).toBeInTheDocument();
     expect(screen.getByText("General panel values stay mounted")).toBeInTheDocument();
   });
 
@@ -538,5 +585,41 @@ describe("SettingsControls Accessibility", () => {
 
     expect(screen.getByText("Resetting project overrides. Current values remain visible.")).toBeInTheDocument();
     expect(screen.getByText("General panel values stay mounted")).toBeInTheDocument();
+  });
+
+  it("ProviderInstanceCard confirms target-specific removal, suppresses duplicate confirms, and restores fallback focus", async () => {
+    const user = userEvent.setup();
+    const fallback = document.createElement("div");
+    fallback.id = "settings-active-category-panel";
+    document.body.append(fallback);
+    const onRemove = vi.fn(() => new Promise<void>((resolve) => window.setTimeout(resolve, 10)));
+
+    render(
+      <ProviderInstanceCard
+        providerConfigId="codex"
+        provider={{
+          provider: "codex",
+          name: "Codex Primary",
+          apiKey: "",
+          authType: "apiKey",
+          mountAuth: false,
+          authPath: "",
+        } as any}
+        providerModel="gpt-5"
+        dockerExecutionEnabled
+        onUpdate={() => {}}
+        onRemove={onRemove}
+      />
+    );
+
+    await user.click(screen.getByRole("button", { name: "Remove Codex Primary" }));
+    const confirmButton = screen.getByRole("button", { name: "Confirm remove Codex Primary" });
+    await user.click(confirmButton);
+    await user.click(confirmButton);
+
+    expect(onRemove).toHaveBeenCalledTimes(1);
+    expect(confirmButton).toHaveAttribute("aria-busy", "true");
+    await waitFor(() => expect(document.activeElement).toBe(fallback));
+    fallback.remove();
   });
 });

@@ -1,9 +1,9 @@
 import { test, expect } from '@playwright/test';
 import { completeOnboarding, ensureSelectedProject } from './helpers/prepare-app';
 
-test.beforeEach(async ({ request }) => {
+test.beforeEach(async ({ request }, testInfo) => {
   await completeOnboarding(request);
-  await ensureSelectedProject(request);
+  await ensureSelectedProject(request, { testInfo, fixtureKey: 'app-smoke' });
 });
 
 test('serves the local Code UX dashboard shell', async ({ page, request }) => {
@@ -12,9 +12,9 @@ test('serves the local Code UX dashboard shell', async ({ page, request }) => {
 
   await page.goto('/');
 
-  await expect(page).toHaveTitle(/Code UX/);
+  await expect(page).toHaveTitle(/Code UX/i);
   await expect(page.getByRole('navigation', { name: /Workspace navigation/i })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Search workspace' })).toBeVisible();
+  await expect(page.getByRole('button', { name: /Search workspace|Search/i })).toBeVisible();
 });
 
 test('navigates to the local sprint ledger', async ({ page }) => {

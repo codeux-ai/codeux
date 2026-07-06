@@ -41,20 +41,25 @@ export interface BuiltQaReviewRequest {
 }
 
 export async function buildQaReviewRequest(args: QaReviewRequestBuilderArgs): Promise<BuiltQaReviewRequest | null> {
+  const requests = await buildQaReviewRequests(args);
+  return requests[0] ?? null;
+}
+
+export async function buildQaReviewRequests(args: QaReviewRequestBuilderArgs): Promise<BuiltQaReviewRequest[]> {
   const { task, project, sprint, settings, budgetArgs, resolveAgent } = args;
 
   if (!project || !sprint) {
-    return null;
+    return [];
   }
 
   const qaSettings = settings.agents.qualityAssurance;
   if (!qaSettings.enabled) {
-    return null;
+    return [];
   }
 
   const triggerType = resolveTaskTriggerType(task, qaSettings);
   if (!triggerType) {
-    return null;
+    return [];
   }
 
   const budget = evaluateQaReviewBudget({
@@ -63,7 +68,7 @@ export async function buildQaReviewRequest(args: QaReviewRequestBuilderArgs): Pr
   });
 
   if (!budget.allowed) {
-    return null;
+    return [];
   }
 
   const sprintFeatureBranch = sprint.featureBranch?.trim()
@@ -74,45 +79,54 @@ export async function buildQaReviewRequest(args: QaReviewRequestBuilderArgs): Pr
   // agent. Do NOT bail here — an early `return null` silently skips QA entirely
   // for every QA-enabled project that uses the default agent, stranding tasks at
   // CODING_COMPLETED/QA_PENDING and blocking all merges.
-  const agentPresetId = triggerType === "completed_task_without_pr"
-    ? qaSettings.completedTaskWithoutPr.agentPresetId
-    : qaSettings.taskCompletion.agentPresetId;
+  const triggerSettings = triggerType === "completed_task_without_pr"
+    ? qaSettings.completedTaskWithoutPr
+    : qaSettings.taskCompletion;
+  const presetIds = Array.isArray(triggerSettings.agentPresetIds) ? triggerSettings.agentPresetIds : [];
+  const configuredAgentPresetIds = presetIds.length > 0
+    ? presetIds
+    : [null];
+  const runIndex = budgetArgs.existingRuns + 1;
 
-  const agent = await resolveAgent(project.id, agentPresetId);
+  return await Promise.all(configuredAgentPresetIds.map(async (agentPresetId) => {
+    const agent = await resolveAgent(project.id, agentPresetId);
 
-  const memoryInstructions = resolveAgentMemoryInstructions(
-    agent,
-    settings.memory?.workerLearningsInstruction
-  );
-  const agentInstructions = agent.instructionMarkdown + (memoryInstructions ? `\n\n### Memory Capture Instructions\n${memoryInstructions}` : "");
+    const memoryInstructions = resolveAgentMemoryInstructions(
+      agent,
+      settings.memory?.workerLearningsInstruction
+    );
+    const agentInstructions = agent.instructionMarkdown + (memoryInstructions ? `\n\n### Memory Capture Instructions\n${memoryInstructions}` : "");
 
-  const runPayload = {
-    projectId: project.id,
-    sprintId: sprint.id,
-    sprintRunId: args.sprintRunId || null,
-    taskId: task.record_id?.trim() || null,
-    taskRunId: args.taskRun?.id || null,
-    triggerType,
-    runIndex: budgetArgs.existingRuns + 1,
-    agentPresetId: agent.id,
-    agentName: agent.name,
-    targetTaskKey: task.id,
-    targetSessionId: task.session_id || null,
-    targetProvider: task.provider || null,
-    payload: {
-      taskKey: task.id,
-      runIndex: budgetArgs.existingRuns + 1,
-    },
-  };
+    const runPayload = {
+      projectId: project.id,
+      sprintId: sprint.id,
+      sprintRunId: args.sprintRunId || null,
+      taskId: task.record_id?.trim() || null,
+      taskRunId: args.taskRun?.id || null,
+      triggerType,
+      runIndex,
+      agentPresetId: agent.id,
+      agentName: agent.name,
+      targetTaskKey: task.id,
+      targetSessionId: task.session_id || null,
+      targetProvider: task.provider || null,
+      payload: {
+        taskKey: task.id,
+        runIndex,
+        agentPresetId: agent.id,
+        agentName: agent.name,
+      },
+    };
 
-  return {
-    triggerType,
-    sprintFeatureBranch,
-    agentPresetId: agent.id,
-    agentName: agent.name,
-    agentInstructions,
-    runPayload,
-  };
+    return {
+      triggerType,
+      sprintFeatureBranch,
+      agentPresetId: agent.id,
+      agentName: agent.name,
+      agentInstructions,
+      runPayload,
+    };
+  }));
 }
 
 export function resolveTaskTriggerType(

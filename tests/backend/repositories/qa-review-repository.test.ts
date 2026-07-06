@@ -5,6 +5,7 @@ import * as path from "path";
 import { AppDbStorage } from "../../../src/repositories/app-db-storage.js";
 import { ProjectManagementRepository } from "../../../src/repositories/project-management-repository.js";
 import { QaReviewRepository } from "../../../src/repositories/qa-review-repository.js";
+import { AgentPresetRepository } from "../../../src/repositories/agent-preset-repository.js";
 
 const tempDirs: string[] = [];
 
@@ -12,6 +13,7 @@ const createRepository = async (): Promise<{
   dir: string;
   repository: QaReviewRepository;
   projectRepository: ProjectManagementRepository;
+  agentPresetRepository: AgentPresetRepository;
 }> => {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), "qa-review-repo-"));
   tempDirs.push(dir);
@@ -20,6 +22,7 @@ const createRepository = async (): Promise<{
     dir,
     repository: new QaReviewRepository(storage),
     projectRepository: new ProjectManagementRepository(storage),
+    agentPresetRepository: new AgentPresetRepository(storage),
   };
 };
 
@@ -156,5 +159,73 @@ describe("QaReviewRepository", () => {
     expect(repository.countTaskRuns(task.id)).toBe(0);
     expect(repository.countDecisiveTaskRuns(task.id)).toBe(0);
     expect(repository.getLatestTaskRun(task.id)).toBeNull();
+  });
+
+  it("counts multi-reviewer task rows as one review cycle", async () => {
+    const { repository, projectRepository, agentPresetRepository } = await createRepository();
+    const project = projectRepository.createProject({
+      name: "QA Project",
+      sourceType: "local",
+      sourceRef: path.join(os.tmpdir(), "qa-multi-cycle"),
+    });
+    const sprint = projectRepository.createSprint(project.id, {
+      name: "Sprint 1",
+      goal: "Ship",
+      status: "active",
+      featureBranch: "feature/sprint-1",
+    });
+    const task = projectRepository.createTask(project.id, {
+      sprintId: sprint.id,
+      title: "Task",
+      promptMarkdown: "Do the thing.",
+      status: "coding_completed",
+      isIndependent: true,
+    });
+    const qaA = agentPresetRepository.createAgentPreset(project.id, {
+      name: "QA A",
+      presetId: "qa-a",
+      instructionMarkdown: "Review as A.",
+    });
+    const qaB = agentPresetRepository.createAgentPreset(project.id, {
+      name: "QA B",
+      presetId: "qa-b",
+      instructionMarkdown: "Review as B.",
+    });
+
+    const passRun = repository.createRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      triggerType: "task_completion",
+      runIndex: 1,
+      agentPresetId: qaA.id,
+      agentName: "QA A",
+    });
+    repository.updateRun(passRun.id, {
+      status: "completed",
+      outcome: "pass",
+      summaryMarkdown: "A passed.",
+      finishedAt: new Date().toISOString(),
+    });
+    const changesRun = repository.createRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      triggerType: "task_completion",
+      runIndex: 1,
+      agentPresetId: qaB.id,
+      agentName: "QA B",
+    });
+    repository.updateRun(changesRun.id, {
+      status: "completed",
+      outcome: "changes_requested",
+      summaryMarkdown: "B requested changes.",
+      finishedAt: new Date().toISOString(),
+    });
+
+    expect(repository.countTaskRuns(task.id)).toBe(1);
+    expect(repository.countDecisiveTaskRuns(task.id)).toBe(1);
+    expect(repository.listLatestTaskCycleRuns(task.id).map((run) => run.agentPresetId).sort()).toEqual([qaA.id, qaB.id].sort());
+    expect(repository.getLatestTaskRun(task.id)?.id).toBe(changesRun.id);
   });
 });

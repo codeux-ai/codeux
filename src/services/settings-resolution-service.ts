@@ -121,6 +121,23 @@ function cloneInstructionTemplates(
   return { ...templates };
 }
 
+function cloneQualityAssuranceTrigger(
+  trigger: ProjectSettings["agents"]["qualityAssurance"]["taskCompletion"],
+): ProjectSettings["agents"]["qualityAssurance"]["taskCompletion"] {
+  const sourceIds = Array.isArray(trigger.agentPresetIds)
+    ? trigger.agentPresetIds
+    : trigger.agentPresetId
+      ? [trigger.agentPresetId]
+      : [];
+  const agentPresetIds = [...new Set(sourceIds.map((id) => id.trim()).filter(Boolean))];
+
+  return {
+    ...trigger,
+    agentPresetIds,
+    agentPresetId: agentPresetIds[0] ?? null,
+  };
+}
+
 function cloneQualityAssuranceSettings(
   settings: ProjectSettings["agents"]["qualityAssurance"],
 ): ProjectSettings["agents"]["qualityAssurance"] {
@@ -129,9 +146,9 @@ function cloneQualityAssuranceSettings(
     maxTaskReviewRuns: settings.maxTaskReviewRuns,
     maxSprintReviewRuns: settings.maxSprintReviewRuns,
     exhaustionPolicy: settings.exhaustionPolicy,
-    taskCompletion: { ...settings.taskCompletion },
-    sprintCompletion: { ...settings.sprintCompletion },
-    completedTaskWithoutPr: { ...settings.completedTaskWithoutPr },
+    taskCompletion: cloneQualityAssuranceTrigger(settings.taskCompletion),
+    sprintCompletion: cloneQualityAssuranceTrigger(settings.sprintCompletion),
+    completedTaskWithoutPr: cloneQualityAssuranceTrigger(settings.completedTaskWithoutPr),
   };
 }
 
@@ -316,14 +333,24 @@ function sanitizeQualityAssuranceTriggerSettings(
   defaults: ProjectSettings["agents"]["qualityAssurance"]["taskCompletion"],
 ): ProjectSettings["agents"]["qualityAssurance"]["taskCompletion"] {
   const input = toRecord(value);
+  const sourceIds = Array.isArray(input.agentPresetIds)
+    ? input.agentPresetIds
+    : typeof input.agentPresetId === "string" && input.agentPresetId.trim().length > 0
+      ? [input.agentPresetId]
+      : defaults.agentPresetIds;
+  const agentPresetIds = [...new Set(
+    sourceIds
+      .filter((id): id is string => typeof id === "string")
+      .map((id) => id.trim())
+      .filter(Boolean)
+  )];
 
   return {
     enabled: typeof input.enabled === "boolean"
       ? input.enabled
       : defaults.enabled,
-    agentPresetId: typeof input.agentPresetId === "string" && input.agentPresetId.trim().length > 0
-      ? input.agentPresetId.trim()
-      : null,
+    agentPresetIds,
+    agentPresetId: agentPresetIds[0] ?? null,
   };
 }
 

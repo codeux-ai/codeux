@@ -19,10 +19,19 @@ describe("electron-builder packaged defaults", () => {
       "agents/quality_assurance_agent.md",
       "agents/worker.md",
       "container/setup.sh",
+      "quicksprints/templates/*.md",
     ]));
     expect(defaultsResource?.filter).not.toContain("agents/iris.md");
 
     for (const assetPath of defaultsResource?.filter ?? []) {
+      if (assetPath.includes("*")) {
+        const wildcardIndex = assetPath.indexOf("*");
+        const directory = assetPath.slice(0, wildcardIndex);
+        const suffix = assetPath.slice(wildcardIndex + 1);
+        const absoluteDirectory = path.join(process.cwd(), ".code-ux", directory);
+        expect(fs.readdirSync(absoluteDirectory).some((entry) => entry.endsWith(suffix))).toBe(true);
+        continue;
+      }
       expect(fs.existsSync(path.join(process.cwd(), ".code-ux", assetPath))).toBe(true);
     }
   });

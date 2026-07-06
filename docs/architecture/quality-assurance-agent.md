@@ -28,15 +28,28 @@ The current settings are:
 
 - `enabled`
 - `maxTaskReviewRuns`
+- `maxSprintReviewRuns`
+- `exhaustionPolicy`
 - `taskCompletion`
   - `enabled`
-  - `agentPresetId`
+  - `agentPresetIds`
+  - `agentPresetId` legacy compatibility mirror
 - `sprintCompletion`
   - `enabled`
-  - `agentPresetId`
+  - `agentPresetIds`
+  - `agentPresetId` legacy compatibility mirror
 - `completedTaskWithoutPr`
   - `enabled`
-  - `agentPresetId`
+  - `agentPresetIds`
+  - `agentPresetId` legacy compatibility mirror
+
+Each QA trigger owns an ordered reviewer roster in `agentPresetIds`:
+
+- `[]` means no custom reviewer IDs are configured; Code UX resolves one built-in/default QA reviewer through `resolveTargetedQualityAssuranceAgent(projectId, null)`.
+- `["agent-qa-primary"]` runs one custom reviewer.
+- `["agent-qa-security", "agent-qa-accessibility"]` runs both custom reviewers in order.
+
+The legacy `agentPresetId` field is still accepted by sanitizer and effective-settings paths. When `agentPresetIds` is absent, a non-empty legacy value seeds the one-item roster; when `agentPresetIds` is present, it is authoritative and `agentPresetId` mirrors the first selected reviewer or `null`.
 
 Dashboard surface:
 
@@ -47,7 +60,7 @@ The `Settings -> Sprint & Git` panel includes a dedicated `Quality Assurance` se
 - stays compact when QA is disabled
 - appears immediately below `Merge Gates & Autofix` in the Sprint & Git settings stack
 - exposes the three QA triggers when enabled
-- allows per-trigger agent preset selection across all project agent presets
+- allows per-trigger multi-select agent preset assignment across all project agent presets
 - sorts presets labeled for QA ahead of other agent presets
 - allows controlling how many times task QA can re-run after QA-driven fixes
 
@@ -83,14 +96,44 @@ Behavior:
 1. resolve effective project/sprint settings
 2. decide whether the trigger is `task_completion` or `completed_task_without_pr`
 3. enforce `maxTaskReviewRuns`
-4. resolve the QA agent preset and provider route
-5. run the QA prompt with sprint task context plus the current task context
-6. store the run in `qa_review_runs`
-7. if QA requests changes, continue the active Jules or CLI session with fix instructions when possible, otherwise requeue the task for another implementation pass
-8. allow feature merge only after:
-   - QA returns `pass`
-   - QA determines a no-PR task should not have a PR
-   - task QA retry budget is exhausted
+4. resolve the trigger reviewer roster from `agentPresetIds`, or one default fallback reviewer when the roster is empty
+5. create one `qa_review_runs` row per reviewer with the same `run_index`
+6. run each QA prompt with sprint task context plus the current task context
+7. store the reviewer-specific verdict, summary, fix instructions, `agent_preset_id`, `agent_name`, and payload in that reviewer's row
+8. if any reviewer requests changes, continue the active Jules or CLI session with fix instructions when possible, otherwise requeue the task for another implementation pass
+9. allow feature merge only after:
+   - every reviewer in the latest review cycle returns `pass`
+   - every reviewer that reviews a no-PR task agrees it should not have a PR
+   - task QA retry budget is exhausted according to the configured exhaustion policy
+
+Runtime aggregation is fail-closed for the latest cycle:
+
+- all reviewer rows in the same `run_index` must pass before QA passes
+- any `changes_requested` reviewer blocks the task and can provide the fix instructions used for the single follow-up action in that cycle
+- any `running` or `failed` reviewer keeps the task blocked until it recovers, retries, or exhausts the configured budget
+- review budgets count distinct `run_index` values, not reviewer rows, so two reviewers in one cycle consume one QA attempt
+- reviewer rows stay visible independently in `qa_review_runs`, task events, and dashboard history with their own agent identity and payload details
+
+Example trigger settings:
+
+```json
+{
+  "agents": {
+    "qualityAssurance": {
+      "taskCompletion": {
+        "enabled": true,
+        "agentPresetIds": ["agent-qa-security", "agent-qa-regression"],
+        "agentPresetId": "agent-qa-security"
+      },
+      "completedTaskWithoutPr": {
+        "enabled": true,
+        "agentPresetIds": [],
+        "agentPresetId": null
+      }
+    }
+  }
+}
+```
 
 Task-level prompt scope:
 
@@ -140,6 +183,7 @@ This separation keeps repository writes, provider calls, task status mutations, 
 - extra QA runs only happen after QA requested fixes and the task reaches code-complete again
 - `maxTaskReviewRuns = 1` normally means only the initial task review runs; when QA itself requested and successfully applied an automatic CLI continuation, Code UX still permits the follow-up verification run so the task cannot remain indefinitely QA-blocked after completed fix work
 - recovered stale QA rows do not consume the task's final retry opportunity. If Code UX marks a running QA row failed because its provider runtime disappeared, the next cycle treats that as a retryable infrastructure recovery rather than a semantic QA failure.
+- multi-reviewer cycles share one `run_index`, so one cycle with several reviewer rows still counts as one used run for `maxTaskReviewRuns`
 - `maxTaskReviewRuns = 2` means the initial task review plus one QA re-check after fixes
 - `maxTaskReviewRuns = N` means the initial task review plus up to `N - 1` QA re-checks for later fix iterations
 - `maxTaskReviewRuns = 3` is the default task QA budget for new or unset settings
@@ -157,6 +201,8 @@ Before Code UX evaluates the final `feature -> default` merge, it runs sprint-co
 Behavior:
 
 - QA receives full sprint context, including every task instruction prompt rather than only the task summary lines
+- sprint-completion QA uses `sprintCompletion.agentPresetIds`, or one default fallback reviewer when that roster is empty
+- each reviewer in the sprint cycle gets its own `qa_review_runs` row with the same `run_index`
 - QA can choose a target task that should continue
 - QA can return structured `followUpTasks` with full task instructions so Code UX creates new pending sprint tasks automatically
 - if QA requests follow-up work and Code UX can continue that task session, sprint completion is held open
@@ -170,8 +216,9 @@ Behavior:
   - later runs are only used to check QA-requested fixes or follow-up work
   - `maxSprintReviewRuns = 3` is the default sprint QA budget for new or unset settings
   - `maxSprintReviewRuns = 1` means sprint fixes are not re-checked by QA
-- if sprint QA passes, Code UX proceeds to main-merge evaluation and eventual completion
-- if sprint QA is still running, failed, or waiting on follow-up work, the main merge stays blocked
+- if every reviewer in the latest sprint QA cycle passes, Code UX proceeds to main-merge evaluation and eventual completion
+- if any reviewer is still running, failed, requested changes, or waiting on follow-up work, the main merge stays blocked
+- reviewer rows remain visible per agent, while the shared `run_index` spends one sprint QA budget cycle
 - while a sprint QA review is running, Code UX now refreshes the parent sprint-run heartbeat and lease so long reviews are not mistaken for stalled orchestration and failed by runtime cleanup
 - stale sprint-level `running` QA rows are also reconciled against execution invocation state before gating; if the backing invocation already ended, Code UX reclassifies the stale row and immediately allows a retry instead of keeping sprint completion blocked forever
 

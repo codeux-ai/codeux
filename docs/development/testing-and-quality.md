@@ -5,6 +5,7 @@ This guide describes how to validate changes safely.
 Test files are organized under `tests/`:
 - `tests/backend/**`
 - `tests/dashboard/**`
+- `tests/e2e/**`
 
 
 ## Local Scratch Files
@@ -54,7 +55,7 @@ The quality guardrail script also audits `vitest.config.ts` directly. It fails i
 
 - Run Playwright E2E browser tests
 ```bash
-pnpm exec playwright test
+pnpm run test:e2e
 ```
 Build first when running E2E from a clean checkout:
 ```bash
@@ -63,17 +64,107 @@ pnpm exec playwright test
 ```
 The Playwright config starts `node dist/index.js`, waits on the local `/health` liveness probe, and runs against a temporary HOME/USERPROFILE so the suite does not depend on a developer's browser cache, onboarding state, selected project, or real Code UX database. The E2E suite is local-only: tests must navigate through `baseURL` routes or local API probes, not external websites. Failure artifacts are retained under `test-results/`, and the HTML report is written to `playwright-report/`; CI uploads both paths after every run so traces, videos, screenshots, and reports are available when failures occur.
 
-GitHub Actions optimization notes:
-- `CI` runs on pushes to `main` and `dev`, and on pull requests targeting any branch. `Playwright Tests` runs on pushes and pull requests targeting `main` or `dev`, keeping release and publish workflows separate from validation.
-- The CI pipeline is split into parallel jobs: `Typecheck & Lint`, `Backend Tests & Coverage`, `Dashboard Tests`, `Build`, and `Security Audit`. Playwright E2E runs in its own workflow so browser setup and artifacts stay isolated.
-- Every validation job restores dependency cache as a speed hint, then still runs `pnpm install --frozen-lockfile --ignore-scripts` so the lockfile remains the install source of truth.
-- Restores and saves Vite, Vitest, and TypeScript compiler increment caches across runs. Build and Playwright jobs intentionally do not restore `.cache/tsc` because stale `.tsbuildinfo` without matching `dist/` output can make compiled entrypoints appear up-to-date when `dist/` is missing.
-- Caches Playwright browser binaries (`~/.cache/ms-playwright`) to reduce downloads, then always runs `pnpm exec playwright install chromium --with-deps` so browser and OS dependencies are verified even after a cache restore.
-- Keeps Playwright browser tests serialized because the suite shares one local `node dist/index.js` server and isolated SQLite home per run.
-- Seamlessly integrates browser-level E2E tests for WebGL visual rendering, failure fallbacks, and mobile/desktop responsive layout breakpoints, removing mock-heavy DOM stubs from Unit tests.
-- Uses the GitHub Actions reporter to publish Playwright test failures inline on pull request checks.
-- Cancels superseded runs for the same branch or PR to conserve resources.
-- Uploads `test-results/` and `playwright-report/` as the `playwright-artifacts` workflow artifact for seven days, with empty uploads ignored so successful runs do not fail if no failure artifacts were produced.
+Focused examples:
+```bash
+pnpm run test:e2e -- tests/e2e/sprint-task-lifecycle.spec.ts
+pnpm run test:e2e -- tests/e2e/app-release-smoke.spec.ts
+pnpm run test:e2e -- tests/e2e/project-setup-release.spec.ts
+pnpm run test:e2e -- tests/e2e/app-release-smoke.spec.ts -g "normal app shell"
+```
+
+### Playwright Release E2E
+
+The release-style E2E suite lives under `tests/e2e` and exercises the production-style dashboard served by the compiled server. It is not a provider orchestration test suite: specs must avoid provider credentials, Docker provider startup, project setup automation, worker dispatch, and sprint execution endpoints. The current coverage includes:
+
+- `tests/e2e/app-release-smoke.spec.ts`, which verifies the normal app shell, core dashboard routes, responsive task-board behavior, route landmarks, and unexpected browser errors.
+- `tests/e2e/project-setup-release.spec.ts`, which verifies first-run onboarding completion, visible Add Project modal behavior for a credential-free local directory under the OS temp path, dashboard project selection, `/projects` landmarks, `/tasks` navigation, loading/error checks, and desktop/mobile overflow checks without provider secrets or orchestration endpoints.
+- `tests/e2e/sprint-task-lifecycle.spec.ts`, which verifies draft sprint and implementation task create/edit/delete behavior through the visible dashboard flows and collection API assertions.
+- `tests/e2e/helpers/prepare-app.ts`, which prepares deterministic app state through dashboard HTTP APIs for onboarding, local project selection, draft sprint setup, task setup, updates, deletes, and cleanup.
+
+`playwright.config.ts` uses Chromium, `http://127.0.0.1:4444`, `fullyParallel: false`, CI retries, and the GitHub plus HTML reporters in CI. It checks `/health` instead of `/ready` because a clean run may not have project live-status activity, while liveness is enough to know the compiled web app accepted the browser session.
+
+### E2E Authoring Rules
+
+Root E2E specs should prepare normal app state through `tests/e2e/helpers/prepare-app.ts` before loading pages that depend on onboarding, project selection, sprints, or tasks. The helper layer uses the dashboard HTTP APIs, not direct database writes or shell commands, and creates per-run local project fixtures under the OS temp directory with names prefixed by the Playwright worker and a timestamp-safe run suffix.
+
+- Use `completeOnboarding`, `ensureSelectedProject`, `createDraftSprint`, and `createTaskInSprint` for setup instead of hand-writing setup requests in each spec.
+- Use unique fixture keys and generated names from the helper utilities so parallel workers and retries do not collide.
+- Prefer role-based locators, accessible names, landmarks, and stable `data-testid` roots over CSS shape or timing assertions.
+- Build paths with Node `os`, `path`, and `fs` APIs so fixtures remain portable on Windows, macOS, and Linux.
+- For credential-free project setup coverage, drive the visible Add Project UI and disable the Project Setup Agent option before submitting so the test does not call provider orchestration, Docker provider startup, worker dispatch, or sprint execution endpoints.
+- Clean up created sprints and tasks with `deleteTask`, `deleteSprint`, or `cleanupSprintFixture` in `afterEach` when a spec mutates persistent app state.
+- Use the exported update/delete helpers to mutate or clean sprint/task records during a spec. Keep setup deterministic and local to the web app contract.
+
+### GitHub Actions E2E Policy
+
+The Playwright workflow is `.github/workflows/playwright.yml`. It runs on pushes and pull requests targeting `main` or `dev`, keeping release and publish workflows separate from validation.
+
+The workflow matrix covers `ubuntu-latest`, `macos-latest`, and `windows-latest`. It installs dependencies with pnpm 10.33.0 on Node 22, builds the server and dashboard before Playwright starts `node dist/index.js`, caches browser binaries under `.cache/ms-playwright`, installs Linux Chromium system dependencies only on Linux runners, and runs the same `pnpm run test:e2e` script used locally. It uploads `test-results/` and `playwright-report/` as the `playwright-artifacts` workflow artifact for seven days, with empty uploads ignored so successful runs do not fail if no failure artifacts were produced.
+
+This lane is credential-free. It validates the compiled dashboard and server, including project setup coverage through `tests/e2e/project-setup-release.spec.ts`, without provider keys, Docker provider startup, project setup automation, sprint orchestration, or real project state.
+
+- Run the local release install verifier
+```bash
+node scripts/verify-release-install.mjs
+```
+
+The release install verifier builds the workspace, creates a local npm tarball with `npm pack --ignore-scripts`, installs that tarball into a temporary isolated npm project, and runs the installed `codeux --help`. Set `CODE_UX_KEEP_RELEASE_INSTALL_TEMP=1` when diagnosing a failed run and you need to inspect the temporary package or install directory.
+
+### Release Checks Policy
+
+The no-secret release validation workflow is `.github/workflows/release-checks.yml`. It runs only on `push` to `main` and `workflow_dispatch`, and it uses a native Linux, macOS, and Windows matrix to prove the project can install dependencies, build from source, install from its packed npm tarball, run the installed CLI help command, and build the platform desktop package without provider credentials or publishing credentials.
+
+Each job uses pnpm 10.33.0 and Node 22, runs `pnpm install --frozen-lockfile`, `pnpm run build`, `node scripts/verify-release-install.mjs`, rebuilds Electron native dependencies with `pnpm run electron:install-deps`, and then runs the matching Electron distribution script for the runner platform:
+
+- Linux: `pnpm run electron:dist:linux`
+- macOS: `pnpm run electron:dist:mac`
+- Windows: `pnpm run electron:dist:win`
+
+`node scripts/verify-release-install.mjs` builds the workspace, creates a local npm tarball with `npm pack --ignore-scripts`, installs that tarball into a temporary npm project, and runs the installed `codeux --help` CLI smoke command. Electron packaging sets `CSC_IDENTITY_AUTO_DISCOVERY=false` so CI builds remain unsigned, and generated installer/package files under `release/electron/` are uploaded as workflow artifacts only.
+
+Together, `.github/workflows/release-checks.yml` and `.github/workflows/playwright.yml` are the push-to-main credential-free release validation lanes. The former checks source build, package installability, CLI help, and desktop package creation; the latter checks the compiled app in Chromium across Linux, macOS, and Windows, including project setup coverage.
+
+Local reproduction commands:
+
+```bash
+pnpm run build
+node scripts/verify-release-install.mjs
+pnpm run test:e2e -- tests/e2e/project-setup-release.spec.ts
+```
+
+Build first before Playwright because `playwright.config.ts` starts `node dist/index.js`.
+
+### OpenRouter Sprint Validation Policy
+
+The optional credentialed sprint validation workflow is `.github/workflows/openrouter-sprint-e2e.yml`. It runs on `push` to `main` and `workflow_dispatch` on `ubuntu-latest`, installs with pnpm 10.33.0 on Node 22, builds the compiled runtime, and invokes `node scripts/e2e/run-openrouter-sprint-validation.mjs`.
+
+This lane only performs real provider-backed sprint validation when the repository secret `OPENROUTER_API_KEY` is configured. If the secret is absent, the runner prints `Skipping OpenRouter sprint validation: OPENROUTER_API_KEY is not set.` and exits with status 0; the workflow is then a successful skip, not a provider validation pass. The workflow sets `CODEUX_E2E_OPENROUTER_MODEL` from the optional repository variable of the same name, defaulting to `openai/gpt-5-mini`.
+
+The runner uses the existing `codex` provider configured with OpenRouter-compatible settings, isolated app home directories, and temporary local git repositories. It executes three scenarios by default:
+
+- `smoke`: a three-task dependency-chain sprint.
+- `ci-repair`: a one-task deterministic CI failure repair sprint.
+- `conflict-dag`: a five-task merge-conflict DAG sprint.
+
+Artifacts are written under `.cache/e2e-openrouter/<run-id>/` and uploaded by the workflow as `openrouter-sprint-e2e-artifacts` when validation fails or artifacts exist. The artifact upload includes hidden files because the root is under `.cache/e2e-openrouter/`; retention is 5 days.
+
+Expected failure semantics are strict after the secret is present: unknown scenarios, missing `dist/index.js`, server readiness failures, scenario timeouts, non-terminal tasks, failed task statuses, or failed child commands return a non-zero exit code. Summaries and logs redact provider keys and authorization headers.
+
+Local skip check, which does not require `dist/index.js`:
+
+```bash
+node scripts/e2e/run-openrouter-sprint-validation.mjs
+```
+
+Local credentialed validation:
+
+```bash
+pnpm run build
+OPENROUTER_API_KEY=... node scripts/e2e/run-openrouter-sprint-validation.mjs
+OPENROUTER_API_KEY=... CODEUX_E2E_OPENROUTER_MODEL=openai/gpt-5-mini node scripts/e2e/run-openrouter-sprint-validation.mjs --scenario smoke
+```
+
+Set `CODEUX_E2E_OPENROUTER_MODEL` only when validating a different OpenRouter model intentionally.
 
 - Build backend and dashboard
 ```bash

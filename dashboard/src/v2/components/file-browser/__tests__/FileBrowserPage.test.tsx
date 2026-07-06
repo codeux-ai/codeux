@@ -146,11 +146,13 @@ vi.mock("../../../components/file-browser/FileTree.js", async () => {
       selectedPath,
       onSelectFile,
       searchTerm,
+      loadingPath,
     }: {
       nodes: FileBrowserTreeNode[];
       selectedPath: string | null;
       onSelectFile: (path: string) => void;
       searchTerm?: string;
+      loadingPath?: string | null;
     }) => {
       const visibleNodes = flatten(nodes).filter((node) =>
         !searchTerm?.trim() || node.name.toLowerCase().includes(searchTerm.trim().toLowerCase()),
@@ -166,9 +168,10 @@ vi.mock("../../../components/file-browser/FileTree.js", async () => {
               type: "button",
               role: "treeitem",
               "aria-selected": selectedPath === node.path,
+              "aria-busy": loadingPath === node.path,
               onClick: () => onSelectFile(node.path),
             },
-            node.path,
+            loadingPath === node.path ? `${node.path} Loading` : node.path,
           ),
         ),
       );
@@ -248,6 +251,39 @@ test("retains selected file state while the file tree refreshes", async () => {
   refreshTree.resolve(treeResponse);
 });
 
+test("marks the selected file row busy while file contents load", async () => {
+  const fileLoad = createDeferred<{
+    path: string;
+    content: string;
+    encoding: string;
+    size: number;
+    truncated: boolean;
+    binary: boolean;
+    language: string;
+  }>();
+  apiMocks.fetchFileBrowserFile.mockReturnValueOnce(fileLoad.promise);
+
+  render(<FileBrowserPage />);
+
+  fireEvent.click(await screen.findByRole("treeitem", { name: "src/App.tsx" }));
+
+  const loadingRow = screen.getByRole("treeitem", { name: "src/App.tsx Loading" });
+  expect(loadingRow).toHaveAttribute("aria-busy", "true");
+  expect(screen.getByText("Loading file…")).toBeInTheDocument();
+
+  fileLoad.resolve({
+    path: "src/App.tsx",
+    content: "export const App = () => 'loaded';",
+    encoding: "utf8",
+    size: 34,
+    truncated: false,
+    binary: false,
+    language: "typescript",
+  });
+
+  expect(await screen.findByText("export const App = () => 'loaded';")).toBeInTheDocument();
+});
+
 test("announces search results and mode-switch change counts with selected state", async () => {
   render(<FileBrowserPage />);
 
@@ -290,7 +326,8 @@ test("suppresses duplicate stop activation and explains disabled state while pen
   expect(apiMocks.stopFileBrowserSession).toHaveBeenCalledTimes(1);
   expect(stopButton).toBeDisabled();
   expect(stopButton).toHaveAttribute("aria-busy", "true");
-  expect(screen.getAllByText("A file browser action is already pending.").length).toBeGreaterThan(0);
+  expect(screen.getAllByText("A stop is already pending. Wait for the container to stop before starting another action.").length).toBeGreaterThan(0);
+  expect(screen.getByRole("button", { name: "Rebuild file browser container" })).toHaveAccessibleDescription("A stop is already pending. Wait for the container to stop before rebuilding.");
 
   fireEvent.click(stopButton);
   expect(apiMocks.stopFileBrowserSession).toHaveBeenCalledTimes(1);

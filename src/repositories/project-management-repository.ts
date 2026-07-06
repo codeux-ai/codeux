@@ -233,6 +233,10 @@ export class ProjectManagementRepository {
         if (!this.getSelectedProjectId()) {
           this.setSelectedProjectId(id);
         }
+
+        if (input.settingsOverrides) {
+          this.settingsRepository.saveProjectSettings(id, input.settingsOverrides);
+        }
       });
 
       const created = this.requireProject(id);

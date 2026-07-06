@@ -480,12 +480,22 @@ export function deriveLiveSessionSnapshotSurface(args: {
   isRecovering: boolean;
   snapshotUpdatedAt?: string | null;
   transportBannerTitle?: LiveTransportBannerViewModel["title"] | null;
+  error?: string | null;
 }): ExecutionSnapshotSurfaceState {
   if (args.transportState === "reconnecting" || args.transportState === "disconnected") {
     return {
       kind: "reconnecting",
       label: "Reconnecting",
       description: "Cached runtime snapshot remains visible while the live stream reconnects.",
+      isBusy: true,
+    };
+  }
+
+  if (args.error) {
+    return {
+      kind: "recovering",
+      label: "Retrying Load",
+      description: "Cached runtime snapshot remains visible while the failed live data request can be retried.",
       isBusy: true,
     };
   }

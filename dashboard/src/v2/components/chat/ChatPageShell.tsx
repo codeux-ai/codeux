@@ -80,7 +80,7 @@ export const ChatPageShell: FunctionComponent<{
   }, [prefersReducedMotion]);
 
   return (
-    <PageContainer padding="chat" className="min-h-0 flex-1 flex flex-col gap-6 lg:gap-8 h-full overflow-hidden">
+    <PageContainer aria-label="Chat" padding="chat" className="min-h-0 flex-1 flex flex-col gap-6 lg:gap-8 h-full overflow-hidden">
       <PageHeader
         containerRef={headerRef}
         className="shrink-0"

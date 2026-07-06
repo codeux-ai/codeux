@@ -220,7 +220,7 @@ describe("AgentPresetSyncService", () => {
     expect(drifted[0]?.memoryTemplateOverrideEnabled).toBe(false);
   });
 
-  it("seeds built-in default agents only once per project", async () => {
+  it("keeps built-in default agents available from bundled defaults after deletion", async () => {
     process.env.CODE_UX_ENABLE_DEFAULT_ASSET_INSTALL_IN_TESTS = "1";
 
     const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-agent-default-once-"));
@@ -271,7 +271,7 @@ describe("AgentPresetSyncService", () => {
     expect(initial.find((preset) => preset.name === "Project manager")?.mcpAccess?.linkedServerIds).toEqual([DEFAULT_PLAYWRIGHT_MCP_SERVER_ID]);
     expect(initial.find((preset) => preset.name === "Planning agent")?.mcpAccess).toBeUndefined();
     expect(initial.find((preset) => preset.name === "Quality assurance agent")?.mcpAccess).toBeUndefined();
-    expect(agentPresetRepository.hasCopiedDefaultAgentPresets(project.id)).toBe(true);
+    expect(agentPresetRepository.hasCopiedDefaultAgentPresets(project.id)).toBe(false);
 
     const worker = initial.find((preset) => preset.name === "Worker");
     expect(worker?.sourceScope).toBe("default");
@@ -279,8 +279,11 @@ describe("AgentPresetSyncService", () => {
     await fs.rm(path.join(homeDir, ".code-ux", "agents", "worker.md"), { force: true });
 
     const afterDelete = await syncService.listAgentPresets(project.id);
-    expect(afterDelete.some((preset) => preset.name === "Worker")).toBe(false);
-    await expect(fs.stat(path.join(homeDir, ".code-ux", "agents", "worker.md"))).rejects.toThrow();
+    expect(afterDelete.find((preset) => preset.name === "Worker")).toMatchObject({
+      sourceScope: "default",
+      instructionMarkdown: "default worker.md",
+    });
+    await expect(fs.stat(path.join(homeDir, ".code-ux", "agents", "worker.md"))).resolves.toBeTruthy();
   });
 
   it("normalizes project manager sources and resolves the project manager agent", async () => {
@@ -426,6 +429,8 @@ describe("AgentPresetSyncService", () => {
   });
 
   it("writes dashboard-created and updated agents into the project agent directory", async () => {
+    process.env.CODE_UX_ENABLE_DEFAULT_ASSET_INSTALL_IN_TESTS = "1";
+
     const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-agent-dashboard-write-"));
     tempDirs.push(dir);
 
@@ -434,6 +439,11 @@ describe("AgentPresetSyncService", () => {
     await fs.mkdir(defaultAgentsDir, { recursive: true });
     const defaultPlanningPath = path.join(defaultAgentsDir, "planning_agent.md");
     await fs.writeFile(defaultPlanningPath, "Default planning instructions.\n", "utf8");
+    await fs.writeFile(path.join(defaultAgentsDir, "project_manager.md"), "Default manager instructions.\n", "utf8");
+    await fs.writeFile(path.join(defaultAgentsDir, "quality_assurance_agent.md"), "Default QA instructions.\n", "utf8");
+    await fs.writeFile(path.join(defaultAgentsDir, "worker.md"), "Default worker instructions.\n", "utf8");
+    await fs.mkdir(path.join(dir, ".code-ux", "container"), { recursive: true });
+    await fs.writeFile(path.join(dir, ".code-ux", "container", "setup.sh"), "#!/usr/bin/env bash\necho setup\n", "utf8");
 
     const storage = createAppStorage(path.join(dir, "app.db"));
     const projectRepository = new ProjectManagementRepository(storage);

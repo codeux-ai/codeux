@@ -139,7 +139,7 @@ describe("InvocationFeedPanel", () => {
     expect(feed).toHaveAttribute("aria-live", "polite");
     expect(feed).toHaveAttribute("aria-busy", "true");
 
-    expect(screen.getByRole("link", { name: "Open transcript for Task Coding" }))
+    expect(screen.getByRole("link", { name: "Open transcript for Task Coding invocation xi-live-" }))
       .toHaveAttribute("href", "/chat?mode=invocations&invocation=xi-live-1");
   });
 
@@ -178,8 +178,36 @@ describe("InvocationFeedPanel", () => {
 
     expect(screen.getByText("scoped-provider")).toBeInTheDocument();
     expect(screen.queryByText("raw-provider")).not.toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Open transcript for Task Coding" }))
+    expect(screen.getByRole("link", { name: "Open transcript for Task Coding invocation xi-scope" }))
       .toHaveAttribute("href", "/chat?mode=invocations&invocation=xi-scoped");
+  });
+
+  it("renders container build progress from invocation metadata", () => {
+    vi.mocked(useExecutionTimeline).mockReturnValue({
+      execution: createSnapshot([]),
+    } as never);
+
+    render(<InvocationFeedPanel invocations={[
+      {
+        ...createInvocation({ id: "xi-build", status: "running" }),
+        metadata: {
+          setupImageProgress: {
+            kind: "build_step",
+            imageTag: "code-ux-setup-cache-node-24-bookworm:abc123",
+            baseImage: "node:24-bookworm",
+            message: "Docker setup image build: RUN bash setup.sh",
+            progressPercent: 64,
+            stepText: "RUN bash setup.sh",
+          },
+        },
+      } as ExecutionInvocationRecord,
+    ]} />);
+
+    expect(screen.getByText("Building container image")).toBeInTheDocument();
+    expect(screen.getByText("RUN bash setup.sh")).toBeInTheDocument();
+    expect(screen.getByText("64% complete")).toBeInTheDocument();
+    expect(screen.getByRole("progressbar", { name: "setup-cache image build progress" }))
+      .toHaveAttribute("aria-valuenow", "64");
   });
 
   it("uses tokenized reduced-motion status highlights without GSAP animation", () => {

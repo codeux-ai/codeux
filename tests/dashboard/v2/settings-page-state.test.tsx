@@ -96,13 +96,13 @@ describe("useSettingsPageState", () => {
     await waitFor(() => expect(result.current.loading).toBe(false));
 
     expect(result.current.systemSettings?.defaults.ciIntelligence.featurePrAutoMergeMode).toBe("ALWAYS");
-    expect(result.current.systemSettings?.defaults.ciIntelligence.mainBranchAutoMergeMode).toBe("CREATE_PR");
+    expect(result.current.systemSettings?.defaults.ciIntelligence.mainBranchAutoMergeMode).toBe("ALWAYS");
     expect(result.current.systemSettings?.defaults.ciIntelligence.resolveMergeConflicts).toBe(true);
     expect(result.current.systemSettings?.defaults.ciIntelligence.resolveMainMergeConflicts).toBe(true);
     expect(result.current.systemSettings?.defaults.memory.enabled).toBe(true);
     expect(result.current.systemSettings?.defaults.agents.qualityAssurance.enabled).toBe(true);
     expect(result.current.editableSettings?.ciIntelligence.featurePrAutoMergeMode).toBe("ALWAYS");
-    expect(result.current.editableSettings?.ciIntelligence.mainBranchAutoMergeMode).toBe("CREATE_PR");
+    expect(result.current.editableSettings?.ciIntelligence.mainBranchAutoMergeMode).toBe("ALWAYS");
     expect(result.current.editableSettings?.ciIntelligence.resolveMergeConflicts).toBe(true);
     expect(result.current.editableSettings?.ciIntelligence.resolveMainMergeConflicts).toBe(true);
     expect(result.current.editableSettings?.memory.enabled).toBe(true);
@@ -118,7 +118,7 @@ describe("useSettingsPageState", () => {
     const mapped = applyEffectiveProjectSettings(effective);
 
     expect(mapped.settings.ciIntelligence.featurePrAutoMergeMode).toBe("ALWAYS");
-    expect(mapped.settings.ciIntelligence.mainBranchAutoMergeMode).toBe("CREATE_PR");
+    expect(mapped.settings.ciIntelligence.mainBranchAutoMergeMode).toBe("ALWAYS");
     expect(mapped.settings.ciIntelligence.resolveMergeConflicts).toBe(true);
     expect(mapped.settings.ciIntelligence.resolveMainMergeConflicts).toBe(true);
     expect(mapped.settings.memory.enabled).toBe(true);
@@ -414,6 +414,59 @@ describe("useSettingsPageState", () => {
     expect(result.current.savingSystem).toBe(false);
     expect(result.current.activeSaving).toBe(false);
     expect(mockSaveSystem).toHaveBeenCalled();
+  });
+
+  it("preserves project draft values while a system save reloads effective settings", async () => {
+    const initialSettings = cloneDashboardSettings();
+    const staleReloadSettings = cloneDashboardSettings();
+    staleReloadSettings.git.defaultBranch = "server-reloaded-main";
+    mockFetchProject.mockResolvedValue({
+      settings: initialSettings,
+      sources: {},
+    } as any);
+    mockSaveSystem.mockResolvedValueOnce({
+      runtime: { dashboardPort: 4444, consoleLogLevel: "debug", debugLogFileLevel: "error", consoleLogMode: "standard" },
+      integrations: { providers: {}, githubToken: "" },
+      defaults: cloneDashboardSettings(),
+      mcpTools: [],
+    } as any);
+    mockSaveProject.mockRejectedValueOnce(new Error("project save failed"));
+
+    const { result } = renderHook(() => useSettingsPageState(CATEGORIES));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    act(() => {
+      result.current.updateSystem((current) => ({
+        ...current,
+        runtime: {
+          ...current.runtime,
+          consoleLogLevel: "debug",
+        },
+      }));
+      result.current.setActiveScope("project");
+    });
+    act(() => {
+      result.current.updateEditableSettings((current) => ({
+        ...current,
+        git: {
+          ...current.git,
+          defaultBranch: "draft-project-main",
+        },
+      }));
+    });
+    mockFetchProject.mockResolvedValue({
+      settings: staleReloadSettings,
+      sources: {},
+    } as any);
+
+    await act(async () => {
+      await result.current.handleSave();
+    });
+
+    expect(mockSaveSystem).toHaveBeenCalled();
+    expect(mockSaveProject).toHaveBeenCalled();
+    expect(result.current.projectSettings?.git.defaultBranch).toBe("draft-project-main");
+    expect(result.current.error).toContain("project save failed");
   });
 
   it.skip("handles saving project settings", async () => {

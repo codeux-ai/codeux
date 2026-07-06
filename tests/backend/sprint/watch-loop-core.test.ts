@@ -1144,6 +1144,212 @@ describe("WatchLoopRunner", () => {
     nowSpy.mockRestore();
   });
 
+  it("LOCAL: merges the sprint feature branch into a local-only default branch before completing", async () => {
+    const deps = buildDeps();
+    const cycleRunner = buildCycleRunner();
+    const nowSpy = vi.spyOn(Date, "now");
+    nowSpy.mockReturnValueOnce(0).mockReturnValue(1000);
+
+    deps.renderInstruction.mockImplementation(async (id) => {
+      if (id === "watchHeader") return "HEADER";
+      if (id === "cleanupAllMerged") return "CLEANUP_MERGED";
+      return "";
+    });
+    deps.getDashboardSettings = () => ({
+      ...buildMockSettings(),
+      git: {
+        ...buildMockSettings().git,
+        deleteMergedBranches: true,
+      },
+    });
+
+    cycleRunner.run.mockResolvedValue({
+      subtasks: [buildMockSubtask({ status: "COMPLETED", is_merged: true, worker_branch: "task/t01" })],
+      reportText: "REPORT",
+      statusTable: "TABLE",
+      instructions: "",
+      awaitingMerge: [],
+      manualMergeTasks: [],
+      workerEscalatedMergeConflictTasks: [],
+    });
+
+    let currentBranch = "user/topic";
+    vi.mocked(runCommandStrict).mockImplementation(async (_cmd: string, args: string[]) => {
+      if (args[0] === "symbolic-ref" && args.includes("--short")) {
+        return { stdout: `${currentBranch}\n`, stderr: "" } as any;
+      }
+      if (args[0] === "rev-parse" && args[1] === "--verify") {
+        return { stdout: "feature-sha\n", stderr: "" } as any;
+      }
+      if (args[0] === "show-ref" && args.includes("refs/heads/main")) {
+        return { stdout: "", stderr: "" } as any;
+      }
+      if (args[0] === "checkout") {
+        currentBranch = args.at(-1) ?? currentBranch;
+        return { stdout: "", stderr: "" } as any;
+      }
+      if (args[0] === "merge") {
+        return { stdout: "Merge made by the 'ort' strategy.\n", stderr: "" } as any;
+      }
+      if (args[0] === "rev-parse" && args[1] === "--abbrev-ref") {
+        return { stdout: `${currentBranch}\n`, stderr: "" } as any;
+      }
+      if (args[0] === "branch" && args[1] === "-D") {
+        return { stdout: "Deleted branch feature/sprint-1.\n", stderr: "" } as any;
+      }
+      return { stdout: "", stderr: "" } as any;
+    });
+
+    const runner = new WatchLoopRunner(deps as any, cycleRunner as any, vi.fn().mockResolvedValue({
+      text: "",
+      state: "ready_for_merge",
+      prNumber: null,
+      prUrl: null,
+      hasMergeConflict: false,
+      mergeStateStatus: null,
+      hasFailedChecks: false,
+      hasPendingChecks: false,
+      hasReviewBlockers: false,
+      failedChecks: [],
+    }));
+
+    const result = await runner.run({
+      args: { sprint_number: 1, action: "orchestrate" } as any,
+      executionContext: {
+        project: { id: "project-1", name: "Test Project" },
+        sprint: { id: "sprint-1", name: "Sprint 1" },
+        sprintNumber: 1,
+        repoPath: "/tmp/local-only",
+        featureBranch: "feature/sprint-1",
+        defaultBranch: "main",
+      },
+      repoPath: "/tmp/local-only",
+      defaultFeatureBranch: "feature/sprint-1",
+      defaultBranch: "main",
+      githubMode: "LOCAL",
+      retryFailed: false,
+      loopSteps: { watchLoopOutputIntervalSeconds: 60, watchLoopIntervalSeconds: 1 } as any,
+      ciIntelligence: {} as any,
+      automationLevel: "SEMI_AUTO",
+      automationInterventions: {} as any,
+      dashboardPort: 4444,
+      sprintRunId: "run-1",
+    });
+
+    expect(runCommandStrict).toHaveBeenCalledWith("git", ["checkout", "main"], "/tmp/local-only");
+    expect(runCommandStrict).toHaveBeenCalledWith(
+      "git",
+      ["merge", "--no-ff", "-m", "Merge branch 'feature/sprint-1' into main", "feature/sprint-1"],
+      "/tmp/local-only",
+    );
+    expect(runCommandStrict).toHaveBeenCalledWith("git", ["checkout", "user/topic"], "/tmp/local-only");
+    expect(runCommandStrict).toHaveBeenCalledWith("git", ["branch", "-D", "feature/sprint-1"], "/tmp/local-only");
+    expect(result).toContain("Sprint Execution Finished");
+    expect(deps.executionRepository.appendSprintRunEvent).toHaveBeenCalledWith(
+      "run-1",
+      "sprint_completed",
+      "system",
+      expect.objectContaining({ taskCount: 1 }),
+      expect.any(Object),
+    );
+    expect(deps.projectAttentionService.resolveItemsForSprintRun).toHaveBeenCalledWith(
+      "project-1",
+      "run-1",
+      ["merge_required", "merge_conflict"],
+      "sprint_completed",
+    );
+    nowSpy.mockRestore();
+  });
+
+  it("LOCAL: logs restore failures without masking a successful final merge", async () => {
+    const deps = buildDeps();
+    const cycleRunner = buildCycleRunner();
+    const nowSpy = vi.spyOn(Date, "now");
+    nowSpy.mockReturnValueOnce(0).mockReturnValue(1000);
+
+    deps.renderInstruction.mockImplementation(async (id) => {
+      if (id === "watchHeader") return "HEADER";
+      if (id === "cleanupAllMerged") return "CLEANUP_MERGED";
+      return "";
+    });
+
+    cycleRunner.run.mockResolvedValue({
+      subtasks: [buildMockSubtask({ status: "COMPLETED", is_merged: true })],
+      reportText: "REPORT",
+      statusTable: "TABLE",
+      instructions: "",
+      awaitingMerge: [],
+      manualMergeTasks: [],
+      workerEscalatedMergeConflictTasks: [],
+    });
+
+    vi.mocked(runCommandStrict).mockImplementation(async (_cmd: string, args: string[]) => {
+      if (args[0] === "symbolic-ref" && args.includes("--short")) {
+        return { stdout: "user/topic\n", stderr: "" } as any;
+      }
+      if (args[0] === "rev-parse" && args[1] === "--verify") {
+        return { stdout: "feature-sha\n", stderr: "" } as any;
+      }
+      if (args[0] === "show-ref") {
+        return { stdout: "", stderr: "" } as any;
+      }
+      if (args[0] === "checkout" && args[1] === "user/topic") {
+        throw new Error("restore failed");
+      }
+      if (args[0] === "checkout") {
+        return { stdout: "", stderr: "" } as any;
+      }
+      if (args[0] === "merge") {
+        return { stdout: "", stderr: "" } as any;
+      }
+      return { stdout: "", stderr: "" } as any;
+    });
+
+    const runner = new WatchLoopRunner(deps as any, cycleRunner as any, vi.fn().mockResolvedValue({
+      text: "",
+      state: "ready_for_merge",
+      prNumber: null,
+      prUrl: null,
+      hasMergeConflict: false,
+      mergeStateStatus: null,
+      hasFailedChecks: false,
+      hasPendingChecks: false,
+      hasReviewBlockers: false,
+      failedChecks: [],
+    }));
+
+    const result = await runner.run({
+      args: { sprint_number: 1, action: "orchestrate" } as any,
+      executionContext: {
+        project: { id: "project-1", name: "Test Project" },
+        sprint: { id: "sprint-1", name: "Sprint 1" },
+        sprintNumber: 1,
+        repoPath: "/tmp/local-only",
+        featureBranch: "feature/sprint-1",
+        defaultBranch: "main",
+      },
+      repoPath: "/tmp/local-only",
+      defaultFeatureBranch: "feature/sprint-1",
+      defaultBranch: "main",
+      githubMode: "LOCAL",
+      retryFailed: false,
+      loopSteps: { watchLoopOutputIntervalSeconds: 60, watchLoopIntervalSeconds: 1 } as any,
+      ciIntelligence: {} as any,
+      automationLevel: "SEMI_AUTO",
+      automationInterventions: {} as any,
+      dashboardPort: 4444,
+      sprintRunId: "run-1",
+    });
+
+    expect(result).toContain("Sprint Execution Finished");
+    expect(deps.logger.warn).toHaveBeenCalledWith(
+      "LOCAL Mode: Failed to restore original checked-out ref after final merge attempt",
+      expect.objectContaining({ originalRef: "user/topic" }),
+    );
+    expect(runCommandStrict).not.toHaveBeenCalledWith("git", ["branch", "-D", "feature/sprint-1"], "/tmp/local-only");
+    nowSpy.mockRestore();
+  });
+
   it("LOCAL: pauses when a main-merge conflict has escalated to a human", async () => {
     const deps = buildDeps();
     const cycleRunner = buildCycleRunner();

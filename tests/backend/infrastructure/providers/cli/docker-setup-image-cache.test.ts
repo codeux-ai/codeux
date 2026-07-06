@@ -1,6 +1,6 @@
 import * as fs from "fs/promises";
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { DockerSetupImageCache } from "../../../../../src/infrastructure/providers/cli/docker-setup-image-cache.js";
+import { DockerSetupImageCache, type DockerSetupImageCacheProgress } from "../../../../../src/infrastructure/providers/cli/docker-setup-image-cache.js";
 import { runStreamingCommand } from "../../../../../src/services/cli-process-runner.js";
 
 vi.mock("fs/promises");
@@ -63,6 +63,17 @@ describe("DockerSetupImageCache", () => {
 
   it("builds the cached image on a cache miss", async () => {
     const onActivity = vi.fn();
+    const onProgress = vi.fn();
+    vi.mocked(runStreamingCommand).mockReset();
+    vi.mocked(runStreamingCommand)
+      .mockResolvedValueOnce({ ok: false, code: 1, stdout: "", stderr: "missing" })
+      .mockResolvedValueOnce({ ok: false, code: 1, stdout: "", stderr: "missing" })
+      .mockImplementationOnce(async (_command, _args, _cwd, _env, options: any) => {
+        options.onStdoutLine?.("#1 [internal] load build definition from Dockerfile");
+        options.onStderrLine?.("Step 2/4 : COPY setup.sh /tmp/code-ux-setup.sh");
+        options.onStdoutLine?.("#3 [3/4] RUN bash /tmp/code-ux-setup.sh");
+        return { ok: true, code: 0, stdout: "built", stderr: "" };
+      });
     const result = await new DockerSetupImageCache().resolveImage({
       baseImage: "node:24-bookworm",
       setupScriptPath: "/repo/.code-ux/container/setup.sh",
@@ -70,6 +81,7 @@ describe("DockerSetupImageCache", () => {
       runtimeRoot: "/runtime",
       repoPath: "/repo",
       onActivity,
+      onProgress,
       mapSourcePathForDaemon: (sourcePath) => `/mapped${sourcePath}`,
     });
 
@@ -91,6 +103,19 @@ describe("DockerSetupImageCache", () => {
     expect(dockerfileWrite?.[1]).toContain('LABEL org.opencontainers.image.title="Code UX setup cache"');
     expect(dockerfileWrite?.[1]).toContain('LABEL ai.codeux.base-image="node:24-bookworm"');
     expect(dockerfileWrite?.[1]).not.toContain("PLAYWRIGHT_BROWSERS_PATH");
+    const progressEvents = onProgress.mock.calls.map(([event]) => event as DockerSetupImageCacheProgress);
+    expect(progressEvents.map((event) => event.kind)).toEqual(expect.arrayContaining([
+      "cache_miss",
+      "build_start",
+      "build_step",
+      "build_success",
+    ]));
+    expect(progressEvents.some((event) => event.stepText?.includes("COPY setup.sh"))).toBe(true);
+    expect(progressEvents.map((event) => event.progressPercent)).toEqual(
+      [...progressEvents.map((event) => event.progressPercent)].sort((a, b) => a - b),
+    );
+    expect(progressEvents.at(-1)?.progressPercent).toBe(100);
+    expect(onActivity).toHaveBeenCalledWith(expect.stringContaining("first build may take a few minutes"));
   });
 
   it("bakes Playwright browser location into cached images when enabled", async () => {
@@ -120,6 +145,7 @@ describe("DockerSetupImageCache", () => {
       .mockResolvedValueOnce({ ok: false, code: 1, stdout: "", stderr: "build failed" });
 
     const onActivity = vi.fn();
+    const onProgress = vi.fn();
     const result = await new DockerSetupImageCache().resolveImage({
       baseImage: "node:24-bookworm",
       setupScriptPath: "/repo/.code-ux/container/setup.sh",
@@ -127,6 +153,7 @@ describe("DockerSetupImageCache", () => {
       runtimeRoot: "/runtime",
       repoPath: "/repo",
       onActivity,
+      onProgress,
       mapSourcePathForDaemon: (sourcePath) => `/mapped${sourcePath}`,
     });
 
@@ -135,6 +162,10 @@ describe("DockerSetupImageCache", () => {
       runSetupScriptAtRuntime: true,
     });
     expect(onActivity).toHaveBeenCalledWith(expect.stringContaining("Falling back to runtime setup script"));
+    expect(onProgress).toHaveBeenCalledWith(expect.objectContaining({
+      kind: "build_failure_fallback",
+      progressPercent: 100,
+    }));
   });
 
   it("falls back to runtime setup instead of building when buildIfMissing is false", async () => {
@@ -165,16 +196,22 @@ describe("DockerSetupImageCache", () => {
   it("deduplicates concurrent setup image builds in the same process", async () => {
     let finishBuild: ((value: { ok: true; code: 0; stdout: string; stderr: string }) => void) | undefined;
     vi.mocked(runStreamingCommand).mockReset();
-    vi.mocked(runStreamingCommand).mockImplementation(async (_command, args) => {
+    vi.mocked(runStreamingCommand).mockImplementation(async (_command, args, _cwd, _env, options: any) => {
       if (args[0] === "image") {
         return { ok: false, code: 1, stdout: "", stderr: "missing" } as any;
       }
       return await new Promise((resolve) => {
-        finishBuild = resolve;
+        finishBuild = (value) => {
+          options.onStdoutLine?.("Step 1/2 : FROM node:24-bookworm");
+          options.onStdoutLine?.("Step 2/2 : RUN echo ready");
+          resolve(value);
+        };
       });
     });
 
     const cache = new DockerSetupImageCache();
+    const firstProgress = vi.fn();
+    const secondProgress = vi.fn();
     const first = cache.resolveImage({
       baseImage: "node:24-bookworm",
       setupScriptPath: "/repo/.code-ux/container/setup.sh",
@@ -182,6 +219,7 @@ describe("DockerSetupImageCache", () => {
       runtimeRoot: "/runtime",
       repoPath: "/repo",
       onActivity: vi.fn(),
+      onProgress: firstProgress,
       mapSourcePathForDaemon: (sourcePath) => `/mapped${sourcePath}`,
     });
     const second = cache.resolveImage({
@@ -191,6 +229,7 @@ describe("DockerSetupImageCache", () => {
       runtimeRoot: "/runtime",
       repoPath: "/repo",
       onActivity: vi.fn(),
+      onProgress: secondProgress,
       mapSourcePathForDaemon: (sourcePath) => `/mapped${sourcePath}`,
     });
 
@@ -201,5 +240,9 @@ describe("DockerSetupImageCache", () => {
 
     expect(firstResult).toEqual(secondResult);
     expect(vi.mocked(runStreamingCommand).mock.calls.filter(([, args]) => args[0] === "build")).toHaveLength(1);
+    expect(firstProgress).toHaveBeenCalledWith(expect.objectContaining({ kind: "build_step", stepText: "RUN echo ready" }));
+    expect(secondProgress).toHaveBeenCalledWith(expect.objectContaining({ kind: "lock_wait" }));
+    expect(secondProgress).toHaveBeenCalledWith(expect.objectContaining({ kind: "build_step", stepText: "RUN echo ready" }));
+    expect(secondProgress).toHaveBeenCalledWith(expect.objectContaining({ kind: "build_success", progressPercent: 100 }));
   });
 });
