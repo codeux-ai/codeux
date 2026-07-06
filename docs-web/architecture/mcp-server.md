@@ -7,7 +7,7 @@ This page documents the transports, the tool registry, the request routing path,
 ## Server identity
 
 - **Name:** `code-ux` (constant `CODE_UX_SERVICE_NAME`).
-- **Version:** `0.8.x`.
+- **Version:** The current installed package version.
 - **Capabilities:** `tools`, `resources`, `prompts`.
 
 The capabilities object is empty (no specific tool/resource caps); it merely advertises that the categories exist.

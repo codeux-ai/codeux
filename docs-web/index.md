@@ -41,6 +41,6 @@ This site is the canonical reference for installing, operating, integrating, and
 
 ## Versioning and license
 
-This documentation tracks the `0.8.x` release line of the
+This documentation tracks the current release line of the
 [`@codeuxai/codeux`](https://www.npmjs.com/package/@codeuxai/codeux) npm package. Code UX is released
 under the [MIT License](https://github.com/codeux-ai/codeux/blob/main/LICENSE).

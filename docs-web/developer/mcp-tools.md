@@ -6,7 +6,7 @@ previews, and telemetry. This page is the exact contract: the tool list, each to
 input shape, approval rules, and the error model.
 
 > **Server identity:** the server identifies as `code-ux`, with the version matching the installed
-> package (the `0.8.x` line). The package on npm is `@codeuxai/codeux`. Capabilities advertised at
+> package. The package on npm is `@codeuxai/codeux`. Capabilities advertised at
 > `initialize`: `tools`, `resources`, `prompts`.
 
 ## Tool availability

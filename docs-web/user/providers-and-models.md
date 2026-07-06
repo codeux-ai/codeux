@@ -18,7 +18,7 @@ All non-Jules providers are *virtual workers* — Code UX shells out to the prov
 
 ## The models
 
-The full model catalog lives in `src/repositories/settings-defaults.ts`. The defaults below reflect the shipped 0.8.x release.
+The full model catalog lives in `src/repositories/settings-defaults.ts`. The defaults below reflect the currently shipped release.
 
 ### Gemini
 ```

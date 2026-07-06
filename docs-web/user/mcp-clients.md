@@ -98,7 +98,7 @@ Claude Code reads its MCP servers from `~/.claude/settings.json` or per-project.
 When Code UX boots in stdio mode it advertises itself with:
 
 - **Name:** `code-ux`
-- **Version:** `0.8.x`
+- **Version:** The current installed package version.
 - **Capabilities:** `tools`, `resources`, `prompts`
 
 The tool list (filtered by your runtime role and `mcpTools` toggles) is **one tool per management
