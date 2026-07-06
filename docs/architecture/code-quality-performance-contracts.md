@@ -46,6 +46,7 @@ Related docs: [Execution Dashboard Projection](./execution-dashboard-projection.
 ### Provider Telemetry
 
 - Treat provider telemetry as metadata-first during a running process: check provider/model identity, native session id, stdout/stderr fingerprints, and provider-specific file metadata before reading full transcripts or databases.
+- Repeated live telemetry metadata or full-read failures must use bounded retry backoff keyed by the cheap source signature. A changed signature or a successful read clears the failure state so recovery is immediate when provider output advances.
 - Preserve the separation between best-effort live telemetry and final authoritative usage collection after provider completion.
 - Providers with cumulative session stores, such as Codex rollout files, OpenCode exports, and resumed Antigravity databases, must isolate the current invocation from prior turns before persisting usage.
 - Store raw usage payloads when they are needed as future baselines, but keep dashboard rollups on normalized numeric columns and `usage_source`.
