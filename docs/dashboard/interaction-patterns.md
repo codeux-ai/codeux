@@ -91,6 +91,7 @@ When announcing asynchronous feedback (e.g., via Toasts, ActionFeedbackRegion, o
 - Pending actions must suppress duplicate activation and expose the blocked reason through visible status text, `title`, or `aria-describedby`. Do not rely on click-time announcements from disabled controls.
 - Destructive confirmations must use a named dialog, focus trap, explicit confirm/cancel controls, and progress semantics for hold-to-confirm. Reduced motion may remove progress animation timing, but visible percent text, progressbar attributes, and cancellation copy remain required.
 - No critical action or state may be disclosed by hover alone. Hover-revealed affordances must also be reachable by keyboard focus, or the action must remain persistently visible.
+- Dashboard reliability states should be covered with role-based regression tests: destructive confirmations assert dialog names, focus trapping, Escape/cancel behavior, pending `aria-busy`, and focus restoration; cache tests assert mutation invalidation and project/sprint scope isolation; reduced-motion tests assert zero-duration tokens while status DOM remains mounted; async route tests assert loading `status`, blocking `alert`, empty states, and stable action labels.
 
 ## Shared Control States
 

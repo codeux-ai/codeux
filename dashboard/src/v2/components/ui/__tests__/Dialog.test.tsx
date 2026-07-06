@@ -2,11 +2,14 @@
 import { h } from "preact";
 import { useState } from "preact/hooks";
 import { render, screen, cleanup, fireEvent, waitFor } from "@testing-library/preact";
+import * as matchers from "@testing-library/jest-dom/matchers";
 import { Dialog } from "../Dialog.js";
 import { ConfirmDialog } from "../ConfirmDialog.js";
 import { DropdownMenu, DropdownMenuItem } from "../DropdownMenu.js";
 import { useConfirmDialog } from "../../../hooks/use-confirm-dialog.js";
 import { expect, test, describe, afterEach, vi } from "vitest";
+
+expect.extend(matchers);
 
 vi.mock("gsap", () => {
   const gsap = {
@@ -77,6 +80,61 @@ function ConfirmHarness({ onDecision }: { onDecision: (confirmed: boolean) => vo
         options={confirm.options}
         onConfirm={confirm.handleConfirm}
         onCancel={confirm.handleCancel}
+      />
+    </main>
+  );
+}
+
+function PendingConfirmHarness({
+  onConfirm,
+}: {
+  onConfirm: () => Promise<void>;
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+
+  return (
+    <main>
+      <button type="button" onClick={() => setIsOpen(true)}>
+        Delete source
+      </button>
+      <ConfirmDialog
+        isOpen={isOpen}
+        options={{
+          title: "Delete source project",
+          body: "Delete this project from the dashboard?",
+          confirmLabel: "Delete",
+          cancelLabel: "Cancel",
+          tone: "danger",
+        }}
+        onConfirm={async () => {
+          await onConfirm();
+          setIsOpen(false);
+        }}
+        onCancel={() => setIsOpen(false)}
+      />
+    </main>
+  );
+}
+
+function DestructiveConfirmHarness() {
+  const [isOpen, setIsOpen] = useState(false);
+
+  return (
+    <main>
+      <button type="button" onClick={() => setIsOpen(true)}>
+        Open destructive confirm
+      </button>
+      <ConfirmDialog
+        isOpen={isOpen}
+        options={{
+          title: "Delete sprint",
+          body: "Delete this sprint permanently?",
+          confirmLabel: "Delete Sprint",
+          cancelLabel: "Keep Sprint",
+          destructive: true,
+        }}
+        onConfirm={() => setIsOpen(false)}
+        onCancel={() => setIsOpen(false)}
       />
     </main>
   );
@@ -247,6 +305,73 @@ describe("Dialog and Modal", () => {
       expect(onDecision).toHaveBeenCalledWith(true);
       expect(document.activeElement).toBe(trigger);
     });
+  });
+
+  test("confirm dialog traps focus between cancel and confirm controls", async () => {
+    const onDecision = vi.fn();
+    render(<ConfirmHarness onDecision={onDecision} />);
+
+    const trigger = screen.getByRole("button", { name: "Open confirm" });
+    trigger.focus();
+    fireEvent.click(trigger);
+
+    await screen.findByRole("dialog", { name: "Reset runtime state" });
+    const cancel = screen.getByRole("button", { name: "Keep" });
+    const confirm = screen.getByRole("button", { name: "Reset" });
+
+    await waitFor(() => {
+      expect(document.activeElement).toBe(cancel);
+    });
+
+    fireEvent.keyDown(document, { key: "Tab", shiftKey: true });
+    expect(document.activeElement).toBe(confirm);
+
+    fireEvent.keyDown(document, { key: "Tab" });
+    expect(document.activeElement).toBe(cancel);
+  });
+
+  test("confirm dialog exposes pending progress with aria-busy and restores focus after async confirm", async () => {
+    let resolveConfirm: (() => void) | undefined;
+    const onConfirm = vi.fn(() => new Promise<void>((resolve) => {
+      resolveConfirm = resolve;
+    }));
+    render(<PendingConfirmHarness onConfirm={onConfirm} />);
+
+    const trigger = screen.getByRole("button", { name: "Delete source" });
+    trigger.focus();
+    fireEvent.click(trigger);
+
+    await screen.findByRole("dialog", { name: "Delete source project" });
+    const confirm = screen.getByRole("button", { name: "Delete" });
+    fireEvent.click(confirm);
+
+    expect(onConfirm).toHaveBeenCalledTimes(1);
+    const pending = screen.getByRole("button", { name: /Processing/ });
+    expect(pending).toHaveAttribute("aria-busy", "true");
+    expect(pending).toHaveTextContent("Processing...");
+
+    resolveConfirm?.();
+
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog", { name: "Delete source project" })).toBeNull();
+      expect(document.activeElement).toBe(trigger);
+    });
+  });
+
+  test("destructive confirm exposes hold progress semantics without dropping dialog state", async () => {
+    render(<DestructiveConfirmHarness />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Open destructive confirm" }));
+    const dialog = await screen.findByRole("dialog", { name: "Delete sprint" });
+    const holdButton = screen.getByRole("button", { name: "Hold to Delete Sprint" });
+
+    fireEvent.pointerDown(holdButton, { button: 0, pointerId: 1 });
+
+    expect(screen.getByRole("progressbar", { name: "Hold confirmation progress" })).toHaveAttribute("aria-valuemin", "0");
+    expect(holdButton).toHaveAccessibleDescription("Keep holding until progress completes. Release before completion to cancel.");
+    expect(dialog).toBeInTheDocument();
+
+    fireEvent.pointerUp(holdButton, { pointerId: 1 });
   });
 
   test("confirm dialog resolves false on cancel, Escape, and backdrop dismissal without confirming", async () => {
