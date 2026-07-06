@@ -16,12 +16,13 @@ Both tiers are vector-indexed using a locally-running embedding model (ONNX Runt
 Each memory has a **category**:
 
 - `context` — generic context (default).
-- `architecture` — design decisions, patterns.
+- `architecture` — design decisions, architectural rules.
 - `codebase` — file/symbol landmarks.
-- `convention` — coding standards.
-- `gotcha` — known issue, workaround.
-- `feedback` — user-validated patterns.
-- *(extensible)*
+- `preferences` — formatting, naming, and style preferences.
+- `patterns` — recurring implementation patterns.
+- `decision` — explicit technical decisions made.
+- `error` — known errors or workarounds.
+- `learning` — task learnings.
 
 Categories drive default rendering and can be used as filters in search.
 
@@ -100,4 +101,4 @@ The footer shows aggregate memory statistics: total counts per scope/category, a
 
 ## Programmatic access
 
-The Memory MCP domain (`manage_code_ux` → `domain: "memory"`) exposes search, list, get, create, update, delete, promote, start_reembed, get_map, count, and model_status actions. See [Management actions → memory](../../developer/management-actions.md#memory).
+The Memory MCP tool (`manage_memory`) exposes search, list, get, create, update, delete, promote, start_reembed, get_map, count, and model_status actions, as well as durable claim actions. Destructive actions require approval confirmation. (Note: The legacy unified `manage_code_ux` tool is deprecated). See [Management actions → memory](../../developer/management-actions.md#memory).
