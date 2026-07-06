@@ -77,6 +77,10 @@ describe("SprintIssueImportModal", () => {
 
     render(<SprintIssueImportModal project={project} onClose={vi.fn()} onImport={onImport} />);
 
+    const dialog = screen.getByRole("dialog", { name: /browse backlog and import sprint context/i });
+    expect(dialog).toHaveAccessibleDescription(/search issues, select a dense batch/i);
+    expect(screen.getByRole("button", { name: /close issue import/i })).toBeEnabled();
+
     await waitFor(() => {
       expect(searchProjectIssues).toHaveBeenCalledWith("project-1", expect.objectContaining({
         provider: "github",
@@ -89,12 +93,19 @@ describe("SprintIssueImportModal", () => {
       }), expect.any(AbortSignal));
     });
 
+    expect(screen.getByRole("button", { name: /^github$/i })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: /^gitlab$/i })).toHaveAttribute("aria-pressed", "false");
+    expect(screen.getByRole("button", { name: /search issues/i })).toBeEnabled();
+    expect(screen.getByRole("button", { name: /import as linked issues is disabled because no issues are selected/i })).toBeDisabled();
     expect(screen.getByRole("button", { name: /advanced filters/i })).toHaveAttribute("aria-expanded", "false");
     expect(document.getElementById("repository-issue-import-advanced-filters")).toHaveClass("hidden");
     expect(screen.getByText(/Sort: Updated, Newest first/i)).toBeInTheDocument();
     expect(screen.getAllByText(/1 visible result/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/0 selected/i).length).toBeGreaterThan(0);
+    expect(screen.getByRole("button", { name: /fix ci/i })).toHaveAttribute("aria-pressed", "false");
 
     await user.click(screen.getByRole("button", { name: /^gitlab$/i }));
+    expect(screen.getByRole("button", { name: /^gitlab$/i })).toHaveAttribute("aria-pressed", "true");
     fireEvent.change(screen.getByPlaceholderText("gitlab.com"), { target: { value: "gitlab.example.com" } });
     fireEvent.change(screen.getByPlaceholderText("owner/repository"), { target: { value: "acme/widgets" } });
     await user.type(screen.getByPlaceholderText("Title, body, or issue text"), "pipeline");
@@ -143,6 +154,7 @@ describe("SprintIssueImportModal", () => {
     expect(await screen.findByText("Fix CI")).toBeInTheDocument();
     fireEvent.click(screen.getAllByRole("button", { name: /select all visible results/i })[0]);
 
+    expect(screen.getByRole("button", { name: /fix ci/i })).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByText(/1 selected issue will be imported/i)).toBeInTheDocument();
     fireEvent.click(screen.getAllByRole("button", { name: /clear selected issues/i })[0]);
     expect(screen.getByText(/No issues selected/i)).toBeInTheDocument();
