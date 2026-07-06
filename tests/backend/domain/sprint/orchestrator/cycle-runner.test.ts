@@ -1092,6 +1092,162 @@ describe("CycleRunner attention sync", () => {
     expect(deps.startTask).toHaveBeenCalledTimes(1);
   });
 
+  it("does not start duplicate work across repeated cycles for active gate states", async () => {
+    const deps = buildDeps();
+    const runner = new CycleRunner(deps);
+    const tasks = [
+      {
+        id: "T1",
+        record_id: "task-running",
+        title: "Already running",
+        prompt: "keep running",
+        depends_on: [],
+        is_independent: true,
+        status: "RUNNING",
+        session_id: "session-running",
+      },
+      {
+        id: "T2",
+        record_id: "task-blocked",
+        title: "Blocked task",
+        prompt: "wait for dependency",
+        depends_on: ["T1"],
+        is_independent: false,
+        status: "BLOCKED",
+      },
+      {
+        id: "T3",
+        record_id: "task-qa",
+        title: "QA reviewing task",
+        prompt: "wait for QA",
+        depends_on: [],
+        is_independent: true,
+        status: "CODING_COMPLETED",
+        merge_indicator: "QA_PENDING",
+        worker_branch: "worker/T3",
+        pr_url: "https://example.com/pr/103",
+      },
+      {
+        id: "T4",
+        record_id: "task-merge",
+        title: "Ready for merge task",
+        prompt: "wait for merge",
+        depends_on: [],
+        is_independent: true,
+        status: "COMPLETED",
+        is_merged: false,
+        merge_indicator: "PR_ONLY",
+        worker_branch: "worker/T4",
+        pr_url: "https://example.com/pr/104",
+      },
+    ] as any[];
+    vi.mocked(deps.sprintExecutionStateService.loadSubtasks).mockImplementation(async () => tasks);
+    deps.startTask = vi.fn().mockResolvedValue({ id: "duplicate-session", provider: "codex" });
+    deps.qualityAssuranceService = {
+      getTaskMergeGateStatus: vi.fn().mockImplementation(({ task }: { task: { id: string } }) => {
+        if (task.id === "T3") {
+          return {
+            mergeAllowed: false,
+            reason: "pending_review",
+            summary: "QA review is still running.",
+            latestRun: null,
+            runsUsed: 0,
+            maxRuns: 2,
+          };
+        }
+        return {
+          mergeAllowed: true,
+          reason: "passed",
+          summary: "QA passed.",
+          latestRun: null,
+          runsUsed: 1,
+          maxRuns: 2,
+        };
+      }),
+      reconcileRunningTaskQaReviews: vi.fn().mockResolvedValue(undefined),
+    } as any;
+    deps.getCiStatusForScope = vi.fn().mockResolvedValue({
+      available: true,
+      openPullRequests: [
+        {
+          number: 103,
+          title: "QA PR",
+          url: "https://example.com/pr/103",
+          state: "OPEN",
+          isDraft: false,
+          headRefName: "worker/T3",
+          baseRefName: "feature/sprint-1",
+          checks: [{ name: "ci", status: "completed", conclusion: "success" }],
+          comments: 0,
+          reviewDecision: "APPROVED",
+        },
+        {
+          number: 104,
+          title: "Merge PR",
+          url: "https://example.com/pr/104",
+          state: "OPEN",
+          isDraft: false,
+          headRefName: "worker/T4",
+          baseRefName: "feature/sprint-1",
+          checks: [{ name: "ci", status: "completed", conclusion: "success" }],
+          comments: 0,
+          reviewDecision: "APPROVED",
+        },
+      ],
+      ciRuns: [],
+      mergedPullRequests: [],
+    });
+
+    const runArgs = {
+      action: "orchestrate" as const,
+      automationLevel: "FULL" as const,
+      automationInterventions: DEFAULT_DASHBOARD_SETTINGS.automationInterventions,
+      executionContext: {
+        project: { id: "project-1", name: "Project 1" } as any,
+        sprint: { id: "sprint-1", name: "Sprint 1" } as any,
+        sprintNumber: 1,
+        repoPath: "/repo/project-1",
+        featureBranch: "feature/sprint-1",
+        defaultBranch: "main",
+      },
+      repoPath: "/repo/project-1",
+      defaultFeatureBranch: "feature/sprint-1",
+      retryFailed: false,
+      loopSteps: {
+        loadSubtasks: true,
+        sessionSync: false,
+        statusDerivation: true,
+        startReadyTasks: true,
+        statusTable: false,
+        mergeProtocol: true,
+        actionRequiredProtocol: true,
+      } as any,
+      ciIntelligence: {
+        ...DEFAULT_DASHBOARD_SETTINGS.ciIntelligence,
+        enabled: false,
+        featurePrAutoMergeMode: "CREATE_PR",
+      },
+      githubMode: "REMOTE" as const,
+      defaultBranch: "main",
+      featureBranchPrefix: "feature/",
+      sprintRunId: "run-1",
+    };
+
+    const first = await runner.run(runArgs);
+    const second = await runner.run(runArgs);
+
+    expect(deps.startTask).not.toHaveBeenCalled();
+    expect(first.subtasks.map((task) => task.id)).toEqual(["T1", "T2", "T3", "T4"]);
+    expect(second.subtasks.find((task) => task.id === "T3")).toMatchObject({
+      status: "CODING_COMPLETED",
+      merge_indicator: "QA_PENDING",
+    });
+    expect(second.subtasks.find((task) => task.id === "T4")).toMatchObject({
+      status: "COMPLETED",
+      merge_indicator: "PR_ONLY",
+    });
+  });
+
   it("does not open action_required attention while the same clarification request is already answered", async () => {
     const deps = buildDeps();
     deps.isActionRequiredState = (state?: string) => state === "AWAITING_USER_FEEDBACK";

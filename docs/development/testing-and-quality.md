@@ -204,6 +204,7 @@ pnpm run typecheck:dashboard
 
 ### Backend
 - Sprint orchestration behavior
+- Sprint orchestration regression tests should cover repeated watch-loop cycles, including active dispatch reuse, QA/CI gate waits, merge-ready tasks, and failed provider startup rows. These tests should assert durable task-run/dispatch/provider invocation events and avoid real provider CLIs, Docker containers, Git pushes, or GitHub API calls.
 - Settings repository defaults and persistence
 - Git status service parsing
 - Task service prompt construction
