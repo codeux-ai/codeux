@@ -113,6 +113,12 @@ Project management:
   - Updates scheduler status, timing, recurrence, or target payload
 - `DELETE /api/scheduler/:entryId`
   - Deletes a scheduler entry
+- `GET /api/projects/:projectId/scheduler/memory-remediation`
+  - Evaluates memory metrics and proposes scheduled remediation tasks
+- `PUT /api/projects/:projectId/scheduler/memory-remediation`
+  - Configures the automatic memory remediation schedule
+- `POST /api/scheduler/run-due`
+  - Processes due scheduler entries manually
 
 Legacy runtime:
 - `GET /api/status`
@@ -121,6 +127,10 @@ Legacy runtime:
   - Selected-project execution control-plane snapshot (`sprintRuns`, `taskDispatches`, `recentEvents`, lease ownership)
 - `GET /api/telemetry/overview`
   - Cross-project overview telemetry snapshot for all currently active project runs
+- `GET /api/live`
+  - Unified Live runtime snapshot for the selected project
+- `PUT /api/projects/:projectId/preferred-worker`
+  - Sets the preferred worker host for the selected project
 - `GET /api/realtime`
   - websocket upgrade endpoint for dashboard realtime subscriptions (`projects`, `overview`, `project:<projectId>`, `thread:<threadId>`)
 - `GET /api/projects/:projectId/execution`
@@ -165,6 +175,24 @@ Legacy runtime:
   - Rebuilds and restarts one sprint preview session
 - `POST /api/browser/sessions/:sessionId/stop`
   - Stops one sprint preview session
+- `GET /api/projects/:projectId/file-browser/sessions`
+  - Lists persisted sprint file-browser sessions for the selected project
+- `POST /api/projects/:projectId/sprints/:sprintId/file-browser/start`
+  - Starts or reuses a file-browser session for one sprint
+- `POST /api/file-browser/sessions/:sessionId/rebuild`
+  - Rebuilds and restarts a file-browser session
+- `POST /api/file-browser/sessions/:sessionId/stop`
+  - Stops a file-browser session
+- `DELETE /api/file-browser/sessions/:sessionId`
+  - Deletes a file-browser session
+- `GET /api/file-browser/sessions/:sessionId/tree`
+  - Lists the filesystem tree for the sprint branch
+- `GET /api/file-browser/sessions/:sessionId/file`
+  - Reads a file from the file-browser session
+- `GET /api/file-browser/sessions/:sessionId/changes`
+  - Gets git status/changes for the sprint branch
+- `GET /api/file-browser/sessions/:sessionId/diff`
+  - Gets a diff for the sprint branch
 - `GET /api/projects/:projectId/sprints/:sprintId/preview/script`
   - Loads the editable preview startup script or generated fallback for one sprint
 - `PUT /api/projects/:projectId/sprints/:sprintId/preview/script`
@@ -191,6 +219,18 @@ Legacy runtime:
   - Resumes a paused sprint run
 - `POST /api/sprint-runs/:sprintRunId/cancel`
   - Stops an active sprint run
+- `GET /api/projects/:projectId/quicksprints/templates`
+  - Lists resolved quicksprint templates for the selected project
+- `GET /api/projects/:projectId/quicksprints/templates/:templateId`
+  - Gets one quicksprint template
+- `POST /api/projects/:projectId/quicksprints/templates`
+  - Creates a new custom project quicksprint template
+- `PATCH /api/projects/:projectId/quicksprints/templates/:templateId`
+  - Updates a quicksprint template
+- `DELETE /api/projects/:projectId/quicksprints/templates/:templateId`
+  - Deletes or hides a quicksprint template
+- `POST /api/projects/:projectId/quicksprints/execute`
+  - Plans and starts a quicksprint directly
 
 ## UI Sections
 
