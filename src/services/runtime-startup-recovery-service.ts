@@ -8,7 +8,7 @@ import type {
   RestartInvocationPolicy,
   RestartSprintPolicy,
 } from "../contracts/app-types.js";
-import type { ExecutionInvocationRecord, ProviderInvocationUsageRecord, TaskDispatchStatus, TaskRunRecord } from "../contracts/execution-types.js";
+import type { ExecutionInvocationRecord, ProviderInvocationUsageRecord, TaskDispatchRecord, TaskDispatchStatus, TaskRunRecord } from "../contracts/execution-types.js";
 import type { ExecutionRepository } from "../repositories/execution-repository.js";
 import type { ProjectManagementRepository } from "../repositories/project-management-repository.js";
 import type { QaReviewRepository } from "../repositories/qa-review-repository.js";
@@ -30,6 +30,7 @@ const TERMINAL_TASK_RUN_STATES = new Set(["COMPLETED", "FAILED", "BLOCKED", "QUO
 const TERMINAL_SPRINT_RUN_STATUSES = new Set(["completed", "failed", "cancelled"]);
 const ACTIVE_TASK_RUN_STATES = ["PENDING", "RUNNING", "PAUSED"] as const;
 const TASK_CODING_INVOCATION_TYPES = ["task_coding", "cli_task_coding", "cli_task_followup"] as const;
+const TERMINAL_PROVIDER_INVOCATION_STATUSES = new Set(["completed", "failed", "cancelled"]);
 const CLI_PROVIDERS = new Set<ProviderId>(["gemini", "codex", "claude-code", "qwen-code", "opencode", "antigravity"]);
 const DURABLE_REMOTE_PROVIDERS = new Set(["jules"]);
 const QA_RUN_START_TIMEOUT_MS = 60_000;
@@ -59,6 +60,7 @@ export interface RuntimeStartupRecoveryResult {
   reconciledStructuredInvocationIds: string[];
   reconciledTaskCodingInvocationIds: string[];
   reconciledTaskCodingProviderIds: string[];
+  reconciledTerminalProviderDispatchIds: string[];
   reconciledTerminalDispatchIds: string[];
   rehydratedSprintRunIds: string[];
   reconciledTaskRunIds: string[];
@@ -69,6 +71,8 @@ export interface RuntimeStartupRecoveryResult {
   restartPolicyPausedSprintRunIds: string[];
   restartPolicyCancelledSprintRunIds: string[];
   restartPolicySyncedPausedSprintIds: string[];
+  restartPolicySyncedOrphanedSprintIds: string[];
+  reconciledDuplicateDispatchIds: string[];
 }
 
 interface RuntimeStartupRecoveryServiceDeps {
@@ -128,9 +132,12 @@ export class RuntimeStartupRecoveryService {
     const demotedPrematureMergeConflictEscalationIds = this.demotePrematureMergeConflictEscalations();
     const reconciledStructuredInvocationIds = await invocationRecovery.reconcileInterruptedStructuredInvocations(activeContainerSessionIds);
     const rehydratedSprintRunIds = this.rehydrateDurableProviderSprintRuns();
+    const restartPolicySyncedOrphanedSprintIds = this.syncOrphanedRunningSprintProjections();
     const reconciledTaskCodingInvocationIds = await invocationRecovery.reconcileInterruptedTaskCodingInvocations(activeContainerSessionIds);
     const reconciledTaskCodingProviderIds = invocationRecovery.reconcileOrphanedTaskCodingProviderInvocations();
+    const reconciledTerminalProviderDispatchIds = this.reconcileTerminalProviderBackedDispatches();
     const reconciledTerminalDispatchIds = this.reconcileTerminalTaskRunDispatches();
+    const reconciledDuplicateDispatchIds = this.reconcileDuplicateActiveTaskDispatches();
     const reconciledTaskRunIds = this.reconcileInterruptedTaskRuns();
     const reconciledPausedSprintRunIds = this.reconcileStalePausedSprintRuns();
     const { resumedSprintRunIds, supersededSprintRunIds } = restartPolicies.sprintPolicy === "continue"
@@ -149,11 +156,14 @@ export class RuntimeStartupRecoveryService {
       || reconciledStructuredInvocationIds.length > 0
       || reconciledTaskCodingInvocationIds.length > 0
       || reconciledTaskCodingProviderIds.length > 0
+      || reconciledTerminalProviderDispatchIds.length > 0
       || reconciledTerminalDispatchIds.length > 0
+      || reconciledDuplicateDispatchIds.length > 0
       || rehydratedSprintRunIds.length > 0
       || reconciledTaskRunIds.length > 0
       || reconciledPausedSprintRunIds.length > 0
       || restartPolicySyncedPausedSprintIds.length > 0
+      || restartPolicySyncedOrphanedSprintIds.length > 0
       || restartPolicyResult.pausedSprintRunIds.length > 0
       || restartPolicyResult.cancelledSprintRunIds.length > 0
       || resumedSprintRunIds.length > 0
@@ -171,11 +181,14 @@ export class RuntimeStartupRecoveryService {
         reconciledStructuredInvocations: reconciledStructuredInvocationIds.length,
         reconciledTaskCodingInvocations: reconciledTaskCodingInvocationIds.length,
         reconciledTaskCodingProviders: reconciledTaskCodingProviderIds.length,
+        reconciledTerminalProviderDispatches: reconciledTerminalProviderDispatchIds.length,
         reconciledTerminalDispatches: reconciledTerminalDispatchIds.length,
+        reconciledDuplicateDispatches: reconciledDuplicateDispatchIds.length,
         rehydratedSprintRuns: rehydratedSprintRunIds.length,
         reconciledTaskRuns: reconciledTaskRunIds.length,
         reconciledPausedSprintRuns: reconciledPausedSprintRunIds.length,
         restartPolicySyncedPausedSprints: restartPolicySyncedPausedSprintIds.length,
+        restartPolicySyncedOrphanedSprints: restartPolicySyncedOrphanedSprintIds.length,
         restartPolicyPausedSprintRuns: restartPolicyResult.pausedSprintRunIds.length,
         restartPolicyCancelledSprintRuns: restartPolicyResult.cancelledSprintRunIds.length,
         resumedSprintRuns: resumedSprintRunIds.length,
@@ -195,11 +208,14 @@ export class RuntimeStartupRecoveryService {
       reconciledStructuredInvocationIds,
       reconciledTaskCodingInvocationIds,
       reconciledTaskCodingProviderIds,
+      reconciledTerminalProviderDispatchIds,
       reconciledTerminalDispatchIds,
       rehydratedSprintRunIds,
       reconciledTaskRunIds,
       reconciledPausedSprintRunIds,
       restartPolicySyncedPausedSprintIds,
+      restartPolicySyncedOrphanedSprintIds,
+      reconciledDuplicateDispatchIds,
       restartPolicyPausedSprintRunIds: restartPolicyResult.pausedSprintRunIds,
       restartPolicyCancelledSprintRunIds: restartPolicyResult.cancelledSprintRunIds,
       resumedSprintRunIds,
@@ -527,9 +543,7 @@ export class RuntimeStartupRecoveryService {
       });
 
       if (resolution.resetTaskToPending) {
-        this.deps.projectManagementRepository.updateTask(taskRun.taskId, {
-          status: "pending",
-        });
+        this.resetTaskToPending(taskRun.taskId);
       }
 
       reconciledTaskRunIds.push(taskRun.id);
@@ -609,6 +623,91 @@ export class RuntimeStartupRecoveryService {
       }, {
         sourceEventKey: `startup-recovery:terminal-dispatch:${dispatch.id}:${taskRun.state}`,
       });
+      reconciledDispatchIds.push(dispatch.id);
+    }
+
+    return reconciledDispatchIds;
+  }
+
+  private reconcileTerminalProviderBackedDispatches(): string[] {
+    const activeDispatches = this.deps.executionRepository.listTaskDispatchesByStatus([...ACTIVE_DISPATCH_STATUSES]);
+    if (activeDispatches.length === 0) {
+      return [];
+    }
+
+    const reconciledAt = new Date().toISOString();
+    const reconciledDispatchIds: string[] = [];
+
+    for (const dispatch of activeDispatches) {
+      const taskRun = this.deps.executionRepository.getTaskRunByDispatchId(dispatch.id);
+      if (!taskRun || isTerminalTaskRunState(taskRun)) {
+        continue;
+      }
+
+      const linkedProviderInvocations = this.deps.executionRepository
+        .listProviderInvocationsForTask(dispatch.projectId, dispatch.taskId)
+        .filter((invocation) => (
+          TASK_CODING_INVOCATION_TYPES.includes(invocation.purpose as typeof TASK_CODING_INVOCATION_TYPES[number])
+          && (invocation.dispatchId === dispatch.id || invocation.taskRunId === taskRun.id)
+        ));
+      if (
+        linkedProviderInvocations.length === 0
+        || linkedProviderInvocations.some((invocation) => invocation.status === "running")
+      ) {
+        continue;
+      }
+
+      const terminalProviderInvocation = linkedProviderInvocations
+        .filter((invocation) => TERMINAL_PROVIDER_INVOCATION_STATUSES.has(invocation.status))
+        .sort((left, right) => this.providerInvocationActivityMs(right) - this.providerInvocationActivityMs(left))[0];
+      if (!terminalProviderInvocation) {
+        continue;
+      }
+
+      const task = this.deps.projectManagementRepository.getTask(dispatch.taskId);
+      const taskAlreadyCodeComplete = task?.status === "coding_completed" || task?.status === "completed";
+      const providerCompletedSettledTask = terminalProviderInvocation.status === "completed" && taskAlreadyCodeComplete;
+      const nextDispatchStatus: TaskDispatchStatus = providerCompletedSettledTask
+        ? "completed"
+        : terminalProviderInvocation.status === "cancelled"
+          ? "cancelled"
+          : "failed";
+      const nextTaskRunState: TaskRunRecord["state"] = providerCompletedSettledTask ? "COMPLETED" : "FAILED";
+      const errorMessage = providerCompletedSettledTask
+        ? null
+        : `Startup recovery closed active dispatch after linked provider invocation ended as ${terminalProviderInvocation.status}.`;
+
+      this.deps.executionRepository.releaseLease("task_dispatch", dispatch.id);
+      this.deps.executionRepository.updateTaskDispatch(dispatch.id, {
+        connectionId: null,
+        status: nextDispatchStatus,
+        startedAt: dispatch.startedAt || taskRun.startedAt || terminalProviderInvocation.startedAt || reconciledAt,
+        finishedAt: dispatch.finishedAt || taskRun.finishedAt || terminalProviderInvocation.finishedAt || reconciledAt,
+        lastHeartbeatAt: reconciledAt,
+        errorMessage,
+      });
+      this.deps.executionRepository.updateTaskRun(taskRun.id, {
+        connectionId: null,
+        state: nextTaskRunState,
+        finishedAt: taskRun.finishedAt || terminalProviderInvocation.finishedAt || reconciledAt,
+        durationMs: calculateDurationMs(taskRun, terminalProviderInvocation.finishedAt || reconciledAt),
+      });
+      this.deps.executionRepository.appendTaskRunEvent(taskRun.id, "task_dispatch_reconciled", "system", {
+        reason: "terminal_provider_active_dispatch_mismatch",
+        providerInvocationId: terminalProviderInvocation.id,
+        providerStatus: terminalProviderInvocation.status,
+        previousDispatchStatus: dispatch.status,
+        nextDispatchStatus,
+        previousTaskRunState: taskRun.state,
+        nextTaskRunState,
+      }, {
+        sourceEventKey: `startup-recovery:terminal-provider-dispatch:${dispatch.id}:${terminalProviderInvocation.id}`,
+      });
+
+      if (!providerCompletedSettledTask && task?.status === "in_progress") {
+        this.resetTaskToPending(dispatch.taskId);
+      }
+
       reconciledDispatchIds.push(dispatch.id);
     }
 
@@ -912,9 +1011,13 @@ export class RuntimeStartupRecoveryService {
         });
       }
 
-      this.deps.projectManagementRepository.updateTask(dispatch.taskId, {
-        status: retryTask ? "pending" : "QA_REVIEW_FAILED",
-      });
+      if (retryTask) {
+        this.resetTaskToPending(dispatch.taskId);
+      } else {
+        this.deps.projectManagementRepository.updateTask(dispatch.taskId, {
+          status: "QA_REVIEW_FAILED",
+        });
+      }
 
       if (dispatch.sprintRunId) {
         this.deps.sprintRunLifecycleService.finalizeCancellationIfIdle(dispatch.sprintRunId);
@@ -980,9 +1083,13 @@ export class RuntimeStartupRecoveryService {
       }, {
         sourceEventKey: `startup-recovery:jules-pre-session:${dispatch.id}:${taskRun.id}`,
       });
-      this.deps.projectManagementRepository.updateTask(dispatch.taskId, {
-        status: retryTask ? "pending" : "QA_REVIEW_FAILED",
-      });
+      if (retryTask) {
+        this.resetTaskToPending(dispatch.taskId);
+      } else {
+        this.deps.projectManagementRepository.updateTask(dispatch.taskId, {
+          status: "QA_REVIEW_FAILED",
+        });
+      }
 
       if (dispatch.sprintRunId) {
         this.deps.sprintRunLifecycleService.finalizeCancellationIfIdle(dispatch.sprintRunId);
@@ -1017,6 +1124,152 @@ export class RuntimeStartupRecoveryService {
     }
 
     return syncedSprintIds;
+  }
+
+  private syncOrphanedRunningSprintProjections(): string[] {
+    const activeRuns = this.deps.executionRepository.listSprintRunsByStatus([...ACTIVE_SPRINT_RUN_STATUSES, "cancel_requested"]);
+    const activeSprintIds = new Set(activeRuns.map((run) => run.sprintId));
+    const syncedSprintIds: string[] = [];
+
+    for (const project of this.deps.projectManagementRepository.listProjects().projects) {
+      for (const sprint of this.deps.projectManagementRepository.listSprints(project.id).sprints) {
+        const rawStatus = this.deps.projectManagementRepository.getRawSprintStatus(sprint.id);
+        if (rawStatus !== "running" || activeSprintIds.has(sprint.id)) {
+          continue;
+        }
+
+        const latestRun = this.deps.executionRepository.listSprintRuns(project.id, sprint.id)[0];
+        if (!latestRun) {
+          this.deps.projectManagementRepository.updateSprint(sprint.id, { status: "idle" });
+          syncedSprintIds.push(sprint.id);
+          continue;
+        }
+
+        if (latestRun.status === "paused") {
+          this.deps.projectManagementRepository.updateSprint(sprint.id, { status: "paused" });
+          syncedSprintIds.push(sprint.id);
+          continue;
+        }
+
+        if (TERMINAL_SPRINT_RUN_STATUSES.has(latestRun.status)) {
+          this.deps.sprintRunLifecycleService.syncSprintStatus(sprint.id, latestRun.status);
+          syncedSprintIds.push(sprint.id);
+        }
+      }
+    }
+
+    return syncedSprintIds;
+  }
+
+  private reconcileDuplicateActiveTaskDispatches(): string[] {
+    const activeDispatches = this.deps.executionRepository.listTaskDispatchesByStatus([...ACTIVE_DISPATCH_STATUSES]);
+    if (activeDispatches.length === 0) {
+      return [];
+    }
+
+    const groupedByTaskRun = new Map<string, TaskDispatchRecord[]>();
+    for (const dispatch of activeDispatches) {
+      const key = `${dispatch.sprintRunId}:${dispatch.taskId}`;
+      const entries = groupedByTaskRun.get(key) || [];
+      entries.push(dispatch);
+      groupedByTaskRun.set(key, entries);
+    }
+
+    const reconciledAt = new Date().toISOString();
+    const reconciledDispatchIds: string[] = [];
+    for (const dispatches of groupedByTaskRun.values()) {
+      if (dispatches.length < 2) {
+        continue;
+      }
+
+      const [keeper, ...duplicates] = dispatches.sort((left, right) => (
+        this.dispatchActivityMs(right) - this.dispatchActivityMs(left)
+      ));
+      for (const duplicate of duplicates) {
+        const taskRun = this.deps.executionRepository.getTaskRunByDispatchId(duplicate.id);
+        this.deps.executionRepository.releaseLease("task_dispatch", duplicate.id);
+        this.deps.executionRepository.updateTaskDispatch(duplicate.id, {
+          connectionId: null,
+          status: "cancelled",
+          finishedAt: reconciledAt,
+          lastHeartbeatAt: reconciledAt,
+          errorMessage: "Startup recovery cancelled duplicate active task dispatch; a newer dispatch for the same task and sprint run is still active.",
+        });
+
+        if (taskRun && !isTerminalTaskRunState(taskRun)) {
+          this.deps.executionRepository.updateTaskRun(taskRun.id, {
+            connectionId: null,
+            state: "BLOCKED",
+            finishedAt: reconciledAt,
+            durationMs: calculateDurationMs(taskRun, reconciledAt),
+          });
+          this.deps.executionRepository.appendTaskRunEvent(taskRun.id, "duplicate_dispatch_cancelled", "system", {
+            dispatchId: duplicate.id,
+            keptDispatchId: keeper.id,
+            reason: "startup_duplicate_active_dispatch_reconcile",
+          }, {
+            sourceEventKey: `startup-recovery:duplicate-dispatch:${duplicate.id}:${taskRun.id}`,
+          });
+        }
+
+        for (const invocation of this.deps.executionRepository.listRunningProviderInvocationUsages()
+          .filter((usage) => usage.dispatchId === duplicate.id || usage.taskRunId === taskRun?.id)) {
+          cancelStaleProviderInvocation(
+            this.deps.executionRepository,
+            invocation,
+            this.deps.executionRepository.listExecutionInvocationsByProviderInvocationId(invocation.id),
+            {
+              reconciledAt,
+              recoveryReason: "startup_duplicate_active_dispatch_reconcile",
+              systemMessage: "Startup recovery cancelled duplicate active task dispatch; a newer dispatch for the same task and sprint run is still active.",
+            },
+          );
+        }
+
+        reconciledDispatchIds.push(duplicate.id);
+      }
+    }
+
+    return reconciledDispatchIds;
+  }
+
+  private dispatchActivityMs(dispatch: TaskDispatchRecord): number {
+    const candidates = [
+      dispatch.startedAt,
+      dispatch.claimedAt,
+      dispatch.lastHeartbeatAt,
+      dispatch.queuedAt,
+      dispatch.createdAt,
+    ];
+    for (const candidate of candidates) {
+      if (!candidate) {
+        continue;
+      }
+      const parsed = Date.parse(candidate);
+      if (Number.isFinite(parsed)) {
+        return parsed;
+      }
+    }
+    return 0;
+  }
+
+  private providerInvocationActivityMs(invocation: ProviderInvocationUsageRecord): number {
+    const candidates = [
+      invocation.finishedAt,
+      invocation.updatedAt,
+      invocation.startedAt,
+      invocation.createdAt,
+    ];
+    for (const candidate of candidates) {
+      if (!candidate) {
+        continue;
+      }
+      const parsed = Date.parse(candidate);
+      if (Number.isFinite(parsed)) {
+        return parsed;
+      }
+    }
+    return 0;
   }
 
   private applyRestartSprintPolicy(policy: RestartSprintPolicy): {
@@ -1372,9 +1625,13 @@ export class RuntimeStartupRecoveryService {
       }
     }
 
-    this.deps.projectManagementRepository.updateTask(invocation.taskId, {
-      status: retryTask ? "pending" : "QA_REVIEW_FAILED",
-    });
+    if (retryTask) {
+      this.resetTaskToPending(invocation.taskId);
+    } else {
+      this.deps.projectManagementRepository.updateTask(invocation.taskId, {
+        status: "QA_REVIEW_FAILED",
+      });
+    }
 
     if (invocation.sprintRunId) {
       this.deps.sprintRunLifecycleService.finalizeCancellationIfIdle(invocation.sprintRunId);
@@ -1434,9 +1691,13 @@ export class RuntimeStartupRecoveryService {
       }
     }
 
-    this.deps.projectManagementRepository.updateTask(invocation.taskId, {
-      status: retryTask ? "pending" : "QA_REVIEW_FAILED",
-    });
+    if (retryTask) {
+      this.resetTaskToPending(invocation.taskId);
+    } else {
+      this.deps.projectManagementRepository.updateTask(invocation.taskId, {
+        status: "QA_REVIEW_FAILED",
+      });
+    }
 
     if (invocation.sprintRunId) {
       this.deps.sprintRunLifecycleService.finalizeCancellationIfIdle(invocation.sprintRunId);
@@ -1454,6 +1715,14 @@ export class RuntimeStartupRecoveryService {
       projectId: invocation.projectId,
       sprintId: invocation.sprintId,
     }).cliWorkflow.executionMode;
+  }
+
+  private resetTaskToPending(taskId: string): void {
+    this.deps.projectManagementRepository.updateTask(taskId, {
+      status: "pending",
+      mergeIndicator: null,
+      isMerged: false,
+    });
   }
 }
 

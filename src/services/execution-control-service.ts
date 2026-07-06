@@ -98,12 +98,14 @@ export class ExecutionControlService {
     return { ok: true };
   }
 
-  pauseSprintRun(sprintRunId: string): SprintRunRecord {
+  async pauseSprintRun(sprintRunId: string): Promise<SprintRunRecord> {
     const sprintRun = this.requireSprintRun(sprintRunId);
     if (sprintRun.status === "paused" || sprintRun.status === "cancelled" || sprintRun.status === "completed" || sprintRun.status === "failed" || sprintRun.status === "cancel_requested") {
       return sprintRun;
     }
     const now = new Date().toISOString();
+    await this.cancelRunningProviderInvocationsForSprintRun(sprintRun, now, "Sprint run was paused from the dashboard.");
+    await this.pauseActiveDispatchesForSprintRun(sprintRun, now, "Sprint run was paused from the dashboard.");
     const updated = this.deps.sprintRunLifecycleService.updateRun(sprintRunId, {
       status: "paused",
       lastHeartbeatAt: now,
@@ -115,6 +117,58 @@ export class ExecutionControlService {
       sourceEventKey: `dashboard-pause:${sprintRunId}`,
     });
     return updated;
+  }
+
+  private async pauseActiveDispatchesForSprintRun(sprintRun: SprintRunRecord, now: string, message: string): Promise<void> {
+    for (const dispatch of this.deps.executionRepository.listTaskDispatches({
+      projectId: sprintRun.projectId,
+      sprintRunId: sprintRun.id,
+    })) {
+      if (!ACTIVE_DISPATCH_STATUSES.has(dispatch.status)) {
+        continue;
+      }
+
+      if ((dispatch.status === "running" || dispatch.status === "cancel_requested") && dispatch.executorType === "docker_cli") {
+        await this.deps.activeDispatchRegistry.requestStop(dispatch.id, message).catch(() => undefined);
+      }
+      if ((dispatch.status === "running" || dispatch.status === "cancel_requested") && dispatch.executorType === "jules") {
+        const taskRun = this.deps.executionRepository.getTaskRunByDispatchId(dispatch.id);
+        if (taskRun?.sessionId) {
+          await this.deps.julesApi.sendSessionMessage(
+            taskRun.sessionId,
+            "Sprint paused. Please halt this task until the sprint is resumed.",
+          ).catch(() => undefined);
+        }
+      }
+
+      this.deps.executionRepository.releaseLease("task_dispatch", dispatch.id);
+      this.deps.executionRepository.updateTaskDispatch(dispatch.id, {
+        connectionId: null,
+        status: "paused",
+        finishedAt: null,
+        lastHeartbeatAt: now,
+        errorMessage: null,
+      });
+
+      const taskRun = this.deps.executionRepository.getTaskRunByDispatchId(dispatch.id);
+      if (taskRun && taskRun.state !== "COMPLETED" && taskRun.state !== "FAILED" && taskRun.state !== "BLOCKED" && taskRun.state !== "QUOTA") {
+        this.deps.executionRepository.updateTaskRun(taskRun.id, {
+          connectionId: null,
+          state: "PAUSED",
+          finishedAt: null,
+          durationMs: taskRun.durationMs,
+        });
+        this.deps.executionRepository.appendTaskRunEvent(taskRun.id, "dispatch_paused", "user", {
+          dispatchId: dispatch.id,
+          requestedBy: "dashboard",
+          reason: message,
+        }, {
+          sourceEventKey: `dashboard-sprint-pause:${dispatch.id}`,
+        });
+      }
+
+      this.resetTaskToPending(dispatch.taskId);
+    }
   }
 
   async resumeSprintRun(sprintRunId: string): Promise<SprintRunRecord> {
@@ -139,6 +193,7 @@ export class ExecutionControlService {
 
     const now = new Date().toISOString();
     this.deps.sprintRunLifecycleService.releaseSprintLease(sprintRun.sprintId);
+    const hadActiveOrchestrator = this.deps.sprintOrchestrator.isOrchestratingSprint?.(sprintRun.projectId, sprintRun.sprintId) ?? false;
     const resumedRun = this.deps.sprintRunLifecycleService.updateRun(sprintRunId, {
       status: "running",
       startedAt: sprintRun.startedAt ?? now,
@@ -148,14 +203,12 @@ export class ExecutionControlService {
 
     this.deps.sprintOrchestrator.setConsecutiveFailures(0);
     this.reapRecomputedSprintAttention(sprintRun.projectId, sprintRun.sprintId);
-    void this.deps.sprintOrchestrator.recoverSprintRun(sprintRunId).catch((error) => {
-      this.deps.logger?.error("Dashboard-triggered sprint resume failed", {
-        projectId: sprintRun.projectId,
-        sprintId: sprintRun.sprintId,
-        sprintRunId,
-        error: error instanceof Error ? error.message : String(error),
-      });
-    });
+    this.recoverSprintRunAfterResume(sprintRun, sprintRunId);
+    if (hadActiveOrchestrator) {
+      setTimeout(() => {
+        this.recoverSprintRunAfterResume(sprintRun, sprintRunId);
+      }, 2_000).unref?.();
+    }
 
     return resumedRun;
   }
@@ -324,9 +377,7 @@ export class ExecutionControlService {
         });
       }
 
-      this.deps.projectManagementRepository.updateTask(dispatch.taskId, {
-        status: "pending",
-      });
+      this.resetTaskToPending(dispatch.taskId);
     }
   }
 
@@ -517,9 +568,7 @@ export class ExecutionControlService {
       });
     }
 
-    this.deps.projectManagementRepository.updateTask(dispatch.taskId, {
-      status: "pending",
-    });
+    this.resetTaskToPending(dispatch.taskId);
 
     return updated;
   }
@@ -585,9 +634,7 @@ export class ExecutionControlService {
         sourceEventKey: `dashboard-dispatch-cancel:${dispatch.id}`,
       });
     }
-    this.deps.projectManagementRepository.updateTask(dispatch.taskId, {
-      status: "pending",
-    });
+    this.resetTaskToPending(dispatch.taskId);
     return updated;
   }
 
@@ -703,9 +750,7 @@ export class ExecutionControlService {
       });
     }
 
-    this.deps.projectManagementRepository.updateTask(dispatch.taskId, {
-      status: "pending",
-    });
+    this.resetTaskToPending(dispatch.taskId);
 
     if (dispatch.sprintRunId) {
       this.deps.sprintRunLifecycleService.finalizeCancellationIfIdle(dispatch.sprintRunId);
@@ -762,6 +807,25 @@ export class ExecutionControlService {
       return null;
     }
     return Math.max(0, finishedAtMs - startedAtMs);
+  }
+
+  private resetTaskToPending(taskId: string): void {
+    this.deps.projectManagementRepository.updateTask(taskId, {
+      status: "pending",
+      mergeIndicator: null,
+      isMerged: false,
+    });
+  }
+
+  private recoverSprintRunAfterResume(sprintRun: SprintRunRecord, sprintRunId: string): void {
+    void this.deps.sprintOrchestrator.recoverSprintRun(sprintRunId).catch((error) => {
+      this.deps.logger?.error("Dashboard-triggered sprint resume failed", {
+        projectId: sprintRun.projectId,
+        sprintId: sprintRun.sprintId,
+        sprintRunId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    });
   }
 
   private resolveBlockingSprintRun(projectId: string, sprintId: string): SprintRunRecord | null {

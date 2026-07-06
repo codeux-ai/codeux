@@ -275,7 +275,7 @@ export class SprintActions {
       }
       case "pause": {
         const sprintRunId = readRequiredString(payload, "sprintRunId");
-        const result = this.deps.executionControlService.pauseSprintRun(sprintRunId);
+        const result = await this.deps.executionControlService.pauseSprintRun(sprintRunId);
         return { result };
       }
       case "cancel": {

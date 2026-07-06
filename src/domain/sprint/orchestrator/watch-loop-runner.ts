@@ -716,6 +716,31 @@ export class WatchLoopRunner {
         }
 
         if (githubMode === "LOCAL") {
+          if (activeMainMergeAttentionItems.length > 0) {
+            const humanMustAct = activeMainMergeAttentionItems.some((item) => isHumanEscalatedAttentionItem(item));
+            if (!humanMustAct) {
+              return {
+                status: "wait",
+                report: report + `- ⏳ **Local Merge Conflict:** Existing main-merge attention is still assigned to a worker for \`${defaultFeatureBranch}\` → \`${defaultBranch}\`. Sprint remains active.\n`,
+              };
+            }
+
+            this.deps.sprintRunLifecycleService.transition({
+              sprintRunId,
+              status: "paused",
+              eventType: "sprint_paused",
+              eventPayload: {
+                reason: "main_merge_blocked",
+                message: `Local merge conflict merging ${defaultFeatureBranch} into ${defaultBranch} still requires human attention.`,
+              },
+              sourceEventKey: `sprint-paused:${sprintRunId}:local-main-merge-attention-active`,
+            });
+            return {
+              status: "exit",
+              report: report + `- ⏸️ **Local Merge Conflict:** Existing main-merge attention requires a human before \`${defaultFeatureBranch}\` can merge into \`${defaultBranch}\`. Resolve conflicts locally.\n`,
+            };
+          }
+
           this.deps.logger.info(`LOCAL Mode: Merging feature branch ${defaultFeatureBranch} into default branch ${defaultBranch}`);
           let mainMerge: LocalMergeResult = {
             ok: false,

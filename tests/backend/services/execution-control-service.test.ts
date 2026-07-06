@@ -319,7 +319,7 @@ describe("ExecutionControlService", () => {
       expiresAt: new Date(Date.now() + 60_000).toISOString(),
     });
 
-    const paused = service.pauseSprintRun(sprintRun.id);
+    const paused = await service.pauseSprintRun(sprintRun.id);
 
     expect(paused.status).toBe("paused");
     expect(executionRepository.getLease("sprint", sprint.id)).toBeNull();

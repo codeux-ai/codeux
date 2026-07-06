@@ -270,6 +270,101 @@ describe("RuntimeStartupRecoveryService", () => {
     expect(executionRepository.listTaskRunEvents(taskRun.id).map((event) => event.eventType)).toContain("task_dispatch_reconciled");
   });
 
+  it("requeues an active task dispatch when its linked provider invocation already failed", async () => {
+    const {
+      projectRepository,
+      executionRepository,
+      service,
+    } = await createFixture({
+      dockerService: {
+        listContainers: async () => [
+          { id: "container-terminal-provider", labels: { "code-ux.session-id": "session-terminal-provider" } },
+        ],
+      },
+    });
+
+    const project = projectRepository.createProject({
+      name: "Terminal Provider Dispatch Recovery Project",
+      sourceType: "local",
+      sourceRef: "/workspace/terminal-provider-dispatch-recovery",
+    });
+    const sprint = projectRepository.createSprint(project.id, {
+      name: "Terminal Provider Dispatch Recovery Sprint",
+      number: 8,
+      status: "running",
+    });
+    const task = projectRepository.createTask(project.id, {
+      sprintId: sprint.id,
+      taskKey: "T08",
+      title: "Task with terminal provider but active dispatch",
+      status: "in_progress",
+    });
+    const sprintRun = executionRepository.createSprintRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      executorMode: "docker_cli",
+      status: "running",
+      lastHeartbeatAt: "2026-07-02T10:00:00.000Z",
+    });
+    const dispatch = executionRepository.createTaskDispatch({
+      projectId: project.id,
+      sprintId: sprint.id,
+      sprintRunId: sprintRun.id,
+      taskId: task.id,
+      executorType: "docker_cli",
+      status: "running",
+      startedAt: "2026-07-02T10:00:00.000Z",
+      lastHeartbeatAt: "2026-07-02T10:05:00.000Z",
+    } as any);
+    const taskRun = executionRepository.createTaskRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      sprintRunId: sprintRun.id,
+      taskId: task.id,
+      dispatchId: dispatch.id,
+      provider: "qwen-code",
+      mode: "docker_cli",
+      sessionId: "session-terminal-provider",
+      state: "RUNNING",
+      startedAt: "2026-07-02T10:00:00.000Z",
+    });
+    const providerInvocation = executionRepository.createProviderInvocationUsage({
+      projectId: project.id,
+      sprintId: sprint.id,
+      sprintRunId: sprintRun.id,
+      taskId: task.id,
+      dispatchId: dispatch.id,
+      taskRunId: taskRun.id,
+      sessionId: "session-terminal-provider",
+      provider: "qwen-code",
+      purpose: "task_coding",
+      status: "running",
+      startedAt: "2026-07-02T10:00:00.000Z",
+    });
+    executionRepository.updateProviderInvocationUsage(providerInvocation.id, {
+      status: "failed",
+      finishedAt: "2026-07-02T10:20:00.000Z",
+    });
+
+    const result = await service.recover();
+
+    expect(result.reconciledTerminalProviderDispatchIds).toEqual([dispatch.id]);
+    expect(executionRepository.getTaskDispatch(dispatch.id)).toMatchObject({
+      status: "failed",
+      errorMessage: expect.stringContaining("linked provider invocation ended as failed"),
+    });
+    expect(executionRepository.getTaskRun(taskRun.id)).toMatchObject({
+      state: "FAILED",
+      finishedAt: "2026-07-02T10:20:00.000Z",
+    });
+    expect(projectRepository.getTask(task.id)).toMatchObject({
+      status: "pending",
+      mergeIndicator: null,
+      isMerged: false,
+    });
+    expect(executionRepository.listTaskRunEvents(taskRun.id).map((event) => event.eventType)).toContain("task_dispatch_reconciled");
+  });
+
   it("cancels stale running QA review rows without provider runtime linkage on startup", async () => {
     const {
       projectRepository,
@@ -2554,5 +2649,141 @@ describe("RuntimeStartupRecoveryService", () => {
     expect(result.reconciledPausedSprintRunIds).toEqual([]);
     const updatedRun = executionRepository.getSprintRun(sprintRun.id);
     expect(updatedRun?.status).toBe("paused");
+  });
+
+  it("repairs orphaned running sprint projections without an active run", async () => {
+    const { projectRepository, service } = await createFixture();
+
+    const project = projectRepository.createProject({
+      name: "Orphaned Running Sprint Projection Project",
+      sourceType: "local",
+      sourceRef: "/workspace/orphaned-running-sprint-projection-project",
+    });
+    const sprint = projectRepository.createSprint(project.id, {
+      name: "Orphaned Running Projection",
+      number: 91,
+      status: "running",
+    });
+
+    const result = await service.recover();
+
+    expect(result.restartPolicySyncedOrphanedSprintIds).toEqual([sprint.id]);
+    expect(projectRepository.getRawSprintStatus(sprint.id)).toBe("idle");
+  });
+
+  it("cancels older duplicate active dispatches for the same task and sprint run", async () => {
+    const { projectRepository, executionRepository, service, recoverSprintRun } = await createFixture();
+
+    const project = projectRepository.createProject({
+      name: "Duplicate Dispatch Recovery Project",
+      sourceType: "local",
+      sourceRef: "/workspace/duplicate-dispatch-recovery-project",
+    });
+    const sprint = projectRepository.createSprint(project.id, {
+      name: "Duplicate Dispatch Recovery",
+      number: 92,
+      status: "running",
+    });
+    const task = projectRepository.createTask(project.id, {
+      sprintId: sprint.id,
+      title: "Keep exactly one active dispatch",
+      executorType: "jules",
+      status: "in_progress",
+    });
+    const sprintRun = executionRepository.createSprintRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      executorMode: "jules",
+      status: "running",
+    });
+    const olderDispatch = executionRepository.createTaskDispatch({
+      projectId: project.id,
+      sprintId: sprint.id,
+      sprintRunId: sprintRun.id,
+      taskId: task.id,
+      executorType: "jules",
+      status: "running",
+      queuedAt: "2026-07-06T10:00:00.000Z",
+    });
+    executionRepository.updateTaskDispatch(olderDispatch.id, {
+      startedAt: "2026-07-06T10:00:01.000Z",
+      lastHeartbeatAt: "2026-07-06T10:00:05.000Z",
+    });
+    const olderTaskRun = executionRepository.createTaskRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      sprintRunId: sprintRun.id,
+      taskId: task.id,
+      dispatchId: olderDispatch.id,
+      provider: "jules",
+      mode: "jules",
+      sessionId: "duplicate-older-session",
+      sessionName: "sessions/duplicate-older-session",
+      state: "RUNNING",
+      startedAt: "2026-07-06T10:00:01.000Z",
+    });
+    const olderInvocation = executionRepository.createProviderInvocationUsage({
+      projectId: project.id,
+      sprintId: sprint.id,
+      sprintRunId: sprintRun.id,
+      taskId: task.id,
+      taskRunId: olderTaskRun.id,
+      dispatchId: olderDispatch.id,
+      sessionId: "duplicate-older-session",
+      provider: "jules",
+      purpose: "task_coding",
+      status: "running",
+      startedAt: "2026-07-06T10:00:01.000Z",
+    });
+
+    const newerDispatch = executionRepository.createTaskDispatch({
+      projectId: project.id,
+      sprintId: sprint.id,
+      sprintRunId: sprintRun.id,
+      taskId: task.id,
+      executorType: "jules",
+      status: "running",
+      queuedAt: "2026-07-06T10:01:00.000Z",
+    });
+    executionRepository.updateTaskDispatch(newerDispatch.id, {
+      startedAt: "2026-07-06T10:01:01.000Z",
+      lastHeartbeatAt: "2026-07-06T10:01:05.000Z",
+    });
+    const newerTaskRun = executionRepository.createTaskRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      sprintRunId: sprintRun.id,
+      taskId: task.id,
+      dispatchId: newerDispatch.id,
+      provider: "jules",
+      mode: "jules",
+      sessionId: "duplicate-newer-session",
+      sessionName: "sessions/duplicate-newer-session",
+      state: "RUNNING",
+      startedAt: "2026-07-06T10:01:01.000Z",
+    });
+
+    const result = await service.recover();
+
+    expect(result.reconciledDuplicateDispatchIds).toEqual([olderDispatch.id]);
+    expect(result.resumedSprintRunIds).toEqual([sprintRun.id]);
+    expect(recoverSprintRun).toHaveBeenCalledWith(sprintRun.id);
+    expect(executionRepository.getTaskDispatch(olderDispatch.id)).toMatchObject({
+      status: "cancelled",
+      connectionId: null,
+    });
+    expect(executionRepository.getTaskRun(olderTaskRun.id)).toMatchObject({
+      state: "BLOCKED",
+      connectionId: null,
+    });
+    expect(executionRepository.getProviderInvocationUsage(olderInvocation.id)).toMatchObject({
+      status: "cancelled",
+    });
+    expect(executionRepository.getTaskDispatch(newerDispatch.id)).toMatchObject({
+      status: "running",
+    });
+    expect(executionRepository.getTaskRun(newerTaskRun.id)).toMatchObject({
+      state: "RUNNING",
+    });
   });
 });

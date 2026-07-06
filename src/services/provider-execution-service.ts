@@ -105,6 +105,8 @@ function isServerShutdownAbort(signal: AbortSignal | undefined): boolean {
   return isRuntimeShutdownInProgress() || Boolean(signal?.aborted && signal.reason === SERVER_SHUTDOWN_STOP_REASON);
 }
 
+const ACTIVE_TASK_DISPATCH_STATUSES = new Set(["queued", "claimed", "running", "cancel_requested", "paused"]);
+
 export interface ProviderExecutionServiceDeps {
   executionRepository?: ExecutionRepository;
   sessionTracking?: SessionTrackingRepository;
@@ -402,6 +404,7 @@ export class ProviderExecutionService {
               usageSource: telemetry.usageSource,
               rawUsageJson: telemetry.rawUsageJson || undefined,
             });
+            this.refreshLinkedDispatchHeartbeat(args.dispatchId);
             lastPersistedUsageSignature = usageSignature;
           }
 
@@ -733,5 +736,18 @@ export class ProviderExecutionService {
   private isExecutionInvocationStillRunning(executionInvocationId: string): boolean {
     const current = this.deps.executionRepository?.getExecutionInvocation?.(executionInvocationId);
     return !current || current.status === "running" || current.status === "paused";
+  }
+
+  private refreshLinkedDispatchHeartbeat(dispatchId: string | null | undefined): void {
+    if (!dispatchId || !this.deps.executionRepository) {
+      return;
+    }
+    const dispatch = this.deps.executionRepository.getTaskDispatch(dispatchId);
+    if (!dispatch || !ACTIVE_TASK_DISPATCH_STATUSES.has(dispatch.status)) {
+      return;
+    }
+    this.deps.executionRepository.updateTaskDispatch(dispatch.id, {
+      lastHeartbeatAt: new Date().toISOString(),
+    });
   }
 }

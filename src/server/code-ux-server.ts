@@ -1278,6 +1278,7 @@ export class CodeUxServer {
         projectWorkerAssignmentRepository: this.projectWorkerAssignmentRepository,
         projectWorkerAssignmentService: this.projectWorkerAssignmentService,
         projectAttentionRepository: this.projectAttentionRepository,
+        qaReviewRepository: this.qaReviewRepository,
         guardrailService: this.guardrailService,
         agentPresetRepository: this.agentPresetRepository,
         agentPresetSyncService: this.agentPresetSyncService,
