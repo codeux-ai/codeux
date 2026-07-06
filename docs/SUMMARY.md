@@ -79,7 +79,7 @@
 - [Operations Runbook](./operations/runbook.md)
 - [Security Hardening](./operations/security-hardening.md)
 - [Logging and Correlation IDs](./operations/logging-and-correlation.md)
-- [CLI Commands Reference](./reference/cli-commands.md) - `codeux` management syntax, aliases, prompting, JSON payloads, and approvals
+- [CLI Commands Reference](./reference/cli-commands.md) - `codeux` management syntax, aliases, flag coercions, startup behaviors, prompting, JSON payloads, and approvals
 - [CLI Management Surface](./operations/management-cli.md)
 - [Electron Desktop App](./deployment/electron-desktop.md)
 - [Glossary](./reference/glossary.md)
