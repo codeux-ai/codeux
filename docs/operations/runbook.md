@@ -36,8 +36,10 @@ If started without key:
 ### Dashboard and file access boundaries
 - Dashboard mutation requests to `/api/*`, `/health`, and `/ready` reject hostile browser origins. Treat `Sec-Fetch-Site: cross-site`, malformed `Origin`, cross-host `Origin`, malformed `Referer`, and cross-host `Referer` on mutations as blocked browser requests; CLI/API clients without browser origin headers remain allowed.
 - Local directory browsing only lists canonical paths inside the allowed local roots. Encoded traversal, Windows-style separator traversal, absolute paths outside the roots, and symlink escapes must not expose directory listings or leak requested paths in error responses.
-- Sprint file-browser file and diff reads accept normalized relative paths only. Encoded traversal, `..` traversal, Windows drive paths, and absolute paths are rejected before provider or Docker-backed file-browser dependencies are invoked.
-- MCP approval prompts are one-time, correlation-id-bound decisions. Expired, mismatched, duplicate, blank, or malformed correlation IDs must not return a pending approval.
+- Sprint file-browser file and diff reads accept normalized relative paths only. Encoded traversal, malformed percent encoding, `..` traversal, Windows drive paths, and absolute paths are rejected as malformed client input before provider or Docker-backed file-browser dependencies are invoked.
+- Provider login terminal requests reject provider configuration IDs with path separators, traversal sequences, absolute-path syntax, encoded separators, control characters, leading hyphens, or characters outside the filesystem-safe ID set before credential directories are removed, created, or copied.
+- Malformed dashboard route inputs should return client errors (`400`, `403`, or `404` depending on the failure). Unexpected server failures should return only `{ "error": "Internal Server Error" }` to callers while still flowing to Express error handling and structured logs.
+- MCP approval prompts are one-time, correlation-id-bound decisions. Expired, mismatched, duplicate, blank, or malformed correlation IDs must not return a pending approval, and destructive settings approvals are bound to the exact action and payload that was queued.
 - Structured logs and invocation output pass through redaction helpers before storage or display. Secret-like environment assignments, authorization headers, hosted Git tokens, and URL credentials should appear only as `[REDACTED]` in logs and provider output.
 
 ### Emergency stop
@@ -56,6 +58,20 @@ Provider concurrency is enforced globally across all projects using `ProviderSet
 - **Unlimited Mode**: Setting `maxConcurrentTasks` to `0` disables concurrency enforcement for that provider (unlimited).
 - **Terminal States**: Completed, failed, cancelled, or quota-wait terminal invocations do not count against the cap. Only 'running' invocations are counted.
 - **Abort Handling**: If a task dispatch is cancelled while waiting for a slot, the wait loop exits immediately without creating a stale running invocation record.
+
+### Provider invocation observability
+- Provider usage rows are the source of truth for runtime diagnostics. Confirm `provider_invocations` keeps the Code UX provider invocation id, Code UX session id, native provider session id, provider, purpose, status, model, execution mode, lifecycle timestamps, duration, token counters, transcript character count, tool-call count, usage source, invocation source, and raw-usage presence. Linked `execution_invocations` preserve the provider invocation id for cross-querying.
+- Structured invocation logs are metadata-only. They may include identifiers, lifecycle fields, counters, `failureCount`, `errorName`, and `correlationId`, but must not include raw transcripts, API keys, provider environment values, raw usage JSON, or full prompts.
+- Docker provider launches should expose only env-file and controlled mount paths in the host process arguments. Provider API keys, Git tokens, custom provider env values, and long prompts are written to temporary files or controlled mounts and should not appear in `docker run` argv or activity log metadata.
+- File logging has its own threshold. `DEBUG_LOG_FILE_LEVEL=debug` can persist debug-level provider diagnostics to `.code-ux/debug.log` even when console logging is filtered to `error`; use this only for focused diagnostics and keep the metadata-only rule in place.
+
+Focused validation:
+
+```bash
+pnpm run test:backend -- tests/backend/infrastructure/providers/cli/provider-runner.test.ts tests/backend/infrastructure/providers/cli/provider-execution-loop.test.ts tests/backend/infrastructure/providers/cli/provider-telemetry-watcher.test.ts tests/backend/infrastructure/providers/cli/docker-runner.test.ts tests/backend/infrastructure/providers/cli/workspace-manager.test.ts tests/backend/repositories/execution-repository.test.ts tests/backend/shared/logging/logger.test.ts
+pnpm run test:backend:coverage
+pnpm run lint
+```
 
 ## Common Incidents
 
@@ -332,7 +348,8 @@ curl http://localhost:4444/api/git-status
 
 GitHub validation is split by signal:
 - `CI` runs `Typecheck & Lint`, `Backend Tests & Coverage`, `Dashboard Tests`, `Build`, and `Security Audit` on Node 22 with pnpm 10.33.0. It runs on pushes to `main` and `dev`, and on pull requests targeting any branch.
-- `Playwright Tests` runs browser E2E validation on pushes and pull requests targeting `main` or `dev`. Release and publish workflows remain separate from CI/E2E validation.
+- `Playwright Tests` runs browser E2E validation on pushes and pull requests targeting `main`. This keeps the heavyweight OS-matrix lane on the release path while `dev` remains gated by core CI. Release and publish workflows remain separate from CI/E2E validation.
+- `Release Checks` runs no-secret release validation on pull requests targeting `main` and manual dispatches. It remains separate from core CI and Playwright so desktop packaging or release-install failures do not hide test, audit, or browser failures.
 - Superseded runs for the same branch or pull request are cancelled by workflow concurrency groups.
 
 Local equivalents:
@@ -341,13 +358,15 @@ Local equivalents:
 - `pnpm run test:dashboard` mirrors the dashboard Vitest job.
 - `pnpm run audit` mirrors the independent security audit job.
 - `pnpm run build` validates the compiled server and dashboard bundle.
-- `pnpm exec playwright test` runs the browser E2E suite locally after dependencies and Playwright browsers are installed.
+- `pnpm run build` followed by `pnpm exec playwright test` runs the browser E2E suite locally against the compiled app after dependencies and Playwright browsers are installed.
+- `node scripts/verify-release-install.mjs` mirrors the release install smoke check before Electron packaging.
 
 Dependency and cache behavior:
 - CI restores `node_modules` only as a speed hint and still runs `pnpm install --frozen-lockfile --ignore-scripts` in every job.
-- Vitest, Vite, TypeScript, and Playwright browser caches are keyed to the Linux runner, Node 22, pnpm 10.33.0, and dependency/config files that affect the cached output.
-- Playwright always runs `pnpm exec playwright install chromium --with-deps` after restoring the browser cache so cached browser binaries cannot hide missing OS dependencies.
+- Vitest, Vite, TypeScript, Playwright browser, and release-check caches are keyed to the runner OS, Node 22, pnpm 10.33.0, and dependency/config files that affect the cached output.
+- Playwright restores the browser cache before running `pnpm exec playwright install chromium`; Linux runners also run `pnpm exec playwright install-deps chromium` so cached browser binaries cannot hide missing OS dependencies.
 - The Build and Playwright jobs do not cache `.cache/tsc`; those jobs must emit a fresh `dist/` tree for package output and the E2E web server.
+- `tests/backend/ci/workflow-health.test.ts` audits these workflow invariants so accidental drift in package manager version, Node version, install mode, cache keys, audit separation, concurrency cancellation, Playwright artifacts, or release-lane separation fails a focused backend test.
 
 Artifacts:
 - On Playwright failure, download the `playwright-artifacts` artifact from the workflow run. It contains `test-results/` traces/screenshots/videos when produced and `playwright-report/` for the HTML report.
