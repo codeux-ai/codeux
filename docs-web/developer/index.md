@@ -31,6 +31,3 @@ Unless explicitly marked `experimental` or `deprecated`, every contract document
 - The `preview` management domain (interface may evolve as Docker tooling matures).
 - The `WORKER` invocation routing profile.
 
-Deprecated surfaces:
-
-- The unified `manage_code_ux` tool — use the per-domain `manage_*` tools instead.

@@ -1,9 +1,9 @@
 # Code UX Documentation
 
-> **Code UX** is an open-source, container-first agentic coding runtime. It turns a goal into a
+> **Code UX** is a local-first, container-first multi-provider runtime. It turns a goal into a
 > managed sprint — planned, routed to the right agent, executed in isolated Docker workspaces,
-> reviewed through Git and CI, and tracked in a live local dashboard — across Jules, Claude Code,
-> Codex, Gemini, Qwen Code, OpenCode, and Antigravity.
+> reviewed through Git and CI, and tracked in a live local dashboard — across hosted providers (like Jules)
+> and local CLI/Docker providers (like Gemini, Codex, Claude Code, Qwen Code, OpenCode, and Antigravity).
 
 This site is the canonical reference for installing, operating, integrating, and extending Code UX.
 
