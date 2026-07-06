@@ -3,12 +3,13 @@
 /** @jsxFrag Fragment */
 import { h, Fragment } from "preact";
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, waitFor, fireEvent } from "@testing-library/preact";
+import { cleanup, render, screen, waitFor, fireEvent } from "@testing-library/preact";
 import * as matchers from "@testing-library/jest-dom/matchers";
 import { SettingsPage } from "../../../dashboard/src/v2/SettingsPage.js";
 import { useProjectData } from "../../../dashboard/src/v2/context/project-data.js";
 import { fetchSystemSettings, saveSystemSettings, saveProjectSettings, resetProjectSettings, fetchProjectEffectiveSettings } from "../../../dashboard/src/v2/lib/settings-api.js";
 import { fetchAgentPresets } from "../../../dashboard/src/v2/lib/agent-preset-api.js";
+import { fetchLocalFiles } from "../../../dashboard/src/v2/lib/project-api.js";
 import { fetchExternalSettingsHints } from "../../../dashboard/src/lib/api/dashboard-api.js";
 import { DEFAULT_DASHBOARD_SETTINGS } from "../../../src/repositories/settings-defaults.js";
 
@@ -39,6 +40,7 @@ vi.mock("../../../dashboard/src/v2/components/settings/SettingsCategoryRail.js",
   const categories = [
     { id: "general", num: "01", label: "General", icon, description: "General settings" },
     { id: "agents", num: "06", label: "Agents", icon, description: "Agent settings" },
+    { id: "mcp", num: "09", label: "MCP", icon, description: "MCP settings" },
   ];
 
   return {
@@ -48,11 +50,11 @@ vi.mock("../../../dashboard/src/v2/components/settings/SettingsCategoryRail.js",
       onSwitchCategory,
     }: {
       filteredCategories: Array<{ id: string; label: string }>;
-      onSwitchCategory: (categoryId: "general" | "agents") => void;
+      onSwitchCategory: (categoryId: "general" | "agents" | "mcp") => void;
     }) => (
       <div>
         {filteredCategories.map((category) => (
-          <button key={category.id} type="button" onClick={() => onSwitchCategory(category.id as "general" | "agents")}>
+          <button key={category.id} type="button" onClick={() => onSwitchCategory(category.id as "general" | "agents" | "mcp")}>
             {category.label}
           </button>
         ))}
@@ -61,12 +63,28 @@ vi.mock("../../../dashboard/src/v2/components/settings/SettingsCategoryRail.js",
   };
 });
 
-vi.mock("../../../dashboard/src/v2/components/settings/SettingsContentPanels.js", () => ({
-  SettingsContentPanels: ({
+vi.mock("../../../dashboard/src/v2/components/settings/SettingsContentPanels.js", async () => {
+  const { SettingsGeneralPanel } = await vi.importActual<typeof import("../../../dashboard/src/v2/components/settings/panels/SettingsGeneralPanel.js")>(
+    "../../../dashboard/src/v2/components/settings/panels/SettingsGeneralPanel.js",
+  );
+  const { SettingsMcpPanel } = await vi.importActual<typeof import("../../../dashboard/src/v2/components/settings/panels/SettingsMcpPanel.js")>(
+    "../../../dashboard/src/v2/components/settings/panels/SettingsMcpPanel.js",
+  );
+
+  return {
+    SettingsContentPanels: ({
     state,
   }: {
-    state: { activeCategory: string; updateEditableSettings: (recipe: (current: any) => any) => void };
+    state: { activeCategory: string; activeScope?: string; updateEditableSettings: (recipe: (current: any) => any) => void };
   }) => {
+    if (state.activeCategory === "general" && state.activeScope === "system") {
+      return <SettingsGeneralPanel state={state as any} />;
+    }
+
+    if (state.activeCategory === "mcp") {
+      return <SettingsMcpPanel state={state as any} />;
+    }
+
     if (state.activeCategory === "agents") {
       return (
         <section>
@@ -92,7 +110,8 @@ vi.mock("../../../dashboard/src/v2/components/settings/SettingsContentPanels.js"
       </section>
     );
   },
-}));
+  };
+});
 
 vi.mock("../../../dashboard/src/v2/context/project-data.js", () => {
   return {
@@ -112,6 +131,10 @@ vi.mock("../../../dashboard/src/v2/lib/settings-api.js", () => ({
 
 vi.mock("../../../dashboard/src/v2/lib/agent-preset-api.js", () => ({
   fetchAgentPresets: vi.fn(),
+}));
+
+vi.mock("../../../dashboard/src/v2/lib/project-api.js", () => ({
+  fetchLocalFiles: vi.fn(),
 }));
 
 vi.mock("../../../dashboard/src/lib/api/dashboard-api.js", () => ({
@@ -134,6 +157,20 @@ const createDashboardSettings = () => {
   settings.agents.qualityAssurance.taskCompletion.enabled = true;
   settings.agents.qualityAssurance.sprintCompletion.enabled = true;
   settings.agents.qualityAssurance.completedTaskWithoutPr.enabled = true;
+  settings.cliWorkflow.containerSetupScriptPath = ".code-ux/container/setup.sh";
+  settings.mcpTools = [{ name: "manage_tasks", enabled: true, isInternal: true }];
+  settings.customMcpServers = [
+    {
+      id: "remote-docs",
+      name: "remote_docs",
+      label: "Remote Docs",
+      description: "Documentation server for local test settings.",
+      enabled: true,
+      transport: "http",
+      url: "https://mcp.example.test/sse",
+      headers: { Authorization: "Bearer test-token" },
+    },
+  ];
   return settings;
 };
 
@@ -149,7 +186,8 @@ const mockSystemSettings = {
     githubToken: "",
   },
   defaults: createDashboardSettings(),
-  mcpTools: [],
+  mcpTools: createDashboardSettings().mcpTools,
+  customMcpServers: createDashboardSettings().customMcpServers,
 };
 
 const mockEffectiveSettingsData = {
@@ -191,9 +229,18 @@ describe("SettingsPage data interactions", () => {
     });
 
     vi.mocked(fetchSystemSettings).mockResolvedValue(mockSystemSettings);
+    vi.mocked(fetchLocalFiles).mockResolvedValue({
+      currentPath: "/workspace/local-test",
+      parentPath: "/workspace",
+      rootPath: "/",
+      homePath: "/home/user",
+      directories: [],
+      files: [{ name: "setup.sh", path: "/workspace/local-test/setup.sh" }],
+    });
   });
 
   afterEach(() => {
+    cleanup();
     vi.restoreAllMocks();
   });
 
@@ -320,5 +367,36 @@ describe("SettingsPage data interactions", () => {
       expect(screen.getByText("Enable QA agent")).toBeInTheDocument();
       expect(screen.getByText("QA is disabled. Enable it to review completed tasks, gate sprint completion, and inspect completed tasks that do not yet have a PR.")).toBeInTheDocument();
     });
+  });
+
+  it("preserves setup-script drafts while MCP HTTP guidance remains available", async () => {
+    render(<SettingsPage />);
+
+    await waitFor(() => {
+      expect(fetchSystemSettings).toHaveBeenCalledTimes(1);
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Browse" }));
+    expect(await screen.findByText("/workspace/local-test")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "setup.sh" }));
+    expect(screen.getByLabelText("Container setup script")).toHaveValue("/workspace/local-test/setup.sh");
+    expect(screen.getByRole("button", { name: "Save Changes" })).toBeEnabled();
+
+    fireEvent.click(screen.getAllByRole("button", { name: "MCP" }).at(-1)!);
+
+    expect(await screen.findByText("MCP connection modes")).toBeInTheDocument();
+    expect(screen.getByText(/built-in MCP server over stdio by default/i)).toBeInTheDocument();
+    expect(screen.getByText(/MCP_HTTP_\* environment variables or --mcp-http\* flags/i)).toBeInTheDocument();
+    expect(screen.getByText("Remote Docs")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Manage" }));
+    expect(screen.getByText("HTTP / SSE setup")).toBeInTheDocument();
+    expect(screen.getByLabelText("Server URL")).toHaveValue("https://mcp.example.test/sse");
+    expect(screen.getByLabelText("Auth headers JSON")).toHaveValue(JSON.stringify({ Authorization: "Bearer test-token" }, null, 2));
+
+    fireEvent.click(screen.getAllByRole("button", { name: "General" }).at(-1)!);
+    expect(await screen.findByLabelText("Container setup script")).toHaveValue("/workspace/local-test/setup.sh");
+    expect(screen.getByRole("button", { name: "Save Changes" })).toBeEnabled();
   });
 });
