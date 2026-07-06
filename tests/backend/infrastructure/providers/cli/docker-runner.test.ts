@@ -221,6 +221,47 @@ describe("DockerRunner", () => {
     await runPromise;
   });
 
+  it("reclaims and retries a provider container when Docker reports a stale name conflict", async () => {
+    const conflict = [
+      "docker: Error response from daemon: Conflict.",
+      'The container name "/code-ux-qwen-code-session-1" is already in use by container "abc123".',
+    ].join(" ");
+    vi.mocked(runStreamingCommand)
+      .mockResolvedValueOnce({ ok: false, stdout: "", stderr: conflict, code: 125 } as any)
+      .mockResolvedValueOnce({ ok: true, stdout: "done", stderr: "", code: 0 } as any);
+    vi.spyOn(runner as any, "sleep").mockResolvedValue(undefined);
+    const onActivity = vi.fn();
+
+    const result = await runner.runProviderInDocker({
+      command: "qwen",
+      args: ["--prompt", "plan"],
+      cwd: "docker-volume://workspace-1",
+      providerEnv: {},
+      sessionId: "session-1",
+      providerLabel: "qwen-code",
+      workflowSettings: {
+        executionMode: "DOCKER",
+        containerImage: "node:24",
+        containerSetupScriptPath: "",
+        containerCacheSetupScriptImage: false,
+      } as any,
+      repoPath: "/repo/project",
+      onActivity,
+    });
+
+    expect(result.ok).toBe(true);
+    expect(runStreamingCommand).toHaveBeenCalledTimes(2);
+    expect(runCommandStrict).toHaveBeenCalledWith(
+      "docker",
+      ["rm", "-f", "-v", "code-ux-qwen-code-session-1"],
+      process.cwd(),
+    );
+    expect(onActivity).toHaveBeenCalledWith(
+      "Retrying qwen-code after reclaiming stale Docker container code-ux-qwen-code-session-1.",
+      "provider",
+    );
+  });
+
   it("mounts provider argv from a file so long prompts do not enter the host docker command line", async () => {
     const longPrompt = `plan ${"x".repeat(64_000)} with 'quotes'`;
 
