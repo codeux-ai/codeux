@@ -34,7 +34,10 @@ Stable layouts on narrow widths (especially mobile or multi-panel layouts) must 
 - **Project & Sprint Menus:** Must remain visible on compact screens. Enforce strict text truncation using `truncate` and responsive maximum widths (e.g., `max-w-[80px] sm:max-w-[140px] md:max-w-[200px]`) rather than letting content dictate unbounded flex-growth. Compact action clusters should use `min-w-0` to allow safe text truncation without shrinking icon buttons (which should retain `shrink-0`).
 - **Search and Telemetry Layout:** Components should gracefully hide text or collapse altogether (e.g. icon-only triggers) instead of overflowing the flex container.
 
-### 5. Hover and Active Indicators
+### 5. Standardized Components
+The shell relies on reusable layout components from `dashboard/src/v2/components/layout/` (such as `Sidebar` and `NavItem`) and top navigation components from `dashboard/src/v2/components/top-nav/` (such as `BrandSection`, `GlobalSearch`, and `TelemetryStats`).
+
+### 6. Hover and Active Indicators
 - **Motion Tokens:** Shell navigation must use the interaction contracts in `dashboard/src/v2/lib/motion`. Use `controlFeedback` for hover, focus, icon color, and label feedback; `selectionMovement` for active route backgrounds, vertical markers, and minimized/expanded label reveal; and `enterExit` for mobile drawer and backdrop transitions.
 - **Interactions:** Hover backgrounds for triggers follow `hover:bg-black/[0.05] dark:hover:bg-white/[0.05]`. Active routes in the Sidebar use the primary `signal-500` marker tone and must remain visibly marked by semantic `aria-current="page"`, active label weight/color, and the persistent Signal Jade indicator.
 - **Minimized Tooltips:** Minimized primary sidebar navigation items expose semantic `aria-label`s on their links and keep visual tooltips explicitly mapped via `aria-hidden="true"` styled to mimic standard dropdown glass panels (`shadow-2xl rounded-2xl`). Tooltips must appear on both hover and `focus-visible`, so keyboard users receive the same label confirmation without pointer hover. Footer actions such as Settings and the sidebar collapse/expand control follow the same minimized tooltip pattern.

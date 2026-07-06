@@ -100,9 +100,9 @@ CLI-backed tasks refresh the remote branch before preparing the worker branch. T
 
 ### CI autofix loops
 
-A `ci_fix` worker keeps trying and failing.
+A `VirtualWorkerService` doing `ci_fix` tasks keeps trying and failing.
 
-**Fix:** the underlying CI failure is structural. Check the PR's CI log, fix manually, push, mark the attention item resolved. Optionally lower `julesCiAutofixMaxRetries` to fail faster next time.
+**Fix:** the underlying CI failure is structural. Triage it operationally: inspect the failing PR's CI log, reproduce the issue locally with repo scripts, fix it manually, push, and mark the attention item resolved. Escalate only after you have local evidence. Optionally lower `julesCiAutofixMaxRetries` to fail faster next time.
 
 ### Sprint paused at finalisation
 
@@ -124,11 +124,11 @@ The CLI is installed but not logged in.
 
 **Fix:** run the CLI's auth command directly (e.g. `gemini auth login`, `codex login`, `claude login`). Refresh Settings.
 
-### Docker mode fails to start a container
+### Preview/file-browser failures or Docker mode fails to start a container
 
 The Docker daemon is unreachable, or the worker image cannot be pulled.
 
-**Fix:** verify `docker ps` works. Pre-pull the image: `docker pull node:24-bookworm`.
+**Fix:** verify `docker ps` works. Pre-pull the image: `docker pull node:24-bookworm`. For preview/file-browser issues specifically, triage routes through preview host middleware (`src/server/preview-host-middleware.ts`) and cleanup/rebuild/restart steps. Ensure any commands used are safe and avoid exposing local DB contents, tokens, hostnames, or private paths.
 
 For packaged Windows builds, Docker errors that show `C:\...` as a container `--workdir`, `HOME`, or mount target indicate an outdated build. Current preview containers mount Windows/macOS/Linux host runtime storage at Linux container paths under `/code-ux-preview-runtime`.
 
