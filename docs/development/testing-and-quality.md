@@ -53,6 +53,8 @@ pnpm run lint
 
 Persistence migrations must be replay-safe: startup can execute `runMigrations()` repeatedly against an existing database without duplicating indexes, dropping migrated columns/tables, or damaging legacy rows. Tests for these paths should use `:memory:` databases or temporary homes, seed legacy table/payload shapes behaviorally, and close all SQLite handles before removing temporary paths.
 
+Provider invocation persistence tests should cover required observability fields in `provider_invocations`, including status, provider, model/session identifiers, token and character counters, failure metadata, nullable timestamps, and zero-valued usage. Repository tests must keep default storage on `:memory:` through `VITEST_IN_MEMORY_DB=true` or use an isolated temporary home when file-backed SQLite behavior is under test.
+
 - Run the local fast CI mirror (strict TS validation plus tests)
 ```bash
 pnpm run ci

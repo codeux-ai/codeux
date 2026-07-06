@@ -270,6 +270,100 @@ afterEach(async () => {
       ]);
     });
 
+    it("round-trips failed provider invocation observability fields with nulls and zeros", async () => {
+      const { projectRepository, executionRepository } = await createRepositories();
+      const project = projectRepository.createProject({
+        name: "Provider Invocation Round Trip Project",
+        sourceType: "local",
+        sourceRef: "/workspace/provider-invocation-round-trip",
+      });
+
+      const usage = executionRepository.createProviderInvocationUsage({
+        projectId: project.id,
+        sessionId: "round-trip-session",
+        provider: "codex",
+        purpose: "task_coding",
+        status: "running",
+        model: null,
+        executionMode: null,
+        nativeSessionId: null,
+        startedAt: "2026-01-02T03:04:05.000Z",
+        promptChars: 0,
+        julesTokens: 0,
+      });
+
+      const updated = executionRepository.updateProviderInvocationUsage(usage.id, {
+        status: "failed",
+        model: null,
+        executionMode: null,
+        nativeSessionId: null,
+        finishedAt: null,
+        durationMs: 0,
+        transcriptChars: 0,
+        inputTokens: 0,
+        cachedInputTokens: 0,
+        outputTokens: 0,
+        reasoningOutputTokens: 0,
+        totalTokens: 0,
+        toolCallCount: 0,
+        julesTokens: 0,
+        usageSource: "reported",
+        invocationSource: "internal",
+        rawUsageJson: {
+          failureCode: "provider_exit",
+          failureMessage: "provider exited before emitting telemetry",
+          exitCode: 1,
+          retryable: false,
+        },
+      });
+
+      expect(updated).toEqual(expect.objectContaining({
+        id: usage.id,
+        projectId: project.id,
+        sprintId: null,
+        sprintRunId: null,
+        taskId: null,
+        dispatchId: null,
+        taskRunId: null,
+        attentionItemId: null,
+        connectionId: null,
+        sessionId: "round-trip-session",
+        provider: "codex",
+        purpose: "task_coding",
+        status: "failed",
+        model: null,
+        executionMode: null,
+        nativeSessionId: null,
+        startedAt: "2026-01-02T03:04:05.000Z",
+        finishedAt: null,
+        durationMs: 0,
+        promptChars: 0,
+        transcriptChars: 0,
+        inputTokens: 0,
+        cachedInputTokens: 0,
+        outputTokens: 0,
+        reasoningOutputTokens: 0,
+        totalTokens: 0,
+        toolCallCount: 0,
+        julesTokens: 0,
+        usageSource: "reported",
+        invocationSource: "internal",
+        costCents: null,
+      }));
+      expect(updated.createdAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+      expect(updated.updatedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+      expect(updated.rawUsageJson).toEqual({
+        failureCode: "provider_exit",
+        failureMessage: "provider exited before emitting telemetry",
+        exitCode: 1,
+        retryable: false,
+      });
+
+      expect(executionRepository.getProviderInvocationUsage(usage.id)).toEqual(updated);
+      expect(executionRepository.getLatestProviderInvocationUsageBySession("sessions/round-trip-session", "task_coding"))
+        .toEqual(updated);
+    });
+
     it("claims provider invocation slots through the repository facade", async () => {
       const { projectRepository, executionRepository } = await createRepositories();
       const project = projectRepository.createProject({
