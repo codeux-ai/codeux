@@ -118,6 +118,7 @@ export const DependencyStatusIndicators: FunctionComponent<{
         const statusCopy = getDependencyStatusCopy(dep);
         const dependencyState = getDependencyState(dep);
         const blockingCopy = isDependencyBlocking(dep) ? "Blocking dependency" : "Resolved dependency";
+        const blockingBadge = isDependencyBlocking(dep) ? "Blocking" : "Clear";
         const stateDescription = dep.stateDescription ?? getDependencyPresentation(dep.status, dep.isKnown !== false && !dep.title.startsWith("Unknown Task")).stateDescription;
         const containerClass = getDependencyToneClass(dep);
 
@@ -135,6 +136,7 @@ export const DependencyStatusIndicators: FunctionComponent<{
             <ArrowRight className="w-2.5 h-2.5" strokeWidth={2.5} aria-hidden="true" />
             <span aria-hidden="true" className="shrink-0">{dep.id}</span>
             <span aria-hidden="true" className="rounded-full bg-current/10 px-1.5 py-0.5 text-[8px] opacity-90">{statusCopy}</span>
+            <span aria-hidden="true" className="rounded-full border border-current/15 bg-current/5 px-1.5 py-0.5 text-[8px] opacity-90">{blockingBadge}</span>
             <span aria-hidden="true" className="min-w-0 max-w-[9rem] truncate text-[8px] normal-case opacity-80">{dep.title}</span>
           </div>
         );

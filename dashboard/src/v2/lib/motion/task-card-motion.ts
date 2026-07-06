@@ -75,10 +75,10 @@ export function useTaskCardDragMotion(ref: RefObject<HTMLElement>, isDragging: b
         opacity: 1,
         boxShadow: 'none',
         duration: tokens.selectionMovement.duration,
-        ease: tokens.inlineValidation.ease,
+        ease: tokens.selectionMovement.ease,
         clearProps: 'boxShadow,transform,opacity',
         overwrite: "auto",
       });
     }
-  }, [isDragging, isReducedMotion, tokens.selectionMovement.duration, tokens.selectionMovement.ease, tokens.inlineValidation.ease]);
+  }, [isDragging, isReducedMotion, tokens.selectionMovement.duration, tokens.selectionMovement.ease]);
 }
