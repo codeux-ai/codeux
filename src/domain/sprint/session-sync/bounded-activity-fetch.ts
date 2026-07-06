@@ -1,48 +1,12 @@
 import type { JulesActivity } from "../../../contracts/app-types.js";
 import type { Logger } from "../../../shared/logging/logger.js";
+import {
+  mapBoundedOrdered,
+  normalizeActivityFetchError,
+  withActivityFetchTimeout,
+} from "./activity-fetch-utils.js";
 
 const DEFAULT_ACTIVITY_FETCH_TIMEOUT_MS = 30_000;
-
-const describeFetchError = (error: unknown): Record<string, unknown> => {
-  if (error instanceof Error) {
-    return {
-      error,
-      errorName: error.name,
-      errorMessage: error.message,
-    };
-  }
-  return {
-    error,
-    errorName: typeof error,
-    errorMessage: String(error),
-  };
-};
-
-const withTimeout = async <T>(
-  promise: Promise<T>,
-  timeoutMs: number,
-  sessionName: string,
-): Promise<T> => {
-  if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
-    return promise;
-  }
-
-  let timeout: NodeJS.Timeout | undefined;
-  try {
-    return await Promise.race([
-      promise,
-      new Promise<T>((_, reject) => {
-        timeout = setTimeout(() => {
-          reject(new Error(`Timed out fetching activities for ${sessionName} after ${timeoutMs}ms`));
-        }, timeoutMs);
-      }),
-    ]);
-  } finally {
-    if (timeout) {
-      clearTimeout(timeout);
-    }
-  }
-};
 
 export const fetchActivitiesBounded = async (
   sessionNames: string[],
@@ -52,17 +16,20 @@ export const fetchActivitiesBounded = async (
   logger: Logger,
   timeoutMs: number = DEFAULT_ACTIVITY_FETCH_TIMEOUT_MS,
 ): Promise<Map<string, JulesActivity[]>> => {
-  const results = new Map<string, JulesActivity[]>();
-  let currentIndex = 0;
-
-  const worker = async () => {
-    while (currentIndex < sessionNames.length) {
-      const index = currentIndex++;
-      const sessionName = sessionNames[index];
+  const fetchResults = await mapBoundedOrdered({
+    items: sessionNames,
+    concurrency,
+    mapper: async (sessionName) => {
       const startedAt = Date.now();
       try {
-        const activities = await withTimeout(fetchRecentActivities(sessionName, pageSize), timeoutMs, sessionName);
-        results.set(sessionName, activities);
+        const activities = await withActivityFetchTimeout(
+          fetchRecentActivities(sessionName, pageSize),
+          {
+            timeoutMs,
+            createTimeoutError: () => new Error(`Timed out fetching activities for ${sessionName} after ${timeoutMs}ms`),
+          },
+        );
+        return activities;
       } catch (err) {
         logger.warn("Could not fetch activities for session", {
           sessionName,
@@ -70,24 +37,16 @@ export const fetchActivitiesBounded = async (
           concurrency,
           timeoutMs,
           elapsedMs: Date.now() - startedAt,
-          ...describeFetchError(err),
+          ...normalizeActivityFetchError(err),
         });
-        results.set(sessionName, []);
+        return [];
       }
-    }
-  };
+    },
+  });
 
-  const workers = [];
-  for (let i = 0; i < Math.min(concurrency, sessionNames.length); i++) {
-    workers.push(worker());
-  }
-
-  await Promise.all(workers);
-
-  // Preserve ordering of results matching input sessionNames array
   const orderedResults = new Map<string, JulesActivity[]>();
-  for (const sessionName of sessionNames) {
-    orderedResults.set(sessionName, results.get(sessionName) || []);
+  for (const [index, sessionName] of sessionNames.entries()) {
+    orderedResults.set(sessionName, fetchResults[index] || []);
   }
 
   return orderedResults;
