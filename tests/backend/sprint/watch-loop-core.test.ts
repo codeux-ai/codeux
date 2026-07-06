@@ -1146,6 +1146,95 @@ describe("WatchLoopRunner", () => {
     nowSpy.mockRestore();
   });
 
+  it("LOCAL: does not retry final merge while worker-owned main-merge attention is open", async () => {
+    const deps = buildDeps();
+    const cycleRunner = buildCycleRunner();
+    const nowValues = [0, 1_000, 2_000, 3_000, 61_000];
+    const nowSpy = vi.spyOn(Date, "now").mockImplementation(() => nowValues.shift() ?? 61_000);
+
+    deps.renderInstruction.mockImplementation(async (id) => {
+      if (id === "watchHeader") return "HEADER";
+      if (id === "cleanupAllMerged") return "CLEANUP_MERGED";
+      return "";
+    });
+    deps.executionRepository.getSprintRun = vi.fn().mockReturnValue({ status: "running" });
+    deps.projectAttentionService.listActiveProjectItems = vi.fn()
+      .mockReturnValueOnce([
+        {
+          id: "main-conflict-1",
+          sprintRunId: "run-1",
+          attentionType: "merge_conflict",
+          ownerType: "worker",
+          status: "open",
+          summaryMarkdown: "Worker is resolving the main merge conflict.",
+          payload: { mergeStage: "main" },
+        },
+      ])
+      .mockReturnValue([]);
+
+    cycleRunner.run.mockResolvedValue({
+      subtasks: [buildMockSubtask({ status: "COMPLETED", is_merged: true, worker_branch: "worker/task-1" })],
+      reportText: "REPORT",
+      statusTable: "TABLE",
+      instructions: "",
+      awaitingMerge: [],
+      manualMergeTasks: [],
+      workerEscalatedMergeConflictTasks: [],
+    });
+
+    let mergeAttempts = 0;
+    vi.mocked(runCommandStrict).mockImplementation(async (_cmd: string, args: string[]) => {
+      if (args[0] === "merge" && args[1] !== "--abort") {
+        mergeAttempts += 1;
+      }
+      return { stdout: "", stderr: "" } as any;
+    });
+
+    const renderMergeFeedbackMock = vi.fn().mockResolvedValue({
+      text: "FB",
+      state: "ready_for_merge",
+      prNumber: null,
+      prUrl: null,
+      hasMergeConflict: false,
+      mergeStateStatus: null,
+      hasFailedChecks: false,
+      hasPendingChecks: false,
+      hasReviewBlockers: false,
+      failedChecks: [],
+    });
+
+    const runner = new WatchLoopRunner(deps as any, cycleRunner as any, renderMergeFeedbackMock);
+    const result = await runner.run({
+      args: { sprint_number: 1, action: "orchestrate" } as any,
+      executionContext: {
+        project: { id: "project-1", name: "Test Project" },
+        sprint: { id: "sprint-1", name: "Sprint 1" },
+        sprintNumber: 1,
+        repoPath: "/tmp",
+        featureBranch: "feat",
+        defaultBranch: "main",
+      },
+      repoPath: "/tmp",
+      defaultFeatureBranch: "feat",
+      defaultBranch: "main",
+      githubMode: "LOCAL",
+      retryFailed: false,
+      loopSteps: { watchLoopOutputIntervalSeconds: 60, watchLoopIntervalSeconds: 0.01 } as any,
+      ciIntelligence: { resolveMainMergeConflicts: true } as any,
+      automationLevel: "SEMI_AUTO",
+      automationInterventions: {} as any,
+      dashboardPort: 4444,
+      sprintRunId: "run-1",
+    });
+
+    expect(mergeAttempts).toBe(1);
+    expect(result).toContain("Existing main-merge attention is still assigned to a worker");
+    expect(result).toContain("Sprint Execution Finished");
+
+    vi.mocked(runCommandStrict).mockResolvedValue({ stdout: "", stderr: "" } as any);
+    nowSpy.mockRestore();
+  });
+
   it("LOCAL: merges the sprint feature branch into a local-only default branch before completing", async () => {
     const deps = buildDeps();
     const cycleRunner = buildCycleRunner();

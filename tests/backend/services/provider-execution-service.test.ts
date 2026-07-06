@@ -52,6 +52,8 @@ describe("ProviderExecutionService", () => {
       createProviderInvocationUsage: vi.fn().mockReturnValue({ id: "prov-inv-1" }),
       getProviderInvocationUsage: vi.fn().mockReturnValue({ id: "prov-inv-1", status: "running" }),
       updateProviderInvocationUsage: vi.fn(),
+      getTaskDispatch: vi.fn().mockReturnValue({ id: "dispatch-1", status: "running" }),
+      updateTaskDispatch: vi.fn(),
       updateExecutionInvocation: vi.fn(),
       appendTaskRunEvent: vi.fn(),
     } as any;
@@ -461,6 +463,33 @@ describe("ProviderExecutionService", () => {
     expect(runningUsageWrites).toHaveLength(2);
     expect(runningUsageWrites[0]?.[1]).toEqual(expect.objectContaining({ totalTokens: 30 }));
     expect(runningUsageWrites[1]?.[1]).toEqual(expect.objectContaining({ totalTokens: 33 }));
+  });
+
+  it("refreshes the linked active dispatch heartbeat when live telemetry is persisted", async () => {
+    providerRunner.runProvider.mockImplementation(async (opts: any) => {
+      opts.onTelemetry({
+        ...mockResult.usageTelemetry,
+        transcriptText: "live transcript",
+        conversation: [
+          { kind: "assistant", text: "Working..." },
+        ],
+      });
+      return mockResult;
+    });
+
+    await service.executeProvider({
+      ...defaultArgs,
+      dispatchId: "dispatch-1",
+      trackPromptInInvocation: false,
+    });
+
+    expect(executionRepository.getTaskDispatch).toHaveBeenCalledWith("dispatch-1");
+    expect(executionRepository.updateTaskDispatch).toHaveBeenCalledWith(
+      "dispatch-1",
+      expect.objectContaining({
+        lastHeartbeatAt: expect.any(String),
+      }),
+    );
   });
 
   it("allows structured callers to defer invocation completion and assistant transcript writes", async () => {

@@ -414,6 +414,14 @@ export class SprintOrchestrator {
     if (existingRun.status !== "queued" && existingRun.status !== "running") {
       return null;
     }
+    if (this.isOrchestratingSprint(existingRun.projectId, existingRun.sprintId)) {
+      this.deps.logger.warn("Skipped sprint run recovery because sprint already has an active orchestrator", {
+        sprintRunId,
+        projectId: existingRun.projectId,
+        sprintId: existingRun.sprintId,
+      });
+      return null;
+    }
 
     const args: SprintAgentArgs = {
       action: "orchestrate",

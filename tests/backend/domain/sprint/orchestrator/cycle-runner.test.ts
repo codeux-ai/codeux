@@ -1936,7 +1936,11 @@ describe("CycleRunner attention sync", () => {
         expect.objectContaining({ status: "QA_REVIEW_FAILED" }),
       );
       expect(deps.projectAttentionService.openItems).toHaveBeenCalledWith(expect.arrayContaining([
-        expect.objectContaining({ attentionType: "human_escalation_required", taskId: "task-1" }),
+        expect.objectContaining({
+          attentionType: "human_escalation_required",
+          taskId: "task-1",
+          payload: expect.objectContaining({ sourceAttentionType: "qa_review" }),
+        }),
       ]));
       expect(deps.qualityAssuranceService.reviewCompletedTask).not.toHaveBeenCalled();
     });
