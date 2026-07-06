@@ -86,6 +86,7 @@ export const BrowserPage: FunctionComponent = () => {
   const savingScriptRef = useRef(false);
   const removingSessionIdsRef = useRef<Set<string>>(new Set());
   const logsCacheRef = useRef<Map<string, string>>(new Map());
+  const logsRef = useRef("");
   const pathBySessionPortRef = useRef<Map<string, string>>(new Map());
   const selectedPortPathKeyRef = useRef<string | null>(null);
 
@@ -185,6 +186,13 @@ export const BrowserPage: FunctionComponent = () => {
           : "Preview logs loaded. Logs refresh automatically and may be slightly stale."
         : "No preview logs are available yet."
     : "No preview session selected for logs.";
+  const sessionActionDisabledReason = pendingSessionAction === "rebuild"
+    ? "Rebuild in progress. Rebuild and stop controls are temporarily unavailable."
+    : pendingSessionAction === "stop"
+      ? "Stop in progress. Rebuild and stop controls are temporarily unavailable."
+      : !visibleSelectedSession
+        ? "Select or launch a preview session to enable container actions."
+        : "Container actions are available.";
 
   const scriptTargetSprint = useMemo(() => {
     if (visibleSelectedSession) {
@@ -232,6 +240,10 @@ export const BrowserPage: FunctionComponent = () => {
   }, [currentPath]);
 
   useEffect(() => {
+    logsRef.current = logs;
+  }, [logs]);
+
+  useEffect(() => {
     if (!visibleSelectedSession || !frameSrc) {
       return;
     }
@@ -262,7 +274,7 @@ export const BrowserPage: FunctionComponent = () => {
         } else {
           setLogs((current) => current || "");
           setLogsSessionId((current) => current || session.id);
-          setLogsStale(Boolean(logs));
+          setLogsStale(Boolean(logsRef.current));
         }
       }
       setLogsError(null);
@@ -272,7 +284,7 @@ export const BrowserPage: FunctionComponent = () => {
     } catch (fetchLogsError) {
       const message = fetchLogsError instanceof Error ? fetchLogsError.message : "Unknown log error";
       setLogsError(message);
-      setLogsStale(Boolean(logs || logsCacheRef.current.get(session.id)));
+      setLogsStale(Boolean(logsRef.current || logsCacheRef.current.get(session.id)));
       if (announce) {
         browserFeedback.setError(`Failed to refresh logs: ${message}`);
       }
@@ -350,7 +362,7 @@ export const BrowserPage: FunctionComponent = () => {
           } else if (!logsCacheRef.current.has(visibleSelectedSession.id)) {
             setLogs((current) => current || "");
             setLogsSessionId((current) => current || visibleSelectedSession.id);
-            setLogsStale(Boolean(logs));
+            setLogsStale(Boolean(logsRef.current));
           } else {
             setLogs(logsCacheRef.current.get(visibleSelectedSession.id) || "");
             setLogsSessionId(visibleSelectedSession.id);
@@ -361,7 +373,7 @@ export const BrowserPage: FunctionComponent = () => {
         .catch((fetchLogsError) => {
           if (!cancelled) {
             setLogsError(fetchLogsError instanceof Error ? fetchLogsError.message : "Unknown log error");
-            setLogsStale(Boolean(logs || logsCacheRef.current.get(visibleSelectedSession.id)));
+            setLogsStale(Boolean(logsRef.current || logsCacheRef.current.get(visibleSelectedSession.id)));
           }
         })
         .finally(() => {
@@ -393,14 +405,18 @@ export const BrowserPage: FunctionComponent = () => {
     }
   };
 
+  const clearNavigationSuccessTimers = () => {
+    clearNavigationTimer(navigationActionSuccessTimerRef);
+    clearNavigationTimer(addressNavigationSuccessTimerRef);
+  };
+
   useEffect(() => () => {
     mountedRef.current = false;
     if (navigationPendingTimerRef.current !== null) {
       window.clearTimeout(navigationPendingTimerRef.current);
       navigationPendingTimerRef.current = null;
     }
-    clearNavigationTimer(navigationActionSuccessTimerRef);
-    clearNavigationTimer(addressNavigationSuccessTimerRef);
+    clearNavigationSuccessTimers();
     navigationPendingRef.current = false;
   }, []);
 
@@ -451,6 +467,7 @@ export const BrowserPage: FunctionComponent = () => {
     if (!visibleSelectedSession || containerPort === selectedContainerPort) {
       return;
     }
+    clearNavigationSuccessTimers();
     if (selectedPortPathKeyRef.current) {
       pathBySessionPortRef.current.set(selectedPortPathKeyRef.current, normalizePath(currentPathRef.current));
     }
@@ -481,7 +498,7 @@ export const BrowserPage: FunctionComponent = () => {
     browserFeedback.setPending(pendingMessage);
     markNavigationPending();
     action();
-    clearNavigationTimer(navigationActionSuccessTimerRef);
+    clearNavigationSuccessTimers();
     navigationActionSuccessTimerRef.current = window.setTimeout(() => {
       navigationActionSuccessTimerRef.current = null;
       if (!mountedRef.current) {
@@ -613,6 +630,7 @@ export const BrowserPage: FunctionComponent = () => {
     const nextPath = normalizePath(addressValue);
     browserFeedback.setPending(`Navigating preview to ${nextPath}...`);
     markNavigationPending();
+    clearNavigationSuccessTimers();
     if (selectedPortPathKeyRef.current) {
       pathBySessionPortRef.current.set(selectedPortPathKeyRef.current, nextPath);
     }
@@ -849,6 +867,7 @@ export const BrowserPage: FunctionComponent = () => {
                   aria-label={pendingSessionAction === "rebuild" ? "Rebuilding preview container" : "Rebuild preview container"}
                   aria-busy={pendingSessionAction === "rebuild"}
                   aria-describedby="preview-session-action-status"
+                  title={sessionActionPending || !visibleSelectedSession ? sessionActionDisabledReason : "Rebuild preview container"}
                   className="inline-flex h-10 items-center justify-center gap-2 rounded-2xl border border-black/[0.08] text-xs font-semibold text-slate-700 transition hover:border-black/[0.16] hover:text-slate-900 disabled:cursor-not-allowed disabled:border-slate-300/50 disabled:bg-slate-200/60 disabled:text-slate-500 disabled:opacity-100 dark:border-white/[0.08] dark:text-slate-200 dark:hover:border-white/[0.16] dark:hover:text-white dark:disabled:border-slate-700 dark:disabled:bg-slate-800/60 dark:disabled:text-slate-500"
                 >
                   <RotateCcw className={`h-4 w-4 ${pendingSessionAction === "rebuild" ? 'animate-spin motion-reduce:animate-none' : ''}`} strokeWidth={2} />
@@ -862,6 +881,7 @@ export const BrowserPage: FunctionComponent = () => {
                   aria-label={pendingSessionAction === "stop" ? "Stopping preview container" : "Stop preview container"}
                   aria-busy={pendingSessionAction === "stop"}
                   aria-describedby="preview-session-action-status"
+                  title={sessionActionPending || !visibleSelectedSession ? sessionActionDisabledReason : "Stop preview container"}
                   className="inline-flex h-10 items-center justify-center gap-2 rounded-2xl border border-black/[0.08] text-xs font-semibold text-slate-700 transition hover:border-black/[0.16] hover:text-slate-900 disabled:cursor-not-allowed disabled:border-slate-300/50 disabled:bg-slate-200/60 disabled:text-slate-500 disabled:opacity-100 dark:border-white/[0.08] dark:text-slate-200 dark:hover:border-white/[0.16] dark:hover:text-white dark:disabled:border-slate-700 dark:disabled:bg-slate-800/60 dark:disabled:text-slate-500"
                 >
                   <Square className="h-4 w-4" strokeWidth={2} />
@@ -881,13 +901,7 @@ export const BrowserPage: FunctionComponent = () => {
                 </a>
               </div>
               <div id="preview-session-action-status" role="status" aria-live="polite" className="mt-3 min-h-4 text-xs text-slate-500 dark:text-slate-400">
-                {pendingSessionAction === "rebuild"
-                  ? "Rebuild in progress. Rebuild and stop controls are temporarily unavailable."
-                  : pendingSessionAction === "stop"
-                    ? "Stop in progress. Rebuild and stop controls are temporarily unavailable."
-                    : !visibleSelectedSession
-                      ? "Select or launch a preview session to enable container actions."
-                      : "Container actions are available."}
+                {sessionActionDisabledReason}
               </div>
             </div>
           </div>
@@ -968,6 +982,8 @@ export const BrowserPage: FunctionComponent = () => {
                   aria-disabled={!visibleSelectedSession || logsLoading}
                   aria-busy={logsLoading}
                   aria-label={logsLoading ? "Refreshing preview logs" : "Refresh preview logs"}
+                  aria-describedby="preview-logs-status"
+                  title={logsLoading ? logsStatusMessage : visibleSelectedSession ? "Refresh preview logs" : logsStatusMessage}
                   className="inline-flex h-8 items-center gap-1.5 rounded-xl border border-black/[0.08] px-2.5 text-[11px] font-semibold text-slate-600 transition hover:border-black/[0.16] hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-50 motion-reduce:transition-none dark:border-white/[0.08] dark:text-slate-300 dark:hover:border-white/[0.16] dark:hover:text-white"
                 >
                   <RefreshCw className={`h-3.5 w-3.5 ${logsLoading ? "animate-spin motion-reduce:animate-none" : ""}`} strokeWidth={2.2} />

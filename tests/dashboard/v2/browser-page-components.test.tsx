@@ -354,6 +354,7 @@ describe("PreviewWindowChrome", () => {
     });
 
     expect(childWrapper.classList.contains("hidden")).toBe(false);
+    expect(screen.getByLabelText("Minimize preview window")).toHaveFocus();
   });
 
   it("toggles close mode hiding iframe wrapper", async () => {
@@ -382,6 +383,7 @@ describe("PreviewWindowChrome", () => {
     });
 
     expect(childWrapper.classList.contains("hidden")).toBe(false);
+    expect(screen.getByLabelText("Close preview window")).toHaveFocus();
   });
 
   it("describes disabled and pending navigation controls", () => {
@@ -445,6 +447,15 @@ describe("PreviewWindowChrome", () => {
     await user.keyboard("[ArrowRight]");
 
     expect(onSelectPort).toHaveBeenCalledWith(5173);
+    expect(screen.getByRole("tab", { name: "Select preview port Vite :5173 routed to host port 8081" })).toHaveFocus();
+    expect(screen.getByRole("tab", { name: "Select preview port Vite :5173 routed to host port 8081" })).toHaveAttribute("aria-controls", "preview-window-frame");
+
+    await user.keyboard("[Home]");
+    expect(onSelectPort).toHaveBeenLastCalledWith(3000);
+    expect(screen.getByRole("tab", { name: "Select preview port :3000 routed to host port 8080" })).toHaveFocus();
+
+    await user.keyboard("[End]");
+    expect(onSelectPort).toHaveBeenLastCalledWith(5173);
     expect(screen.getByRole("tab", { name: "Select preview port Vite :5173 routed to host port 8081" })).toHaveFocus();
   });
 
