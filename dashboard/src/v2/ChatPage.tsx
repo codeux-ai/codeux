@@ -4,6 +4,7 @@ import {
   ArrowUp,
   Ban,
   RefreshCw,
+  TimerReset,
 } from "lucide-preact";
 import { buildPresetIndex } from "./lib/chat-entity-index.js";
 import { ChatThreadHeader } from "./components/chat/ChatThreadHeader.js";
@@ -30,7 +31,7 @@ import { AgentAvatarSvg } from "./components/agents/AgentAvatarSvg.js";
 import { generateRandomAgentAvatar } from "./lib/agent-avatar.js";
 import { formatInvocationRetryAt } from "./lib/invocation-retry-time.js";
 import type { ExecutionInvocationRecord } from "./types.js";
-import { cancelExecutionInvocation, restartExecutionInvocation, type InvocationRestartMode } from "./lib/invocation-api.js";
+import { cancelExecutionInvocation, resetInvocationUsageLimitTimer, restartExecutionInvocation, type InvocationRestartMode } from "./lib/invocation-api.js";
 import { useActionFeedback } from "./hooks/use-action-feedback.js";
 import {
   formatTokenCount,
@@ -55,12 +56,22 @@ const formatInvocationErrorCategory = (value: ExecutionInvocationRecord["lastErr
   }
 };
 
+const hasUsageLimitTimer = (invocation: ExecutionInvocationRecord | null | undefined): invocation is ExecutionInvocationRecord => {
+  return Boolean(
+    invocation
+      && (invocation.status === "running" || invocation.status === "paused")
+      && invocation.lastRetryAfterIso
+      && (invocation.lastErrorCategory === "QUOTA_EXHAUSTED" || invocation.lastErrorCategory === "RATE_LIMITED")
+  );
+};
+
 export const ChatPage: FunctionComponent = () => {
   const messagesRef = useRef<HTMLDivElement>(null);
   const composerRef = useRef<HTMLTextAreaElement>(null);
   const [workingTimerPhase, setWorkingTimerPhase] = useState<"starting" | "working" | null>(null);
   const [restartingInvocation, setRestartingInvocation] = useState<{ id: string; mode: InvocationRestartMode } | null>(null);
   const [cancellingInvocationId, setCancellingInvocationId] = useState<string | null>(null);
+  const [resettingUsageLimitInvocationId, setResettingUsageLimitInvocationId] = useState<string | null>(null);
   const invocationFeedback = useActionFeedback();
 
   const {
@@ -125,7 +136,7 @@ export const ChatPage: FunctionComponent = () => {
   );
 
   const handleRestartInvocation = useCallback(async (mode: InvocationRestartMode = "retry_full_prompt") => {
-    if (!selectedInvocation || selectedInvocation.status !== "failed" || restartingInvocation || cancellingInvocationId) {
+    if (!selectedInvocation || selectedInvocation.status !== "failed" || restartingInvocation || cancellingInvocationId || resettingUsageLimitInvocationId) {
       return;
     }
     setRestartingInvocation({ id: selectedInvocation.id, mode });
@@ -146,10 +157,10 @@ export const ChatPage: FunctionComponent = () => {
     } finally {
       setRestartingInvocation(null);
     }
-  }, [activateInvocation, cancellingInvocationId, invocationFeedback, refreshThreads, restartingInvocation, selectedInvocation]);
+  }, [activateInvocation, cancellingInvocationId, invocationFeedback, refreshThreads, resettingUsageLimitInvocationId, restartingInvocation, selectedInvocation]);
 
   const handleCancelInvocation = useCallback(async () => {
-    if (!selectedInvocation || selectedInvocation.status !== "running" || cancellingInvocationId || restartingInvocation) {
+    if (!selectedInvocation || selectedInvocation.status !== "running" || cancellingInvocationId || restartingInvocation || resettingUsageLimitInvocationId) {
       return;
     }
     setCancellingInvocationId(selectedInvocation.id);
@@ -168,7 +179,29 @@ export const ChatPage: FunctionComponent = () => {
     } finally {
       setCancellingInvocationId(null);
     }
-  }, [activateInvocation, cancellingInvocationId, invocationFeedback, refreshThreads, restartingInvocation, selectedInvocation]);
+  }, [activateInvocation, cancellingInvocationId, invocationFeedback, refreshThreads, resettingUsageLimitInvocationId, restartingInvocation, selectedInvocation]);
+
+  const handleResetUsageLimitTimer = useCallback(async () => {
+    if (!hasUsageLimitTimer(selectedInvocation) || cancellingInvocationId || restartingInvocation || resettingUsageLimitInvocationId) {
+      return;
+    }
+    setResettingUsageLimitInvocationId(selectedInvocation.id);
+    invocationFeedback.setPending("Resetting usage limit timer...", { autoDismiss: false });
+    try {
+      const result = await resetInvocationUsageLimitTimer(selectedInvocation.id);
+      invocationFeedback.setSuccess(result.reset ? "Usage limit timer reset." : (result.message || "Usage limit timer was already cleared."));
+      await refreshThreads({ mode: "invocations" });
+      void activateInvocation(selectedInvocation.id, { foreground: true });
+    } catch (error) {
+      invocationFeedback.setError(error instanceof Error ? error.message : String(error), {
+        retryAction: () => void handleResetUsageLimitTimer(),
+        retryLabel: "Retry",
+        autoDismiss: false,
+      });
+    } finally {
+      setResettingUsageLimitInvocationId(null);
+    }
+  }, [activateInvocation, cancellingInvocationId, invocationFeedback, refreshThreads, resettingUsageLimitInvocationId, restartingInvocation, selectedInvocation]);
 
   // Build lookups from agentPresets
   const presetIdMap = useMemo(() => {
@@ -469,6 +502,7 @@ export const ChatPage: FunctionComponent = () => {
     const inv = selectedInvocation;
     const canRestartInvocation = inv?.status === "failed" && inv.type === "planning";
     const canCancelInvocation = inv?.status === "running";
+    const canResetUsageLimitTimer = hasUsageLimitTimer(inv);
     const headerStatus = inv
       ? inv.status === "failed"
         ? { dot: "bg-status-red shadow-[0_0_6px_rgba(227,0,15,0.5)]", text: "text-status-red" }
@@ -542,8 +576,21 @@ export const ChatPage: FunctionComponent = () => {
                     </span>
                   )}
                 </div>
-                {(canRestartInvocation || canCancelInvocation) && (
+                {(canRestartInvocation || canCancelInvocation || canResetUsageLimitTimer) && (
                   <div className="flex flex-wrap items-center gap-2">
+                    {canResetUsageLimitTimer && (
+                      <button
+                        type="button"
+                        onClick={() => void handleResetUsageLimitTimer()}
+                        disabled={resettingUsageLimitInvocationId === inv.id}
+                        aria-busy={resettingUsageLimitInvocationId === inv.id}
+                        aria-label={resettingUsageLimitInvocationId === inv.id ? "Resetting usage limit timer" : "Reset usage limit timer"}
+                        className="inline-flex min-h-9 items-center gap-2 rounded-xl border border-signal-500/25 bg-signal-500/10 px-3 py-2 text-[12px] font-bold text-signal-700 transition hover:border-signal-500/40 hover:bg-signal-500/15 disabled:cursor-wait disabled:opacity-60 dark:text-signal-400"
+                      >
+                        <TimerReset className={`h-3.5 w-3.5 ${resettingUsageLimitInvocationId === inv.id ? "animate-pulse motion-reduce:animate-none" : ""}`} />
+                        {resettingUsageLimitInvocationId === inv.id ? "Resetting..." : "Reset timer"}
+                      </button>
+                    )}
                     {canCancelInvocation && (
                       <button
                         type="button"

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { fetchJson } from "../../../lib/api/fetch-json.js";
-import { cancelExecutionInvocation } from "../invocation-api.js";
+import { cancelExecutionInvocation, resetInvocationUsageLimitTimer } from "../invocation-api.js";
 
 vi.mock("../../../lib/api/fetch-json.js", () => ({
   fetchJson: vi.fn(),
@@ -27,6 +27,24 @@ describe("invocation-api", () => {
     });
     expect(fetchJson).toHaveBeenCalledWith(
       "/api/execution/invocations/inv-1/cancel",
+      { method: "POST" },
+    );
+  });
+
+  it("posts to the usage-limit timer reset endpoint", async () => {
+    vi.mocked(fetchJson).mockResolvedValueOnce({
+      reset: true,
+      invocationId: "inv-1",
+    });
+
+    const result = await resetInvocationUsageLimitTimer("inv-1");
+
+    expect(result).toEqual({
+      reset: true,
+      invocationId: "inv-1",
+    });
+    expect(fetchJson).toHaveBeenCalledWith(
+      "/api/execution/invocations/inv-1/reset-usage-limit",
       { method: "POST" },
     );
   });

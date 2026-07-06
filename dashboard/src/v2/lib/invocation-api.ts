@@ -69,3 +69,12 @@ export const cancelExecutionInvocation = async (
     { method: "POST" },
   );
 };
+
+export const resetInvocationUsageLimitTimer = async (
+  invocationId: string,
+): Promise<{ reset: boolean; invocationId: string; message?: string }> => {
+  return fetchJson<{ reset: boolean; invocationId: string; message?: string }>(
+    `/api/execution/invocations/${encodeURIComponent(invocationId)}/reset-usage-limit`,
+    { method: "POST" },
+  );
+};
