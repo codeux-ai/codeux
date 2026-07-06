@@ -4,6 +4,7 @@ import type { SettingsPageState } from "../../../hooks/use-settings-page-state.j
 import { ActionButton, NoticePanel } from "../SettingsSurface.js";
 import { ActionFeedbackRegion } from "../../ui/ActionFeedbackRegion.js";
 import { NumberInput, Row, Toggle, TextInput, PillChoiceGroup } from "../SettingsFormFields.js";
+import { LocalFilePickerField } from "../LocalFilePickerField.js";
 import type { ProjectSettings } from "../../../../../../src/contracts/settings-scope-types.js";
 import { SectionCard, getBadge as getBadgeHelper, getFieldBadge as getFieldBadgeHelper } from "./SharedPanelComponents.js";
 import { Bot, Cog, Database, FolderOpen, RotateCcw, Sparkles } from "lucide-preact";
@@ -208,7 +209,8 @@ const DockerRuntimeCard: FunctionComponent<{
       />
     </Row>
     <Row label="Container setup script" description="Optional setup script run inside the container before task execution." badge={getFieldBadge("cliWorkflow.containerSetupScriptPath")}>
-      <TextInput
+      <LocalFilePickerField
+        label="Container setup script"
         value={settings.cliWorkflow.containerSetupScriptPath}
         onChange={(value) => update((current) => ({
           ...current,
@@ -217,7 +219,8 @@ const DockerRuntimeCard: FunctionComponent<{
             containerSetupScriptPath: value,
           },
         }))}
-        mono
+        helperText="Type a relative path or browse to an absolute local script."
+        placeholder=".code-ux/container/setup.sh"
       />
     </Row>
     <Row label="Cache setup as image" description="Build and reuse a derived Docker image from the base image plus setup script contents." badge={getFieldBadge("cliWorkflow.containerCacheSetupScriptImage")}>

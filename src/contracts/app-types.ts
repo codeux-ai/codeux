@@ -162,6 +162,15 @@ export interface LocalDirectoryBrowserResponse {
   directories: LocalDirectoryBrowserEntry[];
 }
 
+export interface LocalFileBrowserEntry {
+  name: string;
+  path: string;
+}
+
+export interface LocalFileBrowserResponse extends LocalDirectoryBrowserResponse {
+  files: LocalFileBrowserEntry[];
+}
+
 /**
  * The authoritative contract for the Live page snapshot.
  *

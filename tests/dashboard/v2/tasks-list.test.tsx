@@ -105,6 +105,17 @@ describe("TasksList", () => {
         expect(screen.getByText("Test Task")).toBeInTheDocument();
     });
 
+    it("exposes loading active streams as a named busy status", () => {
+        render(
+            <ProjectDataProvider initialProject={null}>
+                <TasksList pageData={{ ...pageData, isLoading: true, tasks: [] }} />
+            </ProjectDataProvider>
+        );
+
+        expect(screen.getByRole("region", { name: "Active stream tasks" })).toHaveAttribute("aria-busy", "true");
+        expect(screen.getByRole("status", { name: "Loading active stream tasks" })).toHaveAttribute("aria-busy", "true");
+    });
+
 
     it("hides task if it does not belong to an active sprint", () => {
         const noSprintPageData = {
@@ -119,7 +130,7 @@ describe("TasksList", () => {
         );
 
         expect(screen.queryByText("Test Task")).not.toBeInTheDocument();
-        expect(screen.getByText("No Active Streams")).toBeInTheDocument();
+        expect(screen.getByRole("status", { name: /No Active Streams/i })).toHaveTextContent("There are no tasks currently matching the selected filter in active sprints.");
     });
 
     it("handles reduced motion correctly", () => {

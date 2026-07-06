@@ -6,8 +6,15 @@ import { fireEvent } from "@testing-library/preact";
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { ProjectSettingsEditor } from "../../dashboard/src/v2/components/settings/ProjectSettingsEditor.jsx";
 import { TextInput } from "../../dashboard/src/v2/components/settings/SettingsFormFields.js";
+import { fetchLocalFiles } from "../../dashboard/src/v2/lib/project-api.js";
+import { cloneProjectSettings } from "../../dashboard/src/v2/lib/settings/project-overrides.js";
+import { DEFAULT_DASHBOARD_SETTINGS } from "../../src/repositories/settings-defaults.js";
 import * as matchers from '@testing-library/jest-dom/matchers';
 expect.extend(matchers);
+
+vi.mock("../../dashboard/src/v2/lib/project-api.js", () => ({
+  fetchLocalFiles: vi.fn(),
+}));
 
 describe("ProjectSettingsEditor", () => {
   const originalMatchMedia = window.matchMedia;
@@ -15,12 +22,14 @@ describe("ProjectSettingsEditor", () => {
   afterEach(() => {
     cleanup();
     window.matchMedia = originalMatchMedia;
+    vi.mocked(fetchLocalFiles).mockReset();
   });
 
   it("renders Max Parsing Retries input and passes updates correctly", async () => {
     const mockOnChange = vi.fn();
     const mockSettings = {
       cliWorkflow: {
+        ...cloneProjectSettings(DEFAULT_DASHBOARD_SETTINGS).cliWorkflow,
         maxParsingRetries: 3
       },
       workers: {
@@ -120,5 +129,42 @@ describe("ProjectSettingsEditor", () => {
 
     const counter = screen.getByText("10 / 10");
     expect(counter).toHaveStyle({ animationDuration: "0ms" });
+  });
+
+  it("uses the local file picker for setup script path updates", async () => {
+    const settings = cloneProjectSettings(DEFAULT_DASHBOARD_SETTINGS);
+    settings.cliWorkflow.containerSetupScriptPath = ".code-ux/container/setup.sh";
+    const mockOnChange = vi.fn();
+    vi.mocked(fetchLocalFiles).mockResolvedValueOnce({
+      currentPath: "/workspace/test-project",
+      parentPath: "/workspace",
+      rootPath: "/",
+      homePath: "/home/user",
+      directories: [],
+      files: [{ name: "setup.sh", path: "/workspace/test-project/setup.sh" }],
+    });
+
+    render(
+      <ProjectSettingsEditor
+        settings={settings}
+        onChange={mockOnChange}
+      />
+    );
+
+    fireEvent.input(screen.getByLabelText("Setup script path"), {
+      target: { value: "scripts/container/setup.sh" },
+    });
+    expect(mockOnChange).toHaveBeenCalledWith(expect.objectContaining({
+      cliWorkflow: expect.objectContaining({ containerSetupScriptPath: "scripts/container/setup.sh" }),
+    }));
+
+    fireEvent.click(screen.getByRole("button", { name: "Browse" }));
+    expect(await screen.findByText("/workspace/test-project")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "setup.sh" }));
+
+    expect(mockOnChange).toHaveBeenCalledWith(expect.objectContaining({
+      cliWorkflow: expect.objectContaining({ containerSetupScriptPath: "/workspace/test-project/setup.sh" }),
+    }));
   });
 });

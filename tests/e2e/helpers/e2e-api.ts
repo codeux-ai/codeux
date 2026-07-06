@@ -69,6 +69,10 @@ export async function selectProjectViaApi(request: APIRequestContext, projectId:
   return response.selectedProjectId;
 }
 
+export async function deleteProjectViaApi(request: APIRequestContext, projectId: string): Promise<void> {
+  await expectApiResponse(await request.delete(`/api/projects/${encodeURIComponent(projectId)}`), [200, 404]);
+}
+
 export async function fetchSprintsViaApi(
   request: APIRequestContext,
   projectId: string,

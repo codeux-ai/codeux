@@ -17,6 +17,10 @@ test.describe('AgentAvatarScene E2E Tests', () => {
     await page.goto('/agents');
     await page.getByRole('button', { name: /Create First Agent|New Agent/ }).first().click();
 
+    // The 3D scene is lazy-loaded when its portrait host intersects the
+    // viewport. Bring the host into view before asserting the WebGL renderer.
+    await page.locator('[data-testid="lazy-agent-avatar-scene"]').first().scrollIntoViewIfNeeded();
+
     // Assert that the 3D scene container is rendered and contains a canvas
     const avatarScene = page.locator('[data-testid="agent-avatar-scene"]');
     await expect(avatarScene).toBeVisible();

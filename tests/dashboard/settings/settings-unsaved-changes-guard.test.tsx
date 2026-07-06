@@ -1,10 +1,27 @@
 // @vitest-environment happy-dom
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
-import { cleanup, renderHook, render, screen, fireEvent, waitFor } from "@testing-library/preact";
+import { act, cleanup, renderHook, render, screen, fireEvent, waitFor } from "@testing-library/preact";
 import { UnsavedChangesModal } from "../../../dashboard/src/v2/components/ui/UnsavedChangesModal.js";
 import { NumberInput } from "../../../dashboard/src/v2/components/settings/SettingsFormFields.js";
 import { useUnsavedChangesGuard } from "../../../dashboard/src/v2/hooks/useUnsavedChangesGuard.js";
 import { getNavigationBlockerCount } from "../../../dashboard/src/v2/router/navigation-blocker.js";
+
+vi.mock("gsap", () => {
+  const gsap = {
+    fromTo: vi.fn((_target, _from, to) => {
+      to?.onComplete?.();
+      return { kill: vi.fn() };
+    }),
+    to: vi.fn((_target, to) => {
+      to?.onComplete?.();
+      return { kill: vi.fn() };
+    }),
+    set: vi.fn(),
+    killTweensOf: vi.fn(),
+    context: vi.fn(() => ({ add: (callback: () => void) => callback(), revert: vi.fn() })),
+  };
+  return { default: gsap, gsap };
+});
 
 describe("useUnsavedChangesGuard", () => {
   const originalConfirm = window.confirm;
@@ -17,6 +34,7 @@ describe("useUnsavedChangesGuard", () => {
   afterEach(() => {
     cleanup();
     window.confirm = originalConfirm;
+    vi.useRealTimers();
     vi.restoreAllMocks();
   });
 
@@ -153,5 +171,85 @@ describe("UnsavedChangesModal rendering", () => {
 
     await waitFor(() => expect(input.getAttribute("aria-invalid")).toBe("true"));
     expect(screen.getByRole("alert").textContent).toContain("Use a value of at least 1.");
+  });
+});
+
+describe("SettingsPage reset confirmation", () => {
+  afterEach(() => {
+    cleanup();
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  it("gates the header project reset side effect behind cancelable confirmation", async () => {
+    vi.resetModules();
+    const handleResetProject = vi.fn().mockResolvedValue(undefined);
+
+    vi.doMock("../../../dashboard/src/v2/hooks/use-settings-page-state.js", () => ({
+      useSettingsPageState: () => ({
+        clearFeedback: vi.fn(),
+        activeCategory: "general",
+        activeScope: "project",
+        setActiveScope: vi.fn(),
+        settingsSearch: "",
+        setSettingsSearch: vi.fn(),
+        activeCategoryConfig: {
+          label: "General",
+          description: "General settings",
+          icon: () => null,
+          danger: false,
+        },
+        filteredCategories: [{ id: "general", label: "General" }],
+        settingsSearchMatches: {},
+        error: null,
+        selectedProject: { id: "project-1", name: "Approved local test project" },
+        activeDirty: false,
+        activeSaving: false,
+        loading: false,
+        saveMessage: null,
+        handleSave: vi.fn(),
+        handleResetProject,
+        resettingProject: false,
+        showUnsavedModal: false,
+        confirmDiscard: vi.fn(),
+        cancelDiscard: vi.fn(),
+        saveAndLeave: vi.fn(),
+        setActiveCategory: vi.fn(),
+        searchInputRef: { current: null },
+      }),
+    }));
+    vi.doMock("../../../dashboard/src/v2/components/settings/SettingsCategoryRail.js", () => ({
+      CATEGORIES: [{ id: "general", label: "General", description: "General settings", icon: () => null }],
+      SettingsCategoryRail: () => null,
+    }));
+    vi.doMock("../../../dashboard/src/v2/components/settings/SettingsContentPanels.js", () => ({
+      SettingsContentPanels: () => null,
+    }));
+
+    const { SettingsPage } = await import("../../../dashboard/src/v2/SettingsPage.js");
+
+    render(<SettingsPage />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Reset Project" }));
+    expect(handleResetProject).not.toHaveBeenCalled();
+    expect(screen.getByRole("dialog", { name: "Reset Project Overrides" }).textContent).toContain("Approved local test project");
+
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Reset Project Overrides" })).toBeNull());
+    expect(handleResetProject).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Reset Project" }));
+    vi.useFakeTimers();
+    const confirmButton = screen.getByRole("button", { name: "Hold to Reset Project" });
+    fireEvent.pointerDown(confirmButton, { button: 0, pointerId: 1 });
+    await act(async () => {
+      vi.advanceTimersByTime(1000);
+      await Promise.resolve();
+    });
+    vi.useRealTimers();
+
+    await waitFor(() => {
+      expect(handleResetProject).toHaveBeenCalledTimes(1);
+    });
   });
 });

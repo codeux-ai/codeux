@@ -591,6 +591,16 @@ describe("dashboard accessibility quality regressions", () => {
     expect(card).toHaveClass("kanban-card-reduced-motion");
     expect(card).not.toHaveAttribute("draggable", "true");
     expect(screen.getByText("Draggable reordering is disabled in reduced motion mode.")).toHaveClass("sr-only");
+
+    const rootStyles = readSource("dashboard/src/styles.css");
+    expect(rootStyles).toMatch(/:root\[data-reduced-motion="true"\]/);
+    expect(rootStyles).toMatch(/:root\[data-reduced-motion="REDUCE"\]/);
+    expect(rootStyles).toMatch(/\.animate-spin, \.animate-ping, \.animate-pulse, \.animate-bounce, \.animate-skeleton-shimmer/);
+    expect(rootStyles).toMatch(/\.live-duration-badge[\s\S]*var\(--status-static-running-ring\)/);
+
+    const tokenStyles = readSource("dashboard/src/v2/styles/tokens.css");
+    expect(tokenStyles).toMatch(/:root\[data-reduced-motion="true"\]/);
+    expect(tokenStyles).toMatch(/:root\[data-reduced-motion="REDUCE"\]/);
   });
 
   it("guards refined interaction surfaces against hardcoded motion timing", () => {
@@ -654,6 +664,15 @@ describe("dashboard accessibility quality regressions", () => {
     expect(searchOverlay).toMatch(/current results remain available/);
     expect(searchOverlay).toMatch(/aria-busy=\{isLoading \? "true" : undefined\}/);
     expect(searchOverlay).toMatch(/aria-activedescendant=\{activeDescendantId\}/);
+
+    const runtimeEventFeed = readSource("dashboard/src/v2/components/RuntimeEventFeed.tsx");
+    expect(runtimeEventFeed).toMatch(/aria-busy="true"/);
+    expect(runtimeEventFeed).toMatch(/Loading runtime events/);
+    expect(runtimeEventFeed).toMatch(/aria-busy="false"/);
+
+    const liveDurationBadge = readSource("dashboard/src/v2/components/ui/LiveDurationBadge.tsx");
+    expect(liveDurationBadge).toMatch(/aria-label=\{`Live duration:/);
+    expect(liveDurationBadge).toMatch(/live-duration-badge/);
   });
 
   it("guards disabled reasons and non-hover action access on refined controls", () => {

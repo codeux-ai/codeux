@@ -366,6 +366,9 @@ export class ProviderExecutionService {
         signal: args.signal,
         continueSessionId,
         openCodeBaselineUsage: openCodeBaselineRawUsageJson,
+        invocationId: execInvocationId,
+        providerInvocationId: invocation?.id,
+        purpose: args.purpose,
         mcpConnection: resolvedMcp.mcpConnection,
         customMcpServers: resolvedMcp.customMcpServers,
         onActivity: (desc: string, originator?: string) => {

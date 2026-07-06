@@ -28,7 +28,7 @@ test('Dashboard accessibility smoke test', async ({ page }) => {
   await expect(searchTrigger).toBeVisible();
 
   // 4. Notification trigger
-  const notificationTrigger = page.getByRole('button', { name: 'Notifications' });
+  const notificationTrigger = page.getByRole('button', { name: /Notifications/ });
   await expect(notificationTrigger).toBeVisible();
 
   // 5. Project Selector
@@ -42,11 +42,9 @@ test('Dashboard accessibility smoke test', async ({ page }) => {
   }
 
   // 7. Open Dialog
-  await searchTrigger.evaluate((element) => {
-    if (element instanceof HTMLButtonElement) {
-      element.click();
-    }
-  });
+  await searchTrigger.focus();
+  await expect(searchTrigger).toBeFocused();
+  await page.keyboard.press('Enter');
   const dialog = page.getByRole('dialog', { name: 'Search' });
   await expect(dialog).toBeVisible();
   const searchInput = dialog.getByPlaceholder('Find sprints, tasks, agents, previews...');

@@ -33,6 +33,7 @@ This document outlines the design system for the Sprints page and related planni
 ### Sprint Action State Management
 
 *   **Async Operations:** For dashboard v2 asynchronous sprint actions (like starting, pausing, toggling showcase, or completing sprints), use the shared `SprintPageActionRunner` to handle pending states, optimistic UI updates, and data refresh cycles, preventing duplicated async state management.
+*   **Delete Flow Ownership:** Sprint card and ledger action menus do not own their own destructive delete confirmation. The menu item closes the menu and delegates to the page-owned sprint delete dialog so the user sees one shared destructive confirm flow per delete action.
 *   **Interaction Contracts:** Sprint cards and ledger controls use `controlFeedback` for hover/focus/button transitions, `selectionMovement` for row and select-all selection changes, `listReorder` for sort/filter/window changes, `expansionCollapse` for bulk action bar disclosure, and `asyncFeedback` for pending loaders and busy-state transitions. Do not introduce one-off timing constants for these surfaces.
 
 ### Quicksprint Panel
