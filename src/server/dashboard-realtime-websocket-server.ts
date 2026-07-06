@@ -11,12 +11,18 @@ import { isHostileBrowserOrigin } from "./dashboard-security.js";
 import { parseDashboardRealtimeScope } from "../repositories/dashboard-realtime-event-repository.js";
 import type { DashboardRealtimeService } from "../services/dashboard-realtime-service.js";
 import type { Logger } from "../shared/logging/logger.js";
+import {
+  extractCorrelationIdFromHeaders,
+  resolveCorrelationId,
+  runWithCorrelationId,
+} from "../shared/logging/correlation-id.js";
 
 interface RealtimeClientState {
   socket: Socket;
   subscriptions: Set<string>;
   lastPushedSequence: number | null;
   recoveryAttempts: number[];
+  correlationId: string;
 }
 
 const WS_MAGIC = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
@@ -241,189 +247,219 @@ export function bootDashboardRealtimeWebSocketServer(args: {
   const unsubscribe = args.realtimeService.subscribe(broadcastEvent);
 
   const upgradeHandler = (req: IncomingMessage, socket: Socket): void => {
-    if (args.shouldHandleRequest && !args.shouldHandleRequest(req)) {
-      return;
-    }
-    const requestUrl = new URL(req.url || "/", "http://127.0.0.1");
-    if (requestUrl.pathname !== args.pathName) {
-      return;
-    }
-    if (!isRealtimeUpgradeRequest(req, args.pathName)) {
-      socket.destroy();
-      return;
-    }
+    const correlationId = resolveCorrelationId(extractCorrelationIdFromHeaders(req.headers));
+    runWithCorrelationId(correlationId, () => {
+      if (args.shouldHandleRequest && !args.shouldHandleRequest(req)) {
+        return;
+      }
+      const requestUrl = new URL(req.url || "/", "http://127.0.0.1");
+      if (requestUrl.pathname !== args.pathName) {
+        return;
+      }
+      if (!isRealtimeUpgradeRequest(req, args.pathName)) {
+        socket.destroy();
+        return;
+      }
 
-    const wsKey = String(req.headers["sec-websocket-key"] || "").trim();
-    if (!wsKey) {
-      socket.destroy();
-      return;
-    }
+      const wsKey = String(req.headers["sec-websocket-key"] || "").trim();
+      if (!wsKey) {
+        socket.destroy();
+        return;
+      }
 
-    const mockReq = {
-      method: "POST", // Bypass the GET/HEAD/OPTIONS fast-path skip in isHostileBrowserOrigin
-      path: args.pathName,
-      headers: req.headers,
-    } as unknown as Request;
-
-    if (isHostileBrowserOrigin(mockReq)) {
-      args.logger.warn("websocket_upgrade_rejected_hostile_origin", {
-        logPurpose: "security",
+      const mockReq = {
+        method: "POST", // Bypass the GET/HEAD/OPTIONS fast-path skip in isHostileBrowserOrigin
         path: args.pathName,
-      });
-      // Important: don't respond with a 101, explicitly reject and close.
-      socket.write("HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n");
-      socket.destroy();
-      return;
-    }
+        headers: req.headers,
+      } as unknown as Request;
 
-    socket.write(
-      [
-        "HTTP/1.1 101 Switching Protocols",
-        "Upgrade: websocket",
-        "Connection: Upgrade",
-        `Sec-WebSocket-Accept: ${acceptKey(wsKey)}`,
-        "",
-        "",
-      ].join("\r\n"),
-    );
-
-    const client: RealtimeClientState = {
-      socket,
-      subscriptions: new Set<string>(),
-      lastPushedSequence: null,
-      recoveryAttempts: [],
-    };
-    clients.set(socket, client);
-    sendJson(socket, { type: "ready" });
-
-    let buffered: Buffer<ArrayBufferLike> = Buffer.alloc(0);
-    socket.on("data", (chunk: Buffer) => {
-      if (buffered.length + chunk.length > MAX_WS_BUFFER_SIZE) {
-        closeSocket(socket);
+      if (isHostileBrowserOrigin(mockReq)) {
+        args.logger.warn("websocket_upgrade_rejected_hostile_origin", {
+          logPurpose: "security",
+          path: args.pathName,
+          correlationId,
+        });
+        // Important: don't respond with a 101, explicitly reject and close.
+        socket.write("HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n");
+        socket.destroy();
         return;
       }
 
-      buffered = Buffer.concat([buffered, chunk]);
-      const parsed = parseClientFrames(buffered);
-      buffered = parsed.nextBuffer;
+      socket.write(
+        [
+          "HTTP/1.1 101 Switching Protocols",
+          "Upgrade: websocket",
+          "Connection: Upgrade",
+          `Sec-WebSocket-Accept: ${acceptKey(wsKey)}`,
+          "",
+          "",
+        ].join("\r\n"),
+      );
 
-      if (parsed.closed) {
-        closeSocket(socket);
-        return;
-      }
+      const client: RealtimeClientState = {
+        socket,
+        subscriptions: new Set<string>(),
+        lastPushedSequence: null,
+        recoveryAttempts: [],
+        correlationId,
+      };
+      clients.set(socket, client);
+      sendJson(socket, { type: "ready" });
 
-      for (const messageText of parsed.messages) {
-        try {
-          const message = JSON.parse(messageText) as DashboardRealtimeClientMessage;
-          if (message.type !== "set_subscriptions") {
-            continue;
+      let buffered: Buffer<ArrayBufferLike> = Buffer.alloc(0);
+      socket.on("data", (chunk: Buffer) => {
+        runWithCorrelationId(client.correlationId, () => {
+          if (buffered.length + chunk.length > MAX_WS_BUFFER_SIZE) {
+            closeSocket(socket);
+            return;
           }
 
-          const scopes = [...new Set((message.scopes || []).map((scope) => String(scope || "").trim()).filter(Boolean))];
-          const validScopes = scopes.filter((scope) => parseDashboardRealtimeScope(scope) !== null);
-          client.subscriptions = new Set(validScopes);
+          buffered = Buffer.concat([buffered, chunk]);
+          const parsed = parseClientFrames(buffered);
+          buffered = parsed.nextBuffer;
 
-          const afterSequence = Math.max(0, Number(message.lastSequence ?? 0) || 0);
-          if (afterSequence > 0 && validScopes.length > 0) {
-            const latestSequence = args.realtimeService.getLatestSequenceForScopes(validScopes);
+          if (parsed.closed) {
+            closeSocket(socket);
+            return;
+          }
 
-            // If the client claims a sequence beyond anything the server currently knows about,
-            // the server has restarted (its in-memory snapshot watermarks are gone). Treat the
-            // client as stale and force a fresh snapshot rather than silently leaving it behind.
-            const serverGlobalLatest = args.realtimeService.getLatestSequence();
-            const clientAheadOfServer = serverGlobalLatest !== null && afterSequence > serverGlobalLatest;
+          for (const messageText of parsed.messages) {
+            try {
+              const message = JSON.parse(messageText) as DashboardRealtimeClientMessage;
+              if (message.type !== "set_subscriptions") {
+                continue;
+              }
 
-            const isUpToDateWithLatest = !clientAheadOfServer && latestSequence !== null && afterSequence >= latestSequence;
-            const receivedViaPush = !clientAheadOfServer && client.lastPushedSequence !== null && afterSequence >= client.lastPushedSequence;
-            const isGenuinelyBehind = clientAheadOfServer || (!isUpToDateWithLatest && !receivedViaPush);
+              const scopes = [...new Set((message.scopes || []).map((scope) => String(scope || "").trim()).filter(Boolean))];
+              const validScopes = scopes.filter((scope) => parseDashboardRealtimeScope(scope) !== null);
+              client.subscriptions = new Set(validScopes);
 
-            if (isGenuinelyBehind) {
-              const missedNonReplayableSnapshot = clientAheadOfServer
-                || args.realtimeService.hasNonReplayableEventsSince(validScopes, afterSequence);
-              const replayEvents = args.realtimeService.replay(validScopes, afterSequence, 200);
-              const replayLastSequence = replayEvents[replayEvents.length - 1]?.sequence ?? afterSequence;
+              const afterSequence = Math.max(0, Number(message.lastSequence ?? 0) || 0);
+              if (afterSequence > 0 && validScopes.length > 0) {
+                const latestSequence = args.realtimeService.getLatestSequenceForScopes(validScopes);
 
-              if (missedNonReplayableSnapshot || (latestSequence !== null && replayLastSequence < latestSequence)) {
-                const reason = missedNonReplayableSnapshot ? "non_replayable_event_missed" : "replay_window_exceeded";
-                args.logger.warn("websocket_recovery_snapshot_required", {
-                  reason,
-                  afterSequence,
-                  latestSequence
-                });
+                // If the client claims a sequence beyond anything the server currently knows about,
+                // the server has restarted (its in-memory snapshot watermarks are gone). Treat the
+                // client as stale and force a fresh snapshot rather than silently leaving it behind.
+                const serverGlobalLatest = args.realtimeService.getLatestSequence();
+                const clientAheadOfServer = serverGlobalLatest !== null && afterSequence > serverGlobalLatest;
 
-                const now = Date.now();
-                client.recoveryAttempts.push(now);
-                client.recoveryAttempts = client.recoveryAttempts.filter(t => now - t <= 60000);
-                if (client.recoveryAttempts.length > 3) {
-                  args.logger.warn("repeated_unhealthy_recovery_patterns", {
-                    clientId: socket.remoteAddress || "unknown",
-                    count: client.recoveryAttempts.length
-                  });
-                  client.recoveryAttempts = [];
-                }
+                const isUpToDateWithLatest = !clientAheadOfServer && latestSequence !== null && afterSequence >= latestSequence;
+                const receivedViaPush = !clientAheadOfServer && client.lastPushedSequence !== null && afterSequence >= client.lastPushedSequence;
+                const isGenuinelyBehind = clientAheadOfServer || (!isUpToDateWithLatest && !receivedViaPush);
 
-                sendJson(socket, {
-                  type: "snapshot_required",
-                  reason,
-                });
-              } else {
-                for (const replayEvent of replayEvents) {
-                  sendJson(socket, {
-                    type: "event",
-                    event: replayEvent,
-                  });
+                if (isGenuinelyBehind) {
+                  const missedNonReplayableSnapshot = clientAheadOfServer
+                    || args.realtimeService.hasNonReplayableEventsSince(validScopes, afterSequence);
+                  const replayEvents = args.realtimeService.replay(validScopes, afterSequence, 200);
+                  const replayLastSequence = replayEvents[replayEvents.length - 1]?.sequence ?? afterSequence;
+
+                  if (missedNonReplayableSnapshot || (latestSequence !== null && replayLastSequence < latestSequence)) {
+                    const reason = missedNonReplayableSnapshot ? "non_replayable_event_missed" : "replay_window_exceeded";
+                    args.logger.warn("websocket_recovery_snapshot_required", {
+                      logPurpose: "realtime",
+                      reason,
+                      afterSequence,
+                      latestSequence,
+                      scopes: validScopes,
+                      correlationId: client.correlationId,
+                    });
+
+                    const now = Date.now();
+                    client.recoveryAttempts.push(now);
+                    client.recoveryAttempts = client.recoveryAttempts.filter(t => now - t <= 60000);
+                    if (client.recoveryAttempts.length > 3) {
+                      args.logger.warn("repeated_unhealthy_recovery_patterns", {
+                        logPurpose: "realtime",
+                        clientId: socket.remoteAddress || "unknown",
+                        count: client.recoveryAttempts.length,
+                        correlationId: client.correlationId,
+                      });
+                      client.recoveryAttempts = [];
+                    }
+
+                    sendJson(socket, {
+                      type: "snapshot_required",
+                      reason,
+                    });
+                  } else {
+                    for (const replayEvent of replayEvents) {
+                      sendJson(socket, {
+                        type: "event",
+                        event: replayEvent,
+                      });
+                    }
+                  }
                 }
               }
+
+              sendJson(socket, {
+                type: "subscribed",
+                scopes: validScopes,
+                lastSequence: args.realtimeService.getLatestSequence(),
+              });
+            } catch (error) {
+              args.logger.warn("Invalid dashboard realtime websocket message", {
+                logPurpose: "realtime",
+                correlationId: client.correlationId,
+                error,
+              });
+              const reason = "invalid_client_message";
+              args.logger.warn("websocket_recovery_snapshot_required", {
+                logPurpose: "realtime",
+                reason,
+                correlationId: client.correlationId,
+              });
+
+              const now = Date.now();
+              client.recoveryAttempts.push(now);
+              client.recoveryAttempts = client.recoveryAttempts.filter(t => now - t <= 60000);
+              if (client.recoveryAttempts.length > 3) {
+                args.logger.warn("repeated_unhealthy_recovery_patterns", {
+                  logPurpose: "realtime",
+                  clientId: socket.remoteAddress || "unknown",
+                  count: client.recoveryAttempts.length,
+                  correlationId: client.correlationId,
+                });
+                client.recoveryAttempts = [];
+              }
+
+              sendJson(socket, {
+                type: "snapshot_required",
+                reason,
+              });
             }
           }
+        });
+      });
 
-          sendJson(socket, {
-            type: "subscribed",
-            scopes: validScopes,
-            lastSequence: args.realtimeService.getLatestSequence(),
+      socket.on("close", () => {
+        clients.delete(socket);
+      });
+      socket.on("end", () => {
+        clients.delete(socket);
+      });
+      socket.on("error", (error) => {
+        clients.delete(socket);
+        // A client closing its tab/connection abruptly surfaces here as a reset or
+        // broken pipe. That's a normal disconnect, not a server fault, so keep it
+        // out of the warning stream (it would otherwise spam a full stack trace
+        // for every page teardown). Genuinely unexpected errors still warn.
+        const code = (error as NodeJS.ErrnoException).code;
+        if (code === "ECONNRESET" || code === "EPIPE" || code === "ECONNABORTED" || code === "ETIMEDOUT") {
+          args.logger.debug("Dashboard realtime websocket client disconnected", {
+            logPurpose: "realtime",
+            code,
+            correlationId: client.correlationId,
           });
-        } catch (error) {
-          args.logger.warn("Invalid dashboard realtime websocket message", { error });
-          const reason = "invalid_client_message";
-          args.logger.warn("websocket_recovery_snapshot_required", { reason });
-
-          const now = Date.now();
-          client.recoveryAttempts.push(now);
-          client.recoveryAttempts = client.recoveryAttempts.filter(t => now - t <= 60000);
-          if (client.recoveryAttempts.length > 3) {
-            args.logger.warn("repeated_unhealthy_recovery_patterns", {
-              clientId: socket.remoteAddress || "unknown",
-              count: client.recoveryAttempts.length
-            });
-            client.recoveryAttempts = [];
-          }
-
-          sendJson(socket, {
-            type: "snapshot_required",
-            reason,
-          });
+          return;
         }
-      }
-    });
-
-    socket.on("close", () => {
-      clients.delete(socket);
-    });
-    socket.on("end", () => {
-      clients.delete(socket);
-    });
-    socket.on("error", (error) => {
-      clients.delete(socket);
-      // A client closing its tab/connection abruptly surfaces here as a reset or
-      // broken pipe. That's a normal disconnect, not a server fault, so keep it
-      // out of the warning stream (it would otherwise spam a full stack trace
-      // for every page teardown). Genuinely unexpected errors still warn.
-      const code = (error as NodeJS.ErrnoException).code;
-      if (code === "ECONNRESET" || code === "EPIPE" || code === "ECONNABORTED" || code === "ETIMEDOUT") {
-        args.logger.debug("Dashboard realtime websocket client disconnected", { code });
-        return;
-      }
-      args.logger.warn("Dashboard realtime websocket client error", { error });
+        args.logger.warn("Dashboard realtime websocket client error", {
+          logPurpose: "realtime",
+          correlationId: client.correlationId,
+          error,
+        });
+      });
     });
   };
 

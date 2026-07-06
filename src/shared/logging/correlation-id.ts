@@ -31,6 +31,13 @@ const extractHeaderCorrelationId = (header: string | string[] | undefined): stri
   return normalizeCorrelationId(header);
 };
 
+export const extractCorrelationIdFromHeaders = (
+  headers: Record<string, string | string[] | undefined>,
+): string | undefined => (
+  extractHeaderCorrelationId(headers[CORRELATION_ID_HEADER]) ??
+  extractHeaderCorrelationId(headers["x-request-id"])
+);
+
 export const generateCorrelationId = (): string => randomUUID();
 
 export const resolveCorrelationId = (value: unknown): string => normalizeCorrelationId(value) ?? generateCorrelationId();
@@ -47,9 +54,10 @@ export const runWithResolvedCorrelationId = <T>(operation: () => T, preferredCor
 
 export const correlationIdMiddleware = (): RequestHandler => {
   return (req, res, next) => {
-    const requestedCorrelationId =
-      extractHeaderCorrelationId(req.header(CORRELATION_ID_HEADER)) ??
-      extractHeaderCorrelationId(req.header("x-request-id"));
+    const requestedCorrelationId = extractCorrelationIdFromHeaders({
+      [CORRELATION_ID_HEADER]: req.header(CORRELATION_ID_HEADER),
+      "x-request-id": req.header("x-request-id"),
+    });
     const correlationId = resolveCorrelationId(requestedCorrelationId);
     res.setHeader(CORRELATION_ID_HEADER, correlationId);
     runWithCorrelationId(correlationId, next);
