@@ -246,12 +246,13 @@ describe('ActivityCacheService', () => {
         sessionName: 'session-1',
         failureCause: 'error',
         errorName: 'Error',
+        errorMessage: 'Fetch failed',
         cacheFallbackState: 'empty',
         cachedActivityCount: 0,
       });
     });
 
-    it('should return stale cached activities when a refresh times out', async () => {
+    it('should return stale cached activities when a refresh times out through the shared fetch helper', async () => {
       service = new ActivityCacheService(mockDeps, LIVE_CACHE_MS, GIT_CACHE_MS, PAGE_SIZE, 3, 2000, 25);
       mockDeps.getSubtasks.mockReturnValue([mockTask]);
       mockDeps.resolveSessionNameFromTask.mockReturnValue('session-1');
@@ -274,6 +275,7 @@ describe('ActivityCacheService', () => {
         sessionName: 'session-1',
         failureCause: 'timeout',
         errorName: 'ActivityFetchTimeoutError',
+        errorMessage: 'Timed out fetching live activities for session-1 after 25ms',
         cacheFallbackState: 'stale',
         cachedActivityCount: 1,
         timeoutMs: 25,
@@ -299,6 +301,7 @@ describe('ActivityCacheService', () => {
         sessionName: 'session-1',
         failureCause: 'error',
         errorName: 'Error',
+        errorMessage: 'Fetch failed',
         cacheFallbackState: 'stale',
         cachedActivityCount: 1,
       });
@@ -312,7 +315,7 @@ describe('ActivityCacheService', () => {
       await service.getLiveActivitiesForActiveTasks();
 
       vi.advanceTimersByTime(LIVE_CACHE_MS + 100);
-      mockDeps.fetchRecentActivities.mockRejectedValue(new Error('provider-output-body-should-not-log'));
+      mockDeps.fetchRecentActivities.mockRejectedValue(new Error('provider rejected'));
 
       const firstFallback = await service.getLiveActivitiesForActiveTasks();
       const secondFallback = await service.getLiveActivitiesForActiveTasks();
@@ -328,10 +331,11 @@ describe('ActivityCacheService', () => {
           sessionName: 'session-1',
           failureCause: 'error',
           errorName: 'Error',
+          errorMessage: 'provider rejected',
           cacheFallbackState: 'stale',
           cachedActivityCount: 1,
         });
-        expect(JSON.stringify(metadata)).not.toContain('provider-output-body-should-not-log');
+        expect(JSON.stringify(metadata)).not.toContain('BASH_COMMAND');
       }
     });
 
@@ -383,6 +387,46 @@ describe('ActivityCacheService', () => {
       expect(res1).toEqual({
         'session-1': [mockActivity],
         'session-2': [mockActivity],
+      });
+    });
+
+    it('should preserve session ordering when concurrent missing-session fetches resolve out of order', async () => {
+      const mockTask2 = { ...mockTask, id: 'task-2' };
+      const mockTask3 = { ...mockTask, id: 'task-3' };
+      const activity1 = { ...mockActivity, id: 'act-1', taskId: 'task-1' };
+      const activity2 = { ...mockActivity, id: 'act-2', taskId: 'task-2' };
+      const activity3 = { ...mockActivity, id: 'act-3', taskId: 'task-3' };
+      const fetchResolutions = new Map<string, (activities: JulesActivity[]) => void>();
+
+      service = new ActivityCacheService(mockDeps, LIVE_CACHE_MS, GIT_CACHE_MS, PAGE_SIZE, 2, 2000);
+      mockDeps.getSubtasks.mockReturnValue([mockTask, mockTask2, mockTask3]);
+      mockDeps.resolveSessionNameFromTask.mockImplementation((task) => `session-${task.id.slice(-1)}`);
+      mockDeps.fetchRecentActivities.mockImplementation((sessionName) => {
+        return new Promise<JulesActivity[]>((resolve) => {
+          fetchResolutions.set(sessionName, resolve);
+        });
+      });
+
+      const resultPromise = service.getLiveActivitiesForActiveTasks();
+      await vi.waitFor(() => {
+        expect(mockDeps.fetchRecentActivities).toHaveBeenCalledTimes(2);
+      });
+
+      fetchResolutions.get('session-2')?.([activity2]);
+      await vi.waitFor(() => {
+        expect(mockDeps.fetchRecentActivities).toHaveBeenCalledTimes(3);
+      });
+
+      fetchResolutions.get('session-3')?.([activity3]);
+      fetchResolutions.get('session-1')?.([activity1]);
+
+      const result = await resultPromise;
+
+      expect(Object.keys(result)).toEqual(['session-1', 'session-2', 'session-3']);
+      expect(result).toEqual({
+        'session-1': [activity1],
+        'session-2': [activity2],
+        'session-3': [activity3],
       });
     });
 
