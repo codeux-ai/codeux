@@ -30,6 +30,7 @@ pnpm run lint
 - Deduplicate realtime delivery semantically. Top-level `updatedAt` and transport timestamps are assembly metadata, not sufficient proof that runtime state changed.
 - Heavy live payloads stay on dedicated scopes such as `project:<projectId>:live`; do not broaden delivery to generic project scopes without a measured reason.
 - Cache policies are explicit runtime contracts. Change TTLs, invalidation keys, or immutable snapshot assumptions only in the cache policy and update tests beside the cache.
+- Dashboard snapshot caches must maintain project-to-key indexes for full execution, lean execution, and project stats entries. Hot realtime invalidation for one project must delete through those indexes instead of scanning unrelated cached project/query keys.
 
 Related docs: [Live Runtime Contract](./live-runtime-contract.md), [Execution Dashboard Projection](./execution-dashboard-projection.md), [System Overview](./system-overview.md).
 

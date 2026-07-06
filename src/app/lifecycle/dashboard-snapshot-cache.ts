@@ -104,6 +104,7 @@ export class DashboardSnapshotCache {
   private deps: DashboardSnapshotCacheDeps;
 
   private projectExecutionSnapshotCache = new Map<ProjectExecutionSnapshotCacheKey, { snapshot: ExecutionDashboardSnapshot; expiresAt: number }>();
+  private projectExecutionSnapshotKeysByProject = new Map<string, Set<ProjectExecutionSnapshotCacheKey>>();
   // Memoizes the feed-less view with the same explicit project/sprint scope as
   // the full snapshot cache. The source snapshot guard prevents stale lean views
   // from surviving a full snapshot rebuild after TTL expiry.
@@ -112,12 +113,42 @@ export class DashboardSnapshotCache {
     snapshot: ExecutionDashboardSnapshot;
     expiresAt: number;
   }>();
+  private leanExecutionSnapshotKeysByProject = new Map<string, Set<ProjectExecutionSnapshotCacheKey>>();
   private projectStatsSnapshotCache = new Map<string, { snapshot: ReturnType<DashboardSnapshotCacheDeps["executionRepository"]["getProjectStatsSnapshot"]>; expiresAt: number }>();
+  private projectStatsSnapshotKeysByProject = new Map<string, Set<string>>();
   private overviewTelemetryCache: { snapshot: ReturnType<DashboardSnapshotCacheDeps["executionRepository"]["getOverviewTelemetrySnapshot"]>; expiresAt: number } | null = null;
   private projectsSnapshotCache: { snapshot: ReturnType<DashboardSnapshotCacheDeps["projectManagementRepository"]["listProjects"]>; expiresAt: number } | null = null;
 
   constructor(deps: DashboardSnapshotCacheDeps) {
     this.deps = deps;
+  }
+
+  private registerProjectCacheKey<Key extends string>(
+    index: Map<string, Set<Key>>,
+    projectId: string,
+    cacheKey: Key,
+  ): void {
+    const keys = index.get(projectId);
+    if (keys) {
+      keys.add(cacheKey);
+      return;
+    }
+    index.set(projectId, new Set([cacheKey]));
+  }
+
+  private unregisterProjectCacheKey<Key extends string>(
+    index: Map<string, Set<Key>>,
+    projectId: string,
+    cacheKey: Key,
+  ): void {
+    const keys = index.get(projectId);
+    if (!keys) {
+      return;
+    }
+    keys.delete(cacheKey);
+    if (keys.size === 0) {
+      index.delete(projectId);
+    }
   }
 
   getProjectsSnapshot = () => {
@@ -177,7 +208,9 @@ export class DashboardSnapshotCache {
       snapshot,
       expiresAt: now + DashboardSnapshotCachePolicy.PROJECT_EXECUTION_CACHE_TTL_MS,
     });
+    this.registerProjectCacheKey(this.projectExecutionSnapshotKeysByProject, projectId, cacheKey);
     this.leanExecutionSnapshotCache.delete(cacheKey);
+    this.unregisterProjectCacheKey(this.leanExecutionSnapshotKeysByProject, projectId, cacheKey);
     return snapshot;
   };
 
@@ -210,6 +243,7 @@ export class DashboardSnapshotCache {
       snapshot: lean,
       expiresAt: now + DashboardSnapshotCachePolicy.PROJECT_EXECUTION_CACHE_TTL_MS,
     });
+    this.registerProjectCacheKey(this.leanExecutionSnapshotKeysByProject, projectId, cacheKey);
     return lean;
   };
 
@@ -225,27 +259,37 @@ export class DashboardSnapshotCache {
       snapshot,
       expiresAt: now + DashboardSnapshotCachePolicy.PROJECT_STATS_CACHE_TTL_MS,
     });
+    this.registerProjectCacheKey(this.projectStatsSnapshotKeysByProject, projectId, cacheKey);
     return snapshot;
   };
 
   invalidateProjectExecution(projectId: string): void {
-    for (const key of Array.from(this.projectExecutionSnapshotCache.keys())) {
-      if (DashboardSnapshotCachePolicy.isProjectExecutionSnapshotCacheKeyMatch(key, projectId)) {
+    const executionKeys = this.projectExecutionSnapshotKeysByProject.get(projectId);
+    if (executionKeys) {
+      for (const key of executionKeys) {
         this.projectExecutionSnapshotCache.delete(key);
       }
+      this.projectExecutionSnapshotKeysByProject.delete(projectId);
     }
-    for (const key of Array.from(this.leanExecutionSnapshotCache.keys())) {
-      if (DashboardSnapshotCachePolicy.isProjectExecutionSnapshotCacheKeyMatch(key, projectId)) {
+
+    const leanKeys = this.leanExecutionSnapshotKeysByProject.get(projectId);
+    if (leanKeys) {
+      for (const key of leanKeys) {
         this.leanExecutionSnapshotCache.delete(key);
       }
+      this.leanExecutionSnapshotKeysByProject.delete(projectId);
     }
   }
 
   invalidateProjectStats(projectId: string): void {
-    const keysToDelete = Array.from(this.projectStatsSnapshotCache.keys()).filter((k) => DashboardSnapshotCachePolicy.isProjectStatsCacheKeyMatch(k, projectId));
-    for (const key of keysToDelete) {
+    const statsKeys = this.projectStatsSnapshotKeysByProject.get(projectId);
+    if (!statsKeys) {
+      return;
+    }
+    for (const key of statsKeys) {
       this.projectStatsSnapshotCache.delete(key);
     }
+    this.projectStatsSnapshotKeysByProject.delete(projectId);
   }
 
   invalidateOverview(): void {
@@ -258,8 +302,11 @@ export class DashboardSnapshotCache {
 
   invalidateAll(): void {
     this.projectExecutionSnapshotCache.clear();
+    this.projectExecutionSnapshotKeysByProject.clear();
     this.leanExecutionSnapshotCache.clear();
+    this.leanExecutionSnapshotKeysByProject.clear();
     this.projectStatsSnapshotCache.clear();
+    this.projectStatsSnapshotKeysByProject.clear();
     this.overviewTelemetryCache = null;
     this.projectsSnapshotCache = null;
   }
