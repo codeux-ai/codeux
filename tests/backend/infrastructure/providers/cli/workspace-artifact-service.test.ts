@@ -160,6 +160,62 @@ describe("WorkspaceArtifactService", () => {
       .toBe("remote worker tip\n");
   });
 
+  it("keeps a checked-out worker branch clean after materializing a patch", async () => {
+    const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), "workspace-artifact-service-"));
+    cleanupPaths.push(tempRoot);
+
+    const originPath = path.join(tempRoot, "origin.git");
+    const hostRepoPath = path.join(tempRoot, "host-repo");
+    const workspaceRepoPath = path.join(tempRoot, "workspace-repo");
+
+    await runCommandStrict("git", ["init", "--bare", originPath], tempRoot);
+    await runCommandStrict("git", ["clone", originPath, hostRepoPath], tempRoot);
+
+    await runGit(hostRepoPath, ["config", "user.name", "Code UX Test"]);
+    await runGit(hostRepoPath, ["config", "user.email", "code-ux@example.com"]);
+    await runGit(hostRepoPath, ["checkout", "-b", "main"]);
+    await fs.writeFile(path.join(hostRepoPath, "file.txt"), "base\n", "utf8");
+    await runGit(hostRepoPath, ["add", "file.txt"]);
+    await runGit(hostRepoPath, ["commit", "-m", "base"]);
+    await runGit(hostRepoPath, ["push", "-u", "origin", "main"]);
+    const baseRef = (await runGit(hostRepoPath, ["rev-parse", "HEAD"])).trim();
+
+    await runGit(hostRepoPath, ["checkout", "-b", "worker/test", baseRef]);
+
+    await runCommandStrict("git", ["clone", originPath, workspaceRepoPath], tempRoot);
+    await runGit(workspaceRepoPath, ["config", "user.name", "Code UX Test"]);
+    await runGit(workspaceRepoPath, ["config", "user.email", "code-ux@example.com"]);
+    await runGit(workspaceRepoPath, ["checkout", "-b", "worker/test", "origin/main"]);
+    await fs.writeFile(path.join(workspaceRepoPath, "file.txt"), "base\nworker change\n", "utf8");
+
+    const workspaceManager = {
+      runWorkspaceCommand: async (
+        _worktreePath: string,
+        command: string,
+        args: string[],
+        options: WorkspaceCommandOptions = {},
+      ) => await runCommandStrict(command, args, workspaceRepoPath, process.env, {
+        trimOutput: options.trimOutput,
+        signal: options.signal,
+      }),
+    } as IWorkspaceManager;
+
+    const service = new WorkspaceArtifactService(workspaceManager);
+    const patchText = await service.exportBinaryPatch("workspace", baseRef);
+    const result = await service.applyPatchToBranch({
+      repoPath: hostRepoPath,
+      baseRef,
+      workerBranch: "worker/test",
+      patchText,
+      commitMessage: "worker change",
+    });
+
+    expect(result.hasChanges).toBe(true);
+    expect((await runGit(hostRepoPath, ["branch", "--show-current"])).trim()).toBe("worker/test");
+    expect(await runGit(hostRepoPath, ["status", "--porcelain"], { trimOutput: false })).toBe("");
+    expect(await fs.readFile(path.join(hostRepoPath, "file.txt"), "utf8")).toBe("base\nworker change\n");
+  });
+
   it("retries killed branch pushes after materializing the resolved commit locally", async () => {
     const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), "workspace-artifact-service-"));
     cleanupPaths.push(tempRoot);

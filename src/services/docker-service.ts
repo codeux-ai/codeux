@@ -38,6 +38,18 @@ export class DockerService {
     return this.inFlight;
   }
 
+  async removeContainers(containerIds: string[], options: { removeVolumes?: boolean } = {}): Promise<void> {
+    const refs = containerIds.map((id) => id.trim()).filter(Boolean);
+    if (refs.length === 0) {
+      return;
+    }
+    this.cachedContainers = null;
+    const args = options.removeVolumes === true
+      ? ["rm", "-f", "-v", ...refs]
+      : ["rm", "-f", ...refs];
+    await runCommandStrict("docker", args, process.cwd()).catch(() => undefined);
+  }
+
   private async fetchContainers(): Promise<DockerContainer[]> {
     try {
       const result = await runCommandStrict("docker", ["ps", "--format", "{{json .}}"], process.cwd());
@@ -93,4 +105,3 @@ export class DockerService {
     }
   }
 }
-

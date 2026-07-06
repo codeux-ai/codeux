@@ -1377,6 +1377,66 @@ describe("VirtualWorkerService", () => {
     );
   });
 
+  it("keeps merge-conflict attention open when the worker records no merge evidence", async () => {
+    const { virtualWorkerService, projectAttentionService, project, workerEndpointRepository } = await setupServiceWithProject();
+
+    const endpoint = workerEndpointRepository.createVirtualEndpoint({
+      endpointKey: "virtual:no-merge-evidence",
+      displayName: "Virtual Worker",
+      status: "connected",
+      transport: "internal",
+      capabilities: {},
+    });
+
+    const item = projectAttentionService.openItem({
+      projectId: project.id,
+      sprintId: null,
+      taskId: null,
+      sprintRunId: null,
+      dispatchId: null,
+      attentionType: "merge_conflict",
+      severity: "high",
+      ownerType: "worker",
+      title: "Merge Conflict",
+      summaryMarkdown: "Resolve it",
+      payload: { repoPath: "/test", conflictingBranches: { source: "src", target: "tgt" } },
+    });
+
+    vi.spyOn((virtualWorkerService as any).workspaceManager, "buildWorktreePath").mockReturnValue("/tmp/wt");
+    vi.spyOn((virtualWorkerService as any).workspaceManager, "prepareWorktree").mockResolvedValue({ worktreePath: "/tmp/wt" });
+    vi.spyOn((virtualWorkerService as any).workspaceManager, "buildWorkspaceGuidance").mockResolvedValue("guidance");
+    vi.spyOn((virtualWorkerService as any).workspaceManager, "removeWorktree").mockResolvedValue(undefined);
+    vi.spyOn((virtualWorkerService as any).workspaceArtifactService, "exportBinaryPatch").mockResolvedValue("");
+    vi.spyOn((virtualWorkerService as any).workspaceArtifactService, "applyPatchToBranch")
+      .mockResolvedValue({ hasChanges: false });
+    vi.spyOn((virtualWorkerService as any), "runProviderWithRetry").mockResolvedValue(undefined);
+    vi.spyOn((virtualWorkerService as any), "runWorkspaceCommand").mockResolvedValue({
+      ok: true,
+      stdout: "initial-head\n",
+      stderr: "",
+      code: 0,
+    });
+    (virtualWorkerService as any).prService = {
+      hasUnpushedCommits: vi.fn().mockResolvedValue(false),
+      hasWorkerBranchCommitsAgainstFeature: vi.fn().mockResolvedValue(false),
+    };
+
+    vi.spyOn((virtualWorkerService as any).dockerService, "isAvailable").mockResolvedValue(true);
+    vi.spyOn((virtualWorkerService as any), "isMergeConflictResolvedOnRemote").mockResolvedValue(false);
+    vi.spyOn((virtualWorkerService as any), "runMergeIntoSource").mockResolvedValue(true);
+    vi.spyOn((virtualWorkerService as any), "ensureMergeConflictResolved").mockResolvedValue(undefined);
+    vi.spyOn((virtualWorkerService as any), "finalizeMergeCommit").mockResolvedValue(undefined);
+    vi.spyOn((virtualWorkerService as any), "ensureTargetMergedIntoSource").mockResolvedValue(undefined);
+
+    await (virtualWorkerService as any).resolveMergeConflictAttention(endpoint.id, item);
+
+    const updated = projectAttentionService.getItem(item.id);
+    expect(updated?.status).toBe("open");
+    expect(updated?.payload?.lastVirtualWorkerError).toContain("without recording merge evidence");
+    expect(projectAttentionService.listActiveProjectItems(project.id)
+      .some((attentionItem) => attentionItem.attentionType === "human_escalation_required")).toBe(false);
+  });
+
   it("records the merge-conflict guardrail attempt even when the resolution fails", async () => {
     const { virtualWorkerService, projectAttentionService, project, workerEndpointRepository, projectManagementRepository } = await setupServiceWithProject();
 

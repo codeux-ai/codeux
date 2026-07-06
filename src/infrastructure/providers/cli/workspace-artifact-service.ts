@@ -199,7 +199,11 @@ export class WorkspaceArtifactService {
         buildCommitIdentityEnv(args.gitIdentity),
       )).stdout.trim();
 
+      const shouldSyncCheckedOutWorkerBranch = await this.shouldSyncCheckedOutWorkerBranch(args.repoPath, args.workerBranch);
       await runCommandStrict("git", ["update-ref", `refs/heads/${args.workerBranch}`, commitSha], args.repoPath);
+      if (shouldSyncCheckedOutWorkerBranch) {
+        await runCommandStrict("git", ["reset", "--hard", commitSha], args.repoPath);
+      }
       if (args.githubMode !== "LOCAL") {
         const pushEnv = await buildGitHttpAuthEnvForRepoWithFallbacks(args.repoPath, args.gitAuth ?? {});
         await this.pushWorkerBranchWithRetry(args.repoPath, args.workerBranch, pushEnv ?? process.env);
@@ -279,6 +283,37 @@ export class WorkspaceArtifactService {
       return true;
     } catch {
       return false;
+    }
+  }
+
+  private async shouldSyncCheckedOutWorkerBranch(
+    repoPath: string,
+    workerBranch: string,
+  ): Promise<boolean> {
+    const currentBranch = await this.resolveCurrentBranch(repoPath);
+    if (currentBranch !== workerBranch) {
+      return false;
+    }
+
+    const trackedStatus = (await runCommandStrict(
+      "git",
+      ["status", "--porcelain", "--untracked-files=no"],
+      repoPath,
+    )).stdout.trim();
+    if (trackedStatus.length > 0) {
+      return false;
+    }
+
+    return true;
+  }
+
+  private async resolveCurrentBranch(repoPath: string): Promise<string | null> {
+    try {
+      const result = await runCommandStrict("git", ["rev-parse", "--abbrev-ref", "HEAD"], repoPath);
+      const branch = result.stdout.trim();
+      return branch && branch !== "HEAD" ? branch : null;
+    } catch {
+      return null;
     }
   }
 

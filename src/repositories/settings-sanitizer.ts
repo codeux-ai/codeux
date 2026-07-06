@@ -5,6 +5,8 @@ import type {
   McpToolToggle,
   RuntimeLogLevel,
   ConsoleLogMode,
+  RestartInvocationPolicy,
+  RestartSprintPolicy,
   SkillToggle,
 } from "../contracts/app-types.js";
 import { readBoolean, readPort, readString } from "../shared/config/value-readers.js";
@@ -47,6 +49,8 @@ const enforceGitManagerSkillset = (skills: SkillToggle[], githubMode: "REMOTE" |
 };
 
 const RUNTIME_LOG_LEVEL_SET = new Set<RuntimeLogLevel>(["off", "debug", "info", "warn", "error"]);
+const RESTART_SPRINT_POLICY_SET = new Set<RestartSprintPolicy>(["continue", "pause", "cancel"]);
+const RESTART_INVOCATION_POLICY_SET = new Set<RestartInvocationPolicy>(["continue", "cancel", "restart"]);
 
 const readRuntimeLogLevel = (value: unknown, fallback: RuntimeLogLevel): RuntimeLogLevel => (
   typeof value === "string" && RUNTIME_LOG_LEVEL_SET.has(value as RuntimeLogLevel)
@@ -56,6 +60,18 @@ const readRuntimeLogLevel = (value: unknown, fallback: RuntimeLogLevel): Runtime
 
 const readConsoleLogMode = (value: unknown, fallback: ConsoleLogMode): ConsoleLogMode => (
   value === "full" ? "full" : fallback
+);
+
+const readRestartSprintPolicy = (value: unknown, fallback: RestartSprintPolicy): RestartSprintPolicy => (
+  typeof value === "string" && RESTART_SPRINT_POLICY_SET.has(value as RestartSprintPolicy)
+    ? value as RestartSprintPolicy
+    : fallback
+);
+
+const readRestartInvocationPolicy = (value: unknown, fallback: RestartInvocationPolicy): RestartInvocationPolicy => (
+  typeof value === "string" && RESTART_INVOCATION_POLICY_SET.has(value as RestartInvocationPolicy)
+    ? value as RestartInvocationPolicy
+    : fallback
 );
 
 const sanitizePreviewPortList = (value: unknown, primaryPort: number): number[] => {
@@ -253,6 +269,8 @@ export const cloneDefaults = (externalHints?: ExternalSettingsHints): DashboardS
   dbAutoVacuumOnStartup: DEFAULT_DASHBOARD_SETTINGS.dbAutoVacuumOnStartup,
   dbPruningEnabled: DEFAULT_DASHBOARD_SETTINGS.dbPruningEnabled,
   dbRetentionDays: DEFAULT_DASHBOARD_SETTINGS.dbRetentionDays,
+  restartSprintPolicy: DEFAULT_DASHBOARD_SETTINGS.restartSprintPolicy,
+  restartInvocationPolicy: DEFAULT_DASHBOARD_SETTINGS.restartInvocationPolicy,
   appearance: { ...DEFAULT_DASHBOARD_SETTINGS.appearance },
   automationLevel: DEFAULT_DASHBOARD_SETTINGS.automationLevel,
   automationInterventions: {
@@ -352,6 +370,8 @@ export const sanitizeSettings = (value: unknown, externalHints?: ExternalSetting
   const dbAutoVacuumOnStartup = readBoolean(input.dbAutoVacuumOnStartup, DEFAULT_DASHBOARD_SETTINGS.dbAutoVacuumOnStartup);
   const dbPruningEnabled = readBoolean(input.dbPruningEnabled, DEFAULT_DASHBOARD_SETTINGS.dbPruningEnabled);
   const dbRetentionDays = typeof input.dbRetentionDays === "number" ? input.dbRetentionDays : DEFAULT_DASHBOARD_SETTINGS.dbRetentionDays;
+  const restartSprintPolicy = readRestartSprintPolicy(input.restartSprintPolicy, DEFAULT_DASHBOARD_SETTINGS.restartSprintPolicy);
+  const restartInvocationPolicy = readRestartInvocationPolicy(input.restartInvocationPolicy, DEFAULT_DASHBOARD_SETTINGS.restartInvocationPolicy);
 
   const appearanceInput = (input.appearance && typeof input.appearance === "object"
     ? input.appearance
@@ -517,6 +537,8 @@ export const sanitizeSettings = (value: unknown, externalHints?: ExternalSetting
     dbAutoVacuumOnStartup,
     dbPruningEnabled,
     dbRetentionDays,
+    restartSprintPolicy,
+    restartInvocationPolicy,
     appearance,
     automationLevel: validAutomationLevel,
     automationInterventions,

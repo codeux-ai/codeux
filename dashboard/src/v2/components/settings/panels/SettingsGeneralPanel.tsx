@@ -6,10 +6,17 @@ import { ActionFeedbackRegion } from "../../ui/ActionFeedbackRegion.js";
 import { NumberInput, Row, Toggle, TextInput, PillChoiceGroup } from "../SettingsFormFields.js";
 import type { ProjectSettings } from "../../../../../../src/contracts/settings-scope-types.js";
 import { SectionCard, getBadge as getBadgeHelper, getFieldBadge as getFieldBadgeHelper } from "./SharedPanelComponents.js";
-import { Bot, Cog, Database, FolderOpen, Sparkles } from "lucide-preact";
+import { Bot, Cog, Database, FolderOpen, RotateCcw, Sparkles } from "lucide-preact";
 import { openOnboarding } from "../../../lib/onboarding-control.js";
 import { useProjectData } from "../../../context/project-data.js";
 
+const toRestartSprintPolicy = (value: string) => (
+  value === "pause" || value === "cancel" ? value : "continue"
+);
+
+const toRestartInvocationPolicy = (value: string) => (
+  value === "cancel" || value === "restart" ? value : "continue"
+);
 
 const ProjectContextCard: FunctionComponent<{
   projectName: string;
@@ -325,6 +332,43 @@ export const SettingsGeneralPanel: FunctionComponent<{ state: SettingsPageState 
                 options={[
                   { value: "standard", label: "Standard", hint: "Important runtime activity." },
                   { value: "full", label: "Full", hint: "Includes HTTP requests." },
+                ]}
+              />
+            </Row>
+          </SectionCard>
+
+          <SectionCard title="Restart Behavior" watermark="RST" icon={<RotateCcw strokeWidth={2.4} />}>
+            <Row label="After app restart" description="Choose what Code UX does with sprint runs that were active when the runtime stopped.">
+              <PillChoiceGroup
+                value={systemSettings?.runtime.restartSprintPolicy ?? "continue"}
+                onChange={(value) => updateSystem((current) => ({
+                  ...current,
+                  runtime: {
+                    ...current.runtime,
+                    restartSprintPolicy: toRestartSprintPolicy(value),
+                  },
+                }))}
+                options={[
+                  { value: "continue", label: "Continue", hint: "Resume active sprint watch loops." },
+                  { value: "pause", label: "Pause", hint: "Hold active sprints for manual resume." },
+                  { value: "cancel", label: "Cancel", hint: "Stop active sprint runs on startup." },
+                ]}
+              />
+            </Row>
+            <Row label="Interrupted invocations" description="When sprints continue after restart, choose how interrupted provider, QA, and task invocations are reconciled." last>
+              <PillChoiceGroup
+                value={systemSettings?.runtime.restartInvocationPolicy ?? "continue"}
+                onChange={(value) => updateSystem((current) => ({
+                  ...current,
+                  runtime: {
+                    ...current.runtime,
+                    restartInvocationPolicy: toRestartInvocationPolicy(value),
+                  },
+                }))}
+                options={[
+                  { value: "continue", label: "Continue", hint: "Keep live provider runtimes attached when possible." },
+                  { value: "cancel", label: "Cancel", hint: "Mark interrupted work cancelled." },
+                  { value: "restart", label: "Restart", hint: "Retry interrupted work from preserved state." },
                 ]}
               />
             </Row>

@@ -22,6 +22,8 @@ import type {
   WorkerSettings,
   ConsoleLogMode,
   RuntimeLogLevel,
+  RestartInvocationPolicy,
+  RestartSprintPolicy,
   JiraSettings,
 } from "./app-types.js";
 import type { MemorySettings } from "./memory-types.js";
@@ -97,6 +99,8 @@ export interface SystemRuntimeSettings {
   dbAutoVacuumOnStartup: boolean;
   dbPruningEnabled: boolean;
   dbRetentionDays: number;
+  restartSprintPolicy: RestartSprintPolicy;
+  restartInvocationPolicy: RestartInvocationPolicy;
 }
 
 export interface SystemProviderCredentialSettings {
