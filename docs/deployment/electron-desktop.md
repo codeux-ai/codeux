@@ -93,6 +93,14 @@ Release builds set `CSC_IDENTITY_AUTO_DISCOVERY=false`, so the default workflow 
 
 The release workflow caches pnpm downloads, TypeScript/Vite caches, Electron downloads, Electron Builder caches, and `.cache/electron-runtime` to reduce repeated desktop build time on native runners.
 
+## Main-Branch Release Checks
+
+The no-secret release validation lane is `.github/workflows/release-checks.yml`. It runs only on pushes to `main` and manual `workflow_dispatch` starts, using native `ubuntu-latest`, `macos-latest`, and `windows-latest` runners.
+
+Each matrix job installs with pnpm 10.33.0 on Node 22, runs `pnpm run build`, runs `node scripts/verify-release-install.mjs`, rebuilds Electron native dependencies, then builds the current platform desktop package with the matching `electron:dist:*` script. The verifier builds the workspace, creates a local npm tarball with `npm pack --ignore-scripts`, installs that tarball into an isolated temporary npm project, and runs the installed `codeux --help` command.
+
+Release checks set `CSC_IDENTITY_AUTO_DISCOVERY=false` for unsigned Electron packaging and do not require provider API keys, npm publishing credentials, Docker credentials, GitHub Release events, or real project state. When Electron output exists, the workflow uploads files from `release/electron/` as workflow artifacts only; it does not publish to npm or attach files to a GitHub Release.
+
 ## Cross-Platform Compatibility Findings
 
 - File and directory selection: browser image upload uses standard `<input type="file">` and `FileReader`, which Electron/Chromium supports on macOS, Linux, and Windows. Project directory selection now uses Electron's native directory dialog in the desktop app and falls back to the existing dashboard directory browser outside Electron.

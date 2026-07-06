@@ -91,6 +91,19 @@ The Playwright workflow is `.github/workflows/playwright.yml`. It runs only on `
 
 The workflow matrix covers `ubuntu-latest`, `macos-latest`, and `windows-latest`. It installs dependencies with pnpm 10.33.0 on Node 22, builds the server and dashboard before Playwright starts `node dist/index.js`, caches browser binaries under `.cache/ms-playwright`, installs Linux Chromium system dependencies only on Linux runners, and runs the same `pnpm run test:e2e` script used locally.
 
+- Run the local release install verifier
+```bash
+node scripts/verify-release-install.mjs
+```
+
+The release install verifier builds the workspace, creates a local npm tarball with `npm pack --ignore-scripts`, installs that tarball into a temporary isolated npm project, and runs the installed `codeux --help`. Set `CODE_UX_KEEP_RELEASE_INSTALL_TEMP=1` when diagnosing a failed run and you need to inspect the temporary package or install directory.
+
+### GitHub Actions Release Checks Policy
+
+The no-secret release validation workflow is `.github/workflows/release-checks.yml`. It runs only on `push` to `main` and `workflow_dispatch`, and it uses a native Linux, macOS, and Windows matrix to prove the project can install dependencies, build, install from its packed npm tarball, run the installed CLI help command, and build the platform desktop package without provider credentials or publishing credentials.
+
+Each job uses pnpm 10.33.0 and Node 22, runs `pnpm install --frozen-lockfile`, `pnpm run build`, `node scripts/verify-release-install.mjs`, rebuilds Electron native dependencies, and then runs the matching Electron distribution script for the runner platform. Electron packaging sets `CSC_IDENTITY_AUTO_DISCOVERY=false` so CI builds remain unsigned, and generated installer/package files under `release/electron/` are uploaded as workflow artifacts only.
+
 - Build backend and dashboard
 ```bash
 pnpm run build
