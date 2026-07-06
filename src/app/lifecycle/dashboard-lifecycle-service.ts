@@ -664,6 +664,11 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<DashboardS
       deps.activityCacheService.invalidateGitStatusCache();
       return result;
     },
+    resetInvocationUsageLimitTimer: async (invocationId) => {
+      const result = await deps.executionInvocationControlService.resetUsageLimitTimer(invocationId);
+      deps.activityCacheService.invalidateGitStatusCache();
+      return result;
+    },
 
     rerunTask: async (taskId: string, options?: { provider?: string; providerConfigId?: string; model?: string; clearWorktree?: boolean; resetDependents?: boolean; undoMerge?: boolean }) => {
       const task = await deps.taskRerunService.rerunTask(taskId, {

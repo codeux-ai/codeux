@@ -688,7 +688,12 @@ export class ProviderExecutionService {
             });
           }
           continueSessionId = providerResult.nativeSessionId || (args.provider === "claude-code" ? null : args.sessionId);
-          await sleepWithSignal(retryDecision.delayMs, args.signal);
+          await this.sleepUntilInvocationRetryTimer({
+            invocationId: execInvocationId,
+            retryAtIso: retryAfterIso,
+            delayMs: retryDecision.delayMs,
+            signal: args.signal,
+          });
           continue;
         }
       }
@@ -736,6 +741,40 @@ export class ProviderExecutionService {
   private isExecutionInvocationStillRunning(executionInvocationId: string): boolean {
     const current = this.deps.executionRepository?.getExecutionInvocation?.(executionInvocationId);
     return !current || current.status === "running" || current.status === "paused";
+  }
+
+  private async sleepUntilInvocationRetryTimer(args: {
+    invocationId: string | null;
+    retryAtIso: string | null;
+    delayMs: number;
+    signal?: AbortSignal;
+  }): Promise<void> {
+    if (
+      !args.invocationId
+      || !args.retryAtIso
+      || !this.deps.executionRepository
+      || typeof this.deps.executionRepository.getExecutionInvocation !== "function"
+    ) {
+      await sleepWithSignal(args.delayMs, args.signal);
+      return;
+    }
+
+    const deadlineMs = Date.now() + Math.max(0, args.delayMs);
+    while (Date.now() < deadlineMs) {
+      const invocation = this.deps.executionRepository.getExecutionInvocation(args.invocationId);
+      if (invocation && invocation.status !== "running" && invocation.status !== "paused") {
+        throw new Error(`Invocation retry wait stopped because invocation is ${invocation.status}.`);
+      }
+      if (!invocation?.lastRetryAfterIso || invocation.lastRetryAfterIso !== args.retryAtIso) {
+        return;
+      }
+
+      const beforeSleepMs = Date.now();
+      await sleepWithSignal(Math.min(1000, Math.max(1, deadlineMs - beforeSleepMs)), args.signal);
+      if (Date.now() <= beforeSleepMs) {
+        return;
+      }
+    }
   }
 
   private refreshLinkedDispatchHeartbeat(dispatchId: string | null | undefined): void {

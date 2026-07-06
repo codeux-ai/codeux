@@ -35,6 +35,7 @@ describe("ProviderExecutionService", () => {
   let service: ProviderExecutionService;
   let defaultArgs: any;
   let mockResult: ProviderRunResult;
+  let executionInvocationState: Record<string, unknown>;
 
   beforeEach(() => {
     vi.resetAllMocks();
@@ -44,9 +45,10 @@ describe("ProviderExecutionService", () => {
       runProviderForText: vi.fn(),
     } as any;
 
+    executionInvocationState = { id: "exec-inv-1", status: "running" };
     executionRepository = {
-      createExecutionInvocation: vi.fn().mockReturnValue({ id: "exec-inv-1" }),
-      getExecutionInvocation: vi.fn().mockReturnValue({ id: "exec-inv-1", status: "running" }),
+      createExecutionInvocation: vi.fn().mockReturnValue(executionInvocationState),
+      getExecutionInvocation: vi.fn(() => executionInvocationState as any),
       appendExecutionInvocationMessage: vi.fn(),
       clearExecutionInvocationMessages: vi.fn(),
       createProviderInvocationUsage: vi.fn().mockReturnValue({ id: "prov-inv-1" }),
@@ -54,7 +56,9 @@ describe("ProviderExecutionService", () => {
       updateProviderInvocationUsage: vi.fn(),
       getTaskDispatch: vi.fn().mockReturnValue({ id: "dispatch-1", status: "running" }),
       updateTaskDispatch: vi.fn(),
-      updateExecutionInvocation: vi.fn(),
+      updateExecutionInvocation: vi.fn((_id, input) => {
+        Object.assign(executionInvocationState, input);
+      }),
       appendTaskRunEvent: vi.fn(),
     } as any;
 

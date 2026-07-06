@@ -43,6 +43,8 @@ The Chat -> Invocations detail view exposes same-session recovery actions for fa
 
 Running invocations can also be cancelled from the same detail header. Cancellation is available for every running invocation type, not just planning. The dashboard posts to `/api/execution/invocations/:invocationId/cancel`; the server requests any registered active dispatch to stop, finds Docker containers by the existing `code-ux.session-id` label from the linked provider/task runtime, kills those containers, marks the provider usage row `cancelled`, and appends a system cancellation message to the invocation transcript. Provider finalizers check the current invocation state before writing terminal status so a cancelled row is not overwritten by a late provider failure while the process unwinds.
 
+Invocations waiting on provider usage limits expose a **Reset timer** action when they are still active, have `last_retry_after_iso`, and carry `last_error_category = QUOTA_EXHAUSTED` or `RATE_LIMITED`. The dashboard posts to `/api/execution/invocations/:invocationId/reset-usage-limit`; the server clears the retry timestamp and records a transcript audit message. The provider retry loop watches that persisted timestamp while sleeping, so clearing it wakes the active wait and lets the same invocation retry immediately instead of waiting for the original reset time.
+
 ## Realtime Synchronization
 
 When an invocation or its messages are created/updated, the server emits a project-scoped realtime event.

@@ -26,6 +26,7 @@ The dashboard server now exposes:
 - `POST /api/sprint-runs/:sprintRunId/cancel`
 - `POST /api/task-dispatches/:dispatchId/cancel`
 - `POST /api/task-dispatches/:dispatchId/retry`
+- `POST /api/execution/invocations/:invocationId/reset-usage-limit`
 
 ## Runtime Behavior
 
@@ -143,6 +144,19 @@ Retry is currently limited to terminal dispatches.
 Retry uses the existing task rerun flow instead of inventing a dispatch-only executor path. That keeps retry semantics aligned with normal task restarts.
 
 When a dashboard task rerun has to create a fresh `running` sprint run because no active run exists, Code UX now resumes the watch loop automatically after launching the new task dispatch. That keeps post-task CI, merge-conflict handling, and sprint completion logic moving without requiring a second manual `orchestrate` click after the rerun finishes.
+
+## Invocation Usage-Limit Controls
+
+The Chat -> Invocations detail header shows **Reset timer** for active invocations that are waiting on a provider quota or rate-limit retry timestamp.
+
+Resetting the timer:
+
+- clears `last_retry_after_iso` on the active execution invocation
+- writes a system transcript entry
+- writes a `usage_limit_timer_reset` task-run event when the invocation is task-backed
+- wakes the provider retry loop so the same invocation can retry immediately
+
+If the invocation is no longer active or no longer has usage-limit retry metadata, the API returns a non-mutating result and the dashboard reports that the timer was already cleared.
 
 ## Remaining Limitation
 

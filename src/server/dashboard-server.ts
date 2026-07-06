@@ -246,6 +246,7 @@ export interface DashboardServerOptions {
   listInvocationMessages: (invocationId: string) => ExecutionInvocationMessageRecord[];
   restartExecutionInvocation?: (invocationId: string, mode?: PlanningInvocationRestartMode) => Promise<unknown> | unknown;
   cancelExecutionInvocation?: (invocationId: string) => Promise<unknown> | unknown;
+  resetInvocationUsageLimitTimer?: (invocationId: string) => Promise<unknown> | unknown;
 
   rerunTask: (taskId: string, options?: { provider?: string; providerConfigId?: string; model?: string; clearWorktree?: boolean; resetDependents?: boolean; undoMerge?: boolean }) => Promise<unknown>;
   orchestrateSprint: (projectId: string, sprintId: string) => Promise<unknown>;

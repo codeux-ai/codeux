@@ -61,6 +61,161 @@ afterEach(async () => {
 });
 
 describe("ExecutionInvocationControlService", () => {
+  it("resets a usage-limit timer without cancelling linked task work", async () => {
+    const { projectRepository, executionRepository, activeDispatchRegistry, service } = await createFixture();
+    const project = projectRepository.createProject({
+      name: "Usage Limit Reset Project",
+      sourceType: "local",
+      sourceRef: "/workspace/usage-limit-reset",
+    });
+    const sprint = projectRepository.createSprint(project.id, { name: "Quota Sprint", number: 1 });
+    const task = projectRepository.createTask(project.id, { sprintId: sprint.id, title: "Retry quota task", status: "QUOTA" });
+    const sprintRun = executionRepository.createSprintRun({ projectId: project.id, sprintId: sprint.id, status: "running" });
+    const dispatch = executionRepository.createTaskDispatch({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      sprintRunId: sprintRun.id,
+      executorType: "docker_cli",
+      status: "running",
+    });
+    const taskRun = executionRepository.createTaskRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      sprintRunId: sprintRun.id,
+      dispatchId: dispatch.id,
+      state: "RUNNING",
+      sessionId: "session-quota",
+      startedAt: "2026-07-02T10:00:00.000Z",
+    });
+    const providerInvocation = executionRepository.createProviderInvocationUsage({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      sprintRunId: sprintRun.id,
+      dispatchId: dispatch.id,
+      taskRunId: taskRun.id,
+      sessionId: "session-quota",
+      provider: "codex",
+      purpose: "task_coding",
+      status: "running",
+      executionMode: "DOCKER",
+      startedAt: "2026-07-02T10:00:00.000Z",
+    });
+    const invocation = executionRepository.createExecutionInvocation({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      sprintRunId: sprintRun.id,
+      dispatchId: dispatch.id,
+      taskRunId: taskRun.id,
+      providerInvocationId: providerInvocation.id,
+      type: "task_coding",
+      status: "running",
+      provider: "codex",
+      startedAt: "2026-07-02T10:00:00.000Z",
+      lastErrorCategory: "QUOTA_EXHAUSTED",
+      lastErrorMessage: "Provider quota exhausted.",
+      lastRetryAfterIso: "2026-07-02T11:00:00.000Z",
+    });
+    const requestStop = vi.fn().mockResolvedValue({ accepted: true });
+    activeDispatchRegistry.register({
+      dispatchId: dispatch.id,
+      taskRunId: taskRun.id,
+      sessionId: "session-quota",
+      executorType: "docker_cli",
+      requestStop,
+    });
+
+    const result = await service.resetUsageLimitTimer(invocation.id);
+
+    expect(result).toMatchObject({
+      reset: true,
+      invocationId: invocation.id,
+      message: "Usage limit timer reset.",
+    });
+    expect(requestStop).not.toHaveBeenCalled();
+    expect(executionRepository.getExecutionInvocation(invocation.id)).toMatchObject({
+      status: "running",
+      lastRetryAfterIso: null,
+      lastErrorMessage: "Usage limit timer reset from Chat -> Invocations.",
+    });
+    expect(executionRepository.getProviderInvocationUsage(providerInvocation.id)?.status).toBe("running");
+    expect(executionRepository.getTaskDispatch(dispatch.id)).toMatchObject({
+      status: "running",
+    });
+    expect(executionRepository.getTaskRun(taskRun.id)).toMatchObject({
+      state: "RUNNING",
+    });
+    expect(projectRepository.getTask(task.id)?.status).toBe("QUOTA");
+    const taskRunEvents = executionRepository.listTaskRunEvents(taskRun.id);
+    expect(taskRunEvents.at(-1)).toMatchObject({
+      eventType: "usage_limit_timer_reset",
+    });
+    expect(executionRepository.listExecutionInvocationMessages(invocation.id).at(-1)?.metadata).toMatchObject({
+      control: "dashboard_usage_limit_timer_reset",
+      previousRetryAfterIso: "2026-07-02T11:00:00.000Z",
+    });
+  });
+
+  it("does not reset invocations that are not waiting on usage limits", async () => {
+    const { projectRepository, executionRepository, service } = await createFixture();
+    const project = projectRepository.createProject({
+      name: "No Timer Invocation Project",
+      sourceType: "local",
+      sourceRef: "/workspace/no-timer-invocation",
+    });
+    const invocation = executionRepository.createExecutionInvocation({
+      projectId: project.id,
+      type: "planning",
+      status: "running",
+      startedAt: "2026-07-02T10:00:00.000Z",
+    });
+
+    const result = await service.resetUsageLimitTimer(invocation.id);
+
+    expect(result).toMatchObject({
+      reset: false,
+      invocationId: invocation.id,
+      message: "Invocation is not waiting for a usage limit reset.",
+    });
+    expect(executionRepository.getExecutionInvocation(invocation.id)?.status).toBe("running");
+    expect(runCommandStrict).not.toHaveBeenCalled();
+  });
+
+  it("resets non-task usage-limit waits", async () => {
+    const { projectRepository, executionRepository, service } = await createFixture();
+    const project = projectRepository.createProject({
+      name: "Planning Usage Limit Project",
+      sourceType: "local",
+      sourceRef: "/workspace/planning-usage-limit",
+    });
+    const invocation = executionRepository.createExecutionInvocation({
+      projectId: project.id,
+      type: "planning",
+      status: "running",
+      startedAt: "2026-07-02T10:00:00.000Z",
+      lastErrorCategory: "RATE_LIMITED",
+      lastErrorMessage: "Rate limited.",
+      lastRetryAfterIso: "2026-07-02T10:05:00.000Z",
+    });
+
+    const result = await service.resetUsageLimitTimer(invocation.id);
+
+    expect(result).toMatchObject({
+      reset: true,
+      invocationId: invocation.id,
+      message: "Usage limit timer reset.",
+    });
+    expect(executionRepository.getExecutionInvocation(invocation.id)).toMatchObject({
+      status: "running",
+      lastRetryAfterIso: null,
+      lastErrorMessage: "Usage limit timer reset from Chat -> Invocations.",
+    });
+    expect(runCommandStrict).not.toHaveBeenCalled();
+  });
+
   it("cancels a running invocation and kills its Docker session container", async () => {
     const { projectRepository, executionRepository, activeDispatchRegistry, service } = await createFixture();
     const project = projectRepository.createProject({
