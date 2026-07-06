@@ -459,7 +459,6 @@ Settings patch and replacement calls still require the stateful human-confirmati
 
 These legacy MCP tools are no longer registered:
 
-- `manage_code_ux`
 - `get_source`
 - `list_sources`
 - `list_all_sources`

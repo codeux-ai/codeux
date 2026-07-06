@@ -785,7 +785,7 @@ Behavior:
 - API-backed tools return setup guidance until key is configured.
 - Guidance points to:
   - `.env` (`JULES_API_KEY`)
-  - `.jules-subagents/settings.json` (`julesApiKey`)
+  - `.code-ux/settings.json` (`julesApiKey`)
   - Dashboard settings (`http://localhost:4444` by default)
 
 Runtime update:

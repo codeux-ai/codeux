@@ -215,8 +215,10 @@ pnpm run lint
   - `.code-ux/agents/*.md`
 - Instruction templates:
   - `.code-ux/instructions/sprint-main-loop/**/*`
+- Legacy CLI session tracking DB:
+  - `~/.code-ux/session-tracking.db`
 - Preview and startup scripts (only where supported by `sprint-preview-service`).
-- Session and task runtime state is persisted in the Code UX SQLite database (`code-ux.db`), not a local user directory tracking file.
+- Session and task runtime state is persisted in the Code UX SQLite database (`~/.code-ux/app.db`), not a local user directory tracking file.
 
 ## Operational Advice
 

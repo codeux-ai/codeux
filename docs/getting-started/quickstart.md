@@ -47,7 +47,7 @@ pnpm start
 JULES_API_KEY=YOUR_KEY
 ```
 
-4. `.jules-subagents/settings.json` (project or home)
+4. `.code-ux/settings.json` (project or home)
 ```json
 {
   "julesApiKey": "YOUR_KEY"

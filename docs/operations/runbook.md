@@ -22,7 +22,7 @@ Database maintenance (`DatabaseMaintenanceService`) runs automatically during no
    - `/ready`: Readiness probe from `src/server/dashboard-server.ts`. A success (`{"status": "READY"}` or `{"status": "UP"}`) means the server considers required startup/runtime dependencies ready enough to serve normal traffic. It does not validate every provider, project, Docker workspace, or external service.
 
 If started without key:
-- Configure `JULES_API_KEY` in `.env`, or `julesApiKey` in `.jules-subagents/settings.json`, or set it in dashboard settings.
+- Configure `JULES_API_KEY` in `.env`, or `julesApiKey` in `.code-ux/settings.json`, or set it in dashboard settings.
 - Retry API-backed commands after configuration.
 - Dashboard key fields can stay empty when system-wide environment keys are already present.
 
@@ -109,7 +109,7 @@ Checks:
 Checks:
 - Is Jules API key configured in dashboard settings?
 - Is `.env` loaded with `JULES_API_KEY`?
-- Is `.jules-subagents/settings.json` containing `julesApiKey`?
+- Is `.code-ux/settings.json` containing `julesApiKey`?
 - Was settings save applied after editing dashboard value?
 
 ### 3a. Jules task stays at "Started jules dispatch"

@@ -17,7 +17,7 @@ It includes:
 - DB-backed project-scoped Agents and Chat pages
 - first listen-loop MCP connection and conversation contracts
 - first DB-native sprint orchestration slice for project/sprint scope
-- `manage_code_ux` MCP tool handlers for projects and sprints domain actions
+- Domain MCP tool handlers (e.g. `manage_sprints`, `manage_projects`) for domain actions
 - the Projects page now renders source kind, repository details, local path, timestamps, and latest run activity directly from `GET /api/projects` without per-card follow-up requests
 
 It does not yet include:
