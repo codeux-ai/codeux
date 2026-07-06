@@ -51,6 +51,12 @@ The browser preview provides an integrated environment for interacting with runn
 - Preview links only activate when a session is running and has a routed host port. Starting, stopped, errored, and missing-port sessions remain visible but disabled, omit navigable URLs, suppress activation, and expose a persistent reason through visible copy plus `aria-describedby` or `title`.
 - Container log refreshes keep cached log output visible during foreground refresh, silent polling, empty responses, and refresh errors. The logs region exposes `aria-busy`, a visible Ready/Refreshing/Stale/Error badge, and status copy that names whether the user is seeing current logs or a cached fallback.
 
+## File-Browser Containment
+
+The sprint file browser treats tree, file, change, and diff paths as workspace-relative paths only. Requests reject absolute paths, Windows drive paths, null/control characters, `.git` internals, traversal segments, and encoded or double-encoded traversal before the backend delegates to the file-browser runtime.
+
+File content reads add a second containment check at the Docker sink. The read command resolves the requested target with `realpath` inside the mounted `/workspace`, verifies the canonical target still lives under the canonical workspace root, rejects symlink escapes, verifies the target is a file, and then applies the normal file-size cap. Diff reads validate the requested path before using it as a Git object path, including renamed-file old and new paths.
+
 ## Verification Notes
 
 For documentation-only updates, run `pnpm run lint` and:
