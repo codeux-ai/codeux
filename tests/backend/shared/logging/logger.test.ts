@@ -10,6 +10,23 @@ import {
 } from "../../../../src/shared/logging/correlation-id.js";
 import { createLogger } from "../../../../src/shared/logging/logger.js";
 
+async function readFileEventually(filePath: string, timeoutMs = 500): Promise<string> {
+  const startedAt = Date.now();
+  let lastError: unknown;
+  while (Date.now() - startedAt < timeoutMs) {
+    try {
+      return await fs.readFile(filePath, "utf8");
+    } catch (error) {
+      lastError = error;
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+  }
+  if (lastError) {
+    throw lastError;
+  }
+  return await fs.readFile(filePath, "utf8");
+}
+
 describe("createLogger", () => {
   // The global test setup forces console logging to "error" via CODEUX_FORCE_LOG_LEVEL
   // to keep the reporter clean. These tests verify the real level-resolution logic,
@@ -123,13 +140,44 @@ describe("createLogger", () => {
     logger.info("visible on console only");
     logger.error("visible everywhere");
 
-    await new Promise((resolve) => setTimeout(resolve, 20));
-
     expect(stderrSpy).toHaveBeenCalledTimes(2);
-    const fileOutput = await fs.readFile(logFilePath, "utf8");
+    const fileOutput = await readFileEventually(logFilePath);
     expect(fileOutput).not.toContain("visible on console only");
     expect(fileOutput).toContain("visible everywhere");
     await fs.rm(dir, { recursive: true, force: true });
+  });
+
+  it("honors DEBUG_LOG_FILE_LEVEL independently of console filtering", async () => {
+    const previousDebugLogFileLevel = process.env.DEBUG_LOG_FILE_LEVEL;
+    process.env.DEBUG_LOG_FILE_LEVEL = "debug";
+    try {
+      const stderrSpy = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+      const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-logger-env-"));
+      const logFilePath = path.join(dir, "debug.log");
+      const logger = createLogger({
+        environment: "development",
+        consoleLogLevel: "error",
+        consoleLogMode: "full",
+        logFilePath,
+      });
+
+      logger.debug("file only debug record");
+      logger.info("file only info record");
+      logger.error("console and file record");
+
+      expect(stderrSpy).toHaveBeenCalledTimes(1);
+      const fileOutput = await readFileEventually(logFilePath);
+      expect(fileOutput).toContain("file only debug record");
+      expect(fileOutput).toContain("file only info record");
+      expect(fileOutput).toContain("console and file record");
+      await fs.rm(dir, { recursive: true, force: true });
+    } finally {
+      if (previousDebugLogFileLevel === undefined) {
+        delete process.env.DEBUG_LOG_FILE_LEVEL;
+      } else {
+        process.env.DEBUG_LOG_FILE_LEVEL = previousDebugLogFileLevel;
+      }
+    }
   });
 
   it("does not open the debug file when file log level is off", async () => {

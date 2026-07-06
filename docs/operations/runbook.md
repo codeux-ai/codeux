@@ -57,6 +57,20 @@ Provider concurrency is enforced globally across all projects using `ProviderSet
 - **Terminal States**: Completed, failed, cancelled, or quota-wait terminal invocations do not count against the cap. Only 'running' invocations are counted.
 - **Abort Handling**: If a task dispatch is cancelled while waiting for a slot, the wait loop exits immediately without creating a stale running invocation record.
 
+### Provider invocation observability
+- Provider usage rows are the source of truth for runtime diagnostics. Confirm `provider_invocations` keeps the Code UX provider invocation id, Code UX session id, native provider session id, provider, purpose, status, model, execution mode, lifecycle timestamps, duration, token counters, transcript character count, tool-call count, usage source, invocation source, and raw-usage presence. Linked `execution_invocations` preserve the provider invocation id for cross-querying.
+- Structured invocation logs are metadata-only. They may include identifiers, lifecycle fields, counters, `failureCount`, `errorName`, and `correlationId`, but must not include raw transcripts, API keys, provider environment values, raw usage JSON, or full prompts.
+- Docker provider launches should expose only env-file and controlled mount paths in the host process arguments. Provider API keys, Git tokens, custom provider env values, and long prompts are written to temporary files or controlled mounts and should not appear in `docker run` argv or activity log metadata.
+- File logging has its own threshold. `DEBUG_LOG_FILE_LEVEL=debug` can persist debug-level provider diagnostics to `.code-ux/debug.log` even when console logging is filtered to `error`; use this only for focused diagnostics and keep the metadata-only rule in place.
+
+Focused validation:
+
+```bash
+pnpm run test:backend -- tests/backend/infrastructure/providers/cli/provider-runner.test.ts tests/backend/infrastructure/providers/cli/provider-execution-loop.test.ts tests/backend/infrastructure/providers/cli/provider-telemetry-watcher.test.ts tests/backend/infrastructure/providers/cli/docker-runner.test.ts tests/backend/infrastructure/providers/cli/workspace-manager.test.ts tests/backend/repositories/execution-repository.test.ts tests/backend/shared/logging/logger.test.ts
+pnpm run test:backend:coverage
+pnpm run lint
+```
+
 ## Common Incidents
 
 ### 1. Dashboard unavailable
