@@ -60,6 +60,8 @@
     "test:coverage": "vitest run --coverage",
     "test:backend:coverage": "vitest run tests/backend --coverage",
     "quality:guardrails": "node scripts/check-quality-guardrails.mjs",
+    "sync:docs-web": "node scripts/sync-docs-web.mjs",
+    "check:docs-web": "node scripts/sync-docs-web.mjs --check",
     "lint": "tsc --noEmit --incremental --tsBuildInfoFile .cache/tsc/root.tsbuildinfo",
     "typecheck": "tsc --noEmit --incremental --tsBuildInfoFile .cache/tsc/root.tsbuildinfo",
     "ci": "pnpm run quality:guardrails && pnpm run audit && pnpm run lint && pnpm run test:backend:coverage && pnpm run test:dashboard && pnpm run build",

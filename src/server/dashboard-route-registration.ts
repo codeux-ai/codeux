@@ -26,6 +26,7 @@ import { registerGitProviderRoutes } from "./git-provider-routes.js";
 import { registerUpdateStatusRoutes } from "./update-status-routes.js";
 import { registerMemoryRoutes } from "./memory-routes.js";
 import { registerKnowledgeRoutes } from "./knowledge-routes.js";
+import { registerDocsWebRoutes } from "./docs-web-routes.js";
 
 export interface DashboardRouteRegistrationOptions {
   app: Express;
@@ -99,6 +100,7 @@ const registerExecutionRouteGroup = (app: Express, deps: DashboardDependencies):
 const registerSystemIntegrationRouteGroup = (app: Express, deps: DashboardDependencies): void => {
   registerGitProviderRoutes(app, deps);
   registerUpdateStatusRoutes(app, deps);
+  registerDocsWebRoutes(app);
 };
 
 const registerOptionalKnowledgeRouteGroup = (app: Express, deps: DashboardDependencies): void => {

@@ -1,0 +1,261 @@
+.docs-web-collapsible {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 200ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.docs-web-collapsible.open {
+  grid-template-rows: 1fr;
+}
+
+.docs-web-collapsible-content {
+  min-height: 0;
+  overflow: hidden;
+  opacity: 0;
+  transform: translateY(-2px);
+  transition: opacity 200ms ease, transform 200ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.docs-web-collapsible.open .docs-web-collapsible-content {
+  opacity: 1;
+  transform: translateY(0);
+  transition-delay: 50ms;
+}
+
+.docs-web-sidebar-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+
+.docs-web-sidebar-scroll:hover,
+.docs-web-sidebar-scroll:focus-within,
+.docs-web-sidebar-scroll.is-scrolling {
+  scrollbar-color: rgba(100, 116, 139, 0.26) transparent;
+}
+
+.docs-web-sidebar-scroll::-webkit-scrollbar {
+  width: 6px;
+}
+
+.docs-web-sidebar-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.docs-web-sidebar-scroll::-webkit-scrollbar-thumb {
+  background: transparent;
+  border-radius: 9999px;
+}
+
+.docs-web-sidebar-scroll:hover::-webkit-scrollbar-thumb,
+.docs-web-sidebar-scroll:focus-within::-webkit-scrollbar-thumb,
+.docs-web-sidebar-scroll.is-scrolling::-webkit-scrollbar-thumb {
+  background: rgba(100, 116, 139, 0.3);
+}
+
+.docs-web-prose {
+  color: rgb(51 65 85);
+}
+
+.dark .docs-web-prose {
+  color: rgb(203 213 225);
+}
+
+.docs-web-prose h1,
+.docs-web-prose h2,
+.docs-web-prose h3,
+.docs-web-prose h4 {
+  scroll-margin-top: 7rem;
+  font-weight: 700;
+  letter-spacing: 0;
+  color: rgb(15 23 42);
+}
+
+.dark .docs-web-prose h1,
+.dark .docs-web-prose h2,
+.dark .docs-web-prose h3,
+.dark .docs-web-prose h4 {
+  color: white;
+}
+
+.docs-web-prose h1 {
+  margin: 0 0 1.5rem;
+  font-size: 2rem;
+  line-height: 1.12;
+}
+
+.docs-web-prose h2 {
+  margin: 2.5rem 0 1rem;
+  border-top: 1px solid rgba(15, 23, 42, 0.08);
+  padding-top: 2rem;
+  font-size: 1.5rem;
+  line-height: 1.2;
+}
+
+.dark .docs-web-prose h2 {
+  border-top-color: rgba(255, 255, 255, 0.08);
+}
+
+.docs-web-prose h3 {
+  margin: 2rem 0 0.75rem;
+  font-size: 1.18rem;
+  line-height: 1.25;
+}
+
+.docs-web-prose h4 {
+  margin: 1.5rem 0 0.5rem;
+  font-size: 1rem;
+}
+
+.docs-web-prose h1 + p {
+  font-size: 1.05rem;
+  color: rgb(71 85 105);
+}
+
+.dark .docs-web-prose h1 + p {
+  color: rgb(203 213 225);
+}
+
+.docs-web-prose p {
+  margin-bottom: 1.15rem;
+  line-height: 1.72;
+}
+
+.docs-web-prose ul,
+.docs-web-prose ol {
+  margin: 0 0 1.25rem;
+  padding-left: 1.5rem;
+}
+
+.docs-web-prose li {
+  margin-bottom: 0.45rem;
+  line-height: 1.68;
+}
+
+.docs-web-prose a {
+  color: rgb(0 128 96);
+  text-decoration: underline;
+  text-decoration-color: rgba(0, 128, 96, 0.35);
+  text-underline-offset: 4px;
+  transition: color 160ms ease, text-decoration-color 160ms ease;
+}
+
+.docs-web-prose a:hover {
+  color: rgb(0 96 72);
+  text-decoration-color: currentColor;
+}
+
+.dark .docs-web-prose a {
+  color: rgb(0 224 160);
+  text-decoration-color: rgba(0, 224, 160, 0.35);
+}
+
+.dark .docs-web-prose a:hover {
+  color: rgb(91 255 202);
+}
+
+.docs-web-prose code {
+  border: 1px solid rgba(15, 23, 42, 0.1);
+  border-radius: 0.375rem;
+  background: rgba(15, 23, 42, 0.05);
+  padding: 0.12rem 0.35rem;
+  color: rgb(15 23 42);
+  font-size: 0.875em;
+}
+
+.dark .docs-web-prose code {
+  border-color: rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.06);
+  color: rgb(241 245 249);
+}
+
+.docs-web-prose pre {
+  margin: 1.5rem 0;
+  overflow-x: auto;
+  border: 1px solid rgba(15, 23, 42, 0.1);
+  border-radius: 0.5rem;
+  background: rgb(15 23 42);
+  padding: 1rem;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0, 224, 160, 0.35) transparent;
+}
+
+.dark .docs-web-prose pre {
+  border-color: rgba(255, 255, 255, 0.1);
+  background: rgb(9 8 6);
+}
+
+.docs-web-prose pre code {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  color: rgb(226 232 240);
+}
+
+.docs-web-prose blockquote {
+  margin: 1.5rem 0;
+  border-left: 4px solid rgb(0 184 130);
+  border-radius: 0 0.5rem 0.5rem 0;
+  background: rgba(0, 184, 130, 0.09);
+  padding: 0.8rem 1.1rem;
+  font-weight: 500;
+}
+
+.docs-web-prose table {
+  margin: 1.5rem 0;
+  width: 100%;
+  overflow: hidden;
+  border: 1px solid rgba(15, 23, 42, 0.1);
+  border-collapse: separate;
+  border-spacing: 0;
+  border-radius: 0.5rem;
+  font-size: 0.9rem;
+}
+
+.dark .docs-web-prose table {
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+.docs-web-prose th,
+.docs-web-prose td {
+  border-bottom: 1px solid rgba(15, 23, 42, 0.07);
+  padding: 0.75rem 0.9rem;
+  text-align: left;
+  vertical-align: top;
+}
+
+.dark .docs-web-prose th,
+.dark .docs-web-prose td {
+  border-bottom-color: rgba(255, 255, 255, 0.06);
+}
+
+.docs-web-prose th {
+  background: rgba(15, 23, 42, 0.045);
+  color: rgb(30 41 59);
+  font-weight: 700;
+}
+
+.dark .docs-web-prose th {
+  background: rgba(255, 255, 255, 0.06);
+  color: rgb(226 232 240);
+}
+
+.docs-web-prose tr:last-child td {
+  border-bottom: 0;
+}
+
+.docs-web-prose hr {
+  margin: 2rem 0;
+  border: 0;
+  border-top: 1px solid rgba(15, 23, 42, 0.08);
+}
+
+.dark .docs-web-prose hr {
+  border-top-color: rgba(255, 255, 255, 0.1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .docs-web-collapsible,
+  .docs-web-collapsible-content {
+    transition: none !important;
+  }
+}
