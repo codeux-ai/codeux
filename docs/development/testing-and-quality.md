@@ -215,12 +215,21 @@ pnpm run typecheck:dashboard
 - Status helpers
 - UI tests that only need DOM events and markup assertions should use `@vitest-environment happy-dom` to reduce environment startup cost
 - Dashboard accessibility and design-system regression tests live under `tests/dashboard/accessibility/`. These tests should assert specific keyboard behavior, accessible names, live-region roles, responsive labels/wrapping, overflow boundaries, and reduced-motion fallbacks without snapshotting full pages or requiring a running backend.
+- Dashboard quality regression tests should cover user-facing contracts with role, name, text, and live-region assertions. For accessibility-sensitive surfaces, include landmark/dialog names, button accessible names, focus restoration after Escape/cancel/dismiss flows, visible `status`/`alert` regions, and reduced-motion behavior that preserves static state without animation-only feedback.
+- Destructive dashboard actions must have tests for the full confirmation lifecycle: opening the named dialog, Escape and cancel paths, pending or busy state, final confirmation, and focus restoration to the trigger or a visible fallback. Prefer exercising `useConfirmDialog` through real settings/task actions, with direct `ConfirmDialog` coverage for shared pending-state behavior.
+- Realtime and cached dashboard hooks should have deterministic invalidation tests. Matching websocket/custom events should refresh or replace state, unrelated events should not refetch, concurrent silent refreshes should dedupe, and stale completions should not overwrite newer data.
+- Loading, error, and empty states should be asserted through visible copy and accessible roles such as `status`, `alert`, `log`, and named `region`/`dialog` containers. Avoid class-name selectors except where motion classes or animation suppression are the behavior under test.
 - Page-shell tests should focus on page-level state and mock expensive visual children instead of importing full chart/editor stacks
 - Live page regression coverage should explicitly assert sidebar composition (`Invocation Feed`, `Runtime Timeline`, `Git / CI / PR`, `Attention Queue`, `Execution Runtime`) and order, while asserting removed cards (`Latest Activity`, `Protocol`, `Live Connections`) stay absent from the default Live sidebar.
 - Live sidebar Git CI coverage should include at least one active CI run and assert both the status text (for example `IN_PROGRESS`) and an active indicator query (`.animate-spin`) so CI-state rendering regressions are detected quickly.
 
 - Interaction behavior tests should verify pointer cursors, focus management, overlay dismissibility, and reduced-motion states for animated components.
 - Flow-specific tests (like destructive actions) must assert that confirmation dialogs appear and that side-effect actions (like "Reset downstream tasks") are triggered correctly based on user selection.
+
+Focused dashboard quality lane:
+```bash
+pnpm run test:dashboard -- tests/dashboard/accessibility/dashboard-quality-regressions.test.tsx tests/dashboard/components/ui/ActionFeedbackRegion.test.tsx tests/dashboard/v2/settings-danger-panel.test.tsx tests/dashboard/v2/settings-page-state.test.tsx tests/dashboard/v2/runtime-event-feed.test.tsx tests/dashboard/v2/use-project-effective-settings.test.tsx tests/dashboard/hooks/use-realtime-resource.test.tsx dashboard/src/v2/components/__tests__/NotificationPanel.test.tsx dashboard/src/v2/lib/__tests__/motion/interaction-tokens.test.tsx
+```
 
 
 ## Quality Expectations

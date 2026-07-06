@@ -274,4 +274,41 @@ describe("useProjectEffectiveSettings", () => {
 
     expect(fetchProjectEffectiveSettings).toHaveBeenCalledTimes(2);
   });
+
+  it("serves cached settings until a matching project update invalidates the cache", async () => {
+    vi.mocked(fetchProjectEffectiveSettings).mockResolvedValueOnce(MOCK_SETTINGS as any);
+
+    const first = renderHook(() => useProjectEffectiveSettings("proj-1"));
+
+    await waitFor(() => {
+      expect(first.result.current.data).toEqual(MOCK_SETTINGS);
+    });
+    expect(fetchProjectEffectiveSettings).toHaveBeenCalledTimes(1);
+    first.unmount();
+
+    vi.mocked(fetchProjectEffectiveSettings).mockResolvedValueOnce(MOCK_SETTINGS_2 as any);
+
+    const second = renderHook(() => useProjectEffectiveSettings("proj-1"));
+
+    expect(second.result.current.loading).toBe(false);
+    expect(second.result.current.data).toEqual(MOCK_SETTINGS);
+    expect(fetchProjectEffectiveSettings).toHaveBeenCalledTimes(1);
+
+    window.dispatchEvent(new CustomEvent("codeux:settings-updated", {
+      detail: { scope: "project", projectId: "other-project" },
+    }));
+
+    await new Promise((resolve) => window.setTimeout(resolve, 0));
+    expect(second.result.current.data).toEqual(MOCK_SETTINGS);
+    expect(fetchProjectEffectiveSettings).toHaveBeenCalledTimes(1);
+
+    window.dispatchEvent(new CustomEvent("codeux:settings-updated", {
+      detail: { scope: "project", projectId: "proj-1" },
+    }));
+
+    await waitFor(() => {
+      expect(second.result.current.data).toEqual(MOCK_SETTINGS_2);
+    });
+    expect(fetchProjectEffectiveSettings).toHaveBeenCalledTimes(2);
+  });
 });
