@@ -182,6 +182,40 @@ describe("DockerRunner", () => {
     }));
   });
 
+  it("keeps Docker and provider execution behind mocked command runners", async () => {
+    expect(vi.isMockFunction(runCommandStrict)).toBe(true);
+    expect(vi.isMockFunction(runStreamingCommand)).toBe(true);
+
+    await runner.runProviderInDocker({
+      command: "codex",
+      args: ["exec", "--help"],
+      cwd: "docker-volume://workspace-1",
+      providerEnv: {},
+      sessionId: "session-1",
+      providerLabel: "codex",
+      workflowSettings: {
+        executionMode: "DOCKER",
+        containerImage: "node:24",
+        containerSetupScriptPath: "",
+        containerCacheSetupScriptImage: false,
+      } as any,
+      repoPath: "/repo/project",
+      onActivity: vi.fn(),
+    });
+
+    expect(runStreamingCommand).toHaveBeenCalledOnce();
+    expect(runStreamingCommand).toHaveBeenCalledWith(
+      "docker",
+      expect.any(Array),
+      expect.any(String),
+      expect.any(Object),
+      expect.any(Object),
+    );
+    const dockerArgs = vi.mocked(runStreamingCommand).mock.calls[0]?.[1] as string[];
+    expect(dockerArgs.slice(-2)).toEqual(["provider-runner", "codex"]);
+    expect(dockerArgs).not.toContain("codex exec --help");
+  });
+
   it("kills the backing container directly when an aborted run is cancelled", async () => {
     let releaseRun: ((result: any) => void) | undefined;
     vi.mocked(runStreamingCommand).mockImplementation(
