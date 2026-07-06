@@ -23,6 +23,10 @@ export const Input: FunctionComponent<InputProps> = ({
   id,
   maxLength,
   onBlur,
+  onBlurCapture,
+  onFocus,
+  onFocusCapture,
+  onFocusIn,
   onFocusOut,
   onInput,
   "aria-disabled": ariaDisabled,
@@ -35,7 +39,8 @@ export const Input: FunctionComponent<InputProps> = ({
   const errorId = errorText ? `${generatedId}-error` : undefined;
   const helperId = helperText ? `${generatedId}-helper` : undefined;
   const [touched, setTouched] = useState(false);
-  const showError = !!errorText && (touched || !!forceValidation || hasExternalInvalidState);
+  const [isRecoveringFocus, setIsRecoveringFocus] = useState(false);
+  const showError = !!errorText && (touched || !!forceValidation || hasExternalInvalidState) && !isRecoveringFocus;
   const isAriaDisabled = ariaDisabled === true || ariaDisabled === "true";
   const isDisabled = !!disabled || isAriaDisabled;
 
@@ -57,19 +62,51 @@ export const Input: FunctionComponent<InputProps> = ({
       e.stopPropagation();
       return;
     }
+    if (errorText && (touched || !!forceValidation || hasExternalInvalidState)) {
+      setIsRecoveringFocus(true);
+    }
     setCharCount(e.currentTarget.value.length);
     if (onInput) {
       onInput(e);
     }
   };
 
+  const handleFocus = (e: any) => {
+    if (errorText && (touched || !!forceValidation || hasExternalInvalidState)) {
+      setIsRecoveringFocus(true);
+    }
+    onFocus?.(e);
+  };
+
+  const handleFocusIn = (e: any) => {
+    if (errorText && (touched || !!forceValidation || hasExternalInvalidState)) {
+      setIsRecoveringFocus(true);
+    }
+    onFocusIn?.(e);
+  };
+
+  const handleFocusCapture = (e: any) => {
+    if (errorText && (touched || !!forceValidation || hasExternalInvalidState)) {
+      setIsRecoveringFocus(true);
+    }
+    onFocusCapture?.(e);
+  };
+
   const handleBlur = (e: any) => {
     setTouched(true);
+    setIsRecoveringFocus(false);
     onBlur?.(e);
+  };
+
+  const handleBlurCapture = (e: any) => {
+    setTouched(true);
+    setIsRecoveringFocus(false);
+    onBlurCapture?.(e);
   };
 
   const handleFocusOut = (e: any) => {
     setTouched(true);
+    setIsRecoveringFocus(false);
     onFocusOut?.(e);
   };
 
@@ -120,6 +157,10 @@ export const Input: FunctionComponent<InputProps> = ({
         id={generatedId}
         maxLength={maxLength}
         onBlur={handleBlur}
+        onBlurCapture={handleBlurCapture}
+        onFocus={handleFocus}
+        onFocusCapture={handleFocusCapture}
+        onFocusIn={handleFocusIn}
         onFocusOut={handleFocusOut}
         onInput={handleInput}
         aria-invalid={showError ? "true" : props["aria-invalid"]}
