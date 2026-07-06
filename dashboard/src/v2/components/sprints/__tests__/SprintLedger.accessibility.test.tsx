@@ -182,7 +182,8 @@ describe("SprintLedger Accessibility", () => {
     expect(getAllByRole("button", { name: /Start Frontend Onboarding/i })[0]).toBeInTheDocument();
   });
 
-  it("announces bulk selection count in a live region", () => {
+  it("announces bulk selection count through the ledger live region", async () => {
+    const user = userEvent.setup();
     render(
       <SprintLedger
         sprints={[mockSprint]}
@@ -207,7 +208,9 @@ describe("SprintLedger Accessibility", () => {
       />
     );
 
-    const liveRegion = screen.getAllByText(/0 of 1 selected/i)[0].closest("div[aria-live]");
+    await user.click(screen.getAllByRole("button", { name: /Select sprint Frontend Onboarding/i })[0]);
+
+    const liveRegion = screen.getByText(/Selected sprint Frontend Onboarding\. 1 sprint visible\. 1 selected\./i).closest("div[aria-live]");
     expect(liveRegion).toHaveAttribute("aria-live", "polite");
   });
 
@@ -304,6 +307,48 @@ describe("SprintLedger Accessibility", () => {
     await user.click(screen.getByRole("button", { name: "Cancel" }));
     await waitFor(() => expect(bulkDeleteBtn).toHaveFocus());
     expect(screen.getByText(/Bulk delete canceled\. Selected sprints were not deleted\./i)).toBeInTheDocument();
+  });
+
+  it("requests confirmation before a row delete and restores fallback focus on cancel", async () => {
+    const user = userEvent.setup();
+    const onDeleteSprint = vi.fn();
+    render(
+      <SprintLedger
+        sprints={[mockSprint]}
+        listWindow={10}
+        onListWindowChange={vi.fn()}
+        activeRunsBySprintId={new Map()}
+        pauseResumeRunsBySprintId={new Map()}
+        interventionBySprintId={new Map()}
+        pendingActionIds={new Set()}
+        onToggleShowcase={vi.fn()}
+        onSprintToggle={vi.fn()}
+        onSprintPauseResume={vi.fn()}
+        onBulkStart={vi.fn()}
+        onBulkDelete={vi.fn()}
+        onEditSprint={vi.fn()}
+        onExportSprint={vi.fn()}
+        onOverridesSprint={vi.fn()}
+        onMarkCompletedSprint={vi.fn()}
+        onDeleteSprint={onDeleteSprint}
+        onBulkShowcaseEnable={vi.fn()}
+        onBulkShowcaseDisable={vi.fn()}
+      />
+    );
+
+    await user.click(screen.getByRole("button", { name: /Open actions menu for sprint Frontend Onboarding/i }));
+    await user.click(await screen.findByRole("menuitem", { name: /Delete sprint Frontend Onboarding/i }));
+
+    expect(await screen.findByText(/Delete Sprint "Frontend Onboarding"\?/i)).toBeInTheDocument();
+    expect(screen.getByText(/You are deleting sprint "Frontend Onboarding"/i)).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+
+    await waitFor(() => {
+      expect(onDeleteSprint).not.toHaveBeenCalled();
+      expect(document.activeElement).toHaveAttribute("data-ledger-view-state");
+    });
+    expect(screen.getByText(/Delete canceled for sprint Frontend Onboarding\. Sprint was not deleted\./i)).toBeInTheDocument();
   });
 
   it("announces bulk action completion after pending state clears", async () => {
@@ -489,7 +534,7 @@ describe("SprintLedger Accessibility", () => {
 
 
   it("announces filter results politely", () => {
-    const { getByText } = render(
+    render(
       <SprintLedger
         sprints={[mockSprint]}
         listWindow={10}
@@ -512,8 +557,6 @@ describe("SprintLedger Accessibility", () => {
         onBulkShowcaseDisable={vi.fn()}
       />
     );
-    // 0 of 1 selected is already checked, but we added a "Showing 1 of 1 sprints" span
-    // Let's test the span with aria-live exists
-    const liveRegion = document.querySelector('span[aria-live="polite"][aria-atomic="true"]');
+    const liveRegion = screen.getByText(/Sorted by Created descending\. Showing all sprints\. No sprints selected\./i).closest("div[aria-live]");
     expect(liveRegion).toBeInTheDocument();
   });

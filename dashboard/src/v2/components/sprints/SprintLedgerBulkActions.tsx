@@ -121,7 +121,7 @@ export const SprintLedgerBulkActions: FunctionComponent<SprintLedgerBulkActionsP
           <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl border border-signal-500/20 bg-signal-500/10 text-signal-700 dark:text-signal-300">
             {isAnyPending ? <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" /> : <Heart className="h-4 w-4" fill="currentColor" />}
           </div>
-          <div className="min-w-0" aria-live="polite" aria-atomic="true">
+          <div className="min-w-0">
             <div className="text-sm font-bold text-slate-900 dark:text-white">
               {selectedCount} of {totalCount} selected
             </div>
@@ -221,7 +221,7 @@ export const SprintLedgerBulkActions: FunctionComponent<SprintLedgerBulkActionsP
           </button>
         </div>
       </div>
-      <div className="sr-only" aria-live="polite" aria-atomic="true">
+      <div className="sr-only">
         {selectedCount === 0 && prevSelectedCount.current > 0 ? "Selection cleared" : feedbackMessage}
       </div>
     </div>
