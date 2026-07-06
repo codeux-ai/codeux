@@ -255,6 +255,51 @@ describe("createLogger", () => {
     }
   });
 
+  it("writes invocation and realtime debug records to the debug file independently from console filtering", async () => {
+    const stderrSpy = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-logger-purpose-file-"));
+    const logFilePath = path.join(dir, "debug.log");
+    const logger = createLogger({
+      environment: "production",
+      consoleLogLevel: "error",
+      debugLogFileLevel: "debug",
+      consoleLogMode: "standard",
+      logFilePath,
+    });
+
+    runWithCorrelationId("corr-debug-file", () => {
+      logger.debug("Provider invocation usage updated", {
+        logPurpose: "invocation",
+        eventType: "provider_invocation_usage_updated",
+        providerInvocationId: "provider-inv-1",
+      });
+      logger.debug("realtime_snapshot_published", {
+        logPurpose: "realtime",
+        type: "project.execution.updated",
+        projectId: "proj-1",
+      });
+    });
+
+    expect(stderrSpy).not.toHaveBeenCalled();
+    const fileOutput = await readFileEventually(logFilePath);
+    const records = fileOutput.trim().split("\n").map((line) => JSON.parse(line));
+    expect(records).toEqual([
+      expect.objectContaining({
+        level: "debug",
+        purpose: "invocation",
+        correlationId: "corr-debug-file",
+        message: "Provider invocation usage updated",
+      }),
+      expect.objectContaining({
+        level: "debug",
+        purpose: "realtime",
+        correlationId: "corr-debug-file",
+        message: "realtime_snapshot_published",
+      }),
+    ]);
+    await fs.rm(dir, { recursive: true, force: true });
+  });
+
   it("does not open the debug file when file log level is off", async () => {
     const stderrSpy = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
     const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-logger-off-"));

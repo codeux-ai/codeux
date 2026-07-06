@@ -8,6 +8,7 @@ import type {
 } from "../contracts/app-types.js";
 import type { ProjectCollectionResponse } from "../contracts/project-management-types.js";
 import type { Logger } from "../shared/logging/logger.js";
+import { getCorrelationId } from "../shared/logging/correlation-id.js";
 import {
   DashboardRealtimeEventRepository,
   type AppendDashboardRealtimeEventInput,
@@ -324,20 +325,25 @@ export class DashboardRealtimeService implements DashboardRealtimeMutationNotifi
   }
 
   publishRawEvent(input: AppendDashboardRealtimeEventInput): DashboardRealtimeEvent | null {
+    const correlationId = input.correlationId ?? getCorrelationId() ?? null;
     try {
-      const event = this.eventRepository.appendEvent(input);
+      const event = this.eventRepository.appendEvent({
+        ...input,
+        correlationId,
+      });
       this.latestSequence = Math.max(this.latestSequence, event.sequence);
       this.broadcast(event);
       return event;
     } catch (error) {
       this.incrementMetric(input.eventType, "failures");
       this.logger.error("dashboard_realtime_event_write_failed", {
+        logPurpose: "realtime",
         eventType: input.eventType,
         scopeType: input.scopeType,
         scopeId: input.scopeId,
         projectId: input.projectId ?? null,
-        correlationId: input.correlationId ?? null,
-        error,
+        correlationId,
+        errorName: error instanceof Error ? error.name : "Error",
       });
       return null;
     }
@@ -436,8 +442,10 @@ export class DashboardRealtimeService implements DashboardRealtimeMutationNotifi
           const fingerprint = getDashboardRealtimePayloadFingerprint(options.eventType, payload);
           if (this.lastPayloadFingerprints.get(options.cacheKey) === fingerprint) {
             this.logger.debug("skipping_duplicate_realtime_snapshot", {
+              logPurpose: "realtime",
               type: options.eventType,
               ...(options.projectId ? { projectId: options.projectId } : {}),
+              correlationId: getCorrelationId() ?? null,
             });
             this.incrementMetric(options.eventType, "unchanged");
             options.onPublished(options.now);
@@ -471,13 +479,19 @@ export class DashboardRealtimeService implements DashboardRealtimeMutationNotifi
         if (options.logType) {
           if (options.logType === "realtime_snapshot_published") {
             this.logger.info(options.logType, {
+              logPurpose: "realtime",
               type: options.eventType,
               ...(payloadSizeBytes !== undefined ? { sizeBytes: payloadSizeBytes } : {}),
               ...(options.projectId ? { projectId: options.projectId } : {}),
+              correlationId: getCorrelationId() ?? null,
               publishFrequencyMs: options.lastPublishedAt > 0 ? options.now - options.lastPublishedAt : 0,
             });
           } else {
-            this.logger.info(options.logType, { type: options.entityId });
+            this.logger.info(options.logType, {
+              logPurpose: "realtime",
+              type: options.entityId,
+              correlationId: getCorrelationId() ?? null,
+            });
           }
         }
 
@@ -485,8 +499,11 @@ export class DashboardRealtimeService implements DashboardRealtimeMutationNotifi
       } catch (error) {
         this.incrementMetric(options.eventType, "failures");
         this.logger.error(`Failed to publish ${options.eventType.replace(/\./g, " ")} realtime snapshot`, {
+          logPurpose: "realtime",
           ...(options.projectId ? { projectId: options.projectId } : {}),
-          error,
+          eventType: options.eventType,
+          correlationId: getCorrelationId() ?? null,
+          errorName: error instanceof Error ? error.name : "Error",
         });
       }
     })();
