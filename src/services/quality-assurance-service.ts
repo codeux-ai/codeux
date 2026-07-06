@@ -580,10 +580,11 @@ export class QualityAssuranceService {
     const sprintFeatureBranch = sprint.featureBranch?.trim()
       || `${settings.git.featureBranchPrefix || "feature/"}sprint-${sprint.number ?? 0}`;
 
-    const latestRuns = this.deps.qaReviewRepository
+    const historicalLatestRuns = this.deps.qaReviewRepository
       .listLatestSprintCycleRuns(args.sprintId)
       .map((run) => this.reconcileRunningQaRun(run))
       .filter((run): run is QaReviewRunRecord => Boolean(run));
+    const latestRuns = historicalLatestRuns.filter((run) => run.sprintRunId === args.sprintRunId);
     const latestRun = latestRuns[0] ?? null;
     const maxRuns = qaSettings.maxSprintReviewRuns;
     const currentTaskSnapshot = buildSprintQaSnapshot(args.subtasks);
@@ -619,7 +620,10 @@ export class QualityAssuranceService {
       && qaSettings.sprintCompletion.agentPresetIds.length > 0
       ? qaSettings.sprintCompletion.agentPresetIds
       : [null];
-    const runIndex = (latestRun?.runIndex || 0) + 1;
+    const latestHistoricalRunIndex = historicalLatestRuns.reduce((maxRunIndex, run) => {
+      return Math.max(maxRunIndex, typeof run.runIndex === "number" ? run.runIndex : 0);
+    }, 0);
+    const runIndex = Math.max(latestRun?.runIndex || 0, latestHistoricalRunIndex) + 1;
     const sprintReviewResults: Array<{
       agentPresetId: string;
       agentName: string;
@@ -943,7 +947,6 @@ export class QualityAssuranceService {
           purpose: "qa_review",
           type: "qa_review",
           provider,
-          maxConcurrentTasks: providerSettings.maxConcurrentTasks,
           ...buildProviderSettingsOverride(providerSettings.model, providerSettings),
           providerPrompt,
           repoPath: args.repoPath,

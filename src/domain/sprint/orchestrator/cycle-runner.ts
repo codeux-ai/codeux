@@ -902,7 +902,7 @@ export class CycleRunner {
     const qaContinuedTask = qaGate.latestRun.payload?.continued === true;
     const qaStartedAt = Date.parse(qaGate.latestRun.startedAt);
 
-    return invocations.some((invocation) => {
+    const hasFollowUpInvocation = invocations.some((invocation) => {
       if (invocation.type !== "cli_task_followup" || invocation.status !== "completed" || !invocation.finishedAt) {
         return false;
       }
@@ -915,6 +915,21 @@ export class CycleRunner {
       }
       return followUpFinishedAt > qaFinishedAt;
     });
+    if (hasFollowUpInvocation) {
+      return true;
+    }
+
+    if (!task.session_id || !taskRun?.sessionId || taskRun.sessionId !== task.session_id || taskRun.state !== "COMPLETED" || !taskRun.finishedAt) {
+      return false;
+    }
+    const taskRunFinishedAt = Date.parse(taskRun.finishedAt);
+    if (!Number.isFinite(taskRunFinishedAt)) {
+      return false;
+    }
+    if (qaContinuedTask && Number.isFinite(qaStartedAt)) {
+      return taskRunFinishedAt >= qaStartedAt;
+    }
+    return taskRunFinishedAt > qaFinishedAt;
   }
 
   private hasLatestChangesRequestedQaRun(qaGate: TaskQaMergeGateStatus): boolean {

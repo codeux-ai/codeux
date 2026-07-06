@@ -9,6 +9,7 @@ export interface ProviderSettingsOverride {
   model: string;
   thinkingMode: ThinkingMode;
   apiKey: string;
+  maxConcurrentTasks: number;
   qwenAuthMode?: "LOCAL_AUTH" | "ALIBABA_CODING_PLAN" | "MODEL_PROVIDER";
   qwenRegion?: "china" | "international";
   qwenBaseUrl?: string;
@@ -38,6 +39,7 @@ export function buildProviderSettingsOverride(
     model: resolvedModel,
     thinkingMode: providerSettings.thinkingMode,
     apiKey: usesMountedAuth ? "" : providerSettings.apiKey,
+    maxConcurrentTasks: providerSettings.maxConcurrentTasks,
     qwenAuthMode: usesMountedAuth && providerSettings.provider === "qwen-code"
       ? "LOCAL_AUTH"
       : providerSettings.qwenAuthMode,

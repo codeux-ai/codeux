@@ -51,9 +51,9 @@ const createMockContext = (): PipelineContext => {
     settings: {
       aiProvider: {
         providers: {
-          gemini: { apiKey: "key", model: "model", thinkingMode: false, enabled: true, weight: 1 },
-          codex: { apiKey: "key", model: "model", thinkingMode: false, enabled: true, weight: 1 },
-          "claude-code": { apiKey: "key", model: "model", thinkingMode: false, enabled: true, weight: 1 },
+          gemini: { apiKey: "key", model: "model", thinkingMode: false, enabled: true, weight: 1, maxConcurrentTasks: 0 },
+          codex: { apiKey: "key", model: "model", thinkingMode: false, enabled: true, weight: 1, maxConcurrentTasks: 0 },
+          "claude-code": { apiKey: "key", model: "model", thinkingMode: false, enabled: true, weight: 1, maxConcurrentTasks: 0 },
         },
         provider: "gemini",
         strategy: "SINGLE",
@@ -435,6 +435,37 @@ describe("executeProviderStage", () => {
       role: "system",
       contentMarkdown: "Retrying with file-discovery guidance.",
     }));
+  });
+
+  it("uses the selected provider instance concurrency cap from the provider override", async () => {
+    const ctx = createMockContext();
+    ctx.providerSettingsOverride = {
+      model: "custom-model",
+      thinkingMode: "HIGH",
+      apiKey: "key",
+      maxConcurrentTasks: 2,
+    };
+    ctx.deps.providerConcurrencyService = {
+      waitForSlotAndClaim: vi.fn().mockResolvedValue({ id: "usage-override" }),
+    } as any;
+    vi.mocked(ctx.providerRunner.runProvider).mockResolvedValueOnce({
+      ok: true,
+      stdout: "success",
+      stderr: "",
+      usageTelemetry: { transcriptText: "success transcript" } as any,
+    });
+
+    await executeProviderStage(ctx, "prompt");
+
+    expect(ctx.deps.providerConcurrencyService.waitForSlotAndClaim).toHaveBeenCalledWith(
+      "gemini",
+      2,
+      expect.objectContaining({
+        provider: "gemini",
+        purpose: "task_coding",
+      }),
+      undefined,
+    );
   });
 
   it("continues the native provider session when retrying after a rate limit", async () => {

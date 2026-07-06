@@ -21,6 +21,7 @@ async function createFixture(): Promise<{
   service: ExecutionControlService;
   rerunTask: ReturnType<typeof vi.fn>;
   executeOrchestrator: ReturnType<typeof vi.fn>;
+  recoverSprintRun: ReturnType<typeof vi.fn>;
   setConsecutiveFailures: ReturnType<typeof vi.fn>;
   requestStop: ReturnType<typeof vi.fn>;
   sendSessionMessage: ReturnType<typeof vi.fn>;
@@ -34,6 +35,7 @@ async function createFixture(): Promise<{
   const projectAttentionRepository = new ProjectAttentionRepository(storage);
   const rerunTask = vi.fn().mockResolvedValue({ id: "task-1" });
   const executeOrchestrator = vi.fn().mockResolvedValue({ content: [] });
+  const recoverSprintRun = vi.fn().mockResolvedValue(null);
   const setConsecutiveFailures = vi.fn();
   const requestStop = vi.fn().mockResolvedValue({ accepted: true });
   const sendSessionMessage = vi.fn().mockResolvedValue({ ok: true });
@@ -55,6 +57,7 @@ async function createFixture(): Promise<{
     } as any,
     sprintOrchestrator: {
       execute: executeOrchestrator,
+      recoverSprintRun,
       setConsecutiveFailures,
     } as any,
     julesApi: {
@@ -72,6 +75,7 @@ async function createFixture(): Promise<{
     service,
     rerunTask,
     executeOrchestrator,
+    recoverSprintRun,
     setConsecutiveFailures,
     requestStop,
     sendSessionMessage,
@@ -260,6 +264,30 @@ describe("ExecutionControlService", () => {
     expect(closed).toHaveLength(2);
     expect(closed.every((item) => item.status === "resolved")).toBe(true);
     expect(closed.every((item) => item.payload?.resolutionReason === "sprint_orchestration_recomputed")).toBe(true);
+  });
+
+  it("recovers an active sprint run instead of starting a duplicate orchestration", async () => {
+    const { projectRepository, executionRepository, service, executeOrchestrator, recoverSprintRun, setConsecutiveFailures } = await createFixture();
+    const project = projectRepository.createProject({
+      name: "Active Recovery Project",
+      sourceType: "local",
+      sourceRef: "/workspace/active-recovery-project",
+    });
+    const sprint = projectRepository.createSprint(project.id, {
+      name: "Active Recovery Sprint",
+      number: 1,
+    });
+    const sprintRun = executionRepository.createSprintRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      status: "running",
+    });
+
+    await service.orchestrateSprint(project.id, sprint.id);
+
+    expect(setConsecutiveFailures).toHaveBeenCalledWith(0);
+    expect(recoverSprintRun).toHaveBeenCalledWith(sprintRun.id);
+    expect(executeOrchestrator).not.toHaveBeenCalled();
   });
 
   it("rejects orchestration while a sprint cancellation is still pending for active work", async () => {
@@ -489,6 +517,17 @@ describe("ExecutionControlService", () => {
         title: "Merge conflict handoff for T2",
         summaryMarkdown: "Needs a human.",
         payload: { sourceAttentionType: "merge_conflict" },
+      },
+      {
+        projectId: project.id,
+        sprintId: sprint.id,
+        sprintRunId: sprintRun.id,
+        attentionType: "human_escalation_required",
+        severity: "medium",
+        ownerType: "human",
+        title: "Virtual worker escalation for sprint manual attention",
+        summaryMarkdown: "Sprint-level manual attention handoff.",
+        payload: { sourceAttentionType: "manual_attention" },
       },
       {
         projectId: project.id,

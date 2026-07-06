@@ -128,6 +128,8 @@ That means:
 
 Provider `maxConcurrentTasks` is enforced before a task is counted as started. When the selected provider is already at its global cap, sprint task dispatch creates or refreshes a queued dispatch/task-run record, records a `provider_concurrency_wait` event, and returns the task to a retryable `PENDING` state for the next orchestration cycle.
 
+Custom provider instances carry their own `maxConcurrentTasks` value through the selected provider-settings override. Enforcement still counts active rows by provider family globally (for example all `qwen-code` invocations share the same running-count pool), but the limit used for a new invocation comes from the exact provider instance selected by routing or agent configuration.
+
 Provider-cap queueing is not a task creation failure. It must not increment the consecutive task creation failure counter, trigger the emergency stop, or record `task_coding` guardrail usage. Real startup failures still use the normal failure path and continue to count toward `maxFailures`.
 
 ## Services Using Invocation Routing

@@ -2719,6 +2719,107 @@ describe("CycleRunner attention sync", () => {
     expect(reviewCompletedTask).not.toHaveBeenCalled();
   });
 
+  it("reruns QA after changes-requested when recovery sees a newer completed run for the current task session", async () => {
+    const deps = buildDeps();
+    vi.mocked(deps.executionRepository.getLatestTaskRun).mockReturnValue({
+      id: "task-run-later",
+      state: "COMPLETED",
+      sessionId: "session-2",
+      finishedAt: "2026-06-13T20:45:14.510Z",
+    } as any);
+    vi.mocked(deps.executionRepository.listExecutionInvocations).mockReturnValue([]);
+    const reviewCompletedTask = vi.fn().mockResolvedValue({
+      reviewed: true,
+      reopenedTask: false,
+      mergeBlocked: false,
+      reportText: "",
+    });
+    deps.qualityAssuranceService = {
+      getTaskMergeGateStatus: vi.fn().mockReturnValue({
+        mergeAllowed: false,
+        reason: "changes_requested",
+        summary: "QA requested fixes.",
+        latestRun: {
+          id: "qa-1",
+          projectId: "project-1",
+          status: "completed",
+          outcome: "changes_requested",
+          finishedAt: "2026-06-13T20:42:31.128Z",
+        },
+        runsUsed: 1,
+        maxRuns: 2,
+      }),
+      reviewCompletedTask,
+    } as any;
+    deps.getDashboardSettings = () => ({
+      ...DEFAULT_DASHBOARD_SETTINGS,
+      agents: {
+        ...DEFAULT_DASHBOARD_SETTINGS.agents,
+        qualityAssurance: {
+          ...DEFAULT_DASHBOARD_SETTINGS.agents.qualityAssurance,
+          enabled: true,
+        },
+      },
+    });
+    vi.mocked(deps.sprintExecutionStateService.loadSubtasks).mockResolvedValue([
+      {
+        id: "T1",
+        record_id: "task-1",
+        project_id: "project-1",
+        title: "Recovered CLI task",
+        prompt: "Change README.",
+        depends_on: [],
+        is_independent: true,
+        status: "CODING_COMPLETED",
+        provider: "qwen-code",
+        session_id: "session-2",
+        pr_url: "https://example.com/pr/4",
+      },
+    ] as any);
+    deps.getCiStatusForScope = vi.fn().mockResolvedValue({
+      available: true,
+      openPullRequests: [],
+      ciRuns: [],
+      mergedPullRequests: [],
+    } as any);
+
+    const runner = new CycleRunner(deps);
+    await runner.run({
+      action: "orchestrate",
+      automationLevel: "SEMI_AUTO",
+      automationInterventions: DEFAULT_DASHBOARD_SETTINGS.automationInterventions,
+      executionContext: {
+        project: { id: "project-1", name: "Project 1" } as any,
+        sprint: { id: "sprint-1", name: "Sprint 1" } as any,
+        sprintNumber: 1,
+        repoPath: "/repo/project-1",
+        featureBranch: "feature/sprint-1",
+        defaultBranch: "main",
+      },
+      repoPath: "/repo/project-1",
+      defaultFeatureBranch: "feature/sprint-1",
+      retryFailed: false,
+      loopSteps: {
+        loadSubtasks: true,
+        sessionSync: false,
+        statusDerivation: true,
+        startReadyTasks: false,
+        statusTable: false,
+        mergeProtocol: false,
+        actionRequiredProtocol: false,
+      } as any,
+      ciIntelligence: {
+        enabled: true,
+      } as any,
+      githubMode: "REMOTE",
+      defaultBranch: "main",
+      featureBranchPrefix: "feature/",
+      sprintRunId: "run-1",
+    });
+
+    expect(reviewCompletedTask).toHaveBeenCalledTimes(1);
+  });
+
   it("reruns QA after a changes-requested review when QA continued a completed CLI follow-up in the same task run", async () => {
     const deps = buildDeps();
     vi.mocked(deps.executionRepository.getLatestTaskRun).mockReturnValue({
