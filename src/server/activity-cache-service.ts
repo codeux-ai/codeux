@@ -1,84 +1,33 @@
 import type { GitTrackingStatus, JulesActivity, Subtask } from "../contracts/app-types.js";
+import {
+  mapBoundedOrdered,
+  normalizeActivityFetchError,
+  withActivityFetchTimeout,
+} from "../domain/sprint/session-sync/activity-fetch-utils.js";
 import type { Logger } from "../shared/logging/logger.js";
 
 const DEFAULT_LIVE_ACTIVITY_FETCH_TIMEOUT_MS = 30_000;
-
-class ActivityFetchTimeoutError extends Error {
-  readonly timeoutMs: number;
-
-  constructor(sessionName: string, timeoutMs: number) {
-    super(`Timed out fetching live activities for ${sessionName} after ${timeoutMs}ms`);
-    this.name = "ActivityFetchTimeoutError";
-    this.timeoutMs = timeoutMs;
-  }
-}
+const LIVE_ACTIVITY_FETCH_TIMEOUT_ERROR_NAME = "ActivityFetchTimeoutError";
 
 const getFetchFailureMetadata = (
   sessionName: string,
   error: unknown,
   cacheFallbackState: "empty" | "stale",
-  cachedActivityCount: number
+  cachedActivityCount: number,
+  timeoutMs: number
 ) => {
-  const isTimeout = error instanceof ActivityFetchTimeoutError;
+  const { errorName, errorMessage } = normalizeActivityFetchError(error);
+  const isTimeout = errorName === LIVE_ACTIVITY_FETCH_TIMEOUT_ERROR_NAME;
   return {
     sessionName,
     failureCause: isTimeout ? "timeout" : "error",
-    errorName: error instanceof Error ? error.name : typeof error,
+    errorName,
+    errorMessage,
     cacheFallbackState,
     cachedActivityCount,
-    ...(isTimeout ? { timeoutMs: error.timeoutMs } : {}),
+    ...(isTimeout ? { timeoutMs } : {}),
   };
 };
-
-async function withTimeout<T>(
-  promise: Promise<T>,
-  timeoutMs: number,
-  sessionName: string
-): Promise<T> {
-  if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
-    return promise;
-  }
-
-  let timeout: ReturnType<typeof setTimeout> | undefined;
-  try {
-    return await Promise.race([
-      promise,
-      new Promise<T>((_, reject) => {
-        timeout = setTimeout(() => {
-          reject(new ActivityFetchTimeoutError(sessionName, timeoutMs));
-        }, timeoutMs);
-      }),
-    ]);
-  } finally {
-    if (timeout) {
-      clearTimeout(timeout);
-    }
-  }
-}
-
-async function pMap<T, R>(
-  items: T[],
-  mapper: (item: T) => Promise<R>,
-  concurrency: number
-): Promise<R[]> {
-  const results: R[] = new Array(items.length);
-  let currentIndex = 0;
-
-  const worker = async () => {
-    while (currentIndex < items.length) {
-      const index = currentIndex++;
-      results[index] = await mapper(items[index]);
-    }
-  };
-
-  const workers = Array.from(
-    { length: Math.min(concurrency, items.length) },
-    () => worker()
-  );
-  await Promise.all(workers);
-
-  return results;
-}
 
 export interface ActivityCacheServiceDependencies {
   getSubtasks: () => Subtask[];
@@ -159,32 +108,38 @@ export class ActivityCacheService {
       }
 
       if (missingSessions.length > 0) {
-        const fetchResults = await pMap(
-          missingSessions,
-          async (sessionName) => {
+        const fetchResults = await mapBoundedOrdered({
+          items: missingSessions,
+          concurrency: this.activityFetchConcurrency,
+          mapper: async (sessionName) => {
             try {
-              const activities = await withTimeout(
+              const activities = await withActivityFetchTimeout(
                 this.deps.fetchRecentActivities(sessionName, this.activityPageSize),
-                this.liveActivityFetchTimeoutMs,
-                sessionName
+                {
+                  timeoutMs: this.liveActivityFetchTimeoutMs,
+                  createTimeoutError: () => {
+                    const error = new Error(`Timed out fetching live activities for ${sessionName} after ${this.liveActivityFetchTimeoutMs}ms`);
+                    error.name = LIVE_ACTIVITY_FETCH_TIMEOUT_ERROR_NAME;
+                    return error;
+                  },
+                },
               );
               return { sessionName, activities, isNegative: activities.length === 0, failed: false };
             } catch (error) {
               const cached = this.liveActivitiesCache.get(sessionName);
               if (cached && !cached.isNegative) {
                 this.deps.logger?.warn("Could not fetch live activities; returning stale cached activities", {
-                  ...getFetchFailureMetadata(sessionName, error, "stale", cached.data.length),
+                  ...getFetchFailureMetadata(sessionName, error, "stale", cached.data.length, this.liveActivityFetchTimeoutMs),
                 });
                 return { sessionName, activities: cached.data, isNegative: false, failed: true };
               }
               this.deps.logger?.warn("Could not fetch live activities", {
-                ...getFetchFailureMetadata(sessionName, error, "empty", 0),
+                ...getFetchFailureMetadata(sessionName, error, "empty", 0, this.liveActivityFetchTimeoutMs),
               });
               return { sessionName, activities: [], isNegative: false, failed: true };
             }
           },
-          this.activityFetchConcurrency
-        );
+        });
 
         const fetchTimestamp = Date.now();
         for (const { sessionName, activities, isNegative, failed } of fetchResults) {

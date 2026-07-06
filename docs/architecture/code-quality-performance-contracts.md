@@ -58,7 +58,7 @@ Related docs: [Usage Telemetry And Stats](./usage-telemetry-and-stats.md), [Exec
 - Keep page size, concurrency, and timeout limits at the fetch helper boundary so provider stalls degrade individual sessions rather than the entire sprint loop.
 - Keep generic timeout, error metadata normalization, and ordered bounded mapping semantics in `activity-fetch-utils.ts`; Jules-specific activity shaping belongs in caller wrappers such as `bounded-activity-fetch.ts`.
 - Activity sync must preserve ordering after bounded concurrent fetches so task updates stay deterministic.
-- Dashboard activity cache changes must maintain bounded fetch concurrency and short negative caching for repeated empty or failing reads.
+- Dashboard activity cache changes must consume the shared bounded activity fetch utilities, preserve stale positive cache fallbacks on per-session fetch failures, keep short negative caching for real empty reads, and log structured timeout/error metadata without rejecting the whole live activity snapshot.
 
 Related docs: [System Overview](./system-overview.md), [Project Runtime Integration](./project-runtime-integration.md), [Operations Runbook](../operations/runbook.md).
 
