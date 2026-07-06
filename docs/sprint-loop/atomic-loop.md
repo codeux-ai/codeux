@@ -244,13 +244,13 @@ pnpm run lint
 ## Files and Data Used
 
 - Subtasks directory:
-  - `.jules-subagents/sprints/sprint<N>-subtasks/`
+  - `.code-ux/sprints/sprint<N>-subtasks/`
 - Guide files:
-  - `.jules-subagents/agents/*.md`
+  - `.code-ux/agents/*.md`
 - Instruction templates:
-  - `.jules-subagents/instructions/sprint-main-loop/**/*`
+  - `.code-ux/instructions/sprint-main-loop/**/*`
 - CLI session tracking DB:
-  - `~/.jules-subagents/session-tracking.db`
+  - `~/.code-ux/session-tracking.db`
 
 ## Operational Advice
 
