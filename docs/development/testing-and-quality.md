@@ -249,6 +249,10 @@ pnpm run test:backend -- tests/backend/repositories/sqlite-connection.test.ts te
 Tests are expected to pass on Windows, macOS, and Linux. Keep fixtures and assertions portable:
 
 - Vitest pins deterministic runtime defaults before tests run: `TZ=UTC`, `LANG=C.UTF-8`, `LC_ALL=C.UTF-8`, `VITEST_IN_MEMORY_DB=true`, `LOG_LEVEL=error`, and `CODEUX_FORCE_LOG_LEVEL=error`. Do not rely on the host timezone, locale, or persisted dashboard log settings in assertions.
+- Backend determinism regressions are covered by focused tests for runtime environment defaults, isolated HOME/USERPROFILE state, SQLite WAL/SHM cleanup, timer-controlled polling, subprocess boundaries, Docker command stubbing, and local Git fixture cleanup. When changing these areas, start with:
+```bash
+pnpm run test:backend -- tests/backend/repositories/sqlite-connection.test.ts tests/backend/shared/polling/wait-until.test.ts tests/backend/shared/subprocess/command-runner.test.ts tests/backend/infrastructure/local-git-origin.test.ts tests/backend/infrastructure/providers/cli/docker-runner.test.ts
+```
 - Use Node-powered subprocess fixtures instead of shell-specific commands such as `sh`, `sleep`, or POSIX-only `echo` behavior.
 - Normalize path separators in assertions when the app behavior is not explicitly testing native path rendering.
 - Normalize Git working-tree text fixtures for CRLF when assertions only care about logical file contents.
@@ -256,6 +260,8 @@ Tests are expected to pass on Windows, macOS, and Linux. Keep fixtures and asser
 - Pin date, time, and number formatting to an explicit locale and time zone for UI text that is asserted in tests.
 - Fake timers are not enabled globally. Tests that call `vi.useFakeTimers()` must call `vi.useRealTimers()` during cleanup; the shared setup restores leaked fake timers at test-file boundaries and fails loudly so the next test cannot inherit a mocked clock.
 - Close SQLite databases before cleanup when possible. Windows can briefly hold SQLite sidecar files open during teardown, so the Vitest setup tolerates transient temp-directory `EBUSY` and `EPERM` removal errors without weakening application lifecycle cleanup.
+- File-backed SQLite tests should use `tests/backend/repositories/sqlite-cleanup-test-helper.ts` for temp homes. Use `withSqliteTempHome` when a test must point HOME/USERPROFILE and XDG paths at a disposable SQLite fixture, and use `removeSqliteTempHome` plus `expectSqliteSidecarsRemoved` for manual open/close cycles.
+- Tests around provider CLIs, Docker, and remote Git must stub the command boundary. Assert generated command arguments or local config parsing instead of invoking provider binaries, Docker daemons, network remotes, or developer credentials.
 - When PowerShell execution policy blocks package-manager scripts, run commands through `pnpm.cmd` on Windows.
 
 ## Safe Refactor Pattern

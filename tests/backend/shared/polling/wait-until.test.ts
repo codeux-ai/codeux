@@ -1,8 +1,13 @@
-import { describe, it, expect, vi } from 'vitest';
-import { waitUntil } from '../../../../src/shared/polling/wait-until.js';
+import { afterEach, describe, it, expect, vi } from "vitest";
+import { waitUntil } from "../../../../src/shared/polling/wait-until.js";
 
-describe('waitUntil', () => {
-  it('should resolve when predicate is met', async () => {
+describe("waitUntil", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("should resolve when predicate is met without depending on wall-clock time", async () => {
+    vi.useFakeTimers();
     let count = 0;
     const action = async () => {
       count++;
@@ -10,83 +15,119 @@ describe('waitUntil', () => {
     };
     const predicate = (val: number) => val === 3;
 
-    const result = await waitUntil({
+    const resultPromise = waitUntil({
       action,
       predicate,
       intervalMs: 10,
       timeoutMs: 100,
     });
 
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(10);
+    await vi.advanceTimersByTimeAsync(10);
+
+    const result = await resultPromise;
     expect(result).toBe(3);
     expect(count).toBe(3);
   });
 
-  it('should timeout if predicate is never met', async () => {
-    const action = async () => 'pending';
-    const predicate = (val: string) => val === 'done';
+  it("should timeout if predicate is never met", async () => {
+    vi.useFakeTimers();
+    let attempts = 0;
+    const action = async () => {
+      attempts++;
+      if (attempts === 2) {
+        vi.setSystemTime(Date.now() + 51);
+      }
+      return "pending";
+    };
+    const predicate = (val: string) => val === "done";
 
-    await expect(
-      waitUntil({
-        action,
-        predicate,
-        intervalMs: 10,
-        timeoutMs: 50,
-        description: 'test condition',
-      })
-    ).rejects.toThrow('Timeout waiting for test condition after 50ms');
+    const resultPromise = waitUntil({
+      action,
+      predicate,
+      intervalMs: 10,
+      timeoutMs: 50,
+      description: "test condition",
+    });
+    const expectation = expect(resultPromise).rejects.toThrow("Timeout waiting for test condition after 50ms");
+
+    await vi.advanceTimersByTimeAsync(10);
+
+    await expectation;
+    expect(attempts).toBe(2);
   });
 
-  it('should support AbortSignal', async () => {
+  it("should support AbortSignal", async () => {
+    vi.useFakeTimers();
     const controller = new AbortController();
-    const action = async () => 'pending';
+    const action = async () => "pending";
     const predicate = () => false;
 
     setTimeout(() => controller.abort(), 25);
 
-    await expect(
-      waitUntil({
-        action,
-        predicate,
-        intervalMs: 10,
-        timeoutMs: 100,
-        signal: controller.signal,
-        description: 'aborted task',
-      })
-    ).rejects.toThrow('Wait for aborted task aborted');
+    const resultPromise = waitUntil({
+      action,
+      predicate,
+      intervalMs: 10,
+      timeoutMs: 100,
+      signal: controller.signal,
+      description: "aborted task",
+    });
+    const expectation = expect(resultPromise).rejects.toThrow("Wait for aborted task aborted");
+
+    await vi.advanceTimersByTimeAsync(25);
+
+    await expectation;
   });
 
-  it('should call onTimeout when timing out', async () => {
+  it("should call onTimeout when timing out", async () => {
+    vi.useFakeTimers();
     const onTimeout = vi.fn();
-    const action = async () => 'pending';
+    let attempts = 0;
+    const action = async () => {
+      attempts++;
+      if (attempts === 2) {
+        vi.setSystemTime(Date.now() + 51);
+      }
+      return "pending";
+    };
     const predicate = () => false;
 
-    await expect(
-      waitUntil({
-        action,
-        predicate,
-        intervalMs: 10,
-        timeoutMs: 50,
-        onTimeout,
-      })
-    ).rejects.toThrow();
+    const resultPromise = waitUntil({
+      action,
+      predicate,
+      intervalMs: 10,
+      timeoutMs: 50,
+      onTimeout,
+    });
+    const expectation = expect(resultPromise).rejects.toThrow();
+
+    await vi.advanceTimersByTimeAsync(10);
+
+    await expectation;
 
     expect(onTimeout).toHaveBeenCalled();
   });
 
-  it('should handle async predicates', async () => {
-    const action = async () => 'done';
+  it("should handle async predicates", async () => {
+    vi.useFakeTimers();
+    const action = async () => "done";
     const predicate = async (val: string) => {
       await new Promise(resolve => setTimeout(resolve, 5));
-      return val === 'done';
+      return val === "done";
     };
 
-    const result = await waitUntil({
+    const resultPromise = waitUntil({
       action,
       predicate,
       intervalMs: 10,
       timeoutMs: 100,
     });
 
-    expect(result).toBe('done');
+    await vi.advanceTimersByTimeAsync(5);
+
+    const result = await resultPromise;
+    expect(result).toBe("done");
   });
 });
