@@ -22,6 +22,9 @@ type GuardrailModule = {
     repositorySource: { path: string; text: string },
     serviceSource: { path: string; text: string },
   ) => Array<{ path: string; line: number; pattern: string; match: string; remediation: string }>;
+  findUnboundedExecutionRuntimeEventQueryViolations: (
+    sources: Array<{ path: string; text: string }>,
+  ) => Array<{ path: string; line: number; pattern: string; match: string; remediation: string }>;
   findCoverageThresholdViolations: (
     source: string,
     options?: {
@@ -216,6 +219,100 @@ class DashboardRealtimeService {
       pattern: "project.execution.updated direct publishRawEvent replayability",
     });
     expect(violations[0].match).not.toContain("conversation.message.created");
+  });
+});
+
+describe("quality guardrail execution runtime-event query scanner", () => {
+  it("reports ordered runtime-event reads without an explicit live snapshot bound", () => {
+    const violations = guardrails.findUnboundedExecutionRuntimeEventQueryViolations([
+      {
+        path: "src/repositories/execution/execution-runtime-events-query.ts",
+        text: `
+export function queryExecutionRuntimeEvents(db) {
+  return db.prepare(\`
+    SELECT tre.id, tre.created_at
+    FROM task_run_events tre
+    INNER JOIN task_runs tr ON tr.id = tre.task_run_id
+    WHERE tre.project_id = ?
+    ORDER BY tre.created_at DESC, tre.id DESC
+  \`).all(projectId);
+}
+`,
+      },
+    ]);
+
+    expect(violations).toHaveLength(1);
+    expect(violations[0]).toMatchObject({
+      path: "src/repositories/execution/execution-runtime-events-query.ts",
+      line: 5,
+      pattern: "unbounded execution runtime event task_run_events query",
+    });
+    expect(violations[0].remediation).toContain("SQL LIMIT");
+    expect(violations[0].remediation).toContain("run_event_rank");
+  });
+
+  it("allows bounded runtime-event LIMIT and per-run rank slices in the scoped projection module", () => {
+    const violations = guardrails.findUnboundedExecutionRuntimeEventQueryViolations([
+      {
+        path: "src/repositories/execution/execution-runtime-events-query.ts",
+        text: `
+export function queryExecutionRuntimeEvents(db, storage) {
+  const recentTaskEvents = db.prepare(\`
+    SELECT tre.id, tre.created_at
+    FROM task_run_events tre
+    WHERE tre.project_id = ?
+    ORDER BY tre.created_at DESC, tre.id DESC
+    LIMIT ?
+  \`).all(projectId, limit);
+
+  const expandedSprintTaskEvents = storage.executeChunkedInQuery({
+    sqlPrefix: \`
+      SELECT * FROM (
+        SELECT
+          tre.id,
+          tre.created_at,
+          ROW_NUMBER() OVER (
+            PARTITION BY tr.sprint_run_id
+            ORDER BY tre.created_at DESC, tre.id DESC
+          ) AS run_event_rank
+        FROM task_run_events tre
+        INNER JOIN task_runs tr ON tr.id = tre.task_run_id
+        WHERE tre.project_id = ?
+          AND tr.sprint_run_id\`,
+    sqlSuffix: \`
+      ) ranked
+      WHERE ranked.run_event_rank <= 120\`,
+    items: sprintRunIds,
+  });
+
+  const recentSprintRunEvents = db.prepare(\`
+    SELECT sre.id, sre.created_at
+    FROM sprint_run_events sre
+    INNER JOIN sprint_runs sr ON sr.id = sre.sprint_run_id
+    WHERE sr.project_id = ?
+    ORDER BY sre.created_at DESC, sre.id DESC
+    LIMIT ?
+  \`).all(projectId, limit);
+
+  return [...recentTaskEvents, ...expandedSprintTaskEvents, ...recentSprintRunEvents];
+}
+`,
+      },
+      {
+        path: "src/repositories/execution/project-stats-git-query.ts",
+        text: `
+export function queryAuditHistory(db) {
+  return db.prepare(\`
+    SELECT tre.id
+    FROM task_run_events tre
+    ORDER BY tre.created_at DESC
+  \`).all();
+}
+`,
+      },
+    ]);
+
+    expect(violations).toEqual([]);
   });
 });
 
