@@ -16,10 +16,6 @@ A dedicated-tool call takes the `action` plus action-specific fields:
 }
 ```
 
-The **deprecated** `manage_code_ux` tool reaches the same handlers via an explicit envelope —
-`{ "domain": "<name>", "action": "<name>", "payload": { … }, "approval": { … } }` — and is kept only
-for backward compatibility.
-
 **Approval handshake:** Destructive actions return `{ approvalRequired: true, approvalMessage: "..." }` on first call. Re-call with `approval: { confirmed: true }` to proceed.
 
 ---
