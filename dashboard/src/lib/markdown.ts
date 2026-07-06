@@ -1,7 +1,8 @@
 import { marked } from "marked";
 
-const renderer = new marked.Renderer();
-renderer.html = () => "";
+export interface RenderMarkdownOptions {
+  transformHref?: (href: string, kind: "link" | "image") => string;
+}
 
 const isUrlSafe = (url: string, isImage: boolean = false): boolean => {
   try {
@@ -71,42 +72,57 @@ const escapeHtml = (html: string): string => {
     .replace(/'/g, "&#39;");
 };
 
-renderer.link = function (token) {
-  const { href, title, tokens } = token;
-  const parsedText = this.parser.parseInline(tokens);
+function createRenderer(options?: RenderMarkdownOptions) {
+  const renderer = new marked.Renderer();
+  renderer.html = () => "";
 
-  if (!isUrlSafe(href)) {
-    return parsedText;
-  }
+  renderer.link = function (token) {
+    const { href, title, tokens } = token;
+    const parsedText = this.parser.parseInline(tokens);
 
-  let out = `<a href="${escapeHtml(href.trim())}"`;
-  if (title) {
-    out += ` title="${escapeHtml(title)}"`;
-  }
+    if (!isUrlSafe(href)) {
+      return parsedText;
+    }
+    const transformedHref = options?.transformHref?.(href.trim(), "link") ?? href.trim();
+    if (!isUrlSafe(transformedHref)) {
+      return parsedText;
+    }
 
-  if (/^https?:\/\//i.test(href.trim()) || href.trim().startsWith("//")) {
-    out += ` rel="noopener noreferrer"`;
-  }
+    let out = `<a href="${escapeHtml(transformedHref)}"`;
+    if (title) {
+      out += ` title="${escapeHtml(title)}"`;
+    }
 
-  out += `>${parsedText}</a>`;
-  return out as any;
-};
+    if (/^https?:\/\//i.test(transformedHref) || transformedHref.startsWith("//")) {
+      out += ` rel="noopener noreferrer"`;
+    }
 
-renderer.image = function (token) {
-  const { href, title, text } = token;
-  if (!isUrlSafe(href, true)) {
-    return escapeHtml(text);
-  }
+    out += `>${parsedText}</a>`;
+    return out as any;
+  };
 
-  let out = `<img src="${escapeHtml(href.trim())}" alt="${escapeHtml(text)}"`;
-  if (title) {
-    out += ` title="${escapeHtml(title)}"`;
-  }
-  out += ">";
-  return out as any;
-};
+  renderer.image = function (token) {
+    const { href, title, text } = token;
+    if (!isUrlSafe(href, true)) {
+      return escapeHtml(text);
+    }
+    const transformedHref = options?.transformHref?.(href.trim(), "image") ?? href.trim();
+    if (!isUrlSafe(transformedHref, true)) {
+      return escapeHtml(text);
+    }
 
-export const renderMarkdown = (text?: string): string => {
+    let out = `<img src="${escapeHtml(transformedHref)}" alt="${escapeHtml(text)}"`;
+    if (title) {
+      out += ` title="${escapeHtml(title)}"`;
+    }
+    out += ">";
+    return out as any;
+  };
+
+  return renderer;
+}
+
+export const renderMarkdown = (text?: string, options?: RenderMarkdownOptions): string => {
   if (!text) return "";
-  return marked.parse(text, { renderer }) as string;
+  return marked.parse(text, { renderer: createRenderer(options) }) as string;
 };
