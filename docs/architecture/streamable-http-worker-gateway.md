@@ -24,11 +24,10 @@ The worker gateway solves that by exposing a dedicated authenticated MCP HTTP en
 
 ## Runtime Roles
 
-Code UX now uses three MCP runtime roles internally:
+Code UX uses two MCP runtime roles internally:
 
 - `project_manager`
-- `worker_host`
-- `worker_gateway`
+- `worker-host`
 
 ### `project_manager`
 
@@ -36,7 +35,7 @@ The normal main Code UX server process.
 
 It exposes the human-facing MCP tool surface over stdio.
 
-### `worker_host`
+### `worker-host`
 
 A headless local Code UX runtime started by the worker process on the worker machine.
 
@@ -46,22 +45,13 @@ It exposes only the worker-local execution tools needed to:
 - cancel local work
 - generate a dashboard reply with local provider context
 
-### `worker_gateway`
+### HTTP Transport
 
-The MCP role exposed by the main Code UX server over Streamable HTTP.
+The MCP HTTPS transport exposes the same `project_manager` tool surface.
 
-It exposes only the remote worker control-plane tools needed to:
+The gateway now enforces worker identity at the listener entrypoint:
 
-- listen for dashboard messages
-- receive worker dispatch claims
-- post dashboard replies
-- heartbeat and finalize dispatch state
-
-It does not expose the full project-manager tool surface.
-
-The gateway now also enforces worker identity at the listener entrypoint:
-
-- `listen` on `worker_gateway` is always registered as `role = worker`
+- `listen` on remote connections is always registered as `role = worker`
 - the stored connection transport is always `streamable_http`
 
 That prevents remote HTTP worker connections from masquerading as normal stdio listeners.
@@ -108,25 +98,25 @@ That metadata is surfaced in the live runtime dashboard so operators can disting
 
 The main Code UX server can expose the worker gateway with:
 
-- `--mcp-http`
-- `--mcp-http-port`
-- `--mcp-http-host`
-- `--mcp-http-path`
-- `--mcp-http-auth-token`
+- `--mcp-https`
+- `--mcp-https-port`
+- `--mcp-https-host`
+- `--mcp-https-path`
+- `--mcp-https-auth-token`
 
 Equivalent environment variables:
 
-- `MCP_HTTP_ENABLED`
-- `MCP_HTTP_PORT`
-- `MCP_HTTP_HOST`
-- `MCP_HTTP_PATH`
-- `MCP_HTTP_AUTH_TOKEN`
+- `MCP_HTTPS_ENABLED`
+- `MCP_HTTPS_PORT`
+- `MCP_HTTPS_HOST`
+- `MCP_HTTPS_PATH`
+- `MCP_HTTPS_AUTH_TOKEN`
 
 Behavior:
 
-- disabled by default
-- automatically disabled for `worker_host`
-- defaults to `dashboardPort + 1` when `--mcp-http` is set without an explicit HTTP port
+- enabled by default
+- can be disabled with `--no-mcp-https` or `MCP_HTTPS_ENABLED=false`
+- defaults to `dashboardPort + 1` when no explicit MCP HTTPS port is configured
 - fails startup when binding to any non-loopback host such as `0.0.0.0`, `::`, or a LAN address without a non-empty auth token
 - preserves unauthenticated loopback-only development binds on `127.0.0.1`, `localhost`, and `::1`
 
@@ -146,7 +136,7 @@ Remote control-plane mode uses:
 
 ```bash
 node dist/worker/index.js \
-  --server-url http://SERVER_HOST:5555/mcp \
+  --server-url http://SERVER_HOST:4445/mcp \
   --auth-token <TOKEN> \
   --project-id <PROJECT_ID>
 ```

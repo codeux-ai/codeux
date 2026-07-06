@@ -25,6 +25,12 @@ When using shared overlay components (`Modal`, `Dialog`, `Drawer`, `Notification
 4.  **Notification Panels**:
     *   Flyout menus and notification surfaces should be collision-aware with width and max-height constraints (e.g., `max-w-[calc(100vw-2rem)] max-h-[calc(100dvh-5rem)]`) so they remain fully visible from the top nav at tablet widths without clipping.
 
+5.  **ConfirmDialog**:
+    *   On mobile screens, `ConfirmDialog` must trap focus and respond to the Escape key. Action buttons in the footer should stack vertically (e.g., `flex flex-col-reverse sm:flex-row`) to ensure touch targets are accessible and distinct.
+
+6.  **ActionFeedbackRegion**:
+    *   Must be allowed to stretch to full available width on mobile at the bottom or top of the viewport and safely wrap text to prevent horizontal overflow in toasts or feedback messages.
+
 ## Responsive Data Display
 
 When using the `Table` component for responsive data displays:
@@ -33,6 +39,7 @@ When using the `Table` component for responsive data displays:
 3. **Mobile Labels:** Supply a `mobileLabel` prop to `<TableCell>` components. This programmatic label acts as a substitute for standard column headers when the layout switches to a stacked card presentation on narrow screens.
 4. **Accessible Sort States:** Apply `ariaSort` explicitly only on the active sort column.
 5. **Handling Long Strings:** To ensure long continuous strings do not overflow the mobile cards or desktop columns, `TableCell` internals must use `min-w-0 break-words` classes. Content rendered inside the cell must support text wrapping safely without breaking the mobile layout.
+6. **FilterStrip**: Must accommodate long sets of filters on mobile by enabling horizontal scrolling with `overflow-x-auto` or gracefully wrapping its elements without clipping inner controls.
 
 ## Stats Analytics Surfaces
 

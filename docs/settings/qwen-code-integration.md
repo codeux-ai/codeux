@@ -14,7 +14,7 @@ Qwen Code can be selected anywhere a virtual CLI provider is accepted: task codi
 
 ## Authentication Modes
 
-The system integration entry for each named Qwen instance stores a `qwenAuthMode`.
+The system integration entry for each named Qwen instance stores a `qwenAuthMode` (`LOCAL_AUTH`, `ALIBABA_CODING_PLAN`, or `MODEL_PROVIDER`).
 
 ### Local Auth
 

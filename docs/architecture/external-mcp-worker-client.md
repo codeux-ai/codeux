@@ -47,9 +47,9 @@ This local worker-host runtime is now a helper for local execution, not the main
 
 ## Worker Command
 
-The new CLI is:
+The new CLI is run via:
 
-- `code-ux-worker`
+- `node dist/worker/index.js`
 
 Default behavior:
 

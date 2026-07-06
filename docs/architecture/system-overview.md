@@ -1,6 +1,6 @@
 # System Overview
 
-This project is a Model Context Protocol (MCP) server with an integrated dashboard and a DB-backed sprint orchestration engine.
+Code UX is a container-first multi-provider runtime with an integrated dashboard and a DB-backed sprint orchestration engine.
 
 ## Core Responsibilities
 
@@ -14,10 +14,12 @@ This project is a Model Context Protocol (MCP) server with an integrated dashboa
 ## Runtime Components
 
 ### 1. Entrypoint and runtime composition
-- Bootstrap file: `src/index.ts`
+- CLI/MCP entrypoint: `src/index.ts`
 - Responsibilities:
   - Load `.env` and startup config.
   - Construct and run `CodeUxServer`.
+- Worker entrypoint: `src/worker/index.ts` (worker-host mode)
+- Electron shell: `src/electron/main.ts` (desktop shell)
 
 - Runtime composition file: `src/server/code-ux-server.ts`
 - Responsibilities:
@@ -49,15 +51,17 @@ This project is a Model Context Protocol (MCP) server with an integrated dashboa
 
 ### 5. Dashboard server and frontend
 - API host: `src/server/dashboard-server.ts`
-- Frontend app: `dashboard/src/*`
+- Frontend app: `dashboard/src/v2/*`
 - Settings view-models: `dashboard/src/v2/lib/settings-view-models.ts` is a compatibility barrel over focused helpers in `dashboard/src/v2/lib/settings/`. Provider instance/auth helpers, model option catalogs, model pricing refs, project override/source helpers, display metadata, and branch naming helpers are kept in separate typed modules so dashboard components can share behavior without changing settings API contracts or saved settings shapes.
 
 ### 6. Data and settings repositories
+- Persistence uses SQLite via `node:sqlite`.
 - Subtasks: `src/repositories/subtask-repository.ts`
 - Settings DB: `src/repositories/settings-repository.ts`
 - Settings defaults/sanitization/storage: `src/repositories/settings-defaults.ts`, `src/repositories/settings-sanitizer.ts`, `src/repositories/settings-db-storage.ts`
 
 ### 7. CLI workflow execution helpers
+- Docker and host CLI providers implementations are in `src/infrastructure/providers/cli/`.
 - `src/services/cli-workflow-service.ts`
 - `src/services/cli-process-runner.ts`
 - `src/services/cli-docker-utils.ts`
@@ -82,11 +86,13 @@ flowchart TD
   F --> H[src/instructions/instruction-template-service.ts]
   H --> I[(settings.db)]
   D --> J[src/services/task-service.ts]
-  R --> L[src/server/dashboard-server.ts]
-  L --> M[Dashboard UI dashboard/src/*]
+  R --> L[Express dashboard/API]
+  L --> M[Dashboard UI dashboard/src/v2/*]
   M -->|poll| N[/api/live + /api/git-status/]
-  L --> O[src/repositories/settings-repository.ts]
+  L --> O[SQLite repositories]
   O --> P[(~/.code-ux/settings.db)]
+  R --> Q[MCP stdio/HTTPS gateway]
+  F --> S[Docker/host CLI providers]
 ```
 
 ## High-Level Data Flow
@@ -124,4 +130,4 @@ The system is designed for independent edits in these layers:
 - Orchestration control layer (`src/sprint/sprint-orchestrator.ts`)
 - Step behavior layer (`src/sprint/steps/*`)
 - Human-facing protocol text layer (`agents.instructionTemplates` in settings)
-- Dashboard settings/presentation layer (`dashboard/src/*`)
+- Dashboard settings/presentation layer (`dashboard/src/v2/*`)

@@ -4,7 +4,7 @@ This runbook covers day-to-day operation and incident handling for the MCP serve
 
 ## Normal Startup Procedure
 
-Database maintenance runs automatically during normal startup. Operators can expect:
+Database maintenance (`DatabaseMaintenanceService`) runs automatically during normal startup. Operators can expect:
 - `dbAutoVacuumOnStartup`: Triggers VACUUM on local databases. Can skip if set to false.
 - `dbPruningEnabled`: Prunes old data matching `dbRetentionDays`. Can skip if set to false.
 - `dbRetentionDays`: Bounded to a safe range (1-3650 days). Negative or zero values will be clamped.
@@ -16,10 +16,13 @@ Database maintenance runs automatically during normal startup. Operators can exp
    - Code UX writes a project-manager PID lock under the home `.code-ux/runtime/` directory. If another recorded Code UX runtime process is still alive, startup waits briefly for that process to finish shutdown before failing, instead of launching a second scheduler against the same Docker/runtime state. Tune the wait with `CODE_UX_RUNTIME_LOCK_WAIT_MS` when shutdown is expected to be slow. Set `CODE_UX_ALLOW_MULTIPLE_RUNTIMES=1` only for targeted diagnostics.
    - Dashboard startup launches a best-effort background prewarm for the pinned provider-login base image. Startup does not wait for Docker; if Docker is unavailable or the build fails, the login modal retries image preparation on demand and can still fall back to the raw base image.
 3. Open dashboard and verify settings.
-4. Confirm `/api/status` and `/api/git-status` are responding.
+4. Confirm `/api/status` and `/api/git-status` (via `GitStatusService`) are responding.
+5. Confirm `/health` and `/ready` probes:
+   - `/health`: Liveness probe. A success (`{"status": "UP"}`) means the dashboard server process is reachable and can answer basic HTTP requests.
+   - `/ready`: Readiness probe from `src/server/dashboard-server.ts`. A success (`{"status": "READY"}` or `{"status": "UP"}`) means the server considers required startup/runtime dependencies ready enough to serve normal traffic. It does not validate every provider, project, Docker workspace, or external service.
 
 If started without key:
-- Configure `JULES_API_KEY` in `.env`, or `julesApiKey` in `.jules-subagents/settings.json`, or set it in dashboard settings.
+- Configure `JULES_API_KEY` in `.env`, or `julesApiKey` in `.code-ux/settings.json`, or set it in dashboard settings.
 - Retry API-backed commands after configuration.
 - Dashboard key fields can stay empty when system-wide environment keys are already present.
 
@@ -40,6 +43,7 @@ If started without key:
 - Provider login terminal requests reject provider configuration IDs with path separators, traversal sequences, absolute-path syntax, encoded separators, control characters, leading hyphens, or characters outside the filesystem-safe ID set before credential directories are removed, created, or copied.
 - Malformed dashboard route inputs should return client errors (`400`, `403`, or `404` depending on the failure). Unexpected server failures should return only `{ "error": "Internal Server Error" }` to callers while still flowing to Express error handling and structured logs.
 - MCP approval prompts are one-time, correlation-id-bound decisions. Expired, mismatched, duplicate, blank, or malformed correlation IDs must not return a pending approval, and destructive settings approvals are bound to the exact action and payload that was queued.
+- For preview/file-browser failures, triage routes through preview host middleware (`src/server/preview-host-middleware.ts`) and cleanup/rebuild/restart steps; commands are safe and avoid exposing local DB contents, tokens, hostnames, or private paths.
 - Structured logs and invocation output pass through redaction helpers before storage or display. Secret-like environment assignments, authorization headers, hosted Git tokens, and URL credentials should appear only as `[REDACTED]` in logs and provider output.
 
 ### Emergency stop
@@ -125,7 +129,7 @@ Checks:
 Checks:
 - Is Jules API key configured in dashboard settings?
 - Is `.env` loaded with `JULES_API_KEY`?
-- Is `.jules-subagents/settings.json` containing `julesApiKey`?
+- Is `.code-ux/settings.json` containing `julesApiKey`?
 - Was settings save applied after editing dashboard value?
 
 ### 3a. Jules task stays at "Started jules dispatch"
@@ -174,8 +178,8 @@ Checks:
   - Docker workspace/runtime volumes for tracked CLI sessions are preserved across startup pruning after recovery marks the interrupted session `CANCELLED`; the next retry can still resume the old workspace volume when `Resume failed task in same workspace` is enabled.
   - Rerun resume uses the latest `cli_workspace_bound` event as the source of truth for the workspace session id. If the latest interrupted provider invocation has a different `session_id`, Code UX still resumes the Docker volume named by the recorded workspace binding.
   - Codex uses per-session container home directories under that runtime root to prevent stale state from previous Codex runs.
-  - Runtime cleanup prunes stale `home-codex-*` session homes and stale shared runtime temp directories automatically once those sessions are no longer active.
-- During shutdown, Code UX disposes the command-spawner host before Docker cleanup. If shutdown is interrupted or Docker cleanup is slow, the helper process cannot continue launching Docker commands behind the exiting runtime.
+  - `RuntimeCleanupService` prunes stale `home-codex-*` session homes and stale shared runtime temp directories automatically once those sessions are no longer active.
+- During shutdown, Code UX disposes the command-spawner host before Docker cleanup (`DockerRuntimePruneService` and `DockerAssetPruneService`). These services clean or prune runtime artifacts and stale Docker assets/workspaces (they do not perform a full repair for broken provider state). If shutdown is interrupted or Docker cleanup is slow, the helper process cannot continue launching Docker commands behind the exiting runtime.
 - Docker provider launches use readable container names such as `code-ux-codex-<session>` and mount provider arguments through a generated argv file instead of passing the full prompt through the host `docker run` command line. Secret-bearing provider environment variables are written to temporary `0600` env-files and supplied with `--env-file`, so `ps`/process-list inspection should show only the env-file path and not API key values. If Docker reports that the deterministic provider container name is already in use, Code UX force-removes that named container with volumes and retries the launch once; repeated conflicts usually mean an external Docker daemon or another runtime is recreating the same session container. Packaged Windows Electron builds that fail with `spawn ENAMETOOLONG` during provider launch are using an older build or a non-provider launch path that still embeds a large payload in command arguments.
 - When setup-image caching is enabled, the first Docker provider or preview run for a base image/setup-script combination may spend several minutes building a content-addressed `code-ux-setup-cache-*` image. Activity logs now call out the cache miss, stream Docker build steps, and report bounded progress; later runs reuse the cached image until the base image, setup script content, Dockerfile template, or Playwright-browser setting changes. If the build fails, Code UX logs the fallback and runs the setup script at container runtime instead.
 - Provider login uses a separate content-addressed `code-ux-login-base-node-24-bookworm-slim:*` image with curl and keyring prerequisites baked in. The image is prewarmed after dashboard logging is available, but this is best-effort: failures should be treated as startup warnings, not as a reason to block the dashboard or provider login.
@@ -198,9 +202,10 @@ Checks:
 - To continue retries in the same failed workspace:
   - `Settings -> CLI Workflow -> Resume failed task in same workspace` should remain enabled (default).
 - Dashboard **Resume** for a paused sprint run reactivates that same run and starts the recovery/watch-loop path in place. It should not create a replacement sprint run or a second watch loop. If the old loop is still draining, resume schedules a short follow-up recovery attempt after the registry clears so a run is not left `running` without a heartbeat.
-- Sprint deletion is rejected while the sprint has any queued/running/cancel-pending sprint run, active task dispatch, running provider/execution invocation, preserved invocation transcript, or a sprint run that finished in the last 30 seconds. Cancel, pause, or let runtime cleanup settle first; this prevents database cascades from deleting rows while an in-memory watch loop or provider callback is still unwinding.
-- Startup recovery closes active dispatch/task-run rows whose linked provider invocation already reached a terminal state. If the project task is already code-complete, the dispatch mirrors completion; otherwise the task is reset to pending for a clean retry instead of staying in a stale running state.
-- Live provider telemetry refreshes the linked task-dispatch heartbeat while the provider invocation is running. A dispatch heartbeat should not go stale when provider usage rows are still updating.
+- Sprint deletion is rejected while the sprint has any queued/running/cancel-pending sprint run, active task dispatch, running provider/execution invocation, preserved invocation transcript, or a sprint run that finished in the last 30 seconds. Cancel, pause, or let runtime cleanup (`RuntimeCleanupService`) settle first; this prevents database cascades from deleting rows while an in-memory watch loop or provider callback is still unwinding.
+- To clean up stale workspace branches that were merged or closed on origin, use `BranchReaperService` logic via the dashboard.
+- `RuntimeStartupRecoveryService` closes active dispatch/task-run rows whose linked provider invocation already reached a terminal state. It reconciles persisted/runtime state after restart and cleans or marks stale execution artifacts according to service behavior. If the project task is already code-complete, the dispatch mirrors completion; otherwise the task is reset to pending for a clean retry instead of staying in a stale running state.
+- Live provider telemetry refreshes the linked task-dispatch heartbeat (`HeartbeatService`) while the provider invocation is running. A dispatch heartbeat should not go stale when provider usage rows are still updating.
 - In local-git mode, an existing worker-owned main-merge conflict attention item suppresses additional `feature -> default` merge attempts while the worker is resolving the conflict. Human-escalated main-merge attention pauses the sprint with local conflict instructions.
 
 ### 5. Planning retry message appears but no provider work is visible

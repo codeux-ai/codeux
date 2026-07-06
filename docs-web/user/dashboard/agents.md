@@ -39,7 +39,7 @@ Open the detail panel and click **Edit**. All fields are editable; saving create
 
 ## Importing / syncing from markdown
 
-Agent presets can be defined as markdown files inside `<repo>/.code-ux/agents/<agent-id>.md` with YAML frontmatter:
+Agent presets can be defined as markdown files inside `<repo>/.code-ux/agents/<preset_name>.md` with YAML frontmatter (the filename stem is normalized to become the preset's display name):
 
 ```markdown
 ---

@@ -4,6 +4,8 @@ The dashboard UI uses a set of shared interaction tokens to ensure standard easi
 
 ## Overview
 
+The dashboard relies on motion hooks from `dashboard/src/v2/lib/motion/`, including `useReducedMotionSafe` for accessibility-aware animations and `use-animated-active-indicator` for complex state transitions.
+
 We export two sets of tokens to accommodate different styling approaches:
 
 When components use standard interaction contracts, they dynamically apply durations and easings via inline `style` tags referencing `useInteractionTokens`.

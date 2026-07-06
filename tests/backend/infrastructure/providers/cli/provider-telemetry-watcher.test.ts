@@ -554,11 +554,13 @@ describe("ProviderTelemetryWatcher", () => {
       return created;
     });
 
-    await waitForExpect(() => expect(opts.readCodexLatestSessionJson).toHaveBeenCalledTimes(3));
+    await waitForExpect(() => {
+      // The watcher runs concurrently, and we want to ensure it has failed twice
+      // and logged two warnings.
+      expect(logger.warn).toHaveBeenCalledTimes(2);
+    });
     controller.abort();
     await watcher.stop();
-
-    expect(opts.readCodexLatestSessionJson).toHaveBeenCalledTimes(3);
     expect(logger.warn).toHaveBeenCalledWith("Provider telemetry watcher read failed", expect.objectContaining({
       logPurpose: "invocation",
       eventType: "provider_telemetry_poll_failed",

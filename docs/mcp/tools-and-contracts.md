@@ -9,7 +9,6 @@ Implemented in:
 - `src/mcp/management-tool-handler.ts`
 
 These cover:
-- `manage_code_ux`
 - `manage_projects`
 - `manage_sprints`
 - `manage_tasks`
@@ -40,7 +39,6 @@ These cover:
 - `generate_dashboard_reply`
 
 ### Management
-- `manage_code_ux`
 - `manage_projects`
 - `manage_sprints`
 - `manage_tasks`
@@ -136,7 +134,7 @@ Tool arguments are validated against `src/contracts/mcp-tool-definitions.ts` bef
 
 ### Destructive Action Approvals
 
-Destructive actions (e.g., actions starting with `delete_`, `reset_`, `replace_`) executed via the `manage_code_ux` tool follow an explicit approval flow to prevent accidental data loss:
+Destructive actions (e.g., actions starting with `delete_`, `reset_`, `replace_`) follow an explicit approval flow to prevent accidental data loss:
 1. The initial call is sent without an `approval` block, or with `approval.confirmed: false`.
 2. The server short-circuits the action, returning an early envelope with `approvalRequired: true` and an explanatory `approvalMessage`.
 3. The server records a pending approval fingerprint for the normalized tool domain, action, scope identifiers, and payload. Scope identifiers include project, sprint, and task ids when present; settings fingerprints also include the setting path and proposed value.
@@ -161,12 +159,12 @@ Runtime behavior:
 2. The server records a pending approval for the exact settings action, scope, setting path, and normalized payload for 15 minutes.
 3. The response returns `approvalRequired: true` with instructions to ask the user for confirmation.
 4. The client must not call the same endpoint again with `approval.confirmed: true` unless the user explicitly confirms the exact change.
-5. After user confirmation, the same action and same payload can be called once with `approval.confirmed: true`; the pending approval is consumed and cannot be reused.
+5. After user confirmation, the same action and same payload can be called once with `approval.confirmed: true` within 15 minutes; the pending approval is consumed and cannot be reused.
 6. A different settings payload, even for the same setting path, creates a separate pending approval and does not execute. Fingerprints preserve explicit `null`, explicit `undefined`, and array order, while object key order is normalized.
 
 ### Project Setup Action
 
-`manage_projects` and `manage_code_ux` support project setup:
+`manage_projects` supports project setup:
 
 ```json
 {
@@ -190,7 +188,7 @@ Dashboard calls can add `background: true` to the HTTP setup request. In that mo
 
 ### Project Creation Paths
 
-`manage_projects` and `manage_code_ux` project creation use the same initialization path as the dashboard. Git URL projects are cloned into the selected `cloneDir`, or `~/.code-ux/projects/<repo-name>` when `cloneDir` is omitted. `new-remote` project creation treats `cloneDir` as the clone parent directory and stores the project base directory as the single repository checkout root. `new-local` project creation resolves relative `sourceRef` values from the user's home directory and accepts absolute paths selected by the desktop picker without constraining them to the Code UX process working directory.
+`manage_projects` project creation uses the same initialization path as the dashboard. Git URL projects are cloned into the selected `cloneDir`, or `~/.code-ux/projects/<repo-name>` when `cloneDir` is omitted. `new-remote` project creation treats `cloneDir` as the clone parent directory and stores the project base directory as the single repository checkout root. `new-local` project creation resolves relative `sourceRef` values from the user's home directory and accepts absolute paths selected by the desktop picker without constraining them to the Code UX process working directory.
 
 ### Sprint, Task, and Settings Payload Normalization
 
@@ -207,7 +205,7 @@ For payload normalization in management tools, Code UX centralizes parsing behav
 - **Validation Errors**: Parser failures throw `ManagementValidationError`, which the management tool handler serializes as the standardized `result.status: "error"` envelope with `errorType: "validation"` and `isError: true`.
 
 
-The dedicated management tools (`manage_sprints`, `manage_tasks`, `manage_quicksprints`, `manage_scheduler`, `manage_settings`) and the legacy `manage_code_ux` dispatcher share the same action handlers.
+The dedicated management tools (`manage_sprints`, `manage_tasks`, `manage_quicksprints`, `manage_scheduler`, `manage_settings`) share the same action handlers.
 
 ### `manage_memory` claim actions
 
@@ -440,6 +438,10 @@ For scheduler calls:
 - Scheduled chat messages use `bodyMarkdown`, optional `threadId`, optional `connectionId`, and optional `title`. When due, the scheduler posts through the same chat runtime used by dashboard conversations.
 - `update` supports pausing and resuming entries via the `status` field. Resuming a `paused` entry to `scheduled` recomputes the next run time to the next future occurrence, preventing immediate execution of missed runs. Pause/resume acts as automation gating and does not manually trigger the target.
 - `delete` requires approval confirmation.
+
+For preview calls:
+- `manage_preview` supports `list_sessions`, `start_session`, `rebuild_session`, `stop_session`, `remove_session`, `get_logs`, `get_url`, `get_script`, and `update_script`.
+- `remove_session` requires approval confirmation.
 
 For settings patch calls, `value` may be any JSON value, including strings, booleans, numbers, `null`, arrays, or objects.
 Settings patch and replacement calls still require the stateful human-confirmation gate described above.

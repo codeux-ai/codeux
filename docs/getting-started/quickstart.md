@@ -5,24 +5,15 @@ This guide gets the MCP server and dashboard running locally with minimal setup.
 ## Prerequisites
 
 - Node.js 22+
-- pnpm (only for building from source)
+- pnpm 10.33.0 (only for building from source)
 - A valid Jules API key
 - Optional for remote git intelligence: GitHub CLI (`gh`) authenticated
-
-## Install from npm (recommended)
-
-Install the runtime globally and run the `codeux` command:
-
-```bash
-npm i -g @codeuxai/codeux
-codeux
-```
-
-This starts the MCP server and dashboard. Skip ahead to [Configure API Key](#configure-api-key); the build steps below are only needed when running from source.
 
 ## Install and Build (from source)
 
 ```bash
+git clone https://github.com/codeux-ai/codeux.git
+cd codeux
 pnpm install
 pnpm run build
 ```
@@ -47,7 +38,7 @@ pnpm start
 JULES_API_KEY=YOUR_KEY
 ```
 
-4. `.jules-subagents/settings.json` (project or home)
+4. `.code-ux/settings.json` (project or home)
 ```json
 {
   "julesApiKey": "YOUR_KEY"
@@ -101,7 +92,11 @@ curl http://localhost:4444/api/git-status
 - `Jules API Key is missing`
   - Confirm key source and priority order.
 - Dashboard port in use
-  - Set `DASHBOARD_PORT` in `.env`, or configure `dashboardPort` in `config.json` or System Settings.
+  - Set `DASHBOARD_PORT` in `.env` (e.g., `DASHBOARD_PORT=5555 pnpm run dev`), or configure `dashboardPort` in `config.json` or System Settings.
+
+### Advanced Start Options
+
+For headless runs or remote workers, you can pass `--headless`, `--runtime-role`, and MCP HTTPS flags (`--mcp-https`, `--mcp-https-port`, etc.). See the [Installation CLI Flags](../docs-web/user/installation.md#cli-flags) reference for the complete list.
 - Remote mode has no PR/CI data
   - Verify `gh` is installed and authenticated.
 

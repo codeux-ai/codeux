@@ -51,12 +51,13 @@ Callers should pass `logPurpose` when the purpose is known. An explicit `logPurp
 
 ## Dashboard API Correlation Flow
 
-1. `src/server/dashboard-server.ts` installs `correlationIdMiddleware()` before route handlers.
-2. Incoming `x-correlation-id` is reused when present, otherwise a new ID is generated.
-3. Response always includes `x-correlation-id`.
-4. Request-completion logs are emitted through the shared logger and include the active correlation ID.
-5. Malformed dashboard JSON request bodies are rejected by the shared pre-route middleware with `400` and `{ "error": "Invalid JSON request body." }`. The response and structured logs do not include the raw body.
-6. Dashboard HTTP request logs are purpose-classified as `request`/`HTTP` and only print to the server console when Console Visibility is `full`.
+1. `src/server/dashboard-server.ts` installs `correlationIdMiddleware()` from `src/shared/logging/correlation-id.ts` before route handlers.
+2. Incoming `x-correlation-id` (or fallback `x-request-id`) is parsed, validated, and reused when present; otherwise a new UUID is generated.
+3. The resolved ID is bound to the async execution context via `AsyncLocalStorage`.
+4. The response header `x-correlation-id` is always set to the resolved ID.
+5. Request-completion logs are emitted through the shared logger and automatically include the active correlation ID from the context.
+6. Malformed dashboard JSON request bodies are rejected by the shared pre-route middleware with `400` and `{ "error": "Invalid JSON request body." }`. The response and structured logs do not include the raw body.
+7. Dashboard HTTP request logs are purpose-classified as `request`/`HTTP` and only print to the server console when Console Visibility is `full`.
 
 ## Runtime Log Levels
 

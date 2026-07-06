@@ -9,7 +9,7 @@ This map explains where major responsibilities live.
 ├─ src/                        # Backend MCP server and orchestration engine
 ├─ tests/                      # Dedicated backend + dashboard test suites
 ├─ dashboard/                  # Preact dashboard app
-├─ .jules-subagents/           # Local default guides + instruction templates
+├─ .code-ux/                   # Local configuration, artifacts, and templates
 ├─ docs/                       # Project documentation
 ├─ dist/                       # Compiled backend output
 └─ package.json                # Scripts and dependencies
@@ -45,6 +45,7 @@ backup files appear there.
   - `dashboard-server.ts`
   - Express routes for dashboard APIs and static assets.
 - `repositories/`
+  - Persistence using SQLite via `node:sqlite`.
   - `execution-repository.ts`
   - Delegates snapshot projection to `execution/project-execution-snapshot-query.ts` while keeping validation boundary. The snapshot query owns shared sprint-run/task ID deduplication before invoking bounded slice queries and usage/wall-time enrichment.
   - `execution/execution-invocations-query.ts`
@@ -65,6 +66,8 @@ backup files appear there.
 - `infrastructure/repositories/`
   - `file-template-repository.ts`
   - Shared file lookup implementation used by guide and instruction template repositories.
+- `infrastructure/providers/cli/`
+  - Docker and host CLI provider implementations for task execution.
 - `mcp/`
   - `core-tool-handler.ts`
   - `agent-tool-handler.ts`
@@ -98,7 +101,7 @@ backup files appear there.
 - `instructions/`
   - Template loading, fallback, and placeholder rendering.
 
-## Dashboard (`dashboard/src/`)
+## Dashboard (`dashboard/src/v2/`)
 
 - `app.tsx`
   - Main view orchestration and polling.
