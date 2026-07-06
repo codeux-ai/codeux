@@ -147,7 +147,7 @@ The guide covers:
 - Projects: project management and adding the first project
 - Docker Containers: container runtime readiness and running CLI containers
 - Active Sessions: preview containers and browser sessions
-- Each navigation destination: Chat, Overview, Sprints, Tasks, Agents, Stats, Memory, Knowledge, Browser, Live, and Settings/Config
+- Each navigation destination in visible order: Chat, Overview, Sprints, Tasks, Agents, Stats, Schedule, Memory, Knowledge, Browser, Files, Live, Docs, and Settings/Config
 
 The tour card includes previous/next controls, a skip action, the current step count, status copy, and a progress bar. Keyboard users can use Escape to close the tour, ArrowLeft/ArrowRight to move between steps, and the primary Next/Done control receives focus as the step changes. Previous, Next, Skip, and Finish controls include the target step or current location in their accessible names. Closing the tour through Escape, Skip, or Done restores focus to the control that started the tour when possible.
 
