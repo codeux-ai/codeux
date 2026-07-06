@@ -73,6 +73,12 @@ Examples:
 4. Include command examples in fenced code blocks where action is required.
 5. Use system scope for shared defaults and project scope only when a repository truly needs custom operator guidance.
 
+## Editable Repository Instruction Files
+
+The dashboard instruction-file editor is separate from the template system above. It can edit only the static catalog of repository instruction files exposed by the backend, such as `AGENTS.md`, `CLAUDE.md`, `GEMINI.md`, `QWEN.md`, and `.github/copilot-instructions.md`.
+
+Instruction file IDs are catalog IDs, not project-relative paths. The backend resolves each ID through the catalog, canonicalizes the destination under the selected project's base directory, and rejects unknown IDs, traversal-like IDs, symlink escapes, missing projects, and content over the configured byte limit. The editor does not accept arbitrary repository paths.
+
 ## Example
 
 Template:
