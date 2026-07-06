@@ -310,7 +310,8 @@ describe("KanbanTaskCard Integration", () => {
     }));
   });
 
-  it("keeps quick actions mounted and reachable without hover on pointer-fine devices", () => {
+  it("keeps quick actions mounted at the card bottom and keyboard reachable without hover", async () => {
+    const user = userEvent.setup();
     const { container, getByRole } = render(
       <KanbanTaskCard
         viewModel={mockViewModel}
@@ -326,11 +327,18 @@ describe("KanbanTaskCard Integration", () => {
     expect(actionsContainer).toHaveAttribute("aria-label", "Actions for task TASK-123");
     expect(getByRole("button", { name: /Edit task TASK-123: Implement new feature/i })).toBeInTheDocument();
     expect(getByRole("button", { name: /Delete task TASK-123: Implement new feature/i })).toBeInTheDocument();
+    expect(actionsContainer).not.toHaveClass("absolute");
+    expect(actionsContainer?.previousElementSibling).toHaveClass("sm:flex-row");
+
+    await user.tab();
+    expect(card).toHaveFocus();
+    await user.tab();
+    expect(getByRole("button", { name: /Rerun task TASK-123: Implement new feature/i })).toHaveFocus();
 
     expect(taskCardCss).toContain("@media (any-pointer: fine) and (hover: hover)");
     expect(taskCardCss).toMatch(/\.kanban-card__actions\s*\{[\s\S]*opacity:\s*1;[\s\S]*pointer-events:\s*auto;[\s\S]*transform:\s*translateY\(0\);/);
-    expect(taskCardCss).toMatch(/@media \(any-pointer: fine\) and \(hover: hover\)\s*\{[\s\S]*\.kanban-card__actions\s*\{[\s\S]*opacity:\s*0\.92;[\s\S]*pointer-events:\s*auto;[\s\S]*transform:\s*translateY\(0\);/);
-    expect(taskCardCss).toMatch(/\.kanban-card:hover \.kanban-card__actions,[\s\S]*\.kanban-card:focus \.kanban-card__actions,[\s\S]*\.kanban-card:focus-visible \.kanban-card__actions,[\s\S]*\.kanban-card:focus-within \.kanban-card__actions\s*\{[\s\S]*opacity:\s*1;[\s\S]*pointer-events:\s*auto;/);
+    expect(taskCardCss).toMatch(/@media \(any-pointer: fine\) and \(hover: hover\)\s*\{[\s\S]*\.kanban-card__actions\s*\{[\s\S]*opacity:\s*0;[\s\S]*pointer-events:\s*none;[\s\S]*transform:\s*translateY\(0\.375rem\);/);
+    expect(taskCardCss).toMatch(/\.kanban-card:hover \.kanban-card__actions,[\s\S]*\.kanban-card:focus \.kanban-card__actions,[\s\S]*\.kanban-card:focus-visible \.kanban-card__actions,[\s\S]*\.kanban-card:focus-within \.kanban-card__actions\s*\{[\s\S]*opacity:\s*1;[\s\S]*pointer-events:\s*auto;[\s\S]*transform:\s*translateY\(0\);/);
   });
 
   it("renders status transition clearly when a task status updates", async () => {
@@ -571,13 +579,14 @@ describe("KanbanTaskCard Integration", () => {
 
     const title = container.querySelector("h4");
     expect(title).toHaveClass("break-words");
-    expect(title).toHaveClass("pr-12");
+    expect(title).not.toHaveClass("pr-12");
 
     const sourceSpan = container.querySelector('.font-mono.truncate');
     expect(sourceSpan).toHaveClass('min-w-0');
 
-    const actionsContainer = container.querySelector('.absolute.top-3.right-3');
+    const actionsContainer = container.querySelector('.kanban-card__actions');
     expect(actionsContainer).toHaveClass('kanban-card__actions');
+    expect(actionsContainer).not.toHaveClass('absolute');
     expect(actionsContainer).toHaveAttribute("aria-label", "Actions for task TASK-123");
   });
 
