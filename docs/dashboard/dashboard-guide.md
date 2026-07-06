@@ -580,6 +580,7 @@ Runtime scoping:
 - Project scope General settings expose the selected project's display name as an immediate metadata edit. Saving calls `PATCH /api/projects/:projectId` with the trimmed `name`, refreshes the project collection, and leaves the project id, settings overrides, tasks, and runtime history unchanged.
 - The `/config` page keeps the existing v2 settings shell and categories, but now binds them to real scoped settings instead of draft-only values
 - System scope only edits system-owned controls, while project scope only edits project-owned overrides for the selected project
+- The Settings scope/status row stays sticky below the app shell while scrolling, keeping the System/Project selector, selected-scope context, project availability or inheritance summary, visible-category count, and save badges visible. The active panel/save-state strip is also sticky and uses a measured top offset from the wrapped scope row so long project names and narrow layouts do not create overlapping pinned controls.
 - The integrations view now owns provider API keys plus GitHub and GitLab tokens and GitHub workflow settings, rather than splitting those across separate categories
 - The integrations view uses a registry-style list with per-integration `Add` and `Manage` actions so additional integrations can be added without turning the page into one long form
 - Provider integrations are now instance-based:
