@@ -40,7 +40,6 @@ for destructive actions.
 | `manage_settings` | platform | Get/resolve/patch/replace/reset system, project, and sprint settings. |
 | `manage_preview` | platform | Manage sprint preview containers (start/stop/rebuild, logs, scripts). |
 | `manage_telemetry` | platform | Read execution snapshots, invocations, sprint runs, and dispatches. |
-| `manage_code_ux` | advanced | **Deprecated** unified dispatcher (see below). Prefer the dedicated tools. |
 
 Every tool requires `runtimeRoles: ["project_manager"]` and is enabled by default.
 
@@ -92,22 +91,6 @@ subscriptions, so no project id is needed.
 
 Returns the most relevant passages with their source documents. See the
 [Knowledge](../user/dashboard/knowledge.md) page for managing the underlying documents.
-
-## `manage_code_ux` (deprecated)
-
-A single dispatcher that proxies to any domain via `{ domain, action, payload, approval }`. It still
-works but is **deprecated** in favor of the dedicated `manage_*` tools, which carry typed schemas and
-clearer enums.
-
-```jsonc
-{
-  "domain": "projects",        // projects | sprints | tasks | quicksprints | scheduler |
-                                //  settings | agents | memory | preview | telemetry
-  "action": "list",
-  "payload": { },
-  "approval": { "confirmed": false }
-}
-```
 
 ## Error model
 
