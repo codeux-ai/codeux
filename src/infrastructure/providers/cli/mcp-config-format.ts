@@ -1,5 +1,6 @@
 import type { CustomMcpServer } from "../../../contracts/app-types.js";
 import type { McpConnectionInfo } from "../../../contracts/mcp-connection-types.js";
+import { sanitizeCustomMcpServers } from "../../../mcp/mcp-tool-availability.js";
 import type { CliProviderId } from "./provider-command-specs.js";
 
 export const escapeTomlString = (value: string): string => value.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
@@ -148,7 +149,7 @@ export function buildProviderMcpConfigArtifact(
     options.rewriteUrl ? options.rewriteUrl(url, options.rewriteEnabled ?? false) : url;
 
   const processedConn = conn ? { ...conn, url: rewrite(conn.url) } : null;
-  const processedServers = customServers.map(server =>
+  const processedServers = sanitizeCustomMcpServers(customServers).map(server =>
     server.transport === "http" && server.url
       ? { ...server, url: rewrite(server.url) }
       : server

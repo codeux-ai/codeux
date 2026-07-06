@@ -776,7 +776,17 @@ describe("SprintPreviewService unit tests", () => {
           "cookie": "val",
           "set-cookie": "val",
           "x-code-ux-test": "test",
+          "x-code-ux-preview-port": "5556",
           "connection": "close",
+          "upgrade": "websocket",
+          "transfer-encoding": "chunked",
+          "host": "localhost:4444",
+          "content-length": "42",
+          "accept-encoding": "gzip",
+          "proxy-authorization": "Basic secret",
+          "origin": "http://localhost:4444",
+          "referer": "http://localhost:4444/browser?path=/test",
+          "sec-fetch-site": "same-site",
           "x-custom": "allowed",
         },
       });
@@ -786,7 +796,17 @@ describe("SprintPreviewService unit tests", () => {
       expect(calledOptions.headers).not.toHaveProperty("cookie");
       expect(calledOptions.headers).not.toHaveProperty("set-cookie");
       expect(calledOptions.headers).not.toHaveProperty("x-code-ux-test");
+      expect(calledOptions.headers).not.toHaveProperty("x-code-ux-preview-port");
       expect(calledOptions.headers).not.toHaveProperty("connection");
+      expect(calledOptions.headers).not.toHaveProperty("upgrade");
+      expect(calledOptions.headers).not.toHaveProperty("transfer-encoding");
+      expect(calledOptions.headers).not.toHaveProperty("host");
+      expect(calledOptions.headers).not.toHaveProperty("content-length");
+      expect(calledOptions.headers).not.toHaveProperty("accept-encoding");
+      expect(calledOptions.headers).not.toHaveProperty("proxy-authorization");
+      expect(calledOptions.headers).toHaveProperty("origin", "http://127.0.0.1:5555");
+      expect(calledOptions.headers).toHaveProperty("referer", "http://127.0.0.1:5555/browser?path=/test");
+      expect(calledOptions.headers).toHaveProperty("sec-fetch-site", "same-origin");
       expect(calledOptions.headers).toHaveProperty("x-custom", "allowed");
     });
 
@@ -941,7 +961,7 @@ describe("SprintPreviewService unit tests", () => {
       vi.unstubAllGlobals();
     });
 
-    it("strips set-cookie and rewrites location headers", async () => {
+    it("strips unsafe response headers and rewrites location headers", async () => {
       const session = makeSession({ containerId: null, containerName: null });
       deps.sprintPreviewRepository.getSession.mockReturnValue(session);
       deps.sprintPreviewRepository.updateSession.mockImplementation(
@@ -954,6 +974,10 @@ describe("SprintPreviewService unit tests", () => {
         "content-type": "text/plain",
         "location": "/redirect",
         "set-cookie": "token=abc",
+        "content-security-policy": "default-src 'none'",
+        "content-security-policy-report-only": "default-src 'self'",
+        "x-frame-options": "DENY",
+        "x-custom": "allowed",
       });
       const mockResponse = {
         status: 302,
@@ -972,6 +996,10 @@ describe("SprintPreviewService unit tests", () => {
       expect(result.status).toBe(302);
       expect(result.headers["location"]).toContain("/api/browser/sessions/session-1/proxy/redirect");
       expect(result.headers["set-cookie"]).toBeUndefined();
+      expect(result.headers["content-security-policy"]).toBeUndefined();
+      expect(result.headers["content-security-policy-report-only"]).toBeUndefined();
+      expect(result.headers["x-frame-options"]).toBeUndefined();
+      expect(result.headers["x-custom"]).toBe("allowed");
       vi.unstubAllGlobals();
     });
 
