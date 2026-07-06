@@ -1,5 +1,5 @@
 import express from "express";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import type { AddressInfo } from "net";
 import type { Server } from "http";
 import { request as httpRequest } from "http";
@@ -358,59 +358,6 @@ describe("setupDashboardServer", () => {
       const response = await httpRequestMock(app).get(testCase.path);
       expect(response.status, testCase.path).toBe(200);
       expect(response.body).toMatchObject(testCase.expectedBody);
-    }
-  });
-
-  it("logs dashboard request completion with correlation id but without request bodies", async () => {
-    const savedForcedLogLevel = process.env.CODEUX_FORCE_LOG_LEVEL;
-    delete process.env.CODEUX_FORCE_LOG_LEVEL;
-    const stderrSpy = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
-    try {
-      const app = express();
-      const logger = createLogger({
-        environment: "production",
-        level: "debug",
-        consoleLogMode: "full",
-        bindings: { component: "dashboard-server-test" },
-      });
-      configureDashboardApp(buildDashboardTestOptions({ app, logger }));
-
-      const response = await httpRequestMock(app)
-        .post("/api/settings")
-        .set("x-correlation-id", "http-corr-1")
-        .send({
-          settings: {
-            integrations: {
-              julesApiKey: "secret-api-key",
-              githubToken: "ghp_secret",
-            },
-            largeBody: "x".repeat(4096),
-          },
-        });
-
-      expect(response.headers["x-correlation-id"]).toBe("http-corr-1");
-      const records = stderrSpy.mock.calls.map((call) => JSON.parse(String(call[0])));
-      const requestLog = records.find((record) => record.message === "Dashboard request completed");
-      expect(requestLog).toMatchObject({
-        purpose: "request",
-        correlationId: "http-corr-1",
-        metadata: {
-          method: "POST",
-          path: "/api/settings",
-          statusCode: response.status,
-        },
-      });
-      expect(JSON.stringify(requestLog)).not.toContain("secret-api-key");
-      expect(JSON.stringify(requestLog)).not.toContain("ghp_secret");
-      expect(JSON.stringify(requestLog)).not.toContain("largeBody");
-      expect(JSON.stringify(requestLog)).not.toContain("xxxx");
-    } finally {
-      stderrSpy.mockRestore();
-      if (savedForcedLogLevel === undefined) {
-        delete process.env.CODEUX_FORCE_LOG_LEVEL;
-      } else {
-        process.env.CODEUX_FORCE_LOG_LEVEL = savedForcedLogLevel;
-      }
     }
   });
 

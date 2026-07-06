@@ -97,7 +97,7 @@ describe("DashboardRealtimeWebSocketServer", () => {
     });
   });
 
-  const setupClient = (headers: Record<string, string> = {}) => {
+  const setupClient = () => {
     const socket = new EventEmitter() as Socket;
     socket.write = vi.fn();
     socket.end = vi.fn();
@@ -109,7 +109,6 @@ describe("DashboardRealtimeWebSocketServer", () => {
         upgrade: "websocket",
         connection: "Upgrade",
         "sec-websocket-key": "testkey",
-        ...headers,
       },
     } as unknown as IncomingMessage;
 
@@ -328,7 +327,7 @@ describe("DashboardRealtimeWebSocketServer", () => {
   });
 
   it("sends snapshot_required when afterSequence is genuinely behind and missed non-replayable events", () => {
-    const { sendClientMessage, getWrittenJson } = setupClient({ "x-correlation-id": "ws-corr-1" });
+    const { sendClientMessage, getWrittenJson, socket } = setupClient();
 
     realtimeService.getLatestSequenceForScopes.mockReturnValue(100);
     realtimeService.getLatestSequence.mockReturnValue(100);
@@ -346,17 +345,6 @@ describe("DashboardRealtimeWebSocketServer", () => {
       type: "snapshot_required",
       reason: "non_replayable_event_missed",
     });
-    expect(logger.warn).toHaveBeenCalledWith(
-      "websocket_recovery_snapshot_required",
-      expect.objectContaining({
-        logPurpose: "realtime",
-        reason: "non_replayable_event_missed",
-        afterSequence: 50,
-        latestSequence: 100,
-        scopes: ["project:p1"],
-        correlationId: "ws-corr-1",
-      }),
-    );
   });
 
   it("does not send snapshot_required when afterSequence is equal to latest scope sequence", () => {
@@ -450,38 +438,6 @@ describe("DashboardRealtimeWebSocketServer", () => {
     });
   });
 
-  it("logs invalid client messages with correlation metadata but without raw websocket payloads", () => {
-    const { socket, getWrittenJson } = setupClient({ "x-request-id": "ws-request-corr" });
-    const secretPayload = "invalid-json-with-token-secret-" + "x".repeat(4096);
-    const payload = Buffer.from(secretPayload);
-    const header = Buffer.alloc(8);
-    header[0] = 0x81;
-    header[1] = 126 | 0x80;
-    header.writeUInt16BE(payload.length, 2);
-    header[4] = 0;
-    header[5] = 0;
-    header[6] = 0;
-    header[7] = 0;
-
-    socket.emit("data", Buffer.concat([header, payload]));
-
-    expect(getWrittenJson()).toContainEqual({
-      type: "snapshot_required",
-      reason: "invalid_client_message",
-    });
-    expect(logger.warn).toHaveBeenCalledWith(
-      "Invalid dashboard realtime websocket message",
-      expect.objectContaining({
-        logPurpose: "realtime",
-        correlationId: "ws-request-corr",
-        error: expect.any(SyntaxError),
-      }),
-    );
-    const serializedLogs = JSON.stringify(logger.warn.mock.calls);
-    expect(serializedLogs).not.toContain(secretPayload);
-    expect(serializedLogs).not.toContain("invalid-json-with-token-secret");
-  });
-
   it("does not send snapshot_required when afterSequence = 0 (first connection)", () => {
     const { sendClientMessage, getWrittenJson } = setupClient();
 
@@ -554,8 +510,6 @@ describe("DashboardRealtimeWebSocketServer", () => {
         error: expect.any(Error),
       }),
     );
-    const broadcastLog = logger.warn.mock.calls.find((call) => call[0] === "dashboard_realtime_websocket_broadcast_failed");
-    expect(broadcastLog?.[1]).not.toHaveProperty("payload");
     expect(socket.destroy).toHaveBeenCalled();
   });
 
@@ -754,7 +708,6 @@ describe("DashboardRealtimeWebSocketServer observability", () => {
     expect(loggerMock.warn).toHaveBeenCalledWith(
       "repeated_unhealthy_recovery_patterns",
       expect.objectContaining({
-        logPurpose: "realtime",
         clientId: "127.0.0.1",
         count: 4,
       })

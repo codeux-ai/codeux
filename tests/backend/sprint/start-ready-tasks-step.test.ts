@@ -38,4 +38,45 @@ describe("runStartReadyTasksStep", () => {
     expect(result.subtasks[0].status).toBe("RUNNING");
     expect(result.subtasks[0].session_id).toBe("sessions/abc");
   });
+
+  it("does not automatically restart QA-parked tasks during the start-ready pass", async () => {
+    const startTask = vi.fn();
+    const subtasks: Subtask[] = [
+      {
+        id: "task-1",
+        title: "Needs human QA follow-up",
+        prompt: "",
+        depends_on: [],
+        is_independent: true,
+        status: "QA_REVIEW_FAILED",
+        session_id: "completed-session",
+      },
+    ];
+
+    const result = await runStartReadyTasksStep(subtasks, {
+      action: "orchestrate",
+      maxFailures: 5,
+      getConsecutiveFailures: () => 0,
+      setConsecutiveFailures: vi.fn(),
+      startTask,
+      resolveSessionName: (session) => session.name,
+      extractSessionId: (session) => session.id,
+      logger: {
+        debug: vi.fn(),
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+        child: vi.fn().mockReturnThis(),
+      } as any,
+      getProviderForTask: () => null,
+      getProviderSettings: () => ({}),
+      getRunningCounts: () => ({}),
+    });
+
+    expect(result.subtasks[0]).toMatchObject({
+      status: "QA_REVIEW_FAILED",
+      session_id: "completed-session",
+    });
+    expect(startTask).not.toHaveBeenCalled();
+  });
 });

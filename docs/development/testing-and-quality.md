@@ -234,7 +234,23 @@ pnpm run typecheck:dashboard
 - Interaction behavior tests should verify pointer cursors, focus management, overlay dismissibility, and reduced-motion states for animated components.
 - Flow-specific tests (like destructive actions) must assert that confirmation dialogs appear and that side-effect actions (like "Reset downstream tasks") are triggered correctly based on user selection.
 
-Focused dashboard quality lane:
+### Orchestration Gate Regressions
+
+Use the focused orchestration regression set when changing the sprint watch loop, task dispatch/session sync, CI gates, or QA review gates:
+
+```bash
+pnpm run test:backend -- tests/backend/sprint/watch-loop-core.test.ts tests/backend/sprint/status-derivation-step.test.ts tests/backend/sprint/session-sync-step.test.ts tests/backend/sprint/sprint-orchestrator-ci.test.ts tests/backend/domain/sprint/ci/feature-pr-gate.test.ts tests/backend/domain/sprint/ci/main-merge-gate.test.ts tests/backend/domain/qa-review/qa-review-runner.test.ts
+```
+
+These tests are intentionally network-free. They mock provider sessions, CI status, PR metadata, QA reviewers, and dispatch rows so repeated watch-loop cycles can be checked deterministically. When one fails, triage in this order:
+
+- Duplicate dispatch or dependency unlock failures: inspect `runStatusDerivationStep`, `runStartReadyTasksStep`, and active dispatch lookups before changing DAG semantics.
+- CI gate failures: compare the structured gate state (`waiting_checks`, `ready_for_merge`, `failed_checks`, `missing_pr`, stale-empty-check skip) with the mocked PR/check/run timestamps.
+- QA gate failures: distinguish a running review, a recovered stale review, an errored review, and `QA_REVIEW_FAILED`; parked QA tasks must not be restarted by the generic start-ready pass.
+- Provider failure failures: verify task runs, task dispatches, provider invocations, and task-run events all settle together instead of leaving `running` rows behind.
+
+### Focused dashboard quality lane
+
 ```bash
 pnpm run test:dashboard -- tests/dashboard/accessibility/dashboard-quality-regressions.test.tsx tests/dashboard/components/ui/ActionFeedbackRegion.test.tsx tests/dashboard/v2/settings-danger-panel.test.tsx tests/dashboard/v2/settings-page-state.test.tsx tests/dashboard/v2/runtime-event-feed.test.tsx tests/dashboard/v2/use-project-effective-settings.test.tsx tests/dashboard/hooks/use-realtime-resource.test.tsx dashboard/src/v2/components/__tests__/NotificationPanel.test.tsx dashboard/src/v2/lib/__tests__/motion/interaction-tokens.test.tsx
 ```
