@@ -18,6 +18,7 @@ This document defines the visual patterns and rules for the Settings workspace. 
     *   Provider-instance cards announce local action results in-card through `ActionFeedbackRegion`. Enable/disable, auth-mode changes, dashboard login, and remove affordances distinguish local unsaved changes from persisted state; destructive remove actions require a target-named confirmation click before invoking the change and suppress duplicate activation while pending.
     *   Pill choices and toggles use `controlFeedback` for focus, hover, active, and selected cues. Arrow keys move between pill radio choices and update the selected value. Reduced motion snaps the selected rail and color changes while preserving the checked state and visible label.
     *   Quality Assurance trigger agent assignment uses checkbox-based multi-select groups with trigger-specific accessible names. Empty selection is a visible built-in QA fallback state and must not write placeholder preset ids.
+    *   MCP custom server transport selection keeps radiogroup semantics. HTTP / SSE setup must expose the URL field and auth headers JSON editor with durable accessible names, keep the generated config preview in a labelled region, and state that saved changes apply on the next CLI run.
 
 3.  **High-Risk Actions**:
     *   Destructive actions in the Danger Zone (`Wipe Project`, `Wipe Database`) use the `danger` tone, yielding clear semantic `bg-status-red text-white` presentation. Panels themselves hint at danger via red-tinted borders and backgrounds.
