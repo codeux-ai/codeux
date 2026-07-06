@@ -334,7 +334,7 @@ curl http://localhost:4444/api/git-status
 
 GitHub validation is split by signal:
 - `CI` runs `Typecheck & Lint`, `Backend Tests & Coverage`, `Dashboard Tests`, `Build`, and `Security Audit` on Node 22 with pnpm 10.33.0. It runs on pushes to `main` and `dev`, and on pull requests targeting any branch.
-- `Playwright Tests` runs browser E2E validation on pushes and pull requests targeting `main` or `dev`. Release and publish workflows remain separate from CI/E2E validation.
+- `Playwright Tests` runs browser E2E validation on pushes and pull requests targeting `main`. Release and publish workflows remain separate from CI/E2E validation.
 - Superseded runs for the same branch or pull request are cancelled by workflow concurrency groups.
 
 Local equivalents:
@@ -343,16 +343,22 @@ Local equivalents:
 - `pnpm run test:dashboard` mirrors the dashboard Vitest job.
 - `pnpm run audit` mirrors the independent security audit job.
 - `pnpm run build` validates the compiled server and dashboard bundle.
-- `pnpm exec playwright test` runs the browser E2E suite locally after dependencies and Playwright browsers are installed.
+- `pnpm run build && pnpm exec playwright test` runs the browser E2E suite locally against the compiled server from a clean checkout.
 
 Dependency and cache behavior:
 - CI restores `node_modules` only as a speed hint and still runs `pnpm install --frozen-lockfile --ignore-scripts` in every job.
-- Vitest, Vite, TypeScript, and Playwright browser caches are keyed to the Linux runner, Node 22, pnpm 10.33.0, and dependency/config files that affect the cached output.
-- Playwright always runs `pnpm exec playwright install chromium --with-deps` after restoring the browser cache so cached browser binaries cannot hide missing OS dependencies.
+- Vite and Playwright browser caches are keyed to the runner OS, Node 22, pnpm 10.33.0, and dependency/config files that affect the cached output.
+- Playwright installs Linux Chromium OS dependencies on Linux runners and always runs `pnpm exec playwright install chromium` after restoring the browser cache so cached browser binaries cannot hide a missing browser install.
 - The Build and Playwright jobs do not cache `.cache/tsc`; those jobs must emit a fresh `dist/` tree for package output and the E2E web server.
 
+Playwright runtime behavior:
+- `playwright.config.ts` starts `node dist/index.js` with `reuseExistingServer: false` and waits on `http://127.0.0.1:4444/health`, not `/ready`, so clean CI does not require prior project activity.
+- The web server process receives a generated temporary `HOME` and `USERPROFILE`; E2E tests create only temp local projects and must not depend on browser cache, a developer database, provider credentials, Docker provider startup, worker dispatch, sprint execution, or real project state.
+- Root smoke helpers verify the `/health` liveness payload, load the app shell from the configured `baseURL`, guard against external main-frame navigations, and derive fixture names/paths from run id, worker, repeat, retry, and fixture key.
+- Release-style specs cover both desktop and mobile viewport behavior with `page.setViewportSize` while keeping the Playwright project serialized with one worker.
+
 Artifacts:
-- On Playwright failure, download the `playwright-artifacts` artifact from the workflow run. It contains `test-results/` traces/screenshots/videos when produced and `playwright-report/` for the HTML report.
+- On Playwright failure, download the `playwright-artifacts-<os>` artifact from the workflow run. It contains `test-results/` traces/screenshots/videos when produced and `playwright-report/` for the HTML report.
 - The artifact retention window is seven days. If no files were produced, artifact upload is allowed to continue without masking the original test failure.
 
 ## Escalation Notes

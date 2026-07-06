@@ -1,5 +1,11 @@
 import { expect, type ConsoleMessage, type Locator, type Page, test } from '@playwright/test';
-import { completeOnboarding, createDraftSprint, ensureSelectedProject } from './helpers/prepare-app';
+import {
+  completeOnboarding,
+  createDraftSprint,
+  ensureSelectedProject,
+  expectLocalAppReady,
+  installLocalNavigationGuard,
+} from './helpers/prepare-app';
 
 type RouteSmokeCase = {
   path: string;
@@ -155,6 +161,7 @@ test.beforeEach(async ({ page, request }, testInfo) => {
 
 test('normal app shell loads and global shell behavior works', async ({ page, request }, testInfo) => {
   const errors = installErrorCapture(page);
+  const assertNoExternalNavigation = installLocalNavigationGuard(page, testInfo);
   const project = await ensureSelectedProject(request, { testInfo, fixtureKey: 'release-smoke-shell' });
   await createDraftSprint(request, project.id, {
     testInfo,
@@ -162,7 +169,7 @@ test('normal app shell loads and global shell behavior works', async ({ page, re
     goal: 'Keep shell smoke checks in normal project scope.',
   });
 
-  await page.goto('/');
+  await expectLocalAppReady(page, request, testInfo);
 
   await expect(page).toHaveTitle(/Code UX/i);
   await expect(page.getByRole('heading', { name: 'Overview' })).toBeVisible();
@@ -205,6 +212,7 @@ test('normal app shell loads and global shell behavior works', async ({ page, re
   await ensureProjectSelectedInShell(page, project.name);
   await expectNoPersistentLoading(page);
   await expectNoCapturedErrors(errors);
+  assertNoExternalNavigation();
 });
 
 test('core dashboard routes render release smoke landmarks without app errors', async ({ page, request }, testInfo) => {
