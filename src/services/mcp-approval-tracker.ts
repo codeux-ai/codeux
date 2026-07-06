@@ -6,6 +6,9 @@ export interface PendingMcpApproval {
   proposedAt: string;
 }
 
+const APPROVAL_CORRELATION_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
+const TOKEN_SHAPED_CORRELATION_ID_PATTERN = /^(?:gh[pousr]_|github_pat_|glpat-|sk-|sess-|ATATT3xFfGF0)/;
+
 /**
  * Tracks pending approval-required actions from MCP tool calls.
  * Used by the worker gateway to capture approval-gated actions so the
@@ -65,6 +68,10 @@ export class McpApprovalTracker {
   }
 
   private isValidCorrelationId(correlationId: unknown): correlationId is string {
-    return typeof correlationId === "string" && correlationId.trim().length > 0;
+    if (typeof correlationId !== "string") {
+      return false;
+    }
+    const trimmed = correlationId.trim();
+    return APPROVAL_CORRELATION_ID_PATTERN.test(trimmed) && !TOKEN_SHAPED_CORRELATION_ID_PATTERN.test(trimmed);
   }
 }

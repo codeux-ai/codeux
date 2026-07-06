@@ -1,22 +1,28 @@
 const SENSITIVE_KEYS_LIST = [
   "apiKey", "token", "authorization", "password", "secret",
+  "anthropicApiKey", "codexApiKey", "geminiApiKey", "jiraApiToken", "julesApiKey",
+  "openaiCompatibleApiKey", "openRouterApiKey", "providerApiKey", "qwenApiKey",
   "githubToken", "gitlabToken", "jiraToken",
-  "ANTHROPIC_API_KEY", "OPENAI_API_KEY", "GEMINI_API_KEY",
-  "GH_TOKEN", "GITLAB_TOKEN"
+  "ANTHROPIC_API_KEY", "CODEX_API_KEY", "GEMINI_API_KEY", "JIRA_API_TOKEN",
+  "JULES_API_KEY", "OPENAI_API_KEY", "OPENAI_COMPATIBLE_API_KEY", "OPENROUTER_API_KEY",
+  "QWEN_API_KEY", "GH_TOKEN", "GITHUB_TOKEN", "GITLAB_TOKEN"
 ];
 
 const SENSITIVE_KEYS = new Set(SENSITIVE_KEYS_LIST.map((key) => key.toLowerCase()));
 const SENSITIVE_KEYS_REGEX_STR = SENSITIVE_KEYS_LIST.join("|");
+const SENSITIVE_KEY_FRAGMENT_PATTERN = /(?:api[-_]?key|token|authorization|password|secret)/i;
 
 const JSON_SECRET_PATTERN = new RegExp(`"(${SENSITIVE_KEYS_REGEX_STR})"\\s*:\\s*"(?:[^"\\\\]|\\\\.)*"`, "gi");
 const ENV_ASSIGNMENT_PATTERN = new RegExp(`\\b(${SENSITIVE_KEYS_REGEX_STR})\\s*=\\s*(['"]?)[^\\s'"\\\\]+\\2`, "gi");
 const AUTH_TOKEN_PATTERN = /(Authorization:\s*(?:Bearer|Basic|token)\s+)[^\s"'\\]+/gi;
 const GITHUB_TOKEN_PATTERN = /\b(?:gh[pousr]_[A-Za-z0-9_]{36,}|github_pat_[A-Za-z0-9_]{82,})\b/g;
 const GITLAB_TOKEN_PATTERN = /\b(?:glpat-[A-Za-z0-9_\-]{20,})\b/g;
+const JIRA_TOKEN_PATTERN = /\b(?:ATATT3xFfGF0[A-Za-z0-9_\-=]{20,})\b/g;
+const OPENAI_COMPATIBLE_TOKEN_PATTERN = /\b(?:sk|sess)-[A-Za-z0-9_-]{20,}\b/g;
 const URL_CREDENTIAL_PATTERN = /(https?:\/\/)(?:[^:@"\/]+:[^:@"\/]+)@/gi;
 
 export const isSensitiveKey = (key: string): boolean => {
-  return SENSITIVE_KEYS.has(key.toLowerCase());
+  return SENSITIVE_KEYS.has(key.toLowerCase()) || SENSITIVE_KEY_FRAGMENT_PATTERN.test(key);
 };
 
 export const redactText = (value: string): string => {
@@ -30,6 +36,8 @@ export const redactText = (value: string): string => {
   sanitized = sanitized.replace(URL_CREDENTIAL_PATTERN, '$1[REDACTED]@');
   sanitized = sanitized.replace(GITHUB_TOKEN_PATTERN, '[REDACTED]');
   sanitized = sanitized.replace(GITLAB_TOKEN_PATTERN, '[REDACTED]');
+  sanitized = sanitized.replace(JIRA_TOKEN_PATTERN, '[REDACTED]');
+  sanitized = sanitized.replace(OPENAI_COMPATIBLE_TOKEN_PATTERN, '[REDACTED]');
 
   return sanitized;
 };

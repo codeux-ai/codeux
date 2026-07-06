@@ -21,6 +21,13 @@ describe("file browser scan policy", () => {
 
     it("rejects encoded traversal", () => {
       expect(() => normalizeAndValidatePath("foo/%2e%2e/bar")).toThrowError("encoded traversal is not allowed");
+      expect(() => normalizeAndValidatePath("%2e%2e/secrets.env")).toThrowError("encoded traversal is not allowed");
+    });
+
+    it("rejects plain traversal segments", () => {
+      expect(() => normalizeAndValidatePath("../secrets.env")).toThrowError("encoded traversal is not allowed");
+      expect(() => normalizeAndValidatePath("src/../../secrets.env")).toThrowError("encoded traversal is not allowed");
+      expect(() => normalizeAndValidatePath("..")).toThrowError("encoded traversal is not allowed");
     });
 
     it("rejects control characters", () => {
