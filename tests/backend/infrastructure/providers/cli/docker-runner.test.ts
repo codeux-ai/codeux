@@ -333,11 +333,16 @@ describe("DockerRunner", () => {
   });
 
   it("passes provider environment through an env-file so API keys do not enter docker argv", async () => {
+    const onActivity = vi.fn();
     await runner.runProviderInDocker({
       command: "gemini",
       args: ["--prompt", "plan"],
       cwd: "docker-volume://workspace-1",
-      providerEnv: { GEMINI_API_KEY: "secret-key-value", GEMINI_MODEL: "gemini-2.5-pro" },
+      providerEnv: {
+        GEMINI_API_KEY: "secret-key-value",
+        GEMINI_MODEL: "gemini-2.5-pro",
+        GITHUB_TOKEN: "ghp-secret-value",
+      },
       sessionId: "session-1",
       providerLabel: "gemini",
       workflowSettings: {
@@ -347,17 +352,23 @@ describe("DockerRunner", () => {
         containerCacheSetupScriptImage: false,
       } as any,
       repoPath: "/repo/project",
-      onActivity: vi.fn(),
+      onActivity,
     });
 
     const dockerArgs = vi.mocked(runStreamingCommand).mock.calls[0]?.[1] as string[];
     expect(dockerArgs).toContain("--env-file");
-    expect(dockerArgs.join(" ")).not.toContain("secret-key-value");
-    expect(dockerArgs.join(" ")).not.toContain("GEMINI_API_KEY=");
+    const dockerArgText = dockerArgs.join(" ");
+    expect(dockerArgText).not.toContain("secret-key-value");
+    expect(dockerArgText).not.toContain("ghp-secret-value");
+    expect(dockerArgText).not.toContain("GEMINI_API_KEY=");
+    expect(dockerArgText).not.toContain("GITHUB_TOKEN=");
 
     const envWrite = vi.mocked(fs.writeFile).mock.calls.find(([file]) => String(file).endsWith("provider.env"));
     expect(envWrite?.[1]).toContain("GEMINI_API_KEY=secret-key-value");
+    expect(envWrite?.[1]).toContain("GITHUB_TOKEN=ghp-secret-value");
     expect(envWrite?.[2]).toEqual(expect.objectContaining({ mode: 0o600 }));
+    expect(JSON.stringify(onActivity.mock.calls)).not.toContain("secret-key-value");
+    expect(JSON.stringify(onActivity.mock.calls)).not.toContain("ghp-secret-value");
   });
 
   it("stages generated Gemini MCP config outside runtime home and copies it during bootstrap", async () => {

@@ -170,6 +170,106 @@ afterEach(async () => {
       expect(loggedMetadata).not.toContain("raw provider transcript");
     });
 
+    it("preserves failed provider invocation diagnostics across update and linked invocation queries", async () => {
+      const { projectRepository, executionRepository } = await createRepositories();
+      const project = projectRepository.createProject({
+        name: "Failed Provider Invocation Project",
+        sourceType: "local",
+        sourceRef: "/workspace/failed-provider-invocation",
+      });
+
+      const usage = executionRepository.createProviderInvocationUsage({
+        projectId: project.id,
+        sessionId: "provider-session-1",
+        provider: "codex",
+        purpose: "task_coding",
+        status: "running",
+        model: "gpt-test",
+        executionMode: "DOCKER",
+        nativeSessionId: "native-before-failure",
+        startedAt: "2026-01-01T00:00:00.000Z",
+        promptChars: 321,
+      });
+      const executionInvocation = executionRepository.createExecutionInvocation({
+        projectId: project.id,
+        type: "cli_provider",
+        status: "running",
+        providerInvocationId: usage.id,
+      });
+
+      const updated = executionRepository.updateProviderInvocationUsage(usage.id, {
+        status: "failed",
+        finishedAt: "2026-01-01T00:01:00.000Z",
+        durationMs: 60_000,
+        nativeSessionId: "native-after-failure",
+        transcriptChars: 128,
+        inputTokens: 10,
+        cachedInputTokens: 3,
+        outputTokens: 4,
+        reasoningOutputTokens: 2,
+        totalTokens: 19,
+        toolCallCount: 1,
+        usageSource: "reported",
+        rawUsageJson: {
+          failureCode: "provider_error",
+          retryable: false,
+          apiKey: "stored-but-not-logged",
+          transcript: "stored raw provider transcript",
+        },
+      });
+      executionRepository.updateExecutionInvocation(executionInvocation.id, {
+        status: "failed",
+        providerInvocationId: usage.id,
+      });
+
+      expect(updated).toEqual(expect.objectContaining({
+        id: usage.id,
+        projectId: project.id,
+        sessionId: "provider-session-1",
+        provider: "codex",
+        purpose: "task_coding",
+        status: "failed",
+        model: "gpt-test",
+        executionMode: "DOCKER",
+        nativeSessionId: "native-after-failure",
+        finishedAt: "2026-01-01T00:01:00.000Z",
+        durationMs: 60_000,
+        promptChars: 321,
+        transcriptChars: 128,
+        inputTokens: 10,
+        cachedInputTokens: 3,
+        outputTokens: 4,
+        reasoningOutputTokens: 2,
+        totalTokens: 19,
+        toolCallCount: 1,
+        usageSource: "reported",
+      }));
+      expect(updated.rawUsageJson).toEqual(expect.objectContaining({
+        failureCode: "provider_error",
+        retryable: false,
+        apiKey: "stored-but-not-logged",
+        transcript: "stored raw provider transcript",
+      }));
+
+      expect(executionRepository.getProviderInvocationUsage(usage.id)).toEqual(expect.objectContaining({
+        id: usage.id,
+        status: "failed",
+        nativeSessionId: "native-after-failure",
+        rawUsageJson: expect.objectContaining({ failureCode: "provider_error" }),
+      }));
+      expect(executionRepository.getLatestProviderInvocationUsageBySession("provider-session-1", "task_coding")).toEqual(expect.objectContaining({
+        id: usage.id,
+        status: "failed",
+      }));
+      expect(executionRepository.listExecutionInvocationsByProviderInvocationId(usage.id)).toEqual([
+        expect.objectContaining({
+          id: executionInvocation.id,
+          status: "failed",
+          providerInvocationId: usage.id,
+        }),
+      ]);
+    });
+
     it("claims provider invocation slots through the repository facade", async () => {
       const { projectRepository, executionRepository } = await createRepositories();
       const project = projectRepository.createProject({

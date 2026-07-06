@@ -86,18 +86,29 @@ The Dashboard General settings page stores separate system runtime settings for 
 
 Provider runtime telemetry is purpose-classified as `invocation`/`INVK` and must remain metadata-only. Logs can include provider, purpose, Code UX session id, execution invocation id, provider invocation id, native provider session id, token counters, transcript character count, usage source, and active `correlationId`. Logs must not include raw provider transcript text, API keys, provider environment values, or raw usage JSON payloads.
 
+Provider invocation usage rows preserve the operational fields needed for dashboard and recovery workflows:
+
+- Identity and routing: `id`, `projectId`, optional sprint/task/runtime ids, `sessionId`, `nativeSessionId`, `provider`, `purpose`, `model`, `executionMode`, and `invocationSource`.
+- Lifecycle: `status`, `startedAt`, `finishedAt`, `durationMs`, `createdAt`, and `updatedAt`.
+- Bounded usage counters: `promptChars`, `transcriptChars`, `inputTokens`, `cachedInputTokens`, `outputTokens`, `reasoningOutputTokens`, `totalTokens`, `toolCallCount`, `julesTokens`, `usageSource`, and `costCents`.
+- Raw provider usage JSON may be stored on the invocation row for later diagnostics, but structured logs only expose `rawUsageJsonPresent: true|false` plus stable counters. Logs must not serialize the raw payload.
+
+Provider telemetry warning logs intentionally do not include raw provider read error messages. They include `errorName`, invocation identifiers, `failureCount`, and correlation context so operators can identify the failing invocation without risking transcript fragments in log metadata.
+
 Expected provider telemetry event types:
 
 - `provider_telemetry_poll_succeeded`: A watcher tick parsed reported provider usage and emitted deterministic counters.
 - `provider_telemetry_poll_partial`: A watcher tick emitted estimated or otherwise partial usage while the provider run is still active.
 - `provider_telemetry_poll_no_new_data`: Source metadata matched the previous successful tick, so the watcher skipped expensive transcript/database reads.
-- `provider_telemetry_poll_failed`: A watcher tick failed to read or parse provider telemetry; the error message is redacted and logged with invocation context.
+- `provider_telemetry_poll_failed`: A watcher tick failed to read or parse provider telemetry; the warning logs invocation context, `failureCount`, and `errorName` without provider transcript or usage payload text.
 - `provider_invocation_usage_updated`: A provider invocation usage row was updated; logs include the update shape and summary counters, not raw usage payloads.
+
+Docker-backed provider launches pass secret-bearing provider environment values through a temporary `0600` env-file supplied with `--env-file`. Long prompts and provider argv are mounted from a generated argv file. Host `docker run` arguments and provider activity logs should show env-file or mount paths only, never API key values, provider env assignments, raw prompts, or usage JSON.
 
 Focused verification:
 
 ```bash
-pnpm run test:backend -- tests/backend/infrastructure/providers/cli/provider-telemetry-watcher.test.ts tests/backend/repositories/execution-repository.test.ts
+pnpm run test:backend -- tests/backend/infrastructure/providers/cli/provider-telemetry-watcher.test.ts tests/backend/infrastructure/providers/cli/docker-runner.test.ts tests/backend/repositories/execution-repository.test.ts tests/backend/shared/logging/logger.test.ts
 ```
 
 Focused logging/realtime validation:
