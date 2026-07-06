@@ -29,6 +29,7 @@ export interface ScheduleSprintTarget {
 export interface ScheduleQuicksprintTarget {
   templateId: string;
   taskCount: number;
+  noTaskLimit?: boolean;
   submitMode: QuicksprintExecutionInput["submitMode"];
   additionalPrompt?: string;
   agentPresetId?: string;

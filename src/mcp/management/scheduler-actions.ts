@@ -156,6 +156,9 @@ function normalizeQuicksprintTarget(payload: Record<string, unknown>): ScheduleQ
     taskCount: readPositiveInteger(source, "taskCount", 5),
     submitMode: readSubmitMode(source.submitMode),
   };
+  if (source.noTaskLimit === true) {
+    target.noTaskLimit = true;
+  }
   const additionalPrompt = readString(source, "additionalPrompt");
   const agentPresetId = readString(source, "agentPresetId");
   if (additionalPrompt) target.additionalPrompt = additionalPrompt;

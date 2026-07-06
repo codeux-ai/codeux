@@ -1,6 +1,11 @@
 import type { FunctionComponent } from "preact";
-import { ChevronLeft, BrainCircuit, Zap, EyeOff, Eye, Rocket, ClipboardList, X } from "lucide-preact";
-import type { PlanningRouteOption } from "../../lib/sprint-composer-state.js";
+import { ChevronLeft, BrainCircuit, Zap, EyeOff, Eye, Rocket, ClipboardList, X, CalendarClock } from "lucide-preact";
+import {
+  toSprintSchedulePayload,
+  type PlanningRouteOption,
+  type SprintScheduleConfig,
+  type SprintSchedulePayload,
+} from "../../lib/sprint-composer-state.js";
 import { AvantgardeSelect } from "../ui/AvantgardeSelect.js";
 import { SubtaskSlider, getTagStyles, IconMap } from "./quicksprint-shared.js";
 import { PlanningProgressOverlay } from "../ui/PlanningProgressOverlay.js";
@@ -29,6 +34,18 @@ export const QuicksprintExecutionView: FunctionComponent<{
   elapsedMs: number;
   isOverlayDismissed: boolean; setIsOverlayDismissed: (v: boolean) => void;
   handleExecute: (mode: "plan_only" | "plan_and_start") => void;
+  onSchedule?: (input: {
+    templateId: string;
+    taskCount: number;
+    noTaskLimit: boolean;
+    submitMode: "plan_only" | "plan_and_start";
+    additionalPrompt?: string;
+    routeOverride?: PlanningRouteOption | null;
+    modelOverride?: string | null;
+    schedule: SprintSchedulePayload;
+    title?: string;
+  }) => Promise<void>;
+  scheduleAnchorSprintOptions?: Array<{ id: string; label: string }>;
   handleCancelExecute: () => void;
   handleNewQuicksprint: () => void;
   defaultRouteOptionLabel: string;
@@ -54,6 +71,8 @@ export const QuicksprintExecutionView: FunctionComponent<{
   elapsedMs,
   isOverlayDismissed, setIsOverlayDismissed,
   handleExecute,
+  onSchedule,
+  scheduleAnchorSprintOptions = [],
   handleCancelExecute,
   handleNewQuicksprint,
   defaultRouteOptionLabel,
@@ -62,11 +81,29 @@ export const QuicksprintExecutionView: FunctionComponent<{
   planningEta,
   announcePhaseStatus,
 }) => {
+  const toDateTimeLocalValue = (date: Date): string => {
+    const pad = (value: number): string => String(value).padStart(2, "0");
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+  };
+  const createDefaultScheduleConfig = (): SprintScheduleConfig => {
+    const scheduled = new Date();
+    scheduled.setHours(scheduled.getHours() + 1, 0, 0, 0);
+    return {
+      mode: "absolute",
+      scheduledFor: toDateTimeLocalValue(scheduled),
+      sourceSprintId: "",
+      offsetMinutes: 0,
+    };
+  };
   const isBusy = executingMode !== null;
   const [statusMessage, setStatusMessage] = useState("");
   const [pendingExecuteMode, setPendingExecuteMode] = useState<"plan_only" | "plan_and_start" | null>(null);
+  const [scheduleConfig, setScheduleConfig] = useState<SprintScheduleConfig>(() => createDefaultScheduleConfig());
+  const [scheduleSubmitMode, setScheduleSubmitMode] = useState<"plan_only" | "plan_and_start">("plan_and_start");
+  const [isSchedulePending, setIsSchedulePending] = useState(false);
   const [isCancelPending, setIsCancelPending] = useState(false);
   const headingRef = useRef<HTMLHeadingElement>(null);
+  const scheduleFocusRef = useRef<HTMLElement | null>(null);
   const pendingExecuteClickRef = useRef(false);
   const promptRegionId = selectedTemplateId ? `quicksprint-combined-prompt-${selectedTemplateId}` : "quicksprint-combined-prompt";
   const busyDescriptionId = selectedTemplateId ? `quicksprint-busy-status-${selectedTemplateId}` : "quicksprint-busy-status";
@@ -85,12 +122,14 @@ export const QuicksprintExecutionView: FunctionComponent<{
   const defaultModelLabel = routeOverride?.effectiveModel
     ? `Default (${routeOverride.effectiveModel})`
     : defaultModelOptionLabel;
-  const isSubmitBlocked = isBusy || pendingExecuteMode !== null || isCancelPending;
+  const isSubmitBlocked = isBusy || pendingExecuteMode !== null || isCancelPending || isSchedulePending;
   const controlsDisabled = isSubmitBlocked;
   const submitBlockedReason = isBusy
     ? "A quicksprint planning request is already running. Cancel it or wait for it to finish before submitting again."
     : pendingExecuteMode
       ? "Planning is starting. Duplicate submissions are blocked until the request state is ready."
+      : isSchedulePending
+        ? "Schedule creation is in progress. Duplicate submissions are blocked until it finishes."
       : isCancelPending
         ? "Cancellation is already in progress. Duplicate cancellation and submit requests are blocked until the request settles."
       : "";
@@ -175,6 +214,49 @@ export const QuicksprintExecutionView: FunctionComponent<{
     pendingExecuteClickRef.current = false;
     setPendingExecuteMode(null);
     publishStatus(message);
+  };
+  const handleSchedule = async () => {
+    if (!onSchedule || !selectedTemplate || isSubmitBlocked) {
+      publishStatus(submitBlockedReason || "Schedule request is already in progress. Duplicate submission blocked.");
+      return;
+    }
+    if (scheduleConfig.mode === "after_sprint_end" && !scheduleConfig.sourceSprintId) {
+      publishStatus("Choose the source sprint for the after-sprint-end schedule.");
+      return;
+    }
+    if (scheduleConfig.mode === "absolute" && !Number.isFinite(new Date(scheduleConfig.scheduledFor).getTime())) {
+      publishStatus("Choose a valid schedule date and time.");
+      return;
+    }
+
+    scheduleFocusRef.current = document.activeElement as HTMLElement | null;
+    setIsSchedulePending(true);
+    publishStatus(`Scheduling ${selectedTemplate.name}.`);
+    try {
+      await onSchedule({
+        templateId: selectedTemplate.id,
+        taskCount,
+        noTaskLimit,
+        submitMode: scheduleSubmitMode,
+        additionalPrompt: additionalPrompt.trim() || undefined,
+        routeOverride,
+        modelOverride,
+        schedule: toSprintSchedulePayload(scheduleConfig),
+        title: `Run ${selectedTemplate.name}`,
+      });
+      publishStatus(`${selectedTemplate.name} scheduled.`);
+      setTimeout(() => {
+        scheduleFocusRef.current?.focus({ preventScroll: true });
+      }, 0);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      publishStatus(`Could not schedule ${selectedTemplate.name}: ${message}`);
+      setTimeout(() => {
+        scheduleFocusRef.current?.focus({ preventScroll: true });
+      }, 0);
+    } finally {
+      setIsSchedulePending(false);
+    }
   };
 
   return (
@@ -387,6 +469,104 @@ export const QuicksprintExecutionView: FunctionComponent<{
               </div>
 
               {/* Spacer */}
+              <div data-qs-stagger className="mt-8 rounded-[1.35rem] border border-signal-500/18 bg-signal-500/[0.045] p-4">
+                <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-700 dark:text-white">
+                  <CalendarClock className="h-3.5 w-3.5 text-signal-500" strokeWidth={2.1} />
+                  Schedule
+                </div>
+                <div className="mt-4 grid gap-3">
+                  <div className="grid grid-cols-2 gap-2" role="group" aria-label="Scheduled quicksprint submit mode">
+                    {[
+                      { value: "plan_and_start" as const, label: "Start Later" },
+                      { value: "plan_only" as const, label: "Plan Later" },
+                    ].map((option) => (
+                      <button
+                        key={option.value}
+                        type="button"
+                        disabled={controlsDisabled}
+                        aria-pressed={scheduleSubmitMode === option.value}
+                        onClick={() => {
+                          setScheduleSubmitMode(option.value);
+                          publishStatus(`Scheduled quicksprint submit mode set to ${option.label}.`);
+                        }}
+                        className={`min-h-[38px] rounded-full border px-3 text-[10px] font-bold uppercase tracking-[0.12em] transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
+                          scheduleSubmitMode === option.value
+                            ? "border-signal-500/30 bg-signal-500/[0.12] text-signal-700 dark:text-signal-300"
+                            : "border-black/[0.06] bg-white/66 text-slate-500 hover:bg-white dark:border-white/[0.06] dark:bg-white/[0.02] dark:text-slate-400"
+                        }`}
+                      >
+                        {option.label}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="grid grid-cols-2 gap-2" role="group" aria-label="Schedule timing mode">
+                    {[
+                      { value: "absolute" as const, label: "Absolute" },
+                      { value: "after_sprint_end" as const, label: "After End" },
+                    ].map((option) => (
+                      <button
+                        key={option.value}
+                        type="button"
+                        disabled={controlsDisabled}
+                        aria-pressed={scheduleConfig.mode === option.value}
+                        onClick={() => {
+                          setScheduleConfig((current) => ({ ...current, mode: option.value }));
+                          publishStatus(`Schedule timing set to ${option.label}.`);
+                        }}
+                        className={`min-h-[38px] rounded-full border px-3 text-[10px] font-bold uppercase tracking-[0.12em] transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
+                          scheduleConfig.mode === option.value
+                            ? "border-signal-500/30 bg-signal-500/[0.12] text-signal-700 dark:text-signal-300"
+                            : "border-black/[0.06] bg-white/66 text-slate-500 hover:bg-white dark:border-white/[0.06] dark:bg-white/[0.02] dark:text-slate-400"
+                        }`}
+                      >
+                        {option.label}
+                      </button>
+                    ))}
+                  </div>
+                  {scheduleConfig.mode === "absolute" ? (
+                    <label className="block">
+                      <span className="text-[9px] font-bold uppercase tracking-[0.16em] text-slate-400">Date and Time</span>
+                      <input
+                        type="datetime-local"
+                        value={scheduleConfig.scheduledFor}
+                        disabled={controlsDisabled}
+                        onInput={(event) => setScheduleConfig((current) => ({ ...current, scheduledFor: (event.currentTarget as HTMLInputElement).value }))}
+                        className="mt-2 min-h-[42px] w-full rounded-[1rem] border border-black/[0.06] bg-white/72 px-3 text-xs font-semibold text-slate-700 outline-none transition-colors focus:border-signal-500/40 focus:ring-2 focus:ring-signal-500/20 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-200"
+                      />
+                    </label>
+                  ) : (
+                    <div className="grid gap-3">
+                      <label className="block">
+                        <span className="text-[9px] font-bold uppercase tracking-[0.16em] text-slate-400">Source Sprint</span>
+                        <AvantgardeSelect
+                          variant="compact"
+                          aria-label="Quicksprint Source Sprint"
+                          disabled={controlsDisabled}
+                          value={scheduleConfig.sourceSprintId}
+                          onChange={(value) => setScheduleConfig((current) => ({ ...current, sourceSprintId: value }))}
+                          options={[
+                            { value: "", label: "Choose sprint" },
+                            ...scheduleAnchorSprintOptions.map((option) => ({ value: option.id, label: option.label })),
+                          ]}
+                          placeholder="Choose sprint"
+                        />
+                      </label>
+                      <label className="block">
+                        <span className="text-[9px] font-bold uppercase tracking-[0.16em] text-slate-400">Offset Minutes</span>
+                        <input
+                          type="number"
+                          min={0}
+                          value={scheduleConfig.offsetMinutes}
+                          disabled={controlsDisabled}
+                          onInput={(event) => setScheduleConfig((current) => ({ ...current, offsetMinutes: Number((event.currentTarget as HTMLInputElement).value) }))}
+                          className="mt-2 min-h-[42px] w-full rounded-[1rem] border border-black/[0.06] bg-white/72 px-3 text-xs font-semibold text-slate-700 outline-none transition-colors focus:border-signal-500/40 focus:ring-2 focus:ring-signal-500/20 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-200"
+                        />
+                      </label>
+                    </div>
+                  )}
+                </div>
+              </div>
+
               <div className="mt-auto pt-8" />
 
               {/* Action buttons */}
@@ -455,6 +635,18 @@ export const QuicksprintExecutionView: FunctionComponent<{
                   {statusMessage || `Ready to plan ${selectedTemplate.name}.`}
                 </p>
                 <button
+                  type="button"
+                  onClick={() => { void handleSchedule(); }}
+                  disabled={!onSchedule || isSubmitBlocked}
+                  aria-busy={isSchedulePending ? "true" : "false"}
+                  aria-describedby={isSubmitBlocked ? duplicateSubmitDescriptionId : undefined}
+                  className="flex min-h-[44px] w-full items-center justify-center gap-2.5 rounded-[1.35rem] border border-signal-500/25 bg-signal-500/[0.1] px-5 py-3.5 text-[11px] font-bold uppercase tracking-[0.14em] text-signal-700 transition-colors hover:bg-signal-500/[0.16] disabled:cursor-not-allowed disabled:opacity-50 dark:text-signal-300"
+                >
+                  <CalendarClock className={`h-4 w-4 ${isSchedulePending ? "motion-safe:animate-pulse" : ""}`} />
+                  {isSchedulePending ? "Scheduling..." : "Schedule"}
+                </button>
+                <button
+                  type="button"
                   onClick={() => handlePlanningExecute("plan_and_start")}
                   disabled={isSubmitBlocked}
                   aria-busy={executingMode === "plan_and_start" || pendingExecuteMode === "plan_and_start" ? "true" : "false"}
@@ -465,6 +657,7 @@ export const QuicksprintExecutionView: FunctionComponent<{
                   Plan & Start
                 </button>
                 <button
+                  type="button"
                   onClick={() => handlePlanningExecute("plan_only")}
                   disabled={isSubmitBlocked}
                   aria-busy={executingMode === "plan_only" || pendingExecuteMode === "plan_only" ? "true" : "false"}

@@ -275,6 +275,7 @@ export class SchedulerRepository {
         quicksprintTarget: {
           templateId,
           taskCount: Math.max(1, Math.floor(Number(input.quicksprintTarget?.taskCount ?? 5)) || 5),
+          ...(input.quicksprintTarget?.noTaskLimit === true ? { noTaskLimit: true } : {}),
           submitMode: input.quicksprintTarget?.submitMode ?? "plan_and_start",
           additionalPrompt: input.quicksprintTarget?.additionalPrompt?.trim() || undefined,
           agentPresetId: input.quicksprintTarget?.agentPresetId?.trim() || undefined,

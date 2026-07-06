@@ -48,6 +48,7 @@ const createSprintMock = vi.fn();
 const updateSprintMock = vi.fn();
 const addImportedTasksToSprintMock = vi.fn();
 const executeQuicksprintMock = vi.fn();
+const createSchedulerEntryMock = vi.fn();
 
 const renderActions = (createProject = vi.fn()) => {
   let actionsRef: ReturnType<typeof useSprintsPageActions> | null = null;
@@ -142,6 +143,10 @@ vi.mock("../../../dashboard/src/v2/lib/quicksprint-api.js", () => ({
   createCustomQuicksprintTemplate: vi.fn(),
   updateCustomQuicksprintTemplate: vi.fn(),
   deleteCustomQuicksprintTemplate: vi.fn(),
+}));
+
+vi.mock("../../../dashboard/src/v2/lib/scheduler-api.js", () => ({
+  createSchedulerEntry: (...args: unknown[]) => createSchedulerEntryMock(...args),
 }));
 
 const HookHarness = () => {
@@ -430,6 +435,85 @@ describe("useSprintsPageData sprint-number reservations", () => {
     const settingsOverrides = createProject.mock.calls[0]?.[0].settingsOverrides;
     expect(settingsOverrides.skills.find((skill: any) => skill.name === "git_manager_local")?.enabled).toBe(true);
     expect(settingsOverrides.skills.find((skill: any) => skill.name === "git_manager_remote")?.enabled).toBe(false);
+  });
+
+  it("creates a scheduler entry when a new sprint is submitted in schedule mode", async () => {
+    createSprintMock.mockResolvedValueOnce({ id: "scheduled-sprint", name: "Scheduled Sprint" });
+    createSchedulerEntryMock.mockResolvedValueOnce({ id: "schedule-1" });
+    const actions = renderActions();
+
+    await actions.handleSubmitSprint({
+      name: "Scheduled Sprint",
+      goal: "Run later",
+      originalPrompt: "Run later",
+      submitMode: "schedule",
+      routeOverride: null,
+      modelOverride: null,
+      planningAgentPresetId: "planner-1",
+      agentRoutingMode: "ORCHESTRATOR",
+      workerAgentPresetId: null,
+      linkedIssues: [],
+      schedule: {
+        scheduleAnchor: {
+          mode: "after_sprint_end",
+          sourceSprintId: "source-sprint-1",
+          offsetMinutes: 20,
+        },
+      },
+    });
+
+    expect(createSprintMock).toHaveBeenCalledTimes(1);
+    expect(createSchedulerEntryMock).toHaveBeenCalledWith("project-1", expect.objectContaining({
+      title: "Start Scheduled Sprint",
+      targetType: "sprint",
+      sprintTarget: { sprintId: "scheduled-sprint" },
+      scheduleAnchor: {
+        mode: "after_sprint_end",
+        sourceSprintId: "source-sprint-1",
+        offsetMinutes: 20,
+      },
+    }));
+  });
+
+  it("creates a scheduler entry for quicksprint schedule requests", async () => {
+    createSchedulerEntryMock.mockResolvedValueOnce({ id: "schedule-1" });
+    const actions = renderActions();
+
+    await actions.handleQuicksprintSchedule({
+      templateId: "template-1",
+      taskCount: 4,
+      noTaskLimit: true,
+      submitMode: "plan_only",
+      additionalPrompt: "Only deployment follow-ups.",
+      routeOverride: null,
+      modelOverride: null,
+      title: "Run Template 1",
+      schedule: {
+        scheduleAnchor: {
+          mode: "after_sprint_end",
+          sourceSprintId: "source-sprint-1",
+          offsetMinutes: 30,
+        },
+      },
+    });
+
+    expect(createSchedulerEntryMock).toHaveBeenCalledWith("project-1", expect.objectContaining({
+      title: "Run Template 1",
+      targetType: "quicksprint",
+      scheduleAnchor: {
+        mode: "after_sprint_end",
+        sourceSprintId: "source-sprint-1",
+        offsetMinutes: 30,
+      },
+      quicksprintTarget: {
+        templateId: "template-1",
+        taskCount: 4,
+        noTaskLimit: true,
+        submitMode: "plan_only",
+        additionalPrompt: "Only deployment follow-ups.",
+        planningOverrides: undefined,
+      },
+    }));
   });
 
   it("preserves remote project creation without LOCAL git-mode overrides", async () => {
