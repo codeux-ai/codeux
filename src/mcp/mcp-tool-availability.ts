@@ -1,5 +1,13 @@
 import type { CustomMcpServer, CustomMcpTransport, DashboardSettings, McpToolToggle, ProviderId } from "../contracts/app-types.js";
 import { TOOL_DEFINITIONS, type McpRuntimeRole, type ToolName } from "../contracts/mcp-tool-definitions.js";
+import { isIP } from "node:net";
+
+export interface AgentCodeUxToolAccess {
+  codeUxEnabled: boolean;
+  codeUxToolToggles: McpToolToggle[];
+}
+
+export type AgentToolAvailability = McpToolToggle[] | AgentCodeUxToolAccess | null | undefined;
 
 const CUSTOM_MCP_NAME_PATTERN = /^[a-zA-Z0-9_-]+$/;
 const VALID_PROVIDER_IDS: ReadonlySet<ProviderId> = new Set<ProviderId>([
@@ -10,6 +18,26 @@ const HEADER_NAME_PATTERN = /^[a-zA-Z0-9-]+$/;
 const ENV_NAME_PATTERN = /^[a-zA-Z_][a-zA-Z0-9_]*$/;
 const CONTROL_CHAR_PATTERN = /[\x00-\x1F\x7F]/;
 const SHELL_METACHAR_PATTERN = /[&|;<>$\(\)\`'"\x00-\x1F\x7F]/;
+const DECIMAL_IPV4_PATTERN = /^(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)$/;
+const NUMERIC_HOST_PATTERN = /^(?:0x[0-9a-f]+|[0-9]+)(?:\.(?:0x[0-9a-f]+|[0-9]+))*$/i;
+const BLOCKED_CUSTOM_MCP_HEADER_NAMES = new Set([
+  "connection",
+  "content-length",
+  "expect",
+  "host",
+  "keep-alive",
+  "proxy-authenticate",
+  "proxy-authorization",
+  "proxy-connection",
+  "te",
+  "trailer",
+  "transfer-encoding",
+  "upgrade",
+]);
+const BLOCKED_METADATA_HOSTS = new Set([
+  "metadata",
+  "metadata.google.internal",
+]);
 
 const sanitizeHeadersMap = (value: unknown): Record<string, string> | undefined => {
   if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
@@ -19,6 +47,7 @@ const sanitizeHeadersMap = (value: unknown): Record<string, string> | undefined 
     const name = key.trim();
     if (name.length === 0 || name.length > 64 || typeof raw !== "string" || raw.length > 4096) continue;
     if (!HEADER_NAME_PATTERN.test(name)) continue;
+    if (BLOCKED_CUSTOM_MCP_HEADER_NAMES.has(name.toLowerCase())) continue;
     if (CONTROL_CHAR_PATTERN.test(raw)) continue;
     out[name] = raw;
     count++;
@@ -51,11 +80,92 @@ const sanitizeArgs = (value: unknown): string[] | undefined => {
   return out.length > 0 ? out : undefined;
 };
 
+const extractRawHostname = (urlStr: string): string | null => {
+  const schemeIndex = urlStr.indexOf("://");
+  if (schemeIndex < 0) return null;
+  const authorityStart = schemeIndex + 3;
+  const remainder = urlStr.slice(authorityStart);
+  const authorityEnd = remainder.search(/[/?#]/);
+  const authority = remainder.slice(0, authorityEnd === -1 ? undefined : authorityEnd);
+  if (authority.includes("@")) return null;
+  if (authority.startsWith("[")) {
+    const end = authority.indexOf("]");
+    if (end <= 1) return null;
+    return authority.slice(1, end);
+  }
+  const portIndex = authority.lastIndexOf(":");
+  return portIndex >= 0 ? authority.slice(0, portIndex) : authority;
+};
+
+const parseDecimalIpv4 = (host: string): number[] | null => {
+  if (!DECIMAL_IPV4_PATTERN.test(host)) return null;
+  const octets = host.split(".").map((part) => Number(part));
+  return octets.every((part) => Number.isInteger(part) && part >= 0 && part <= 255) ? octets : null;
+};
+
+const isAmbiguousNumericHost = (host: string): boolean => {
+  const normalized = host.toLowerCase();
+  return NUMERIC_HOST_PATTERN.test(normalized) && parseDecimalIpv4(normalized) === null;
+};
+
+const isBlockedIpv4Target = (octets: number[]): boolean => {
+  const [first, second, , fourth] = octets;
+  if (first === 127) return false;
+  return (
+    first === 0
+    || (first === 169 && second === 254)
+    || (first >= 224 && first <= 239)
+    || first === 255
+    || fourth === 255
+  );
+};
+
+const getIpv6FirstHextet = (host: string): number | null => {
+  const first = host.split(":").find((part) => part.length > 0);
+  if (!first || !/^[0-9a-f]{1,4}$/i.test(first)) return null;
+  return Number.parseInt(first, 16);
+};
+
+const isBlockedIpv6Target = (host: string): boolean => {
+  if (host === "::1" || host === "0:0:0:0:0:0:0:1") return false;
+  const first = getIpv6FirstHextet(host);
+  if (first === null) return true;
+  return (first & 0xffc0) === 0xfe80 || (first & 0xff00) === 0xff00;
+};
+
+const isSafeHttpHostname = (hostname: string, rawHostname: string): boolean => {
+  const raw = rawHostname.toLowerCase().replace(/\.$/, "");
+  const host = hostname.toLowerCase().replace(/^\[|\]$/g, "").replace(/\.$/, "");
+  if (raw === "localhost" || host === "localhost") return true;
+  if (BLOCKED_METADATA_HOSTS.has(raw) || BLOCKED_METADATA_HOSTS.has(host)) return false;
+  if (isAmbiguousNumericHost(raw)) return false;
+
+  const rawIpv4 = parseDecimalIpv4(raw);
+  if (rawIpv4) return !isBlockedIpv4Target(rawIpv4);
+
+  const ipVersion = isIP(host);
+  if (ipVersion === 4) {
+    const octets = parseDecimalIpv4(host);
+    return !!octets && !isBlockedIpv4Target(octets);
+  }
+  if (ipVersion === 6) {
+    return !isBlockedIpv6Target(host);
+  }
+  return true;
+};
+
 const isValidHttpUrl = (urlStr: string): boolean => {
   if (CONTROL_CHAR_PATTERN.test(urlStr)) return false;
   try {
+    const rawHostname = extractRawHostname(urlStr);
+    if (!rawHostname || CONTROL_CHAR_PATTERN.test(rawHostname)) return false;
     const u = new URL(urlStr);
-    return (u.protocol === "http:" || u.protocol === "https:") && !u.username && !u.password;
+    return (
+      (u.protocol === "http:" || u.protocol === "https:")
+      && !u.username
+      && !u.password
+      && isSafeHttpHostname(u.hostname, rawHostname)
+    );
   } catch {
     return false;
   }
@@ -69,8 +179,11 @@ const sanitizeProviders = (value: unknown): ProviderId[] | undefined => {
 
 export const isUsableCustomMcpServer = (server: CustomMcpServer): boolean => (
   server.transport === "stdio"
-    ? typeof server.command === "string" && server.command.trim().length > 0
-    : typeof server.url === "string" && server.url.trim().length > 0
+    ? typeof server.command === "string"
+      && server.command.trim().length > 0
+      && server.command.trim().length <= 256
+      && !SHELL_METACHAR_PATTERN.test(server.command.trim())
+    : typeof server.url === "string" && isValidHttpUrl(server.url.trim())
 );
 
 export const sanitizeCustomMcpServers = (value: unknown): CustomMcpServer[] => {
@@ -168,12 +281,18 @@ export const sanitizeMcpToolToggles = (value: unknown): McpToolToggle[] => {
 
 const getEnabledToolNameSet = (
   settings: DashboardSettings,
-  agentToolToggles?: McpToolToggle[] | null,
+  agentToolAccess?: AgentToolAvailability,
 ): Set<string> => {
   const enabledByName = new Map<string, boolean>();
   for (const tool of settings.mcpTools) {
     enabledByName.set(tool.name, tool.enabled);
   }
+  if (agentToolAccess && !Array.isArray(agentToolAccess) && !agentToolAccess.codeUxEnabled) {
+    return new Set();
+  }
+  const agentToolToggles = Array.isArray(agentToolAccess)
+    ? agentToolAccess
+    : agentToolAccess?.codeUxToolToggles;
   if (agentToolToggles) {
     for (const tool of agentToolToggles) {
       enabledByName.set(tool.name, tool.enabled);
@@ -196,9 +315,9 @@ const isToolVisibleForRuntimeRole = (
 export const getEnabledToolDefinitions = (
   settings: DashboardSettings,
   runtimeRole: McpRuntimeRole = "project_manager",
-  agentToolToggles?: McpToolToggle[] | null,
+  agentToolAccess?: AgentToolAvailability,
 ): Array<(typeof TOOL_DEFINITIONS)[number]> => {
-  const enabled = getEnabledToolNameSet(settings, agentToolToggles);
+  const enabled = getEnabledToolNameSet(settings, agentToolAccess);
   return TOOL_DEFINITIONS.filter((tool) => enabled.has(tool.name) && isToolVisibleForRuntimeRole(tool, runtimeRole)) as Array<(typeof TOOL_DEFINITIONS)[number]>;
 };
 
@@ -206,9 +325,9 @@ export const isToolEnabled = (
   settings: DashboardSettings,
   toolName: string,
   runtimeRole: McpRuntimeRole = "project_manager",
-  agentToolToggles?: McpToolToggle[] | null,
+  agentToolAccess?: AgentToolAvailability,
 ): toolName is ToolName => {
-  if (!getEnabledToolNameSet(settings, agentToolToggles).has(toolName)) {
+  if (!getEnabledToolNameSet(settings, agentToolAccess).has(toolName)) {
     return false;
   }
 

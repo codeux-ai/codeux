@@ -96,17 +96,63 @@ export function registerPreviewRoutes(app: Express, deps: DashboardDependencies)
       sessionId,
       method: req.method,
       path: proxiedPath,
-      headers: Object.fromEntries(
-        Object.entries(req.headers).map(([key, value]) => [key, Array.isArray(value) ? value.join(", ") : value]),
-      ),
+      headers: buildDashboardPreviewProxyRequestHeaders(req.headers),
       body,
       selectedPort,
     });
-    for (const [key, value] of Object.entries(proxied.headers)) {
+    for (const [key, value] of Object.entries(sanitizeDashboardPreviewProxyResponseHeaders(proxied.headers))) {
       res.setHeader(key, value);
     }
     res.status(proxied.status).send(proxied.body);
   }));
+}
+
+const DASHBOARD_PREVIEW_PROXY_STRIPPED_HEADERS = new Set([
+  "authorization",
+  "cookie",
+  "set-cookie",
+  "host",
+  "connection",
+  "upgrade",
+  "transfer-encoding",
+  "content-length",
+  "accept-encoding",
+]);
+
+const DASHBOARD_PREVIEW_PROXY_STRIPPED_RESPONSE_HEADERS = new Set([
+  "set-cookie",
+  "content-security-policy",
+  "content-security-policy-report-only",
+  "x-frame-options",
+]);
+
+function buildDashboardPreviewProxyRequestHeaders(
+  headers: Record<string, string | string[] | undefined>,
+): Record<string, string | undefined> {
+  const next: Record<string, string | undefined> = {};
+  for (const [key, value] of Object.entries(headers)) {
+    const normalized = key.toLowerCase();
+    if (
+      DASHBOARD_PREVIEW_PROXY_STRIPPED_HEADERS.has(normalized)
+      || normalized.startsWith("proxy-")
+      || normalized.startsWith("x-code-ux-")
+    ) {
+      continue;
+    }
+    next[key] = Array.isArray(value) ? value.join(", ") : value;
+  }
+  return next;
+}
+
+function sanitizeDashboardPreviewProxyResponseHeaders(headers: Record<string, string>): Record<string, string> {
+  const next: Record<string, string> = {};
+  for (const [key, value] of Object.entries(headers)) {
+    if (DASHBOARD_PREVIEW_PROXY_STRIPPED_RESPONSE_HEADERS.has(key.toLowerCase())) {
+      continue;
+    }
+    next[key] = value;
+  }
+  return next;
 }
 
 function parsePreviewProxyPath(

@@ -12,6 +12,7 @@ Code UX can run as an installable Electron desktop app while preserving the exis
 - Mutable dashboard runtime traffic (`/api/*`, `/health`, and `/ready`) is treated as non-cacheable in both the backend response headers and the Electron session. The desktop app clears the Electron HTTP cache on startup, injects no-cache request headers only for runtime `GET`/`HEAD` reads, and injects no-store response headers for all loopback runtime data so stale Chromium cache entries cannot make settings, project, agent, or runtime pages appear frozen after navigation without interfering with JSON upload bodies.
 - Windows packaged builds keep the active WebGL context cap at 16 so the persistent shell canvas, avatar canvases, and route-scoped chart canvases have enough headroom during long navigation sessions while old Chromium contexts are waiting for garbage collection.
 - External links are opened through the host operating system. In-app dashboard and sprint-preview URLs remain inside the Electron app.
+- The desktop shell renders only the resolved dashboard origin and same-port sprint preview origins that match `preview-<session>.localhost:<dashboardPort>` internally. Other `http`, `https`, and `mailto` navigations are denied in the renderer and opened through the host operating system after scheme validation; all other schemes are blocked.
 - The compact title bar version label polls `/api/system/update-status` on startup and every 30 minutes. When the response reports a newer version without an error, the title bar shows a no-drag "Update available" release link with an external-link icon; activating it opens the GitHub release URL in the user's default browser. No update action is shown for failed checks or current installations.
 
 ## Native Desktop Integration
@@ -24,6 +25,10 @@ The native picker is exposed through the isolated preload bridge:
 - returns `{ canceled, filePath }`
 
 Renderer Node access remains disabled. The preload exposes only this narrow IPC surface.
+
+Renderer privileges are constrained with `contextIsolation: true`, `nodeIntegration: false`, and `sandbox: true`. The preload bridge keeps the supported desktop API limited to directory selection, zoom control, and window controls. IPC handlers validate renderer input before using it: directory picker defaults must be strings without control characters, and zoom factors must be finite numbers before being clamped to the supported range.
+
+Electron permission prompts are denied by default for dashboard and preview pages, including camera, microphone, geolocation, notifications, and media requests. Preview origins currently do not require a permission exception; add one only with a documented product need and a targeted test for that origin and permission.
 
 The desktop BrowserWindow is frameless and transparent on every supported platform so the renderer-level `.app-shell` clip can expose real rounded window corners. The shell uses a fixed corner radius and subtle gray border in normal windowed mode, then removes that treatment when Electron reports maximized or fullscreen state, matching the host operating system's square maximized-window behavior. Keep the native BrowserWindow `backgroundColor` transparent when changing package settings; an opaque native background will make the corners appear square even if the renderer content is clipped.
 

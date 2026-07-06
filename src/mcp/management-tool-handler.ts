@@ -46,7 +46,7 @@ import { SchedulerActions } from "./management/scheduler-actions.js";
 import { SettingsActions } from "./management/settings-actions.js";
 import { AgentActions } from "./management/agent-actions.js";
 import { MemoryActions } from "./management/memory-actions.js";
-import { formatManagementErrorEnvelope } from "./management/payload-parsers.js";
+import { buildMcpApprovalFingerprint, formatManagementErrorEnvelope } from "./management/payload-parsers.js";
 import { resolveLateBoundDependency, type LateBoundOrValue } from "../shared/late-bound-dependency.js";
 
 export interface ManagementToolHandlerDeps {
@@ -69,9 +69,12 @@ export interface ManagementToolHandlerDeps {
   schedulerService?: LateBoundOrValue<SchedulerService>;
 }
 
+const MANAGEMENT_APPROVAL_TTL_MS = 15 * 60 * 1000;
+
 export class ManagementToolHandler {
   private sprintActions: SprintActions | null = null;
   private taskActions: TaskActions | null = null;
+  private readonly pendingDestructiveApprovals = new Map<string, number>();
   private readonly settingsActions: SettingsActions;
   private readonly agentActions: AgentActions;
   private readonly memoryActions: MemoryActions;
@@ -164,59 +167,117 @@ export class ManagementToolHandler {
     return { content: [{ type: "text", text: JSON.stringify(envelope, null, 2) }], isError: true };
   }
 
+  private isStatefulApprovalGatedMutation(args: ManageCodeUxArgs): boolean {
+    if (args.domain === "settings") {
+      return false;
+    }
+    return args.action === "delete"
+      || args.action.startsWith("delete_")
+      || args.action.startsWith("reset_")
+      || args.action.startsWith("replace_")
+      || args.action === "remove_session"
+      || args.action === "deprecate_claim";
+  }
+
+  private cleanupDestructiveApprovals(now = Date.now()): void {
+    for (const [fingerprint, createdAt] of this.pendingDestructiveApprovals.entries()) {
+      if (now - createdAt > MANAGEMENT_APPROVAL_TTL_MS) {
+        this.pendingDestructiveApprovals.delete(fingerprint);
+      }
+    }
+  }
+
+  private async requireStatefulApproval(
+    args: ManageCodeUxArgs,
+    executeUnconfirmed: () => Promise<ManagementResponseEnvelope> | ManagementResponseEnvelope,
+  ): Promise<ManagementResponseEnvelope | null> {
+    if (!this.isStatefulApprovalGatedMutation(args)) {
+      return null;
+    }
+
+    const now = Date.now();
+    this.cleanupDestructiveApprovals(now);
+
+    if (args.approval?.confirmed !== true) {
+      return null;
+    }
+
+    const fingerprint = buildMcpApprovalFingerprint(args);
+    const pendingCreatedAt = this.pendingDestructiveApprovals.get(fingerprint);
+    if (pendingCreatedAt !== undefined && now - pendingCreatedAt <= MANAGEMENT_APPROVAL_TTL_MS) {
+      this.pendingDestructiveApprovals.delete(fingerprint);
+      return null;
+    }
+
+    const approvalEnvelope = await executeUnconfirmed();
+    if (approvalEnvelope.approvalRequired) {
+      this.pendingDestructiveApprovals.set(fingerprint, now);
+    }
+    return approvalEnvelope;
+  }
+
+  private recordStatefulApprovalRequirement(args: ManageCodeUxArgs, envelope: ManagementResponseEnvelope): ManagementResponseEnvelope {
+    if (this.isStatefulApprovalGatedMutation(args) && envelope.approvalRequired) {
+      this.cleanupDestructiveApprovals();
+      this.pendingDestructiveApprovals.set(buildMcpApprovalFingerprint(args), Date.now());
+    }
+    return envelope;
+  }
+
+  private async dispatchManageCodeUx(args: ManageCodeUxArgs): Promise<ManagementResponseEnvelope> {
+    if (args.domain === "projects") {
+      return handleProjectAction(
+        args.action,
+        args.payload,
+        this.deps.projectManagementRepository,
+        args.domain,
+        args.approval,
+        this.deps.projectSetupService ? resolveLateBoundDependency(this.deps.projectSetupService) : undefined,
+        (input) => this.createProject(input)
+      );
+    } else if (args.domain === "sprints") {
+      return this.getSprintActions().handleSprintAction(args);
+    } else if (args.domain === "tasks") {
+      return this.getTaskActions().handleTaskAction(args);
+    } else if (args.domain === "quicksprints") {
+      return this.getQuicksprintActions().handleQuicksprintAction(args);
+    } else if (args.domain === "scheduler") {
+      return this.getSchedulerActions().handleSchedulerAction(args);
+    } else if (args.domain === "settings") {
+      return this.settingsActions.handleSettingsAction(args);
+    } else if (args.domain === "agents") {
+      return this.agentActions.handleAgentAction(args);
+    } else if (args.domain === "memory") {
+      return this.memoryActions.handleMemoryAction(args);
+    } else if (args.domain === "preview") {
+      const currentHost = null; // serverHost is not available on DashboardSettings, we'll fall back to localhost in preview-origin
+      return this.previewActions.handlePreviewAction(args, currentHost);
+    } else if (args.domain === "telemetry") {
+      return handleTelemetryActions(args, this.deps.executionRepository);
+    }
+
+    const isDestructive = args.action.startsWith("delete_") || args.action.startsWith("reset_") || args.action.startsWith("replace_");
+
+    if (isDestructive && args.approval?.confirmed !== true) {
+      return {
+        approvalRequired: true,
+        approvalMessage: `The action '${args.action}' is destructive and requires explicit approval. Please review the changes and call this tool again with approval.confirmed set to true.`,
+      };
+    }
+    return {
+      result: {
+        status: "success",
+        domain: args.domain,
+        action: args.action,
+        message: `Domain ${args.domain} is not implemented yet.`,
+      },
+    };
+  }
+
   async handleManageCodeUx(args: ManageCodeUxArgs): Promise<{ content: Array<{ type: string; text: string }> }> {
     try {
-      let envelope: ManagementResponseEnvelope;
-
-      if (args.domain === "projects") {
-        envelope = await handleProjectAction(
-          args.action,
-          args.payload,
-          this.deps.projectManagementRepository,
-          args.domain,
-          args.approval,
-          this.deps.projectSetupService ? resolveLateBoundDependency(this.deps.projectSetupService) : undefined,
-          (input) => this.createProject(input)
-        );
-      } else if (args.domain === "sprints") {
-        envelope = await this.getSprintActions().handleSprintAction(args);
-      } else if (args.domain === "tasks") {
-        envelope = await this.getTaskActions().handleTaskAction(args);
-      } else if (args.domain === "quicksprints") {
-        envelope = await this.getQuicksprintActions().handleQuicksprintAction(args);
-      } else if (args.domain === "scheduler") {
-        envelope = await this.getSchedulerActions().handleSchedulerAction(args);
-      } else if (args.domain === "settings") {
-        envelope = await this.settingsActions.handleSettingsAction(args);
-      } else if (args.domain === "agents") {
-        envelope = await this.agentActions.handleAgentAction(args);
-      } else if (args.domain === "memory") {
-        envelope = await this.memoryActions.handleMemoryAction(args);
-      } else if (args.domain === "preview") {
-        const currentHost = null; // serverHost is not available on DashboardSettings, we'll fall back to localhost in preview-origin
-        envelope = await this.previewActions.handlePreviewAction(args, currentHost);
-      } else if (args.domain === "telemetry") {
-        envelope = await handleTelemetryActions(args, this.deps.executionRepository);
-      } else {
-        const isDestructive = args.action.startsWith("delete_") || args.action.startsWith("reset_") || args.action.startsWith("replace_");
-
-        if (isDestructive && args.approval?.confirmed !== true) {
-          envelope = {
-            approvalRequired: true,
-            approvalMessage: `The action '${args.action}' is destructive and requires explicit approval. Please review the changes and call this tool again with approval.confirmed set to true.`,
-          };
-        } else {
-          envelope = {
-            result: {
-              status: "success",
-              domain: args.domain,
-              action: args.action,
-              message: `Domain ${args.domain} is not implemented yet.`,
-            },
-          };
-        }
-      }
-
+      const approvalGate = await this.requireStatefulApproval(args, () => this.dispatchManageCodeUx({ ...args, approval: { confirmed: false } }));
+      const envelope = approvalGate ?? this.recordStatefulApprovalRequirement(args, await this.dispatchManageCodeUx(args));
       return { content: [{ type: "text", text: JSON.stringify(envelope, null, 2) }] };
     } catch (error) {
       return this.formatError(args.domain, args.action, error);
@@ -225,15 +286,18 @@ export class ManagementToolHandler {
 
   async handleManageProjects(args: ManageProjectsArgs): Promise<{ content: Array<{ type: string; text: string }> }> {
     try {
-      const envelope = await handleProjectAction(
-        args.action,
-        args as unknown as Record<string, unknown>,
-        this.deps.projectManagementRepository,
-        "projects",
-        args.approval,
-        this.deps.projectSetupService ? resolveLateBoundDependency(this.deps.projectSetupService) : undefined,
-        (input) => this.createProject(input)
-      );
+      const managementArgs = { domain: "projects", action: args.action, payload: args as unknown as Record<string, unknown>, approval: args.approval };
+      const dispatch = (approval = args.approval) => handleProjectAction(
+          args.action,
+          args as unknown as Record<string, unknown>,
+          this.deps.projectManagementRepository,
+          "projects",
+          approval,
+          this.deps.projectSetupService ? resolveLateBoundDependency(this.deps.projectSetupService) : undefined,
+          (input) => this.createProject(input)
+        );
+      const approvalGate = await this.requireStatefulApproval(managementArgs, () => dispatch({ confirmed: false }));
+      const envelope = approvalGate ?? this.recordStatefulApprovalRequirement(managementArgs, await dispatch());
       return { content: [{ type: "text", text: JSON.stringify(envelope, null, 2) }] };
     } catch (error) {
       return this.formatError("projects", args.action, error);
@@ -242,7 +306,10 @@ export class ManagementToolHandler {
 
   async handleManageSprints(args: ManageSprintsArgs): Promise<{ content: Array<{ type: string; text: string }> }> {
     try {
-      const envelope = await this.getSprintActions().handleSprintAction({ domain: "sprints", action: args.action, payload: args as unknown as Record<string, unknown>, approval: args.approval });
+      const managementArgs = { domain: "sprints", action: args.action, payload: args as unknown as Record<string, unknown>, approval: args.approval };
+      const dispatch = (approval = args.approval) => this.getSprintActions().handleSprintAction({ ...managementArgs, approval });
+      const approvalGate = await this.requireStatefulApproval(managementArgs, () => dispatch({ confirmed: false }));
+      const envelope = approvalGate ?? this.recordStatefulApprovalRequirement(managementArgs, await dispatch());
       return { content: [{ type: "text", text: JSON.stringify(envelope, null, 2) }] };
     } catch (error) {
       return this.formatError("sprints", args.action, error);
@@ -251,7 +318,10 @@ export class ManagementToolHandler {
 
   async handleManageTasks(args: ManageTasksArgs): Promise<{ content: Array<{ type: string; text: string }> }> {
     try {
-      const envelope = await this.getTaskActions().handleTaskAction({ domain: "tasks", action: args.action, payload: args as unknown as Record<string, unknown>, approval: args.approval });
+      const managementArgs = { domain: "tasks", action: args.action, payload: args as unknown as Record<string, unknown>, approval: args.approval };
+      const dispatch = (approval = args.approval) => this.getTaskActions().handleTaskAction({ ...managementArgs, approval });
+      const approvalGate = await this.requireStatefulApproval(managementArgs, () => dispatch({ confirmed: false }));
+      const envelope = approvalGate ?? this.recordStatefulApprovalRequirement(managementArgs, await dispatch());
       return { content: [{ type: "text", text: JSON.stringify(envelope, null, 2) }] };
     } catch (error) {
       return this.formatError("tasks", args.action, error);
@@ -260,7 +330,10 @@ export class ManagementToolHandler {
 
   async handleManageQuicksprints(args: ManageQuicksprintsArgs): Promise<{ content: Array<{ type: string; text: string }> }> {
     try {
-      const envelope = await this.getQuicksprintActions().handleQuicksprintAction({ domain: "quicksprints", action: args.action, payload: args as unknown as Record<string, unknown>, approval: args.approval });
+      const managementArgs = { domain: "quicksprints", action: args.action, payload: args as unknown as Record<string, unknown>, approval: args.approval };
+      const dispatch = (approval = args.approval) => this.getQuicksprintActions().handleQuicksprintAction({ ...managementArgs, approval });
+      const approvalGate = await this.requireStatefulApproval(managementArgs, () => dispatch({ confirmed: false }));
+      const envelope = approvalGate ?? this.recordStatefulApprovalRequirement(managementArgs, await dispatch());
       return { content: [{ type: "text", text: JSON.stringify(envelope, null, 2) }] };
     } catch (error) {
       return this.formatError("quicksprints", args.action, error);
@@ -269,7 +342,10 @@ export class ManagementToolHandler {
 
   async handleManageScheduler(args: ManageSchedulerArgs): Promise<{ content: Array<{ type: string; text: string }> }> {
     try {
-      const envelope = await this.getSchedulerActions().handleSchedulerAction({ domain: "scheduler", action: args.action, payload: args as unknown as Record<string, unknown>, approval: args.approval });
+      const managementArgs = { domain: "scheduler", action: args.action, payload: args as unknown as Record<string, unknown>, approval: args.approval };
+      const dispatch = (approval = args.approval) => this.getSchedulerActions().handleSchedulerAction({ ...managementArgs, approval });
+      const approvalGate = await this.requireStatefulApproval(managementArgs, () => dispatch({ confirmed: false }));
+      const envelope = approvalGate ?? this.recordStatefulApprovalRequirement(managementArgs, await dispatch());
       return { content: [{ type: "text", text: JSON.stringify(envelope, null, 2) }] };
     } catch (error) {
       return this.formatError("scheduler", args.action, error);
@@ -278,7 +354,10 @@ export class ManagementToolHandler {
 
   async handleManageAgents(args: ManageAgentsArgs): Promise<{ content: Array<{ type: string; text: string }> }> {
     try {
-      const envelope = await this.agentActions.handleAgentAction({ domain: "agents", action: args.action, payload: args as unknown as Record<string, unknown>, approval: args.approval });
+      const managementArgs = { domain: "agents", action: args.action, payload: args as unknown as Record<string, unknown>, approval: args.approval };
+      const dispatch = (approval = args.approval) => this.agentActions.handleAgentAction({ ...managementArgs, approval });
+      const approvalGate = await this.requireStatefulApproval(managementArgs, () => dispatch({ confirmed: false }));
+      const envelope = approvalGate ?? this.recordStatefulApprovalRequirement(managementArgs, await dispatch());
       return { content: [{ type: "text", text: JSON.stringify(envelope, null, 2) }] };
     } catch (error) {
       return this.formatError("agents", args.action, error);
@@ -287,7 +366,10 @@ export class ManagementToolHandler {
 
   async handleManageMemory(args: ManageMemoryArgs): Promise<{ content: Array<{ type: string; text: string }> }> {
     try {
-      const envelope = await this.memoryActions.handleMemoryAction({ domain: "memory", action: args.action, payload: args as unknown as Record<string, unknown>, approval: args.approval });
+      const managementArgs = { domain: "memory", action: args.action, payload: args as unknown as Record<string, unknown>, approval: args.approval };
+      const dispatch = (approval = args.approval) => this.memoryActions.handleMemoryAction({ ...managementArgs, approval });
+      const approvalGate = await this.requireStatefulApproval(managementArgs, () => dispatch({ confirmed: false }));
+      const envelope = approvalGate ?? this.recordStatefulApprovalRequirement(managementArgs, await dispatch());
       return { content: [{ type: "text", text: JSON.stringify(envelope, null, 2) }] };
     } catch (error) {
       return this.formatError("memory", args.action, error);
@@ -306,7 +388,10 @@ export class ManagementToolHandler {
   async handleManagePreview(args: ManagePreviewArgs): Promise<{ content: Array<{ type: string; text: string }> }> {
     try {
       const currentHost = null; // fallback to localhost
-      const envelope = await this.previewActions.handlePreviewAction({ domain: "preview", action: args.action, payload: args as unknown as Record<string, unknown>, approval: args.approval }, currentHost);
+      const managementArgs = { domain: "preview", action: args.action, payload: args as unknown as Record<string, unknown>, approval: args.approval };
+      const dispatch = (approval = args.approval) => this.previewActions.handlePreviewAction({ ...managementArgs, approval }, currentHost);
+      const approvalGate = await this.requireStatefulApproval(managementArgs, () => dispatch({ confirmed: false }));
+      const envelope = approvalGate ?? this.recordStatefulApprovalRequirement(managementArgs, await dispatch());
       return { content: [{ type: "text", text: JSON.stringify(envelope, null, 2) }] };
     } catch (error) {
       return this.formatError("preview", args.action, error);
