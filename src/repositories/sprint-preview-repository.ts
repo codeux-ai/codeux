@@ -131,6 +131,23 @@ export class SprintPreviewRepository {
     return row ? this.mapRow(row) : null;
   }
 
+  getSessionForProjectSprint(projectId: string, sprintId: string, id: string): SprintPreviewSession | null {
+    const row = this.storage.getDatabase().prepare(`
+      SELECT
+        sps.*,
+        p.name AS project_name,
+        sp.name AS sprint_name,
+        sp.number AS sprint_number
+      FROM sprint_preview_sessions sps
+      INNER JOIN projects p ON p.id = sps.project_id
+      INNER JOIN sprints sp ON sp.id = sps.sprint_id
+      WHERE sps.project_id = ? AND sps.sprint_id = ? AND sps.id = ?
+      LIMIT 1
+    `).get(projectId, sprintId, id) as SprintPreviewSessionRow | undefined;
+
+    return row ? this.mapRow(row) : null;
+  }
+
   getSessionByProjectSprint(projectId: string, sprintId: string): SprintPreviewSession | null {
     const row = this.storage.getDatabase().prepare(`
       SELECT

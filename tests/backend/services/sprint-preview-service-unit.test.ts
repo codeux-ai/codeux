@@ -155,6 +155,7 @@ function makeDeps(overrides: Record<string, unknown> = {}) {
     sprintPreviewRepository: {
       listSessions: vi.fn(() => []),
       getSession: vi.fn(() => null),
+      getSessionForProjectSprint: vi.fn(() => null),
       getSessionByProjectSprint: vi.fn(() => null),
       createSession: vi.fn((input: Record<string, unknown>) => makeSession(input as Partial<SprintPreviewSession>)),
       updateSession: vi.fn((id: string, patch: Partial<SprintPreviewSession>) => makeSession({ id, ...patch })),
@@ -292,6 +293,34 @@ describe("SprintPreviewService unit tests", () => {
     it("throws when session does not exist", async () => {
       const service = new SprintPreviewService(deps as any);
       await expect(service.stopSession("nonexistent")).rejects.toThrow("Sprint preview session not found");
+    });
+
+    it("rejects scoped stop when the session belongs to another project", async () => {
+      deps.sprintPreviewRepository.getSessionForProjectSprint.mockReturnValue(null);
+      const service = new SprintPreviewService(deps as any);
+
+      await expect(service.stopSessionForProjectSprint("proj-2", "sprint-2", "session-1"))
+        .rejects.toThrow("Sprint preview session not found");
+      expect(runCommandStrict).not.toHaveBeenCalledWith(
+        "docker",
+        ["rm", "-f", "-v", expect.any(String)],
+        expect.any(String),
+      );
+    });
+
+    it("allows scoped stop when the project and sprint match", async () => {
+      const session = makeSession();
+      deps.sprintPreviewRepository.getSessionForProjectSprint.mockReturnValue(session);
+      deps.sprintPreviewRepository.getSession.mockReturnValue(session);
+      deps.sprintPreviewRepository.updateSession.mockImplementation(
+        (id: string, patch: Partial<SprintPreviewSession>) => makeSession({ id, ...patch }),
+      );
+      const service = new SprintPreviewService(deps as any);
+
+      const result = await service.stopSessionForProjectSprint("proj-1", "sprint-1", "session-1");
+
+      expect(result.status).toBe("stopped");
+      expect(deps.sprintPreviewRepository.getSessionForProjectSprint).toHaveBeenCalledWith("proj-1", "sprint-1", "session-1");
     });
   });
 

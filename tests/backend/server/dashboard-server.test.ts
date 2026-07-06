@@ -1677,7 +1677,7 @@ describe("setupDashboardServer", () => {
         startCalls += 1;
         return {} as any;
       },
-      rebuildSprintPreviewSession: async () => {
+      rebuildSprintPreviewSessionForProjectSprint: async () => {
         rebuildCalls += 1;
         return {} as any;
       },
@@ -1785,13 +1785,13 @@ describe("setupDashboardServer", () => {
       retryTaskDispatch: async () => ({ ok: true }),
       improveSprintPrompt: async () => ({ ok: true }),
       planSprint: async () => ({ ok: true }),
-      removeSprintPreviewSession: async (sessionId: string) => {
+      removeSprintPreviewSessionForProjectSprint: async (_projectId: string, _sprintId: string, sessionId: string) => {
         removedSessionId = sessionId;
       },
     });
     serversToClose.push(handle.server);
 
-    const response = await fetch(`http://127.0.0.1:${handle.port}/api/browser/sessions/test-session`, {
+    const response = await fetch(`http://127.0.0.1:${handle.port}/api/projects/project-test/sprints/sprint-test/preview/sessions/test-session`, {
       method: "DELETE",
     });
 

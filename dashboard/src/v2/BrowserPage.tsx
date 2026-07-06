@@ -258,7 +258,7 @@ export const BrowserPage: FunctionComponent = () => {
     setLogsLoading(true);
     setLogsError(null);
     try {
-      const result = await fetchPreviewLogs(session.id, 160);
+      const result = await fetchPreviewLogs(session.projectId, session.sprintId, session.id, 160);
       const nextLogs = result.logs;
       if (nextLogs) {
         logsCacheRef.current.set(session.id, nextLogs);
@@ -348,7 +348,7 @@ export const BrowserPage: FunctionComponent = () => {
     setLogsError(null);
     let cancelled = false;
     const deferredFetch = window.setTimeout(() => {
-      void fetchPreviewLogs(visibleSelectedSession.id, 160)
+      void fetchPreviewLogs(visibleSelectedSession.projectId, visibleSelectedSession.sprintId, visibleSelectedSession.id, 160)
         .then((result) => {
           if (cancelled) {
             return;
@@ -548,7 +548,7 @@ export const BrowserPage: FunctionComponent = () => {
     setPendingSessionAction("rebuild");
     browserFeedback.setPending("Rebuilding container...");
     try {
-      await rebuildPreviewSession(visibleSelectedSession.id);
+      await rebuildPreviewSession(visibleSelectedSession.projectId, visibleSelectedSession.sprintId, visibleSelectedSession.id);
       await refreshSessions(true);
       reloadFrame();
       browserFeedback.setSuccess("Container rebuilt successfully");
@@ -567,7 +567,7 @@ export const BrowserPage: FunctionComponent = () => {
     setPendingSessionAction("stop");
     browserFeedback.setPending("Stopping container...");
     try {
-      await stopPreviewSession(visibleSelectedSession.id);
+      await stopPreviewSession(visibleSelectedSession.projectId, visibleSelectedSession.sprintId, visibleSelectedSession.id);
       await refreshSessions(true);
       browserFeedback.setSuccess("Container stopped successfully");
     } catch (actionError) {
@@ -591,7 +591,11 @@ export const BrowserPage: FunctionComponent = () => {
     }
     browserFeedback.setPending("Removing preview session...");
     try {
-      await removePreviewSession(sessionId);
+      const session = sessions.find((candidate) => candidate.id === sessionId);
+      if (!session) {
+        throw new Error("Preview session is unavailable.");
+      }
+      await removePreviewSession(session.projectId, session.sprintId, session.id);
       await refreshSessions(true);
       browserFeedback.setSuccess("Preview session removed successfully");
     } catch (actionError) {

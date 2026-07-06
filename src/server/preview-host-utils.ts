@@ -112,15 +112,26 @@ function getEffectivePreviewPortMappings(session: Pick<SprintPreviewSession, "co
 }
 
 export function isAllowedPreviewControlOrigin(req: express.Request): boolean {
-  const origin = typeof req.headers.origin === "string" ? req.headers.origin.trim() : "";
+  const origin = canonicalizeOrigin(typeof req.headers.origin === "string" ? req.headers.origin : "");
   if (!origin) {
     return true;
   }
-  const currentHost = String(req.headers.host || "").trim();
   const protocol = req.protocol || "http";
-  const currentOrigin = `${protocol}://${currentHost}`;
-  const dashboardOrigin = buildDashboardOriginForPreviewHost(req);
+  const currentOrigin = canonicalizeOrigin(`${protocol}://${String(req.headers.host || "").trim()}`);
+  const dashboardOrigin = canonicalizeOrigin(buildDashboardOriginForPreviewHost(req));
   return origin === currentOrigin || origin === dashboardOrigin;
+}
+
+function canonicalizeOrigin(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return "";
+  }
+  try {
+    return new URL(trimmed).origin;
+  } catch {
+    return "";
+  }
 }
 
 export function buildDashboardOriginForPreviewHost(req: express.Request): string {
@@ -333,8 +344,11 @@ function buildPreviewCorsHeaders(
   isControlPath?: boolean,
 ): Record<string, string> {
   let origin = typeof req.headers.origin === "string" && req.headers.origin.trim()
-    ? req.headers.origin.trim()
+    ? canonicalizeOrigin(req.headers.origin)
     : "*";
+  if (!origin) {
+    origin = "*";
+  }
 
   if (isControlPath && !isAllowedPreviewControlOrigin(req)) {
     origin = buildDashboardOriginForPreviewHost(req);
