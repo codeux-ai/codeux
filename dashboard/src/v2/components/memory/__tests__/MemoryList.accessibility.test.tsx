@@ -1,10 +1,10 @@
 /** @vitest-environment jsdom */
 import { h } from "preact";
-import { fireEvent, render, waitFor } from "@testing-library/preact";
+import { act, fireEvent, render, waitFor } from "@testing-library/preact";
 import * as matchers from "@testing-library/jest-dom/matchers";
 import { expect, test, describe, vi, afterEach } from "vitest";
 import { MemoryList } from "../MemoryList.js";
-import { memoryMutationsSignal, searchQuerySignal, selectedMemoryIdsSignal } from "../memoryState.js";
+import { activeTierSignal, memoryMutationsSignal, searchQuerySignal, selectedAgentPresetIdSignal, selectedMemoryIdsSignal, selectedSprintIdSignal } from "../memoryState.js";
 import type { MemNode } from "../../../lib/memory-graph.js";
 
 expect.extend(matchers);
@@ -39,6 +39,9 @@ describe("MemoryList", () => {
         document.body.innerHTML = "";
         searchQuerySignal.value = "";
         selectedMemoryIdsSignal.value = [];
+        activeTierSignal.value = "short_term";
+        selectedSprintIdSignal.value = undefined;
+        selectedAgentPresetIdSignal.value = undefined;
         mockReducedMotion = false;
     });
 
@@ -243,6 +246,30 @@ describe("MemoryList", () => {
         expect(getByText("No memories match your search or filters", { selector: "p" })).toBeInTheDocument();
     });
 
+    test("does not show stale memories after the committed filter context changes", () => {
+        selectedSprintIdSignal.value = "sprint-1";
+        const { getByText, queryByText, rerender } = render(
+            <MemoryList
+                nodes={[buildNode({ id: "memory-1", content: "Alpha project memory" })]}
+                onSelectNode={vi.fn()}
+            />
+        );
+
+        expect(getByText("Alpha project memory")).toBeInTheDocument();
+
+        selectedSprintIdSignal.value = "sprint-2";
+        rerender(
+            <MemoryList
+                nodes={[]}
+                onSelectNode={vi.fn()}
+                refreshing={true}
+            />
+        );
+
+        expect(queryByText("Alpha project memory")).toBeNull();
+        expect(getByText("No memories exist", { selector: "p" })).toBeInTheDocument();
+    });
+
     test("shows recovery copy and retry action when refresh fails", () => {
         const onRetry = vi.fn();
         const { getByRole, getByText } = render(
@@ -260,6 +287,32 @@ describe("MemoryList", () => {
         fireEvent.click(getByRole("button", { name: "Retry" }));
 
         expect(onRetry).toHaveBeenCalledTimes(1);
+    });
+
+    test("suppresses duplicate refresh retry clicks while retry is pending", async () => {
+        let resolveRetry: (() => void) | null = null;
+        const onRetry = vi.fn(() => new Promise<void>((resolve) => {
+            resolveRetry = resolve;
+        }));
+        const { getByRole } = render(
+            <MemoryList
+                nodes={[]}
+                onSelectNode={vi.fn()}
+                loadError="Network unavailable"
+                onRetry={onRetry}
+            />
+        );
+
+        const retry = getByRole("button", { name: "Retry" });
+        fireEvent.click(retry);
+        fireEvent.click(retry);
+
+        expect(onRetry).toHaveBeenCalledTimes(1);
+        expect(retry).toBeDisabled();
+
+        await act(async () => {
+            resolveRetry?.();
+        });
     });
 
     test("empty list gives an add-memory next action", () => {

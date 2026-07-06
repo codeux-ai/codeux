@@ -236,6 +236,8 @@ describe("useMemoryPageData Hook", () => {
             limit: 200,
         });
         expect(api.getMemoryStats).toHaveBeenCalledWith("proj-1");
+        expect(result.current.graphDataContextKey).toBe(result.current.requestedContextKey);
+        expect(result.current.requestedContextKey).toContain('"tier":"short_term"');
     });
 
     it("respects filters for sprints and agents", async () => {
@@ -258,6 +260,9 @@ describe("useMemoryPageData Hook", () => {
             sprintId: "sprint-123",
             agentPresetId: "agent-456"
         });
+        expect(result.current.graphDataContextKey).toBe(result.current.requestedContextKey);
+        expect(result.current.requestedContextKey).toContain('"sprintId":"sprint-123"');
+        expect(result.current.requestedContextKey).toContain('"agentPresetId":"agent-456"');
     });
 });
 
