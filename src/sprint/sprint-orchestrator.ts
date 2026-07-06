@@ -47,6 +47,7 @@ import { WorkspaceManager } from "../infrastructure/providers/cli/workspace-mana
 import type { JulesUsageService } from "../domain/jules/jules-usage-service.js";
 import { buildSprintPrComposerInput } from "../domain/sprint/composer/sprint-pr-input-builder.js";
 import { composeSprintPrBody, composeSprintPrTitle } from "../domain/sprint/composer/pr-description-composer.js";
+import type { SprintRunLifecycleService } from "../services/sprint-run-lifecycle-service.js";
 
 
 const SPRINT_ORCHESTRATOR_OWNER_KEY = `sprint_orchestrator:${process.pid}`;
@@ -124,6 +125,7 @@ export interface SprintOrchestratorDependencies {
   taskService?: TaskService;
   sprintIssueService?: SprintIssueService;
   heartbeatService: HeartbeatService;
+  sprintRunLifecycleService: SprintRunLifecycleService;
   workspaceManager: WorkspaceManager;
   /** Resolve the planning agent preset ID for a project (used for per-agent memory tagging). */
   resolvePlanningAgentPresetId?: (projectId: string) => Promise<string | undefined>;
@@ -375,7 +377,7 @@ export class SprintOrchestrator {
     if (args.action !== "orchestrate") {
       return;
     }
-    const sprintRun = this.deps.executionRepository.createSprintRun({
+    const sprintRun = this.deps.sprintRunLifecycleService.createRun({
       projectId: args.projectId,
       sprintId: args.sprintId,
       triggerType: "mcp",
@@ -384,14 +386,15 @@ export class SprintOrchestrator {
       status: "paused",
     });
     const now = new Date().toISOString();
-    this.deps.executionRepository.updateSprintRun(sprintRun.id, {
+    this.deps.sprintRunLifecycleService.transition({
+      sprintRunId: sprintRun.id,
       status: "paused",
+      eventType: args.eventType,
+      eventPayload: args.payload,
+      sourceEventKey: `${args.eventType}:${args.sprintId}:${JSON.stringify(args.payload)}`,
       startedAt: now,
       finishedAt: now,
       lastHeartbeatAt: now,
-    });
-    this.deps.executionRepository.appendSprintRunEvent(sprintRun.id, args.eventType, "system", args.payload, {
-      sourceEventKey: `${args.eventType}:${args.sprintId}:${JSON.stringify(args.payload)}`,
     });
   }
 
@@ -444,15 +447,13 @@ export class SprintOrchestrator {
     const leaseToken = randomUUID();
     const now = new Date().toISOString();
 
-    this.deps.executionRepository.acquireLease({
-      scopeType: "sprint",
+    this.deps.sprintRunLifecycleService.acquireSprintLease({
       scopeId: executionContext.sprint.id,
       ownerKey: SPRINT_ORCHESTRATOR_OWNER_KEY,
       leaseToken,
       expiresAt: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
     });
-    this.deps.executionRepository.updateSprintRun(existingRun.id, {
-      status: "running",
+    this.deps.sprintRunLifecycleService.markRunning(existingRun.id, {
       startedAt: existingRun.startedAt || now,
       finishedAt: null,
       lastHeartbeatAt: now,
@@ -492,7 +493,7 @@ export class SprintOrchestrator {
     } catch (error) {
       const failedAt = new Date().toISOString();
       const message = error instanceof Error ? error.message : String(error);
-      this.deps.executionRepository.updateSprintRun(existingRun.id, {
+      this.deps.sprintRunLifecycleService.updateRun(existingRun.id, {
         status: "failed",
         finishedAt: failedAt,
         lastHeartbeatAt: failedAt,
@@ -506,7 +507,7 @@ export class SprintOrchestrator {
       throw error;
     } finally {
       this.activeOrchestrations.delete(orchestrationKey);
-      this.deps.executionRepository.releaseLease("sprint", executionContext.sprint.id, leaseToken);
+      this.deps.sprintRunLifecycleService.releaseSprintLease(executionContext.sprint.id, leaseToken);
     }
   }
 
@@ -715,7 +716,7 @@ export class SprintOrchestrator {
         );
         if (blockingRun) {
           const finalizedCancelledRun = blockingRun.status === "cancel_requested"
-            ? this.deps.executionRepository.finalizeSprintRunCancellationIfIdle(blockingRun.id)
+            ? this.deps.sprintRunLifecycleService.finalizeCancellationIfIdle(blockingRun.id)
             : null;
           const effectiveBlockingRun = finalizedCancelledRun?.status === "cancelled"
             ? null
@@ -743,8 +744,7 @@ export class SprintOrchestrator {
 
         const leaseToken = randomUUID();
         try {
-          this.deps.executionRepository.acquireLease({
-            scopeType: "sprint",
+          this.deps.sprintRunLifecycleService.acquireSprintLease({
             scopeId: executionContext.sprint.id,
             ownerKey: SPRINT_ORCHESTRATOR_OWNER_KEY,
             leaseToken,
@@ -766,7 +766,7 @@ export class SprintOrchestrator {
           };
         }
 
-        const sprintRun = this.deps.executionRepository.createSprintRun({
+        const sprintRun = this.deps.sprintRunLifecycleService.createRun({
           projectId: executionContext.project.id,
           sprintId: executionContext.sprint.id,
           triggerType: "mcp",
@@ -774,8 +774,7 @@ export class SprintOrchestrator {
           executorMode: "mixed",
           status: "running",
         });
-        this.deps.executionRepository.updateSprintRun(sprintRun.id, {
-          status: "running",
+        this.deps.sprintRunLifecycleService.markRunning(sprintRun.id, {
           startedAt: new Date().toISOString(),
           lastHeartbeatAt: new Date().toISOString(),
         });
@@ -808,7 +807,7 @@ export class SprintOrchestrator {
           } catch (error) {
             const failedAt = new Date().toISOString();
             const message = error instanceof Error ? error.message : String(error);
-            this.deps.executionRepository.updateSprintRun(sprintRun.id, {
+            this.deps.sprintRunLifecycleService.updateRun(sprintRun.id, {
               status: "failed",
               finishedAt: failedAt,
               lastHeartbeatAt: failedAt,
@@ -823,7 +822,7 @@ export class SprintOrchestrator {
           }
         } finally {
           this.activeOrchestrations.delete(orchestrationKey);
-          this.deps.executionRepository.releaseLease("sprint", executionContext.sprint.id, leaseToken);
+          this.deps.sprintRunLifecycleService.releaseSprintLease(executionContext.sprint.id, leaseToken);
         }
       }
     }

@@ -15,6 +15,7 @@ import { InvocationRecoveryService } from "./runtime-recovery/invocation-recover
 import { calculateInvocationDurationMs, isTerminalTaskRunState } from "./runtime-recovery/recovery-utils.js";
 import { cancelStaleProviderInvocation, failStaleProviderInvocation } from "../domain/runtime/provider-invocation-recovery.js";
 import type { GuardrailService } from "./guardrail-service.js";
+import type { SprintRunLifecycleService } from "./sprint-run-lifecycle-service.js";
 
 const ACTIVE_SPRINT_RUN_STATUSES = ["queued", "running"] as const;
 const ACTIVE_DISPATCH_STATUSES = ["queued", "claimed", "running", "cancel_requested"] as const;
@@ -58,6 +59,7 @@ export interface RuntimeStartupRecoveryResult {
 interface RuntimeStartupRecoveryServiceDeps {
   sessionTracking: SessionTrackingRepository;
   executionRepository: ExecutionRepository;
+  sprintRunLifecycleService: SprintRunLifecycleService;
   qaReviewRepository?: QaReviewRepository;
   projectManagementRepository: ProjectManagementRepository;
   projectAttentionService?: Pick<ProjectAttentionService, "listActiveProjectItems" | "openItem" | "resolveItem">;
@@ -288,7 +290,7 @@ export class RuntimeStartupRecoveryService {
 
       const targetRunWasTerminal = TERMINAL_SPRINT_RUN_STATUSES.has(targetRun.status);
       if (TERMINAL_SPRINT_RUN_STATUSES.has(targetRun.status)) {
-        this.deps.executionRepository.updateSprintRun(targetRun.id, {
+        this.deps.sprintRunLifecycleService.updateRun(targetRun.id, {
           status: "running",
           startedAt: targetRun.startedAt || now,
           finishedAt: null,
@@ -595,7 +597,7 @@ export class RuntimeStartupRecoveryService {
         continue;
       }
 
-      this.deps.executionRepository.updateSprintRun(sprintRun.id, {
+      this.deps.sprintRunLifecycleService.updateRun(sprintRun.id, {
         status: "failed",
         finishedAt: reconciledAt,
         lastHeartbeatAt: reconciledAt,
@@ -849,7 +851,7 @@ export class RuntimeStartupRecoveryService {
       });
 
       if (dispatch.sprintRunId) {
-        this.deps.executionRepository.finalizeSprintRunCancellationIfIdle(dispatch.sprintRunId);
+        this.deps.sprintRunLifecycleService.finalizeCancellationIfIdle(dispatch.sprintRunId);
       }
       reconciledDispatchIds.push(dispatch.id);
     }
@@ -898,7 +900,7 @@ export class RuntimeStartupRecoveryService {
       });
 
       if (dispatch.sprintRunId) {
-        this.deps.executionRepository.finalizeSprintRunCancellationIfIdle(dispatch.sprintRunId);
+        this.deps.sprintRunLifecycleService.finalizeCancellationIfIdle(dispatch.sprintRunId);
       }
       reconciledDispatchIds.push(dispatch.id);
     }
@@ -916,7 +918,7 @@ export class RuntimeStartupRecoveryService {
 
     for (const sprintRun of activeRuns) {
       if (recoveredSprintIds.has(sprintRun.sprintId)) {
-        this.deps.executionRepository.updateSprintRun(sprintRun.id, {
+        this.deps.sprintRunLifecycleService.updateRun(sprintRun.id, {
           status: "failed",
           finishedAt: recoveredAt,
           lastHeartbeatAt: recoveredAt,
@@ -946,7 +948,7 @@ export class RuntimeStartupRecoveryService {
       const sprintIsTerminalOrDeleted =
         rawStatus === null || rawStatus === "completed" || rawStatus === "cancelled";
       if (sprintIsTerminalOrDeleted) {
-        this.deps.executionRepository.updateSprintRun(sprintRun.id, {
+        this.deps.sprintRunLifecycleService.updateRun(sprintRun.id, {
           status: "failed",
           finishedAt: recoveredAt,
           lastHeartbeatAt: recoveredAt,
@@ -967,7 +969,7 @@ export class RuntimeStartupRecoveryService {
       }
 
       recoveredSprintIds.add(sprintRun.sprintId);
-      this.deps.executionRepository.releaseLease("sprint", sprintRun.sprintId);
+      this.deps.sprintRunLifecycleService.releaseSprintLease(sprintRun.sprintId);
       resumedSprintRunIds.push(sprintRun.id);
 
       void this.deps.sprintOrchestrator.recoverSprintRun(sprintRun.id).catch((error) => {
@@ -1098,7 +1100,7 @@ export class RuntimeStartupRecoveryService {
     });
 
     if (invocation.sprintRunId) {
-      this.deps.executionRepository.finalizeSprintRunCancellationIfIdle(invocation.sprintRunId);
+      this.deps.sprintRunLifecycleService.finalizeCancellationIfIdle(invocation.sprintRunId);
     }
   }
 
@@ -1158,7 +1160,7 @@ export class RuntimeStartupRecoveryService {
     });
 
     if (invocation.sprintRunId) {
-      this.deps.executionRepository.finalizeSprintRunCancellationIfIdle(invocation.sprintRunId);
+      this.deps.sprintRunLifecycleService.finalizeCancellationIfIdle(invocation.sprintRunId);
     }
   }
 

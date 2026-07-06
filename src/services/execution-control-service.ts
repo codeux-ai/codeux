@@ -11,6 +11,7 @@ import type { ActiveDispatchRegistry } from "./active-dispatch-registry.js";
 import type { Logger } from "../shared/logging/logger.js";
 import type { ProjectAttentionType } from "../contracts/project-attention-types.js";
 import { resolveLateBoundDependency, type LateBoundOrValue } from "../shared/late-bound-dependency.js";
+import type { SprintRunLifecycleService } from "./sprint-run-lifecycle-service.js";
 
 const RECOMPUTED_SPRINT_ATTENTION_TYPES: ProjectAttentionType[] = [
   "manual_attention",
@@ -34,6 +35,7 @@ interface ExecutionControlServiceDeps {
   sprintOrchestrator: SprintOrchestrator;
   julesApi: JulesApiClient;
   activeDispatchRegistry: ActiveDispatchRegistry;
+  sprintRunLifecycleService: SprintRunLifecycleService;
   logger?: Logger;
 }
 
@@ -97,7 +99,7 @@ export class ExecutionControlService {
       return sprintRun;
     }
     const now = new Date().toISOString();
-    const updated = this.deps.executionRepository.updateSprintRun(sprintRunId, {
+    const updated = this.deps.sprintRunLifecycleService.updateRun(sprintRunId, {
       status: "paused",
       lastHeartbeatAt: now,
     });
@@ -130,7 +132,7 @@ export class ExecutionControlService {
     });
 
     const now = new Date().toISOString();
-    const resumedRun = this.deps.executionRepository.updateSprintRun(sprintRunId, {
+    const resumedRun = this.deps.sprintRunLifecycleService.updateRun(sprintRunId, {
       status: "running",
       startedAt: sprintRun.startedAt ?? now,
       finishedAt: null,
@@ -174,8 +176,8 @@ export class ExecutionControlService {
       }
     }
 
-    this.deps.executionRepository.releaseLease("sprint", sprintRun.sprintId);
-    const updated = this.deps.executionRepository.updateSprintRun(sprintRunId, {
+    this.deps.sprintRunLifecycleService.releaseSprintLease(sprintRun.sprintId);
+    const updated = this.deps.sprintRunLifecycleService.updateRun(sprintRunId, {
       status: "cancelled",
       finishedAt: now,
       lastHeartbeatAt: now,
@@ -254,8 +256,8 @@ export class ExecutionControlService {
       await this.forceCancelDispatchInternal(dispatch, now, "Sprint run was force-cancelled from the dashboard.");
     }
 
-    this.deps.executionRepository.releaseLease("sprint", sprintRun.sprintId);
-    const updated = this.deps.executionRepository.updateSprintRun(sprintRunId, {
+    this.deps.sprintRunLifecycleService.releaseSprintLease(sprintRun.sprintId);
+    const updated = this.deps.sprintRunLifecycleService.updateRun(sprintRunId, {
       status: "cancelled",
       finishedAt: now,
       lastHeartbeatAt: now,
@@ -585,7 +587,7 @@ export class ExecutionControlService {
     });
 
     if (dispatch.sprintRunId) {
-      this.deps.executionRepository.finalizeSprintRunCancellationIfIdle(dispatch.sprintRunId);
+      this.deps.sprintRunLifecycleService.finalizeCancellationIfIdle(dispatch.sprintRunId);
     }
 
     return updated;
@@ -639,7 +641,7 @@ export class ExecutionControlService {
     }
 
     if (activeRun.status === "cancel_requested") {
-      const finalized = this.deps.executionRepository.finalizeSprintRunCancellationIfIdle(activeRun.id);
+      const finalized = this.deps.sprintRunLifecycleService.finalizeCancellationIfIdle(activeRun.id);
       if (finalized?.status === "cancelled") {
         return null;
       }

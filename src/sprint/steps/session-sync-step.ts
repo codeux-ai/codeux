@@ -531,7 +531,7 @@ const syncExecutionRunState = async (
       errorMessage: resolveDispatchErrorMessage(currentDispatch?.errorMessage, nextRunState, session.state),
     });
     if (nextRunState !== "RUNNING" && taskRun.sprintRunId) {
-      deps.executionRepository.finalizeSprintRunCancellationIfIdle(taskRun.sprintRunId);
+      deps.sprintRunLifecycleService?.finalizeCancellationIfIdle(taskRun.sprintRunId);
     }
   }
 

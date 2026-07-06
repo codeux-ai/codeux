@@ -5,6 +5,7 @@ import { ProjectAttentionService } from "../domain/workers/project-attention-ser
 import type { TaskRunState } from "../contracts/execution-types.js";
 import type { Logger } from "../shared/logging/logger.js";
 import { DockerRuntimePruneService } from "./docker-runtime-prune-service.js";
+import { SprintRunLifecycleService } from "./sprint-run-lifecycle-service.js";
 
 export interface RuntimeCleanupResult {
   staleConnectionIds: string[];
@@ -25,6 +26,7 @@ export class RuntimeCleanupService {
   constructor(
     private readonly connectionChatRepository: ConnectionChatRepository,
     private readonly executionRepository: ExecutionRepository,
+    private readonly sprintRunLifecycleService: SprintRunLifecycleService,
     private readonly projectManagementRepository: ProjectManagementRepository,
     private readonly projectAttentionService: ProjectAttentionService,
     private readonly dockerRuntimePruneService?: DockerRuntimePruneService,
@@ -97,7 +99,7 @@ export class RuntimeCleanupService {
       });
       blockedDispatchIds.push(dispatch.id);
       if (dispatch.sprintRunId) {
-        this.executionRepository.finalizeSprintRunCancellationIfIdle(dispatch.sprintRunId);
+        this.sprintRunLifecycleService.finalizeCancellationIfIdle(dispatch.sprintRunId);
       }
     }
 
@@ -153,7 +155,7 @@ export class RuntimeCleanupService {
       });
       forceCancelledDispatchIds.push(dispatch.id);
       if (dispatch.sprintRunId) {
-        this.executionRepository.finalizeSprintRunCancellationIfIdle(dispatch.sprintRunId);
+        this.sprintRunLifecycleService.finalizeCancellationIfIdle(dispatch.sprintRunId);
       }
     }
 
@@ -215,7 +217,7 @@ export class RuntimeCleanupService {
             : null,
       });
       if (dispatch.sprintRunId) {
-        this.executionRepository.finalizeSprintRunCancellationIfIdle(dispatch.sprintRunId);
+        this.sprintRunLifecycleService.finalizeCancellationIfIdle(dispatch.sprintRunId);
       }
       reconciledDispatchIds.push(dispatch.id);
     }
@@ -243,9 +245,9 @@ export class RuntimeCleanupService {
       }
 
       if (sprintLease) {
-        this.executionRepository.releaseLease("sprint", sprintRun.sprintId, sprintLease.leaseToken);
+        this.sprintRunLifecycleService.releaseSprintLease(sprintRun.sprintId, sprintLease.leaseToken);
       }
-      this.executionRepository.updateSprintRun(sprintRun.id, {
+      this.sprintRunLifecycleService.updateRun(sprintRun.id, {
         status: "failed",
         finishedAt: nowIso,
         lastHeartbeatAt: nowIso,

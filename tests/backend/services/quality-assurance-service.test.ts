@@ -3332,6 +3332,10 @@ describe("QualityAssuranceService", () => {
         } as any,
         providerRunner: {} as any,
         structuredAgentRequestService: structuredAgentRequestService as any,
+        sprintRunLifecycleService: {
+          updateRun: (sprintRunId: string, input: Parameters<typeof executionRepository.updateSprintRun>[1]) =>
+            executionRepository.updateSprintRun(sprintRunId, input),
+        },
         getDashboardSettings: () => ({
           ...DEFAULT_DASHBOARD_SETTINGS,
           agents: {

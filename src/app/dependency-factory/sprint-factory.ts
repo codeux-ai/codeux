@@ -77,6 +77,7 @@ export function createSprintDependencies(
     activeDispatchRegistry,
     memoryService: coreDeps.memoryService,
     providerConcurrencyService: coreDeps.providerConcurrencyService,
+    sprintRunLifecycleService: coreDeps.sprintRunLifecycleService,
     getDashboardSettings: resolveDashboardSettings,
     agentPresetSyncService,
     getGithubToken: () => context.getEffectiveGithubToken(),
@@ -155,6 +156,7 @@ export function createSprintDependencies(
     memoryService: coreDeps.memoryService,
     structuredAgentRequestService,
     dockerService: new DockerService(),
+    sprintRunLifecycleService: coreDeps.sprintRunLifecycleService,
   });
 
   const memoryRemediationService = new MemoryRemediationService({
@@ -200,6 +202,7 @@ export function createSprintDependencies(
           return undefined;
         }
       },
+      coreDeps.sprintRunLifecycleService,
     ),
     cliWorkflowService,
     sprintExecutionStateService,
@@ -228,7 +231,7 @@ export function createSprintDependencies(
   });
 
   const heartbeatService = new HeartbeatService({
-    executionRepository,
+    sprintRunLifecycleService: coreDeps.sprintRunLifecycleService,
     logger: logger.child({ component: "heartbeat-service" }),
   });
 
@@ -254,6 +257,7 @@ export function createSprintDependencies(
     listSessions: () => context.listSessionsForSync(),
     projectManagementRepository,
     executionRepository,
+    sprintRunLifecycleService: coreDeps.sprintRunLifecycleService,
     guardrailService: coreDeps.guardrailService,
     projectAttentionService,
     sprintExecutionStateService,

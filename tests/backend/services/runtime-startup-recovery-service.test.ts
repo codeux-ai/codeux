@@ -13,6 +13,7 @@ import { SessionTrackingRepository } from "../../../src/repositories/session-tra
 import { DEFAULT_DASHBOARD_SETTINGS } from "../../../src/repositories/settings-defaults.js";
 import { ProjectAttentionService } from "../../../src/domain/workers/project-attention-service.js";
 import { RuntimeStartupRecoveryService } from "../../../src/services/runtime-startup-recovery-service.js";
+import { SprintRunLifecycleService } from "../../../src/services/sprint-run-lifecycle-service.js";
 import { QaReviewRecoveryService } from "../../../src/services/runtime-recovery/qa-review-recovery.js";
 import { InvocationRecoveryService } from "../../../src/services/runtime-recovery/invocation-recovery.js";
 import { CliWorkflowService } from "../../../src/services/cli-workflow-service.js";
@@ -48,10 +49,15 @@ async function createFixture(options?: {
   const qaReviewRepository = new QaReviewRepository(storage);
   const sessionTracking = new SessionTrackingRepository(path.join(dir, "session-tracking.db"));
   const recoverSprintRun = options?.recoverSprintRun ?? vi.fn().mockResolvedValue(null);
+  const sprintRunLifecycleService = new SprintRunLifecycleService({
+    executionRepository,
+    projectManagementRepository: projectRepository,
+  });
 
   const service = new RuntimeStartupRecoveryService({
     sessionTracking,
     executionRepository,
+    sprintRunLifecycleService,
     qaReviewRepository,
     projectManagementRepository: projectRepository,
     projectAttentionService,

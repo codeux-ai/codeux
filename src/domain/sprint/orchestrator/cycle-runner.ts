@@ -130,6 +130,7 @@ export class CycleRunner {
           isActionRequiredState: this.deps.isActionRequiredState,
           projectManagementRepository: this.deps.projectManagementRepository,
           executionRepository: this.deps.executionRepository,
+          sprintRunLifecycleService: this.deps.sprintRunLifecycleService,
           sprintRunId: args.sprintRunId,
           logger: this.deps.logger.child({ component: "session-sync-step", projectId: args.executionContext.project.id, sprintId: args.executionContext.sprint.id, sprintRunId: args.sprintRunId }),
           listAllActivities: this.deps.listAllActivities,

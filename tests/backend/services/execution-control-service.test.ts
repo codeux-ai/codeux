@@ -9,6 +9,7 @@ import { ProjectWorkerAssignmentRepository } from "../../../src/repositories/pro
 import { ProjectAttentionRepository } from "../../../src/repositories/project-attention-repository.js";
 import { ProjectAttentionService } from "../../../src/domain/workers/project-attention-service.js";
 import { ExecutionControlService } from "../../../src/services/execution-control-service.js";
+import { SprintRunLifecycleService } from "../../../src/services/sprint-run-lifecycle-service.js";
 
 const tempDirs: string[] = [];
 const storages: AppDbStorage[] = [];
@@ -36,10 +37,15 @@ async function createFixture(): Promise<{
   const setConsecutiveFailures = vi.fn();
   const requestStop = vi.fn().mockResolvedValue({ accepted: true });
   const sendSessionMessage = vi.fn().mockResolvedValue({ ok: true });
+  const sprintRunLifecycleService = new SprintRunLifecycleService({
+    executionRepository,
+    projectManagementRepository: projectRepository,
+  });
 
   const service = new ExecutionControlService({
     projectManagementRepository: projectRepository,
     executionRepository,
+    sprintRunLifecycleService,
     projectAttentionService: new ProjectAttentionService(
       projectAttentionRepository,
       new ProjectWorkerAssignmentRepository(storage),

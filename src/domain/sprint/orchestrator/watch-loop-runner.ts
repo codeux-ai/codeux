@@ -22,7 +22,6 @@ import type { CycleRunner } from "./cycle-runner.js";
 import type { SprintExecutionContext } from "../../../services/sprint-execution-state-service.js";
 import type { MergeFeedbackResult } from "../ci/main-merge-gate.js";
 import type { ProjectAttentionItemRecord } from "../../../contracts/project-attention-types.js";
-import { transitionSprintRun } from "./sprint-run-transitions.js";
 import { buildTaskAttentionPayload } from "./attention-payload-builder.js";
 import { decideMainMergeWaitOrPause, decideTerminalCompletion, isHumanEscalatedAttentionItem } from "./watch-loop-policies.js";
 import { decideFinalizationTransition } from "./watch-loop-finalization-policy.js";
@@ -32,9 +31,10 @@ import { evaluateSprintRunState, isMainMergeAttentionItem } from "./sprint-state
 import { evaluateSprintTransitionState } from "../task-transition-state.js";
 import type { HeartbeatService } from "../../../services/heartbeat-service.js";
 import type { SprintIssueService } from "../../../services/sprint-issue-service.js";
+import type { SprintRunLifecycleService } from "../../../services/sprint-run-lifecycle-service.js";
 
 
-export type WatchLoopExecutionDependencies = Pick<ExecutionRepository, "appendSprintRunEvent" | "finalizeSprintRunCancellationIfIdle" | "getSprintRun" | "getTaskRunByDispatchId" | "listTaskDispatches" | "listTaskRunEvents" | "updateSprintRun" | "renewLease">;
+export type WatchLoopExecutionDependencies = Pick<ExecutionRepository, "appendSprintRunEvent" | "getSprintRun" | "getTaskRunByDispatchId" | "listTaskDispatches" | "listTaskRunEvents">;
 export type WatchLoopAttentionDependencies = Pick<ProjectAttentionService, "listActiveProjectItems" | "openItems" | "resolveItemsForSprintRun" | "resolveItem">;
 
 export interface WatchLoopDependencies {
@@ -50,6 +50,7 @@ export interface WatchLoopDependencies {
   qualityAssuranceService?: QualityAssuranceService;
   sprintIssueService?: SprintIssueService;
   executionRepository: WatchLoopExecutionDependencies;
+  sprintRunLifecycleService: Pick<SprintRunLifecycleService, "transition" | "finalizeCancellationIfIdle">;
   projectAttentionService: WatchLoopAttentionDependencies;
   heartbeatService: HeartbeatService;
   workspaceManager: WorkspaceManager;
@@ -389,7 +390,7 @@ export class WatchLoopRunner {
       return { status: "exit", report: "\n⏸️ **Sprint Paused:** Dashboard control paused this sprint run.\n" };
     }
     if (controlledRun?.status === "cancel_requested") {
-      const finalized = this.deps.executionRepository.finalizeSprintRunCancellationIfIdle(sprintRunId);
+      const finalized = this.deps.sprintRunLifecycleService.finalizeCancellationIfIdle(sprintRunId);
       return {
         status: "exit",
         report: finalized
@@ -694,17 +695,16 @@ export class WatchLoopRunner {
           report += mergeFeedback.text;
 
           if (decision.status === "exit" && decision.terminalState === "paused" && decision.pauseReason === "main_merge_blocked") {
-            transitionSprintRun(
-              this.deps.executionRepository,
+            this.deps.sprintRunLifecycleService.transition({
               sprintRunId,
-              "paused",
-              "sprint_paused",
-              {
+              status: "paused",
+              eventType: "sprint_paused",
+              eventPayload: {
                 reason: "main_merge_blocked",
                 ...decision.pausePayload,
               },
-              `sprint-paused:${sprintRunId}:main-merge-blocked:${mergeFeedback.state}:${mergeFeedback.prNumber || "none"}`
-            );
+              sourceEventKey: `sprint-paused:${sprintRunId}:main-merge-blocked:${mergeFeedback.state}:${mergeFeedback.prNumber || "none"}`,
+            });
           }
 
           if (decision.reportModifier) {
@@ -832,17 +832,16 @@ export class WatchLoopRunner {
               };
             }
 
-            transitionSprintRun(
-              this.deps.executionRepository,
+            this.deps.sprintRunLifecycleService.transition({
               sprintRunId,
-              "paused",
-              "sprint_paused",
-              {
+              status: "paused",
+              eventType: "sprint_paused",
+              eventPayload: {
                 reason: "main_merge_blocked",
                 message: `Local merge conflict merging ${defaultFeatureBranch} into ${defaultBranch}. Resolve conflicts locally.`,
               },
-              `sprint-paused:${sprintRunId}:local-main-merge-blocked`
-            );
+              sourceEventKey: `sprint-paused:${sprintRunId}:local-main-merge-blocked`,
+            });
 
             return {
               status: "exit",
@@ -865,19 +864,18 @@ export class WatchLoopRunner {
             };
           }
 
-          transitionSprintRun(
-            this.deps.executionRepository,
+          this.deps.sprintRunLifecycleService.transition({
             sprintRunId,
-            "paused",
-            "sprint_paused",
-            {
+            status: "paused",
+            eventType: "sprint_paused",
+            eventPayload: {
               reason: "main_merge_blocked",
               mainMergeState: mergeFeedback.state,
               prNumber: mergeFeedback.prNumber,
               prUrl: mergeFeedback.prUrl,
             },
-            `sprint-paused:${sprintRunId}:remote-main-merge-not-merged:${mergeFeedback.state}:${mergeFeedback.prNumber || "none"}`
-          );
+            sourceEventKey: `sprint-paused:${sprintRunId}:remote-main-merge-not-merged:${mergeFeedback.state}:${mergeFeedback.prNumber || "none"}`,
+          });
 
           return {
             status: "exit",
@@ -885,17 +883,16 @@ export class WatchLoopRunner {
           };
         }
         this.deps.completedSprints.add(`${scopedExecutionContext.project.id}:${scopedExecutionContext.sprint.id}`);
-        transitionSprintRun(
-          this.deps.executionRepository,
+        this.deps.sprintRunLifecycleService.transition({
           sprintRunId,
-          "completed",
-          "sprint_completed",
-          {
+          status: "completed",
+          eventType: "sprint_completed",
+          eventPayload: {
             sprintNumber: scopedExecutionContext.sprintNumber,
             taskCount: subtasks.length,
           },
-          `sprint-completed:${sprintRunId}`
-        );
+          sourceEventKey: `sprint-completed:${sprintRunId}`,
+        });
         // The sprint has finished merging — reap any merge attention items that
         // are still open for this run (e.g. a transient escalation the auto-merge
         // gate raised then superseded). Left behind, they keep the project pinned
@@ -946,14 +943,13 @@ export class WatchLoopRunner {
 
       switch (finalizationTransition.type) {
         case "failed": {
-          transitionSprintRun(
-            this.deps.executionRepository,
+          this.deps.sprintRunLifecycleService.transition({
             sprintRunId,
-            "failed",
-            "sprint_failed",
-            { failedTaskCount: finalizationTransition.failedTaskCount },
-            `sprint-failed:${sprintRunId}`
-          );
+            status: "failed",
+            eventType: "sprint_failed",
+            eventPayload: { failedTaskCount: finalizationTransition.failedTaskCount },
+            sourceEventKey: `sprint-failed:${sprintRunId}`,
+          });
           await this.cleanupTerminalSprintCliWorkspaces({
             projectId: scopedExecutionContext.project.id,
             sprintId: scopedExecutionContext.sprint.id,
@@ -964,29 +960,27 @@ export class WatchLoopRunner {
           break;
         }
         case "paused_awaiting_merge": {
-          transitionSprintRun(
-            this.deps.executionRepository,
+          this.deps.sprintRunLifecycleService.transition({
             sprintRunId,
-            "paused",
-            "sprint_paused",
-            {
+            status: "paused",
+            eventType: "sprint_paused",
+            eventPayload: {
               reason: "awaiting_merge",
               awaitingMergeCount: finalizationTransition.awaitingMergeCount,
             },
-            `sprint-paused:${sprintRunId}:awaiting-merge`
-          );
+            sourceEventKey: `sprint-paused:${sprintRunId}:awaiting-merge`,
+          });
           report += await this.deps.renderInstruction("cleanupDeferred", {}, repoPath);
           break;
         }
         case "cancelled_empty": {
-          transitionSprintRun(
-            this.deps.executionRepository,
+          this.deps.sprintRunLifecycleService.transition({
             sprintRunId,
-            "cancelled",
-            "sprint_cancelled",
-            { reason: "empty" },
-            `sprint-cancelled:${sprintRunId}:empty`
-          );
+            status: "cancelled",
+            eventType: "sprint_cancelled",
+            eventPayload: { reason: "empty" },
+            sourceEventKey: `sprint-cancelled:${sprintRunId}:empty`,
+          });
           await this.cleanupTerminalSprintCliWorkspaces({
             projectId: scopedExecutionContext.project.id,
             sprintId: scopedExecutionContext.sprint.id,
@@ -997,14 +991,13 @@ export class WatchLoopRunner {
           break;
         }
         case "paused_manual_attention": {
-          transitionSprintRun(
-            this.deps.executionRepository,
+          this.deps.sprintRunLifecycleService.transition({
             sprintRunId,
-            "paused",
-            "sprint_paused",
-            { reason: "manual_attention" },
-            `sprint-paused:${sprintRunId}:manual-attention`
-          );
+            status: "paused",
+            eventType: "sprint_paused",
+            eventPayload: { reason: "manual_attention" },
+            sourceEventKey: `sprint-paused:${sprintRunId}:manual-attention`,
+          });
           this.deps.projectAttentionService.openItems([buildTaskAttentionPayload({
             projectId: scopedExecutionContext.project.id,
             sprintId: scopedExecutionContext.sprint.id,

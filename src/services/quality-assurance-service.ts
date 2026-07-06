@@ -49,6 +49,7 @@ import { resolveRunningQaRunRecoveryDecision } from "../domain/qa-review/qa-revi
 import { clearMergeProjectionForRerun, MERGE_PROJECTION_RESET } from "../domain/sprint/task-reset-state.js";
 import { buildQaReviewRequests, resolveTaskTriggerType, type BuiltQaReviewRequest } from "../domain/qa-review/qa-review-request-builder.js";
 import { buildSprintQaSnapshot, evaluateSprintQaReviewCycleDecision, shouldRunSprintQaReview } from "../domain/qa-review/sprint-qa-snapshot.js";
+import type { SprintRunLifecycleService } from "./sprint-run-lifecycle-service.js";
 
 type CliQaProvider = Exclude<ProviderId, "jules">;
 
@@ -88,6 +89,7 @@ interface QualityAssuranceServiceDependencies {
   memoryService?: MemoryService;
   structuredAgentRequestService?: StructuredAgentRequestService;
   dockerService?: Pick<{ listContainers: () => Promise<DockerContainer[]> }, "listContainers">;
+  sprintRunLifecycleService?: Pick<SprintRunLifecycleService, "updateRun">;
 }
 
 export class QualityAssuranceService {
@@ -1137,9 +1139,11 @@ export class QualityAssuranceService {
     }
 
     const now = new Date().toISOString();
-    executionRepository.updateSprintRun(sprintRunId, {
-      lastHeartbeatAt: now,
-    });
+    if (this.deps.sprintRunLifecycleService) {
+      this.deps.sprintRunLifecycleService.updateRun(sprintRunId, {
+        lastHeartbeatAt: now,
+      });
+    }
   }
 
   private buildReviewPrompt(args: {

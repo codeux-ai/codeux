@@ -70,6 +70,7 @@ export function createDashboardDependencies(
     sprintOrchestrator,
     julesApi,
     activeDispatchRegistry,
+    sprintRunLifecycleService: coreDeps.sprintRunLifecycleService,
     logger: logger.child({ component: "execution-control-service" }),
   });
   const executionInvocationControlService = new ExecutionInvocationControlService({
@@ -245,7 +246,7 @@ export function createDashboardDependencies(
         return { sprintRunId: existing.id, created: false };
       }
 
-      const created = executionRepository.createSprintRun({
+      const created = coreDeps.sprintRunLifecycleService.createRun({
         projectId,
         sprintId,
         triggerType: "dashboard",
@@ -253,8 +254,7 @@ export function createDashboardDependencies(
         executorMode: "mixed",
         status: "running",
       });
-      executionRepository.updateSprintRun(created.id, {
-        status: "running",
+      coreDeps.sprintRunLifecycleService.markRunning(created.id, {
         startedAt: new Date().toISOString(),
         lastHeartbeatAt: new Date().toISOString(),
       });
