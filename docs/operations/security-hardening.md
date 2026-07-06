@@ -37,6 +37,13 @@ While Code UX trusts the developer and any connected systems, several specific p
 - **Preview Frame Compatibility:** Preview-host traffic is treated as local trusted application content rather than dashboard chrome. The dashboard does not stamp its frame/permissions hardening headers onto preview-host responses, and proxied preview HTML has upstream CSP and `X-Frame-Options` stripped so the in-app iframe remains loadable.
 - **Preview CORS Compatibility:** Preview-host traffic answers CORS preflights and overrides upstream `Access-Control-*` headers at the proxy boundary. The dashboard API origin keeps its CSRF guard; only preview-host origins get permissive local-app CORS behavior.
 
+### Electron Desktop Shell
+- **Sandboxed Renderer:** The desktop BrowserWindow runs with context isolation, renderer sandboxing, and Node integration disabled. The isolated preload exposes only the directory picker, zoom, and window-control IPC bridge required by the dashboard.
+- **Internal Navigation Allowlist:** Electron allows internal rendering only for the resolved dashboard origin and canonical same-port preview hosts in the form `preview-<session>.localhost:<dashboardPort>`. All other renderer navigations are denied.
+- **External Link Handling:** Non-internal `http`, `https`, and `mailto` targets are opened with the operating system through `shell.openExternal` after scheme validation. Unsafe schemes such as `file:`, `javascript:`, and `data:` are blocked instead of being rendered in the desktop shell.
+- **Permission Denial:** Electron permission requests from dashboard and preview pages are denied by default, including camera, microphone, geolocation, notifications, and media prompts. Preview origins currently have no permission exception.
+- **IPC Input Validation:** Desktop IPC handlers reject invalid renderer input before invoking native APIs. Directory picker defaults must be strings without control characters, and zoom factors must be finite numbers.
+
 ### Redaction
 - **Log and Output Filtering:** Internal API keys, credentials, and sensitive configurations are actively scrubbed and redacted from application logs, debug outputs, and exported execution traces. The shared redactor covers provider API keys, OpenAI-compatible key shapes, GitHub/GitLab/Jira tokens, bearer/basic authorization headers, URL credentials, nested arrays, and error messages/stacks.
 - **MCP Gateway Log Hygiene:** Unauthorized, invalid-header, inactive-session, and session-cap gateway logs omit bearer values, supplied session ids, and supplied agent ids. They retain only correlation-safe metadata needed for operations.
