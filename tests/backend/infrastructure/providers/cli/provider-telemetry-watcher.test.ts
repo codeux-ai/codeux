@@ -4,6 +4,19 @@ import { collectProviderUsageTelemetry } from "../../../../../src/infrastructure
 import { runWithCorrelationId } from "../../../../../src/shared/logging/correlation-id.js";
 import * as fs from "fs/promises";
 
+async function waitForExpect(assertion: () => void, timeoutMs = 200): Promise<void> {
+  const started = Date.now();
+  while (Date.now() - started < timeoutMs) {
+    try {
+      assertion();
+      return;
+    } catch {
+      await new Promise((resolve) => setTimeout(resolve, 5));
+    }
+  }
+  assertion();
+}
+
 vi.mock("../../../../../src/infrastructure/providers/cli/provider-usage.js", () => ({
   collectProviderUsageTelemetry: vi.fn(),
 }));
@@ -488,8 +501,7 @@ describe("ProviderTelemetryWatcher", () => {
     await watcher.stop();
   });
 
-  it("logs repeated read failures with provider and session context without failing the watcher", async () => {
-    vi.useFakeTimers();
+  it("rate-limits repeated read failures with provider and session context without failing the watcher", async () => {
     const controller = new AbortController();
     const logger = { warn: vi.fn() };
     const opts = {
@@ -509,6 +521,8 @@ describe("ProviderTelemetryWatcher", () => {
       nativeSessionId: "native-1",
       sessionId: "sess-1",
       antigravityLogPath: null,
+      initialPollDelayMs: 1,
+      pollIntervalMs: 1,
       readClaudeSessionJsonl: vi.fn(),
       readCodexLatestSessionJson: vi.fn().mockRejectedValue(new Error("File read error apiKey=super-secret")),
       readQwenLogData: vi.fn(),
@@ -524,9 +538,11 @@ describe("ProviderTelemetryWatcher", () => {
       return created;
     });
 
-    await vi.advanceTimersByTimeAsync(1000 + 9 * 1500);
+    await waitForExpect(() => expect(opts.readCodexLatestSessionJson).toHaveBeenCalledTimes(3));
+    controller.abort();
+    await watcher.stop();
 
-    expect(opts.readCodexLatestSessionJson).toHaveBeenCalledTimes(10);
+    expect(opts.readCodexLatestSessionJson).toHaveBeenCalledTimes(3);
     expect(logger.warn).toHaveBeenCalledWith("Provider telemetry watcher read failed", expect.objectContaining({
       provider: "codex",
       purpose: "task_coding",
@@ -538,12 +554,98 @@ describe("ProviderTelemetryWatcher", () => {
       failureCount: 2,
       error: "File read error apiKey=[REDACTED]",
     }));
-    expect(logger.warn.mock.calls.map((call) => call[1].failureCount)).toEqual([1, 2, 5, 10]);
+    expect(logger.warn.mock.calls.map((call) => call[1].failureCount)).toEqual([1, 2]);
     expect(JSON.stringify(logger.warn.mock.calls)).not.toContain("super-secret");
     expect(opts.onTelemetry).not.toHaveBeenCalled();
+  });
 
+  it("rate-limits repeated metadata failures before full reads run", async () => {
+    const controller = new AbortController();
+    const logger = { warn: vi.fn() };
+    const opts = {
+      provider: "codex" as const,
+      model: "test-model",
+      prompt: "test",
+      cwd: "/cwd",
+      startedMs: 123,
+      workflowSettings: { executionMode: "HOST" as const },
+      signal: controller.signal,
+      logger,
+      getAccumulatedRawStdout: () => "",
+      getAccumulatedStderr: () => "",
+      nativeSessionId: "native-1",
+      sessionId: "sess-1",
+      antigravityLogPath: null,
+      initialPollDelayMs: 1,
+      pollIntervalMs: 1,
+      readClaudeSessionJsonl: vi.fn(),
+      getCodexLatestSessionJsonMetadata: vi.fn().mockRejectedValue(new Error("Metadata unavailable")),
+      readCodexLatestSessionJson: vi.fn().mockResolvedValue("codex transcript"),
+      readQwenLogData: vi.fn(),
+      parseAntigravityConversationId: vi.fn(),
+      readAntigravityTranscript: vi.fn(),
+      resolveAntigravityDatabase: vi.fn(),
+      onTelemetry: vi.fn(),
+    };
+
+    const watcher = new ProviderTelemetryWatcher(opts as any);
+    watcher.start();
+
+    await waitForExpect(() => expect(opts.getCodexLatestSessionJsonMetadata).toHaveBeenCalledTimes(2));
     controller.abort();
     await watcher.stop();
+
+    expect(opts.getCodexLatestSessionJsonMetadata).toHaveBeenCalledTimes(2);
+    expect(opts.readCodexLatestSessionJson).not.toHaveBeenCalled();
+    expect(logger.warn.mock.calls.map((call) => call[1].failureCount)).toEqual([1, 2]);
+    expect(opts.onTelemetry).not.toHaveBeenCalled();
+  });
+
+  it("resets failure backoff and warning counts after a successful read", async () => {
+    const controller = new AbortController();
+    const logger = { warn: vi.fn() };
+    const opts = {
+      provider: "codex" as const,
+      model: "test-model",
+      prompt: "test",
+      cwd: "/cwd",
+      startedMs: 123,
+      workflowSettings: { executionMode: "HOST" as const },
+      signal: controller.signal,
+      logger,
+      getAccumulatedRawStdout: () => "",
+      getAccumulatedStderr: () => "",
+      nativeSessionId: "native-1",
+      sessionId: "sess-1",
+      antigravityLogPath: null,
+      initialPollDelayMs: 1,
+      pollIntervalMs: 1,
+      readClaudeSessionJsonl: vi.fn(),
+      getCodexLatestSessionJsonMetadata: vi.fn()
+        .mockResolvedValueOnce("rollout.jsonl:12:100")
+        .mockResolvedValueOnce("rollout.jsonl:24:200")
+        .mockResolvedValue("rollout.jsonl:36:300"),
+      readCodexLatestSessionJson: vi.fn()
+        .mockRejectedValueOnce(new Error("First read failed"))
+        .mockResolvedValueOnce("codex transcript")
+        .mockRejectedValueOnce(new Error("Second read failed")),
+      readQwenLogData: vi.fn(),
+      parseAntigravityConversationId: vi.fn(),
+      readAntigravityTranscript: vi.fn(),
+      resolveAntigravityDatabase: vi.fn(),
+      onTelemetry: vi.fn(),
+    };
+
+    const watcher = new ProviderTelemetryWatcher(opts as any);
+    watcher.start();
+
+    await waitForExpect(() => expect(opts.readCodexLatestSessionJson).toHaveBeenCalledTimes(3));
+    controller.abort();
+    await watcher.stop();
+
+    expect(opts.readCodexLatestSessionJson).toHaveBeenCalledTimes(3);
+    expect(opts.onTelemetry).toHaveBeenCalledTimes(1);
+    expect(logger.warn.mock.calls.map((call) => call[1].failureCount)).toEqual([1, 1]);
   });
 
   it("cleans up an Antigravity watcher temp db path once after an aborted error path", async () => {
