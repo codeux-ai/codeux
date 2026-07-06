@@ -352,7 +352,9 @@ QA merge-gate notes:
   - `executionMode` (`HOST|DOCKER`)
 - Docker runtime config:
   - `containerImage`
-  - `containerSetupScriptPath` (optional; when set to a relative path, runtime checks both sprint repo root and current server working directory)
+  - `containerSetupScriptPath` (optional; saved as a string and not required to exist when settings are saved)
+    - the dashboard picker is a convenience for selecting local absolute paths from allowed host roots
+    - manually entered relative paths remain supported; Docker runtime resolves them later against the sprint repo root and current server working directory
     - if empty, Code UX first seeds missing bundled defaults into `~/.code-ux`, then falls back to `.code-ux/container/setup.sh` in repo root, then home directory, then the bundled Code UX default script
   - `containerCacheSetupScriptImage` (default `true`)
     - when enabled, Docker runtime builds and reuses a derived image keyed by the base image plus setup script contents
