@@ -171,6 +171,27 @@ describe("dashboard-realtime-client", () => {
     unsubscribe();
   });
 
+  it("preserves snapshot_required reasons for missed replay windows", async () => {
+    const { subscribeToDashboardRealtime } = await import("../../../dashboard/src/lib/realtime/dashboard-realtime-client.js");
+    const listener = vi.fn();
+    const unsubscribe = subscribeToDashboardRealtime(["project:p1"], listener);
+
+    const socket = MockWebSocket.instances[0];
+    socket?.emit("open");
+
+    socket?.emit("message", {
+      type: "snapshot_required",
+      reason: "replay_window_exceeded",
+    });
+
+    expect(listener).toHaveBeenCalledWith({
+      type: "snapshot_required",
+      reason: "replay_window_exceeded",
+    });
+
+    unsubscribe();
+  });
+
   it("does not suppress event or subscribed messages", async () => {
     const { subscribeToDashboardRealtime } = await import("../../../dashboard/src/lib/realtime/dashboard-realtime-client.js");
     const listener = vi.fn();

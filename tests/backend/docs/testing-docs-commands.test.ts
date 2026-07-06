@@ -93,7 +93,10 @@ describe("testing and operations documentation", () => {
     expectContainsAll(testingGuide, [
       "Security Audit",
       "pnpm run audit",
+      "pnpm run quality:guardrails",
       "global coverage threshold",
+      "coverage.include",
+      "src/**/*.ts",
       "lines: 77.4",
       "functions: 71.5",
       "branches: 66.1",

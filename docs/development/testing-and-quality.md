@@ -43,6 +43,16 @@ pnpm run test:coverage
 pnpm run test:backend:coverage
 ```
 
+- Run focused persistence repository coverage after changing schema migrations,
+  SQLite storage lifecycle, or scoped settings resolution
+```bash
+pnpm run test:backend -- tests/backend/repositories/db/app-db-schema.test.ts tests/backend/repositories/app-db-storage.test.ts tests/backend/repositories/settings-repository.test.ts
+pnpm run test:backend:coverage
+pnpm run lint
+```
+
+Persistence migrations must be replay-safe: startup can execute `runMigrations()` repeatedly against an existing database without duplicating indexes, dropping migrated columns/tables, or damaging legacy rows. Tests for these paths should use `:memory:` databases or temporary homes, seed legacy table/payload shapes behaviorally, and close all SQLite handles before removing temporary paths.
+
 - Run the local fast CI mirror (strict TS validation plus tests)
 ```bash
 pnpm run ci
@@ -51,7 +61,12 @@ pnpm run ci
 `pnpm run ci` starts with `pnpm run quality:guardrails`, then runs audit, lint, backend coverage, dashboard tests, and build. Run `pnpm run quality:guardrails` directly after changes that affect shared implementation structure, large modules, duplicate logic, dependency factory wiring, realtime snapshot persistence, optimistic task insertion, or the guardrail script itself. Treat blocking guardrail output as CI-equivalent; advisory oversized-file and broad-`any` reports identify cleanup targets but do not fail the command.
 
 GitHub Actions runs the same signals as separate jobs so a vulnerability finding does not obscure compile, test, or build failures. The `Security Audit` job runs `pnpm run audit` independently, while `Typecheck & Lint`, `Backend Tests & Coverage`, `Dashboard Tests`, and `Build` run the repository quality, TypeScript, Vitest, and bundle checks on Node 22 with pnpm 10.33.0. Workflow health tests under `tests/backend/ci/workflow-health.test.ts` assert this split, the pinned `pnpm/action-setup` and `actions/setup-node` versions, frozen `pnpm install --frozen-lockfile --ignore-scripts` installs, concurrency cancellation, and cache keys that include runner OS, Node 22, pnpm 10.33.0, and dependency/config hash inputs.
-The quality guardrail script also audits `vitest.config.ts` directly. It fails if any global coverage threshold drops below the locked floors (`lines: 77.4`, `functions: 71.5`, `branches: 66.1`, `statements: 76.0`) or if the `src/server/activity-cache-service.ts` line threshold is missing or below 80%. This check is file-based and deterministic; it does not run Vitest coverage.
+The quality guardrail script also audits `vitest.config.ts` directly. It fails if `coverage.include` stops observing `src/**/*.ts`, if any global coverage threshold drops below the locked floors (`lines: 77.4`, `functions: 71.5`, `branches: 66.1`, `statements: 76.0`), if the `src/server/activity-cache-service.ts` line threshold is missing, malformed, below 80%, or if that file is excluded from coverage observability. This check is file-based and deterministic; it does not run Vitest coverage internally. Guardrail failures name the exact configured value, required minimum, and remediation command. After intentionally raising or restoring thresholds, run:
+
+```bash
+pnpm run quality:guardrails
+pnpm run test:backend:coverage
+```
 
 - Run Playwright E2E browser tests
 ```bash
@@ -205,12 +220,21 @@ pnpm run typecheck:dashboard
 - Status helpers
 - UI tests that only need DOM events and markup assertions should use `@vitest-environment happy-dom` to reduce environment startup cost
 - Dashboard accessibility and design-system regression tests live under `tests/dashboard/accessibility/`. These tests should assert specific keyboard behavior, accessible names, live-region roles, responsive labels/wrapping, overflow boundaries, and reduced-motion fallbacks without snapshotting full pages or requiring a running backend.
+- Dashboard quality regression tests should cover user-facing contracts with role, name, text, and live-region assertions. For accessibility-sensitive surfaces, include landmark/dialog names, button accessible names, focus restoration after Escape/cancel/dismiss flows, visible `status`/`alert` regions, and reduced-motion behavior that preserves static state without animation-only feedback.
+- Destructive dashboard actions must have tests for the full confirmation lifecycle: opening the named dialog, Escape and cancel paths, pending or busy state, final confirmation, and focus restoration to the trigger or a visible fallback. Prefer exercising `useConfirmDialog` through real settings/task actions, with direct `ConfirmDialog` coverage for shared pending-state behavior.
+- Realtime and cached dashboard hooks should have deterministic invalidation tests. Matching websocket/custom events should refresh or replace state, unrelated events should not refetch, concurrent silent refreshes should dedupe, and stale completions should not overwrite newer data.
+- Loading, error, and empty states should be asserted through visible copy and accessible roles such as `status`, `alert`, `log`, and named `region`/`dialog` containers. Avoid class-name selectors except where motion classes or animation suppression are the behavior under test.
 - Page-shell tests should focus on page-level state and mock expensive visual children instead of importing full chart/editor stacks
 - Live page regression coverage should explicitly assert sidebar composition (`Invocation Feed`, `Runtime Timeline`, `Git / CI / PR`, `Attention Queue`, `Execution Runtime`) and order, while asserting removed cards (`Latest Activity`, `Protocol`, `Live Connections`) stay absent from the default Live sidebar.
 - Live sidebar Git CI coverage should include at least one active CI run and assert both the status text (for example `IN_PROGRESS`) and an active indicator query (`.animate-spin`) so CI-state rendering regressions are detected quickly.
 
 - Interaction behavior tests should verify pointer cursors, focus management, overlay dismissibility, and reduced-motion states for animated components.
 - Flow-specific tests (like destructive actions) must assert that confirmation dialogs appear and that side-effect actions (like "Reset downstream tasks") are triggered correctly based on user selection.
+
+Focused dashboard quality lane:
+```bash
+pnpm run test:dashboard -- tests/dashboard/accessibility/dashboard-quality-regressions.test.tsx tests/dashboard/components/ui/ActionFeedbackRegion.test.tsx tests/dashboard/v2/settings-danger-panel.test.tsx tests/dashboard/v2/settings-page-state.test.tsx tests/dashboard/v2/runtime-event-feed.test.tsx tests/dashboard/v2/use-project-effective-settings.test.tsx tests/dashboard/hooks/use-realtime-resource.test.tsx dashboard/src/v2/components/__tests__/NotificationPanel.test.tsx dashboard/src/v2/lib/__tests__/motion/interaction-tokens.test.tsx
+```
 
 
 ## Quality Expectations
@@ -224,7 +248,7 @@ pnpm run typecheck:dashboard
 ## Change-Specific Validation
 
 - Quality guardrail changes: run `pnpm run quality:guardrails`, the focused guardrail tests under `tests/backend/scripts/quality-guardrails.test.ts`, `pnpm run lint`, and `pnpm run build` if package scripts or shared TypeScript imports changed.
-- Coverage threshold changes: run `pnpm run quality:guardrails`, `pnpm run test:backend -- tests/backend/scripts/quality-guardrails.test.ts`, `pnpm run lint`, and the relevant coverage command (`pnpm run test:coverage` or `pnpm run test:backend:coverage`) before proposing an increase. Never lower the global threshold floors or the `src/server/activity-cache-service.ts` 80% line gate.
+- Coverage threshold changes: run `pnpm run quality:guardrails`, `pnpm run test:backend -- tests/backend/scripts/quality-guardrails.test.ts tests/backend/docs/testing-docs-commands.test.ts`, `pnpm run lint`, and the relevant coverage command (`pnpm run test:coverage` or `pnpm run test:backend:coverage`) before proposing an increase. Never lower the global threshold floors, remove `coverage.include: ["src/**/*.ts"]`, exclude `src/server/activity-cache-service.ts`, or lower the activity-cache-service 80% line gate.
 - Execution snapshot or Live runtime performance changes: run focused backend repository/service tests for the changed query or websocket path, focused dashboard hook/view-model tests for stabilization behavior, `pnpm run quality:guardrails`, `pnpm run lint`, and `pnpm run build`.
 - Backend-only behavior changes: run the narrowest relevant backend tests first, then `pnpm run test:backend`, `pnpm run lint`, and `pnpm run build` when contracts, repositories, scripts, or app startup paths changed.
 - Dashboard-only behavior changes: run the narrowest relevant dashboard tests first, then `pnpm run test:dashboard`, `pnpm run typecheck:dashboard`, and `pnpm run build` for route-level, resource, accessibility, or user-facing changes.
@@ -239,6 +263,10 @@ pnpm run test:backend -- tests/backend/repositories/sqlite-connection.test.ts te
 Tests are expected to pass on Windows, macOS, and Linux. Keep fixtures and assertions portable:
 
 - Vitest pins deterministic runtime defaults before tests run: `TZ=UTC`, `LANG=C.UTF-8`, `LC_ALL=C.UTF-8`, `VITEST_IN_MEMORY_DB=true`, `LOG_LEVEL=error`, and `CODEUX_FORCE_LOG_LEVEL=error`. Do not rely on the host timezone, locale, or persisted dashboard log settings in assertions.
+- Backend determinism regressions are covered by focused tests for runtime environment defaults, isolated HOME/USERPROFILE state, SQLite WAL/SHM cleanup, timer-controlled polling, subprocess boundaries, Docker command stubbing, and local Git fixture cleanup. When changing these areas, start with:
+```bash
+pnpm run test:backend -- tests/backend/repositories/sqlite-connection.test.ts tests/backend/shared/polling/wait-until.test.ts tests/backend/shared/subprocess/command-runner.test.ts tests/backend/infrastructure/local-git-origin.test.ts tests/backend/infrastructure/providers/cli/docker-runner.test.ts
+```
 - Use Node-powered subprocess fixtures instead of shell-specific commands such as `sh`, `sleep`, or POSIX-only `echo` behavior.
 - Normalize path separators in assertions when the app behavior is not explicitly testing native path rendering.
 - Normalize Git working-tree text fixtures for CRLF when assertions only care about logical file contents.
@@ -246,6 +274,8 @@ Tests are expected to pass on Windows, macOS, and Linux. Keep fixtures and asser
 - Pin date, time, and number formatting to an explicit locale and time zone for UI text that is asserted in tests.
 - Fake timers are not enabled globally. Tests that call `vi.useFakeTimers()` must call `vi.useRealTimers()` during cleanup; the shared setup restores leaked fake timers at test-file boundaries and fails loudly so the next test cannot inherit a mocked clock.
 - Close SQLite databases before cleanup when possible. Windows can briefly hold SQLite sidecar files open during teardown, so the Vitest setup tolerates transient temp-directory `EBUSY` and `EPERM` removal errors without weakening application lifecycle cleanup.
+- File-backed SQLite tests should use `tests/backend/repositories/sqlite-cleanup-test-helper.ts` for temp homes. Use `withSqliteTempHome` when a test must point HOME/USERPROFILE and XDG paths at a disposable SQLite fixture, and use `removeSqliteTempHome` plus `expectSqliteSidecarsRemoved` for manual open/close cycles.
+- Tests around provider CLIs, Docker, and remote Git must stub the command boundary. Assert generated command arguments or local config parsing instead of invoking provider binaries, Docker daemons, network remotes, or developer credentials.
 - When PowerShell execution policy blocks package-manager scripts, run commands through `pnpm.cmd` on Windows.
 
 ## Safe Refactor Pattern

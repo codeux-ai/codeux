@@ -560,6 +560,7 @@ describe("ProviderTelemetryWatcher", () => {
   });
 
   it("rate-limits repeated metadata failures before full reads run", async () => {
+    vi.useFakeTimers();
     const controller = new AbortController();
     const logger = { warn: vi.fn() };
     const opts = {
@@ -591,7 +592,9 @@ describe("ProviderTelemetryWatcher", () => {
     const watcher = new ProviderTelemetryWatcher(opts as any);
     watcher.start();
 
-    await waitForExpect(() => expect(opts.getCodexLatestSessionJsonMetadata).toHaveBeenCalledTimes(2));
+    await vi.advanceTimersByTimeAsync(3);
+
+    expect(opts.getCodexLatestSessionJsonMetadata).toHaveBeenCalledTimes(2);
     controller.abort();
     await watcher.stop();
 
@@ -602,6 +605,7 @@ describe("ProviderTelemetryWatcher", () => {
   });
 
   it("resets failure backoff and warning counts after a successful read", async () => {
+    vi.useFakeTimers();
     const controller = new AbortController();
     const logger = { warn: vi.fn() };
     const opts = {
@@ -639,7 +643,9 @@ describe("ProviderTelemetryWatcher", () => {
     const watcher = new ProviderTelemetryWatcher(opts as any);
     watcher.start();
 
-    await waitForExpect(() => expect(opts.readCodexLatestSessionJson).toHaveBeenCalledTimes(3));
+    await vi.advanceTimersByTimeAsync(4);
+
+    expect(opts.readCodexLatestSessionJson).toHaveBeenCalledTimes(3);
     controller.abort();
     await watcher.stop();
 
