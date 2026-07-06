@@ -1,12 +1,12 @@
 # Connecting MCP clients
 
-Besides its dashboard, Code UX is also a Model Context Protocol (MCP) server. Any MCP-compatible client can connect to it and call its tools — so you can drive projects and sprints from the Gemini CLI, Codex, Claude Code, or your own client. This page shows the canonical setup for the clients we test against, and how to use the **MCP HTTPS worker gateway** for remote workers.
+Besides its dashboard, Code UX is also a Model Context Protocol (MCP) server. Any MCP-compatible client can connect to it and call its tools — so you can drive projects and sprints from the Gemini CLI, Codex, Claude Code, or your own client. This page shows the canonical setup for the clients we test against, and how to use the **MCP HTTPS transport** for remote workers.
 
 ## How the connection works
 
 By default, Code UX speaks MCP over **stdio**: the client launches the `codeux` process and exchanges JSON-RPC messages on its stdin/stdout. The server detects stdio mode automatically when stdin is not a TTY.
 
-Code UX also runs an **MCP HTTPS worker gateway** (enabled by default; disable with `--no-mcp-https`). It listens on its own host/port/path — configurable via `--mcp-https-host`, `--mcp-https-port`, and `--mcp-https-path` (default path `/mcp`) — and is used by remote workers and clients that prefer an HTTP transport. On a non-loopback host it requires a bearer token (`--mcp-https-auth-token` or `MCP_HTTPS_AUTH_TOKEN`).
+Code UX also runs an **MCP HTTPS transport** (enabled by default; disable with `--no-mcp-https`). It listens on its own host/port/path — configurable via `--mcp-https-host`, `--mcp-https-port`, and `--mcp-https-path` (default path `/mcp`) — and is used by remote workers and clients that prefer an HTTP transport. On a non-loopback host it requires a bearer token (`--mcp-https-auth-token` or `MCP_HTTPS_AUTH_TOKEN`).
 
 > The dashboard server (port `4444` by default) is **separate** from the MCP HTTPS gateway. The dashboard hosts the UI and REST API; the gateway hosts JSON-RPC. They run as two distinct listeners.
 
@@ -122,9 +122,9 @@ domain**, plus `search_knowledge`:
 For full schemas and `action` enums, see [Developer → MCP tools](../developer/mcp-tools.md). For the
 per-action payloads, see [Developer → Management actions](../developer/management-actions.md).
 
-## Remote MCP HTTP gateway
+## Remote MCP HTTP transport
 
-If you want external worker hosts to connect to Code UX over the network, enable the gateway:
+If you want external worker hosts to connect to Code UX over the network, use the MCP HTTPS transport:
 
 ```bash
 codeux \

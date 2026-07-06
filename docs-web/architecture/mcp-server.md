@@ -30,7 +30,7 @@ Source: `src/app/lifecycle/mcp-lifecycle-service.ts:92-106`.
 
 ### Streamable HTTP
 
-By default (disable with `--no-mcp-https` or `MCP_HTTPS_ENABLED=false`), Code UX also binds an HTTP listener using `StreamableHTTPServerTransport` for the MCP HTTPS worker gateway.
+By default (disable with `--no-mcp-https` or `MCP_HTTPS_ENABLED=false`), Code UX also binds an HTTP listener using `StreamableHTTPServerTransport` for the MCP HTTPS transport.
 
 | Default | Value |
 | --- | --- |
