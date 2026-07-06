@@ -581,7 +581,7 @@ export class SprintPreviewService {
     try {
       response = await fetch(upstreamUrl, {
         method: args.method,
-        headers: this.buildProxyHeaders(args.headers),
+        headers: this.buildProxyHeaders(args.headers, upstreamUrl.origin),
         body: args.body && args.body.length > 0 ? new Uint8Array(args.body) : undefined,
         redirect: "manual",
       });
@@ -599,7 +599,7 @@ export class SprintPreviewService {
     const rewritePrefix = `/api/browser/sessions/${refreshed.id}/proxy`;
     const responseHeaders: Record<string, string> = {};
     response.headers.forEach((value, key) => {
-      if (key.toLowerCase() === "set-cookie") {
+      if (this.shouldStripProxyResponseHeader(key)) {
         return;
       }
       if (key.toLowerCase() === "location") {
@@ -830,7 +830,7 @@ export class SprintPreviewService {
     });
   }
 
-  private buildProxyHeaders(headers: Record<string, string | undefined> = {}): Record<string, string> {
+  private buildProxyHeaders(headers: Record<string, string | undefined> = {}, upstreamOrigin: string): Record<string, string> {
     const next: Record<string, string> = {};
     const stripList = ["authorization", "cookie", "set-cookie", "connection", "upgrade", "transfer-encoding", "host", "content-length", "accept-encoding"];
     for (const [key, value] of Object.entries(headers)) {
@@ -839,9 +839,39 @@ export class SprintPreviewService {
       if (stripList.includes(normalized) || normalized.startsWith("proxy-") || normalized.startsWith("x-code-ux-")) {
         continue;
       }
+      if (normalized === "origin") {
+        next[key] = upstreamOrigin;
+        continue;
+      }
+      if (normalized === "referer") {
+        next[key] = this.normalizeProxyRefererHeader(value, upstreamOrigin);
+        continue;
+      }
+      if (normalized === "sec-fetch-site") {
+        next[key] = "same-origin";
+        continue;
+      }
       next[key] = value;
     }
     return next;
+  }
+
+  private normalizeProxyRefererHeader(value: string, upstreamOrigin: string): string {
+    try {
+      const refererUrl = new URL(value);
+      return `${upstreamOrigin}${refererUrl.pathname}${refererUrl.search}${refererUrl.hash}`;
+    } catch {
+      return upstreamOrigin;
+    }
+  }
+
+  private shouldStripProxyResponseHeader(headerName: string): boolean {
+    return [
+      "set-cookie",
+      "content-security-policy",
+      "content-security-policy-report-only",
+      "x-frame-options",
+    ].includes(headerName.toLowerCase());
   }
 
   private shouldRewriteBody(contentType: string): boolean {
