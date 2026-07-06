@@ -65,5 +65,11 @@ test.describe('Sprint Ledger Responsive Layout E2E Tests', () => {
     await expect(mobileIdLabels.first()).not.toBeVisible();
     await expect(mobileCompletionLabels.first()).not.toBeVisible();
     await expect(mobileControlsLabels.first()).not.toBeVisible();
+
+    // Desktop headers remain visible, so this test distinguishes them from the
+    // responsive row labels above instead of matching by text alone.
+    await expect(page.getByRole('columnheader', { name: /Sprint ID/i })).toBeVisible();
+    await expect(page.getByRole('columnheader', { name: /Completion/i })).toBeVisible();
+    await expect(page.getByRole('columnheader', { name: /Controls/i })).toBeVisible();
   });
 });
