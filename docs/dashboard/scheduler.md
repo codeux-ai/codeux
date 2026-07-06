@@ -40,6 +40,12 @@ Minutely entries are not special-cased at runtime. They are persisted in the sam
 
 Scheduler state is persisted in SQLite in `scheduler_entries`.
 
+Entries support two scheduling modes:
+- **Absolute time**: the default path. `scheduledFor` is required on create, `nextRunAt` is populated from that timestamp, and recurrence expansion keeps using the existing UTC recurrence helpers.
+- **After sprint end**: set `scheduleAnchor = { mode: "after_sprint_end", sourceSprintId, offsetMinutes? }`. The source sprint must exist in the same project. `offsetMinutes` is optional, defaults to `0`, and must be non-negative.
+
+Anchors are persisted inside the existing `target_json` payload instead of a new column. This keeps existing `scheduler_entries` rows compatible and avoids a destructive migration; older absolute entries simply hydrate with no `scheduleAnchor`.
+
 The shared TypeScript contract lives in:
 - `src/contracts/scheduler-types.ts`
 
@@ -53,8 +59,10 @@ The dashboard API routes are:
   - Returns persisted entries and expanded occurrences for the requested window.
 - `POST /api/projects/:projectId/scheduler`
   - Creates a scheduler entry.
+  - Absolute entries use `scheduledFor`; anchored entries use `scheduleAnchor`.
 - `PATCH /api/scheduler/:entryId`
   - Updates status, timing, recurrence, or target payload.
+  - Updating `scheduleAnchor` switches an entry to anchored semantics. Setting it to `null` returns the entry to absolute-time semantics with `scheduledFor`.
 - `DELETE /api/scheduler/:entryId`
   - Deletes an entry.
 - `GET /api/projects/:projectId/scheduler/memory-remediation`
@@ -93,3 +101,13 @@ Due entries execute through existing production paths:
 AI memory remediation entries create a `remediation` invocation record even when no cleanup candidates are found; in that case the invocation is completed with a skipped reason instead of dispatching an empty provider request.
 
 After a successful run, the service advances `nextRunAt` from the scheduled occurrence time. One-time entries move to `completed`; recurring entries stay `scheduled` until their count or end date/time is exhausted. Failed entries move to `failed` with `lastError` for operator visibility.
+
+Anchored entries are evaluated separately from absolute `nextRunAt` polling:
+- An `after_sprint_end` entry is due only after the source sprint reaches `completed`, `failed`, or `cancelled`.
+- The anchor timestamp is the latest terminal sprint run `finishedAt` when a terminal run exists; otherwise the scheduler falls back to the sprint `endDate`.
+- The optional offset is applied after that terminal timestamp.
+- Anchored entries are one-time entries. Recurrence is rejected for `after_sprint_end` because repeated execution would be ambiguous without a new recurrence anchor model.
+- When the scheduled target is also a sprint, the target sprint cannot be the same sprint used as the source anchor.
+- Project isolation is strict: source sprints from another project are rejected.
+
+The MCP `manage_scheduler` tool accepts the same model. Use `scheduleMode: "after_sprint_end"` or `anchorMode: "after_sprint_end"` with `sourceSprintId`/`anchorSourceSprintId` and optional `offsetMinutes`/`anchorOffsetMinutes`, or pass the nested `scheduleAnchor` object directly. Absolute schedules continue to use `scheduledFor`; `scheduleMode: "absolute"` on update clears an existing anchor.

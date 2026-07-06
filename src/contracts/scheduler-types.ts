@@ -4,6 +4,7 @@ export type ScheduleTargetType = "sprint" | "quicksprint" | "chat" | "memory_rem
 export type ScheduleStatus = "scheduled" | "paused" | "completed" | "failed" | "cancelled";
 export type ScheduleRecurrenceFrequency = "none" | "minutely" | "hourly" | "daily" | "weekly" | "monthly";
 export type ScheduleRecurrenceEndMode = "never" | "after_count" | "on_date";
+export type ScheduleAnchorMode = "after_sprint_end";
 
 export interface ScheduleRecurrenceRule {
   frequency: ScheduleRecurrenceFrequency;
@@ -12,6 +13,14 @@ export interface ScheduleRecurrenceRule {
   count?: number | null;
   until?: string | null;
 }
+
+export interface ScheduleAfterSprintEndAnchor {
+  mode: "after_sprint_end";
+  sourceSprintId: string;
+  offsetMinutes?: number;
+}
+
+export type ScheduleAnchor = ScheduleAfterSprintEndAnchor;
 
 export interface ScheduleSprintTarget {
   sprintId: string;
@@ -45,6 +54,7 @@ export interface SchedulerEntryRecord {
   targetType: ScheduleTargetType;
   status: ScheduleStatus;
   scheduledFor: string;
+  scheduleAnchor?: ScheduleAnchor;
   timezone: string;
   recurrence: ScheduleRecurrenceRule;
   nextRunAt: string | null;
@@ -82,7 +92,8 @@ export interface SchedulerCollectionResponse {
 export interface CreateSchedulerEntryInput {
   title?: string;
   targetType: ScheduleTargetType;
-  scheduledFor: string;
+  scheduledFor?: string;
+  scheduleAnchor?: ScheduleAnchor;
   timezone?: string;
   recurrence?: Partial<ScheduleRecurrenceRule>;
   sprintTarget?: ScheduleSprintTarget;
@@ -96,6 +107,7 @@ export interface UpdateSchedulerEntryInput {
   status?: ScheduleStatus;
   targetType?: ScheduleTargetType;
   scheduledFor?: string;
+  scheduleAnchor?: ScheduleAnchor | null;
   timezone?: string;
   recurrence?: Partial<ScheduleRecurrenceRule>;
   sprintTarget?: ScheduleSprintTarget;

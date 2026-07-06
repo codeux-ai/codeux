@@ -434,6 +434,7 @@ export function createDashboardDependencies(
   const schedulerService = new SchedulerService({
     schedulerRepository: coreDeps.schedulerRepository,
     projectManagementRepository,
+    executionRepository,
     quicksprintService,
     chatThreadRuntimeService,
     executionControlService,

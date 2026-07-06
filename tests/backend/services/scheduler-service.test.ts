@@ -96,10 +96,102 @@ describe("SchedulerService", () => {
     expect(schedulerRepository.markRunSucceeded).toHaveBeenCalledWith("entry-1", "2026-05-18T09:00:00.000Z", null);
   });
 
+  it("runs anchored entries only after the source sprint terminal time plus offset", async () => {
+    const entry = createEntry({
+      targetType: "chat",
+      sprintTarget: undefined,
+      scheduleAnchor: {
+        mode: "after_sprint_end",
+        sourceSprintId: "source-sprint",
+        offsetMinutes: 10,
+      },
+      recurrence: normalizeRecurrenceRule(),
+      nextRunAt: null,
+      chatTarget: { bodyMarkdown: "Start follow-up." },
+    });
+    const repo = {
+      listDueEntries: vi.fn(() => []),
+      listScheduledAnchoredEntries: vi.fn(() => [entry]),
+      getEntry: vi.fn(() => entry),
+      markRunSucceeded: vi.fn(),
+      markRunFailed: vi.fn(),
+    };
+    const projectManagementRepository = {
+      getSprint: vi.fn(() => ({
+        id: "source-sprint",
+        projectId: "project-1",
+        status: "completed",
+        endDate: "2026-05-18T09:00:00.000Z",
+      })),
+    };
+    const chatThreadRuntimeService = {
+      postMessage: vi.fn().mockResolvedValue({ id: "message-1" }),
+    };
+    const service = buildService(repo, { projectManagementRepository, chatThreadRuntimeService });
+
+    await service.runDueEntries(new Date("2026-05-18T09:09:59.000Z"));
+    expect(chatThreadRuntimeService.postMessage).not.toHaveBeenCalled();
+    expect(repo.markRunSucceeded).not.toHaveBeenCalled();
+
+    await service.runDueEntries(new Date("2026-05-18T09:10:00.000Z"));
+
+    expect(chatThreadRuntimeService.postMessage).toHaveBeenCalledWith("project-1", expect.objectContaining({
+      bodyMarkdown: "Start follow-up.",
+    }));
+    expect(repo.markRunSucceeded).toHaveBeenCalledWith("entry-1", "2026-05-18T09:10:00.000Z", null);
+  });
+
+  it("prefers the latest terminal sprint run finish time for anchored due checks", async () => {
+    const entry = createEntry({
+      targetType: "chat",
+      sprintTarget: undefined,
+      scheduleAnchor: {
+        mode: "after_sprint_end",
+        sourceSprintId: "source-sprint",
+        offsetMinutes: 5,
+      },
+      recurrence: normalizeRecurrenceRule(),
+      nextRunAt: null,
+      chatTarget: { bodyMarkdown: "Start follow-up." },
+    });
+    const repo = {
+      listDueEntries: vi.fn(() => []),
+      listScheduledAnchoredEntries: vi.fn(() => [entry]),
+      getEntry: vi.fn(() => entry),
+      markRunSucceeded: vi.fn(),
+      markRunFailed: vi.fn(),
+    };
+    const projectManagementRepository = {
+      getSprint: vi.fn(() => ({
+        id: "source-sprint",
+        projectId: "project-1",
+        status: "completed",
+        endDate: "2026-05-18T08:00:00.000Z",
+      })),
+    };
+    const executionRepository = {
+      listSprintRuns: vi.fn(() => [
+        { status: "completed", finishedAt: "2026-05-18T09:30:00.000Z" },
+        { status: "failed", finishedAt: "2026-05-18T09:45:00.000Z" },
+      ]),
+    };
+    const chatThreadRuntimeService = {
+      postMessage: vi.fn().mockResolvedValue({ id: "message-1" }),
+    };
+    const service = buildService(repo, { projectManagementRepository, executionRepository, chatThreadRuntimeService });
+
+    await service.runDueEntries(new Date("2026-05-18T09:49:59.000Z"));
+    expect(chatThreadRuntimeService.postMessage).not.toHaveBeenCalled();
+
+    await service.runDueEntries(new Date("2026-05-18T09:50:00.000Z"));
+    expect(repo.markRunSucceeded).toHaveBeenCalledWith("entry-1", "2026-05-18T09:50:00.000Z", null);
+  });
+
   const buildService = (repo: Record<string, unknown>, extra: Partial<Record<string, unknown>> = {}) =>
     new SchedulerService({
       schedulerRepository: repo as any,
       projectManagementRepository: (extra.projectManagementRepository ?? {}) as any,
+      executionRepository: extra.executionRepository as any,
       quicksprintService: (extra.quicksprintService ?? {}) as any,
       chatThreadRuntimeService: (extra.chatThreadRuntimeService ?? {}) as any,
       executionControlService: (extra.executionControlService ?? {}) as any,
@@ -265,6 +357,49 @@ describe("SchedulerService", () => {
     expect(() =>
       service.createEntry("project-1", { targetType: "sprint", sprintTarget: { sprintId: "sprint-1" } } as any),
     ).toThrow(/Only sprints in the selected project/);
+    expect(repo.createEntry).not.toHaveBeenCalled();
+  });
+
+  it("validates after-sprint-end anchors against project ownership and target sprint identity", () => {
+    const projectManagementRepository = {
+      getSprint: vi.fn((sprintId: string) => {
+        if (sprintId === "source-other") {
+          return { id: sprintId, projectId: "other-project", status: "completed" };
+        }
+        return { id: sprintId, projectId: "project-1", status: "idle" };
+      }),
+    };
+    const repo = { createEntry: vi.fn() };
+    const service = buildService(repo, { projectManagementRepository });
+
+    expect(() => service.createEntry("project-1", {
+      targetType: "chat",
+      scheduleAnchor: { mode: "after_sprint_end", sourceSprintId: "source-other" },
+      chatTarget: { bodyMarkdown: "hi" },
+    })).toThrow(/selected project/);
+
+    expect(() => service.createEntry("project-1", {
+      targetType: "sprint",
+      scheduleAnchor: { mode: "after_sprint_end", sourceSprintId: "sprint-1" },
+      sprintTarget: { sprintId: "sprint-1" },
+    })).toThrow(/own completion/);
+
+    expect(repo.createEntry).not.toHaveBeenCalled();
+  });
+
+  it("rejects recurrence on after-sprint-end anchors before persistence", () => {
+    const projectManagementRepository = {
+      getSprint: vi.fn(() => ({ id: "source-sprint", projectId: "project-1", status: "completed" })),
+    };
+    const repo = { createEntry: vi.fn() };
+    const service = buildService(repo, { projectManagementRepository });
+
+    expect(() => service.createEntry("project-1", {
+      targetType: "chat",
+      scheduleAnchor: { mode: "after_sprint_end", sourceSprintId: "source-sprint" },
+      recurrence: { frequency: "daily", interval: 1 },
+      chatTarget: { bodyMarkdown: "hi" },
+    })).toThrow(/do not support recurrence/);
     expect(repo.createEntry).not.toHaveBeenCalled();
   });
 
