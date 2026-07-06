@@ -263,6 +263,7 @@ pnpm run test:backend -- tests/backend/repositories/sqlite-connection.test.ts te
 Tests are expected to pass on Windows, macOS, and Linux. Keep fixtures and assertions portable:
 
 - Vitest pins deterministic runtime defaults before tests run: `TZ=UTC`, `LANG=C.UTF-8`, `LC_ALL=C.UTF-8`, `VITEST_IN_MEMORY_DB=true`, `LOG_LEVEL=error`, and `CODEUX_FORCE_LOG_LEVEL=error`. Do not rely on the host timezone, locale, or persisted dashboard log settings in assertions.
+- Repository-level determinism guardrails live in `tests/backend/scripts/test-determinism-guardrails.test.ts`. They assert the Vitest defaults, isolated HOME/USERPROFILE and XDG helper behavior, explicit fake-timer cleanup, and temp-only filesystem app state for backend tests.
 - Backend determinism regressions are covered by focused tests for runtime environment defaults, isolated HOME/USERPROFILE state, SQLite WAL/SHM cleanup, timer-controlled polling, subprocess boundaries, Docker command stubbing, and local Git fixture cleanup. When changing these areas, start with:
 ```bash
 pnpm run test:backend -- tests/backend/repositories/sqlite-connection.test.ts tests/backend/shared/polling/wait-until.test.ts tests/backend/shared/subprocess/command-runner.test.ts tests/backend/infrastructure/local-git-origin.test.ts tests/backend/infrastructure/providers/cli/docker-runner.test.ts
