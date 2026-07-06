@@ -29,6 +29,7 @@ export const providerLabels: Record<ProviderId, string> = {
   "qwen-code": "Qwen Code",
   opencode: "OpenCode",
   antigravity: "Antigravity",
+  "mockup-cli": "Mockup CLI",
 };
 
 export const PROVIDER_TYPES: ProviderId[] = ["jules", "gemini", "antigravity", "codex", "claude-code", "qwen-code", "opencode"];
@@ -41,6 +42,7 @@ export const providerDescriptions: Record<ProviderId, string> = {
   "qwen-code": "Qwen Code CLI with OAuth, Alibaba Coding Plan, or custom model provider config.",
   opencode: "OpenCode CLI with local auth, provider keys, or OpenAI-compatible endpoints.",
   antigravity: "Antigravity CLI (agy) for Google-powered local container execution.",
+  "mockup-cli": "Internal test-only mock provider.",
 };
 
 export const getProviderWatermark = (providerId: ProviderId): string => (

@@ -13,6 +13,7 @@ const providerLabels: Record<ProviderId, string> = {
   "qwen-code": "Qwen Code",
   opencode: "OpenCode",
   antigravity: "Antigravity",
+  "mockup-cli": "Mockup CLI",
 };
 
 const PROVIDER_TYPES: ProviderId[] = ["jules", "gemini", "antigravity", "codex", "claude-code", "qwen-code", "opencode"];
