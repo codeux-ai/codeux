@@ -77,6 +77,27 @@ describe("NotificationPanel", () => {
     await waitFor(() => {
       expect(screen.getByRole("dialog", { name: "Notifications Panel" })).toHaveAttribute("aria-busy", "false");
     });
+    expect(screen.getByRole("dialog", { name: "Notifications Panel" })).toHaveFocus();
+    expect(screen.getByText("Notifications refreshed.")).toBeInTheDocument();
+  });
+
+  it("renders the empty notification list as a visible status region", () => {
+    render(
+      <NotificationPanel
+        unreadCount={0}
+        notifications={[]}
+        onMarkAllRead={vi.fn()}
+        onMarkRead={vi.fn()}
+        onDismiss={vi.fn()}
+        onRefresh={vi.fn()}
+      />,
+    );
+
+    const panel = screen.getByRole("dialog", { name: "Notifications Panel" });
+    expect(panel).toHaveAttribute("aria-busy", "false");
+    expect(screen.getByRole("list", { name: "Notifications list" })).toHaveAttribute("aria-live", "polite");
+    expect(screen.getByRole("status")).toHaveTextContent("No notifications");
+    expect(screen.getByText("Startup checks are healthy and there is nothing waiting for operator attention.")).toBeInTheDocument();
   });
 
   it("explains why mark-all-read is disabled when there is nothing unread", () => {

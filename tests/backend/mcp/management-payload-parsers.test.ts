@@ -21,6 +21,11 @@ describe("Payload Parsers", () => {
     expect(() => parseRequiredString({}, "foo", "Custom error!")).toThrow("Custom error!");
   });
 
+  it("parseRequiredString treats null and non-string values as validation errors", () => {
+    expect(() => parseRequiredString({ foo: null }, "foo")).toThrow("foo is required");
+    expect(() => parseRequiredString({ foo: 42 }, "foo")).toThrow("foo is required");
+  });
+
   it("parseOptionalString", () => {
     expect(parseOptionalString({ foo: " bar " }, "foo")).toBe("bar");
     expect(parseOptionalString({ foo: "   " }, "foo")).toBeUndefined();
@@ -47,6 +52,12 @@ describe("Payload Parsers", () => {
     expect(parseOptionalBoolean({ foo: false }, "foo")).toBe(false);
     expect(parseOptionalBoolean({ foo: "true" }, "foo")).toBeUndefined();
     expect(parseOptionalBoolean({}, "foo")).toBeUndefined();
+  });
+
+  it("parseOptionalBoolean does not coerce string or numeric booleans", () => {
+    expect(parseOptionalBoolean({ foo: "false" }, "foo")).toBeUndefined();
+    expect(parseOptionalBoolean({ foo: 0 }, "foo")).toBeUndefined();
+    expect(parseOptionalBoolean({ foo: 1 }, "foo")).toBeUndefined();
   });
 
   it("parseOptionalObject", () => {
@@ -78,6 +89,10 @@ describe("Payload Parsers", () => {
       .toThrow("Invalid value for count. Must be a valid integer.");
     expect(() => parseOptionalIntegerStrict({ count: "0" }, "count", { min: 1 }))
       .toThrow("Invalid value for count. Must be at least 1.");
+    expect(() => parseOptionalIntegerStrict({ count: "11" }, "count", { max: 10 }))
+      .toThrow("Invalid value for count. Must be at most 10.");
+    expect(() => parseOptionalIntegerStrict({ count: "" }, "count"))
+      .toThrow("Invalid value for count. Must be a valid integer.");
   });
 
   it("formats validation and runtime error envelopes consistently", () => {

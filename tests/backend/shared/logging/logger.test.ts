@@ -8,7 +8,23 @@ import {
   getCorrelationId,
   runWithCorrelationId,
 } from "../../../../src/shared/logging/correlation-id.js";
-import { createLogger } from "../../../../src/shared/logging/logger.js";
+import { createLogger, type LogPurpose } from "../../../../src/shared/logging/logger.js";
+
+const purposeLabels: Record<LogPurpose, string> = {
+  dashboard: "DASH",
+  general: "GEN",
+  integration: "INT",
+  invocation: "INVK",
+  lifecycle: "LIFE",
+  mcp: "MCP",
+  orchestration: "ORCH",
+  request: "HTTP",
+  runtime: "RUN",
+  settings: "CONF",
+  storage: "DATA",
+  realtime: "LIVE",
+  security: "SEC",
+};
 
 async function readFileEventually(filePath: string, timeoutMs = 500): Promise<string> {
   const startedAt = Date.now();
@@ -89,6 +105,65 @@ describe("createLogger", () => {
     const output = String(stderrSpy.mock.calls[0][0]);
     expect(output).toContain("\u001b[");
     expect(output).toContain("INVK");
+  });
+
+  it("keeps every log purpose mapped to a stable console label", () => {
+    const stderrSpy = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+    const logger = createLogger({ environment: "development", consoleLogLevel: "debug", consoleLogMode: "full" });
+
+    for (const purpose of Object.keys(purposeLabels) as LogPurpose[]) {
+      logger.info(`purpose-${purpose}`, { logPurpose: purpose });
+    }
+
+    expect(stderrSpy).toHaveBeenCalledTimes(Object.keys(purposeLabels).length);
+    for (const [index, purpose] of (Object.keys(purposeLabels) as LogPurpose[]).entries()) {
+      const output = String(stderrSpy.mock.calls[index]?.[0] || "");
+      expect(output).toContain(purposeLabels[purpose]);
+      expect(output).toContain(`purpose-${purpose}`);
+    }
+  });
+
+  it("lets explicit logPurpose take precedence over message and component inference", () => {
+    const stderrSpy = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+    const logger = createLogger({
+      environment: "production",
+      level: "debug",
+      consoleLogMode: "full",
+      bindings: { component: "provider websocket dashboard" },
+    });
+
+    logger.info("provider websocket request completed", { logPurpose: "storage" });
+
+    const payload = JSON.parse(String(stderrSpy.mock.calls[0][0]));
+    expect(payload.purpose).toBe("storage");
+  });
+
+  it("infers purpose fallbacks from stable message and metadata conventions", () => {
+    const stderrSpy = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+    const logger = createLogger({ environment: "production", level: "debug", consoleLogMode: "full" });
+
+    logger.info("HTTP request completed", { method: "GET", path: "/api/projects", statusCode: 200 });
+    logger.info("Provider invocation started");
+    logger.info("MCP request handled");
+    logger.info("Dashboard realtime websocket broadcast failed");
+    logger.info("Settings saved");
+    logger.info("Sprint orchestration started");
+    logger.info("Runtime startup complete");
+    logger.info("Dashboard server started");
+    logger.info("Unclassified background note");
+
+    const purposes = stderrSpy.mock.calls.map((call) => JSON.parse(String(call[0])).purpose);
+    expect(purposes).toEqual([
+      "request",
+      "invocation",
+      "mcp",
+      "realtime",
+      "settings",
+      "orchestration",
+      "lifecycle",
+      "dashboard",
+      "general",
+    ]);
   });
 
   it("logs JSON output with correlation id in production", () => {
@@ -222,6 +297,12 @@ describe("createLogger", () => {
     expect(payload.metadata.apiKey).toBe("[REDACTED]");
     expect(payload.metadata.nested.token).toBe("[REDACTED]");
     expect(payload.metadata.nested.public).toBe("ok");
+    expect(payload.metadata).toMatchObject({
+      apiKey: "[REDACTED]",
+      nested: {
+        token: "[REDACTED]",
+      },
+    });
 
     // Arrays, nested strings, and Error objects should be redacted.
     expect(payload.metadata.message).toBe("connecting to https://[REDACTED]@example.com");
@@ -234,6 +315,35 @@ describe("createLogger", () => {
     expect(originalMetadata.nested.token).toBe("secret456");
     expect(originalMetadata.message).toBe("connecting to https://user:pass@example.com");
     expect(error.message).toBe("auth failed for Authorization: Bearer token123");
+  });
+
+  it("redacts deeply nested sensitive metadata without weakening non-sensitive fields", () => {
+    const stderrSpy = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+    const logger = createLogger({
+      environment: "production",
+      level: "debug",
+    });
+
+    logger.info("nested metadata", {
+      payload: {
+        headers: {
+          authorization: "Bearer secret-token",
+          accept: "application/json",
+        },
+        attempts: [
+          {
+            password: "super-secret",
+            notes: "OPENAI_API_KEY=sk-test-value and https://user:pass@example.test/path",
+          },
+        ],
+      },
+    });
+
+    const payload = JSON.parse(String(stderrSpy.mock.calls[0][0]));
+    expect(payload.metadata.payload.headers.authorization).toBe("[REDACTED]");
+    expect(payload.metadata.payload.headers.accept).toBe("application/json");
+    expect(payload.metadata.payload.attempts[0].password).toBe("[REDACTED]");
+    expect(payload.metadata.payload.attempts[0].notes).toBe("OPENAI_API_KEY=[REDACTED] and https://[REDACTED]@example.test/path");
   });
 });
 

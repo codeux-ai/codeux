@@ -87,6 +87,8 @@ const minimumGlobalCoverageThresholds = {
 };
 const activityCacheServiceCoveragePath = "src/server/activity-cache-service.ts";
 const minimumActivityCacheServiceLineThreshold = 80;
+const requiredCoverageIncludePattern = "src/**/*.ts";
+const coverageThresholdRemediationCommand = "pnpm run test:backend:coverage";
 const directRealtimePayloadStringifyPattern =
   /JSON\.stringify\s*\(\s*(?:payload|snapshot|event\.payload|options\.payload)\s*(?:[,)]|\s*\))/g;
 const runtimeEventTableReadPattern = /\bFROM\s+(task_run_events|sprint_run_events)\b/gi;
@@ -444,6 +446,131 @@ function parseNumericProperty(properties, propertyName) {
     property,
     value: match ? Number.parseFloat(match[1]) : null,
   };
+}
+
+function parseStringArrayProperty(properties, propertyName) {
+  const property = properties.get(propertyName);
+  if (!property) {
+    return { property, values: null };
+  }
+
+  const value = property.value.trim();
+  if (!value.startsWith("[")) {
+    return { property, values: null };
+  }
+
+  const closeIndex = findMatchingBracket(value, 0);
+  if (closeIndex < 0) {
+    return { property, values: null };
+  }
+
+  const arrayContent = value.slice(1, closeIndex);
+  const values = [];
+  for (const item of splitTopLevelProperties(arrayContent)) {
+    const commentFreeText = stripJavaScriptComments(item.text).trim();
+    if (!commentFreeText) {
+      continue;
+    }
+
+    const match = /^(?:"([^"]*)"|'([^']*)'|`([^`]*)`)$/.exec(commentFreeText);
+    if (!match) {
+      return { property, values: null };
+    }
+
+    values.push(match[1] ?? match[2] ?? match[3]);
+  }
+
+  return { property, values };
+}
+
+function findMatchingBracket(text, openIndex) {
+  const openChar = text[openIndex];
+  const closeChar = openChar === "[" ? "]" : openChar === "(" ? ")" : "}";
+  let depth = 0;
+  let quote = "";
+  let escaped = false;
+  let inLineComment = false;
+  let inBlockComment = false;
+
+  for (let index = openIndex; index < text.length; index += 1) {
+    const current = text[index];
+    const next = text[index + 1] ?? "";
+
+    if (inLineComment) {
+      if (current === "\n" || current === "\r") {
+        inLineComment = false;
+      }
+      continue;
+    }
+
+    if (inBlockComment) {
+      if (current === "*" && next === "/") {
+        inBlockComment = false;
+        index += 1;
+      }
+      continue;
+    }
+
+    if (quote) {
+      if (escaped) {
+        escaped = false;
+      } else if (current === "\\") {
+        escaped = true;
+      } else if (current === quote) {
+        quote = "";
+      }
+      continue;
+    }
+
+    if (current === "\"" || current === "'" || current === "`") {
+      quote = current;
+      continue;
+    }
+
+    if (current === "/" && next === "/") {
+      inLineComment = true;
+      index += 1;
+      continue;
+    }
+
+    if (current === "/" && next === "*") {
+      inBlockComment = true;
+      index += 1;
+      continue;
+    }
+
+    if (current === openChar) {
+      depth += 1;
+    } else if (current === closeChar) {
+      depth -= 1;
+      if (depth === 0) {
+        return index;
+      }
+    }
+  }
+
+  return -1;
+}
+
+function globPatternMatchesPath(pattern, filePath) {
+  if (pattern === filePath) {
+    return true;
+  }
+
+  const escaped = pattern
+    .replace(/[.+^${}()|[\]\\]/g, "\\$&")
+    .replace(/\*\*/g, "\0")
+    .replace(/\*/g, "[^/]*")
+    .replace(/\0/g, ".*");
+  return new RegExp(`^${escaped}$`).test(filePath);
+}
+
+function formatCoverageConfiguredValue(value) {
+  return value === null ? "missing or malformed" : String(value);
+}
+
+function coverageThresholdRemediation(thresholdName, minimum) {
+  return `Restore ${thresholdName} to ${minimum}% or higher in vitest.config.ts and run ${coverageThresholdRemediationCommand}.`;
 }
 
 async function collectProductionFiles() {
@@ -1070,9 +1197,47 @@ export function findCoverageThresholdViolations(source, options = {}) {
   const minimumFileLineThreshold = options.minimumFileLineThreshold ?? minimumActivityCacheServiceLineThreshold;
   const violations = [];
   const coverageBlock = findObjectPropertyBlock(source, "coverage");
+  const coverageProperties = coverageBlock ? parseTopLevelProperties(coverageBlock.content) : new Map();
   const thresholdsBlock = coverageBlock
     ? findObjectPropertyBlock(source, "thresholds", coverageBlock.openIndex)
     : findObjectPropertyBlock(source, "thresholds");
+
+  const { property: includeProperty, values: includeValues } = parseStringArrayProperty(
+    coverageProperties,
+    "include",
+  );
+  if (!includeValues?.includes(requiredCoverageIncludePattern)) {
+    violations.push({
+      path: configPath,
+      line: includeProperty
+        ? lineNumberAt(source, coverageBlock.contentStartIndex + includeProperty.start)
+        : coverageBlock
+          ? lineNumberAt(source, coverageBlock.openIndex)
+          : 1,
+      pattern: "coverage include src TypeScript",
+      match: `coverage.include configured ${
+        includeValues === null ? "missing or malformed" : JSON.stringify(includeValues)
+      }, required ${JSON.stringify(requiredCoverageIncludePattern)}`,
+      remediation: `Keep coverage.include observing ${requiredCoverageIncludePattern} and run ${coverageThresholdRemediationCommand}.`,
+    });
+  }
+
+  const { property: excludeProperty, values: excludeValues } = parseStringArrayProperty(
+    coverageProperties,
+    "exclude",
+  );
+  const activityCacheExclusion = excludeValues?.find((pattern) =>
+    globPatternMatchesPath(pattern, filePath),
+  );
+  if (activityCacheExclusion) {
+    violations.push({
+      path: configPath,
+      line: lineNumberAt(source, coverageBlock.contentStartIndex + (excludeProperty?.start ?? 0)),
+      pattern: "activity-cache-service coverage exclusion",
+      match: `coverage.exclude configured ${JSON.stringify(activityCacheExclusion)}, required not excluded for ${filePath}`,
+      remediation: `Remove the ${filePath} coverage exclusion and run ${coverageThresholdRemediationCommand}.`,
+    });
+  }
 
   if (!thresholdsBlock) {
     violations.push({
@@ -1081,7 +1246,7 @@ export function findCoverageThresholdViolations(source, options = {}) {
       pattern: "missing coverage thresholds",
       match: "coverage.thresholds",
       remediation:
-        "Define test.coverage.thresholds with global minimums and the activity-cache-service line threshold.",
+        `Define test.coverage.thresholds with global minimums and the activity-cache-service line threshold, then run ${coverageThresholdRemediationCommand}.`,
     });
     return violations;
   }
@@ -1098,8 +1263,8 @@ export function findCoverageThresholdViolations(source, options = {}) {
       path: configPath,
       line: property ? lineNumberAt(source, thresholdsBlock.contentStartIndex + property.start) : lineNumberAt(source, thresholdsBlock.openIndex),
       pattern: `coverage threshold ${metric}`,
-      match: value === null ? `${metric}: missing` : `${metric}: ${value}`,
-      remediation: `Keep the global ${metric} coverage threshold at ${minimum}% or higher.`,
+      match: `global ${metric} threshold configured ${formatCoverageConfiguredValue(value)}, required >= ${minimum}`,
+      remediation: coverageThresholdRemediation(`global ${metric} coverage threshold`, minimum),
     });
   }
 
@@ -1109,8 +1274,8 @@ export function findCoverageThresholdViolations(source, options = {}) {
       path: configPath,
       line: lineNumberAt(source, thresholdsBlock.openIndex),
       pattern: "activity-cache-service coverage threshold",
-      match: `${filePath}: missing`,
-      remediation: `Keep a ${minimumFileLineThreshold}% or higher line threshold for ${filePath}.`,
+      match: `${filePath}.lines threshold configured missing, required >= ${minimumFileLineThreshold}`,
+      remediation: coverageThresholdRemediation(`${filePath} line coverage threshold`, minimumFileLineThreshold),
     });
     return violations;
   }
@@ -1121,8 +1286,8 @@ export function findCoverageThresholdViolations(source, options = {}) {
       path: configPath,
       line: lineNumberAt(source, thresholdsBlock.contentStartIndex + fileThreshold.start),
       pattern: "activity-cache-service coverage threshold",
-      match: compactMatch(fileThreshold.text),
-      remediation: `Keep ${filePath} configured as an object with lines at ${minimumFileLineThreshold}% or higher.`,
+      match: `${filePath}.lines threshold configured malformed (${compactMatch(fileThreshold.text)}), required >= ${minimumFileLineThreshold}`,
+      remediation: coverageThresholdRemediation(`${filePath} line coverage threshold`, minimumFileLineThreshold),
     });
     return violations;
   }
@@ -1147,8 +1312,8 @@ export function findCoverageThresholdViolations(source, options = {}) {
           (lineProperty?.start ?? 0),
       ),
       pattern: "activity-cache-service coverage threshold",
-      match: lineValue === null ? `${filePath}.lines: missing` : `${filePath}.lines: ${lineValue}`,
-      remediation: `Keep ${filePath} line coverage at ${minimumFileLineThreshold}% or higher.`,
+      match: `${filePath}.lines threshold configured ${formatCoverageConfiguredValue(lineValue)}, required >= ${minimumFileLineThreshold}`,
+      remediation: coverageThresholdRemediation(`${filePath} line coverage threshold`, minimumFileLineThreshold),
     });
   }
 
