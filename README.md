@@ -304,8 +304,8 @@ Use source builds when developing Code UX itself or when you need to inspect/mod
 
 ### Requirements
 
-- Node.js 22 LTS or newer.
-- pnpm 10.33 or newer.
+- Node.js >=22.
+- pnpm 10.33.0 or newer.
 - Git 2.30 or newer.
 - Docker, recommended for virtual worker execution and required for preview containers.
 - Provider credentials are optional for installation and local startup; configure them later in the dashboard when you are ready to dispatch work.
@@ -355,7 +355,7 @@ For the full local CI equivalent:
 pnpm run ci
 ```
 
-GitHub Actions also runs the high-severity dependency audit after the consolidated CI command:
+GitHub Actions runs the high-severity dependency audit independently alongside the consolidated CI commands:
 
 ```bash
 pnpm run audit
@@ -363,7 +363,7 @@ pnpm run audit
 
 Additional GitHub Actions behavior:
 
-- Playwright E2E runs only on pushes to `main` and pull requests targeting `main`.
+- Playwright E2E runs only on pushes to `main` and pull requests targeting `main`. It starts `node dist/index.js` and waits on the local `/health` liveness probe.
 - The models.dev catalogue workflow runs on pushes to `main` and `dev`. When upstream catalogue data changes, it uses the built-in `GITHUB_TOKEN` to push a `chore/models-catalog-<branch>` update branch and open a PR. The repository or organization must allow GitHub Actions to create pull requests, and the workflow grants `contents: write` plus `pull-requests: write`.
 
 ## Contributing
