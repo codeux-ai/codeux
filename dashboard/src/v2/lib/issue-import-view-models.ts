@@ -56,6 +56,53 @@ export interface IssueImportErrorCopy {
   message: string;
 }
 
+export type IssueImportFilterSummaryValue =
+  | string
+  | number
+  | boolean
+  | ReadonlyArray<string | number | boolean | null | undefined>
+  | null
+  | undefined;
+
+type IssueImportFilterSummaryArray = ReadonlyArray<string | number | boolean | null | undefined>;
+
+export interface IssueImportFilterSummaryInput {
+  id: string;
+  label: string;
+  value: IssueImportFilterSummaryValue;
+  defaultValue?: IssueImportFilterSummaryValue;
+  priority?: number;
+  alwaysShow?: boolean;
+  valueLabel?: string | null;
+  defaultLabel?: string | null;
+}
+
+export interface IssueImportFilterSummaryChip {
+  id: string;
+  label: string;
+  value: string;
+  active: boolean;
+}
+
+export interface IssueImportCompactStateInput {
+  filters?: ReadonlyArray<IssueImportFilterSummaryInput>;
+  selectedCount?: number;
+  visibleCount?: number;
+  totalCount?: number;
+  sortField?: string | null;
+  sortDirection?: string | null;
+  sortFieldOptions?: ReadonlyArray<{ value: string; label: string }>;
+  sortDirectionOptions?: ReadonlyArray<{ value: string; label: string }>;
+}
+
+export interface IssueImportCompactState {
+  chips: IssueImportFilterSummaryChip[];
+  activeFilterCount: number;
+  activeFilterCountLabel: string;
+  sortLabel: string;
+  selectedCountLabel: string;
+}
+
 const PROVIDER_METADATA: Record<IssueImportProvider, IssueImportProviderMetadata> = {
   github: {
     provider: "github",
@@ -105,6 +152,33 @@ const normalizeText = (value: string | null | undefined): string | null => {
   return trimmed ? trimmed : null;
 };
 
+const normalizeSummaryScalar = (value: string | number | boolean | null | undefined): string | null => {
+  if (typeof value === "string") {
+    return normalizeText(value);
+  }
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? String(value) : null;
+  }
+  if (typeof value === "boolean") {
+    return value ? "Yes" : "No";
+  }
+  return null;
+};
+
+const isSummaryArray = (value: IssueImportFilterSummaryValue): value is IssueImportFilterSummaryArray => (
+  Array.isArray(value)
+);
+
+const normalizeSummaryValue = (value: IssueImportFilterSummaryValue): string | null => {
+  if (isSummaryArray(value)) {
+    const normalized = value
+      .map((item) => normalizeSummaryScalar(item))
+      .filter((item): item is string => item !== null);
+    return normalized.length > 0 ? normalized.join(", ") : null;
+  }
+  return normalizeSummaryScalar(value);
+};
+
 const formatDateTime = (value: string | null | undefined): string | null => {
   const normalized = normalizeText(value);
   if (!normalized) {
@@ -138,16 +212,122 @@ const addMetadataRow = (
 };
 
 export const getIssueImportProviderMetadata = (
-  provider: IssueImportProvider,
+  provider: IssueImportProvider | string | null | undefined,
   accentOverride?: Partial<IssueImportProviderAccent>,
 ): IssueImportProviderMetadata => {
-  const metadata = PROVIDER_METADATA[provider];
+  const metadata = provider === "gitlab" || provider === "jira" || provider === "github"
+    ? PROVIDER_METADATA[provider]
+    : PROVIDER_METADATA.github;
   return {
     ...metadata,
     accent: {
       ...metadata.accent,
       ...accentOverride,
     },
+  };
+};
+
+export const getIssueImportActiveFilterCount = (
+  filters: ReadonlyArray<IssueImportFilterSummaryInput>,
+): number => filters.reduce((count, filter) => {
+  const value = normalizeSummaryValue(filter.value);
+  const defaultValue = normalizeSummaryValue(filter.defaultValue);
+  const active = value !== null && value !== defaultValue;
+  return active ? count + 1 : count;
+}, 0);
+
+export const buildIssueImportFilterSummaryChips = (
+  filters: ReadonlyArray<IssueImportFilterSummaryInput>,
+): IssueImportFilterSummaryChip[] => filters
+  .map((filter, index) => {
+    const value = normalizeSummaryValue(filter.value);
+    const defaultValue = normalizeSummaryValue(filter.defaultValue);
+    const active = value !== null && value !== defaultValue;
+    const displayValue = normalizeText(filter.valueLabel ?? undefined)
+      ?? value
+      ?? normalizeText(filter.defaultLabel ?? undefined)
+      ?? defaultValue;
+
+    if (!displayValue || (!active && !filter.alwaysShow)) {
+      return null;
+    }
+
+    return {
+      chip: {
+        id: normalizeText(filter.id) ?? `${filter.label}-${index}`,
+        label: normalizeText(filter.label) ?? "Filter",
+        value: displayValue,
+        active,
+      },
+      index,
+      priority: filter.priority ?? index,
+    };
+  })
+  .filter((entry): entry is { chip: IssueImportFilterSummaryChip; index: number; priority: number } => entry !== null)
+  .sort((left, right) => left.priority - right.priority || left.index - right.index)
+  .map((entry) => entry.chip);
+
+export const getIssueImportActiveFilterCountLabel = (activeFilterCount: number): string => {
+  if (activeFilterCount <= 0) {
+    return "No active filters";
+  }
+  return `${activeFilterCount} active filter${activeFilterCount === 1 ? "" : "s"}`;
+};
+
+export const getIssueImportDefaultSortLabel = (
+  sortField?: string | null,
+  sortDirection?: string | null,
+  sortFieldOptions: ReadonlyArray<{ value: string; label: string }> = [],
+  sortDirectionOptions: ReadonlyArray<{ value: string; label: string }> = [],
+): string => {
+  const normalizedField = normalizeText(sortField ?? undefined);
+  const normalizedDirection = normalizeText(sortDirection ?? undefined);
+  const fieldLabel = sortFieldOptions.find((option) => option.value === normalizedField)?.label
+    ?? normalizedField
+    ?? "Default";
+  const directionLabel = sortDirectionOptions.find((option) => option.value === normalizedDirection)?.label
+    ?? (normalizedDirection === "desc" ? "Newest first" : normalizedDirection === "asc" ? "Oldest first" : null);
+
+  return directionLabel ? `${fieldLabel}, ${directionLabel}` : fieldLabel;
+};
+
+export const getIssueImportSelectedResultCountLabel = (
+  selectedCount: number,
+  visibleCount?: number,
+  totalCount?: number,
+): string => {
+  const selected = Math.max(0, Math.trunc(selectedCount));
+  const visible = typeof visibleCount === "number" ? Math.max(0, Math.trunc(visibleCount)) : null;
+  const total = typeof totalCount === "number" ? Math.max(0, Math.trunc(totalCount)) : null;
+  const issueNoun = selected === 1 ? "issue" : "issues";
+
+  if (visible !== null && total !== null && total !== visible) {
+    return `${selected} selected ${issueNoun} across ${visible} visible of ${total} results.`;
+  }
+  if (visible !== null) {
+    return `${selected} selected ${issueNoun} across ${visible} visible results.`;
+  }
+  return `${selected} selected ${issueNoun}.`;
+};
+
+export const buildIssueImportCompactState = ({
+  filters = [],
+  selectedCount = 0,
+  visibleCount,
+  totalCount,
+  sortField,
+  sortDirection,
+  sortFieldOptions,
+  sortDirectionOptions,
+}: IssueImportCompactStateInput): IssueImportCompactState => {
+  const chips = buildIssueImportFilterSummaryChips(filters);
+  const activeFilterCount = getIssueImportActiveFilterCount(filters);
+  return {
+    chips,
+    activeFilterCount,
+    activeFilterCountLabel: getIssueImportActiveFilterCountLabel(activeFilterCount),
+    sortLabel: getIssueImportDefaultSortLabel(sortField, sortDirection, sortFieldOptions, sortDirectionOptions),
+    selectedCountLabel: getIssueImportSelectedResultCountLabel(selectedCount, visibleCount, totalCount),
   };
 };
 
