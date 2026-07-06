@@ -90,6 +90,7 @@ Root E2E specs should prepare normal app state through `tests/e2e/helpers/prepar
 - Use `completeOnboarding`, `ensureSelectedProject`, `createDraftSprint`, and `createTaskInSprint` for setup instead of hand-writing setup requests in each spec.
 - Use unique fixture keys and generated names from the helper utilities so parallel workers and retries do not collide.
 - Prefer role-based locators, accessible names, landmarks, and stable `data-testid` roots over CSS shape or timing assertions.
+- For live-updating menus or dropdowns, keep helper clicks idempotent: reopen the menu and retry if a located item detaches between visibility and click, while still asserting the accessible action is visible before each attempt.
 - Build paths with Node `os`, `path`, and `fs` APIs so fixtures remain portable on Windows, macOS, and Linux.
 - For credential-free project setup coverage, drive the visible Add Project UI and disable the Project Setup Agent option before submitting so the test does not call provider orchestration, Docker provider startup, worker dispatch, or sprint execution endpoints.
 - Clean up created sprints and tasks with `deleteTask`, `deleteSprint`, or `cleanupSprintFixture` in `afterEach` when a spec mutates persistent app state.
