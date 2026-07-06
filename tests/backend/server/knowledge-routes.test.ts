@@ -23,26 +23,47 @@ afterEach(async () => {
 
 const createKnowledgeApp = (overrides: Record<string, unknown> = {}) => {
   const app = express();
-  const ingestDocument = vi.fn(async (_projectId: string, input: any) => ({
+  const documentRecord = {
     id: "doc-1",
     projectId: "project-1",
-    title: input.title,
-    sourceType: input.sourceType,
-    sourceRef: input.sourceRef ?? null,
-    mimeType: input.mimeType ?? "text/plain",
+    title: "Runbook",
+    sourceType: "paste",
+    sourceRef: null,
+    mimeType: "text/plain",
     byteSize: 12,
     charCount: 12,
     tokenCount: 3,
     summary: "",
     contentHash: "hash",
-    status: "pending",
+    status: "ready",
     embeddingModel: null,
     chunkCount: 0,
     errorMessage: null,
     createdAt: "2026-01-01T00:00:00.000Z",
     updatedAt: "2026-01-01T00:00:00.000Z",
+  };
+  const ingestDocument = vi.fn(async (_projectId: string, input: any) => ({
+    ...documentRecord,
+    title: input.title,
+    sourceType: input.sourceType,
+    sourceRef: input.sourceRef ?? null,
+    mimeType: input.mimeType ?? "text/plain",
+    status: "pending",
     subscriberAgentIds: [],
   }));
+  const getDocumentForProject = vi.fn((projectId: string, documentId: string) => (
+    projectId === "project-1" && documentId === "doc-1" ? documentRecord : null
+  ));
+  const deleteDocumentForProject = vi.fn((projectId: string, documentId: string) => (
+    projectId === "project-1" && documentId === "doc-1"
+  ));
+  const reembedDocumentForProject = vi.fn(async (projectId: string, documentId: string) => (
+    projectId === "project-1" && documentId === "doc-1" ? documentRecord : null
+  ));
+  const listDocuments = vi.fn((projectId: string) => (
+    projectId === "project-1" ? [{ ...documentRecord, subscriberAgentIds: [] }] : []
+  ));
+  const search = vi.fn(async () => []);
 
   configureDashboardApp({
     app,
@@ -55,12 +76,15 @@ const createKnowledgeApp = (overrides: Record<string, unknown> = {}) => {
     getStatus: () => ({}),
     knowledgeService: {
       isModelLoaded: () => true,
-      listDocuments: () => [],
+      listDocuments,
       ingestDocument,
       deleteDocument: () => {},
       getDocument: () => null,
       reembedDocument: async () => {},
-      search: async () => [],
+      getDocumentForProject,
+      deleteDocumentForProject,
+      reembedDocumentForProject,
+      search,
       listSubscriptions: () => [],
       setSubscriptions: () => [],
       importDocumentsFromProject: async () => ({ documents: [], errors: [] }),
@@ -74,10 +98,89 @@ const createKnowledgeApp = (overrides: Record<string, unknown> = {}) => {
     ...overrides,
   } as any);
 
-  return { app, ingestDocument };
+  return { app, ingestDocument, getDocumentForProject, deleteDocumentForProject, reembedDocumentForProject, search };
 };
 
 describe("knowledge routes", () => {
+  describe("document object access", () => {
+    it("allows same-project document reads and returns 404 for cross-project reads", async () => {
+      const { app, getDocumentForProject } = createKnowledgeApp();
+
+      await request(app)
+        .get("/api/projects/project-1/knowledge/documents/doc-1")
+        .expect(200);
+
+      const crossProject = await request(app)
+        .get("/api/projects/project-2/knowledge/documents/doc-1")
+        .expect(404);
+
+      expect(crossProject.body).toEqual({ error: "Document not found" });
+      expect(getDocumentForProject).toHaveBeenCalledWith("project-1", "doc-1");
+      expect(getDocumentForProject).toHaveBeenCalledWith("project-2", "doc-1");
+    });
+
+    it("requires projectId on legacy document reads and hides project mismatches as not found", async () => {
+      const { app } = createKnowledgeApp();
+
+      await request(app)
+        .get("/api/knowledge/documents/doc-1")
+        .expect(400);
+
+      await request(app)
+        .get("/api/knowledge/documents/doc-1?projectId=project-1")
+        .expect(200);
+
+      const mismatch = await request(app)
+        .get("/api/knowledge/documents/doc-1?projectId=project-2")
+        .expect(404);
+
+      expect(mismatch.body).toEqual({ error: "Document not found" });
+    });
+
+    it("allows same-project deletes and rejects cross-project deletes without mutating", async () => {
+      const { app, deleteDocumentForProject } = createKnowledgeApp();
+
+      await request(app)
+        .delete("/api/projects/project-1/knowledge/documents/doc-1")
+        .expect(200);
+
+      const mismatch = await request(app)
+        .delete("/api/projects/project-2/knowledge/documents/doc-1")
+        .expect(404);
+
+      expect(mismatch.body).toEqual({ error: "Document not found" });
+      expect(deleteDocumentForProject).toHaveBeenCalledWith("project-1", "doc-1");
+      expect(deleteDocumentForProject).toHaveBeenCalledWith("project-2", "doc-1");
+    });
+
+    it("allows same-project re-embeds and rejects cross-project re-embeds", async () => {
+      const { app, reembedDocumentForProject } = createKnowledgeApp();
+
+      await request(app)
+        .post("/api/projects/project-1/knowledge/documents/doc-1/reembed")
+        .expect(200);
+
+      const mismatch = await request(app)
+        .post("/api/projects/project-2/knowledge/documents/doc-1/reembed")
+        .expect(404);
+
+      expect(mismatch.body).toEqual({ error: "Document not found" });
+      expect(reembedDocumentForProject).toHaveBeenCalledWith("project-1", "doc-1");
+      expect(reembedDocumentForProject).toHaveBeenCalledWith("project-2", "doc-1");
+    });
+
+    it("filters search document IDs to the route project before loading chunks", async () => {
+      const { app, search } = createKnowledgeApp();
+
+      await request(app)
+        .post("/api/projects/project-1/knowledge/search")
+        .send({ query: "deploy", documentIds: ["doc-1", "foreign-doc"] })
+        .expect(200);
+
+      expect(search).toHaveBeenCalledWith(["doc-1"], "deploy", 8);
+    });
+  });
+
   describe("upload", () => {
     it("sanitizes filenames and rejects unsupported types early", async () => {
       const { app, ingestDocument } = createKnowledgeApp();

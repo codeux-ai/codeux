@@ -43,6 +43,7 @@ import { ActivityCacheService } from "./activity-cache-service.js";
 import { registerMcpRequestHandlers } from "./mcp-request-router.js";
 import { TaskRerunService } from "../services/task-rerun-service.js";
 import { ExecutionControlService } from "../services/execution-control-service.js";
+import { toAgentCodeUxToolAccess } from "../services/agent-mcp-access.js";
 import { JulesSourceResolver } from "../services/jules-source-resolver.js";
 import { RuntimeCleanupService } from "../services/runtime-cleanup-service.js";
 import { RuntimeStartupRecoveryService } from "../services/runtime-startup-recovery-service.js";
@@ -435,8 +436,10 @@ export class CodeUxServer {
       managementToolHandler: this.managementToolHandler,
       getDashboardSettings: () => this.runtimeContext.dashboardSettings || DEFAULT_DASHBOARD_SETTINGS,
       getRuntimeRole: () => runtimeRole,
-      resolveAgentMcpToolToggles: (agentId) =>
-        this.agentPresetRepository.getAgentPreset(agentId)?.mcpAccess?.codeUxToolToggles ?? null,
+      resolveAgentMcpToolAccess: (agentId) => {
+        const access = this.agentPresetRepository.getAgentPreset(agentId)?.mcpAccess;
+        return access ? toAgentCodeUxToolAccess(access) : null;
+      },
       formatError: (error: unknown) => this.formatError(error),
       logger: this.logger.child({ component: "mcp-request-router", runtimeRole }),
       withCorrelationContext: (request, operation) => this.runWithMcpCorrelationContext(request, operation),
@@ -1303,14 +1306,20 @@ export class CodeUxServer {
         listDockerContainers: () => this.dockerService.listContainers(),
         listSprintPreviewSessions: (projectId) => this.sprintPreviewService.listSessions(projectId),
         getSprintPreviewSession: (sessionId: string) => this.sprintPreviewService.getSession(sessionId),
+        getSprintPreviewSessionForProjectSprint: (projectId, sprintId, sessionId) => this.sprintPreviewService.getSessionForProjectSprint(projectId, sprintId, sessionId),
         startSprintPreviewSession: (projectId, sprintId) => this.sprintPreviewService.startSession(projectId, sprintId),
         rebuildSprintPreviewSession: (sessionId) => this.sprintPreviewService.rebuildSession(sessionId),
+        rebuildSprintPreviewSessionForProjectSprint: (projectId, sprintId, sessionId) => this.sprintPreviewService.rebuildSessionForProjectSprint(projectId, sprintId, sessionId),
         stopSprintPreviewSession: (sessionId) => this.sprintPreviewService.stopSession(sessionId),
+        stopSprintPreviewSessionForProjectSprint: (projectId, sprintId, sessionId) => this.sprintPreviewService.stopSessionForProjectSprint(projectId, sprintId, sessionId),
         removeSprintPreviewSession: (sessionId) => this.sprintPreviewService.removeSession(sessionId),
+        removeSprintPreviewSessionForProjectSprint: (projectId, sprintId, sessionId) => this.sprintPreviewService.removeSessionForProjectSprint(projectId, sprintId, sessionId),
         getSprintPreviewScript: (projectId, sprintId) => this.sprintPreviewService.getScript(projectId, sprintId),
         saveSprintPreviewScript: (projectId, sprintId, content) => this.sprintPreviewService.saveScript(projectId, sprintId, content),
         getSprintPreviewLogs: (sessionId, tail) => this.sprintPreviewService.getLogs(sessionId, tail),
+        getSprintPreviewLogsForProjectSprint: (projectId, sprintId, sessionId, tail) => this.sprintPreviewService.getLogsForProjectSprint(projectId, sprintId, sessionId, tail),
         proxySprintPreviewRequest: (args) => this.sprintPreviewService.proxyRequest(args),
+        proxySprintPreviewRequestForProjectSprint: (projectId, sprintId, args) => this.sprintPreviewService.proxyRequestForProjectSprint(projectId, sprintId, args),
         listFileBrowserSessions: (projectId) => this.sprintFileBrowserService.listSessions(projectId),
         startFileBrowserSession: (projectId, sprintId) => this.sprintFileBrowserService.startSession(projectId, sprintId),
         rebuildFileBrowserSession: (sessionId) => this.sprintFileBrowserService.rebuildSession(sessionId),

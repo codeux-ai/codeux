@@ -276,14 +276,27 @@ export interface DashboardServerOptions {
   resetOnboardingState?: () => OnboardingStateRecord;
   listSprintPreviewSessions?: (projectId: string) => Promise<SprintPreviewSession[]> | SprintPreviewSession[];
   getSprintPreviewSession?: (sessionId: string) => Promise<SprintPreviewSession | null> | SprintPreviewSession | null;
+  getSprintPreviewSessionForProjectSprint?: (projectId: string, sprintId: string, sessionId: string) => Promise<SprintPreviewSession> | SprintPreviewSession;
   startSprintPreviewSession?: (projectId: string, sprintId: string) => Promise<SprintPreviewSession> | SprintPreviewSession;
   rebuildSprintPreviewSession?: (sessionId: string) => Promise<SprintPreviewSession> | SprintPreviewSession;
+  rebuildSprintPreviewSessionForProjectSprint?: (projectId: string, sprintId: string, sessionId: string) => Promise<SprintPreviewSession> | SprintPreviewSession;
   stopSprintPreviewSession?: (sessionId: string) => Promise<SprintPreviewSession> | SprintPreviewSession;
+  stopSprintPreviewSessionForProjectSprint?: (projectId: string, sprintId: string, sessionId: string) => Promise<SprintPreviewSession> | SprintPreviewSession;
   removeSprintPreviewSession?: (sessionId: string) => Promise<void> | void;
+  removeSprintPreviewSessionForProjectSprint?: (projectId: string, sprintId: string, sessionId: string) => Promise<void> | void;
   getSprintPreviewScript?: (projectId: string, sprintId: string) => Promise<SprintPreviewScript> | SprintPreviewScript;
   saveSprintPreviewScript?: (projectId: string, sprintId: string, content: string) => Promise<SprintPreviewScript> | SprintPreviewScript;
   getSprintPreviewLogs?: (sessionId: string, tail?: number) => Promise<{ logs: string }> | { logs: string };
+  getSprintPreviewLogsForProjectSprint?: (projectId: string, sprintId: string, sessionId: string, tail?: number) => Promise<{ logs: string }> | { logs: string };
   proxySprintPreviewRequest?: (args: {
+    sessionId: string;
+    method: string;
+    path: string;
+    headers?: Record<string, string | undefined>;
+    body?: Buffer;
+    selectedPort?: string | number | null;
+  }) => Promise<{ status: number; headers: Record<string, string>; body: Buffer }>;
+  proxySprintPreviewRequestForProjectSprint?: (projectId: string, sprintId: string, args: {
     sessionId: string;
     method: string;
     path: string;

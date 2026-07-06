@@ -155,26 +155,36 @@ describe("loadAppConfig", () => {
   it("assembles full config from env when CLI arg is missing", () => {
     process.env.JULES_API_KEY = "env-key";
     process.env.DASHBOARD_PORT = "8888";
-    const config = loadAppConfig(["node", "index.js"], tempDir);
+    const config = loadAppConfig(["node", "index.js", "--no-mcp-https"], tempDir);
     expect(config.apiKey).toBe("env-key");
     expect(config.dashboardPort).toBe(8888);
   });
 
-  it("uses a container-reachable default MCP bind with generated auth on Docker Desktop platforms", () => {
-    const config = loadAppConfig(["node", "index.js"], tempDir);
+  it("uses a loopback default MCP bind without auth on non-Docker Desktop platforms", () => {
     const needsContainerReachableDefault = process.platform === "win32"
       || process.platform === "darwin"
       || os.release().toLowerCase().includes("microsoft");
 
-    expect(config.mcpHttpEnabled).toBe(true);
     if (needsContainerReachableDefault) {
-      expect(config.mcpHttpHost).toBe("0.0.0.0");
-      expect(config.mcpHttpAuthToken).toEqual(expect.any(String));
-      expect(config.mcpHttpAuthToken!.length).toBeGreaterThan(20);
-    } else {
-      expect(config.mcpHttpHost).toBe("127.0.0.1");
-      expect(config.mcpHttpAuthToken).toBeNull();
+      return;
     }
+
+    const config = loadAppConfig(["node", "index.js"], tempDir);
+    expect(config.mcpHttpEnabled).toBe(true);
+    expect(config.mcpHttpHost).toBe("127.0.0.1");
+    expect(config.mcpHttpAuthToken).toBeNull();
+  });
+
+  it("requires explicit auth for a container-reachable default MCP bind on Docker Desktop platforms", () => {
+    const needsContainerReachableDefault = process.platform === "win32"
+      || process.platform === "darwin"
+      || os.release().toLowerCase().includes("microsoft");
+
+    if (!needsContainerReachableDefault) {
+      return;
+    }
+
+    expect(() => loadAppConfig(["node", "index.js"], tempDir)).toThrow("MCP HTTPS auth token is required");
   });
 
   it("ignores legacy worker-host runtime flags and keeps project-manager defaults", () => {
@@ -185,7 +195,7 @@ describe("loadAppConfig", () => {
   });
 
   it("supports explicit headless project-manager mode", () => {
-    const config = loadAppConfig(["node", "index.js", "--headless"], tempDir);
+    const config = loadAppConfig(["node", "index.js", "--headless", "--no-mcp-https"], tempDir);
     expect(config.runtimeRole).toBe("project_manager");
     expect(config.dashboardEnabled).toBe(false);
   });
@@ -227,13 +237,47 @@ describe("loadAppConfig", () => {
     expect(config.mcpHttpAuthToken).toBe("env-token");
   });
 
-  it("requires MCP HTTP auth token for non-loopback binding", () => {
+  it.each(["0.0.0.0", "::", "192.168.1.10"])("requires MCP HTTP auth token for non-loopback binding %s", (host) => {
     expect(() => loadAppConfig([
       "node",
       "index.js",
       "--mcp-https",
+      "--mcp-https-port",
+      "5555",
+      "--mcp-https-host",
+      host,
+    ], tempDir)).toThrow("MCP HTTPS auth token is required");
+  });
+
+  it.each(["127.0.0.1", "localhost", "::1"])("allows unauthenticated loopback MCP HTTP binding %s", (host) => {
+    const config = loadAppConfig([
+      "node",
+      "index.js",
+      "--mcp-https-port",
+      "5555",
+      "--mcp-https-host",
+      host,
+    ], tempDir);
+
+    expect(config.mcpHttpEnabled).toBe(true);
+    expect(config.mcpHttpHost).toBe(host);
+    expect(config.mcpHttpAuthToken).toBeNull();
+  });
+
+  it("allows non-loopback MCP HTTP binding with an explicit auth token", () => {
+    const config = loadAppConfig([
+      "node",
+      "index.js",
+      "--mcp-https-port",
+      "5555",
       "--mcp-https-host",
       "0.0.0.0",
-    ], tempDir)).toThrow("MCP HTTPS auth token is required");
+      "--mcp-https-auth-token",
+      "secret-token",
+    ], tempDir);
+
+    expect(config.mcpHttpEnabled).toBe(true);
+    expect(config.mcpHttpHost).toBe("0.0.0.0");
+    expect(config.mcpHttpAuthToken).toBe("secret-token");
   });
 });

@@ -39,15 +39,6 @@ export function createPreviewHostMiddleware(options: DashboardServerOptions): ex
       return;
     }
     const isControlPath = req.path === PREVIEW_START_PATH || req.path === PREVIEW_REBUILD_PATH || req.path === PREVIEW_STATUS_PATH;
-    if (isControlPath && !isAllowedPreviewControlOrigin(req)) {
-      res.status(403).send("Forbidden");
-      return;
-    }
-    applyPreviewCorsHeaders(req, res, isControlPath);
-    if (req.method === "OPTIONS") {
-      res.status(204).end();
-      return;
-    }
     if (req.path === PREVIEW_BRIDGE_PATH) {
       res.setHeader("Cache-Control", "no-store");
       res.type("application/javascript").send(buildPreviewBridgeScript());
@@ -67,6 +58,16 @@ export function createPreviewHostMiddleware(options: DashboardServerOptions): ex
     }
     if (!session) {
       res.status(404).send("Sprint preview session is unavailable.");
+      return;
+    }
+
+    if (isControlPath && !isAllowedPreviewControlOrigin(req)) {
+      res.status(403).send("Forbidden");
+      return;
+    }
+    applyPreviewCorsHeaders(req, res, isControlPath);
+    if (req.method === "OPTIONS") {
+      res.status(204).end();
       return;
     }
 
@@ -90,12 +91,12 @@ export function createPreviewHostMiddleware(options: DashboardServerOptions): ex
     }
 
     if (req.path === PREVIEW_REBUILD_PATH) {
-      if (!options.rebuildSprintPreviewSession) {
+      if (!options.rebuildSprintPreviewSessionForProjectSprint) {
         res.status(503).send("Sprint preview rebuild is unavailable.");
         return;
       }
       try {
-        const rebuilt = await options.rebuildSprintPreviewSession(session.id);
+        const rebuilt = await options.rebuildSprintPreviewSessionForProjectSprint(session.projectId, session.sprintId, session.id);
         res.json(rebuilt);
       } catch (error) {
         res.status(502).send(toErrorResponse(error, "Failed to rebuild sprint preview session").error);

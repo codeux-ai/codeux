@@ -155,22 +155,24 @@ export const KnowledgePage: FunctionComponent = () => {
   }, [handleUpload]);
 
   const removeDocument = useCallback(async (documentId: string) => {
+    if (!pid) return;
     setDocuments((prev) => prev.filter((d) => d.id !== documentId));
     try {
-      await deleteKnowledgeDocument(documentId);
+      await deleteKnowledgeDocument(pid, documentId);
     } catch {
       await loadData();
     }
-  }, [loadData]);
+  }, [loadData, pid]);
 
   const reembed = useCallback(async (documentId: string) => {
+    if (!pid) return;
     try {
-      const updated = await reembedKnowledgeDocument(documentId);
+      const updated = await reembedKnowledgeDocument(pid, documentId);
       setDocuments((prev) => prev.map((d) => (d.id === documentId ? updated : d)));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Re-embed failed");
     }
-  }, []);
+  }, [pid]);
 
   const totalChunks = documents.reduce((sum, d) => sum + d.chunkCount, 0);
   const readyCount = documents.filter((d) => d.status === "ready").length;

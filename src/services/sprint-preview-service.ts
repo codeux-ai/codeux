@@ -17,6 +17,7 @@ import type { ExecutionRepository } from "../repositories/execution-repository.j
 import type { ProjectManagementRepository } from "../repositories/project-management-repository.js";
 import type { SettingsRepository } from "../repositories/settings-repository.js";
 import { SprintPreviewRepository } from "../repositories/sprint-preview-repository.js";
+import { EntityNotFoundError } from "../repositories/repository-utils.js";
 import { DockerBootstrapBuilder } from "../infrastructure/providers/cli/docker-bootstrap-builder.js";
 import { DockerCredentialMountBuilder } from "../infrastructure/providers/cli/docker-credential-mount-builder.js";
 import { DockerSetupImageCache, type DockerSetupImageCacheProgress } from "../infrastructure/providers/cli/docker-setup-image-cache.js";
@@ -96,6 +97,11 @@ export class SprintPreviewService {
   async getSession(sessionId: string): Promise<SprintPreviewSession | null> {
     const session = this.deps.sprintPreviewRepository.getSession(sessionId);
     return session ? await this.refreshRuntimeState(session) : null;
+  }
+
+  async getSessionForProjectSprint(projectId: string, sprintId: string, sessionId: string): Promise<SprintPreviewSession> {
+    const session = await this.requireScopedSession(projectId, sprintId, sessionId);
+    return await this.refreshRuntimeState(session);
   }
 
   async startSession(projectId: string, sprintId: string, options?: { rebuild?: boolean }): Promise<SprintPreviewSession> {
@@ -463,6 +469,11 @@ export class SprintPreviewService {
     return await this.startSession(session.projectId, session.sprintId, { rebuild: true });
   }
 
+  async rebuildSessionForProjectSprint(projectId: string, sprintId: string, sessionId: string): Promise<SprintPreviewSession> {
+    await this.requireScopedSession(projectId, sprintId, sessionId);
+    return await this.startSession(projectId, sprintId, { rebuild: true });
+  }
+
   async stopSession(sessionId: string): Promise<SprintPreviewSession> {
     const session = await this.requireSession(sessionId);
     return await this.lifecycle.withSessionLock(this.buildSessionLockKey(session.projectId, session.sprintId), async () => {
@@ -482,6 +493,11 @@ export class SprintPreviewService {
     });
   }
 
+  async stopSessionForProjectSprint(projectId: string, sprintId: string, sessionId: string): Promise<SprintPreviewSession> {
+    await this.requireScopedSession(projectId, sprintId, sessionId);
+    return await this.stopSession(sessionId);
+  }
+
   async removeSession(sessionId: string): Promise<void> {
     const session = await this.requireSession(sessionId);
     await this.lifecycle.withSessionLock(this.buildSessionLockKey(session.projectId, session.sprintId), async () => {
@@ -490,6 +506,11 @@ export class SprintPreviewService {
       await this.removeSprintVolume(session.sprintId);
       this.deps.sprintPreviewRepository.deleteSession(sessionId);
     });
+  }
+
+  async removeSessionForProjectSprint(projectId: string, sprintId: string, sessionId: string): Promise<void> {
+    await this.requireScopedSession(projectId, sprintId, sessionId);
+    await this.removeSession(sessionId);
   }
 
   async getLogs(sessionId: string, tail = 200): Promise<{ logs: string }> {
@@ -510,6 +531,11 @@ export class SprintPreviewService {
       const message = error instanceof Error ? error.message : String(error);
       return { logs: message };
     }
+  }
+
+  async getLogsForProjectSprint(projectId: string, sprintId: string, sessionId: string, tail = 200): Promise<{ logs: string }> {
+    await this.requireScopedSession(projectId, sprintId, sessionId);
+    return await this.getLogs(sessionId, tail);
   }
 
   async getScript(projectId: string, sprintId: string): Promise<SprintPreviewScript> {
@@ -581,7 +607,7 @@ export class SprintPreviewService {
     try {
       response = await fetch(upstreamUrl, {
         method: args.method,
-        headers: this.buildProxyHeaders(args.headers),
+        headers: this.buildProxyHeaders(args.headers, upstreamUrl.origin),
         body: args.body && args.body.length > 0 ? new Uint8Array(args.body) : undefined,
         redirect: "manual",
       });
@@ -599,7 +625,7 @@ export class SprintPreviewService {
     const rewritePrefix = `/api/browser/sessions/${refreshed.id}/proxy`;
     const responseHeaders: Record<string, string> = {};
     response.headers.forEach((value, key) => {
-      if (key.toLowerCase() === "set-cookie") {
+      if (this.shouldStripProxyResponseHeader(key)) {
         return;
       }
       if (key.toLowerCase() === "location") {
@@ -647,6 +673,18 @@ export class SprintPreviewService {
       headers: responseHeaders,
       body: rewrittenBody,
     };
+  }
+
+  async proxyRequestForProjectSprint(projectId: string, sprintId: string, args: {
+    sessionId: string;
+    method: string;
+    path: string;
+    headers?: Record<string, string | undefined>;
+    body?: Buffer;
+    selectedPort?: string | number | null;
+  }): Promise<SprintPreviewProxyResponse> {
+    await this.requireScopedSession(projectId, sprintId, args.sessionId);
+    return await this.proxyRequest(args);
   }
 
   async reconcileSessions(): Promise<void> {
@@ -830,7 +868,7 @@ export class SprintPreviewService {
     });
   }
 
-  private buildProxyHeaders(headers: Record<string, string | undefined> = {}): Record<string, string> {
+  private buildProxyHeaders(headers: Record<string, string | undefined> = {}, upstreamOrigin: string): Record<string, string> {
     const next: Record<string, string> = {};
     const stripList = ["authorization", "cookie", "set-cookie", "connection", "upgrade", "transfer-encoding", "host", "content-length", "accept-encoding"];
     for (const [key, value] of Object.entries(headers)) {
@@ -839,9 +877,39 @@ export class SprintPreviewService {
       if (stripList.includes(normalized) || normalized.startsWith("proxy-") || normalized.startsWith("x-code-ux-")) {
         continue;
       }
+      if (normalized === "origin") {
+        next[key] = upstreamOrigin;
+        continue;
+      }
+      if (normalized === "referer") {
+        next[key] = this.normalizeProxyRefererHeader(value, upstreamOrigin);
+        continue;
+      }
+      if (normalized === "sec-fetch-site") {
+        next[key] = "same-origin";
+        continue;
+      }
       next[key] = value;
     }
     return next;
+  }
+
+  private normalizeProxyRefererHeader(value: string, upstreamOrigin: string): string {
+    try {
+      const refererUrl = new URL(value);
+      return `${upstreamOrigin}${refererUrl.pathname}${refererUrl.search}${refererUrl.hash}`;
+    } catch {
+      return upstreamOrigin;
+    }
+  }
+
+  private shouldStripProxyResponseHeader(headerName: string): boolean {
+    return [
+      "set-cookie",
+      "content-security-policy",
+      "content-security-policy-report-only",
+      "x-frame-options",
+    ].includes(headerName.toLowerCase());
   }
 
   private shouldRewriteBody(contentType: string): boolean {
@@ -1318,9 +1386,17 @@ export class SprintPreviewService {
   private async requireSession(sessionId: string): Promise<SprintPreviewSession> {
     const session = await this.getSession(sessionId);
     if (!session) {
-      throw new Error(`Sprint preview session not found: ${sessionId}`);
+      throw new EntityNotFoundError("Sprint preview session not found.");
     }
     return session;
+  }
+
+  private async requireScopedSession(projectId: string, sprintId: string, sessionId: string): Promise<SprintPreviewSession> {
+    const session = this.deps.sprintPreviewRepository.getSessionForProjectSprint(projectId, sprintId, sessionId);
+    if (!session) {
+      throw new EntityNotFoundError("Sprint preview session not found.");
+    }
+    return await this.refreshRuntimeState(session);
   }
 
   private resolveSettings(projectId: string, sprintId: string) {

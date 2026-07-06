@@ -17,6 +17,7 @@ import { DEFAULT_DASHBOARD_SETTINGS } from "../../../src/repositories/settings-d
 import { DashboardRealtimeEventRepository } from "../../../src/repositories/dashboard-realtime-event-repository.js";
 import { DashboardRealtimeService } from "../../../src/services/dashboard-realtime-service.js";
 import { createLogger } from "../../../src/shared/logging/logger.js";
+import { ValidationError } from "../../../src/repositories/repository-utils.js";
 import type { DashboardRealtimeEventMessage, DashboardRealtimeServerMessage } from "../../../src/contracts/app-types.js";
 
 const serversToClose: Server[] = [];
@@ -361,6 +362,39 @@ describe("setupDashboardServer", () => {
     }
   });
 
+  it("returns sanitized validation errors for crafted instruction file ids", async () => {
+    const app = express();
+    const readInstructionFile = vi.fn((_projectId: string, fileId: string) => {
+      expect(fileId).toBe("../secrets");
+      throw new ValidationError("Invalid instruction file id.");
+    });
+    configureDashboardApp(buildDashboardTestOptions({ app, readInstructionFile }));
+
+    const response = await httpRequestMock(app).get("/api/projects/project-1/instruction-files/..%2Fsecrets");
+
+    expect(response.status).toBe(400);
+    expect(response.body).toEqual({ error: "Invalid instruction file id." });
+    expect(JSON.stringify(response.body)).not.toContain("secrets");
+  });
+
+  it("returns sanitized validation errors for instruction file write failures", async () => {
+    const app = express();
+    const writeInstructionFile = vi.fn(() => {
+      throw new ValidationError("Invalid instruction file path: symlink target escapes the project directory.");
+    });
+    configureDashboardApp(buildDashboardTestOptions({ app, writeInstructionFile }));
+
+    const response = await httpRequestMock(app)
+      .put("/api/projects/project-1/instruction-files/agents")
+      .send({ content: "new" });
+
+    expect(response.status).toBe(400);
+    expect(response.body).toEqual({
+      error: "Invalid instruction file path: symlink target escapes the project directory.",
+    });
+    expect(JSON.stringify(response.body)).not.toContain("/tmp/");
+  });
+
   it("logs dashboard request completion with correlation id but without request bodies", async () => {
     const savedForcedLogLevel = process.env.CODEUX_FORCE_LOG_LEVEL;
     delete process.env.CODEUX_FORCE_LOG_LEVEL;
@@ -638,6 +672,76 @@ describe("setupDashboardServer", () => {
     const response = await httpRequestMock(app)
       .post("/api/settings")
       .set("Host", "localhost:3000")
+      .send({ settings: {} });
+
+    expect(response.status).not.toBe(403);
+  });
+
+  it("rejects API requests with comma-separated forwarded hosts", async () => {
+    const app = express();
+    configureDashboardApp(buildDashboardTestOptions({ app }));
+
+    const response = await httpRequestMock(app)
+      .post("/api/settings")
+      .set("Host", "localhost:3000")
+      .set("X-Forwarded-Host", "localhost:3000, evil.com")
+      .set("Origin", "http://localhost:3000")
+      .send({ settings: {} });
+
+    expect(response.status).toBe(403);
+    expect(response.body).toEqual({ error: "Forbidden: Untrusted host." });
+  });
+
+  it("rejects runtime requests with non-local preview host spoofing", async () => {
+    const app = express();
+    configureDashboardApp(buildDashboardTestOptions({ app }));
+
+    const response = await httpRequestMock(app)
+      .post("/api/settings")
+      .set("Host", "preview-test-session.evil.example:3000")
+      .set("Origin", "http://preview-test-session.evil.example:3000")
+      .send({ settings: {} });
+
+    expect(response.status).toBe(403);
+    expect(response.body).toEqual({ error: "Forbidden: Untrusted host." });
+  });
+
+  it("rejects hostile browser origins on runtime probe routes", async () => {
+    const app = express();
+    configureDashboardApp(buildDashboardTestOptions({ app }));
+
+    const response = await httpRequestMock(app)
+      .post("/ready")
+      .set("Host", "localhost:3000")
+      .set("Origin", "https://evil.example")
+      .send({});
+
+    expect(response.status).toBe(403);
+    expect(response.body).toEqual({ error: "Forbidden: Cross-site requests are not allowed." });
+  });
+
+  it("rejects malformed referers on runtime probe routes", async () => {
+    const app = express();
+    configureDashboardApp(buildDashboardTestOptions({ app }));
+
+    const response = await httpRequestMock(app)
+      .post("/health")
+      .set("Host", "localhost:3000")
+      .set("Referer", "not a valid referer")
+      .send({});
+
+    expect(response.status).toBe(403);
+    expect(response.body).toEqual({ error: "Forbidden: Cross-site requests are not allowed." });
+  });
+
+  it("allows IPv6 loopback dashboard origins", async () => {
+    const app = express();
+    configureDashboardApp(buildDashboardTestOptions({ app }));
+
+    const response = await httpRequestMock(app)
+      .post("/api/settings")
+      .set("Host", "[::1]:4444")
+      .set("Origin", "http://[::1]:4444")
       .send({ settings: {} });
 
     expect(response.status).not.toBe(403);
@@ -1643,7 +1747,7 @@ describe("setupDashboardServer", () => {
         startCalls += 1;
         return {} as any;
       },
-      rebuildSprintPreviewSession: async () => {
+      rebuildSprintPreviewSessionForProjectSprint: async () => {
         rebuildCalls += 1;
         return {} as any;
       },
@@ -1751,13 +1855,13 @@ describe("setupDashboardServer", () => {
       retryTaskDispatch: async () => ({ ok: true }),
       improveSprintPrompt: async () => ({ ok: true }),
       planSprint: async () => ({ ok: true }),
-      removeSprintPreviewSession: async (sessionId: string) => {
+      removeSprintPreviewSessionForProjectSprint: async (_projectId: string, _sprintId: string, sessionId: string) => {
         removedSessionId = sessionId;
       },
     });
     serversToClose.push(handle.server);
 
-    const response = await fetch(`http://127.0.0.1:${handle.port}/api/browser/sessions/test-session`, {
+    const response = await fetch(`http://127.0.0.1:${handle.port}/api/projects/project-test/sprints/sprint-test/preview/sessions/test-session`, {
       method: "DELETE",
     });
 

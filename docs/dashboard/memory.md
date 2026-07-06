@@ -64,6 +64,8 @@ Memory records encapsulate the base `content` string alongside its vectorized by
 
 **Note:** Knowledge subscriptions validate requested document IDs in batched chunk-safe queries (validating project ownership efficiently) before applying the replace-all transaction.
 
+Knowledge document object access is project-scoped. Document read, delete, re-embed, and project-import operations must prove the document belongs to the route or request project before returning content or mutating rows. Legacy unscoped document endpoints require an explicit `projectId` value and treat missing documents and cross-project mismatches as the same not-found response.
+
 ## Long-Term Claims and Evidence
 
 Sprint-scoped memories are treated as observations. Durable project knowledge is stored as canonical claims:

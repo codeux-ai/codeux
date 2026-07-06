@@ -26,9 +26,44 @@ import {
   parseCreateConversationThreadInput,
   parseUpdateConversationThreadInput,
   parseStatsDateInput,
+  DASHBOARD_DEFAULT_JSON_BODY_LIMIT,
+  DASHBOARD_LARGE_SETTINGS_JSON_BODY_LIMIT,
+  getDashboardJsonBodyLimit,
+  isSupportedDashboardJsonContentType,
 } from "../../../src/server/request-parsers.js";
 
 describe("Request Parsers", () => {
+  describe("dashboard JSON body policy", () => {
+    it("uses the small default JSON body limit for normal API mutations", () => {
+      expect(DASHBOARD_DEFAULT_JSON_BODY_LIMIT).toBe("1mb");
+      expect(getDashboardJsonBodyLimit("POST", "/api/projects/project-1/tasks")).toBe("default");
+      expect(getDashboardJsonBodyLimit("PATCH", "/api/tasks/task-1")).toBe("default");
+    });
+
+    it("keeps the large JSON body limit scoped to settings routes that can carry appearance images", () => {
+      expect(DASHBOARD_LARGE_SETTINGS_JSON_BODY_LIMIT).toBe("25mb");
+      expect(getDashboardJsonBodyLimit("PUT", "/api/system-settings")).toBe("large");
+      expect(getDashboardJsonBodyLimit("PUT", "/api/projects/project-1/settings")).toBe("large");
+      expect(getDashboardJsonBodyLimit("PUT", "/api/sprints/sprint-1/settings")).toBe("large");
+    });
+
+    it("bypasses JSON parsing for upload, preview proxy, reads, and non-runtime paths", () => {
+      expect(getDashboardJsonBodyLimit("POST", "/api/projects/project-1/knowledge/documents/upload")).toBeNull();
+      expect(getDashboardJsonBodyLimit("POST", "/api/browser/sessions/session-1/proxy/api/comment")).toBeNull();
+      expect(getDashboardJsonBodyLimit("GET", "/api/system-settings")).toBeNull();
+      expect(getDashboardJsonBodyLimit("POST", "/assets/index.js")).toBeNull();
+    });
+
+    it("accepts JSON media types and rejects ambiguous alternatives", () => {
+      expect(isSupportedDashboardJsonContentType("application/json")).toBe(true);
+      expect(isSupportedDashboardJsonContentType("application/json; charset=utf-8")).toBe(true);
+      expect(isSupportedDashboardJsonContentType("application/vnd.codeux+json")).toBe(true);
+      expect(isSupportedDashboardJsonContentType("text/plain;charset=UTF-8")).toBe(false);
+      expect(isSupportedDashboardJsonContentType("multipart/form-data; boundary=abc")).toBe(false);
+      expect(isSupportedDashboardJsonContentType(undefined)).toBe(false);
+    });
+  });
+
   describe("Validation Helpers", () => {
     it("parseOptionalBoolean rejects invalid forms", () => {
       expect(() => parseOptionalBoolean("yes")).toThrow();

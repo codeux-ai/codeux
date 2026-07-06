@@ -1,4 +1,4 @@
-import type { Express } from "express";
+import type { Express, Request, Response } from "express";
 import type { DashboardDependencies } from "./dashboard-server.js";
 import { asyncRoute } from "./route-utils.js";
 import { requireTrimmedString } from "./request-parsers.js";
@@ -23,25 +23,74 @@ export function registerPreviewRoutes(app: Express, deps: DashboardDependencies)
     ));
   }));
 
-  app.post("/api/browser/sessions/:sessionId/rebuild", asyncRoute(async (req, res) => {
-    if (!deps.rebuildSprintPreviewSession) {
+  app.post("/api/projects/:projectId/sprints/:sprintId/preview/sessions/:sessionId/rebuild", asyncRoute(async (req, res) => {
+    if (!deps.rebuildSprintPreviewSessionForProjectSprint) {
       throw new Error("Sprint preview runtime is unavailable.");
     }
-    res.json(await deps.rebuildSprintPreviewSession(requireTrimmedString(req.params.sessionId, "sessionId")));
+    res.json(await deps.rebuildSprintPreviewSessionForProjectSprint(
+      requireTrimmedString(req.params.projectId, "projectId"),
+      requireTrimmedString(req.params.sprintId, "sprintId"),
+      requireTrimmedString(req.params.sessionId, "sessionId"),
+    ));
+  }));
+
+  app.post("/api/browser/sessions/:sessionId/rebuild", asyncRoute(async (req, res) => {
+    if (!deps.rebuildSprintPreviewSessionForProjectSprint) {
+      throw new Error("Sprint preview runtime is unavailable.");
+    }
+    const scope = requirePreviewScope(req);
+    res.json(await deps.rebuildSprintPreviewSessionForProjectSprint(
+      scope.projectId,
+      scope.sprintId,
+      requireTrimmedString(req.params.sessionId, "sessionId"),
+    ));
+  }));
+
+  app.post("/api/projects/:projectId/sprints/:sprintId/preview/sessions/:sessionId/stop", asyncRoute(async (req, res) => {
+    if (!deps.stopSprintPreviewSessionForProjectSprint) {
+      throw new Error("Sprint preview runtime is unavailable.");
+    }
+    res.json(await deps.stopSprintPreviewSessionForProjectSprint(
+      requireTrimmedString(req.params.projectId, "projectId"),
+      requireTrimmedString(req.params.sprintId, "sprintId"),
+      requireTrimmedString(req.params.sessionId, "sessionId"),
+    ));
   }));
 
   app.post("/api/browser/sessions/:sessionId/stop", asyncRoute(async (req, res) => {
-    if (!deps.stopSprintPreviewSession) {
+    if (!deps.stopSprintPreviewSessionForProjectSprint) {
       throw new Error("Sprint preview runtime is unavailable.");
     }
-    res.json(await deps.stopSprintPreviewSession(requireTrimmedString(req.params.sessionId, "sessionId")));
+    const scope = requirePreviewScope(req);
+    res.json(await deps.stopSprintPreviewSessionForProjectSprint(
+      scope.projectId,
+      scope.sprintId,
+      requireTrimmedString(req.params.sessionId, "sessionId"),
+    ));
+  }));
+
+  app.delete("/api/projects/:projectId/sprints/:sprintId/preview/sessions/:sessionId", asyncRoute(async (req, res) => {
+    if (!deps.removeSprintPreviewSessionForProjectSprint) {
+      throw new Error("Sprint preview runtime is unavailable.");
+    }
+    await deps.removeSprintPreviewSessionForProjectSprint(
+      requireTrimmedString(req.params.projectId, "projectId"),
+      requireTrimmedString(req.params.sprintId, "sprintId"),
+      requireTrimmedString(req.params.sessionId, "sessionId"),
+    );
+    res.status(204).end();
   }));
 
   app.delete("/api/browser/sessions/:sessionId", asyncRoute(async (req, res) => {
-    if (!deps.removeSprintPreviewSession) {
+    if (!deps.removeSprintPreviewSessionForProjectSprint) {
       throw new Error("Sprint preview runtime is unavailable.");
     }
-    await deps.removeSprintPreviewSession(requireTrimmedString(req.params.sessionId, "sessionId"));
+    const scope = requirePreviewScope(req);
+    await deps.removeSprintPreviewSessionForProjectSprint(
+      scope.projectId,
+      scope.sprintId,
+      requireTrimmedString(req.params.sessionId, "sessionId"),
+    );
     res.status(204).end();
   }));
 
@@ -66,47 +115,112 @@ export function registerPreviewRoutes(app: Express, deps: DashboardDependencies)
     ));
   }));
 
-  app.get("/api/browser/sessions/:sessionId/logs", asyncRoute(async (req, res) => {
-    if (!deps.getSprintPreviewLogs) {
+  app.get("/api/projects/:projectId/sprints/:sprintId/preview/sessions/:sessionId/logs", asyncRoute(async (req, res) => {
+    if (!deps.getSprintPreviewLogsForProjectSprint) {
       throw new Error("Sprint preview runtime is unavailable.");
     }
     const tail = typeof req.query.tail === "string" ? Number(req.query.tail) : undefined;
-    res.json(await deps.getSprintPreviewLogs(requireTrimmedString(req.params.sessionId, "sessionId"), tail));
+    res.json(await deps.getSprintPreviewLogsForProjectSprint(
+      requireTrimmedString(req.params.projectId, "projectId"),
+      requireTrimmedString(req.params.sprintId, "sprintId"),
+      requireTrimmedString(req.params.sessionId, "sessionId"),
+      tail,
+    ));
   }));
 
-  app.all("/api/browser/sessions/:sessionId/proxy{*rest}", asyncRoute(async (req, res) => {
-    if (!deps.proxySprintPreviewRequest) {
+  app.get("/api/browser/sessions/:sessionId/logs", asyncRoute(async (req, res) => {
+    if (!deps.getSprintPreviewLogsForProjectSprint) {
+      throw new Error("Sprint preview runtime is unavailable.");
+    }
+    const scope = requirePreviewScope(req);
+    const tail = typeof req.query.tail === "string" ? Number(req.query.tail) : undefined;
+    res.json(await deps.getSprintPreviewLogsForProjectSprint(
+      scope.projectId,
+      scope.sprintId,
+      requireTrimmedString(req.params.sessionId, "sessionId"),
+      tail,
+    ));
+  }));
+
+  app.all("/api/projects/:projectId/sprints/:sprintId/preview/sessions/:sessionId/proxy{*rest}", asyncRoute(async (req, res) => {
+    if (!deps.proxySprintPreviewRequestForProjectSprint) {
       throw new Error("Sprint preview runtime is unavailable.");
     }
     const sessionId = requireTrimmedString(req.params.sessionId, "sessionId");
-    const prefix = `/api/browser/sessions/${sessionId}/proxy`;
-    const pathWithQuery = req.originalUrl.startsWith(prefix)
-      ? req.originalUrl.slice(prefix.length) || "/"
-      : "/";
-    const { path: proxiedPath, selectedPort } = parsePreviewProxyPath(pathWithQuery, req.headers["x-code-ux-preview-port"]);
-    const body = req.body
-      ? Buffer.isBuffer(req.body)
-        ? req.body
-        : Buffer.from(JSON.stringify(req.body))
-      : undefined;
-    if (body && body.byteLength > 5 * 1024 * 1024) {
-      throw new HttpRouteError(413, "Request body exceeds maximum allowed size for proxied preview");
-    }
-    const proxied = await deps.proxySprintPreviewRequest({
-      sessionId,
-      method: req.method,
-      path: proxiedPath,
-      headers: Object.fromEntries(
-        Object.entries(req.headers).map(([key, value]) => [key, Array.isArray(value) ? value.join(", ") : value]),
-      ),
-      body,
-      selectedPort,
-    });
-    for (const [key, value] of Object.entries(proxied.headers)) {
-      res.setHeader(key, value);
-    }
-    res.status(proxied.status).send(proxied.body);
+    const proxied = await deps.proxySprintPreviewRequestForProjectSprint(
+      requireTrimmedString(req.params.projectId, "projectId"),
+      requireTrimmedString(req.params.sprintId, "sprintId"),
+      buildProxyRequestArgs(req, sessionId, `/api/projects/${req.params.projectId}/sprints/${req.params.sprintId}/preview/sessions/${sessionId}/proxy`),
+    );
+    sendProxiedResponse(res, proxied);
   }));
+
+  app.all("/api/browser/sessions/:sessionId/proxy{*rest}", asyncRoute(async (req, res) => {
+    if (!deps.proxySprintPreviewRequestForProjectSprint) {
+      throw new Error("Sprint preview runtime is unavailable.");
+    }
+    const scope = requirePreviewScope(req);
+    const sessionId = requireTrimmedString(req.params.sessionId, "sessionId");
+    const proxied = await deps.proxySprintPreviewRequestForProjectSprint(
+      scope.projectId,
+      scope.sprintId,
+      buildProxyRequestArgs(req, sessionId, `/api/browser/sessions/${sessionId}/proxy`),
+    );
+    sendProxiedResponse(res, proxied);
+  }));
+}
+
+function requirePreviewScope(req: { query: Record<string, unknown> }): { projectId: string; sprintId: string } {
+  return {
+    projectId: requireTrimmedString(req.query.projectId, "projectId"),
+    sprintId: requireTrimmedString(req.query.sprintId, "sprintId"),
+  };
+}
+
+function buildProxyRequestArgs(
+  req: Request,
+  sessionId: string,
+  prefix: string,
+): {
+  sessionId: string;
+  method: string;
+  path: string;
+  headers: Record<string, string | undefined>;
+  body?: Buffer;
+  selectedPort: string | null;
+} {
+  const pathWithQuery = req.originalUrl.startsWith(prefix)
+    ? req.originalUrl.slice(prefix.length) || "/"
+    : "/";
+  const { path: proxiedPath, selectedPort } = parsePreviewProxyPath(pathWithQuery, req.headers["x-code-ux-preview-port"]);
+  const body = req.body
+    ? Buffer.isBuffer(req.body)
+      ? req.body
+      : Buffer.from(JSON.stringify(req.body))
+    : undefined;
+  if (body && body.byteLength > 5 * 1024 * 1024) {
+    throw new HttpRouteError(413, "Request body exceeds maximum allowed size for proxied preview");
+  }
+  return {
+    sessionId,
+    method: req.method,
+    path: proxiedPath,
+    headers: Object.fromEntries(
+      Object.entries(req.headers).map(([key, value]) => [key, Array.isArray(value) ? value.join(", ") : value]),
+    ) as Record<string, string | undefined>,
+    body,
+    selectedPort,
+  };
+}
+
+function sendProxiedResponse(
+  res: Response,
+  proxied: { status: number; headers: Record<string, string>; body: Buffer },
+): void {
+  for (const [key, value] of Object.entries(proxied.headers)) {
+    res.setHeader(key, value);
+  }
+  res.status(proxied.status).send(proxied.body);
 }
 
 function parsePreviewProxyPath(

@@ -1,4 +1,4 @@
-import { mkdtemp, rm, mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdtemp, rm, mkdir, readFile, writeFile, symlink, access } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -23,6 +23,21 @@ async function createService(): Promise<{ service: InstructionFileService; baseD
 }
 
 describe("InstructionFileService", () => {
+  it("reads and writes valid catalog files", async () => {
+    const { service, baseDir } = await createService();
+    await writeFile(path.join(baseDir, "AGENTS.md"), "# Agents\n", "utf8");
+
+    const existing = await service.readInstructionFile("p1", "agents");
+    expect(existing.exists).toBe(true);
+    expect(existing.relativePath).toBe("AGENTS.md");
+    expect(existing.content).toBe("# Agents\n");
+
+    const saved = await service.writeInstructionFile("p1", "agents", "# Updated\n");
+    expect(saved.exists).toBe(true);
+    expect(saved.content).toBe("# Updated\n");
+    expect(await readFile(path.join(baseDir, "AGENTS.md"), "utf8")).toBe("# Updated\n");
+  });
+
   it("lists the catalogue and reports which files exist", async () => {
     const { service, baseDir } = await createService();
     await writeFile(path.join(baseDir, "CLAUDE.md"), "# Claude\n", "utf8");
@@ -76,12 +91,12 @@ describe("InstructionFileService", () => {
 
   it("rejects unknown file ids", async () => {
     const { service } = await createService();
-    await expect(service.readInstructionFile("p1", "../secrets")).rejects.toThrow(/Unknown instruction file/);
+    await expect(service.readInstructionFile("p1", "../secrets")).rejects.toThrow(/Invalid instruction file id/);
   });
 
   it("rejects projects without a base directory", async () => {
     const { service } = await createService();
-    await expect(service.listInstructionFiles("missing")).rejects.toThrow(/not found/);
+    await expect(service.listInstructionFiles("missing")).rejects.toThrow(/Missing project or base directory/);
   });
 
   it("rejects content over the size ceiling", async () => {
@@ -97,5 +112,28 @@ describe("InstructionFileService", () => {
     const saved = await service.writeInstructionFile("p1", "agents", "hello");
     expect(saved.exists).toBe(true);
     expect(await readFile(path.join(baseDir, "AGENTS.md"), "utf8")).toBe("hello");
+  });
+
+  it("rejects catalog file symlinks that point outside the project", async () => {
+    const { service, baseDir } = await createService();
+    const outsideDir = await mkdtemp(path.join(os.tmpdir(), "instruction-files-outside-"));
+    tmpDirs.push(outsideDir);
+    const outsideFile = path.join(outsideDir, "AGENTS.md");
+    await writeFile(outsideFile, "outside", "utf8");
+    await symlink(outsideFile, path.join(baseDir, "AGENTS.md"));
+
+    await expect(service.readInstructionFile("p1", "agents")).rejects.toThrow(/symlink target escapes/);
+    await expect(service.writeInstructionFile("p1", "agents", "new")).rejects.toThrow(/symlink target escapes/);
+    expect(await readFile(outsideFile, "utf8")).toBe("outside");
+  });
+
+  it("rejects writes through symlinked parent directories", async () => {
+    const { service, baseDir } = await createService();
+    const outsideDir = await mkdtemp(path.join(os.tmpdir(), "instruction-files-parent-outside-"));
+    tmpDirs.push(outsideDir);
+    await symlink(outsideDir, path.join(baseDir, ".github"));
+
+    await expect(service.writeInstructionFile("p1", "copilot", "outside")).rejects.toThrow(/parent directory escapes/);
+    await expect(access(path.join(outsideDir, "copilot-instructions.md"))).rejects.toThrow();
   });
 });
