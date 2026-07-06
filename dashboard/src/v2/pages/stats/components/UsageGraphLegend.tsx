@@ -34,6 +34,7 @@ export const UsageGraphLegend: FunctionComponent<UsageGraphLegendProps> = ({
               const fallbackColors = ['#F43F5E', '#8B5CF6', '#10B981', '#F59E0B', '#3B82F6', '#EC4899', '#14B8A6'];
               const accentHex = s.color || fallbackColors[idx % fallbackColors.length];
               const activeCountLabel = active ? 'On' : 'Off';
+              const disabledReasonId = `usage-series-${s.id}-disabled-reason`;
 
               return (
                 <button
@@ -42,7 +43,7 @@ export const UsageGraphLegend: FunctionComponent<UsageGraphLegendProps> = ({
                   role="switch"
                   aria-checked={active}
                   aria-disabled={disabled ? "true" : undefined}
-                  disabled={disabled}
+                  aria-describedby={disabled ? disabledReasonId : undefined}
                   aria-label={`${s.label} series, ${active ? 'enabled' : 'disabled'}${disabled ? ', required because it is the last active series' : ''}`}
                   onClick={() => {
                     if (!disabled) onToggleSeries(s.id);
@@ -75,6 +76,11 @@ export const UsageGraphLegend: FunctionComponent<UsageGraphLegendProps> = ({
                       }`}
                     />
                   </span>
+                  {disabled ? (
+                    <span id={disabledReasonId} className="sr-only">
+                      Keep one series enabled so the chart can still render.
+                    </span>
+                  ) : null}
                 </button>
               );
             })}
