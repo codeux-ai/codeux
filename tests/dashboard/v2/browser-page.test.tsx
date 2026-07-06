@@ -442,7 +442,7 @@ describe("BrowserPage", () => {
       await waitFor(() => {
         expect(screen.getByLabelText("Preview container logs")).toHaveTextContent("mock logs");
       });
-      expect(vi.mocked(fetchPreviewLogs)).toHaveBeenCalledWith("sess-1", 160);
+      expect(vi.mocked(fetchPreviewLogs)).toHaveBeenCalledWith("p1", "s1", "sess-1", 160);
     } finally {
       vi.useRealTimers();
     }
@@ -896,7 +896,7 @@ describe("BrowserPage", () => {
       fireEvent.click(screen.getAllByRole("button", { name: "Remove" })[0]!);
     });
 
-    expect(mockRemovePreviewSession).toHaveBeenCalledWith("sess-1");
+    expect(mockRemovePreviewSession).toHaveBeenCalledWith("p1", "s1", "sess-1");
     expect(mockRefreshSessions).toHaveBeenCalled();
   });
 
@@ -923,6 +923,6 @@ describe("BrowserPage", () => {
       resolveRemoval?.();
     });
 
-    expect(mockRemovePreviewSession).toHaveBeenCalledWith("sess-1");
+    expect(mockRemovePreviewSession).toHaveBeenCalledWith("p1", "s1", "sess-1");
   });
 });
