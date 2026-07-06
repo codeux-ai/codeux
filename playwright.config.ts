@@ -46,8 +46,13 @@ export default defineConfig({
   /* Configure projects for major browsers */
   projects: [
     {
-      name: 'chromium',
+      name: 'chromium-desktop',
       use: { ...devices['Desktop Chrome'] },
+    },
+    {
+      name: 'chromium-mobile',
+      testMatch: /sprint-ledger-responsive\.spec\.ts/,
+      use: { ...devices['Pixel 5'] },
     },
   ],
 
