@@ -13,7 +13,7 @@ The runtime ships three ways from one codebase: the **CLI/server** (`codeux`), a
 app**, and an **MCP server** (stdio + optional HTTPS worker gateway) so MCP-aware clients can drive
 it. The same backend powers all three.
 
-Key distinction from older docs: this is **no longer just a Jules MCP server**. Jules is one of
+Key distinction from older docs: this is **no longer just a hosted MCP server**. The Code UX runtime supports
 several providers. Local CLI providers (Gemini, Codex, Claude Code, Qwen, OpenCode, Antigravity) run
 in Docker-backed workspaces; Jules is the one hosted provider.
 
@@ -39,9 +39,9 @@ pnpm run audit          # pnpm audit --audit-level=high
 
 Electron: `pnpm run electron:dev`, `pnpm run electron:dist[:linux|:mac|:win]`.
 
-Coverage thresholds (vitest.config.ts, ratchet-only — never lower): lines 73.2%, functions 67.5%,
-branches 61.13%, statements 72.0%. `src/server/activity-cache-service.ts` has a separate 80% line
-gate. CI runs on Node 22: lint → backend coverage → dashboard tests → build → audit.
+Coverage thresholds (vitest.config.ts, ratchet-only — never lower): lines 77.4%, functions 71.5%,
+branches 66.1%, statements 76.0%. `src/server/activity-cache-service.ts` has a separate 80% line
+gate. CI runs on Node 22: lint → backend coverage → dashboard tests → build.
 
 ## Architecture
 
