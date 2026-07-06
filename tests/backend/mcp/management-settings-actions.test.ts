@@ -124,6 +124,25 @@ describe("SettingsActions", () => {
     expect(settingsRepository.saveSystemSettings).not.toHaveBeenCalled();
   });
 
+  it("preserves explicit null patch values after confirmation", async () => {
+    const payload = { path: "defaults.automationLevel", value: null };
+
+    await actions.handleSettingsAction({
+      domain: "settings",
+      action: "patch_system_setting",
+      payload,
+    });
+    const res = await actions.handleSettingsAction({
+      domain: "settings",
+      action: "patch_system_setting",
+      payload,
+      approval: { confirmed: true },
+    });
+
+    expect(res.result).toEqual({ settings: { defaults: { automationLevel: null } } });
+    expect(settingsRepository.saveSystemSettings).toHaveBeenCalledWith({ defaults: { automationLevel: null } });
+  });
+
   it("requires approval for replacing system settings", async () => {
     const res = await actions.handleSettingsAction({
       domain: "settings",
@@ -247,6 +266,13 @@ describe("SettingsActions", () => {
       await expect(
         actions.handleSettingsAction({ domain: "settings", action: "replace_system_settings", payload: {} }),
       ).rejects.toThrow(/settings object is required/);
+    });
+
+    it("rejects replace_system_settings with an invalid settings object type", async () => {
+      await expect(
+        actions.handleSettingsAction({ domain: "settings", action: "replace_system_settings", payload: { settings: [] } }),
+      ).rejects.toThrow(/settings object is required/);
+      expect(settingsRepository.saveSystemSettings).not.toHaveBeenCalled();
     });
 
     it("rejects replace_project_settings without a settings object", async () => {

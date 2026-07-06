@@ -2,7 +2,11 @@ import type { ManageCodeUxArgs, ManagementResponseEnvelope } from "../../contrac
 import type { SettingsRepository } from "../../repositories/settings-repository.js";
 import { SettingsPathUpdater } from "../../services/settings-path-updater.js";
 import type { SystemSettings, ProjectSettingsOverride, SprintSettingsOverride } from "../../contracts/settings-scope-types.js";
-import { managementValidationError, parseRequiredString as readRequiredString } from "./payload-parsers.js";
+import {
+  parseRequiredObject,
+  parseRequiredPresentValue,
+  parseRequiredString as readRequiredString,
+} from "./payload-parsers.js";
 
 const SETTINGS_APPROVAL_TTL_MS = 15 * 60 * 1000;
 const SETTINGS_APPROVAL_MESSAGE = [
@@ -11,21 +15,6 @@ const SETTINGS_APPROVAL_MESSAGE = [
   "DO NOT call this settings endpoint again with approval.confirmed: true unless the user explicitly confirms.",
   "This approval is one-use, bound to this exact action and payload, and expires in 15 minutes.",
 ].join(" ");
-
-function readRequiredValue(payload: Record<string, unknown>): unknown {
-  if (!("value" in payload)) {
-    throw managementValidationError("value is required", "value");
-  }
-  return payload.value;
-}
-
-function readRequiredSettingsObject<T>(payload: Record<string, unknown>): T {
-  const settings = payload.settings;
-  if (typeof settings !== "object" || settings === null || Array.isArray(settings)) {
-    throw managementValidationError("settings object is required", "settings");
-  }
-  return settings as T;
-}
 
 function normalizeForApproval(value: unknown): unknown {
   if (Array.isArray(value)) {
@@ -155,7 +144,7 @@ export class SettingsActions {
   }
 
   private replaceSystemSettings(args: ManageCodeUxArgs, payload: Record<string, unknown>): ManagementResponseEnvelope {
-    const settings = readRequiredSettingsObject<SystemSettings>(payload);
+    const settings = parseRequiredObject<SystemSettings>(payload, "settings", "settings object is required");
     const approval = this.requireSettingsApproval(args, payload);
     if (approval) return approval;
     return { result: { settings: this.settingsRepository.saveSystemSettings(settings) } };
@@ -163,7 +152,7 @@ export class SettingsActions {
 
   private patchSystemSetting(args: ManageCodeUxArgs, payload: Record<string, unknown>): ManagementResponseEnvelope {
     const path = readRequiredString(payload, "path");
-    const value = readRequiredValue(payload);
+    const value = parseRequiredPresentValue(payload, "value");
     const approval = this.requireSettingsApproval(args, payload);
     if (approval) return approval;
 
@@ -174,7 +163,7 @@ export class SettingsActions {
 
   private replaceProjectSettings(args: ManageCodeUxArgs, payload: Record<string, unknown>): ManagementResponseEnvelope {
     const projectId = readRequiredString(payload, "projectId");
-    const settings = readRequiredSettingsObject<ProjectSettingsOverride>(payload);
+    const settings = parseRequiredObject<ProjectSettingsOverride>(payload, "settings", "settings object is required");
     const approval = this.requireSettingsApproval(args, payload);
     if (approval) return approval;
     return { result: { settings: this.settingsRepository.saveProjectSettings(projectId, settings) } };
@@ -183,7 +172,7 @@ export class SettingsActions {
   private patchProjectSetting(args: ManageCodeUxArgs, payload: Record<string, unknown>): ManagementResponseEnvelope {
     const projectId = readRequiredString(payload, "projectId");
     const path = readRequiredString(payload, "path");
-    const value = readRequiredValue(payload);
+    const value = parseRequiredPresentValue(payload, "value");
     const approval = this.requireSettingsApproval(args, payload);
     if (approval) return approval;
 
@@ -203,7 +192,7 @@ export class SettingsActions {
   private replaceSprintSettings(args: ManageCodeUxArgs, payload: Record<string, unknown>): ManagementResponseEnvelope {
     const projectId = readRequiredString(payload, "projectId");
     const sprintId = readRequiredString(payload, "sprintId");
-    const settings = readRequiredSettingsObject<SprintSettingsOverride>(payload);
+    const settings = parseRequiredObject<SprintSettingsOverride>(payload, "settings", "settings object is required");
     const approval = this.requireSettingsApproval(args, payload);
     if (approval) return approval;
 
@@ -215,7 +204,7 @@ export class SettingsActions {
     const projectId = readRequiredString(payload, "projectId");
     const sprintId = readRequiredString(payload, "sprintId");
     const path = readRequiredString(payload, "path");
-    const value = readRequiredValue(payload);
+    const value = parseRequiredPresentValue(payload, "value");
     const approval = this.requireSettingsApproval(args, payload);
     if (approval) return approval;
 
