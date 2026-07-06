@@ -86,6 +86,7 @@ export const QuicksprintExecutionView: FunctionComponent<{
     ? `Default (${routeOverride.effectiveModel})`
     : defaultModelOptionLabel;
   const isSubmitBlocked = isBusy || pendingExecuteMode !== null || isCancelPending;
+  const controlsDisabled = isSubmitBlocked;
   const submitBlockedReason = isBusy
     ? "A quicksprint planning request is already running. Cancel it or wait for it to finish before submitting again."
     : pendingExecuteMode
@@ -186,8 +187,8 @@ export const QuicksprintExecutionView: FunctionComponent<{
                 <button
                   type="button"
                   onClick={onBackToBrowse}
-                  disabled={isBusy}
-                  aria-describedby={isSubmitBlocked ? duplicateSubmitDescriptionId : undefined}
+                  disabled={controlsDisabled}
+                  aria-describedby={controlsDisabled ? duplicateSubmitDescriptionId : undefined}
                   className="inline-flex min-h-[44px] min-w-[44px] h-8 w-8 items-center justify-center rounded-full border border-black/[0.06] text-slate-400 transition-colors duration-[var(--interaction-control-feedback-duration)] ease-[var(--interaction-control-feedback-ease)] hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-45 motion-reduce:transition-none dark:border-white/[0.06] dark:hover:text-white"
                   aria-label="Back to quicksprint templates"
                 >
@@ -218,14 +219,14 @@ export const QuicksprintExecutionView: FunctionComponent<{
                   <div className="mt-2">
                     <AvantgardeSelect
                       variant="compact"
-                      disabled={isBusy}
+                      disabled={controlsDisabled}
                       value={routeOverride?.id || ""}
                       onChange={(id) => {
                         const opt = routeOptions.find((o) => o.id === id);
                         setRouteOverride(opt || null);
                         publishStatus(`Planning route changed to ${opt?.label || defaultRouteOptionLabel}.`);
                       }}
-                      aria-describedby={isSubmitBlocked ? duplicateSubmitDescriptionId : routeStatusId}
+                      aria-describedby={controlsDisabled ? duplicateSubmitDescriptionId : routeStatusId}
                       options={[
                         {
                           value: "",
@@ -258,14 +259,14 @@ export const QuicksprintExecutionView: FunctionComponent<{
                   <div className="mt-2">
                     <AvantgardeSelect
                       variant="compact"
-                      disabled={!showModelOverride || isBusy}
+                      disabled={!showModelOverride || controlsDisabled}
                       value={modelOverride || ""}
                       onChange={(val) => {
                         const opt = modelOptions.find((option) => option.value === val);
                         setModelOverride(val || null);
                         publishStatus(`Model override changed to ${opt?.label || defaultModelLabel}.`);
                       }}
-                      aria-describedby={isSubmitBlocked ? duplicateSubmitDescriptionId : routeStatusId}
+                      aria-describedby={controlsDisabled ? duplicateSubmitDescriptionId : routeStatusId}
                       options={[
                         {
                           value: "",
@@ -297,8 +298,8 @@ export const QuicksprintExecutionView: FunctionComponent<{
                     setAdditionalPrompt((e.target as HTMLTextAreaElement).value);
                     publishStatus("Additional instructions updated for this quicksprint.");
                   }}
-                  disabled={isBusy}
-                  aria-describedby={isSubmitBlocked ? duplicateSubmitDescriptionId : undefined}
+                  disabled={controlsDisabled}
+                  aria-describedby={controlsDisabled ? duplicateSubmitDescriptionId : undefined}
                   placeholder="Add extra context or requirements for this specific run — e.g. 'Focus only on the auth module' or 'Include migration scripts'..."
                   rows={4}
                   className="w-full rounded-[1.7rem] border border-black/[0.06] bg-black/[0.025] p-5 text-sm leading-relaxed text-slate-700 outline-none transition-all placeholder:text-slate-300 focus:border-ember-500/40 focus:shadow-[0_0_0_1px_rgba(255,107,0,0.16),0_0_30px_rgba(255,107,0,0.08)] dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-300 dark:placeholder:text-slate-600 resize-y"
@@ -362,7 +363,8 @@ export const QuicksprintExecutionView: FunctionComponent<{
                   <input
                     type="checkbox"
                     checked={noTaskLimit}
-                    disabled={isBusy}
+                    disabled={controlsDisabled}
+                    aria-describedby={controlsDisabled ? duplicateSubmitDescriptionId : undefined}
                     onChange={(e) => {
                       const checked = (e.target as HTMLInputElement).checked;
                       setNoTaskLimit(checked);
@@ -379,7 +381,7 @@ export const QuicksprintExecutionView: FunctionComponent<{
                       setTaskCount(value);
                       publishStatus(`Subtask count set to ${value}.`);
                     }}
-                    disabled={noTaskLimit || isBusy}
+                    disabled={noTaskLimit || controlsDisabled}
                   />
                 </div>
               </div>
