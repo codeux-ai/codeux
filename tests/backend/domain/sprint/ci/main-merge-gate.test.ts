@@ -51,6 +51,13 @@ describe("MainMergeGateService", () => {
 
   it("returns info message if no open PR is found", async () => {
     const result = await MainMergeGateService.renderMergeFeedback(defaultContext);
+    const structured = MainMergeGateService.evaluateMergeFeedback(defaultContext);
+    expect(structured).toMatchObject({
+      state: "missing_pr",
+      prNumber: null,
+      hasFailedChecks: false,
+      hasPendingChecks: false,
+    });
     expect(result).toContain("No open PR `feature/sprint1 -> main` found");
   });
 
@@ -261,6 +268,13 @@ describe("MainMergeGateService", () => {
       },
     };
     const result = await MainMergeGateService.renderMergeFeedback(context);
+    const structured = MainMergeGateService.evaluateMergeFeedback(context);
+    expect(structured).toMatchObject({
+      state: "pending_checks",
+      prNumber: 101,
+      hasPendingChecks: true,
+      hasFailedChecks: false,
+    });
     expect(result).toContain("Check Status: `PENDING`\n");
     expect(result).toContain("Only approve merge into `main` once all required checks are green.");
   });
@@ -289,8 +303,62 @@ describe("MainMergeGateService", () => {
       },
     };
     const result = await MainMergeGateService.renderMergeFeedback(context);
+    const structured = MainMergeGateService.evaluateMergeFeedback(context);
+    expect(structured).toMatchObject({
+      state: "ready_for_merge",
+      prNumber: 101,
+      hasPendingChecks: false,
+      hasFailedChecks: false,
+      failedChecks: [],
+    });
     expect(result).toContain("Check Status: `SUCCESS`\n");
     expect(result).toContain("✅ Required checks are green. Main merge can be approved");
+  });
+
+  it("falls back to feature branch CI runs when the main PR has a stale empty check rollup", async () => {
+    const context: MergeFeedbackContext = {
+      ...defaultContext,
+      gitStatus: {
+        ...defaultContext.gitStatus!,
+        openPullRequests: [
+          {
+            number: 101,
+            title: "Sprint 1",
+            url: "https://github.com/repo/pull/101",
+            state: "OPEN",
+            isDraft: false,
+            headRefName: "feature/sprint1",
+            baseRefName: "main",
+            reviewDecision: "APPROVED",
+            comments: 0,
+            checks: [],
+          } as any,
+        ],
+        ciRuns: [
+          {
+            id: 9001,
+            name: "lint",
+            workflowName: "CI",
+            status: "completed",
+            conclusion: "failure",
+            headBranch: "feature/sprint1",
+            url: "https://github.com/repo/actions/runs/9001",
+            updatedAt: "2026-04-01T00:00:00.000Z",
+          },
+        ] as any,
+      },
+    };
+
+    const structured = MainMergeGateService.evaluateMergeFeedback(context);
+
+    expect(structured).toMatchObject({
+      state: "failed_checks",
+      hasFailedChecks: true,
+      hasPendingChecks: false,
+      failedChecks: ["CI"],
+    });
+    expect(structured.text).toContain("Check Status: `FAILED`");
+    expect(structured.text).toContain("Failed checks: CI");
   });
 
   it("treats the main PR as ready when CI waiting is disabled", async () => {

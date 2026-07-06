@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { WatchLoopRunner } from "../../../src/domain/sprint/orchestrator/watch-loop-runner.js";
+import { CycleRunner } from "../../../src/domain/sprint/orchestrator/cycle-runner.js";
 
 vi.mock("../../../src/services/cli-process-runner.js", () => ({
   runCommandStrict: vi.fn().mockResolvedValue({ stdout: "", stderr: "" }),
@@ -10,6 +11,7 @@ import { evaluateSprintRunState } from "../../../src/domain/sprint/orchestrator/
 import { decideMainMergeWaitOrPause, decideTerminalCompletion } from "../../../src/domain/sprint/orchestrator/watch-loop-policies.js";
 import { buildMockSettings } from "../../builders/settings-builder.js";
 import { buildMockSubtask } from "../../builders/subtask-builder.js";
+import { DEFAULT_DASHBOARD_SETTINGS } from "../../../src/repositories/settings-defaults.js";
 
 const buildDeps = () => ({
   heartbeatService: {
@@ -103,6 +105,148 @@ describe("WatchLoopRunner", () => {
     // merge conflict). Reset it to the default no-op success so it never leaks across tests.
     vi.mocked(runCommandStrict).mockReset();
     vi.mocked(runCommandStrict).mockResolvedValue({ stdout: "", stderr: "" } as any);
+  });
+
+  it("does not double-dispatch an unlocked dependent task across repeated cycles", async () => {
+    const dispatchRows: Array<{ taskId: string; sprintRunId: string; status: string }> = [];
+    const startTask = vi.fn().mockImplementation(async (task: any, context: any) => {
+      dispatchRows.push({
+        taskId: task.record_id,
+        sprintRunId: context.sprintRunId,
+        status: "running",
+      });
+      return { id: `session-${task.id}`, name: `sessions/session-${task.id}`, provider: "codex" };
+    });
+    const deps = {
+      settings: { maxFailures: 5 },
+      dashboardPort: 4444,
+      completedSprints: new Set<string>(),
+      getConsecutiveFailures: () => 0,
+      setConsecutiveFailures: vi.fn(),
+      isActionRequiredState: vi.fn().mockReturnValue(false),
+      resolveSessionName: (session: { name?: string }) => session.name,
+      extractSessionId: (session: { id?: string }) => session.id,
+      fetchRecentActivities: vi.fn().mockResolvedValue([]),
+      listSessions: vi.fn().mockResolvedValue({ sessions: [] }),
+      projectManagementRepository: {
+        updateTask: vi.fn(),
+        getTasksByIds: vi.fn().mockReturnValue([
+          { id: "task-1", executorType: "codex" },
+          { id: "task-2", executorType: "codex" },
+        ]),
+      },
+      taskService: {
+        resolveTaskProvider: vi.fn().mockReturnValue("codex"),
+      },
+      executionRepository: {
+        getLatestTaskRun: vi.fn().mockReturnValue(null),
+        getLatestTaskRunBySessionId: vi.fn().mockReturnValue(null),
+        getTaskRunByDispatchId: vi.fn().mockReturnValue(null),
+        listTaskDispatches: vi.fn().mockImplementation(({ taskId }: { taskId?: string }) =>
+          dispatchRows.filter((row) => !taskId || row.taskId === taskId),
+        ),
+        listExecutionInvocations: vi.fn().mockReturnValue([]),
+        updateTaskRun: vi.fn(),
+        updateTaskRunsBatch: vi.fn(),
+        updateTaskDispatch: vi.fn(),
+        updateTaskDispatchesBatch: vi.fn(),
+        appendTaskRunEvent: vi.fn(),
+      },
+      guardrailService: {
+        evaluate: vi.fn().mockReturnValue({ allowed: true, count: 0, cap: 0, action: "WARN_ONLY" }),
+        evaluateQa: vi.fn().mockReturnValue({ allowed: true, count: 0, cap: 0, action: "WARN_ONLY" }),
+        record: vi.fn(),
+        getCounts: vi.fn(),
+        reset: vi.fn(),
+      },
+      projectAttentionService: {
+        openItems: vi.fn(),
+        resolveItems: vi.fn(),
+        resolveItemsForTask: vi.fn(),
+        resolveItemsForSprintRun: vi.fn(),
+        listActiveProjectItems: vi.fn().mockReturnValue([]),
+      },
+      sprintExecutionStateService: {
+        loadSubtasks: vi.fn(),
+      },
+      startTask,
+      updateLastStatus: vi.fn(),
+      getDashboardSettings: () => DEFAULT_DASHBOARD_SETTINGS,
+      isJulesApiConfigured: () => true,
+      approveSessionPlan: vi.fn(),
+      sendSessionMessage: vi.fn(),
+      providerConcurrencyService: {
+        getGlobalRunningCounts: vi.fn().mockReturnValue({}),
+      },
+      renderInstruction: vi.fn().mockResolvedValue(""),
+      logger: {
+        debug: vi.fn(),
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+        child: vi.fn().mockReturnThis(),
+      },
+    };
+    const runner = new CycleRunner(deps as any);
+    let subtasks = [
+      buildMockSubtask({
+        id: "T1",
+        record_id: "task-1",
+        status: "COMPLETED",
+        is_merged: true,
+        depends_on: [],
+        is_independent: true,
+      }),
+      buildMockSubtask({
+        id: "T2",
+        record_id: "task-2",
+        status: "BLOCKED",
+        depends_on: ["T1"],
+        is_independent: false,
+        is_merged: false,
+      }),
+    ];
+    vi.mocked(deps.sprintExecutionStateService.loadSubtasks).mockImplementation(async () => subtasks as any);
+
+    const runArgs = {
+      action: "orchestrate" as const,
+      automationLevel: "FULL" as const,
+      automationInterventions: DEFAULT_DASHBOARD_SETTINGS.automationInterventions,
+      executionContext: {
+        project: { id: "project-1", name: "Project 1" } as any,
+        sprint: { id: "sprint-1", name: "Sprint 1" } as any,
+        sprintNumber: 1,
+        repoPath: "/repo/project-1",
+        featureBranch: "feature/sprint-1",
+        defaultBranch: "main",
+      },
+      repoPath: "/repo/project-1",
+      defaultFeatureBranch: "feature/sprint-1",
+      retryFailed: false,
+      loopSteps: {
+        loadSubtasks: true,
+        sessionSync: false,
+        statusDerivation: true,
+        startReadyTasks: true,
+        statusTable: false,
+        mergeProtocol: false,
+        actionRequiredProtocol: false,
+      } as any,
+      ciIntelligence: { enabled: false } as any,
+      githubMode: "REMOTE" as const,
+      defaultBranch: "main",
+      featureBranchPrefix: "feature/",
+      sprintRunId: "run-1",
+    };
+
+    const first = await runner.run(runArgs);
+    subtasks = first.subtasks.map((task) => ({ ...task }));
+    const second = await runner.run(runArgs);
+
+    expect(first.subtasks.find((task) => task.id === "T2")).toMatchObject({ status: "RUNNING" });
+    expect(second.subtasks.find((task) => task.id === "T2")).toMatchObject({ status: "RUNNING" });
+    expect(startTask).toHaveBeenCalledTimes(1);
+    expect(dispatchRows).toEqual([{ taskId: "task-2", sprintRunId: "run-1", status: "running" }]);
   });
 
   it.skip("continues past checkpoint boundaries until a terminal condition is reached", async () => {
