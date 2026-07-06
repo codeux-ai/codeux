@@ -431,6 +431,42 @@ describe("MainMergeGateService", () => {
       expect(result.state).toBe("pending_checks");
     });
 
+    it("does not auto-merge when WHEN_GREEN and checks are failed, then preserves green behavior", async () => {
+      const failedContext: MergeFeedbackContext = {
+        ...greenPrContext,
+        gitStatus: {
+          ...greenPrContext.gitStatus!,
+          openPullRequests: [
+            {
+              ...greenPrContext.gitStatus!.openPullRequests[0],
+              checks: [{ name: "test", status: "completed", conclusion: "failure" }],
+            } as any,
+          ],
+        },
+      };
+      const failedFeedback = MainMergeGateService.evaluateMergeFeedback(failedContext);
+      const autoMergePr = vi.fn().mockResolvedValue({ ok: true, merged: true });
+      const failedResult = await MainMergeGateService.attemptMainAutoMerge(failedFeedback, {
+        ...failedContext,
+        ciIntelligence: { ...defaultCiSettings, mainBranchAutoMergeMode: "WHEN_GREEN" },
+        autoMergeMainBranchPr: autoMergePr,
+      });
+
+      expect(failedResult.state).toBe("failed_checks");
+      expect(failedResult.hasFailedChecks).toBe(true);
+      expect(autoMergePr).not.toHaveBeenCalled();
+
+      const greenFeedback = MainMergeGateService.evaluateMergeFeedback(greenPrContext);
+      const greenResult = await MainMergeGateService.attemptMainAutoMerge(greenFeedback, {
+        ...greenPrContext,
+        ciIntelligence: { ...defaultCiSettings, mainBranchAutoMergeMode: "WHEN_GREEN" },
+        autoMergeMainBranchPr: autoMergePr,
+      });
+
+      expect(greenResult.state).toBe("automerge_succeeded");
+      expect(autoMergePr).toHaveBeenCalledWith({ repoPath: "/repo", prNumber: 101 });
+    });
+
     it("auto-merges when ALWAYS and no review blockers, ignoring CI", async () => {
       const feedback = MainMergeGateService.evaluateMergeFeedback(greenPrContext);
       const autoMergePr = vi.fn().mockResolvedValue({ ok: true, merged: true });
