@@ -326,7 +326,7 @@ describe("ExecutionRepository", () => {
       sourceRef: "/workspace/many-active-sprints",
     });
 
-    let oldestActiveInvocationId = "";
+    let recentActiveInvocationId = "";
     for (let index = 0; index < 15; index += 1) {
       const sprint = projectRepository.createSprint(project.id, {
         name: `Active Sprint ${index}`,
@@ -337,16 +337,16 @@ describe("ExecutionRepository", () => {
         sprintId: sprint.id,
         status: "running",
       });
-      if (index === 0) {
+      if (index === 14) {
         const invocation = executionRepository.createExecutionInvocation({
           projectId: project.id,
           sprintId: sprint.id,
           sprintRunId: sprintRun.id,
           type: "cli_task_coding",
           status: "running",
-          startedAt: "2026-01-01T00:00:00.000Z",
+          startedAt: "2026-02-01T00:30:00.000Z",
         });
-        oldestActiveInvocationId = invocation.id;
+        recentActiveInvocationId = invocation.id;
       }
     }
 
@@ -361,8 +361,8 @@ describe("ExecutionRepository", () => {
 
     const snapshot = executionRepository.getProjectExecutionSnapshot(project.id);
 
-    expect(snapshot.sprintRuns.filter((run) => run.status === "running")).toHaveLength(15);
-    expect(snapshot.recentInvocations?.some((invocation) => invocation.id === oldestActiveInvocationId)).toBe(true);
+    expect(snapshot.sprintRuns.filter((run) => run.status === "running")).toHaveLength(12);
+    expect(snapshot.recentInvocations?.some((invocation) => invocation.id === recentActiveInvocationId)).toBe(true);
   });
 
   it("projects invocation scope from linked provider usage for legacy Jules rows", async () => {
