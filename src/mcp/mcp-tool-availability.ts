@@ -120,6 +120,25 @@ const isBlockedIpv4Target = (octets: number[]): boolean => {
   );
 };
 
+const parseMappedIpv6Ipv4Octets = (host: string): number[] | null => {
+  const normalized = host.toLowerCase();
+  const mappedPrefix = normalized.startsWith("::ffff:")
+    ? "::ffff:"
+    : normalized.startsWith("0:0:0:0:0:ffff:")
+      ? "0:0:0:0:0:ffff:"
+      : null;
+  if (!mappedPrefix) return null;
+
+  const embedded = normalized.slice(mappedPrefix.length);
+  const dotted = parseDecimalIpv4(embedded);
+  if (dotted) return dotted;
+
+  const hextets = embedded.split(":");
+  if (hextets.length !== 2 || !hextets.every((part) => /^[0-9a-f]{1,4}$/.test(part))) return null;
+  const [high, low] = hextets.map((part) => Number.parseInt(part, 16));
+  return [high >> 8, high & 0xff, low >> 8, low & 0xff];
+};
+
 const getIpv6FirstHextet = (host: string): number | null => {
   const first = host.split(":").find((part) => part.length > 0);
   if (!first || !/^[0-9a-f]{1,4}$/i.test(first)) return null;
@@ -149,6 +168,8 @@ const isSafeHttpHostname = (hostname: string, rawHostname: string): boolean => {
     return !!octets && !isBlockedIpv4Target(octets);
   }
   if (ipVersion === 6) {
+    const mappedIpv4 = parseMappedIpv6Ipv4Octets(host);
+    if (mappedIpv4) return !isBlockedIpv4Target(mappedIpv4);
     return !isBlockedIpv6Target(host);
   }
   return true;
