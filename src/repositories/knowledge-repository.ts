@@ -112,6 +112,13 @@ export class KnowledgeRepository {
     return row ? this.mapDocument(row) : null;
   }
 
+  getDocumentForProject(projectId: string, documentId: string): KnowledgeDocumentRecord | null {
+    const row = this.db.prepare(
+      "SELECT * FROM knowledge_documents WHERE project_id = ? AND id = ?",
+    ).get(projectId, documentId) as DocumentRow | undefined;
+    return row ? this.mapDocument(row) : null;
+  }
+
   findByContentHash(projectId: string, contentHash: string): KnowledgeDocumentRecord | null {
     const row = this.db.prepare(
       "SELECT * FROM knowledge_documents WHERE project_id = ? AND content_hash = ? LIMIT 1",
@@ -163,6 +170,17 @@ export class KnowledgeRepository {
       this.db.prepare("DELETE FROM knowledge_documents WHERE id = ?").run(documentId);
     } catch (error) {
       this.logger.error("Operation failed", { error, documentId });
+      throw new RepositoryError(error instanceof Error ? error.message : "Operation failed", error);
+    }
+  }
+
+  deleteDocumentForProject(projectId: string, documentId: string): boolean {
+    try {
+      // chunks + subscriptions cascade via FK
+      const result = this.db.prepare("DELETE FROM knowledge_documents WHERE project_id = ? AND id = ?").run(projectId, documentId);
+      return result.changes > 0;
+    } catch (error) {
+      this.logger.error("Operation failed", { error, projectId, documentId });
       throw new RepositoryError(error instanceof Error ? error.message : "Operation failed", error);
     }
   }

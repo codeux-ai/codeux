@@ -32,16 +32,20 @@ import {
 } from "./lib/scheduler-api.js";
 import type {
   CreateSchedulerEntryInput,
+  ScheduleAnchor,
   SchedulerCollectionResponse,
   SchedulerEntryRecord,
   SchedulerOccurrence,
   ScheduleRecurrenceRule,
   ScheduleTargetType,
   SprintRecord,
+  UpdateSchedulerEntryInput,
 } from "./types.js";
 import type { QuicksprintTemplateRecord } from "../../../src/contracts/quicksprint-types.js";
 
 type SchedulerView = "calendar" | "day";
+type ScheduleTimingMode = "absolute" | "after_sprint_end";
+type SchedulerFormInput = Omit<UpdateSchedulerEntryInput, "targetType"> & Pick<CreateSchedulerEntryInput, "targetType">;
 type FeedbackState = { tone: "idle" | "success" | "error"; message: string | null };
 
 const SCHEDULER_FIELD_CLASS = "scheduler-field rounded-[var(--radius-ui)] border border-[color:var(--color-border-muted)] dark:border-white/[0.06] hover:border-[color:var(--color-border-muted)] dark:hover:border-white/[0.12] bg-white/80 dark:bg-white/[0.05] px-3.5 text-sm font-semibold text-slate-700 dark:text-slate-200 placeholder-slate-400 shadow-[inset_0_1px_0_rgba(255,255,255,0.55)] outline-none transition-all duration-150 ease-[cubic-bezier(0.4,0,0.2,1)] focus:border-signal-500/40 focus:outline-none focus:ring-2 focus:ring-signal-500/20";
@@ -153,6 +157,28 @@ const recurrenceSummary = (recurrence: ScheduleRecurrenceRule): string => {
   return `Every ${every}`;
 };
 
+const scheduleAnchorOffsetLabel = (offsetMinutes?: number): string => {
+  const offset = Math.max(0, Math.floor(Number(offsetMinutes ?? 0)));
+  if (offset === 0) {
+    return "";
+  }
+  if (offset === 1) {
+    return " + 1 minute";
+  }
+  return ` + ${offset} minutes`;
+};
+
+const sprintDisplayName = (sprints: SprintRecord[], sprintId: string): string => (
+  sprints.find((sprint) => sprint.id === sprintId)?.name || sprintId
+);
+
+const scheduleTimingSummary = (entry: SchedulerEntryRecord, sprints: SprintRecord[]): string => {
+  if (entry.scheduleAnchor?.mode === "after_sprint_end") {
+    return `After ${sprintDisplayName(sprints, entry.scheduleAnchor.sourceSprintId)} ends${scheduleAnchorOffsetLabel(entry.scheduleAnchor.offsetMinutes)}`;
+  }
+  return `Next run: ${entry.nextRunAt ? new Date(entry.nextRunAt).toLocaleString() : "none"}`;
+};
+
 const ProjectPlaceholder: FunctionComponent = () => (
   <div className="rounded-[1.75rem] border border-black/[0.06] bg-white/70 p-6 md:p-8 shadow-[0_2px_20px_rgba(0,0,0,0.04)] backdrop-blur-2xl dark:border-white/[0.06] dark:bg-void-800/60 dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]">
     <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-signal-500/20 bg-signal-500/[0.08] text-signal-500 shadow-[0_0_15px_rgba(0,224,160,0.08)]">
@@ -209,6 +235,9 @@ export const SchedulerPage: FunctionComponent = () => {
     date.setHours(date.getHours() + 1, 0, 0, 0);
     return toDateInputValue(date);
   });
+  const [scheduleTimingMode, setScheduleTimingMode] = useState<ScheduleTimingMode>("absolute");
+  const [anchorSourceSprintId, setAnchorSourceSprintId] = useState("");
+  const [anchorOffsetMinutes, setAnchorOffsetMinutes] = useState(0);
   const [selectedSprintId, setSelectedSprintId] = useState("");
   const [selectedTemplateId, setSelectedTemplateId] = useState("");
   const [taskCount, setTaskCount] = useState(5);
@@ -243,6 +272,7 @@ export const SchedulerPage: FunctionComponent = () => {
       setSprints(sprintResponse.sprints);
       setTemplates(quicksprintTemplates);
       setSelectedSprintId((current) => current || sprintResponse.sprints.find((sprint) => sprint.status !== "completed")?.id || "");
+      setAnchorSourceSprintId((current) => current || sprintResponse.sprints[0]?.id || "");
       setSelectedTemplateId((current) => current || quicksprintTemplates[0]?.id || "");
     } catch (error) {
       if (!signal?.aborted) {
@@ -261,6 +291,16 @@ export const SchedulerPage: FunctionComponent = () => {
     return () => controller.abort();
   }, [refresh]);
 
+  const incompleteSprints = useMemo(() => sprints.filter((sprint) => sprint.status !== "completed"), [sprints]);
+  const canUseAnchoredTiming = targetType === "sprint" || targetType === "quicksprint";
+  const isAnchoredTiming = canUseAnchoredTiming && scheduleTimingMode === "after_sprint_end";
+
+  useEffect(() => {
+    if (!canUseAnchoredTiming && scheduleTimingMode === "after_sprint_end") {
+      setScheduleTimingMode("absolute");
+    }
+  }, [canUseAnchoredTiming, scheduleTimingMode]);
+
   useEffect(() => {
     if (!selectedProject?.id) return;
     return subscribeToDashboardRealtime([`project:${selectedProject.id}`], (message) => {
@@ -277,7 +317,6 @@ export const SchedulerPage: FunctionComponent = () => {
     });
   }, [selectedProject?.id, refresh]);
 
-  const incompleteSprints = useMemo(() => sprints.filter((sprint) => sprint.status !== "completed"), [sprints]);
   const weekDays = useMemo(() => Array.from({ length: 7 }, (_item, index) => addDays(startOfWeek(selectedDate), index)), [selectedDate]);
   const dayOccurrences = useMemo(() => {
     const dayStart = startOfDay(selectedDate).getTime();
@@ -348,6 +387,15 @@ export const SchedulerPage: FunctionComponent = () => {
     setEntryTitle(entry.title);
     setTargetType(entry.targetType);
     setScheduledFor(toDateInputValue(new Date(entry.scheduledFor)));
+    if (entry.scheduleAnchor?.mode === "after_sprint_end") {
+      setScheduleTimingMode("after_sprint_end");
+      setAnchorSourceSprintId(entry.scheduleAnchor.sourceSprintId);
+      setAnchorOffsetMinutes(entry.scheduleAnchor.offsetMinutes ?? 0);
+    } else {
+      setScheduleTimingMode("absolute");
+      setAnchorSourceSprintId((current) => current || sprints[0]?.id || "");
+      setAnchorOffsetMinutes(0);
+    }
 
     if (entry.targetType === "sprint" && entry.sprintTarget) {
       setSelectedSprintId(entry.sprintTarget.sprintId);
@@ -370,6 +418,9 @@ export const SchedulerPage: FunctionComponent = () => {
     } else {
       setRepeatEnabled(false);
     }
+    if (entry.scheduleAnchor) {
+      setRepeatEnabled(false);
+    }
   };
 
   const cancelEdit = () => {
@@ -379,6 +430,9 @@ export const SchedulerPage: FunctionComponent = () => {
     const date = new Date();
     date.setHours(date.getHours() + 1, 0, 0, 0);
     setScheduledFor(toDateInputValue(date));
+    setScheduleTimingMode("absolute");
+    setAnchorSourceSprintId(sprints[0]?.id || "");
+    setAnchorOffsetMinutes(0);
     setSelectedSprintId(sprints.find((sprint) => sprint.status !== "completed")?.id || "");
     setSelectedTemplateId(templates[0]?.id || "");
     setTaskCount(5);
@@ -407,7 +461,7 @@ export const SchedulerPage: FunctionComponent = () => {
       return;
     }
     setFeedback({ tone: "idle", message: null });
-    const recurrence: Partial<ScheduleRecurrenceRule> = repeatEnabled
+    const recurrence: Partial<ScheduleRecurrenceRule> = repeatEnabled && !isAnchoredTiming
       ? {
         frequency,
         interval,
@@ -456,13 +510,42 @@ export const SchedulerPage: FunctionComponent = () => {
       }
     }
 
-    const input: any = {
+    let scheduleAnchor: ScheduleAnchor | undefined;
+    if (isAnchoredTiming) {
+      if (!anchorSourceSprintId) {
+        setFeedback({ tone: "error", message: "Choose the sprint this schedule should wait for." });
+        return;
+      }
+      const offsetMinutes = Math.floor(Number(anchorOffsetMinutes || 0));
+      if (!Number.isFinite(offsetMinutes) || offsetMinutes < 0) {
+        setFeedback({ tone: "error", message: "Offset minutes must be zero or greater." });
+        return;
+      }
+      if (targetType === "sprint" && selectedSprintId === anchorSourceSprintId) {
+        setFeedback({ tone: "error", message: "A sprint cannot be scheduled after its own completion." });
+        return;
+      }
+      scheduleAnchor = {
+        mode: "after_sprint_end",
+        sourceSprintId: anchorSourceSprintId,
+        offsetMinutes,
+      };
+    }
+
+    const input: SchedulerFormInput = {
       title: finalTitle,
       targetType,
-      scheduledFor: new Date(scheduledFor).toISOString(),
       timezone: editingEntry ? editingEntry.timezone : (Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC"),
       recurrence,
     };
+    if (scheduleAnchor) {
+      input.scheduleAnchor = scheduleAnchor;
+    } else {
+      input.scheduledFor = new Date(scheduledFor).toISOString();
+      if (editingEntry?.scheduleAnchor) {
+        input.scheduleAnchor = null;
+      }
+    }
 
     if (targetType === "sprint") {
       input.sprintTarget = { sprintId: selectedSprintId };
@@ -489,7 +572,11 @@ export const SchedulerPage: FunctionComponent = () => {
         setFeedback({ tone: "success", message: "Schedule entry updated." });
         cancelEdit();
       } else {
-        await createSchedulerEntry(selectedProject.id, input);
+        const createInput: CreateSchedulerEntryInput = {
+          ...input,
+          scheduleAnchor: input.scheduleAnchor ?? undefined,
+        };
+        await createSchedulerEntry(selectedProject.id, createInput);
         setFeedback({ tone: "success", message: "Schedule entry created." });
         setChatMessage("");
         setEntryTitle("");
@@ -742,31 +829,92 @@ export const SchedulerPage: FunctionComponent = () => {
               </label>
             )}
 
-            <label className="block">
-              <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Date and time</span>
-              <input
-                type="datetime-local"
-                value={scheduledFor}
-                onInput={(event) => setScheduledFor(event.currentTarget.value)}
-                className={`mt-2 min-h-[44px] w-full ${SCHEDULER_FIELD_CLASS}`}
-              />
-              <div className="mt-2 grid grid-cols-3 gap-2">
-                {[
-                  { label: "In 1h", date: () => { const date = new Date(); date.setHours(date.getHours() + 1, 0, 0, 0); return date; } },
-                  { label: "Tomorrow 9", date: () => { const date = addDays(new Date(), 1); date.setHours(9, 0, 0, 0); return date; } },
-                  { label: "Monday 9", date: () => { const date = startOfWeek(addDays(new Date(), 7)); date.setHours(9, 0, 0, 0); return date; } },
-                ].map((preset) => (
-                  <button
-                    key={preset.label}
-                    type="button"
-                    onClick={() => setScheduledFor(toDateInputValue(preset.date()))}
-                    className="min-h-[32px] rounded-full border border-black/[0.06] bg-black/[0.025] px-2 text-[10px] font-black uppercase tracking-[0.11em] text-slate-500 transition hover:border-signal-500/20 hover:text-slate-900 dark:border-white/[0.06] dark:bg-white/[0.035] dark:text-slate-400 dark:hover:text-white"
-                  >
-                    {preset.label}
-                  </button>
-                ))}
+            <div className="rounded-2xl border border-black/[0.06] bg-black/[0.015] p-4 dark:border-white/[0.06] dark:bg-white/[0.02]">
+              <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Timing</div>
+              <div className="mt-3 grid gap-2" role="radiogroup" aria-label="Schedule timing">
+                <label className="flex cursor-pointer items-center gap-3 rounded-xl border border-black/[0.06] bg-white/60 px-3 py-2.5 text-xs font-bold text-slate-700 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-200">
+                  <input
+                    type="radio"
+                    name="schedule-timing-mode"
+                    value="absolute"
+                    checked={scheduleTimingMode === "absolute"}
+                    onChange={() => setScheduleTimingMode("absolute")}
+                    className="h-4 w-4 accent-signal-500"
+                  />
+                  Absolute date/time
+                </label>
+                {canUseAnchoredTiming && (
+                  <label className="flex cursor-pointer items-center gap-3 rounded-xl border border-black/[0.06] bg-white/60 px-3 py-2.5 text-xs font-bold text-slate-700 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-200">
+                    <input
+                      type="radio"
+                      name="schedule-timing-mode"
+                      value="after_sprint_end"
+                      checked={scheduleTimingMode === "after_sprint_end"}
+                      onChange={() => setScheduleTimingMode("after_sprint_end")}
+                      className="h-4 w-4 accent-signal-500"
+                    />
+                    After another sprint ends
+                  </label>
+                )}
               </div>
-            </label>
+
+              {isAnchoredTiming ? (
+                <div className="mt-4 grid gap-3">
+                  <label className="block">
+                    <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Wait for sprint</span>
+                    <AvantgardeSelect
+                      value={anchorSourceSprintId}
+                      onChange={setAnchorSourceSprintId}
+                      searchable={true}
+                      options={[
+                        { value: "", label: "Choose source sprint" },
+                        ...sprints.map((sprint) => ({ value: sprint.id, label: `${sprint.name} (${sprint.status})` })),
+                      ]}
+                      className="mt-2"
+                    />
+                  </label>
+                  <label className="block">
+                    <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Offset minutes</span>
+                    <input
+                      type="number"
+                      min={0}
+                      value={anchorOffsetMinutes}
+                      onInput={(event) => setAnchorOffsetMinutes(Number(event.currentTarget.value))}
+                      className={`mt-2 min-h-[44px] w-full ${SCHEDULER_FIELD_CLASS}`}
+                    />
+                  </label>
+                  <p className="text-xs leading-relaxed text-slate-400">
+                    Anchored schedules run once after the source sprint reaches a terminal state. Recurrence is disabled, and a sprint cannot wait for its own completion.
+                  </p>
+                </div>
+              ) : (
+                <label className="mt-4 block">
+                  <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Date and time</span>
+                  <input
+                    type="datetime-local"
+                    value={scheduledFor}
+                    onInput={(event) => setScheduledFor(event.currentTarget.value)}
+                    className={`mt-2 min-h-[44px] w-full ${SCHEDULER_FIELD_CLASS}`}
+                  />
+                  <div className="mt-2 grid grid-cols-3 gap-2">
+                    {[
+                      { label: "In 1h", date: () => { const date = new Date(); date.setHours(date.getHours() + 1, 0, 0, 0); return date; } },
+                      { label: "Tomorrow 9", date: () => { const date = addDays(new Date(), 1); date.setHours(9, 0, 0, 0); return date; } },
+                      { label: "Monday 9", date: () => { const date = startOfWeek(addDays(new Date(), 7)); date.setHours(9, 0, 0, 0); return date; } },
+                    ].map((preset) => (
+                      <button
+                        key={preset.label}
+                        type="button"
+                        onClick={() => setScheduledFor(toDateInputValue(preset.date()))}
+                        className="min-h-[32px] rounded-full border border-black/[0.06] bg-black/[0.025] px-2 text-[10px] font-black uppercase tracking-[0.11em] text-slate-500 transition hover:border-signal-500/20 hover:text-slate-900 dark:border-white/[0.06] dark:bg-white/[0.035] dark:text-slate-400 dark:hover:text-white"
+                      >
+                        {preset.label}
+                      </button>
+                    ))}
+                  </div>
+                </label>
+              )}
+            </div>
 
             <div className="rounded-2xl border border-black/[0.06] bg-black/[0.015] p-4 dark:border-white/[0.06] dark:bg-white/[0.02]">
               <label className="flex items-center justify-between gap-3">
@@ -777,12 +925,19 @@ export const SchedulerPage: FunctionComponent = () => {
                 <input
                   type="checkbox"
                   checked={repeatEnabled}
+                  disabled={isAnchoredTiming}
                   onChange={(event) => setRepeatEnabled(event.currentTarget.checked)}
                   className="h-5 w-5 accent-signal-500 rounded border-black/[0.08] dark:border-white/[0.08]"
                 />
               </label>
 
-              {repeatEnabled && (
+              {isAnchoredTiming && (
+                <p className="mt-3 text-xs leading-relaxed text-slate-400">
+                  After-sprint-end schedules are one-time entries.
+                </p>
+              )}
+
+              {repeatEnabled && !isAnchoredTiming && (
                 <div className="mt-4 grid gap-3">
                   <div className="grid grid-cols-[5rem_minmax(0,1fr)] gap-2">
                     <input
@@ -1078,7 +1233,7 @@ export const SchedulerPage: FunctionComponent = () => {
                       </div>
                       <h4 className="mt-2 truncate text-sm font-semibold text-slate-900 dark:text-white">{entry.title}</h4>
                       <p className="mt-1 text-xs font-medium text-slate-500 dark:text-slate-400">
-                        Next run: {entry.nextRunAt ? new Date(entry.nextRunAt).toLocaleString() : "none"}
+                        {scheduleTimingSummary(entry, sprints)}
                         {entry.lastRunAt && ` · Last fired: ${new Date(entry.lastRunAt).toLocaleString()}`}
                       </p>
                       {entry.lastError && (

@@ -2,7 +2,7 @@ import type { FunctionComponent } from "preact";
 import { useRef, useEffect, useState, useLayoutEffect, useCallback } from "preact/hooks";
 import { Link, useRouterState } from "@tanstack/react-router";
 import { prefetchRoute } from "../router/route-prefetch.js";
-import { MessageCircle, Hexagon, Layers, ListChecks, Zap, Settings, Inbox, Cpu, BarChart3, Compass, CalendarDays, FolderTree, Library } from "lucide-preact";
+import { BookOpen, MessageCircle, Hexagon, Layers, ListChecks, Zap, Settings, Inbox, Cpu, BarChart3, Compass, CalendarDays, FolderTree, Library } from "lucide-preact";
 import gsap from "gsap";
 import { useProjectData } from "../context/project-data.js";
 import { useProjectEffectiveSettings } from "../hooks/use-project-effective-settings.js";
@@ -25,6 +25,7 @@ const RIGHT_ITEMS = [
     { icon: Compass,  label: "Browser",  path: "/browser", color: "text-signal-500" },
     { icon: FolderTree, label: "Files",  path: "/files",   color: "text-signal-500" },
     { icon: Zap,      label: "Live",     path: "/live",    color: "text-signal-500" },
+    { icon: BookOpen, label: "Docs",     path: "/docs",    color: "text-signal-500" },
     { icon: Settings, label: "Config",   path: "/config",  color: "text-slate-400 dark:text-slate-400" },
 ] as const;
 

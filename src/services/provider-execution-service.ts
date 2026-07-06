@@ -12,6 +12,7 @@ import type { CliProviderId } from "../infrastructure/providers/cli/provider-com
 import type { ParsedConversationTurn, ProviderUsageTelemetry } from "../infrastructure/providers/cli/provider-usage.js";
 import type { AppendExecutionInvocationMessageInput } from "../contracts/invocation-types.js";
 import type { Logger } from "../shared/logging/logger.js";
+import { getCorrelationId } from "../shared/logging/correlation-id.js";
 import type { ProviderConcurrencyService } from "./provider-concurrency-service.js";
 import { isReadFileNotFoundToolError, buildReadFileRetryPrompt } from "./cli-workflow-text-utils.js";
 import { classifyProviderError, ProviderQuotaError } from "../shared/providers/provider-error-classifier.js";
@@ -324,6 +325,7 @@ export class ProviderExecutionService {
       const startedMs = Date.now();
       this.deps.logger?.info("Provider invocation started", {
         logPurpose: "invocation",
+        correlationId: getCorrelationId(),
         invocationId: execInvocationId,
         providerInvocationId: invocation?.id,
         projectId: args.projectId,
@@ -458,6 +460,7 @@ export class ProviderExecutionService {
           }
           const logFields = {
             logPurpose: "invocation" as const,
+            correlationId: getCorrelationId(),
             invocationId: execInvocationId,
             providerInvocationId: invocation?.id,
             projectId: args.projectId,
@@ -466,8 +469,9 @@ export class ProviderExecutionService {
             provider: args.provider,
             model: effectiveModel,
             purpose: args.purpose,
+            executionMode: args.workflowSettings.executionMode,
             durationMs: Date.now() - startedMs,
-            error,
+            errorName: error instanceof Error ? error.name : "Error",
           };
           if (wasCancelled) {
             this.deps.logger?.info("Provider invocation cancelled", logFields);
@@ -524,6 +528,7 @@ export class ProviderExecutionService {
 
       this.deps.logger?.info("Provider invocation finished", {
         logPurpose: "invocation",
+        correlationId: getCorrelationId(),
         invocationId: execInvocationId,
         providerInvocationId: invocation?.id,
         projectId: args.projectId,
@@ -688,7 +693,12 @@ export class ProviderExecutionService {
             });
           }
           continueSessionId = providerResult.nativeSessionId || (args.provider === "claude-code" ? null : args.sessionId);
-          await sleepWithSignal(retryDecision.delayMs, args.signal);
+          await this.sleepUntilInvocationRetryTimer({
+            invocationId: execInvocationId,
+            retryAtIso: retryAfterIso,
+            delayMs: retryDecision.delayMs,
+            signal: args.signal,
+          });
           continue;
         }
       }
@@ -736,6 +746,40 @@ export class ProviderExecutionService {
   private isExecutionInvocationStillRunning(executionInvocationId: string): boolean {
     const current = this.deps.executionRepository?.getExecutionInvocation?.(executionInvocationId);
     return !current || current.status === "running" || current.status === "paused";
+  }
+
+  private async sleepUntilInvocationRetryTimer(args: {
+    invocationId: string | null;
+    retryAtIso: string | null;
+    delayMs: number;
+    signal?: AbortSignal;
+  }): Promise<void> {
+    if (
+      !args.invocationId
+      || !args.retryAtIso
+      || !this.deps.executionRepository
+      || typeof this.deps.executionRepository.getExecutionInvocation !== "function"
+    ) {
+      await sleepWithSignal(args.delayMs, args.signal);
+      return;
+    }
+
+    const deadlineMs = Date.now() + Math.max(0, args.delayMs);
+    while (Date.now() < deadlineMs) {
+      const invocation = this.deps.executionRepository.getExecutionInvocation(args.invocationId);
+      if (invocation && invocation.status !== "running" && invocation.status !== "paused") {
+        throw new Error(`Invocation retry wait stopped because invocation is ${invocation.status}.`);
+      }
+      if (!invocation?.lastRetryAfterIso || invocation.lastRetryAfterIso !== args.retryAtIso) {
+        return;
+      }
+
+      const beforeSleepMs = Date.now();
+      await sleepWithSignal(Math.min(1000, Math.max(1, deadlineMs - beforeSleepMs)), args.signal);
+      if (Date.now() <= beforeSleepMs) {
+        return;
+      }
+    }
   }
 
   private refreshLinkedDispatchHeartbeat(dispatchId: string | null | undefined): void {

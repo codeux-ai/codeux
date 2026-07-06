@@ -170,6 +170,200 @@ afterEach(async () => {
       expect(loggedMetadata).not.toContain("raw provider transcript");
     });
 
+    it("preserves failed provider invocation diagnostics across update and linked invocation queries", async () => {
+      const { projectRepository, executionRepository } = await createRepositories();
+      const project = projectRepository.createProject({
+        name: "Failed Provider Invocation Project",
+        sourceType: "local",
+        sourceRef: "/workspace/failed-provider-invocation",
+      });
+
+      const usage = executionRepository.createProviderInvocationUsage({
+        projectId: project.id,
+        sessionId: "provider-session-1",
+        provider: "codex",
+        purpose: "task_coding",
+        status: "running",
+        model: "gpt-test",
+        executionMode: "DOCKER",
+        nativeSessionId: "native-before-failure",
+        startedAt: "2026-01-01T00:00:00.000Z",
+        promptChars: 321,
+      });
+      const executionInvocation = executionRepository.createExecutionInvocation({
+        projectId: project.id,
+        type: "cli_provider",
+        status: "running",
+        providerInvocationId: usage.id,
+      });
+
+      const updated = executionRepository.updateProviderInvocationUsage(usage.id, {
+        status: "failed",
+        finishedAt: "2026-01-01T00:01:00.000Z",
+        durationMs: 60_000,
+        nativeSessionId: "native-after-failure",
+        transcriptChars: 128,
+        inputTokens: 10,
+        cachedInputTokens: 3,
+        outputTokens: 4,
+        reasoningOutputTokens: 2,
+        totalTokens: 19,
+        toolCallCount: 1,
+        usageSource: "reported",
+        rawUsageJson: {
+          failureCode: "provider_error",
+          retryable: false,
+          apiKey: "stored-but-not-logged",
+          transcript: "stored raw provider transcript",
+        },
+      });
+      executionRepository.updateExecutionInvocation(executionInvocation.id, {
+        status: "failed",
+        providerInvocationId: usage.id,
+      });
+
+      expect(updated).toEqual(expect.objectContaining({
+        id: usage.id,
+        projectId: project.id,
+        sessionId: "provider-session-1",
+        provider: "codex",
+        purpose: "task_coding",
+        status: "failed",
+        model: "gpt-test",
+        executionMode: "DOCKER",
+        nativeSessionId: "native-after-failure",
+        finishedAt: "2026-01-01T00:01:00.000Z",
+        durationMs: 60_000,
+        promptChars: 321,
+        transcriptChars: 128,
+        inputTokens: 10,
+        cachedInputTokens: 3,
+        outputTokens: 4,
+        reasoningOutputTokens: 2,
+        totalTokens: 19,
+        toolCallCount: 1,
+        usageSource: "reported",
+      }));
+      expect(updated.rawUsageJson).toEqual(expect.objectContaining({
+        failureCode: "provider_error",
+        retryable: false,
+        apiKey: "stored-but-not-logged",
+        transcript: "stored raw provider transcript",
+      }));
+
+      expect(executionRepository.getProviderInvocationUsage(usage.id)).toEqual(expect.objectContaining({
+        id: usage.id,
+        status: "failed",
+        nativeSessionId: "native-after-failure",
+        rawUsageJson: expect.objectContaining({ failureCode: "provider_error" }),
+      }));
+      expect(executionRepository.getLatestProviderInvocationUsageBySession("provider-session-1", "task_coding")).toEqual(expect.objectContaining({
+        id: usage.id,
+        status: "failed",
+      }));
+      expect(executionRepository.listExecutionInvocationsByProviderInvocationId(usage.id)).toEqual([
+        expect.objectContaining({
+          id: executionInvocation.id,
+          status: "failed",
+          providerInvocationId: usage.id,
+        }),
+      ]);
+    });
+
+    it("round-trips failed provider invocation observability fields with nulls and zeros", async () => {
+      const { projectRepository, executionRepository } = await createRepositories();
+      const project = projectRepository.createProject({
+        name: "Provider Invocation Round Trip Project",
+        sourceType: "local",
+        sourceRef: "/workspace/provider-invocation-round-trip",
+      });
+
+      const usage = executionRepository.createProviderInvocationUsage({
+        projectId: project.id,
+        sessionId: "round-trip-session",
+        provider: "codex",
+        purpose: "task_coding",
+        status: "running",
+        model: null,
+        executionMode: null,
+        nativeSessionId: null,
+        startedAt: "2026-01-02T03:04:05.000Z",
+        promptChars: 0,
+        julesTokens: 0,
+      });
+
+      const updated = executionRepository.updateProviderInvocationUsage(usage.id, {
+        status: "failed",
+        model: null,
+        executionMode: null,
+        nativeSessionId: null,
+        finishedAt: null,
+        durationMs: 0,
+        transcriptChars: 0,
+        inputTokens: 0,
+        cachedInputTokens: 0,
+        outputTokens: 0,
+        reasoningOutputTokens: 0,
+        totalTokens: 0,
+        toolCallCount: 0,
+        julesTokens: 0,
+        usageSource: "reported",
+        invocationSource: "internal",
+        rawUsageJson: {
+          failureCode: "provider_exit",
+          failureMessage: "provider exited before emitting telemetry",
+          exitCode: 1,
+          retryable: false,
+        },
+      });
+
+      expect(updated).toEqual(expect.objectContaining({
+        id: usage.id,
+        projectId: project.id,
+        sprintId: null,
+        sprintRunId: null,
+        taskId: null,
+        dispatchId: null,
+        taskRunId: null,
+        attentionItemId: null,
+        connectionId: null,
+        sessionId: "round-trip-session",
+        provider: "codex",
+        purpose: "task_coding",
+        status: "failed",
+        model: null,
+        executionMode: null,
+        nativeSessionId: null,
+        startedAt: "2026-01-02T03:04:05.000Z",
+        finishedAt: null,
+        durationMs: 0,
+        promptChars: 0,
+        transcriptChars: 0,
+        inputTokens: 0,
+        cachedInputTokens: 0,
+        outputTokens: 0,
+        reasoningOutputTokens: 0,
+        totalTokens: 0,
+        toolCallCount: 0,
+        julesTokens: 0,
+        usageSource: "reported",
+        invocationSource: "internal",
+        costCents: null,
+      }));
+      expect(updated.createdAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+      expect(updated.updatedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+      expect(updated.rawUsageJson).toEqual({
+        failureCode: "provider_exit",
+        failureMessage: "provider exited before emitting telemetry",
+        exitCode: 1,
+        retryable: false,
+      });
+
+      expect(executionRepository.getProviderInvocationUsage(usage.id)).toEqual(updated);
+      expect(executionRepository.getLatestProviderInvocationUsageBySession("sessions/round-trip-session", "task_coding"))
+        .toEqual(updated);
+    });
+
     it("claims provider invocation slots through the repository facade", async () => {
       const { projectRepository, executionRepository } = await createRepositories();
       const project = projectRepository.createProject({

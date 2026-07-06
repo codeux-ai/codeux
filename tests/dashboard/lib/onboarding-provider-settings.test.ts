@@ -40,7 +40,7 @@ describe("onboarding-provider-settings", () => {
     const settings = {
       runtime: {},
       integrations: {
-        jira: { host: "", email: "", apiToken: "", autoCloseLinkedIssues: false, defaultProject: "", closeTransitionName: "Done" },
+        jira: { host: "", email: "", apiToken: "", autoTransitionLinkedIssuesOnImport: true, importTransitionName: "In Work", autoCloseLinkedIssues: false, defaultProject: "", closeTransitionName: "Done" },
         providers: {
           "p1": { provider: "jules", name: "Jules", apiKey: "key", mountAuth: false, authPath: "" }
         }
@@ -50,7 +50,7 @@ describe("onboarding-provider-settings", () => {
         automationLevel: "FULL",
         automationInterventions: {},
         git: { githubMode: "app", githubToken: "", defaultBranch: "main", autoCreatePr: false, autoCloseLinkedIssues: false, deleteMergedBranches: false, featureBranchPrefix: "", sprintBranchScheme: "FLAT", sprintKeyPrefix: "" },
-        jira: { host: "h", email: "e", apiToken: "t", autoCloseLinkedIssues: false, defaultProject: "P", closeTransitionName: "Done" },
+        jira: { host: "h", email: "e", apiToken: "t", autoTransitionLinkedIssuesOnImport: true, importTransitionName: "In Work", autoCloseLinkedIssues: false, defaultProject: "P", closeTransitionName: "Done" },
         ciIntelligence: {},
         sprintLoopSteps: { apply: { type: "apply" }, pr: { type: "pr" }, runTests: { type: "test" } },
         cliWorkflow: { executionMode: "HOST" },

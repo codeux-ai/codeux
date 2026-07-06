@@ -273,6 +273,7 @@ const MemoryPage    = lazy(() => import("./v2/MemoryPage.js").then(m => ({ defau
 const KnowledgePage = lazy(() => import("./v2/KnowledgePage.js").then(m => ({ default: m.KnowledgePage })));
 const BrowserPage   = lazy(() => import("./v2/BrowserPage.js").then(m => ({ default: m.BrowserPage })));
 const FileBrowserPage = lazy(() => import("./v2/FileBrowserPage.js").then(m => ({ default: m.FileBrowserPage })));
+const DocsWebPage = lazy(() => import("./v2/docs-web/DocsWebPage.js").then(m => ({ default: m.DocsWebPage })));
 const ErrorPage     = lazy(() => import("./v2/ErrorPage.js").then(m => ({ default: m.ErrorPage })));
 
 // 1. Root layout route
@@ -375,13 +376,25 @@ const fileBrowserRoute = createRoute({
   component: FileBrowserPage,
 });
 
+const docsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/docs",
+  component: DocsWebPage,
+});
+
+const docsDocumentRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/docs/$docId",
+  component: DocsWebPage,
+});
+
 const notFoundRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "*",
   component: ErrorPage,
 });
 
-const routeTree = rootRoute.addChildren([indexRoute, sprintsRoute, tasksRoute, projectsRoute, chatRoute, agentsRoute, statsRoute, schedulerRoute, configRoute, memoryRoute, knowledgeRoute, browserRoute, fileBrowserRoute, liveRoute, notFoundRoute]);
+const routeTree = rootRoute.addChildren([indexRoute, sprintsRoute, tasksRoute, projectsRoute, chatRoute, agentsRoute, statsRoute, schedulerRoute, configRoute, memoryRoute, knowledgeRoute, browserRoute, fileBrowserRoute, docsRoute, docsDocumentRoute, liveRoute, notFoundRoute]);
 // `defaultPreload: "intent"` warms route matching on hover/focus; the page chunks themselves are
 // prefetched explicitly by the nav components via prefetchRoute() since they are Preact-lazy.
 const router = createRouter({ routeTree, defaultPreload: "intent", defaultPreloadDelay: 50 });

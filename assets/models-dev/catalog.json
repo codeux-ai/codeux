@@ -62451,6 +62451,46 @@
         "temperature": true,
         "tool_call": true
       },
+      "openai/gpt-oss-20b": {
+        "attachment": false,
+        "cost": {
+          "input": 0.1,
+          "output": 0.5
+        },
+        "description": "Open-weight GPT model for self-hosted reasoning and instruction-following workloads",
+        "family": "gpt-oss",
+        "id": "openai/gpt-oss-20b",
+        "last_updated": "2025-08-05",
+        "limit": {
+          "context": 131072,
+          "output": 32768
+        },
+        "modalities": {
+          "input": [
+            "text"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "name": "GPT OSS 20B",
+        "open_weights": true,
+        "reasoning": true,
+        "reasoning_options": [
+          {
+            "type": "effort",
+            "values": [
+              "low",
+              "medium",
+              "high"
+            ]
+          }
+        ],
+        "release_date": "2025-08-05",
+        "structured_output": true,
+        "temperature": true,
+        "tool_call": true
+      },
       "stepfun-ai/Step-3.5-Flash": {
         "attachment": false,
         "cost": {
@@ -138322,6 +138362,7 @@
       "moonshotai/kimi-k2.5": {
         "attachment": true,
         "cost": {
+          "cache_read": 0.203,
           "input": 0.375,
           "output": 2.025
         },
@@ -143232,6 +143273,7 @@
       "qwen/qwen3.5-397b-a17b": {
         "attachment": true,
         "cost": {
+          "cache_read": 0.111,
           "input": 0.385,
           "output": 2.45
         },
@@ -144146,6 +144188,47 @@
         "temperature": true,
         "tool_call": false
       },
+      "tencent/hy3": {
+        "attachment": false,
+        "cost": {
+          "cache_read": 0.035,
+          "input": 0.14,
+          "output": 0.58
+        },
+        "description": "Tencent Hy reasoning model for coding, instruction following, and agent tasks",
+        "family": "hy3",
+        "id": "tencent/hy3",
+        "last_updated": "2026-07-06",
+        "limit": {
+          "context": 202752,
+          "output": 131072
+        },
+        "modalities": {
+          "input": [
+            "text"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "name": "Hy3",
+        "open_weights": true,
+        "reasoning": true,
+        "reasoning_options": [
+          {
+            "type": "effort",
+            "values": [
+              "none",
+              "low",
+              "high"
+            ]
+          }
+        ],
+        "release_date": "2026-07-06",
+        "structured_output": true,
+        "temperature": true,
+        "tool_call": true
+      },
       "tencent/hy3-preview": {
         "attachment": false,
         "cost": {
@@ -144184,6 +144267,46 @@
         ],
         "release_date": "2026-04-20",
         "structured_output": false,
+        "temperature": true,
+        "tool_call": true
+      },
+      "tencent/hy3:free": {
+        "attachment": false,
+        "cost": {
+          "input": 0,
+          "output": 0
+        },
+        "description": "Tencent Hy reasoning model for coding, instruction following, and agent tasks",
+        "family": "hy3",
+        "id": "tencent/hy3:free",
+        "last_updated": "2026-07-06",
+        "limit": {
+          "context": 262144,
+          "output": 262144
+        },
+        "modalities": {
+          "input": [
+            "text"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "name": "Hy3 (free)",
+        "open_weights": true,
+        "reasoning": true,
+        "reasoning_options": [
+          {
+            "type": "effort",
+            "values": [
+              "none",
+              "low",
+              "high"
+            ]
+          }
+        ],
+        "release_date": "2026-07-06",
+        "structured_output": true,
         "temperature": true,
         "tool_call": true
       },
@@ -144575,6 +144698,7 @@
       "xiaomi/mimo-v2.5": {
         "attachment": true,
         "cost": {
+          "cache_read": 0.028,
           "input": 0.105,
           "output": 0.28
         },
@@ -145014,9 +145138,9 @@
       "z-ai/glm-5.2": {
         "attachment": false,
         "cost": {
-          "cache_read": 0.1274,
-          "input": 0.686,
-          "output": 2.156
+          "cache_read": 0.16874,
+          "input": 0.9086,
+          "output": 2.8556
         },
         "description": "Open flagship GLM for long-horizon coding agents and million-token context work",
         "family": "glm",
@@ -167762,17 +167886,54 @@
     ],
     "id": "subconscious",
     "models": {
+      "subconscious/glm-5.2": {
+        "attachment": false,
+        "cost": {
+          "cache_read": 0.26,
+          "input": 1.4,
+          "output": 4.4
+        },
+        "description": "Open flagship GLM for long-horizon coding agents and million-token context work",
+        "family": "glm",
+        "id": "subconscious/glm-5.2",
+        "last_updated": "2026-06-13",
+        "limit": {
+          "context": 1000000,
+          "output": 131072
+        },
+        "modalities": {
+          "input": [
+            "text"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "name": "GLM-5.2",
+        "open_weights": true,
+        "reasoning": true,
+        "reasoning_options": [
+          {
+            "type": "toggle"
+          },
+          {
+            "type": "budget_tokens"
+          }
+        ],
+        "release_date": "2026-06-13",
+        "structured_output": true,
+        "temperature": true,
+        "tool_call": true
+      },
       "subconscious/tim-qwen3.6-27b": {
         "attachment": false,
         "cost": {
-          "input": 0,
-          "output": 0
+          "cache_read": 0.15,
+          "input": 0.3,
+          "output": 3
         },
         "description": "Reasoning model for deliberate analysis, multi-step problem solving, and tool use",
         "id": "subconscious/tim-qwen3.6-27b",
-        "interleaved": {
-          "field": "reasoning_content"
-        },
         "last_updated": "2026-05-11",
         "limit": {
           "context": 8192,
@@ -167793,6 +167954,9 @@
         "reasoning_options": [
           {
             "type": "toggle"
+          },
+          {
+            "type": "budget_tokens"
           }
         ],
         "release_date": "2026-05-11",
@@ -167802,7 +167966,7 @@
       }
     },
     "name": "Subconscious",
-    "npm": "@ai-sdk/openai-compatible"
+    "npm": "@ai-sdk/anthropic"
   },
   "submodel": {
     "api": "https://llm.submodel.ai/v1",

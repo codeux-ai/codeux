@@ -70,6 +70,18 @@ Typed tool argument contracts and registry dispatch are defined in `src/api/mcp/
 ### Output minimization
 - `get_session` returns a compact session summary (state, provider, PR links, last activity summary) instead of full raw payload.
 
+## Per-Agent Tool Access
+
+Worker MCP clients can advertise their agent preset with the `X-Code-Ux-Agent` header on the Code UX MCP connection. When the header is absent, Code UX treats the request as a project-manager or stdio-style client and applies the system MCP tool toggles for the current runtime role.
+
+When the header is present, Code UX must resolve it to an explicit agent MCP access policy before exposing built-in Code UX management tools. Malformed HTTP header values are rejected before MCP routing; if an advertised agent identity reaches the router but is unknown or resolves to an agent without an explicit MCP access policy, `list_tools` returns no Code UX tools and `call_tool` rejects every Code UX management tool with MCP `MethodNotFound`. This fail-closed behavior prevents an unrecognized agent from inheriting broad system-level management access.
+
+For a resolved agent policy:
+- `codeUxEnabled: false` removes every built-in Code UX tool from `list_tools` and causes `call_tool` to return `MethodNotFound`, even when system-level toggles enable those tools.
+- `codeUxEnabled: true` applies the agent's per-tool overrides over the system MCP tool toggles.
+- Runtime-role filtering still applies after system and agent policy checks.
+- Custom external MCP servers remain limited to the agent's linked server ids and are not broadened by Code UX tool availability.
+
 ## Common Response Shape
 
 Successful responses return:
@@ -118,13 +130,17 @@ The parsed management envelope has:
 
 Approval responses are not errors. Calls that need human confirmation still return `approvalRequired: true` and do not set `isError`.
 
+Tool arguments are validated against `src/contracts/mcp-tool-definitions.ts` before dispatch. Invalid tool payload shapes, missing required schema fields, invalid enum values, and malformed approval envelopes fail as MCP `InvalidParams` errors before management action handlers run. Management action parser failures still use the standardized management error envelope described above, with sanitized validation messages and a `field` when the helper can identify one.
+
 ### Destructive Action Approvals
 
 Destructive actions (e.g., actions starting with `delete_`, `reset_`, `replace_`) follow an explicit approval flow to prevent accidental data loss:
 1. The initial call is sent without an `approval` block, or with `approval.confirmed: false`.
 2. The server short-circuits the action, returning an early envelope with `approvalRequired: true` and an explanatory `approvalMessage`.
-3. The agent reviews the message and issues the exact same call again, but with `approval.confirmed: true` added to the payload.
-4. The server executes the operation and returns the `result` block.
+3. The server records a pending approval fingerprint for the normalized tool domain, action, scope identifiers, and payload. Scope identifiers include project, sprint, and task ids when present; settings fingerprints also include the setting path and proposed value.
+4. The agent reviews the message and issues the exact same call again, but with `approval.confirmed: true` added to the payload.
+5. The server executes the operation only when the confirmed call matches the pending fingerprint exactly and the pending approval has not expired. The approval is consumed before execution and cannot be replayed.
+6. A confirmed call with any payload substitution, changed identifier, changed setting path, changed proposed value, meaningful array-order change, or `null` versus missing-field change is rejected with another approval-required response and does not consume the original pending approval.
 
 ### Settings Human Confirmation Gate
 
@@ -140,11 +156,11 @@ All mutating settings actions require a stateful human-confirmation step. This i
 
 Runtime behavior:
 1. The first mutating settings call never changes settings, even if it includes `approval.confirmed: true`.
-2. The server records a pending approval for the exact settings action and normalized payload for 15 minutes.
+2. The server records a pending approval for the exact settings action, scope, setting path, and normalized payload for 15 minutes.
 3. The response returns `approvalRequired: true` with instructions to ask the user for confirmation.
 4. The client must not call the same endpoint again with `approval.confirmed: true` unless the user explicitly confirms the exact change.
 5. After user confirmation, the same action and same payload can be called once with `approval.confirmed: true` within 15 minutes; the pending approval is consumed and cannot be reused.
-6. A different settings payload, even for the same setting path, creates a separate pending approval and does not execute.
+6. A different settings payload, even for the same setting path, creates a separate pending approval and does not execute. Fingerprints preserve explicit `null`, explicit `undefined`, and array order, while object key order is normalized.
 
 ### Project Setup Action
 

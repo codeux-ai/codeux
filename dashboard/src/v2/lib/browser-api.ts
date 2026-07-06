@@ -11,20 +11,24 @@ export const startPreviewSession = async (projectId: string, sprintId: string): 
   });
 };
 
-export const rebuildPreviewSession = async (sessionId: string): Promise<SprintPreviewSession> => {
-  return fetchJson(`/api/browser/sessions/${encodeURIComponent(sessionId)}/rebuild`, {
+const buildScopedPreviewSessionPath = (projectId: string, sprintId: string, sessionId: string, suffix = ""): string => {
+  return `/api/projects/${encodeURIComponent(projectId)}/sprints/${encodeURIComponent(sprintId)}/preview/sessions/${encodeURIComponent(sessionId)}${suffix}`;
+};
+
+export const rebuildPreviewSession = async (projectId: string, sprintId: string, sessionId: string): Promise<SprintPreviewSession> => {
+  return fetchJson(buildScopedPreviewSessionPath(projectId, sprintId, sessionId, "/rebuild"), {
     method: "POST",
   });
 };
 
-export const stopPreviewSession = async (sessionId: string): Promise<SprintPreviewSession> => {
-  return fetchJson(`/api/browser/sessions/${encodeURIComponent(sessionId)}/stop`, {
+export const stopPreviewSession = async (projectId: string, sprintId: string, sessionId: string): Promise<SprintPreviewSession> => {
+  return fetchJson(buildScopedPreviewSessionPath(projectId, sprintId, sessionId, "/stop"), {
     method: "POST",
   });
 };
 
-export const removePreviewSession = async (sessionId: string): Promise<void> => {
-  const response = await fetch(`/api/browser/sessions/${encodeURIComponent(sessionId)}`, {
+export const removePreviewSession = async (projectId: string, sprintId: string, sessionId: string): Promise<void> => {
+  const response = await fetch(buildScopedPreviewSessionPath(projectId, sprintId, sessionId), {
     method: "DELETE",
   });
   if (!response.ok) {
@@ -50,8 +54,8 @@ export const savePreviewScript = async (
   });
 };
 
-export const fetchPreviewLogs = async (sessionId: string, tail = 200): Promise<{ logs: string }> => {
-  const url = new URL(`/api/browser/sessions/${encodeURIComponent(sessionId)}/logs`, window.location.origin);
+export const fetchPreviewLogs = async (projectId: string, sprintId: string, sessionId: string, tail = 200): Promise<{ logs: string }> => {
+  const url = new URL(buildScopedPreviewSessionPath(projectId, sprintId, sessionId, "/logs"), window.location.origin);
   url.searchParams.set("tail", String(tail));
   return fetchJson(`${url.pathname}${url.search}`);
 };

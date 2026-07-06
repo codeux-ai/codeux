@@ -1855,6 +1855,382 @@ describe("QualityAssuranceService", () => {
     expect(qaReviewRepository.getLatestSprintRun(sprint.id)?.outcome).toBe("pass");
   });
 
+  it("ignores failed sprint QA from an older sprint run when finalizing a new run", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "qa-service-old-sprint-run-"));
+    tempDirs.push(dir);
+    const storage = new AppDbStorage(path.join(dir, "app.db"));
+    const projectRepository = new ProjectManagementRepository(storage);
+    const executionRepository = new ExecutionRepository(storage);
+    const qaReviewRepository = new QaReviewRepository(storage);
+    const agentPresetRepository = new AgentPresetRepository(storage);
+
+    const project = projectRepository.createProject({
+      name: "QA Project",
+      sourceType: "local",
+      sourceRef: dir,
+    });
+    const sprint = projectRepository.createSprint(project.id, {
+      name: "Sprint 1",
+      goal: "Ship safely",
+      status: "running",
+      featureBranch: "feature/sprint-1",
+    });
+    const task = projectRepository.createTask(project.id, {
+      sprintId: sprint.id,
+      taskKey: "T1",
+      title: "Initial task",
+      promptMarkdown: "Implement the initial feature.",
+      status: "completed",
+      isIndependent: true,
+    });
+    const previousSprintRun = executionRepository.createSprintRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      status: "cancelled",
+    });
+    const currentSprintRun = executionRepository.createSprintRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      status: "running",
+    });
+    const qaPreset = agentPresetRepository.createAgentPreset(project.id, {
+      name: "QA",
+      presetId: "QA-current-sprint-run",
+      instructionMarkdown: "QA Agent",
+    });
+    const taskSnapshot = JSON.stringify([{
+      id: "T1",
+      title: "Initial task",
+      prompt: "Implement the initial feature.",
+      status: "COMPLETED",
+      dependsOn: [],
+      isMerged: true,
+      mergeIndicator: "MERGED",
+    }]);
+    const oldRun = qaReviewRepository.createRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      sprintRunId: previousSprintRun.id,
+      triggerType: "sprint_completion",
+      runIndex: 1,
+      agentPresetId: qaPreset.id,
+      agentName: qaPreset.name,
+      payload: {
+        sprintRunId: previousSprintRun.id,
+        taskSnapshot,
+      },
+      startedAt: "2026-04-11T09:20:00.000Z",
+    });
+    qaReviewRepository.updateRun(oldRun.id, {
+      status: "failed",
+      summaryMarkdown: "Virtual QA worker returned empty output.",
+      finishedAt: "2026-04-11T09:21:00.000Z",
+    });
+
+    const service = new QualityAssuranceService({
+      projectManagementRepository: projectRepository,
+      executionRepository,
+      guardrailService: qaGuardrailStub(),
+      sessionTracking: {} as any,
+      qaReviewRepository,
+      taskService: {} as any,
+      agentPresetSyncService: {
+        resolveTargetedQualityAssuranceAgent: async () => ({
+          id: qaPreset.id,
+          name: qaPreset.name,
+          instructionMarkdown: qaPreset.instructionMarkdown,
+        }),
+      } as any,
+      providerRunner: {} as any,
+      getDashboardSettings: () => ({
+        ...DEFAULT_DASHBOARD_SETTINGS,
+        agents: {
+          ...DEFAULT_DASHBOARD_SETTINGS.agents,
+          qualityAssurance: {
+            ...DEFAULT_DASHBOARD_SETTINGS.agents.qualityAssurance,
+            enabled: true,
+            sprintCompletion: { enabled: true, agentPresetIds: [qaPreset.id], agentPresetId: qaPreset.id },
+            maxSprintReviewRuns: 3,
+          },
+        },
+      }),
+      getGithubToken: () => undefined,
+      sendSessionMessage: async () => ({}),
+    });
+    vi.spyOn(service as any, "runReview").mockResolvedValue({
+      verdict: "pass",
+      summary: "Sprint QA passed for the current run.",
+      findings: [],
+      fixInstructions: null,
+      targetTaskKey: null,
+      shouldHavePr: null,
+      followUpTasks: [],
+      raw: {},
+    });
+
+    const outcome = await service.reviewSprintCompletion({
+      projectId: project.id,
+      sprintId: sprint.id,
+      sprintRunId: currentSprintRun.id,
+      repoPath: dir,
+      subtasks: [{
+        record_id: task.id,
+        project_id: project.id,
+        sprint_id: sprint.id,
+        id: "T1",
+        title: "Initial task",
+        prompt: "Implement the initial feature.",
+        depends_on: [],
+        is_independent: true,
+        status: "COMPLETED",
+        is_merged: true,
+        merge_indicator: "MERGED",
+      }] as any,
+    });
+
+    expect(outcome).toMatchObject({
+      reviewed: true,
+      blockedCompletion: false,
+      mergeBlocked: false,
+    });
+    expect((service as any).runReview).toHaveBeenCalledTimes(1);
+    const latestRun = qaReviewRepository.getLatestSprintRun(sprint.id);
+    expect(latestRun).toMatchObject({
+      sprintRunId: currentSprintRun.id,
+      runIndex: 2,
+      status: "completed",
+      outcome: "pass",
+    });
+  });
+
+  it("blocks task merge and records a visible reason when task QA fails", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "qa-service-task-failure-blocks-"));
+    tempDirs.push(dir);
+    const storage = new AppDbStorage(path.join(dir, "app.db"));
+    const projectRepository = new ProjectManagementRepository(storage);
+    const executionRepository = new ExecutionRepository(storage);
+    const qaReviewRepository = new QaReviewRepository(storage);
+    const agentPresetRepository = new AgentPresetRepository(storage);
+
+    const project = projectRepository.createProject({
+      name: "QA Project",
+      sourceType: "local",
+      sourceRef: dir,
+    });
+    const sprint = projectRepository.createSprint(project.id, {
+      name: "Sprint 1",
+      goal: "Ship safely",
+      status: "running",
+      featureBranch: "feature/sprint-1",
+    });
+    const task = projectRepository.createTask(project.id, {
+      sprintId: sprint.id,
+      taskKey: "T1",
+      title: "Initial task",
+      promptMarkdown: "Implement the initial feature.",
+      status: "coding_completed",
+      isIndependent: true,
+    });
+    const sprintRun = executionRepository.createSprintRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      status: "running",
+    });
+    executionRepository.createTaskRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      sprintRunId: sprintRun.id,
+      taskId: task.id,
+      state: "COMPLETED",
+      provider: "opencode",
+      sessionId: "session-1",
+      startedAt: "2026-06-13T20:40:00.000Z",
+      finishedAt: "2026-06-13T20:41:00.000Z",
+    });
+    const qaPreset = agentPresetRepository.createAgentPreset(project.id, {
+      name: "QA",
+      presetId: "QA-task-failure",
+      instructionMarkdown: "QA Agent",
+    });
+    const service = new QualityAssuranceService({
+      projectManagementRepository: projectRepository,
+      executionRepository,
+      guardrailService: qaGuardrailStub(),
+      sessionTracking: {} as any,
+      qaReviewRepository,
+      taskService: {} as any,
+      agentPresetSyncService: {
+        resolveTargetedQualityAssuranceAgent: async () => ({
+          id: qaPreset.id,
+          name: qaPreset.name,
+          instructionMarkdown: qaPreset.instructionMarkdown,
+        }),
+      } as any,
+      providerRunner: {} as any,
+      getDashboardSettings: () => ({
+        ...DEFAULT_DASHBOARD_SETTINGS,
+        agents: {
+          ...DEFAULT_DASHBOARD_SETTINGS.agents,
+          qualityAssurance: {
+            ...DEFAULT_DASHBOARD_SETTINGS.agents.qualityAssurance,
+            enabled: true,
+            taskCompletion: { enabled: true, agentPresetId: qaPreset.id },
+            completedTaskWithoutPr: { enabled: true, agentPresetId: qaPreset.id },
+            maxTaskReviewRuns: 3,
+          },
+        },
+      }),
+      getGithubToken: () => undefined,
+      sendSessionMessage: async () => ({}),
+    });
+    vi.spyOn(service as any, "runReview").mockRejectedValue(new Error("QA provider timeout."));
+
+    const outcome = await service.reviewCompletedTask({
+      projectId: project.id,
+      sprintId: sprint.id,
+      sprintRunId: sprintRun.id,
+      repoPath: dir,
+      task: {
+        record_id: task.id,
+        project_id: project.id,
+        sprint_id: sprint.id,
+        id: "T1",
+        title: "Initial task",
+        prompt: "Implement the initial feature.",
+        depends_on: [],
+        is_independent: true,
+        status: "CODING_COMPLETED",
+        provider: "opencode",
+        session_id: "session-1",
+        pr_url: "https://example.com/pr/1",
+      },
+      subtasks: [],
+    });
+
+    expect(outcome).toMatchObject({
+      reviewed: false,
+      reopenedTask: false,
+      mergeBlocked: true,
+    });
+    expect(outcome.reportText).toContain("QA review failed for `T1` and must retry before merge");
+    expect(outcome.reportText).toContain("QA provider timeout.");
+
+    const latestRun = qaReviewRepository.getLatestTaskRun(task.id);
+    expect(latestRun).toMatchObject({
+      status: "failed",
+      summaryMarkdown: "QA provider timeout.",
+    });
+    expect(latestRun?.payload).toMatchObject({ error_code: "API_TIMEOUT" });
+  });
+
+  it("blocks sprint completion and records a visible reason when sprint QA fails", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "qa-service-sprint-failure-blocks-"));
+    tempDirs.push(dir);
+    const storage = new AppDbStorage(path.join(dir, "app.db"));
+    const projectRepository = new ProjectManagementRepository(storage);
+    const executionRepository = new ExecutionRepository(storage);
+    const qaReviewRepository = new QaReviewRepository(storage);
+    const agentPresetRepository = new AgentPresetRepository(storage);
+
+    const project = projectRepository.createProject({
+      name: "QA Project",
+      sourceType: "local",
+      sourceRef: dir,
+    });
+    const sprint = projectRepository.createSprint(project.id, {
+      name: "Sprint 1",
+      goal: "Ship safely",
+      status: "running",
+      featureBranch: "feature/sprint-1",
+    });
+    const task = projectRepository.createTask(project.id, {
+      sprintId: sprint.id,
+      taskKey: "T1",
+      title: "Initial task",
+      promptMarkdown: "Implement the initial feature.",
+      status: "completed",
+      isIndependent: true,
+      isMerged: true,
+      mergeIndicator: "MERGED",
+    });
+    const sprintRun = executionRepository.createSprintRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      status: "running",
+    });
+    const qaPreset = agentPresetRepository.createAgentPreset(project.id, {
+      name: "QA",
+      presetId: "QA-sprint-failure",
+      instructionMarkdown: "QA Agent",
+    });
+    const service = new QualityAssuranceService({
+      projectManagementRepository: projectRepository,
+      executionRepository,
+      guardrailService: qaGuardrailStub(),
+      sessionTracking: {} as any,
+      qaReviewRepository,
+      taskService: {} as any,
+      agentPresetSyncService: {
+        resolveTargetedQualityAssuranceAgent: async () => ({
+          id: qaPreset.id,
+          name: qaPreset.name,
+          instructionMarkdown: qaPreset.instructionMarkdown,
+        }),
+      } as any,
+      providerRunner: {} as any,
+      getDashboardSettings: () => ({
+        ...DEFAULT_DASHBOARD_SETTINGS,
+        agents: {
+          ...DEFAULT_DASHBOARD_SETTINGS.agents,
+          qualityAssurance: {
+            ...DEFAULT_DASHBOARD_SETTINGS.agents.qualityAssurance,
+            enabled: true,
+            sprintCompletion: { enabled: true, agentPresetIds: [qaPreset.id], agentPresetId: qaPreset.id },
+            maxSprintReviewRuns: 3,
+          },
+        },
+      }),
+      getGithubToken: () => undefined,
+      sendSessionMessage: async () => ({}),
+    });
+    vi.spyOn(service as any, "runReview").mockRejectedValue(new Error("Sprint QA provider timed out."));
+
+    const outcome = await service.reviewSprintCompletion({
+      projectId: project.id,
+      sprintId: sprint.id,
+      sprintRunId: sprintRun.id,
+      repoPath: dir,
+      subtasks: [{
+        record_id: task.id,
+        project_id: project.id,
+        sprint_id: sprint.id,
+        id: "T1",
+        title: "Initial task",
+        prompt: "Implement the initial feature.",
+        depends_on: [],
+        is_independent: true,
+        status: "COMPLETED",
+        is_merged: true,
+        merge_indicator: "MERGED",
+      }] as any,
+    });
+
+    expect(outcome).toMatchObject({
+      reviewed: false,
+      blockedCompletion: true,
+      mergeBlocked: true,
+    });
+    expect(outcome.reportText).toContain("Sprint QA failed and blocked merge");
+    expect(outcome.reportText).toContain("Sprint QA provider timed out.");
+
+    const latestRun = qaReviewRepository.getLatestSprintRun(sprint.id);
+    expect(latestRun).toMatchObject({
+      status: "failed",
+      summaryMarkdown: "Sprint QA provider timed out.",
+    });
+    expect(latestRun?.payload).toMatchObject({ error_code: "UNKNOWN" });
+  });
+
   it("marks a shutdown-interrupted task QA review as cancelled instead of failed", async () => {
     const dir = await fs.mkdtemp(path.join(os.tmpdir(), "qa-service-shutdown-cancelled-"));
     tempDirs.push(dir);

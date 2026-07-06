@@ -2,6 +2,7 @@ import type { FunctionComponent } from "preact";
 import { useLayoutEffect, useRef, useState, useEffect, useMemo } from "preact/hooks";
 import gsap from "gsap";
 import {
+  CalendarClock,
   Link as LinkIcon,
   Loader2,
   Sparkles,
@@ -18,6 +19,9 @@ import {
   toVirtualPlanningRouteOption,
   toPlanningOverrides,
   resolveSubmitOriginalPrompt,
+  toSprintSchedulePayload,
+  type SprintScheduleConfig,
+  type SprintSchedulePayload,
 } from "../../lib/sprint-composer-state.js";
 import { getProviderModelOptions } from "../../lib/settings-view-models.js";
 import {
@@ -65,6 +69,7 @@ interface SprintComposerProps {
   defaultAgentRoutingMode?: "MANUAL" | "ORCHESTRATOR";
   defaultWorkerAgentPresetId?: string | null;
   planningEta: number;
+  scheduleAnchorSprintOptions?: Array<{ id: string; label: string }>;
   onClose: () => void;
   onImprovePrompt?: (draft: ImprovePromptInput, signal?: AbortSignal) => Promise<string>;
   onSubmit: (payload: {
@@ -78,6 +83,7 @@ interface SprintComposerProps {
     agentRoutingMode: "MANUAL" | "ORCHESTRATOR";
     workerAgentPresetId: string | null;
     linkedIssues: SprintLinkedIssueInput[];
+    schedule?: SprintSchedulePayload;
     clientRequestId?: string;
     sprintKeyOverride?: string;
     signal?: AbortSignal;
@@ -125,6 +131,32 @@ const formatImportedTaskPriority = (priority?: SprintImportedTaskInput["priority
   return `${priority.charAt(0).toUpperCase()}${priority.slice(1)}`;
 };
 
+const toDateTimeLocalValue = (date: Date): string => {
+  const pad = (value: number): string => String(value).padStart(2, "0");
+  return [
+    date.getFullYear(),
+    "-",
+    pad(date.getMonth() + 1),
+    "-",
+    pad(date.getDate()),
+    "T",
+    pad(date.getHours()),
+    ":",
+    pad(date.getMinutes()),
+  ].join("");
+};
+
+const createDefaultScheduleConfig = (): SprintScheduleConfig => {
+  const scheduled = new Date();
+  scheduled.setHours(scheduled.getHours() + 1, 0, 0, 0);
+  return {
+    mode: "absolute",
+    scheduledFor: toDateTimeLocalValue(scheduled),
+    sourceSprintId: "",
+    offsetMinutes: 0,
+  };
+};
+
 export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
   nextId,
   initialSprint = null,
@@ -138,6 +170,7 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
   defaultAgentRoutingMode = "MANUAL",
   defaultWorkerAgentPresetId = null,
   planningEta,
+  scheduleAnchorSprintOptions = [],
   onClose,
   onImprovePrompt,
   onSubmit,
@@ -168,6 +201,7 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
   });
   const [isImproving, setIsImproving] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [scheduleConfig, setScheduleConfig] = useState<SprintScheduleConfig>(() => createDefaultScheduleConfig());
   const { feedback: actionFeedback, setPending, setSuccess, setWarning, setError, clearFeedback, clearError } = useActionFeedback();
   const [touchedName, setTouchedName] = useState(false);
   const [touchedGoal, setTouchedGoal] = useState(false);
@@ -215,6 +249,7 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
     state.setPlanningAgentPresetId(defaultPlanningAgentPresetId || null);
     state.setAgentRoutingMode(defaultAgentRoutingMode);
     state.setWorkerAgentPresetId(defaultWorkerAgentPresetId || null);
+    setScheduleConfig(createDefaultScheduleConfig());
   };
 
   useEffect(() => {
@@ -289,6 +324,7 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
   };
 
   const submitActionType = (): PlanningActionType => {
+    if (state.submitMode === "schedule") return "schedule";
     if (state.submitMode === "plan_only") return "plan_only";
     if (state.submitMode === "replan") return "replan";
     if (state.submitMode === "draft") return "draft";
@@ -477,6 +513,21 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
       return;
     }
 
+    let schedule: SprintSchedulePayload | undefined;
+    if (state.submitMode === "schedule") {
+      if (scheduleConfig.mode === "after_sprint_end" && !scheduleConfig.sourceSprintId) {
+        state.setHasAttemptedSubmit(true);
+        setError("Choose the source sprint for the after-sprint-end schedule.", { autoDismiss: false });
+        return;
+      }
+      if (scheduleConfig.mode === "absolute" && !Number.isFinite(new Date(scheduleConfig.scheduledFor).getTime())) {
+        state.setHasAttemptedSubmit(true);
+        setError("Choose a valid schedule date and time.", { autoDismiss: false });
+        return;
+      }
+      schedule = toSprintSchedulePayload(scheduleConfig);
+    }
+
     if (state.submitMode === "append_tasks" && onAppendTasks) {
       setPending(getPlanningPendingMessage("append_tasks"), { autoDismiss: true });
       onAppendTasks();
@@ -512,6 +563,7 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
         agentRoutingMode: state.agentRoutingMode,
         workerAgentPresetId: state.agentRoutingMode === "MANUAL" ? state.workerAgentPresetId : null,
         linkedIssues: visibleLinkedIssues,
+        schedule,
         clientRequestId,
         sprintKeyOverride: state.sprintKeyOverride.trim() || undefined,
         signal: controller.signal,
@@ -1053,6 +1105,80 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
               })}
             </div>
           </div>
+
+          {state.submitMode === "schedule" && (
+            <div data-composer-stagger className={`rounded-[1.35rem] border border-signal-500/20 bg-signal-500/[0.045] p-4 transition-all ${isBusy ? "opacity-50" : ""}`}>
+              <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-700 dark:text-white">
+                <CalendarClock className="h-3.5 w-3.5 text-signal-500" strokeWidth={2.1} />
+                Schedule Timing
+              </div>
+              <div className="mt-4 grid gap-3">
+                <div className="grid grid-cols-2 gap-2" role="group" aria-label="Schedule timing mode">
+                  {[
+                    { value: "absolute" as const, label: "Absolute" },
+                    { value: "after_sprint_end" as const, label: "After End" },
+                  ].map((option) => (
+                    <button
+                      key={option.value}
+                      type="button"
+                      disabled={isBusy}
+                      aria-pressed={scheduleConfig.mode === option.value}
+                      onClick={() => setScheduleConfig((current) => ({ ...current, mode: option.value }))}
+                      className={`min-h-[38px] rounded-full border px-3 text-[10px] font-bold uppercase tracking-[0.12em] transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
+                        scheduleConfig.mode === option.value
+                          ? "border-signal-500/30 bg-signal-500/[0.12] text-signal-700 dark:text-signal-300"
+                          : "border-black/[0.06] bg-white/66 text-slate-500 hover:bg-white dark:border-white/[0.06] dark:bg-white/[0.02] dark:text-slate-400"
+                      }`}
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+
+                {scheduleConfig.mode === "absolute" ? (
+                  <label className="block">
+                    <span className="text-[9px] font-bold uppercase tracking-[0.16em] text-slate-400">Date and Time</span>
+                    <input
+                      type="datetime-local"
+                      value={scheduleConfig.scheduledFor}
+                      disabled={isBusy}
+                      onInput={(event) => setScheduleConfig((current) => ({ ...current, scheduledFor: (event.currentTarget as HTMLInputElement).value }))}
+                      className="mt-2 min-h-[42px] w-full rounded-[1rem] border border-black/[0.06] bg-white/72 px-3 text-xs font-semibold text-slate-700 outline-none transition-colors focus:border-signal-500/40 focus:ring-2 focus:ring-signal-500/20 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-200"
+                    />
+                  </label>
+                ) : (
+                  <div className="grid gap-3">
+                    <label className="block">
+                      <span className="text-[9px] font-bold uppercase tracking-[0.16em] text-slate-400">Source Sprint</span>
+                      <AvantgardeSelect
+                        variant="compact"
+                        aria-label="Source Sprint"
+                        disabled={isBusy}
+                        value={scheduleConfig.sourceSprintId}
+                        onChange={(value) => setScheduleConfig((current) => ({ ...current, sourceSprintId: value }))}
+                        options={[
+                          { value: "", label: "Choose sprint" },
+                          ...scheduleAnchorSprintOptions.map((option) => ({ value: option.id, label: option.label })),
+                        ]}
+                        placeholder="Choose sprint"
+                      />
+                    </label>
+                    <label className="block">
+                      <span className="text-[9px] font-bold uppercase tracking-[0.16em] text-slate-400">Offset Minutes</span>
+                      <input
+                        type="number"
+                        min={0}
+                        value={scheduleConfig.offsetMinutes}
+                        disabled={isBusy}
+                        onInput={(event) => setScheduleConfig((current) => ({ ...current, offsetMinutes: Number((event.currentTarget as HTMLInputElement).value) }))}
+                        className="mt-2 min-h-[42px] w-full rounded-[1rem] border border-black/[0.06] bg-white/72 px-3 text-xs font-semibold text-slate-700 outline-none transition-colors focus:border-signal-500/40 focus:ring-2 focus:ring-signal-500/20 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-200"
+                      />
+                    </label>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
 
         </aside>
           </div>

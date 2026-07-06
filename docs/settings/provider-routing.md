@@ -128,6 +128,8 @@ That means:
 
 Provider `maxConcurrentTasks` is enforced before a task is counted as started. When the selected provider is already at its global cap, sprint task dispatch creates or refreshes a queued dispatch/task-run record, records a `provider_concurrency_wait` event, and returns the task to a retryable `PENDING` state for the next orchestration cycle.
 
+Custom provider instances carry their own `maxConcurrentTasks` value through the selected provider-settings override. Enforcement still counts active rows by provider family globally (for example all `qwen-code` invocations share the same running-count pool), but the limit used for a new invocation comes from the exact provider instance selected by routing or agent configuration.
+
 Provider-cap queueing is not a task creation failure. It must not increment the consecutive task creation failure counter, trigger the emergency stop, or record `task_coding` guardrail usage. Real startup failures still use the normal failure path and continue to count toward `maxFailures`.
 
 ## Services Using Invocation Routing
@@ -184,6 +186,14 @@ File:
 ## Provider Runtime Config Boundary
 
 Code UX extracts provider runtime config and MCP config assembly from `ProviderRunner` into focused typed builder modules, such as `src/infrastructure/providers/cli/provider-runtime-config.ts`. This isolates the JSON/TOML generation logic for providers like Qwen, OpenCode, and Antigravity, while keeping process execution and mount creation in the runner.
+
+## Custom MCP Server Safety
+
+Custom MCP servers saved in settings are sanitized before provider runs generate Claude, Gemini, Qwen, Codex, OpenCode, or Antigravity MCP config. HTTP / SSE custom servers must use `http://` or `https://` URLs without embedded credentials or control characters. Local developer tools on loopback remain supported with explicit `localhost`, `127.0.0.1`, or `[::1]` URLs, but link-local metadata endpoints, multicast and broadcast addresses, and ambiguous numeric IP encodings such as decimal-integer, hexadecimal, shortened, or leading-zero IPv4 forms are rejected.
+
+Custom HTTP headers keep the existing count and length limits and may carry normal auth headers such as `Authorization`. Code UX drops hop-by-hop and request-smuggling-sensitive names including `Host`, `Connection`, `Transfer-Encoding`, `Content-Length`, `TE`, `Trailer`, `Upgrade`, `Keep-Alive`, proxy auth/connection headers, and `Expect`.
+
+Stdio custom servers continue to be serialized as provider-native command, args, and env fields rather than shell command strings. Commands containing shell metacharacters are rejected; args and env values are passed as structured strings in generated config artifacts.
 
 ## Provider Override Settings Boundary
 

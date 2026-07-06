@@ -3,7 +3,7 @@ import type { FunctionComponent, JSX } from "preact";
 import gsap from "gsap";
 
 import type { AgentPreset, ProviderId } from "../../types.js";
-import type { PlanningRouteOption } from "../../lib/sprint-composer-state.js";
+import type { PlanningRouteOption, SprintSchedulePayload } from "../../lib/sprint-composer-state.js";
 import type { QuicksprintTemplateRecord } from "../../../../../src/contracts/quicksprint-types.js";
 
 import { useQuicksprintEditorState } from "./use-quicksprint-editor-state.js";
@@ -48,6 +48,18 @@ interface QuicksprintPanelProps {
   projectId: string;
   onClose: () => void;
   onExecute: (templateId: string, taskCount: number, submitMode: "plan_only" | "plan_and_start", additionalPrompt?: string, routeOverride?: PlanningRouteOption | null, modelOverride?: string | null, signal?: AbortSignal, options?: QuicksprintExecutionOptions) => Promise<void>;
+  onSchedule?: (input: {
+    templateId: string;
+    taskCount: number;
+    noTaskLimit: boolean;
+    submitMode: "plan_only" | "plan_and_start";
+    additionalPrompt?: string;
+    routeOverride?: PlanningRouteOption | null;
+    modelOverride?: string | null;
+    schedule: SprintSchedulePayload;
+    title?: string;
+  }) => Promise<void>;
+  scheduleAnchorSprintOptions?: Array<{ id: string; label: string }>;
   templates: QuicksprintTemplateRecord[];
   loading?: boolean;
   agentPresets?: AgentPreset[];
@@ -84,6 +96,8 @@ export const QuicksprintPanel: FunctionComponent<QuicksprintPanelProps> = ({
   projectId,
   onClose,
   onExecute,
+  onSchedule,
+  scheduleAnchorSprintOptions = [],
   templates,
   loading = false,
   agentPresets = [],
@@ -410,6 +424,8 @@ export const QuicksprintPanel: FunctionComponent<QuicksprintPanelProps> = ({
             handleExecute={executionState.handleExecute}
             handleCancelExecute={executionState.handleCancelExecute}
             handleNewQuicksprint={executionState.handleNewQuicksprint}
+            onSchedule={onSchedule}
+            scheduleAnchorSprintOptions={scheduleAnchorSprintOptions}
             defaultRouteOptionLabel={defaultRouteOptionLabel}
             defaultModelOptionLabel={defaultModelOptionLabel}
             defaultRouteIconProviderId={defaultRouteIconProviderId}

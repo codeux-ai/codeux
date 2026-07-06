@@ -55,7 +55,7 @@ export async function executeProviderStage(ctx: PipelineContext, providerPrompt:
   // The provider concurrency cap is a provider-level setting (already clamped to the system
   // ceiling during settings resolution). Pass it through explicitly so containerized tasks
   // enforce the configured cap instead of falling back to provider defaults.
-  const concurrencyLimit = ctx.settings.aiProvider.providers[ctx.provider]?.maxConcurrentTasks;
+  const concurrencyLimit = providerSettings.maxConcurrentTasks;
 
   const result = await providerExecutionService.executeProvider({
     projectId: taskRun?.projectId || "",

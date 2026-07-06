@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 import { h } from "preact";
 import { useRef, useState } from "preact/hooks";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/preact";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/preact";
 import userEvent from "@testing-library/user-event";
 import "@testing-library/jest-dom/vitest";
 import type { ExecutionInvocationRecord, SprintPreviewSession } from "../../../dashboard/src/types.js";
@@ -362,6 +362,49 @@ describe("dashboard accessibility quality regressions", () => {
     expect(confirm).toHaveAccessibleDescription("Hold until complete. Release before completion to cancel.");
   });
 
+  it("keeps non-destructive confirmation controls stable while confirm is pending", async () => {
+    let resolveConfirm: () => void = () => undefined;
+    const onConfirm = vi.fn(() => new Promise<void>((resolve) => {
+      resolveConfirm = resolve;
+    }));
+    const onCancel = vi.fn();
+
+    render(
+      <ConfirmDialog
+        isOpen
+        options={{
+          title: "Refresh Settings?",
+          body: "Reload settings from disk.",
+          confirmLabel: "Refresh Settings",
+          cancelLabel: "Keep Editing",
+          tone: "warning",
+        }}
+        onConfirm={onConfirm}
+        onCancel={onCancel}
+      />,
+    );
+
+    const dialog = screen.getByRole("dialog", { name: "Refresh Settings?" });
+    const confirm = screen.getByRole("button", { name: "Refresh Settings" });
+    const cancel = screen.getByRole("button", { name: "Keep Editing" });
+
+    await userEvent.click(confirm);
+
+    expect(onConfirm).toHaveBeenCalledTimes(1);
+    expect(dialog).toHaveAttribute("aria-modal", "true");
+    expect(confirm).toHaveAttribute("aria-busy", "true");
+    expect(confirm).toBeDisabled();
+    expect(cancel).toBeDisabled();
+    expect(screen.getByText("Processing, please wait")).toHaveClass("sr-only");
+
+    resolveConfirm();
+
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog", { name: "Refresh Settings?" })).not.toBeInTheDocument();
+    });
+    expect(onCancel).not.toHaveBeenCalled();
+  });
+
   it("closes Popover on Escape and restores focus to the trigger", async () => {
     const user = userEvent.setup();
     render(<PopoverHarness />);
@@ -372,7 +415,7 @@ describe("dashboard accessibility quality regressions", () => {
     expect(trigger).toHaveAttribute("aria-expanded", "false");
     expect(trigger).toHaveAttribute("aria-controls");
 
-    await user.keyboard("{Enter}");
+    await user.click(trigger);
     expect(trigger).toHaveAttribute("aria-expanded", "true");
     expect(screen.getByRole("dialog", { name: "Runtime actions" })).toBeInTheDocument();
     await user.tab();

@@ -92,6 +92,76 @@ describe("ProviderRunner", () => {
     expect(result.text).toBe("keep this line");
   });
 
+  it("sanitizes host provider activity callbacks and returned command output", async () => {
+    const rawSecret = "sk-or-v1-providerRunnerHostSecret1234567890";
+    const onActivity = vi.fn();
+    vi.mocked(runStreamingCommand).mockImplementationOnce(async (_command, _args, _cwd, _env, options: any) => {
+      options.onStdoutLine?.(`stdout OPENROUTER_API_KEY=${rawSecret}`);
+      options.onStderrLine?.(`stderr Authorization: Bearer ${rawSecret}`);
+      return {
+        ok: true,
+        stdout: `stdout OPENROUTER_API_KEY=${rawSecret}`,
+        stderr: `stderr Authorization: Bearer ${rawSecret}`,
+        code: 0,
+        signal: null,
+      };
+    });
+
+    const result = await runner.runProvider({
+      provider: "codex",
+      prompt: "hello",
+      cwd: "/repo",
+      model: "default",
+      apiKey: "key",
+      sessionId: "session-1",
+      workflowSettings: { executionMode: "HOST" } as any,
+      repoPath: "/repo",
+      onActivity,
+    });
+
+    const activityText = JSON.stringify(onActivity.mock.calls);
+    expect(activityText).not.toContain(rawSecret);
+    expect(activityText).toContain("[REDACTED]");
+    expect(result.stdout).not.toContain(rawSecret);
+    expect(result.stderr).not.toContain(rawSecret);
+    expect(result.stdout).toContain("OPENROUTER_API_KEY=[REDACTED]");
+    expect(result.stderr).toContain("Authorization: Bearer [REDACTED]");
+  });
+
+  it("sanitizes Docker provider activity callbacks and returned command output", async () => {
+    const rawSecret = "github_pat_1234567890abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_1234567890";
+    const onActivity = vi.fn();
+    dockerRunner.runProviderInDocker.mockImplementationOnce(async ({ onActivity: emit }: any) => {
+      emit(`cloned with ${rawSecret}`, "agent");
+      emit(`provider Authorization: Bearer ${rawSecret}`, "provider");
+      return {
+        ok: true,
+        stdout: `stdout ${rawSecret}`,
+        stderr: `stderr Authorization: Bearer ${rawSecret}`,
+        code: 0,
+        signal: null,
+      };
+    });
+
+    const result = await runner.runProvider({
+      provider: "gemini",
+      prompt: "hello",
+      cwd: "/repo",
+      model: "gemini-2.5-pro",
+      apiKey: "key",
+      sessionId: "session-1",
+      workflowSettings: { executionMode: "DOCKER" } as any,
+      repoPath: "/repo",
+      onActivity,
+    });
+
+    const activityText = JSON.stringify(onActivity.mock.calls);
+    expect(activityText).not.toContain(rawSecret);
+    expect(activityText).toContain("[REDACTED]");
+    expect(result.stdout).not.toContain(rawSecret);
+    expect(result.stderr).not.toContain(rawSecret);
+  });
+
   it("persists the fresh Claude session id after missing-conversation fallback", async () => {
     const oldNativeSessionId = "66e95743-e82e-445d-891a-ac01b27ddcb9";
     dockerRunner.readWorkspaceFile.mockResolvedValue("");
@@ -213,6 +283,63 @@ describe("ProviderRunner", () => {
     expect(mockRm).toHaveBeenCalled();
     mockRm.mockRestore();
   });
+
+  it("logs runtime cleanup failures as sanitized metadata without raw command payloads", async () => {
+    vi.mocked(runStreamingCommand).mockResolvedValueOnce({
+      ok: true,
+      stdout: "provider output",
+      stderr: "",
+      code: 0,
+      signal: null,
+    });
+    const logger = {
+      debug: vi.fn(),
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+      child: vi.fn(),
+    };
+    const runnerWithLogger = new ProviderRunner(dockerRunner, logger as any);
+    const repoDir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-runner-cleanup-"));
+    const rawPrompt = "raw prompt transcript that must not be logged";
+    const rawSecret = "sk-cleanup-secret";
+    const mockRm = vi.spyOn(fs, "rm").mockRejectedValueOnce(
+      new Error(`rm failed after antigravity ${rawPrompt} ANTHROPIC_API_KEY=${rawSecret}`),
+    );
+
+    const result = await runnerWithLogger.runProvider({
+      provider: "opencode",
+      prompt: rawPrompt,
+      cwd: repoDir,
+      model: "anthropic/claude-sonnet-4-5",
+      apiKey: rawSecret,
+      openCodeAuthMode: "ENV_KEY",
+      sessionId: "session-1",
+      invocationId: "exec-inv-1",
+      providerInvocationId: "provider-inv-1",
+      purpose: "task_coding",
+      workflowSettings: { executionMode: "HOST" } as any,
+      repoPath: repoDir,
+      mcpConnection: { url: "http://127.0.0.1:4444/mcp", authToken: "mcp-secret" },
+      onActivity: vi.fn(),
+    });
+
+    expect(result.ok).toBe(true);
+    expect(logger.error).toHaveBeenCalledWith(
+      "Provider cleanup task failed: runtime cleanup",
+      expect.objectContaining({
+        logPurpose: "runtime",
+        errorName: "Error",
+      }),
+    );
+    const loggedMetadata = JSON.stringify(logger.error.mock.calls);
+    expect(loggedMetadata).not.toContain(rawPrompt);
+    expect(loggedMetadata).not.toContain(rawSecret);
+    expect(loggedMetadata).not.toContain("ANTHROPIC_API_KEY");
+    mockRm.mockRestore();
+    await fs.rm(repoDir, { recursive: true, force: true });
+  });
+
   it("cleans up workspace and codex output path if internal execution throws in runProvider", async () => {
     dockerRunner.runProviderInDocker.mockRejectedValueOnce(new Error("Execution failed"));
 
@@ -1063,6 +1190,8 @@ describe("ProviderRunner MCP config generation", () => {
     mockReadFile.mockResolvedValue(null as any);
     const mockWriteFile = vi.spyOn(fs, 'writeFile');
     mockWriteFile.mockResolvedValue(undefined);
+    const mockChmod = vi.spyOn(fs, 'chmod');
+    mockChmod.mockResolvedValue(undefined);
   });
 
   const writeConfig = (conn: any, cwd: string, provider: any, qwenSettings?: string, customServers: any[] = []) =>

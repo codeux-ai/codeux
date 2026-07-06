@@ -11,12 +11,26 @@ export const sanitizeJira = (
   const email = readString(jiraInput.email, defaults.email).trim();
   const apiToken = readString(jiraInput.apiToken, defaults.apiToken).trim();
 
+  let autoTransitionLinkedIssuesOnImport = readBoolean(
+    jiraInput.autoTransitionLinkedIssuesOnImport,
+    defaults.autoTransitionLinkedIssuesOnImport,
+  );
+  if (
+    typeof jiraInput.autoTransitionLinkedIssuesOnImport !== "boolean"
+    && jiraInput.autoTransitionLinkedIssuesOnImport !== undefined
+  ) {
+    autoTransitionLinkedIssuesOnImport = false;
+  }
+
   let autoCloseLinkedIssues = readBoolean(jiraInput.autoCloseLinkedIssues, defaults.autoCloseLinkedIssues);
   if (typeof jiraInput.autoCloseLinkedIssues !== "boolean" && jiraInput.autoCloseLinkedIssues !== undefined) {
     autoCloseLinkedIssues = false;
   }
 
   const defaultProject = readString(jiraInput.defaultProject, defaults.defaultProject).trim();
+
+  const importTransitionNameString = readString(jiraInput.importTransitionName, defaults.importTransitionName).trim();
+  const importTransitionName = importTransitionNameString === "" ? "In Work" : importTransitionNameString;
 
   const closeTransitionNameString = readString(jiraInput.closeTransitionName, defaults.closeTransitionName).trim();
   const closeTransitionName = closeTransitionNameString === "" ? "Done" : closeTransitionNameString;
@@ -25,6 +39,8 @@ export const sanitizeJira = (
     host,
     email,
     apiToken,
+    autoTransitionLinkedIssuesOnImport,
+    importTransitionName,
     autoCloseLinkedIssues,
     defaultProject,
     closeTransitionName,

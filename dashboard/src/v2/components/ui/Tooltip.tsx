@@ -41,6 +41,7 @@ export const Tooltip: FunctionComponent<TooltipProps> = ({
         if (e.pointerType === "mouse" || e.pointerType === "pen") {
             if (hoverTimeout.current) clearTimeout(hoverTimeout.current);
             hoverTimeout.current = window.setTimeout(() => {
+                if (typeof document === "undefined") return;
                 setIsVisible(true);
                 setIsRendered(true);
             }, delay);
@@ -56,6 +57,7 @@ export const Tooltip: FunctionComponent<TooltipProps> = ({
         }
         if (hoverTimeout.current) clearTimeout(hoverTimeout.current);
         hoverTimeout.current = window.setTimeout(() => {
+            if (typeof document === "undefined") return;
             setIsVisible(true);
             setIsRendered(true);
         }, delay);
@@ -64,6 +66,7 @@ export const Tooltip: FunctionComponent<TooltipProps> = ({
     const handlePointerLeave = (e?: PointerEvent | FocusEvent) => {
         if (hoverTimeout.current) clearTimeout(hoverTimeout.current);
         hoverTimeout.current = window.setTimeout(() => {
+            if (typeof document === "undefined") return;
             setIsVisible(false);
         }, Math.round(gsapTokens.controlFeedback.duration * 1000));
     };
@@ -185,7 +188,7 @@ export const Tooltip: FunctionComponent<TooltipProps> = ({
     return (
         <>
             {triggerElement}
-            {isRendered && createPortal(
+            {isRendered && typeof document !== "undefined" && document.body ? createPortal(
                 <div
                     id={tooltipId}
                     ref={tooltipRef}
@@ -198,7 +201,7 @@ export const Tooltip: FunctionComponent<TooltipProps> = ({
                     {content}
                 </div>,
                 document.body
-            )}
+            ) : null}
         </>
     );
 };

@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "preact/hooks";
 import { Link, useRouterState } from "@tanstack/react-router";
 import { prefetchRoute } from "../../router/route-prefetch.js";
 import gsap from "gsap";
-import { Hexagon, Layers, ListChecks, Zap, Settings, Inbox, Cpu, BarChart3, Compass, MessageCircle, ChevronLeft, ChevronRight, CalendarDays, FolderTree, Library } from "lucide-preact";
+import { BookOpen, Hexagon, Layers, ListChecks, Zap, Settings, Inbox, Cpu, BarChart3, Compass, MessageCircle, ChevronLeft, ChevronRight, CalendarDays, FolderTree, Library } from "lucide-preact";
 import { useProjectData } from "../../context/project-data.js";
 import { useProjectEffectiveSettings } from "../../hooks/use-project-effective-settings.js";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
@@ -85,7 +85,7 @@ export const Sidebar: FunctionComponent<SidebarProps> = ({ isMobile, isOpen, onC
 
     const matches = useRouterState({ select: (s) => s.matches });
     const currentPath = (matches && matches.length > 0) ? (matches[matches.length - 1]?.pathname || "/") : "/";
-    const activeIndex = navItems.findIndex(i => i.path === currentPath && !i.unavailableReason);
+    const activeIndex = navItems.findIndex(i => (i.path === currentPath || (i.path !== "/" && currentPath.startsWith(`${i.path}/`))) && !i.unavailableReason);
 
     useLayoutEffect(() => {
         const activeElement = navItemRefs.current[activeIndex];
@@ -231,6 +231,34 @@ export const Sidebar: FunctionComponent<SidebarProps> = ({ isMobile, isOpen, onC
             {/* Settings & Toggle */}
             <div className="relative z-10 flex flex-col">
                 <Link
+                    to="/docs"
+                    onClick={isMobile ? onClose : undefined}
+                    onMouseEnter={() => prefetchRoute("/docs")}
+                    onPointerDown={() => prefetchRoute("/docs")}
+                    onFocus={() => prefetchRoute("/docs")}
+                    aria-label="Docs"
+                    aria-describedby={isMinimized && !isMobile ? "nav-tooltip-docs" : undefined}
+                    aria-current={currentPath === "/docs" || currentPath.startsWith("/docs/") ? "page" : undefined}
+                    data-tour-id="nav-docs"
+                    className={`relative flex items-center ${isMinimized && !isMobile ? 'justify-center mx-4' : 'gap-3.5 px-5 mx-4'} py-2 min-h-[40px] rounded-2xl transition-[background-color,border-color,box-shadow,color,opacity,transform] motion-reduce:transition-none group mb-0.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 focus-visible:rounded-2xl focus-visible:z-10 no-underline decoration-transparent`}
+                    style={controlTransitionStyle}
+                >
+                    <div className="absolute inset-0 rounded-2xl bg-black/[0.05] dark:bg-white/[0.05] transition-[opacity,transform,background-color] motion-reduce:transition-none pointer-events-none origin-left opacity-0 -translate-x-full group-hover:translate-x-0 group-hover:opacity-100 group-focus-visible:translate-x-0 group-focus-visible:opacity-100" style={controlTransitionStyle} />
+                    <BookOpen aria-hidden="true" className={`relative z-10 w-4 h-4 shrink-0 transition-[color,transform] motion-reduce:transition-none ${currentPath === "/docs" || currentPath.startsWith("/docs/") ? 'text-signal-600 dark:text-signal-400 drop-shadow-[0_0_8px_rgba(0,224,160,0.5)]' : 'text-slate-400 dark:text-slate-500 group-hover:text-slate-700 dark:group-hover:text-slate-300'}`} strokeWidth={currentPath === "/docs" || currentPath.startsWith("/docs/") ? 2 : 1.5} style={selectionTransitionStyle} />
+                    <div className={`relative z-10 overflow-hidden transition-[width,opacity] motion-reduce:transition-none ${isMinimized && !isMobile ? 'w-0 opacity-0' : 'opacity-100'}`} style={selectionTransitionStyle}>
+                        <span className={`font-medium text-sm tracking-wide transition-colors whitespace-nowrap ${currentPath === "/docs" || currentPath.startsWith("/docs/") ? 'text-slate-900 dark:text-white font-semibold' : 'text-slate-500 dark:text-slate-500 group-hover:text-slate-700 dark:group-hover:text-slate-300'}`} style={controlTransitionStyle}>
+                            Docs
+                        </span>
+                    </div>
+                    {isMinimized && !isMobile && (
+                        <div id="nav-tooltip-docs" aria-hidden="true" className="absolute left-[calc(100%+16px)] top-1/2 -translate-y-1/2 px-3 py-1.5 bg-white/95 dark:bg-void-800/95 backdrop-blur-xl border border-black/[0.08] dark:border-white/[0.08] text-slate-800 dark:text-slate-100 text-xs font-bold tracking-wide rounded-2xl opacity-0 -translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 group-focus-visible:opacity-100 group-focus-visible:translate-x-0 transition-[opacity,transform] motion-reduce:transition-none pointer-events-none shadow-2xl z-[100] max-w-[calc(100vw-6rem)] text-wrap break-words whitespace-normal flex items-center gap-2" style={controlTransitionStyle}>
+                            <span className="w-1.5 h-1.5 rounded-full bg-signal-500/80 shadow-[0_0_6px_rgba(0,224,160,0.6)] shrink-0"></span>
+                            Docs
+                        </div>
+                    )}
+                </Link>
+
+                <Link
                     to="/config"
                     onClick={isMobile ? onClose : undefined}
                     onMouseEnter={() => prefetchRoute("/config")}
@@ -240,7 +268,7 @@ export const Sidebar: FunctionComponent<SidebarProps> = ({ isMobile, isOpen, onC
                     aria-describedby={isMinimized && !isMobile ? "nav-tooltip-settings" : undefined}
                     aria-current={currentPath === "/config" ? "page" : undefined}
                     data-tour-id="nav-config" 
-                    className={`relative flex items-center ${isMinimized && !isMobile ? 'justify-center mx-4' : 'gap-3.5 px-5 mx-4'} py-2 min-h-[40px] rounded-2xl transition-[background-color,border-color,box-shadow,color,opacity,transform] motion-reduce:transition-none group mb-0.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 focus-visible:rounded-2xl focus-visible:z-10 decoration-none`}
+                    className={`relative flex items-center ${isMinimized && !isMobile ? 'justify-center mx-4' : 'gap-3.5 px-5 mx-4'} py-2 min-h-[40px] rounded-2xl transition-[background-color,border-color,box-shadow,color,opacity,transform] motion-reduce:transition-none group mb-0.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 focus-visible:rounded-2xl focus-visible:z-10 no-underline decoration-transparent`}
                     style={controlTransitionStyle}
                 >
                     <div className="absolute inset-0 rounded-2xl bg-black/[0.05] dark:bg-white/[0.05] transition-[opacity,transform,background-color] motion-reduce:transition-none pointer-events-none origin-left opacity-0 -translate-x-full group-hover:translate-x-0 group-hover:opacity-100 group-focus-visible:translate-x-0 group-focus-visible:opacity-100" style={controlTransitionStyle} />

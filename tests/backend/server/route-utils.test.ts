@@ -71,6 +71,13 @@ describe("route-utils", () => {
         delegatesToNext: false,
       },
       {
+        label: "explicit forbidden HttpRouteError",
+        error: new HttpRouteError(403, "Forbidden path"),
+        status: 403,
+        body: { error: "Forbidden path" },
+        delegatesToNext: false,
+      },
+      {
         label: "unexpected error",
         error: new Error("Database password leaked in stack"),
         status: 500,

@@ -110,19 +110,32 @@ export interface BootDashboardDeps {
   getOnboardingRuntimeReadiness?: () => Promise<OnboardingRuntimeReadiness>;
   listSprintPreviewSessions: (projectId: string) => Promise<SprintPreviewSession[]>;
   getSprintPreviewSession: (sessionId: string) => Promise<SprintPreviewSession | null>;
+  getSprintPreviewSessionForProjectSprint: (projectId: string, sprintId: string, sessionId: string) => Promise<SprintPreviewSession>;
   startSprintPreviewSession: (projectId: string, sprintId: string) => Promise<SprintPreviewSession>;
   rebuildSprintPreviewSession: (sessionId: string) => Promise<SprintPreviewSession>;
+  rebuildSprintPreviewSessionForProjectSprint: (projectId: string, sprintId: string, sessionId: string) => Promise<SprintPreviewSession>;
   stopSprintPreviewSession: (sessionId: string) => Promise<SprintPreviewSession>;
+  stopSprintPreviewSessionForProjectSprint: (projectId: string, sprintId: string, sessionId: string) => Promise<SprintPreviewSession>;
   removeSprintPreviewSession: (sessionId: string) => Promise<void>;
+  removeSprintPreviewSessionForProjectSprint: (projectId: string, sprintId: string, sessionId: string) => Promise<void>;
   getSprintPreviewScript: (projectId: string, sprintId: string) => Promise<SprintPreviewScript>;
   saveSprintPreviewScript: (projectId: string, sprintId: string, content: string) => Promise<SprintPreviewScript>;
   getSprintPreviewLogs: (sessionId: string, tail?: number) => Promise<{ logs: string }>;
+  getSprintPreviewLogsForProjectSprint: (projectId: string, sprintId: string, sessionId: string, tail?: number) => Promise<{ logs: string }>;
   proxySprintPreviewRequest: (args: {
     sessionId: string;
     method: string;
     path: string;
     headers?: Record<string, string | undefined>;
     body?: Buffer;
+  }) => Promise<{ status: number; headers: Record<string, string>; body: Buffer }>;
+  proxySprintPreviewRequestForProjectSprint: (projectId: string, sprintId: string, args: {
+    sessionId: string;
+    method: string;
+    path: string;
+    headers?: Record<string, string | undefined>;
+    body?: Buffer;
+    selectedPort?: string | number | null;
   }) => Promise<{ status: number; headers: Record<string, string>; body: Buffer }>;
   listFileBrowserSessions: (projectId: string) => Promise<FileBrowserSession[]>;
   startFileBrowserSession: (projectId: string, sprintId: string) => Promise<FileBrowserSession>;
@@ -664,6 +677,11 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<DashboardS
       deps.activityCacheService.invalidateGitStatusCache();
       return result;
     },
+    resetInvocationUsageLimitTimer: async (invocationId) => {
+      const result = await deps.executionInvocationControlService.resetUsageLimitTimer(invocationId);
+      deps.activityCacheService.invalidateGitStatusCache();
+      return result;
+    },
 
     rerunTask: async (taskId: string, options?: { provider?: string; providerConfigId?: string; model?: string; clearWorktree?: boolean; resetDependents?: boolean; undoMerge?: boolean }) => {
       const task = await deps.taskRerunService.rerunTask(taskId, {
@@ -722,14 +740,20 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<DashboardS
     resetOnboardingState: () => deps.settingsRepository.resetOnboardingState(),
     listSprintPreviewSessions: deps.listSprintPreviewSessions,
     getSprintPreviewSession: deps.getSprintPreviewSession,
+    getSprintPreviewSessionForProjectSprint: deps.getSprintPreviewSessionForProjectSprint,
     startSprintPreviewSession: deps.startSprintPreviewSession,
     rebuildSprintPreviewSession: deps.rebuildSprintPreviewSession,
+    rebuildSprintPreviewSessionForProjectSprint: deps.rebuildSprintPreviewSessionForProjectSprint,
     stopSprintPreviewSession: deps.stopSprintPreviewSession,
+    stopSprintPreviewSessionForProjectSprint: deps.stopSprintPreviewSessionForProjectSprint,
     removeSprintPreviewSession: deps.removeSprintPreviewSession,
+    removeSprintPreviewSessionForProjectSprint: deps.removeSprintPreviewSessionForProjectSprint,
     getSprintPreviewScript: deps.getSprintPreviewScript,
     saveSprintPreviewScript: deps.saveSprintPreviewScript,
     getSprintPreviewLogs: deps.getSprintPreviewLogs,
+    getSprintPreviewLogsForProjectSprint: deps.getSprintPreviewLogsForProjectSprint,
     proxySprintPreviewRequest: deps.proxySprintPreviewRequest,
+    proxySprintPreviewRequestForProjectSprint: deps.proxySprintPreviewRequestForProjectSprint,
     listFileBrowserSessions: deps.listFileBrowserSessions,
     startFileBrowserSession: deps.startFileBrowserSession,
     rebuildFileBrowserSession: deps.rebuildFileBrowserSession,

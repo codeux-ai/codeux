@@ -1,8 +1,22 @@
 import { useState, useEffect } from "preact/hooks";
-import { Rocket, ClipboardList, Save, RefreshCw, ListPlus } from "lucide-preact";
-import type { AgentRoutingMode, PlanningOverrides, ProviderId, Sprint } from "../types.js";
+import { Rocket, ClipboardList, Save, RefreshCw, ListPlus, Clock3 } from "lucide-preact";
+import type { AgentRoutingMode, PlanningOverrides, ProviderId, Sprint, ScheduleAnchor } from "../types.js";
 
-export type SprintSubmitMode = "plan_and_start" | "plan_only" | "draft" | "replan" | "append_tasks";
+export type SprintSubmitMode = "plan_and_start" | "plan_only" | "draft" | "replan" | "append_tasks" | "schedule";
+
+export type SprintScheduleMode = "absolute" | "after_sprint_end";
+
+export interface SprintScheduleConfig {
+  mode: SprintScheduleMode;
+  scheduledFor: string;
+  sourceSprintId: string;
+  offsetMinutes: number;
+}
+
+export interface SprintSchedulePayload {
+  scheduledFor?: string;
+  scheduleAnchor?: ScheduleAnchor;
+}
 
 export interface CreateMode {
   id: SprintSubmitMode;
@@ -29,6 +43,12 @@ export const CREATE_MODES: CreateMode[] = [
     label: "Save Draft",
     description: "Store the sprint only and keep planning for later.",
     icon: Save,
+  },
+  {
+    id: "schedule",
+    label: "Schedule",
+    description: "Save the sprint and create a scheduler entry without starting planning now.",
+    icon: Clock3,
   },
 ];
 
@@ -154,6 +174,12 @@ export const getAvailableModes = (isEditing: boolean, hasTasks: boolean): Create
         description: "Update the sprint definition without triggering planning.",
         icon: Save,
       },
+      {
+        id: "schedule",
+        label: "Schedule",
+        description: "Save changes and schedule this sprint to start later.",
+        icon: Clock3,
+      },
     ];
   }
 
@@ -175,6 +201,12 @@ export const getAvailableModes = (isEditing: boolean, hasTasks: boolean): Create
       label: "Save Changes",
       description: "Update the sprint definition without triggering planning.",
       icon: Save,
+    },
+    {
+      id: "schedule",
+      label: "Schedule",
+      description: "Save changes and schedule this sprint to start later.",
+      icon: Clock3,
     },
   ];
 };
@@ -251,4 +283,20 @@ export function resolveSubmitOriginalPrompt(
     return goal.trim() || null;
   }
   return originalPrompt;
+}
+
+export function toSprintSchedulePayload(config: SprintScheduleConfig): SprintSchedulePayload {
+  if (config.mode === "after_sprint_end") {
+    return {
+      scheduleAnchor: {
+        mode: "after_sprint_end",
+        sourceSprintId: config.sourceSprintId,
+        offsetMinutes: Math.max(0, Math.floor(Number(config.offsetMinutes) || 0)),
+      },
+    };
+  }
+
+  return {
+    scheduledFor: new Date(config.scheduledFor).toISOString(),
+  };
 }

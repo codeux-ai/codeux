@@ -1045,6 +1045,8 @@ export function resolveDashboardSettings(args: {
       host: sprintSettings.jira.host || systemJira.host,
       email: sprintSettings.jira.email || systemJira.email,
       apiToken: sprintSettings.jira.apiToken || systemJira.apiToken,
+      autoTransitionLinkedIssuesOnImport: sprintSettings.jira.autoTransitionLinkedIssuesOnImport,
+      importTransitionName: sprintSettings.jira.importTransitionName || systemJira.importTransitionName,
       defaultProject: sprintSettings.jira.defaultProject || systemJira.defaultProject,
       closeTransitionName: sprintSettings.jira.closeTransitionName || systemJira.closeTransitionName,
       autoCloseLinkedIssues: sprintSettings.jira.autoCloseLinkedIssues,

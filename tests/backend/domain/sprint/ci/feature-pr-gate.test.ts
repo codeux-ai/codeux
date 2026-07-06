@@ -621,6 +621,61 @@ jobs:
     expect(result.reportText).toContain("Worker CI fix already running");
   });
 
+  it("holds a failed-check task in CI until a later green observation explicitly settles it", async () => {
+    subtasks[0].session_id = undefined;
+    subtasks[0].provider = "gemini" as any;
+    context.ciIntelligence.featurePrAutoMergeMode = "WHEN_GREEN";
+    context.gitStatus.openPullRequests[0].checks = [
+      { name: "build", status: "completed", conclusion: "failure" }
+    ];
+    context.openCiFixAttentionItems = vi.fn();
+    context.hasActiveWorkerCiFixAttempt = vi.fn().mockReturnValue(true);
+    context.autoMergeFeaturePr = vi.fn().mockResolvedValue({
+      ok: true,
+      merged: true,
+      autoMergeScheduled: false,
+    });
+
+    const failed = await service.evaluateCiGate(subtasks, context);
+
+    expect(failed.subtasks[0]).toMatchObject({
+      status: "RUNNING",
+      merge_indicator: "CI",
+    });
+    expect(failed.subtasks[0].is_merged).toBeFalsy();
+    expect(context.autoMergeFeaturePr).not.toHaveBeenCalled();
+    expect(context.openCiFixAttentionItems).not.toHaveBeenCalled();
+
+    failed.subtasks[0].status = "COMPLETED";
+    context.gitStatus.openPullRequests[0].checks = [
+      { name: "build", status: "completed", conclusion: "success" }
+    ];
+    vi.mocked(context.hasActiveWorkerCiFixAttempt!).mockReturnValue(false);
+
+    const green = await service.evaluateCiGate(failed.subtasks, context);
+
+    expect(green.subtasks[0]).toMatchObject({
+      status: "COMPLETED",
+      is_merged: true,
+      merge_indicator: "AUTOMERGE",
+    });
+    expect(context.autoMergeFeaturePr).toHaveBeenCalledTimes(1);
+    expect(context.executionRepository?.appendTaskRunEvent).toHaveBeenCalledWith(
+      "run-1",
+      "ci_gate_status",
+      "system",
+      expect.objectContaining({ state: "waiting_checks", hasFailedChecks: true, prNumber: 101 }),
+      expect.any(Object),
+    );
+    expect(context.executionRepository?.appendTaskRunEvent).toHaveBeenCalledWith(
+      "run-1",
+      "ci_gate_status",
+      "system",
+      expect.objectContaining({ state: "automerge_succeeded", prNumber: 101 }),
+      expect.any(Object),
+    );
+  });
+
   it("does not block a task at the retry limit while the current worker CI fix attempt is still active", async () => {
     subtasks[0].session_id = undefined;
     subtasks[0].provider = "gemini" as any;

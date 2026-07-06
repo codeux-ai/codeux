@@ -3,7 +3,7 @@ import * as fs from "fs/promises";
 import * as os from "os";
 import * as path from "path";
 import request from "supertest";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { registerLocalDirectoryRoutes } from "../../../src/server/local-directory-routes.js";
 
 const tempDirs: string[] = [];
@@ -13,6 +13,7 @@ beforeEach(() => {
 });
 
 afterEach(async () => {
+  vi.restoreAllMocks();
   await Promise.all(tempDirs.splice(0).map((dir) => fs.rm(dir, { recursive: true, force: true })));
   delete process.env.CODE_UX_DIRECTORY_BROWSER_ROOTS;
 });
@@ -72,22 +73,30 @@ describe("local directory routes", () => {
 
   it("rejects path traversal outside allowed roots", async () => {
     const rootDir = path.parse(process.cwd()).root;
+    const statSpy = vi.spyOn(fs, "stat");
+    const readdirSpy = vi.spyOn(fs, "readdir");
     // Assuming rootDir is not an allowed root
     const response = await request(createApp()).get("/api/local-directories").query({ path: rootDir });
     expect(response.status).toBe(403);
     expect(response.body.error).toBe("Access denied");
+    expect(statSpy).not.toHaveBeenCalled();
+    expect(readdirSpy).not.toHaveBeenCalled();
   });
 
   it("rejects encoded traversal that resolves outside allowed roots", async () => {
     const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-local-directories-"));
     tempDirs.push(dir);
     const encodedTraversal = `${dir}/%2e%2e/%2e%2e`;
+    const statSpy = vi.spyOn(fs, "stat");
+    const readdirSpy = vi.spyOn(fs, "readdir");
 
     const response = await request(createApp()).get(`/api/local-directories?path=${encodedTraversal}`);
 
     expect(response.status).toBe(403);
     expect(response.body.error).toBe("Access denied");
     expect(response.text).not.toContain(dir);
+    expect(statSpy).not.toHaveBeenCalled();
+    expect(readdirSpy).not.toHaveBeenCalled();
   });
 
   it("rejects Windows-style separator traversal attempts without listing directories", async () => {
@@ -103,11 +112,15 @@ describe("local directory routes", () => {
 
   it("rejects absolute paths outside the allowed roots", async () => {
     const outsideRoot = path.parse(process.cwd()).root;
+    const statSpy = vi.spyOn(fs, "stat");
+    const readdirSpy = vi.spyOn(fs, "readdir");
 
     const response = await request(createApp()).get("/api/local-directories").query({ path: outsideRoot });
 
     expect(response.status).toBe(403);
     expect(response.body.error).toBe("Access denied");
+    expect(statSpy).not.toHaveBeenCalled();
+    expect(readdirSpy).not.toHaveBeenCalled();
   });
 
   it("rejects symlink escapes outside allowed roots", async () => {

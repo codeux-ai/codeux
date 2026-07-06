@@ -26,6 +26,7 @@ The dashboard server now exposes:
 - `POST /api/sprint-runs/:sprintRunId/cancel`
 - `POST /api/task-dispatches/:dispatchId/cancel`
 - `POST /api/task-dispatches/:dispatchId/retry`
+- `POST /api/execution/invocations/:invocationId/reset-usage-limit`
 
 ## Runtime Behavior
 
@@ -40,6 +41,7 @@ That means:
 - duplicate orchestration still respects sprint leases
 - a resumed sprint creates a fresh orchestration attempt rather than mutating old run history
 - dashboard-triggered execution and MCP-triggered execution converge on the same runtime model
+- if the sprint already has an active `queued` or `running` run, another start request is treated as an idempotent recovery nudge for that run instead of launching a duplicate orchestrator or returning an operator-facing 500
 - Code UX now releases stale sprint leases left behind by already-terminal runs, paused runs, and fully-idle cancelled runs before starting a fresh orchestration attempt
 - if a lingering sprint lease still exists after stale-run recovery, the dashboard start request now fails fast instead of returning a misleading success while no new run can start
 - a sprint cannot be restarted while an older run is still `cancel_requested` with active dispatch shutdown still pending
@@ -70,6 +72,7 @@ The dashboard:
 - cancels queued, claimed, and paused dispatches immediately
 - writes final dispatch/task-run terminal state without waiting for the next scheduler tick
 - updates the `sprint_run` to `cancelled`, writes `sprint_cancelled`, and releases the sprint lease
+- resolves transient sprint-run attention, including merge/CI handoffs and virtual-worker handoffs derived from sprint-level manual attention, so cancelled test runs do not leave projects pinned in intervention state
 
 Repeated cancel requests are idempotent for already-cancelled runs and do not recreate events or resurrect dispatch state.
 
@@ -141,6 +144,19 @@ Retry is currently limited to terminal dispatches.
 Retry uses the existing task rerun flow instead of inventing a dispatch-only executor path. That keeps retry semantics aligned with normal task restarts.
 
 When a dashboard task rerun has to create a fresh `running` sprint run because no active run exists, Code UX now resumes the watch loop automatically after launching the new task dispatch. That keeps post-task CI, merge-conflict handling, and sprint completion logic moving without requiring a second manual `orchestrate` click after the rerun finishes.
+
+## Invocation Usage-Limit Controls
+
+The Chat -> Invocations detail header shows **Reset timer** for active invocations that are waiting on a provider quota or rate-limit retry timestamp.
+
+Resetting the timer:
+
+- clears `last_retry_after_iso` on the active execution invocation
+- writes a system transcript entry
+- writes a `usage_limit_timer_reset` task-run event when the invocation is task-backed
+- wakes the provider retry loop so the same invocation can retry immediately
+
+If the invocation is no longer active or no longer has usage-limit retry metadata, the API returns a non-mutating result and the dashboard reports that the timer was already cleared.
 
 ## Remaining Limitation
 

@@ -34,6 +34,8 @@ describe("file browser routes", () => {
     ["encoded traversal", "src/%2e%2e/package.json"],
     ["Windows-style traversal", "src\\..\\package.json"],
     ["Unix traversal", "../package.json"],
+    ["encoded slash traversal", "src%2f..%2fpackage.json"],
+    ["malformed percent encoding", "src/%E0%A4%A"],
     ["Unix absolute path", "/etc/passwd"],
     ["Windows absolute path", "C:\\Windows\\System32\\drivers\\etc\\hosts"],
   ])("rejects %s before reading a file", async (_label, hostilePath) => {
@@ -52,6 +54,8 @@ describe("file browser routes", () => {
     ["encoded traversal", "src/%2e%2e/package.json"],
     ["Windows-style traversal", "src\\..\\package.json"],
     ["Unix traversal", "../package.json"],
+    ["encoded slash traversal", "src%2f..%2fpackage.json"],
+    ["malformed percent encoding", "src/%E0%A4%A"],
     ["Unix absolute path", "/etc/passwd"],
     ["Windows absolute path", "C:\\Windows\\System32\\drivers\\etc\\hosts"],
   ])("rejects %s before reading a diff", async (_label, hostilePath) => {

@@ -84,12 +84,83 @@ describe("Knowledge Base Navigation", () => {
         expect(screen.getByText("Knowledge")).toBeInTheDocument();
     });
 
+    it("keeps Sidebar navigation in the guided tour order", () => {
+        render(<Sidebar />);
+
+        const routeNames = screen.getAllByRole("link")
+            .map((link) => link.getAttribute("aria-label") || link.textContent?.trim() || "")
+            .filter((name) => [
+                "Chat",
+                "Overview",
+                "Sprints",
+                "Tasks",
+                "Agents",
+                "Stats",
+                "Schedule",
+                "Memory",
+                "Knowledge",
+                "Browser",
+                "Files",
+                "Live",
+                "Docs",
+                "Settings",
+            ].includes(name));
+
+        expect(routeNames).toEqual([
+            "Chat",
+            "Overview",
+            "Sprints",
+            "Tasks",
+            "Agents",
+            "Stats",
+            "Schedule",
+            "Memory",
+            "Knowledge",
+            "Browser",
+            "Files",
+            "Live",
+            "Docs",
+            "Settings",
+        ]);
+        expect(screen.getByRole("link", { name: "Schedule" })).toHaveAttribute("href", "/scheduler");
+        expect(screen.getByRole("link", { name: "Knowledge" })).toHaveAttribute("href", "/knowledge");
+        expect(screen.getByRole("link", { name: "Docs" })).toHaveAttribute("href", "/docs");
+    });
+
     it("renders Knowledge link in KineticDock", () => {
         render(<KineticDock />);
         const knowledgeLinks = screen.getAllByTestId("link-/knowledge");
         expect(knowledgeLinks[knowledgeLinks.length - 1]).toBeInTheDocument();
         // The label might be in a tooltip/span
         expect(screen.getAllByText("Knowledge")[0]).toBeInTheDocument();
+    });
+
+    it("keeps KineticDock navigation in the guided tour order", () => {
+        render(<KineticDock />);
+
+        const routeNames = screen.getAllByRole("link")
+            .map((link) => link.getAttribute("aria-label") || "")
+            .filter(Boolean);
+
+        expect(routeNames).toEqual([
+            "Chat",
+            "Overview",
+            "Sprints",
+            "Tasks",
+            "Agents",
+            "Stats",
+            "Schedule",
+            "Memory",
+            "Knowledge",
+            "Browser",
+            "Files",
+            "Live",
+            "Docs",
+            "Config",
+        ]);
+        expect(screen.getByRole("link", { name: "Schedule" })).toHaveAttribute("href", "/scheduler");
+        expect(screen.getByRole("link", { name: "Knowledge" })).toHaveAttribute("href", "/knowledge");
+        expect(screen.getByRole("link", { name: "Docs" })).toHaveAttribute("href", "/docs");
     });
 
     it("gives dock links stable names and current-page semantics", () => {

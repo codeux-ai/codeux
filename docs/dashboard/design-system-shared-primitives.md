@@ -62,6 +62,17 @@ Shared data controls are responsible for keeping table, list, card, rail, and gr
 6.  **Tables & Mobile Data**: The `Table` primitive must retain rowgroup, row, columnheader, and cell semantics even when mobile styles render rows as cards. Captions describe the dataset, not the visual layout. `mobileLabel` text should match the column meaning and remain available in stacked mobile rows.
 7.  **Focus Restoration**: Shared overlays, menus, popovers, dialogs, confirmation flows, and feedback controls that can remove themselves must restore focus to the trigger when it remains usable. If the trigger is gone, hidden, disabled, inert, or the focused feedback control is removed by dismiss/clear, move focus to a caller-provided fallback, a named route region, `[data-feedback-focus-fallback]`, `[data-focus-fallback]`, `[role="main"]`, or `body`. Feedback dismissals should only move focus after removal would otherwise leave focus on `body` or a disconnected element.
 
+### Markdown And URL Safety
+
+Dashboard components that render untrusted or operator-authored markdown must use `renderMarkdown`; components that assign dynamic `href` values directly must use `getSafeUrl`. Both paths share the same URL policy:
+
+- Links allow `http`, `https`, `mailto`, anchors, query-only links, root-relative paths, and normal relative paths.
+- Images allow only `http` and `https` sources.
+- Protocol-relative URLs, backslash-prefixed URLs, malformed absolute URLs, control-character or HTML-entity protocol obfuscation, and scheme-like relative values before the first `/`, `?`, or `#` delimiter are rejected.
+- Markdown raw HTML is not passed through. Script, iframe, and other inline HTML tags render inertly instead of becoming DOM elements.
+- Markdown link/image attributes are escaped after any `transformHref` callback, and transformed URLs are revalidated before rendering.
+- External markdown links receive `rel="noopener noreferrer"`; do not add `target="_blank"` unless the consuming UI already requires a new tab.
+
 ### Field Accessibility & Error Contracts
 
 1.  **FieldWrapper**: Always associates labels with the first control. It dynamically passes down `id`, `aria-describedby`, `aria-errormessage`, `aria-invalid`, and `aria-required` to its children.

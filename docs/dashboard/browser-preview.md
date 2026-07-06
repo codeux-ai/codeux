@@ -11,6 +11,8 @@ The browser preview provides an integrated environment for interacting with runn
 ## Interaction Contracts
 
 - Preview refresh, launch, rebuild, stop, remove, navigation, and startup-script save operations use visible async feedback plus local status text. Page-level operation results use `ActionFeedbackRegion` where available; control-specific progress stays beside the control that is pending.
+- Dashboard API calls that operate on an existing preview session must carry the owning project and sprint scope. Rebuild, stop, remove, log, and dashboard proxy requests verify the session belongs to the requested project and sprint before returning data or taking action; a foreign or missing session receives the same generic not-found response.
+- Preview-host iframe traffic keeps the existing `preview-<sessionId>.<dashboard-host>` URL format. Host-side start, rebuild, and status controls first resolve that host session, then accept only the canonical preview origin or its canonical dashboard origin.
 - Use `controlFeedback` for preview chrome buttons, session rail controls, launch controls, rebuild/stop/open actions, script save, and address navigation controls.
 - Use `enterExit` for preview window empty/starting/error states, menus, and browser chrome state surfaces.
 - Use `selectionMovement` for active session cards and rail selection changes.
@@ -50,6 +52,15 @@ The browser preview provides an integrated environment for interacting with runn
 - The Live Preview button uses the same mapping model outside the full browser page. Its primary click opens the primary routed port. When the session exposes additional routed ports, the adjacent arrow menu lists each port mapping so operators can open a secondary port directly; mappings that do not yet have a host port stay visible but disabled with their pending reason.
 - Preview links only activate when a session is running and has a routed host port. Starting, stopped, errored, and missing-port sessions remain visible but disabled, omit navigable URLs, suppress activation, and expose a persistent reason through visible copy plus `aria-describedby` or `title`.
 - Container log refreshes keep cached log output visible during foreground refresh, silent polling, empty responses, and refresh errors. The logs region exposes `aria-busy`, a visible Ready/Refreshing/Stale/Error badge, and status copy that names whether the user is seeing current logs or a cached fallback.
+
+## Proxy Credential Boundaries
+
+The browser preview has two proxy paths with different credential rules:
+
+- Dashboard API proxy requests under `/api/browser/sessions/:sessionId/proxy*` originate from the dashboard runtime. Before forwarding to the selected preview port, the proxy strips dashboard cookies, bearer authorization, `set-cookie`, hop-by-hop headers, `proxy-*`, `x-code-ux-*`, `host`, `content-length`, and compression negotiation headers. It also normalizes `Origin`, `Referer`, and `Sec-Fetch-Site` so the preview app sees the selected local upstream origin, such as `http://127.0.0.1:<hostPort>`.
+- Preview-host iframe requests on `preview-<session>.localhost` are the preview app's own origin. Those requests may forward the preview app's own `Authorization` and `Cookie` headers so stateful login/session flows continue to work inside the iframe. Transport, proxy-control, and Code UX control headers are still stripped before the request reaches the container.
+
+Both paths only route to loopback host ports recorded on the active preview session. The dashboard API proxy also removes `Set-Cookie`, CSP, CSP report-only, and `X-Frame-Options` response headers before writing the response on the dashboard origin. Preview-host HTML keeps iframe compatibility by stripping upstream document CSP and frame-blocking headers while allowing preview-origin app cookies to reach that preview host.
 
 ## Verification Notes
 

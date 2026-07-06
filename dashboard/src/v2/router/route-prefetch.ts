@@ -22,6 +22,7 @@ const componentImporters: Record<string, ModuleImporter> = {
   "/knowledge": () => import("../KnowledgePage.js"),
   "/browser": () => import("../BrowserPage.js"),
   "/files": () => import("../FileBrowserPage.js"),
+  "/docs": () => import("../docs-web/DocsWebPage.js"),
 };
 
 const startedPaths = new Set<string>();

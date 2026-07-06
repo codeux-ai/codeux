@@ -5,7 +5,6 @@ import { randomUUID } from "crypto";
 import { CliWorkflowSettings } from "../../../contracts/app-types.js";
 import type { Logger } from "../../../shared/logging/logger.js";
 import { getCorrelationId } from "../../../shared/logging/correlation-id.js";
-import { redactText } from "../../../shared/security/redaction.js";
 import { CliProviderId } from "./provider-command-specs.js";
 import {
   collectProviderUsageTelemetry,
@@ -559,6 +558,7 @@ export class ProviderTelemetryWatcher {
     };
     if (this.shouldLogFailureWarning()) {
       this.lastFailureWarningCount = this.readFailureCount;
+      const errorName = err instanceof Error ? err.name : "Error";
       this.opts.logger?.warn?.("Provider telemetry watcher read failed", {
         logPurpose: "invocation",
         eventType: "provider_telemetry_poll_failed",
@@ -570,7 +570,7 @@ export class ProviderTelemetryWatcher {
         nativeSessionId: this.resolvedNativeSessionId || this.opts.nativeSessionId || undefined,
         correlationId: getCorrelationId(),
         failureCount: this.readFailureCount,
-        error: redactText(err instanceof Error ? err.message : String(err)),
+        errorName,
       });
     }
   }

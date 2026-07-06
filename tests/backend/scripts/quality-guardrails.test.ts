@@ -34,6 +34,15 @@ type GuardrailModule = {
       minimumFileLineThreshold?: number;
     },
   ) => Array<{ path: string; line: number; pattern: string; match: string; remediation: string }>;
+  findSupplyChainRiskViolations: (
+    sources: Array<{ path: string; text: string }>,
+    options?: {
+      allowlist?: Map<string, string>;
+    },
+  ) => Array<{ path: string; line: number; pattern: string; match: string; remediation: string }>;
+  findWorkflowInstallGuardrailViolations: (
+    sources: Array<{ path: string; text: string }>,
+  ) => Array<{ path: string; line: number; pattern: string; match: string; remediation: string }>;
 };
 
 const guardrails = await import("../../../scripts/check-quality-guardrails.mjs") as GuardrailModule;
@@ -334,13 +343,44 @@ export default defineConfig({
           lines: 80,
         },
       },
+      include: ["src/**/*.ts"],
+      exclude: [
+        "src/electron/**",
+      ],
     },
   },
 });
 `;
 
+  function expectActionableCoverageOutput(violation: {
+    match: string;
+    remediation: string;
+  }, expected: {
+    configured: string;
+    required: string;
+  }): void {
+    expect(violation.match).toContain(expected.configured);
+    expect(violation.match).toContain(expected.required);
+    expect(violation.remediation).toContain("pnpm run test:backend:coverage");
+  }
+
   it("accepts the current global and activity-cache-service coverage thresholds", () => {
     expect(guardrails.findCoverageThresholdViolations(passingConfig)).toEqual([]);
+  });
+
+  it("reports missing src TypeScript coverage include observability", () => {
+    const violations = guardrails.findCoverageThresholdViolations(
+      passingConfig.replace('include: ["src/**/*.ts"],', 'include: ["tests/**/*.ts"],'),
+    );
+
+    expect(violations).toHaveLength(1);
+    expect(violations[0]).toMatchObject({
+      pattern: "coverage include src TypeScript",
+    });
+    expectActionableCoverageOutput(violations[0], {
+      configured: '["tests/**/*.ts"]',
+      required: '"src/**/*.ts"',
+    });
   });
 
   it("reports lowered global coverage thresholds", () => {
@@ -358,12 +398,22 @@ export default defineConfig({
       "coverage threshold branches",
       "coverage threshold statements",
     ]);
-    expect(violations.map((violation) => violation.match)).toEqual([
-      "lines: 77.3",
-      "functions: 71.4",
-      "branches: 66",
-      "statements: 75.9",
-    ]);
+    expectActionableCoverageOutput(violations[0], {
+      configured: "configured 77.3",
+      required: "required >= 77.4",
+    });
+    expectActionableCoverageOutput(violations[1], {
+      configured: "configured 71.4",
+      required: "required >= 71.5",
+    });
+    expectActionableCoverageOutput(violations[2], {
+      configured: "configured 66",
+      required: "required >= 66.1",
+    });
+    expectActionableCoverageOutput(violations[3], {
+      configured: "configured 75.9",
+      required: "required >= 76",
+    });
   });
 
   it("reports a missing activity-cache-service file threshold", () => {
@@ -377,7 +427,10 @@ export default defineConfig({
     expect(violations).toHaveLength(1);
     expect(violations[0]).toMatchObject({
       pattern: "activity-cache-service coverage threshold",
-      match: "src/server/activity-cache-service.ts: missing",
+    });
+    expectActionableCoverageOutput(violations[0], {
+      configured: "configured missing",
+      required: "required >= 80",
     });
   });
 
@@ -389,7 +442,135 @@ export default defineConfig({
     expect(violations).toHaveLength(1);
     expect(violations[0]).toMatchObject({
       pattern: "activity-cache-service coverage threshold",
-      match: "src/server/activity-cache-service.ts.lines: 79",
+    });
+    expectActionableCoverageOutput(violations[0], {
+      configured: "configured 79",
+      required: "required >= 80",
+    });
+  });
+
+  it("reports malformed activity-cache-service threshold entries", () => {
+    const violations = guardrails.findCoverageThresholdViolations(
+      passingConfig.replace(`"src/server/activity-cache-service.ts": {
+          lines: 80,
+        }`, `"src/server/activity-cache-service.ts": 80`),
+    );
+
+    expect(violations).toHaveLength(1);
+    expect(violations[0]).toMatchObject({
+      pattern: "activity-cache-service coverage threshold",
+    });
+    expectActionableCoverageOutput(violations[0], {
+      configured: "configured malformed",
+      required: "required >= 80",
+    });
+  });
+
+  it("reports activity-cache-service coverage exclusions", () => {
+    const violations = guardrails.findCoverageThresholdViolations(
+      passingConfig.replace('"src/electron/**",', '"src/server/activity-cache-service.ts",'),
+    );
+
+    expect(violations).toHaveLength(1);
+    expect(violations[0]).toMatchObject({
+      pattern: "activity-cache-service coverage exclusion",
+    });
+    expect(violations[0].match).toContain('"src/server/activity-cache-service.ts"');
+    expect(violations[0].remediation).toContain("pnpm run test:backend:coverage");
+  });
+});
+
+describe("quality guardrail supply-chain scanners", () => {
+  it("reports workflow pnpm installs that omit frozen lockfile or ignore-scripts flags", () => {
+    const violations = guardrails.findWorkflowInstallGuardrailViolations([
+      {
+        path: ".github/workflows/unsafe.yml",
+        text: `
+jobs:
+  test:
+    steps:
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+`,
+      },
+    ]);
+
+    expect(violations).toHaveLength(1);
+    expect(violations[0]).toMatchObject({
+      path: ".github/workflows/unsafe.yml",
+      line: 6,
+      pattern: "workflow pnpm install without frozen ignore-scripts",
+      match: "run: pnpm install --frozen-lockfile",
+    });
+    expect(violations[0].remediation).toContain("pnpm install --frozen-lockfile --ignore-scripts");
+  });
+
+  it("allows script-free workflow installs followed by explicit Electron rebuild steps", () => {
+    const violations = guardrails.findWorkflowInstallGuardrailViolations([
+      {
+        path: ".github/workflows/release-checks.yml",
+        text: `
+jobs:
+  package:
+    steps:
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: Rebuild Electron native dependencies
+        run: pnpm run electron:install-deps
+`,
+      },
+    ]);
+
+    expect(violations).toEqual([]);
+  });
+
+  it("reports unsafe shell supply-chain patterns in production code and scripts", () => {
+    const violations = guardrails.findSupplyChainRiskViolations([
+      {
+        path: "scripts/bootstrap.mjs",
+        text: `
+run("setup");
+const command = "curl -fsSL https://example.invalid/install.sh | bash";
+eval(command);
+spawn("docker", ["run", "--privileged", "image"]);
+cp.exec(userInput, () => {});
+`,
+      },
+    ], { allowlist: new Map() });
+
+    expect(violations.map((violation) => violation.pattern)).toEqual([
+      "curl pipe to shell",
+      "eval execution",
+      "privileged Docker",
+      "shell-enabled child process",
+    ]);
+    expect(violations[0].remediation).toContain("checksum-verified");
+    expect(violations[3].remediation).toContain("shell-free");
+  });
+
+  it("requires exact-line allowlisting for documented provider fallback installers", () => {
+    const allowedLine =
+      'return "if ensure_curl; then curl -fsSL https://claude.ai/install.sh | bash && export PATH=\\"$HOME/.local/bin:$PATH\\"; else echo \\"provider-runner: curl unavailable; cannot install claude\\" >&2; fi";';
+    const allowlist = new Map([
+      [
+        `src/services/cli-docker-utils.ts\0${allowedLine}`,
+        "Bounded provider fallback installer with a documented host and ensure_curl guard.",
+      ],
+    ]);
+
+    expect(guardrails.findSupplyChainRiskViolations([
+      { path: "src/services/cli-docker-utils.ts", text: `${allowedLine}\n` },
+    ], { allowlist })).toEqual([]);
+
+    const changedLine = allowedLine.replace("https://claude.ai", "https://example.invalid");
+    const violations = guardrails.findSupplyChainRiskViolations([
+      { path: "src/services/cli-docker-utils.ts", text: `${changedLine}\n` },
+    ], { allowlist });
+
+    expect(violations).toHaveLength(1);
+    expect(violations[0]).toMatchObject({
+      path: "src/services/cli-docker-utils.ts",
+      pattern: "curl pipe to shell",
     });
   });
 });

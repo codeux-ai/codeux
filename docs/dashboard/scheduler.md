@@ -19,6 +19,16 @@ Operators can create entries for:
 - Messages sent into `/chat` at the selected date and time.
 - Long-term memory remediation, either deterministic or AI-routed through the Remediation route.
 
+The Sprint Composer also exposes a `Schedule` execution mode. That path saves the sprint definition first, including the sprint key override, name, goal, original prompt, planning route/model overrides, agent preset selections, linked issues, and imported tasks, then creates a scheduler entry targeting the saved sprint. It does not call planning or execution immediately.
+
+The Quicksprint configure view exposes the same scheduler timing model. Scheduling a quicksprint serializes the selected template, subtask count, `No limit` state, additional prompt, planning route/model override, and scheduled submit mode into `quicksprintTarget`, then creates a scheduler entry without launching the quicksprint immediately.
+
+Sprint and quicksprint entries support two dashboard timing modes:
+- **Absolute date/time** keeps the existing date-time picker, quick presets, timezone capture, and recurrence controls. This is the only timing mode available for chat and memory remediation entries.
+- **After another sprint ends** stores the shared `scheduleAnchor = { mode: "after_sprint_end", sourceSprintId, offsetMinutes? }` payload. Operators choose a source sprint from the project sprint list and may add a non-negative offset in minutes. These entries are one-time only, so the dashboard disables recurrence and explains that a sprint cannot be anchored to its own completion.
+
+Anchored entries in the scheduled-entry list are summarized as relative timing, for example `After Release Prep ends + 15 minutes`, instead of showing a misleading fixed `Next run` time while the scheduler is still waiting for the source sprint to finish.
+
 The Memory settings panel can also manage one project-scoped long-term remediation entry. That entry is marked with `memoryRemediationTarget.source = "memory_settings"` so the settings shortcut does not overwrite manually created Scheduler page remediation entries.
 
 Scheduler target selectors, recurrence indicators, and repeating-count summary icons use the dashboard signal jade palette for interactive accents. Sprint and next-run status tones remain differentiated with their existing ember/status colors.
@@ -40,6 +50,14 @@ Minutely entries are not special-cased at runtime. They are persisted in the sam
 
 Scheduler state is persisted in SQLite in `scheduler_entries`.
 
+Entries support two scheduling modes:
+- **Absolute time**: the default path. `scheduledFor` is required on create, `nextRunAt` is populated from that timestamp, and recurrence expansion keeps using the existing UTC recurrence helpers.
+- **After sprint end**: set `scheduleAnchor = { mode: "after_sprint_end", sourceSprintId, offsetMinutes? }`. The source sprint must exist in the same project. `offsetMinutes` is optional, defaults to `0`, and must be non-negative.
+
+Composer and quicksprint shortcut scheduling both use this same contract. Absolute shortcut submissions send `scheduledFor`; after-sprint-end shortcut submissions send `scheduleAnchor`.
+
+Anchors are persisted inside the existing `target_json` payload instead of a new column. This keeps existing `scheduler_entries` rows compatible and avoids a destructive migration; older absolute entries simply hydrate with no `scheduleAnchor`.
+
 The shared TypeScript contract lives in:
 - `src/contracts/scheduler-types.ts`
 
@@ -50,11 +68,13 @@ The persistence and runtime layers live in:
 
 The dashboard API routes are:
 - `GET /api/projects/:projectId/scheduler?from=<iso>&to=<iso>`
-  - Returns persisted entries and expanded occurrences for the requested window.
+  - Returns persisted entries and expanded occurrences for the requested window. Anchored entries stay in `entries` but do not appear in `occurrences` until the source sprint reaches a terminal state; once resolved, the occurrence starts at the terminal sprint timestamp plus any configured offset.
 - `POST /api/projects/:projectId/scheduler`
   - Creates a scheduler entry.
+  - Absolute entries use `scheduledFor`; anchored entries use `scheduleAnchor`.
 - `PATCH /api/scheduler/:entryId`
   - Updates status, timing, recurrence, or target payload.
+  - Updating `scheduleAnchor` switches an entry to anchored semantics. Setting it to `null` returns the entry to absolute-time semantics with `scheduledFor`.
 - `DELETE /api/scheduler/:entryId`
   - Deletes an entry.
 - `GET /api/projects/:projectId/scheduler/memory-remediation`
@@ -95,3 +115,13 @@ Due entries execute through existing production paths:
 AI memory remediation entries create a `remediation` invocation record even when no cleanup candidates are found; in that case the invocation is completed with a skipped reason instead of dispatching an empty provider request.
 
 After a successful run, the service advances `nextRunAt` from the scheduled occurrence time. One-time entries move to `completed`; recurring entries stay `scheduled` until their count or end date/time is exhausted. Failed entries move to `failed` with `lastError` for operator visibility.
+
+Anchored entries are evaluated separately from absolute `nextRunAt` polling:
+- An `after_sprint_end` entry is due only after the source sprint reaches `completed`, `failed`, or `cancelled`.
+- The anchor timestamp is the latest terminal sprint run `finishedAt` when a terminal run exists; otherwise the scheduler falls back to the sprint `endDate`.
+- The optional offset is applied after that terminal timestamp.
+- Anchored entries are one-time entries. Recurrence is rejected for `after_sprint_end` because repeated execution would be ambiguous without a new recurrence anchor model.
+- When the scheduled target is also a sprint, the target sprint cannot be the same sprint used as the source anchor.
+- Project isolation is strict: source sprints from another project are rejected.
+
+The MCP `manage_scheduler` tool accepts the same model. Use `scheduleMode: "after_sprint_end"` or `anchorMode: "after_sprint_end"` with `sourceSprintId`/`anchorSourceSprintId` and optional `offsetMinutes`/`anchorOffsetMinutes`, or pass the nested `scheduleAnchor` object directly. Absolute schedules continue to use `scheduledFor`; `scheduleMode: "absolute"` on update clears an existing anchor.

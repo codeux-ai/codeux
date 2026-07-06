@@ -51,7 +51,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add assets/models-dev/catalog.json
-          git commit -m "chore: update models.dev catalogue [skip ci]"
+          git commit -m "chore: update models.dev catalogue"
           git push --force-with-lease origin "HEAD:${update_branch}"
 
           existing_pr_url="$(gh pr list \
@@ -70,4 +70,4 @@ jobs:
             --base "${TARGET_BRANCH}" \
             --head "${update_branch}" \
             --title "chore: update models.dev catalogue" \
-            --body "Refreshes the vendored models.dev catalogue for ${TARGET_BRANCH} after the scheduled push-triggered prefetch detected upstream changes."
+            --body "Refreshes the vendored models.dev catalogue for ${TARGET_BRANCH} after the scheduled push-triggered prefetch detected upstream changes. This PR intentionally runs the normal pull request CI checks."
