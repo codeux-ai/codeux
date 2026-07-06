@@ -85,6 +85,60 @@ describe("SchedulerRepository", () => {
     expect(schedulerRepository.listEntries(project.id)[0]?.recurrence).toEqual(entry.recurrence);
   });
 
+  it("persists after-sprint-end anchors in the target payload without a schema migration", async () => {
+    const { dir, projectRepository, schedulerRepository } = await createRepositories();
+    const project = projectRepository.createProject({
+      name: "Scheduler Project",
+      sourceType: "local",
+      sourceRef: dir,
+    });
+    const sourceSprint = projectRepository.createSprint(project.id, {
+      name: "Source sprint",
+      goal: "Finish first.",
+    });
+
+    const entry = schedulerRepository.createEntry(project.id, {
+      targetType: "chat",
+      scheduleAnchor: {
+        mode: "after_sprint_end",
+        sourceSprintId: sourceSprint.id,
+        offsetMinutes: 15,
+      },
+      chatTarget: { bodyMarkdown: "Start the follow-up." },
+    });
+
+    expect(entry.scheduleAnchor).toEqual({
+      mode: "after_sprint_end",
+      sourceSprintId: sourceSprint.id,
+      offsetMinutes: 15,
+    });
+    expect(entry.nextRunAt).toBeNull();
+
+    const stored = schedulerRepository.getEntry(entry.id);
+    expect(stored?.scheduleAnchor).toEqual(entry.scheduleAnchor);
+    expect(schedulerRepository.listScheduledAnchoredEntries()).toEqual([stored]);
+  });
+
+  it("rejects recurrence for after-sprint-end anchors", async () => {
+    const { dir, projectRepository, schedulerRepository } = await createRepositories();
+    const project = projectRepository.createProject({
+      name: "Scheduler Project",
+      sourceType: "local",
+      sourceRef: dir,
+    });
+    const sourceSprint = projectRepository.createSprint(project.id, { name: "Source sprint" });
+
+    expect(() => schedulerRepository.createEntry(project.id, {
+      targetType: "chat",
+      scheduleAnchor: {
+        mode: "after_sprint_end",
+        sourceSprintId: sourceSprint.id,
+      },
+      recurrence: { frequency: "daily", interval: 1 },
+      chatTarget: { bodyMarkdown: "Start the follow-up." },
+    })).toThrow(/do not support recurrence/);
+  });
+
   it("marks successful runs and completes one-time entries", async () => {
     const { dir, projectRepository, schedulerRepository } = await createRepositories();
     const project = projectRepository.createProject({

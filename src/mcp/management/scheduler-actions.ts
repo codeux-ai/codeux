@@ -1,6 +1,7 @@
 import type { ManageCodeUxArgs, ManagementResponseEnvelope } from "../../contracts/internal-management-types.js";
 import type {
   CreateSchedulerEntryInput,
+  ScheduleAnchor,
   ScheduleChatTarget,
   ScheduleQuicksprintTarget,
   ScheduleRecurrenceRule,
@@ -72,6 +73,19 @@ function parsePositiveInteger(value: unknown): number | undefined {
   return undefined;
 }
 
+function parseNonNegativeInteger(value: unknown): number | undefined {
+  if (typeof value === "number" && Number.isFinite(value) && value >= 0) {
+    return Math.floor(value);
+  }
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Number(value.trim());
+    if (Number.isFinite(parsed) && parsed >= 0) {
+      return Math.floor(parsed);
+    }
+  }
+  return undefined;
+}
+
 function readPositiveInteger(payload: Record<string, unknown>, key: string, fallback: number): number {
   return parsePositiveInteger(payload[key]) ?? fallback;
 }
@@ -83,6 +97,42 @@ function readSubmitMode(value: unknown): ScheduleQuicksprintTarget["submitMode"]
 function readRecurrence(payload: Record<string, unknown>): Partial<ScheduleRecurrenceRule> | undefined {
   const recurrence = readObject(payload, "recurrence");
   return recurrence ? normalizeRecurrenceRule(recurrence) : undefined;
+}
+
+function readScheduleAnchor(payload: Record<string, unknown>): ScheduleAnchor | null | undefined {
+  const mode = readString(payload, "scheduleMode") ?? readString(payload, "anchorMode");
+  if (mode === "absolute") {
+    return null;
+  }
+
+  const nested = readObject(payload, "scheduleAnchor");
+  const source = nested ?? payload;
+  const nestedMode = nested ? readString(nested, "mode") : undefined;
+  const effectiveMode = nestedMode ?? mode;
+  const hasAnchorFields = Boolean(
+    nested
+    || effectiveMode === "after_sprint_end"
+    || "sourceSprintId" in payload
+    || "anchorSourceSprintId" in payload
+    || "offsetMinutes" in payload
+    || "anchorOffsetMinutes" in payload
+  );
+  if (!hasAnchorFields) {
+    return undefined;
+  }
+  if (effectiveMode && effectiveMode !== "after_sprint_end") {
+    throw new Error("scheduleMode must be absolute or after_sprint_end");
+  }
+  const sourceSprintId = readString(source, "sourceSprintId") ?? readString(source, "anchorSourceSprintId");
+  if (!sourceSprintId) {
+    throw new Error("sourceSprintId or scheduleAnchor.sourceSprintId is required for after_sprint_end schedules");
+  }
+  const offsetMinutes = parseNonNegativeInteger(source.offsetMinutes ?? source.anchorOffsetMinutes);
+  return {
+    mode: "after_sprint_end",
+    sourceSprintId,
+    offsetMinutes: offsetMinutes ?? 0,
+  };
 }
 
 function normalizeSprintTarget(payload: Record<string, unknown>): ScheduleSprintTarget {
@@ -145,10 +195,15 @@ function assignTarget(input: CreateSchedulerEntryInput | UpdateSchedulerEntryInp
 
 function normalizeCreateInput(payload: Record<string, unknown>, action: string): CreateSchedulerEntryInput {
   const targetType = readTargetType(payload, action);
+  const scheduleAnchor = readScheduleAnchor(payload);
   const input: CreateSchedulerEntryInput = {
     targetType,
-    scheduledFor: readRequiredString(payload, "scheduledFor"),
   };
+  if (scheduleAnchor) {
+    input.scheduleAnchor = scheduleAnchor;
+  } else {
+    input.scheduledFor = readRequiredString(payload, "scheduledFor");
+  }
   const title = readString(payload, "title");
   const timezone = readString(payload, "timezone");
   const recurrence = readRecurrence(payload);
@@ -166,12 +221,14 @@ function normalizeUpdateInput(payload: Record<string, unknown>): UpdateScheduler
   const scheduledFor = readString(payload, "scheduledFor");
   const timezone = readString(payload, "timezone");
   const recurrence = readRecurrence(payload);
+  const scheduleAnchor = readScheduleAnchor(payload);
 
   if ("title" in payload) input.title = title;
   if (status) input.status = status;
   if (scheduledFor) input.scheduledFor = scheduledFor;
   if (timezone) input.timezone = timezone;
   if (recurrence) input.recurrence = recurrence;
+  if (scheduleAnchor !== undefined) input.scheduleAnchor = scheduleAnchor;
 
   if ("sprintTarget" in payload || "sprintId" in payload) {
     input.sprintTarget = normalizeSprintTarget(payload);

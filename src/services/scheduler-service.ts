@@ -2,6 +2,7 @@ import type {
   CreateSchedulerEntryInput,
   MemoryRemediationScheduleResponse,
   MemoryRemediationScheduleSettings,
+  ScheduleAnchor,
   SchedulerCollectionResponse,
   SchedulerEntryRecord,
   UpdateSchedulerEntryInput,
@@ -9,6 +10,7 @@ import type {
 import type { Logger } from "../shared/logging/logger.js";
 import { SchedulerRepository } from "../repositories/scheduler-repository.js";
 import type { ProjectManagementRepository } from "../repositories/project-management-repository.js";
+import type { SprintRunRecord } from "../contracts/execution-types.js";
 import type { QuicksprintService } from "./quicksprint-service.js";
 import type { ChatThreadRuntimeService } from "./chat-thread-runtime-service.js";
 import type { ExecutionControlService } from "./execution-control-service.js";
@@ -19,6 +21,9 @@ import type { CreateDashboardConversationMessageInput } from "../contracts/conne
 export interface SchedulerServiceDeps {
   schedulerRepository: SchedulerRepository;
   projectManagementRepository: ProjectManagementRepository;
+  executionRepository?: {
+    listSprintRuns(projectId: string, sprintId?: string): SprintRunRecord[];
+  };
   quicksprintService: QuicksprintService;
   chatThreadRuntimeService: ChatThreadRuntimeService;
   executionControlService: ExecutionControlService;
@@ -70,6 +75,7 @@ export class SchedulerService {
 
   createEntry(projectId: string, input: CreateSchedulerEntryInput): SchedulerEntryRecord {
     this.validateInputTarget(projectId, input);
+    this.validateScheduleAnchor(projectId, input);
     return this.deps.schedulerRepository.createEntry(projectId, input);
   }
 
@@ -135,12 +141,23 @@ export class SchedulerService {
       return this.deps.schedulerRepository.updateEntry(entryId, input);
     }
     this.validateInputTarget(current.projectId, {
-      targetType: current.targetType,
+      targetType: input.targetType ?? current.targetType,
       scheduledFor: input.scheduledFor ?? current.scheduledFor,
+      scheduleAnchor: input.scheduleAnchor === undefined ? current.scheduleAnchor : input.scheduleAnchor,
       sprintTarget: input.sprintTarget ?? current.sprintTarget,
       quicksprintTarget: input.quicksprintTarget ?? current.quicksprintTarget,
       chatTarget: input.chatTarget ?? current.chatTarget,
       memoryRemediationTarget: input.memoryRemediationTarget ?? current.memoryRemediationTarget,
+    });
+    this.validateScheduleAnchor(current.projectId, {
+      targetType: input.targetType ?? current.targetType,
+      scheduledFor: input.scheduledFor ?? current.scheduledFor,
+      scheduleAnchor: input.scheduleAnchor === undefined ? current.scheduleAnchor : input.scheduleAnchor,
+      sprintTarget: input.sprintTarget ?? current.sprintTarget,
+      quicksprintTarget: input.quicksprintTarget ?? current.quicksprintTarget,
+      chatTarget: input.chatTarget ?? current.chatTarget,
+      memoryRemediationTarget: input.memoryRemediationTarget ?? current.memoryRemediationTarget,
+      recurrence: input.recurrence ? { ...current.recurrence, ...input.recurrence } : current.recurrence,
     });
     return this.deps.schedulerRepository.updateEntry(entryId, input);
   }
@@ -150,7 +167,10 @@ export class SchedulerService {
   }
 
   async runDueEntries(now = new Date()): Promise<void> {
-    const dueEntries = this.deps.schedulerRepository.listDueEntries(now.toISOString());
+    const dueEntries = [
+      ...this.deps.schedulerRepository.listDueEntries(now.toISOString()),
+      ...this.listDueAnchoredEntries(now),
+    ];
     for (const entry of dueEntries) {
       if (this.inFlightEntryIds.has(entry.id)) {
         continue;
@@ -159,27 +179,29 @@ export class SchedulerService {
       // Re-verify that the entry is still scheduled and due before proceeding.
       // This prevents running entries that were paused or modified during the current tick.
       const freshEntry = this.deps.schedulerRepository.getEntry(entry.id);
-      if (!freshEntry || freshEntry.status !== "scheduled" || !freshEntry.nextRunAt || new Date(freshEntry.nextRunAt).getTime() > now.getTime()) {
+      const occurrenceIso = this.resolveDueOccurrence(freshEntry, now);
+      if (!freshEntry || freshEntry.status !== "scheduled" || !occurrenceIso) {
         continue;
       }
 
       this.inFlightEntryIds.add(entry.id);
       
-      const occurrenceIso = entry.nextRunAt ?? entry.scheduledFor;
-      const nextRunAt = computeNextRunAfterOccurrence(occurrenceIso, entry.recurrence, entry.runCount + 1);
+      const nextRunAt = freshEntry.scheduleAnchor
+        ? null
+        : computeNextRunAfterOccurrence(occurrenceIso, freshEntry.recurrence, freshEntry.runCount + 1);
       
       // Immediately mark as succeeded to prevent double firing if app restarts during execution
-      this.deps.schedulerRepository.markRunSucceeded(entry.id, occurrenceIso, nextRunAt);
+      this.deps.schedulerRepository.markRunSucceeded(freshEntry.id, occurrenceIso, nextRunAt);
 
-      this.executeEntry(entry).catch((error) => {
+      this.executeEntry(freshEntry).catch((error) => {
         const message = error instanceof Error ? error.message : String(error);
         this.deps.logger.error("Scheduled entry execution failed", {
-          entryId: entry.id,
-          projectId: entry.projectId,
-          targetType: entry.targetType,
+          entryId: freshEntry.id,
+          projectId: freshEntry.projectId,
+          targetType: freshEntry.targetType,
           error: message,
         });
-        this.deps.schedulerRepository.markRunFailed(entry.id, message);
+        this.deps.schedulerRepository.markRunFailed(freshEntry.id, message);
       }).finally(() => {
         this.inFlightEntryIds.delete(entry.id);
       });
@@ -239,7 +261,7 @@ export class SchedulerService {
     await this.deps.chatThreadRuntimeService.postMessage(entry.projectId, input);
   }
 
-  private validateInputTarget(projectId: string, input: CreateSchedulerEntryInput): void {
+  private validateInputTarget(projectId: string, input: CreateSchedulerEntryInput | UpdateSchedulerEntryInput): void {
     if (input.targetType !== "sprint") {
       return;
     }
@@ -256,6 +278,81 @@ export class SchedulerService {
     }
   }
 
+  private validateScheduleAnchor(projectId: string, input: CreateSchedulerEntryInput | UpdateSchedulerEntryInput): void {
+    const anchor = input.scheduleAnchor ?? undefined;
+    if (!anchor) {
+      return;
+    }
+    if (anchor.mode !== "after_sprint_end") {
+      throw new Error("scheduleAnchor.mode must be after_sprint_end.");
+    }
+    const sourceSprintId = anchor.sourceSprintId?.trim();
+    if (!sourceSprintId) {
+      throw new Error("scheduleAnchor.sourceSprintId is required.");
+    }
+    const offsetMinutes = Number(anchor.offsetMinutes ?? 0);
+    if (!Number.isFinite(offsetMinutes) || offsetMinutes < 0) {
+      throw new Error("scheduleAnchor.offsetMinutes must be a non-negative number.");
+    }
+    const sourceSprint = this.deps.projectManagementRepository.getSprint(sourceSprintId);
+    if (!sourceSprint || sourceSprint.projectId !== projectId) {
+      throw new Error("Schedule anchors must reference a sprint in the selected project.");
+    }
+    if (input.targetType === "sprint" && input.sprintTarget?.sprintId === sourceSprintId) {
+      throw new Error("A scheduled sprint cannot be anchored to its own completion.");
+    }
+    if (input.recurrence && input.recurrence.frequency && input.recurrence.frequency !== "none") {
+      throw new Error("after_sprint_end scheduler anchors do not support recurrence.");
+    }
+  }
+
+  private listDueAnchoredEntries(now: Date): SchedulerEntryRecord[] {
+    const listAnchored = this.deps.schedulerRepository.listScheduledAnchoredEntries;
+    if (typeof listAnchored !== "function") {
+      return [];
+    }
+    return listAnchored.call(this.deps.schedulerRepository, 25)
+      .filter((entry) => Boolean(this.resolveDueOccurrence(entry, now)));
+  }
+
+  private resolveDueOccurrence(entry: SchedulerEntryRecord | null, now: Date): string | null {
+    if (!entry || entry.status !== "scheduled") {
+      return null;
+    }
+    if (!entry.scheduleAnchor) {
+      if (!entry.nextRunAt) {
+        return null;
+      }
+      return new Date(entry.nextRunAt).getTime() <= now.getTime() ? entry.nextRunAt : null;
+    }
+    const anchorTime = this.resolveAnchorSprintEndTime(entry.projectId, entry.scheduleAnchor);
+    if (!anchorTime) {
+      return null;
+    }
+    const dueAt = new Date(anchorTime.getTime() + ((entry.scheduleAnchor.offsetMinutes ?? 0) * 60_000));
+    return dueAt.getTime() <= now.getTime() ? dueAt.toISOString() : null;
+  }
+
+  private resolveAnchorSprintEndTime(projectId: string, anchor: ScheduleAnchor): Date | null {
+    const sprint = this.deps.projectManagementRepository.getSprint(anchor.sourceSprintId);
+    if (!sprint || sprint.projectId !== projectId || !isTerminalSprintStatus(sprint.status)) {
+      return null;
+    }
+
+    const latestRunFinishedAt = this.deps.executionRepository
+      ? latestTerminalRunFinishedAt(this.deps.executionRepository.listSprintRuns(projectId, anchor.sourceSprintId))
+      : null;
+    if (latestRunFinishedAt) {
+      return latestRunFinishedAt;
+    }
+
+    if (!sprint.endDate) {
+      return null;
+    }
+    const parsed = new Date(sprint.endDate);
+    return Number.isFinite(parsed.getTime()) ? parsed : null;
+  }
+
   private findSettingsManagedMemoryRemediationEntry(projectId: string): SchedulerEntryRecord | null {
     const entries = this.deps.schedulerRepository.listEntries(projectId);
     return entries.find((entry) => (
@@ -264,6 +361,27 @@ export class SchedulerService {
       && entry.status !== "cancelled"
     )) ?? null;
   }
+}
+
+function isTerminalSprintStatus(status: string): boolean {
+  return status === "completed" || status === "failed" || status === "cancelled";
+}
+
+function latestTerminalRunFinishedAt(runs: SprintRunRecord[]): Date | null {
+  let latest: Date | null = null;
+  for (const run of runs) {
+    if (!isTerminalSprintStatus(run.status) || !run.finishedAt) {
+      continue;
+    }
+    const finishedAt = new Date(run.finishedAt);
+    if (!Number.isFinite(finishedAt.getTime())) {
+      continue;
+    }
+    if (!latest || finishedAt.getTime() > latest.getTime()) {
+      latest = finishedAt;
+    }
+  }
+  return latest;
 }
 
 function normalizeScheduleStart(value?: string): string {
