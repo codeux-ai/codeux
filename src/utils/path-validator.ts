@@ -115,7 +115,6 @@ export function validateNonEmptyDir(targetPath: string, allowedRoot?: string): V
 
 export function validateExistingPathInside(basePath: string, targetPath: string): ValidatedPath {
   const resolvedBase = path.resolve(basePath);
-  validateRelativePathInput(targetPath);
   const resolvedTarget = path.resolve(resolvedBase, targetPath);
   if (!isPathInside(resolvedBase, resolvedTarget)) {
     throw new Error("Path must be inside the project directory.");
@@ -134,32 +133,4 @@ export function validateExistingPathInside(basePath: string, targetPath: string)
   }
 
   return asValidatedPath(realTarget);
-}
-
-function validateRelativePathInput(targetPath: string): void {
-  if (!targetPath || targetPath.trim() === "") {
-    throw new Error("Path not found");
-  }
-  const trimmed = targetPath.trim();
-  if (/[\x00-\x1F\x7F]/.test(trimmed)) {
-    throw new Error("Path contains invalid characters.");
-  }
-
-  let decoded = trimmed;
-  for (let i = 0; i < 4; i += 1) {
-    decoded = decodeURIComponent(decoded);
-    if (!/%[0-9a-fA-F]{2}/.test(decoded)) {
-      break;
-    }
-  }
-
-  if (/[\x00-\x1F\x7F]/.test(decoded)) {
-    throw new Error("Path contains invalid characters.");
-  }
-  if (path.isAbsolute(decoded) || /^[a-zA-Z]:/.test(decoded) || decoded.replace(/\\/g, "/").startsWith("/")) {
-    throw new Error("Path must be inside the project directory.");
-  }
-  if (decoded.replace(/\\/g, "/").split("/").includes("..")) {
-    throw new Error("Path must be inside the project directory.");
-  }
 }

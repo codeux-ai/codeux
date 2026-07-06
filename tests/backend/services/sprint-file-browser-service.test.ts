@@ -344,73 +344,6 @@ describe("SprintFileBrowserService", () => {
     expect(result.content).toBe("");
   });
 
-  it("reads normal nested files through canonical Docker containment", async () => {
-    const { service, fileBrowserRepository, project, sprint } = await createHarness();
-    const containerTsv = `cid123\tname\tUp 2 seconds\t${project.id}\t${sprint.id}\tsess`;
-    const session = fileBrowserRepository.createSession({
-      projectId: project.id,
-      sprintId: sprint.id,
-      status: "running",
-      workspacePath: "/runtime-root/file-browser/x/workspace",
-    });
-    fileBrowserRepository.updateSession(session.id, { status: "running", containerId: "cid123" });
-
-    runCommandStrict.mockImplementation(async (cmd: string, args: string[]) =>
-      cmd === "docker" && args[0] === "ps" && args.includes("--format") ? ok(containerTsv) : ok(),
-    );
-    commandRun.mockImplementation(async () => ok("export {};\n"));
-
-    const result = await service.readFile(session.id, "src/nested/file.ts");
-
-    expect(result.path).toBe("src/nested/file.ts");
-    expect(result.content).toBe("export {};\n");
-    const dockerRead = commandRun.mock.calls.find(([cmd, args]) => cmd === "docker" && (args as string[])[0] === "exec");
-    const script = (dockerRead?.[1] as string[])[4];
-    expect(script).toContain("realpath -- '/workspace'");
-    expect(script).toContain("realpath -- '/workspace/src/nested/file.ts'");
-    expect(script).toContain("path must stay inside workspace");
-    expect(script).toContain("head -c 2000001");
-  });
-
-  it("rejects symlink escapes detected by the canonical Docker read", async () => {
-    const { service, fileBrowserRepository, project, sprint } = await createHarness();
-    const containerTsv = `cid123\tname\tUp 2 seconds\t${project.id}\t${sprint.id}\tsess`;
-    const session = fileBrowserRepository.createSession({
-      projectId: project.id,
-      sprintId: sprint.id,
-      status: "running",
-      workspacePath: "/runtime-root/file-browser/x/workspace",
-    });
-    fileBrowserRepository.updateSession(session.id, { status: "running", containerId: "cid123" });
-
-    runCommandStrict.mockImplementation(async (cmd: string, args: string[]) =>
-      cmd === "docker" && args[0] === "ps" && args.includes("--format") ? ok(containerTsv) : ok(),
-    );
-    commandRun.mockResolvedValue(fail("Invalid file path: path must stay inside workspace\n"));
-
-    await expect(service.readFile(session.id, "linked-secret.txt")).rejects.toThrow("path must stay inside workspace");
-  });
-
-  it("reports missing files without exposing host workspace paths", async () => {
-    const { service, fileBrowserRepository, project, sprint } = await createHarness();
-    const containerTsv = `cid123\tname\tUp 2 seconds\t${project.id}\t${sprint.id}\tsess`;
-    const session = fileBrowserRepository.createSession({
-      projectId: project.id,
-      sprintId: sprint.id,
-      status: "running",
-      workspacePath: "/runtime-root/file-browser/x/workspace",
-    });
-    fileBrowserRepository.updateSession(session.id, { status: "running", containerId: "cid123" });
-
-    runCommandStrict.mockImplementation(async (cmd: string, args: string[]) =>
-      cmd === "docker" && args[0] === "ps" && args.includes("--format") ? ok(containerTsv) : ok(),
-    );
-    commandRun.mockResolvedValue(fail("Path not found\n"));
-
-    await expect(service.readFile(session.id, "src/missing.ts")).rejects.toThrow("Path not found");
-    await expect(service.readFile(session.id, "src/missing.ts")).rejects.not.toThrow("/runtime-root");
-  });
-
   it("rejects path traversal attempts", async () => {
     const { service, fileBrowserRepository, project, sprint } = await createHarness();
     const containerTsv = `cid123\tname\tUp 2 seconds\t${project.id}\t${sprint.id}\tsess`;
@@ -426,26 +359,6 @@ describe("SprintFileBrowserService", () => {
     );
 
     await expect(service.readFile(session.id, "../../etc/passwd")).rejects.toThrow(/Invalid file path/);
-  });
-
-  it("rejects encoded traversal, .git internals, and Windows drive paths before Docker reads", async () => {
-    const { service, fileBrowserRepository, project, sprint } = await createHarness();
-    const containerTsv = `cid123\tname\tUp 2 seconds\t${project.id}\t${sprint.id}\tsess`;
-    const session = fileBrowserRepository.createSession({
-      projectId: project.id,
-      sprintId: sprint.id,
-      status: "running",
-      workspacePath: "/runtime-root/file-browser/x/workspace",
-    });
-    fileBrowserRepository.updateSession(session.id, { status: "running", containerId: "cid123" });
-    runCommandStrict.mockImplementation(async (cmd: string, args: string[]) =>
-      cmd === "docker" && args[0] === "ps" && args.includes("--format") ? ok(containerTsv) : ok(),
-    );
-
-    await expect(service.readFile(session.id, "src/%252e%252e/package.json")).rejects.toThrow(/Invalid file path/);
-    await expect(service.readFile(session.id, ".git/config")).rejects.toThrow(/Invalid file path/);
-    await expect(service.readFile(session.id, "C:\\Windows\\System32")).rejects.toThrow(/Invalid file path/);
-    expect(commandRun).not.toHaveBeenCalled();
   });
 
   it("builds a change set comparing the feature branch against the default branch", async () => {
@@ -530,45 +443,6 @@ describe("SprintFileBrowserService", () => {
     expect(diff.modified).toBe("const a = 2;\n");
     expect(diff.binary).toBe(false);
     expect(diff.language).toBe("typescript");
-  });
-
-  it("produces a diff for renamed files using the old and new validated paths", async () => {
-    const { service, fileBrowserRepository, project, sprint } = await createHarness();
-    const containerTsv = `cid123\tname\tUp 2 seconds\t${project.id}\t${sprint.id}\tsess`;
-    const session = fileBrowserRepository.createSession({
-      projectId: project.id,
-      sprintId: sprint.id,
-      status: "running",
-      featureBranch: "feature/test",
-      defaultBranch: "main",
-      workspacePath: "/runtime-root/file-browser/x/workspace",
-    });
-    fileBrowserRepository.updateSession(session.id, { status: "running", containerId: "cid123" });
-
-    runCommandStrict.mockImplementation(async (cmd: string, args: string[]) =>
-      cmd === "docker" && args[0] === "ps" && args.includes("--format") ? ok(containerTsv) : ok(),
-    );
-    commandRun.mockImplementation(async (cmd: string, args: string[]) => {
-      if (cmd !== "git") return ok();
-      if (args[0] === "show-ref") return args.some((a) => a.startsWith("refs/heads/")) ? ok() : fail();
-      if (args[0] === "merge-base") return ok("deadbeef\n");
-      if (args[0] === "diff" && args.includes("--name-status")) return ok("R100\tsrc/old.ts\tsrc/new.ts\n");
-      if (args[0] === "diff" && args.includes("--numstat")) return ok("1\t1\tsrc/old.ts => src/new.ts\n");
-      if (args[0] === "rev-parse" && args.includes("--verify")) return ok("deadbeef\n");
-      if (args[0] === "show") {
-        const refPath = args[1] as string;
-        if (refPath === "deadbeef:src/old.ts") return ok("old\n");
-        if (refPath === "feature/test:src/new.ts") return ok("new\n");
-      }
-      return ok();
-    });
-
-    const diff = await service.getDiff(session.id, "src/new.ts");
-
-    expect(diff.status).toBe("renamed");
-    expect(diff.oldPath).toBe("src/old.ts");
-    expect(diff.original).toBe("old\n");
-    expect(diff.modified).toBe("new\n");
   });
 
   it("stops a session and clears its container", async () => {

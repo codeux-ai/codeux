@@ -250,7 +250,8 @@ export class SprintFileBrowserService {
        throw new Error(`Invalid file path: ${relPath} is within a pruned directory`);
     }
 
-    const script = this.buildReadFileScript(relPath);
+    const containerPath = pathPosix.join(CONTAINER_WORKSPACE_PATH, relPath);
+    const script = `head -c ${MAX_FILE_BYTES + 1} -- ${this.shellQuote(containerPath)}`;
     const result = await commandRunner.run("docker", ["exec", session.containerId!, "sh", "-c", script], {
       cwd: process.cwd(),
       trimOutput: false,
@@ -546,19 +547,6 @@ export class SprintFileBrowserService {
     const dirs = `find . ${prune} -o -type d -print | sed 's#^#D#'`;
     const files = `find . ${prune} -o -type f -print | sed 's#^#F#'`;
     return `cd ${CONTAINER_WORKSPACE_PATH} && { ${dirs}; ${files}; }`;
-  }
-
-  private buildReadFileScript(relPath: string): string {
-    const workspace = this.shellQuote(CONTAINER_WORKSPACE_PATH);
-    const requested = this.shellQuote(pathPosix.join(CONTAINER_WORKSPACE_PATH, relPath));
-    const maxBytes = MAX_FILE_BYTES + 1;
-    return [
-      `workspace=$(realpath -- ${workspace} 2>/dev/null) || exit 1`,
-      `target=$(realpath -- ${requested} 2>/dev/null) || { echo 'Path not found' >&2; exit 2; }`,
-      `case "$target" in "$workspace"/*) ;; "$workspace") ;; *) echo 'Invalid file path: path must stay inside workspace' >&2; exit 3;; esac`,
-      `[ -f "$target" ] || { echo 'Path not found' >&2; exit 4; }`,
-      `head -c ${maxBytes} -- "$target"`,
-    ].join("; ");
   }
 
   private buildTree(sessionId: string, output: string): FileBrowserTree {

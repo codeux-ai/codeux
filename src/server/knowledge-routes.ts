@@ -1,4 +1,4 @@
-import type { Express, Response } from "express";
+import type { Express, Request, Response } from "express";
 import multer from "multer";
 import * as fs from "fs/promises";
 import * as path from "path";
@@ -77,6 +77,25 @@ function sanitizeFilename(name: string): string {
   return clean;
 }
 
+function optionalTrimmedString(value: unknown): string {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function requireDocumentProjectId(req: Request): string {
+  const queryProjectId = optionalTrimmedString(req.query.projectId);
+  if (queryProjectId) return queryProjectId;
+
+  const body = (req.body ?? {}) as { projectId?: unknown };
+  const bodyProjectId = optionalTrimmedString(body.projectId);
+  if (bodyProjectId) return bodyProjectId;
+
+  throw new Error("projectId is required");
+}
+
+function sendDocumentNotFound(res: Response): void {
+  res.status(404).json({ error: "Document not found" });
+}
+
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -111,12 +130,28 @@ export function registerKnowledgeRoutes(app: Express, deps: KnowledgeRouteDepend
     }
   }));
 
+  app.get("/api/projects/:projectId/knowledge/documents/:documentId", syncRoute((req, res) => {
+    try {
+      const projectId = requireTrimmedString(req.params.projectId, "projectId");
+      const documentId = requireTrimmedString(req.params.documentId, "documentId");
+      const doc = knowledgeService.getDocumentForProject(projectId, documentId);
+      if (!doc) {
+        sendDocumentNotFound(res);
+        return;
+      }
+      res.json(doc);
+    } catch (error) {
+      res.status(400).json(toErrorResponse(error, "Failed to get knowledge document"));
+    }
+  }));
+
   app.get("/api/knowledge/documents/:documentId", syncRoute((req, res) => {
     try {
       const documentId = requireTrimmedString(req.params.documentId, "documentId");
-      const doc = knowledgeService.getDocument(documentId);
+      const projectId = requireDocumentProjectId(req);
+      const doc = knowledgeService.getDocumentForProject(projectId, documentId);
       if (!doc) {
-        res.status(404).json({ error: "Document not found" });
+        sendDocumentNotFound(res);
         return;
       }
       res.json(doc);
@@ -229,21 +264,61 @@ export function registerKnowledgeRoutes(app: Express, deps: KnowledgeRouteDepend
     }
   }));
 
-  app.delete("/api/knowledge/documents/:documentId", syncRoute((req, res) => {
+  app.delete("/api/projects/:projectId/knowledge/documents/:documentId", syncRoute((req, res) => {
     try {
-      knowledgeService.deleteDocument(requireTrimmedString(req.params.documentId, "documentId"));
+      const projectId = requireTrimmedString(req.params.projectId, "projectId");
+      const documentId = requireTrimmedString(req.params.documentId, "documentId");
+      if (!knowledgeService.deleteDocumentForProject(projectId, documentId)) {
+        sendDocumentNotFound(res);
+        return;
+      }
       res.json({ ok: true });
     } catch (error) {
       res.status(400).json(toErrorResponse(error, "Failed to delete knowledge document"));
     }
   }));
 
-  app.post("/api/knowledge/documents/:documentId/reembed", asyncRoute(async (req, res) => {
+  app.delete("/api/knowledge/documents/:documentId", syncRoute((req, res) => {
     try {
+      const projectId = requireDocumentProjectId(req);
+      const documentId = requireTrimmedString(req.params.documentId, "documentId");
+      if (!knowledgeService.deleteDocumentForProject(projectId, documentId)) {
+        sendDocumentNotFound(res);
+        return;
+      }
+      res.json({ ok: true });
+    } catch (error) {
+      res.status(400).json(toErrorResponse(error, "Failed to delete knowledge document"));
+    }
+  }));
+
+  app.post("/api/projects/:projectId/knowledge/documents/:documentId/reembed", asyncRoute(async (req, res) => {
+    try {
+      const projectId = requireTrimmedString(req.params.projectId, "projectId");
       const documentId = requireTrimmedString(req.params.documentId, "documentId");
       if (!requireModel(res)) return;
-      await knowledgeService.reembedDocument(documentId);
-      res.json(knowledgeService.getDocument(documentId));
+      const doc = await knowledgeService.reembedDocumentForProject(projectId, documentId);
+      if (!doc) {
+        sendDocumentNotFound(res);
+        return;
+      }
+      res.json(doc);
+    } catch (error) {
+      res.status(400).json(toErrorResponse(error, "Failed to re-embed knowledge document"));
+    }
+  }));
+
+  app.post("/api/knowledge/documents/:documentId/reembed", asyncRoute(async (req, res) => {
+    try {
+      const projectId = requireDocumentProjectId(req);
+      const documentId = requireTrimmedString(req.params.documentId, "documentId");
+      if (!requireModel(res)) return;
+      const doc = await knowledgeService.reembedDocumentForProject(projectId, documentId);
+      if (!doc) {
+        sendDocumentNotFound(res);
+        return;
+      }
+      res.json(doc);
     } catch (error) {
       res.status(400).json(toErrorResponse(error, "Failed to re-embed knowledge document"));
     }
@@ -259,13 +334,14 @@ export function registerKnowledgeRoutes(app: Express, deps: KnowledgeRouteDepend
         return;
       }
 
+      const projectDocumentIds = new Set(knowledgeService.listDocuments(projectId).map((doc) => doc.id));
       let documentIds: string[];
       if (Array.isArray(body.documentIds)) {
-        documentIds = body.documentIds.filter((id): id is string => typeof id === "string");
+        documentIds = body.documentIds.filter((id): id is string => typeof id === "string" && projectDocumentIds.has(id));
       } else if (typeof body.agentPresetId === "string" && body.agentPresetId) {
-        documentIds = knowledgeService.listSubscriptions(body.agentPresetId);
+        documentIds = knowledgeService.listSubscriptions(body.agentPresetId).filter((id) => projectDocumentIds.has(id));
       } else {
-        documentIds = knowledgeService.listDocuments(projectId).map((doc) => doc.id);
+        documentIds = [...projectDocumentIds];
       }
 
       const limit = typeof body.limit === "number" && body.limit > 0 ? Math.min(Math.floor(body.limit), 20) : 8;
