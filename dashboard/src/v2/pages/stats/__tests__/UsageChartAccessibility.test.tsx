@@ -285,6 +285,11 @@ describe("UsageChartAccessibility", () => {
     expect(await screen.findByText("Refreshing trend telemetry from cache. Existing chart data remains visible.")).toBeInTheDocument();
     expect(screen.getByRole("img", { name: /Data Visualization/i })).toHaveAttribute("aria-busy", "true");
 
+    rerender(<InteractiveUsageChart stats={mockStats as any} loading={false} error={null} refresh={async () => {}} chartState={createChartState() as any} />);
+    expect(await screen.findByText("Trend telemetry ready.")).toBeInTheDocument();
+    expect(screen.queryByText("Refreshing trend telemetry from cache. Existing chart data remains visible.")).not.toBeInTheDocument();
+    expect(screen.getByRole("img", { name: /Data Visualization/i })).toHaveAttribute("aria-busy", "false");
+
     rerender(<InteractiveUsageChart stats={mockStats as any} loading={false} error="Network timeout" refresh={async () => {}} chartState={createChartState() as any} />);
     expect(await screen.findByText("Trend telemetry error: Network timeout")).toBeInTheDocument();
   });
