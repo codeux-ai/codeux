@@ -17,7 +17,7 @@ Planning routes use the same named OpenCode provider instance settings as chat a
 
 ## Authentication Modes
 
-Each named OpenCode provider instance stores an `openCodeAuthMode`.
+Each named OpenCode provider instance stores an `openCodeAuthMode` (`LOCAL_AUTH`, `ENV_KEY`, or `CUSTOM_PROVIDER`).
 
 ### Local Auth
 

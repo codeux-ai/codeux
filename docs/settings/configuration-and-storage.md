@@ -26,12 +26,20 @@ External hint env keys used for dashboard import:
 - `OPENAI_API_KEY` (Codex CLI)
 - `GH_TOKEN` / `GITHUB_TOKEN`
 
-## Settings JSON Search Paths
+## Settings Overrides and Scoped Resolution
 
-For `.code-ux/settings.json`, search roots include:
+Code UX settings resolve through a scoped cascade: `system` → `project` → `sprint`.
+
+System settings hold global state, runtime behavior (e.g., ports, `consoleLogLevel`, `debugLogFileLevel`, `consoleLogMode`), and system integration credentials (Jira tokens, GitLab/GitHub tokens).
+
+Project and sprint scopes can override execution-specific settings, such as `aiProvider` routes (which now include provider instances and `invocationRouting` as first-class citizens instead of legacy top-level keys), `cliWorkflow` settings (like `gitMode`, `executionMode`, `containerImage`, `containerSetupScriptPath`), and preview defaults (like `sprintPreview.startupScriptPath` defaulting to `.code-ux/browser/start-preview.sh`). `git.defaultBranch` fallback is resolved based on scoped overrides too. Jira and GitLab integration configurations are also scoped and can be overridden.
+
+For `.code-ux/settings.json` (used primarily for credential hints during initial onboarding), search roots include:
 - current working directory
 - project root
 - home directory
+
+Note: `.code-ux/settings.json` is not the primary configuration source; Code UX reads its execution settings from the SQLite `settings.db`.
 
 ## Scoped Settings Persistence
 

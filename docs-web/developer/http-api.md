@@ -253,6 +253,7 @@ This page lists every endpoint, grouped by domain. Path parameters use `:name` n
 | `POST` | `/api/browser/sessions/:sessionId/rebuild` | Rebuild. |
 | `POST` | `/api/browser/sessions/:sessionId/stop` | Stop. |
 | `DELETE` | `/api/browser/sessions/:sessionId` | Remove. |
+| `ALL` | `/api/browser/sessions/:sessionId/proxy{*rest}` | Proxy traffic to the container. |
 | `GET` | `/api/projects/:projectId/sprints/:sprintId/preview/script` | Get script. |
 | `PUT` | `/api/projects/:projectId/sprints/:sprintId/preview/script` | Save script. |
 | `GET` | `/api/browser/sessions/:sessionId/logs` | Stream logs. |

@@ -7,9 +7,15 @@ This document explains the sprint orchestrator control flow and each atomic step
 - File: `src/sprint/sprint-orchestrator.ts`
 - Public method: `execute(args: SprintAgentArgs)`
 - Shared args type: `src/sprint/sprint-types.ts`
-- Supporting modules:
-  - `src/domain/sprint/orchestrator/*`
-  - `src/domain/sprint/ci/*`
+- Current orchestration split modules:
+  - `src/domain/sprint/orchestrator/sprint-orchestrator.ts`
+  - `src/domain/sprint/orchestrator/sprint-action-runner.ts`
+  - `src/domain/sprint/orchestrator/cycle-runner.ts`
+  - `src/domain/sprint/orchestrator/watch-loop-runner.ts`
+  - `src/domain/sprint/orchestrator/watch-loop-state-machine.ts`
+  - `src/domain/sprint/orchestrator/cycle-state-coordinator.ts`
+  - `src/domain/sprint/ci/feature-pr-gate.ts`
+  - `src/sprint/steps/*`
 
 ## Actions
 
@@ -75,91 +81,53 @@ Automatically created PRs must provide sufficient human context:
 ### 1. Branch preflight (optional)
 - Step module: `branch-preflight-step.ts`
 - Applies to: `plan` and `orchestrate`
-- Validates sprint feature branch exists:
-  - locally
-  - on remote origin
+- Validates that the sprint feature branch exists locally and on the remote origin (`LOCAL` vs `REMOTE` git behavior applies). During orchestration, it will create and check out the missing feature branch from the default branch, and push it to the remote.
+- Records the base commit SHA when a branch is freshly created.
 - On failure: returns templated blocker instructions.
 
 ### 2. Planning preflight (optional)
 - Step module: `planning-preflight-step.ts`
 - Applies to: `status` and `orchestrate`
-- Ensures subtask markdown files exist in sprint subtask directory.
+- Verifies that the sprint subtask directory exists and contains at least one `.md` file.
 - On failure: returns templated planning blocker.
 
 ### 3. Plan action
 If `action=plan`:
-- Creates subtask directory if missing.
+- Creates subtask directory if missing under `.code-ux/sprints/**`.
+- Uses DB-backed planning to generate or regenerate subtasks, writing the resulting sprint subtask markdown artifacts to `.code-ux/sprints/**`.
 - Optionally injects `sprint_agent_guide.md`.
 - Returns templated planning instructions.
 - Planning may apply a provider-suggested sprint title only when the sprint was explicitly stored as generated/auto-named at creation time. Placeholder-looking custom titles such as `Untitled sprint 1` are treated as user titles and are not writable by planning.
 
 ### 4. Orchestration cycle
-For `status` and `orchestrate`, each cycle can run:
+For `status` and `orchestrate`, each cycle follows the strict execution order defined in `CycleRunner.run`:
 
-1. Load subtasks
-- `load-subtasks-step.ts`
-
-2. Sync sessions and activities
-- `session-sync-step.ts`
-- Session-sync activity fetch planning is delegated to `src/domain/sprint/session-sync/activity-fetch-plan.ts` to make decisions testable.
-- Session state, task-run state, dispatch status, dispatch error message, and planning-status mapping are delegated to `src/domain/sprint/session-sync/session-state-mapping.ts`. This boundary is pure: it contains no repository writes, provider calls, activity reads, or cooldown retry decisions.
-- Session activity fetch planning deduplicates by task-run key and normalized session aliases before entering the fetch pool. Foreign task-run matches are skipped with a warning, and locally terminal sessions are skipped only when the provider state is also terminal (`COMPLETED`, `FAILED`, or another state that maps to failed such as `CANCELLED`). A locally terminal session that is remote-running or action-required is still fetched so reruns, submitted replies, quota recovery, and other active-session follow-up can settle correctly.
-- Session activity fetching uses a bounded concurrency worker pool to prevent overloading the backend, preserving isolated failures per-session. Activity reads also use a timeout guard, so one slow or failed provider activity lookup degrades that session to an empty activity list without blocking unrelated task sync. Fully synchronized local/remote terminal skips are logged and do not enter the activity fetch pool.
-- Each session-sync cycle keeps a cycle-local metadata cache keyed by session object and normalized session id/name. The cache resolves session identity, latest task-run ownership, provider/mode ownership, and local terminal state once per session for that cycle only, so activity planning and task sync share the same safety decisions without repeated dependency or repository lookups.
-- Sync source is provider-agnostic:
-  - Jules API sessions (when available)
-  - locally tracked CLI sessions (`gemini`/`codex`)
-
-3. Derive effective task status
-- `status-derivation-step.ts`
-- Task transition decisions are centralized in `src/domain/sprint/task-transition-state.ts`.
-  The step asks this pure helper whether dependencies are met, whether a failed
-  session should reset to `PENDING` or remain `BLOCKED`, and whether terminal,
-  QA-pending, merge-required, quota, or failed states should be preserved.
-
-4. Start ready tasks (orchestrate only)
-- `start-ready-tasks-step.ts`
-- Provider is selected per task using `aiProvider` strategy.
-- For CLI providers the workflow is:
-  - allocate a unique sprint feature branch name when the sprint has not persisted one yet, checking local and remote refs so restarted sprint numbers do not reuse old branch history
-  - create child task branch from sprint feature branch
-  - run CLI in background
-  - commit/push branch
-  - open PR back to sprint feature branch
-  - track state and activity in sqlite
-- CLI task dispatch carries two task identities through the runtime: the human task key (`T01`, `T02`, ...) stays in branch names, titles, prompts, and task-run tags, while repository/execution lookups use the persisted task record id (`record_id`). Workspace resume targets, task runs, dispatches, and provider invocations must use the record id so normal planned sprint tasks can resume from the correct Docker workspace volume after cancellation or restart.
-- Ready-task dispatch is idempotent per `(sprint_run_id, task_id)`. If a watch-loop cycle or recovered monitor sees an existing queued/claimed/running/cancel-requested/paused dispatch for that task in the same run, it reuses the existing runtime row instead of starting a duplicate provider invocation.
-- CLI workspace patch export discovers untracked files with Git's `--exclude-standard` filtering, then intent-to-adds only those non-ignored paths in bounded batches before diffing. Ignored workspace caches such as `.pnpm-store`, provider runtime homes, and transient export indexes are export noise and must not turn a completed/no-change provider run into a failed dispatch.
-
-5. Build protocol instructions
-- `protocol-step.ts`
- - Action-required tasks are separated into:
-   - `AGENT INTERVENTION NEEDED`
-   - `HUMAN INTERVENTION NEEDED`
-
-6. Build status table
-- `status-table-step.ts`
-
-### Automation intervention routing
-
-Action-required Jules sessions (`AWAITING_PLAN_APPROVAL`, `AWAITING_USER_FEEDBACK`, `PAUSED`) are routed by automation policy:
-- `FULL`: auto-intervene for all supported action-required states.
-- `SEMI_AUTO`: obey `automationInterventions` toggles.
-- `ALWAYS_ASK`: no auto-intervention.
-- Worker-generated clarification replies are tracked against the persisted task record id (`record_id`) when available, not the display task key (`T01`, `T02`, ...), so auto-intervention does not fail during execution-invocation logging.
-- Worker-generated clarification replies now use the editable `Project manager` agent preset instead of worker instructions, and the prompt includes a dedicated Jules clarification-request section so the latest explicit message is preserved when available.
-- Worker-generated clarification replies unwrap CLI provider response envelopes before they are sent back to Jules, even when bootstrap or package-manager output surrounds the JSON envelope.
-- Clarification dedupe ignores Code UX's own user reply activity and keys silent Jules prompts by the latest non-user activity id/time, so repeated polling of the same activity is idempotent while a later unanswered Jules activity is treated as a new request.
-
-When auto-intervention fails, tasks are routed to `AGENT INTERVENTION NEEDED` with context.
+1. **Load subtasks**: Reads subtask markdown files via `SprintExecutionStateService` and reconciles them with the current DB task and task_run execution state.
+2. **Snapshot entry states**: Captures task statuses at the start of the cycle.
+3. **Sync sessions**: Synchronizes hosted provider sessions and local/CLI/worker dispatch state through execution records and provider invocations. Sync source is provider-agnostic.
+4. **Derive effective task status**: Applies pre-CI status normalization rules. For example, a `COMPLETED` task with unmerged PR evidence is moved back to `CODING_COMPLETED`, and settled merge evidence officially marks a task as `COMPLETED`. Intervention and merge indicators are also refreshed.
+5. **Start ready tasks** (`orchestrate` only):
+   - Filters `PENDING` tasks, skips quota cooldowns, applies coding guardrails, and respects provider concurrency deferrals.
+   - Evaluates the readiness gate: a task must be `PENDING`, dependencies completed and merged, provider concurrency available, and emergency stop inactive.
+   - Task dispatch creates DB task dispatch and task-run records, selects the provider based on settings (uses hosted provider for `jules` and CLI/Docker or host workflows for local providers).
+   - Marks tasks `RUNNING`, records session id/name/provider, and resets consecutive failure count on success. Triggers emergency stop after repeated real dispatch failures.
+6. **Apply action-required automation**: Provider-agnostic handling of plan approval, clarification replies (via Project manager preset), and paused sessions, utilizing cooldown/dedupe rules and escalating attention items when necessary.
+7. **Collect CI status**: Gathers CI data for feature branches.
+8. **Backfill PR metadata**: Ensures PRs are tracked accurately.
+9. **Run task QA review**: Evaluates completed coding work (`CODING_COMPLETED`). QA is a formal part of the merge gate, evaluating the work rather than acting as a vague final-only review. This handles retry/review behavior, stale QA invocation reconciliation, QA follow-up reruns, and transitions tasks back to in-progress when PR/CI/QA is not merge-ready.
+10. **Evaluate feature PR CI/merge gate**: Evaluates completed coding work for PR/CI/merge readiness, review blockers, merge conflicts, missing PRs, and attention items. Does not automatically merge or apply fixes unless tied to configured auto-merge modes and intelligence settings.
+11. **Persist CI gate state changes**: Saves the result of the CI merge gates.
+12. **Rerun status derivation/start-ready**: Re-evaluates state and starts ready tasks if merges unblocked dependencies.
+13. **Build status/protocol/table output**: Compiles the final cycle report and separates action-required tasks into agent and human intervention categories.
 
 ## Watch Mode
 
 When `action=orchestrate`, `wait` is true, and `watchLoop` is enabled:
-- Orchestrator enters continuous loop.
+- Orchestrator executes continuous cycles.
 - Wait interval is 10 seconds between cycles.
-- Output interval defaults to 300 seconds and is now used only as an internal checkpoint boundary for heartbeat/lease renewal inside the same sprint run.
-- Code UX does not stop at that boundary anymore. It keeps the same sprint run alive, renews its lease/heartbeat, resets the checkpoint window, and continues watching until a real terminal condition is reached.
+- Checkpoint reports (based on `watchLoopOutputIntervalSeconds`) are emitted without ending the run. The checkpoint boundary is used to renew heartbeats and leases inside the same sprint run, keeping it alive while resetting the checkpoint window.
+- The loop continuously observes pause and cancel interventions at the top of each cycle.
+- Finalisation only runs on terminal conditions.
 - Startup recovery and dashboard **Resume** restart monitoring through the existing-run recovery path. A resumed paused run keeps its original sprint-run id, is moved back to `running`, and then starts the watch loop without creating a duplicate run. Resume is refused while another queued/running/cancel-pending run for the same sprint is active.
 - Existing-run recovery first checks the in-memory active-orchestrator registry and returns without starting another watch loop when the same project/sprint is already being monitored by the current process.
 - Sprint-run lifecycle updates are mirrored to the parent sprint row for dashboard/operator consistency. Active run states (`queued`, `running`, `cancel_requested`) keep the sprint `running`; pause, completion, failure, and cancellation transitions update the sprint row to the matching summary state. Heartbeats also repair drift after restarts, so a live run cannot remain hidden behind an `idle` sprint summary.
@@ -172,19 +140,17 @@ When `action=orchestrate`, `wait` is true, and `watchLoop` is enabled:
 - Dashboard live snapshots are optimized for high sprint concurrency: selected-sprint checks use targeted project/sprint lookups instead of hydrating every sprint, recent provider activities are cached until the project's latest provider activity event changes, and provider activity event reads use partial sqlite indexes for the activity-only paths.
 - Preview reconciliation also avoids full project execution snapshots in the common running-session path. It queries running sprint runs directly and memoizes that result while reconciling preview sessions and auto-starting previews.
 - Loop exits when:
-  - all tasks terminal (`COMPLETED+merged` or `FAILED`) and the final merge is settled: remote-git mode requires GitHub to report the completion PR as merged, while local-git mode requires the sprint feature branch to merge into the configured local default branch, or
+  - all tasks reach their terminal state (e.g., `COMPLETED` + merged, or `FAILED`) and the final merge is settled: remote-git mode requires GitHub to report the completion PR as merged, while local-git mode requires the sprint feature branch to merge into the configured local default branch, or
   - no runnable tasks remain, or
-  - merge-required tasks are detected.
+  - merge-required tasks are detected that need manual intervention.
+- The checkpoint window triggers internal reports and lease renewals without stopping the run. The run pauses for human handoff (such as `CREATE_PR` mode for main-branch merges) or cancels if aborted.
 - In local-git mode, the final sprint feature-branch merge runs in a temporary Git worktree and force-updates the configured default branch after the merge succeeds. The visible project checkout is not switched between branches, so user-facing local workspaces stay clean and stay on the branch the operator had checked out.
 - The watch loop uses the same `task-transition-state.ts` helper as the cycle
   runner to classify settled tasks, failed terminal tasks, PR-backed merge waits,
   QA-pending tasks, quota waits, dependency blockers, and worker attention waits.
   Protocol text and status table rendering remain separate presentation steps.
 
-On completion it may:
-- clean up subtask directory,
-- append completion steps,
-- preserve files when failures remain.
+On completion or pause, Code UX performs finalization cleanup where the source supports it. It triggers memory auto-promotion, removes orphaned Docker worktrees from terminal CLI dispatches, and clears temporary workspaces, but it never blindly deletes execution artifacts if failures or active blocks remain.
 
 ## Single-Cycle Fallback
 
@@ -228,10 +194,10 @@ For `action=status`:
 - Before creating the final `feature -> default` merge PR, Code UX now verifies that the configured default branch exists on `origin`. If it is missing, Code UX creates it from the repository's actual `origin/HEAD` branch, pushes it, and then creates the final PR against the configured target.
 - Main-branch PR creation failures are logged and surfaced in the final merge gate feedback instead of being reduced to an unexplained missing-PR wait state.
 - When the watch loop waits or exits at the final main-merge gate, the dashboard status snapshot is republished with the finalization report so operators can see the current blocker without waiting for a later cycle.
-- If feature PR checks fail, the sprint loop keeps the task in work state and enters the CI-fix guardrail path. When `waitForJulesCiAutofix` is enabled for a Jules-managed task, Code UX first notifies the Jules session with failed-check context, matched failed run ids/URLs, failed job names, and failed-job log excerpts (when available). When that toggle is disabled, or the task is not Jules-managed, Code UX skips the Jules notification and dispatches a worker-owned `ci_fix_required` item.
-- CI autofix retries are capped by `julesCiAutofixMaxRetries`; once exhausted, the task is escalated as intervention-needed with exact task id, PR URL, failed check names, failed run summary, and failed job names (focus: fix CI before merge). The cap applies to the generic CI-fix loop, including worker repairs.
+- If feature PR checks fail, the sprint loop keeps the task in work state and enters the CI-fix guardrail path. When `waitForJulesCiAutofix` (the legacy-named configuration for CI autofix) is enabled for a hosted-provider-managed task, Code UX first notifies the hosted provider session with failed-check context, matched failed run ids/URLs, failed job names, and failed-job log excerpts (when available). When that toggle is disabled, or the task is not hosted-provider-managed, Code UX skips the hosted provider notification and dispatches a worker-owned `ci_fix_required` item.
+- CI autofix retries are capped by `julesCiAutofixMaxRetries` (the legacy-named setting); once exhausted, the task is escalated as intervention-needed with exact task id, PR URL, failed check names, failed run summary, and failed job names (focus: fix CI before merge). The cap applies to the generic CI-fix loop, including worker repairs.
 - Worker-owned CI autofix attempts are de-duplicated across watch-loop cycles. While a matching `ci_fix_required` attention item is still open or claimed, Code UX treats that attempt as in-flight, keeps the task in `RUNNING`, and does not consume another retry until the worker attempt resolves. This includes the final main-merge gate: after a worker pushes a CI fix and GitHub reports replacement checks as pending, the main-merge `ci_fix_required` item stays active until checks pass, the merge completes, or another blocker replaces it.
-- Human/agent intervention is opened only after the CI-fix guardrail is exhausted; disabling the Jules notification toggle must not disable worker CI repair.
+- Human/agent intervention is opened only after the CI-fix guardrail is exhausted; disabling the hosted provider notification toggle must not disable worker CI repair.
 
 Focused regression commands for these guarantees:
 
@@ -244,13 +210,15 @@ pnpm run lint
 ## Files and Data Used
 
 - Subtasks directory:
-  - `.jules-subagents/sprints/sprint<N>-subtasks/`
+  - `.code-ux/sprints/sprint<N>-subtasks/`
 - Guide files:
-  - `.jules-subagents/agents/*.md`
+  - `.code-ux/agents/*.md`
 - Instruction templates:
-  - `.jules-subagents/instructions/sprint-main-loop/**/*`
-- CLI session tracking DB:
-  - `~/.jules-subagents/session-tracking.db`
+  - `.code-ux/instructions/sprint-main-loop/**/*`
+- Legacy CLI session tracking DB:
+  - `~/.code-ux/session-tracking.db`
+- Preview and startup scripts (only where supported by `sprint-preview-service`).
+- Session and task runtime state is persisted in the Code UX SQLite database (`~/.code-ux/app.db`), not a local user directory tracking file.
 
 ## Operational Advice
 

@@ -23,7 +23,7 @@ A single orchestration *cycle* runs the following pipeline (each step is indepen
 1. **branchPreflight** — Ensure the feature branch exists; create it from default branch if not.
 2. **planningPreflight** — Validate the subtask graph: detect cycles, ensure required fields, sanity-check dependencies.
 3. **loadSubtasks** — Read subtask markdown files and reconcile with DB state.
-4. **sessionSync** — Pull the latest state of every active worker session (Jules / virtual).
+4. **sessionSync** — Synchronize the latest state of every active provider invocation (hosted and CLI providers).
 5. **statusDerivation** — Apply state rules to derive each subtask's effective status (`PENDING`, `RUNNING`, `CODING_COMPLETED`, `COMPLETED`, etc.).
 6. **startReadyTasks** — Find subtasks whose dependencies are met and start a new worker session for each. Concurrency is capped per provider via `maxConcurrentTasks`.
 7. **mergeProtocol** — Run the [CI gate](./automation-and-ci.md): create PRs, watch CI, auto-merge per policy, surface attention items for conflicts and CI failures.
@@ -97,7 +97,7 @@ Per-provider concurrency is controlled by `provider.maxConcurrentTasks`:
 
 | Provider | Default cap |
 | --- | --- |
-| Jules | `15` |
+| Hosted Provider | `15` |
 | Gemini | `0` (unlimited) |
 | Codex | `0` (unlimited) |
 | Claude Code | `0` (unlimited) |

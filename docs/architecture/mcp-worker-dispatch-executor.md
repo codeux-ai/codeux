@@ -106,7 +106,7 @@ There is no worker-only control plane and no compatibility file bridge.
 
 Worker support is now concrete, not schema-only.
 
-The repo now ships `code-ux-worker`, which:
+The repo now ships a worker client (`node dist/worker/index.js`), which:
 
 1. spawns Code UX in headless `worker-host` mode
 2. connects to that worker-host server over stdio MCP

@@ -14,7 +14,7 @@ This page is the exact format reference.
         ├── <task-id>.md       # one file per subtask
         ├── <task-id>.md
         ├── …
-        └── preview.sh         # optional preview container script
+        └── .code-ux/browser/start-preview.sh # optional preview container script
 ```
 
 `<n>` is the sprint number; `<task-id>` is a stable URL-safe slug (e.g. `setup-db`, `auth-login`).
@@ -93,7 +93,7 @@ All three are parsed equivalently. The serializer always emits the bracketed for
 
 The on-disk format intentionally exposes only `merged` (to allow manual flagging) and not derived fields like `status`, `session_id`, `pr_url`. Those live in the database and are *projected* into the file on export but ignored on import.
 
-If you want to *force* a status manually, edit it in the database via the dashboard's **Tasks** page or via `manage_code_ux` → `tasks` → `update`.
+If you want to *force* a status manually, edit it in the database via the dashboard's **Tasks** page or via `manage_tasks` → `update`.
 
 ## Naming conventions
 

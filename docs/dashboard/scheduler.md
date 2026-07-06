@@ -61,6 +61,8 @@ The dashboard API routes are:
   - Returns the settings-managed long-term memory remediation entry, if one exists.
 - `PUT /api/projects/:projectId/scheduler/memory-remediation`
   - Creates, updates, or pauses the settings-managed long-term memory remediation entry.
+- `POST /api/scheduler/run-due`
+  - Processes due scheduler entries manually
 
 ## Runtime Execution
 

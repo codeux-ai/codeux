@@ -44,8 +44,8 @@ observable, and cheap.
 Code UX ships two ways, both powered by the same runtime:
 
 - The **desktop app** (Windows, macOS, Linux) — an Electron shell around the runtime and dashboard.
-- The **`@codeuxai/codeux` npm package** — the same orchestration server, dashboard, and MCP server
-  as a CLI, without the Electron shell.
+- **From source** — the same orchestration server, dashboard, and MCP server
+  run via Node.js, without the Electron shell.
 
 Either way, Code UX serves its dashboard locally at `http://localhost:4444`. See
 [Installation](./installation.md) to get set up, then [Quickstart](./quickstart.md) to run your first

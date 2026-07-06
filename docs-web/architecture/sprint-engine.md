@@ -8,13 +8,15 @@ This page documents the runner classes, the cycle pipeline, the watch loop state
 
 | File | Role |
 | --- | --- |
+| `src/sprint/sprint-orchestrator.ts` | Primary entry point to orchestration. |
 | `src/domain/sprint/orchestrator/sprint-action-runner.ts` | Top-level dispatcher (plan / status / orchestrate). |
 | `src/domain/sprint/orchestrator/cycle-runner.ts` | Single cycle execution. |
 | `src/domain/sprint/orchestrator/watch-loop-runner.ts` | Continuous loop wrapper. |
 | `src/domain/sprint/orchestrator/watch-loop-state-machine.ts` | State decision (RUNNING / CHECKPOINT / FINISHED). |
+| `src/domain/sprint/orchestrator/cycle-state-coordinator.ts` | Coordinates task lifecycle and gate state changes. |
 | `src/sprint/steps/start-ready-tasks-step.ts` | Task-start step + emergency-stop logic. |
 | `src/domain/sprint/task-merge-state.ts` | Subtask state transition rules. |
-| `src/domain/sprint/ci/feature-pr-gate.ts` | Merge protocol / CI gate. |
+| `src/domain/sprint/ci/feature-pr-gate.ts` | Merge protocol / CI gate / QA review. |
 | `src/sprint/action-required-automation.ts` | Plan / clarification / paused auto-handling. |
 
 ## Sprint actions
@@ -33,15 +35,15 @@ A cycle runs the following steps. Each step is independently togglable via `spri
 
 | Step | Purpose |
 | --- | --- |
-| `branchPreflight` | Ensure the feature branch exists; create from `defaultBranch` if not. |
-| `planningPreflight` | Validate the subtask graph (no cycles, required fields). |
-| `loadSubtasks` | Read on-disk markdown; reconcile with DB. |
-| `sessionSync` | Pull latest worker session state (Jules API + virtual). |
-| `statusDerivation` | Apply `evaluatePreCiGateTransition` to advance task statuses. |
-| `startReadyTasks` | Find ready PENDING tasks, dispatch new sessions (respecting concurrency caps and emergency stop). |
-| `mergeProtocol` | Run `evaluateCiGate` for every CODING_COMPLETED task. |
-| `actionRequiredProtocol` | Auto-handle plan approvals, clarifications, paused sessions. |
-| `statusTable` | Render the report. |
+| `branchPreflight` | Validates that the sprint feature branch exists locally and on remote origin. During orchestration, it creates and pushes the branch if missing. Validates that at least one provider is configured. |
+| `planningPreflight` | Verifies that the sprint subtask directory exists under `.code-ux/sprints/**` and contains at least one `.md` file. |
+| `loadSubtasks` | Read on-disk markdown from `.code-ux/sprints/**` and reconcile with DB task/run state. |
+| `sessionSync` | Synchronizes hosted provider sessions and local/CLI/worker dispatch state through execution records and provider invocations. |
+| `statusDerivation` | Applies pre-CI status normalization rules (e.g., `COMPLETED` returning to `CODING_COMPLETED` for pending merges). |
+| `startReadyTasks` | Finds `PENDING` tasks with resolved dependencies and concurrency slack, creates DB dispatches, and starts the session via a provider (hosted or CLI/Docker). |
+| `actionRequiredProtocol` | Provider-agnostic auto-handling of plan approvals, clarification replies (using Project manager preset), and paused sessions. |
+| `mergeProtocol` | Evaluates completed coding work (`CODING_COMPLETED`) against QA review budgets, CI gates, and PR merge readiness. Includes logic for transitions back to in-progress when work is rejected or unready. |
+| `statusTable` | Compiles the cycle report and aggregates attention items. |
 
 Each step catches its own errors. A failure logs the error, surfaces an attention item if appropriate, and proceeds to the next step. The cycle does *not* abort.
 
@@ -100,9 +102,9 @@ function determineNextState(ctx) {
 
 Behaviour per state:
 
-- `FINISHED` → run finalisation, emit final report, exit loop.
-- `CHECKPOINT` → emit progress report, reset checkpoint window, sleep one interval.
-- `RUNNING` → sleep one interval, no output.
+- `FINISHED` → Runs on terminal conditions. Executes finalisation cleanup (such as Docker worktree removal), emit final report, and exit loop.
+- `CHECKPOINT` → Internal report boundary used for heartbeat and lease renewals. Keeps the same sprint run alive, emits the progress report, resets the checkpoint window, and sleeps one interval. Does not exit the run.
+- `RUNNING` → Sleep one interval, no output.
 
 Default tunables (`sprintLoopSteps`):
 
@@ -150,7 +152,7 @@ Override: `maxFailures` setting or `JULES_API_MAX_FAILS` env. Recommended floor:
 
 ## CI autofix retries
 
-Per task, the CI gate tracks attempted CI fix dispatches in `ciAutofixRetryCounts: Map<taskId, number>`. The cap is `julesCiAutofixMaxRetries` (default 3, min 0, max 20).
+Per task, the CI gate tracks attempted CI fix dispatches in `ciAutofixRetryCounts: Map<taskId, number>`. The cap is configured by the legacy setting `julesCiAutofixMaxRetries` (default 3, min 0, max 20).
 
 Beyond the cap, the gate emits an attention item rather than dispatching another fix worker.
 
