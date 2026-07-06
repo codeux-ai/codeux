@@ -87,8 +87,9 @@ describe("UsageChartMinimap", () => {
 
   it("emits a zoom range after a drag selection", () => {
     const onZoomChange = vi.fn();
+    const onStatusChange = vi.fn();
     const { getByTestId } = render(
-      <UsageChartMinimap buckets={createBuckets(11)} zoomRange={null} onZoomChange={onZoomChange} />,
+      <UsageChartMinimap buckets={createBuckets(11)} zoomRange={null} onZoomChange={onZoomChange} onStatusChange={onStatusChange} />,
     );
 
     const strip = getByTestId("usage-chart-minimap") as HTMLElement;
@@ -100,12 +101,14 @@ describe("UsageChartMinimap", () => {
     fireEvent.pointerUp(strip, { clientX: 600, pointerId: 1 });
 
     expect(onZoomChange).toHaveBeenCalledWith({ start: 2, end: 6 });
+    expect(onStatusChange).toHaveBeenCalledWith("Zoomed overview to b2 through b6, 5 of 11 buckets.");
   });
 
   it("clears the zoom on a simple click", () => {
     const onZoomChange = vi.fn();
+    const onStatusChange = vi.fn();
     const { getByTestId } = render(
-      <UsageChartMinimap buckets={createBuckets(11)} zoomRange={{ start: 2, end: 6 }} onZoomChange={onZoomChange} />,
+      <UsageChartMinimap buckets={createBuckets(11)} zoomRange={{ start: 2, end: 6 }} onZoomChange={onZoomChange} onStatusChange={onStatusChange} />,
     );
 
     const strip = getByTestId("usage-chart-minimap") as HTMLElement;
@@ -116,6 +119,25 @@ describe("UsageChartMinimap", () => {
     fireEvent.pointerUp(strip, { clientX: 400, pointerId: 1 });
 
     expect(onZoomChange).toHaveBeenCalledWith(null);
+    expect(onStatusChange).toHaveBeenCalledWith("Zoom reset to the full 11-bucket range.");
+  });
+
+  it("announces keyboard pan and reset actions", () => {
+    const onZoomChange = vi.fn();
+    const onStatusChange = vi.fn();
+    const { getByTestId } = render(
+      <UsageChartMinimap buckets={createBuckets(11)} zoomRange={{ start: 2, end: 6 }} onZoomChange={onZoomChange} onStatusChange={onStatusChange} />,
+    );
+
+    const strip = getByTestId("usage-chart-minimap") as HTMLElement;
+
+    fireEvent.keyDown(strip, { key: "ArrowRight" });
+    expect(onZoomChange).toHaveBeenCalledWith({ start: 3, end: 7 });
+    expect(onStatusChange).toHaveBeenCalledWith("Zoomed overview to b3 through b7, 5 of 11 buckets.");
+
+    fireEvent.keyDown(strip, { key: "Escape" });
+    expect(onZoomChange).toHaveBeenCalledWith(null);
+    expect(onStatusChange).toHaveBeenCalledWith("Zoom reset to the full 11-bucket range.");
   });
 
   it("shows the zoom window summary when zoomed", () => {

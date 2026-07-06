@@ -34,6 +34,7 @@ import {
   type LedgerSortKey,
   type ExecutionStatsEntityWithDuration,
 } from "./StatsShared.js";
+import { useInteractionTokens } from "../../../lib/motion/index.js";
 
 export function getStatusChipTone(status: string): string {
   const normalized = status.toLowerCase();
@@ -159,6 +160,7 @@ export const TelemetryLedger: FunctionComponent<{
   emptyLabel,
   defaultSortKey = "tokens",
 }) => {
+  const interactionTokens = useInteractionTokens();
   const [query, setQuery] = useState("");
   const [sortKey, setSortKey] = useState<LedgerSortKey>(defaultSortKey);
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
@@ -269,6 +271,19 @@ export const TelemetryLedger: FunctionComponent<{
   const averageCalls = items.length > 0 ? overallTotals.invocationCount / items.length : 0;
   const filteredShare = overallTotals.totalTokens > 0 ? (totals.totalTokens / overallTotals.totalTokens) * 100 : 0;
   const singularKind = kindLabel.replace(/s$/, "");
+  const sortLabelByKey: Record<LedgerSortKey, string> = {
+    last: "Latest",
+    tokens: "Tokens",
+    active: "Active",
+    input: "Input",
+    output: "Output",
+    name: "Name",
+    p50: "p50",
+    p95: "p95",
+  };
+  const ledgerStatus = queryIsActive
+    ? `Showing ${filteredItems.length.toLocaleString()} of ${items.length.toLocaleString()} ${kindLabel} matching ${query.trim()}, sorted by ${sortLabelByKey[sortKey]} ${sortDir === "desc" ? "descending" : "ascending"}.`
+    : `Showing ${filteredItems.length.toLocaleString()} of ${items.length.toLocaleString()} ${kindLabel}, sorted by ${sortLabelByKey[sortKey]} ${sortDir === "desc" ? "descending" : "ascending"}.`;
 
   return (
     <div className={`${PANEL_CLASS} p-6 md:p-7`}>
@@ -284,6 +299,9 @@ export const TelemetryLedger: FunctionComponent<{
           <div aria-live="polite" aria-atomic="true" className={`inline-flex items-center gap-2 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.16em] ${CHIP_CLASS} ${TEXT_DETAIL_CLASS}`}>
             <Hash className="h-3.5 w-3.5 text-[color:var(--stats-signal-text)]" strokeWidth={2.2} />
             {filteredItems.length.toLocaleString()} visible / {items.length.toLocaleString()} total
+          </div>
+          <div className="sr-only" role="status" aria-live="polite" aria-atomic="true">
+            {ledgerStatus}
           </div>
         </div>
 
@@ -526,8 +544,8 @@ export const TelemetryLedger: FunctionComponent<{
                         >
                           <div
                             aria-hidden="true"
-                            className="h-1 rounded-full bg-[color:var(--stats-positive-text)] motion-safe:transition-all motion-safe:duration-500"
-                            style={{ width: `${Math.min(100, Math.max(shareOfLeader > 0 ? 3 : 0, shareOfLeader))}%` }}
+                            className="h-1 rounded-full bg-[color:var(--stats-positive-text)] motion-safe:transition-all"
+                            style={{ transitionDuration: interactionTokens.listReorder.duration, transitionTimingFunction: interactionTokens.listReorder.ease, width: `${Math.min(100, Math.max(shareOfLeader > 0 ? 3 : 0, shareOfLeader))}%` }}
                           />
                         </div>
                         <div className="flex flex-wrap items-center justify-between gap-3">
