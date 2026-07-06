@@ -14,6 +14,14 @@ The runner is secret-gated. If `OPENROUTER_API_KEY` is not set, it prints a skip
 - Polls task state until every task reaches a terminal state or the scenario timeout expires.
 - Writes redacted JSON summaries under `.cache/e2e-openrouter/<run-id>/`.
 
+## GitHub Actions
+
+`.github/workflows/openrouter-sprint-e2e.yml` runs this validation on pushes to `main` and through manual dispatch. The workflow installs dependencies with pnpm 10.33.0 on Node 22, builds the compiled runtime, and then invokes the runner.
+
+The workflow passes `OPENROUTER_API_KEY` from repository secrets. Until that secret is configured, the runner prints its skip message and exits successfully. Set the optional repository variable `CODEUX_E2E_OPENROUTER_MODEL` to override the default model; otherwise the workflow uses `openai/gpt-5-mini`.
+
+Runner artifacts under `.cache/e2e-openrouter/` are uploaded when validation fails or when the runner creates artifacts, with a short retention period.
+
 ## Scenarios
 
 - `conflict-dag`: a five-task merge-conflict DAG sprint.
