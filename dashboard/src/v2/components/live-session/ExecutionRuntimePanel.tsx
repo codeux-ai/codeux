@@ -203,7 +203,17 @@ const RuntimeActionButton: FunctionComponent<{
         >
             {icon}
             <span>{label}</span>
-            {statusLabel && <span id={statusId} className="text-[8px] normal-case tracking-normal opacity-80">{statusLabel}</span>}
+            {statusLabel && (
+                <span
+                    id={statusId}
+                    role="status"
+                    aria-live="polite"
+                    aria-atomic="true"
+                    className="text-[8px] normal-case tracking-normal opacity-80"
+                >
+                    {statusLabel}
+                </span>
+            )}
             {unavailableReason && unavailableReason !== statusLabel && (
                 <span id={reasonId} className={actionState === "disabled" ? "text-[8px] normal-case tracking-normal opacity-80" : "sr-only"}>{unavailableReason}</span>
             )}
@@ -667,7 +677,7 @@ export const ExecutionRuntimePanel: FunctionComponent<{
                                                         actionState={cancelActionState}
                                                         labels={{ idle: "Cancel", pending: "Cancelling", success: "Cancel Requested", error: "Cancel Failed" }}
                                                         ariaLabel={`Cancel sprint run ${run.sprintName}`}
-                                                        onActivate={() => onCancelSprintRun(run.id)}
+                                                        onActivate={() => onCancelSprintRun(run.id, run.sprintName)}
                                                         toneClassName="border border-status-red/20 bg-status-red/10 text-status-red hover:bg-status-red/15"
                                                         icon={<XCircle className={`h-3 w-3 ${cancelActionState === "pending" ? "motion-safe:animate-spin" : ""}`} strokeWidth={2} aria-hidden="true" />}
                                                     />
@@ -682,7 +692,7 @@ export const ExecutionRuntimePanel: FunctionComponent<{
                                                             actionState={forceCancelActionState}
                                                             labels={{ idle: "Force Cancel", pending: "Force Cancelling", success: "Force Cancelled", error: "Force Cancel Failed" }}
                                                             ariaLabel={`Force cancel sprint run ${run.sprintName}`}
-                                                            onActivate={() => onForceCancelSprintRun(run.id)}
+                                                            onActivate={() => onForceCancelSprintRun(run.id, run.sprintName)}
                                                             toneClassName="border border-status-red/20 bg-status-red/10 text-status-red hover:bg-status-red/15"
                                                             icon={<XCircle className={`h-3 w-3 ${forceCancelActionState === "pending" ? "motion-safe:animate-spin" : ""}`} strokeWidth={2} aria-hidden="true" />}
                                                         />
@@ -821,8 +831,8 @@ export const ExecutionRuntimePanel: FunctionComponent<{
                                                     <RuntimeActionButton
                                                         actionState={cancelActionState}
                                                         labels={{ idle: "Cancel", pending: "Cancelling", success: "Cancel Requested", error: "Cancel Failed" }}
-                                                        ariaLabel={"Cancel dispatch " + dispatch.id}
-                                                        onActivate={() => onCancelTaskDispatch(dispatch.id)}
+                                                        ariaLabel={`Cancel dispatch ${dispatch.taskKey}: ${dispatch.taskTitle}`}
+                                                        onActivate={() => onCancelTaskDispatch(dispatch.id, `${dispatch.taskKey}: ${dispatch.taskTitle}`)}
                                                         toneClassName="border border-status-red/20 bg-status-red/10 text-status-red hover:bg-status-red/15"
                                                         icon={<XCircle className={`h-3 w-3 ${cancelActionState === "pending" ? "motion-safe:animate-spin" : ""}`} strokeWidth={2} aria-hidden="true" />}
                                                     />
@@ -836,8 +846,8 @@ export const ExecutionRuntimePanel: FunctionComponent<{
                                                         <RuntimeActionButton
                                                             actionState={forceCancelActionState}
                                                             labels={{ idle: "Force Cancel", pending: "Force Cancelling", success: "Force Cancelled", error: "Force Cancel Failed" }}
-                                                            ariaLabel={"Force cancel dispatch " + dispatch.id}
-                                                            onActivate={() => onForceCancelTaskDispatch(dispatch.id)}
+                                                            ariaLabel={`Force cancel dispatch ${dispatch.taskKey}: ${dispatch.taskTitle}`}
+                                                            onActivate={() => onForceCancelTaskDispatch(dispatch.id, `${dispatch.taskKey}: ${dispatch.taskTitle}`)}
                                                             toneClassName="border border-status-red/20 bg-status-red/10 text-status-red hover:bg-status-red/15"
                                                             icon={<XCircle className={`h-3 w-3 ${forceCancelActionState === "pending" ? "motion-safe:animate-spin" : ""}`} strokeWidth={2} aria-hidden="true" />}
                                                         />
@@ -847,7 +857,7 @@ export const ExecutionRuntimePanel: FunctionComponent<{
                                                     <RuntimeActionButton
                                                         actionState={retryActionState}
                                                         labels={{ idle: "Retry", pending: "Retrying", success: "Retry Started", error: "Retry Failed" }}
-                                                        ariaLabel={"Retry dispatch " + dispatch.id}
+                                                        ariaLabel={`Retry dispatch ${dispatch.taskKey}: ${dispatch.taskTitle}`}
                                                         onActivate={() => onRetryTaskDispatch(dispatch.id)}
                                                         toneClassName="border border-signal-500/20 bg-signal-500/10 text-signal-600 hover:bg-signal-500/15 dark:text-signal-400"
                                                         icon={<RotateCcw className={`h-3 w-3 ${retryActionState === "pending" ? "motion-safe:animate-spin" : ""}`} strokeWidth={2} aria-hidden="true" />}
