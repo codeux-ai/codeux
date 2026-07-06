@@ -463,6 +463,7 @@ export const ProjectsPage: FunctionComponent = () => {
         projects: sources,
         selectedProjectId,
         loading,
+        error,
         createProject,
         deleteProject,
         selectProject,
@@ -752,7 +753,31 @@ export const ProjectsPage: FunctionComponent = () => {
                 </div>
 
                 {/* ── Cards Grid ──────────────────────────────────────── */}
-                <div ref={gridRef} className="grid grid-cols-1 grid-rows-1 relative">
+                {loading && (
+                    <div role="status" aria-live="polite" aria-busy="true" className="sr-only">
+                        Loading projects.
+                    </div>
+                )}
+
+                {error && (
+                    <div role="alert" aria-live="assertive" className="rounded-2xl border border-status-red/20 bg-status-red/[0.06] px-5 py-4 text-sm font-semibold text-status-red">
+                        {error}
+                    </div>
+                )}
+
+                {!loading && !error && sources.length === 0 && (
+                    <div role="status" aria-live="polite" className="sr-only">
+                        No projects connected. Add a project to start tracking work.
+                    </div>
+                )}
+
+                <div
+                    ref={gridRef}
+                    role="region"
+                    aria-label="Project cards"
+                    aria-busy={loading || showSkeletons ? "true" : undefined}
+                    className="grid grid-cols-1 grid-rows-1 relative"
+                >
                     <SkeletonLoader
                         show={showSkeletons}
                         className="col-start-1 row-start-1"

@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import request from "supertest";
 import express from "express";
 import { setupDashboardServer } from "../../../src/server/dashboard-server.js";
+import { HttpRouteError } from "../../../src/server/http-errors.js";
 import * as http from "http";
 
 vi.mock("http", async () => {
@@ -131,6 +132,7 @@ describe("dashboard-server quicksprint routes", () => {
     quicksprintService.getTemplate.mockReturnValue(null);
     const res = await request(app).get("/api/projects/p1/quicksprints/templates/t1");
     expect(res.status).toBe(404);
+    expect(res.body).toEqual({ error: "Template not found" });
   });
 
   it("POST /api/projects/:projectId/quicksprints/templates", async () => {
@@ -175,6 +177,36 @@ describe("dashboard-server quicksprint routes", () => {
     expect(res.status).toBe(400);
     expect(res.body).toEqual({ error: "Missing or empty required field: templateId" });
     expect(quicksprintService.executeQuicksprint).not.toHaveBeenCalled();
+  });
+
+  it("POST /api/projects/:projectId/quicksprints/execute rejects malformed body values without exposing secrets", async () => {
+    const secret = "provider-api-key-secret";
+    const res = await request(app)
+      .post("/api/projects/p1/quicksprints/execute")
+      .send({
+        templateId: "t1",
+        taskCount: 2,
+        submitMode: secret,
+        planningOverrides: { apiKey: secret },
+      });
+
+    expect(res.status).toBe(400);
+    expect(res.body).toEqual({ error: "Invalid submitMode. Must be 'plan_only' or 'plan_and_start'." });
+    expect(JSON.stringify(res.body)).not.toContain(secret);
+    expect(quicksprintService.executeQuicksprint).not.toHaveBeenCalled();
+  });
+
+  it("maps quicksprint route conflicts through the shared route status mapper", async () => {
+    quicksprintService.createCustomTemplate.mockImplementation(() => {
+      throw new HttpRouteError(409, "Template already exists");
+    });
+
+    const res = await request(app)
+      .post("/api/projects/p1/quicksprints/templates")
+      .send({ name: "n", description: "d", icon: "i", category: "c", agentInstructionMarkdown: "aim" });
+
+    expect(res.status).toBe(409);
+    expect(res.body).toEqual({ error: "Template already exists" });
   });
 
   it("Handles missing quicksprintService", async () => {
@@ -261,22 +293,28 @@ describe("dashboard-server quicksprint routes", () => {
       quicksprintService.listTemplates.mockImplementation(() => { throw new Error("Oops"); });
       const res = await request(app).get("/api/projects/p1/quicksprints/templates");
       expect(res.status).toBe(500);
+      expect(res.body).toEqual({ error: "Internal Server Error" });
+      expect(JSON.stringify(res.body)).not.toContain("Oops");
 
       quicksprintService.getTemplate.mockImplementation(() => { throw new Error("Oops"); });
       const res2 = await request(app).get("/api/projects/p1/quicksprints/templates/t1");
       expect(res2.status).toBe(500);
+      expect(res2.body).toEqual({ error: "Internal Server Error" });
 
       quicksprintService.createCustomTemplate.mockImplementation(() => { throw new Error("Oops"); });
       const res3 = await request(app).post("/api/projects/p1/quicksprints/templates").send({});
       expect(res3.status).toBe(500);
+      expect(res3.body).toEqual({ error: "Internal Server Error" });
 
       quicksprintService.updateCustomTemplate.mockImplementation(() => { throw new Error("Oops"); });
       const res4 = await request(app).patch("/api/projects/p1/quicksprints/templates/t1").send({});
       expect(res4.status).toBe(500);
+      expect(res4.body).toEqual({ error: "Internal Server Error" });
 
       quicksprintService.deleteCustomTemplate.mockImplementation(() => { throw new Error("Oops"); });
       const res5 = await request(app).delete("/api/projects/p1/quicksprints/templates/t1");
       expect(res5.status).toBe(500);
+      expect(res5.body).toEqual({ error: "Internal Server Error" });
 
       quicksprintService.executeQuicksprint.mockImplementation(() => { throw new Error("Oops"); });
       const res6 = await request(app).post("/api/projects/p1/quicksprints/execute").send({
@@ -285,5 +323,6 @@ describe("dashboard-server quicksprint routes", () => {
         submitMode: "plan_only",
       });
       expect(res6.status).toBe(500);
+      expect(res6.body).toEqual({ error: "Internal Server Error" });
   });
 });

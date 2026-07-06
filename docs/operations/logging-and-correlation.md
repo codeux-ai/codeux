@@ -55,7 +55,8 @@ Callers should pass `logPurpose` when the purpose is known. An explicit `logPurp
 2. Incoming `x-correlation-id` is reused when present, otherwise a new ID is generated.
 3. Response always includes `x-correlation-id`.
 4. Request-completion logs are emitted through the shared logger and include the active correlation ID.
-5. Dashboard HTTP request logs are purpose-classified as `request`/`HTTP` and only print to the server console when Console Visibility is `full`.
+5. Malformed dashboard JSON request bodies are rejected by the shared pre-route middleware with `400` and `{ "error": "Invalid JSON request body." }`. The response and structured logs do not include the raw body.
+6. Dashboard HTTP request logs are purpose-classified as `request`/`HTTP` and only print to the server console when Console Visibility is `full`.
 
 ## Runtime Log Levels
 
@@ -95,6 +96,8 @@ Provider invocation usage rows preserve the operational fields needed for dashbo
 
 Provider telemetry warning logs intentionally do not include raw provider read error messages. They include `errorName`, invocation identifiers, `failureCount`, and correlation context so operators can identify the failing invocation without risking transcript fragments in log metadata.
 
+Provider invocation lifecycle logs (`Provider invocation started`, `Provider invocation finished`, `Provider invocation crashed`, and cancellation logs) carry `logPurpose: "invocation"` plus the active `correlationId` when one is present. Crash and cleanup logs include `errorName` and bounded identifiers instead of raw `Error` objects, command argv, prompts, provider env values, or subprocess/Docker failure payloads.
+
 Expected provider telemetry event types:
 
 - `provider_telemetry_poll_succeeded`: A watcher tick parsed reported provider usage and emitted deterministic counters.
@@ -131,6 +134,7 @@ Realtime logs must use `logPurpose: "realtime"` unless they are security rejecti
 - `project_live_snapshot_assembled`: Logs the build time and byte size of an assembled project live snapshot.
 - `realtime_snapshot_published`: Logs the published realtime snapshot event and size.
 - `realtime_background_refresh`: Logs scheduled background dashboard refreshes, such as overview telemetry.
+- `dashboard_realtime_event_write_failed`: Logs bounded event metadata and `errorName` when a realtime event cannot be written. The event publisher defaults event `correlationId` from the active correlation context when the caller did not provide one.
 - `websocket_recovery_snapshot_required`: Emitted when a client reconnects and needs a full snapshot payload. Metadata includes the recovery reason (`non_replayable_event_missed`, `replay_window_exceeded`, or `invalid_client_message`) and the active correlation id when one was provided on the websocket upgrade.
 - `repeated_unhealthy_recovery_patterns`: Emitted when a websocket client repeatedly requires recovery snapshots within a short window.
 - `dashboard_realtime_websocket_backpressure_disconnect`: Emitted when a slow client is disconnected before the server buffers unbounded realtime frames.
@@ -150,6 +154,8 @@ Dashboard HTTP requests handled by `syncRoute` or `asyncRoute` automatically map
 - `EntityNotFoundError` maps to `404 Not Found`.
 - Explicit `HttpRouteError` instances preserve their status and public message.
 - Unexpected or unhandled exceptions map to `500 Internal Server Error`, hiding internal details from the client response.
+
+Malformed JSON is handled before route dispatch and uses the same correlation header and request logging path as normal dashboard API requests. Route handlers should validate body values through shared parsers or throw `HttpRouteError`/repository errors so status mapping remains centralized instead of adding one-off response formatting.
 
 When a `500 Internal Server Error` occurs (and headers haven't already been sent), the response will be safely formatted and sent, and the original error will then be delegated to Express error handlers via `next(error)` so that it can be logged and appropriately traced.
 

@@ -10,6 +10,7 @@ import * as fetchJsonModule from "../../../dashboard/src/lib/api/fetch-json.js";
 describe("Dashboard API Cache", () => {
   beforeEach(() => {
     clearLivePayloadCacheForTests();
+    vi.restoreAllMocks();
     vi.spyOn(fetchJsonModule, "fetchJson").mockImplementation(async (url) => {
       const projectId = url.includes("projectId=p") ? url.split("projectId=")[1] : "default";
       return {
@@ -76,6 +77,67 @@ describe("Dashboard API Cache", () => {
     invalidateLivePayloadCache("p1");
     expect(getCachedLivePayload("p1")).toBeNull();
     expect(getCachedLivePayload("p2")).not.toBeNull();
+  });
+
+  it("does not reuse stale payloads after a mutation invalidates the project cache", async () => {
+    vi.mocked(fetchJsonModule.fetchJson)
+      .mockResolvedValueOnce({
+        projectId: "p1",
+        selectedSprintId: "s1",
+        status: { project_id: "p1", subtasks: [{ id: "stale-task" }], timestamp: null },
+        execution: { projectId: "p1", revision: "before-mutation" },
+      } as any)
+      .mockResolvedValueOnce({
+        projectId: "p1",
+        selectedSprintId: "s2",
+        status: { project_id: "p1", subtasks: [{ id: "fresh-task" }], timestamp: null },
+        execution: { projectId: "p1", revision: "after-mutation" },
+      } as any);
+
+    await fetchLivePayload("p1");
+    expect(getCachedLivePayload("p1")?.execution).toEqual({ projectId: "p1", revision: "before-mutation" });
+
+    invalidateLivePayloadCache("p1");
+
+    expect(getCachedLivePayload("p1")).toBeNull();
+
+    await fetchLivePayload("p1");
+
+    expect(fetchJsonModule.fetchJson).toHaveBeenCalledTimes(2);
+    expect(getCachedLivePayload("p1")?.execution).toEqual({ projectId: "p1", revision: "after-mutation" });
+    expect(getCachedLivePayload("p1", { selectedSprintId: "s1" })).toBeNull();
+  });
+
+  it("keeps project, sprint, and explicit scope payloads isolated", async () => {
+    vi.mocked(fetchJsonModule.fetchJson)
+      .mockResolvedValueOnce({
+        projectId: "p1",
+        selectedSprintId: "s1",
+        status: { project_id: "p1", subtasks: [{ id: "p1-s1-task" }], timestamp: null },
+        execution: { projectId: "p1", scope: "s1" },
+      } as any)
+      .mockResolvedValueOnce({
+        projectId: "p1",
+        selectedSprintId: "s2",
+        status: { project_id: "p1", subtasks: [{ id: "p1-s2-task" }], timestamp: null },
+        execution: { projectId: "p1", scope: "s2" },
+      } as any)
+      .mockResolvedValueOnce({
+        projectId: "p2",
+        selectedSprintId: "s1",
+        status: { project_id: "p2", subtasks: [{ id: "p2-s1-task" }], timestamp: null },
+        execution: { projectId: "p2", scope: "s1" },
+      } as any);
+
+    await fetchLivePayload("p1", { selectedSprintId: "s1" });
+    await fetchLivePayload("p1", { selectedSprintId: "s2" });
+    await fetchLivePayload("p2", { selectedSprintId: "s1" });
+
+    expect(getCachedLivePayload("p1", { selectedSprintId: "s1" })?.status.subtasks).toEqual([{ id: "p1-s1-task" }]);
+    expect(getCachedLivePayload("p1", { selectedSprintId: "s2" })?.status.subtasks).toEqual([{ id: "p1-s2-task" }]);
+    expect(getCachedLivePayload("p2", { selectedSprintId: "s1" })?.status.subtasks).toEqual([{ id: "p2-s1-task" }]);
+    expect(getCachedLivePayload("p2", { selectedSprintId: "s2" })).toBeNull();
+    expect(getCachedLivePayload("p1", { scopeKey: "review" })).toBeNull();
   });
 
   it("should support clearLivePayloadCacheForTests", async () => {

@@ -315,6 +315,85 @@ describe("SprintTaskDispatchService", () => {
     });
   });
 
+  it("reuses an active dispatch instead of creating duplicate task-run or provider invocation rows", async () => {
+    const { projectManagementRepository, executionRepository, taskService, service } = await createFixture();
+    const project = projectManagementRepository.createProject({
+      name: "Duplicate Dispatch Project",
+      sourceType: "local",
+      sourceRef: "/workspace/duplicate-dispatch-project",
+    });
+    const sprint = projectManagementRepository.createSprint(project.id, {
+      name: "Duplicate Dispatch Sprint",
+      number: 19,
+    });
+    const taskRecord = projectManagementRepository.createTask(project.id, {
+      sprintId: sprint.id,
+      title: "Run once in Jules",
+      promptMarkdown: "This task must only start once.",
+      executorType: "jules",
+    });
+    const sprintRun = executionRepository.createSprintRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      status: "running",
+      executorMode: "mixed",
+    });
+
+    taskService.resolveTaskProvider.mockReturnValue("jules");
+    taskService.startSprintTask.mockResolvedValue({
+      id: "jules-session-once",
+      name: "sessions/jules-session-once",
+      provider: "jules",
+    });
+
+    const startArgs = {
+      task: {
+        id: taskRecord.taskKey,
+        record_id: taskRecord.id,
+        title: taskRecord.title,
+        prompt: taskRecord.promptMarkdown,
+        depends_on: [],
+        is_independent: true,
+        status: "PENDING" as const,
+      },
+      projectId: project.id,
+      sprintId: sprint.id,
+      sprintRunId: sprintRun.id,
+      featureBranch: "feature/sprint-19",
+      repoPath: "/workspace/duplicate-dispatch-project",
+      sprintNumber: 19,
+    };
+
+    await service.startTask(startArgs);
+    taskService.startSprintTask.mockClear();
+
+    const reused = await service.startTask(startArgs);
+
+    expect(reused).toMatchObject({
+      id: "jules-session-once",
+      name: "sessions/jules-session-once",
+      provider: "jules",
+    });
+    expect(taskService.startSprintTask).not.toHaveBeenCalled();
+    expect(executionRepository.listTaskDispatches({
+      projectId: project.id,
+      sprintRunId: sprintRun.id,
+      taskId: taskRecord.id,
+    })).toHaveLength(1);
+    expect(executionRepository.listExecutionInvocations({
+      projectId: project.id,
+      sprintRunId: sprintRun.id,
+    }).filter((invocation) => invocation.taskId === taskRecord.id)).toHaveLength(1);
+    expect(executionRepository.listProviderInvocationsForTask(project.id, taskRecord.id)).toHaveLength(1);
+
+    const latestRun = executionRepository.getLatestTaskRun(taskRecord.id, sprintRun.id);
+    expect(latestRun).toMatchObject({
+      state: "RUNNING",
+      sessionId: "jules-session-once",
+    });
+    expect(executionRepository.listTaskRunEvents(latestRun!.id).filter((event) => event.eventType === "dispatch_started")).toHaveLength(1);
+  });
+
   it("marks the dispatch-created Jules invocation failed when session creation fails", async () => {
     const { projectManagementRepository, executionRepository, taskService, service } = await createFixture();
     const project = projectManagementRepository.createProject({
@@ -375,6 +454,32 @@ describe("SprintTaskDispatchService", () => {
 
     const providerUsage = executionRepository.getProviderInvocationUsage(julesInvocation.providerInvocationId!);
     expect(providerUsage?.status).toBe("failed");
+
+    const dispatches = executionRepository.listTaskDispatches({
+      projectId: project.id,
+      sprintRunId: sprintRun.id,
+      taskId: taskRecord.id,
+    });
+    expect(dispatches).toHaveLength(1);
+    expect(dispatches[0]).toMatchObject({
+      status: "failed",
+      errorMessage: "Jules API unavailable",
+    });
+
+    const taskRun = executionRepository.getLatestTaskRun(taskRecord.id, sprintRun.id);
+    expect(taskRun).toMatchObject({
+      state: "FAILED",
+      provider: "jules",
+    });
+    expect(executionRepository.listTaskRunEvents(taskRun!.id)).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        eventType: "dispatch_failed",
+        payload: expect.objectContaining({
+          dispatchId: dispatches[0]!.id,
+          error: "Jules API unavailable",
+        }),
+      }),
+    ]));
 
     const messages = executionRepository.listExecutionInvocationMessages(julesInvocation.id);
     expect(messages.some((message) => message.contentMarkdown.includes("Jules dispatch failed: Jules API unavailable"))).toBe(true);

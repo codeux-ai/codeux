@@ -49,8 +49,40 @@ describe("ProviderExecutionLoop", () => {
     expect(result.ok).toBe(true);
     expect(runCmd).toHaveBeenCalledTimes(2);
     expect(opts.trackingOnActivity).toHaveBeenCalledWith("Codex transport disconnected. Retrying once automatically...");
+    expect(JSON.stringify(opts.trackingOnActivity.mock.calls)).not.toContain("error");
+    expect(JSON.stringify(opts.trackingOnActivity.mock.calls)).not.toContain("arg1");
 
     vi.useRealTimers();
+  });
+
+  it("classifies command failures through provider activity without raw command payloads", async () => {
+    const rawSecret = "sk-loop-secret";
+    const rawPrompt = "raw loop prompt";
+    const rawCommandPayload = `cmd --prompt "${rawPrompt}" OPENAI_API_KEY=${rawSecret}`;
+    const runCmd = vi.fn()
+      .mockResolvedValueOnce({ ok: false, stdout: rawCommandPayload, stderr: rawCommandPayload })
+      .mockResolvedValueOnce({ ok: true, stdout: "ok", stderr: "" });
+    const opts: ProviderExecutionLoopOptions = {
+      ...getDefaultOptions(),
+      provider: "claude-code",
+      args: ["--resume", "native-session", "--prompt", rawPrompt],
+      continueSession: true,
+      runCmd,
+      isClaudeConversationNotFoundError: vi.fn().mockReturnValue(true),
+    };
+
+    const result = await runProviderExecutionLoop(opts);
+
+    expect(result.ok).toBe(true);
+    expect(opts.trackingOnActivity).toHaveBeenCalledWith(
+      "Claude Code could not resume the previous conversation (no conversation found). Retrying once with a fresh session...",
+      "provider",
+    );
+    const activityPayload = JSON.stringify(opts.trackingOnActivity.mock.calls);
+    expect(activityPayload).not.toContain(rawPrompt);
+    expect(activityPayload).not.toContain(rawSecret);
+    expect(activityPayload).not.toContain("OPENAI_API_KEY");
+    expect(activityPayload).not.toContain(rawCommandPayload);
   });
 
   it("retries Claude Code with a fresh session when conversation is not found", async () => {

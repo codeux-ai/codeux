@@ -8,6 +8,7 @@ const WORKFLOWS = {
   releaseChecks: ".github/workflows/release-checks.yml",
 } as const;
 
+const PLAYWRIGHT_CONFIG = "playwright.config.ts";
 const REQUIRED_INSTALL = "pnpm install --frozen-lockfile --ignore-scripts";
 const PACKAGE_MANAGER_VERSION = "10.33.0";
 const NODE_VERSION = "22";
@@ -90,6 +91,10 @@ function expectCommandBefore(workflow: string, before: string, after: string): v
   expect(beforeIndex, `"${before}" should appear before "${after}"`).toBeLessThan(afterIndex);
 }
 
+function expectWorkflowStepAfter(workflow: string, firstStepName: string, secondStepName: string): void {
+  expectCommandBefore(workflow, `- name: ${firstStepName}`, `- name: ${secondStepName}`);
+}
+
 describe("GitHub workflow health", () => {
   it("keeps package toolchain policy pinned to pnpm 10.33.0 and Node 22", async () => {
     const packageJson = JSON.parse(await readRepoFile("package.json")) as PackageJson;
@@ -133,6 +138,7 @@ describe("GitHub workflow health", () => {
 
   it("keeps Playwright as a release-path E2E lane with build, browser install, and artifacts", async () => {
     const playwright = await readRepoFile(WORKFLOWS.playwright);
+    const playwrightJob = getJobBlock(playwright, "test-e2e");
 
     expectWorkflowToolchain(playwright, "Playwright");
     expectConcurrencyCancellation(playwright, "Playwright");
@@ -141,16 +147,37 @@ describe("GitHub workflow health", () => {
     expect(playwright).not.toContain("branches: [dev]");
 
     expectCommandBefore(playwright, "run: pnpm run build", "run: pnpm run test:e2e");
-    expectCommandBefore(playwright, "id: playwright-cache", "run: pnpm exec playwright install chromium");
-    expect(playwright).toContain("run: pnpm exec playwright install-deps chromium");
-    expect(playwright).toContain("run: pnpm exec playwright install chromium");
-    expect(playwright).toMatch(/if: always\(\)\n        uses: actions\/upload-artifact@v4/);
-    expect(playwright).toContain("test-results/");
-    expect(playwright).toContain("playwright-report/");
+    expectWorkflowStepAfter(playwrightJob, "Build server & dashboard", "Run Playwright E2E Tests");
+    expectWorkflowStepAfter(playwrightJob, "Cache Playwright browser binaries", "Install Playwright browsers");
+    expectWorkflowStepAfter(playwrightJob, "Install Playwright browsers", "Run Playwright E2E Tests");
+    expect(playwrightJob).toContain("if: runner.os == 'Linux'");
+    expect(playwrightJob).toContain("run: pnpm exec playwright install-deps chromium");
+    expect(playwrightJob).toContain("run: pnpm exec playwright install chromium");
+    expect(playwrightJob).toMatch(/- name: Upload Playwright artifacts\n        if: always\(\)\n        uses: actions\/upload-artifact@v4/);
+    expect(playwrightJob).toContain("test-results/");
+    expect(playwrightJob).toContain("playwright-report/");
 
     expectCacheKey(playwright, "-nm-", ["package.json", "pnpm-lock.yaml"]);
     expectCacheKey(playwright, "-vite-e2e-", ["package.json", "pnpm-lock.yaml", "vite.config.ts", "tsconfig.json", "dashboard/tsconfig.json"]);
     expectCacheKey(playwright, "-playwright-", ["package.json", "pnpm-lock.yaml"]);
+  });
+
+  it("keeps Playwright config isolated, serialized, and failure-artifact friendly", async () => {
+    const config = await readRepoFile(PLAYWRIGHT_CONFIG);
+
+    expect(config).toContain("command: 'node dist/index.js'");
+    expect(config).toContain("url: 'http://127.0.0.1:4444/health'");
+    expect(config).toContain("reuseExistingServer: false");
+    expect(config).toContain("workers: 1");
+    expect(config).toContain("trace: 'retain-on-failure'");
+    expect(config).toContain("screenshot: 'only-on-failure'");
+    expect(config).toContain("video: 'retain-on-failure'");
+    expect(config).toContain("HOME: tempHome");
+    expect(config).toContain("USERPROFILE: tempHome");
+    expect(config).toContain("name: 'chromium-desktop'");
+    expect(config).toContain("name: 'chromium-mobile'");
+    expect(config).toContain("testMatch: /sprint-ledger-responsive\\.spec\\.ts/");
+    expect(config).toContain("...devices['Pixel 5']");
   });
 
   it("keeps release checks separate from CI and Playwright validation lanes", async () => {
