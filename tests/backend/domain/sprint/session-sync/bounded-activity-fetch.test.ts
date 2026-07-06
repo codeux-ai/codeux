@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { fetchActivitiesBounded } from "../../../../../src/domain/sprint/session-sync/bounded-activity-fetch.js";
+import { withActivityFetchTimeout } from "../../../../../src/domain/sprint/session-sync/activity-fetch-utils.js";
 import type { JulesActivity } from "../../../../../src/contracts/app-types.js";
 import type { Logger } from "../../../../../src/shared/logging/logger.js";
 
@@ -141,6 +142,21 @@ describe("fetchActivitiesBounded", () => {
 
     expect(result.get("empty-session")).toEqual([]);
     expect(mockLogger.warn).not.toHaveBeenCalled();
+  });
+
+  it("passes non-positive timeout values through without scheduling timeout fallback", async () => {
+    vi.useFakeTimers();
+
+    const promise = new Promise<JulesActivity[]>((resolve) => {
+      setTimeout(() => resolve([{ id: "late-activity" }]), 5_000);
+    });
+    const resultPromise = withActivityFetchTimeout(promise, {
+      timeoutMs: 0,
+      createTimeoutError: () => new Error("should not timeout"),
+    });
+
+    await vi.advanceTimersByTimeAsync(5_000);
+    await expect(resultPromise).resolves.toEqual([{ id: "late-activity" }]);
   });
 
   it("handles empty session list without error", async () => {
