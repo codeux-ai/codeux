@@ -143,6 +143,30 @@ describe("knowledge routes", () => {
       expect(res.body.error).toContain("Path must be inside the project directory");
     });
 
+    it("rejects traversal and absolute path escapes before ingestion", async () => {
+      const baseDir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-kb-route-traversal-"));
+      tempDirs.push(baseDir);
+      const outsideDir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-kb-route-outside-"));
+      tempDirs.push(outsideDir);
+      await fs.writeFile(path.join(outsideDir, "outside.txt"), "secret");
+
+      const { app, ingestDocument } = createKnowledgeApp({ baseDir });
+      const attempts = [
+        "../outside.txt",
+        "%2e%2e/outside.txt",
+        path.join(outsideDir, "outside.txt"),
+      ];
+
+      for (const requestedPath of attempts) {
+        const res = await request(app)
+          .post("/api/projects/project-1/knowledge/documents")
+          .send({ path: requestedPath });
+
+        expect(res.status).toBe(400);
+      }
+      expect(ingestDocument).not.toHaveBeenCalled();
+    });
+
     it("caps directory file-count", async () => {
       const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-kb-route-cap-"));
       tempDirs.push(dir);

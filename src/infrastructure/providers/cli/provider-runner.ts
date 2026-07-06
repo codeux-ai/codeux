@@ -589,7 +589,7 @@ export class ProviderRunner implements IProviderRunner {
       try {
         await watcher.stop();
       } catch (err) {
-        this.logger.error("Provider cleanup task failed: watcher stop", { error: err, logPurpose: "runtime" });
+        this.logger.error("Provider cleanup task failed: watcher stop", { logPurpose: "runtime", errorName: err instanceof Error ? err.name : "Error" });
       }
     }
 
@@ -597,7 +597,7 @@ export class ProviderRunner implements IProviderRunner {
       try {
         await fs.rm(tempDbPath, { force: true });
       } catch (err) {
-        this.logger.error("Provider cleanup task failed: temp db removal", { error: err, logPurpose: "runtime" });
+        this.logger.error("Provider cleanup task failed: temp db removal", { logPurpose: "runtime", errorName: err instanceof Error ? err.name : "Error" });
       }
     }
 
@@ -609,7 +609,7 @@ export class ProviderRunner implements IProviderRunner {
           await fs.rm(entry.path, { force: true });
         }
       } catch (err) {
-        this.logger.error("Provider cleanup task failed: mcp config restore", { error: err, logPurpose: "runtime" });
+        this.logger.error("Provider cleanup task failed: mcp config restore", { logPurpose: "runtime", errorName: err instanceof Error ? err.name : "Error" });
       }
     }
 
@@ -617,7 +617,7 @@ export class ProviderRunner implements IProviderRunner {
       try {
         await fs.rm(cleanupPath, { force: true });
       } catch (err) {
-        this.logger.error("Provider cleanup task failed: runtime cleanup", { error: err, logPurpose: "runtime" });
+        this.logger.error("Provider cleanup task failed: runtime cleanup", { logPurpose: "runtime", errorName: err instanceof Error ? err.name : "Error" });
       }
     }
 
@@ -631,7 +631,7 @@ export class ProviderRunner implements IProviderRunner {
         this.dockerRunner.removeWorkspaceDir ? this.dockerRunner.removeWorkspaceDir.bind(this.dockerRunner) : undefined
       );
     } catch (err) {
-      this.logger.error("Provider cleanup task failed: artifact cleanup", { error: err, logPurpose: "runtime" });
+      this.logger.error("Provider cleanup task failed: artifact cleanup", { logPurpose: "runtime", errorName: err instanceof Error ? err.name : "Error" });
     }
   }
 

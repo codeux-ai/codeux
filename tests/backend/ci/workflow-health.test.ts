@@ -8,6 +8,7 @@ const WORKFLOWS = {
   releaseChecks: ".github/workflows/release-checks.yml",
 } as const;
 
+const PLAYWRIGHT_CONFIG = "playwright.config.ts";
 const REQUIRED_INSTALL = "pnpm install --frozen-lockfile --ignore-scripts";
 const PACKAGE_MANAGER_VERSION = "10.33.0";
 const NODE_VERSION = "22";
@@ -17,6 +18,7 @@ type PackageJson = {
   engines?: {
     node?: string;
   };
+  scripts?: Record<string, string>;
 };
 
 async function readRepoFile(path: string): Promise<string> {
@@ -39,6 +41,15 @@ function expectWorkflowToolchain(workflow: string, label: string): void {
   expect(workflow, `${label} should pin setup-node`).toMatch(/uses: actions\/setup-node@v\d+/);
   expect(workflow, `${label} should pin Node 22`).toMatch(/node-version: 22/);
   expect(workflow, `${label} should use frozen lockfile installs without lifecycle scripts`).toContain(REQUIRED_INSTALL);
+}
+
+function expectJobToolchain(job: string, label: string): void {
+  expect(job, `${label} should pin pnpm/action-setup`).toMatch(/uses: pnpm\/action-setup@v\d+/);
+  expect(job, `${label} should pin pnpm version`).toMatch(/version: 10\.33\.0/);
+  expect(job, `${label} should disable action-driven installs`).toContain("run_install: false");
+  expect(job, `${label} should pin setup-node`).toMatch(/uses: actions\/setup-node@v\d+/);
+  expect(job, `${label} should pin Node 22`).toMatch(/node-version: 22/);
+  expect(job, `${label} should use frozen lockfile installs without lifecycle scripts`).toContain(REQUIRED_INSTALL);
 }
 
 function expectConcurrencyCancellation(workflow: string, label: string): void {
@@ -67,6 +78,10 @@ function expectJobRunsCommandIndependently(workflow: string, jobName: string, co
   expect(job, `${jobName} should be an independent job without a needs dependency`).not.toMatch(/^    needs:/m);
 }
 
+function expectJobDoesNotRunCommand(workflow: string, jobName: string, command: string): void {
+  expect(getJobBlock(workflow, jobName), `${jobName} should not run ${command}`).not.toContain(`run: ${command}`);
+}
+
 function expectCommandBefore(workflow: string, before: string, after: string): void {
   const beforeIndex = workflow.indexOf(before);
   const afterIndex = workflow.indexOf(after);
@@ -76,12 +91,17 @@ function expectCommandBefore(workflow: string, before: string, after: string): v
   expect(beforeIndex, `"${before}" should appear before "${after}"`).toBeLessThan(afterIndex);
 }
 
+function expectWorkflowStepAfter(workflow: string, firstStepName: string, secondStepName: string): void {
+  expectCommandBefore(workflow, `- name: ${firstStepName}`, `- name: ${secondStepName}`);
+}
+
 describe("GitHub workflow health", () => {
   it("keeps package toolchain policy pinned to pnpm 10.33.0 and Node 22", async () => {
     const packageJson = JSON.parse(await readRepoFile("package.json")) as PackageJson;
 
     expect(packageJson.packageManager).toBe(`pnpm@${PACKAGE_MANAGER_VERSION}`);
     expect(packageJson.engines?.node).toBe(`>=${NODE_VERSION}`);
+    expect(packageJson.scripts?.audit).toBe("pnpm audit --audit-level=high");
   });
 
   it("keeps core CI split into auditable jobs with independent security audit", async () => {
@@ -95,6 +115,10 @@ describe("GitHub workflow health", () => {
     }
 
     expectJobRunsCommandIndependently(ci, "security-audit", "pnpm run audit");
+    expectJobToolchain(getJobBlock(ci, "security-audit"), "CI security audit");
+    for (const jobName of ["typecheck", "test-backend", "test-dashboard", "build"]) {
+      expectJobDoesNotRunCommand(ci, jobName, "pnpm run audit");
+    }
     expect(getJobBlock(ci, "typecheck")).toContain("pnpm run quality:guardrails");
     expect(getJobBlock(ci, "typecheck")).toContain("pnpm run typecheck");
     expect(getJobBlock(ci, "test-backend")).toContain("pnpm run test:backend:coverage");
@@ -114,6 +138,7 @@ describe("GitHub workflow health", () => {
 
   it("keeps Playwright as a release-path E2E lane with build, browser install, and artifacts", async () => {
     const playwright = await readRepoFile(WORKFLOWS.playwright);
+    const playwrightJob = getJobBlock(playwright, "test-e2e");
 
     expectWorkflowToolchain(playwright, "Playwright");
     expectConcurrencyCancellation(playwright, "Playwright");
@@ -122,16 +147,37 @@ describe("GitHub workflow health", () => {
     expect(playwright).not.toContain("branches: [dev]");
 
     expectCommandBefore(playwright, "run: pnpm run build", "run: pnpm run test:e2e");
-    expectCommandBefore(playwright, "id: playwright-cache", "run: pnpm exec playwright install chromium");
-    expect(playwright).toContain("run: pnpm exec playwright install-deps chromium");
-    expect(playwright).toContain("run: pnpm exec playwright install chromium");
-    expect(playwright).toMatch(/if: always\(\)\n        uses: actions\/upload-artifact@v4/);
-    expect(playwright).toContain("test-results/");
-    expect(playwright).toContain("playwright-report/");
+    expectWorkflowStepAfter(playwrightJob, "Build server & dashboard", "Run Playwright E2E Tests");
+    expectWorkflowStepAfter(playwrightJob, "Cache Playwright browser binaries", "Install Playwright browsers");
+    expectWorkflowStepAfter(playwrightJob, "Install Playwright browsers", "Run Playwright E2E Tests");
+    expect(playwrightJob).toContain("if: runner.os == 'Linux'");
+    expect(playwrightJob).toContain("run: pnpm exec playwright install-deps chromium");
+    expect(playwrightJob).toContain("run: pnpm exec playwright install chromium");
+    expect(playwrightJob).toMatch(/- name: Upload Playwright artifacts\n        if: always\(\)\n        uses: actions\/upload-artifact@v4/);
+    expect(playwrightJob).toContain("test-results/");
+    expect(playwrightJob).toContain("playwright-report/");
 
     expectCacheKey(playwright, "-nm-", ["package.json", "pnpm-lock.yaml"]);
     expectCacheKey(playwright, "-vite-e2e-", ["package.json", "pnpm-lock.yaml", "vite.config.ts", "tsconfig.json", "dashboard/tsconfig.json"]);
     expectCacheKey(playwright, "-playwright-", ["package.json", "pnpm-lock.yaml"]);
+  });
+
+  it("keeps Playwright config isolated, serialized, and failure-artifact friendly", async () => {
+    const config = await readRepoFile(PLAYWRIGHT_CONFIG);
+
+    expect(config).toContain("command: 'node dist/index.js'");
+    expect(config).toContain("url: 'http://127.0.0.1:4444/health'");
+    expect(config).toContain("reuseExistingServer: false");
+    expect(config).toContain("workers: 1");
+    expect(config).toContain("trace: 'retain-on-failure'");
+    expect(config).toContain("screenshot: 'only-on-failure'");
+    expect(config).toContain("video: 'retain-on-failure'");
+    expect(config).toContain("HOME: tempHome");
+    expect(config).toContain("USERPROFILE: tempHome");
+    expect(config).toContain("name: 'chromium-desktop'");
+    expect(config).toContain("name: 'chromium-mobile'");
+    expect(config).toContain("testMatch: /sprint-ledger-responsive\\.spec\\.ts/");
+    expect(config).toContain("...devices['Pixel 5']");
   });
 
   it("keeps release checks separate from CI and Playwright validation lanes", async () => {

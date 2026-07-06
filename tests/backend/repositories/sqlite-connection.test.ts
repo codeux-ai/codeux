@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import * as fs from "fs/promises";
 import * as path from "path";
+import { AppDbStorage, resolveAppDbPath } from "../../../src/repositories/app-db-storage.js";
 import {
   createSqliteTempHome,
   expectSqliteSidecarsRemoved,
@@ -48,6 +49,43 @@ describe("openSqliteDatabase", () => {
     expect(process.env.LC_ALL).toBe("C.UTF-8");
     expect(process.env.VITEST_IN_MEMORY_DB).toBe("true");
     expect(Intl.DateTimeFormat().resolvedOptions().timeZone).toBe("UTC");
+  });
+
+  it("keeps default repository storage off the real user database during Vitest", async () => {
+    const homeDir = await createSqliteTempHome("code-ux-default-db-isolation-");
+    const realRuntimeDbPath = path.join(homeDir, ".code-ux", "app.db");
+    const originalHome = process.env.HOME;
+    const originalUserProfile = process.env.USERPROFILE;
+    process.env.HOME = homeDir;
+    process.env.USERPROFILE = homeDir;
+
+    try {
+      expect(process.env.VITEST_IN_MEMORY_DB).toBe("true");
+      expect(resolveAppDbPath()).toBe(":memory:");
+
+      const storage = new AppDbStorage();
+      try {
+        expect(storage.getPath()).toBe(":memory:");
+        expect(storage.getDatabase().prepare("SELECT 1 AS value").get()).toEqual({ value: 1 });
+      } finally {
+        storage.close();
+      }
+
+      await expect(fs.stat(realRuntimeDbPath)).rejects.toMatchObject({ code: "ENOENT" });
+      await expectSqliteSidecarsRemoved(realRuntimeDbPath);
+    } finally {
+      if (originalHome === undefined) {
+        delete process.env.HOME;
+      } else {
+        process.env.HOME = originalHome;
+      }
+      if (originalUserProfile === undefined) {
+        delete process.env.USERPROFILE;
+      } else {
+        process.env.USERPROFILE = originalUserProfile;
+      }
+      await removeSqliteTempHome(homeDir);
+    }
   });
 
   it("retries busy startup failures before succeeding", async () => {

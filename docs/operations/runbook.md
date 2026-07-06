@@ -64,6 +64,8 @@ Provider concurrency is enforced globally across all projects using `ProviderSet
 - Structured invocation logs are metadata-only. They may include identifiers, lifecycle fields, counters, `failureCount`, `errorName`, and `correlationId`, but must not include raw transcripts, API keys, provider environment values, raw usage JSON, or full prompts.
 - Docker provider launches should expose only env-file and controlled mount paths in the host process arguments. Provider API keys, Git tokens, custom provider env values, and long prompts are written to temporary files or controlled mounts and should not appear in `docker run` argv or activity log metadata.
 - File logging has its own threshold. `DEBUG_LOG_FILE_LEVEL=debug` can persist debug-level provider diagnostics to `.code-ux/debug.log` even when console logging is filtered to `error`; use this only for focused diagnostics and keep the metadata-only rule in place.
+- New runtime logs should set a structured `logPurpose` label so request (`HTTP`), invocation (`INVK`), realtime (`LIVE`), security (`SEC`), orchestration (`ORCH`), storage (`DATA`), and lifecycle (`LIFE`) traffic stays separable in console and debug-file output.
+- Realtime event logs are operational metadata, not payload dumps. They may include event type, sequence, scope, bounded byte sizes, replay/recovery reason, and `correlationId`; they must not include full websocket frames, dashboard payloads, provider transcripts, request bodies, API keys, or authorization headers.
 
 Focused validation:
 
@@ -353,6 +355,7 @@ GitHub validation is split by signal:
 - `Playwright Tests` runs browser E2E validation on pushes and pull requests targeting `main`. This keeps the heavyweight OS-matrix lane on the release path while `dev` remains gated by core CI. Release and publish workflows remain separate from CI/E2E validation.
 - `Release Checks` runs no-secret release validation on pull requests targeting `main` and manual dispatches. It remains separate from core CI and Playwright so desktop packaging or release-install failures do not hide test, audit, or browser failures.
 - Superseded runs for the same branch or pull request are cancelled by workflow concurrency groups.
+- Security validation is intentionally separated from build and Playwright lanes. The `Security Audit` job runs `pnpm run audit`, which is `pnpm audit --audit-level=high`; high-severity dependency findings fail that job without preventing typecheck, tests, build, or Playwright artifacts from reporting their own status.
 
 Local equivalents:
 - `pnpm run lint` mirrors the TypeScript validation portion of `Typecheck & Lint`.

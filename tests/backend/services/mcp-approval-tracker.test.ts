@@ -74,10 +74,24 @@ describe("McpApprovalTracker", () => {
     tracker.setPending("req-valid", approval);
 
     tracker.setPending("" as unknown as string, createApproval("Malformed approval."));
+    tracker.setPending("../req-valid", createApproval("Path-like approval."));
+    tracker.setPending("ghp_123456789012345678901234567890123456", createApproval("Token-shaped approval."));
 
     expect(tracker.takePending({ value: "req-valid" } as unknown as string)).toBeNull();
     expect(tracker.takePending(" " as unknown as string)).toBeNull();
+    expect(tracker.takePending("../req-valid")).toBeNull();
+    expect(tracker.takePending("ghp_123456789012345678901234567890123456")).toBeNull();
     expect(tracker.takePending("req-valid")).toEqual(approval);
+  });
+
+  it("should reject mismatched token-like approval ids without consuming valid approvals", () => {
+    const tracker = new McpApprovalTracker();
+    const approval = createApproval("Valid approval.");
+    tracker.setPending("mcp-42", approval);
+
+    expect(tracker.takePending("mcp-42\nAuthorization: Bearer fixture-token")).toBeNull();
+    expect(tracker.takePending("mcp-42/../other")).toBeNull();
+    expect(tracker.takePending("mcp-42")).toEqual(approval);
   });
 
   it("should overwrite previous pending with latest for same id", () => {

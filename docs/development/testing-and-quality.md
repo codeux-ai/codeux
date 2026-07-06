@@ -14,6 +14,11 @@ Temporary experiments, scratch files, or test scripts should be created outside 
 
 ## Core Commands
 
+- Run TypeScript validation / lint
+```bash
+pnpm run lint
+```
+
 - Run tests
 ```bash
 pnpm test
@@ -53,6 +58,8 @@ pnpm run lint
 
 Persistence migrations must be replay-safe: startup can execute `runMigrations()` repeatedly against an existing database without duplicating indexes, dropping migrated columns/tables, or damaging legacy rows. Tests for these paths should use `:memory:` databases or temporary homes, seed legacy table/payload shapes behaviorally, and close all SQLite handles before removing temporary paths.
 
+Provider invocation persistence tests should cover required observability fields in `provider_invocations`, including status, provider, model/session identifiers, token and character counters, failure metadata, nullable timestamps, and zero-valued usage. Repository tests must keep default storage on `:memory:` through `VITEST_IN_MEMORY_DB=true` or use an isolated temporary home when file-backed SQLite behavior is under test.
+
 - Run the local fast CI mirror (strict TS validation plus tests)
 ```bash
 pnpm run ci
@@ -60,8 +67,17 @@ pnpm run ci
 
 `pnpm run ci` starts with `pnpm run quality:guardrails`, then runs audit, lint, backend coverage, dashboard tests, and build. Run `pnpm run quality:guardrails` directly after changes that affect shared implementation structure, large modules, duplicate logic, dependency factory wiring, realtime snapshot persistence, optimistic task insertion, or the guardrail script itself. Treat blocking guardrail output as CI-equivalent; advisory oversized-file and broad-`any` reports identify cleanup targets but do not fail the command.
 
-GitHub Actions runs the same signals as separate jobs so a vulnerability finding does not obscure compile, test, or build failures. The `Security Audit` job runs `pnpm run audit` independently, while `Typecheck & Lint`, `Backend Tests & Coverage`, `Dashboard Tests`, and `Build` run the repository quality, TypeScript, Vitest, and bundle checks on Node 22 with pnpm 10.33.0. Workflow health tests under `tests/backend/ci/workflow-health.test.ts` assert this split, the pinned `pnpm/action-setup` and `actions/setup-node` versions, frozen `pnpm install --frozen-lockfile --ignore-scripts` installs, concurrency cancellation, and cache keys that include runner OS, Node 22, pnpm 10.33.0, and dependency/config hash inputs.
-The quality guardrail script also audits `vitest.config.ts` directly. It fails if `coverage.include` stops observing `src/**/*.ts`, if any global coverage threshold drops below the locked floors (`lines: 77.4`, `functions: 71.5`, `branches: 66.1`, `statements: 76.0`), if the `src/server/activity-cache-service.ts` line threshold is missing, malformed, below 80%, or if that file is excluded from coverage observability. This check is file-based and deterministic; it does not run Vitest coverage internally. Guardrail failures name the exact configured value, required minimum, and remediation command. After intentionally raising or restoring thresholds, run:
+GitHub Actions runs the same signals as separate jobs so a vulnerability finding does not obscure compile, test, or build failures. The `Security Audit` job runs `pnpm run audit` independently, while `Typecheck & Lint`, `Backend Tests & Coverage`, `Dashboard Tests`, and `Build` run the repository quality, TypeScript, Vitest, and bundle checks on Node 22 with pnpm 10.33.0. Workflow health tests under `tests/backend/ci/workflow-health.test.ts` assert this split, the `package.json` audit script value, the absence of audit execution from build and Playwright lanes, the pinned `pnpm/action-setup` and `actions/setup-node` versions, frozen `pnpm install --frozen-lockfile --ignore-scripts` installs, concurrency cancellation, and cache keys that include runner OS, Node 22, pnpm 10.33.0, and dependency/config hash inputs.
+The quality guardrail script also audits `vitest.config.ts` directly. It fails if `coverage.include` stops observing `src/**/*.ts`, if any global coverage threshold drops below the locked floors, if the `src/server/activity-cache-service.ts` line threshold is missing, malformed, below 80%, or if that file is excluded from coverage observability. The enforced global thresholds in `vitest.config.ts` are:
+
+| Metric | Threshold |
+| --- | ---: |
+| Lines | `77.4` |
+| Functions | `71.5` |
+| Branches | `66.1` |
+| Statements | `76.0` |
+
+`src/server/activity-cache-service.ts` has an additional file-specific `lines: 80` gate. Coverage thresholds are ratchet-only: never lower the global floors, remove `coverage.include: ["src/**/*.ts"]`, exclude `src/server/activity-cache-service.ts`, or lower the activity-cache-service 80% line gate. The focused backend policy test at `tests/backend/ci/vitest-coverage-policy.test.ts` reads the real Vitest config and `package.json` scripts so deterministic env defaults, backend coverage scope, threshold floors, and `pnpm run test:backend:coverage` CI wiring cannot drift silently. These checks are file-based and deterministic; they do not depend on generated coverage output. Guardrail failures name the exact configured value, required minimum, and remediation command. After intentionally raising or restoring thresholds, run:
 
 ```bash
 pnpm run quality:guardrails
@@ -96,7 +112,7 @@ The release-style E2E suite lives under `tests/e2e` and exercises the production
 - `tests/e2e/sprint-task-lifecycle.spec.ts`, which verifies draft sprint and implementation task create/edit/delete behavior through the visible dashboard flows and collection API assertions.
 - `tests/e2e/helpers/prepare-app.ts`, which prepares deterministic app state through dashboard HTTP APIs for onboarding, local project selection, draft sprint setup, task setup, updates, deletes, and cleanup.
 
-`playwright.config.ts` uses Chromium, `http://127.0.0.1:4444`, `fullyParallel: false`, CI retries, and the GitHub plus HTML reporters in CI. It checks `/health` instead of `/ready` because a clean run may not have project live-status activity, while liveness is enough to know the compiled web app accepted the browser session.
+`playwright.config.ts` uses Chromium, `http://127.0.0.1:4444`, `fullyParallel: false`, CI retries, and the GitHub plus HTML reporters in CI. It checks `/health` instead of `/ready` because a clean run may not have project live-status activity, while liveness is enough to know the compiled web app accepted the browser session. The default desktop Chromium project runs the full E2E suite, and the mobile Chromium project is scoped to the responsive sprint ledger spec so mobile viewport coverage stays explicit without requiring every release-path test to support a narrow layout.
 
 ### E2E Authoring Rules
 
@@ -110,6 +126,17 @@ Root E2E specs should prepare normal app state through `tests/e2e/helpers/prepar
 - For credential-free project setup coverage, drive the visible Add Project UI and disable the Project Setup Agent option before submitting so the test does not call provider orchestration, Docker provider startup, worker dispatch, or sprint execution endpoints.
 - Clean up created sprints and tasks with `deleteTask`, `deleteSprint`, or `cleanupSprintFixture` in `afterEach` when a spec mutates persistent app state.
 - Use the exported update/delete helpers to mutate or clean sprint/task records during a spec. Keep setup deterministic and local to the web app contract.
+
+### Deterministic Test Runtime
+
+`vitest.config.ts` pins backend and dashboard Vitest runs to deterministic process defaults before the config is exported:
+
+- `VITEST_IN_MEMORY_DB=true` keeps default `new AppDbStorage()` calls on `:memory:` during tests so suites do not touch `~/.code-ux/app.db`.
+- `TZ=UTC`, `LANG=C.UTF-8`, and `LC_ALL=C.UTF-8` keep date, time, and locale formatting stable across Linux, macOS, and Windows runners.
+- `tests/setup/runtime-warning-filter.ts` applies an isolated temporary HOME/USERPROFILE/XDG home for the full test process, exports `withIsolatedTestHome` for tests that need their own temp home, and removes temp homes after each scoped callback.
+- File-backed SQLite tests should use `tests/backend/repositories/sqlite-cleanup-test-helper.ts` when they need real WAL/SHM behavior; close tracked handles before removing temp roots.
+- Fake timers are not enabled globally. Tests that call `vi.useFakeTimers()` must call `vi.useRealTimers()` in `try/finally` or file-level cleanup; the setup file fails the suite if fake timers leak between tests or after a test file.
+- Stub Docker, Git, provider CLI/API, subprocess, filesystem-home, and network boundaries unless the test is explicitly validating that boundary. Orchestration regression tests should assert durable rows/events through repositories and mocked provider/session services, not real containers, Git pushes, or provider credentials.
 
 ### GitHub Actions E2E Policy
 
@@ -204,6 +231,7 @@ pnpm run typecheck:dashboard
 
 ### Backend
 - Sprint orchestration behavior
+- Sprint orchestration regression tests should cover repeated watch-loop cycles, including active dispatch reuse, QA/CI gate waits, merge-ready tasks, and failed provider startup rows. These tests should assert durable task-run/dispatch/provider invocation events and avoid real provider CLIs, Docker containers, Git pushes, or GitHub API calls.
 - Settings repository defaults and persistence
 - Git status service parsing
 - Task service prompt construction
@@ -248,7 +276,7 @@ pnpm run test:dashboard -- tests/dashboard/accessibility/dashboard-quality-regre
 ## Change-Specific Validation
 
 - Quality guardrail changes: run `pnpm run quality:guardrails`, the focused guardrail tests under `tests/backend/scripts/quality-guardrails.test.ts`, `pnpm run lint`, and `pnpm run build` if package scripts or shared TypeScript imports changed.
-- Coverage threshold changes: run `pnpm run quality:guardrails`, `pnpm run test:backend -- tests/backend/scripts/quality-guardrails.test.ts tests/backend/docs/testing-docs-commands.test.ts`, `pnpm run lint`, and the relevant coverage command (`pnpm run test:coverage` or `pnpm run test:backend:coverage`) before proposing an increase. Never lower the global threshold floors, remove `coverage.include: ["src/**/*.ts"]`, exclude `src/server/activity-cache-service.ts`, or lower the activity-cache-service 80% line gate.
+- Coverage threshold changes: run `pnpm run quality:guardrails`, `pnpm run test:backend -- tests/backend/ci/vitest-coverage-policy.test.ts tests/backend/scripts/quality-guardrails.test.ts tests/backend/docs/testing-docs-commands.test.ts`, `pnpm run lint`, and the relevant coverage command (`pnpm run test:coverage` or `pnpm run test:backend:coverage`) before proposing an increase. Never lower the global threshold floors, remove `coverage.include: ["src/**/*.ts"]`, exclude `src/server/activity-cache-service.ts`, or lower the activity-cache-service 80% line gate.
 - Execution snapshot or Live runtime performance changes: run focused backend repository/service tests for the changed query or websocket path, focused dashboard hook/view-model tests for stabilization behavior, `pnpm run quality:guardrails`, `pnpm run lint`, and `pnpm run build`.
 - Backend-only behavior changes: run the narrowest relevant backend tests first, then `pnpm run test:backend`, `pnpm run lint`, and `pnpm run build` when contracts, repositories, scripts, or app startup paths changed.
 - Dashboard-only behavior changes: run the narrowest relevant dashboard tests first, then `pnpm run test:dashboard`, `pnpm run typecheck:dashboard`, and `pnpm run build` for route-level, resource, accessibility, or user-facing changes.
@@ -263,6 +291,7 @@ pnpm run test:backend -- tests/backend/repositories/sqlite-connection.test.ts te
 Tests are expected to pass on Windows, macOS, and Linux. Keep fixtures and assertions portable:
 
 - Vitest pins deterministic runtime defaults before tests run: `TZ=UTC`, `LANG=C.UTF-8`, `LC_ALL=C.UTF-8`, `VITEST_IN_MEMORY_DB=true`, `LOG_LEVEL=error`, and `CODEUX_FORCE_LOG_LEVEL=error`. Do not rely on the host timezone, locale, or persisted dashboard log settings in assertions.
+- Repository-level determinism guardrails live in `tests/backend/scripts/test-determinism-guardrails.test.ts`. They assert the Vitest defaults, isolated HOME/USERPROFILE and XDG helper behavior, explicit fake-timer cleanup, and temp-only filesystem app state for backend tests.
 - Backend determinism regressions are covered by focused tests for runtime environment defaults, isolated HOME/USERPROFILE state, SQLite WAL/SHM cleanup, timer-controlled polling, subprocess boundaries, Docker command stubbing, and local Git fixture cleanup. When changing these areas, start with:
 ```bash
 pnpm run test:backend -- tests/backend/repositories/sqlite-connection.test.ts tests/backend/shared/polling/wait-until.test.ts tests/backend/shared/subprocess/command-runner.test.ts tests/backend/infrastructure/local-git-origin.test.ts tests/backend/infrastructure/providers/cli/docker-runner.test.ts

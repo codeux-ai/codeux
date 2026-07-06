@@ -414,6 +414,66 @@ describe("setupDashboardServer", () => {
     }
   });
 
+  it("returns sanitized JSON 400 responses for malformed dashboard request bodies with correlation logs", async () => {
+    const savedForcedLogLevel = process.env.CODEUX_FORCE_LOG_LEVEL;
+    delete process.env.CODEUX_FORCE_LOG_LEVEL;
+    const stderrSpy = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+    try {
+      const app = express();
+      const logger = createLogger({
+        environment: "production",
+        level: "debug",
+        consoleLogMode: "full",
+        bindings: { component: "dashboard-server-test" },
+      });
+      configureDashboardApp(buildDashboardTestOptions({ app, logger }));
+
+      const secretBody = "{\"settings\":{\"integrations\":{\"julesApiKey\":\"secret-api-key\"}},";
+      const response = await httpRequestMock(app)
+        .post("/api/settings")
+        .set("content-type", "application/json")
+        .set("x-correlation-id", "bad-json-corr-1")
+        .send(secretBody);
+
+      expect(response.status).toBe(400);
+      expect(response.headers["x-correlation-id"]).toBe("bad-json-corr-1");
+      expect(response.body).toEqual({ error: "Invalid JSON request body." });
+      expect(JSON.stringify(response.body)).not.toContain("secret-api-key");
+
+      const records = stderrSpy.mock.calls.map((call) => JSON.parse(String(call[0])));
+      const parseFailureLog = records.find((record) => record.message === "Rejected malformed dashboard JSON request body");
+      expect(parseFailureLog).toMatchObject({
+        purpose: "request",
+        correlationId: "bad-json-corr-1",
+        metadata: {
+          method: "POST",
+          path: "/api/settings",
+          statusCode: 400,
+          reason: "malformed_json",
+        },
+      });
+      const requestLog = records.find((record) => record.message === "Dashboard request completed");
+      expect(requestLog).toMatchObject({
+        purpose: "request",
+        correlationId: "bad-json-corr-1",
+        metadata: {
+          method: "POST",
+          path: "/api/settings",
+          statusCode: 400,
+        },
+      });
+      expect(JSON.stringify(records)).not.toContain("secret-api-key");
+      expect(JSON.stringify(records)).not.toContain(secretBody);
+    } finally {
+      stderrSpy.mockRestore();
+      if (savedForcedLogLevel === undefined) {
+        delete process.env.CODEUX_FORCE_LOG_LEVEL;
+      } else {
+        process.env.CODEUX_FORCE_LOG_LEVEL = savedForcedLogLevel;
+      }
+    }
+  });
+
   it("allows same-origin API requests", async () => {
     const app = express();
     const handle = await setupDashboardServer({

@@ -5,6 +5,7 @@ import * as path from "path";
 import { AppDbStorage } from "../../../src/repositories/app-db-storage.js";
 import { DashboardRealtimeEventRepository } from "../../../src/repositories/dashboard-realtime-event-repository.js";
 import { DashboardRealtimeService } from "../../../src/services/dashboard-realtime-service.js";
+import { runWithCorrelationId } from "../../../src/shared/logging/correlation-id.js";
 
 const tempDirs: string[] = [];
 
@@ -1286,9 +1287,10 @@ describe("DashboardRealtimeService backpressure and metrics", () => {
       "dashboard_realtime_event_write_failed",
       expect.objectContaining({
         eventType: "project.live.updated",
+        logPurpose: "realtime",
         projectId: "proj-1",
         correlationId: null,
-        error: expect.any(Error),
+        errorName: "Error",
       }),
     );
     expect(service.getMetrics("project.live.updated").failures).toBe(1);
@@ -1316,5 +1318,73 @@ describe("DashboardRealtimeService backpressure and metrics", () => {
 
     expect(eventRepoMock.appendEvent).toHaveBeenCalledWith(expect.objectContaining({ eventType: "execution_refresh" }));
     expect(eventRepoMock.appendEvent).toHaveBeenCalledWith(expect.objectContaining({ eventType: "projects.updated" }));
+  });
+
+  it("publishes provider invocation usage/status refreshes with stable event names, counters, and correlation ids", async () => {
+    const loggerMock = { warn: vi.fn(), info: vi.fn(), debug: vi.fn(), error: vi.fn(), child: vi.fn() };
+    let sequence = 10;
+    const eventRepoMock = {
+      getLatestSequence: () => sequence,
+      appendEvent: vi.fn().mockImplementation((event) => ({
+        sequence: ++sequence,
+        emittedAt: "2026-03-30T09:00:00.000Z",
+        scope: event.scopeType === "overview" ? "overview" : `${event.scopeType}:${event.scopeId}`,
+        ...event,
+      })),
+    };
+    const service = new DashboardRealtimeService(eventRepoMock as any, loggerMock as any);
+    service.setSnapshotLoaders({
+      getProjectLiveSnapshot: () => ({
+        projectId: "proj-1",
+        selectedSprintId: "sprint-1",
+        execution: {
+          recentInvocations: [
+            {
+              id: "exec-inv-1",
+              providerInvocationId: "provider-inv-1",
+              status: "running",
+              messageCount: 2,
+            },
+          ],
+        },
+      } as any),
+      getProjectsSnapshot: () => ({} as any),
+      getProjectExecutionSnapshot: () => ({
+        projectId: "proj-1",
+        recentInvocations: [
+          {
+            id: "exec-inv-1",
+            providerInvocationId: "provider-inv-1",
+            status: "running",
+            messageCount: 2,
+          },
+        ],
+      } as any),
+      getProjectStatusSnapshot: () => ({} as any),
+      getOverviewTelemetrySnapshot: () => ({} as any),
+    });
+
+    await runWithCorrelationId("corr-realtime-provider-usage", async () => {
+      service.scheduleProjectExecutionRefresh("proj-1", { includeOverview: false });
+      await service.drain();
+    });
+
+    const eventInputs = eventRepoMock.appendEvent.mock.calls.map((call) => call[0]);
+    expect(eventInputs.map((event) => event.eventType)).toEqual([
+      "execution_refresh",
+      "project.live.updated",
+      "project.execution.updated",
+    ]);
+    expect(eventInputs.map((event) => event.correlationId)).toEqual([
+      "corr-realtime-provider-usage",
+      "corr-realtime-provider-usage",
+      "corr-realtime-provider-usage",
+    ]);
+    expect(service.getMetrics("execution_refresh").published).toBe(1);
+    expect(service.getMetrics("project.live.updated").published).toBe(1);
+    expect(service.getMetrics("project.execution.updated").published).toBe(1);
+    expect(service.getLatestSequence()).toBe(13);
+    expect(JSON.stringify(eventInputs)).not.toContain("rawUsageJson");
+    expect(JSON.stringify(eventInputs)).not.toContain("transcript");
   });
 });
