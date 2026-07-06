@@ -67,6 +67,8 @@ describe("ManagementToolHandler", () => {
       },
       settingsRepository: {
         getGlobalSettings: vi.fn(),
+        getSystemSettings: vi.fn(() => ({ defaults: { automationLevel: "FULL" } })),
+        saveSystemSettings: vi.fn((settings: unknown) => settings),
       },
       agentPresetSyncService: {
         syncPresets: vi.fn(),
@@ -213,6 +215,53 @@ describe("ManagementToolHandler", () => {
       errorType: "validation",
       field: "value",
     });
+  });
+
+  it("does not let a destructive settings approval be reused", async () => {
+    const payload = { path: "defaults.automationLevel", value: "SEMI_AUTO" };
+
+    let response = await handler.handleManageSettings({
+      action: "patch_system_setting",
+      ...payload,
+    });
+    let parsed = JSON.parse(response.content[0].text);
+    expect(parsed.approvalRequired).toBe(true);
+
+    response = await handler.handleManageSettings({
+      action: "patch_system_setting",
+      ...payload,
+      approval: { confirmed: true },
+    });
+    parsed = JSON.parse(response.content[0].text);
+    expect(parsed.result.settings.defaults.automationLevel).toBe("SEMI_AUTO");
+
+    response = await handler.handleManageSettings({
+      action: "patch_system_setting",
+      ...payload,
+      approval: { confirmed: true },
+    });
+    parsed = JSON.parse(response.content[0].text);
+    expect(parsed.approvalRequired).toBe(true);
+    expect(deps.settingsRepository.saveSystemSettings).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not let a destructive settings approval execute a mismatched payload", async () => {
+    await handler.handleManageSettings({
+      action: "patch_system_setting",
+      path: "defaults.automationLevel",
+      value: "SEMI_AUTO",
+    });
+
+    const response = await handler.handleManageSettings({
+      action: "patch_system_setting",
+      path: "defaults.automationLevel",
+      value: "MANUAL",
+      approval: { confirmed: true },
+    });
+    const parsed = JSON.parse(response.content[0].text);
+
+    expect(parsed.approvalRequired).toBe(true);
+    expect(deps.settingsRepository.saveSystemSettings).not.toHaveBeenCalled();
   });
 
   it("should return approvalRequired for destructive actions without approval in handleManageCodeUx", async () => {

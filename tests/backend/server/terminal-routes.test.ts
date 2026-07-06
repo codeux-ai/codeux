@@ -3,6 +3,7 @@ import request from "supertest";
 import express from "express";
 import { EventEmitter } from "events";
 import { spawn } from "child_process";
+import * as fs from "fs/promises";
 import {
   registerTerminalRoutes,
   bootDashboardTerminalWebSocketServer,
@@ -116,6 +117,7 @@ describe("Terminal Routes", () => {
     mockStderr.removeAllListeners();
     mockLoginImageState.holdBuild = false;
     mockLoginImageState.finishBuild = null;
+    vi.restoreAllMocks();
   });
 
   it("should reject websocket upgrades from hostile origins", async () => {
@@ -154,21 +156,36 @@ describe("Terminal Routes", () => {
     // A directly-supplied (valid) providerId bypasses the providerConfigId
     // lookup, so without validation the traversal value would reach the
     // destructive credential fs.rm/mkdir/cp. The handler must 400 first.
+    const rmSpy = vi.spyOn(fs, "rm");
+    const mkdirSpy = vi.spyOn(fs, "mkdir");
+
     const response = await request(app)
       .post("/api/terminal/start")
       .send({ providerId: "codex", providerConfigId: "../../../../tmp/evil" });
 
     expect(response.status).toBe(400);
     expect(String(response.body.error)).toMatch(/providerConfigId/i);
+    expect(rmSpy).not.toHaveBeenCalled();
+    expect(mkdirSpy).not.toHaveBeenCalled();
   });
 
-  it("rejects a providerConfigId containing path separators", async () => {
+  it.each([
+    ["Unix separator", "codex/../../secrets"],
+    ["Windows separator", "codex\\..\\secrets"],
+    ["absolute path", "/tmp/secrets"],
+    ["encoded separator", "codex%2fsecrets"],
+  ])("rejects a providerConfigId containing %s", async (_label, providerConfigId) => {
+    const rmSpy = vi.spyOn(fs, "rm");
+    const mkdirSpy = vi.spyOn(fs, "mkdir");
+
     const response = await request(app)
       .post("/api/terminal/start")
-      .send({ providerId: "claude-code", providerConfigId: "codex/../../secrets" });
+      .send({ providerId: "claude-code", providerConfigId });
 
     expect(response.status).toBe(400);
     expect(String(response.body.error)).toMatch(/providerConfigId/i);
+    expect(rmSpy).not.toHaveBeenCalled();
+    expect(mkdirSpy).not.toHaveBeenCalled();
   });
 
   it("should close the socket when receiving oversized frames", async () => {

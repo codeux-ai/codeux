@@ -36,8 +36,10 @@ If started without key:
 ### Dashboard and file access boundaries
 - Dashboard mutation requests to `/api/*`, `/health`, and `/ready` reject hostile browser origins. Treat `Sec-Fetch-Site: cross-site`, malformed `Origin`, cross-host `Origin`, malformed `Referer`, and cross-host `Referer` on mutations as blocked browser requests; CLI/API clients without browser origin headers remain allowed.
 - Local directory browsing only lists canonical paths inside the allowed local roots. Encoded traversal, Windows-style separator traversal, absolute paths outside the roots, and symlink escapes must not expose directory listings or leak requested paths in error responses.
-- Sprint file-browser file and diff reads accept normalized relative paths only. Encoded traversal, `..` traversal, Windows drive paths, and absolute paths are rejected before provider or Docker-backed file-browser dependencies are invoked.
-- MCP approval prompts are one-time, correlation-id-bound decisions. Expired, mismatched, duplicate, blank, or malformed correlation IDs must not return a pending approval.
+- Sprint file-browser file and diff reads accept normalized relative paths only. Encoded traversal, malformed percent encoding, `..` traversal, Windows drive paths, and absolute paths are rejected as malformed client input before provider or Docker-backed file-browser dependencies are invoked.
+- Provider login terminal requests reject provider configuration IDs with path separators, traversal sequences, absolute-path syntax, encoded separators, control characters, leading hyphens, or characters outside the filesystem-safe ID set before credential directories are removed, created, or copied.
+- Malformed dashboard route inputs should return client errors (`400`, `403`, or `404` depending on the failure). Unexpected server failures should return only `{ "error": "Internal Server Error" }` to callers while still flowing to Express error handling and structured logs.
+- MCP approval prompts are one-time, correlation-id-bound decisions. Expired, mismatched, duplicate, blank, or malformed correlation IDs must not return a pending approval, and destructive settings approvals are bound to the exact action and payload that was queued.
 - Structured logs and invocation output pass through redaction helpers before storage or display. Secret-like environment assignments, authorization headers, hosted Git tokens, and URL credentials should appear only as `[REDACTED]` in logs and provider output.
 
 ### Emergency stop
