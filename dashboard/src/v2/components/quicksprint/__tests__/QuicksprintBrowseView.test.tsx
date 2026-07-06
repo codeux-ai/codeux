@@ -1,6 +1,6 @@
 /** @vitest-environment happy-dom */
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen } from "@testing-library/preact";
+import { cleanup, fireEvent, render, screen } from "@testing-library/preact";
 import "@testing-library/jest-dom/vitest";
 
 import type { QuicksprintTemplateRecord } from "../../../../../../src/contracts/quicksprint-types.js";
@@ -118,5 +118,43 @@ describe("QuicksprintBrowseView", () => {
     expect(selectedLaunch.closest("article")).toHaveAttribute("aria-current", "true");
 
     expect(screen.getByRole("button", { name: "Template 1" })).not.toHaveAttribute("aria-pressed");
+  });
+
+  it("announces purpose filter changes in the browse phase", () => {
+    const announcePhaseStatus = vi.fn();
+    render(
+      <QuicksprintBrowseView
+        templates={templates}
+        builtinPurposeOptions={[
+          {
+            value: "fullstack-js",
+            label: "Fullstack JS App",
+            description: "Default quicksprints for fullstack JavaScript applications.",
+          },
+          {
+            value: "python-service",
+            label: "Python Service",
+            description: "Default quicksprints for Python services.",
+          },
+        ]}
+        selectedBuiltinPurpose="fullstack-js"
+        setSelectedBuiltinPurpose={vi.fn()}
+        announcePhaseStatus={announcePhaseStatus}
+        handleSelectTemplate={vi.fn()}
+        openEditor={vi.fn()}
+        activeBuiltinPurpose={{
+          value: "fullstack-js",
+          label: "Fullstack JS App",
+          description: "Default quicksprints for fullstack JavaScript applications.",
+        }}
+        loading={false}
+        onClose={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Default template purpose" }));
+    fireEvent.click(screen.getByRole("option", { name: "Python Service" }));
+
+    expect(announcePhaseStatus).toHaveBeenCalledWith("Default template purpose changed to Python Service.");
   });
 });

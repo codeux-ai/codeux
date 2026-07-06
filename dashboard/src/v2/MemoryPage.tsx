@@ -275,8 +275,11 @@ export const MemoryPage: FunctionComponent = () => {
         initialModels,
         initialStats,
         graphData,
+        graphDataContextKey,
+        requestedContextKey,
         loadData
     } = useMemoryPageData(pid, activeScope, activeTier, effectiveSelectedSprintId, selectedAgentPresetId, memoryDataEnabled);
+    const graphMatchesRequestedContext = graphDataContextKey === requestedContextKey;
 
     const {
         models,
@@ -1121,7 +1124,7 @@ export const MemoryPage: FunctionComponent = () => {
                 </div>
 
                 <MemorySidebar
-                    nodes={S.current.graph.nodes}
+                    nodes={graphMatchesRequestedContext ? S.current.graph.nodes : []}
                     onSelectNode={onSelectNode}
                     refreshing={loading}
                     loadError={loadError}

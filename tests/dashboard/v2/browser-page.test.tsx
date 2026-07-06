@@ -8,7 +8,7 @@ import * as matchers from "@testing-library/jest-dom/matchers";
 import { BrowserPage } from "../../../dashboard/src/v2/BrowserPage.js";
 import { useProjectData } from "../../../dashboard/src/v2/context/project-data.js";
 import { usePreviewSessions } from "../../../dashboard/src/v2/hooks/use-preview-sessions.js";
-import { fetchPreviewLogs, fetchPreviewScript, savePreviewScript } from "../../../dashboard/src/v2/lib/browser-api.js";
+import { fetchPreviewLogs, fetchPreviewScript, rebuildPreviewSession, savePreviewScript } from "../../../dashboard/src/v2/lib/browser-api.js";
 
 expect.extend(matchers);
 
@@ -376,6 +376,8 @@ describe("BrowserPage", () => {
     vi.mocked(fetchPreviewScript).mockResolvedValue({ content: "mock script", mode: "script", path: "/script.sh" });
     vi.mocked(savePreviewScript).mockReset();
     vi.mocked(savePreviewScript).mockResolvedValue({ content: "new mock script", mode: "script", path: "/script.sh" });
+    vi.mocked(rebuildPreviewSession).mockReset();
+    vi.mocked(rebuildPreviewSession).mockResolvedValue(undefined);
   });
 
   it("renders correctly with new slider and chrome components", async () => {
@@ -611,6 +613,36 @@ describe("BrowserPage", () => {
     });
 
     expect(screen.getByText("Script saved successfully")).toBeInTheDocument();
+  });
+
+  it("shows pending session action feedback and suppresses duplicate rebuild submissions", async () => {
+    const user = userEvent.setup();
+    let resolveRebuild: (() => void) | null = null;
+    vi.mocked(rebuildPreviewSession).mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveRebuild = resolve;
+        })
+    );
+
+    render(<BrowserPage />);
+
+    const rebuildButton = screen.getByRole("button", { name: "Rebuild preview container" });
+    await user.click(rebuildButton);
+    await user.click(rebuildButton);
+
+    expect(vi.mocked(rebuildPreviewSession)).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole("button", { name: "Rebuilding preview container" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Rebuilding preview container" })).toHaveAttribute("aria-busy", "true");
+    expect(screen.getByRole("button", { name: "Stop preview container" })).toBeDisabled();
+    expect(screen.getByText("Rebuild in progress. Rebuild and stop controls are temporarily unavailable.")).toBeInTheDocument();
+
+    await act(async () => {
+      resolveRebuild?.();
+      await Promise.resolve();
+    });
+
+    expect(screen.getByText("Container rebuilt successfully")).toBeInTheDocument();
   });
 
   it("shows script save error feedback and keeps the editor available for recovery", async () => {

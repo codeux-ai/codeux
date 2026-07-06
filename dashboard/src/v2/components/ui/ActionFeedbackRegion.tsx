@@ -177,6 +177,7 @@ export function ActionFeedbackRegion({ status, message, onDismiss, className = "
       return;
     }
 
+    const previousActive = document.activeElement === retryRef.current ? document.activeElement : null;
     retryPendingRef.current = true;
     setLocalRetryPending(true);
     try {
@@ -184,6 +185,7 @@ export function ActionFeedbackRegion({ status, message, onDismiss, className = "
     } finally {
       retryPendingRef.current = false;
       setLocalRetryPending(false);
+      if (previousActive) moveFocusToFallbackIfRemoved(previousActive);
     }
   };
 

@@ -114,8 +114,7 @@ export const Button: FunctionComponent<ButtonProps> = memo(({
 
     if (!reducedMotion) {
       if (isPending && !prev.isPending) {
-        if (labelRef.current && spinnerRef.current) {
-          gsap.to(labelRef.current, { opacity: 0, duration: gsapTokens.controlFeedback.duration, ease: gsapTokens.controlFeedback.ease });
+        if (spinnerRef.current) {
           gsap.fromTo(
             spinnerRef.current,
             { opacity: 0, scale: 0.7 },
@@ -125,8 +124,7 @@ export const Button: FunctionComponent<ButtonProps> = memo(({
       }
 
       if (isSuccess && !prev.isSuccess) {
-        if (labelRef.current && spinnerRef.current) {
-          gsap.to(labelRef.current, { opacity: 1, duration: gsapTokens.controlFeedback.duration, ease: gsapTokens.controlFeedback.ease });
+        if (spinnerRef.current) {
           gsap.to(spinnerRef.current, { opacity: 0, scale: 0.7, duration: gsapTokens.controlFeedback.duration, ease: gsapTokens.controlFeedback.ease });
         }
         if (buttonRef.current) {
@@ -152,8 +150,7 @@ export const Button: FunctionComponent<ButtonProps> = memo(({
       }
 
       if (isError && !prev.isError) {
-        if (labelRef.current && spinnerRef.current) {
-          gsap.to(labelRef.current, { opacity: 1, duration: gsapTokens.controlFeedback.duration, ease: gsapTokens.controlFeedback.ease });
+        if (spinnerRef.current) {
           gsap.to(spinnerRef.current, { opacity: 0, scale: 0.7, duration: gsapTokens.controlFeedback.duration, ease: gsapTokens.controlFeedback.ease });
         }
         if (buttonRef.current) {
@@ -167,15 +164,14 @@ export const Button: FunctionComponent<ButtonProps> = memo(({
 
       if (!isPending && !isSuccess && !isError && (prev.isPending || prev.isSuccess || prev.isError)) {
         // Restore label when returning to idle
-        if (labelRef.current && spinnerRef.current) {
-          gsap.to(labelRef.current, { opacity: 1, duration: gsapTokens.controlFeedback.duration, ease: gsapTokens.controlFeedback.ease });
+        if (spinnerRef.current) {
           gsap.to(spinnerRef.current, { opacity: 0, duration: gsapTokens.controlFeedback.duration, ease: gsapTokens.controlFeedback.ease });
         }
       }
     } else {
-      // If reduced motion, just ensure visibility states immediately without animation
+      // If reduced motion, keep the label visible and snap status slots immediately.
       if (labelRef.current && spinnerRef.current) {
-        labelRef.current.style.opacity = isPending ? "0" : "1";
+        labelRef.current.style.opacity = "1";
         spinnerRef.current.style.opacity = isPending ? "1" : "0";
         spinnerRef.current.style.transform = isPending ? "scale(1)" : "scale(0.7)";
       }
@@ -239,11 +235,15 @@ export const Button: FunctionComponent<ButtonProps> = memo(({
       >
 
         <div ref={contentRef} className="flex min-w-0 max-w-full items-center justify-center gap-2">
-          {(Icon || isSuccess || isError) && (
+          {(Icon || isFeedbackActive) && (
             <div ref={iconContainerRef} className="relative flex items-center justify-center w-4 h-4 shrink-0">
               <div data-active={!isPending && !isSuccess && !isError} className={`absolute inset-0 flex items-center justify-center transition-all  ${isPending || isSuccess || isError ? "scale-0 opacity-0 pointer-events-none" : "scale-100 opacity-100"}`}
                 style={{ transitionDuration: tokens.controlFeedback.duration, transitionTimingFunction: tokens.controlFeedback.ease }}>
                 {Icon && <Icon className="w-4 h-4" aria-hidden="true" />}
+              </div>
+              <div ref={spinnerRef} data-active={isPending} className={`absolute inset-0 flex items-center justify-center pointer-events-none transition-all ${isPending ? "scale-100 opacity-100" : "scale-0 opacity-0"}`}
+                style={{ transitionDuration: tokens.controlFeedback.duration, transitionTimingFunction: tokens.controlFeedback.ease }}>
+                <Loader2 className="w-4 h-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
               </div>
               <div key={`success-${feedback.status}`} data-active={isSuccess} className={`absolute inset-0 flex items-center justify-center transition-all  ${isSuccess ? "scale-100 opacity-100" : "scale-0 opacity-0 pointer-events-none"}`}
                 style={{ transitionDuration: tokens.controlFeedback.duration, transitionTimingFunction: tokens.controlFeedback.ease }}>
@@ -256,10 +256,7 @@ export const Button: FunctionComponent<ButtonProps> = memo(({
             </div>
           )}
           <div className="relative flex min-w-0 max-w-full items-center justify-center">
-            <span ref={labelRef} className="flex min-w-0 max-w-full items-center justify-center gap-2 truncate" style={{ opacity: isPending ? 0 : 1 }}>{children}</span>
-            <div ref={spinnerRef} className="absolute inset-0 flex items-center justify-center pointer-events-none text-current" style={{ opacity: isPending ? 1 : 0, transform: isPending ? "scale(1)" : "scale(0.7)", transitionDuration: tokens.controlFeedback.duration, transitionTimingFunction: tokens.controlFeedback.ease }}>
-              <Loader2 className="w-4 h-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
-            </div>
+            <span ref={labelRef} className="flex min-w-0 max-w-full items-center justify-center gap-2 truncate" style={{ opacity: 1 }}>{children}</span>
           </div>
         </div>
       </button>

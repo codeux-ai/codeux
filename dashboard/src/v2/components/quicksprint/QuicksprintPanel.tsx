@@ -277,6 +277,7 @@ export const QuicksprintPanel: FunctionComponent<QuicksprintPanelProps> = ({
       setBlockingStatus(message);
       setPhaseStatus(message);
     },
+    onStatus: setPhaseStatus,
   });
 
   useEffect(() => {

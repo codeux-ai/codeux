@@ -9,6 +9,7 @@ import { BrowserSessionsMenu } from "../../../dashboard/src/v2/components/browse
 import { TopNav } from "../../../dashboard/src/v2/components/TopNav.js";
 import { useProjectData } from "../../../dashboard/src/v2/context/project-data.js";
 import { useSprints } from "../../../dashboard/src/hooks/useSprints.js";
+import { useNotifications } from "../../../dashboard/src/v2/hooks/use-notifications.js";
 import { useRouterState } from "@tanstack/react-router";
 import * as browserApi from "../../../dashboard/src/v2/lib/browser-api.js";
 import { buildPreviewUrl } from "../../../dashboard/src/v2/lib/preview-origin.js";
@@ -90,7 +91,7 @@ vi.mock("gsap", () => ({
         to: vi.fn(),
         context: (cb: any) => {
             cb();
-            return { revert: vi.fn() };
+            return { add: vi.fn((fn: any) => fn()), revert: vi.fn() };
         },
     },
 }));
@@ -561,6 +562,46 @@ describe("BrowserSessionsMenu", () => {
             expect(screen.queryByRole("alert")).not.toBeInTheDocument();
         });
     });
+
+    it("restores trigger focus after blur closes the sessions menu", async () => {
+        vi.mocked(useProjectData).mockReturnValue({
+            selectedProject: { id: "proj-1" },
+        } as any);
+
+        vi.mocked(browserApi.fetchPreviewSessions).mockResolvedValue([
+            {
+                id: "sess-1",
+                sprintId: "sprint-1",
+                projectId: "proj-1",
+                sprintName: "Runnable preview",
+                status: "running",
+                healthStatus: "healthy",
+                containerAppPort: 3000,
+                hostPort: 8080,
+                lastKnownPath: "/",
+            },
+        ] as any);
+
+        render(
+            <div>
+                <BrowserSessionsMenu />
+                <button type="button">After sessions</button>
+            </div>
+        );
+
+        const button = screen.getByRole("button", { name: /Browser Sessions:/i });
+        fireEvent.click(button);
+
+        const item = await screen.findByRole("menuitem", { name: /Open preview session Runnable preview/i });
+        const outside = screen.getByRole("button", { name: "After sessions" });
+        item.focus();
+        item.dispatchEvent(new FocusEvent("focusout", { bubbles: true, relatedTarget: outside }));
+
+        await waitFor(() => {
+            expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+            expect(document.activeElement).toBe(button);
+        });
+    });
 });
 
 describe("TopNav shell accessibility", () => {
@@ -632,6 +673,39 @@ describe("TopNav shell accessibility", () => {
 
         await waitFor(() => {
             expect(screen.getByRole("status")).toHaveTextContent("Route changed to sprints");
+        });
+    });
+
+    it("restores notification trigger focus after outside click closes the panel", async () => {
+        mockTopNavData();
+        vi.mocked(useNotifications).mockReturnValue({
+            notifications: [],
+            unreadCount: 1,
+            markAllRead: vi.fn(),
+            markRead: vi.fn(),
+            dismiss: vi.fn(),
+            refresh: vi.fn(),
+        } as any);
+
+        render(
+            <div>
+                <TopNav />
+                <button type="button">Outside notification target</button>
+            </div>
+        );
+
+        const trigger = screen.getByRole("button", { name: /Notifications: 1 unread/i });
+        fireEvent.click(trigger);
+
+        await waitFor(() => {
+            expect(screen.getByRole("dialog", { name: "Notifications Panel" })).toBeInTheDocument();
+        });
+
+        fireEvent.mouseDown(screen.getByRole("button", { name: "Outside notification target" }));
+
+        await waitFor(() => {
+            expect(screen.queryByRole("dialog", { name: "Notifications Panel" })).not.toBeInTheDocument();
+            expect(document.activeElement).toBe(trigger);
         });
     });
 });

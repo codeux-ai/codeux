@@ -36,7 +36,7 @@ export const NotificationPanel: FunctionComponent<{
   notifications: DashboardNotification[];
   unreadCount: number;
   onMarkAllRead: () => void | Promise<void>;
-  onMarkRead: (id: string) => void;
+  onMarkRead: (id: string) => void | Promise<void>;
   onDismiss: (id: string) => void;
   onRefresh: () => void | Promise<void>;
 }> = ({
@@ -54,6 +54,8 @@ export const NotificationPanel: FunctionComponent<{
   const motionTokens = useGsapInteractionTokens();
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isMarkingAllRead, setIsMarkingAllRead] = useState(false);
+  const [pendingReadIds, setPendingReadIds] = useState<ReadonlySet<string>>(() => new Set());
+  const pendingReadIdsRef = useRef<Set<string>>(new Set());
   const [announcement, setAnnouncement] = useState("");
 
   const visibleNotifications = useMemo(() => {
@@ -91,6 +93,14 @@ export const NotificationPanel: FunctionComponent<{
     queueMicrotask(focusPanel);
   }, [focusPanel]);
 
+  const focusPanelIfTargetRemoved = useCallback((target: HTMLElement | null) => {
+    queueMicrotask(() => {
+      if (target && !target.isConnected) {
+        focusPanel();
+      }
+    });
+  }, [focusPanel]);
+
   const handleRefresh = useCallback(async (): Promise<void> => {
     if (isRefreshing) {
       return;
@@ -124,6 +134,33 @@ export const NotificationPanel: FunctionComponent<{
       focusPanelAfterUpdate();
     }
   }, [focusPanelAfterUpdate, isMarkingAllRead, onMarkAllRead, unreadCount]);
+
+  const handleMarkRead = useCallback(async (notification: DashboardNotification, focusTarget?: HTMLElement | null): Promise<void> => {
+    if (!notification.unread || pendingReadIdsRef.current.has(notification.id)) {
+      return;
+    }
+
+    const target = focusTarget ?? (document.activeElement instanceof HTMLElement ? document.activeElement : null);
+    let markedRead = false;
+    pendingReadIdsRef.current.add(notification.id);
+    setPendingReadIds((previous) => new Set(previous).add(notification.id));
+    setAnnouncement(`Marking ${notification.title} read.`);
+    try {
+      await onMarkRead(notification.id);
+      markedRead = true;
+      setAnnouncement(`${notification.title} marked read.`);
+    } finally {
+      pendingReadIdsRef.current.delete(notification.id);
+      setPendingReadIds((previous) => {
+        const next = new Set(previous);
+        next.delete(notification.id);
+        return next;
+      });
+      if (markedRead) {
+        focusPanelIfTargetRemoved(target);
+      }
+    }
+  }, [focusPanelIfTargetRemoved, onMarkRead]);
 
   useLayoutEffect(() => {
     if (!panelRef.current) return;
@@ -263,6 +300,8 @@ export const NotificationPanel: FunctionComponent<{
           const details = notification.body ?? notification.subtitle;
           const accentClass = notification.type === "intervention" ? "bg-signal-500" : classes.accent;
           const iconClass = notification.iconColor ?? classes.icon;
+          const isMarkingRead = pendingReadIds.has(notification.id);
+          const itemBusy = isMarkingRead || busy;
 
           return (
             <li
@@ -270,7 +309,10 @@ export const NotificationPanel: FunctionComponent<{
               data-notification-item
               data-motion-contract="listReorder"
               tabIndex={0}
-              onFocus={() => onMarkRead(notification.id)}
+              onFocus={(event) => {
+                void handleMarkRead(notification, event.currentTarget);
+              }}
+              aria-busy={itemBusy ? "true" : "false"}
               className="group relative mb-2 rounded-2xl border border-black/[0.05] bg-white/75 p-3 text-left transition-colors motion-reduce:transition-none hover:border-black/[0.1] hover:bg-black/[0.025] last:mb-0 dark:border-white/[0.06] dark:bg-white/[0.04] dark:hover:border-white/[0.1] dark:hover:bg-white/[0.06]"
             >
               {notification.unread ? (
@@ -293,17 +335,25 @@ export const NotificationPanel: FunctionComponent<{
                       {details ? (
                         <div className="mt-1 break-words text-xs leading-relaxed text-slate-500 dark:text-slate-400">{details}</div>
                       ) : null}
+                      {isMarkingRead ? (
+                        <div className="mt-2 rounded-lg border border-signal-500/20 bg-signal-500/10 px-2 py-1 text-[10px] font-bold uppercase tracking-[0.12em] text-signal-700 dark:text-signal-300" role="status" aria-live="polite">
+                          Marking read
+                        </div>
+                      ) : null}
                     </div>
                     <div className="shrink-0 text-[10px] font-medium text-slate-400">{notification.time}</div>
                   </div>
                   <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
                     <button
                       type="button"
-                      onClick={() => onMarkRead(notification.id)}
-                      className="rounded-full px-2 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400 hover:bg-black/[0.04] hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 dark:hover:bg-white/[0.06] dark:hover:text-slate-200"
-                      aria-label={`${notification.unread ? "Mark read" : "Read"} ${notification.title}`}
+                      onClick={(event) => {
+                        void handleMarkRead(notification, event.currentTarget);
+                      }}
+                      disabled={isMarkingRead || !notification.unread}
+                      className="rounded-full px-2 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400 hover:bg-black/[0.04] hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 disabled:cursor-not-allowed disabled:opacity-55 dark:hover:bg-white/[0.06] dark:hover:text-slate-200"
+                      aria-label={`${isMarkingRead ? "Marking read" : notification.unread ? "Mark read" : "Read"} ${notification.title}`}
                     >
-                      {notification.unread ? "Mark read" : "Read"}
+                      {isMarkingRead ? "Marking read" : notification.unread ? "Mark read" : "Read"}
                     </button>
                     <div className="flex items-center gap-1.5">
                       {notification.actionLabel && notification.onAction ? (
@@ -314,7 +364,7 @@ export const NotificationPanel: FunctionComponent<{
                               focusPanel();
                               (e.currentTarget as HTMLElement).blur();
                             }
-                            onMarkRead(notification.id);
+                            void handleMarkRead(notification);
                             notification.onAction?.();
                             setAnnouncement(`${notification.actionLabel} opened for ${notification.title}.`);
                             focusPanelAfterUpdate();

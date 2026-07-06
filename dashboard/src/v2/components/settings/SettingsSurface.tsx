@@ -3,7 +3,7 @@ import { RefreshCw, CheckCircle, AlertTriangle, XCircle, Loader2 } from "lucide-
 import { SHARED_INTERACTION_CLASSES } from "../ui/Button.js";
 import { MODAL_MOTION } from "../../lib/motion/modal-motion.js";
 import gsap from "gsap";
-import { useLayoutEffect, useRef } from "preact/hooks";
+import { useId, useLayoutEffect, useRef } from "preact/hooks";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 import { useGsapDurations } from "../../lib/motion/constants.js";
 import { ActionFeedbackRegion } from "../ui/ActionFeedbackRegion.js";
@@ -70,6 +70,8 @@ export const ActionButton: FunctionComponent<{
   disabled?: boolean;
   disabledReason?: string;
 }> = ({ label, onClick, tone = "secondary", busy = false, disabled = false, disabledReason }) => {
+  const disabledReasonId = useId();
+  const describedBy = disabled && disabledReason ? disabledReasonId : undefined;
   let toneClass = "border border-[color:var(--border-hairline)] bg-[var(--surface-glass)] text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white";
 
   if (tone === "primary") {
@@ -96,7 +98,7 @@ export const ActionButton: FunctionComponent<{
       aria-disabled={disabled || busy}
       aria-busy={busy}
       aria-label={label}
-      aria-description={disabled && disabledReason ? disabledReason : undefined}
+      aria-describedby={describedBy}
       title={disabled && disabledReason ? disabledReason : undefined}
       className={`inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 text-xs font-bold relative overflow-hidden ${SHARED_INTERACTION_CLASSES} ${toneClass}`}
     >
@@ -109,6 +111,7 @@ export const ActionButton: FunctionComponent<{
           <span className="sr-only">{label} in progress</span>
         </div>
       )}
+      {describedBy ? <span id={disabledReasonId} className="sr-only">{disabledReason}</span> : null}
     </button>
   );
 };

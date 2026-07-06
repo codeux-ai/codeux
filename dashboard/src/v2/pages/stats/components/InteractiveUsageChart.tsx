@@ -31,6 +31,7 @@ import { useUsageFilters } from '../hooks/useUsageFilters.js';
 import { UsageGraphTooltip } from './UsageGraphTooltip.js';
 import { UsageGraphEmpty, UsageGraphError } from './UsageGraphStates.js';
 import { Activity } from 'lucide-preact';
+import { useGsapInteractionTokens, useInteractionTokens } from '../../../lib/motion/index.js';
 
 export const InteractiveUsageChart: FunctionComponent<{
   stats: ProjectExecutionStatsSnapshot;
@@ -48,6 +49,9 @@ export const InteractiveUsageChart: FunctionComponent<{
   const panelRef = useRef<HTMLDivElement>(null);
   const svgContainerRef = useRef<HTMLDivElement>(null);
   const { isFiltersOpen, toggleFilters, closeFilters } = useUsageFilters();
+  const gsapTokens = useGsapInteractionTokens();
+  const interactionTokens = useInteractionTokens();
+  const [chartStatus, setChartStatus] = useState("Trend telemetry ready.");
 
   const handleSliderChange = (e: JSX.TargetedEvent<HTMLInputElement>) => {
     const val = parseInt(e.currentTarget.value, 10);
@@ -59,7 +63,7 @@ export const InteractiveUsageChart: FunctionComponent<{
       e.preventDefault();
       if (hoveredIndex !== null) {
         // Zoom into current bucket
-        setZoomRange({ start: hoveredIndex, end: hoveredIndex });
+        applyZoomRange({ start: hoveredIndex, end: hoveredIndex }, describeZoomRange(hoveredIndex, hoveredIndex));
       }
     }
   };
@@ -163,6 +167,19 @@ export const InteractiveUsageChart: FunctionComponent<{
     [activeSeriesLabels, visibleMetrics, zoomLabel]
   );
 
+  const describeZoomRange = (start: number, end: number): string => {
+    const startLabel = buckets[start]?.label ?? `bucket ${start + 1}`;
+    const endLabel = buckets[end]?.label ?? `bucket ${end + 1}`;
+    return start === end
+      ? `Pinned ${startLabel}.`
+      : `Zoomed to ${startLabel} through ${endLabel}, ${end - start + 1} buckets.`;
+  };
+
+  const applyZoomRange = (range: { start: number; end: number } | null, status: string) => {
+    setZoomRange(range);
+    setChartStatus(status);
+  };
+
   useEffect(() => {
     const handleMouseUp = () => {
       if (dragStartIndex === null || dragCurrentIndex === null) {
@@ -171,7 +188,7 @@ export const InteractiveUsageChart: FunctionComponent<{
       const start = Math.min(dragStartIndex, dragCurrentIndex);
       const end = Math.max(dragStartIndex, dragCurrentIndex);
       if (end - start >= 1) {
-        setZoomRange({ start, end });
+        applyZoomRange({ start, end }, describeZoomRange(start, end));
       }
       setDragStartIndex(null);
       setDragCurrentIndex(null);
@@ -204,16 +221,16 @@ export const InteractiveUsageChart: FunctionComponent<{
       paths.forEach((path) => {
         const length = typeof path.getTotalLength === "function" ? path.getTotalLength() : 100;
         gsap.set(path, { strokeDasharray: `${length} ${length}`, strokeDashoffset: length });
-        timeline.to(path, { strokeDashoffset: 0, duration: 1.05, ease: "power3.out", clearProps: "strokeDashoffset,strokeDasharray" }, 0);
+        timeline.to(path, { strokeDashoffset: 0, duration: gsapTokens.listReveal.duration, ease: gsapTokens.listReveal.ease, clearProps: "strokeDashoffset,strokeDasharray" }, 0);
       });
       if (areas.length > 0) {
-        timeline.to(areas, { opacity: (_index, target) => Number((target as SVGPathElement).dataset.areaOpacity || "0.3"), duration: 0.7, stagger: 0.08, ease: "power2.out" }, 0.18);
+        timeline.to(areas, { opacity: (_index, target) => Number((target as SVGPathElement).dataset.areaOpacity || "0.3"), duration: gsapTokens.selectionMovement.duration, stagger: gsapTokens.controlFeedback.duration / 2, ease: gsapTokens.selectionMovement.ease }, gsapTokens.controlFeedback.duration);
       }
       if (pointsNodes.length > 0) {
-        timeline.to(pointsNodes, { opacity: 1, scale: 1, duration: 0.38, stagger: 0.012, ease: "back.out(1.8)" }, 0.3);
+        timeline.to(pointsNodes, { opacity: 1, scale: 1, duration: gsapTokens.controlFeedback.duration, stagger: gsapTokens.controlFeedback.duration / 12, ease: gsapTokens.controlFeedback.ease }, gsapTokens.selectionMovement.duration);
       }
       if (cards.length > 0) {
-        timeline.fromTo(cards, { opacity: 0, y: 18 }, { opacity: 1, y: 0, duration: 0.55, stagger: 0.05, ease: "power3.out" }, 0.18);
+        timeline.fromTo(cards, { opacity: 0, y: 10 }, { opacity: 1, y: 0, duration: gsapTokens.listReveal.duration, stagger: gsapTokens.controlFeedback.duration / 3, ease: gsapTokens.listReveal.ease }, gsapTokens.controlFeedback.duration);
       }
     });
 
@@ -227,11 +244,27 @@ export const InteractiveUsageChart: FunctionComponent<{
     });
 
     return () => ctx.revert();
-  }, [enabledSeries, visibleBuckets.length, stats.range.from, stats.range.to]);
+  }, [enabledSeries, visibleBuckets.length, stats.range.from, stats.range.to, gsapTokens.controlFeedback.duration, gsapTokens.controlFeedback.ease, gsapTokens.listReveal.duration, gsapTokens.listReveal.ease, gsapTokens.selectionMovement.duration, gsapTokens.selectionMovement.ease]);
+
+  useEffect(() => {
+    if (error) {
+      setChartStatus(`Trend telemetry error: ${error}`);
+    } else if (loading) {
+      setChartStatus("Refreshing trend telemetry from cache. Existing chart data remains visible.");
+    } else {
+      setChartStatus("Trend telemetry ready.");
+    }
+  }, [error, loading]);
 
   const onToggleSeries = (id: string) => {
-    if (activeSeriesCount === 1 && enabledSeries[id]) return;
+    if (activeSeriesCount === 1 && enabledSeries[id]) {
+      setChartStatus("Keep at least one series enabled. The last active series cannot be turned off.");
+      return;
+    }
+    const seriesLabel = stats.chartSeries.find((series) => series.id === id)?.label ?? id;
+    const nextEnabled = !enabledSeries[id];
     setEnabledSeries((curr: Record<string, boolean>) => ({ ...curr, [id]: !curr[id] }));
+    setChartStatus(`${seriesLabel} series ${nextEnabled ? "enabled" : "disabled"}. ${activeSeriesCount + (nextEnabled ? 1 : -1)} series active.`);
   };
 
   return (
@@ -277,7 +310,7 @@ export const InteractiveUsageChart: FunctionComponent<{
           isFiltersOpen={isFiltersOpen}
           activeSeriesCount={activeSeriesCount}
           onToggleFilters={toggleFilters}
-          onResetZoom={() => setZoomRange(null)}
+          onResetZoom={() => applyZoomRange(null, `Zoom reset to ${stats.range.label}.`)}
         />
 
         <div className="relative z-50">
@@ -287,7 +320,11 @@ export const InteractiveUsageChart: FunctionComponent<{
             stats={stats}
             enabledSeries={enabledSeries}
             setEnabledSeries={setEnabledSeries}
+            onStatusChange={setChartStatus}
           />
+        </div>
+        <div className="sr-only" role="status" aria-live="polite" aria-atomic="true">
+          {chartStatus}
         </div>
 
         <div className="grid grid-cols-1 items-stretch gap-3 xl:grid-cols-[minmax(0,1fr)_20rem] 2xl:grid-cols-[minmax(0,1fr)_22rem]">
@@ -320,11 +357,11 @@ export const InteractiveUsageChart: FunctionComponent<{
                   </div>
                 ) : null}
                 {buckets.length === 0 ? (
-                  <div className={`absolute inset-0 h-full w-full transition-opacity duration-300 motion-reduce:transition-none ${loading ? "opacity-60 pointer-events-none" : "opacity-100"}`}>
-                    <UsageGraphEmpty onReset={() => setZoomRange(null)} />
+                  <div className={`absolute inset-0 h-full w-full transition-opacity motion-reduce:transition-none ${loading ? "opacity-60 pointer-events-none" : "opacity-100"}`} style={{ transitionDuration: interactionTokens.asyncFeedback.duration, transitionTimingFunction: interactionTokens.asyncFeedback.ease }}>
+                    <UsageGraphEmpty onReset={() => applyZoomRange(null, `Zoom reset to ${stats.range.label}.`)} />
                   </div>
                 ) : (
-                  <svg role="img" aria-labelledby="chart-summary-heading" viewBox={`0 0 ${width} ${height}`} className={`absolute inset-0 h-full w-full overflow-visible transition-opacity duration-300 motion-reduce:transition-none ${loading ? "opacity-60 pointer-events-none" : "opacity-100"}`}>
+                  <svg role="img" aria-labelledby="chart-summary-heading" aria-busy={loading ? "true" : "false"} viewBox={`0 0 ${width} ${height}`} className={`absolute inset-0 h-full w-full overflow-visible transition-opacity motion-reduce:transition-none ${loading ? "opacity-60 pointer-events-none" : "opacity-100"}`} style={{ transitionDuration: interactionTokens.asyncFeedback.duration, transitionTimingFunction: interactionTokens.asyncFeedback.ease }}>
                     <defs>
                       {chartData.map((series) => (
                         <linearGradient key={`fill-${series.id}`} id={`stats-area-${series.id}`} x1="0" x2="0" y1="0" y2="1">
@@ -405,7 +442,7 @@ export const InteractiveUsageChart: FunctionComponent<{
                           stroke="var(--stats-card-bg)"
                           strokeWidth={hoveredIndex === index ? 2 : 0}
                           fillOpacity={hoveredIndex === null || hoveredIndex === index ? 0.9 : 0.32}
-                          style={{ transition: 'r 0.2s, fill-opacity 0.2s, stroke-width 0.2s' }}
+                          style={{ transition: `r ${interactionTokens.selectionMovement.duration} ${interactionTokens.selectionMovement.ease}, fill-opacity ${interactionTokens.selectionMovement.duration} ${interactionTokens.selectionMovement.ease}, stroke-width ${interactionTokens.selectionMovement.duration} ${interactionTokens.selectionMovement.ease}` }}
                         />
                       ))
                     ))}
@@ -437,7 +474,7 @@ export const InteractiveUsageChart: FunctionComponent<{
 
                             event.preventDefault();
                             setHoveredIndex(index);
-                            setZoomRange({ start: absoluteIndex, end: absoluteIndex });
+                            applyZoomRange({ start: absoluteIndex, end: absoluteIndex }, describeZoomRange(absoluteIndex, absoluteIndex));
                           }}
                           aria-describedby="usage-chart-instructions"
                           aria-label={buckets[absoluteIndex]
@@ -456,7 +493,7 @@ export const InteractiveUsageChart: FunctionComponent<{
                             const start = Math.min(dragStartIndex, absoluteIndex);
                             const end = Math.max(dragStartIndex, absoluteIndex);
                             if (end - start >= 1) {
-                              setZoomRange({ start, end });
+                              applyZoomRange({ start, end }, describeZoomRange(start, end));
                             }
                             setDragStartIndex(null);
                             setDragCurrentIndex(null);
@@ -485,6 +522,7 @@ export const InteractiveUsageChart: FunctionComponent<{
                   buckets={buckets}
                   zoomRange={zoomRange}
                   onZoomChange={setZoomRange}
+                  onStatusChange={setChartStatus}
                 />
               ) : null}
             </div>

@@ -243,7 +243,7 @@ describe("ConnectionRuntimePanel", () => {
 
         render(<ExecutionRuntimePanel />);
 
-        const retry = screen.getByRole("button", { name: "Retry dispatch dispatch-1. Retrying is already in progress." });
+        const retry = screen.getByRole("button", { name: "Retry dispatch T-1: Repair runtime action feedback. Retrying is already in progress." });
         expect(retry).toHaveTextContent("Retrying");
         expect(retry).toHaveAttribute("aria-busy", "true");
         expect(retry).toHaveAttribute("aria-disabled", "true");

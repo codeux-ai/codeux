@@ -1,4 +1,4 @@
-import { useState, useCallback } from "preact/hooks";
+import { useRef, useState, useCallback } from "preact/hooks";
 import {
     cancelSprintRun,
     cancelTaskDispatch,
@@ -22,10 +22,17 @@ export function useLiveSessionActions(
 ) {
     const [rerunningIds, setRerunningIds] = useState<Set<string>>(new Set());
     const [pendingActionIds, setPendingActionIds] = useState<Set<string>>(new Set());
+    const rerunningIdsRef = useRef(rerunningIds);
+    const pendingActionIdsRef = useRef(pendingActionIds);
     const { addToast } = useToast();
 
     const handleRerun = useCallback(async (taskId: string, options?: RerunTaskOptions) => {
-        setRerunningIds(prev => new Set(prev).add(taskId));
+        if (rerunningIdsRef.current.has(taskId)) {
+            return;
+        }
+        const nextRerunningIds = new Set(rerunningIdsRef.current).add(taskId);
+        rerunningIdsRef.current = nextRerunningIds;
+        setRerunningIds(nextRerunningIds);
         try {
             await rerunTask(taskId, options);
             await refreshRuntimeStatus();
@@ -46,12 +53,20 @@ export function useLiveSessionActions(
                 autoDismissMs: 0,
             });
         } finally {
-            setRerunningIds(prev => { const next = new Set(prev); next.delete(taskId); return next; });
+            const next = new Set(rerunningIdsRef.current);
+            next.delete(taskId);
+            rerunningIdsRef.current = next;
+            setRerunningIds(next);
         }
     }, [refreshRuntimeStatus, refreshGitStatus, addToast]);
 
     const runControlAction = useCallback(async (actionId: string, operation: () => Promise<void>) => {
-        setPendingActionIds(prev => new Set(prev).add(actionId));
+        if (pendingActionIdsRef.current.has(actionId)) {
+            return;
+        }
+        const nextPendingActionIds = new Set(pendingActionIdsRef.current).add(actionId);
+        pendingActionIdsRef.current = nextPendingActionIds;
+        setPendingActionIds(nextPendingActionIds);
         try {
             await operation();
             await new Promise((resolve) => setTimeout(resolve, 150));
@@ -73,7 +88,10 @@ export function useLiveSessionActions(
                 autoDismissMs: 0,
             });
         } finally {
-            setPendingActionIds(prev => { const next = new Set(prev); next.delete(actionId); return next; });
+            const next = new Set(pendingActionIdsRef.current);
+            next.delete(actionId);
+            pendingActionIdsRef.current = next;
+            setPendingActionIds(next);
         }
     }, [refreshRuntimeStatus, refreshGitStatus, addToast]);
 
@@ -89,29 +107,77 @@ export function useLiveSessionActions(
         });
     }, [runControlAction]);
 
-    const handleCancelSprintRun = useCallback(async (sprintRunId: string) => {
+    const handleCancelSprintRun = useCallback(async (sprintRunId: string, targetLabel = sprintRunId) => {
+        if (pendingActionIdsRef.current.has(`sprint-cancel:${sprintRunId}`)) {
+            return;
+        }
+        const confirmed = await requestConfirm({
+            title: "Cancel Sprint Run",
+            body: `Request cancellation for sprint run "${targetLabel}"? Running work will be asked to stop and cached runtime rows will remain visible while the request is confirmed.`,
+            confirmLabel: "Cancel Run",
+            destructive: true,
+        });
+        if (!confirmed) {
+            return;
+        }
         await runControlAction(`sprint-cancel:${sprintRunId}`, async () => {
             await cancelSprintRun(sprintRunId);
         });
-    }, [runControlAction]);
+    }, [requestConfirm, runControlAction]);
 
-    const handleCancelTaskDispatch = useCallback(async (dispatchId: string) => {
+    const handleCancelTaskDispatch = useCallback(async (dispatchId: string, targetLabel = dispatchId) => {
+        if (pendingActionIdsRef.current.has(`dispatch-cancel:${dispatchId}`)) {
+            return;
+        }
+        const confirmed = await requestConfirm({
+            title: "Cancel Dispatch",
+            body: `Request cancellation for dispatch "${targetLabel}"? The runtime will keep the current dispatch row visible while the stop request is confirmed.`,
+            confirmLabel: "Cancel Dispatch",
+            destructive: true,
+        });
+        if (!confirmed) {
+            return;
+        }
         await runControlAction(`dispatch-cancel:${dispatchId}`, async () => {
             await cancelTaskDispatch(dispatchId);
         });
-    }, [runControlAction]);
+    }, [requestConfirm, runControlAction]);
 
-    const handleForceCancelSprintRun = useCallback(async (sprintRunId: string) => {
+    const handleForceCancelSprintRun = useCallback(async (sprintRunId: string, targetLabel = sprintRunId) => {
+        if (pendingActionIdsRef.current.has(`sprint-force-cancel:${sprintRunId}`)) {
+            return;
+        }
+        const confirmed = await requestConfirm({
+            title: "Force Cancel Sprint Run",
+            body: `Force cancel sprint run "${targetLabel}" now? Use this only when the normal stop request is already pending or stalled.`,
+            confirmLabel: "Force Cancel Run",
+            destructive: true,
+        });
+        if (!confirmed) {
+            return;
+        }
         await runControlAction(`sprint-force-cancel:${sprintRunId}`, async () => {
             await forceCancelSprintRun(sprintRunId);
         });
-    }, [runControlAction]);
+    }, [requestConfirm, runControlAction]);
 
-    const handleForceCancelTaskDispatch = useCallback(async (dispatchId: string) => {
+    const handleForceCancelTaskDispatch = useCallback(async (dispatchId: string, targetLabel = dispatchId) => {
+        if (pendingActionIdsRef.current.has(`dispatch-force-cancel:${dispatchId}`)) {
+            return;
+        }
+        const confirmed = await requestConfirm({
+            title: "Force Cancel Dispatch",
+            body: `Force cancel dispatch "${targetLabel}" now? Use this only when the normal stop request is already pending or stalled.`,
+            confirmLabel: "Force Cancel Dispatch",
+            destructive: true,
+        });
+        if (!confirmed) {
+            return;
+        }
         await runControlAction(`dispatch-force-cancel:${dispatchId}`, async () => {
             await forceCancelTaskDispatch(dispatchId);
         });
-    }, [runControlAction]);
+    }, [requestConfirm, runControlAction]);
 
     const handleRetryTaskDispatch = useCallback(async (dispatchId: string) => {
         await runControlAction(`dispatch-retry:${dispatchId}`, async () => {

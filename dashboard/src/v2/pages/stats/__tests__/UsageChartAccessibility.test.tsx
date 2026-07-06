@@ -9,6 +9,7 @@ import * as matchers from "@testing-library/jest-dom/matchers";
 import { InteractiveUsageChart } from "../components/InteractiveUsageChart.js";
 import { useUsageChartState } from "../use-usage-chart-state.js";
 import { UsageGraphEmpty, UsageGraphLoading, UsageGraphError } from "../components/UsageGraphStates.js";
+import gsap from "gsap";
 
 expect.extend(matchers);
 
@@ -142,6 +143,23 @@ describe("UsageChartAccessibility", () => {
     fireEvent.keyDown(rects[1]!, { key: "Enter" });
 
     expect(screen.getByRole("button", { name: /Reset zoom/i })).toBeInTheDocument();
+    expect(screen.getByText("Pinned Jan 2.")).toBeInTheDocument();
+  });
+
+  it("announces completed drag zoom changes without per-frame status", async () => {
+    const { container } = render(<Wrapper />);
+
+    await vi.waitFor(() => {
+      expect(container.querySelectorAll('rect[tabIndex="0"]').length).toBe(3);
+    });
+
+    const rects = container.querySelectorAll('rect[tabIndex="0"]');
+    fireEvent.mouseDown(rects[0]!);
+    fireEvent.mouseMove(rects[2]!);
+    fireEvent.mouseUp(rects[2]!);
+
+    expect(screen.getByText("Zoomed to Jan 1 through Jan 3, 3 buckets.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Reset zoom/i })).toBeInTheDocument();
   });
 
   it("renders a textual summary of the chart", () => {
@@ -227,5 +245,52 @@ describe("UsageChartAccessibility", () => {
     cleanup();
     const { container: errorContainer } = render(<UsageGraphError />);
     expect(screen.getByRole("alert")).toBeInTheDocument();
+  });
+
+  it("keeps chart geometry static for reduced motion", () => {
+    vi.mocked(gsap.matchMedia).mockReturnValueOnce({
+      add: vi.fn().mockImplementation((_query, cb) => {
+        if (_query.includes("reduce")) cb();
+      }),
+      revert: vi.fn(),
+    } as any);
+
+    render(<Wrapper />);
+
+    expect(gsap.set).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ strokeDasharray: "none", strokeDashoffset: 0 }),
+    );
+  });
+
+  it("announces refresh and error status copy while preserving chart context", async () => {
+    const createChartState = () => ({
+      visualMode: "trend" as const,
+      setVisualMode: vi.fn(),
+      zoomRange: null,
+      setZoomRange: vi.fn(),
+      hoveredIndex: null,
+      setHoveredIndex: vi.fn(),
+      dragStartIndex: null,
+      setDragStartIndex: vi.fn(),
+      dragCurrentIndex: null,
+      setDragCurrentIndex: vi.fn(),
+      enabledSeries: { tokens: true },
+      setEnabledSeries: vi.fn(),
+      metrics: null,
+    });
+    const { rerender } = render(<InteractiveUsageChart stats={mockStats as any} loading={false} error={null} refresh={async () => {}} chartState={createChartState() as any} />);
+
+    rerender(<InteractiveUsageChart stats={mockStats as any} loading={true} error={null} refresh={async () => {}} chartState={createChartState() as any} />);
+    expect(await screen.findByText("Refreshing trend telemetry from cache. Existing chart data remains visible.")).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: /Data Visualization/i })).toHaveAttribute("aria-busy", "true");
+
+    rerender(<InteractiveUsageChart stats={mockStats as any} loading={false} error={null} refresh={async () => {}} chartState={createChartState() as any} />);
+    expect(await screen.findByText("Trend telemetry ready.")).toBeInTheDocument();
+    expect(screen.queryByText("Refreshing trend telemetry from cache. Existing chart data remains visible.")).not.toBeInTheDocument();
+    expect(screen.getByRole("img", { name: /Data Visualization/i })).toHaveAttribute("aria-busy", "false");
+
+    rerender(<InteractiveUsageChart stats={mockStats as any} loading={false} error="Network timeout" refresh={async () => {}} chartState={createChartState() as any} />);
+    expect(await screen.findByText("Trend telemetry error: Network timeout")).toBeInTheDocument();
   });
 });

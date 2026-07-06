@@ -42,7 +42,7 @@ type DropdownMenuItemProps = JSX.HTMLAttributes<HTMLButtonElement> & {
   disabled?: boolean;
 };
 
-export const DropdownMenuItem = ({ children, className = "", onClick, ...props }: DropdownMenuItemProps) => {
+export const DropdownMenuItem = ({ children, className = "", onClick, onKeyDown, ...props }: DropdownMenuItemProps) => {
   const isAriaDisabled = props["aria-disabled"] === true || props["aria-disabled"] === "true";
   const isDisabled = !!props.disabled || isAriaDisabled;
 
@@ -54,6 +54,14 @@ export const DropdownMenuItem = ({ children, className = "", onClick, ...props }
       {...props}
       disabled={props.disabled}
       aria-disabled={isDisabled}
+      onKeyDown={(event) => {
+        if (isDisabled && (event.key === "Enter" || event.key === " ")) {
+          event.preventDefault();
+          event.stopPropagation();
+          return;
+        }
+        onKeyDown?.(event);
+      }}
       onClick={(event) => {
         if (isDisabled) {
           event.preventDefault();
@@ -235,7 +243,7 @@ export const DropdownMenu = ({
           {
             opacity: 1,
             y: 0,
-            stagger: Math.min(0.018, 0.18 / itemCount),
+            stagger: gsapTokens.listReveal.duration / itemCount,
             duration: gsapTokens.listReveal.duration,
             ease: gsapTokens.listReveal.ease,
             delay: gsapTokens.enterExit.duration,
@@ -309,12 +317,19 @@ export const DropdownMenu = ({
         e.preventDefault();
         focusMenuItem(items[items.length - 1]);
       } else if (e.key === "Enter" || e.key === " ") {
-        if (document.activeElement && items.includes(document.activeElement as HTMLElement)) {
+        const activeElement = document.activeElement as HTMLElement | null;
+        const activeDisabled = activeElement?.hasAttribute("disabled") || activeElement?.getAttribute("aria-disabled") === "true";
+        if (activeDisabled) {
+          e.preventDefault();
+          e.stopPropagation();
+          return;
+        }
+        if (activeElement && items.includes(activeElement)) {
           // Check if the element handles Enter/Space itself, otherwise we click it.
           // Native buttons and links handle Enter/Space natively on focus, but we'll manually dispatch a click if it's a generic menuitem
-          if (document.activeElement.getAttribute('role') === 'menuitem') {
+          if (activeElement.getAttribute('role') === 'menuitem') {
             e.preventDefault();
-            (document.activeElement as HTMLElement).click();
+            activeElement.click();
           }
         }
       }

@@ -287,6 +287,7 @@ export const LiveSessionPage: FunctionComponent = () => {
         if (!confirmed) {
             return;
         }
+        setPending(`Force completing task "${task.title || task.id}". The live runtime snapshot remains visible while the update is confirmed.`, { autoDismiss: false });
         setForceCompletePendingIds((prev) => new Set(prev).add(taskRuntimeId));
         setForceCompleteErrorByTaskId((prev) => {
             const next = new Map(prev);
@@ -298,7 +299,7 @@ export const LiveSessionPage: FunctionComponent = () => {
             await forceCompleteLiveTask(realtimeProjectId, taskRuntimeId);
             await refreshRuntimeStatus();
             await refreshGitStatus();
-            setSuccess("Task marked as completed.");
+            setSuccess(`Task "${task.title || task.id}" marked as completed.`);
         } catch (error) {
             setOptimisticallyCompletedTaskIds((prev) => {
                 const next = new Set(prev);
@@ -310,7 +311,7 @@ export const LiveSessionPage: FunctionComponent = () => {
                 next.set(taskRuntimeId, error instanceof Error ? error.message : "Failed to force complete task.");
                 return next;
             });
-            setError("Failed to force complete task.");
+            setError(`Failed to force complete task "${task.title || task.id}".`);
         } finally {
             setForceCompletePendingIds((prev) => {
                 const next = new Set(prev);

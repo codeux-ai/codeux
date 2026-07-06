@@ -4,7 +4,7 @@ import { act, fireEvent, render, renderHook, screen, waitFor } from "@testing-li
 import * as matchers from "@testing-library/jest-dom/matchers";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { MemoryList } from "../MemoryList.js";
-import { memoryMutationsSignal, searchQuerySignal, selectedMemoryIdsSignal } from "../memoryState.js";
+import { activeTierSignal, memoryMutationsSignal, searchQuerySignal, selectedAgentPresetIdSignal, selectedMemoryIdsSignal, selectedSprintIdSignal } from "../memoryState.js";
 import { useMemoryPageData } from "../../../hooks/use-memory-page-data.js";
 import type { MemNode } from "../../../lib/memory-graph.js";
 import { listEmbeddingModels, listMemories, getEmbeddingMap, getMemoryStats, deleteMemories } from "../../../lib/memory-api.js";
@@ -88,6 +88,9 @@ const buildMemoryRecord = (id: string, content: string): MemoryRecord => ({
 describe("Memory batch delete", () => {
     beforeEach(() => {
         searchQuerySignal.value = "";
+        activeTierSignal.value = "short_term";
+        selectedSprintIdSignal.value = undefined;
+        selectedAgentPresetIdSignal.value = undefined;
         selectedMemoryIdsSignal.value = [];
         memoryMutationsSignal.value = {
             addMemory: vi.fn(),
@@ -107,6 +110,9 @@ describe("Memory batch delete", () => {
     afterEach(() => {
         document.body.innerHTML = "";
         searchQuerySignal.value = "";
+        activeTierSignal.value = "short_term";
+        selectedSprintIdSignal.value = undefined;
+        selectedAgentPresetIdSignal.value = undefined;
         selectedMemoryIdsSignal.value = [];
     });
 
@@ -142,6 +148,9 @@ describe("Memory batch delete", () => {
     test("confirms single selected memory deletion before mutating", async () => {
         const removeMemories = vi.fn().mockResolvedValue([]);
         memoryMutationsSignal.value.removeMemories = removeMemories;
+        activeTierSignal.value = "long_term";
+        selectedAgentPresetIdSignal.value = "agent-1";
+        searchQuerySignal.value = "alpha";
 
         const { getByRole } = render(
             <MemoryList
@@ -154,7 +163,7 @@ describe("Memory batch delete", () => {
         fireEvent.click(getByRole("button", { name: "Delete selected" }));
 
         expect(screen.getByRole("dialog", { name: "Delete Selected Memories" })).toBeInTheDocument();
-        expect(screen.getByText("Delete 1 selected memory? This action cannot be undone.")).toBeInTheDocument();
+        expect(screen.getByText('Delete 1 selected memory from the visible scope: Long Term, project memories, agent agent-1, search "alpha". This action cannot be undone.')).toBeInTheDocument();
         expect(removeMemories).not.toHaveBeenCalled();
 
         fireEvent.click(getByRole("button", { name: "Delete Memory" }));

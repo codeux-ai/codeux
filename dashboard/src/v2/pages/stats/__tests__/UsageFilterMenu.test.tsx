@@ -2,7 +2,8 @@
  * @vitest-environment jsdom
  */
 import { afterEach, describe, it, expect, vi } from 'vitest';
-import { render, fireEvent, cleanup } from '@testing-library/preact';
+import { render, fireEvent, cleanup, screen } from '@testing-library/preact';
+import { useState } from 'preact/hooks';
 import gsap from 'gsap';
 
 vi.mock('gsap', () => ({
@@ -95,7 +96,49 @@ describe('UsageFilterMenu', () => {
     const tokensButton = getByRole('switch', { name: /tokens/i });
     expect(tokensButton.getAttribute('aria-disabled')).toBe('true');
     expect(tokensButton.getAttribute('aria-checked')).toBe('true');
+    const describedBy = tokensButton.getAttribute('aria-describedby');
+    expect(describedBy).toBeTruthy();
+    expect(document.getElementById(describedBy!)?.textContent).toContain('Keep one series enabled so the chart can still render.');
     fireEvent.click(tokensButton);
     expect(setEnabledSeriesSpy).not.toHaveBeenCalled();
+  });
+
+  it('focuses the first useful switch and restores trigger focus on Escape', () => {
+    const onStatusChange = vi.fn();
+
+    const Wrapper = () => {
+      const [open, setOpen] = useState(false);
+      return (
+        <div>
+          <button type="button" onClick={() => setOpen(true)}>Open filters</button>
+          <UsageFilterMenu
+            {...mockProps}
+            isOpen={open}
+            onClose={() => setOpen(false)}
+            onStatusChange={onStatusChange}
+          />
+        </div>
+      );
+    };
+
+    render(<Wrapper />);
+    const trigger = screen.getByRole('button', { name: 'Open filters' });
+    trigger.focus();
+    fireEvent.click(trigger);
+
+    expect((document.activeElement as HTMLElement).getAttribute('role')).toBe('switch');
+
+    fireEvent.keyDown(window, { key: 'Escape' });
+
+    expect(document.activeElement).toBe(trigger);
+  });
+
+  it('announces filter reset feedback', () => {
+    const onStatusChange = vi.fn();
+    render(<UsageFilterMenu {...mockProps} onStatusChange={onStatusChange} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Reset filters' }));
+
+    expect(onStatusChange).toHaveBeenCalledWith('Graph filters reset. 2 series active.');
   });
 });

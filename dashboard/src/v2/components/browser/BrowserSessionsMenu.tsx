@@ -94,9 +94,19 @@ export const BrowserSessionsMenu: FunctionComponent<{ enabled?: boolean }> = ({ 
 
     const handleBlur = (e: FocusEvent) => {
         if (!containerRef.current?.contains(e.relatedTarget as Node)) {
-            closeMenu(false);
+            closeMenu();
         }
     };
+
+    useEffect(() => {
+        if (!isMenuVisible || !containerRef.current) {
+            return;
+        }
+
+        const container = containerRef.current;
+        container.addEventListener("focusout", handleBlur);
+        return () => container.removeEventListener("focusout", handleBlur);
+    }, [isMenuVisible, closeMenu]);
 
     const toggleMenu = () => {
         setInteractionState((prev) => (prev === 'closed' ? 'open' : 'closed'));
@@ -235,7 +245,7 @@ export const BrowserSessionsMenu: FunctionComponent<{ enabled?: boolean }> = ({ 
                         <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Active Sessions</span>
                         <Link
                             to="/browser"
-                            onClick={() => closeMenu(false)}
+                            onClick={() => closeMenu()}
                             className="text-[10px] font-bold uppercase tracking-[0.14em] text-signal-600 hover:text-signal-700 dark:text-signal-500 dark:hover:text-signal-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 rounded-md px-1"
                         >
                             Open App
@@ -341,6 +351,7 @@ export const BrowserSessionsMenu: FunctionComponent<{ enabled?: boolean }> = ({ 
                                         rel="noopener noreferrer"
                                         role="menuitem"
                                         aria-label={`Open preview session ${sprintName} in a new tab`}
+                                        onClick={() => closeMenu()}
                                         tabIndex={index === firstEnabledIndex ? 0 : -1}
                                         className={menuItemClassName}
                                         style={{ transition: menuTransition }}
