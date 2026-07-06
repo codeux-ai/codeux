@@ -9,20 +9,11 @@ This guide gets the MCP server and dashboard running locally with minimal setup.
 - A valid Jules API key
 - Optional for remote git intelligence: GitHub CLI (`gh`) authenticated
 
-## Install from npm (recommended)
-
-Install the runtime globally and run the `codeux` command:
-
-```bash
-npm i -g @codeuxai/codeux
-codeux
-```
-
-This starts the MCP server and dashboard. Skip ahead to [Configure API Key](#configure-api-key); the build steps below are only needed when running from source.
-
 ## Install and Build (from source)
 
 ```bash
+git clone https://github.com/codeux-ai/codeux.git
+cd codeux
 pnpm install
 pnpm run build
 ```

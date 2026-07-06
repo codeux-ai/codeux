@@ -39,20 +39,20 @@ After launch, Code UX opens its local dashboard at:
 http://localhost:4444
 ```
 
-### npm (CLI)
+### CLI (from source)
 
-Prefer the command line? Install the runtime globally from npm:
-
-```bash
-npm i -g @codeuxai/codeux
-```
-
-This installs the `codeux` command — the orchestration server, MCP server, and live dashboard (the
-same runtime that powers the desktop app, without the Electron shell). Start it with:
+Prefer the command line? Run the runtime from source using `pnpm` (the package is also published on npm as `@codeuxai/codeux`):
 
 ```bash
-codeux
+git clone https://github.com/codeux-ai/codeux.git
+cd codeux
+pnpm install
+pnpm run build
+pnpm start
 ```
+
+This starts the `codeux` orchestration server, MCP server, and live dashboard (the
+same runtime that powers the desktop app, without the Electron shell).
 
 Then open the dashboard at `http://localhost:4444`. Requires **Node.js 22 or newer**; Docker is
 recommended for virtual worker execution and required for preview containers. Run `codeux --help` for
@@ -278,7 +278,7 @@ start planning sprint work without rebuilding the same agent setup for every CLI
 
 ## Typical Workflow
 
-1. Install Code UX from Releases (or npm) and open the dashboard.
+1. Install Code UX from Releases (or source) and open the dashboard.
 2. Add a local repository or clone a Git URL into a managed project.
 3. Configure provider credentials and choose Docker or host execution for each provider.
 4. Create a sprint from a prompt, linked issue set, or quicksprint template.

@@ -12,7 +12,7 @@ can read on demand.
 | Page | What it covers |
 | --- | --- |
 | [Introduction](./introduction.md) | What Code UX is, how it's different, and the core concepts. |
-| [Installation](./installation.md) | Desktop app, npm CLI, source, CLI flags, and environment. |
+| [Installation](./installation.md) | Desktop app, source, CLI flags, and environment. |
 | [Quickstart](./quickstart.md) | Your first sprint in about ten minutes. |
 | [Providers and models](./providers-and-models.md) | The seven providers and routing work by invocation type. |
 | [Sprint orchestration](./sprint-orchestration.md) | Planning, the dependency model, the watch loop, and retries. |
