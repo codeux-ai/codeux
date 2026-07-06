@@ -11,6 +11,8 @@ The browser preview provides an integrated environment for interacting with runn
 ## Interaction Contracts
 
 - Preview refresh, launch, rebuild, stop, remove, navigation, and startup-script save operations use visible async feedback plus local status text. Page-level operation results use `ActionFeedbackRegion` where available; control-specific progress stays beside the control that is pending.
+- Dashboard API calls that operate on an existing preview session must carry the owning project and sprint scope. Rebuild, stop, remove, log, and dashboard proxy requests verify the session belongs to the requested project and sprint before returning data or taking action; a foreign or missing session receives the same generic not-found response.
+- Preview-host iframe traffic keeps the existing `preview-<sessionId>.<dashboard-host>` URL format. Host-side start, rebuild, and status controls first resolve that host session, then accept only the canonical preview origin or its canonical dashboard origin.
 - Use `controlFeedback` for preview chrome buttons, session rail controls, launch controls, rebuild/stop/open actions, script save, and address navigation controls.
 - Use `enterExit` for preview window empty/starting/error states, menus, and browser chrome state surfaces.
 - Use `selectionMovement` for active session cards and rail selection changes.

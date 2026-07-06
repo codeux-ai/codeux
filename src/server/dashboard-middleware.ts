@@ -128,7 +128,10 @@ export function shouldParseDashboardJsonBody(req: IncomingMessage): boolean {
   if (!isRuntimeDataPath) {
     return false;
   }
-  if (pathname.startsWith("/api/browser/sessions/") && pathname.includes("/proxy")) {
+  if (
+    (pathname.startsWith("/api/browser/sessions/") && pathname.includes("/proxy"))
+    || (pathname.startsWith("/api/projects/") && pathname.includes("/preview/sessions/") && pathname.includes("/proxy"))
+  ) {
     return false;
   }
 

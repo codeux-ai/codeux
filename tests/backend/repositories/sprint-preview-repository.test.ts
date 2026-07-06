@@ -129,4 +129,30 @@ describe("SprintPreviewRepository", () => {
       { containerPort: 6006, hostPort: 6201 },
     ]);
   });
+
+  it("only returns a session when the project and sprint scope match", async () => {
+    const { storage, repository, projectId, sprintId } = await createFixture();
+    const projects = new ProjectManagementRepository(storage);
+    const otherProject = projects.createProject({
+      name: "Other Preview Project",
+      sourceType: "local",
+      sourceRef: "/tmp/other-preview-project",
+    });
+    const otherSprint = projects.createSprint(otherProject.id, {
+      name: "Other Preview Sprint",
+      number: 2,
+    });
+    const session = repository.createSession({
+      projectId,
+      sprintId,
+      status: "running",
+      containerAppPort: 3000,
+      startupScriptPath: ".code-ux/browser/start-preview.sh",
+      startupMode: "auto",
+      hostPort: 5555,
+    });
+
+    expect(repository.getSessionForProjectSprint(projectId, sprintId, session.id)?.id).toBe(session.id);
+    expect(repository.getSessionForProjectSprint(otherProject.id, otherSprint.id, session.id)).toBeNull();
+  });
 });

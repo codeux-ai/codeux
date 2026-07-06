@@ -90,6 +90,74 @@ describe("preview-host-middleware", () => {
     expect(res.headers["access-control-allow-origin"]).toBe("http://localhost:4444");
   });
 
+  it("returns 404 for preview control paths when the host session does not resolve", async () => {
+    const options = {
+      getSprintPreviewSession: vi.fn().mockResolvedValue(null),
+      startSprintPreviewSession: vi.fn(),
+    } as unknown as DashboardServerOptions;
+
+    const app = express();
+    app.use(createPreviewHostMiddleware(options));
+
+    const res = await request(app)
+      .get("/_code_ux/preview-status")
+      .set("Host", "preview-foreign-session.localhost:4444")
+      .set("Origin", "http://preview-foreign-session.localhost:4444");
+
+    expect(res.status).toBe(404);
+    expect(res.text).toContain("Sprint preview session is unavailable.");
+  });
+
+  it("rebuilds preview-host controls through the resolved project and sprint scope", async () => {
+    const session = {
+      id: "session-1",
+      projectId: "proj-1",
+      sprintId: "sprint-1",
+      status: "running",
+      hostPort: 3000,
+    };
+    const rebuildSprintPreviewSessionForProjectSprint = vi.fn().mockResolvedValue(session);
+    const options = {
+      getSprintPreviewSession: vi.fn().mockResolvedValue(session),
+      rebuildSprintPreviewSessionForProjectSprint,
+    } as unknown as DashboardServerOptions;
+
+    const app = express();
+    app.use(createPreviewHostMiddleware(options));
+
+    const res = await request(app)
+      .post("/_code_ux/preview-rebuild")
+      .set("Host", "preview-session-1.localhost:4444")
+      .set("Origin", "http://preview-session-1.localhost:4444");
+
+    expect(res.status).toBe(200);
+    expect(rebuildSprintPreviewSessionForProjectSprint).toHaveBeenCalledWith("proj-1", "sprint-1", "session-1");
+  });
+
+  it("allows canonical same-origin control requests with origin path syntax", async () => {
+    const options = {
+      getSprintPreviewSession: vi.fn().mockResolvedValue({
+        id: "session-1",
+        projectId: "proj-1",
+        sprintId: "sprint-1",
+        status: "running",
+        hostPort: 3000,
+      }),
+      startSprintPreviewSession: vi.fn().mockResolvedValue({}),
+    } as unknown as DashboardServerOptions;
+
+    const app = express();
+    app.use(createPreviewHostMiddleware(options));
+
+    const res = await request(app)
+      .post("/_code_ux/preview-start")
+      .set("Host", "preview-session-1.localhost:4444")
+      .set("Origin", "http://preview-session-1.localhost:4444/some/path");
+
+    expect(res.status).toBe(200);
+    expect(res.headers["access-control-allow-origin"]).toBe("http://preview-session-1.localhost:4444");
+  });
+
   it("rejects request if body exceeds PREVIEW_MAX_REQUEST_BODY_BYTES", async () => {
     const session = {
       id: "session-1",
