@@ -1,17 +1,27 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import * as path from "path";
+import {
+  createSqliteTempHome,
+  expectSqliteSidecarsRemoved,
+  getExistingSqliteSidecars,
+  removeSqliteTempHome,
+} from "./sqlite-cleanup-test-helper.js";
 
 const databaseSyncCtor = vi.fn();
 
-vi.mock("node:sqlite", () => ({
-  DatabaseSync: function DatabaseSyncMock(this: unknown, ...args: unknown[]) {
-    return databaseSyncCtor(...args);
-  },
-}));
+function mockNodeSqlite(): void {
+  vi.doMock("node:sqlite", () => ({
+    DatabaseSync: function DatabaseSyncMock(this: unknown, ...args: unknown[]) {
+      return databaseSyncCtor(...args);
+    },
+  }));
+}
 
 describe("openSqliteDatabase", () => {
   beforeEach(() => {
     vi.resetModules();
     vi.clearAllMocks();
+    mockNodeSqlite();
   });
 
   it("opens sqlite with timeout and pragmas", async () => {
@@ -46,5 +56,31 @@ describe("openSqliteDatabase", () => {
 
     expect(databaseSyncCtor).toHaveBeenCalledTimes(2);
     expect(db).toEqual({ exec });
+  });
+
+  it("allows file-backed WAL sidecars to be removed after the database is closed", async () => {
+    vi.doUnmock("node:sqlite");
+    vi.resetModules();
+    const homeDir = await createSqliteTempHome("code-ux-sqlite-connection-");
+    const dbPath = path.join(homeDir, "app.db");
+
+    try {
+      const { openSqliteDatabase } = await import("../../../src/repositories/sqlite-connection.js");
+      const db = openSqliteDatabase(dbPath);
+      db.exec(`
+        CREATE TABLE cleanup_probe (
+          id INTEGER PRIMARY KEY,
+          value TEXT NOT NULL
+        );
+        INSERT INTO cleanup_probe (value) VALUES ('ready');
+      `);
+
+      expect(await getExistingSqliteSidecars(dbPath)).toEqual(["app.db-wal", "app.db-shm"]);
+
+      db.close();
+      await expectSqliteSidecarsRemoved(dbPath);
+    } finally {
+      await removeSqliteTempHome(homeDir);
+    }
   });
 });

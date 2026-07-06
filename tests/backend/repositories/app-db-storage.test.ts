@@ -2,9 +2,14 @@ process.env.VITEST_IN_MEMORY_DB = "false";
 
 import { afterEach, describe, expect, it } from "vitest";
 import * as fs from "fs/promises";
-import * as os from "os";
 import * as path from "path";
 import { AppDbStorage, resolveAppDbPath } from "../../../src/repositories/app-db-storage.js";
+import {
+  createSqliteTempHome,
+  expectSqliteSidecarsRemoved,
+  getExistingSqliteSidecars,
+  removeSqliteTempHome,
+} from "./sqlite-cleanup-test-helper.js";
 
 const tempDirs: string[] = [];
 
@@ -14,13 +19,13 @@ function getIndexColumns(db: ReturnType<AppDbStorage["getDatabase"]>, indexName:
 }
 
 async function createTempDbPath(): Promise<string> {
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-app-db-"));
+  const dir = await createSqliteTempHome("code-ux-app-db-");
   tempDirs.push(dir);
   return path.join(dir, "app.db");
 }
 
 afterEach(async () => {
-  await Promise.all(tempDirs.splice(0).map((dir) => fs.rm(dir, { recursive: true, force: true })));
+  await Promise.all(tempDirs.splice(0).map((dir) => removeSqliteTempHome(dir)));
 });
 
 describe("AppDbStorage", () => {
@@ -102,6 +107,36 @@ describe("AppDbStorage", () => {
     storage.close();
 
     expect(() => storage.getDatabase().prepare("SELECT 1").get()).toThrow();
+  });
+
+  it("closes file-backed cycles before removing sqlite sidecars and temp home", async () => {
+    const homeDir = await createSqliteTempHome("code-ux-app-db-home-");
+    tempDirs.push(homeDir);
+    const dbPath = path.join(homeDir, ".code-ux", "app.db");
+
+    for (let cycle = 0; cycle < 3; cycle += 1) {
+      const storage = new AppDbStorage(dbPath);
+      storage.getDatabase().exec(`
+        CREATE TABLE IF NOT EXISTS cleanup_probe (
+          id INTEGER PRIMARY KEY,
+          cycle INTEGER NOT NULL
+        );
+        INSERT INTO cleanup_probe (cycle) VALUES (${cycle});
+      `);
+
+      expect(await getExistingSqliteSidecars(dbPath)).toEqual(["app.db-wal", "app.db-shm"]);
+
+      storage.close();
+      await expectSqliteSidecarsRemoved(dbPath);
+    }
+
+    await removeSqliteTempHome(homeDir);
+    const tempDirIndex = tempDirs.indexOf(homeDir);
+    if (tempDirIndex >= 0) {
+      tempDirs.splice(tempDirIndex, 1);
+    }
+
+    await expect(fs.access(homeDir)).rejects.toMatchObject({ code: "ENOENT" });
   });
 
   it("backfills estimated Docker CLI usage from persisted character counts", async () => {

@@ -6,11 +6,13 @@ Project Initialization runs a repository-specific setup pass through the `Projec
 
 - `Add Project` keeps the existing `Initialize with Project Setup Agent` flow for local and git source types.
 - New local project creation treats the directory path as optional. When no directory is selected, the dashboard submits the project name and the backend resolves it under the user's home directory; relative typed paths resolve from the user's home directory, while absolute paths selected through the desktop picker are used as-is.
+- Local project creation, including `Local Project` and `new_project` with `Local Repo`, saves a project-level settings override for `git.githubMode: LOCAL`. The same dashboard git-mode updater synchronizes internal `git_manager`, `git_manager_local`, and `git_manager_remote` skills so local projects start with repo-local git behavior.
 - `New Project` opens the same modal with the `new_project` source selected, which exposes `Local Repo` / `Remote Repo` init modes instead of the setup scope controls.
 - The `new_project` branch hides the Project Setup Agent section entirely and routes creation through the backend `initMode` fields.
 - `new_project` local init does not require a Git URL slug; it only needs a project name and optional local directory path.
 - `new_project` remote init still requires a Git URL slug and auto-fills it from the project name until the user edits it.
 - `new_project` remote init clones into the selected clone directory, or `~/.code-ux/projects` when the field is blank, and stores the project base directory as the single checkout root `~/.code-ux/projects/<repo-name>`.
+- `new_project` remote init and existing Git URL projects do not receive a local-mode settings override. They continue to inherit the remote git defaults unless the operator explicitly changes the project or sprint settings.
 - Existing projects expose a `Setup Project` action from the project card agent button.
 
 Both flows let the operator choose which artifacts to create:

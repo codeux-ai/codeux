@@ -104,7 +104,7 @@ import { applyDashboardPreRouteMiddleware, applyDashboardPostRouteMiddleware } f
 
 
 import { bootDashboardRealtimeWebSocketServer } from "./dashboard-realtime-websocket-server.js";
-import { bootDashboardTerminalWebSocketServer } from "./terminal-routes.js";
+import { bootDashboardTerminalWebSocketServer, prewarmLoginBaseImage } from "./terminal-routes.js";
 import type { DashboardRealtimeService } from "../services/dashboard-realtime-service.js";
 import type { MemoryService } from "../services/memory-service.js";
 import type { MemoryPromotionService } from "../services/memory-promotion-service.js";
@@ -441,6 +441,9 @@ export const setupDashboardServer = async (options: DashboardServerOptions): Pro
     getSprintPreviewSession,
   } = options;
   const dashboardLogger = configureDashboardApp(options);
+  if (process.env.NODE_ENV !== "test") {
+    prewarmLoginBaseImage(dashboardLogger.child({ component: "login-base-image-prewarm" }));
+  }
   const handle = await bindDashboardServer(app, port, dashboardLogger);
 
   handle.server.on("upgrade", (req, socket, head) => {

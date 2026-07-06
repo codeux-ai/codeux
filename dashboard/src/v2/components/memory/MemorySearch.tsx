@@ -12,6 +12,10 @@ export const MemorySearch: FunctionComponent = () => {
     const [announcement, setAnnouncement] = useState("");
     const interactionTokens = useInteractionTokens();
     const searchPending = inputValue !== committedQuery;
+    const asyncFeedbackStyle = {
+        transitionDuration: interactionTokens.asyncFeedback.duration,
+        transitionTimingFunction: interactionTokens.asyncFeedback.ease,
+    };
 
     useEffect(() => {
         setInputValue(committedQuery);
@@ -86,7 +90,7 @@ export const MemorySearch: FunctionComponent = () => {
             <p id="memory-search-hint" className="sr-only">
                 Type to filter memories. Search is applied after a short pause. Press Escape to clear the search.
             </p>
-            <div id="memory-search-status" className="mt-1 min-h-4 text-[11px] font-medium text-slate-500 dark:text-slate-400">
+            <div id="memory-search-status" className="mt-1 min-h-4 text-[11px] font-medium text-slate-500 transition-colors dark:text-slate-400" style={asyncFeedbackStyle}>
                 {searchPending
                     ? "Typing. Search applies after a short pause."
                     : committedQuery.trim()
@@ -97,7 +101,7 @@ export const MemorySearch: FunctionComponent = () => {
                 {announcement}
             </div>
             {searchPending && (
-                <div className="absolute right-10 top-1/2 hidden -translate-y-1/2 rounded-md border border-signal-500/20 bg-signal-500/[0.08] px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.12em] text-signal-600 dark:text-signal-400 sm:block">
+                <div className="absolute right-10 top-1/2 hidden -translate-y-1/2 rounded-md border border-signal-500/20 bg-signal-500/[0.08] px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.12em] text-signal-600 transition-[background-color,border-color,color] dark:text-signal-400 sm:block" style={asyncFeedbackStyle}>
                     Pending
                 </div>
             )}

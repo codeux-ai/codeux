@@ -272,7 +272,7 @@ export class CycleStateCoordinator {
     }
 
     for (const taskId of knownTaskIds) {
-      if (!mergeTaskIds.has(taskId)) {
+      if (!mergeTaskIds.has(taskId) && !ciFixTaskIds.has(taskId)) {
         itemsToResolve.push({
           filter: {
             projectId,

@@ -157,6 +157,8 @@ const TaskBoardColumnsComponent: FunctionComponent<TaskBoardColumnsProps> = ({
     ref={boardRef}
     aria-busy={filterTransitionPending}
     style={listTransitionStyle}
+    data-motion-list-reorder="listReorder"
+    data-motion-list-reveal="listReveal"
     className={`grid gap-6 transition-opacity ${filterTransitionPending ? "opacity-80" : "opacity-100"} ${
       columns.length === 1 ? "grid-cols-1" :
       columns.length === 2 ? "grid-cols-1 lg:grid-cols-2" :
@@ -173,11 +175,11 @@ const TaskBoardColumnsComponent: FunctionComponent<TaskBoardColumnsProps> = ({
         aria-busy={loading || showSkeletons || filterTransitionPending}
       >
         <ColumnHeader status={status} count={count} />
-        <p id={`task-lane-summary-${status}`} className="sr-only">
-          {STATUS_CFG[status].label} lane contains {count} {count === 1 ? "task" : "tasks"}.
+        <p id={`task-lane-summary-${status}`} className="sr-only" aria-live="polite" aria-atomic="true">
+          {STATUS_CFG[status].label} lane contains {count} {count === 1 ? "task" : "tasks"} after current filters.
         </p>
         <div
-          className={`flex-1 grid grid-cols-1 grid-rows-1 p-4 rounded-[1.5rem] min-h-[200px] bg-black/[0.015] dark:bg-white/[0.015] border relative transition-colors duration-300 ${dropTargetContext?.status === status ? "border-signal-500/50 bg-signal-500/5" : "border-black/[0.03] dark:border-white/[0.03]"} ${reducedMotion ? "border-dashed" : ""}`}
+          className={`flex-1 grid grid-cols-1 grid-rows-1 p-4 rounded-[1.5rem] min-h-[200px] bg-black/[0.015] dark:bg-white/[0.015] border relative transition-colors motion-reduce:transition-none ${dropTargetContext?.status === status ? "border-signal-500/50 bg-signal-500/5" : "border-black/[0.03] dark:border-white/[0.03]"} ${reducedMotion ? "border-dashed" : ""}`}
           onDragOver={(event) => onDragOver(status, columnTasks.length, event as DragEvent)}
           onDrop={(event) => onDrop(status, event as DragEvent)}
           aria-describedby={`task-lane-summary-${status} task-lane-drop-${status}`}
@@ -207,13 +209,13 @@ const TaskBoardColumnsComponent: FunctionComponent<TaskBoardColumnsProps> = ({
             )}
           >
             {!loading && columnTasks.length === 0 ? (
-              <div role="status" aria-live="polite" className={`col-start-1 row-start-1 flex items-center justify-center text-center p-6 text-xs font-medium text-slate-400 dark:text-slate-500 border-2 border-dashed rounded-[1.5rem] bg-black/[0.015] dark:bg-white/[0.015] transition-colors ${dropTargetContext?.status === status ? "border-signal-500/30" : "border-black/[0.05] dark:border-white/[0.05]"}`}>
+              <div role="status" aria-live="polite" aria-atomic="true" className={`col-start-1 row-start-1 flex min-h-36 items-center justify-center text-center p-6 text-xs font-medium text-slate-400 dark:text-slate-500 border-2 border-dashed rounded-[1.5rem] bg-black/[0.015] dark:bg-white/[0.015] transition-colors motion-reduce:transition-none ${dropTargetContext?.status === status ? "border-signal-500/30" : "border-black/[0.05] dark:border-white/[0.05]"}`}>
                 No {status.replace("_", " ")} tasks
                 <br />
                 {statusFilter !== "all" || priorityFilter !== "all" ? "matching current filters" : taskScopeSprintId ? "in this sprint" : "in this project"}.
               </div>
             ) : !loading ? (
-              <div className="col-start-1 row-start-1 flex flex-col gap-4">
+              <div className="col-start-1 row-start-1 flex flex-col gap-4" data-motion-contract="listReorder">
                 {columnTasks.map((task, index) => {
                   const isDraggedOver = dropTargetContext?.status === status && dropTargetContext?.index === index;
                   const viewModel = taskViewModels.get(task.recordId);
@@ -222,7 +224,7 @@ const TaskBoardColumnsComponent: FunctionComponent<TaskBoardColumnsProps> = ({
                   return (
                     <div key={task.recordId} className="contents">
                       {isDraggedOver && draggedTaskId !== task.recordId && (
-                        <div className="h-24 mb-4 rounded-[1.5rem] border-2 border-dashed border-signal-500/50 bg-signal-500/10 transition-all duration-300" />
+                        <div className="h-24 mb-4 rounded-[1.5rem] border-2 border-dashed border-signal-500/50 bg-signal-500/10 transition-all motion-reduce:transition-none" />
                       )}
                       <div
                         className="task-card-entry"
@@ -252,7 +254,7 @@ const TaskBoardColumnsComponent: FunctionComponent<TaskBoardColumnsProps> = ({
                   );
                 })}
                 {dropTargetContext?.status === status && dropTargetContext?.index === columnTasks.length && (
-                  <div className="h-24 mt-4 rounded-[1.5rem] border-2 border-dashed border-signal-500/50 bg-signal-500/10 transition-all duration-300" />
+                  <div className="h-24 mt-4 rounded-[1.5rem] border-2 border-dashed border-signal-500/50 bg-signal-500/10 transition-all motion-reduce:transition-none" />
                 )}
               </div>
             ) : null}

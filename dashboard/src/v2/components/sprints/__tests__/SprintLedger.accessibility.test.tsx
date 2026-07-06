@@ -303,6 +303,117 @@ describe("SprintLedger Accessibility", () => {
 
     await user.click(screen.getByRole("button", { name: "Cancel" }));
     await waitFor(() => expect(bulkDeleteBtn).toHaveFocus());
+    expect(screen.getByText(/Bulk delete canceled\. Selected sprints were not deleted\./i)).toBeInTheDocument();
+  });
+
+  it("announces bulk action completion after pending state clears", async () => {
+    const user = userEvent.setup();
+    const onBulkStart = vi.fn();
+    const { rerender } = render(
+      <SprintLedger
+        sprints={[mockSprint]}
+        listWindow={10}
+        onListWindowChange={vi.fn()}
+        activeRunsBySprintId={new Map()}
+        pauseResumeRunsBySprintId={new Map()}
+        interventionBySprintId={new Map()}
+        pendingActionIds={new Set()}
+        onToggleShowcase={vi.fn()}
+        onSprintToggle={vi.fn()}
+        onSprintPauseResume={vi.fn()}
+        onBulkStart={onBulkStart}
+        onBulkDelete={vi.fn()}
+        onEditSprint={vi.fn()}
+        onExportSprint={vi.fn()}
+        onOverridesSprint={vi.fn()}
+        onMarkCompletedSprint={vi.fn()}
+        onDeleteSprint={vi.fn()}
+        onBulkShowcaseEnable={vi.fn()}
+        onBulkShowcaseDisable={vi.fn()}
+      />
+    );
+
+    await user.click(screen.getAllByRole("button", { name: /Select sprint Frontend Onboarding/i })[0]);
+    await user.click(screen.getByRole("button", { name: /Start 1 selected sprints/i }));
+    expect(onBulkStart).toHaveBeenCalledWith(["sprint-1"]);
+
+    rerender(
+      <SprintLedger
+        sprints={[mockSprint]}
+        listWindow={10}
+        onListWindowChange={vi.fn()}
+        activeRunsBySprintId={new Map()}
+        pauseResumeRunsBySprintId={new Map()}
+        interventionBySprintId={new Map()}
+        pendingActionIds={new Set(["sprint-start:sprint-1"])}
+        onToggleShowcase={vi.fn()}
+        onSprintToggle={vi.fn()}
+        onSprintPauseResume={vi.fn()}
+        onBulkStart={onBulkStart}
+        onBulkDelete={vi.fn()}
+        onEditSprint={vi.fn()}
+        onExportSprint={vi.fn()}
+        onOverridesSprint={vi.fn()}
+        onMarkCompletedSprint={vi.fn()}
+        onDeleteSprint={vi.fn()}
+        onBulkShowcaseEnable={vi.fn()}
+        onBulkShowcaseDisable={vi.fn()}
+      />
+    );
+    expect(screen.getByRole("button", { name: /Starting 1 selected sprints/i })).toBeDisabled();
+
+    rerender(
+      <SprintLedger
+        sprints={[mockSprint]}
+        listWindow={10}
+        onListWindowChange={vi.fn()}
+        activeRunsBySprintId={new Map()}
+        pauseResumeRunsBySprintId={new Map()}
+        interventionBySprintId={new Map()}
+        pendingActionIds={new Set()}
+        onToggleShowcase={vi.fn()}
+        onSprintToggle={vi.fn()}
+        onSprintPauseResume={vi.fn()}
+        onBulkStart={onBulkStart}
+        onBulkDelete={vi.fn()}
+        onEditSprint={vi.fn()}
+        onExportSprint={vi.fn()}
+        onOverridesSprint={vi.fn()}
+        onMarkCompletedSprint={vi.fn()}
+        onDeleteSprint={vi.fn()}
+        onBulkShowcaseEnable={vi.fn()}
+        onBulkShowcaseDisable={vi.fn()}
+      />
+    );
+
+    expect(screen.getByText(/Start completed for 1 selected sprint\./i)).toBeInTheDocument();
+  });
+
+  it("surfaces mark-completed pending state on the target row", () => {
+    render(
+      <table>
+        <tbody>
+          <SprintLedgerRow
+            sprint={mockSprint}
+            isSelected={false}
+            isEven={false} activeRun={undefined} pauseResumeRun={undefined} humanIntervention={null} isAnyBulkPending={false}
+            pendingActionIds={new Set(["sprint-mark-completed:sprint-1"])}
+            onToggleRow={vi.fn()}
+            onToggleShowcase={vi.fn()}
+            onSprintToggle={vi.fn()}
+            onSprintPauseResume={vi.fn()}
+            onEdit={vi.fn()}
+            onExport={vi.fn()}
+            onOverrides={vi.fn()}
+            onMarkCompleted={vi.fn()}
+            onDelete={vi.fn()}
+          />
+        </tbody>
+      </table>
+    );
+
+    expect(screen.getByText("Completion pending")).toBeInTheDocument();
+    expect(screen.getAllByRole("row")[0]).toHaveAttribute("aria-busy", "true");
   });
 
   it("reveals and collapses bulk actions based on selection count", () => {

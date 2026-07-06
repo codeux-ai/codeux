@@ -56,6 +56,12 @@ describe('ActivityCacheService', () => {
       metadata: {}
     };
 
+    const expectWarnMetadata = (message: string) => {
+      const warn = vi.mocked(mockDeps.logger?.warn);
+      expect(warn).toHaveBeenCalledWith(message, expect.any(Object));
+      return warn?.mock.calls.find((call) => call[0] === message)?.[1] as Record<string, unknown>;
+    };
+
     it('should fetch and cache activities when no cache exists ("set" logic)', async () => {
       mockDeps.getSubtasks.mockReturnValue([mockTask]);
       mockDeps.resolveSessionNameFromTask.mockReturnValue('session-1');
@@ -189,6 +195,24 @@ describe('ActivityCacheService', () => {
       expect(result).toEqual({});
     });
 
+    it('should skip terminal sessions even when stale activities are cached', async () => {
+      mockDeps.getSubtasks.mockReturnValue([mockTask]);
+      mockDeps.resolveSessionNameFromTask.mockReturnValue('session-1');
+      (mockDeps.isSessionTerminal as any).mockReturnValue(false);
+      mockDeps.fetchRecentActivities.mockResolvedValue([mockActivity]);
+
+      await service.getLiveActivitiesForActiveTasks();
+
+      mockDeps.fetchRecentActivities.mockClear();
+      (mockDeps.isSessionTerminal as any).mockReturnValue(true);
+
+      const result = await service.getLiveActivitiesForActiveTasks();
+
+      expect(mockDeps.isSessionTerminal).toHaveBeenCalledWith('session-1');
+      expect(mockDeps.fetchRecentActivities).not.toHaveBeenCalled();
+      expect(result).toEqual({});
+    });
+
     it('should filter terminal sessions while fetching active non-terminal sessions', async () => {
       const mockTask2 = { ...mockTask, id: 'task-2' };
       mockDeps.getSubtasks.mockReturnValue([mockTask, mockTask2]);
@@ -217,10 +241,14 @@ describe('ActivityCacheService', () => {
       const result = await service.getLiveActivitiesForActiveTasks();
 
       expect(result).toEqual({ 'session-1': [] });
-      expect(mockDeps.logger?.warn).toHaveBeenCalledWith(
-        'Could not fetch live activities',
-        expect.objectContaining({ sessionName: 'session-1' })
-      );
+      const metadata = expectWarnMetadata('Could not fetch live activities');
+      expect(metadata).toEqual({
+        sessionName: 'session-1',
+        failureCause: 'error',
+        errorName: 'Error',
+        cacheFallbackState: 'empty',
+        cachedActivityCount: 0,
+      });
     });
 
     it('should return stale cached activities when a refresh times out', async () => {
@@ -241,10 +269,16 @@ describe('ActivityCacheService', () => {
 
       expect(mockDeps.fetchRecentActivities).toHaveBeenCalledTimes(1);
       expect(result).toEqual({ 'session-1': [mockActivity] });
-      expect(mockDeps.logger?.warn).toHaveBeenCalledWith(
-        'Could not fetch live activities; returning stale cached activities',
-        expect.objectContaining({ sessionName: 'session-1' })
-      );
+      const metadata = expectWarnMetadata('Could not fetch live activities; returning stale cached activities');
+      expect(metadata).toEqual({
+        sessionName: 'session-1',
+        failureCause: 'timeout',
+        errorName: 'ActivityFetchTimeoutError',
+        cacheFallbackState: 'stale',
+        cachedActivityCount: 1,
+        timeoutMs: 25,
+      });
+      expect(JSON.stringify(metadata)).not.toContain('BASH_COMMAND');
     });
 
     it('should return stale cached activities when a refresh fails', async () => {
@@ -260,10 +294,45 @@ describe('ActivityCacheService', () => {
       const result = await service.getLiveActivitiesForActiveTasks();
 
       expect(result).toEqual({ 'session-1': [mockActivity] });
-      expect(mockDeps.logger?.warn).toHaveBeenCalledWith(
-        'Could not fetch live activities; returning stale cached activities',
-        expect.objectContaining({ sessionName: 'session-1' })
-      );
+      const metadata = expectWarnMetadata('Could not fetch live activities; returning stale cached activities');
+      expect(metadata).toEqual({
+        sessionName: 'session-1',
+        failureCause: 'error',
+        errorName: 'Error',
+        cacheFallbackState: 'stale',
+        cachedActivityCount: 1,
+      });
+    });
+
+    it('should preserve stale cached activities across repeated refresh failures', async () => {
+      mockDeps.getSubtasks.mockReturnValue([mockTask]);
+      mockDeps.resolveSessionNameFromTask.mockReturnValue('session-1');
+      mockDeps.fetchRecentActivities.mockResolvedValue([mockActivity]);
+
+      await service.getLiveActivitiesForActiveTasks();
+
+      vi.advanceTimersByTime(LIVE_CACHE_MS + 100);
+      mockDeps.fetchRecentActivities.mockRejectedValue(new Error('provider-output-body-should-not-log'));
+
+      const firstFallback = await service.getLiveActivitiesForActiveTasks();
+      const secondFallback = await service.getLiveActivitiesForActiveTasks();
+
+      expect(mockDeps.fetchRecentActivities).toHaveBeenCalledTimes(3);
+      expect(firstFallback).toEqual({ 'session-1': [mockActivity] });
+      expect(secondFallback).toEqual({ 'session-1': [mockActivity] });
+
+      const warn = vi.mocked(mockDeps.logger?.warn);
+      expect(warn).toHaveBeenCalledTimes(2);
+      for (const [, metadata] of warn?.mock.calls ?? []) {
+        expect(metadata).toMatchObject({
+          sessionName: 'session-1',
+          failureCause: 'error',
+          errorName: 'Error',
+          cacheFallbackState: 'stale',
+          cachedActivityCount: 1,
+        });
+        expect(JSON.stringify(metadata)).not.toContain('provider-output-body-should-not-log');
+      }
     });
 
     it('should reuse ongoing fetch promise if called concurrently', async () => {
@@ -317,7 +386,7 @@ describe('ActivityCacheService', () => {
       });
     });
 
-    it('should cache genuinely empty activity results temporarily with negative TTL', async () => {
+    it('should cache genuinely empty activity results only until the negative TTL expires', async () => {
       mockDeps.getSubtasks.mockReturnValue([mockTask]);
       mockDeps.resolveSessionNameFromTask.mockReturnValue('session-1');
       mockDeps.fetchRecentActivities.mockResolvedValue([]);
@@ -333,14 +402,20 @@ describe('ActivityCacheService', () => {
       expect(mockDeps.fetchRecentActivities).not.toHaveBeenCalled();
       expect(result2).toEqual({ 'session-1': [] });
 
+      vi.advanceTimersByTime(1999);
+
+      const result3 = await service.getLiveActivitiesForActiveTasks();
+      expect(mockDeps.fetchRecentActivities).not.toHaveBeenCalled();
+      expect(result3).toEqual({ 'session-1': [] });
+
       // Advance time past negative TTL (2000ms)
-      vi.advanceTimersByTime(2100);
+      vi.advanceTimersByTime(1);
 
       // Third call should fetch again
       mockDeps.fetchRecentActivities.mockResolvedValue([mockActivity]);
-      const result3 = await service.getLiveActivitiesForActiveTasks();
+      const result4 = await service.getLiveActivitiesForActiveTasks();
       expect(mockDeps.fetchRecentActivities).toHaveBeenCalledTimes(1);
-      expect(result3).toEqual({ 'session-1': [mockActivity] });
+      expect(result4).toEqual({ 'session-1': [mockActivity] });
     });
 
     it('should not negative-cache provider failures', async () => {

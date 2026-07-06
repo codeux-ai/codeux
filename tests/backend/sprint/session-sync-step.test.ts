@@ -11,6 +11,7 @@ import { ExecutionRepository } from "../../../src/repositories/execution-reposit
 const tempDirs: string[] = [];
 
 afterEach(async () => {
+  vi.useRealTimers();
   await Promise.all(tempDirs.splice(0).map((dir) => fs.rm(dir, { recursive: true, force: true })));
 });
 
@@ -772,11 +773,15 @@ describe("runSessionSyncStep", () => {
   });
 
   it("times out a slow activity fetch without blocking unrelated task sync", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-03-09T10:00:00.000Z"));
+
     const subtasks: Subtask[] = [
       { id: "task-1", title: "Task One", prompt: "", depends_on: [], is_independent: true, status: "PENDING" },
       { id: "task-2", title: "Task Two", prompt: "", depends_on: [], is_independent: true, status: "PENDING" },
     ];
 
+    const logger = { warn: vi.fn() };
     const healthyActivities = [
       {
         id: "activity-2",
@@ -791,7 +796,7 @@ describe("runSessionSyncStep", () => {
       return Promise.resolve(healthyActivities);
     });
 
-    const result = await runSessionSyncStep(
+    const resultPromise = runSessionSyncStep(
       subtasks,
       {
         listSessions: vi.fn().mockResolvedValue({
@@ -813,16 +818,33 @@ describe("runSessionSyncStep", () => {
         resolveSessionName: (session: { name?: string }) => session.name,
         extractSessionId: (session: { id?: string }) => session.id,
         fetchRecentActivities,
-        activityFetchTimeoutMs: 1,
+        activityFetchTimeoutMs: 30_000,
         isActionRequiredState: vi.fn().mockReturnValue(false),
-        logger: { warn: vi.fn() },
+        logger,
       } as any,
       false,
       { repoPath: "/tmp/my-repo", sprintNumber: 3 },
     );
 
+    await vi.advanceTimersByTimeAsync(29_999);
+    expect(logger.warn).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(1);
+    const result = await resultPromise;
+
     expect(result.subtasks[0]?.activities).toEqual([]);
     expect(result.subtasks[1]?.activities).toBe(healthyActivities);
+    expect(logger.warn).toHaveBeenCalledWith(
+      "Could not fetch activities for session",
+      expect.objectContaining({
+        sessionName: "sessions/session-1",
+        pageSize: 5,
+        concurrency: 5,
+        timeoutMs: 30_000,
+        elapsedMs: 30_000,
+        errorMessage: "Timed out fetching activities for sessions/session-1 after 30000ms",
+      }),
+    );
   });
 
   it("fetches activities using bounded parallelism for multiple unique sessions", async () => {
@@ -1317,6 +1339,9 @@ describe("runSessionSyncStep", () => {
   });
 
   it("refreshes a recorded task session directly when the snapshot has a stale nonterminal copy", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-28T20:00:00.000Z"));
+
     const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-session-sync-stale-snapshot-"));
     tempDirs.push(dir);
 

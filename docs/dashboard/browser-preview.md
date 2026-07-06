@@ -2,6 +2,12 @@
 
 The browser preview provides an integrated environment for interacting with running sprint containers directly from the dashboard.
 
+## Defaults
+
+- Fresh system and project settings enable the preview runtime and show the in-app browser workspace by default.
+- Existing persisted system, project, or sprint overrides remain authoritative. Sanitization only fills missing preview fields from the current defaults, so an explicit disabled preview stays disabled.
+- `autoStartOnRunningSprint` remains false by default. Operators still choose whether sprint runs should launch preview containers automatically; the default only makes preview controls and the embedded browser available.
+
 ## Interaction Contracts
 
 - Preview refresh, launch, rebuild, stop, remove, navigation, and startup-script save operations use visible async feedback plus local status text. Page-level operation results use `ActionFeedbackRegion` where available; control-specific progress stays beside the control that is pending.
@@ -30,9 +36,14 @@ The browser preview provides an integrated environment for interacting with runn
 - Launch pending state keeps the selected sprint value visible, explains the disabled select and launch controls through status text and control titles, and prevents duplicate launch submission until the start request settles.
 - Startup-script saving sets `aria-busy` on the save button and textarea and pauses editing until the save completes. Script save status is a polite live region connected through `aria-describedby`.
 - Container logs keep stale log text mounted during refresh, set `aria-busy` on the log region, and show a visible Ready/Refreshing/Error badge plus polite live-region copy.
+- File-browser launch, rebuild, and stop follow the same async contract as browser preview: the affected region or button sets `aria-busy`, the visible label names the pending operation, duplicate activation is suppressed, and disabled sibling controls describe whether launch, rebuild, or stop is blocking recovery.
+- File tree rows and changed-file rows keep keyboard tree/listbox semantics while selection loads. The selected row sets `aria-busy`, shows a non-animation-only Loading badge, and keeps focusable row activation available for normal selection behavior.
+- File and diff viewers keep cached editor content mounted during background refresh. The viewer region sets `aria-busy`, the retained content is visually marked with a stale/refresh ring and visible status copy, and empty states are reserved for committed empty selections where no cached file or diff exists.
+- Changed-file refreshes keep the cached list mounted when available. Refresh and error banners must say whether the list is current, refreshing, or a cached fallback, and unavailable diffs keep their backend-provided reason visible.
 - Navigation pending state is a short client-side command guard. Back, forward, reload, and address submit controls announce that the navigation command is being sent; the iframe bridge does not acknowledge command completion.
 - Multi-port preview sessions render as one persisted browser session with an accessible port tablist in the browser chrome. The first container-to-host port mapping is the primary tab, tabs support pointer and arrow-key selection, and secondary tabs route through the existing selected-port proxy query while preserving a separate current path per selected port.
 - The Live Preview button uses the same mapping model outside the full browser page. Its primary click opens the primary routed port. When the session exposes additional routed ports, the adjacent arrow menu lists each port mapping so operators can open a secondary port directly; mappings that do not yet have a host port stay visible but disabled with their pending reason.
+- Preview links only activate when a session is running and has a routed host port. Starting, stopped, errored, and missing-port sessions remain visible but disabled, omit navigable URLs, suppress activation, and expose a persistent reason through visible copy plus `aria-describedby` or `title`.
 
 ## Verification Notes
 

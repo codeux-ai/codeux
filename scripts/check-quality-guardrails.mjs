@@ -75,6 +75,15 @@ const optimisticInsertionFiles = [
   "dashboard/src/v2/TasksPage.tsx",
   "dashboard/src/v2/lib/tasks/task-board-actions.ts",
 ];
+const coverageThresholdConfigPath = "vitest.config.ts";
+const minimumGlobalCoverageThresholds = {
+  lines: 77.4,
+  functions: 71.5,
+  branches: 66.1,
+  statements: 76.0,
+};
+const activityCacheServiceCoveragePath = "src/server/activity-cache-service.ts";
+const minimumActivityCacheServiceLineThreshold = 80;
 const directRealtimePayloadStringifyPattern =
   /JSON\.stringify\s*\(\s*(?:payload|snapshot|event\.payload|options\.payload)\s*(?:[,)]|\s*\))/g;
 
@@ -166,6 +175,271 @@ function lineNumberAt(text, index) {
 
 function compactMatch(value) {
   return value.trim().replace(/\s+/g, " ");
+}
+
+function stripJavaScriptComments(text) {
+  let output = "";
+  let quote = "";
+  let escaped = false;
+  let inLineComment = false;
+  let inBlockComment = false;
+
+  for (let index = 0; index < text.length; index += 1) {
+    const current = text[index];
+    const next = text[index + 1] ?? "";
+
+    if (inLineComment) {
+      if (current === "\n" || current === "\r") {
+        inLineComment = false;
+        output += current;
+      }
+      continue;
+    }
+
+    if (inBlockComment) {
+      if (current === "*" && next === "/") {
+        inBlockComment = false;
+        index += 1;
+      } else if (current === "\n" || current === "\r") {
+        output += current;
+      }
+      continue;
+    }
+
+    if (quote) {
+      output += current;
+      if (escaped) {
+        escaped = false;
+      } else if (current === "\\") {
+        escaped = true;
+      } else if (current === quote) {
+        quote = "";
+      }
+      continue;
+    }
+
+    if (current === "\"" || current === "'" || current === "`") {
+      quote = current;
+      output += current;
+      continue;
+    }
+
+    if (current === "/" && next === "/") {
+      inLineComment = true;
+      index += 1;
+      continue;
+    }
+
+    if (current === "/" && next === "*") {
+      inBlockComment = true;
+      index += 1;
+      continue;
+    }
+
+    output += current;
+  }
+
+  return output;
+}
+
+function findMatchingBrace(text, openIndex) {
+  let depth = 0;
+  let quote = "";
+  let escaped = false;
+  let inLineComment = false;
+  let inBlockComment = false;
+
+  for (let index = openIndex; index < text.length; index += 1) {
+    const current = text[index];
+    const next = text[index + 1] ?? "";
+
+    if (inLineComment) {
+      if (current === "\n" || current === "\r") {
+        inLineComment = false;
+      }
+      continue;
+    }
+
+    if (inBlockComment) {
+      if (current === "*" && next === "/") {
+        inBlockComment = false;
+        index += 1;
+      }
+      continue;
+    }
+
+    if (quote) {
+      if (escaped) {
+        escaped = false;
+      } else if (current === "\\") {
+        escaped = true;
+      } else if (current === quote) {
+        quote = "";
+      }
+      continue;
+    }
+
+    if (current === "\"" || current === "'" || current === "`") {
+      quote = current;
+      continue;
+    }
+
+    if (current === "/" && next === "/") {
+      inLineComment = true;
+      index += 1;
+      continue;
+    }
+
+    if (current === "/" && next === "*") {
+      inBlockComment = true;
+      index += 1;
+      continue;
+    }
+
+    if (current === "{") {
+      depth += 1;
+    } else if (current === "}") {
+      depth -= 1;
+      if (depth === 0) {
+        return index;
+      }
+    }
+  }
+
+  return -1;
+}
+
+function findObjectPropertyBlock(text, propertyName, fromIndex = 0) {
+  const propertyPattern = new RegExp(`\\b${propertyName}\\s*:`, "g");
+  propertyPattern.lastIndex = fromIndex;
+  const match = propertyPattern.exec(text);
+  if (!match) {
+    return null;
+  }
+
+  const openIndex = text.indexOf("{", propertyPattern.lastIndex);
+  if (openIndex < 0) {
+    return null;
+  }
+
+  const closeIndex = findMatchingBrace(text, openIndex);
+  if (closeIndex < 0) {
+    return null;
+  }
+
+  return {
+    content: text.slice(openIndex + 1, closeIndex),
+    contentStartIndex: openIndex + 1,
+    openIndex,
+    closeIndex,
+  };
+}
+
+function splitTopLevelProperties(objectContent) {
+  const properties = [];
+  let depth = 0;
+  let start = 0;
+  let quote = "";
+  let escaped = false;
+  let inLineComment = false;
+  let inBlockComment = false;
+
+  for (let index = 0; index < objectContent.length; index += 1) {
+    const current = objectContent[index];
+    const next = objectContent[index + 1] ?? "";
+
+    if (inLineComment) {
+      if (current === "\n" || current === "\r") {
+        inLineComment = false;
+      }
+      continue;
+    }
+
+    if (inBlockComment) {
+      if (current === "*" && next === "/") {
+        inBlockComment = false;
+        index += 1;
+      }
+      continue;
+    }
+
+    if (quote) {
+      if (escaped) {
+        escaped = false;
+      } else if (current === "\\") {
+        escaped = true;
+      } else if (current === quote) {
+        quote = "";
+      }
+      continue;
+    }
+
+    if (current === "\"" || current === "'" || current === "`") {
+      quote = current;
+      continue;
+    }
+
+    if (current === "/" && next === "/") {
+      inLineComment = true;
+      index += 1;
+      continue;
+    }
+
+    if (current === "/" && next === "*") {
+      inBlockComment = true;
+      index += 1;
+      continue;
+    }
+
+    if (current === "{" || current === "(" || current === "[") {
+      depth += 1;
+    } else if (current === "}" || current === ")" || current === "]") {
+      depth -= 1;
+    } else if (current === "," && depth === 0) {
+      properties.push({ text: objectContent.slice(start, index), start });
+      start = index + 1;
+    }
+  }
+
+  properties.push({ text: objectContent.slice(start), start });
+  return properties;
+}
+
+function parseTopLevelProperties(objectContent) {
+  const properties = new Map();
+
+  for (const property of splitTopLevelProperties(objectContent)) {
+    const commentFreeText = stripJavaScriptComments(property.text).trim();
+    if (!commentFreeText) {
+      continue;
+    }
+
+    const match = /^(?:"([^"]+)"|'([^']+)'|([A-Za-z_$][\w$]*))\s*:\s*([\s\S]*)$/.exec(commentFreeText);
+    if (!match) {
+      continue;
+    }
+
+    properties.set(match[1] ?? match[2] ?? match[3], {
+      value: match[4].trim(),
+      start: property.start,
+      text: commentFreeText,
+    });
+  }
+
+  return properties;
+}
+
+function parseNumericProperty(properties, propertyName) {
+  const property = properties.get(propertyName);
+  if (!property) {
+    return { property, value: null };
+  }
+
+  const match = /^(-?\d+(?:\.\d+)?)\b/.exec(property.value);
+  return {
+    property,
+    value: match ? Number.parseFloat(match[1]) : null,
+  };
 }
 
 async function collectProductionFiles() {
@@ -711,6 +985,104 @@ async function inspectDuplicateOptimisticInsertions() {
   return violations;
 }
 
+export function findCoverageThresholdViolations(source, options = {}) {
+  const configPath = options.path ?? coverageThresholdConfigPath;
+  const minimumGlobalThresholds = options.minimumGlobalThresholds ?? minimumGlobalCoverageThresholds;
+  const filePath = options.filePath ?? activityCacheServiceCoveragePath;
+  const minimumFileLineThreshold = options.minimumFileLineThreshold ?? minimumActivityCacheServiceLineThreshold;
+  const violations = [];
+  const coverageBlock = findObjectPropertyBlock(source, "coverage");
+  const thresholdsBlock = coverageBlock
+    ? findObjectPropertyBlock(source, "thresholds", coverageBlock.openIndex)
+    : findObjectPropertyBlock(source, "thresholds");
+
+  if (!thresholdsBlock) {
+    violations.push({
+      path: configPath,
+      line: 1,
+      pattern: "missing coverage thresholds",
+      match: "coverage.thresholds",
+      remediation:
+        "Define test.coverage.thresholds with global minimums and the activity-cache-service line threshold.",
+    });
+    return violations;
+  }
+
+  const thresholds = parseTopLevelProperties(thresholdsBlock.content);
+
+  for (const [metric, minimum] of Object.entries(minimumGlobalThresholds)) {
+    const { property, value } = parseNumericProperty(thresholds, metric);
+    if (value !== null && value >= minimum) {
+      continue;
+    }
+
+    violations.push({
+      path: configPath,
+      line: property ? lineNumberAt(source, thresholdsBlock.contentStartIndex + property.start) : lineNumberAt(source, thresholdsBlock.openIndex),
+      pattern: `coverage threshold ${metric}`,
+      match: value === null ? `${metric}: missing` : `${metric}: ${value}`,
+      remediation: `Keep the global ${metric} coverage threshold at ${minimum}% or higher.`,
+    });
+  }
+
+  const fileThreshold = thresholds.get(filePath);
+  if (!fileThreshold) {
+    violations.push({
+      path: configPath,
+      line: lineNumberAt(source, thresholdsBlock.openIndex),
+      pattern: "activity-cache-service coverage threshold",
+      match: `${filePath}: missing`,
+      remediation: `Keep a ${minimumFileLineThreshold}% or higher line threshold for ${filePath}.`,
+    });
+    return violations;
+  }
+
+  const fileThresholdOpenIndex = fileThreshold.value.indexOf("{");
+  if (fileThresholdOpenIndex < 0) {
+    violations.push({
+      path: configPath,
+      line: lineNumberAt(source, thresholdsBlock.contentStartIndex + fileThreshold.start),
+      pattern: "activity-cache-service coverage threshold",
+      match: compactMatch(fileThreshold.text),
+      remediation: `Keep ${filePath} configured as an object with lines at ${minimumFileLineThreshold}% or higher.`,
+    });
+    return violations;
+  }
+
+  const fileThresholdCloseIndex = findMatchingBrace(fileThreshold.value, fileThresholdOpenIndex);
+  const fileThresholdContent =
+    fileThresholdCloseIndex >= 0
+      ? fileThreshold.value.slice(fileThresholdOpenIndex + 1, fileThresholdCloseIndex)
+      : "";
+  const fileThresholdProperties = parseTopLevelProperties(fileThresholdContent);
+  const { property: lineProperty, value: lineValue } = parseNumericProperty(fileThresholdProperties, "lines");
+
+  if (lineValue === null || lineValue < minimumFileLineThreshold) {
+    violations.push({
+      path: configPath,
+      line: lineNumberAt(
+        source,
+        thresholdsBlock.contentStartIndex +
+          fileThreshold.start +
+          fileThreshold.value.indexOf("{") +
+          1 +
+          (lineProperty?.start ?? 0),
+      ),
+      pattern: "activity-cache-service coverage threshold",
+      match: lineValue === null ? `${filePath}.lines: missing` : `${filePath}.lines: ${lineValue}`,
+      remediation: `Keep ${filePath} line coverage at ${minimumFileLineThreshold}% or higher.`,
+    });
+  }
+
+  return violations;
+}
+
+async function inspectCoverageThresholds() {
+  const configPath = path.join(root, coverageThresholdConfigPath);
+  const source = await readFile(configPath, "utf8");
+  return findCoverageThresholdViolations(source, { path: coverageThresholdConfigPath });
+}
+
 function printList(items, renderItem) {
   for (const item of items.slice(0, topLimit)) {
     console.log(renderItem(item));
@@ -735,6 +1107,7 @@ async function main() {
     realtimePayloadFingerprintViolations,
     optimisticInsertionViolations,
     duplicateImplementationViolations,
+    coverageThresholdViolations,
   ] = await Promise.all([
     Promise.all(productionFiles.map(inspectSourceFile)),
     Promise.all(dependencyFactoryFiles.map(inspectDependencyFactoryFile)),
@@ -742,6 +1115,7 @@ async function main() {
     inspectRealtimePayloadFingerprinting(),
     inspectDuplicateOptimisticInsertions(),
     inspectDuplicateImplementationBlocks(productionFiles),
+    inspectCoverageThresholds(),
   ]);
   const dependencyFactoryViolations = dependencyFactoryViolationsNested.flat();
   const blockingViolations = [
@@ -750,6 +1124,7 @@ async function main() {
     ...realtimePayloadFingerprintViolations,
     ...optimisticInsertionViolations,
     ...duplicateImplementationViolations,
+    ...coverageThresholdViolations,
   ];
   const oversizedFiles = reports
     .filter((report) => report.lineCount > report.threshold)

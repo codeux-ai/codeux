@@ -3,7 +3,14 @@ import request from "supertest";
 import express from "express";
 import { EventEmitter } from "events";
 import { spawn } from "child_process";
-import { registerTerminalRoutes, bootDashboardTerminalWebSocketServer, buildLoginDockerfile, parseAndValidateLoginUrl } from "../../../src/server/terminal-routes.js";
+import {
+  registerTerminalRoutes,
+  bootDashboardTerminalWebSocketServer,
+  buildLoginDockerfile,
+  parseAndValidateLoginUrl,
+  prewarmLoginBaseImage,
+  resetLoginBaseImageStateForTests,
+} from "../../../src/server/terminal-routes.js";
 import type { DashboardDependencies } from "../../../src/server/dashboard-server.js";
 
 // Mock child_process.spawn
@@ -24,6 +31,13 @@ const mockChildProcess = {
     return mockChildProcess;
   },
 };
+const mockLoginImageState = vi.hoisted(() => ({
+  inspectExitCode: 0,
+  holdBuild: false,
+  finishBuild: null as ((code: number) => void) | null,
+  buildCount: 0,
+  buildExitCode: 0,
+}));
 
 vi.mock("child_process", () => {
   return {
@@ -37,7 +51,16 @@ vi.mock("child_process", () => {
         proc.stdin = { write: vi.fn(), end: vi.fn() };
         proc.stdout = new EventEmitter();
         proc.stderr = new EventEmitter();
-        process.nextTick(() => proc.emit("close", 0));
+        if (argv.includes("build") && mockLoginImageState.holdBuild) {
+          mockLoginImageState.buildCount += 1;
+          mockLoginImageState.finishBuild = (code: number) => process.nextTick(() => proc.emit("close", code));
+        } else {
+          if (argv.includes("build")) {
+            mockLoginImageState.buildCount += 1;
+          }
+          const code = argv.includes("inspect") ? mockLoginImageState.inspectExitCode : mockLoginImageState.buildExitCode;
+          process.nextTick(() => proc.emit("close", code));
+        }
         return proc;
       }
       return mockChildProcess;
@@ -51,6 +74,12 @@ describe("Terminal Routes", () => {
   let systemSettings: any;
 
   beforeEach(() => {
+    resetLoginBaseImageStateForTests();
+    mockLoginImageState.inspectExitCode = 0;
+    mockLoginImageState.holdBuild = false;
+    mockLoginImageState.finishBuild = null;
+    mockLoginImageState.buildCount = 0;
+    mockLoginImageState.buildExitCode = 0;
     app = express();
     app.use(express.json());
 
@@ -85,6 +114,8 @@ describe("Terminal Routes", () => {
     mockSpawnEvents.removeAllListeners();
     mockStdout.removeAllListeners();
     mockStderr.removeAllListeners();
+    mockLoginImageState.holdBuild = false;
+    mockLoginImageState.finishBuild = null;
   });
 
   it("should reject websocket upgrades from hostile origins", async () => {
@@ -252,6 +283,41 @@ describe("Terminal Routes", () => {
     expect(dockerfile).not.toContain("@google/gemini-cli");
     expect(dockerfile).not.toContain("claude.ai/install.sh");
     expect(dockerfile).not.toContain("opencode.ai/install");
+  });
+
+  it("prewarms the login image in the background and deduplicates concurrent builds", async () => {
+    mockLoginImageState.inspectExitCode = 1;
+    const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn(), child: vi.fn() } as any;
+
+    prewarmLoginBaseImage(logger);
+    prewarmLoginBaseImage(logger);
+
+    await vi.waitFor(() => {
+      expect(logger.info).toHaveBeenCalledWith("Login base image prewarm completed.", {
+        image: expect.stringMatching(/^code-ux-login-base-node-24-bookworm-slim:/),
+      });
+    });
+    const buildLogCount = logger.info.mock.calls.filter(([message]: [unknown]) =>
+      typeof message === "string" && message.startsWith("Building login base image")
+    ).length;
+    expect(buildLogCount).toBe(1);
+  });
+
+  it("keeps terminal start fallback available when login image prewarm build fails", async () => {
+    mockLoginImageState.inspectExitCode = 1;
+    mockLoginImageState.buildExitCode = 1;
+    const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn(), child: vi.fn() } as any;
+
+    prewarmLoginBaseImage(logger);
+
+    await vi.waitFor(() => {
+      expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining("fell back to the raw base image"));
+    });
+    mockLoginImageState.buildExitCode = 0;
+    const response = await request(app)
+      .post("/api/terminal/start")
+      .send({ providerConfigId: "gemini" });
+    expect(response.status).toBe(200);
   });
 
   it("should return 400 if providerConfigId is missing", async () => {

@@ -1,10 +1,14 @@
 import { useEffect, useRef, useState } from "preact/hooks";
+import { getContainerBuildProgress, type ContainerBuildProgress } from "../../lib/activity.js";
 
 export interface InteractiveLoginMessage {
   type: string;
   data?: string;
   code?: number;
   url?: string;
+  buildProgress?: ContainerBuildProgress;
+  loginImageBuildProgress?: ContainerBuildProgress;
+  containerBuildProgress?: ContainerBuildProgress;
 }
 
 interface UseInteractiveLoginSessionArgs {
@@ -12,6 +16,7 @@ interface UseInteractiveLoginSessionArgs {
   providerId: string;
   onSessionMessage: (message: InteractiveLoginMessage) => void;
   onSessionError: (message: string) => void;
+  onBuildProgress?: (progress: ContainerBuildProgress) => void;
 }
 
 interface UseInteractiveLoginSessionResult {
@@ -85,7 +90,18 @@ export function useInteractiveLoginSession(args: UseInteractiveLoginSessionArgs)
           throw new Error(errData.error || "Failed to start terminal session.");
         }
 
-        const data = await response.json() as { sessionId: string };
+        const data = await response.json() as {
+          sessionId: string;
+          buildProgress?: unknown;
+          loginImageBuildProgress?: unknown;
+          containerBuildProgress?: unknown;
+        };
+        const startProgress = getContainerBuildProgress(data.containerBuildProgress)
+          ?? getContainerBuildProgress(data.loginImageBuildProgress)
+          ?? getContainerBuildProgress(data.buildProgress);
+        if (startProgress) {
+          args.onBuildProgress?.(startProgress);
+        }
         sessionIdRef.current = data.sessionId;
         setSessionId(data.sessionId);
 
@@ -101,6 +117,13 @@ export function useInteractiveLoginSession(args: UseInteractiveLoginSessionArgs)
         ws.onmessage = (event: MessageEvent) => {
           try {
             const msg = JSON.parse(event.data as string) as InteractiveLoginMessage;
+            const messageProgress = getContainerBuildProgress(msg.containerBuildProgress)
+              ?? getContainerBuildProgress(msg.loginImageBuildProgress)
+              ?? getContainerBuildProgress(msg.buildProgress)
+              ?? getContainerBuildProgress(msg);
+            if (messageProgress) {
+              args.onBuildProgress?.(messageProgress);
+            }
             args.onSessionMessage(msg);
           } catch {
             if (typeof event.data === "string") {

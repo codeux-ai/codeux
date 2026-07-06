@@ -3,7 +3,7 @@
 import { h } from "preact";
 // @ts-ignore
 globalThis.React = { createElement: h };
-import { cleanup, render, screen } from "@testing-library/preact";
+import { cleanup, render, screen, waitFor } from "@testing-library/preact";
 import userEvent from "@testing-library/user-event";
 import * as matchers from "@testing-library/jest-dom/matchers";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -96,8 +96,37 @@ describe("ModelCard", () => {
 
     expect(screen.getAllByText("Downloading")).toHaveLength(2);
     expect(screen.getByText("42%")).toBeInTheDocument();
+    expect(screen.getByText("Download progress 42%.")).toBeInTheDocument();
     expect(screen.getByRole("progressbar", { name: "BGE Small EN download progress" })).toHaveAttribute("aria-valuenow", "42");
     expect(screen.queryByRole("button", { name: "Download" })).not.toBeInTheDocument();
+  });
+
+  it("suppresses duplicate download activation while the first action is pending", async () => {
+    let resolveDownload: () => void = () => {};
+    const props = {
+      ...handlers(),
+      onDownload: vi.fn(() => new Promise<void>((resolve) => {
+        resolveDownload = resolve;
+      })),
+    };
+    render(<ModelCard model={model()}
+      {...props}
+      reembedding={false}
+      staleCount={0} />);
+
+    const button = screen.getByRole("button", { name: "Download" });
+
+    await userEvent.click(button);
+    await userEvent.click(button);
+
+    expect(props.onDownload).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole("button", { name: "Starting" })).toHaveAttribute("aria-busy", "true");
+
+    resolveDownload();
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Download" })).toBeEnabled();
+    });
   });
 
   it("surfaces stale re-embed state with an Ember action", async () => {

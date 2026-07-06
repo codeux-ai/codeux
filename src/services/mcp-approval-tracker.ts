@@ -33,11 +33,17 @@ export class McpApprovalTracker {
   }
 
   setPending(correlationId: string, approval: PendingMcpApproval): void {
+    if (!this.isValidCorrelationId(correlationId)) {
+      return;
+    }
     this.pending.set(correlationId, { approval, timestamp: Date.now() });
   }
 
   /** Takes and clears the pending approval for a given correlation ID, if any. */
   takePending(correlationId: string): PendingMcpApproval | null {
+    if (!this.isValidCorrelationId(correlationId)) {
+      return null;
+    }
     const entry = this.pending.get(correlationId);
     if (entry) {
       this.pending.delete(correlationId);
@@ -52,6 +58,13 @@ export class McpApprovalTracker {
   }
 
   clear(correlationId: string): void {
+    if (!this.isValidCorrelationId(correlationId)) {
+      return;
+    }
     this.pending.delete(correlationId);
+  }
+
+  private isValidCorrelationId(correlationId: unknown): correlationId is string {
+    return typeof correlationId === "string" && correlationId.trim().length > 0;
   }
 }

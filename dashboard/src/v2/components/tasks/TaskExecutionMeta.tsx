@@ -42,6 +42,8 @@ export const TaskExecutionMeta: FunctionComponent<TaskExecutionMetaProps> = memo
   const durationLabel = time || "Not started";
   const executorLabel = getExecutorLabel();
   const modeLabel = executionMode || "Standard";
+  const runtimeAvailabilityLabel = time ? `Runtime duration available: ${durationLabel}` : "Runtime not started.";
+  const showExecutorVisibly = executorType !== "auto" && executorType !== undefined;
 
   return (
     <div
@@ -49,11 +51,19 @@ export const TaskExecutionMeta: FunctionComponent<TaskExecutionMetaProps> = memo
       role="list"
       aria-label="Task execution metadata"
       aria-busy="false"
+      aria-live="polite"
       style={{
         "--task-meta-control-duration": interactionTokens.controlFeedback.duration,
         "--task-meta-control-ease": interactionTokens.controlFeedback.ease,
+        "--task-meta-selection-duration": interactionTokens.selectionMovement.duration,
+        "--task-meta-selection-ease": interactionTokens.selectionMovement.ease,
       }}
+      data-motion-control="controlFeedback"
+      data-motion-selection="selectionMovement"
     >
+      <span className="sr-only" role="status" aria-live="polite" aria-atomic="true">
+        {runtimeAvailabilityLabel} Executor {executorLabel}. Mode {modeLabel}.
+      </span>
       <div
         className="flex min-h-7 min-w-[8.75rem] max-w-full items-center gap-1.5 bg-black/[0.03] dark:bg-white/[0.03] px-2 py-0.5 rounded-full border border-black/[0.06] dark:border-white/[0.08] transition-colors duration-[var(--task-meta-control-duration)] ease-[var(--task-meta-control-ease)]"
         role="listitem"
@@ -71,7 +81,7 @@ export const TaskExecutionMeta: FunctionComponent<TaskExecutionMetaProps> = memo
       >
         {getExecutorIcon()}
         <span className="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">Executor</span>
-        <span className="min-w-0 break-words">{executorLabel}</span>
+        <span className={showExecutorVisibly ? "min-w-0 break-words" : "sr-only"}>{executorLabel}</span>
       </div>
 
       <div

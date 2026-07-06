@@ -1,3 +1,6 @@
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { runCommandStrict, type CommandResult } from "../../services/cli-process-runner.js";
 
 /**
@@ -7,6 +10,12 @@ import { runCommandStrict, type CommandResult } from "../../services/cli-process
 export type LocalMergeRunner = (command: string, args: string[], cwd: string) => Promise<CommandResult>;
 
 const defaultRunner: LocalMergeRunner = (command, args, cwd) => runCommandStrict(command, args, cwd);
+const defaultHostGitRunner: LocalMergeRunner = (command, args, cwd) => runCommandStrict(
+  command,
+  args,
+  cwd,
+  { ...process.env, CODE_UX_GIT_CONTAINER_MODE: "host" },
+);
 
 export interface LocalMergeResult {
   ok: boolean;
@@ -53,16 +62,18 @@ export async function restoreCheckedOutRef(
   repoPath: string,
   original: CheckedOutRef | null,
   runner: LocalMergeRunner = defaultRunner,
-): Promise<void> {
-  if (!original) return;
+): Promise<boolean> {
+  if (!original) return true;
   try {
     await runner(
       "git",
       original.detached ? ["checkout", "--detach", original.ref] : ["checkout", original.ref],
       repoPath,
     );
+    return true;
   } catch {
     // Leave HEAD where the merge left it rather than throwing during cleanup.
+    return false;
   }
 }
 
@@ -125,6 +136,19 @@ async function gitRefExists(
   }
 }
 
+async function gitCommitExists(
+  repoPath: string,
+  ref: string,
+  runner: LocalMergeRunner,
+): Promise<boolean> {
+  try {
+    await runner("git", ["rev-parse", "--verify", `${ref}^{commit}`], repoPath);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 async function gitRevListCount(
   repoPath: string,
   range: string,
@@ -135,6 +159,27 @@ async function gitRevListCount(
     return Number.parseInt(res.stdout.trim(), 10) || 0;
   } catch {
     return 0;
+  }
+}
+
+function formatGitError(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
+async function hasUnmergedConflictEntries(
+  repoPath: string,
+  runner: LocalMergeRunner,
+): Promise<boolean> {
+  try {
+    const res = await runner("git", ["diff", "--name-only", "--diff-filter=U"], repoPath);
+    return res.stdout.trim().length > 0;
+  } catch {
+    try {
+      const res = await runner("git", ["ls-files", "-u"], repoPath);
+      return res.stdout.trim().length > 0;
+    } catch {
+      return false;
+    }
   }
 }
 
@@ -192,17 +237,6 @@ export async function workerBranchHasMergeWork(args: {
 }
 
 /**
- * Merges `sourceBranch` into `targetBranch` with a `--no-ff` merge commit, entirely
- * on the local host repo (LOCAL git mode has no remote PR to merge). Checks out the
- * target branch, performs the merge, and aborts cleanly on conflict.
- *
- * Does NOT restore the previously checked-out branch — callers wrap one or more
- * merges with {@link getCheckedOutRef}/{@link restoreCheckedOutRef} so the host repo
- * is checked out at most once and restored once, instead of churning the working
- * tree per merge. This matters because the host repo is the user's own working
- * directory; the orchestrator must not silently leave it on a different branch.
- */
-/**
  * Deletes a local branch after its work has been merged. Never deletes the branch that is currently
  * checked out (git refuses anyway) and swallows errors — branch cleanup is best-effort and must
  * never fail a merge. Returns true when the branch was removed.
@@ -233,6 +267,18 @@ export async function deleteBranchLocally(args: {
   }
 }
 
+/**
+ * Merges `sourceBranch` into `targetBranch` entirely on the local host repo (LOCAL
+ * git mode has no remote PR to merge). Checks out the target branch, creates it
+ * from the source when a freshly initialized local repo has no default-branch ref
+ * yet, performs the merge, and aborts cleanly on conflict.
+ *
+ * Does NOT restore the previously checked-out branch — callers wrap one or more
+ * merges with {@link getCheckedOutRef}/{@link restoreCheckedOutRef} so the host repo
+ * is checked out at most once and restored once, instead of churning the working
+ * tree per merge. This matters because the host repo is the user's own working
+ * directory; the orchestrator must not silently leave it on a different branch.
+ */
 export async function mergeBranchLocally(args: {
   repoPath: string;
   targetBranch: string;
@@ -241,24 +287,115 @@ export async function mergeBranchLocally(args: {
   runner?: LocalMergeRunner;
 }): Promise<LocalMergeResult> {
   const runner = args.runner ?? defaultRunner;
+  const targetBranch = args.targetBranch.trim();
+  const sourceBranch = args.sourceBranch.trim();
+  if (!targetBranch) {
+    return { ok: false, conflict: false, error: "Target branch is required for local merge." };
+  }
+  if (!sourceBranch) {
+    return { ok: false, conflict: false, error: "Source branch is required for local merge." };
+  }
+  if (!(await gitCommitExists(args.repoPath, sourceBranch, runner))) {
+    return {
+      ok: false,
+      conflict: false,
+      error: `Source branch or ref '${sourceBranch}' was not found or does not point to a commit.`,
+    };
+  }
   try {
-    await runner("git", ["checkout", args.targetBranch], args.repoPath);
+    if (await gitRefExists(args.repoPath, `refs/heads/${targetBranch}`, runner)) {
+      await runner("git", ["checkout", targetBranch], args.repoPath);
+    } else {
+      await runner("git", ["checkout", "-B", targetBranch, sourceBranch], args.repoPath);
+      return { ok: true, conflict: false };
+    }
   } catch (err) {
-    return { ok: false, conflict: false, error: err instanceof Error ? err.message : String(err) };
+    return { ok: false, conflict: false, error: formatGitError(err) };
   }
   try {
     await runner(
       "git",
-      ["merge", "--no-ff", "-m", args.commitMessage, args.sourceBranch],
+      ["merge", "--no-ff", "-m", args.commitMessage, sourceBranch],
       args.repoPath,
     );
     return { ok: true, conflict: false };
   } catch (err) {
+    const conflict = await hasUnmergedConflictEntries(args.repoPath, runner);
     try {
       await runner("git", ["merge", "--abort"], args.repoPath);
     } catch {
       // Abort can itself fail if there was nothing to abort; ignore.
     }
-    return { ok: false, conflict: true, error: err instanceof Error ? err.message : String(err) };
+    return { ok: false, conflict, error: formatGitError(err) };
+  }
+}
+
+/**
+ * Merges `sourceBranch` into `targetBranch` from a detached temporary worktree.
+ * This is intended for final LOCAL-mode feature -> default merges where the
+ * user's visible checkout must not switch branches or receive conflict files.
+ */
+export async function mergeBranchLocallyInTemporaryWorktree(args: {
+  repoPath: string;
+  targetBranch: string;
+  sourceBranch: string;
+  commitMessage: string;
+  runner?: LocalMergeRunner;
+}): Promise<LocalMergeResult> {
+  const runner = args.runner ?? defaultHostGitRunner;
+  const targetBranch = args.targetBranch.trim();
+  const sourceBranch = args.sourceBranch.trim();
+  if (!targetBranch) {
+    return { ok: false, conflict: false, error: "Target branch is required for local merge." };
+  }
+  if (!sourceBranch) {
+    return { ok: false, conflict: false, error: "Source branch is required for local merge." };
+  }
+  if (!(await gitCommitExists(args.repoPath, sourceBranch, runner))) {
+    return {
+      ok: false,
+      conflict: false,
+      error: `Source branch or ref '${sourceBranch}' was not found or does not point to a commit.`,
+    };
+  }
+
+  const targetExists = await gitRefExists(args.repoPath, `refs/heads/${targetBranch}`, runner);
+  if (!targetExists) {
+    try {
+      await runner("git", ["branch", targetBranch, sourceBranch], args.repoPath);
+      return { ok: true, conflict: false };
+    } catch (err) {
+      return { ok: false, conflict: false, error: formatGitError(err) };
+    }
+  }
+
+  const worktreePath = await mkdtemp(path.join(tmpdir(), "code-ux-local-merge-"));
+  let worktreeCreated = false;
+  try {
+    await runner("git", ["worktree", "add", "--detach", worktreePath, targetBranch], args.repoPath);
+    worktreeCreated = true;
+    await runner(
+      "git",
+      ["merge", "--no-ff", "-m", args.commitMessage, sourceBranch],
+      worktreePath,
+    );
+    await runner("git", ["branch", "-f", targetBranch, "HEAD"], worktreePath);
+    return { ok: true, conflict: false };
+  } catch (err) {
+    const conflict = worktreeCreated ? await hasUnmergedConflictEntries(worktreePath, runner) : false;
+    if (worktreeCreated) {
+      try {
+        await runner("git", ["merge", "--abort"], worktreePath);
+      } catch {
+        // Abort can itself fail if there was nothing to abort; ignore.
+      }
+    }
+    return { ok: false, conflict, error: formatGitError(err) };
+  } finally {
+    if (worktreeCreated) {
+      await runner("git", ["worktree", "remove", "--force", worktreePath], args.repoPath).catch(() => undefined);
+      await runner("git", ["worktree", "prune"], args.repoPath).catch(() => undefined);
+    }
+    await rm(worktreePath, { recursive: true, force: true }).catch(() => undefined);
   }
 }

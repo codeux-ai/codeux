@@ -153,6 +153,9 @@ describe("dashboard-lifecycle-service", () => {
         getAttentionItem: vi.fn(),
         resolveAttentionItem: vi.fn(),
       } as any,
+      qaReviewRepository: {
+        resetTaskReviewRuns: vi.fn().mockReturnValue(2),
+      } as any,
       guardrailService: {
         resetPurpose: vi.fn(),
       } as any,
@@ -336,6 +339,52 @@ describe("dashboard-lifecycle-service", () => {
         resolutionSummaryMarkdown: undefined,
       });
       expect(mockDeps.guardrailService.resetPurpose).toHaveBeenCalledWith("task-1", "merge_conflict");
+    });
+
+    it("resets QA review history when a QA human escalation is resolved", async () => {
+      const escalation = {
+        id: "attention-qa-1",
+        projectId: "project-1",
+        sprintId: "sprint-1",
+        taskId: "task-1",
+        sprintRunId: "run-1",
+        dispatchId: null,
+        attentionType: "human_escalation_required",
+        severity: "high",
+        ownerType: "human",
+        status: "open",
+        assignedWorkerEndpointId: null,
+        title: "QA could not verify T1",
+        summaryMarkdown: "QA review budget exhausted.",
+        payload: {
+          sourceAttentionType: "qa_review",
+          taskKey: "T1",
+          qaReason: "retries_exhausted",
+          runsUsed: 2,
+          maxRuns: 2,
+        },
+        openedAt: "2026-03-09T00:00:00.000Z",
+        claimedAt: null,
+        resolvedAt: null,
+        updatedAt: "2026-03-09T00:00:00.000Z",
+      };
+      vi.mocked(mockDeps.projectAttentionRepository.getAttentionItem).mockReturnValue(escalation as any);
+      vi.mocked(mockDeps.projectAttentionRepository.resolveAttentionItem).mockReturnValue({
+        ...escalation,
+        status: "resolved",
+        resolvedAt: "2026-03-09T00:01:00.000Z",
+      } as any);
+
+      await bootDashboard(mockDeps);
+      const setupArgs = vi.mocked(setupDashboardServer).mock.calls[0][0];
+      const result = setupArgs.resolveAttentionItem!("project-1", "attention-qa-1", {
+        status: "resolved",
+        reason: "human_reviewed",
+      });
+
+      expect(result.status).toBe("resolved");
+      expect(mockDeps.qaReviewRepository.resetTaskReviewRuns).toHaveBeenCalledWith("task-1");
+      expect(mockDeps.guardrailService.resetPurpose).toHaveBeenCalledWith("task-1", "qa_review");
     });
 
     it("handles saveSystemSettings callback correctly", async () => {

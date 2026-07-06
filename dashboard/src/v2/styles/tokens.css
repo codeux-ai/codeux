@@ -78,7 +78,8 @@
     }
   }
 
-  :root[data-reduced-motion="true"] {
+  :root[data-reduced-motion="true"],
+  :root[data-reduced-motion="REDUCE"] {
     --motion-fast: 0ms;
     --motion-standard: 0ms;
     --motion-slow: 0ms;

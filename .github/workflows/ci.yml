@@ -11,6 +11,52 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  release-version-bump:
+    name: Release Version Bump
+    if: github.event_name == 'pull_request' && github.base_ref == 'main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Verify package version was bumped
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          base_version="$(git show "${BASE_SHA}:package.json" | node -e "const fs = require('node:fs'); console.log(JSON.parse(fs.readFileSync(0, 'utf8')).version)")"
+          head_version="$(git show "${HEAD_SHA}:package.json" | node -e "const fs = require('node:fs'); console.log(JSON.parse(fs.readFileSync(0, 'utf8')).version)")"
+
+          echo "Base package version: ${base_version}"
+          echo "Head package version: ${head_version}"
+
+          node - "${base_version}" "${head_version}" <<'NODE'
+          const [, , baseVersion, headVersion] = process.argv;
+          const semverPattern = /^(\d+)\.(\d+)\.(\d+)(?:[-+][0-9A-Za-z.-]+)?$/;
+
+          function parseVersion(value, label) {
+            const match = semverPattern.exec(value);
+            if (!match) {
+              throw new Error(`${label} package.json version is not valid semver: ${value}`);
+            }
+            return match.slice(1, 4).map(Number);
+          }
+
+          const base = parseVersion(baseVersion, 'Base');
+          const head = parseVersion(headVersion, 'Head');
+          const isGreater = head[0] > base[0]
+            || (head[0] === base[0] && head[1] > base[1])
+            || (head[0] === base[0] && head[1] === base[1] && head[2] > base[2]);
+
+          if (!isGreater) {
+            throw new Error(`Main release PRs must bump package.json version above ${baseVersion}; found ${headVersion}.`);
+          }
+          NODE
+
   typecheck:
     name: Typecheck & Lint
     runs-on: ubuntu-latest
@@ -37,17 +83,16 @@ jobs:
         uses: actions/cache@v5
         with:
           path: node_modules
-          key: ${{ runner.os }}-nm-${{ hashFiles('pnpm-lock.yaml') }}
+          key: ${{ runner.os }}-node22-pnpm10.33.0-nm-${{ hashFiles('package.json', 'pnpm-lock.yaml') }}
 
       - name: Install dependencies
-        if: steps.nm-cache-typecheck.outputs.cache-hit != 'true'
         run: pnpm install --frozen-lockfile --ignore-scripts
 
       - name: Restore compiler caches
         uses: actions/cache@v5
         with:
           path: .cache/tsc
-          key: ${{ runner.os }}-tsc-${{ hashFiles('package.json', 'pnpm-lock.yaml', 'tsconfig.json', 'dashboard/tsconfig.json') }}
+          key: ${{ runner.os }}-node22-pnpm10.33.0-tsc-${{ hashFiles('package.json', 'pnpm-lock.yaml', 'tsconfig.json', 'dashboard/tsconfig.json') }}
 
       - name: Run Quality Guardrails
         run: pnpm run quality:guardrails
@@ -84,17 +129,16 @@ jobs:
         uses: actions/cache@v5
         with:
           path: node_modules
-          key: ${{ runner.os }}-nm-${{ hashFiles('pnpm-lock.yaml') }}
+          key: ${{ runner.os }}-node22-pnpm10.33.0-nm-${{ hashFiles('package.json', 'pnpm-lock.yaml') }}
 
       - name: Install dependencies
-        if: steps.nm-cache-backend.outputs.cache-hit != 'true'
         run: pnpm install --frozen-lockfile --ignore-scripts
 
       - name: Restore Vitest cache
         uses: actions/cache@v5
         with:
           path: node_modules/.vitest
-          key: ${{ runner.os }}-vitest-backend-${{ hashFiles('package.json', 'pnpm-lock.yaml', 'vitest.config.ts') }}
+          key: ${{ runner.os }}-node22-pnpm10.33.0-vitest-backend-${{ hashFiles('package.json', 'pnpm-lock.yaml', 'vitest.config.ts') }}
 
       - name: Run Backend Tests with Coverage
         run: pnpm run test:backend:coverage
@@ -125,20 +169,59 @@ jobs:
         uses: actions/cache@v5
         with:
           path: node_modules
-          key: ${{ runner.os }}-nm-${{ hashFiles('pnpm-lock.yaml') }}
+          key: ${{ runner.os }}-node22-pnpm10.33.0-nm-${{ hashFiles('package.json', 'pnpm-lock.yaml') }}
 
       - name: Install dependencies
-        if: steps.nm-cache-dashboard.outputs.cache-hit != 'true'
         run: pnpm install --frozen-lockfile --ignore-scripts
 
       - name: Restore Vitest cache
         uses: actions/cache@v5
         with:
           path: node_modules/.vitest
-          key: ${{ runner.os }}-vitest-dashboard-${{ hashFiles('package.json', 'pnpm-lock.yaml', 'vitest.config.ts') }}
+          key: ${{ runner.os }}-node22-pnpm10.33.0-vitest-dashboard-${{ hashFiles('package.json', 'pnpm-lock.yaml', 'vitest.config.ts') }}
 
       - name: Run Dashboard Tests
         run: pnpm run test:dashboard
+
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 10.33.0
+          run_install: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          package-manager-cache: false
+
+      - name: Restore node_modules cache
+        id: nm-cache-build
+        uses: actions/cache@v5
+        with:
+          path: node_modules
+          key: ${{ runner.os }}-node22-pnpm10.33.0-nm-${{ hashFiles('package.json', 'pnpm-lock.yaml') }}
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --ignore-scripts
+
+      - name: Restore Vite cache
+        uses: actions/cache@v5
+        with:
+          path: .cache/vite
+          key: ${{ runner.os }}-node22-pnpm10.33.0-vite-build-${{ hashFiles('package.json', 'pnpm-lock.yaml', 'vite.config.ts', 'tsconfig.json', 'dashboard/tsconfig.json') }}
+
+      - name: Build Server & Dashboard
+        run: pnpm run build
 
   security-audit:
     name: Security Audit
@@ -166,10 +249,9 @@ jobs:
         uses: actions/cache@v5
         with:
           path: node_modules
-          key: ${{ runner.os }}-nm-${{ hashFiles('pnpm-lock.yaml') }}
+          key: ${{ runner.os }}-node22-pnpm10.33.0-nm-${{ hashFiles('package.json', 'pnpm-lock.yaml') }}
 
       - name: Install dependencies
-        if: steps.nm-cache-audit.outputs.cache-hit != 'true'
         run: pnpm install --frozen-lockfile --ignore-scripts
 
       - name: Run Security Audit

@@ -116,5 +116,31 @@ describe("redaction", () => {
     it("converts bigint to string", () => {
       expect(redactMetadata(BigInt(9007199254740991))).toBe("9007199254740991");
     });
+
+    it("redacts secret-looking values from structured log metadata", () => {
+      const rawApiKey = "sk-test-value-12345";
+      const rawGithubToken = "ghp_123456789012345678901234567890123456";
+      const rawUrlPassword = "fixture-pass";
+      const result = redactMetadata({
+        request: {
+          headers: {
+            authorization: `Bearer ${rawApiKey}`,
+          },
+          url: `https://user:${rawUrlPassword}@example.invalid/repo.git`,
+        },
+        provider: {
+          githubToken: rawGithubToken,
+        },
+        message: `Authorization: Bearer ${rawApiKey}`,
+      }) as any;
+      const serialized = JSON.stringify(result);
+
+      expect(serialized).not.toContain(rawApiKey);
+      expect(serialized).not.toContain(rawGithubToken);
+      expect(serialized).not.toContain(rawUrlPassword);
+      expect(result.request.headers.authorization).toBe("[REDACTED]");
+      expect(result.provider.githubToken).toBe("[REDACTED]");
+      expect(result.message).toBe("Authorization: Bearer [REDACTED]");
+    });
   });
 });

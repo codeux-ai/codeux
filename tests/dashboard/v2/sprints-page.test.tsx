@@ -1004,7 +1004,7 @@ describe("SprintsPage", () => {
     fireEvent.click(cancelButtons[cancelButtons.length - 1]);
 
     await vi.waitFor(() => expect(deleteButton).toHaveFocus());
-    expect(screen.getByText(/Bulk delete canceled\. 2 sprints visible\. 2 selected\./)).toBeInTheDocument();
+    expect(screen.getByText(/Bulk delete canceled\. Selected sprints were not deleted\. 2 sprints visible\. 2 selected\./)).toBeInTheDocument();
   });
 
 

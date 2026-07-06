@@ -2,9 +2,10 @@
 import { h } from "preact";
 import { afterEach, describe, expect, it, vi, beforeEach } from "vitest";
 import { renderHook, act, waitFor, cleanup, render, screen, fireEvent } from "@testing-library/preact";
+import * as matchers from "@testing-library/jest-dom/matchers";
 import { useSettingsPageState } from "../../../dashboard/src/v2/hooks/use-settings-page-state.js";
 import { SettingsCategoryRail, CATEGORIES } from "../../../dashboard/src/v2/components/settings/SettingsCategoryRail.js";
-import { focusFirstInvalidSettingsControl } from "../../../dashboard/src/v2/SettingsPage.js";
+import { focusFirstInvalidSettingsControl, SettingsPage } from "../../../dashboard/src/v2/SettingsPage.js";
 import { applyEffectiveProjectSettings } from "../../../dashboard/src/v2/lib/settings-view-models.js";
 import * as settingsApi from "../../../dashboard/src/v2/lib/settings-api.js";
 import * as memoryApi from "../../../dashboard/src/v2/lib/memory-api.js";
@@ -13,6 +14,8 @@ import * as dashboardApi from "../../../dashboard/src/lib/api/dashboard-api.js";
 import { DEFAULT_DASHBOARD_SETTINGS } from "../../../src/repositories/settings-defaults.js";
 
 import * as navigationBlocker from "../../../dashboard/src/v2/router/navigation-blocker.js";
+
+expect.extend(matchers);
 
 vi.mock("../../../dashboard/src/v2/context/project-data.js", async () => {
   const { createContext } = await import("preact");
@@ -218,6 +221,45 @@ describe("useSettingsPageState", () => {
     await waitFor(() => expect(result.current.loading).toBe(false));
   });
 
+  it("renders settings loading state as a busy category region", () => {
+    mockFetchSystem.mockReturnValueOnce(new Promise(() => {}));
+
+    render(<SettingsPage />);
+
+    expect(screen.getByRole("region", { name: "Settings category panel" })).toHaveAttribute("aria-busy", "true");
+    expect(screen.getByRole("status", { name: "Loading settings" })).toHaveTextContent("Loading settings.");
+  });
+
+  it("renders settings load failures as alerts while preserving the shell", async () => {
+    mockFetchSystem.mockRejectedValueOnce(new Error("settings exploded"));
+
+    render(<SettingsPage />);
+
+    await waitFor(() => {
+      expect(screen.getAllByRole("alert").some((alert) => alert.textContent?.includes("settings exploded"))).toBe(true);
+    });
+    expect(screen.getByRole("region", { name: "Settings category panel" })).not.toHaveAttribute("aria-busy");
+  });
+
+  it("announces empty settings search results and recovers when the query clears", async () => {
+    render(<SettingsPage />);
+
+    await waitFor(() => {
+      expect(screen.getByRole("region", { name: "Settings category panel" })).not.toHaveAttribute("aria-busy");
+    });
+
+    fireEvent.input(screen.getByLabelText("Search settings categories"), {
+      target: { value: "this_should_not_exist_at_all" },
+    });
+    const emptySearchStatus = screen.getByText(/No settings match this_should_not_exist_at_all\./);
+    expect(emptySearchStatus.closest('[role="status"]')).toBeInTheDocument();
+
+    fireEvent.input(screen.getByLabelText("Search settings categories"), {
+      target: { value: "" },
+    });
+    expect(screen.getByText(/settings categories available/).closest('[role="status"]')).toBeInTheDocument();
+  });
+
   it("loads hints correctly during initialization", async () => {
     const { result } = renderHook(() => useSettingsPageState(CATEGORIES));
     await waitFor(() => expect(result.current.loading).toBe(false));
@@ -372,6 +414,59 @@ describe("useSettingsPageState", () => {
     expect(result.current.savingSystem).toBe(false);
     expect(result.current.activeSaving).toBe(false);
     expect(mockSaveSystem).toHaveBeenCalled();
+  });
+
+  it("preserves project draft values while a system save reloads effective settings", async () => {
+    const initialSettings = cloneDashboardSettings();
+    const staleReloadSettings = cloneDashboardSettings();
+    staleReloadSettings.git.defaultBranch = "server-reloaded-main";
+    mockFetchProject.mockResolvedValue({
+      settings: initialSettings,
+      sources: {},
+    } as any);
+    mockSaveSystem.mockResolvedValueOnce({
+      runtime: { dashboardPort: 4444, consoleLogLevel: "debug", debugLogFileLevel: "error", consoleLogMode: "standard" },
+      integrations: { providers: {}, githubToken: "" },
+      defaults: cloneDashboardSettings(),
+      mcpTools: [],
+    } as any);
+    mockSaveProject.mockRejectedValueOnce(new Error("project save failed"));
+
+    const { result } = renderHook(() => useSettingsPageState(CATEGORIES));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    act(() => {
+      result.current.updateSystem((current) => ({
+        ...current,
+        runtime: {
+          ...current.runtime,
+          consoleLogLevel: "debug",
+        },
+      }));
+      result.current.setActiveScope("project");
+    });
+    act(() => {
+      result.current.updateEditableSettings((current) => ({
+        ...current,
+        git: {
+          ...current.git,
+          defaultBranch: "draft-project-main",
+        },
+      }));
+    });
+    mockFetchProject.mockResolvedValue({
+      settings: staleReloadSettings,
+      sources: {},
+    } as any);
+
+    await act(async () => {
+      await result.current.handleSave();
+    });
+
+    expect(mockSaveSystem).toHaveBeenCalled();
+    expect(mockSaveProject).toHaveBeenCalled();
+    expect(result.current.projectSettings?.git.defaultBranch).toBe("draft-project-main");
+    expect(result.current.error).toContain("project save failed");
   });
 
   it.skip("handles saving project settings", async () => {

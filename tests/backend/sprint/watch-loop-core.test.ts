@@ -38,6 +38,10 @@ const buildDeps = () => ({
     updateSprintRun: vi.fn(),
     renewLease: vi.fn(),
   },
+  sprintRunLifecycleService: {
+    transition: vi.fn((_input: any) => ({ id: "run-1", status: _input.status })),
+    finalizeCancellationIfIdle: vi.fn().mockReturnValue(null),
+  },
   heartbeatService: {
     startHeartbeat: vi.fn(),
     stopHeartbeat: vi.fn(),
@@ -518,6 +522,101 @@ describe("WatchLoopRunner", () => {
     nowSpy.mockRestore();
   });
 
+  it("keeps the loop running while a dependent task is still blocked by an unsettled gate", async () => {
+    const deps = buildDeps();
+    const cycleRunner = buildCycleRunner();
+    const nowValues = [0, 1_000, 2_000, 3_000, 61_000];
+    const nowSpy = vi.spyOn(Date, "now").mockImplementation(() => nowValues.shift() ?? 61_000);
+
+    deps.renderInstruction.mockImplementation(async (id) => id === "watchHeader" ? "HEADER" : "");
+    deps.executionRepository.getSprintRun = vi.fn()
+      .mockReturnValueOnce({ status: "running" })
+      .mockReturnValueOnce({ status: "running" })
+      .mockReturnValueOnce({ status: "running" });
+
+    cycleRunner.run
+      .mockResolvedValueOnce({
+        subtasks: [
+          buildMockSubtask({
+            id: "T1",
+            status: "RUNNING",
+            merge_indicator: "CI",
+            is_merged: false,
+            worker_branch: "worker/T1",
+            pr_url: "https://example.com/pr/101",
+          }),
+          buildMockSubtask({
+            id: "T2",
+            status: "BLOCKED",
+            is_independent: false,
+            depends_on: ["T1"],
+          }),
+        ],
+        reportText: "REPORT_WAIT",
+        statusTable: "TABLE_WAIT",
+        instructions: "",
+        awaitingMerge: [],
+        manualMergeTasks: [],
+        workerEscalatedMergeConflictTasks: [],
+      })
+      .mockResolvedValueOnce({
+        subtasks: [
+          buildMockSubtask({ id: "T1", status: "COMPLETED", is_merged: true }),
+          buildMockSubtask({ id: "T2", status: "COMPLETED", is_merged: true, is_independent: false, depends_on: ["T1"] }),
+        ],
+        reportText: "REPORT_DONE",
+        statusTable: "TABLE_DONE",
+        instructions: "",
+        awaitingMerge: [],
+        manualMergeTasks: [],
+        workerEscalatedMergeConflictTasks: [],
+      });
+
+    const runner = new WatchLoopRunner(deps as any, cycleRunner as any, vi.fn().mockResolvedValue({
+      text: "",
+      state: "ready_for_merge",
+      prNumber: null,
+      prUrl: null,
+      hasMergeConflict: false,
+      mergeStateStatus: null,
+      hasFailedChecks: false,
+      hasPendingChecks: false,
+      hasReviewBlockers: false,
+      failedChecks: [],
+    }));
+
+    const result = await runner.run({
+      args: { sprint_number: 1, action: "orchestrate" } as any,
+      executionContext: {
+        project: { id: "project-1", name: "Test Project" },
+        sprint: { id: "sprint-1", name: "Sprint 1" },
+        sprintNumber: 1,
+        repoPath: "/tmp",
+        featureBranch: "feat",
+        defaultBranch: "main",
+      },
+      repoPath: "/tmp",
+      defaultFeatureBranch: "feat",
+      defaultBranch: "main",
+      githubMode: "LOCAL",
+      retryFailed: false,
+      loopSteps: { watchLoopOutputIntervalSeconds: 60, watchLoopIntervalSeconds: 1 } as any,
+      ciIntelligence: {} as any,
+      automationLevel: "SEMI_AUTO",
+      automationInterventions: {} as any,
+      dashboardPort: 4444,
+      sprintRunId: "run-1",
+    });
+
+    expect(cycleRunner.run).toHaveBeenCalledTimes(2);
+    expect(result).toContain("Sprint Execution Finished");
+    expect(result).toContain("REPORT_DONE");
+    expect(deps.projectAttentionService.openItems).not.toHaveBeenCalledWith(expect.arrayContaining([expect.objectContaining({
+      attentionType: "manual_attention",
+    })]));
+    nowSpy.mockRestore();
+  });
+
   it("clears stale main-merge human escalation items once the main PR conflict is gone", async () => {
     const deps = buildDeps();
     const cycleRunner = buildCycleRunner();
@@ -707,16 +806,14 @@ describe("WatchLoopRunner", () => {
         ownerType: "worker",
       })]),
     );
-    expect(deps.executionRepository.updateSprintRun).toHaveBeenCalledWith(
-      "run-1",
-      expect.objectContaining({ status: "paused" }),
+    expect(deps.sprintRunLifecycleService.transition).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sprintRunId: "run-1",
+        status: "paused",
+      }),
     );
-    expect(deps.executionRepository.appendSprintRunEvent).not.toHaveBeenCalledWith(
-      "run-1",
-      "sprint_completed",
-      expect.anything(),
-      expect.anything(),
-      expect.anything(),
+    expect(deps.sprintRunLifecycleService.transition).not.toHaveBeenCalledWith(
+      expect.objectContaining({ eventType: "sprint_completed" }),
     );
     nowSpy.mockRestore();
   });
@@ -1049,6 +1146,332 @@ describe("WatchLoopRunner", () => {
     nowSpy.mockRestore();
   });
 
+  it("LOCAL: does not retry final merge while worker-owned main-merge attention is open", async () => {
+    const deps = buildDeps();
+    const cycleRunner = buildCycleRunner();
+    const nowValues = [0, 1_000, 2_000, 3_000, 61_000];
+    const nowSpy = vi.spyOn(Date, "now").mockImplementation(() => nowValues.shift() ?? 61_000);
+
+    deps.renderInstruction.mockImplementation(async (id) => {
+      if (id === "watchHeader") return "HEADER";
+      if (id === "cleanupAllMerged") return "CLEANUP_MERGED";
+      return "";
+    });
+    deps.executionRepository.getSprintRun = vi.fn().mockReturnValue({ status: "running" });
+    deps.projectAttentionService.listActiveProjectItems = vi.fn()
+      .mockReturnValueOnce([
+        {
+          id: "main-conflict-1",
+          sprintRunId: "run-1",
+          attentionType: "merge_conflict",
+          ownerType: "worker",
+          status: "open",
+          summaryMarkdown: "Worker is resolving the main merge conflict.",
+          payload: { mergeStage: "main" },
+        },
+      ])
+      .mockReturnValue([]);
+
+    cycleRunner.run.mockResolvedValue({
+      subtasks: [buildMockSubtask({ status: "COMPLETED", is_merged: true, worker_branch: "worker/task-1" })],
+      reportText: "REPORT",
+      statusTable: "TABLE",
+      instructions: "",
+      awaitingMerge: [],
+      manualMergeTasks: [],
+      workerEscalatedMergeConflictTasks: [],
+    });
+
+    let mergeAttempts = 0;
+    vi.mocked(runCommandStrict).mockImplementation(async (_cmd: string, args: string[]) => {
+      if (args[0] === "merge" && args[1] !== "--abort") {
+        mergeAttempts += 1;
+      }
+      return { stdout: "", stderr: "" } as any;
+    });
+
+    const renderMergeFeedbackMock = vi.fn().mockResolvedValue({
+      text: "FB",
+      state: "ready_for_merge",
+      prNumber: null,
+      prUrl: null,
+      hasMergeConflict: false,
+      mergeStateStatus: null,
+      hasFailedChecks: false,
+      hasPendingChecks: false,
+      hasReviewBlockers: false,
+      failedChecks: [],
+    });
+
+    const runner = new WatchLoopRunner(deps as any, cycleRunner as any, renderMergeFeedbackMock);
+    const result = await runner.run({
+      args: { sprint_number: 1, action: "orchestrate" } as any,
+      executionContext: {
+        project: { id: "project-1", name: "Test Project" },
+        sprint: { id: "sprint-1", name: "Sprint 1" },
+        sprintNumber: 1,
+        repoPath: "/tmp",
+        featureBranch: "feat",
+        defaultBranch: "main",
+      },
+      repoPath: "/tmp",
+      defaultFeatureBranch: "feat",
+      defaultBranch: "main",
+      githubMode: "LOCAL",
+      retryFailed: false,
+      loopSteps: { watchLoopOutputIntervalSeconds: 60, watchLoopIntervalSeconds: 0.01 } as any,
+      ciIntelligence: { resolveMainMergeConflicts: true } as any,
+      automationLevel: "SEMI_AUTO",
+      automationInterventions: {} as any,
+      dashboardPort: 4444,
+      sprintRunId: "run-1",
+    });
+
+    expect(mergeAttempts).toBe(1);
+    expect(result).toContain("Existing main-merge attention is still assigned to a worker");
+    expect(result).toContain("Sprint Execution Finished");
+
+    vi.mocked(runCommandStrict).mockResolvedValue({ stdout: "", stderr: "" } as any);
+    nowSpy.mockRestore();
+  });
+
+  it("LOCAL: merges the sprint feature branch into a local-only default branch before completing", async () => {
+    const deps = buildDeps();
+    const cycleRunner = buildCycleRunner();
+    const nowSpy = vi.spyOn(Date, "now");
+    nowSpy.mockReturnValueOnce(0).mockReturnValue(1000);
+    deps.projectAttentionService.listActiveProjectItems.mockReturnValue([
+      {
+        id: "handoff-1",
+        sprintRunId: "run-1",
+        attentionType: "human_escalation_required",
+        ownerType: "human",
+        status: "open",
+        payload: { sourceAttentionType: "merge_conflict" },
+      },
+      {
+        id: "handoff-unrelated",
+        sprintRunId: "run-1",
+        attentionType: "human_escalation_required",
+        ownerType: "human",
+        status: "open",
+        payload: { sourceAttentionType: "manual_attention" },
+      },
+    ] as any);
+
+    deps.renderInstruction.mockImplementation(async (id) => {
+      if (id === "watchHeader") return "HEADER";
+      if (id === "cleanupAllMerged") return "CLEANUP_MERGED";
+      return "";
+    });
+    deps.getDashboardSettings = () => ({
+      ...buildMockSettings(),
+      git: {
+        ...buildMockSettings().git,
+        deleteMergedBranches: true,
+      },
+    });
+
+    cycleRunner.run.mockResolvedValue({
+      subtasks: [buildMockSubtask({ status: "COMPLETED", is_merged: true, worker_branch: "task/t01" })],
+      reportText: "REPORT",
+      statusTable: "TABLE",
+      instructions: "",
+      awaitingMerge: [],
+      manualMergeTasks: [],
+      workerEscalatedMergeConflictTasks: [],
+    });
+
+    let currentBranch = "user/topic";
+    vi.mocked(runCommandStrict).mockImplementation(async (_cmd: string, args: string[]) => {
+      if (args[0] === "symbolic-ref" && args.includes("--short")) {
+        return { stdout: `${currentBranch}\n`, stderr: "" } as any;
+      }
+      if (args[0] === "rev-parse" && args[1] === "--verify") {
+        return { stdout: "feature-sha\n", stderr: "" } as any;
+      }
+      if (args[0] === "show-ref" && args.includes("refs/heads/main")) {
+        return { stdout: "", stderr: "" } as any;
+      }
+      if (args[0] === "checkout") {
+        currentBranch = args.at(-1) ?? currentBranch;
+        return { stdout: "", stderr: "" } as any;
+      }
+      if (args[0] === "merge") {
+        return { stdout: "Merge made by the 'ort' strategy.\n", stderr: "" } as any;
+      }
+      if (args[0] === "rev-parse" && args[1] === "--abbrev-ref") {
+        return { stdout: `${currentBranch}\n`, stderr: "" } as any;
+      }
+      if (args[0] === "branch" && args[1] === "-D") {
+        return { stdout: "Deleted branch feature/sprint-1.\n", stderr: "" } as any;
+      }
+      return { stdout: "", stderr: "" } as any;
+    });
+
+    const runner = new WatchLoopRunner(deps as any, cycleRunner as any, vi.fn().mockResolvedValue({
+      text: "",
+      state: "ready_for_merge",
+      prNumber: null,
+      prUrl: null,
+      hasMergeConflict: false,
+      mergeStateStatus: null,
+      hasFailedChecks: false,
+      hasPendingChecks: false,
+      hasReviewBlockers: false,
+      failedChecks: [],
+    }));
+
+    const result = await runner.run({
+      args: { sprint_number: 1, action: "orchestrate" } as any,
+      executionContext: {
+        project: { id: "project-1", name: "Test Project" },
+        sprint: { id: "sprint-1", name: "Sprint 1" },
+        sprintNumber: 1,
+        repoPath: "/tmp/local-only",
+        featureBranch: "feature/sprint-1",
+        defaultBranch: "main",
+      },
+      repoPath: "/tmp/local-only",
+      defaultFeatureBranch: "feature/sprint-1",
+      defaultBranch: "main",
+      githubMode: "LOCAL",
+      retryFailed: false,
+      loopSteps: { watchLoopOutputIntervalSeconds: 60, watchLoopIntervalSeconds: 1 } as any,
+      ciIntelligence: {} as any,
+      automationLevel: "SEMI_AUTO",
+      automationInterventions: {} as any,
+      dashboardPort: 4444,
+      sprintRunId: "run-1",
+    });
+
+    expect(runCommandStrict).toHaveBeenCalledWith(
+      "git",
+      ["merge", "--no-ff", "-m", "Merge branch 'feature/sprint-1' into main", "feature/sprint-1"],
+      expect.stringContaining("code-ux-local-merge-"),
+      expect.objectContaining({ CODE_UX_GIT_CONTAINER_MODE: "host" }),
+    );
+    expect(runCommandStrict).toHaveBeenCalledWith(
+      "git",
+      ["worktree", "add", "--detach", expect.stringContaining("code-ux-local-merge-"), "main"],
+      "/tmp/local-only",
+      expect.objectContaining({ CODE_UX_GIT_CONTAINER_MODE: "host" }),
+    );
+    expect(runCommandStrict).toHaveBeenCalledWith(
+      "git",
+      ["branch", "-f", "main", "HEAD"],
+      expect.stringContaining("code-ux-local-merge-"),
+      expect.objectContaining({ CODE_UX_GIT_CONTAINER_MODE: "host" }),
+    );
+    expect(runCommandStrict).not.toHaveBeenCalledWith("git", ["checkout", "main"], "/tmp/local-only");
+    expect(runCommandStrict).not.toHaveBeenCalledWith("git", ["checkout", "user/topic"], "/tmp/local-only");
+    expect(runCommandStrict).toHaveBeenCalledWith("git", ["branch", "-D", "feature/sprint-1"], "/tmp/local-only");
+    expect(result).toContain("Sprint Execution Finished");
+    expect(deps.sprintRunLifecycleService.transition).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sprintRunId: "run-1",
+        status: "completed",
+        eventType: "sprint_completed",
+        eventPayload: expect.objectContaining({ taskCount: 1 }),
+      }),
+    );
+    expect(deps.projectAttentionService.resolveItemsForSprintRun).toHaveBeenCalledWith(
+      "project-1",
+      "run-1",
+      ["merge_required", "merge_conflict"],
+      "sprint_completed",
+    );
+    expect(deps.projectAttentionService.resolveItem).toHaveBeenCalledWith(
+      "handoff-1",
+      { status: "resolved", reason: "sprint_completed" },
+    );
+    expect(deps.projectAttentionService.resolveItem).not.toHaveBeenCalledWith(
+      "handoff-unrelated",
+      expect.anything(),
+    );
+    nowSpy.mockRestore();
+  });
+
+  it("LOCAL: final merge does not restore or mutate the visible checkout", async () => {
+    const deps = buildDeps();
+    const cycleRunner = buildCycleRunner();
+    const nowSpy = vi.spyOn(Date, "now");
+    nowSpy.mockReturnValueOnce(0).mockReturnValue(1000);
+
+    deps.renderInstruction.mockImplementation(async (id) => {
+      if (id === "watchHeader") return "HEADER";
+      if (id === "cleanupAllMerged") return "CLEANUP_MERGED";
+      return "";
+    });
+
+    cycleRunner.run.mockResolvedValue({
+      subtasks: [buildMockSubtask({ status: "COMPLETED", is_merged: true })],
+      reportText: "REPORT",
+      statusTable: "TABLE",
+      instructions: "",
+      awaitingMerge: [],
+      manualMergeTasks: [],
+      workerEscalatedMergeConflictTasks: [],
+    });
+
+    vi.mocked(runCommandStrict).mockImplementation(async (_cmd: string, args: string[]) => {
+      if (args[0] === "rev-parse" && args[1] === "--verify") {
+        return { stdout: "feature-sha\n", stderr: "" } as any;
+      }
+      if (args[0] === "show-ref") {
+        return { stdout: "", stderr: "" } as any;
+      }
+      if (args[0] === "merge") {
+        return { stdout: "", stderr: "" } as any;
+      }
+      return { stdout: "", stderr: "" } as any;
+    });
+
+    const runner = new WatchLoopRunner(deps as any, cycleRunner as any, vi.fn().mockResolvedValue({
+      text: "",
+      state: "ready_for_merge",
+      prNumber: null,
+      prUrl: null,
+      hasMergeConflict: false,
+      mergeStateStatus: null,
+      hasFailedChecks: false,
+      hasPendingChecks: false,
+      hasReviewBlockers: false,
+      failedChecks: [],
+    }));
+
+    const result = await runner.run({
+      args: { sprint_number: 1, action: "orchestrate" } as any,
+      executionContext: {
+        project: { id: "project-1", name: "Test Project" },
+        sprint: { id: "sprint-1", name: "Sprint 1" },
+        sprintNumber: 1,
+        repoPath: "/tmp/local-only",
+        featureBranch: "feature/sprint-1",
+        defaultBranch: "main",
+      },
+      repoPath: "/tmp/local-only",
+      defaultFeatureBranch: "feature/sprint-1",
+      defaultBranch: "main",
+      githubMode: "LOCAL",
+      retryFailed: false,
+      loopSteps: { watchLoopOutputIntervalSeconds: 60, watchLoopIntervalSeconds: 1 } as any,
+      ciIntelligence: {} as any,
+      automationLevel: "SEMI_AUTO",
+      automationInterventions: {} as any,
+      dashboardPort: 4444,
+      sprintRunId: "run-1",
+    });
+
+    expect(result).toContain("Sprint Execution Finished");
+    expect(runCommandStrict).not.toHaveBeenCalledWith("git", ["checkout", expect.any(String)], "/tmp/local-only");
+    expect(deps.logger.warn).not.toHaveBeenCalledWith(
+      "LOCAL Mode: Failed to restore original checked-out ref after final merge attempt",
+      expect.anything(),
+    );
+    nowSpy.mockRestore();
+  });
+
   it("LOCAL: pauses when a main-merge conflict has escalated to a human", async () => {
     const deps = buildDeps();
     const cycleRunner = buildCycleRunner();
@@ -1141,9 +1564,11 @@ describe("WatchLoopRunner", () => {
 
     expect(result).toContain("Resolve conflicts locally");
     expect(result).not.toContain("Sprint Execution Finished");
-    expect(deps.executionRepository.updateSprintRun).toHaveBeenCalledWith(
-      "run-1",
-      expect.objectContaining({ status: "paused" }),
+    expect(deps.sprintRunLifecycleService.transition).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sprintRunId: "run-1",
+        status: "paused",
+      }),
     );
     // An escalation already exists, so no duplicate worker item is opened.
     expect(deps.projectAttentionService.openItems).not.toHaveBeenCalled();
@@ -1214,16 +1639,17 @@ describe("WatchLoopRunner", () => {
     });
 
     expect(result).toContain("Sprint Execution Finished");
-    expect(deps.executionRepository.updateSprintRun).toHaveBeenCalledWith(
-      "run-1",
-      expect.objectContaining({ status: "completed" }),
+    expect(deps.sprintRunLifecycleService.transition).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sprintRunId: "run-1",
+        status: "completed",
+      }),
     );
-    expect(deps.executionRepository.appendSprintRunEvent).toHaveBeenCalledWith(
-      "run-1",
-      "sprint_completed",
-      "system",
-      expect.objectContaining({ taskCount: 1 }),
-      expect.any(Object),
+    expect(deps.sprintRunLifecycleService.transition).toHaveBeenCalledWith(
+      expect.objectContaining({
+        eventType: "sprint_completed",
+        eventPayload: expect.objectContaining({ taskCount: 1 }),
+      }),
     );
     nowSpy.mockRestore();
   });
@@ -1325,12 +1751,13 @@ describe("WatchLoopRunner", () => {
     }));
     expect(result).toContain("Sprint Still Active");
     expect(result).toContain("Sprint Execution Finished");
-    expect(deps.executionRepository.appendSprintRunEvent).toHaveBeenCalledWith(
-      "run-1",
-      "sprint_completed",
-      "system",
-      expect.objectContaining({ taskCount: 1 }),
-      expect.any(Object),
+    expect(deps.sprintRunLifecycleService.transition).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sprintRunId: "run-1",
+        status: "completed",
+        eventType: "sprint_completed",
+        eventPayload: expect.objectContaining({ taskCount: 1 }),
+      }),
     );
     nowSpy.mockRestore();
   });
@@ -1554,12 +1981,13 @@ describe("WatchLoopRunner", () => {
     expect(result).toContain("AUTO_MERGE_SUCCEEDED");
     expect(result).toContain("Waiting for the final main-branch merge to finish");
     expect(result).toContain("Sprint Execution Finished");
-    expect(deps.executionRepository.appendSprintRunEvent).toHaveBeenCalledWith(
-      "run-1",
-      "sprint_completed",
-      "system",
-      expect.objectContaining({ taskCount: 1 }),
-      expect.any(Object),
+    expect(deps.sprintRunLifecycleService.transition).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sprintRunId: "run-1",
+        status: "completed",
+        eventType: "sprint_completed",
+        eventPayload: expect.objectContaining({ taskCount: 1 }),
+      }),
     );
     nowSpy.mockRestore();
   });
@@ -1943,7 +2371,7 @@ describe("WatchLoopRunner", () => {
     const deps = buildDeps();
     const cycleRunner = buildCycleRunner();
     deps.executionRepository.getSprintRun = vi.fn().mockReturnValue({ status: "cancel_requested" });
-    deps.executionRepository.finalizeSprintRunCancellationIfIdle = vi.fn().mockReturnValue({ id: "run-1", status: "cancelled" });
+    deps.sprintRunLifecycleService.finalizeCancellationIfIdle = vi.fn().mockReturnValue({ id: "run-1", status: "cancelled" });
     deps.renderInstruction.mockImplementation(async (id) => id === "watchHeader" ? "HEADER" : "");
 
     const runner = new WatchLoopRunner(deps as any, cycleRunner as any, vi.fn());
@@ -1970,7 +2398,7 @@ describe("WatchLoopRunner", () => {
       sprintRunId: "run-1",
     });
 
-    expect(deps.executionRepository.finalizeSprintRunCancellationIfIdle).toHaveBeenCalledWith("run-1");
+    expect(deps.sprintRunLifecycleService.finalizeCancellationIfIdle).toHaveBeenCalledWith("run-1");
     expect(result).toContain("Sprint Cancelled");
     expect(cycleRunner.run).not.toHaveBeenCalled();
   });
@@ -1979,7 +2407,7 @@ describe("WatchLoopRunner", () => {
     const deps = buildDeps();
     const cycleRunner = buildCycleRunner();
     deps.executionRepository.getSprintRun = vi.fn().mockReturnValue({ status: "cancel_requested" });
-    deps.executionRepository.finalizeSprintRunCancellationIfIdle = vi.fn().mockReturnValue(null);
+    deps.sprintRunLifecycleService.finalizeCancellationIfIdle = vi.fn().mockReturnValue(null);
     deps.renderInstruction.mockImplementation(async (id) => id === "watchHeader" ? "HEADER" : "");
 
     const runner = new WatchLoopRunner(deps as any, cycleRunner as any, vi.fn());
@@ -2006,7 +2434,7 @@ describe("WatchLoopRunner", () => {
       sprintRunId: "run-1",
     });
 
-    expect(deps.executionRepository.finalizeSprintRunCancellationIfIdle).toHaveBeenCalledWith("run-1");
+    expect(deps.sprintRunLifecycleService.finalizeCancellationIfIdle).toHaveBeenCalledWith("run-1");
     expect(result).toContain("Active work is still shutting down");
     expect(cycleRunner.run).not.toHaveBeenCalled();
   });
@@ -2128,16 +2556,14 @@ describe("WatchLoopRunner", () => {
 
     expect(result.status).toBe("exit");
     expect(result.report).toContain("Final completion PR is not merged");
-    expect(deps.executionRepository.updateSprintRun).toHaveBeenCalledWith(
-      "run-1",
-      expect.objectContaining({ status: "paused" }),
+    expect(deps.sprintRunLifecycleService.transition).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sprintRunId: "run-1",
+        status: "paused",
+      }),
     );
-    expect(deps.executionRepository.appendSprintRunEvent).not.toHaveBeenCalledWith(
-      "run-1",
-      "sprint_completed",
-      expect.anything(),
-      expect.anything(),
-      expect.anything(),
+    expect(deps.sprintRunLifecycleService.transition).not.toHaveBeenCalledWith(
+      expect.objectContaining({ eventType: "sprint_completed" }),
     );
     expect(deps.completedSprints.size).toBe(0);
   });

@@ -178,6 +178,12 @@ When dashboard GitHub polling later observes that a merge-conflict-derived atten
 - the matching `merge_conflict`, `human_escalation_required`, or `dashboard_reply_required` item resolves automatically
 - this applies even after the sprint run is already completed, so stale main-merge conflict escalations do not persist forever once GitHub state has moved on
 
+When an operator resolves or dismisses a human QA-exhaustion handoff:
+
+- the task's QA review run history is cleared for task-completion triggers
+- the `qa_review` guardrail counter is reset
+- the next orchestration cycle can schedule a fresh QA review instead of immediately reusing the exhausted budget and reopening the same human escalation
+
 This prevents stale queue entries after the system has been told to attempt recovery.
 
 ## Worker Action Tools

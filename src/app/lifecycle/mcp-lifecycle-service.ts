@@ -1,4 +1,5 @@
 import express from "express";
+import * as fs from "node:fs";
 import { createServer, type IncomingMessage, type Server as HttpServer, type ServerResponse } from "http";
 import type { AddressInfo } from "net";
 import type { Socket } from "node:net";
@@ -16,6 +17,11 @@ import { createHttpRateLimiter } from "../../shared/http/rate-limit.js";
 export interface BootMcpTransportDeps {
   server: McpServer;
   logger: Logger;
+}
+
+interface StdinLike {
+  fd?: number;
+  isTTY?: boolean;
 }
 
 export interface BootMcpHttpTransportDeps {
@@ -122,19 +128,47 @@ function respondBadRequest(res: ServerResponse, message: string): void {
 }
 
 export async function bootMcpTransport(deps: BootMcpTransportDeps): Promise<void> {
-  if (process.env.CODE_UX_DISABLE_MCP_STDIO === "1") {
+  const stdioMode = resolveMcpStdioMode(process.stdin, process.env);
+  if (stdioMode.enabled === false) {
     deps.logger.info(`${CODE_UX_DISPLAY_NAME} MCP stdio transport disabled by environment`);
     return;
   }
 
-  if (process.stdin.isTTY) {
-    deps.logger.info(`${CODE_UX_DISPLAY_NAME} running in standalone mode (stdin is a TTY) — MCP stdio transport disabled`);
+  if (stdioMode.enabled === null) {
+    deps.logger.info(`${CODE_UX_DISPLAY_NAME} running in standalone mode (${stdioMode.reason}) — MCP stdio transport disabled`);
     return;
   }
 
   const transport = new StdioServerTransport();
   await deps.server.connect(transport);
   deps.logger.info(`${CODE_UX_DISPLAY_NAME} MCP server running on stdio`, { version: CODE_UX_VERSION });
+}
+
+export function resolveMcpStdioMode(
+  stdin: StdinLike,
+  env: NodeJS.ProcessEnv,
+  fstat: (fd: number) => fs.Stats = fs.fstatSync,
+): { enabled: true; reason: string } | { enabled: false; reason: string } | { enabled: null; reason: string } {
+  if (env.CODE_UX_DISABLE_MCP_STDIO === "1") {
+    return { enabled: false, reason: "disabled_by_environment" };
+  }
+  if (env.CODE_UX_ENABLE_MCP_STDIO === "1") {
+    return { enabled: true, reason: "enabled_by_environment" };
+  }
+  if (stdin.isTTY) {
+    return { enabled: null, reason: "stdin is a TTY" };
+  }
+
+  const fd = typeof stdin.fd === "number" ? stdin.fd : 0;
+  try {
+    const stats = fstat(fd);
+    if (stats.isFIFO() || stats.isSocket()) {
+      return { enabled: true, reason: "stdin is a pipe/socket" };
+    }
+    return { enabled: null, reason: "stdin is not an MCP pipe" };
+  } catch {
+    return { enabled: null, reason: "stdin cannot be inspected" };
+  }
 }
 
 export async function bootMcpHttpTransport(deps: BootMcpHttpTransportDeps): Promise<McpHttpTransportHandle | null> {

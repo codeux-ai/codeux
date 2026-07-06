@@ -49,6 +49,45 @@ const updateSprintMock = vi.fn();
 const addImportedTasksToSprintMock = vi.fn();
 const executeQuicksprintMock = vi.fn();
 
+const renderActions = (createProject = vi.fn()) => {
+  let actionsRef: ReturnType<typeof useSprintsPageActions> | null = null;
+  const ActionHarness = () => {
+    actionsRef = useSprintsPageActions({
+      selectedProject: { id: "project-1" },
+      sprints: [baseSprint] as any,
+      sprintKeyPrefix: "SPR",
+      activeRunsBySprintId: new Map(),
+      pauseResumeRunsBySprintId: new Map(),
+      pendingActionIds: new Set(),
+      setPendingActionIds: vi.fn(),
+      setOptimisticStatuses: vi.fn(),
+      setSuppressedRunningSprintIds: vi.fn(),
+      refresh: refreshMock,
+      refreshExecution: refreshExecutionMock,
+      refreshPlanningEta: vi.fn(),
+      inFlightStartIds: { current: new Set() },
+      editingSprint: null,
+      setEditingSprint: vi.fn(),
+      reserveNextSprintNumber: vi.fn(() => 2),
+      releaseSprintNumberReservation: vi.fn(),
+      setError: vi.fn(),
+      setExportState: vi.fn(),
+      addTaskForSprint: null,
+      setAddTaskSprintTasks: vi.fn(),
+      setAddTaskForSprint: vi.fn(),
+      reloadQuicksprintTemplates: vi.fn(),
+      createProject,
+    } as any);
+    return null;
+  };
+
+  render(<ActionHarness />);
+  if (!actionsRef) {
+    throw new Error("actions did not render");
+  }
+  return actionsRef;
+};
+
 vi.mock("../../../dashboard/src/v2/context/project-data.js", () => ({
   useProjectData: vi.fn(() => ({
     projects: [{ id: "project-1", name: "Project 1" }],
@@ -368,6 +407,53 @@ describe("useSprintsPageData sprint-number reservations", () => {
         }),
       ],
     ]);
+  });
+
+  it("creates local projects with LOCAL git-mode settings overrides", async () => {
+    const createProject = vi.fn().mockResolvedValue({});
+    const actions = renderActions(createProject);
+
+    await actions.handleAddProject({
+      name: "Local Project",
+      type: "local",
+      path: "/workspace/local-project",
+    });
+
+    expect(createProject).toHaveBeenCalledWith(expect.objectContaining({
+      name: "Local Project",
+      sourceType: "local",
+      sourceRef: "/workspace/local-project",
+      settingsOverrides: expect.objectContaining({
+        git: { githubMode: "LOCAL" },
+      }),
+    }));
+    const settingsOverrides = createProject.mock.calls[0]?.[0].settingsOverrides;
+    expect(settingsOverrides.skills.find((skill: any) => skill.name === "git_manager_local")?.enabled).toBe(true);
+    expect(settingsOverrides.skills.find((skill: any) => skill.name === "git_manager_remote")?.enabled).toBe(false);
+  });
+
+  it("preserves remote project creation without LOCAL git-mode overrides", async () => {
+    const createProject = vi.fn().mockResolvedValue({});
+    const actions = renderActions(createProject);
+
+    await actions.handleAddProject({
+      name: "Remote Project",
+      type: "new_project",
+      path: "",
+      initMode: "new-remote",
+      repoSlug: "remote-project",
+      remoteProvider: "github",
+      isPrivate: true,
+    });
+
+    expect(createProject).toHaveBeenCalledWith({
+      name: "Remote Project",
+      sourceType: "git",
+      sourceRef: "remote-project",
+      initMode: "new-remote",
+      remoteProvider: "github",
+      isPrivate: true,
+    });
   });
 
   it("reserves distinct sprint numbers for multiple unresolved sprint creations", async () => {

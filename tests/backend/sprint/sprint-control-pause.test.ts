@@ -9,6 +9,7 @@ import { ProjectWorkerAssignmentRepository } from "../../../src/repositories/pro
 import { ProjectAttentionRepository } from "../../../src/repositories/project-attention-repository.js";
 import { ProjectAttentionService } from "../../../src/domain/workers/project-attention-service.js";
 import { ExecutionControlService } from "../../../src/services/execution-control-service.js";
+import { SprintRunLifecycleService } from "../../../src/services/sprint-run-lifecycle-service.js";
 
 const tempDirs: string[] = [];
 const storages: AppDbStorage[] = [];
@@ -28,10 +29,15 @@ async function createFixture(): Promise<{
   const executionRepository = new ExecutionRepository(storage);
   const executeOrchestrator = vi.fn().mockResolvedValue({ ok: true });
   const recoverSprintRun = vi.fn().mockResolvedValue({ ok: true });
+  const sprintRunLifecycleService = new SprintRunLifecycleService({
+    executionRepository,
+    projectManagementRepository: projectRepository,
+  });
 
   const service = new ExecutionControlService({
     projectManagementRepository: projectRepository,
     executionRepository,
+    sprintRunLifecycleService,
     projectAttentionService: new ProjectAttentionService(
       new ProjectAttentionRepository(storage),
       new ProjectWorkerAssignmentRepository(storage),
@@ -61,14 +67,65 @@ describe("sprint pause/resume control", () => {
     const project = projectRepository.createProject({ name: "Pause Project", sourceType: "local", sourceRef: "/workspace/pause-project" });
     const sprint = projectRepository.createSprint(project.id, { name: "Pause Sprint", number: 1 });
     const sprintRun = executionRepository.createSprintRun({ projectId: project.id, sprintId: sprint.id, status: "running" });
+    executionRepository.acquireLease({
+      scopeType: "sprint",
+      scopeId: sprint.id,
+      ownerKey: "sprint_orchestrator:test",
+      leaseToken: "lease-1",
+      expiresAt: new Date(Date.now() + 60_000).toISOString(),
+    });
 
-    const paused = service.pauseSprintRun(sprintRun.id);
-    const pausedAgain = service.pauseSprintRun(sprintRun.id);
+    const paused = await service.pauseSprintRun(sprintRun.id);
+    const pausedAgain = await service.pauseSprintRun(sprintRun.id);
 
     expect(paused.status).toBe("paused");
     expect(pausedAgain.status).toBe("paused");
+    expect(executionRepository.getLease("sprint", sprint.id)).toBeNull();
     const pauseEvents = executionRepository.listSprintRunEvents(sprintRun.id).filter((event) => event.eventType === "sprint_pause_requested");
     expect(pauseEvents).toHaveLength(1);
+  });
+
+  it("pauses active dispatch rows when a sprint is paused", async () => {
+    const { projectRepository, executionRepository, service } = await createFixture();
+    const project = projectRepository.createProject({ name: "Pause Dispatch Project", sourceType: "local", sourceRef: "/workspace/pause-dispatch-project" });
+    const sprint = projectRepository.createSprint(project.id, { name: "Pause Dispatch Sprint", number: 3 });
+    const task = projectRepository.createTask(project.id, {
+      sprintId: sprint.id,
+      title: "Running task",
+      executorType: "docker_cli",
+      status: "in_progress",
+    });
+    const sprintRun = executionRepository.createSprintRun({ projectId: project.id, sprintId: sprint.id, status: "running" });
+    const dispatch = executionRepository.createTaskDispatch({
+      projectId: project.id,
+      sprintId: sprint.id,
+      sprintRunId: sprintRun.id,
+      taskId: task.id,
+      executorType: "docker_cli",
+      status: "running",
+    });
+    const taskRun = executionRepository.createTaskRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      sprintRunId: sprintRun.id,
+      taskId: task.id,
+      dispatchId: dispatch.id,
+      state: "RUNNING",
+    });
+
+    await service.pauseSprintRun(sprintRun.id);
+
+    expect(executionRepository.getTaskDispatch(dispatch.id)).toMatchObject({
+      status: "paused",
+      connectionId: null,
+      finishedAt: null,
+    });
+    expect(executionRepository.getTaskRun(taskRun.id)).toMatchObject({
+      state: "PAUSED",
+      connectionId: null,
+      finishedAt: null,
+    });
+    expect(projectRepository.getTask(task.id)?.status).toBe("pending");
   });
 
   it("resumes a paused sprint by scheduling orchestration and recording a resume event", async () => {
@@ -76,12 +133,20 @@ describe("sprint pause/resume control", () => {
     const project = projectRepository.createProject({ name: "Resume Project", sourceType: "local", sourceRef: "/workspace/resume-project" });
     const sprint = projectRepository.createSprint(project.id, { name: "Resume Sprint", number: 1 });
     const sprintRun = executionRepository.createSprintRun({ projectId: project.id, sprintId: sprint.id, status: "paused" });
+    executionRepository.acquireLease({
+      scopeType: "sprint",
+      scopeId: sprint.id,
+      ownerKey: "sprint_orchestrator:previous",
+      leaseToken: "previous-lease",
+      expiresAt: new Date(Date.now() + 60_000).toISOString(),
+    });
 
     const resumed = await service.resumeSprintRun(sprintRun.id);
 
     expect(resumed.status).toBe("running");
     expect(executionRepository.getSprintRun(sprintRun.id)?.status).toBe("running");
     expect(executionRepository.getSprintRun(sprintRun.id)?.lastHeartbeatAt).toEqual(expect.any(String));
+    expect(executionRepository.getLease("sprint", sprint.id)).toBeNull();
     expect(recoverSprintRun).toHaveBeenCalledWith(sprintRun.id);
     expect(executeOrchestrator).not.toHaveBeenCalled();
     expect(executionRepository.listSprintRunEvents(sprintRun.id)).toEqual(expect.arrayContaining([

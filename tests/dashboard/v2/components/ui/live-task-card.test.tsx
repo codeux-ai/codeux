@@ -1,7 +1,7 @@
 /**
  * @vitest-environment jsdom
  */
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/preact";
 import { LiveTaskCard, QuotaCountdown, TaskDuration } from "../../../../../dashboard/src/v2/components/LiveTaskCard";
 import { LiveTaskInvocationRow } from "../../../../../dashboard/src/v2/components/live-session/LiveTaskInvocationRow.js";
@@ -37,6 +37,10 @@ describe("LiveTaskCard", () => {
   beforeEach(() => {
     cleanup();
     vi.clearAllMocks();
+    vi.useRealTimers();
+  });
+
+  afterEach(() => {
     vi.useRealTimers();
   });
 
@@ -216,7 +220,7 @@ describe("LiveTaskCard", () => {
     expect(scoped.getByRole("log", { name: "Invocation feed for task test-task" })).toBeTruthy();
     expect(scoped.getByText("Task Invocations")).toBeTruthy();
     expect(scoped.getByText("Task Coding")).toBeTruthy();
-    expect(scoped.getByRole("link", { name: "Open transcript for Task Coding" }).getAttribute("href"))
+    expect(scoped.getByRole("link", { name: "Open transcript for Task Coding invocation xi-task-" }).getAttribute("href"))
       .toBe("/chat?mode=invocations&invocation=xi-task-1");
   });
 
@@ -243,7 +247,7 @@ describe("LiveTaskCard", () => {
     expect(screen.getByText("model pending")).toBeTruthy();
     expect(screen.getByText("12 tok")).toBeTruthy();
     expect(screen.getByText("Provider returned an error")).toBeTruthy();
-    expect(screen.getByRole("link", { name: "Open transcript for QA Review" }).getAttribute("href"))
+    expect(screen.getByRole("link", { name: "Open transcript for QA Review invocation xi task/" }).getAttribute("href"))
       .toBe("/chat?mode=invocations&invocation=xi%20task%2Fwith%20space");
   });
 });

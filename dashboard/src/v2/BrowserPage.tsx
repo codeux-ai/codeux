@@ -632,7 +632,7 @@ export const BrowserPage: FunctionComponent = () => {
   if (!selectedProject) {
     return (
       <PageContainer aria-label="Browser" padding="workbench">
-        <div className="rounded-[2rem] border border-black/[0.06] bg-white/60 p-8 text-sm text-slate-500 backdrop-blur-md dark:border-white/[0.06] dark:bg-white/[0.04] dark:text-slate-300">
+        <div role="status" aria-live="polite" className="rounded-[2rem] border border-black/[0.06] bg-white/60 p-8 text-sm text-slate-500 backdrop-blur-md dark:border-white/[0.06] dark:bg-white/[0.04] dark:text-slate-300">
           Select a project first. The in-app browser launches one isolated preview container per sprint.
         </div>
       </PageContainer>
@@ -640,7 +640,7 @@ export const BrowserPage: FunctionComponent = () => {
   }
 
   return (
-    <PageContainer aria-label="Browser" padding="workbench" className="min-h-full" data-testid="browser-page-root">
+    <PageContainer aria-label="Browser" padding="workbench" className="min-h-full" data-testid="browser-page-root" aria-busy={loading ? "true" : undefined}>
       <PageHeader
         data-testid="browser-page-header"
         className="mb-8"
@@ -695,6 +695,10 @@ export const BrowserPage: FunctionComponent = () => {
         </div>
       )}
 
+      <div role="status" aria-live="polite" aria-busy={loading ? "true" : undefined} className="sr-only">
+        {loading ? "Refreshing preview sessions." : previewStatusMessage}
+      </div>
+
       <div className="mb-5">
         <PreviewSessionSlider
           sessions={sessionCards}
@@ -715,7 +719,7 @@ export const BrowserPage: FunctionComponent = () => {
       </div>
 
       {(!showInAppBrowser || !previewEnabled) && (
-        <div className="rounded-[2rem] border border-black/[0.06] bg-white/70 p-8 text-sm text-slate-500 shadow-[0_20px_60px_rgba(15,23,42,0.06)] backdrop-blur-md dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-300 dark:shadow-[0_20px_60px_rgba(0,0,0,0.24)]">
+        <div role="status" aria-live="polite" className="rounded-[2rem] border border-black/[0.06] bg-white/70 p-8 text-sm text-slate-500 shadow-[0_20px_60px_rgba(15,23,42,0.06)] backdrop-blur-md dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-300 dark:shadow-[0_20px_60px_rgba(0,0,0,0.24)]">
           <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">Browser Preview</div>
           <div className="mt-3 text-lg font-semibold text-slate-900 dark:text-white">
             {!previewEnabled ? "Preview runtime is disabled." : "In-app browser workspace is hidden."}

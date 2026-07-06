@@ -65,6 +65,7 @@ export const QuicksprintExecutionView: FunctionComponent<{
   const isBusy = executingMode !== null;
   const [statusMessage, setStatusMessage] = useState("");
   const [pendingExecuteMode, setPendingExecuteMode] = useState<"plan_only" | "plan_and_start" | null>(null);
+  const [isCancelPending, setIsCancelPending] = useState(false);
   const headingRef = useRef<HTMLHeadingElement>(null);
   const pendingExecuteClickRef = useRef(false);
   const promptRegionId = selectedTemplateId ? `quicksprint-combined-prompt-${selectedTemplateId}` : "quicksprint-combined-prompt";
@@ -84,11 +85,13 @@ export const QuicksprintExecutionView: FunctionComponent<{
   const defaultModelLabel = routeOverride?.effectiveModel
     ? `Default (${routeOverride.effectiveModel})`
     : defaultModelOptionLabel;
-  const isSubmitBlocked = isBusy || pendingExecuteMode !== null;
+  const isSubmitBlocked = isBusy || pendingExecuteMode !== null || isCancelPending;
   const submitBlockedReason = isBusy
     ? "A quicksprint planning request is already running. Cancel it or wait for it to finish before submitting again."
     : pendingExecuteMode
       ? "Planning is starting. Duplicate submissions are blocked until the request state is ready."
+      : isCancelPending
+        ? "Cancellation is already in progress. Duplicate cancellation and submit requests are blocked until the request settles."
       : "";
 
   const publishStatus = (message: string) => {
@@ -118,6 +121,7 @@ export const QuicksprintExecutionView: FunctionComponent<{
     if (!executingMode || !selectedTemplate) {
       pendingExecuteClickRef.current = false;
       setPendingExecuteMode(null);
+      setIsCancelPending(false);
       return;
     }
     const actionLabel = executingMode === "plan_and_start" ? "Plan and start" : "Plan only";
@@ -151,7 +155,12 @@ export const QuicksprintExecutionView: FunctionComponent<{
     handleExecute(mode);
   };
   const announceCancel = () => {
+    if (isCancelPending) {
+      publishStatus(`Cancellation is already in progress for ${selectedTemplate.name}.`);
+      return;
+    }
     const message = `Cancelled ${executingMode === "plan_and_start" ? "plan and start" : "plan only"} request for ${selectedTemplate.name}.`;
+    setIsCancelPending(true);
     handleCancelExecute();
     pendingExecuteClickRef.current = false;
     setPendingExecuteMode(null);
@@ -170,7 +179,7 @@ export const QuicksprintExecutionView: FunctionComponent<{
   return (
     <>
 {/* ─── CONFIGURE PHASE ────────────────────────────────────── */}
-        <div className="grid gap-0 xl:grid-cols-[minmax(0,1fr)_22rem]" aria-busy={isBusy ? "true" : "false"}>
+        <div className="grid gap-0 xl:grid-cols-[minmax(0,1fr)_22rem]" aria-busy={isBusy || pendingExecuteMode !== null || isCancelPending ? "true" : "false"}>
             {/* Left: Template preview */}
             <div className="border-b border-black/[0.06] p-6 dark:border-white/[0.06] sm:p-8 lg:p-10 xl:border-b-0 xl:border-r">
               <div data-qs-stagger className="flex items-center gap-3">
@@ -383,10 +392,13 @@ export const QuicksprintExecutionView: FunctionComponent<{
                 {isBusy && (
                   <div
                     id={busyDescriptionId}
+                    data-motion-contract="asyncFeedback"
                     className="rounded-[1.25rem] border border-ember-500/20 bg-ember-500/[0.07] p-4 text-xs leading-relaxed text-slate-600 dark:text-slate-300"
-                    role="status"
-                    aria-live="polite"
-                    aria-atomic="true"
+                    style={{
+                      transitionDuration: interactionTokens.asyncFeedback.duration,
+                      transitionTimingFunction: interactionTokens.asyncFeedback.ease,
+                    }}
+                    aria-busy={isCancelPending ? "true" : "false"}
                   >
                     <div className="flex items-center justify-between gap-3">
                       <span className="font-bold uppercase tracking-[0.14em] text-ember-600 dark:text-ember-400">
@@ -411,12 +423,19 @@ export const QuicksprintExecutionView: FunctionComponent<{
                       <button
                         type="button"
                         onClick={announceCancel}
+                        disabled={isCancelPending}
+                        aria-busy={isCancelPending ? "true" : "false"}
                         className="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-full border border-status-red/20 bg-status-red/[0.06] px-4 py-2 text-xs font-semibold text-status-red transition-colors duration-[var(--interaction-control-feedback-duration)] ease-[var(--interaction-control-feedback-ease)] hover:bg-status-red/[0.12] motion-reduce:transition-none"
                       >
                         <X className="h-3.5 w-3.5" />
                         Cancel Request
                       </button>
                     </div>
+                    {isCancelPending && (
+                      <p className="mt-3 font-semibold text-status-amber">
+                        Cancellation requested. The planner is stopping this quicksprint request.
+                      </p>
+                    )}
                   </div>
                 )}
                 {isSubmitBlocked && (
@@ -430,9 +449,6 @@ export const QuicksprintExecutionView: FunctionComponent<{
                 <p
                   id={routeStatusId}
                   className="rounded-[1.1rem] border border-black/[0.06] bg-black/[0.025] px-4 py-3 text-xs font-semibold leading-relaxed text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-400"
-                  role="status"
-                  aria-live="polite"
-                  aria-atomic="true"
                 >
                   {statusMessage || `Ready to plan ${selectedTemplate.name}.`}
                 </p>
@@ -444,7 +460,7 @@ export const QuicksprintExecutionView: FunctionComponent<{
                   className="flex min-h-[44px] w-full items-center justify-center gap-2.5 rounded-[1.35rem] bg-ember-600 px-5 py-3.5 text-[11px] font-bold uppercase tracking-[0.14em] text-white shadow-[0_0_20px_rgba(255,107,0,0.25)] transition-all hover:bg-ember-500 hover:shadow-[0_0_28px_rgba(255,107,0,0.35)] disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <Rocket className={`h-4 w-4 ${executingMode === "plan_and_start" ? "motion-safe:animate-pulse" : ""}`} />
-                  {executingMode === "plan_and_start" || pendingExecuteMode === "plan_and_start" ? "Planning & Starting" : "Plan & Start"}
+                  Plan & Start
                 </button>
                 <button
                   onClick={() => handlePlanningExecute("plan_only")}
@@ -454,7 +470,7 @@ export const QuicksprintExecutionView: FunctionComponent<{
                   className="flex min-h-[44px] w-full items-center justify-center gap-2.5 rounded-[1.35rem] border border-black/[0.08] bg-white/66 px-5 py-3.5 text-[11px] font-bold uppercase tracking-[0.14em] text-slate-600 transition-colors hover:bg-black/[0.04] disabled:opacity-50 disabled:cursor-not-allowed dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-slate-300 dark:hover:bg-white/[0.06]"
                 >
                   <ClipboardList className={`h-4 w-4 ${executingMode === "plan_only" ? "motion-safe:animate-pulse" : ""}`} />
-                  {executingMode === "plan_only" || pendingExecuteMode === "plan_only" ? "Planning Only" : "Plan Only"}
+                  Plan Only
                 </button>
               </div>
             </div>

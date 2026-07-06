@@ -242,6 +242,9 @@ export const SettingsMcpPanel: FunctionComponent<{ state: SettingsPageState }> =
     <>
       <SectionCard title="MCP Servers" watermark="MCP" icon={<Server strokeWidth={2.4} />}>
         <NoticePanel title={isProject ? "Project scope" : "System scope"}>{scopeNotice}</NoticePanel>
+        <NoticePanel title="MCP connection modes">
+          Code UX exposes its built-in MCP server over stdio by default. To let external MCP clients connect over authenticated Streamable HTTP, start Code UX with MCP_HTTP_* environment variables or --mcp-http* flags, then add remote custom servers below with HTTP / SSE.
+        </NoticePanel>
 
         <div className="grid gap-3 md:grid-cols-2">
           {/* Built-in MCP card */}
@@ -331,8 +334,9 @@ const JsonMapEditor: FunctionComponent<{
   resetKey: string;
   value?: Record<string, string>;
   placeholder: string;
+  "aria-label"?: string;
   onChange: (value: Record<string, string> | undefined) => void;
-}> = ({ resetKey, value, placeholder, onChange }) => {
+}> = ({ resetKey, value, placeholder, "aria-label": ariaLabel, onChange }) => {
   const [text, setText] = useState<string>(() => JSON.stringify(value ?? {}, null, 2));
   const [error, setError] = useState<string | null>(null);
 
@@ -372,7 +376,7 @@ const JsonMapEditor: FunctionComponent<{
 
   return (
     <div className="flex w-full flex-col gap-1.5">
-      <TextAreaInput value={text} onChange={handle} rows={5} placeholder={placeholder} />
+      <TextAreaInput value={text} onChange={handle} rows={5} placeholder={placeholder} aria-label={ariaLabel} />
       {error ? <span className="text-[11px] font-medium text-status-red">{error}</span> : null}
     </div>
   );
@@ -427,6 +431,9 @@ const CustomServerDetail: FunctionComponent<{
 
   return (
     <SectionCard title={server.label || server.name || "MCP server"} watermark="MCP" icon={<Server strokeWidth={2.4} />}>
+      <NoticePanel title="HTTP / SSE setup">
+        Choose HTTP / SSE for a remote MCP server that already exposes an HTTP or SSE endpoint. Paste the server URL below, add optional auth headers as a JSON object, and Code UX injects the updated config on the next CLI run.
+      </NoticePanel>
       <Row label="Display name" description="Shown on the MCP servers list.">
         <TextInput value={server.label ?? ""} onChange={(value) => onChange({ label: value })} placeholder="Playwright" />
       </Row>
@@ -455,16 +462,16 @@ const CustomServerDetail: FunctionComponent<{
             <TextAreaInput value={(server.args ?? []).join("\n")} onChange={onArgsChange} rows={4} placeholder={"@playwright/mcp@latest"} />
           </Row>
           <Row label="Environment (JSON)" description="Optional object of env var name to value passed to the command.">
-            <JsonMapEditor resetKey={server.id} value={server.env} placeholder={'{\n  "API_KEY": "..."\n}'} onChange={(env) => onChange({ env })} />
+            <JsonMapEditor resetKey={server.id} value={server.env} placeholder={'{\n  "API_KEY": "..."\n}'} aria-label="Environment JSON" onChange={(env) => onChange({ env })} />
           </Row>
         </>
       ) : (
         <>
-          <Row label="Server URL" description="HTTP/SSE endpoint for the MCP server.">
-            <TextInput value={server.url ?? ""} onChange={(value) => onChange({ url: value })} placeholder="https://example.com/mcp" mono />
+          <Row label="Server URL" description="Paste the HTTP or SSE endpoint URL provided by the MCP server.">
+            <TextInput value={server.url ?? ""} onChange={(value) => onChange({ url: value })} placeholder="https://example.com/mcp" mono aria-label="Server URL" />
           </Row>
-          <Row label="Auth headers (JSON)" description="Optional object of header name to value, e.g. Authorization tokens.">
-            <JsonMapEditor resetKey={server.id} value={server.headers} placeholder={'{\n  "Authorization": "Bearer ..."\n}'} onChange={(headers) => onChange({ headers })} />
+          <Row label="Auth headers (JSON)" description="Optional JSON object of header names to string values, for example Authorization tokens.">
+            <JsonMapEditor resetKey={server.id} value={server.headers} placeholder={'{\n  "Authorization": "Bearer ..."\n}'} aria-label="Auth headers JSON" onChange={(headers) => onChange({ headers })} />
           </Row>
         </>
       )}

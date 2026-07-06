@@ -9,6 +9,8 @@ export function useQuicksprintEditorState({
   onUpdateTemplate,
   onDeleteTemplate,
   onCancel,
+  onStatus,
+  onError,
 }: {
   templates: QuicksprintTemplateRecord[];
   onCreateTemplate?: (data: {
@@ -33,6 +35,8 @@ export function useQuicksprintEditorState({
   }) => Promise<void>;
   onDeleteTemplate?: (templateId: string) => Promise<void>;
   onCancel: () => void;
+  onStatus?: (message: string) => void;
+  onError?: (message: string) => void;
 }) {
   const [editorTemplate, setEditorTemplate] = useState<QuicksprintTemplateRecord | null>(null);
   const [edName, setEdName] = useState("");
@@ -72,6 +76,7 @@ export function useQuicksprintEditorState({
   const handleEditorSave = useCallback(async () => {
     try {
       setEdSaving(true);
+      onStatus?.(editorTemplate ? `Saving changes to ${edName}.` : `Creating ${edName || "template"}.`);
       if (editorTemplate) {
         await onUpdateTemplate?.(editorTemplate.id, {
           name: edName,
@@ -95,9 +100,11 @@ export function useQuicksprintEditorState({
           agentPresetId: edAgentPresetId || undefined,
         });
       }
+      onStatus?.(editorTemplate ? `${edName} saved.` : `${edName} created.`);
       onCancel();
     } catch (err) {
       console.error("Failed to save template", err);
+      onError?.(`Could not save ${edName || "template"}. Check the required fields and try again.`);
     } finally {
       setEdSaving(false);
     }
@@ -114,24 +121,30 @@ export function useQuicksprintEditorState({
     onUpdateTemplate,
     onCreateTemplate,
     onCancel,
+    onStatus,
+    onError,
   ]);
 
   const handleEditorDelete = useCallback(async () => {
     if (!editorTemplate) return;
     if (!edConfirmDelete) {
       setEdConfirmDelete(true);
+      onStatus?.(`Confirm deletion for ${editorTemplate.name}.`);
       return;
     }
     try {
       setEdSaving(true);
+      onStatus?.(`Deleting ${editorTemplate.name}.`);
       await onDeleteTemplate?.(editorTemplate.id);
+      onStatus?.(`${editorTemplate.name} deleted.`);
       onCancel();
     } catch (err) {
       console.error("Failed to delete template", err);
+      onError?.(`Could not delete ${editorTemplate.name}. Try again or check the project template files.`);
     } finally {
       setEdSaving(false);
     }
-  }, [editorTemplate, edConfirmDelete, onDeleteTemplate, onCancel]);
+  }, [editorTemplate, edConfirmDelete, onDeleteTemplate, onCancel, onStatus, onError]);
 
   return {
     editorTemplate, setEditorTemplate,

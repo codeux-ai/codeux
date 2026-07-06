@@ -435,6 +435,8 @@ export const DEFAULT_DASHBOARD_SETTINGS: DashboardSettings = {
   dbAutoVacuumOnStartup: true,
   dbPruningEnabled: true,
   dbRetentionDays: 14,
+  restartSprintPolicy: "continue",
+  restartInvocationPolicy: "continue",
   appearance: {
     navigationMode: "SIDEBAR",
     theme: "SYSTEM",
@@ -566,8 +568,8 @@ export const DEFAULT_DASHBOARD_SETTINGS: DashboardSettings = {
     maxQuotaRetriesWithoutTimer: 5,
   },
   sprintPreview: {
-    enabled: false,
-    showInAppBrowser: false,
+    enabled: true,
+    showInAppBrowser: true,
     autoStartOnRunningSprint: false,
     rebuildOnTaskCompletion: false,
     rebuildOnSprintCompletion: false,

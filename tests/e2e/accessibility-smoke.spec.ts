@@ -1,9 +1,9 @@
 import { test, expect } from '@playwright/test';
 import { completeOnboarding, ensureSelectedProject } from './helpers/prepare-app';
 
-test.beforeEach(async ({ page, request }) => {
+test.beforeEach(async ({ page, request }, testInfo) => {
   await completeOnboarding(request);
-  await ensureSelectedProject(request);
+  await ensureSelectedProject(request, { testInfo, fixtureKey: 'accessibility' });
 
   await page.addInitScript(() => {
     localStorage.setItem('codeux:dashboard-tour-hidden:v1', 'true');
@@ -20,15 +20,15 @@ test('Dashboard accessibility smoke test', async ({ page }) => {
   await expect(skipLink).toBeFocused();
 
   // 2. Primary Navigation
-  const nav = page.getByRole('navigation', { name: /Primary navigation/i });
+  const nav = page.getByRole('navigation', { name: /Workspace navigation/i });
   await expect(nav).toBeVisible();
 
   // 3. Global Search
-  const searchTrigger = page.getByRole('button', { name: 'Search' });
+  const searchTrigger = page.getByRole('button', { name: /Search workspace|Search/i });
   await expect(searchTrigger).toBeVisible();
 
   // 4. Notification trigger
-  const notificationTrigger = page.getByRole('button', { name: 'Notifications' });
+  const notificationTrigger = page.getByRole('button', { name: /Notifications/ });
   await expect(notificationTrigger).toBeVisible();
 
   // 5. Project Selector
@@ -42,7 +42,9 @@ test('Dashboard accessibility smoke test', async ({ page }) => {
   }
 
   // 7. Open Dialog
-  await searchTrigger.click();
+  await searchTrigger.focus();
+  await expect(searchTrigger).toBeFocused();
+  await page.keyboard.press('Enter');
   const dialog = page.getByRole('dialog', { name: 'Search' });
   await expect(dialog).toBeVisible();
   const searchInput = dialog.getByPlaceholder('Find sprints, tasks, agents, previews...');

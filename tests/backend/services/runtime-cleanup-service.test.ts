@@ -12,6 +12,7 @@ import { ProjectWorkerAssignmentService } from "../../../src/domain/workers/proj
 import { ProjectAttentionRepository } from "../../../src/repositories/project-attention-repository.js";
 import { ProjectAttentionService } from "../../../src/domain/workers/project-attention-service.js";
 import { RuntimeCleanupService } from "../../../src/services/runtime-cleanup-service.js";
+import { SprintRunLifecycleService } from "../../../src/services/sprint-run-lifecycle-service.js";
 import type { DockerRuntimePruneService } from "../../../src/services/docker-runtime-prune-service.js";
 import type { Logger } from "../../../src/shared/logging/logger.js";
 
@@ -38,9 +39,14 @@ async function createRepositories(): Promise<{
     projectAttentionRepository,
     projectWorkerAssignmentRepository,
   );
+  const sprintRunLifecycleService = new SprintRunLifecycleService({
+    executionRepository,
+    projectManagementRepository: projectRepository,
+  });
   const cleanupService = new RuntimeCleanupService(
     connectionRepository,
     executionRepository,
+    sprintRunLifecycleService,
     projectRepository,
     projectAttentionService,
   );
@@ -72,9 +78,14 @@ async function createCleanupFixture(options?: {
     projectAttentionRepository,
     projectWorkerAssignmentRepository,
   );
+  const sprintRunLifecycleService = new SprintRunLifecycleService({
+    executionRepository,
+    projectManagementRepository: projectRepository,
+  });
   const cleanupService = new RuntimeCleanupService(
     connectionRepository,
     executionRepository,
+    sprintRunLifecycleService,
     projectRepository,
     projectAttentionService,
     options?.dockerRuntimePruneService as DockerRuntimePruneService | undefined,

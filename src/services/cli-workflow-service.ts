@@ -48,6 +48,7 @@ import type { AgentPresetSyncService } from "./agent-preset-sync-service.js";
 import type { MemoryService } from "./memory-service.js";
 import type { ProviderConcurrencyService } from "./provider-concurrency-service.js";
 import { ProviderQuotaError } from "../shared/providers/provider-error-classifier.js";
+import type { SprintRunLifecycleService } from "./sprint-run-lifecycle-service.js";
 
 interface CliWorkflowServiceDependencies {
   sessionTracking: SessionTrackingRepository;
@@ -56,6 +57,7 @@ interface CliWorkflowServiceDependencies {
   activeDispatchRegistry?: ActiveDispatchRegistry;
   memoryService?: MemoryService;
   providerConcurrencyService?: ProviderConcurrencyService;
+  sprintRunLifecycleService?: Pick<SprintRunLifecycleService, "finalizeCancellationIfIdle">;
   getDashboardSettings: (scope?: DashboardSettingsScope) => DashboardSettings;
   agentPresetSyncService: AgentPresetSyncService;
   getGithubToken: () => string | undefined;
@@ -590,7 +592,10 @@ export class CliWorkflowService {
         unregisterDispatch?.();
         const taskRun = this.resolveTaskRun(args);
         if (taskRun?.sprintRunId) {
-          this.deps.executionRepository?.finalizeSprintRunCancellationIfIdle(taskRun.sprintRunId);
+          if (!this.deps.sprintRunLifecycleService) {
+            throw new Error("Sprint run lifecycle service is required to finalize sprint cancellation.");
+          }
+          this.deps.sprintRunLifecycleService.finalizeCancellationIfIdle(taskRun.sprintRunId);
         }
       }
     }

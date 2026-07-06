@@ -12,6 +12,8 @@ export interface RuntimeProcessLockOptions {
   lockPath?: string;
   projectRoot: string;
   isProcessAlive?: (pid: number) => boolean;
+  acquireTimeoutMs?: number;
+  retryIntervalMs?: number;
 }
 
 export type RuntimeProcessLockRelease = () => Promise<void>;
@@ -40,6 +42,12 @@ export async function acquireRuntimeProcessLock(
 
   const lockPath = options.lockPath ?? defaultRuntimeProcessLockPath();
   const isProcessAlive = options.isProcessAlive ?? defaultIsProcessAlive;
+  const acquireTimeoutMs = options.acquireTimeoutMs ?? readPositiveIntegerEnv(
+    "CODE_UX_RUNTIME_LOCK_WAIT_MS",
+    30_000,
+  );
+  const retryIntervalMs = options.retryIntervalMs ?? 250;
+  const deadline = Date.now() + acquireTimeoutMs;
   const record: RuntimeProcessLockRecord = {
     pid: process.pid,
     projectRoot: path.resolve(options.projectRoot),
@@ -48,7 +56,7 @@ export async function acquireRuntimeProcessLock(
 
   await fs.mkdir(path.dirname(lockPath), { recursive: true });
 
-  for (let attempt = 0; attempt < 2; attempt += 1) {
+  for (;;) {
     try {
       const handle = await fs.open(lockPath, "wx");
       try {
@@ -68,8 +76,12 @@ export async function acquireRuntimeProcessLock(
       return async () => undefined;
     }
     if (existing?.pid && isProcessAlive(existing.pid)) {
+      if (Date.now() < deadline) {
+        await sleep(Math.min(retryIntervalMs, Math.max(1, deadline - Date.now())));
+        continue;
+      }
       throw new RuntimeProcessLockError(
-        `Code UX project-manager runtime is already running (pid ${existing.pid}). Stop it before starting another runtime.`,
+        `Code UX project-manager runtime is already running (pid ${existing.pid}). Stop it before starting another runtime or increase CODE_UX_RUNTIME_LOCK_WAIT_MS for slow shutdowns.`,
         lockPath,
         existing,
       );
@@ -77,12 +89,6 @@ export async function acquireRuntimeProcessLock(
 
     await fs.rm(lockPath, { force: true });
   }
-
-  throw new RuntimeProcessLockError(
-    "Code UX project-manager runtime lock could not be acquired after removing a stale lock.",
-    lockPath,
-    null,
-  );
 }
 
 async function releaseRuntimeProcessLock(lockPath: string, pid: number): Promise<void> {
@@ -117,6 +123,19 @@ function defaultIsProcessAlive(pid: number): boolean {
     const code = (error as NodeJS.ErrnoException).code;
     return code === "EPERM";
   }
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function readPositiveIntegerEnv(name: string, fallback: number): number {
+  const raw = process.env[name];
+  if (!raw) {
+    return fallback;
+  }
+  const parsed = Number.parseInt(raw, 10);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback;
 }
 
 function isFileExistsError(error: unknown): boolean {
