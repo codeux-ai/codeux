@@ -430,8 +430,10 @@ For quicksprint calls:
 
 For scheduler calls:
 - `manage_scheduler` supports `list`, `create`, `schedule_sprint`, `schedule_quicksprint`, `schedule_chat`, `update`, `delete`, and `run_due`.
-- Generic `create` requires `targetType: "sprint" | "quicksprint" | "chat"`.
-- The `schedule_*` aliases infer the target type and accept flattened target fields.
+- `run_due` accepts an optional `now` ISO date override.
+- Generic `create` requires `targetType: "sprint" | "quicksprint" | "chat" | "memory_remediation"`. Memory remediation targets are also managed via their dedicated `/api/projects/:projectId/scheduler/memory-remediation` routes.
+- The `schedule_*` aliases infer the target type and accept flattened target fields. `create` accepts nested targets (`sprintTarget`, `quicksprintTarget`, `chatTarget`).
+- Scheduling supports an absolute date/time (`scheduledFor`) or an `after_sprint_end` anchor using `scheduleMode: "after_sprint_end"` or `anchorMode: "after_sprint_end"` with `sourceSprintId` / `anchorSourceSprintId` and an optional `offsetMinutes` / `anchorOffsetMinutes`.
 - Recurrence `frequency` accepts `minutely`, `hourly`, `daily`, `weekly`, and `monthly`; the dashboard renders `minutely` as `Minutes` and the matching recurrence summaries use labels such as `Every minute` and `Every 15 minutes`.
 - Minute recurrence uses the same UTC scheduler math as longer intervals, so the normalized rule advances `nextRunAt` and expands occurrences exactly like other frequencies once the minute literal has been parsed.
 - Scheduled quicksprints use the same `taskCount` number or numeric-string normalization as direct quicksprints.
