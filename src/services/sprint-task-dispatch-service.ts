@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { DashboardSettings, DashboardSettingsScope, JulesSession, ProviderId, Subtask } from "../contracts/app-types.js";
-import type { ProviderInvocationUsageRecord, TaskDispatchExecutorType, TaskRunRecord } from "../contracts/execution-types.js";
+import type { ProviderInvocationUsageRecord, TaskDispatchExecutorType, TaskDispatchRecord, TaskRunRecord } from "../contracts/execution-types.js";
 import { ExecutionRepository } from "../repositories/execution-repository.js";
 import { ProjectManagementRepository } from "../repositories/project-management-repository.js";
 import { TaskService } from "./task-service.js";
@@ -86,6 +86,14 @@ export interface StartSprintDispatchResult {
   runtimeLabel?: string;
 }
 
+const ACTIVE_TASK_DISPATCH_STATUSES = new Set<TaskDispatchRecord["status"]>([
+  "queued",
+  "claimed",
+  "running",
+  "cancel_requested",
+  "paused",
+]);
+
 export class SprintTaskDispatchService {
   constructor(
     private readonly executionRepository: ExecutionRepository,
@@ -102,6 +110,28 @@ export class SprintTaskDispatchService {
     const taskRecord = args.taskRecord || this.projectManagementRepository.getTask(taskRecordId);
     if (!taskRecord) {
       throw new Error(`Task record not found: ${taskRecordId}`);
+    }
+
+    const activeDispatch = this.findActiveDispatchForTask(args.projectId, args.sprintRunId, taskRecordId);
+    if (activeDispatch) {
+      const taskRun = this.executionRepository.getTaskRunByDispatchId(activeDispatch.id)
+        || this.executionRepository.getLatestTaskRun(taskRecordId, args.sprintRunId);
+      this.logger?.warn("Skipped duplicate sprint task dispatch because an active dispatch already exists", {
+        projectId: args.projectId,
+        sprintId: args.sprintId,
+        sprintRunId: args.sprintRunId,
+        taskId: taskRecordId,
+        dispatchId: activeDispatch.id,
+        dispatchStatus: activeDispatch.status,
+        taskRunId: taskRun?.id,
+        taskRunState: taskRun?.state,
+      });
+      return {
+        id: taskRun?.sessionId || activeDispatch.id,
+        name: taskRun?.sessionName || taskRun?.sessionId || activeDispatch.id,
+        provider: taskRun?.provider || undefined,
+        runtimeLabel: taskRun?.provider ? String(taskRun.provider).toUpperCase() : "EXISTING",
+      };
     }
 
     const preferredExecutor = taskRecord.executorType;
@@ -390,6 +420,22 @@ export class SprintTaskDispatchService {
       return task.record_id;
     }
     throw new Error(`Task ${task.id} is missing its database record id.`);
+  }
+
+  private findActiveDispatchForTask(projectId: string, sprintRunId: string, taskId: string): TaskDispatchRecord | null {
+    const activeDispatches = this.executionRepository.listTaskDispatches({
+      projectId,
+      sprintRunId,
+      taskId,
+    }).filter((dispatch) => ACTIVE_TASK_DISPATCH_STATUSES.has(dispatch.status));
+    if (activeDispatches.length === 0) {
+      return null;
+    }
+    return activeDispatches.sort((left, right) => {
+      const leftTime = Date.parse(left.startedAt || left.claimedAt || left.queuedAt || left.createdAt);
+      const rightTime = Date.parse(right.startedAt || right.claimedAt || right.queuedAt || right.createdAt);
+      return rightTime - leftTime;
+    })[0] ?? null;
   }
 
   private deferForProviderCapacity(

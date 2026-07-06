@@ -157,6 +157,97 @@ describe("ProjectManagementRepository", () => {
     expect(repository.getSprint(sprint.id)).not.toBeNull();
   });
 
+  it("blocks sprint deletion while an active sprint run exists", async () => {
+    const { repository, executionRepository } = await createRepository();
+    const project = repository.createProject({
+      name: "Active Sprint Run Delete Project",
+      sourceType: "local",
+      sourceRef: "/workspace/active-sprint-run-delete-project",
+    });
+    const sprint = repository.createSprint(project.id, {
+      name: "Active Sprint",
+    });
+    const sprintRun = executionRepository.createSprintRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      executorMode: "mixed",
+      status: "running",
+    });
+
+    expect(() => repository.deleteSprint(sprint.id)).toThrow(`Sprint ${sprint.id} has active run ${sprintRun.id}`);
+    expect(repository.getSprint(sprint.id)).not.toBeNull();
+
+    executionRepository.updateSprintRun(sprintRun.id, {
+      status: "cancelled",
+      finishedAt: "2026-01-01T00:00:00.000Z",
+      lastHeartbeatAt: "2026-01-01T00:00:00.000Z",
+    });
+    expect(() => repository.deleteSprint(sprint.id)).not.toThrow();
+    expect(repository.getSprint(sprint.id)).toBeNull();
+  });
+
+  it("blocks sprint deletion briefly after cancellation so runtime cleanup can settle", async () => {
+    const { repository, executionRepository } = await createRepository();
+    const project = repository.createProject({
+      name: "Recently Cancelled Sprint Delete Project",
+      sourceType: "local",
+      sourceRef: "/workspace/recently-cancelled-sprint-delete-project",
+    });
+    const sprint = repository.createSprint(project.id, {
+      name: "Recently Cancelled Sprint",
+    });
+    const sprintRun = executionRepository.createSprintRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      executorMode: "mixed",
+      status: "running",
+    });
+    executionRepository.updateSprintRun(sprintRun.id, {
+      status: "cancelled",
+      finishedAt: new Date().toISOString(),
+      lastHeartbeatAt: new Date().toISOString(),
+    });
+
+    expect(() => repository.deleteSprint(sprint.id)).toThrow(`Sprint ${sprint.id} has recently finished run ${sprintRun.id}`);
+    expect(repository.getSprint(sprint.id)).not.toBeNull();
+  });
+
+  it("blocks sprint deletion while active runtime children are still linked", async () => {
+    const { repository, executionRepository } = await createRepository();
+    const project = repository.createProject({
+      name: "Active Runtime Delete Project",
+      sourceType: "local",
+      sourceRef: "/workspace/active-runtime-delete-project",
+    });
+    const sprint = repository.createSprint(project.id, {
+      name: "Active Runtime Sprint",
+    });
+    const task = repository.createTask(project.id, {
+      sprintId: sprint.id,
+      taskKey: "T01",
+      title: "Active runtime task",
+      status: "in_progress",
+    });
+    const sprintRun = executionRepository.createSprintRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      executorMode: "docker_cli",
+      status: "cancelled",
+      finishedAt: "2026-01-01T00:00:00.000Z",
+    });
+    const dispatch = executionRepository.createTaskDispatch({
+      projectId: project.id,
+      sprintId: sprint.id,
+      sprintRunId: sprintRun.id,
+      taskId: task.id,
+      executorType: "docker_cli",
+      status: "running",
+    } as any);
+
+    expect(() => repository.deleteSprint(sprint.id)).toThrow(`Sprint ${sprint.id} has active task dispatch ${dispatch.id}`);
+    expect(repository.getSprint(sprint.id)).not.toBeNull();
+  });
+
   it("normalizes stale provided sprint numbers to the next project number", async () => {
     const { repository } = await createRepository();
     const project = repository.createProject({

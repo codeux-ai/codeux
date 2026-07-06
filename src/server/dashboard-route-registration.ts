@@ -49,6 +49,7 @@ export const createDashboardRouteDependencies = (options: DashboardServerOptions
       currentVersion: CODE_UX_VERSION,
       latestVersion: null,
       updateAvailable: false,
+      releaseUrl: "https://github.com/codeux-ai/codeux/releases",
       checkedAt: new Date().toISOString(),
     })),
   };

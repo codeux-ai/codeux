@@ -21,6 +21,7 @@ describe("UpdateCheckerService", () => {
     expect(status.currentVersion).toBe(CODE_UX_VERSION);
     expect(status.latestVersion).toBe("99.0.0");
     expect(status.updateAvailable).toBe(true);
+    expect(status.releaseUrl).toBe("https://github.com/codeux-ai/codeux/releases/tag/v99.0.0");
     expect(status.error).toBeUndefined();
     expect(Number.isNaN(Date.parse(status.checkedAt))).toBe(false);
     expect(fetchMock).toHaveBeenCalledTimes(1);
@@ -64,6 +65,7 @@ describe("UpdateCheckerService", () => {
     expect(status.currentVersion).toBe(CODE_UX_VERSION);
     expect(status.latestVersion).toBeNull();
     expect(status.updateAvailable).toBe(false);
+    expect(status.releaseUrl).toBe("https://github.com/codeux-ai/codeux/releases");
     expect(status.error).toContain("HTTP 503");
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });

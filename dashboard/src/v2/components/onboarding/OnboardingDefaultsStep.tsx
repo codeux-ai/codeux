@@ -44,7 +44,7 @@ export const OnboardingDefaultsStep: FunctionComponent<OnboardingDefaultsStepPro
             <div data-onboarding-card className="rounded-3xl border border-black/[0.06] bg-white/70 p-5 shadow-[0_16px_42px_rgba(15,23,42,0.04)] dark:border-white/[0.06] dark:bg-white/[0.04]">
               <div className="mb-3 text-xs font-bold uppercase tracking-[0.14em] text-slate-500">Default Primary Provider</div>
               <p className="mb-4 text-xs text-slate-500">The primary intelligence engine for general tasks.</p>
-              <SelectInput aria-label="Select input"
+              <SelectInput aria-label="Default primary provider"
                 /*label="Primary Provider"*/
                 value={settings.defaults.aiProvider.provider || ""}
                 onChange={(v) => updateSettings((s) => ({
@@ -58,7 +58,7 @@ export const OnboardingDefaultsStep: FunctionComponent<OnboardingDefaultsStepPro
             <div data-onboarding-card className="rounded-3xl border border-black/[0.06] bg-white/70 p-5 shadow-[0_16px_42px_rgba(15,23,42,0.04)] dark:border-white/[0.06] dark:bg-white/[0.04]">
               <div className="mb-3 text-xs font-bold uppercase tracking-[0.14em] text-slate-500">Default CLI Worker Provider</div>
               <p className="mb-4 text-xs text-slate-500">The engine running background CLI tasks (must support tool execution).</p>
-              <SelectInput aria-label="Select input"
+              <SelectInput aria-label="Default CLI worker provider"
                 /*label="Worker Provider"*/
                 value={settings.defaults.workers.virtualWorkerProvider}
                 onChange={(v) => updateSettings((s) => ({

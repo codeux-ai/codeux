@@ -35,6 +35,7 @@ import type { ConnectionChatRepository } from "../../repositories/connection-cha
 import type { ProjectWorkerAssignmentRepository } from "../../repositories/project-worker-assignment-repository.js";
 import type { ProjectWorkerAssignmentService } from "../../domain/workers/project-worker-assignment-service.js";
 import type { ProjectAttentionRepository } from "../../repositories/project-attention-repository.js";
+import type { QaReviewRepository } from "../../repositories/qa-review-repository.js";
 import type { AgentPresetRepository } from "../../repositories/agent-preset-repository.js";
 import type { AgentPresetSyncService } from "../../services/agent-preset-sync-service.js";
 import type { ExecutionRepository } from "../../repositories/execution-repository.js";
@@ -84,6 +85,7 @@ export interface BootDashboardDeps {
   projectWorkerAssignmentRepository: ProjectWorkerAssignmentRepository;
   projectWorkerAssignmentService: ProjectWorkerAssignmentService;
   projectAttentionRepository: ProjectAttentionRepository;
+  qaReviewRepository: QaReviewRepository;
   guardrailService: GuardrailService;
   agentPresetRepository: AgentPresetRepository;
   agentPresetSyncService: AgentPresetSyncService;
@@ -209,7 +211,7 @@ function requireProjectAttentionItem(
 }
 
 function resetGuardrailForResolvedHumanAttention(
-  deps: Pick<BootDashboardDeps, "guardrailService">,
+  deps: Pick<BootDashboardDeps, "guardrailService" | "qaReviewRepository" | "logger">,
   item: NonNullable<ReturnType<ProjectAttentionRepository["getAttentionItem"]>>,
 ): void {
   if (
@@ -221,6 +223,20 @@ function resetGuardrailForResolvedHumanAttention(
   }
 
   const sourceAttentionType = item.payload?.sourceAttentionType;
+  if (sourceAttentionType === "qa_review" || isQaReviewHumanEscalation(item)) {
+    const clearedRuns = deps.qaReviewRepository.resetTaskReviewRuns(item.taskId);
+    deps.guardrailService.resetPurpose(item.taskId, "qa_review");
+    deps.logger.info("Reset QA review budget after human attention resolution", {
+      projectId: item.projectId,
+      sprintId: item.sprintId,
+      sprintRunId: item.sprintRunId,
+      taskId: item.taskId,
+      attentionItemId: item.id,
+      clearedRuns,
+    });
+    return;
+  }
+
   if (
     typeof sourceAttentionType !== "string"
     || !(GUARDRAIL_LEDGER_PURPOSES as string[]).includes(sourceAttentionType)
@@ -229,6 +245,21 @@ function resetGuardrailForResolvedHumanAttention(
   }
 
   deps.guardrailService.resetPurpose(item.taskId, sourceAttentionType as GuardrailLedgerPurpose);
+}
+
+function isQaReviewHumanEscalation(
+  item: NonNullable<ReturnType<ProjectAttentionRepository["getAttentionItem"]>>,
+): boolean {
+  const payload = item.payload;
+  if (!payload || typeof payload !== "object") {
+    return false;
+  }
+
+  return (
+    typeof payload.qaReason === "string"
+    && typeof payload.runsUsed === "number"
+    && typeof payload.maxRuns === "number"
+  );
 }
 
 function requireProject(

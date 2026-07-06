@@ -723,6 +723,129 @@ describe("CycleRunner attention sync", () => {
     expect(deps.startTask).toHaveBeenCalledWith(expect.objectContaining({ id: "T2" }), expect.anything());
   });
 
+  it("keeps dependents blocked during retryable CI and unlocks them only after the gated task is merged", async () => {
+    const deps = buildDeps();
+    const runner = new CycleRunner(deps);
+    const tasks = [
+      {
+        id: "T1",
+        record_id: "task-1",
+        title: "Gated task",
+        prompt: "merge before continuing",
+        depends_on: [],
+        is_independent: true,
+        status: "COMPLETED",
+        is_merged: false,
+        worker_branch: "worker/T1",
+        pr_url: "https://example.com/pr/101",
+        session_id: "session-1",
+      },
+      {
+        id: "T2",
+        record_id: "task-2",
+        title: "Dependent task",
+        prompt: "start after T1 settles",
+        depends_on: ["T1"],
+        is_independent: false,
+        status: "BLOCKED",
+        is_merged: false,
+      },
+    ] as any[];
+    vi.mocked(deps.sprintExecutionStateService.loadSubtasks).mockResolvedValue(tasks);
+    deps.getCiStatusForScope = vi.fn()
+      .mockResolvedValueOnce({
+        available: true,
+        openPullRequests: [
+          {
+            number: 101,
+            title: "Task PR",
+            url: "https://example.com/pr/101",
+            state: "OPEN",
+            isDraft: false,
+            headRefName: "worker/T1",
+            baseRefName: "feature/sprint-1",
+            checks: [{ name: "ci", status: "in_progress", conclusion: null }],
+            comments: 0,
+            reviewDecision: "APPROVED",
+          },
+        ],
+        ciRuns: [],
+        mergedPullRequests: [],
+      })
+      .mockResolvedValueOnce({
+        available: true,
+        openPullRequests: [],
+        ciRuns: [],
+        mergedPullRequests: [
+          {
+            number: 101,
+            title: "Task PR",
+            url: "https://example.com/pr/101",
+            headRefName: "worker/T1",
+            baseRefName: "feature/sprint-1",
+            mergedAt: "2026-03-20T10:00:00.000Z",
+            mergedBy: "octocat",
+          },
+        ],
+      });
+    deps.startTask = vi.fn().mockResolvedValue({ id: "session-2", provider: "codex" });
+
+    const runArgs = {
+      action: "orchestrate" as const,
+      automationLevel: "FULL" as const,
+      automationInterventions: DEFAULT_DASHBOARD_SETTINGS.automationInterventions,
+      executionContext: {
+        project: { id: "project-1", name: "Project 1" } as any,
+        sprint: { id: "sprint-1", name: "Sprint 1" } as any,
+        sprintNumber: 1,
+        repoPath: "/repo/project-1",
+        featureBranch: "feature/sprint-1",
+        defaultBranch: "main",
+      },
+      repoPath: "/repo/project-1",
+      defaultFeatureBranch: "feature/sprint-1",
+      retryFailed: false,
+      loopSteps: {
+        loadSubtasks: true,
+        sessionSync: false,
+        statusDerivation: true,
+        startReadyTasks: true,
+        statusTable: false,
+        mergeProtocol: true,
+        actionRequiredProtocol: true,
+        watchLoopIntervalSeconds: 2,
+      } as any,
+      ciIntelligence: {
+        ...DEFAULT_DASHBOARD_SETTINGS.ciIntelligence,
+        enabled: true,
+        featurePrAutoMergeMode: "WHEN_GREEN",
+      },
+      githubMode: "REMOTE" as const,
+      defaultBranch: "main",
+      featureBranchPrefix: "feature/",
+      sprintRunId: "run-1",
+    };
+
+    const first = await runner.run(runArgs);
+    expect(first.subtasks.find((task) => task.id === "T1")).toMatchObject({
+      status: "RUNNING",
+      merge_indicator: "CI",
+      is_merged: false,
+    });
+    expect(first.subtasks.find((task) => task.id === "T2")).toMatchObject({ status: "BLOCKED" });
+    expect(deps.startTask).not.toHaveBeenCalled();
+
+    const second = await runner.run(runArgs);
+    expect(second.subtasks.find((task) => task.id === "T1")).toMatchObject({
+      status: "COMPLETED",
+      merge_indicator: "MERGED",
+      is_merged: true,
+    });
+    expect(second.subtasks.find((task) => task.id === "T2")).toMatchObject({ status: "RUNNING" });
+    expect(deps.startTask).toHaveBeenCalledTimes(1);
+    expect(deps.startTask).toHaveBeenCalledWith(expect.objectContaining({ id: "T2" }), expect.anything());
+  });
+
   it("treats no-output completed tasks as settled and unlocks dependents", async () => {
     const deps = buildDeps();
     const runner = new CycleRunner(deps);
@@ -911,6 +1034,62 @@ describe("CycleRunner attention sync", () => {
 
     expect(result.subtasks.find((task) => task.id === "T2")).toMatchObject({ status: "BLOCKED" });
     expect(deps.startTask).not.toHaveBeenCalled();
+  });
+
+  it("does not duplicate dispatches when the same ready task is observed by repeated cycles", async () => {
+    const deps = buildDeps();
+    const runner = new CycleRunner(deps);
+    const tasks = [
+      {
+        id: "T1",
+        record_id: "task-1",
+        title: "Ready task",
+        prompt: "run once",
+        depends_on: [],
+        is_independent: true,
+        status: "PENDING",
+      },
+    ] as any[];
+    vi.mocked(deps.sprintExecutionStateService.loadSubtasks).mockResolvedValue(tasks);
+    deps.startTask = vi.fn().mockResolvedValue({ id: "session-1", provider: "codex" });
+    deps.extractSessionId = vi.fn().mockReturnValue("session-1");
+
+    const runArgs = {
+      action: "orchestrate" as const,
+      automationLevel: "FULL" as const,
+      automationInterventions: DEFAULT_DASHBOARD_SETTINGS.automationInterventions,
+      executionContext: {
+        project: { id: "project-1", name: "Project 1" } as any,
+        sprint: { id: "sprint-1", name: "Sprint 1" } as any,
+        sprintNumber: 1,
+        repoPath: "/repo/project-1",
+        featureBranch: "feature/sprint-1",
+        defaultBranch: "main",
+      },
+      repoPath: "/repo/project-1",
+      defaultFeatureBranch: "feature/sprint-1",
+      retryFailed: false,
+      loopSteps: {
+        loadSubtasks: true,
+        sessionSync: false,
+        statusDerivation: true,
+        startReadyTasks: true,
+        statusTable: false,
+        mergeProtocol: true,
+        actionRequiredProtocol: true,
+      } as any,
+      ciIntelligence: { enabled: false } as any,
+      githubMode: "REMOTE" as const,
+      defaultBranch: "main",
+      featureBranchPrefix: "feature/",
+      sprintRunId: "run-1",
+    };
+
+    await runner.run(runArgs);
+    await runner.run(runArgs);
+
+    expect(tasks[0]).toMatchObject({ status: "RUNNING", session_id: "session-1" });
+    expect(deps.startTask).toHaveBeenCalledTimes(1);
   });
 
   it("does not open action_required attention while the same clarification request is already answered", async () => {
@@ -1757,8 +1936,80 @@ describe("CycleRunner attention sync", () => {
         expect.objectContaining({ status: "QA_REVIEW_FAILED" }),
       );
       expect(deps.projectAttentionService.openItems).toHaveBeenCalledWith(expect.arrayContaining([
-        expect.objectContaining({ attentionType: "human_escalation_required", taskId: "task-1" }),
+        expect.objectContaining({
+          attentionType: "human_escalation_required",
+          taskId: "task-1",
+          payload: expect.objectContaining({ sourceAttentionType: "qa_review" }),
+        }),
       ]));
+      expect(deps.qualityAssuranceService.reviewCompletedTask).not.toHaveBeenCalled();
+    });
+
+    it("ESCALATE_TO_HUMAN is idempotent after a task is parked in QA_REVIEW_FAILED", async () => {
+      const deps = buildDeps();
+      deps.qualityAssuranceService = {
+        getTaskMergeGateStatus: vi.fn().mockReturnValue({
+          mergeAllowed: false,
+          reason: "retries_exhausted",
+          summary: "QA could not clear this task.",
+          latestRun: { id: "qa-run-1" },
+          runsUsed: 5,
+          maxRuns: 5,
+        }),
+        reviewCompletedTask: vi.fn(),
+      } as any;
+      deps.getDashboardSettings = vi.fn().mockReturnValue({
+        ...DEFAULT_DASHBOARD_SETTINGS,
+        agents: {
+          ...DEFAULT_DASHBOARD_SETTINGS.agents,
+          qualityAssurance: {
+            ...DEFAULT_DASHBOARD_SETTINGS.agents.qualityAssurance,
+            enabled: true,
+            exhaustionPolicy: "ESCALATE_TO_HUMAN",
+          },
+        },
+      });
+
+      const runner = new CycleRunner(deps);
+      const task: any = {
+        id: "T1",
+        record_id: "task-1",
+        title: "Exhausted task",
+        prompt: "do work",
+        depends_on: [],
+        is_independent: true,
+        status: "CODING_COMPLETED",
+        provider: "codex",
+      };
+      const args = {
+        executionContext: {
+          project: { id: "project-1", name: "Project 1" } as any,
+          sprint: { id: "sprint-1", name: "Sprint 1" } as any,
+          sprintNumber: 1,
+          repoPath: "/repo/project-1",
+          featureBranch: "feature/sprint-1",
+          defaultBranch: "main",
+        },
+        repoPath: "/repo/project-1",
+        sprintRunId: "run-1",
+      } as any;
+
+      await (runner as any).reviewCompletedTasks(
+        [task],
+        new Map([["T1", "CODING_COMPLETED"]]),
+        args,
+        deps.getDashboardSettings(),
+      );
+      await (runner as any).reviewCompletedTasks(
+        [task],
+        new Map([["T1", "QA_REVIEW_FAILED"]]),
+        args,
+        deps.getDashboardSettings(),
+      );
+
+      expect(task.status).toBe("QA_REVIEW_FAILED");
+      expect(deps.projectManagementRepository.updateTask).toHaveBeenCalledTimes(1);
+      expect(deps.projectAttentionService.openItems).toHaveBeenCalledTimes(1);
       expect(deps.qualityAssuranceService.reviewCompletedTask).not.toHaveBeenCalled();
     });
 

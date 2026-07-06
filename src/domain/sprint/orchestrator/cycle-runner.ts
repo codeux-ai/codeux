@@ -130,6 +130,7 @@ export class CycleRunner {
           isActionRequiredState: this.deps.isActionRequiredState,
           projectManagementRepository: this.deps.projectManagementRepository,
           executionRepository: this.deps.executionRepository,
+          sprintRunLifecycleService: this.deps.sprintRunLifecycleService,
           sprintRunId: args.sprintRunId,
           logger: this.deps.logger.child({ component: "session-sync-step", projectId: args.executionContext.project.id, sprintId: args.executionContext.sprint.id, sprintRunId: args.sprintRunId }),
           listAllActivities: this.deps.listAllActivities,
@@ -700,6 +701,7 @@ export class CycleRunner {
           `\nReviews used: ${qaGate.runsUsed}/${qaGate.maxRuns}. The task is held in QA_REVIEW_FAILED and will not be merged or marked complete until a human resolves it.`,
         ].filter(Boolean).join("\n"),
         payload: {
+          sourceAttentionType: "qa_review",
           taskKey: task.id,
           qaReason: qaGate.reason,
           runsUsed: qaGate.runsUsed,

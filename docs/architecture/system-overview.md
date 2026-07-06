@@ -24,7 +24,7 @@ This project is a Model Context Protocol (MCP) server with an integrated dashboa
   - Instantiate repositories, services, handlers, orchestrator.
   - Register MCP request handlers via `src/server/mcp-request-router.ts`.
   - Start dashboard HTTP server.
-  - Start MCP stdio transport.
+  - Start MCP stdio transport only for an attached MCP pipe/socket or explicit `CODE_UX_ENABLE_MCP_STDIO=1`; daemon stdin such as `/dev/null` keeps stdio disabled.
   - Serve cached dashboard live activity and git status via `src/server/activity-cache-service.ts`.
 - Dashboard dependency composition lives in `src/app/dependency-factory/dashboard-factory.ts`. When two dashboard services must be constructed before both concrete instances exist, the factory uses `LateBoundDependency<T>` from `src/shared/late-bound-dependency.ts` and links it synchronously before returning dependencies. Consumers resolve these holders at action time so missing links fail with an explicit late-bound dependency error instead of placeholder objects or private-field mutation.
 
@@ -39,6 +39,7 @@ This project is a Model Context Protocol (MCP) server with an integrated dashboa
 - `src/domain/sprint/orchestrator/*`
 - `src/domain/sprint/ci/*`
 - Atomic step modules in `src/sprint/steps/*`
+- Git-mode behavior is split at the final merge gate. REMOTE mode waits for the hosted completion PR to be observed as merged before marking a run complete. LOCAL mode performs the final `feature -> default` merge in the host repository, restores the user's prior checkout afterward, and keeps the run active or paused with merge attention when the local merge fails.
 
 ### 4. Instruction template system
 - `src/instructions/instruction-template-service.ts`

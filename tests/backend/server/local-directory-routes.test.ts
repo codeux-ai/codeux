@@ -44,6 +44,7 @@ describe("local directory routes", () => {
       { name: "docs", path: path.join(dir, "docs") },
       { name: "src", path: path.join(dir, "src") },
     ]);
+    expect(response.body).not.toHaveProperty("files");
   });
 
   it("allows access to home directory", async () => {
@@ -73,6 +74,58 @@ describe("local directory routes", () => {
     const rootDir = path.parse(process.cwd()).root;
     // Assuming rootDir is not an allowed root
     const response = await request(createApp()).get("/api/local-directories").query({ path: rootDir });
+    expect(response.status).toBe(403);
+    expect(response.body.error).toBe("Access denied");
+  });
+
+  it("rejects encoded traversal that resolves outside allowed roots", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-local-directories-"));
+    tempDirs.push(dir);
+    const encodedTraversal = `${dir}/%2e%2e/%2e%2e`;
+
+    const response = await request(createApp()).get(`/api/local-directories?path=${encodedTraversal}`);
+
+    expect(response.status).toBe(403);
+    expect(response.body.error).toBe("Access denied");
+    expect(response.text).not.toContain(dir);
+  });
+
+  it("rejects Windows-style separator traversal attempts without listing directories", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-local-directories-"));
+    tempDirs.push(dir);
+    const windowsTraversal = `${dir}\\..\\..`;
+
+    const response = await request(createApp()).get("/api/local-directories").query({ path: windowsTraversal });
+
+    expect(response.status).not.toBe(200);
+    expect(response.body.error).toMatch(/Access denied|Path does not exist|Failed to list directories/);
+  });
+
+  it("rejects absolute paths outside the allowed roots", async () => {
+    const outsideRoot = path.parse(process.cwd()).root;
+
+    const response = await request(createApp()).get("/api/local-directories").query({ path: outsideRoot });
+
+    expect(response.status).toBe(403);
+    expect(response.body.error).toBe("Access denied");
+  });
+
+  it("rejects symlink escapes outside allowed roots", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-local-directories-"));
+    tempDirs.push(dir);
+    const symlinkPath = path.join(dir, "outside-root");
+
+    try {
+      await fs.symlink(path.parse(process.cwd()).root, symlinkPath, "dir");
+    } catch (error: any) {
+      if (error?.code === "EPERM" || error?.code === "EACCES" || error?.code === "ENOTSUP") {
+        return;
+      }
+      throw error;
+    }
+
+    const response = await request(createApp()).get("/api/local-directories").query({ path: symlinkPath });
+
     expect(response.status).toBe(403);
     expect(response.body.error).toBe("Access denied");
   });
@@ -114,5 +167,73 @@ describe("local directory routes", () => {
     expect(response.status).toBe(200);
     const directoryNames = response.body.directories.map((d: any) => d.name);
     expect(directoryNames).toEqual(["a_folder", "b_folder", "Z_folder"]);
+  });
+
+  it("lists child directories and files for file browsing without contents", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-local-files-"));
+    tempDirs.push(dir);
+    await fs.mkdir(path.join(dir, "src"));
+    await fs.mkdir(path.join(dir, "docs"));
+    await fs.writeFile(path.join(dir, "setup.sh"), "echo secret");
+    await fs.writeFile(path.join(dir, "README.md"), "# test");
+
+    const response = await request(createApp()).get("/api/local-files").query({ path: dir });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({
+      currentPath: dir,
+      parentPath: path.dirname(dir),
+      rootPath: path.parse(dir).root,
+      homePath: os.homedir(),
+    });
+    expect(response.body.directories).toEqual([
+      { name: "docs", path: path.join(dir, "docs") },
+      { name: "src", path: path.join(dir, "src") },
+    ]);
+    expect(response.body.files).toEqual([
+      { name: "README.md", path: path.join(dir, "README.md") },
+      { name: "setup.sh", path: path.join(dir, "setup.sh") },
+    ]);
+    expect(JSON.stringify(response.body)).not.toContain("echo secret");
+  });
+
+  it("sorts file browser directories and files alphabetically", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-local-files-"));
+    tempDirs.push(dir);
+    await fs.mkdir(path.join(dir, "Z_folder"));
+    await fs.mkdir(path.join(dir, "a_folder"));
+    await fs.writeFile(path.join(dir, "zeta.sh"), "");
+    await fs.writeFile(path.join(dir, "Alpha.sh"), "");
+    await fs.writeFile(path.join(dir, "beta.sh"), "");
+
+    const response = await request(createApp()).get("/api/local-files").query({ path: dir });
+
+    expect(response.status).toBe(200);
+    const directoryNames = response.body.directories.map((d: any) => d.name);
+    const fileNames = response.body.files.map((f: any) => f.name);
+    expect(directoryNames).toEqual(["a_folder", "Z_folder"]);
+    expect(fileNames).toEqual(["Alpha.sh", "beta.sh", "zeta.sh"]);
+  });
+
+  it("rejects file browser access outside allowed roots", async () => {
+    const rootDir = path.parse(process.cwd()).root;
+
+    const response = await request(createApp()).get("/api/local-files").query({ path: rootDir });
+
+    expect(response.status).toBe(403);
+    expect(response.body.error).toBe("Access denied");
+    expect(response.body.error).not.toContain(rootDir);
+  });
+
+  it("rejects missing file browser paths with sanitized errors", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-local-files-"));
+    tempDirs.push(dir);
+    const nonExistentPath = path.join(dir, "does_not_exist");
+
+    const response = await request(createApp()).get("/api/local-files").query({ path: nonExistentPath });
+
+    expect(response.status).toBe(400);
+    expect(response.body.error).toBe("Path does not exist");
+    expect(response.body.error).not.toContain(nonExistentPath);
   });
 });

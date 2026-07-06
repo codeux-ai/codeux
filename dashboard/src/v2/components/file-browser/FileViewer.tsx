@@ -20,6 +20,12 @@ const ViewerShell: FunctionComponent<{ children: preact.ComponentChildren }> = (
 );
 
 export const FileViewer: FunctionComponent<FileViewerProps> = ({ file, loading, error, isDark }) => {
+  const loadingStatusId = "file-viewer-refresh-status";
+  const errorStatusId = "file-viewer-error-status";
+  const statusId = file
+    ? [loading ? loadingStatusId : null, error ? errorStatusId : null].filter(Boolean).join(" ") || undefined
+    : undefined;
+
   if (loading && !file) {
     return (
       <ViewerShell>
@@ -72,15 +78,20 @@ export const FileViewer: FunctionComponent<FileViewerProps> = ({ file, loading, 
   }
 
   return (
-    <section class="relative min-w-0 flex-1 h-full w-full" aria-label={`File contents for ${file.path}`} aria-busy={loading}>
+    <section
+      class={`relative min-w-0 flex-1 h-full w-full ${loading || error ? "ring-1 ring-inset ring-ember-500/20" : ""}`}
+      aria-label={`File contents for ${file.path}`}
+      aria-busy={loading}
+      aria-describedby={statusId}
+    >
       {loading && (
-        <div class="absolute right-3 top-3 z-10 inline-flex items-center gap-2 rounded-full border border-signal-500/20 bg-white/92 px-3 py-1.5 text-[11px] font-semibold text-signal-700 shadow-sm backdrop-blur-md dark:bg-void-900/92 dark:text-signal-300" role="status" aria-live="polite">
-          <Loader2 class="h-3.5 w-3.5 animate-spin" strokeWidth={2} />
-          Refreshing file
+        <div id={loadingStatusId} class="absolute right-3 top-3 z-10 inline-flex max-w-[calc(100%-1.5rem)] items-center gap-2 rounded-full border border-signal-500/20 bg-white/92 px-3 py-1.5 text-[11px] font-semibold text-signal-700 shadow-sm backdrop-blur-md dark:bg-void-900/92 dark:text-signal-300" role="status" aria-live="polite">
+          <Loader2 class="h-3.5 w-3.5 animate-spin motion-reduce:animate-none" strokeWidth={2} />
+          <span class="break-words">Refreshing file. Showing cached contents.</span>
         </div>
       )}
       {error && (
-        <div class="absolute left-3 right-3 top-3 z-10 rounded-xl border border-status-red/25 bg-white/94 px-3 py-2 text-xs text-status-red shadow-sm backdrop-blur-md dark:bg-void-900/94" role="alert">
+        <div id={errorStatusId} class="absolute left-3 right-3 top-3 z-10 rounded-xl border border-status-red/25 bg-white/94 px-3 py-2 text-xs text-status-red shadow-sm backdrop-blur-md dark:bg-void-900/94" role="alert">
           Failed to refresh file contents. Showing cached copy. {error}
         </div>
       )}

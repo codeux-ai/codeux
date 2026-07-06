@@ -556,7 +556,7 @@ export const AgentsPage: FunctionComponent = () => {
   }, [pushResult]);
 
   return (
-    <PageContainer containerRef={contentRef} padding="agents" className="gap-10 md:gap-14">
+    <PageContainer aria-label="Agents" containerRef={contentRef} padding="agents" className="gap-10 md:gap-14">
       <AgentsHero
         selectedProject={selectedProject}
         projectLoading={projectLoading}

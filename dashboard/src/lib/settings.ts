@@ -24,6 +24,8 @@ export const cloneDefaultSettings = (): DashboardSettings => ({
   dbAutoVacuumOnStartup: DEFAULT_DASHBOARD_SETTINGS.dbAutoVacuumOnStartup,
   dbPruningEnabled: DEFAULT_DASHBOARD_SETTINGS.dbPruningEnabled,
   dbRetentionDays: DEFAULT_DASHBOARD_SETTINGS.dbRetentionDays,
+  restartSprintPolicy: DEFAULT_DASHBOARD_SETTINGS.restartSprintPolicy,
+  restartInvocationPolicy: DEFAULT_DASHBOARD_SETTINGS.restartInvocationPolicy,
   appearance: { ...DEFAULT_DASHBOARD_SETTINGS.appearance },
   automationLevel: DEFAULT_DASHBOARD_SETTINGS.automationLevel,
   automationInterventions: { ...DEFAULT_DASHBOARD_SETTINGS.automationInterventions },

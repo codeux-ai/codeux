@@ -31,6 +31,8 @@ describe("SettingsRepository", () => {
     expect(system.runtime.consoleLogLevel).toBe("info");
     expect(system.runtime.debugLogFileLevel).toBe("error");
     expect(system.runtime.consoleLogMode).toBe("standard");
+    expect(system.runtime.restartSprintPolicy).toBe("continue");
+    expect(system.runtime.restartInvocationPolicy).toBe("continue");
     expect(system.defaults.automationLevel).toBe("SEMI_AUTO");
     expect(system.defaults.aiProvider.provider).toBe("jules");
     expect(system.defaults.aiProvider.providers.codex.model).toBe("gpt-5.5");
@@ -74,6 +76,8 @@ describe("SettingsRepository", () => {
         consoleLogLevel: "debug",
         debugLogFileLevel: "warn",
         consoleLogMode: "full",
+        restartSprintPolicy: "pause",
+        restartInvocationPolicy: "restart",
       },
       integrations: {
         julesApiKey: "sys-jules",
@@ -215,6 +219,8 @@ describe("SettingsRepository", () => {
     expect(effectiveProject.settings.consoleLogLevel).toBe("debug");
     expect(effectiveProject.settings.debugLogFileLevel).toBe("warn");
     expect(effectiveProject.settings.consoleLogMode).toBe("full");
+    expect(effectiveProject.settings.restartSprintPolicy).toBe("pause");
+    expect(effectiveProject.settings.restartInvocationPolicy).toBe("restart");
     expect(effectiveProject.settings.aiProvider.providers.jules.apiKey).toBe("sys-jules");
     expect(effectiveProject.settings.git.githubToken).toBe("sys-gh");
     expect(effectiveProject.settings.automationLevel).toBe("ALWAYS_ASK");

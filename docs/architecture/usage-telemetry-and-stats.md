@@ -73,6 +73,13 @@ that is absent, malformed, or otherwise unavailable is represented as
 whether that becomes `estimated` or `unavailable` usage, preserving the
 persisted provider invocation schema and dashboard API shape.
 
+Malformed JSON fragments are classified by the shared parser utilities without
+returning the raw fragment on failure, so synthetic or provider-specific errors
+do not carry secret-like transcript content into telemetry diagnostics. Numeric
+usage fields are normalized as non-negative counters; missing, zero, malformed,
+or negative token fields become `0`, while recoverable mixed payloads continue
+to preserve valid input, output, cached, reasoning, and total-token metadata.
+
 Provider-specific usage inference remains intentionally narrow. Codex and Qwen
 share the OpenAI-style usage adapter, OpenCode keeps its raw cumulative export
 snapshot for resumed-session baselines, and Antigravity continues to document

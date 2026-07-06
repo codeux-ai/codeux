@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 /// <reference types="@testing-library/jest-dom" />
-import { cleanup, render } from "@testing-library/preact";
+import { cleanup, fireEvent, render, screen } from "@testing-library/preact";
 import * as matchers from "@testing-library/jest-dom/matchers";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -67,5 +67,43 @@ describe("SprintCell visuals", () => {
     expect(shadowUnderlay).toBeInTheDocument();
     expect(shadowUnderlay).toHaveClass(...ORGANIC_CELL_SHADOW_CLASS.split(" "));
     expect(shadowUnderlay?.className).not.toContain("drop-shadow");
+  });
+
+  it("keeps hover-revealed card actions keyboard reachable and reduced-motion visible", () => {
+    const { container } = render(
+      <SprintCell
+        sprint={sprint}
+        isEven={false}
+        accentColor="text-signal-600 dark:text-signal-300"
+        onPrimaryAction={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: "Start sprint Dashboard polish" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Open actions menu for sprint Dashboard polish" })).toBeInTheDocument();
+    expect(screen.getByText("Draft").parentElement).toHaveClass("motion-reduce:opacity-100");
+
+    const actionCluster = container.querySelector(".group-focus-within\\:opacity-100");
+    expect(actionCluster).toBeInTheDocument();
+  });
+
+  it("shows target-specific busy state for the primary sprint action", () => {
+    const onPrimaryAction = vi.fn();
+    render(
+      <SprintCell
+        sprint={sprint}
+        isEven={false}
+        accentColor="text-signal-600 dark:text-signal-300"
+        primaryBusy
+        onPrimaryAction={onPrimaryAction}
+      />,
+    );
+
+    const startButton = screen.getByRole("button", { name: "Start sprint Dashboard polish is pending" });
+    expect(startButton).toBeDisabled();
+    expect(startButton).toHaveAttribute("aria-busy", "true");
+
+    fireEvent.click(startButton);
+    expect(onPrimaryAction).not.toHaveBeenCalled();
   });
 });

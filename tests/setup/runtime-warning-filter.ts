@@ -1,17 +1,121 @@
 import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
-import { vi } from "vitest";
+import { afterAll, beforeEach, vi } from "vitest";
 
 const originalEmitWarning = process.emitWarning.bind(process);
 const originalLogLevel = process.env.LOG_LEVEL;
-const isolatedHomeDir = fs.mkdtempSync(path.join(os.tmpdir(), "code-ux-vitest-home-"));
+const DETERMINISTIC_TIME_ZONE = "UTC";
+const DETERMINISTIC_LOCALE = "C.UTF-8";
 
-process.env.HOME = isolatedHomeDir;
-process.env.USERPROFILE = isolatedHomeDir;
-process.env.XDG_CONFIG_HOME = path.join(isolatedHomeDir, ".config");
-process.env.XDG_STATE_HOME = path.join(isolatedHomeDir, ".local", "state");
-process.env.XDG_CACHE_HOME = path.join(isolatedHomeDir, ".cache");
+process.env.TZ = DETERMINISTIC_TIME_ZONE;
+process.env.LANG = DETERMINISTIC_LOCALE;
+process.env.LC_ALL = DETERMINISTIC_LOCALE;
+
+const createIsolatedHomeDir = (): string => fs.mkdtempSync(path.join(os.tmpdir(), "code-ux-vitest-home-"));
+const isolatedHomeDir = createIsolatedHomeDir();
+
+interface HomeEnvSnapshot {
+  HOME: string | undefined;
+  USERPROFILE: string | undefined;
+  XDG_CONFIG_HOME: string | undefined;
+  XDG_STATE_HOME: string | undefined;
+  XDG_CACHE_HOME: string | undefined;
+}
+
+const captureHomeEnv = (): HomeEnvSnapshot => ({
+  HOME: process.env.HOME,
+  USERPROFILE: process.env.USERPROFILE,
+  XDG_CONFIG_HOME: process.env.XDG_CONFIG_HOME,
+  XDG_STATE_HOME: process.env.XDG_STATE_HOME,
+  XDG_CACHE_HOME: process.env.XDG_CACHE_HOME,
+});
+
+const restoreEnvValue = (key: keyof HomeEnvSnapshot, value: string | undefined): void => {
+  if (value === undefined) {
+    delete process.env[key];
+    return;
+  }
+  process.env[key] = value;
+};
+
+const applyIsolatedHomeEnv = (homeDir: string): void => {
+  process.env.HOME = homeDir;
+  process.env.USERPROFILE = homeDir;
+  process.env.XDG_CONFIG_HOME = path.join(homeDir, ".config");
+  process.env.XDG_STATE_HOME = path.join(homeDir, ".local", "state");
+  process.env.XDG_CACHE_HOME = path.join(homeDir, ".cache");
+};
+
+const restoreHomeEnv = (snapshot: HomeEnvSnapshot): void => {
+  restoreEnvValue("HOME", snapshot.HOME);
+  restoreEnvValue("USERPROFILE", snapshot.USERPROFILE);
+  restoreEnvValue("XDG_CONFIG_HOME", snapshot.XDG_CONFIG_HOME);
+  restoreEnvValue("XDG_STATE_HOME", snapshot.XDG_STATE_HOME);
+  restoreEnvValue("XDG_CACHE_HOME", snapshot.XDG_CACHE_HOME);
+};
+
+applyIsolatedHomeEnv(isolatedHomeDir);
+
+export function restoreLeakedFakeTimers(): boolean {
+  if (!vi.isFakeTimers()) {
+    return false;
+  }
+
+  vi.useRealTimers();
+  return true;
+}
+
+beforeEach(() => {
+  if (restoreLeakedFakeTimers()) {
+    throw new Error("Vitest fake timers leaked from a previous test. Call vi.useRealTimers() before the test finishes.");
+  }
+});
+
+afterAll(() => {
+  if (restoreLeakedFakeTimers()) {
+    throw new Error("Vitest fake timers were still enabled after this test file. Call vi.useRealTimers() during cleanup.");
+  }
+});
+
+const removeTempHomeDir = (homeDir: string): void => {
+  try {
+    fs.rmSync(homeDir, { recursive: true, force: true });
+  } catch (error) {
+    if (!isWindowsTempLockError(error, homeDir)) {
+      throw error;
+    }
+  }
+};
+
+const isPromiseLike = <T>(value: T | Promise<T>): value is Promise<T> => {
+  return typeof value === "object" && value !== null && "then" in value && typeof value.then === "function";
+};
+
+export function withIsolatedTestHome<T>(callback: (homeDir: string) => Promise<T>): Promise<T>;
+export function withIsolatedTestHome<T>(callback: (homeDir: string) => T): T;
+export function withIsolatedTestHome<T>(callback: (homeDir: string) => T | Promise<T>): T | Promise<T> {
+  const previousEnv = captureHomeEnv();
+  const homeDir = createIsolatedHomeDir();
+  applyIsolatedHomeEnv(homeDir);
+
+  const cleanup = (): void => {
+    restoreHomeEnv(previousEnv);
+    removeTempHomeDir(homeDir);
+  };
+
+  try {
+    const result = callback(homeDir);
+    if (isPromiseLike(result)) {
+      return result.finally(cleanup);
+    }
+    cleanup();
+    return result;
+  } catch (error) {
+    cleanup();
+    throw error;
+  }
+}
 
 process.emitWarning = ((warning: string | Error, ...args: unknown[]) => {
   const message = typeof warning === "string" ? warning : warning?.message ?? "";

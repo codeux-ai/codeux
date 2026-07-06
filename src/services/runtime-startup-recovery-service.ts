@@ -1,7 +1,14 @@
 import * as fs from "fs";
 import * as path from "path";
-import type { DashboardSettings, DashboardSettingsScope, DockerContainer, ProviderId } from "../contracts/app-types.js";
-import type { ExecutionInvocationRecord, ProviderInvocationUsageRecord, TaskDispatchStatus, TaskRunRecord } from "../contracts/execution-types.js";
+import type {
+  DashboardSettings,
+  DashboardSettingsScope,
+  DockerContainer,
+  ProviderId,
+  RestartInvocationPolicy,
+  RestartSprintPolicy,
+} from "../contracts/app-types.js";
+import type { ExecutionInvocationRecord, ProviderInvocationUsageRecord, TaskDispatchRecord, TaskDispatchStatus, TaskRunRecord } from "../contracts/execution-types.js";
 import type { ExecutionRepository } from "../repositories/execution-repository.js";
 import type { ProjectManagementRepository } from "../repositories/project-management-repository.js";
 import type { QaReviewRepository } from "../repositories/qa-review-repository.js";
@@ -15,6 +22,7 @@ import { InvocationRecoveryService } from "./runtime-recovery/invocation-recover
 import { calculateInvocationDurationMs, isTerminalTaskRunState } from "./runtime-recovery/recovery-utils.js";
 import { cancelStaleProviderInvocation, failStaleProviderInvocation } from "../domain/runtime/provider-invocation-recovery.js";
 import type { GuardrailService } from "./guardrail-service.js";
+import type { SprintRunLifecycleService } from "./sprint-run-lifecycle-service.js";
 
 const ACTIVE_SPRINT_RUN_STATUSES = ["queued", "running"] as const;
 const ACTIVE_DISPATCH_STATUSES = ["queued", "claimed", "running", "cancel_requested"] as const;
@@ -22,9 +30,15 @@ const TERMINAL_TASK_RUN_STATES = new Set(["COMPLETED", "FAILED", "BLOCKED", "QUO
 const TERMINAL_SPRINT_RUN_STATUSES = new Set(["completed", "failed", "cancelled"]);
 const ACTIVE_TASK_RUN_STATES = ["PENDING", "RUNNING", "PAUSED"] as const;
 const TASK_CODING_INVOCATION_TYPES = ["task_coding", "cli_task_coding", "cli_task_followup"] as const;
+const TERMINAL_PROVIDER_INVOCATION_STATUSES = new Set(["completed", "failed", "cancelled"]);
 const CLI_PROVIDERS = new Set<ProviderId>(["gemini", "codex", "claude-code", "qwen-code", "opencode", "antigravity"]);
 const DURABLE_REMOTE_PROVIDERS = new Set(["jules"]);
 const QA_RUN_START_TIMEOUT_MS = 60_000;
+
+interface RestartPolicies {
+  sprintPolicy: RestartSprintPolicy;
+  invocationPolicy: RestartInvocationPolicy;
+}
 
 function parseSprintOrchestratorOwnerPid(ownerKey: string): number | null {
   const match = /^sprint_orchestrator:(\d+)$/.exec(ownerKey);
@@ -46,6 +60,7 @@ export interface RuntimeStartupRecoveryResult {
   reconciledStructuredInvocationIds: string[];
   reconciledTaskCodingInvocationIds: string[];
   reconciledTaskCodingProviderIds: string[];
+  reconciledTerminalProviderDispatchIds: string[];
   reconciledTerminalDispatchIds: string[];
   rehydratedSprintRunIds: string[];
   reconciledTaskRunIds: string[];
@@ -53,17 +68,25 @@ export interface RuntimeStartupRecoveryResult {
   reconciledRetryInvocationIds: string[];
   resumedSprintRunIds: string[];
   supersededSprintRunIds: string[];
+  restartPolicyPausedSprintRunIds: string[];
+  restartPolicyCancelledSprintRunIds: string[];
+  restartPolicySyncedPausedSprintIds: string[];
+  restartPolicySyncedOrphanedSprintIds: string[];
+  reconciledDuplicateDispatchIds: string[];
 }
 
 interface RuntimeStartupRecoveryServiceDeps {
   sessionTracking: SessionTrackingRepository;
   executionRepository: ExecutionRepository;
+  sprintRunLifecycleService: SprintRunLifecycleService;
   qaReviewRepository?: QaReviewRepository;
   projectManagementRepository: ProjectManagementRepository;
   projectAttentionService?: Pick<ProjectAttentionService, "listActiveProjectItems" | "openItem" | "resolveItem">;
   guardrailService?: Pick<GuardrailService, "evaluate">;
   sprintOrchestrator: SprintOrchestrator;
-  dockerService?: Pick<{ listContainers: () => Promise<DockerContainer[]> }, "listContainers">;
+  dockerService?: Pick<{ listContainers: () => Promise<DockerContainer[]>; removeContainers: (containerIds: string[], options?: { removeVolumes?: boolean }) => Promise<void> }, "listContainers"> & {
+    removeContainers?: (containerIds: string[], options?: { removeVolumes?: boolean }) => Promise<void>;
+  };
   getDashboardSettings?: (scope?: DashboardSettingsScope) => DashboardSettings;
   isProcessAlive?: (pid: number) => boolean;
   logger?: Logger;
@@ -76,6 +99,7 @@ export class RuntimeStartupRecoveryService {
     this.releaseStaleSprintLeases();
     await this.identifyZombieWorkspaces();
     const activeContainerSessionIds = await this.listActiveContainerSessionIds();
+    const restartPolicies = this.resolveRestartPolicies();
     const qaReviewRecovery = new QaReviewRecoveryService({
       executionRepository: this.deps.executionRepository,
       qaReviewRepository: this.deps.qaReviewRepository,
@@ -88,21 +112,37 @@ export class RuntimeStartupRecoveryService {
 
     const cliRecovery = this.deps.sessionTracking.recoverInterruptedCliSessions();
     const recoveredCliSessionIds = cliRecovery.sessionIds;
-    const reconciledLocalDispatchIds = this.reconcileInterruptedLocalDispatches(new Set(recoveredCliSessionIds));
-    const reconciledProviderDispatchIds = this.reconcileInterruptedProviderDispatches();
-    const reconciledRetryInvocationIds = this.reconcileInterruptedRetryWaits();
-    const reconciledContainerInvocationIds = await this.reconcileInterruptedCliInvocations(new Set(recoveredCliSessionIds), activeContainerSessionIds);
+    const restartPolicySyncedPausedSprintIds = this.syncPausedSprintProjections();
+    const restartPolicyResult = this.applyRestartSprintPolicy(restartPolicies.sprintPolicy);
+    const shouldRecoverInterruptedInvocations = restartPolicies.sprintPolicy === "continue";
+    const reconciledLocalDispatchIds = shouldRecoverInterruptedInvocations
+      ? await this.reconcileInterruptedLocalDispatches(new Set(recoveredCliSessionIds), activeContainerSessionIds, restartPolicies.invocationPolicy)
+      : [];
+    const reconciledProviderDispatchIds = shouldRecoverInterruptedInvocations
+      ? this.reconcileInterruptedProviderDispatches(restartPolicies.invocationPolicy)
+      : [];
+    const reconciledRetryInvocationIds = shouldRecoverInterruptedInvocations
+      ? this.reconcileInterruptedRetryWaits(restartPolicies.invocationPolicy)
+      : [];
+    const reconciledContainerInvocationIds = shouldRecoverInterruptedInvocations
+      ? await this.reconcileInterruptedCliInvocations(new Set(recoveredCliSessionIds), activeContainerSessionIds, restartPolicies.invocationPolicy)
+      : [];
     const reconciledQaReviewRunIds = await qaReviewRecovery.reconcileInterruptedQaReviewRuns(activeContainerSessionIds);
     const reconciledTerminalProviderLinkedInvocationIds = invocationRecovery.reconcileTerminalProviderLinkedInvocations();
     const demotedPrematureMergeConflictEscalationIds = this.demotePrematureMergeConflictEscalations();
     const reconciledStructuredInvocationIds = await invocationRecovery.reconcileInterruptedStructuredInvocations(activeContainerSessionIds);
     const rehydratedSprintRunIds = this.rehydrateDurableProviderSprintRuns();
+    const restartPolicySyncedOrphanedSprintIds = this.syncOrphanedRunningSprintProjections();
     const reconciledTaskCodingInvocationIds = await invocationRecovery.reconcileInterruptedTaskCodingInvocations(activeContainerSessionIds);
     const reconciledTaskCodingProviderIds = invocationRecovery.reconcileOrphanedTaskCodingProviderInvocations();
+    const reconciledTerminalProviderDispatchIds = this.reconcileTerminalProviderBackedDispatches();
     const reconciledTerminalDispatchIds = this.reconcileTerminalTaskRunDispatches();
+    const reconciledDuplicateDispatchIds = this.reconcileDuplicateActiveTaskDispatches();
     const reconciledTaskRunIds = this.reconcileInterruptedTaskRuns();
     const reconciledPausedSprintRunIds = this.reconcileStalePausedSprintRuns();
-    const { resumedSprintRunIds, supersededSprintRunIds } = this.resumeRecoverableSprintRuns();
+    const { resumedSprintRunIds, supersededSprintRunIds } = restartPolicies.sprintPolicy === "continue"
+      ? this.resumeRecoverableSprintRuns()
+      : { resumedSprintRunIds: [], supersededSprintRunIds: [] };
 
     if (
       recoveredCliSessionIds.length > 0
@@ -116,10 +156,16 @@ export class RuntimeStartupRecoveryService {
       || reconciledStructuredInvocationIds.length > 0
       || reconciledTaskCodingInvocationIds.length > 0
       || reconciledTaskCodingProviderIds.length > 0
+      || reconciledTerminalProviderDispatchIds.length > 0
       || reconciledTerminalDispatchIds.length > 0
+      || reconciledDuplicateDispatchIds.length > 0
       || rehydratedSprintRunIds.length > 0
       || reconciledTaskRunIds.length > 0
       || reconciledPausedSprintRunIds.length > 0
+      || restartPolicySyncedPausedSprintIds.length > 0
+      || restartPolicySyncedOrphanedSprintIds.length > 0
+      || restartPolicyResult.pausedSprintRunIds.length > 0
+      || restartPolicyResult.cancelledSprintRunIds.length > 0
       || resumedSprintRunIds.length > 0
       || supersededSprintRunIds.length > 0
     ) {
@@ -135,10 +181,16 @@ export class RuntimeStartupRecoveryService {
         reconciledStructuredInvocations: reconciledStructuredInvocationIds.length,
         reconciledTaskCodingInvocations: reconciledTaskCodingInvocationIds.length,
         reconciledTaskCodingProviders: reconciledTaskCodingProviderIds.length,
+        reconciledTerminalProviderDispatches: reconciledTerminalProviderDispatchIds.length,
         reconciledTerminalDispatches: reconciledTerminalDispatchIds.length,
+        reconciledDuplicateDispatches: reconciledDuplicateDispatchIds.length,
         rehydratedSprintRuns: rehydratedSprintRunIds.length,
         reconciledTaskRuns: reconciledTaskRunIds.length,
         reconciledPausedSprintRuns: reconciledPausedSprintRunIds.length,
+        restartPolicySyncedPausedSprints: restartPolicySyncedPausedSprintIds.length,
+        restartPolicySyncedOrphanedSprints: restartPolicySyncedOrphanedSprintIds.length,
+        restartPolicyPausedSprintRuns: restartPolicyResult.pausedSprintRunIds.length,
+        restartPolicyCancelledSprintRuns: restartPolicyResult.cancelledSprintRunIds.length,
         resumedSprintRuns: resumedSprintRunIds.length,
         supersededSprintRuns: supersededSprintRunIds.length,
       });
@@ -156,10 +208,16 @@ export class RuntimeStartupRecoveryService {
       reconciledStructuredInvocationIds,
       reconciledTaskCodingInvocationIds,
       reconciledTaskCodingProviderIds,
+      reconciledTerminalProviderDispatchIds,
       reconciledTerminalDispatchIds,
       rehydratedSprintRunIds,
       reconciledTaskRunIds,
       reconciledPausedSprintRunIds,
+      restartPolicySyncedPausedSprintIds,
+      restartPolicySyncedOrphanedSprintIds,
+      reconciledDuplicateDispatchIds,
+      restartPolicyPausedSprintRunIds: restartPolicyResult.pausedSprintRunIds,
+      restartPolicyCancelledSprintRunIds: restartPolicyResult.cancelledSprintRunIds,
       resumedSprintRunIds,
       supersededSprintRunIds,
     };
@@ -277,7 +335,7 @@ export class RuntimeStartupRecoveryService {
 
     for (const [sprintId, taskRuns] of taskRunsBySprintId.entries()) {
       const rawStatus = this.deps.projectManagementRepository.getRawSprintStatus(sprintId);
-      if (rawStatus === null || rawStatus === "completed" || rawStatus === "cancelled") {
+      if (rawStatus === null || rawStatus === "completed" || rawStatus === "failed" || rawStatus === "cancelled") {
         continue;
       }
 
@@ -288,7 +346,7 @@ export class RuntimeStartupRecoveryService {
 
       const targetRunWasTerminal = TERMINAL_SPRINT_RUN_STATUSES.has(targetRun.status);
       if (TERMINAL_SPRINT_RUN_STATUSES.has(targetRun.status)) {
-        this.deps.executionRepository.updateSprintRun(targetRun.id, {
+        this.deps.sprintRunLifecycleService.updateRun(targetRun.id, {
           status: "running",
           startedAt: targetRun.startedAt || now,
           finishedAt: null,
@@ -485,9 +543,7 @@ export class RuntimeStartupRecoveryService {
       });
 
       if (resolution.resetTaskToPending) {
-        this.deps.projectManagementRepository.updateTask(taskRun.taskId, {
-          status: "pending",
-        });
+        this.resetTaskToPending(taskRun.taskId);
       }
 
       reconciledTaskRunIds.push(taskRun.id);
@@ -573,6 +629,91 @@ export class RuntimeStartupRecoveryService {
     return reconciledDispatchIds;
   }
 
+  private reconcileTerminalProviderBackedDispatches(): string[] {
+    const activeDispatches = this.deps.executionRepository.listTaskDispatchesByStatus([...ACTIVE_DISPATCH_STATUSES]);
+    if (activeDispatches.length === 0) {
+      return [];
+    }
+
+    const reconciledAt = new Date().toISOString();
+    const reconciledDispatchIds: string[] = [];
+
+    for (const dispatch of activeDispatches) {
+      const taskRun = this.deps.executionRepository.getTaskRunByDispatchId(dispatch.id);
+      if (!taskRun || isTerminalTaskRunState(taskRun)) {
+        continue;
+      }
+
+      const linkedProviderInvocations = this.deps.executionRepository
+        .listProviderInvocationsForTask(dispatch.projectId, dispatch.taskId)
+        .filter((invocation) => (
+          TASK_CODING_INVOCATION_TYPES.includes(invocation.purpose as typeof TASK_CODING_INVOCATION_TYPES[number])
+          && (invocation.dispatchId === dispatch.id || invocation.taskRunId === taskRun.id)
+        ));
+      if (
+        linkedProviderInvocations.length === 0
+        || linkedProviderInvocations.some((invocation) => invocation.status === "running")
+      ) {
+        continue;
+      }
+
+      const terminalProviderInvocation = linkedProviderInvocations
+        .filter((invocation) => TERMINAL_PROVIDER_INVOCATION_STATUSES.has(invocation.status))
+        .sort((left, right) => this.providerInvocationActivityMs(right) - this.providerInvocationActivityMs(left))[0];
+      if (!terminalProviderInvocation) {
+        continue;
+      }
+
+      const task = this.deps.projectManagementRepository.getTask(dispatch.taskId);
+      const taskAlreadyCodeComplete = task?.status === "coding_completed" || task?.status === "completed";
+      const providerCompletedSettledTask = terminalProviderInvocation.status === "completed" && taskAlreadyCodeComplete;
+      const nextDispatchStatus: TaskDispatchStatus = providerCompletedSettledTask
+        ? "completed"
+        : terminalProviderInvocation.status === "cancelled"
+          ? "cancelled"
+          : "failed";
+      const nextTaskRunState: TaskRunRecord["state"] = providerCompletedSettledTask ? "COMPLETED" : "FAILED";
+      const errorMessage = providerCompletedSettledTask
+        ? null
+        : `Startup recovery closed active dispatch after linked provider invocation ended as ${terminalProviderInvocation.status}.`;
+
+      this.deps.executionRepository.releaseLease("task_dispatch", dispatch.id);
+      this.deps.executionRepository.updateTaskDispatch(dispatch.id, {
+        connectionId: null,
+        status: nextDispatchStatus,
+        startedAt: dispatch.startedAt || taskRun.startedAt || terminalProviderInvocation.startedAt || reconciledAt,
+        finishedAt: dispatch.finishedAt || taskRun.finishedAt || terminalProviderInvocation.finishedAt || reconciledAt,
+        lastHeartbeatAt: reconciledAt,
+        errorMessage,
+      });
+      this.deps.executionRepository.updateTaskRun(taskRun.id, {
+        connectionId: null,
+        state: nextTaskRunState,
+        finishedAt: taskRun.finishedAt || terminalProviderInvocation.finishedAt || reconciledAt,
+        durationMs: calculateDurationMs(taskRun, terminalProviderInvocation.finishedAt || reconciledAt),
+      });
+      this.deps.executionRepository.appendTaskRunEvent(taskRun.id, "task_dispatch_reconciled", "system", {
+        reason: "terminal_provider_active_dispatch_mismatch",
+        providerInvocationId: terminalProviderInvocation.id,
+        providerStatus: terminalProviderInvocation.status,
+        previousDispatchStatus: dispatch.status,
+        nextDispatchStatus,
+        previousTaskRunState: taskRun.state,
+        nextTaskRunState,
+      }, {
+        sourceEventKey: `startup-recovery:terminal-provider-dispatch:${dispatch.id}:${terminalProviderInvocation.id}`,
+      });
+
+      if (!providerCompletedSettledTask && task?.status === "in_progress") {
+        this.resetTaskToPending(dispatch.taskId);
+      }
+
+      reconciledDispatchIds.push(dispatch.id);
+    }
+
+    return reconciledDispatchIds;
+  }
+
   private reconcileStalePausedSprintRuns(): string[] {
     const pausedRuns = this.deps.executionRepository.listSprintRunsByStatus(["paused"]);
     if (pausedRuns.length === 0) {
@@ -595,7 +736,7 @@ export class RuntimeStartupRecoveryService {
         continue;
       }
 
-      this.deps.executionRepository.updateSprintRun(sprintRun.id, {
+      this.deps.sprintRunLifecycleService.updateRun(sprintRun.id, {
         status: "failed",
         finishedAt: reconciledAt,
         lastHeartbeatAt: reconciledAt,
@@ -634,6 +775,9 @@ export class RuntimeStartupRecoveryService {
     }
 
     const sprintRun = taskRun.sprintRunId ? this.deps.executionRepository.getSprintRun(taskRun.sprintRunId) : null;
+    if (taskRun.state === "PAUSED" && sprintRun?.status === "paused") {
+      return null;
+    }
     if (sprintRun && ["completed", "failed", "cancelled"].includes(sprintRun.status)) {
       return {
         state: "FAILED",
@@ -669,6 +813,7 @@ export class RuntimeStartupRecoveryService {
   private async reconcileInterruptedCliInvocations(
     recoveredCliSessionIds: ReadonlySet<string>,
     activeContainerSessionIds: ReadonlySet<string>,
+    invocationPolicy: RestartInvocationPolicy,
   ): Promise<string[]> {
     if (!this.deps.dockerService?.listContainers && recoveredCliSessionIds.size === 0) {
       return [];
@@ -689,9 +834,13 @@ export class RuntimeStartupRecoveryService {
         invocation,
         recoveredCliSessionIds,
         activeContainerSessionIds,
+        invocationPolicy,
       );
       if (!interruptionReason) {
         continue;
+      }
+      if (invocationPolicy !== "continue") {
+        await this.removeContainersForSessions(new Set([invocation.sessionId]));
       }
 
       const linkedExecutionInvocations = this.deps.executionRepository.listExecutionInvocationsByProviderInvocationId(invocation.id);
@@ -706,7 +855,7 @@ export class RuntimeStartupRecoveryService {
         }
       );
 
-      this.reconcileInterruptedTaskExecution(invocation, interruptionReason, reconciledAt);
+      this.reconcileInterruptedTaskExecution(invocation, interruptionReason, reconciledAt, invocationPolicy);
 
       reconciledInvocationIds.push(invocation.id);
     }
@@ -714,7 +863,7 @@ export class RuntimeStartupRecoveryService {
     return reconciledInvocationIds;
   }
 
-  private reconcileInterruptedRetryWaits(): string[] {
+  private reconcileInterruptedRetryWaits(invocationPolicy: RestartInvocationPolicy): string[] {
     const runningRetryInvocations = this.deps.executionRepository.listRunningRetryExecutionInvocations();
     if (runningRetryInvocations.length === 0) {
       return [];
@@ -729,10 +878,13 @@ export class RuntimeStartupRecoveryService {
       const retryWindow = Number.isFinite(retryAtMs) && retryAtMs > Date.now()
         ? `The retry window is still active until ${retryAt}.`
         : `The retry time ${retryAt} has passed.`;
+      const retryTask = invocationPolicy !== "cancel";
       const interruptionReason = [
         `Recovered interrupted ${invocation.type} invocation after Code UX restart while waiting for provider ${invocation.lastErrorCategory || "retry"} recovery.`,
         retryWindow,
-        "The invocation was moved back to a retryable state so recovered orchestration can start a fresh continuation.",
+        retryTask
+          ? "The invocation was moved back to a retryable state so recovered orchestration can start a fresh continuation."
+          : "Restart policy cancelled the invocation, so it will not be retried automatically.",
       ].join(" ");
 
       this.deps.executionRepository.updateExecutionInvocation(invocation.id, {
@@ -753,7 +905,7 @@ export class RuntimeStartupRecoveryService {
         createdAt: reconciledAt,
       });
 
-      this.reconcileInterruptedTaskExecutionInvocation(invocation, interruptionReason, reconciledAt);
+      this.reconcileInterruptedTaskExecutionInvocation(invocation, interruptionReason, reconciledAt, invocationPolicy);
       reconciledInvocationIds.push(invocation.id);
     }
 
@@ -799,7 +951,11 @@ export class RuntimeStartupRecoveryService {
     }
   }
 
-  private reconcileInterruptedLocalDispatches(recoveredCliSessionIds: ReadonlySet<string>): string[] {
+  private async reconcileInterruptedLocalDispatches(
+    recoveredCliSessionIds: ReadonlySet<string>,
+    activeContainerSessionIds: ReadonlySet<string>,
+    invocationPolicy: RestartInvocationPolicy,
+  ): Promise<string[]> {
     const interruptedAt = new Date().toISOString();
     const reconciledDispatchIds: string[] = [];
     const activeLocalDispatches = this.deps.executionRepository.listTaskDispatchesByStatus(
@@ -813,10 +969,19 @@ export class RuntimeStartupRecoveryService {
         continue;
       }
 
-      const sessionRecovered = taskRun?.sessionId ? recoveredCliSessionIds.has(taskRun.sessionId) : false;
+      const sessionId = taskRun?.sessionId || null;
+      const sessionRecovered = sessionId ? recoveredCliSessionIds.has(sessionId) : false;
+      const sessionStillRunning = sessionId ? activeContainerSessionIds.has(sessionId) : false;
+      if (invocationPolicy === "continue" && sessionStillRunning) {
+        continue;
+      }
       const interruptionMessage = sessionRecovered
         ? "Local CLI execution was interrupted by Code UX restart. The task was moved back to a retryable state."
         : "Local CLI execution was interrupted before Code UX could persist a resumable session. The task was moved back to a retryable state.";
+      const retryTask = invocationPolicy !== "cancel";
+      if (sessionId && invocationPolicy !== "continue") {
+        await this.removeContainersForSessions(new Set([sessionId]));
+      }
 
       this.deps.executionRepository.releaseLease("task_dispatch", dispatch.id);
       this.deps.executionRepository.updateTaskDispatch(dispatch.id, {
@@ -830,7 +995,7 @@ export class RuntimeStartupRecoveryService {
       if (taskRun) {
         this.deps.executionRepository.updateTaskRun(taskRun.id, {
           connectionId: null,
-          state: "FAILED",
+          state: retryTask ? "FAILED" : "BLOCKED",
           finishedAt: interruptedAt,
           durationMs: calculateDurationMs(taskRun, interruptedAt),
         });
@@ -838,18 +1003,24 @@ export class RuntimeStartupRecoveryService {
           dispatchId: dispatch.id,
           reason: "runtime_restart_interrupted",
           recoveredSessionId: sessionRecovered ? taskRun.sessionId : null,
-          message: interruptionMessage,
+          message: retryTask
+            ? interruptionMessage
+            : "Local CLI execution was cancelled by restart policy and will not be retried automatically.",
         }, {
           sourceEventKey: `startup-recovery:cli-interrupted:${dispatch.id}:${taskRun.id}`,
         });
       }
 
-      this.deps.projectManagementRepository.updateTask(dispatch.taskId, {
-        status: "pending",
-      });
+      if (retryTask) {
+        this.resetTaskToPending(dispatch.taskId);
+      } else {
+        this.deps.projectManagementRepository.updateTask(dispatch.taskId, {
+          status: "QA_REVIEW_FAILED",
+        });
+      }
 
       if (dispatch.sprintRunId) {
-        this.deps.executionRepository.finalizeSprintRunCancellationIfIdle(dispatch.sprintRunId);
+        this.deps.sprintRunLifecycleService.finalizeCancellationIfIdle(dispatch.sprintRunId);
       }
       reconciledDispatchIds.push(dispatch.id);
     }
@@ -857,7 +1028,7 @@ export class RuntimeStartupRecoveryService {
     return reconciledDispatchIds;
   }
 
-  private reconcileInterruptedProviderDispatches(): string[] {
+  private reconcileInterruptedProviderDispatches(invocationPolicy: RestartInvocationPolicy): string[] {
     const interruptedAt = new Date().toISOString();
     const reconciledDispatchIds: string[] = [];
     const activeJulesDispatches = this.deps.executionRepository.listTaskDispatchesByStatus(
@@ -867,11 +1038,17 @@ export class RuntimeStartupRecoveryService {
 
     for (const dispatch of activeJulesDispatches) {
       const taskRun = this.deps.executionRepository.getTaskRunByDispatchId(dispatch.id);
-      if (!taskRun || isTerminalTaskRunState(taskRun) || taskRun.sessionId || taskRun.sessionName) {
+      if (!taskRun || isTerminalTaskRunState(taskRun)) {
+        continue;
+      }
+      if ((taskRun.sessionId || taskRun.sessionName) && invocationPolicy === "continue") {
         continue;
       }
 
-      const errorMessage = "Jules dispatch was interrupted before Code UX persisted a provider session. The task was moved back to a retryable state.";
+      const retryTask = invocationPolicy !== "cancel";
+      const errorMessage = retryTask
+        ? "Jules dispatch was interrupted before Code UX persisted a provider session. The task was moved back to a retryable state."
+        : "Jules dispatch was cancelled by restart policy before Code UX persisted a provider session.";
       this.deps.executionRepository.releaseLease("task_dispatch", dispatch.id);
       this.deps.executionRepository.updateTaskDispatch(dispatch.id, {
         connectionId: null,
@@ -882,10 +1059,23 @@ export class RuntimeStartupRecoveryService {
       });
       this.deps.executionRepository.updateTaskRun(taskRun.id, {
         connectionId: null,
-        state: "FAILED",
+        state: retryTask ? "FAILED" : "BLOCKED",
         finishedAt: interruptedAt,
         durationMs: calculateDurationMs(taskRun, interruptedAt),
       });
+      for (const invocation of this.deps.executionRepository.listRunningProviderInvocationUsages()
+        .filter((usage) => usage.taskRunId === taskRun.id)) {
+        cancelStaleProviderInvocation(
+          this.deps.executionRepository,
+          invocation,
+          this.deps.executionRepository.listExecutionInvocationsByProviderInvocationId(invocation.id),
+          {
+            reconciledAt: interruptedAt,
+            recoveryReason: "startup_restart_invocation_policy",
+            systemMessage: errorMessage,
+          },
+        );
+      }
       this.deps.executionRepository.appendTaskRunEvent(taskRun.id, "dispatch_failed", "system", {
         dispatchId: dispatch.id,
         reason: "runtime_restart_interrupted_before_session",
@@ -893,17 +1083,321 @@ export class RuntimeStartupRecoveryService {
       }, {
         sourceEventKey: `startup-recovery:jules-pre-session:${dispatch.id}:${taskRun.id}`,
       });
-      this.deps.projectManagementRepository.updateTask(dispatch.taskId, {
-        status: "pending",
-      });
+      if (retryTask) {
+        this.resetTaskToPending(dispatch.taskId);
+      } else {
+        this.deps.projectManagementRepository.updateTask(dispatch.taskId, {
+          status: "QA_REVIEW_FAILED",
+        });
+      }
 
       if (dispatch.sprintRunId) {
-        this.deps.executionRepository.finalizeSprintRunCancellationIfIdle(dispatch.sprintRunId);
+        this.deps.sprintRunLifecycleService.finalizeCancellationIfIdle(dispatch.sprintRunId);
       }
       reconciledDispatchIds.push(dispatch.id);
     }
 
     return reconciledDispatchIds;
+  }
+
+  private syncPausedSprintProjections(): string[] {
+    const activeRuns = this.deps.executionRepository.listSprintRunsByStatus([...ACTIVE_SPRINT_RUN_STATUSES, "cancel_requested"]);
+    const activeSprintIds = new Set(activeRuns.map((run) => run.sprintId));
+    const syncedSprintIds: string[] = [];
+
+    for (const pausedRun of this.deps.executionRepository.listSprintRunsByStatus(["paused"])) {
+      if (activeSprintIds.has(pausedRun.sprintId)) {
+        continue;
+      }
+      const rawStatus = this.deps.projectManagementRepository.getRawSprintStatus(pausedRun.sprintId);
+      if (rawStatus === null || rawStatus === "completed" || rawStatus === "cancelled") {
+        continue;
+      }
+      if (rawStatus === "paused") {
+        continue;
+      }
+      this.deps.sprintRunLifecycleService.updateRun(pausedRun.id, {
+        status: "paused",
+        lastHeartbeatAt: pausedRun.lastHeartbeatAt,
+      });
+      syncedSprintIds.push(pausedRun.sprintId);
+    }
+
+    return syncedSprintIds;
+  }
+
+  private syncOrphanedRunningSprintProjections(): string[] {
+    const activeRuns = this.deps.executionRepository.listSprintRunsByStatus([...ACTIVE_SPRINT_RUN_STATUSES, "cancel_requested"]);
+    const activeSprintIds = new Set(activeRuns.map((run) => run.sprintId));
+    const syncedSprintIds: string[] = [];
+
+    for (const project of this.deps.projectManagementRepository.listProjects().projects) {
+      for (const sprint of this.deps.projectManagementRepository.listSprints(project.id).sprints) {
+        const rawStatus = this.deps.projectManagementRepository.getRawSprintStatus(sprint.id);
+        if (rawStatus !== "running" || activeSprintIds.has(sprint.id)) {
+          continue;
+        }
+
+        const latestRun = this.deps.executionRepository.listSprintRuns(project.id, sprint.id)[0];
+        if (!latestRun) {
+          this.deps.projectManagementRepository.updateSprint(sprint.id, { status: "idle" });
+          syncedSprintIds.push(sprint.id);
+          continue;
+        }
+
+        if (latestRun.status === "paused") {
+          this.deps.projectManagementRepository.updateSprint(sprint.id, { status: "paused" });
+          syncedSprintIds.push(sprint.id);
+          continue;
+        }
+
+        if (TERMINAL_SPRINT_RUN_STATUSES.has(latestRun.status)) {
+          this.deps.sprintRunLifecycleService.syncSprintStatus(sprint.id, latestRun.status);
+          syncedSprintIds.push(sprint.id);
+        }
+      }
+    }
+
+    return syncedSprintIds;
+  }
+
+  private reconcileDuplicateActiveTaskDispatches(): string[] {
+    const activeDispatches = this.deps.executionRepository.listTaskDispatchesByStatus([...ACTIVE_DISPATCH_STATUSES]);
+    if (activeDispatches.length === 0) {
+      return [];
+    }
+
+    const groupedByTaskRun = new Map<string, TaskDispatchRecord[]>();
+    for (const dispatch of activeDispatches) {
+      const key = `${dispatch.sprintRunId}:${dispatch.taskId}`;
+      const entries = groupedByTaskRun.get(key) || [];
+      entries.push(dispatch);
+      groupedByTaskRun.set(key, entries);
+    }
+
+    const reconciledAt = new Date().toISOString();
+    const reconciledDispatchIds: string[] = [];
+    for (const dispatches of groupedByTaskRun.values()) {
+      if (dispatches.length < 2) {
+        continue;
+      }
+
+      const [keeper, ...duplicates] = dispatches.sort((left, right) => (
+        this.dispatchActivityMs(right) - this.dispatchActivityMs(left)
+      ));
+      for (const duplicate of duplicates) {
+        const taskRun = this.deps.executionRepository.getTaskRunByDispatchId(duplicate.id);
+        this.deps.executionRepository.releaseLease("task_dispatch", duplicate.id);
+        this.deps.executionRepository.updateTaskDispatch(duplicate.id, {
+          connectionId: null,
+          status: "cancelled",
+          finishedAt: reconciledAt,
+          lastHeartbeatAt: reconciledAt,
+          errorMessage: "Startup recovery cancelled duplicate active task dispatch; a newer dispatch for the same task and sprint run is still active.",
+        });
+
+        if (taskRun && !isTerminalTaskRunState(taskRun)) {
+          this.deps.executionRepository.updateTaskRun(taskRun.id, {
+            connectionId: null,
+            state: "BLOCKED",
+            finishedAt: reconciledAt,
+            durationMs: calculateDurationMs(taskRun, reconciledAt),
+          });
+          this.deps.executionRepository.appendTaskRunEvent(taskRun.id, "duplicate_dispatch_cancelled", "system", {
+            dispatchId: duplicate.id,
+            keptDispatchId: keeper.id,
+            reason: "startup_duplicate_active_dispatch_reconcile",
+          }, {
+            sourceEventKey: `startup-recovery:duplicate-dispatch:${duplicate.id}:${taskRun.id}`,
+          });
+        }
+
+        for (const invocation of this.deps.executionRepository.listRunningProviderInvocationUsages()
+          .filter((usage) => usage.dispatchId === duplicate.id || usage.taskRunId === taskRun?.id)) {
+          cancelStaleProviderInvocation(
+            this.deps.executionRepository,
+            invocation,
+            this.deps.executionRepository.listExecutionInvocationsByProviderInvocationId(invocation.id),
+            {
+              reconciledAt,
+              recoveryReason: "startup_duplicate_active_dispatch_reconcile",
+              systemMessage: "Startup recovery cancelled duplicate active task dispatch; a newer dispatch for the same task and sprint run is still active.",
+            },
+          );
+        }
+
+        reconciledDispatchIds.push(duplicate.id);
+      }
+    }
+
+    return reconciledDispatchIds;
+  }
+
+  private dispatchActivityMs(dispatch: TaskDispatchRecord): number {
+    const candidates = [
+      dispatch.startedAt,
+      dispatch.claimedAt,
+      dispatch.lastHeartbeatAt,
+      dispatch.queuedAt,
+      dispatch.createdAt,
+    ];
+    for (const candidate of candidates) {
+      if (!candidate) {
+        continue;
+      }
+      const parsed = Date.parse(candidate);
+      if (Number.isFinite(parsed)) {
+        return parsed;
+      }
+    }
+    return 0;
+  }
+
+  private providerInvocationActivityMs(invocation: ProviderInvocationUsageRecord): number {
+    const candidates = [
+      invocation.finishedAt,
+      invocation.updatedAt,
+      invocation.startedAt,
+      invocation.createdAt,
+    ];
+    for (const candidate of candidates) {
+      if (!candidate) {
+        continue;
+      }
+      const parsed = Date.parse(candidate);
+      if (Number.isFinite(parsed)) {
+        return parsed;
+      }
+    }
+    return 0;
+  }
+
+  private applyRestartSprintPolicy(policy: RestartSprintPolicy): {
+    pausedSprintRunIds: string[];
+    cancelledSprintRunIds: string[];
+  } {
+    if (policy === "continue") {
+      return { pausedSprintRunIds: [], cancelledSprintRunIds: [] };
+    }
+
+    const now = new Date().toISOString();
+    const activeRuns = this.deps.executionRepository.listSprintRunsByStatus([...ACTIVE_SPRINT_RUN_STATUSES, "cancel_requested"]);
+    const pausedSprintRunIds: string[] = [];
+    const cancelledSprintRunIds: string[] = [];
+
+    for (const sprintRun of activeRuns) {
+      this.cancelRunningProviderInvocationsForSprintRun(sprintRun.id, now, `Restart policy ${policy} stopped active provider invocation.`);
+      this.cancelRunningQaReviewsForSprintRun(sprintRun.id, now, `Restart policy ${policy} stopped active QA review.`);
+      this.closeActiveDispatchesForSprintRun(sprintRun.id, policy, now);
+      this.deps.sprintRunLifecycleService.releaseSprintLease(sprintRun.sprintId);
+
+      if (policy === "pause") {
+        this.deps.sprintRunLifecycleService.updateRun(sprintRun.id, {
+          status: "paused",
+          lastHeartbeatAt: now,
+        });
+        this.deps.executionRepository.appendSprintRunEvent(sprintRun.id, "sprint_paused", "system", {
+          reason: "startup_restart_policy",
+          policy,
+        }, {
+          sourceEventKey: `startup-recovery:restart-policy:pause:${sprintRun.id}`,
+        });
+        pausedSprintRunIds.push(sprintRun.id);
+      } else {
+        this.deps.sprintRunLifecycleService.updateRun(sprintRun.id, {
+          status: "cancelled",
+          finishedAt: now,
+          lastHeartbeatAt: now,
+        });
+        this.deps.executionRepository.appendSprintRunEvent(sprintRun.id, "sprint_cancelled", "system", {
+          reason: "startup_restart_policy",
+          policy,
+        }, {
+          sourceEventKey: `startup-recovery:restart-policy:cancel:${sprintRun.id}`,
+        });
+        cancelledSprintRunIds.push(sprintRun.id);
+      }
+    }
+
+    return { pausedSprintRunIds, cancelledSprintRunIds };
+  }
+
+  private closeActiveDispatchesForSprintRun(
+    sprintRunId: string,
+    policy: Exclude<RestartSprintPolicy, "continue">,
+    now: string,
+  ): void {
+    const sprintRun = this.deps.executionRepository.getSprintRun(sprintRunId);
+    if (!sprintRun) {
+      return;
+    }
+    for (const dispatch of this.deps.executionRepository.listTaskDispatches({
+      projectId: sprintRun.projectId,
+      sprintRunId,
+    })) {
+      if (!ACTIVE_DISPATCH_STATUSES.includes(dispatch.status as (typeof ACTIVE_DISPATCH_STATUSES)[number])) {
+        continue;
+      }
+      this.deps.executionRepository.releaseLease("task_dispatch", dispatch.id);
+      this.deps.executionRepository.updateTaskDispatch(dispatch.id, {
+        connectionId: null,
+        status: policy === "pause" ? "paused" : "cancelled",
+        finishedAt: policy === "pause" ? null : now,
+        lastHeartbeatAt: now,
+        errorMessage: null,
+      });
+      const taskRun = this.deps.executionRepository.getTaskRunByDispatchId(dispatch.id);
+      if (taskRun && !isTerminalTaskRunState(taskRun)) {
+        this.deps.executionRepository.updateTaskRun(taskRun.id, {
+          connectionId: null,
+          state: policy === "pause" ? "PAUSED" : "FAILED",
+          finishedAt: policy === "pause" ? null : now,
+          durationMs: policy === "pause" ? taskRun.durationMs : calculateDurationMs(taskRun, now),
+        });
+      }
+    }
+  }
+
+  private cancelRunningProviderInvocationsForSprintRun(
+    sprintRunId: string,
+    now: string,
+    message: string,
+  ): void {
+    const invocations = this.deps.executionRepository.listRunningProviderInvocationUsages()
+      .filter((invocation) => invocation.sprintRunId === sprintRunId);
+    for (const invocation of invocations) {
+      cancelStaleProviderInvocation(
+        this.deps.executionRepository,
+        invocation,
+        this.deps.executionRepository.listExecutionInvocationsByProviderInvocationId(invocation.id),
+        {
+          reconciledAt: now,
+          recoveryReason: "startup_restart_policy",
+          systemMessage: message,
+        },
+      );
+    }
+  }
+
+  private cancelRunningQaReviewsForSprintRun(
+    sprintRunId: string,
+    now: string,
+    summaryMarkdown: string,
+  ): void {
+    if (!this.deps.qaReviewRepository) {
+      return;
+    }
+    for (const run of this.deps.qaReviewRepository.listRunningRuns()) {
+      if (run.sprintRunId !== sprintRunId) {
+        continue;
+      }
+      this.deps.qaReviewRepository.updateRun(run.id, {
+        status: "cancelled",
+        outcome: null,
+        summaryMarkdown,
+        finishedAt: now,
+      });
+    }
   }
 
   private resumeRecoverableSprintRuns(): { resumedSprintRunIds: string[]; supersededSprintRunIds: string[] } {
@@ -916,7 +1410,7 @@ export class RuntimeStartupRecoveryService {
 
     for (const sprintRun of activeRuns) {
       if (recoveredSprintIds.has(sprintRun.sprintId)) {
-        this.deps.executionRepository.updateSprintRun(sprintRun.id, {
+        this.deps.sprintRunLifecycleService.updateRun(sprintRun.id, {
           status: "failed",
           finishedAt: recoveredAt,
           lastHeartbeatAt: recoveredAt,
@@ -946,7 +1440,7 @@ export class RuntimeStartupRecoveryService {
       const sprintIsTerminalOrDeleted =
         rawStatus === null || rawStatus === "completed" || rawStatus === "cancelled";
       if (sprintIsTerminalOrDeleted) {
-        this.deps.executionRepository.updateSprintRun(sprintRun.id, {
+        this.deps.sprintRunLifecycleService.updateRun(sprintRun.id, {
           status: "failed",
           finishedAt: recoveredAt,
           lastHeartbeatAt: recoveredAt,
@@ -967,7 +1461,7 @@ export class RuntimeStartupRecoveryService {
       }
 
       recoveredSprintIds.add(sprintRun.sprintId);
-      this.deps.executionRepository.releaseLease("sprint", sprintRun.sprintId);
+      this.deps.sprintRunLifecycleService.releaseSprintLease(sprintRun.sprintId);
       resumedSprintRunIds.push(sprintRun.id);
 
       void this.deps.sprintOrchestrator.recoverSprintRun(sprintRun.id).catch((error) => {
@@ -1008,6 +1502,18 @@ export class RuntimeStartupRecoveryService {
     }
   }
 
+  private resolveRestartPolicies(): RestartPolicies {
+    const settings = this.deps.getDashboardSettings?.();
+    return {
+      sprintPolicy: settings?.restartSprintPolicy === "pause" || settings?.restartSprintPolicy === "cancel"
+        ? settings.restartSprintPolicy
+        : "continue",
+      invocationPolicy: settings?.restartInvocationPolicy === "cancel" || settings?.restartInvocationPolicy === "restart"
+        ? settings.restartInvocationPolicy
+        : "continue",
+    };
+  }
+
   private async listActiveContainerSessionIds(): Promise<Set<string>> {
     if (!this.deps.dockerService?.listContainers) {
       return new Set();
@@ -1025,9 +1531,18 @@ export class RuntimeStartupRecoveryService {
     invocation: ProviderInvocationUsageRecord,
     recoveredCliSessionIds: ReadonlySet<string>,
     activeContainerSessionIds: ReadonlySet<string>,
+    invocationPolicy: RestartInvocationPolicy,
   ): string | null {
     if (!CLI_PROVIDERS.has(invocation.provider as ProviderId)) {
       return null;
+    }
+
+    if (invocationPolicy === "cancel") {
+      return `Restart policy cancelled ${invocation.purpose} invocation after Code UX restart. Session ${invocation.sessionId} will not be retried automatically.`;
+    }
+
+    if (invocationPolicy === "restart") {
+      return `Restart policy restarted ${invocation.purpose} invocation after Code UX restart. Session ${invocation.sessionId} was stopped so orchestration can dispatch a fresh attempt.`;
     }
 
     if (recoveredCliSessionIds.has(invocation.sessionId)) {
@@ -1042,10 +1557,26 @@ export class RuntimeStartupRecoveryService {
     return null;
   }
 
+  private async removeContainersForSessions(sessionIds: ReadonlySet<string>): Promise<void> {
+    if (!this.deps.dockerService?.removeContainers || sessionIds.size === 0) {
+      return;
+    }
+    const containers = await this.deps.dockerService.listContainers().catch(() => []);
+    const containerIds = containers
+      .filter((container) => {
+        const sessionId = container.labels?.["code-ux.session-id"]?.trim();
+        return sessionId ? sessionIds.has(sessionId) : false;
+      })
+      .map((container) => container.id || container.names)
+      .filter((containerId): containerId is string => Boolean(containerId));
+    await this.deps.dockerService.removeContainers(containerIds, { removeVolumes: false }).catch(() => undefined);
+  }
+
   private reconcileInterruptedTaskExecution(
     invocation: ProviderInvocationUsageRecord,
     failureReason: string,
     reconciledAt: string,
+    invocationPolicy: RestartInvocationPolicy,
   ): void {
     if (invocation.purpose !== "task_coding" || !invocation.taskId) {
       return;
@@ -1055,6 +1586,7 @@ export class RuntimeStartupRecoveryService {
     if (!task || task.status !== "in_progress") {
       return;
     }
+    const retryTask = invocationPolicy !== "cancel";
 
     if (invocation.dispatchId) {
       const dispatch = this.deps.executionRepository.getTaskDispatch(invocation.dispatchId);
@@ -1075,7 +1607,7 @@ export class RuntimeStartupRecoveryService {
       if (taskRun && !isTerminalTaskRunState(taskRun)) {
         this.deps.executionRepository.updateTaskRun(taskRun.id, {
           connectionId: null,
-          state: "FAILED",
+          state: retryTask ? "FAILED" : "BLOCKED",
           finishedAt: reconciledAt,
           durationMs: calculateDurationMs(taskRun, reconciledAt),
         });
@@ -1093,12 +1625,16 @@ export class RuntimeStartupRecoveryService {
       }
     }
 
-    this.deps.projectManagementRepository.updateTask(invocation.taskId, {
-      status: "pending",
-    });
+    if (retryTask) {
+      this.resetTaskToPending(invocation.taskId);
+    } else {
+      this.deps.projectManagementRepository.updateTask(invocation.taskId, {
+        status: "QA_REVIEW_FAILED",
+      });
+    }
 
     if (invocation.sprintRunId) {
-      this.deps.executionRepository.finalizeSprintRunCancellationIfIdle(invocation.sprintRunId);
+      this.deps.sprintRunLifecycleService.finalizeCancellationIfIdle(invocation.sprintRunId);
     }
   }
 
@@ -1106,6 +1642,7 @@ export class RuntimeStartupRecoveryService {
     invocation: ExecutionInvocationRecord,
     failureReason: string,
     reconciledAt: string,
+    invocationPolicy: RestartInvocationPolicy,
   ): void {
     if (!["cli_task_coding", "cli_task_followup"].includes(invocation.type) || !invocation.taskId) {
       return;
@@ -1115,6 +1652,7 @@ export class RuntimeStartupRecoveryService {
     if (!task || task.status !== "in_progress") {
       return;
     }
+    const retryTask = invocationPolicy !== "cancel";
 
     if (invocation.dispatchId) {
       const dispatch = this.deps.executionRepository.getTaskDispatch(invocation.dispatchId);
@@ -1135,7 +1673,7 @@ export class RuntimeStartupRecoveryService {
       if (taskRun && !isTerminalTaskRunState(taskRun)) {
         this.deps.executionRepository.updateTaskRun(taskRun.id, {
           connectionId: null,
-          state: "FAILED",
+          state: retryTask ? "FAILED" : "BLOCKED",
           finishedAt: reconciledAt,
           durationMs: calculateDurationMs(taskRun, reconciledAt),
         });
@@ -1153,12 +1691,16 @@ export class RuntimeStartupRecoveryService {
       }
     }
 
-    this.deps.projectManagementRepository.updateTask(invocation.taskId, {
-      status: "pending",
-    });
+    if (retryTask) {
+      this.resetTaskToPending(invocation.taskId);
+    } else {
+      this.deps.projectManagementRepository.updateTask(invocation.taskId, {
+        status: "QA_REVIEW_FAILED",
+      });
+    }
 
     if (invocation.sprintRunId) {
-      this.deps.executionRepository.finalizeSprintRunCancellationIfIdle(invocation.sprintRunId);
+      this.deps.sprintRunLifecycleService.finalizeCancellationIfIdle(invocation.sprintRunId);
     }
   }
 
@@ -1173,6 +1715,14 @@ export class RuntimeStartupRecoveryService {
       projectId: invocation.projectId,
       sprintId: invocation.sprintId,
     }).cliWorkflow.executionMode;
+  }
+
+  private resetTaskToPending(taskId: string): void {
+    this.deps.projectManagementRepository.updateTask(taskId, {
+      status: "pending",
+      mergeIndicator: null,
+      isMerged: false,
+    });
   }
 }
 

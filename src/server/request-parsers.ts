@@ -97,6 +97,9 @@ export function parseCreateProjectInput(body: unknown): CreateProjectInput {
     initMode: parseEnum(input.initMode, ["existing", "new-local", "new-remote"], "initMode"),
     isPrivate: parseOptionalBoolean(input.isPrivate, "isPrivate"),
     remoteProvider: parseEnum(input.remoteProvider, ["github", "gitlab"], "remoteProvider"),
+    settingsOverrides: input.settingsOverrides && typeof input.settingsOverrides === "object"
+      ? input.settingsOverrides as CreateProjectInput["settingsOverrides"]
+      : undefined,
   };
 }
 

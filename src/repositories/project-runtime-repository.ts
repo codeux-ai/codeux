@@ -2,6 +2,7 @@ import { randomUUID } from "crypto";
 import * as path from "path";
 import { DatabaseAdapter } from "./db/database-adapter.js";
 import type { DashboardStatus, Subtask, SubtaskStatus } from "../contracts/app-types.js";
+import type { SprintStatus } from "../contracts/project-management-types.js";
 import { AppDbStorage } from "./app-db-storage.js";
 import type { DashboardRealtimeMutationNotifier } from "../services/dashboard-realtime-service.js";
 import { mapRuntimeStatusToPlanningStatus } from "../services/subtask-state-mapper.js";
@@ -203,7 +204,12 @@ export class ProjectRuntimeRepository {
         }
       }
 
-      const projectStatus: ProjectStatus = hasRunning
+      const activeProjectRunStatus = this.findActiveProjectRunStatus(project.id);
+      const projectStatus: ProjectStatus = activeProjectRunStatus === "queued"
+        || activeProjectRunStatus === "running"
+        || activeProjectRunStatus === "cancel_requested"
+        ? "running"
+        : hasRunning
         ? "running"
         : hasFailure
           ? "failed"
@@ -218,7 +224,10 @@ export class ProjectRuntimeRepository {
       `).run(projectStatus, now, project.id);
 
       if (sprint?.id) {
-        const sprintStatus = hasRunning ? "running" : subtasks.some((task) => task.status === "FAILED") ? "failed" : "idle";
+        const sprintStatus = this.resolveSprintSummaryStatus(sprint.id, {
+          hasRunning,
+          hasFailure: subtasks.some((task) => task.status === "FAILED"),
+        });
         this.db.prepare(`
           UPDATE sprints
           SET status = ?, updated_at = ?
@@ -230,6 +239,49 @@ export class ProjectRuntimeRepository {
     this.realtimeNotifier?.scheduleProjectRuntimeStatusRefresh(project.id);
 
     return this.getProjectStatus(project.id, sprint?.id ?? null);
+  }
+
+  private findActiveProjectRunStatus(projectId: string): string | null {
+    const row = this.db.prepare(`
+      SELECT status
+      FROM sprint_runs
+      WHERE project_id = ?
+        AND status IN ('queued', 'running', 'paused', 'cancel_requested')
+      ORDER BY COALESCE(last_heartbeat_at, updated_at, created_at) DESC, rowid DESC
+      LIMIT 1
+    `).get(projectId) as { status: string } | undefined;
+
+    return row?.status ?? null;
+  }
+
+  private findActiveSprintRunStatus(sprintId: string): string | null {
+    const row = this.db.prepare(`
+      SELECT status
+      FROM sprint_runs
+      WHERE sprint_id = ?
+        AND status IN ('queued', 'running', 'paused', 'cancel_requested')
+      ORDER BY COALESCE(last_heartbeat_at, updated_at, created_at) DESC, rowid DESC
+      LIMIT 1
+    `).get(sprintId) as { status: string } | undefined;
+
+    return row?.status ?? null;
+  }
+
+  private resolveSprintSummaryStatus(sprintId: string, fallback: { hasRunning: boolean; hasFailure: boolean }): SprintStatus {
+    const activeRunStatus = this.findActiveSprintRunStatus(sprintId);
+    if (activeRunStatus === "queued" || activeRunStatus === "running" || activeRunStatus === "cancel_requested") {
+      return "running";
+    }
+    if (activeRunStatus === "paused") {
+      return "paused";
+    }
+    if (fallback.hasRunning) {
+      return "running";
+    }
+    if (fallback.hasFailure) {
+      return "failed";
+    }
+    return "idle";
   }
 
   getSelectedProjectStatus(): DashboardStatus {

@@ -324,6 +324,7 @@ export const TasksPage: FunctionComponent = () => {
 
   return (
     <PageContainer
+      aria-label="Task Board"
       className={isTaskScopeReady ? "gap-16" : "gap-10"}
       padding={isTaskScopeReady ? "standard" : "sprintsEmpty"}
     >

@@ -162,6 +162,15 @@ export const buildDeps = () => {
       listSprintRunEvents: vi.fn().mockReturnValue([]),
       updateSprintRun: vi.fn(),
     },
+    sprintRunLifecycleService: {
+      acquireSprintLease: vi.fn().mockReturnValue({ leaseToken: "lease-1" }),
+      createRun: vi.fn((input: any) => ({ id: "run-1", ...input })),
+      finalizeCancellationIfIdle: vi.fn().mockReturnValue(null),
+      markRunning: vi.fn((id: string, input: any) => ({ id, status: "running", ...input })),
+      releaseSprintLease: vi.fn(),
+      transition: vi.fn((input: any) => ({ id: input.sprintRunId, status: input.status })),
+      updateRun: vi.fn((id: string, input: any) => ({ id, ...input })),
+    },
     projectAttentionService: {
       openItem: vi.fn(),
       listActiveProjectItems: vi.fn().mockReturnValue([]),

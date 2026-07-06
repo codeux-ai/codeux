@@ -54,6 +54,26 @@ export const SprintLedgerBulkActions: FunctionComponent<SprintLedgerBulkActionsP
   const feedbackId = "sprint-ledger-bulk-action-feedback";
   const pendingReasonId = "sprint-ledger-bulk-action-pending-reason";
   const disabledDescription = isAnyPending ? `${feedbackId} ${pendingReasonId}` : undefined;
+  const handleBulkShowcaseEnable = () => {
+    if (isAnyPending) return;
+    onBulkShowcaseEnable();
+  };
+  const handleBulkShowcaseDisable = () => {
+    if (isAnyPending) return;
+    onBulkShowcaseDisable();
+  };
+  const handleBulkStart = () => {
+    if (isAnyPending) return;
+    onBulkStart();
+  };
+  const handleBulkDelete = () => {
+    if (isAnyPending) return;
+    onBulkDelete();
+  };
+  const handleClearSelection = () => {
+    if (isAnyPending) return;
+    onClearSelection();
+  };
 
   useEffect(() => {
     const el = containerRef.current;
@@ -97,7 +117,7 @@ export const SprintLedgerBulkActions: FunctionComponent<SprintLedgerBulkActionsP
       style={{ height: 0 }}
     >
       <div className="flex flex-col gap-3 border-b border-signal-500/20 bg-signal-500/[0.08] px-4 py-3 backdrop-blur-xl dark:bg-signal-500/[0.1] sm:px-6 lg:flex-row lg:items-center lg:justify-between">
-        <div className="flex min-w-0 items-center gap-3">
+        <div className="flex min-w-0 items-center gap-3" aria-busy={isAnyPending ? "true" : undefined}>
           <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl border border-signal-500/20 bg-signal-500/10 text-signal-700 dark:text-signal-300">
             {isAnyPending ? <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" /> : <Heart className="h-4 w-4" fill="currentColor" />}
           </div>
@@ -123,9 +143,9 @@ export const SprintLedgerBulkActions: FunctionComponent<SprintLedgerBulkActionsP
             aria-disabled={isAnyPending}
             aria-busy={isBulkPinning ? "true" : undefined}
             aria-describedby={disabledDescription}
-            onClick={onBulkShowcaseEnable}
+            onClick={handleBulkShowcaseEnable}
             disabled={isAnyPending}
-            className="inline-flex min-h-9 min-w-0 flex-1 flex-wrap items-center justify-center gap-1.5 rounded-xl border border-black/[0.06] bg-white/80 px-3 py-1.5 text-xs font-bold leading-tight text-slate-600 transition-colors hover:bg-white hover:text-slate-900 focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2 dark:border-white/[0.06] dark:bg-white/[0.04] dark:text-slate-300 dark:hover:bg-white/[0.08] dark:hover:text-white disabled:cursor-not-allowed disabled:opacity-50 sm:flex-none"
+            className="inline-flex min-h-9 min-w-[5.5rem] flex-1 flex-nowrap items-center justify-center gap-1.5 rounded-xl border border-black/[0.06] bg-white/80 px-3 py-1.5 text-xs font-bold leading-tight text-slate-600 transition-colors hover:bg-white hover:text-slate-900 focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2 dark:border-white/[0.06] dark:bg-white/[0.04] dark:text-slate-300 dark:hover:bg-white/[0.08] dark:hover:text-white disabled:cursor-not-allowed disabled:opacity-50 sm:flex-none"
             style={controlTransitionStyle}
           >
             <span className="inline-flex h-3 w-3 shrink-0 items-center justify-center">
@@ -140,9 +160,9 @@ export const SprintLedgerBulkActions: FunctionComponent<SprintLedgerBulkActionsP
             aria-disabled={isAnyPending}
             aria-busy={isBulkUnpinning ? "true" : undefined}
             aria-describedby={disabledDescription}
-            onClick={onBulkShowcaseDisable}
+            onClick={handleBulkShowcaseDisable}
             disabled={isAnyPending}
-            className="inline-flex min-h-9 min-w-0 flex-1 flex-wrap items-center justify-center gap-1.5 rounded-xl border border-black/[0.06] bg-white/80 px-3 py-1.5 text-xs font-bold leading-tight text-slate-600 transition-colors hover:bg-white hover:text-slate-900 focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2 dark:border-white/[0.06] dark:bg-white/[0.04] dark:text-slate-300 dark:hover:bg-white/[0.08] dark:hover:text-white disabled:cursor-not-allowed disabled:opacity-50 sm:flex-none"
+            className="inline-flex min-h-9 min-w-[5.5rem] flex-1 flex-nowrap items-center justify-center gap-1.5 rounded-xl border border-black/[0.06] bg-white/80 px-3 py-1.5 text-xs font-bold leading-tight text-slate-600 transition-colors hover:bg-white hover:text-slate-900 focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2 dark:border-white/[0.06] dark:bg-white/[0.04] dark:text-slate-300 dark:hover:bg-white/[0.08] dark:hover:text-white disabled:cursor-not-allowed disabled:opacity-50 sm:flex-none"
             style={controlTransitionStyle}
           >
             <span className="inline-flex h-3 w-3 shrink-0 items-center justify-center">
@@ -157,9 +177,9 @@ export const SprintLedgerBulkActions: FunctionComponent<SprintLedgerBulkActionsP
             aria-disabled={isAnyPending}
             aria-busy={isStartPending ? "true" : undefined}
             aria-describedby={disabledDescription}
-            onClick={onBulkStart}
+            onClick={handleBulkStart}
             disabled={isAnyPending}
-            className="inline-flex min-h-9 min-w-0 flex-1 flex-wrap items-center justify-center gap-1.5 rounded-xl border border-signal-500/25 bg-signal-500/10 px-3 py-1.5 text-xs font-bold leading-tight text-signal-700 transition-colors hover:bg-signal-500/20 focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2 dark:text-signal-300 disabled:cursor-not-allowed disabled:opacity-50 sm:flex-none"
+            className="inline-flex min-h-9 min-w-[5.5rem] flex-1 flex-nowrap items-center justify-center gap-1.5 rounded-xl border border-signal-500/25 bg-signal-500/10 px-3 py-1.5 text-xs font-bold leading-tight text-signal-700 transition-colors hover:bg-signal-500/20 focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2 dark:text-signal-300 disabled:cursor-not-allowed disabled:opacity-50 sm:flex-none"
             style={controlTransitionStyle}
           >
             <span className="inline-flex h-3 w-3 shrink-0 items-center justify-center">
@@ -175,9 +195,9 @@ export const SprintLedgerBulkActions: FunctionComponent<SprintLedgerBulkActionsP
             aria-disabled={isAnyPending}
             aria-busy={isDeletePending ? "true" : undefined}
             aria-describedby={disabledDescription}
-            onClick={onBulkDelete}
+            onClick={handleBulkDelete}
             disabled={isAnyPending}
-            className="inline-flex min-h-9 min-w-0 flex-1 flex-wrap items-center justify-center gap-1.5 rounded-xl border border-status-red/20 bg-status-red/10 px-3 py-1.5 text-xs font-bold leading-tight text-status-red transition-colors hover:bg-status-red/20 focus-visible:ring-2 focus-visible:ring-status-red/30 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 sm:flex-none"
+            className="inline-flex min-h-9 min-w-[5.5rem] flex-1 flex-nowrap items-center justify-center gap-1.5 rounded-xl border border-status-red/20 bg-status-red/10 px-3 py-1.5 text-xs font-bold leading-tight text-status-red transition-colors hover:bg-status-red/20 focus-visible:ring-2 focus-visible:ring-status-red/30 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 sm:flex-none"
             style={controlTransitionStyle}
           >
             <span className="inline-flex h-3 w-3 shrink-0 items-center justify-center">
@@ -191,9 +211,9 @@ export const SprintLedgerBulkActions: FunctionComponent<SprintLedgerBulkActionsP
             title={disabledTitle}
             aria-disabled={isAnyPending}
             aria-describedby={disabledDescription}
-            onClick={onClearSelection}
+            onClick={handleClearSelection}
             disabled={isAnyPending}
-            className="inline-flex min-h-9 min-w-0 flex-1 flex-wrap items-center justify-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-bold leading-tight text-slate-500 transition-colors hover:bg-black/[0.04] hover:text-slate-700 focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2 dark:text-slate-400 dark:hover:bg-white/[0.05] dark:hover:text-slate-200 disabled:cursor-not-allowed disabled:opacity-50 sm:flex-none"
+            className="inline-flex min-h-9 min-w-[5.5rem] flex-1 flex-nowrap items-center justify-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-bold leading-tight text-slate-500 transition-colors hover:bg-black/[0.04] hover:text-slate-700 focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2 dark:text-slate-400 dark:hover:bg-white/[0.05] dark:hover:text-slate-200 disabled:cursor-not-allowed disabled:opacity-50 sm:flex-none"
             style={controlTransitionStyle}
           >
             <X className="h-3.5 w-3.5" strokeWidth={2.2} />

@@ -84,4 +84,12 @@ describe("dashboard settings helpers", () => {
     const fresh = cloneDefaultSettings();
     expect(fresh.automationInterventions.autoApprovePlan).toBe(true);
   });
+
+  it("enables browser preview and the in-app browser by default without auto-starting sprint previews", () => {
+    const settings = cloneDefaultSettings();
+
+    expect(settings.sprintPreview.enabled).toBe(true);
+    expect(settings.sprintPreview.showInAppBrowser).toBe(true);
+    expect(settings.sprintPreview.autoStartOnRunningSprint).toBe(false);
+  });
 });

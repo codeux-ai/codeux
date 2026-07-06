@@ -25,6 +25,7 @@ const healthLabel: Record<SprintPreviewSession["healthStatus"], string> = {
 };
 
 const menuTransition = buildInteractionTransition("listReorder");
+const menuRevealTransition = buildInteractionTransition("listReveal", "opacity, transform");
 const controlTransition = buildInteractionTransition("controlFeedback");
 
 export const BrowserSessionsMenu: FunctionComponent<{ enabled?: boolean }> = ({ enabled = true }) => {
@@ -228,6 +229,7 @@ export const BrowserSessionsMenu: FunctionComponent<{ enabled?: boolean }> = ({ 
                     aria-label="Active Browser Sessions"
                     aria-busy={loading}
                     className="fixed inset-x-4 top-[72px] md:inset-auto md:absolute md:top-full md:right-0 mt-2 w-72 max-w-[calc(100vw-2rem)] max-h-[calc(100dvh-5rem)] bg-white/95 dark:bg-void-800/95 backdrop-blur-2xl border border-black/[0.06] dark:border-white/[0.08] rounded-2xl shadow-[0_20px_40px_rgba(0,0,0,0.12)] dark:shadow-[0_20px_40px_rgba(0,0,0,0.4)] overflow-hidden z-50 flex flex-col"
+                    style={{ transition: menuRevealTransition }}
                 >
                     <div className="px-3 py-2 flex justify-between items-center shrink-0 border-b border-black/[0.06] dark:border-white/[0.06] bg-black/[0.02] dark:bg-white/[0.02]">
                         <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Active Sessions</span>
@@ -258,15 +260,21 @@ export const BrowserSessionsMenu: FunctionComponent<{ enabled?: boolean }> = ({ 
                         )}
                         {loading && sessions.length === 0 ? (
                             <div className="px-4 py-8 text-center flex flex-col items-center justify-center gap-3" role="status" aria-live="polite" aria-busy={loading}>
-                                <Loader2 className="w-5 h-5 text-signal-500 animate-spin" />
+                                <Loader2 className="w-5 h-5 text-signal-500 animate-spin motion-reduce:animate-none" />
                                 <p className="text-xs text-slate-500 font-medium">Discovering active sessions...</p>
                             </div>
                         ) : sessions.length > 0 ? (
                             sessions.map((session, index) => {
                                 const sprintName = session.sprintName || "Unknown Sprint";
                                 const primaryMapping = getPrimaryPreviewPortMapping(session);
-                                const canOpen = Boolean(primaryMapping?.hostPort);
-                                const firstEnabledIndex = sessions.findIndex((candidate) => Boolean(getPrimaryPreviewPortMapping(candidate)?.hostPort));
+                                const canOpen = Boolean(primaryMapping?.hostPort) && session.status === "running";
+                                const unavailableReason = session.status === "stopped"
+                                    ? "Preview link unavailable because the container is stopped."
+                                    : session.status === "error"
+                                        ? "Preview link unavailable because the container has an error."
+                                        : "Preview link unavailable until a host port is routed.";
+                                const unavailableReasonId = `browser-menu-session-${session.id}-unavailable`;
+                                const firstEnabledIndex = sessions.findIndex((candidate) => Boolean(getPrimaryPreviewPortMapping(candidate)?.hostPort) && candidate.status === "running");
                                 const menuItemClassName = `focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 w-full flex flex-col gap-1.5 px-3 py-3 text-left transition-colors group border-b border-black/[0.04] dark:border-white/[0.04] last:border-0 ${
                                     canOpen
                                         ? "hover:bg-black/[0.04] dark:hover:bg-white/[0.04]"
@@ -301,8 +309,8 @@ export const BrowserSessionsMenu: FunctionComponent<{ enabled?: boolean }> = ({ 
                                         </span>
                                     </div>
                                     {!canOpen && (
-                                        <div className="pl-1 text-[10px] text-slate-500 dark:text-slate-400">
-                                            Preview link unavailable until a host port is routed.
+                                        <div id={unavailableReasonId} className="pl-1 text-[10px] text-slate-500 dark:text-slate-400">
+                                            {unavailableReason}
                                         </div>
                                     )}
                                     </>
@@ -315,6 +323,7 @@ export const BrowserSessionsMenu: FunctionComponent<{ enabled?: boolean }> = ({ 
                                             role="menuitem"
                                             aria-disabled="true"
                                             aria-label={`Preview link unavailable for ${sprintName}`}
+                                            aria-describedby={unavailableReasonId}
                                             tabIndex={-1}
                                             className={menuItemClassName}
                                             style={{ transition: menuTransition }}

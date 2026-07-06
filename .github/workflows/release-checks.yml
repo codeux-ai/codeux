@@ -1,0 +1,116 @@
+name: Release Checks
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: release-checks-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  release-checks:
+    name: Release checks (${{ matrix.name }})
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Linux
+            os: ubuntu-latest
+            electron-script: electron:dist:linux
+            artifact-name: release-checks-linux
+          - name: macOS
+            os: macos-latest
+            electron-script: electron:dist:mac
+            artifact-name: release-checks-macos
+          - name: Windows
+            os: windows-latest
+            electron-script: electron:dist:win
+            artifact-name: release-checks-windows
+
+    env:
+      CSC_IDENTITY_AUTO_DISCOVERY: "false"
+      GH_TOKEN: ""
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 10.33.0
+          run_install: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Restore release check caches
+        uses: actions/cache@v5
+        with:
+          path: |
+            .cache/vite
+            .cache/vitest
+            .cache/tsc
+            .cache/electron-runtime
+            ~/.cache/electron
+            ~/.cache/electron-builder
+            ~/AppData/Local/electron/Cache
+            ~/AppData/Local/electron-builder/Cache
+            ~/Library/Caches/electron
+            ~/Library/Caches/electron-builder
+          key: ${{ runner.os }}-node-22-release-checks-${{ hashFiles('package.json', 'pnpm-lock.yaml', 'vite.config.ts', 'tsconfig.json', 'dashboard/tsconfig.json', 'electron-builder.config.cjs', 'scripts/prepare-electron-runtime-deps.mjs', 'scripts/verify-release-install.mjs') }}
+
+      - name: Install Linux packaging dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y libopenjp2-tools
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        run: pnpm run build
+
+      - name: Verify npm tarball install
+        run: node scripts/verify-release-install.mjs
+
+      - name: Rebuild Electron native dependencies
+        run: pnpm run electron:install-deps
+
+      - name: Build desktop package
+        run: pnpm run ${{ matrix.electron-script }}
+
+      - name: Upload release-check artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact-name }}
+          path: |
+            release/electron/*.dmg
+            release/electron/*.zip
+            release/electron/*.AppImage
+            release/electron/*.deb
+            release/electron/*.rpm
+            release/electron/*.exe
+            release/electron/*.msi
+            release/electron/*.pkg
+            release/electron/*.tar.gz
+            release/electron/*.tar.xz
+            release/electron/*.7z
+            !release/electron/*-unpacked/**
+            !release/electron/mac/**
+            !release/electron/builder-debug.yml
+            !release/electron/builder-effective-config.yaml
+          if-no-files-found: ignore

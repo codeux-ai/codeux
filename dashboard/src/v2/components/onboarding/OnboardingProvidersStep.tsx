@@ -3,6 +3,7 @@ import { KeyRound } from "lucide-preact";
 import type { ProviderId, OnboardingProviderCredentialStatus, SystemSettings } from "../../../types.js";
 import { ProviderBrandIcon } from "../providers/ProviderBrandIcon.js";
 import { getSystemProvidersByType } from "../../lib/onboarding-settings-draft.js";
+import { useInteractionTokens } from "../../lib/motion/tokens.js";
 
 const providerLabels: Record<ProviderId, string> = {
   jules: "Jules",
@@ -29,6 +30,8 @@ export const OnboardingProvidersStep: FunctionComponent<OnboardingProvidersStepP
   readinessByProvider,
   settings,
 }) => {
+  const tokens = useInteractionTokens();
+
   return (
     <div className="space-y-4">
       <div data-onboarding-card className="rounded-3xl border border-black/[0.06] bg-white/70 p-5 shadow-[0_16px_42px_rgba(15,23,42,0.04)] dark:border-white/[0.06] dark:bg-white/[0.04]">
@@ -53,8 +56,11 @@ export const OnboardingProvidersStep: FunctionComponent<OnboardingProvidersStepP
               data-onboarding-card
               key={providerId}
               type="button"
+              aria-pressed={selected}
+              aria-label={`${selected ? "Deselect" : "Select"} ${providerLabels[providerId]} provider`}
               onClick={() => toggleProvider(providerId)}
               className={`group relative overflow-hidden rounded-3xl border p-4 text-left shadow-[0_14px_34px_rgba(15,23,42,0.04)] transition-[border-color,background-color,transform,box-shadow] hover:-translate-y-1 ${selected ? "border-signal-500/30 bg-signal-500/10 shadow-[0_18px_46px_rgba(0,224,160,0.08)]" : "border-black/[0.06] bg-white/75 hover:border-black/[0.12] dark:border-white/[0.06] dark:bg-white/[0.04]"}`}
+              style={{ transitionDuration: tokens.selectionMovement.duration, transitionTimingFunction: tokens.selectionMovement.ease }}
             >
               <div aria-hidden className={`absolute left-0 top-4 bottom-4 w-1 rounded-r-full transition-opacity ${selected ? "bg-signal-500 opacity-100" : "bg-slate-300 opacity-0 group-hover:opacity-100 dark:bg-slate-600"}`} />
               <div className="flex items-center justify-between gap-3">

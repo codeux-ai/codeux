@@ -472,4 +472,52 @@ describe("parseClaudeCodeSessionJsonl", () => {
     });
     expect(result.conversation).toEqual([]);
   });
+
+  it("skips partial JSON and unknown entries while preserving recoverable usage and partial tool results", () => {
+    const lines = [
+      "{\"type\":\"assistant\",\"sessionId\":\"secret-session\",\"message\":{\"usage\":{\"input_tokens\":999,\"api_key\":\"sk-test-secret\"",
+      JSON.stringify({ type: "permission-mode", sessionId: "safe-session", permissionMode: "default" }),
+      makeUserEntry({
+        sessionId: "safe-session",
+        timestamp: "2026-06-01T10:00:01.000Z",
+        content: [
+          {
+            type: "tool_result",
+            tool_use_id: "toolu_partial",
+            content: [{ type: "text", text: "truncated command output kept" }],
+            is_error: true,
+          },
+        ],
+      }),
+      makeAssistantEntry({
+        sessionId: "safe-session",
+        messageId: "msg_missing_tokens",
+        timestamp: "2026-06-01T10:00:02.000Z",
+        content: [],
+        usage: {
+          input_tokens: "21",
+          output_tokens: -4,
+          cache_read_input_tokens: undefined,
+        },
+      }),
+    ].join("\n");
+
+    const result = parseClaudeCodeSessionJsonl(lines);
+
+    expect(result.nativeSessionId).toBe("safe-session");
+    expect(result.usage).toEqual({
+      inputTokens: 21,
+      outputTokens: 0,
+      cacheCreationTokens: 0,
+      cacheReadTokens: 0,
+    });
+    expect(result.conversation).toHaveLength(1);
+    expect(result.conversation[0]).toMatchObject({
+      kind: "tool_result",
+      toolCallId: "toolu_partial",
+      toolOutput: "truncated command output kept",
+      toolStatus: "error",
+    });
+    expect(JSON.stringify(result)).not.toContain("sk-test-secret");
+  });
 });

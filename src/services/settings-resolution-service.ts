@@ -5,6 +5,8 @@ import type {
   DashboardSettings,
   ExternalSettingsHints,
   McpToolToggle,
+  RestartInvocationPolicy,
+  RestartSprintPolicy,
   RuntimeLogLevel,
   SkillToggle,
 } from "../contracts/app-types.js";
@@ -55,6 +57,8 @@ const BACKGROUND_PATTERNS = new Set<BackgroundPattern>([
 ]);
 
 const RUNTIME_LOG_LEVEL_SET = new Set<RuntimeLogLevel>(["off", "debug", "info", "warn", "error"]);
+const RESTART_SPRINT_POLICY_SET = new Set<RestartSprintPolicy>(["continue", "pause", "cancel"]);
+const RESTART_INVOCATION_POLICY_SET = new Set<RestartInvocationPolicy>(["continue", "cancel", "restart"]);
 
 const readRuntimeLogLevel = (value: unknown, fallback: RuntimeLogLevel): RuntimeLogLevel => (
   typeof value === "string" && RUNTIME_LOG_LEVEL_SET.has(value as RuntimeLogLevel)
@@ -64,6 +68,18 @@ const readRuntimeLogLevel = (value: unknown, fallback: RuntimeLogLevel): Runtime
 
 const readConsoleLogMode = (value: unknown, fallback: ConsoleLogMode): ConsoleLogMode => (
   value === "full" ? "full" : fallback
+);
+
+const readRestartSprintPolicy = (value: unknown, fallback: RestartSprintPolicy): RestartSprintPolicy => (
+  typeof value === "string" && RESTART_SPRINT_POLICY_SET.has(value as RestartSprintPolicy)
+    ? value as RestartSprintPolicy
+    : fallback
+);
+
+const readRestartInvocationPolicy = (value: unknown, fallback: RestartInvocationPolicy): RestartInvocationPolicy => (
+  typeof value === "string" && RESTART_INVOCATION_POLICY_SET.has(value as RestartInvocationPolicy)
+    ? value as RestartInvocationPolicy
+    : fallback
 );
 
 const sanitizeBackgroundImage = (value: unknown): string | null => {
@@ -554,6 +570,8 @@ export function buildDefaultSystemSettings(externalHints?: ExternalSettingsHints
       dbAutoVacuumOnStartup: DEFAULT_DASHBOARD_SETTINGS.dbAutoVacuumOnStartup,
       dbPruningEnabled: DEFAULT_DASHBOARD_SETTINGS.dbPruningEnabled,
       dbRetentionDays: DEFAULT_DASHBOARD_SETTINGS.dbRetentionDays,
+      restartSprintPolicy: DEFAULT_DASHBOARD_SETTINGS.restartSprintPolicy,
+      restartInvocationPolicy: DEFAULT_DASHBOARD_SETTINGS.restartInvocationPolicy,
     },
     integrations: {
       providers: buildDefaultIntegrationProviders(externalHints),
@@ -730,6 +748,14 @@ export function sanitizeSystemSettings(value: unknown, externalHints?: ExternalS
   const dbRetentionDays = typeof runtime.dbRetentionDays === "number"
     ? runtime.dbRetentionDays
     : defaults.runtime.dbRetentionDays;
+  const restartSprintPolicy = readRestartSprintPolicy(
+    runtime.restartSprintPolicy,
+    defaults.runtime.restartSprintPolicy,
+  );
+  const restartInvocationPolicy = readRestartInvocationPolicy(
+    runtime.restartInvocationPolicy,
+    defaults.runtime.restartInvocationPolicy,
+  );
 
   const systemGithubToken = typeof integrationInput.githubToken === "string"
     ? integrationInput.githubToken
@@ -766,6 +792,8 @@ export function sanitizeSystemSettings(value: unknown, externalHints?: ExternalS
       dbAutoVacuumOnStartup,
       dbPruningEnabled,
       dbRetentionDays,
+      restartSprintPolicy,
+      restartInvocationPolicy,
     },
     integrations: {
       providers: integrations,
@@ -999,6 +1027,8 @@ export function resolveDashboardSettings(args: {
     dbAutoVacuumOnStartup: args.systemSettings.runtime.dbAutoVacuumOnStartup,
     dbPruningEnabled: args.systemSettings.runtime.dbPruningEnabled,
     dbRetentionDays: args.systemSettings.runtime.dbRetentionDays,
+    restartSprintPolicy: args.systemSettings.runtime.restartSprintPolicy,
+    restartInvocationPolicy: args.systemSettings.runtime.restartInvocationPolicy,
     appearance: { ...sprintSettings.appearance },
     automationLevel: sprintSettings.automationLevel,
     automationInterventions: { ...sprintSettings.automationInterventions },

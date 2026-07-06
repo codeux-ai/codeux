@@ -56,6 +56,8 @@ export const SearchResultRow: FunctionComponent<SearchResultRowProps> = ({
     let badgeColorClass = 'text-slate-400 bg-black/5 dark:bg-white/5';
     let showDot = false;
     let dotColorClass = 'bg-slate-400';
+    let dotMotionClass = '';
+    let dotAuraMotionClass = '';
 
     let targetTo = "";
     let targetSearch = {};
@@ -91,7 +93,11 @@ export const SearchResultRow: FunctionComponent<SearchResultRowProps> = ({
         itemId = agentItem.id;
         badgeText = agentItem.status || 'Offline';
         if (agentItem.status === 'idle') dotColorClass = 'bg-slate-400';
-        else if (agentItem.status === 'running' || agentItem.status === 'active') dotColorClass = 'bg-status-green animate-pulse';
+        else if (agentItem.status === 'running' || agentItem.status === 'active') {
+            dotColorClass = 'bg-status-green';
+            dotMotionClass = 'motion-safe:animate-pulse motion-reduce:animate-none motion-reduce:ring-2 motion-reduce:ring-status-green/25';
+            dotAuraMotionClass = 'motion-safe:animate-ping motion-reduce:animate-none motion-reduce:ring-2 motion-reduce:ring-status-green/20';
+        }
     } else if (categoryType === 'containers') {
         const containerItem = item as ContainerSearchItem;
         Icon = Compass;
@@ -102,7 +108,9 @@ export const SearchResultRow: FunctionComponent<SearchResultRowProps> = ({
         itemId = containerItem.id;
         badgeText = containerItem.status || 'Stopped';
         if (containerItem.status === 'running') {
-            dotColorClass = 'bg-status-green animate-pulse';
+            dotColorClass = 'bg-status-green';
+            dotMotionClass = 'motion-safe:animate-pulse motion-reduce:animate-none motion-reduce:ring-2 motion-reduce:ring-status-green/25';
+            dotAuraMotionClass = 'motion-safe:animate-ping motion-reduce:animate-none motion-reduce:ring-2 motion-reduce:ring-status-green/20';
             badgeText = 'Running';
         } else {
              dotColorClass = 'bg-status-red';
@@ -136,6 +144,12 @@ export const SearchResultRow: FunctionComponent<SearchResultRowProps> = ({
             to={targetTo as any}
             search={targetSearch as any}
             onMouseDown={(e: MouseEvent) => {
+                if (isDisabled) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                }
+            }}
+            onPointerDown={(e: PointerEvent) => {
                 if (isDisabled) {
                     e.preventDefault();
                     e.stopPropagation();
@@ -238,8 +252,8 @@ export const SearchResultRow: FunctionComponent<SearchResultRowProps> = ({
                         <div className="flex shrink-0 items-center gap-2 pt-0.5">
                             {showDot && (
                                 <span className="relative flex h-2 w-2 shrink-0" aria-hidden="true">
-                                    <span className={`absolute inline-flex h-full w-full rounded-full opacity-75 ${dotColorClass} ${dotColorClass.includes('animate-pulse') ? 'animate-ping' : ''}`}></span>
-                                    <span className={`relative inline-flex h-2 w-2 rounded-full ${dotColorClass.replace('animate-pulse', '')}`}></span>
+                                    <span className={`absolute inline-flex h-full w-full rounded-full opacity-75 ${dotColorClass} ${dotAuraMotionClass}`}></span>
+                                    <span className={`relative inline-flex h-2 w-2 rounded-full ${dotColorClass} ${dotMotionClass}`}></span>
                                 </span>
                             )}
                             {badgeText && !showDot && (

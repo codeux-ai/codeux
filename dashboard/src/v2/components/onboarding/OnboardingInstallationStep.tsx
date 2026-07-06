@@ -31,7 +31,7 @@ export const OnboardingInstallationStep: FunctionComponent<OnboardingInstallatio
               <X className="h-6 w-6" strokeWidth={2.5} />
             )}
           </div>
-          <div>
+          <div aria-live="polite">
             <h3 className={`text-base font-black ${clusterReady ? "text-signal-700 dark:text-signal-200" : "text-status-amber"}`}>
               {readiness.cluster.label}
             </h3>
@@ -44,7 +44,7 @@ export const OnboardingInstallationStep: FunctionComponent<OnboardingInstallatio
 
       <div className="space-y-3">
         {readiness.dependencies.map((dep) => (
-          <div data-onboarding-card key={dep.id} className="flex items-start gap-3 rounded-2xl border border-black/[0.06] bg-white/70 p-4 shadow-[0_12px_28px_rgba(15,23,42,0.035)] dark:border-white/[0.06] dark:bg-white/[0.04]">
+          <div data-onboarding-card key={dep.id} role="status" aria-label={`${dep.label}: ${dep.status}`} className="flex items-start gap-3 rounded-2xl border border-black/[0.06] bg-white/70 p-4 shadow-[0_12px_28px_rgba(15,23,42,0.035)] dark:border-white/[0.06] dark:bg-white/[0.04]">
             <div className={`mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full ${dep.status === "ready" ? "bg-signal-500/15 text-signal-600" : "bg-status-amber/15 text-status-amber"}`}>
               {dep.status === "ready" ? (
                 <Check className="h-3.5 w-3.5" strokeWidth={3} />

@@ -178,6 +178,38 @@ html.is-electron.is-fullscreen .app-shell {
   button:hover:not(:disabled) {
     @apply brightness-110;
   }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      scroll-behavior: auto !important;
+      transition-duration: 0.01ms !important;
+    }
+
+    :where(.animate-spin, .animate-ping, .animate-pulse, .animate-bounce, .animate-skeleton-shimmer, .animate-organic, .animate-organic-reverse) {
+      animation: none !important;
+    }
+  }
+
+  :root[data-reduced-motion="true"] *,
+  :root[data-reduced-motion="true"] *::before,
+  :root[data-reduced-motion="true"] *::after,
+  :root[data-reduced-motion="REDUCE"] *,
+  :root[data-reduced-motion="REDUCE"] *::before,
+  :root[data-reduced-motion="REDUCE"] *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
+
+  :root[data-reduced-motion="true"] :where(.animate-spin, .animate-ping, .animate-pulse, .animate-bounce, .animate-skeleton-shimmer, .animate-organic, .animate-organic-reverse),
+  :root[data-reduced-motion="REDUCE"] :where(.animate-spin, .animate-ping, .animate-pulse, .animate-bounce, .animate-skeleton-shimmer, .animate-organic, .animate-organic-reverse) {
+    animation: none !important;
+  }
 }
 
 @layer utilities {
@@ -200,6 +232,12 @@ html.is-electron.is-fullscreen .app-shell {
 
   .transition-feedback {
     transition: all var(--transition-feedback);
+  }
+
+  :root[data-reduced-motion="true"] .live-duration-badge,
+  :root[data-reduced-motion="REDUCE"] .live-duration-badge {
+    background-color: var(--primitive-signal-highlight);
+    box-shadow: inset 0 0 0 1px var(--status-static-running-ring);
   }
 
   .expand-grid {

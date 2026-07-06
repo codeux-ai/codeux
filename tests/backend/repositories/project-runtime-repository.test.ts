@@ -324,6 +324,83 @@ describe("ProjectRuntimeRepository", () => {
     });
   });
 
+  it("preserves active sprint-run status when dashboard snapshots have no running subtasks", async () => {
+    const { executionRepository, projectRepository, runtimeRepository } = await createRepositories();
+
+    const project = projectRepository.createProject({
+      name: "Active Runtime Project",
+      sourceType: "local",
+      sourceRef: "/workspace/active-runtime",
+    });
+    const sprint = projectRepository.createSprint(project.id, {
+      name: "Active Runtime Sprint",
+      number: 27,
+      status: "running",
+    });
+    const task = projectRepository.createTask(project.id, {
+      sprintId: sprint.id,
+      taskKey: "T01",
+      title: "Wait for merge gate",
+      promptMarkdown: "Complete the task and wait for the merge gate.",
+      status: "coding_completed",
+    });
+    const sprintRun = executionRepository.createSprintRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      status: "running",
+      startedAt: "2026-07-06T08:00:00.000Z",
+      lastHeartbeatAt: "2026-07-06T08:05:00.000Z",
+    });
+
+    runtimeRepository.syncDashboardStatus({
+      project_id: project.id,
+      sprint_id: sprint.id,
+      sprint_number: 27,
+      subtasks: [
+        {
+          id: "T01",
+          record_id: task.id,
+          title: task.title,
+          prompt: task.promptMarkdown,
+          depends_on: [],
+          is_independent: true,
+          status: "CODING_COMPLETED",
+          merge_indicator: "CI",
+        },
+      ],
+      reportText: "Task is waiting on merge gates.",
+    });
+
+    expect(projectRepository.getSprint(sprint.id)?.status).toBe("running");
+    expect(projectRepository.getProject(project.id)?.status).toBe("running");
+
+    executionRepository.updateSprintRun(sprintRun.id, {
+      status: "paused",
+      lastHeartbeatAt: "2026-07-06T08:06:00.000Z",
+    });
+
+    runtimeRepository.syncDashboardStatus({
+      project_id: project.id,
+      sprint_id: sprint.id,
+      sprint_number: 27,
+      subtasks: [
+        {
+          id: "T01",
+          record_id: task.id,
+          title: task.title,
+          prompt: task.promptMarkdown,
+          depends_on: [],
+          is_independent: true,
+          status: "CODING_COMPLETED",
+          merge_indicator: "CI",
+        },
+      ],
+      reportText: "Sprint is paused while the task waits on merge gates.",
+    });
+
+    expect(projectRepository.getSprint(sprint.id)?.status).toBe("paused");
+  });
+
   it("preserves an existing task run PR URL when same-session status sync omits PR metadata", async () => {
     const { executionRepository, projectRepository, runtimeRepository, storage } = await createRepositories();
 
