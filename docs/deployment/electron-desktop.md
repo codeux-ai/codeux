@@ -93,6 +93,8 @@ Release builds set `CSC_IDENTITY_AUTO_DISCOVERY=false`, so the default workflow 
 
 The release workflow caches pnpm downloads, TypeScript/Vite caches, Electron downloads, Electron Builder caches, and `.cache/electron-runtime` to reduce repeated desktop build time on native runners.
 
+Use this workflow for published desktop releases. It is the lane that attaches generated installers/packages to a GitHub Release when the release event is published.
+
 ## Main-Branch Release Checks
 
 The no-secret release validation lane is `.github/workflows/release-checks.yml`. It runs only on pushes to `main` and manual `workflow_dispatch` starts, using native `ubuntu-latest`, `macos-latest`, and `windows-latest` runners.
@@ -100,6 +102,19 @@ The no-secret release validation lane is `.github/workflows/release-checks.yml`.
 Each matrix job installs with pnpm 10.33.0 on Node 22, runs `pnpm run build`, runs `node scripts/verify-release-install.mjs`, rebuilds Electron native dependencies, then builds the current platform desktop package with the matching `electron:dist:*` script. The verifier builds the workspace, creates a local npm tarball with `npm pack --ignore-scripts`, installs that tarball into an isolated temporary npm project, and runs the installed `codeux --help` command.
 
 Release checks set `CSC_IDENTITY_AUTO_DISCOVERY=false` for unsigned Electron packaging and do not require provider API keys, npm publishing credentials, Docker credentials, GitHub Release events, or real project state. When Electron output exists, the workflow uploads files from `release/electron/` as workflow artifacts only; it does not publish to npm or attach files to a GitHub Release.
+
+This lane validates desktop package creation after code reaches `main`; it is not the publishing lane. Treat its artifacts as CI evidence for installability and package generation, while `.github/workflows/desktop-release.yml` remains the source for release-attached desktop builds.
+
+Developers can reproduce the main-push desktop package portion locally with:
+
+```bash
+pnpm run build
+node scripts/verify-release-install.mjs
+pnpm run electron:install-deps
+pnpm run electron:dist
+```
+
+Use `pnpm run electron:dist:linux`, `pnpm run electron:dist:mac`, or `pnpm run electron:dist:win` when matching a specific GitHub Actions matrix leg.
 
 ## Cross-Platform Compatibility Findings
 
