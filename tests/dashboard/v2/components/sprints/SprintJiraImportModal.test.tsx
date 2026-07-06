@@ -54,6 +54,10 @@ describe("SprintJiraImportModal", () => {
 
     render(<SprintJiraImportModal projectId="project-1" onClose={vi.fn()} onImport={vi.fn()} />);
 
+    const dialog = screen.getByRole("dialog", { name: /import backlog scope/i });
+    expect(dialog).toHaveAccessibleDescription(/search jira with exact keys/i);
+    expect(screen.getByRole("button", { name: /close jira import/i })).toBeEnabled();
+
     await waitFor(() => {
       expect(searchJiraIssues).toHaveBeenCalledWith(
         "project-1",
@@ -79,6 +83,15 @@ describe("SprintJiraImportModal", () => {
     });
 
     expect(screen.getByDisplayValue("OPS")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^search$/i })).toBeEnabled();
+    expect(screen.getByRole("button", { name: /import issues disabled until jira issues are selected/i })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /advanced jira filters/i })).toHaveAttribute("aria-expanded", "false");
+    expect(document.getElementById("jira-import-advanced-filters")).toHaveClass("hidden");
+    expect(screen.getAllByText(/Default: open Jira issues, recently updated first/i).length).toBeGreaterThan(0);
+    expect([...document.querySelectorAll("[aria-live='polite']")].some((node) => (
+      node.textContent?.replace(/\s+/g, " ").includes("0 linked, 0 special")
+    ))).toBe(true);
+    expect(screen.getByRole("button", { name: /import jira backlog/i })).toHaveAttribute("aria-pressed", "false");
   });
 
   it("supports exact keys, user filters, labels, date windows, sort controls, and JQL override", async () => {
@@ -94,6 +107,7 @@ describe("SprintJiraImportModal", () => {
     });
 
     fireEvent.click(screen.getByRole("button", { name: /advanced jira filters/i }));
+    expect(screen.getByRole("button", { name: /advanced jira filters/i })).toHaveAttribute("aria-expanded", "true");
     expect(screen.getByText("People")).toBeInTheDocument();
     expect(screen.getByText("Classification")).toBeInTheDocument();
     expect(screen.getByText("Advanced JQL Override")).toBeInTheDocument();
@@ -179,6 +193,7 @@ describe("SprintJiraImportModal", () => {
     fireEvent.click(screen.getByRole("button", { name: /select all visible/i }));
     expect(screen.getByText(/2 selected issues will be imported/i)).toBeInTheDocument();
     expect(screen.getByText(/2 of 2 visible results selected/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /import jira backlog/i })).toHaveAttribute("aria-pressed", "true");
 
     fireEvent.click(screen.getByLabelText(/append conversation to all selected/i));
     fireEvent.click(screen.getByRole("button", { name: /clear selection/i }));
