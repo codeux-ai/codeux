@@ -45,7 +45,7 @@ export function registerSprintRoutes(router: Express, deps: DashboardDependencie
     }
   }));
 
-  router.put("/api/sprints/:sprintId/linked-issues", syncRoute((req, res) => {
+  router.put("/api/sprints/:sprintId/linked-issues", asyncRoute(async (req, res) => {
     try {
       const sprintId = requireTrimmedString(req.params.sprintId, "sprintId");
       const sprint = deps.getSprint(sprintId);
@@ -59,7 +59,11 @@ export function registerSprintRoutes(router: Express, deps: DashboardDependencie
         return;
       }
       const issues = Array.isArray(req.body.issues) ? req.body.issues as SprintLinkedIssueInput[] : [];
-      res.status(201).json(deps.replaceSprintLinkedIssues(sprintId, projectId, issues));
+      if (deps.sprintIssueService) {
+        res.status(201).json(await deps.sprintIssueService.importLinkedIssues(sprintId, projectId, issues));
+        return;
+      }
+      res.status(201).json({ linkedIssues: deps.replaceSprintLinkedIssues(sprintId, projectId, issues), warnings: [] });
     } catch (error) {
       res.status(400).json(toErrorResponse(error, "Failed to update linked issues"));
     }

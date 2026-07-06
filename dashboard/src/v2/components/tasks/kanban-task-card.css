@@ -106,6 +106,7 @@
   pointer-events: auto;
   transform: translateY(0);
   min-height: 2.75rem;
+  contain: layout;
   transition:
     opacity var(--kanban-card-control-duration, var(--interaction-control-feedback-duration)) var(--kanban-card-control-ease, var(--interaction-control-feedback-ease)),
     transform var(--kanban-card-control-duration, var(--interaction-control-feedback-duration)) var(--kanban-card-control-ease, var(--interaction-control-feedback-ease));
@@ -166,9 +167,9 @@
 
 @media (any-pointer: fine) and (hover: hover) {
   .kanban-card__actions {
-    opacity: 0.92;
-    pointer-events: auto;
-    transform: translateY(0);
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(0.375rem);
   }
 
   .kanban-card:hover .kanban-card__actions,

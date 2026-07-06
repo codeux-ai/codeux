@@ -4,6 +4,7 @@ import { DatabaseAdapter } from "./db/database-adapter.js";
 import { EntityNotFoundError, requireRecord, toNumber, ValidationError } from "./repository-utils.js";
 import type {
   CreateSchedulerEntryInput,
+  ScheduleAnchor,
   ScheduleChatTarget,
   ScheduleMemoryRemediationTarget,
   ScheduleQuicksprintTarget,
@@ -36,6 +37,9 @@ interface SchedulerEntryRow {
 }
 
 interface PersistedTargetPayload {
+  // Anchors live in target_json so existing scheduler_entries rows keep hydrating
+  // without a destructive schema migration.
+  scheduleAnchor?: ScheduleAnchor;
   sprintTarget?: ScheduleSprintTarget;
   quicksprintTarget?: ScheduleQuicksprintTarget;
   chatTarget?: ScheduleChatTarget;
@@ -76,6 +80,18 @@ export class SchedulerRepository {
     return rows.map((row) => this.mapRow(row));
   }
 
+  listScheduledAnchoredEntries(limit = 25): SchedulerEntryRecord[] {
+    const rows = this.db.prepare(`
+      SELECT *
+      FROM scheduler_entries
+      WHERE status = 'scheduled'
+        AND target_json LIKE '%"scheduleAnchor"%'
+      ORDER BY created_at ASC
+      LIMIT ?
+    `).all(Math.max(1, Math.floor(limit))) as unknown as SchedulerEntryRow[];
+    return rows.map((row) => this.mapRow(row)).filter((entry) => Boolean(entry.scheduleAnchor));
+  }
+
   getEntry(entryId: string): SchedulerEntryRecord | null {
     const row = this.db.prepare(`
       SELECT *
@@ -89,9 +105,16 @@ export class SchedulerRepository {
     this.requireProject(projectId);
     const id = randomUUID();
     const now = new Date().toISOString();
-    const scheduledFor = this.normalizeDate(input.scheduledFor, "scheduledFor");
+    const scheduleAnchor = this.normalizeScheduleAnchor(input.scheduleAnchor);
+    const scheduledFor = input.scheduledFor
+      ? this.normalizeDate(input.scheduledFor, "scheduledFor")
+      : this.defaultScheduledFor(scheduleAnchor);
     const recurrence = normalizeRecurrenceRule(input.recurrence);
+    this.validateAnchorRecurrence(scheduleAnchor, recurrence);
     const targetPayload = this.normalizeTargetPayload(input.targetType, input);
+    if (scheduleAnchor) {
+      targetPayload.scheduleAnchor = scheduleAnchor;
+    }
     const title = this.normalizeTitle(input.title, input.targetType, targetPayload);
     const status: ScheduleStatus = "scheduled";
 
@@ -110,7 +133,7 @@ export class SchedulerRepository {
       input.timezone?.trim() || "UTC",
       JSON.stringify(recurrence),
       JSON.stringify(targetPayload),
-      scheduledFor,
+      scheduleAnchor ? null : scheduledFor,
       null,
       0,
       null,
@@ -127,6 +150,9 @@ export class SchedulerRepository {
     const current = this.requireEntry(entryId);
     const nextTargetType = input.targetType ?? current.targetType;
     const isTargetTypeChanged = input.targetType !== undefined && input.targetType !== current.targetType;
+    const nextScheduleAnchor = input.scheduleAnchor === undefined
+      ? current.scheduleAnchor
+      : this.normalizeScheduleAnchor(input.scheduleAnchor);
     const nextTargetPayload = this.normalizeTargetPayload(nextTargetType, {
       targetType: nextTargetType,
       sprintTarget: isTargetTypeChanged ? input.sprintTarget : (input.sprintTarget ?? current.sprintTarget),
@@ -135,21 +161,27 @@ export class SchedulerRepository {
       memoryRemediationTarget: isTargetTypeChanged ? input.memoryRemediationTarget : (input.memoryRemediationTarget ?? current.memoryRemediationTarget),
       scheduledFor: input.scheduledFor ?? current.scheduledFor,
     });
+    if (nextScheduleAnchor) {
+      nextTargetPayload.scheduleAnchor = nextScheduleAnchor;
+    }
     const nextScheduledFor = input.scheduledFor
       ? this.normalizeDate(input.scheduledFor, "scheduledFor")
       : current.scheduledFor;
     const nextRecurrence = input.recurrence
       ? normalizeRecurrenceRule({ ...current.recurrence, ...input.recurrence })
       : current.recurrence;
+    this.validateAnchorRecurrence(nextScheduleAnchor, nextRecurrence);
     const nextStatus = input.status ?? current.status;
     const now = new Date().toISOString();
 
     let nextRunAt = current.nextRunAt;
     if (nextStatus === "scheduled") {
       const isResuming = input.status === "scheduled" && current.status !== "scheduled";
-      const isExplicitScheduleChange = input.scheduledFor !== undefined || input.recurrence !== undefined;
+      const isExplicitScheduleChange = input.scheduledFor !== undefined || input.recurrence !== undefined || input.scheduleAnchor !== undefined;
 
-      if (isResuming) {
+      if (nextScheduleAnchor) {
+        nextRunAt = null;
+      } else if (isResuming) {
         nextRunAt = computeFirstOccurrenceAtOrAfter(nextScheduledFor, nextRecurrence, now);
       } else if (isExplicitScheduleChange) {
         nextRunAt = nextScheduledFor;
@@ -225,7 +257,7 @@ export class SchedulerRepository {
     return entry;
   }
 
-  private normalizeTargetPayload(targetType: ScheduleTargetType, input: CreateSchedulerEntryInput | UpdateSchedulerEntryInput & { targetType: ScheduleTargetType }): PersistedTargetPayload {
+  private normalizeTargetPayload(targetType: ScheduleTargetType, input: (CreateSchedulerEntryInput | UpdateSchedulerEntryInput) & { targetType: ScheduleTargetType }): PersistedTargetPayload {
     if (targetType === "sprint") {
       const sprintId = input.sprintTarget?.sprintId?.trim();
       if (!sprintId) {
@@ -243,6 +275,7 @@ export class SchedulerRepository {
         quicksprintTarget: {
           templateId,
           taskCount: Math.max(1, Math.floor(Number(input.quicksprintTarget?.taskCount ?? 5)) || 5),
+          ...(input.quicksprintTarget?.noTaskLimit === true ? { noTaskLimit: true } : {}),
           submitMode: input.quicksprintTarget?.submitMode ?? "plan_and_start",
           additionalPrompt: input.quicksprintTarget?.additionalPrompt?.trim() || undefined,
           agentPresetId: input.quicksprintTarget?.agentPresetId?.trim() || undefined,
@@ -299,6 +332,42 @@ export class SchedulerRepository {
     return parsed.toISOString();
   }
 
+  private defaultScheduledFor(scheduleAnchor: ScheduleAnchor | undefined): string {
+    if (scheduleAnchor) {
+      return new Date().toISOString();
+    }
+    throw new ValidationError("scheduledFor is required for absolute scheduler entries.");
+  }
+
+  private normalizeScheduleAnchor(value: ScheduleAnchor | null | undefined): ScheduleAnchor | undefined {
+    if (!value) {
+      return undefined;
+    }
+    if (value.mode !== "after_sprint_end") {
+      throw new ValidationError("scheduleAnchor.mode must be after_sprint_end.");
+    }
+    const sourceSprintId = value.sourceSprintId?.trim();
+    if (!sourceSprintId) {
+      throw new ValidationError("scheduleAnchor.sourceSprintId is required.");
+    }
+    const rawOffset = value.offsetMinutes ?? 0;
+    const offsetMinutes = Number(rawOffset);
+    if (!Number.isFinite(offsetMinutes) || offsetMinutes < 0) {
+      throw new ValidationError("scheduleAnchor.offsetMinutes must be a non-negative number.");
+    }
+    return {
+      mode: "after_sprint_end",
+      sourceSprintId,
+      offsetMinutes: Math.floor(offsetMinutes),
+    };
+  }
+
+  private validateAnchorRecurrence(scheduleAnchor: ScheduleAnchor | undefined, recurrence: ScheduleRecurrenceRule): void {
+    if (scheduleAnchor && recurrence.frequency !== "none") {
+      throw new ValidationError("after_sprint_end scheduler anchors do not support recurrence.");
+    }
+  }
+
   private mapRow(row: SchedulerEntryRow): SchedulerEntryRecord {
     const recurrence = this.parseRecurrence(row.recurrence_json);
     const target = this.parseTarget(row.target_json);
@@ -309,6 +378,7 @@ export class SchedulerRepository {
       targetType: row.target_type,
       status: row.status,
       scheduledFor: row.scheduled_for,
+      scheduleAnchor: target.scheduleAnchor,
       timezone: row.timezone,
       recurrence,
       nextRunAt: row.next_run_at,
@@ -335,9 +405,28 @@ export class SchedulerRepository {
   private parseTarget(value: string): PersistedTargetPayload {
     try {
       const parsed = JSON.parse(value) as PersistedTargetPayload;
-      return parsed && typeof parsed === "object" ? parsed : {};
+      if (!parsed || typeof parsed !== "object") {
+        return {};
+      }
+      const scheduleAnchor = this.normalizeParsedScheduleAnchor(parsed.scheduleAnchor);
+      return {
+        ...parsed,
+        scheduleAnchor,
+      };
     } catch {
       return {};
+    }
+  }
+
+  private normalizeParsedScheduleAnchor(value: unknown): ScheduleAnchor | undefined {
+    if (!value || typeof value !== "object") {
+      return undefined;
+    }
+    const candidate = value as Partial<ScheduleAnchor>;
+    try {
+      return this.normalizeScheduleAnchor(candidate as ScheduleAnchor);
+    } catch {
+      return undefined;
     }
   }
 

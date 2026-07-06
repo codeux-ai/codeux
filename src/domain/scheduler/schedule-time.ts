@@ -147,6 +147,7 @@ export function buildSchedulerOccurrences(
   fromIso: string,
   toIso: string,
   nowIso = new Date().toISOString(),
+  resolveAnchoredStart?: (entry: SchedulerEntryRecord) => string | null,
 ): SchedulerOccurrence[] {
   const fromTime = new Date(fromIso).getTime();
   const toTime = new Date(toIso).getTime();
@@ -162,7 +163,9 @@ export function buildSchedulerOccurrences(
       continue;
     }
 
-    let startsAt: string | null = entry.scheduledFor;
+    let startsAt: string | null = entry.scheduleAnchor
+      ? resolveAnchoredStart?.(entry) ?? null
+      : entry.scheduledFor;
     let occurrenceIndex = 1;
 
     while (startsAt) {

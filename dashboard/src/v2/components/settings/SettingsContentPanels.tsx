@@ -1,4 +1,4 @@
-import type { FunctionComponent } from "preact";
+import type { FunctionComponent, JSX } from "preact";
 import type { SettingsPageState } from "../../hooks/use-settings-page-state.js";
 import { SettingsGeneralPanel } from "./panels/SettingsGeneralPanel.js";
 import { SettingsAppearancePanel } from "./panels/SettingsAppearancePanel.js";
@@ -15,7 +15,8 @@ import { useInteractionTokens } from "../../lib/motion/tokens.js";
 
 export const SettingsContentPanels: FunctionComponent<{
   state: SettingsPageState;
-}> = ({ state }) => {
+  stickyTop?: string;
+}> = ({ state, stickyTop = "9.5rem" }) => {
   const { activeCategory, activeDirty, activeSaving, error, saveMessage, loading, resettingProject } = state;
   const tokens = useInteractionTokens();
   const activeCategoryLabel = state.activeCategoryConfig?.label ?? `${activeCategory.charAt(0).toUpperCase()}${activeCategory.slice(1)}`;
@@ -40,10 +41,13 @@ export const SettingsContentPanels: FunctionComponent<{
         : activeSaving
           ? "Saving"
           : activeDirty
-            ? "Unsaved changes"
-            : saveMessage
-              ? "Saved"
-              : "Saved";
+              ? "Unsaved changes"
+              : saveMessage
+                ? "Saved"
+                : "Saved";
+  const stickyStyle = {
+    "--settings-active-panel-top": stickyTop,
+  } as JSX.CSSProperties;
 
   const renderPanel = () => {
     switch (activeCategory) {
@@ -77,11 +81,15 @@ export const SettingsContentPanels: FunctionComponent<{
       <div role={error ? "alert" : "status"} aria-live={error ? "assertive" : "polite"} aria-atomic="true" className="sr-only">
         {panelStatus}
       </div>
-      <div className="mb-3 flex flex-wrap items-center gap-2 rounded-[1rem] border border-black/[0.06] bg-black/[0.025] px-3 py-2 text-xs font-semibold text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.035] dark:text-slate-300">
+      <div
+        data-settings-sticky="active-panel"
+        style={stickyStyle}
+        className="sticky top-[var(--settings-active-panel-top)] z-20 mb-3 flex min-w-0 flex-wrap items-center gap-2 overflow-visible rounded-[1rem] border border-[color:var(--border-hairline)] bg-[var(--surface-glass)] px-3 py-2 text-xs font-semibold text-slate-500 shadow-[var(--elevation-base)] backdrop-blur-2xl dark:text-slate-300"
+      >
         <span className="font-mono text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400 dark:text-slate-500">Active panel</span>
-        <span className="text-slate-800 dark:text-slate-100">{activeCategoryLabel}</span>
+        <span className="min-w-0 max-w-full break-words text-slate-800 dark:text-slate-100">{activeCategoryLabel}</span>
         <span aria-hidden="true" className="text-slate-300 dark:text-slate-600">/</span>
-        <span className={error ? "text-status-red" : activeSaving || loading || resettingProject ? "text-signal-700 dark:text-signal-300" : activeDirty ? "text-amber-700 dark:text-amber-200" : "text-status-green"}>
+        <span className={`min-w-0 max-w-full break-words ${error ? "text-status-red" : activeSaving || loading || resettingProject ? "text-signal-700 dark:text-signal-300" : activeDirty ? "text-amber-700 dark:text-amber-200" : "text-status-green"}`}>
           {visibleSaveState}
         </span>
       </div>

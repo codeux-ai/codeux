@@ -109,6 +109,8 @@ const DEFAULT_JIRA_SETTINGS: SystemSettings["integrations"]["jira"] = {
   host: "",
   email: "",
   apiToken: "",
+  autoTransitionLinkedIssuesOnImport: true,
+  importTransitionName: "In Work",
   autoCloseLinkedIssues: false,
   defaultProject: "",
   closeTransitionName: "Done",

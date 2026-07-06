@@ -91,12 +91,16 @@ Jira uses system-scoped settings from `Settings -> Integrations -> Jira`:
 - account email for Jira Cloud basic auth
 - API token
 - default project key
+- import transition toggle
+- import transition name, defaulting to `In Work`
 - close transition name, defaulting to `Done`
 - Jira-specific auto-close toggle
 
 Jira dashboard and MCP importer workflows require those saved Jira settings. They do not use browser sessions, Atlassian CLI state, or local git configuration as an authentication fallback.
 
 Selected Jira issues are loaded through the same prompt-context path as GitHub/GitLab imports. The sprint prompt receives the Jira description and, when `Append Conversation` is enabled, Jira comments. Imported Jira cards are persisted as linked sprint issues with provider `jira`, host extracted from the Jira URL, project key, repository fallback, parsed issue number from keys such as `OPS-42`, issue key, labels, assignees, status, source URL, and the selected conversation flag. The import result cards also surface Jira issue type, priority, reporter, assignee, labels, status, updated timestamps, and a description preview when Jira returns those fields.
+
+When Jira issues are imported as linked sprint issues, Code UX attempts to move each linked Jira issue through the configured import transition. The default is enabled and uses `In Work`. Transition lookup is case-insensitive. Import transition failures are non-destructive: the linked issue remains persisted locally, the dashboard or MCP result includes a warning with the Jira key and failure message, and the failure is logged for operators. This import-time transition is separate from sprint-completion auto-close and does not change the `Done` close transition behavior.
 
 When operators mark selected Jira issues as security or quality task mode, the dashboard emits imported task payloads instead of linked issue contexts. Those special tasks are created directly on the sprint and bypass planning prose, while ordinary Jira issues still become linked issues that feed the sprint prompt and linked issue records. Jira issue labels, issue type, priority, title, or description text do not automatically convert an issue into a special task.
 

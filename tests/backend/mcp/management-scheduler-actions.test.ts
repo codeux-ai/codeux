@@ -86,6 +86,54 @@ describe("SchedulerActions", () => {
     });
   });
 
+  it("schedules anchored sprint entries from flattened MCP fields", async () => {
+    vi.mocked(schedulerService.createEntry).mockReturnValue({ id: "entry-1" } as any);
+
+    await actions.handleSchedulerAction(makeArgs("schedule_sprint", {
+      projectId: "p1",
+      scheduleMode: "after_sprint_end",
+      sourceSprintId: "source-sprint",
+      offsetMinutes: "15",
+      sprintId: "target-sprint",
+    }));
+
+    expect(schedulerService.createEntry).toHaveBeenCalledWith("p1", {
+      targetType: "sprint",
+      scheduleAnchor: {
+        mode: "after_sprint_end",
+        sourceSprintId: "source-sprint",
+        offsetMinutes: 15,
+      },
+      sprintTarget: { sprintId: "target-sprint" },
+    });
+  });
+
+  it("schedules anchored chat entries from nested MCP fields", async () => {
+    vi.mocked(schedulerService.createEntry).mockReturnValue({ id: "entry-1" } as any);
+
+    await actions.handleSchedulerAction(makeArgs("schedule_chat", {
+      projectId: "p1",
+      scheduleAnchor: {
+        mode: "after_sprint_end",
+        sourceSprintId: "source-sprint",
+        offsetMinutes: 0,
+      },
+      bodyMarkdown: "Follow up now.",
+    }));
+
+    expect(schedulerService.createEntry).toHaveBeenCalledWith("p1", {
+      targetType: "chat",
+      scheduleAnchor: {
+        mode: "after_sprint_end",
+        sourceSprintId: "source-sprint",
+        offsetMinutes: 0,
+      },
+      chatTarget: {
+        bodyMarkdown: "Follow up now.",
+      },
+    });
+  });
+
   it("schedules quicksprints from flattened MCP fields", async () => {
     vi.mocked(schedulerService.createEntry).mockReturnValue({ id: "entry-1" } as any);
 
@@ -159,6 +207,40 @@ describe("SchedulerActions", () => {
 
     expect(schedulerService.updateEntry).toHaveBeenCalledWith("entry-1", {
       recurrence: { frequency: "minutely", interval: 30, endMode: "after_count", count: 3, until: null },
+    });
+  });
+
+  it("updates scheduler anchors from MCP fields", async () => {
+    vi.mocked(schedulerService.updateEntry).mockReturnValue({ id: "entry-1" } as any);
+
+    await actions.handleSchedulerAction(makeArgs("update", {
+      entryId: "entry-1",
+      anchorMode: "after_sprint_end",
+      anchorSourceSprintId: "source-sprint",
+      anchorOffsetMinutes: 3,
+    }));
+
+    expect(schedulerService.updateEntry).toHaveBeenCalledWith("entry-1", {
+      scheduleAnchor: {
+        mode: "after_sprint_end",
+        sourceSprintId: "source-sprint",
+        offsetMinutes: 3,
+      },
+    });
+  });
+
+  it("clears scheduler anchors when update switches to absolute mode", async () => {
+    vi.mocked(schedulerService.updateEntry).mockReturnValue({ id: "entry-1" } as any);
+
+    await actions.handleSchedulerAction(makeArgs("update", {
+      entryId: "entry-1",
+      scheduleMode: "absolute",
+      scheduledFor: "2026-06-09T12:00:00.000Z",
+    }));
+
+    expect(schedulerService.updateEntry).toHaveBeenCalledWith("entry-1", {
+      scheduledFor: "2026-06-09T12:00:00.000Z",
+      scheduleAnchor: null,
     });
   });
 

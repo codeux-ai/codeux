@@ -210,6 +210,8 @@ describe("SettingsIntegrationsPanel", () => {
             host: "https://acme.atlassian.net",
             email: "ops@acme.test",
             apiToken: "jira-token",
+            autoTransitionLinkedIssuesOnImport: true,
+            importTransitionName: "In Work",
             autoCloseLinkedIssues: true,
             defaultProject: "OPS",
             closeTransitionName: "Done",
@@ -247,9 +249,12 @@ describe("SettingsIntegrationsPanel", () => {
 
     expect(container.textContent).toContain("Jira site URL");
     expect(container.textContent).toContain("Default project");
+    expect(container.textContent).toContain("Import transition");
+    expect(container.textContent).toContain("Move Jira issues on import");
     expect(container.textContent).toContain("Auto-close Jira issues");
     const inputValues = Array.from(container.querySelectorAll("input")).map((input) => input.value);
     expect(inputValues).toContain("https://acme.atlassian.net");
+    expect(inputValues).toContain("In Work");
     expect(inputValues).toContain("OPS");
   });
 
