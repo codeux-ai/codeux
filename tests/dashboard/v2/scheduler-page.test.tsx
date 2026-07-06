@@ -229,6 +229,55 @@ describe("SchedulerPage", () => {
     });
   });
 
+  it("creates an after-sprint-end quicksprint schedule with the shared anchor payload", async () => {
+    vi.mocked(fetchSprints).mockResolvedValue({
+      sprints: [
+        { id: "sprint-source", name: "Source Sprint", status: "running" },
+        { id: "sprint-complete", name: "Completed Sprint", status: "completed" },
+      ],
+    } as any);
+    vi.mocked(fetchQuicksprintTemplates).mockResolvedValue([
+      { id: "template-1", name: "Quicksprint Template 1" },
+    ] as any);
+    vi.mocked(fetchProjectSchedule).mockResolvedValue({ entries: [], occurrences: [] } as any);
+
+    const { container } = renderSchedulerPage();
+
+    await waitFor(() => {
+      expect(screen.getByText("Runtime Scheduler")).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /quicksprint/i }));
+    fireEvent.click(screen.getByLabelText(/after another sprint ends/i));
+
+    const offsetInput = screen.getByLabelText(/offset minutes/i) as HTMLInputElement;
+    fireEvent.input(offsetInput, { target: { value: "30" } });
+
+    fireEvent.click(screen.getByRole("button", { name: /schedule/i }));
+
+    await waitFor(() => {
+      expect(createSchedulerEntry).toHaveBeenCalledTimes(1);
+    });
+
+    const [, payload] = vi.mocked(createSchedulerEntry).mock.calls[0]!;
+    expect(payload).toEqual(expect.objectContaining({
+      targetType: "quicksprint",
+      scheduleAnchor: {
+        mode: "after_sprint_end",
+        sourceSprintId: "sprint-source",
+        offsetMinutes: 30,
+      },
+      quicksprintTarget: {
+        templateId: "template-1",
+        taskCount: 5,
+        submitMode: "plan_and_start",
+      },
+      recurrence: { frequency: "none", interval: 1, endMode: "never" },
+    }));
+    expect(payload).not.toHaveProperty("scheduledFor");
+    expect(container.textContent).toContain("After-sprint-end schedules are one-time entries.");
+  });
+
   it("toggles view between calendar and 24 hours", async () => {
     vi.mocked(fetchProjectSchedule).mockResolvedValue({ entries: [], occurrences: [] } as any);
     renderSchedulerPage();
@@ -391,6 +440,76 @@ describe("SchedulerPage", () => {
 
     // Form title should revert back to "Add entry"
     expect(screen.getByText("Add entry")).toBeInTheDocument();
+  });
+
+  it("hydrates and updates an anchored sprint schedule in edit mode", async () => {
+    const mockSprints = [
+      { id: "sprint-source", name: "Source Sprint", status: "completed" },
+      { id: "sprint-target", name: "Target Sprint", status: "running" },
+    ];
+    const mockSchedule = {
+      entries: [
+        {
+          id: "entry-anchor",
+          projectId: "proj-1",
+          title: "Anchored Sprint Title",
+          targetType: "sprint",
+          status: "scheduled",
+          scheduledFor: "2026-06-01T12:00:00.000Z",
+          scheduleAnchor: {
+            mode: "after_sprint_end",
+            sourceSprintId: "sprint-source",
+            offsetMinutes: 10,
+          },
+          timezone: "UTC",
+          sprintTarget: { sprintId: "sprint-target" },
+          recurrence: { frequency: "none", interval: 1, endMode: "never" },
+          runCount: 0,
+        },
+      ],
+      occurrences: [],
+    };
+
+    vi.mocked(fetchSprints).mockResolvedValue({ sprints: mockSprints } as any);
+    vi.mocked(fetchProjectSchedule).mockResolvedValue(mockSchedule as any);
+
+    renderSchedulerPage();
+
+    await waitFor(() => {
+      expect(screen.getByText("Anchored Sprint Title")).toBeInTheDocument();
+    });
+
+    expect(screen.getByText("After Source Sprint ends + 10 minutes")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /^edit schedule entry$/i }));
+
+    expect(screen.getByText("Edit entry")).toBeInTheDocument();
+    expect(screen.getByLabelText(/after another sprint ends/i)).toBeChecked();
+    expect(screen.getByText("Target Sprint")).toBeInTheDocument();
+    expect(screen.getByText("Source Sprint (completed)")).toBeInTheDocument();
+
+    const offsetInput = screen.getByLabelText(/offset minutes/i) as HTMLInputElement;
+    expect(offsetInput.value).toBe("10");
+    fireEvent.input(offsetInput, { target: { value: "20" } });
+
+    fireEvent.click(screen.getByRole("button", { name: /save/i }));
+
+    await waitFor(() => {
+      expect(updateSchedulerEntry).toHaveBeenCalledWith("entry-anchor", expect.objectContaining({
+        title: "Anchored Sprint Title",
+        targetType: "sprint",
+        timezone: "UTC",
+        scheduleAnchor: {
+          mode: "after_sprint_end",
+          sourceSprintId: "sprint-source",
+          offsetMinutes: 20,
+        },
+        sprintTarget: { sprintId: "sprint-target" },
+        recurrence: { frequency: "none", interval: 1, endMode: "never" },
+      }));
+    });
+    const [, payload] = vi.mocked(updateSchedulerEntry).mock.calls[0]!;
+    expect(payload).not.toHaveProperty("scheduledFor");
   });
 
   it("allows cancelling edit mode without mutating the entry", async () => {
