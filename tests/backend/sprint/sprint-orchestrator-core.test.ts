@@ -235,7 +235,7 @@ describe("SprintOrchestrator core execution", () => {
     });
 
     expect(deps.executionRepository.releaseStaleSprintLease).toHaveBeenCalledWith("project-1", "sprint-1");
-    expect(deps.executionRepository.acquireLease).toHaveBeenCalled();
+    expect(deps.sprintRunLifecycleService.acquireSprintLease).toHaveBeenCalled();
 
     await fs.rm(tmpRoot, { recursive: true, force: true });
   });
@@ -263,7 +263,7 @@ describe("SprintOrchestrator core execution", () => {
       wait: false,
     })).rejects.toThrow("watch loop exploded");
 
-    expect(deps.executionRepository.updateSprintRun).toHaveBeenCalledWith(
+    expect(deps.sprintRunLifecycleService.updateRun).toHaveBeenCalledWith(
       "run-1",
       expect.objectContaining({
         status: "failed",

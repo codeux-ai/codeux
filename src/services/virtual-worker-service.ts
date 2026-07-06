@@ -849,6 +849,12 @@ export class VirtualWorkerService {
           );
         }
       }
+      if (!applyResult.hasChanges && !hasUnpushed && !hasAhead) {
+        throw new Error(
+          `Merge-conflict worker completed without recording merge evidence on ${sourceBranch}. ` +
+          "The attention item was kept open so the conflict is not falsely marked resolved.",
+        );
+      }
       const headSha = applyResult.commitSha
         || ((hasUnpushed || hasAhead)
           ? (await runCommandStrict("git", ["rev-parse", `refs/heads/${sourceBranch}`], repoPath)).stdout.trim()

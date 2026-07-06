@@ -435,6 +435,8 @@ export const DEFAULT_DASHBOARD_SETTINGS: DashboardSettings = {
   dbAutoVacuumOnStartup: true,
   dbPruningEnabled: true,
   dbRetentionDays: 14,
+  restartSprintPolicy: "continue",
+  restartInvocationPolicy: "continue",
   appearance: {
     navigationMode: "SIDEBAR",
     theme: "SYSTEM",

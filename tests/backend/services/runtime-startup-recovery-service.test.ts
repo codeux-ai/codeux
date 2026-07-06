@@ -13,6 +13,7 @@ import { SessionTrackingRepository } from "../../../src/repositories/session-tra
 import { DEFAULT_DASHBOARD_SETTINGS } from "../../../src/repositories/settings-defaults.js";
 import { ProjectAttentionService } from "../../../src/domain/workers/project-attention-service.js";
 import { RuntimeStartupRecoveryService } from "../../../src/services/runtime-startup-recovery-service.js";
+import { SprintRunLifecycleService } from "../../../src/services/sprint-run-lifecycle-service.js";
 import { QaReviewRecoveryService } from "../../../src/services/runtime-recovery/qa-review-recovery.js";
 import { InvocationRecoveryService } from "../../../src/services/runtime-recovery/invocation-recovery.js";
 import { CliWorkflowService } from "../../../src/services/cli-workflow-service.js";
@@ -20,14 +21,19 @@ import { buildTaskRunKey } from "../../../src/services/task-run-key.js";
 import { GuardrailService } from "../../../src/services/guardrail-service.js";
 import type { SprintOrchestrator } from "../../../src/sprint/sprint-orchestrator.js";
 import type { Logger } from "../../../src/shared/logging/logger.js";
+import type { DashboardSettings } from "../../../src/contracts/app-types.js";
 
 const tempDirs: string[] = [];
 
 async function createFixture(options?: {
   recoverSprintRun?: SprintOrchestrator["recoverSprintRun"];
   logger?: Pick<Logger, "info" | "error">;
-  dockerService?: { listContainers: () => Promise<Array<{ labels?: Record<string, string> }>> };
+  dockerService?: {
+    listContainers: () => Promise<Array<{ id?: string; names?: string; labels?: Record<string, string> }>>;
+    removeContainers?: (containerIds: string[], options?: { removeVolumes?: boolean }) => Promise<void>;
+  };
   isProcessAlive?: (pid: number) => boolean;
+  getDashboardSettings?: () => DashboardSettings;
 }) {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-startup-recovery-"));
   tempDirs.push(dir);
@@ -48,10 +54,15 @@ async function createFixture(options?: {
   const qaReviewRepository = new QaReviewRepository(storage);
   const sessionTracking = new SessionTrackingRepository(path.join(dir, "session-tracking.db"));
   const recoverSprintRun = options?.recoverSprintRun ?? vi.fn().mockResolvedValue(null);
+  const sprintRunLifecycleService = new SprintRunLifecycleService({
+    executionRepository,
+    projectManagementRepository: projectRepository,
+  });
 
   const service = new RuntimeStartupRecoveryService({
     sessionTracking,
     executionRepository,
+    sprintRunLifecycleService,
     qaReviewRepository,
     projectManagementRepository: projectRepository,
     projectAttentionService,
@@ -59,8 +70,8 @@ async function createFixture(options?: {
     sprintOrchestrator: {
       recoverSprintRun,
     } as SprintOrchestrator,
-    dockerService: options?.dockerService,
-    getDashboardSettings: () => DEFAULT_DASHBOARD_SETTINGS,
+    dockerService: options?.dockerService as any,
+    getDashboardSettings: options?.getDashboardSettings ?? (() => DEFAULT_DASHBOARD_SETTINGS),
     isProcessAlive: options?.isProcessAlive,
     logger: options?.logger,
   });
@@ -2177,6 +2188,343 @@ describe("RuntimeStartupRecoveryService", () => {
     expect(result.resumedSprintRunIds).toEqual([sprintRun.id]);
     expect(result.supersededSprintRunIds).toEqual([]);
     expect(recoverSprintRun).toHaveBeenCalledWith(sprintRun.id);
+  });
+
+  it("syncs paused sprint projections so paused runs do not look running after restart", async () => {
+    const {
+      projectRepository,
+      executionRepository,
+      service,
+      recoverSprintRun,
+    } = await createFixture();
+
+    const project = projectRepository.createProject({
+      name: "Paused Projection Project",
+      sourceType: "local",
+      sourceRef: "/workspace/paused-projection-project",
+    });
+    const sprint = projectRepository.createSprint(project.id, {
+      name: "Paused Projection Sprint",
+      number: 93,
+      status: "running",
+    });
+    const sprintRun = executionRepository.createSprintRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      executorMode: "mixed",
+      status: "paused",
+    });
+
+    const result = await service.recover();
+
+    expect(result.restartPolicySyncedPausedSprintIds).toEqual([sprint.id]);
+    expect(result.resumedSprintRunIds).toEqual([]);
+    expect(recoverSprintRun).not.toHaveBeenCalled();
+    expect(executionRepository.getSprintRun(sprintRun.id)?.status).toBe("paused");
+    expect(projectRepository.getRawSprintStatus(sprint.id)).toBe("paused");
+  });
+
+  it("pauses active sprint runs on startup when restart sprint policy is pause", async () => {
+    const {
+      projectRepository,
+      executionRepository,
+      qaReviewRepository,
+      service,
+      recoverSprintRun,
+    } = await createFixture({
+      getDashboardSettings: () => ({
+        ...DEFAULT_DASHBOARD_SETTINGS,
+        restartSprintPolicy: "pause",
+      }),
+    });
+
+    const project = projectRepository.createProject({
+      name: "Restart Pause Policy Project",
+      sourceType: "local",
+      sourceRef: "/workspace/restart-pause-policy-project",
+    });
+    const sprint = projectRepository.createSprint(project.id, {
+      name: "Restart Pause Policy Sprint",
+      number: 94,
+      status: "running",
+    });
+    const task = projectRepository.createTask(project.id, {
+      sprintId: sprint.id,
+      title: "Pause interrupted task",
+      executorType: "docker_cli",
+      status: "in_progress",
+    });
+    const sprintRun = executionRepository.createSprintRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      executorMode: "docker_cli",
+      status: "running",
+    });
+    const dispatch = executionRepository.createTaskDispatch({
+      projectId: project.id,
+      sprintId: sprint.id,
+      sprintRunId: sprintRun.id,
+      taskId: task.id,
+      executorType: "docker_cli",
+      status: "running",
+    });
+    const taskRun = executionRepository.createTaskRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      sprintRunId: sprintRun.id,
+      taskId: task.id,
+      dispatchId: dispatch.id,
+      provider: "codex",
+      mode: "docker_cli",
+      sessionId: "cli-codex-pause-policy",
+      state: "RUNNING",
+      startedAt: "2026-07-06T10:00:00.000Z",
+    });
+    const providerInvocation = executionRepository.createProviderInvocationUsage({
+      projectId: project.id,
+      sprintId: sprint.id,
+      sprintRunId: sprintRun.id,
+      taskId: task.id,
+      taskRunId: taskRun.id,
+      dispatchId: dispatch.id,
+      sessionId: "cli-codex-pause-policy",
+      provider: "codex",
+      purpose: "task_coding",
+      executionMode: "DOCKER",
+      startedAt: "2026-07-06T10:00:01.000Z",
+    });
+    const qaRun = qaReviewRepository.createRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      sprintRunId: sprintRun.id,
+      taskId: task.id,
+      taskRunId: taskRun.id,
+      triggerType: "task_completion",
+      runIndex: 1,
+    });
+
+    const result = await service.recover();
+
+    expect(result.restartPolicyPausedSprintRunIds).toEqual([sprintRun.id]);
+    expect(result.resumedSprintRunIds).toEqual([]);
+    expect(recoverSprintRun).not.toHaveBeenCalled();
+    expect(executionRepository.getSprintRun(sprintRun.id)?.status).toBe("paused");
+    expect(projectRepository.getRawSprintStatus(sprint.id)).toBe("paused");
+    expect(executionRepository.getTaskDispatch(dispatch.id)?.status).toBe("paused");
+    expect(executionRepository.getTaskRun(taskRun.id)?.state).toBe("PAUSED");
+    expect(executionRepository.getProviderInvocationUsage(providerInvocation.id)?.status).toBe("cancelled");
+    expect(qaReviewRepository.listRunningRuns().some((run) => run.id === qaRun.id)).toBe(false);
+  });
+
+  it("cancels active sprint runs on startup when restart sprint policy is cancel", async () => {
+    const {
+      projectRepository,
+      executionRepository,
+      service,
+      recoverSprintRun,
+    } = await createFixture({
+      getDashboardSettings: () => ({
+        ...DEFAULT_DASHBOARD_SETTINGS,
+        restartSprintPolicy: "cancel",
+      }),
+    });
+
+    const project = projectRepository.createProject({
+      name: "Restart Cancel Policy Project",
+      sourceType: "local",
+      sourceRef: "/workspace/restart-cancel-policy-project",
+    });
+    const sprint = projectRepository.createSprint(project.id, {
+      name: "Restart Cancel Policy Sprint",
+      number: 95,
+      status: "running",
+    });
+    const sprintRun = executionRepository.createSprintRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      executorMode: "mixed",
+      status: "running",
+    });
+
+    const result = await service.recover();
+
+    expect(result.restartPolicyCancelledSprintRunIds).toEqual([sprintRun.id]);
+    expect(result.resumedSprintRunIds).toEqual([]);
+    expect(recoverSprintRun).not.toHaveBeenCalled();
+    expect(executionRepository.getSprintRun(sprintRun.id)).toMatchObject({
+      status: "cancelled",
+      finishedAt: expect.any(String),
+    });
+    expect(projectRepository.getRawSprintStatus(sprint.id)).toBe("cancelled");
+  });
+
+  it("cancels interrupted invocations without retrying tasks when restart invocation policy is cancel", async () => {
+    const {
+      projectRepository,
+      executionRepository,
+      service,
+      recoverSprintRun,
+    } = await createFixture({
+      dockerService: {
+        listContainers: vi.fn().mockResolvedValue([]),
+      },
+      getDashboardSettings: () => ({
+        ...DEFAULT_DASHBOARD_SETTINGS,
+        restartInvocationPolicy: "cancel",
+      }),
+    });
+
+    const project = projectRepository.createProject({
+      name: "Invocation Cancel Policy Project",
+      sourceType: "local",
+      sourceRef: "/workspace/invocation-cancel-policy-project",
+    });
+    const sprint = projectRepository.createSprint(project.id, {
+      name: "Invocation Cancel Policy Sprint",
+      number: 96,
+      status: "running",
+    });
+    const task = projectRepository.createTask(project.id, {
+      sprintId: sprint.id,
+      title: "Do not retry interrupted invocation",
+      executorType: "docker_cli",
+      status: "in_progress",
+    });
+    const sprintRun = executionRepository.createSprintRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      executorMode: "docker_cli",
+      status: "running",
+    });
+    const dispatch = executionRepository.createTaskDispatch({
+      projectId: project.id,
+      sprintId: sprint.id,
+      sprintRunId: sprintRun.id,
+      taskId: task.id,
+      executorType: "docker_cli",
+      status: "running",
+    });
+    const taskRun = executionRepository.createTaskRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      sprintRunId: sprintRun.id,
+      taskId: task.id,
+      dispatchId: dispatch.id,
+      provider: "gemini",
+      mode: "docker_cli",
+      sessionId: "cli-gemini-cancel-policy",
+      state: "RUNNING",
+      startedAt: "2026-07-06T10:00:00.000Z",
+    });
+    const providerInvocation = executionRepository.createProviderInvocationUsage({
+      projectId: project.id,
+      sprintId: sprint.id,
+      sprintRunId: sprintRun.id,
+      taskId: task.id,
+      taskRunId: taskRun.id,
+      dispatchId: dispatch.id,
+      sessionId: "cli-gemini-cancel-policy",
+      provider: "gemini",
+      purpose: "task_coding",
+      executionMode: "DOCKER",
+      status: "running",
+      startedAt: "2026-07-06T10:00:01.000Z",
+    });
+
+    const result = await service.recover();
+
+    expect(result.reconciledContainerInvocationIds).toEqual([providerInvocation.id]);
+    expect(result.resumedSprintRunIds).toEqual([sprintRun.id]);
+    expect(recoverSprintRun).toHaveBeenCalledWith(sprintRun.id);
+    expect(executionRepository.getTaskRun(taskRun.id)?.state).toBe("BLOCKED");
+    expect(projectRepository.getTask(task.id)?.status).toBe("QA_REVIEW_FAILED");
+  });
+
+  it("restarts active Docker invocations when restart invocation policy is restart", async () => {
+    const removeContainers = vi.fn().mockResolvedValue(undefined);
+    const {
+      projectRepository,
+      executionRepository,
+      service,
+    } = await createFixture({
+      dockerService: {
+        listContainers: vi.fn().mockResolvedValue([
+          {
+            id: "container-restart-policy",
+            labels: { "code-ux.session-id": "cli-codex-restart-policy" },
+          },
+        ]),
+        removeContainers,
+      },
+      getDashboardSettings: () => ({
+        ...DEFAULT_DASHBOARD_SETTINGS,
+        restartInvocationPolicy: "restart",
+      }),
+    });
+
+    const project = projectRepository.createProject({
+      name: "Invocation Restart Policy Project",
+      sourceType: "local",
+      sourceRef: "/workspace/invocation-restart-policy-project",
+    });
+    const sprint = projectRepository.createSprint(project.id, {
+      name: "Invocation Restart Policy Sprint",
+      number: 97,
+      status: "running",
+    });
+    const task = projectRepository.createTask(project.id, {
+      sprintId: sprint.id,
+      title: "Restart interrupted invocation",
+      executorType: "docker_cli",
+      status: "in_progress",
+    });
+    const sprintRun = executionRepository.createSprintRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      executorMode: "docker_cli",
+      status: "running",
+    });
+    const dispatch = executionRepository.createTaskDispatch({
+      projectId: project.id,
+      sprintId: sprint.id,
+      sprintRunId: sprintRun.id,
+      taskId: task.id,
+      executorType: "docker_cli",
+      status: "running",
+    });
+    const taskRun = executionRepository.createTaskRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      sprintRunId: sprintRun.id,
+      taskId: task.id,
+      dispatchId: dispatch.id,
+      provider: "codex",
+      mode: "docker_cli",
+      sessionId: "cli-codex-restart-policy",
+      state: "RUNNING",
+      startedAt: "2026-07-06T10:00:00.000Z",
+    });
+    const providerInvocation = executionRepository.createProviderInvocationUsage({
+      projectId: project.id,
+      sprintId: sprint.id,
+      sprintRunId: sprintRun.id,
+      taskId: task.id,
+      taskRunId: taskRun.id,
+      dispatchId: dispatch.id,
+      sessionId: "cli-codex-restart-policy",
+      provider: "codex",
+      purpose: "task_coding",
+      executionMode: "DOCKER",
+      status: "running",
+      startedAt: "2026-07-06T10:00:01.000Z",
+    });
+
+    const result = await service.recover();
+
+    expect(result.reconciledContainerInvocationIds).toEqual([providerInvocation.id]);
+    expect(removeContainers).toHaveBeenCalledWith(["container-restart-policy"], { removeVolumes: false });
+    expect(executionRepository.getTaskRun(taskRun.id)?.state).toBe("FAILED");
+    expect(projectRepository.getTask(task.id)?.status).toBe("pending");
   });
 
   it("leaves paused sprint runs paused when the sprint is not terminal", async () => {

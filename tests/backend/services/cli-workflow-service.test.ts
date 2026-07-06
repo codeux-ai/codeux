@@ -53,6 +53,9 @@ describe("CliWorkflowService unpushed commit detection", () => {
       agentPresetSyncService: { getOptionalWorkerAgentForRepoPath: vi.fn().mockResolvedValue({ instructionMarkdown: "guide" }) },
       getGithubToken: vi.fn().mockReturnValue("token"),
       executionRepository,
+      sprintRunLifecycleService: {
+        finalizeCancellationIfIdle: vi.fn(),
+      },
       logger: { error: vi.fn() },
     };
     const service = new CliWorkflowService(deps as any);
@@ -283,6 +286,9 @@ describe("CliWorkflowService unpushed commit detection", () => {
       agentPresetSyncService: { getOptionalWorkerAgentForRepoPath: vi.fn().mockResolvedValue({ instructionMarkdown: "guide" }) },
       getGithubToken: vi.fn().mockReturnValue("token"),
       executionRepository,
+      sprintRunLifecycleService: {
+        finalizeCancellationIfIdle: vi.fn(),
+      },
       logger: { error: vi.fn() },
     };
     const service = new CliWorkflowService(deps as any);
@@ -620,6 +626,9 @@ describe("CliWorkflowService unpushed commit detection", () => {
       agentPresetSyncService: { getOptionalWorkerAgentForRepoPath: vi.fn().mockResolvedValue({ instructionMarkdown: "guide" }) },
       getGithubToken: vi.fn().mockReturnValue("token"),
       executionRepository,
+      sprintRunLifecycleService: {
+        finalizeCancellationIfIdle: vi.fn(),
+      },
       logger: { error: vi.fn() },
     };
     const service = new CliWorkflowService(deps as any);

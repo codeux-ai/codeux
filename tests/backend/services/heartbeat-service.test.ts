@@ -18,7 +18,20 @@ function createDeps(initialStatus = "running") {
     info: vi.fn(),
     debug: vi.fn(),
   };
-  return { run, executionRepository, logger };
+  const sprintRunLifecycleService = {
+    renewHeartbeat: vi.fn(({ sprintRunId, sprintId, leaseToken }: { sprintRunId: string; sprintId: string; leaseToken?: string }) => {
+      const latest = executionRepository.getSprintRun(sprintRunId);
+      if (latest.status === "completed" || latest.status === "failed" || latest.status === "cancelled" || latest.status === "paused" || latest.status === "cancel_requested") {
+        return false;
+      }
+      if (leaseToken) {
+        executionRepository.renewLease({ scopeType: "sprint", scopeId: sprintId, leaseToken });
+      }
+      executionRepository.updateSprintRun(sprintRunId, { status: "running", lastHeartbeatAt: new Date().toISOString() });
+      return true;
+    }),
+  };
+  return { run, executionRepository, sprintRunLifecycleService, logger };
 }
 
 describe("HeartbeatService", () => {
@@ -32,8 +45,8 @@ describe("HeartbeatService", () => {
   });
 
   it("renews immediately on start and refreshes the lease when a token is supplied", () => {
-    const { executionRepository, logger } = createDeps("running");
-    const service = new HeartbeatService({ executionRepository, logger: logger as never, intervalMs: 1000 });
+    const { executionRepository, sprintRunLifecycleService, logger } = createDeps("running");
+    const service = new HeartbeatService({ sprintRunLifecycleService, logger: logger as never, intervalMs: 1000 });
 
     service.startHeartbeat("run-1", "sprint-1", "lease-token");
 
@@ -45,9 +58,34 @@ describe("HeartbeatService", () => {
     service.stopAll();
   });
 
+  it("repairs an idle sprint summary row during heartbeat renewal", () => {
+    const { sprintRunLifecycleService, logger } = createDeps("running");
+    const projectManagementRepository = {
+      getRawSprintStatus: vi.fn().mockReturnValue("idle"),
+      updateSprint: vi.fn(),
+    };
+    const service = new HeartbeatService({
+      sprintRunLifecycleService: {
+        renewHeartbeat: vi.fn(() => {
+          projectManagementRepository.updateSprint("sprint-1", { status: "running" });
+          return true;
+        }),
+      },
+      logger: logger as never,
+      intervalMs: 1000,
+    });
+
+    service.startHeartbeat("run-1", "sprint-1");
+
+    expect(projectManagementRepository.updateSprint).toHaveBeenCalledWith("sprint-1", {
+      status: "running",
+    });
+    service.stopAll();
+  });
+
   it("renews again on each interval tick", () => {
-    const { executionRepository, logger } = createDeps("running");
-    const service = new HeartbeatService({ executionRepository, logger: logger as never, intervalMs: 1000 });
+    const { executionRepository, sprintRunLifecycleService, logger } = createDeps("running");
+    const service = new HeartbeatService({ sprintRunLifecycleService, logger: logger as never, intervalMs: 1000 });
 
     service.startHeartbeat("run-1", "sprint-1");
     expect(executionRepository.updateSprintRun).toHaveBeenCalledTimes(1);
@@ -59,8 +97,8 @@ describe("HeartbeatService", () => {
   });
 
   it("ignores duplicate start calls for the same run", () => {
-    const { executionRepository, logger } = createDeps("running");
-    const service = new HeartbeatService({ executionRepository, logger: logger as never, intervalMs: 1000 });
+    const { executionRepository, sprintRunLifecycleService, logger } = createDeps("running");
+    const service = new HeartbeatService({ sprintRunLifecycleService, logger: logger as never, intervalMs: 1000 });
 
     service.startHeartbeat("run-1", "sprint-1");
     service.startHeartbeat("run-1", "sprint-1");
@@ -70,8 +108,8 @@ describe("HeartbeatService", () => {
   });
 
   it("uses the default interval when none is provided", () => {
-    const { executionRepository, logger } = createDeps("running");
-    const service = new HeartbeatService({ executionRepository, logger: logger as never });
+    const { executionRepository, sprintRunLifecycleService, logger } = createDeps("running");
+    const service = new HeartbeatService({ sprintRunLifecycleService, logger: logger as never });
 
     service.startHeartbeat("run-1", "sprint-1");
     executionRepository.updateSprintRun.mockClear();
@@ -85,8 +123,8 @@ describe("HeartbeatService", () => {
   });
 
   it("stops the heartbeat when the run has reached a terminal status", () => {
-    const { executionRepository, logger } = createDeps("completed");
-    const service = new HeartbeatService({ executionRepository, logger: logger as never, intervalMs: 1000 });
+    const { executionRepository, sprintRunLifecycleService, logger } = createDeps("completed");
+    const service = new HeartbeatService({ sprintRunLifecycleService, logger: logger as never, intervalMs: 1000 });
 
     service.startHeartbeat("run-1", "sprint-1");
 
@@ -98,11 +136,11 @@ describe("HeartbeatService", () => {
   });
 
   it("logs and keeps running when the initial renewal throws", () => {
-    const { executionRepository, logger } = createDeps("running");
-    executionRepository.getSprintRun.mockImplementationOnce(() => {
+    const { sprintRunLifecycleService, logger } = createDeps("running");
+    sprintRunLifecycleService.renewHeartbeat.mockImplementationOnce(() => {
       throw new Error("db offline");
     });
-    const service = new HeartbeatService({ executionRepository, logger: logger as never, intervalMs: 1000 });
+    const service = new HeartbeatService({ sprintRunLifecycleService, logger: logger as never, intervalMs: 1000 });
 
     service.startHeartbeat("run-1", "sprint-1");
 
@@ -114,11 +152,11 @@ describe("HeartbeatService", () => {
   });
 
   it("logs interval renewal failures without throwing", () => {
-    const { executionRepository, logger } = createDeps("running");
-    const service = new HeartbeatService({ executionRepository, logger: logger as never, intervalMs: 1000 });
+    const { sprintRunLifecycleService, logger } = createDeps("running");
+    const service = new HeartbeatService({ sprintRunLifecycleService, logger: logger as never, intervalMs: 1000 });
 
     service.startHeartbeat("run-1", "sprint-1");
-    executionRepository.getSprintRun.mockImplementationOnce(() => {
+    sprintRunLifecycleService.renewHeartbeat.mockImplementationOnce(() => {
       throw "boom";
     });
 
@@ -131,11 +169,11 @@ describe("HeartbeatService", () => {
   });
 
   it("does not refresh the sprint run heartbeat after losing the lease", () => {
-    const { executionRepository, logger } = createDeps("running");
+    const { executionRepository, sprintRunLifecycleService, logger } = createDeps("running");
     executionRepository.renewLease.mockImplementation(() => {
       throw new Error("Lease token mismatch for sprint:sprint-1");
     });
-    const service = new HeartbeatService({ executionRepository, logger: logger as never, intervalMs: 1000 });
+    const service = new HeartbeatService({ sprintRunLifecycleService, logger: logger as never, intervalMs: 1000 });
 
     service.startHeartbeat("run-1", "sprint-1", "old-token");
 
@@ -155,8 +193,8 @@ describe("HeartbeatService", () => {
   });
 
   it("stopHeartbeat is a no-op for unknown runs and stopAll clears every timer", () => {
-    const { executionRepository, logger } = createDeps("running");
-    const service = new HeartbeatService({ executionRepository, logger: logger as never, intervalMs: 1000 });
+    const { executionRepository, sprintRunLifecycleService, logger } = createDeps("running");
+    const service = new HeartbeatService({ sprintRunLifecycleService, logger: logger as never, intervalMs: 1000 });
 
     expect(() => service.stopHeartbeat("missing")).not.toThrow();
 

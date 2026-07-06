@@ -38,6 +38,10 @@ const buildDeps = () => ({
     updateSprintRun: vi.fn(),
     renewLease: vi.fn(),
   },
+  sprintRunLifecycleService: {
+    transition: vi.fn((_input: any) => ({ id: "run-1", status: _input.status })),
+    finalizeCancellationIfIdle: vi.fn().mockReturnValue(null),
+  },
   heartbeatService: {
     startHeartbeat: vi.fn(),
     stopHeartbeat: vi.fn(),
@@ -802,16 +806,14 @@ describe("WatchLoopRunner", () => {
         ownerType: "worker",
       })]),
     );
-    expect(deps.executionRepository.updateSprintRun).toHaveBeenCalledWith(
-      "run-1",
-      expect.objectContaining({ status: "paused" }),
+    expect(deps.sprintRunLifecycleService.transition).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sprintRunId: "run-1",
+        status: "paused",
+      }),
     );
-    expect(deps.executionRepository.appendSprintRunEvent).not.toHaveBeenCalledWith(
-      "run-1",
-      "sprint_completed",
-      expect.anything(),
-      expect.anything(),
-      expect.anything(),
+    expect(deps.sprintRunLifecycleService.transition).not.toHaveBeenCalledWith(
+      expect.objectContaining({ eventType: "sprint_completed" }),
     );
     nowSpy.mockRestore();
   });
@@ -1149,6 +1151,24 @@ describe("WatchLoopRunner", () => {
     const cycleRunner = buildCycleRunner();
     const nowSpy = vi.spyOn(Date, "now");
     nowSpy.mockReturnValueOnce(0).mockReturnValue(1000);
+    deps.projectAttentionService.listActiveProjectItems.mockReturnValue([
+      {
+        id: "handoff-1",
+        sprintRunId: "run-1",
+        attentionType: "human_escalation_required",
+        ownerType: "human",
+        status: "open",
+        payload: { sourceAttentionType: "merge_conflict" },
+      },
+      {
+        id: "handoff-unrelated",
+        sprintRunId: "run-1",
+        attentionType: "human_escalation_required",
+        ownerType: "human",
+        status: "open",
+        payload: { sourceAttentionType: "manual_attention" },
+      },
+    ] as any);
 
     deps.renderInstruction.mockImplementation(async (id) => {
       if (id === "watchHeader") return "HEADER";
@@ -1236,21 +1256,35 @@ describe("WatchLoopRunner", () => {
       sprintRunId: "run-1",
     });
 
-    expect(runCommandStrict).toHaveBeenCalledWith("git", ["checkout", "main"], "/tmp/local-only");
     expect(runCommandStrict).toHaveBeenCalledWith(
       "git",
       ["merge", "--no-ff", "-m", "Merge branch 'feature/sprint-1' into main", "feature/sprint-1"],
-      "/tmp/local-only",
+      expect.stringContaining("code-ux-local-merge-"),
+      expect.objectContaining({ CODE_UX_GIT_CONTAINER_MODE: "host" }),
     );
-    expect(runCommandStrict).toHaveBeenCalledWith("git", ["checkout", "user/topic"], "/tmp/local-only");
+    expect(runCommandStrict).toHaveBeenCalledWith(
+      "git",
+      ["worktree", "add", "--detach", expect.stringContaining("code-ux-local-merge-"), "main"],
+      "/tmp/local-only",
+      expect.objectContaining({ CODE_UX_GIT_CONTAINER_MODE: "host" }),
+    );
+    expect(runCommandStrict).toHaveBeenCalledWith(
+      "git",
+      ["branch", "-f", "main", "HEAD"],
+      expect.stringContaining("code-ux-local-merge-"),
+      expect.objectContaining({ CODE_UX_GIT_CONTAINER_MODE: "host" }),
+    );
+    expect(runCommandStrict).not.toHaveBeenCalledWith("git", ["checkout", "main"], "/tmp/local-only");
+    expect(runCommandStrict).not.toHaveBeenCalledWith("git", ["checkout", "user/topic"], "/tmp/local-only");
     expect(runCommandStrict).toHaveBeenCalledWith("git", ["branch", "-D", "feature/sprint-1"], "/tmp/local-only");
     expect(result).toContain("Sprint Execution Finished");
-    expect(deps.executionRepository.appendSprintRunEvent).toHaveBeenCalledWith(
-      "run-1",
-      "sprint_completed",
-      "system",
-      expect.objectContaining({ taskCount: 1 }),
-      expect.any(Object),
+    expect(deps.sprintRunLifecycleService.transition).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sprintRunId: "run-1",
+        status: "completed",
+        eventType: "sprint_completed",
+        eventPayload: expect.objectContaining({ taskCount: 1 }),
+      }),
     );
     expect(deps.projectAttentionService.resolveItemsForSprintRun).toHaveBeenCalledWith(
       "project-1",
@@ -1258,10 +1292,18 @@ describe("WatchLoopRunner", () => {
       ["merge_required", "merge_conflict"],
       "sprint_completed",
     );
+    expect(deps.projectAttentionService.resolveItem).toHaveBeenCalledWith(
+      "handoff-1",
+      { status: "resolved", reason: "sprint_completed" },
+    );
+    expect(deps.projectAttentionService.resolveItem).not.toHaveBeenCalledWith(
+      "handoff-unrelated",
+      expect.anything(),
+    );
     nowSpy.mockRestore();
   });
 
-  it("LOCAL: logs restore failures without masking a successful final merge", async () => {
+  it("LOCAL: final merge does not restore or mutate the visible checkout", async () => {
     const deps = buildDeps();
     const cycleRunner = buildCycleRunner();
     const nowSpy = vi.spyOn(Date, "now");
@@ -1284,19 +1326,10 @@ describe("WatchLoopRunner", () => {
     });
 
     vi.mocked(runCommandStrict).mockImplementation(async (_cmd: string, args: string[]) => {
-      if (args[0] === "symbolic-ref" && args.includes("--short")) {
-        return { stdout: "user/topic\n", stderr: "" } as any;
-      }
       if (args[0] === "rev-parse" && args[1] === "--verify") {
         return { stdout: "feature-sha\n", stderr: "" } as any;
       }
       if (args[0] === "show-ref") {
-        return { stdout: "", stderr: "" } as any;
-      }
-      if (args[0] === "checkout" && args[1] === "user/topic") {
-        throw new Error("restore failed");
-      }
-      if (args[0] === "checkout") {
         return { stdout: "", stderr: "" } as any;
       }
       if (args[0] === "merge") {
@@ -1342,11 +1375,11 @@ describe("WatchLoopRunner", () => {
     });
 
     expect(result).toContain("Sprint Execution Finished");
-    expect(deps.logger.warn).toHaveBeenCalledWith(
+    expect(runCommandStrict).not.toHaveBeenCalledWith("git", ["checkout", expect.any(String)], "/tmp/local-only");
+    expect(deps.logger.warn).not.toHaveBeenCalledWith(
       "LOCAL Mode: Failed to restore original checked-out ref after final merge attempt",
-      expect.objectContaining({ originalRef: "user/topic" }),
+      expect.anything(),
     );
-    expect(runCommandStrict).not.toHaveBeenCalledWith("git", ["branch", "-D", "feature/sprint-1"], "/tmp/local-only");
     nowSpy.mockRestore();
   });
 
@@ -1442,9 +1475,11 @@ describe("WatchLoopRunner", () => {
 
     expect(result).toContain("Resolve conflicts locally");
     expect(result).not.toContain("Sprint Execution Finished");
-    expect(deps.executionRepository.updateSprintRun).toHaveBeenCalledWith(
-      "run-1",
-      expect.objectContaining({ status: "paused" }),
+    expect(deps.sprintRunLifecycleService.transition).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sprintRunId: "run-1",
+        status: "paused",
+      }),
     );
     // An escalation already exists, so no duplicate worker item is opened.
     expect(deps.projectAttentionService.openItems).not.toHaveBeenCalled();
@@ -1515,16 +1550,17 @@ describe("WatchLoopRunner", () => {
     });
 
     expect(result).toContain("Sprint Execution Finished");
-    expect(deps.executionRepository.updateSprintRun).toHaveBeenCalledWith(
-      "run-1",
-      expect.objectContaining({ status: "completed" }),
+    expect(deps.sprintRunLifecycleService.transition).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sprintRunId: "run-1",
+        status: "completed",
+      }),
     );
-    expect(deps.executionRepository.appendSprintRunEvent).toHaveBeenCalledWith(
-      "run-1",
-      "sprint_completed",
-      "system",
-      expect.objectContaining({ taskCount: 1 }),
-      expect.any(Object),
+    expect(deps.sprintRunLifecycleService.transition).toHaveBeenCalledWith(
+      expect.objectContaining({
+        eventType: "sprint_completed",
+        eventPayload: expect.objectContaining({ taskCount: 1 }),
+      }),
     );
     nowSpy.mockRestore();
   });
@@ -1626,12 +1662,13 @@ describe("WatchLoopRunner", () => {
     }));
     expect(result).toContain("Sprint Still Active");
     expect(result).toContain("Sprint Execution Finished");
-    expect(deps.executionRepository.appendSprintRunEvent).toHaveBeenCalledWith(
-      "run-1",
-      "sprint_completed",
-      "system",
-      expect.objectContaining({ taskCount: 1 }),
-      expect.any(Object),
+    expect(deps.sprintRunLifecycleService.transition).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sprintRunId: "run-1",
+        status: "completed",
+        eventType: "sprint_completed",
+        eventPayload: expect.objectContaining({ taskCount: 1 }),
+      }),
     );
     nowSpy.mockRestore();
   });
@@ -1855,12 +1892,13 @@ describe("WatchLoopRunner", () => {
     expect(result).toContain("AUTO_MERGE_SUCCEEDED");
     expect(result).toContain("Waiting for the final main-branch merge to finish");
     expect(result).toContain("Sprint Execution Finished");
-    expect(deps.executionRepository.appendSprintRunEvent).toHaveBeenCalledWith(
-      "run-1",
-      "sprint_completed",
-      "system",
-      expect.objectContaining({ taskCount: 1 }),
-      expect.any(Object),
+    expect(deps.sprintRunLifecycleService.transition).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sprintRunId: "run-1",
+        status: "completed",
+        eventType: "sprint_completed",
+        eventPayload: expect.objectContaining({ taskCount: 1 }),
+      }),
     );
     nowSpy.mockRestore();
   });
@@ -2244,7 +2282,7 @@ describe("WatchLoopRunner", () => {
     const deps = buildDeps();
     const cycleRunner = buildCycleRunner();
     deps.executionRepository.getSprintRun = vi.fn().mockReturnValue({ status: "cancel_requested" });
-    deps.executionRepository.finalizeSprintRunCancellationIfIdle = vi.fn().mockReturnValue({ id: "run-1", status: "cancelled" });
+    deps.sprintRunLifecycleService.finalizeCancellationIfIdle = vi.fn().mockReturnValue({ id: "run-1", status: "cancelled" });
     deps.renderInstruction.mockImplementation(async (id) => id === "watchHeader" ? "HEADER" : "");
 
     const runner = new WatchLoopRunner(deps as any, cycleRunner as any, vi.fn());
@@ -2271,7 +2309,7 @@ describe("WatchLoopRunner", () => {
       sprintRunId: "run-1",
     });
 
-    expect(deps.executionRepository.finalizeSprintRunCancellationIfIdle).toHaveBeenCalledWith("run-1");
+    expect(deps.sprintRunLifecycleService.finalizeCancellationIfIdle).toHaveBeenCalledWith("run-1");
     expect(result).toContain("Sprint Cancelled");
     expect(cycleRunner.run).not.toHaveBeenCalled();
   });
@@ -2280,7 +2318,7 @@ describe("WatchLoopRunner", () => {
     const deps = buildDeps();
     const cycleRunner = buildCycleRunner();
     deps.executionRepository.getSprintRun = vi.fn().mockReturnValue({ status: "cancel_requested" });
-    deps.executionRepository.finalizeSprintRunCancellationIfIdle = vi.fn().mockReturnValue(null);
+    deps.sprintRunLifecycleService.finalizeCancellationIfIdle = vi.fn().mockReturnValue(null);
     deps.renderInstruction.mockImplementation(async (id) => id === "watchHeader" ? "HEADER" : "");
 
     const runner = new WatchLoopRunner(deps as any, cycleRunner as any, vi.fn());
@@ -2307,7 +2345,7 @@ describe("WatchLoopRunner", () => {
       sprintRunId: "run-1",
     });
 
-    expect(deps.executionRepository.finalizeSprintRunCancellationIfIdle).toHaveBeenCalledWith("run-1");
+    expect(deps.sprintRunLifecycleService.finalizeCancellationIfIdle).toHaveBeenCalledWith("run-1");
     expect(result).toContain("Active work is still shutting down");
     expect(cycleRunner.run).not.toHaveBeenCalled();
   });
@@ -2429,16 +2467,14 @@ describe("WatchLoopRunner", () => {
 
     expect(result.status).toBe("exit");
     expect(result.report).toContain("Final completion PR is not merged");
-    expect(deps.executionRepository.updateSprintRun).toHaveBeenCalledWith(
-      "run-1",
-      expect.objectContaining({ status: "paused" }),
+    expect(deps.sprintRunLifecycleService.transition).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sprintRunId: "run-1",
+        status: "paused",
+      }),
     );
-    expect(deps.executionRepository.appendSprintRunEvent).not.toHaveBeenCalledWith(
-      "run-1",
-      "sprint_completed",
-      expect.anything(),
-      expect.anything(),
-      expect.anything(),
+    expect(deps.sprintRunLifecycleService.transition).not.toHaveBeenCalledWith(
+      expect.objectContaining({ eventType: "sprint_completed" }),
     );
     expect(deps.completedSprints.size).toBe(0);
   });

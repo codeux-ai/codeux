@@ -1014,6 +1014,8 @@ export interface CustomMcpServer {
 
 export type RuntimeLogLevel = "off" | "debug" | "info" | "warn" | "error";
 export type ConsoleLogMode = "standard" | "full";
+export type RestartSprintPolicy = "continue" | "pause" | "cancel";
+export type RestartInvocationPolicy = "continue" | "cancel" | "restart";
 
 export interface ModelPricingSettings {
   /** Per-model user price overrides, keyed by canonical models.dev id ("<provider>/<model>"). */
@@ -1028,6 +1030,8 @@ export interface DashboardSettings {
   dbAutoVacuumOnStartup: boolean;
   dbPruningEnabled: boolean;
   dbRetentionDays: number;
+  restartSprintPolicy: RestartSprintPolicy;
+  restartInvocationPolicy: RestartInvocationPolicy;
   appearance: AppearanceSettings;
   automationLevel: AutomationLevel;
   automationInterventions: AutomationInterventionsSettings;

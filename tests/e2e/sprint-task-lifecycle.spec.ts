@@ -114,6 +114,32 @@ async function activateButtonWithKeyboard(page: Page, button: Locator): Promise<
   await page.keyboard.press('Enter');
 }
 
+async function clickSprintMenuAction(page: Page, sprintName: string, action: 'Edit' | 'Delete'): Promise<void> {
+  const menuButton = page.getByRole('button', { name: `Open actions menu for sprint ${sprintName}` }).last();
+  const actionName = `${action} sprint ${sprintName}`;
+  const actionLocator = page
+    .getByRole('menuitem', { name: actionName })
+    .or(page.getByRole('button', { name: actionName }))
+    .last();
+
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    await expect(menuButton).toBeVisible();
+    await menuButton.click();
+    await expect(actionLocator).toBeVisible({ timeout: 5_000 });
+
+    try {
+      await actionLocator.click({ timeout: 5_000 });
+      return;
+    } catch (error) {
+      if (attempt === 3) {
+        throw error;
+      }
+      await page.keyboard.press('Escape').catch(() => undefined);
+      await page.waitForTimeout(150);
+    }
+  }
+}
+
 test.describe('sprint and task lifecycle', () => {
   test.describe.configure({ mode: 'serial' });
 
@@ -169,8 +195,7 @@ test.describe('sprint and task lifecycle', () => {
     await expect(page.getByText(sprintName).first()).toBeVisible();
 
     await page.getByPlaceholder('Search sprints…').fill(sprintName);
-    await page.getByRole('button', { name: `Open actions menu for sprint ${sprintName}` }).last().click();
-    await page.getByRole('button', { name: `Edit sprint ${sprintName}` }).click();
+    await clickSprintMenuAction(page, sprintName, 'Edit');
     await expect(composer).toBeVisible();
     await composer.getByPlaceholder('Runtime hardening').fill(editedSprintName);
     await composer.getByRole('button', { name: /^Save Changes\b/ }).first().click();
@@ -183,8 +208,7 @@ test.describe('sprint and task lifecycle', () => {
     await page.getByPlaceholder('Search sprints…').fill(editedSprintName);
     await expect(page.getByText(editedSprintName).first()).toBeVisible();
 
-    await page.getByRole('button', { name: `Open actions menu for sprint ${editedSprintName}` }).last().click();
-    await page.getByRole('button', { name: `Delete sprint ${editedSprintName}` }).click();
+    await clickSprintMenuAction(page, editedSprintName, 'Delete');
     const dialog = page.getByRole('dialog', { name: 'Delete Sprint?' });
     await expect(dialog).toBeVisible();
     await holdToConfirm(page, dialog.getByRole('button', { name: 'Hold to Delete Sprint' }));

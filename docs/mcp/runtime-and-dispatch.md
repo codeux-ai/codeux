@@ -14,7 +14,7 @@ Startup sequence:
 6. `src/server/code-ux-server.ts` starts dashboard server.
    - Dashboard API routes (such as project, sprint, task, conversation, and planning endpoints) are broken out into modular route files for maintainability.
    - Route wrappers and body request parsers are maintained as separate server-layer boundaries.
-7. `src/server/code-ux-server.ts` connects MCP stdio transport.
+7. `src/server/code-ux-server.ts` connects MCP stdio transport only when stdin is an MCP pipe/socket or `CODE_UX_ENABLE_MCP_STDIO=1` is set. TTY stdin and daemon-style character-device stdin such as `/dev/null` leave stdio disabled so the dashboard/backend stays alive without an attached client.
 8. `src/server/code-ux-server.ts` optionally starts the MCP HTTP transport with the same project-manager tool surface.
 9. `src/server/code-ux-server.ts` starts runtime intervals and schedules deferred startup work.
 
@@ -131,5 +131,5 @@ On `SIGINT`, `SIGTERM`, or `SIGHUP`, and when the Electron shell quits:
 - Server requests every registered active dispatch to stop through its normal abort hook.
 - Server scans running Docker containers for `code-ux.*` labels and kills any remaining Code UX-managed containers directly.
 - Server preserves Docker workspace/runtime volumes and leaves shutdown-interrupted Docker-backed task rows retryable. Startup recovery closes the interrupted local CLI invocation/dispatch/QA telemetry as `cancelled`, not `failed`, and can resume from the same workspace volume when that retry mode is enabled.
-- Server closes MCP stdio and HTTP transports. The dashboard and MCP HTTP listeners track open sockets and destroy them during shutdown, including upgraded dashboard WebSocket sockets, so an open browser tab does not hold the process in the HTTP close path.
+- Server closes any active MCP stdio transport and the MCP HTTP transport. The dashboard and MCP HTTP listeners track open sockets and destroy them during shutdown, including upgraded dashboard WebSocket sockets, so an open browser tab does not hold the process in the HTTP close path.
 - Process exits cleanly.

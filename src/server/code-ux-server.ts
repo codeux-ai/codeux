@@ -263,6 +263,7 @@ export class CodeUxServer {
     this.runtimeStartupRecoveryService = new RuntimeStartupRecoveryService({
       sessionTracking: this.sessionTracking,
       executionRepository: this.executionRepository,
+      sprintRunLifecycleService: deps.sprintRunLifecycleService,
       qaReviewRepository: this.qaReviewRepository,
       projectManagementRepository: this.projectManagementRepository,
       projectAttentionService: this.projectAttentionService,

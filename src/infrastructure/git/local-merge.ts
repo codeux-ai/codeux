@@ -1,3 +1,6 @@
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { runCommandStrict, type CommandResult } from "../../services/cli-process-runner.js";
 
 /**
@@ -7,6 +10,12 @@ import { runCommandStrict, type CommandResult } from "../../services/cli-process
 export type LocalMergeRunner = (command: string, args: string[], cwd: string) => Promise<CommandResult>;
 
 const defaultRunner: LocalMergeRunner = (command, args, cwd) => runCommandStrict(command, args, cwd);
+const defaultHostGitRunner: LocalMergeRunner = (command, args, cwd) => runCommandStrict(
+  command,
+  args,
+  cwd,
+  { ...process.env, CODE_UX_GIT_CONTAINER_MODE: "host" },
+);
 
 export interface LocalMergeResult {
   ok: boolean;
@@ -318,5 +327,75 @@ export async function mergeBranchLocally(args: {
       // Abort can itself fail if there was nothing to abort; ignore.
     }
     return { ok: false, conflict, error: formatGitError(err) };
+  }
+}
+
+/**
+ * Merges `sourceBranch` into `targetBranch` from a detached temporary worktree.
+ * This is intended for final LOCAL-mode feature -> default merges where the
+ * user's visible checkout must not switch branches or receive conflict files.
+ */
+export async function mergeBranchLocallyInTemporaryWorktree(args: {
+  repoPath: string;
+  targetBranch: string;
+  sourceBranch: string;
+  commitMessage: string;
+  runner?: LocalMergeRunner;
+}): Promise<LocalMergeResult> {
+  const runner = args.runner ?? defaultHostGitRunner;
+  const targetBranch = args.targetBranch.trim();
+  const sourceBranch = args.sourceBranch.trim();
+  if (!targetBranch) {
+    return { ok: false, conflict: false, error: "Target branch is required for local merge." };
+  }
+  if (!sourceBranch) {
+    return { ok: false, conflict: false, error: "Source branch is required for local merge." };
+  }
+  if (!(await gitCommitExists(args.repoPath, sourceBranch, runner))) {
+    return {
+      ok: false,
+      conflict: false,
+      error: `Source branch or ref '${sourceBranch}' was not found or does not point to a commit.`,
+    };
+  }
+
+  const targetExists = await gitRefExists(args.repoPath, `refs/heads/${targetBranch}`, runner);
+  if (!targetExists) {
+    try {
+      await runner("git", ["branch", targetBranch, sourceBranch], args.repoPath);
+      return { ok: true, conflict: false };
+    } catch (err) {
+      return { ok: false, conflict: false, error: formatGitError(err) };
+    }
+  }
+
+  const worktreePath = await mkdtemp(path.join(tmpdir(), "code-ux-local-merge-"));
+  let worktreeCreated = false;
+  try {
+    await runner("git", ["worktree", "add", "--detach", worktreePath, targetBranch], args.repoPath);
+    worktreeCreated = true;
+    await runner(
+      "git",
+      ["merge", "--no-ff", "-m", args.commitMessage, sourceBranch],
+      worktreePath,
+    );
+    await runner("git", ["branch", "-f", targetBranch, "HEAD"], worktreePath);
+    return { ok: true, conflict: false };
+  } catch (err) {
+    const conflict = worktreeCreated ? await hasUnmergedConflictEntries(worktreePath, runner) : false;
+    if (worktreeCreated) {
+      try {
+        await runner("git", ["merge", "--abort"], worktreePath);
+      } catch {
+        // Abort can itself fail if there was nothing to abort; ignore.
+      }
+    }
+    return { ok: false, conflict, error: formatGitError(err) };
+  } finally {
+    if (worktreeCreated) {
+      await runner("git", ["worktree", "remove", "--force", worktreePath], args.repoPath).catch(() => undefined);
+      await runner("git", ["worktree", "prune"], args.repoPath).catch(() => undefined);
+    }
+    await rm(worktreePath, { recursive: true, force: true }).catch(() => undefined);
   }
 }

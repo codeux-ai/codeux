@@ -7,6 +7,7 @@ import {
   getCheckedOutRef,
   restoreCheckedOutRef,
   mergeBranchLocally,
+  mergeBranchLocallyInTemporaryWorktree,
   findRecoverableWorkerBranch,
   workerBranchHasMergeWork,
   deleteBranchLocally,
@@ -217,6 +218,53 @@ describe("local-merge helpers", () => {
     expect(result.ok).toBe(false);
     expect(result.conflict).toBe(false);
     expect(result.error).toContain("checkout failed");
+  });
+
+  it("merges in a temporary worktree without changing a dirty visible checkout", async () => {
+    await git(repo, "checkout", "feature");
+    await commitFile(repo, "feature.txt", "feature\n", "feat: sprint work");
+    await git(repo, "checkout", "-b", "operator/topic", "main");
+    await writeFile(path.join(repo, "local-note.txt"), "uncommitted\n", "utf8");
+
+    const result = await mergeBranchLocallyInTemporaryWorktree({
+      repoPath: repo,
+      targetBranch: "main",
+      sourceBranch: "feature",
+      commitMessage: "Merge branch 'feature' into main",
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.conflict).toBe(false);
+    expect(await currentBranch()).toBe("operator/topic");
+    expect((await git(repo, "status", "--porcelain")).stdout).toContain("?? local-note.txt");
+    const files = (await git(repo, "ls-tree", "--name-only", "main")).stdout;
+    expect(files).toContain("feature.txt");
+  });
+
+  it("reports temporary-worktree merge conflicts without dirtying the visible checkout", async () => {
+    await git(repo, "checkout", "feature");
+    await commitFile(repo, "base.txt", "feature change\n", "feat: feature edit");
+    const mainBefore = (await git(repo, "rev-parse", "main")).stdout.trim();
+
+    await git(repo, "checkout", "main");
+    await commitFile(repo, "base.txt", "main change\n", "feat: main edit");
+    const mainAfterDivergence = (await git(repo, "rev-parse", "main")).stdout.trim();
+    await git(repo, "checkout", "-b", "operator/topic");
+    await writeFile(path.join(repo, "local-note.txt"), "operator draft\n", "utf8");
+
+    const result = await mergeBranchLocallyInTemporaryWorktree({
+      repoPath: repo,
+      targetBranch: "main",
+      sourceBranch: "feature",
+      commitMessage: "Merge branch 'feature' into main",
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.conflict).toBe(true);
+    expect((await git(repo, "rev-parse", "main")).stdout.trim()).not.toBe(mainBefore);
+    expect((await git(repo, "rev-parse", "main")).stdout.trim()).toBe(mainAfterDivergence);
+    expect(await currentBranch()).toBe("operator/topic");
+    expect((await git(repo, "status", "--porcelain")).stdout).toContain("?? local-note.txt");
   });
 });
 

@@ -276,6 +276,29 @@ describe("CommandRunner", () => {
     }
   });
 
+  it("keeps git commands on the host when command env requests host git", () => {
+    const tempRoot = path.join(os.tmpdir(), "code-ux-command-runner-repo");
+    const previous = process.env.CODE_UX_CONTAINERIZED_GIT;
+    process.env.CODE_UX_CONTAINERIZED_GIT = "1";
+    try {
+      const result = (runner as unknown as {
+        resolveCommand: (command: string, args: string[], options: { cwd?: string; env?: NodeJS.ProcessEnv }) => { command: string; args: string[] };
+      }).resolveCommand("git", ["status", "--porcelain"], {
+        cwd: tempRoot,
+        env: { ...process.env, CODE_UX_GIT_CONTAINER_MODE: "host" },
+      });
+
+      expect(result.command).toBe("git");
+      expect(result.args).toEqual(["status", "--porcelain"]);
+    } finally {
+      if (previous === undefined) {
+        delete process.env.CODE_UX_CONTAINERIZED_GIT;
+      } else {
+        process.env.CODE_UX_CONTAINERIZED_GIT = previous;
+      }
+    }
+  });
+
   it("keeps git commands on the host after runtime shutdown begins", () => {
     const tempRoot = path.join(os.tmpdir(), "code-ux-command-runner-repo");
     const previous = process.env.CODE_UX_CONTAINERIZED_GIT;
