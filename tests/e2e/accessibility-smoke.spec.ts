@@ -56,12 +56,6 @@ test('Dashboard accessibility smoke test', async ({ page }) => {
   await page.goto('/sprints');
   await page.waitForURL('**/sprints');
 
-  // Wait for loading indicator to be hidden if it exists
-  const loadingElement = page.getByText(/loading/i).first();
-  if (await loadingElement.isVisible()) {
-    await expect(loadingElement).toBeHidden();
-  }
-
   const sprintLedger = page.getByRole('region', { name: 'Sprint Ledger' });
   await expect(sprintLedger).toBeVisible();
 });

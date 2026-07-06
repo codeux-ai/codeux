@@ -70,4 +70,4 @@ jobs:
             --base "${TARGET_BRANCH}" \
             --head "${update_branch}" \
             --title "chore: update models.dev catalogue" \
-            --body "Refreshes the vendored models.dev catalogue for ${TARGET_BRANCH} after the push-triggered prefetch detected upstream changes."
+            --body "Refreshes the vendored models.dev catalogue for ${TARGET_BRANCH} after the scheduled push-triggered prefetch detected upstream changes."

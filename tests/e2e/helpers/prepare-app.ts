@@ -226,3 +226,34 @@ export async function cleanupSprintFixture(
   await Promise.all(tasks.map((task) => deleteTask(request, projectId, task.id)));
   await deleteSprint(request, projectId, sprintId);
 }
+
+export async function createE2EAgentPreset(
+  request: APIRequestContext,
+  projectId: string,
+): Promise<{ id: string; name: string }> {
+  const name = `E2E Avatar Agent ${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const created = await request.post(`/api/projects/${projectId}/agent-presets`, {
+    data: {
+      name,
+      description: 'E2E avatar rendering fixture',
+      instructionMarkdown: '',
+      labels: ['e2e'],
+      avatarConfig: {
+        chassis: 'classic',
+        eyes: 'smile',
+        antenna: 'jewel',
+        wings: 'none',
+        headphones: 'bumper',
+        accent: 'jade',
+        baseColor: 'pearl',
+      },
+    },
+  });
+
+  if (!created.ok()) {
+    throw new Error(`Failed to create E2E agent preset: ${created.status()} ${await created.text()}`);
+  }
+
+  const body = (await created.json()) as { id: string; name: string };
+  return { id: body.id, name: body.name };
+}
