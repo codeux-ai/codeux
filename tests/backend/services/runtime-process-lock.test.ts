@@ -55,10 +55,38 @@ describe("runtime process lock", () => {
       lockPath,
       projectRoot: process.cwd(),
       isProcessAlive: (pid) => pid === 12345,
+      acquireTimeoutMs: 0,
     })).rejects.toBeInstanceOf(RuntimeProcessLockError);
 
     const raw = await fs.readFile(lockPath, "utf8");
     expect(JSON.parse(raw).pid).toBe(12345);
+  });
+
+  it("waits for a live recorded runtime to exit before acquiring the lock", async () => {
+    const lockPath = await createLockPath();
+    await fs.mkdir(path.dirname(lockPath), { recursive: true });
+    await fs.writeFile(lockPath, JSON.stringify({
+      pid: 12345,
+      projectRoot: "/tmp/shutting-down-runtime",
+      startedAt: "2026-07-05T00:00:00.000Z",
+    }));
+
+    let aliveChecks = 0;
+    const release = await acquireRuntimeProcessLock({
+      lockPath,
+      projectRoot: process.cwd(),
+      isProcessAlive: (pid) => {
+        aliveChecks += 1;
+        return pid === 12345 && aliveChecks < 2;
+      },
+      acquireTimeoutMs: 500,
+      retryIntervalMs: 1,
+    });
+
+    const raw = await fs.readFile(lockPath, "utf8");
+    expect(JSON.parse(raw).pid).toBe(process.pid);
+
+    await release();
   });
 
   it("replaces a stale lock when the recorded pid is gone", async () => {

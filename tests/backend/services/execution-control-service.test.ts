@@ -311,10 +311,18 @@ describe("ExecutionControlService", () => {
       sprintId: sprint.id,
       status: "running",
     });
+    executionRepository.acquireLease({
+      scopeType: "sprint",
+      scopeId: sprint.id,
+      ownerKey: "sprint_orchestrator:test",
+      leaseToken: "lease-1",
+      expiresAt: new Date(Date.now() + 60_000).toISOString(),
+    });
 
     const paused = service.pauseSprintRun(sprintRun.id);
 
     expect(paused.status).toBe("paused");
+    expect(executionRepository.getLease("sprint", sprint.id)).toBeNull();
     expect(executionRepository.listSprintRunEvents(sprintRun.id)[0]).toMatchObject({
       eventType: "sprint_pause_requested",
       originator: "user",
@@ -441,6 +449,18 @@ describe("ExecutionControlService", () => {
       sourceRef: "/workspace/reaper-project",
     });
     const sprint = projectRepository.createSprint(project.id, { name: "Reaper Sprint", number: 9 });
+    const mergeTask = projectRepository.createTask(project.id, {
+      sprintId: sprint.id,
+      title: "Merge task",
+    });
+    const handoffTask = projectRepository.createTask(project.id, {
+      sprintId: sprint.id,
+      title: "Merge handoff task",
+    });
+    const unrelatedHumanTask = projectRepository.createTask(project.id, {
+      sprintId: sprint.id,
+      title: "Unrelated human task",
+    });
     const sprintRun = executionRepository.createSprintRun({
       projectId: project.id,
       sprintId: sprint.id,
@@ -450,6 +470,7 @@ describe("ExecutionControlService", () => {
       {
         projectId: project.id,
         sprintId: sprint.id,
+        taskId: mergeTask.id,
         sprintRunId: sprintRun.id,
         attentionType: "merge_required",
         severity: "medium",
@@ -460,11 +481,24 @@ describe("ExecutionControlService", () => {
       {
         projectId: project.id,
         sprintId: sprint.id,
+        taskId: handoffTask.id,
         sprintRunId: sprintRun.id,
         attentionType: "human_escalation_required",
         severity: "high",
         ownerType: "human",
-        title: "QA could not verify T2",
+        title: "Merge conflict handoff for T2",
+        summaryMarkdown: "Needs a human.",
+        payload: { sourceAttentionType: "merge_conflict" },
+      },
+      {
+        projectId: project.id,
+        sprintId: sprint.id,
+        taskId: unrelatedHumanTask.id,
+        sprintRunId: sprintRun.id,
+        attentionType: "human_escalation_required",
+        severity: "high",
+        ownerType: "human",
+        title: "QA could not verify T3",
         summaryMarkdown: "Needs a human.",
       },
     ]);
@@ -472,8 +506,9 @@ describe("ExecutionControlService", () => {
     await service.cancelSprintRun(sprintRun.id);
 
     const open = projectAttentionRepository.listProjectAttentionItems(project.id, { statuses: ["open", "claimed"] });
-    // The transient merge escalation is reaped; the human escalation is left alone.
+    // The transient merge escalation and its human handoff are reaped; unrelated human escalation is left alone.
     expect(open.map((item) => item.attentionType)).toEqual(["human_escalation_required"]);
+    expect(open[0]?.title).toBe("QA could not verify T3");
   });
 
   it("retries terminal dispatches through the task rerun service", async () => {

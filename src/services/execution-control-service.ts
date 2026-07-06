@@ -12,6 +12,7 @@ import type { Logger } from "../shared/logging/logger.js";
 import type { ProjectAttentionType } from "../contracts/project-attention-types.js";
 import { resolveLateBoundDependency, type LateBoundOrValue } from "../shared/late-bound-dependency.js";
 import type { SprintRunLifecycleService } from "./sprint-run-lifecycle-service.js";
+import { resolveTransientMergeAttentionHandoffs } from "../domain/workers/project-attention-cleanup.js";
 
 const RECOMPUTED_SPRINT_ATTENTION_TYPES: ProjectAttentionType[] = [
   "manual_attention",
@@ -103,6 +104,7 @@ export class ExecutionControlService {
       status: "paused",
       lastHeartbeatAt: now,
     });
+    this.deps.sprintRunLifecycleService.releaseSprintLease(sprintRun.sprintId);
     this.deps.executionRepository.appendSprintRunEvent(sprintRunId, "sprint_pause_requested", "user", {
       requestedBy: "dashboard",
     }, {
@@ -132,6 +134,7 @@ export class ExecutionControlService {
     });
 
     const now = new Date().toISOString();
+    this.deps.sprintRunLifecycleService.releaseSprintLease(sprintRun.sprintId);
     const resumedRun = this.deps.sprintRunLifecycleService.updateRun(sprintRunId, {
       status: "running",
       startedAt: sprintRun.startedAt ?? now,
@@ -205,6 +208,12 @@ export class ExecutionControlService {
         projectId,
         sprintRunId,
         ["merge_required", "merge_conflict", "manual_attention"],
+        reason,
+      );
+      resolveTransientMergeAttentionHandoffs(
+        this.deps.projectAttentionService,
+        projectId,
+        sprintRunId,
         reason,
       );
     } catch {

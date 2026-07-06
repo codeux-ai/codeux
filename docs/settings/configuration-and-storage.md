@@ -17,6 +17,7 @@ Additional startup config:
 - `JULES_DOCKER_HOST_WORKSPACE_ROOT` (optional path mapping for Docker-in-Docker/remote-daemon setups)
 - `JULES_DOCKER_HOST_HOME_ROOT` (optional home-dir path mapping for Docker credential mounts)
 - `CODE_UX_GIT_FETCH_TIMEOUT_MS` (optional timeout for mandatory Git remote refreshes; default `120000`, clamped between 10 seconds and 10 minutes)
+- `CODE_UX_RUNTIME_LOCK_WAIT_MS` (optional; defaults to `30000`. Startup waits this long for an existing project-manager runtime lock holder to exit before rejecting the new process.)
 - `CODE_UX_ALLOW_MULTIPLE_RUNTIMES=1` (diagnostic only; bypasses the project-manager PID lock that normally prevents duplicate local runtimes from driving the same Docker/session state)
 
 External hint env keys used for dashboard import:

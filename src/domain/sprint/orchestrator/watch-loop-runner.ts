@@ -1,6 +1,6 @@
 import { runCompletionStep } from "../../../sprint/steps/completion-step.js";
 import type { SprintAgentArgs } from "../../../sprint/sprint-types.js";
-import { deleteBranchLocally, getCheckedOutRef, mergeBranchLocally, restoreCheckedOutRef, type LocalMergeResult } from "../../../infrastructure/git/local-merge.js";
+import { deleteBranchLocally, mergeBranchLocallyInTemporaryWorktree, type LocalMergeResult } from "../../../infrastructure/git/local-merge.js";
 import { determineNextState, WatchLoopState } from "./watch-loop-state-machine.js";
 import type { Subtask,
   AutomationInterventionsSettings,
@@ -18,6 +18,7 @@ import type { QualityAssuranceService } from "../../../services/quality-assuranc
 import type { Logger } from "../../../shared/logging/logger.js";
 import type { ExecutionRepository } from "../../../repositories/execution-repository.js";
 import type { ProjectAttentionService } from "../../workers/project-attention-service.js";
+import { resolveTransientMergeAttentionHandoffs } from "../../workers/project-attention-cleanup.js";
 import type { CycleRunner } from "./cycle-runner.js";
 import type { SprintExecutionContext } from "../../../services/sprint-execution-state-service.js";
 import type { MergeFeedbackResult } from "../ci/main-merge-gate.js";
@@ -716,18 +717,13 @@ export class WatchLoopRunner {
 
         if (githubMode === "LOCAL") {
           this.deps.logger.info(`LOCAL Mode: Merging feature branch ${defaultFeatureBranch} into default branch ${defaultBranch}`);
-          // Restore whichever branch the user had checked out — the host repo is their
-          // working directory, so finalizing the sprint must not silently park it on the
-          // default branch.
-          const originalRef = await getCheckedOutRef(repoPath);
-          let restoreSucceeded = true;
           let mainMerge: LocalMergeResult = {
             ok: false,
             conflict: false,
             error: "Local merge did not run.",
           };
           try {
-            mainMerge = await mergeBranchLocally({
+            mainMerge = await mergeBranchLocallyInTemporaryWorktree({
               repoPath,
               targetBranch: defaultBranch,
               sourceBranch: defaultFeatureBranch,
@@ -739,16 +735,6 @@ export class WatchLoopRunner {
               conflict: false,
               error: err instanceof Error ? err.message : String(err),
             };
-          } finally {
-            restoreSucceeded = await restoreCheckedOutRef(repoPath, originalRef);
-            if (!restoreSucceeded) {
-              this.deps.logger.warn("LOCAL Mode: Failed to restore original checked-out ref after final merge attempt", {
-                repoPath,
-                originalRef: originalRef?.ref ?? null,
-                detached: originalRef?.detached ?? false,
-                sprintRunId,
-              });
-            }
           }
 
           if (mainMerge.ok) {
@@ -760,17 +746,11 @@ export class WatchLoopRunner {
               projectId: scopedExecutionContext.project.id,
               sprintId: scopedExecutionContext.sprint.id,
             }).git.deleteMergedBranches;
-            if (deleteMergedBranches && restoreSucceeded) {
+            if (deleteMergedBranches) {
               const deleted = await deleteBranchLocally({ repoPath, branch: defaultFeatureBranch });
               if (deleted) {
                 this.deps.logger.info(`LOCAL Mode: Deleted merged feature branch ${defaultFeatureBranch}`);
               }
-            } else if (deleteMergedBranches && !restoreSucceeded) {
-              this.deps.logger.warn("LOCAL Mode: Skipped deleting merged feature branch because the original checkout could not be restored", {
-                repoPath,
-                branch: defaultFeatureBranch,
-                sprintRunId,
-              });
             }
             resolveMainMergeAttentionItems(
               this.deps.projectAttentionService,
@@ -901,6 +881,12 @@ export class WatchLoopRunner {
           scopedExecutionContext.project.id,
           sprintRunId,
           ["merge_required", "merge_conflict"],
+          "sprint_completed",
+        );
+        resolveTransientMergeAttentionHandoffs(
+          this.deps.projectAttentionService,
+          scopedExecutionContext.project.id,
+          sprintRunId,
           "sprint_completed",
         );
         this.triggerMemoryRemediation({

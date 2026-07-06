@@ -79,6 +79,19 @@ export function isMainMergeAttentionItem(item: {
   return isMainMergeConflict || isMainMergeCiFix || isMainMergeHandoff;
 }
 
+function collectHumanEscalatedMergeConflictTaskIds(items: ProjectAttentionItemRecord[]): Set<string> {
+  return new Set(
+    items
+      .filter((item) => (
+        item.ownerType === "human"
+        && (item.attentionType === "human_escalation_required" || item.attentionType === "dashboard_reply_required")
+        && item.payload?.sourceAttentionType === "merge_conflict"
+      ))
+      .map((item) => item.taskId?.trim())
+      .filter((taskId): taskId is string => Boolean(taskId)),
+  );
+}
+
 export function partitionSubtasksByStatus(subtasks: Subtask[]): {
   tasksByStatus: Map<string, Subtask[]>;
   statusCounts: Record<string, number>;
@@ -219,6 +232,11 @@ export function evaluateSprintTransitionState(params: SprintTransitionStateParam
     .map(({ task }) => task);
   const activeWorkerAttentionItems = activeProjectAttentionItems.filter((item) => item.ownerType === "worker");
   const activeWorkerMergeConflictAttention = activeWorkerAttentionItems.some((item) => item.attentionType === "merge_conflict");
+  const humanEscalatedMergeConflictTaskIds = collectHumanEscalatedMergeConflictTaskIds(activeProjectAttentionItems);
+  const workerMergeConflictTasksStillActive = workerEscalatedMergeConflictTasks.filter((task) => {
+    const taskId = task.record_id?.trim();
+    return !taskId || !humanEscalatedMergeConflictTaskIds.has(taskId);
+  });
   const activeMainMergeAttentionItems = activeProjectAttentionItems.filter((item) => (
     item.sprintRunId === sprintRunId && isMainMergeAttentionItem(item)
   ));
@@ -229,7 +247,7 @@ export function evaluateSprintTransitionState(params: SprintTransitionStateParam
     && quotaTasks.length === 0
     && qaPendingTasks.length === 0;
   const needsManualMerge = manualMergeTasks.length > 0;
-  const waitingOnWorkerAttention = workerEscalatedMergeConflictTasks.length > 0
+  const waitingOnWorkerAttention = workerMergeConflictTasksStillActive.length > 0
     || activeWorkerMergeConflictAttention
     || activeWorkerAttentionItems.length > 0;
   const allFinished = allTerminal || ((needsManualMerge || noMoreActionPossible) && !waitingOnWorkerAttention);

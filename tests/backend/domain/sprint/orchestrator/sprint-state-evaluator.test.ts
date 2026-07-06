@@ -115,6 +115,33 @@ describe("evaluateSprintRunState", () => {
     expect(result.waitingOnWorkerAttention).toBe(true);
   });
 
+  it("does not wait on worker attention after a merge conflict escalates to a human", () => {
+    const escalatedTask = createDummySubtask({
+      record_id: "task-record-1",
+      status: "CODING_COMPLETED",
+      merge_indicator: "MERGE_CONFLICT",
+      worker_branch: "task/one",
+    });
+    const result = evaluateSprintRunState({
+      subtasks: [escalatedTask],
+      manualMergeTasks: [],
+      workerEscalatedMergeConflictTasks: [escalatedTask],
+      activeProjectAttentionItems: [
+        createDummyAttentionItem({
+          taskId: "task-record-1",
+          ownerType: "human",
+          attentionType: "human_escalation_required",
+          payload: { sourceAttentionType: "merge_conflict" },
+        }),
+      ],
+      sprintRunId: "run-1",
+    });
+
+    expect(result.noMoreActionPossible).toBe(true);
+    expect(result.waitingOnWorkerAttention).toBe(false);
+    expect(result.allFinished).toBe(true);
+  });
+
   it("waitingOnWorkerAttention is true when active worker attention items are present", () => {
     const result = evaluateSprintRunState({
       subtasks: [],

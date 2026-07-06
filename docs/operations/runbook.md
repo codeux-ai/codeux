@@ -13,7 +13,7 @@ Database maintenance runs automatically during normal startup. Operators can exp
 1. Confirm API key source is available (recommended, but startup is allowed without key).
 2. Start server (`npm run dev` or `npm start`).
    - `npm run dev` runs the TypeScript entrypoint through Node's `ts-node` ESM register hook.
-   - Code UX writes a project-manager PID lock under the home `.code-ux/runtime/` directory. If another recorded Code UX runtime process is still alive, startup fails fast instead of launching a second scheduler against the same Docker/runtime state. Set `CODE_UX_ALLOW_MULTIPLE_RUNTIMES=1` only for targeted diagnostics.
+   - Code UX writes a project-manager PID lock under the home `.code-ux/runtime/` directory. If another recorded Code UX runtime process is still alive, startup waits briefly for that process to finish shutdown before failing, instead of launching a second scheduler against the same Docker/runtime state. Tune the wait with `CODE_UX_RUNTIME_LOCK_WAIT_MS` when shutdown is expected to be slow. Set `CODE_UX_ALLOW_MULTIPLE_RUNTIMES=1` only for targeted diagnostics.
    - Dashboard startup launches a best-effort background prewarm for the pinned provider-login base image. Startup does not wait for Docker; if Docker is unavailable or the build fails, the login modal retries image preparation on demand and can still fall back to the raw base image.
 3. Open dashboard and verify settings.
 4. Confirm `/api/status` and `/api/git-status` are responding.
