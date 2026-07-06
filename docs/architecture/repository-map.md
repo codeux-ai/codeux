@@ -53,6 +53,8 @@ backup files appear there.
   - Focused runtime-event live snapshot slice that merges bounded project-recent, selected-sprint, and expanded-run event rows by event ID without changing the dashboard response contract.
   - `execution/execution-stats-types.ts`
   - Dedicated module for stats query types to decouple queries from the main execution repository.
+  - `project-runtime/run-event-writes.ts`
+  - Focused write module for legacy runtime status-sync task runs and task-run events, including candidate run matching, status-sync event signatures, denormalized `task_run_events.project_id`, and source event key deduplication.
   - `settings-repository.ts`
   - `settings-defaults.ts`
   - `settings-sanitizer.ts`
