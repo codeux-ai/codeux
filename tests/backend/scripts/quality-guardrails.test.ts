@@ -334,13 +334,44 @@ export default defineConfig({
           lines: 80,
         },
       },
+      include: ["src/**/*.ts"],
+      exclude: [
+        "src/electron/**",
+      ],
     },
   },
 });
 `;
 
+  function expectActionableCoverageOutput(violation: {
+    match: string;
+    remediation: string;
+  }, expected: {
+    configured: string;
+    required: string;
+  }): void {
+    expect(violation.match).toContain(expected.configured);
+    expect(violation.match).toContain(expected.required);
+    expect(violation.remediation).toContain("pnpm run test:backend:coverage");
+  }
+
   it("accepts the current global and activity-cache-service coverage thresholds", () => {
     expect(guardrails.findCoverageThresholdViolations(passingConfig)).toEqual([]);
+  });
+
+  it("reports missing src TypeScript coverage include observability", () => {
+    const violations = guardrails.findCoverageThresholdViolations(
+      passingConfig.replace('include: ["src/**/*.ts"],', 'include: ["tests/**/*.ts"],'),
+    );
+
+    expect(violations).toHaveLength(1);
+    expect(violations[0]).toMatchObject({
+      pattern: "coverage include src TypeScript",
+    });
+    expectActionableCoverageOutput(violations[0], {
+      configured: '["tests/**/*.ts"]',
+      required: '"src/**/*.ts"',
+    });
   });
 
   it("reports lowered global coverage thresholds", () => {
@@ -358,12 +389,22 @@ export default defineConfig({
       "coverage threshold branches",
       "coverage threshold statements",
     ]);
-    expect(violations.map((violation) => violation.match)).toEqual([
-      "lines: 77.3",
-      "functions: 71.4",
-      "branches: 66",
-      "statements: 75.9",
-    ]);
+    expectActionableCoverageOutput(violations[0], {
+      configured: "configured 77.3",
+      required: "required >= 77.4",
+    });
+    expectActionableCoverageOutput(violations[1], {
+      configured: "configured 71.4",
+      required: "required >= 71.5",
+    });
+    expectActionableCoverageOutput(violations[2], {
+      configured: "configured 66",
+      required: "required >= 66.1",
+    });
+    expectActionableCoverageOutput(violations[3], {
+      configured: "configured 75.9",
+      required: "required >= 76",
+    });
   });
 
   it("reports a missing activity-cache-service file threshold", () => {
@@ -377,7 +418,10 @@ export default defineConfig({
     expect(violations).toHaveLength(1);
     expect(violations[0]).toMatchObject({
       pattern: "activity-cache-service coverage threshold",
-      match: "src/server/activity-cache-service.ts: missing",
+    });
+    expectActionableCoverageOutput(violations[0], {
+      configured: "configured missing",
+      required: "required >= 80",
     });
   });
 
@@ -389,7 +433,40 @@ export default defineConfig({
     expect(violations).toHaveLength(1);
     expect(violations[0]).toMatchObject({
       pattern: "activity-cache-service coverage threshold",
-      match: "src/server/activity-cache-service.ts.lines: 79",
     });
+    expectActionableCoverageOutput(violations[0], {
+      configured: "configured 79",
+      required: "required >= 80",
+    });
+  });
+
+  it("reports malformed activity-cache-service threshold entries", () => {
+    const violations = guardrails.findCoverageThresholdViolations(
+      passingConfig.replace(`"src/server/activity-cache-service.ts": {
+          lines: 80,
+        }`, `"src/server/activity-cache-service.ts": 80`),
+    );
+
+    expect(violations).toHaveLength(1);
+    expect(violations[0]).toMatchObject({
+      pattern: "activity-cache-service coverage threshold",
+    });
+    expectActionableCoverageOutput(violations[0], {
+      configured: "configured malformed",
+      required: "required >= 80",
+    });
+  });
+
+  it("reports activity-cache-service coverage exclusions", () => {
+    const violations = guardrails.findCoverageThresholdViolations(
+      passingConfig.replace('"src/electron/**",', '"src/server/activity-cache-service.ts",'),
+    );
+
+    expect(violations).toHaveLength(1);
+    expect(violations[0]).toMatchObject({
+      pattern: "activity-cache-service coverage exclusion",
+    });
+    expect(violations[0].match).toContain('"src/server/activity-cache-service.ts"');
+    expect(violations[0].remediation).toContain("pnpm run test:backend:coverage");
   });
 });

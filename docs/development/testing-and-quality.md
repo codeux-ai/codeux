@@ -61,7 +61,12 @@ pnpm run ci
 `pnpm run ci` starts with `pnpm run quality:guardrails`, then runs audit, lint, backend coverage, dashboard tests, and build. Run `pnpm run quality:guardrails` directly after changes that affect shared implementation structure, large modules, duplicate logic, dependency factory wiring, realtime snapshot persistence, optimistic task insertion, or the guardrail script itself. Treat blocking guardrail output as CI-equivalent; advisory oversized-file and broad-`any` reports identify cleanup targets but do not fail the command.
 
 GitHub Actions runs the same signals as separate jobs so a vulnerability finding does not obscure compile, test, or build failures. The `Security Audit` job runs `pnpm run audit` independently, while `Typecheck & Lint`, `Backend Tests & Coverage`, `Dashboard Tests`, and `Build` run the repository quality, TypeScript, Vitest, and bundle checks on Node 22 with pnpm 10.33.0.
-The quality guardrail script also audits `vitest.config.ts` directly. It fails if any global coverage threshold drops below the locked floors (`lines: 77.4`, `functions: 71.5`, `branches: 66.1`, `statements: 76.0`) or if the `src/server/activity-cache-service.ts` line threshold is missing or below 80%. This check is file-based and deterministic; it does not run Vitest coverage.
+The quality guardrail script also audits `vitest.config.ts` directly. It fails if `coverage.include` stops observing `src/**/*.ts`, if any global coverage threshold drops below the locked floors (`lines: 77.4`, `functions: 71.5`, `branches: 66.1`, `statements: 76.0`), if the `src/server/activity-cache-service.ts` line threshold is missing, malformed, below 80%, or if that file is excluded from coverage observability. This check is file-based and deterministic; it does not run Vitest coverage internally. Guardrail failures name the exact configured value, required minimum, and remediation command. After intentionally raising or restoring thresholds, run:
+
+```bash
+pnpm run quality:guardrails
+pnpm run test:backend:coverage
+```
 
 - Run Playwright E2E browser tests
 ```bash
@@ -243,7 +248,7 @@ pnpm run test:dashboard -- tests/dashboard/accessibility/dashboard-quality-regre
 ## Change-Specific Validation
 
 - Quality guardrail changes: run `pnpm run quality:guardrails`, the focused guardrail tests under `tests/backend/scripts/quality-guardrails.test.ts`, `pnpm run lint`, and `pnpm run build` if package scripts or shared TypeScript imports changed.
-- Coverage threshold changes: run `pnpm run quality:guardrails`, `pnpm run test:backend -- tests/backend/scripts/quality-guardrails.test.ts`, `pnpm run lint`, and the relevant coverage command (`pnpm run test:coverage` or `pnpm run test:backend:coverage`) before proposing an increase. Never lower the global threshold floors or the `src/server/activity-cache-service.ts` 80% line gate.
+- Coverage threshold changes: run `pnpm run quality:guardrails`, `pnpm run test:backend -- tests/backend/scripts/quality-guardrails.test.ts tests/backend/docs/testing-docs-commands.test.ts`, `pnpm run lint`, and the relevant coverage command (`pnpm run test:coverage` or `pnpm run test:backend:coverage`) before proposing an increase. Never lower the global threshold floors, remove `coverage.include: ["src/**/*.ts"]`, exclude `src/server/activity-cache-service.ts`, or lower the activity-cache-service 80% line gate.
 - Execution snapshot or Live runtime performance changes: run focused backend repository/service tests for the changed query or websocket path, focused dashboard hook/view-model tests for stabilization behavior, `pnpm run quality:guardrails`, `pnpm run lint`, and `pnpm run build`.
 - Backend-only behavior changes: run the narrowest relevant backend tests first, then `pnpm run test:backend`, `pnpm run lint`, and `pnpm run build` when contracts, repositories, scripts, or app startup paths changed.
 - Dashboard-only behavior changes: run the narrowest relevant dashboard tests first, then `pnpm run test:dashboard`, `pnpm run typecheck:dashboard`, and `pnpm run build` for route-level, resource, accessibility, or user-facing changes.
