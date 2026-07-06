@@ -14,10 +14,10 @@ While Code UX trusts the developer and any connected systems, several specific p
 
 ### Dashboard & API Access
 - **Trusted-Host Enforcement:** The dashboard strictly validates `Host` and `X-Forwarded-Host` headers against the configured allowed hosts to prevent host header injection attacks.
-- **Origin/Fetch-Metadata Checks:** Dashboard endpoints employ strict `Sec-Fetch-Site` checks and explicit `Origin` validation. API modifications from external, untrusted browser origins are rejected to prevent CSRF vectors.
+- **Origin/Fetch-Metadata Checks:** Dashboard endpoints employ strict `Sec-Fetch-Site` checks and explicit `Origin` validation (`isHostileBrowserOrigin`). API modifications from external, untrusted browser origins are rejected to prevent CSRF vectors.
 - **Strict Parsing:** Incoming request payloads are validated using strict parsing schemas to reject malformed data, unexpected types, or excessive sizes before processing.
 - **Rate Limiting:** Critical API endpoints apply rate limiting to prevent abuse and mitigate denial-of-service risks.
-- **Security Headers:** HTTP responses enforce rigorous security headers (e.g., `X-Content-Type-Options: nosniff`, restrictive `Content-Security-Policy`, and explicit frame-ancestor rules) to protect the dashboard context.
+- **Security Headers:** HTTP responses enforce rigorous security headers (via `applyDashboardSecurityHeaders`, e.g., `X-Content-Type-Options: nosniff`, restrictive `Content-Security-Policy`, and explicit frame-ancestor rules) to protect the dashboard context.
 - **Websocket Origin Checks:** The core WebSocket connections similarly validate origins to prevent blind websocket hijacking from hostile origins.
 - **Local Binding Default:** The dashboard binds exclusively to the loopback interface (`127.0.0.1`) by default.
 
@@ -35,7 +35,7 @@ While Code UX trusts the developer and any connected systems, several specific p
 - **Preview CORS Compatibility:** Preview-host traffic answers CORS preflights and overrides upstream `Access-Control-*` headers at the proxy boundary. The dashboard API origin keeps its CSRF guard; only preview-host origins get permissive local-app CORS behavior.
 
 ### Redaction
-- **Log and Output Filtering:** Internal API keys, credentials, and sensitive configurations are actively scrubbed and redacted from application logs, debug outputs, and exported execution traces.
+- **Log and Output Filtering:** Internal API keys, credentials, and sensitive configurations are explicitly scrubbed by filtering functions (`redactMetadata`) from application logs, debug outputs, and exported execution traces.
 - **Settings Secret Inputs:** Dashboard settings fields that store provider API keys, Git host tokens, Jira API tokens, and external embedding API keys render as masked secret inputs by default. Operators must explicitly use the reveal control to inspect a value.
 - **Docker Secret Transport:** Provider and preview Docker launches write selected host/provider environment variables to temporary `0600` env-files and pass those files via `--env-file`. This keeps API keys and Git tokens out of the host `docker run` argv visible through process listings while preserving the same container environment.
 
