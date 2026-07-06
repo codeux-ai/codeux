@@ -20,9 +20,9 @@ If you are looking for narrative explanations, the [User Guide](../user/index.md
 
 ## Versioning
 
-This reference tracks the **0.8.x** release line. Breaking changes follow semver — minor versions add tools / fields without removing them, major versions may remove or restructure.
+This reference tracks the current release line. Breaking changes follow semver — minor versions add tools / fields without removing them, major versions may remove or restructure.
 
-The MCP server name is `code-ux` and version is `0.8.x`. Capabilities advertised at `initialize`: `tools`, `resources`, `prompts`.
+The MCP server name is `code-ux` and the version matches the installed package. Capabilities advertised at `initialize`: `tools`, `resources`, `prompts`.
 
 ## Stable vs experimental
 
