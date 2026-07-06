@@ -6,12 +6,15 @@ import { DatabaseSync } from "node:sqlite";
 import { SettingsRepository } from "../../../src/repositories/settings-repository.js";
 
 const tempDirs: string[] = [];
+const openRepos: SettingsRepository[] = [];
 
 const createRepo = async (): Promise<{ repo: SettingsRepository; dbPath: string; dir: string }> => {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), "jules-settings-"));
   tempDirs.push(dir);
   const dbPath = path.join(dir, "settings.db");
-  return { repo: new SettingsRepository(dbPath), dbPath, dir };
+  const repo = new SettingsRepository(dbPath);
+  openRepos.push(repo);
+  return { repo, dbPath, dir };
 };
 
 afterEach(async () => {
@@ -19,6 +22,14 @@ afterEach(async () => {
   tempDirs.push(cacheResetDir);
   const repo = new SettingsRepository(path.join(cacheResetDir, "settings.db"));
   repo.resetAllData();
+  repo.close();
+  for (const openRepo of openRepos.splice(0).reverse()) {
+    try {
+      openRepo.close();
+    } catch {
+      // Already closed by the test.
+    }
+  }
   await Promise.all(tempDirs.splice(0).map((dir) => fs.rm(dir, { recursive: true, force: true })));
 });
 
@@ -278,6 +289,65 @@ describe("SettingsRepository", () => {
     expect(effectiveProject.sources["automationLevel"]).toBe("system");
     expect(effectiveProject.settings.git.defaultBranch).toBe("develop");
     expect(effectiveProject.sources["git.defaultBranch"]).toBe("project");
+  });
+
+  it("resolves partial persisted scoped settings while preserving default fallbacks", async () => {
+    const { repo } = await createRepo();
+    const now = new Date().toISOString();
+    const db = repo.getDatabase();
+
+    db.prepare(`
+      INSERT INTO system_settings (id, payload, updated_at)
+      VALUES (1, ?, ?)
+    `).run(JSON.stringify({
+      runtime: {
+        dashboardPort: 4555,
+      },
+      defaults: {
+        git: {
+          defaultBranch: "develop",
+        },
+        agents: {
+          qualityAssurance: {
+            taskCompletion: {
+              enabled: false,
+            },
+          },
+        },
+      },
+    }), now);
+    db.prepare(`
+      INSERT INTO project_settings (project_id, payload, updated_at)
+      VALUES (?, ?, ?)
+    `).run("project-partial", JSON.stringify({
+      git: {
+        featureBranchPrefix: "work/",
+      },
+    }), now);
+    db.prepare(`
+      INSERT INTO sprint_settings (sprint_id, payload, updated_at)
+      VALUES (?, ?, ?)
+    `).run("sprint-partial", JSON.stringify({
+      sprintLoopSteps: {
+        watchLoop: false,
+      },
+    }), now);
+
+    const effectiveProject = repo.resolveProjectDashboardSettings("project-partial");
+    expect(effectiveProject.settings.dashboardPort).toBe(4555);
+    expect(effectiveProject.settings.consoleLogLevel).toBe("info");
+    expect(effectiveProject.settings.git.defaultBranch).toBe("develop");
+    expect(effectiveProject.settings.git.featureBranchPrefix).toBe("work/");
+    expect(effectiveProject.settings.agents.qualityAssurance.taskCompletion.enabled).toBe(false);
+    expect(effectiveProject.settings.agents.qualityAssurance.maxTaskReviewRuns).toBe(3);
+    expect(effectiveProject.sources["git.featureBranchPrefix"]).toBe("project");
+
+    const effectiveSprint = repo.resolveSprintDashboardSettings("project-partial", "sprint-partial");
+    expect(effectiveSprint.settings.sprintLoopSteps.watchLoop).toBe(false);
+    expect(effectiveSprint.settings.sprintLoopSteps.watchLoopIntervalSeconds).toBe(10);
+    expect(effectiveSprint.settings.git.defaultBranch).toBe("develop");
+    expect(effectiveSprint.settings.git.featureBranchPrefix).toBe("work/");
+    expect(effectiveSprint.sources["sprintLoopSteps.watchLoop"]).toBe("sprint");
   });
 
   it("resets all scoped settings back to defaults", async () => {
@@ -574,6 +644,78 @@ describe("SettingsRepository", () => {
     const afterMutation = resolver.resolveProjectDashboardSettings("project-1");
     expect(afterMutation).not.toBe(first);
     expect(afterMutation.settings.git.defaultBranch).toBe("develop");
+  });
+
+  it("invalidates effective settings caches after system, project, and sprint resets or mutations", async () => {
+    const { repo } = await createRepo();
+    const resolver = repo.createScopedResolver();
+
+    repo.saveSystemSettings({
+      ...repo.getSystemSettings(),
+      defaults: {
+        ...repo.getSystemSettings().defaults,
+        git: {
+          ...repo.getSystemSettings().defaults.git,
+          defaultBranch: "develop",
+        },
+      },
+    });
+    repo.saveProjectSettings("project-1", {
+      git: {
+        featureBranchPrefix: "work/",
+      },
+    });
+    repo.saveSprintSettings("sprint-1", repo.getProjectResolvedSettings("project-1"), {
+      sprintLoopSteps: {
+        watchLoop: false,
+      },
+    });
+
+    const first = resolver.resolveSprintDashboardSettings("project-1", "sprint-1");
+    expect(first.settings.git.defaultBranch).toBe("develop");
+    expect(first.settings.git.featureBranchPrefix).toBe("work/");
+    expect(first.settings.sprintLoopSteps.watchLoop).toBe(false);
+
+    repo.saveSystemSettings({
+      ...repo.getSystemSettings(),
+      defaults: {
+        ...repo.getSystemSettings().defaults,
+        git: {
+          ...repo.getSystemSettings().defaults.git,
+          defaultBranch: "release",
+        },
+      },
+    });
+
+    const afterSystemMutation = resolver.resolveSprintDashboardSettings("project-1", "sprint-1");
+    expect(afterSystemMutation).not.toBe(first);
+    expect(afterSystemMutation.settings.git.defaultBranch).toBe("release");
+    expect(afterSystemMutation.settings.git.featureBranchPrefix).toBe("work/");
+
+    repo.resetProjectSettings("project-1");
+
+    const afterProjectReset = resolver.resolveSprintDashboardSettings("project-1", "sprint-1");
+    expect(afterProjectReset).not.toBe(afterSystemMutation);
+    expect(afterProjectReset.settings.git.featureBranchPrefix).toBe("feature/");
+    expect(afterProjectReset.settings.sprintLoopSteps.watchLoop).toBe(false);
+
+    repo.saveSprintSettings("sprint-1", repo.getProjectResolvedSettings("project-1"), {
+      sprintLoopSteps: {
+        watchLoopIntervalSeconds: 45,
+      },
+    });
+
+    const afterSprintMutation = resolver.resolveSprintDashboardSettings("project-1", "sprint-1");
+    expect(afterSprintMutation).not.toBe(afterProjectReset);
+    expect(afterSprintMutation.settings.sprintLoopSteps.watchLoop).toBe(true);
+    expect(afterSprintMutation.settings.sprintLoopSteps.watchLoopIntervalSeconds).toBe(45);
+
+    repo.resetAllData();
+
+    const afterSystemReset = resolver.resolveSprintDashboardSettings("project-1", "sprint-1");
+    expect(afterSystemReset).not.toBe(afterSprintMutation);
+    expect(afterSystemReset.settings.git.defaultBranch).toBe("main");
+    expect(afterSystemReset.settings.sprintLoopSteps.watchLoopIntervalSeconds).toBe(10);
   });
 
   it("resolves default autoApprovePlan as true, and preserves explicit false", async () => {
