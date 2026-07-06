@@ -4,6 +4,7 @@ import {
   sanitizeAgentMcpAccess,
   resolveAgentMcpRuntime,
   mergeCodeUxToolToggles,
+  toAgentCodeUxToolAccess,
 } from "../../../src/services/agent-mcp-access.js";
 import type { CustomMcpServer, McpToolToggle } from "../../../src/contracts/app-types.js";
 import type { McpConnectionInfo } from "../../../src/contracts/mcp-connection-types.js";
@@ -97,5 +98,29 @@ describe("mergeCodeUxToolToggles", () => {
     const merged = mergeCodeUxToolToggles(base, [{ name: "manage_tasks", enabled: false, isInternal: true }]);
     expect(merged.find((t) => t.name === "manage_tasks")?.enabled).toBe(false);
     expect(merged.find((t) => t.name === "manage_projects")?.enabled).toBe(true);
+  });
+
+  it("disables every Code UX tool when the agent policy disables Code UX", () => {
+    const merged = mergeCodeUxToolToggles(base, {
+      codeUxEnabled: false,
+      codeUxToolToggles: [{ name: "manage_projects", enabled: true, isInternal: true }],
+    });
+
+    expect(merged).toEqual([
+      { name: "manage_tasks", enabled: false, isInternal: true },
+      { name: "manage_projects", enabled: false, isInternal: true },
+    ]);
+  });
+
+  it("maps agent MCP access to the router availability policy", () => {
+    const access = toAgentCodeUxToolAccess({
+      codeUxEnabled: true,
+      codeUxToolToggles: [{ name: "manage_tasks", enabled: false, isInternal: true }],
+    });
+
+    expect(access).toEqual({
+      codeUxEnabled: true,
+      codeUxToolToggles: [{ name: "manage_tasks", enabled: false, isInternal: true }],
+    });
   });
 });

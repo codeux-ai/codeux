@@ -1,6 +1,13 @@
 import type { CustomMcpServer, CustomMcpTransport, DashboardSettings, McpToolToggle, ProviderId } from "../contracts/app-types.js";
 import { TOOL_DEFINITIONS, type McpRuntimeRole, type ToolName } from "../contracts/mcp-tool-definitions.js";
 
+export interface AgentCodeUxToolAccess {
+  codeUxEnabled: boolean;
+  codeUxToolToggles: McpToolToggle[];
+}
+
+export type AgentToolAvailability = McpToolToggle[] | AgentCodeUxToolAccess | null | undefined;
+
 const CUSTOM_MCP_NAME_PATTERN = /^[a-zA-Z0-9_-]+$/;
 const VALID_PROVIDER_IDS: ReadonlySet<ProviderId> = new Set<ProviderId>([
   "jules", "gemini", "codex", "claude-code", "qwen-code", "opencode", "antigravity",
@@ -168,12 +175,18 @@ export const sanitizeMcpToolToggles = (value: unknown): McpToolToggle[] => {
 
 const getEnabledToolNameSet = (
   settings: DashboardSettings,
-  agentToolToggles?: McpToolToggle[] | null,
+  agentToolAccess?: AgentToolAvailability,
 ): Set<string> => {
   const enabledByName = new Map<string, boolean>();
   for (const tool of settings.mcpTools) {
     enabledByName.set(tool.name, tool.enabled);
   }
+  if (agentToolAccess && !Array.isArray(agentToolAccess) && !agentToolAccess.codeUxEnabled) {
+    return new Set();
+  }
+  const agentToolToggles = Array.isArray(agentToolAccess)
+    ? agentToolAccess
+    : agentToolAccess?.codeUxToolToggles;
   if (agentToolToggles) {
     for (const tool of agentToolToggles) {
       enabledByName.set(tool.name, tool.enabled);
@@ -196,9 +209,9 @@ const isToolVisibleForRuntimeRole = (
 export const getEnabledToolDefinitions = (
   settings: DashboardSettings,
   runtimeRole: McpRuntimeRole = "project_manager",
-  agentToolToggles?: McpToolToggle[] | null,
+  agentToolAccess?: AgentToolAvailability,
 ): Array<(typeof TOOL_DEFINITIONS)[number]> => {
-  const enabled = getEnabledToolNameSet(settings, agentToolToggles);
+  const enabled = getEnabledToolNameSet(settings, agentToolAccess);
   return TOOL_DEFINITIONS.filter((tool) => enabled.has(tool.name) && isToolVisibleForRuntimeRole(tool, runtimeRole)) as Array<(typeof TOOL_DEFINITIONS)[number]>;
 };
 
@@ -206,9 +219,9 @@ export const isToolEnabled = (
   settings: DashboardSettings,
   toolName: string,
   runtimeRole: McpRuntimeRole = "project_manager",
-  agentToolToggles?: McpToolToggle[] | null,
+  agentToolAccess?: AgentToolAvailability,
 ): toolName is ToolName => {
-  if (!getEnabledToolNameSet(settings, agentToolToggles).has(toolName)) {
+  if (!getEnabledToolNameSet(settings, agentToolAccess).has(toolName)) {
     return false;
   }
 

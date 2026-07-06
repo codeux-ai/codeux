@@ -1,7 +1,6 @@
 import * as fs from "fs";
 import * as path from "path";
 import os from "os";
-import { randomBytes } from "crypto";
 import { buildCandidatePaths } from "../shared/config/search-paths.js";
 import { readPort, readString } from "../shared/config/value-readers.js";
 import { getRelativeCodeUxPath } from "../shared/config/code-ux-paths.js";
@@ -98,8 +97,6 @@ const shouldDefaultMcpHttpHostForDockerDesktop = (): boolean => (
 const defaultMcpHttpHost = (): string => (
   shouldDefaultMcpHttpHostForDockerDesktop() ? "0.0.0.0" : "127.0.0.1"
 );
-
-const createMcpHttpAuthToken = (): string => randomBytes(32).toString("base64url");
 
 export const parseRuntimeRoleArg = (argv: string[]): AppConfig["runtimeRole"] => {
   void argv;
@@ -256,10 +253,7 @@ export const loadAppConfig = (argv: string[], projectRoot: string): AppConfig =>
     || process.env.MCP_HTTPS_AUTH_TOKEN?.trim()
     || process.env.MCP_HTTP_AUTH_TOKEN?.trim()
     || null;
-  const mcpHttpAuthToken = explicitMcpHttpAuthToken
-    || (mcpHttpEnabled && !isLoopbackHost(mcpHttpHost) && !explicitMcpHttpHost
-      ? createMcpHttpAuthToken()
-      : null);
+  const mcpHttpAuthToken = explicitMcpHttpAuthToken;
 
   if (mcpHttpEnabled && !isLoopbackHost(mcpHttpHost) && !mcpHttpAuthToken) {
     throw new Error("MCP HTTPS auth token is required when binding the MCP HTTPS server to a non-loopback host.");

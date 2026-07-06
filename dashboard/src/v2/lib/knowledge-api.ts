@@ -93,12 +93,18 @@ export const importKnowledgeFromProject = async (
     body: JSON.stringify(input),
   });
 
-export const deleteKnowledgeDocument = async (documentId: string): Promise<void> => {
-  await fetchJson<{ ok: boolean }>(`/api/knowledge/documents/${encode(documentId)}`, { method: "DELETE" });
+export const deleteKnowledgeDocument = async (projectId: string, documentId: string): Promise<void> => {
+  await fetchJson<{ ok: boolean }>(
+    `/api/projects/${encode(projectId)}/knowledge/documents/${encode(documentId)}`,
+    { method: "DELETE" },
+  );
 };
 
-export const reembedKnowledgeDocument = async (documentId: string): Promise<KnowledgeDocument> =>
-  fetchJson<KnowledgeDocument>(`/api/knowledge/documents/${encode(documentId)}/reembed`, { method: "POST" });
+export const reembedKnowledgeDocument = async (projectId: string, documentId: string): Promise<KnowledgeDocument> =>
+  fetchJson<KnowledgeDocument>(
+    `/api/projects/${encode(projectId)}/knowledge/documents/${encode(documentId)}/reembed`,
+    { method: "POST" },
+  );
 
 export const searchKnowledge = async (
   projectId: string,

@@ -43,6 +43,7 @@ import { ActivityCacheService } from "./activity-cache-service.js";
 import { registerMcpRequestHandlers } from "./mcp-request-router.js";
 import { TaskRerunService } from "../services/task-rerun-service.js";
 import { ExecutionControlService } from "../services/execution-control-service.js";
+import { toAgentCodeUxToolAccess } from "../services/agent-mcp-access.js";
 import { JulesSourceResolver } from "../services/jules-source-resolver.js";
 import { RuntimeCleanupService } from "../services/runtime-cleanup-service.js";
 import { RuntimeStartupRecoveryService } from "../services/runtime-startup-recovery-service.js";
@@ -435,8 +436,10 @@ export class CodeUxServer {
       managementToolHandler: this.managementToolHandler,
       getDashboardSettings: () => this.runtimeContext.dashboardSettings || DEFAULT_DASHBOARD_SETTINGS,
       getRuntimeRole: () => runtimeRole,
-      resolveAgentMcpToolToggles: (agentId) =>
-        this.agentPresetRepository.getAgentPreset(agentId)?.mcpAccess?.codeUxToolToggles ?? null,
+      resolveAgentMcpToolAccess: (agentId) => {
+        const access = this.agentPresetRepository.getAgentPreset(agentId)?.mcpAccess;
+        return access ? toAgentCodeUxToolAccess(access) : null;
+      },
       formatError: (error: unknown) => this.formatError(error),
       logger: this.logger.child({ component: "mcp-request-router", runtimeRole }),
       withCorrelationContext: (request, operation) => this.runWithMcpCorrelationContext(request, operation),

@@ -353,10 +353,20 @@ describe("ManagementToolHandler", () => {
     }
   });
 
-  it("should execute handleManageProjects delete action if approval is provided", async () => {
+  it("should execute handleManageProjects delete action only after exact approval is pending", async () => {
     deps.projectManagementRepository.deleteProject.mockReturnValue({ ok: true });
-    const response = await handler.handleManageProjects({ action: "delete", projectId: "p1", approval: { confirmed: true } });
-    const parsed = JSON.parse(response.content[0].text);
+
+    let response = await handler.handleManageProjects({ action: "delete", projectId: "p1", approval: { confirmed: true } });
+    let parsed = JSON.parse(response.content[0].text);
+    expect(parsed.approvalRequired).toBe(true);
+    expect(deps.projectManagementRepository.deleteProject).not.toHaveBeenCalled();
+
+    response = await handler.handleManageProjects({ action: "delete", projectId: "p1" });
+    parsed = JSON.parse(response.content[0].text);
+    expect(parsed.approvalRequired).toBe(true);
+
+    response = await handler.handleManageProjects({ action: "delete", projectId: "p1", approval: { confirmed: true } });
+    parsed = JSON.parse(response.content[0].text);
     expect(parsed).toEqual({
       result: {
         status: "success",
@@ -364,6 +374,34 @@ describe("ManagementToolHandler", () => {
       }
     });
     expect(deps.projectManagementRepository.deleteProject).toHaveBeenCalledWith("p1");
+  });
+
+  it("rejects destructive handleManageProjects payload substitution without consuming the original approval", async () => {
+    deps.projectManagementRepository.deleteProject.mockReturnValue({ ok: true });
+
+    await handler.handleManageProjects({ action: "delete", projectId: "p1" });
+
+    let response = await handler.handleManageProjects({ action: "delete", projectId: "p2", approval: { confirmed: true } });
+    let parsed = JSON.parse(response.content[0].text);
+    expect(parsed.approvalRequired).toBe(true);
+    expect(deps.projectManagementRepository.deleteProject).not.toHaveBeenCalled();
+
+    response = await handler.handleManageProjects({ action: "delete", projectId: "p1", approval: { confirmed: true } });
+    parsed = JSON.parse(response.content[0].text);
+    expect(parsed.result).toEqual({ status: "success", deletedProjectId: "p1" });
+    expect(deps.projectManagementRepository.deleteProject).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not replay a consumed destructive handleManageProjects approval", async () => {
+    deps.projectManagementRepository.deleteProject.mockReturnValue({ ok: true });
+
+    await handler.handleManageProjects({ action: "delete", projectId: "p1" });
+    await handler.handleManageProjects({ action: "delete", projectId: "p1", approval: { confirmed: true } });
+    const response = await handler.handleManageProjects({ action: "delete", projectId: "p1", approval: { confirmed: true } });
+    const parsed = JSON.parse(response.content[0].text);
+
+    expect(parsed.approvalRequired).toBe(true);
+    expect(deps.projectManagementRepository.deleteProject).toHaveBeenCalledTimes(1);
   });
 
   it("should cover the full lifecycle of project management", async () => {
