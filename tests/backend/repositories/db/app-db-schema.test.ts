@@ -7,9 +7,13 @@ import * as os from "os";
 import * as path from "path";
 
 const liveSnapshotIndexNames = [
+  "idx_provider_invocations_project_sprint_started",
+  "idx_provider_invocations_project_sprint_run_started",
   "idx_provider_invocations_sprint_started",
   "idx_provider_invocations_sprint_run_started",
+  "idx_sprint_runs_project_sprint",
   "idx_sprint_runs_project_status_recency",
+  "idx_task_runs_dispatch",
   "idx_task_dispatches_project_task_recency",
   "idx_task_dispatches_project_sprint_run_recency",
   "idx_task_runs_project_sprint_lookup",
@@ -28,9 +32,13 @@ const liveSnapshotIndexNames = [
 ] as const;
 
 const liveSnapshotIndexColumns: Record<(typeof liveSnapshotIndexNames)[number], string[]> = {
+  idx_provider_invocations_project_sprint_started: ["project_id", "sprint_id", "started_at"],
+  idx_provider_invocations_project_sprint_run_started: ["project_id", "sprint_run_id", "started_at"],
   idx_provider_invocations_sprint_started: ["sprint_id", "started_at"],
   idx_provider_invocations_sprint_run_started: ["sprint_run_id", "started_at"],
+  idx_sprint_runs_project_sprint: ["project_id", "sprint_id", "created_at"],
   idx_sprint_runs_project_status_recency: ["project_id", "status", "last_heartbeat_at", "updated_at", "created_at"],
+  idx_task_runs_dispatch: ["dispatch_id"],
   idx_task_dispatches_project_task_recency: ["project_id", "task_id", "last_heartbeat_at", "started_at", "claimed_at", "queued_at"],
   idx_task_dispatches_project_sprint_run_recency: ["project_id", "sprint_run_id", "last_heartbeat_at", "started_at", "claimed_at", "queued_at"],
   idx_task_runs_project_sprint_lookup: ["project_id", "sprint_id", "sprint_run_id", "id"],

@@ -121,6 +121,21 @@ export function parseOptionalObject<T>(payload: Record<string, unknown>, key: st
   return undefined;
 }
 
+export function parseRequiredObject<T>(payload: Record<string, unknown>, key: string, customError?: string): T {
+  const val = payload[key];
+  if (typeof val === "object" && val !== null && !Array.isArray(val)) {
+    return val as T;
+  }
+  throw managementValidationError(customError || `${key} object is required`, key);
+}
+
+export function parseRequiredPresentValue(payload: Record<string, unknown>, key: string, customError?: string): unknown {
+  if (!(key in payload)) {
+    throw managementValidationError(customError || `${key} is required`, key);
+  }
+  return payload[key];
+}
+
 export function parseOptionalEnum<T extends string>(payload: Record<string, unknown>, key: string, validValues: readonly T[]): T | undefined {
   const val = payload[key];
   if (typeof val === "string") {

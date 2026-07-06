@@ -686,12 +686,16 @@ CREATE TABLE IF NOT EXISTS scheduler_entries (
       );
 
 CREATE INDEX IF NOT EXISTS idx_provider_invocations_provider_status ON provider_invocations (provider, status);
+CREATE INDEX IF NOT EXISTS idx_provider_invocations_project_sprint_started ON provider_invocations (project_id, sprint_id, started_at DESC);
+CREATE INDEX IF NOT EXISTS idx_provider_invocations_project_sprint_run_started ON provider_invocations (project_id, sprint_run_id, started_at DESC);
 CREATE INDEX IF NOT EXISTS idx_provider_invocations_sprint_started ON provider_invocations (sprint_id, started_at DESC);
 CREATE INDEX IF NOT EXISTS idx_provider_invocations_sprint_run_started ON provider_invocations (sprint_run_id, started_at DESC);
 CREATE INDEX IF NOT EXISTS idx_task_dispatches_project_executor_status_priority ON task_dispatches (project_id, executor_type, status, priority);
 CREATE INDEX IF NOT EXISTS idx_sprint_runs_project_status_recency ON sprint_runs (project_id, status, last_heartbeat_at DESC, updated_at DESC, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_sprint_runs_project_sprint ON sprint_runs (project_id, sprint_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_task_dispatches_project_task_recency ON task_dispatches (project_id, task_id, last_heartbeat_at DESC, started_at DESC, claimed_at DESC, queued_at DESC);
 CREATE INDEX IF NOT EXISTS idx_task_dispatches_project_sprint_run_recency ON task_dispatches (project_id, sprint_run_id, last_heartbeat_at DESC, started_at DESC, claimed_at DESC, queued_at DESC);
+CREATE INDEX IF NOT EXISTS idx_task_runs_dispatch ON task_runs (dispatch_id);
 CREATE INDEX IF NOT EXISTS idx_task_runs_task_sprint_session ON task_runs (task_id, sprint_run_id, session_id);
 CREATE INDEX IF NOT EXISTS idx_task_runs_project_sprint_lookup ON task_runs (project_id, sprint_id, sprint_run_id, id);
 CREATE INDEX IF NOT EXISTS idx_task_runs_project_sprint_run_lookup ON task_runs (project_id, sprint_run_id, id);

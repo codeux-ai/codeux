@@ -186,6 +186,8 @@ For payload normalization in management tools, Code UX centralizes parsing behav
 - **Optional Numbers**: Extracted via `parseOptionalNumber`. Validates finiteness and optional min/max constraints.
 - **Optional Enums**: Extracted via `parseOptionalEnum`. Normalizes case and whitespace to match allowed literal types.
 - **Strict Optional Integers and Enums**: Extracted via `parseOptionalIntegerStrict` and `parseOptionalEnumStrict` when a supplied invalid value should be rejected instead of silently ignored. Omitted values still allow action-level defaults.
+- **Required Objects**: Extracted via `parseRequiredObject`. The value must be a non-null object and not an array.
+- **Required Present Values**: Extracted via `parseRequiredPresentValue` for patch-style payloads. The key must be present, but the value may explicitly be `null`; omitted and `undefined` values are distinct from `null` in approval fingerprints and patch application.
 - **Validation Errors**: Parser failures throw `ManagementValidationError`, which the management tool handler serializes as the standardized `result.status: "error"` envelope with `errorType: "validation"` and `isError: true`.
 
 

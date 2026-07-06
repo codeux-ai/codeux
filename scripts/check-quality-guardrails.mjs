@@ -71,6 +71,9 @@ const realtimeFingerprintHotPathFiles = [
   "src/services/dashboard-realtime-service.ts",
   "src/services/dashboard-realtime-payload-fingerprint.ts",
 ];
+const executionRuntimeEventProjectionDirectory = "src/repositories/execution";
+const executionRuntimeEventProjectionPathPattern =
+  /^src\/repositories\/execution\/.*runtime-events-query\.ts$/;
 const optimisticInsertionFiles = [
   "dashboard/src/v2/TasksPage.tsx",
   "dashboard/src/v2/lib/tasks/task-board-actions.ts",
@@ -86,6 +89,7 @@ const activityCacheServiceCoveragePath = "src/server/activity-cache-service.ts";
 const minimumActivityCacheServiceLineThreshold = 80;
 const directRealtimePayloadStringifyPattern =
   /JSON\.stringify\s*\(\s*(?:payload|snapshot|event\.payload|options\.payload)\s*(?:[,)]|\s*\))/g;
+const runtimeEventTableReadPattern = /\bFROM\s+(task_run_events|sprint_run_events)\b/gi;
 
 function readPositiveInt(name, fallback) {
   const raw = process.env[name];
@@ -778,6 +782,13 @@ async function collectDependencyFactoryFiles() {
     .sort((a, b) => toRelative(a).localeCompare(toRelative(b)));
 }
 
+async function collectExecutionRuntimeEventProjectionFiles() {
+  const files = await walkFiles(executionRuntimeEventProjectionDirectory);
+  return files
+    .filter((filePath) => executionRuntimeEventProjectionPathPattern.test(toRelative(filePath)))
+    .sort((a, b) => toRelative(a).localeCompare(toRelative(b)));
+}
+
 async function inspectSourceFile(filePath) {
   const text = await readFile(filePath, "utf8");
   const lines = text.split(/\r?\n/);
@@ -933,6 +944,73 @@ async function inspectRealtimePayloadFingerprinting() {
   }
 
   return findRealtimePayloadFingerprintViolations(sources);
+}
+
+function findRuntimeEventQueryBlock(text, tableIndex) {
+  const prepareIndex = text.lastIndexOf("prepare(`", tableIndex);
+  const chunkedQueryIndex = text.lastIndexOf("executeChunkedInQuery", tableIndex);
+  const fallbackEnd = Math.min(text.length, tableIndex + 2400);
+
+  if (chunkedQueryIndex > prepareIndex) {
+    const openIndex = text.indexOf("{", chunkedQueryIndex);
+    if (openIndex >= 0) {
+      const closeIndex = findMatchingBrace(text, openIndex);
+      if (closeIndex >= 0) {
+        return text.slice(chunkedQueryIndex, closeIndex + 1);
+      }
+    }
+  }
+
+  if (prepareIndex >= 0) {
+    const closeIndex = text.indexOf("`)", tableIndex);
+    if (closeIndex >= 0) {
+      return text.slice(prepareIndex, closeIndex + 2);
+    }
+  }
+
+  return text.slice(tableIndex, fallbackEnd);
+}
+
+export function findUnboundedExecutionRuntimeEventQueryViolations(sources) {
+  const violations = [];
+
+  for (const source of sources) {
+    if (!executionRuntimeEventProjectionPathPattern.test(source.path)) {
+      continue;
+    }
+
+    runtimeEventTableReadPattern.lastIndex = 0;
+    for (const match of source.text.matchAll(runtimeEventTableReadPattern)) {
+      const tableName = match[1];
+      const block = findRuntimeEventQueryBlock(source.text, match.index ?? 0);
+      if (!/\bORDER\s+BY\b[\s\S]{0,500}\bcreated_at\b/i.test(block)) {
+        continue;
+      }
+      if (/\bLIMIT\s+(?:\?|\d+\b|[A-Z_][A-Z0-9_]*\b)/i.test(block) || /\brun_event_rank\s*<=/i.test(block)) {
+        continue;
+      }
+
+      violations.push({
+        path: source.path,
+        line: lineNumberAt(source.text, match.index ?? 0),
+        pattern: `unbounded execution runtime event ${tableName} query`,
+        match: compactMatch(block).slice(0, 240),
+        remediation:
+          "Runtime-event live snapshot reads must keep an explicit row bound: add a SQL LIMIT for project/sprint slices or a ROW_NUMBER run_event_rank cap for expanded-run slices.",
+      });
+    }
+  }
+
+  return violations;
+}
+
+async function inspectExecutionRuntimeEventProjectionQueries(files) {
+  const sources = await Promise.all(files.map(async (filePath) => ({
+    path: toRelative(filePath),
+    text: await readFile(filePath, "utf8"),
+  })));
+
+  return findUnboundedExecutionRuntimeEventQueryViolations(sources);
 }
 
 async function inspectDuplicateOptimisticInsertions() {
@@ -1099,12 +1177,14 @@ async function main() {
     collectArtifactFiles(),
     collectDependencyFactoryFiles(),
   ]);
+  const executionRuntimeEventProjectionFiles = await collectExecutionRuntimeEventProjectionFiles();
 
   const [
     reports,
     dependencyFactoryViolationsNested,
     realtimeSnapshotViolations,
     realtimePayloadFingerprintViolations,
+    runtimeEventProjectionViolations,
     optimisticInsertionViolations,
     duplicateImplementationViolations,
     coverageThresholdViolations,
@@ -1113,6 +1193,7 @@ async function main() {
     Promise.all(dependencyFactoryFiles.map(inspectDependencyFactoryFile)),
     inspectRealtimeSnapshotPersistence(),
     inspectRealtimePayloadFingerprinting(),
+    inspectExecutionRuntimeEventProjectionQueries(executionRuntimeEventProjectionFiles),
     inspectDuplicateOptimisticInsertions(),
     inspectDuplicateImplementationBlocks(productionFiles),
     inspectCoverageThresholds(),
@@ -1122,6 +1203,7 @@ async function main() {
     ...dependencyFactoryViolations,
     ...realtimeSnapshotViolations,
     ...realtimePayloadFingerprintViolations,
+    ...runtimeEventProjectionViolations,
     ...optimisticInsertionViolations,
     ...duplicateImplementationViolations,
     ...coverageThresholdViolations,

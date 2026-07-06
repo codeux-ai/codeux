@@ -5,6 +5,7 @@ import * as path from "path";
 import { AppDbStorage } from "../../../src/repositories/app-db-storage.js";
 import { ExecutionRepository } from "../../../src/repositories/execution-repository.js";
 import { ProjectManagementRepository } from "../../../src/repositories/project-management-repository.js";
+import { RunEventWrites } from "../../../src/repositories/project-runtime/run-event-writes.js";
 import { ProjectRuntimeRepository } from "../../../src/repositories/project-runtime-repository.js";
 
 const tempDirs: string[] = [];
@@ -179,10 +180,88 @@ describe("ProjectRuntimeRepository", () => {
       session_id: "session-1",
       session_name: "sessions/session-1",
     });
+    const eventRows = db.prepare(`
+      SELECT tre.project_id, tre.event_type, tre.originator
+      FROM task_run_events tre
+      INNER JOIN task_runs tr ON tr.id = tre.task_run_id
+      WHERE tr.task_id = ?
+      ORDER BY tre.created_at ASC
+    `).all(taskA.id) as Array<{ project_id: string | null; event_type: string; originator: string | null }>;
+    expect(eventRows).toEqual([
+      {
+        project_id: project.id,
+        event_type: "status_sync",
+        originator: "system",
+      },
+    ]);
 
     const storedProject = projectRepository.getProject(project.id);
     expect(storedProject?.status).toBe("running");
     expect(realtimeNotifier.scheduleProjectRuntimeStatusRefresh).toHaveBeenCalledWith(project.id);
+  });
+
+  it("deduplicates run events by source event key for the same task run", async () => {
+    const { executionRepository, projectRepository, storage } = await createRepositories();
+
+    const project = projectRepository.createProject({
+      name: "Runtime Event Project",
+      sourceType: "local",
+      sourceRef: "/workspace/runtime-events",
+    });
+    const sprint = projectRepository.createSprint(project.id, {
+      name: "Runtime Event Sprint",
+      number: 8,
+    });
+    const task = projectRepository.createTask(project.id, {
+      sprintId: sprint.id,
+      taskKey: "E01",
+      title: "Write provider events",
+      promptMarkdown: "Persist source-keyed events.",
+      status: "in_progress",
+    });
+    const run = executionRepository.createTaskRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      provider: "codex",
+      state: "RUNNING",
+      startedAt: "2026-07-06T10:00:00.000Z",
+    });
+
+    const writer = new RunEventWrites(storage.getDatabase());
+    const firstInserted = writer.insertRunEvent({
+      taskRunId: run.id,
+      eventType: "provider_activity",
+      originator: "agent",
+      payload: { activityId: "activity-1", preview: "First copy" },
+      sourceEventKey: "activity:activity-1",
+      createdAt: "2026-07-06T10:01:00.000Z",
+    });
+    const duplicateInserted = writer.insertRunEvent({
+      taskRunId: run.id,
+      eventType: "provider_activity",
+      originator: "agent",
+      payload: { activityId: "activity-1", preview: "Duplicate copy" },
+      sourceEventKey: "activity:activity-1",
+      createdAt: "2026-07-06T10:02:00.000Z",
+    });
+
+    expect(firstInserted).toBe(true);
+    expect(duplicateInserted).toBe(false);
+    const eventRows = storage.getDatabase().getRawDatabase().prepare(`
+      SELECT project_id, source_event_key, payload_json
+      FROM task_run_events
+      WHERE task_run_id = ?
+    `).all(run.id) as Array<{ project_id: string | null; source_event_key: string | null; payload_json: string | null }>;
+
+    expect(eventRows).toHaveLength(1);
+    expect(eventRows[0]).toMatchObject({
+      project_id: project.id,
+      source_event_key: "activity:activity-1",
+    });
+    expect(JSON.parse(eventRows[0].payload_json || "{}")).toMatchObject({
+      preview: "First copy",
+    });
   });
 
   it("does not create task runs for status-only dependency blockers", async () => {
