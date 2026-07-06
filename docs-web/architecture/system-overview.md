@@ -6,7 +6,7 @@ Code UX is a single Node process that hosts multiple cooperating services. This 
 
 ```
 ┌──────────────────────────────────────────────────────────────────┐
-│                  codeux (single Node process)                    │
+│                  codeux (container-first multi-provider runtime) │
 │                                                                  │
 │  ┌────────────────────────┐   ┌────────────────────────────┐    │
 │  │   Dashboard Server      │   │   MCP Server                │    │
@@ -104,7 +104,7 @@ Subtask data is *also* persisted as markdown files for portability — see [Spri
 
 ### External integrations
 
-- **Jules API** — REST via Axios (`src/integrations/jules-api-client.ts`).
+- **Jules Agent API** — REST via Axios (`src/integrations/jules-api-client.ts`), used as one provider among several.
 - **Provider CLIs** — via spawn (`gemini`, `codex`, `claude`, `qwen`, `opencode`).
 - **GitHub** — via `gh` CLI in `REMOTE` mode, local Git in `LOCAL` mode.
 - **Docker** — via the Docker socket (HTTP API).
