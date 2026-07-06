@@ -127,8 +127,10 @@ Tool arguments are validated against `src/contracts/mcp-tool-definitions.ts` bef
 Destructive actions (e.g., actions starting with `delete_`, `reset_`, `replace_`) executed via the `manage_code_ux` tool follow an explicit approval flow to prevent accidental data loss:
 1. The initial call is sent without an `approval` block, or with `approval.confirmed: false`.
 2. The server short-circuits the action, returning an early envelope with `approvalRequired: true` and an explanatory `approvalMessage`.
-3. The agent reviews the message and issues the exact same call again, but with `approval.confirmed: true` added to the payload.
-4. The server executes the operation and returns the `result` block.
+3. The server records a pending approval fingerprint for the normalized tool domain, action, scope identifiers, and payload. Scope identifiers include project, sprint, and task ids when present; settings fingerprints also include the setting path and proposed value.
+4. The agent reviews the message and issues the exact same call again, but with `approval.confirmed: true` added to the payload.
+5. The server executes the operation only when the confirmed call matches the pending fingerprint exactly and the pending approval has not expired. The approval is consumed before execution and cannot be replayed.
+6. A confirmed call with any payload substitution, changed identifier, changed setting path, changed proposed value, meaningful array-order change, or `null` versus missing-field change is rejected with another approval-required response and does not consume the original pending approval.
 
 ### Settings Human Confirmation Gate
 
@@ -144,11 +146,11 @@ All mutating settings actions require a stateful human-confirmation step. This i
 
 Runtime behavior:
 1. The first mutating settings call never changes settings, even if it includes `approval.confirmed: true`.
-2. The server records a pending approval for the exact settings action and normalized payload for 15 minutes.
+2. The server records a pending approval for the exact settings action, scope, setting path, and normalized payload for 15 minutes.
 3. The response returns `approvalRequired: true` with instructions to ask the user for confirmation.
 4. The client must not call the same endpoint again with `approval.confirmed: true` unless the user explicitly confirms the exact change.
 5. After user confirmation, the same action and same payload can be called once with `approval.confirmed: true`; the pending approval is consumed and cannot be reused.
-6. A different settings payload, even for the same setting path, creates a separate pending approval and does not execute.
+6. A different settings payload, even for the same setting path, creates a separate pending approval and does not execute. Fingerprints preserve explicit `null`, explicit `undefined`, and array order, while object key order is normalized.
 
 ### Project Setup Action
 
