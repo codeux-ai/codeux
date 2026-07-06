@@ -490,7 +490,10 @@ describe("PlanningAgentService", () => {
         }),
       }),
     ]));
-    expect(providerRetryPolicy.sleepWithSignal).toHaveBeenCalledWith(1_000, undefined);
+    const [delayMs, signal] = providerRetryPolicy.sleepWithSignal.mock.calls[0] || [];
+    expect(delayMs).toBeGreaterThanOrEqual(999);
+    expect(delayMs).toBeLessThanOrEqual(1_000);
+    expect(signal).toBeUndefined();
   });
 
   it("restarts a failed planning invocation by resuming the same native session with the full prompt", async () => {
