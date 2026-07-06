@@ -1,13 +1,13 @@
 name: Release Checks
 
 on:
-  push:
+  pull_request:
     branches:
       - main
   workflow_dispatch:
 
 concurrency:
-  group: release-checks-${{ github.ref }}
+  group: release-checks-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 permissions:
@@ -91,7 +91,7 @@ jobs:
         run: pnpm run electron:install-deps
 
       - name: Build desktop package
-        run: pnpm run ${{ matrix.electron-script }}
+        run: pnpm run ${{ matrix.electron-script }} -- --publish never
 
       - name: Upload release-check artifacts
         uses: actions/upload-artifact@v4
