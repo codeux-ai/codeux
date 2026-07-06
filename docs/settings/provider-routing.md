@@ -187,6 +187,14 @@ File:
 
 Code UX extracts provider runtime config and MCP config assembly from `ProviderRunner` into focused typed builder modules, such as `src/infrastructure/providers/cli/provider-runtime-config.ts`. This isolates the JSON/TOML generation logic for providers like Qwen, OpenCode, and Antigravity, while keeping process execution and mount creation in the runner.
 
+## Custom MCP Server Safety
+
+Custom MCP servers saved in settings are sanitized before provider runs generate Claude, Gemini, Qwen, Codex, OpenCode, or Antigravity MCP config. HTTP / SSE custom servers must use `http://` or `https://` URLs without embedded credentials or control characters. Local developer tools on loopback remain supported with explicit `localhost`, `127.0.0.1`, or `[::1]` URLs, but link-local metadata endpoints, multicast and broadcast addresses, and ambiguous numeric IP encodings such as decimal-integer, hexadecimal, shortened, or leading-zero IPv4 forms are rejected.
+
+Custom HTTP headers keep the existing count and length limits and may carry normal auth headers such as `Authorization`. Code UX drops hop-by-hop and request-smuggling-sensitive names including `Host`, `Connection`, `Transfer-Encoding`, `Content-Length`, `TE`, `Trailer`, `Upgrade`, `Keep-Alive`, proxy auth/connection headers, and `Expect`.
+
+Stdio custom servers continue to be serialized as provider-native command, args, and env fields rather than shell command strings. Commands containing shell metacharacters are rejected; args and env values are passed as structured strings in generated config artifacts.
+
 ## Provider Override Settings Boundary
 
 Code UX enforces a single shared typed mapping boundary, `buildProviderSettingsOverride` in `src/services/provider-settings-override.ts`, for converting resolved dashboard provider settings and models into the isolated `providerSettingsOverride` payload needed for CLI execution and QA review dispatches. This shared boundary keeps contract drift out of the duplicated dispatch call sites while maintaining support for auth path overrides, Qwen auth mode sub-fields, OpenCode custom provider logic, and base provider parameters like model or API keys.

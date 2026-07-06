@@ -52,9 +52,12 @@ describe("redaction", () => {
     it("redacts realistic provider and tracker token shapes", () => {
       const input = [
         "github ghp_123456789012345678901234567890123456",
+        "fine-grained github_pat_1234567890abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_1234567890",
         "gitlab glpat-12345678901234567890",
         "jira ATATT3xFfGF0fixtureTokenValue1234567890",
         "openai-compatible sk-fixtureOpenAiCompatibleToken1234567890",
+        "openrouter sk-or-v1-fixtureOpenRouterToken1234567890",
+        "session codex-session-token=fixtureSessionToken1234567890",
         "bearer Authorization: Bearer fixture-bearer-token-value",
       ].join("\n");
 
@@ -62,11 +65,32 @@ describe("redaction", () => {
 
       expect(result).toBe([
         "github [REDACTED]",
+        "fine-grained [REDACTED]",
         "gitlab [REDACTED]",
         "jira [REDACTED]",
         "openai-compatible [REDACTED]",
+        "openrouter [REDACTED]",
+        "session codex-session-token=[REDACTED]",
         "bearer Authorization: Bearer [REDACTED]",
       ].join("\n"));
+    });
+
+    it("redacts MCP and OTEL authorization headers in JSON, TOML, and env header syntax", () => {
+      const token = "fixtureMcpBearerToken1234567890";
+      const input = [
+        `{"headers":{"Authorization":"Bearer ${token}"},"url":"https://example.invalid/mcp"}`,
+        `http_headers = { "Authorization" = "Bearer ${token}", "X-Code-Ux-Agent" = "agent-1" }`,
+        `OTEL_EXPORTER_OTLP_HEADERS=Authorization=Bearer ${token},X-Team=platform`,
+      ].join("\n");
+
+      const result = redactText(input);
+
+      expect(result).not.toContain(token);
+      expect(result).toContain('"Authorization": "[REDACTED]"');
+      expect(result).toContain('"Authorization" = "[REDACTED]"');
+      expect(result).toContain("OTEL_EXPORTER_OTLP_HEADERS=[REDACTED]");
+      expect(result).toContain('"X-Code-Ux-Agent" = "agent-1"');
+      expect(result).toContain('"url":"https://example.invalid/mcp"');
     });
 
     it("redacts URL credentials", () => {

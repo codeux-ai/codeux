@@ -160,7 +160,7 @@ export function buildPreviewProxyRequestHeaders(
   // forwarded: the preview iframe runs on its own origin (preview-<id>.localhost), so these
   // are the previewed app's own credentials — never the dashboard's — and stateful preview
   // apps (login/session flows) need them to reach the container.
-  const headersToStrip = ["connection", "upgrade", "transfer-encoding", "content-length", "accept-encoding"];
+  const headersToStrip = ["set-cookie", "connection", "upgrade", "transfer-encoding", "content-length", "accept-encoding"];
   for (const key of Object.keys(headers)) {
     const lower = key.toLowerCase();
     if (headersToStrip.includes(lower) || lower.startsWith("proxy-") || lower.startsWith("x-code-ux-")) {

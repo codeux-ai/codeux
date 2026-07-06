@@ -1,4 +1,4 @@
-import express, { type ErrorRequestHandler, type Express } from "express";
+import express, { type ErrorRequestHandler, type Express, type RequestHandler } from "express";
 import * as fs from "fs";
 import * as path from "path";
 import type { IncomingMessage } from "http";
@@ -14,6 +14,13 @@ import { createPreviewHostMiddleware } from "./preview-host-middleware.js";
 import { parsePreviewSessionIdFromHost } from "./preview-host-utils.js";
 import { createHttpRateLimiter } from "../shared/http/rate-limit.js";
 import type { DashboardServerOptions } from "./dashboard-server.js";
+import {
+  DASHBOARD_DEFAULT_JSON_BODY_LIMIT,
+  DASHBOARD_LARGE_SETTINGS_JSON_BODY_LIMIT,
+  type DashboardJsonBodyLimit,
+  getDashboardJsonBodyLimit,
+  isSupportedDashboardJsonContentType,
+} from "./request-parsers.js";
 
 function isErrnoException(error: unknown): error is NodeJS.ErrnoException {
   return error instanceof Error && "code" in error;
@@ -91,15 +98,57 @@ export const applyDashboardPreRouteMiddleware = (
   });
 
   app.use(createPreviewHostMiddleware(options));
-
+  app.use(createDashboardJsonContentTypeGuard(dashboardLogger));
   // Settings payloads can embed a base64 background-image data URL, which the
   // dashboard warns about past ~5MB. base64 inflates bytes by ~33%, so allow
-  // generous headroom to keep appearance saves from failing with HTTP 413.
-  app.use(express.json({ limit: "25mb", type: shouldParseDashboardJsonBody }));
+  // generous headroom only for settings save routes while keeping other API
+  // mutations on a much smaller parser budget.
+  app.use(express.json({
+    limit: DASHBOARD_LARGE_SETTINGS_JSON_BODY_LIMIT,
+    type: (req) => shouldParseDashboardJsonBody(req, "large"),
+  }));
+  app.use(express.json({
+    limit: DASHBOARD_DEFAULT_JSON_BODY_LIMIT,
+    type: (req) => shouldParseDashboardJsonBody(req, "default"),
+  }));
   app.use(createDashboardJsonBodyErrorHandler(dashboardLogger));
 };
 
-function createDashboardJsonBodyErrorHandler(dashboardLogger: Logger): ErrorRequestHandler {
+function createDashboardJsonContentTypeGuard(dashboardLogger: Logger): RequestHandler {
+  return (req, res, next) => {
+    const pathname = getRequestPathname(req);
+    if (getDashboardJsonBodyLimit(req.method, pathname) === null) {
+      next();
+      return;
+    }
+
+    const contentType = String(req.headers["content-type"] || "");
+    const contentLength = Number(req.headers["content-length"] || 0);
+    const hasRequestBody = contentLength > 0 || req.headers["transfer-encoding"] !== undefined;
+    if (!contentType && !hasRequestBody) {
+      req.body = {};
+      next();
+      return;
+    }
+
+    if (isSupportedDashboardJsonContentType(contentType)) {
+      next();
+      return;
+    }
+
+    dashboardLogger.warn("Rejected dashboard JSON request with unsupported content type", {
+      logPurpose: "security",
+      method: req.method,
+      path: req.originalUrl,
+      statusCode: 415,
+      reason: "unsupported_content_type",
+      contentType: contentType.split(";")[0] || "none",
+    });
+    res.status(415).json({ error: "Unsupported Content-Type. Use application/json." });
+  };
+}
+
+export function createDashboardJsonBodyErrorHandler(dashboardLogger: Logger): ErrorRequestHandler {
   return (error, req, res, next) => {
     const isSyntaxError = error instanceof SyntaxError;
     const status = typeof (error as { status?: unknown }).status === "number"
@@ -121,30 +170,30 @@ function createDashboardJsonBodyErrorHandler(dashboardLogger: Logger): ErrorRequ
       return;
     }
 
+    if (status === 413 || bodyType === "entity.too.large") {
+      dashboardLogger.warn("Rejected oversized dashboard JSON request body", {
+        logPurpose: "security",
+        method: req.method,
+        path: req.originalUrl,
+        statusCode: 413,
+        reason: "json_body_too_large",
+      });
+      res.status(413).json({ error: "JSON request body exceeds maximum allowed size." });
+      return;
+    }
+
     next(error);
   };
 }
 
-export function shouldParseDashboardJsonBody(req: IncomingMessage): boolean {
+export function shouldParseDashboardJsonBody(req: IncomingMessage, limit?: DashboardJsonBodyLimit): boolean {
   const pathname = getRequestPathname(req);
-  const isRuntimeDataPath = pathname.startsWith("/api/")
-    || pathname === "/health"
-    || pathname === "/ready";
-  if (!isRuntimeDataPath) {
-    return false;
-  }
-  if (pathname.startsWith("/api/browser/sessions/") && pathname.includes("/proxy")) {
+  const bodyLimit = getDashboardJsonBodyLimit(req.method, pathname);
+  if (bodyLimit === null || (limit !== undefined && bodyLimit !== limit)) {
     return false;
   }
 
-  const contentType = String(req.headers["content-type"] || "").toLowerCase();
-  if (contentType.startsWith("multipart/form-data")
-    || contentType.startsWith("application/x-www-form-urlencoded")
-    || contentType.startsWith("application/octet-stream")) {
-    return false;
-  }
-
-  return true;
+  return isSupportedDashboardJsonContentType(String(req.headers["content-type"] || ""));
 }
 
 function getRequestPathname(req: IncomingMessage): string {

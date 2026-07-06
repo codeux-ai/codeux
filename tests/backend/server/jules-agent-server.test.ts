@@ -45,7 +45,7 @@ describe("CodeUxServer", () => {
   let sharedSessionTracking: unknown;
   let sharedActivityCacheService: unknown;
   const projectRoot = path.resolve(process.cwd());
-  const appConfig = loadAppConfig([], projectRoot);
+  const appConfig = loadAppConfig(["node", "index.js", "--no-mcp-https"], projectRoot);
 
   beforeAll(() => {
     server = new CodeUxServer({ projectRoot, appConfig });

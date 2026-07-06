@@ -95,4 +95,25 @@ describe("sanitizeInvocationOutputText", () => {
     expect(sanitized).toContain('"githubToken": "[REDACTED]"');
     expect(sanitized).toContain("https://[REDACTED]@example.invalid/repo.git");
   });
+
+  it("redacts provider config and telemetry header secrets while preserving safe URLs and counts", () => {
+    const mcpToken = "fixtureMcpBearerToken1234567890";
+    const openRouterKey = "sk-or-v1-fixtureOpenRouterToken1234567890";
+    const input = [
+      `http_headers = { "Authorization" = "Bearer ${mcpToken}" }`,
+      `OTEL_EXPORTER_OTLP_HEADERS=Authorization=Bearer ${mcpToken}`,
+      `OPENROUTER_API_KEY=${openRouterKey}`,
+      "url=https://example.invalid/v1",
+      "token_count=42",
+    ].join("\n");
+
+    const sanitized = sanitizeInvocationOutputText(input);
+
+    expect(sanitized).not.toContain(mcpToken);
+    expect(sanitized).not.toContain(openRouterKey);
+    expect(sanitized).toContain('"Authorization" = "[REDACTED]"');
+    expect(sanitized).toContain("OTEL_EXPORTER_OTLP_HEADERS=[REDACTED]");
+    expect(sanitized).toContain("url=https://example.invalid/v1");
+    expect(sanitized).toContain("token_count=42");
+  });
 });

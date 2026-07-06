@@ -1,67 +1,9 @@
 import { marked } from "marked";
+import { getSafeUrl } from "../v2/lib/safe-url.js";
 
 export interface RenderMarkdownOptions {
   transformHref?: (href: string, kind: "link" | "image") => string;
 }
-
-const isUrlSafe = (url: string, isImage: boolean = false): boolean => {
-  try {
-    // Decode HTML entities to handle obfuscated protocols like javascript&#00058;alert(1)
-    const decodedUrl = url.replace(/&#[xX]?[0-9a-fA-F]+;?/g, (match) => {
-      let code;
-      if (match.startsWith("&#x") || match.startsWith("&#X")) {
-        code = parseInt(match.replace(/&#[xX]/, "").replace(";", ""), 16);
-      } else {
-        code = parseInt(match.replace("&#", "").replace(";", ""), 10);
-      }
-      return String.fromCharCode(code);
-    });
-
-    const cleanUrl = decodedUrl.replace(/[\x00-\x1F\x7F-\x9F]/g, "").trim();
-
-    if (cleanUrl.startsWith("//") || cleanUrl.startsWith("\\\\")) {
-      return false;
-    }
-
-    if (cleanUrl.startsWith("/") || cleanUrl.startsWith("#") || cleanUrl.startsWith("?")) {
-      return true;
-    }
-
-    let parsedAbsolute: URL | null = null;
-    try {
-      parsedAbsolute = new URL(cleanUrl);
-    } catch {
-      // Not a valid absolute URL, fall through to relative check
-    }
-
-    if (parsedAbsolute) {
-      if (isImage) {
-        return ["http:", "https:"].includes(parsedAbsolute.protocol);
-      }
-      return ["http:", "https:", "mailto:"].includes(parsedAbsolute.protocol);
-    }
-
-    const colonIndex = cleanUrl.indexOf(":");
-    if (colonIndex !== -1) {
-      const slashIndex = cleanUrl.indexOf("/");
-      const hashIndex = cleanUrl.indexOf("#");
-      const queryIndex = cleanUrl.indexOf("?");
-
-      let firstPathChar = -1;
-      if (slashIndex !== -1) firstPathChar = slashIndex;
-      if (hashIndex !== -1 && (firstPathChar === -1 || hashIndex < firstPathChar)) firstPathChar = hashIndex;
-      if (queryIndex !== -1 && (firstPathChar === -1 || queryIndex < firstPathChar)) firstPathChar = queryIndex;
-
-      if (firstPathChar === -1 || colonIndex < firstPathChar) {
-        return false;
-      }
-    }
-
-    return true;
-  } catch {
-    return false;
-  }
-};
 
 const escapeHtml = (html: string): string => {
   return html
@@ -79,44 +21,50 @@ function createRenderer(options?: RenderMarkdownOptions) {
   renderer.link = function (token) {
     const { href, title, tokens } = token;
     const parsedText = this.parser.parseInline(tokens);
+    const safeHref = getSafeUrl(href);
 
-    if (!isUrlSafe(href)) {
-      return parsedText;
-    }
-    const transformedHref = options?.transformHref?.(href.trim(), "link") ?? href.trim();
-    if (!isUrlSafe(transformedHref)) {
+    if (!safeHref) {
       return parsedText;
     }
 
-    let out = `<a href="${escapeHtml(transformedHref)}"`;
+    const transformedHref = options?.transformHref?.(safeHref, "link") ?? safeHref;
+    const safeTransformedHref = getSafeUrl(transformedHref);
+    if (!safeTransformedHref) {
+      return parsedText;
+    }
+
+    let out = `<a href="${escapeHtml(safeTransformedHref)}"`;
     if (title) {
       out += ` title="${escapeHtml(title)}"`;
     }
 
-    if (/^https?:\/\//i.test(transformedHref) || transformedHref.startsWith("//")) {
+    if (/^https?:\/\//i.test(safeTransformedHref)) {
       out += ` rel="noopener noreferrer"`;
     }
 
     out += `>${parsedText}</a>`;
-    return out as any;
+    return out;
   };
 
   renderer.image = function (token) {
     const { href, title, text } = token;
-    if (!isUrlSafe(href, true)) {
-      return escapeHtml(text);
-    }
-    const transformedHref = options?.transformHref?.(href.trim(), "image") ?? href.trim();
-    if (!isUrlSafe(transformedHref, true)) {
+    const safeHref = getSafeUrl(href, { kind: "image" });
+    if (!safeHref) {
       return escapeHtml(text);
     }
 
-    let out = `<img src="${escapeHtml(transformedHref)}" alt="${escapeHtml(text)}"`;
+    const transformedHref = options?.transformHref?.(safeHref, "image") ?? safeHref;
+    const safeTransformedHref = getSafeUrl(transformedHref, { kind: "image" });
+    if (!safeTransformedHref) {
+      return escapeHtml(text);
+    }
+
+    let out = `<img src="${escapeHtml(safeTransformedHref)}" alt="${escapeHtml(text)}"`;
     if (title) {
       out += ` title="${escapeHtml(title)}"`;
     }
     out += ">";
-    return out as any;
+    return out;
   };
 
   return renderer;
