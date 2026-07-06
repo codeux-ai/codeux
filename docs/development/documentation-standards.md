@@ -36,6 +36,8 @@ When behavior changes:
 3. Update `docs/SUMMARY.md` table of contents.
 4. Add migration notes when behavior is not backward compatible.
 
+**Publication Workflow:** Update canonical `docs/` first, then align the matching `docs-web/` page when the content is public-facing.
+
 ## Source of Truth Hierarchy
 
 1. Source code
