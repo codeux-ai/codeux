@@ -66,6 +66,8 @@ const createSystemSettings = (): SystemSettings => {
         host: "",
         email: "",
         apiToken: "",
+        autoTransitionLinkedIssuesOnImport: true,
+        importTransitionName: "In Work",
         autoCloseLinkedIssues: false,
         defaultProject: "",
         closeTransitionName: "Done",
@@ -689,6 +691,8 @@ describe("onboarding appearance step", () => {
           host: "",
           email: "",
           apiToken: "",
+          autoTransitionLinkedIssuesOnImport: true,
+          importTransitionName: "In Work",
           autoCloseLinkedIssues: false,
           defaultProject: "",
           closeTransitionName: "Done"

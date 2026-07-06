@@ -488,6 +488,8 @@ export const DEFAULT_DASHBOARD_SETTINGS: DashboardSettings = {
     host: "",
     email: "",
     apiToken: "",
+    autoTransitionLinkedIssuesOnImport: true,
+    importTransitionName: "In Work",
     autoCloseLinkedIssues: false,
     defaultProject: "",
     closeTransitionName: "Done",

@@ -732,7 +732,7 @@ describe("settings cloning helpers", () => {
       invocationRouting: {},
     },
     git: { githubMode: "app", githubToken: "", defaultBranch: "main", autoCreatePr: false, autoCloseLinkedIssues: false, deleteMergedBranches: false, featureBranchPrefix: "", sprintBranchScheme: "FLAT", sprintKeyPrefix: "" },
-    jira: { host: "h", email: "e", apiToken: "t", autoCloseLinkedIssues: false, defaultProject: "P", closeTransitionName: "Done" },
+    jira: { host: "h", email: "e", apiToken: "t", autoTransitionLinkedIssuesOnImport: true, importTransitionName: "In Work", autoCloseLinkedIssues: false, defaultProject: "P", closeTransitionName: "Done" },
     ciIntelligence: {},
     guardrails: { onLimitAction: "WARN", defaultLimitOverrides: [], limitOverrides: [], jobConfigOverrides: [], jobs: { task_coding: {}, ci_fix: {}, merge_conflict: {}, clarification_reply: {}, planning: {}, remediation: {} } as any },
     sprintLoopSteps: { apply: { type: "apply" }, pr: { type: "pr" }, runTests: { type: "test" } },
@@ -827,7 +827,7 @@ describe("settings cloning helpers", () => {
       integrations: {
         githubToken: "gh",
         gitlabToken: "gl",
-        jira: { host: "h", email: "e", apiToken: "t", autoCloseLinkedIssues: false, defaultProject: "P", closeTransitionName: "Done" },
+        jira: { host: "h", email: "e", apiToken: "t", autoTransitionLinkedIssuesOnImport: true, importTransitionName: "In Work", autoCloseLinkedIssues: false, defaultProject: "P", closeTransitionName: "Done" },
         providers: {
           "p1": { provider: "jules", name: "Jules", apiKey: "key", mountAuth: false, authPath: "" }
         }

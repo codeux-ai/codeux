@@ -371,6 +371,8 @@ describe("Settings Resolution Service", () => {
             host: "",
             email: "",
             apiToken: "",
+            autoTransitionLinkedIssuesOnImport: true,
+            importTransitionName: "In Work",
             autoCloseLinkedIssues: false,
             defaultProject: "",
             closeTransitionName: "Done",
