@@ -78,6 +78,7 @@ export function focusFirstInvalidSettingsControl(root: ParentNode): string | nul
 export const SettingsPage: FunctionComponent = () => {
   const headerRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
+  const scopeStickyRef = useRef<HTMLDivElement>(null);
   const contentTweenRef = useRef<ReturnType<typeof gsap.to> | null>(null);
   const mountedRef = useRef(true);
   const prefersReducedMotion = useReducedMotion();
@@ -85,6 +86,7 @@ export const SettingsPage: FunctionComponent = () => {
   const interactionTokens = useInteractionTokens();
   const [pendingCategory, setPendingCategory] = useState<typeof CATEGORIES[number]["id"] | null>(null);
   const [validationMessage, setValidationMessage] = useState<string | null>(null);
+  const [panelStickyTop, setPanelStickyTop] = useState("9.5rem");
   const resetProjectConfirm = useConfirmDialog();
   const saveDisabledReasonId = "settings-save-disabled-reason";
   const scopeStatusId = "settings-scope-status";
@@ -188,6 +190,35 @@ export const SettingsPage: FunctionComponent = () => {
     });
     return () => ctx.revert();
   }, [prefersReducedMotion]);
+
+  useLayoutEffect(() => {
+    const scopeSticky = scopeStickyRef.current;
+    if (!scopeSticky) {
+      return;
+    }
+
+    const appShellOffset = 64;
+    const stickyGap = 12;
+    let frameId = 0;
+    const updateStickyOffset = () => {
+      window.cancelAnimationFrame(frameId);
+      frameId = window.requestAnimationFrame(() => {
+        const nextOffset = `${Math.ceil(scopeSticky.getBoundingClientRect().height + appShellOffset + stickyGap)}px`;
+        setPanelStickyTop((currentOffset) => currentOffset === nextOffset ? currentOffset : nextOffset);
+      });
+    };
+
+    updateStickyOffset();
+    window.addEventListener("resize", updateStickyOffset);
+    const resizeObserver = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(updateStickyOffset);
+    resizeObserver?.observe(scopeSticky);
+
+    return () => {
+      window.cancelAnimationFrame(frameId);
+      window.removeEventListener("resize", updateStickyOffset);
+      resizeObserver?.disconnect();
+    };
+  }, []);
 
   const switchCategory = useCallback((categoryId: typeof activeCategory): void => {
     if (!contentRef.current || categoryId === activeCategory) {
@@ -301,7 +332,11 @@ export const SettingsPage: FunctionComponent = () => {
             subtitle="Tune the system baseline, then shape project-level behavior with faster wayfinding, denser controls, and focused routing workspaces."
           />
 
-          <div className="flex flex-wrap items-center gap-3">
+          <div
+            ref={scopeStickyRef}
+            data-settings-sticky="scope"
+            className="sticky top-16 z-30 -mx-1 flex min-w-0 flex-wrap items-center gap-3 overflow-visible rounded-[1.5rem] border border-[color:var(--border-hairline)] bg-[var(--surface-glass)] px-1 py-2 shadow-[var(--elevation-base)] backdrop-blur-2xl"
+          >
             <div
               role="radiogroup"
               aria-label="Settings scope"
@@ -345,7 +380,7 @@ export const SettingsPage: FunctionComponent = () => {
               {scopeStatusText}
             </div>
 
-            <div id="settings-scope-context" className="max-w-full break-words rounded-full border border-black/[0.06] bg-white/70 px-4 py-2 text-xs font-semibold text-slate-500 backdrop-blur-2xl dark:border-white/[0.06] dark:bg-void-800/60 dark:text-slate-300">
+            <div id="settings-scope-context" className="min-w-0 max-w-full break-words rounded-[1rem] border border-black/[0.06] bg-white/70 px-4 py-2 text-xs font-semibold text-slate-500 backdrop-blur-2xl sm:rounded-full dark:border-white/[0.06] dark:bg-void-800/60 dark:text-slate-300">
               {activeScope === "system"
                 ? "Editing live system defaults"
                 : selectedProject
@@ -353,12 +388,12 @@ export const SettingsPage: FunctionComponent = () => {
                   : "Select a project to edit overrides"}
             </div>
             {projectSourceSummary ? (
-              <div className="max-w-full break-words rounded-full border border-slate-500/15 bg-slate-500/[0.06] px-4 py-2 text-xs font-semibold text-slate-600 backdrop-blur-2xl dark:border-slate-300/15 dark:bg-slate-300/[0.08] dark:text-slate-300">
+              <div className="min-w-0 max-w-full break-words rounded-[1rem] border border-slate-500/15 bg-slate-500/[0.06] px-4 py-2 text-xs font-semibold text-slate-600 backdrop-blur-2xl sm:rounded-full dark:border-slate-300/15 dark:bg-slate-300/[0.08] dark:text-slate-300">
                 {projectSourceSummary}
               </div>
             ) : null}
             {!selectedProject ? (
-              <div id="settings-project-scope-disabled" className="max-w-full break-words rounded-full border border-amber-500/20 bg-amber-500/10 px-4 py-2 text-xs font-semibold text-amber-700 backdrop-blur-2xl dark:border-amber-300/20 dark:bg-amber-300/10 dark:text-amber-200">
+              <div id="settings-project-scope-disabled" className="min-w-0 max-w-full break-words rounded-[1rem] border border-amber-500/20 bg-amber-500/10 px-4 py-2 text-xs font-semibold text-amber-700 backdrop-blur-2xl sm:rounded-full dark:border-amber-300/20 dark:bg-amber-300/10 dark:text-amber-200">
                 Project scope unlocks after selecting a project.
               </div>
             ) : (
@@ -367,17 +402,17 @@ export const SettingsPage: FunctionComponent = () => {
               </div>
             )}
 
-            <div className="rounded-full border border-black/[0.06] bg-white/70 px-4 py-2 text-xs font-semibold text-slate-500 backdrop-blur-2xl dark:border-white/[0.06] dark:bg-void-800/60 dark:text-slate-300">
+            <div className="min-w-0 max-w-full break-words rounded-[1rem] border border-black/[0.06] bg-white/70 px-4 py-2 text-xs font-semibold text-slate-500 backdrop-blur-2xl sm:rounded-full dark:border-white/[0.06] dark:bg-void-800/60 dark:text-slate-300">
               {filteredCategories.length} visible categor{filteredCategories.length === 1 ? "y" : "ies"}
             </div>
 
             {activeDirty ? (
-              <div className="rounded-full border border-amber-500/20 bg-amber-500/10 px-4 py-2 text-xs font-semibold text-amber-700 backdrop-blur-2xl dark:border-amber-300/20 dark:bg-amber-300/10 dark:text-amber-200">
+              <div className="min-w-0 max-w-full break-words rounded-[1rem] border border-amber-500/20 bg-amber-500/10 px-4 py-2 text-xs font-semibold text-amber-700 backdrop-blur-2xl sm:rounded-full dark:border-amber-300/20 dark:bg-amber-300/10 dark:text-amber-200">
                 Unsaved edits
               </div>
             ) : null}
             {!activeDirty && !activeSaving && saveMessage && !error ? (
-              <div className="inline-flex items-center gap-1.5 rounded-full border border-status-green/20 bg-status-green/10 px-4 py-2 text-xs font-semibold text-status-green backdrop-blur-2xl">
+              <div className="inline-flex min-w-0 max-w-full items-center gap-1.5 break-words rounded-[1rem] border border-status-green/20 bg-status-green/10 px-4 py-2 text-xs font-semibold text-status-green backdrop-blur-2xl sm:rounded-full">
                 <ShieldCheck className="h-3.5 w-3.5" strokeWidth={2.2} />
                 Saved
               </div>
@@ -569,7 +604,7 @@ export const SettingsPage: FunctionComponent = () => {
             />
           </div>
 
-          <SettingsContentPanels state={state} />
+          <SettingsContentPanels state={state} stickyTop={panelStickyTop} />
         </div>
       </div>
 

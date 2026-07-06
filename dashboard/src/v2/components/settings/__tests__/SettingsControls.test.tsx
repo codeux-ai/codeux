@@ -2,6 +2,7 @@
  * @vitest-environment jsdom
  */
 import { h } from "preact";
+import { readFileSync } from "node:fs";
 import { describe, it, expect, afterEach, vi } from "vitest";
 import { render, screen, cleanup, fireEvent, waitFor } from "@testing-library/preact";
 import "@testing-library/jest-dom/vitest";
@@ -530,6 +531,10 @@ describe("SettingsControls Accessibility", () => {
     expect(screen.getByText("General panel values stay mounted")).toBeInTheDocument();
     expect(screen.getByText("General")).toBeInTheDocument();
     expect(screen.getByText("Unsaved changes")).toBeInTheDocument();
+    const activePanelStrip = screen.getByText("Active panel").parentElement;
+    expect(activePanelStrip).toHaveAttribute("data-settings-sticky", "active-panel");
+    expect(activePanelStrip).toHaveClass("sticky", "top-[var(--settings-active-panel-top)]", "flex-wrap", "overflow-visible");
+    expect(activePanelStrip).toHaveStyle("--settings-active-panel-top: 9.5rem");
     expect(screen.getByText("General panel values stay mounted").parentElement).toHaveAttribute("data-motion-contract", "enterExit");
     expect(screen.getByText("General panel values stay mounted").parentElement).toHaveClass("motion-reduce:animate-none");
 
@@ -566,6 +571,35 @@ describe("SettingsControls Accessibility", () => {
     await waitFor(() => expect(screen.getAllByText("Settings saved.").length).toBeGreaterThan(0));
     expect(screen.getByText("Saved")).toBeInTheDocument();
     expect(screen.getByText("General panel values stay mounted")).toBeInTheDocument();
+  });
+
+  it("SettingsContentPanels accepts the measured sticky offset from the settings scope strip", () => {
+    render(
+      <SettingsContentPanels
+        stickyTop="148px"
+        state={{
+          activeCategory: "general",
+          activeDirty: false,
+          activeSaving: false,
+          error: null,
+          saveMessage: null,
+          loading: false,
+          resettingProject: false,
+        } as any}
+      />
+    );
+
+    expect(screen.getByText("Active panel").parentElement).toHaveStyle("--settings-active-panel-top: 148px");
+  });
+
+  it("SettingsPage keeps the scope controls in a sticky wrapping strip and passes its measured offset to the panel strip", () => {
+    const source = readFileSync("dashboard/src/v2/SettingsPage.tsx", "utf8");
+
+    expect(source).toContain('data-settings-sticky="scope"');
+    expect(source).toContain("sticky top-16 z-30");
+    expect(source).toContain("flex min-w-0 flex-wrap");
+    expect(source).toContain("scopeSticky.getBoundingClientRect().height + appShellOffset + stickyGap");
+    expect(source).toContain("<SettingsContentPanels state={state} stickyTop={panelStickyTop} />");
   });
 
   it("SettingsContentPanels renders reset pending feedback while keeping values mounted", () => {
