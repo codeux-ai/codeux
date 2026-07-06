@@ -71,6 +71,7 @@ export function createDashboardDependencies(
     julesApi,
     activeDispatchRegistry,
     sprintRunLifecycleService: coreDeps.sprintRunLifecycleService,
+    qaReviewRepository: coreDeps.qaReviewRepository,
     logger: logger.child({ component: "execution-control-service" }),
   });
   const executionInvocationControlService = new ExecutionInvocationControlService({

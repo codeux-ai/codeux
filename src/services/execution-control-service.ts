@@ -13,6 +13,8 @@ import type { ProjectAttentionType } from "../contracts/project-attention-types.
 import { resolveLateBoundDependency, type LateBoundOrValue } from "../shared/late-bound-dependency.js";
 import type { SprintRunLifecycleService } from "./sprint-run-lifecycle-service.js";
 import { resolveTransientMergeAttentionHandoffs } from "../domain/workers/project-attention-cleanup.js";
+import type { QaReviewRepository } from "../repositories/qa-review-repository.js";
+import { runCommandStrict } from "./cli-process-runner.js";
 
 const RECOMPUTED_SPRINT_ATTENTION_TYPES: ProjectAttentionType[] = [
   "manual_attention",
@@ -37,6 +39,8 @@ interface ExecutionControlServiceDeps {
   julesApi: JulesApiClient;
   activeDispatchRegistry: ActiveDispatchRegistry;
   sprintRunLifecycleService: SprintRunLifecycleService;
+  qaReviewRepository?: QaReviewRepository;
+  stopProviderContainers?: (sessionIds: string[]) => Promise<string[]>;
   logger?: Logger;
 }
 
@@ -180,6 +184,7 @@ export class ExecutionControlService {
     }
 
     this.deps.sprintRunLifecycleService.releaseSprintLease(sprintRun.sprintId);
+    await this.cancelRunningProviderInvocationsForSprintRun(sprintRun, now, "Sprint run was cancelled from the dashboard.");
     const updated = this.deps.sprintRunLifecycleService.updateRun(sprintRunId, {
       status: "cancelled",
       finishedAt: now,
@@ -266,6 +271,7 @@ export class ExecutionControlService {
     }
 
     this.deps.sprintRunLifecycleService.releaseSprintLease(sprintRun.sprintId);
+    await this.cancelRunningProviderInvocationsForSprintRun(sprintRun, now, "Sprint run was force-cancelled from the dashboard.");
     const updated = this.deps.sprintRunLifecycleService.updateRun(sprintRunId, {
       status: "cancelled",
       finishedAt: now,
@@ -322,6 +328,112 @@ export class ExecutionControlService {
         status: "pending",
       });
     }
+  }
+
+  private async cancelRunningProviderInvocationsForSprintRun(
+    sprintRun: SprintRunRecord,
+    now: string,
+    message: string,
+  ): Promise<void> {
+    const runningProviderInvocations = this.deps.executionRepository
+      .listProviderInvocationsForSprint(sprintRun.projectId, sprintRun.sprintId)
+      .filter((invocation) => invocation.sprintRunId === sprintRun.id && invocation.status === "running");
+    if (runningProviderInvocations.length === 0) {
+      this.cancelRunningQaReviewsForSprintRun(sprintRun.id, now, message);
+      return;
+    }
+
+    const sessionIds = [...new Set(
+      runningProviderInvocations
+        .map((invocation) => invocation.sessionId.trim())
+        .filter(Boolean),
+    )];
+    const stoppedContainerIds = await this.stopProviderContainers(sessionIds);
+    for (const invocation of runningProviderInvocations) {
+      this.deps.executionRepository.updateProviderInvocationUsage(invocation.id, {
+        status: "cancelled",
+        finishedAt: now,
+        durationMs: this.calculateProviderDurationMs(invocation.startedAt, now),
+      });
+      for (const executionInvocation of this.deps.executionRepository.listExecutionInvocationsByProviderInvocationId(invocation.id)) {
+        this.deps.executionRepository.updateExecutionInvocation(executionInvocation.id, {
+          status: "cancelled",
+          finishedAt: now,
+          errorMessage: message,
+        });
+        this.deps.executionRepository.appendExecutionInvocationMessage(executionInvocation.id, {
+          role: "system",
+          contentMarkdown: stoppedContainerIds.length > 0
+            ? `${message} Stopped Docker container${stoppedContainerIds.length === 1 ? "" : "s"} ${stoppedContainerIds.join(", ")}.`
+            : message,
+          metadata: {
+            cancellation: "sprint_run_cancel",
+            providerInvocationId: invocation.id,
+            stoppedContainerIds,
+          },
+          createdAt: now,
+        });
+      }
+    }
+
+    this.cancelRunningQaReviewsForSprintRun(sprintRun.id, now, message);
+  }
+
+  private cancelRunningQaReviewsForSprintRun(sprintRunId: string, now: string, message: string): void {
+    const runningQaRuns = this.deps.qaReviewRepository
+      ?.listRunningRuns()
+      .filter((run) => run.sprintRunId === sprintRunId) ?? [];
+    for (const run of runningQaRuns) {
+      this.deps.qaReviewRepository?.updateRun(run.id, {
+        status: "cancelled",
+        summaryMarkdown: message,
+        finishedAt: now,
+      });
+    }
+  }
+
+  private async stopProviderContainers(sessionIds: string[]): Promise<string[]> {
+    if (sessionIds.length === 0) {
+      return [];
+    }
+    if (this.deps.stopProviderContainers) {
+      return await this.deps.stopProviderContainers(sessionIds);
+    }
+
+    const stoppedContainerIds: string[] = [];
+    for (const sessionId of sessionIds) {
+      const ps = await runCommandStrict("docker", [
+        "ps",
+        "--filter",
+        `label=code-ux.session-id=${sessionId}`,
+        "-q",
+      ], process.cwd()).catch((error: unknown) => {
+        this.deps.logger?.warn("Failed to inspect Docker containers for sprint cancellation", {
+          sessionId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+        return null;
+      });
+      const containerIds = ps?.stdout
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .filter(Boolean) ?? [];
+
+      for (const containerId of containerIds) {
+        const killed = await runCommandStrict("docker", ["kill", containerId], process.cwd()).catch((error: unknown) => {
+          this.deps.logger?.warn("Failed to stop Docker container for sprint cancellation", {
+            sessionId,
+            containerId,
+            error: error instanceof Error ? error.message : String(error),
+          });
+          return null;
+        });
+        if (killed) {
+          stoppedContainerIds.push(containerId);
+        }
+      }
+    }
+    return stoppedContainerIds;
   }
 
   async cancelTaskDispatch(dispatchId: string): Promise<TaskDispatchRecord> {
@@ -641,6 +753,15 @@ export class ExecutionControlService {
       return null;
     }
     return Math.max(0, new Date(finishedAt).getTime() - new Date(taskRun.startedAt).getTime());
+  }
+
+  private calculateProviderDurationMs(startedAt: string, finishedAt: string): number | null {
+    const startedAtMs = Date.parse(startedAt);
+    const finishedAtMs = Date.parse(finishedAt);
+    if (!Number.isFinite(startedAtMs) || !Number.isFinite(finishedAtMs)) {
+      return null;
+    }
+    return Math.max(0, finishedAtMs - startedAtMs);
   }
 
   private resolveBlockingSprintRun(projectId: string, sprintId: string): SprintRunRecord | null {
