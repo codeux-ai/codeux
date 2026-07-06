@@ -33,6 +33,7 @@ export function useQuicksprintExecutionState({
   agentPresets,
   onClose,
   onError,
+  onStatus,
 }: {
   onExecute: (templateId: string, taskCount: number, submitMode: "plan_only" | "plan_and_start", additionalPrompt?: string, routeOverride?: PlanningRouteOption | null, modelOverride?: string | null, signal?: AbortSignal, options?: QuicksprintExecutionOptions) => Promise<void>;
   virtualProviders: VirtualProviderOption[];
@@ -45,6 +46,7 @@ export function useQuicksprintExecutionState({
   agentPresets: AgentPreset[];
   onClose: () => void;
   onError?: (message: string) => void;
+  onStatus?: (message: string) => void;
 }) {
   const [executingMode, setExecutingMode] = useState<"plan_only" | "plan_and_start" | null>(null);
   const [elapsedMs, setElapsedMs] = useState(0);
@@ -83,7 +85,10 @@ export function useQuicksprintExecutionState({
   const handleExecute = useCallback(
     async (mode: "plan_only" | "plan_and_start") => {
       if (!selectedTemplate) return;
-      if (executingMode || activeRequestRef.current) return;
+      if (executingMode || activeRequestRef.current) {
+        onStatus?.("A quicksprint planning request is already running. Duplicate submission blocked.");
+        return;
+      }
 
       const reqId = ++requestCounterRef.current;
       activeRequestRef.current = { id: reqId, detached: false, cancelled: false };
@@ -140,7 +145,7 @@ export function useQuicksprintExecutionState({
         }
       }
     },
-    [onExecute, selectedTemplate, executingMode, taskCount, noTaskLimit, additionalPrompt, routeOverride, modelOverride, onClose, onError],
+    [onExecute, selectedTemplate, executingMode, taskCount, noTaskLimit, additionalPrompt, routeOverride, modelOverride, onClose, onError, onStatus],
   );
 
   const detachCurrentRequest = useCallback(() => {

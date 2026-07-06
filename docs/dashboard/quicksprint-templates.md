@@ -82,6 +82,16 @@ Destructive template removal must name the template in the confirmation title, b
 
 The template editor's icon and color pickers use the dashboard interaction tokens for open, selection, and control feedback. Picker triggers and options expose stable accessible names and selected state, close with Escape or outside click, and keep static selected cues when reduced motion is enabled.
 
+## Interaction State Contract
+
+Quicksprint status copy is part of the product contract, not incidental helper text. Template selection, purpose filter changes, editor entry, picker open/close, route/model changes, prompt edits, task-count changes, planning submission, cancellation, background continuation, completion handoff, failure, and destructive deletion all publish through the panel status region. Failures that block progress also publish through the assertive alert region.
+
+Configure controls share one busy contract. While a planning request is queued, running, or cancellation is settling, route/model selects, prompt editing, task controls, back navigation, and submit buttons are disabled and point to the visible blocked reason with `aria-describedby`. Submit labels stay stable as `Plan & Start` and `Plan Only`; pending state is communicated with `aria-busy`, elapsed/progress copy, and the status region instead of changing the button names.
+
+Editor validation must stay visible and durable. Saving is disabled until the template has a name and either agent instructions or an attached agent preset, and the disabled save action references the validation message. Icon and color picker triggers expose `aria-haspopup="dialog"`, `aria-expanded`, and `aria-controls`; picker options expose selected state, close on Escape or outside click, restore focus to the trigger, and retain visible selected cues when motion is reduced.
+
+Template deletion is always confirmed in UI that names the target template. Browse deletion uses the shared destructive confirmation dialog and restores focus to the original delete control or the template rail fallback after removal. Inline editor deletion uses a two-step confirmation with Cancel/Escape and pending deletion copy. Neither deletion path may rely on browser-native confirmation prompts, color alone, or animation-only cues.
+
 Current built-in purpose set:
 - `Fullstack JS App`
 
