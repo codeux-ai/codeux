@@ -1,4 +1,4 @@
-import express, { type Express } from "express";
+import express, { type ErrorRequestHandler, type Express } from "express";
 import * as fs from "fs";
 import * as path from "path";
 import type { IncomingMessage } from "http";
@@ -91,7 +91,34 @@ export const applyDashboardPreRouteMiddleware = (
   // dashboard warns about past ~5MB. base64 inflates bytes by ~33%, so allow
   // generous headroom to keep appearance saves from failing with HTTP 413.
   app.use(express.json({ limit: "25mb", type: shouldParseDashboardJsonBody }));
+  app.use(createDashboardJsonBodyErrorHandler(dashboardLogger));
 };
+
+function createDashboardJsonBodyErrorHandler(dashboardLogger: Logger): ErrorRequestHandler {
+  return (error, req, res, next) => {
+    const isSyntaxError = error instanceof SyntaxError;
+    const status = typeof (error as { status?: unknown }).status === "number"
+      ? (error as { status: number }).status
+      : undefined;
+    const bodyType = typeof (error as { type?: unknown }).type === "string"
+      ? (error as { type: string }).type
+      : "";
+
+    if (status === 400 && (isSyntaxError || bodyType === "entity.parse.failed")) {
+      dashboardLogger.warn("Rejected malformed dashboard JSON request body", {
+        logPurpose: "request",
+        method: req.method,
+        path: req.originalUrl,
+        statusCode: 400,
+        reason: "malformed_json",
+      });
+      res.status(400).json({ error: "Invalid JSON request body." });
+      return;
+    }
+
+    next(error);
+  };
+}
 
 export function shouldParseDashboardJsonBody(req: IncomingMessage): boolean {
   const pathname = getRequestPathname(req);
