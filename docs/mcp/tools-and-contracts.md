@@ -229,7 +229,7 @@ Available actions:
 - `list_skills`: requires `projectId` and `storageId`; accepts `limit`; returns concise skill summaries, not full markdown bodies.
 - `get_skill`: requires `projectId` and `skillId`; accepts `includeContent`. By default the response is concise; set `includeContent: true` only when the caller needs the full stored body.
 - `create_skill` and `import_markdown`: require `projectId`, `storageId`, and `markdown`; accept `sourceType` (`manual`, `imported`, or `generated`) and nullable `sourceRef`.
-- `update_skill`: requires `projectId`, `storageId`, `skillId`, and `markdown`; accepts `sourceType` and nullable `sourceRef`.
+- `update_skill`: requires `projectId`, `storageId`, `skillId`, and `markdown`; accepts `sourceType` and nullable `sourceRef`. The supplied `storageId` must match the skill's current storage because updates edit skills in place; moving a skill between storages requires a future explicit move operation. When `sourceType` or `sourceRef` are omitted, the existing skill provenance is preserved.
 - `delete_skill`: requires `projectId` and `skillId`; approval-gated. Deletes the stored markdown and embeddings.
 - `export_markdown`: requires `projectId` and `skillId`; returns the full reconstructed markdown with frontmatter.
 
@@ -248,6 +248,8 @@ Focus on bugs, regressions, missing tests, and rollback risk.
 ```
 
 The parser supports scalar frontmatter fields and simple list forms for `tags` and `appliesTo`. The body is the authoritative instruction content. Metadata is stored in dedicated columns so `export_markdown` can reconstruct the markdown.
+
+Updating a skill replaces its markdown-derived metadata and instruction body while keeping the skill in its current storage. The update path preserves existing provenance (`sourceType` and `sourceRef`) unless the caller explicitly supplies replacement source fields.
 
 Create or import example:
 

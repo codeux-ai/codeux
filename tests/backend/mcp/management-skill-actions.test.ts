@@ -110,6 +110,8 @@ describe("SkillActions", () => {
       payload: {
         projectId,
         storageId,
+        sourceType: "imported",
+        sourceRef: "external://review-discipline.md",
         markdown: `---
 title: Review Discipline
 description: Find concrete regressions.
@@ -141,6 +143,12 @@ Review pull requests for bugs, regressions, missing tests, and unclear rollback 
       },
     });
     expect((updateResponse.result as { skill: { version: string } }).skill.version).toBe("1.1.0");
+    expect(updateResponse.result as { skill: { sourceType: string; sourceRef: string } }).toMatchObject({
+      skill: {
+        sourceType: "imported",
+        sourceRef: "external://review-discipline.md",
+      },
+    });
 
     const exportResponse = await actions.handleSkillAction({
       domain: "skills",
@@ -161,6 +169,44 @@ Review pull requests for bugs, regressions, missing tests, and unclear rollback 
     expect(results[0]!.skill.id).toBe(skillId);
     expect(results[0]!.skill).not.toHaveProperty("contentMarkdown");
     expect(results[0]!.skill.summary).toContain("Review pull requests");
+  });
+
+  it("rejects update_skill when storageId does not match the skill storage", async () => {
+    const { actions, projectId, skillService } = await createFixture();
+    const originalStorage = skillService.createStorage(projectId, { id: "original", name: "Original" });
+    const otherStorage = skillService.createStorage(projectId, { id: "other", name: "Other" });
+    const skill = await skillService.writeSkillFromMarkdown(projectId, originalStorage.id, `---
+title: Stored Skill
+---
+
+Review original content.
+`, {
+      sourceType: "imported",
+      sourceRef: "external://stored-skill.md",
+    });
+
+    await expect(actions.handleSkillAction({
+      domain: "skills",
+      action: "update_skill",
+      payload: {
+        projectId,
+        storageId: otherStorage.id,
+        skillId: skill.id,
+        markdown: `---
+title: Stored Skill
+---
+
+Review changed content.
+`,
+      },
+    })).rejects.toThrow("moving skills between storages is not supported");
+
+    expect(skillService.getSkill(projectId, skill.id)).toMatchObject({
+      storageId: originalStorage.id,
+      sourceType: "imported",
+      sourceRef: "external://stored-skill.md",
+      contentMarkdown: "Review original content.",
+    });
   });
 
   it("enforces project isolation through the skill service boundary", async () => {

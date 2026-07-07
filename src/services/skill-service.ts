@@ -127,14 +127,20 @@ export class SkillService {
     markdown: string,
     options: WriteSkillMarkdownOptions = {},
   ): Promise<SkillRecord> {
+    const currentSkill = options.skillId ? this.requireSkill(projectId, options.skillId) : null;
     const parsed = parseSkillMarkdown(markdown);
     const name = parsed.title || "Untitled skill";
+    if (currentSkill && currentSkill.storageId !== storageId) {
+      throw new Error(
+        `Skill ${currentSkill.id} belongs to storage ${currentSkill.storageId}; moving skills between storages is not supported by writeSkillFromMarkdown`,
+      );
+    }
     const input = {
       name,
       description: parsed.description,
       contentMarkdown: parsed.bodyMarkdown,
-      sourceType: options.sourceType ?? "manual",
-      sourceRef: options.sourceRef ?? null,
+      sourceType: options.sourceType ?? currentSkill?.sourceType ?? "manual",
+      sourceRef: options.sourceRef === undefined ? currentSkill?.sourceRef ?? null : options.sourceRef,
       tags: parsed.tags,
       appliesTo: parsed.appliesTo,
       version: parsed.version,

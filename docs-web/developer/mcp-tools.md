@@ -110,6 +110,10 @@ Returns the most relevant passages with their source documents. See the
 - Authoring guidance: `authoring_prompt`.
 - Destructive cleanup: `delete_storage`, `reset_storage`, and `delete_skill` require the approval handshake.
 
+`update_skill` edits the existing skill in place: the request's `storageId` must match the skill's
+current storage. If `sourceType` or `sourceRef` are omitted, Code UX preserves the skill's existing
+provenance; callers can still explicitly supply those fields to replace provenance.
+
 Skill markdown is saved through MCP payloads, not by writing files into the project workspace:
 
 ```md
