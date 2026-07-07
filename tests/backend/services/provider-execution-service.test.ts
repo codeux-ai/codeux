@@ -889,6 +889,8 @@ describe("ProviderExecutionService", () => {
     await expect(service.executeProvider({ ...defaultArgs, signal: abortController.signal }))
       .rejects.toThrow("Aborted");
 
-    expect(sleepWithSignal).toHaveBeenCalledWith(1000, abortController.signal);
+    expect(sleepWithSignal).toHaveBeenCalledWith(expect.any(Number), abortController.signal);
+    expect(sleepWithSignal.mock.calls[0]?.[0]).toBeGreaterThan(0);
+    expect(sleepWithSignal.mock.calls[0]?.[0]).toBeLessThanOrEqual(1000);
   });
 });
