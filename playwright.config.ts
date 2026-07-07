@@ -64,7 +64,7 @@ export default defineConfig({
     // /ready only returns 200 once a project has a live-status timestamp, which
     // never happens in a clean CI checkout, so it would hang until timeout.
     url: 'http://127.0.0.1:4444/health',
-    reuseExistingServer: false,
+    reuseExistingServer: process.env.CODEUX_E2E_REUSE_EXISTING_SERVER === '1',
     timeout: 60000,
     stdout: 'pipe',
     stderr: 'pipe',
@@ -73,6 +73,7 @@ export default defineConfig({
       USERPROFILE: tempHome,
       XDG_CONFIG_HOME: path.join(tempHome, '.config'),
       XDG_DATA_HOME: path.join(tempHome, '.local', 'share'),
+      CODE_UX_DIRECTORY_BROWSER_ROOTS: os.tmpdir(),
       CODEUX_E2E_PROVIDER_CLI_SHIM: mockProviderCliPath,
     },
   },
