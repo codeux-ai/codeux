@@ -1,5 +1,9 @@
-import type { SpeechTranscriptionError, SpeechTranscriptionResult } from "../types.js";
-import { fetchJson } from "../../lib/api/fetch-json.js";
+import type {
+  SpeechTranscriptionError,
+  SpeechTranscriptionErrorCode,
+  SpeechTranscriptionProvider,
+  SpeechTranscriptionResult,
+} from "../types.js";
 
 export interface TranscribeSpeechAudioInput {
   audio: Blob;
@@ -14,6 +18,18 @@ export interface TranscribeSpeechAudioInput {
 export type TranscribeSpeechAudioResult = SpeechTranscriptionResult;
 
 const DEFAULT_AUDIO_FILENAME = "speech-input.wav";
+const SPEECH_TRANSCRIPTION_ERROR_CODES = new Set<SpeechTranscriptionErrorCode>([
+  "unsupported_audio",
+  "missing_local_model",
+  "missing_model",
+  "permission_denied",
+  "client_error",
+  "provider_failure",
+]);
+const SPEECH_TRANSCRIPTION_PROVIDERS = new Set<SpeechTranscriptionProvider>([
+  "local_onnx",
+  "external_api",
+]);
 
 const createClientError = (message: string, retryable = false): SpeechTranscriptionError => ({
   code: "client_error",
@@ -28,6 +44,60 @@ const readErrorMessage = (error: unknown): string => {
 
 const isAbortError = (error: unknown): boolean => {
   return error instanceof DOMException && error.name === "AbortError";
+};
+
+const isRecord = (value: unknown): value is Record<string, unknown> => (
+  typeof value === "object" && value !== null
+);
+
+const isSpeechTranscriptionErrorCode = (value: unknown): value is SpeechTranscriptionErrorCode => (
+  typeof value === "string" && SPEECH_TRANSCRIPTION_ERROR_CODES.has(value as SpeechTranscriptionErrorCode)
+);
+
+const isSpeechTranscriptionProvider = (value: unknown): value is SpeechTranscriptionProvider => (
+  typeof value === "string" && SPEECH_TRANSCRIPTION_PROVIDERS.has(value as SpeechTranscriptionProvider)
+);
+
+const isNullableString = (value: unknown): value is string | null => (
+  value === null || typeof value === "string"
+);
+
+const isNullableNumber = (value: unknown): value is number | null => (
+  value === null || typeof value === "number"
+);
+
+const isSpeechTranscriptionResult = (value: unknown): value is SpeechTranscriptionResult => {
+  if (!isRecord(value)) return false;
+  if (value.ok === true) {
+    return (
+      typeof value.text === "string"
+      && isSpeechTranscriptionProvider(value.provider)
+      && typeof value.model === "string"
+      && isNullableString(value.language)
+      && isNullableNumber(value.durationSeconds)
+    );
+  }
+  if (value.ok !== false || !isRecord(value.error)) return false;
+  return (
+    isSpeechTranscriptionErrorCode(value.error.code)
+    && typeof value.error.message === "string"
+    && typeof value.error.retryable === "boolean"
+    && (value.error.provider === undefined || isSpeechTranscriptionProvider(value.error.provider))
+  );
+};
+
+const readSpeechTranscriptionResult = async (response: Response): Promise<SpeechTranscriptionResult> => {
+  const body = await response.json().catch(() => null);
+  if (isSpeechTranscriptionResult(body)) {
+    return body;
+  }
+  return {
+    ok: false,
+    error: createClientError(
+      response.ok ? "Speech transcription returned an invalid response." : "Speech transcription failed.",
+      response.status >= 500,
+    ),
+  };
 };
 
 const setOptionalFormString = (formData: FormData, key: string, value: string | null | undefined): void => {
@@ -57,11 +127,13 @@ export const transcribeSpeechAudio = async (
   setOptionalFormString(formData, "sprintId", input.sprintId);
 
   try {
-    return await fetchJson<SpeechTranscriptionResult>("/api/speech/transcriptions", {
+    const response = await fetch("/api/speech/transcriptions", {
       method: "POST",
       body: formData,
       signal: input.signal,
+      cache: "no-store",
     });
+    return await readSpeechTranscriptionResult(response);
   } catch (error) {
     return {
       ok: false,
