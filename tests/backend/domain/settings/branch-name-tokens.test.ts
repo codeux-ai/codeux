@@ -306,6 +306,18 @@ function makeBasePayload() {
       mapMaxEdgesPerNode: 3,
       workerLearningsInstruction: "",
     },
+    speech: {
+      enabled: false,
+      providerMode: "auto",
+      localModelId: "onnx-community/whisper-base.en",
+      maxAudioSeconds: 120,
+      externalTranscription: {
+        baseUrl: "https://api.openai.com/v1/audio/transcriptions",
+        apiKey: "",
+        model: "whisper-1",
+        language: null,
+      },
+    },
   };
 }
 

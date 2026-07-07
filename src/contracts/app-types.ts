@@ -2,6 +2,7 @@ import type { InstructionTemplateId } from "../instructions/instruction-template
 import type { ProviderInvocationPurpose, TokenUsageSource } from "./execution-types.js";
 import type { ExecutionInvocationRecord } from "./invocation-types.js";
 import type { MemorySettings } from "./memory-types.js";
+import type { SpeechSettings } from "./speech-types.js";
 
 export interface JulesSource {
   name: string;
@@ -1239,6 +1240,7 @@ export interface DashboardSettings {
   mcpTools: McpToolToggle[];
   customMcpServers: CustomMcpServer[];
   memory: MemorySettings;
+  speech: SpeechSettings;
   modelPricing: ModelPricingSettings;
 }
 
