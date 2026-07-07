@@ -132,6 +132,96 @@ Chat provider management uses the same safety model for sensitive operations:
   payload. Responses include redacted credential metadata and generated ingress URL guidance, never
   raw secret values.
 
+## `manage_chat_providers`
+
+`manage_chat_providers` configures external chat provider setup definitions, provider connections,
+channel bindings, and outbound delivery inspection. It does not process inbound messages or force
+outbound sends; those are runtime services behind authenticated ingress and delivery adapters.
+
+Supported provider kinds are `whatsapp`, `imessage`, `telegram`, `slack`, `microsoft-teams`, and
+`discord`. Supported bridge modes are `openclaw`, `webhook`, and `native_bridge`. Code UX does not
+call those providers' official APIs directly; it talks to the configured OpenClaw bridge, webhook
+gateway, or native bridge command.
+
+Common actions:
+
+- `list_provider_definitions` returns setup schemas, required secret fields, and ingress guidance.
+- `create_connection` and `update_connection` save provider kind, bridge mode, setup fields, enabled
+  state, status, and write-only secret replacements.
+- `create_channel_binding` and `update_channel_binding` attach external channels to projects with
+  optional routing hints, inbound/outbound flags, `agentPresetId`, and `suppressRichWidgets`.
+- `list_outbound_deliveries` reads persisted outbound delivery state by connection, binding, channel,
+  status, and limit.
+
+Redaction rules:
+
+- Raw `secrets` are never returned in success responses, validation errors, or approval envelopes.
+- Public connection records return `credentials` entries that show only key, label, configured state,
+  and redacted placeholder.
+- Delivery payloads, bridge response metadata, and error text are redacted before MCP responses.
+
+Approval behavior:
+
+- `delete_connection` requires approval and cascades channel bindings and delivery rows.
+- `delete_channel_binding` requires approval and stops routing for that channel/project pair.
+- `update_connection` requires a one-use approval handshake before replacing a non-empty `secrets`
+  payload. The approval fingerprint is bound to the redacted payload plus a secret hash.
+
+Create a webhook-backed connection:
+
+```jsonc
+{
+  "action": "create_connection",
+  "providerKind": "slack",
+  "displayName": "Team chat bridge",
+  "bridgeMode": "webhook",
+  "status": "active",
+  "enabled": true,
+  "setup": {
+    "eventsUrl": "https://bridge.example.test/events",
+    "appId": "app-generic"
+  },
+  "secrets": {
+    "signingSecret": "replace-with-secret",
+    "botToken": "replace-with-token"
+  }
+}
+```
+
+Bind a shared external channel to a project:
+
+```jsonc
+{
+  "action": "create_channel_binding",
+  "providerConnectionId": "connection-generic",
+  "externalChannelId": "channel-shared",
+  "externalChannelName": "Shared engineering channel",
+  "projectId": "project-alpha",
+  "routingHints": {
+    "projectSelectorPrefix": "alpha",
+    "aliases": ["alpha", "project-alpha"]
+  },
+  "inboundEnabled": true,
+  "outboundEnabled": true,
+  "suppressRichWidgets": true
+}
+```
+
+Inspect retryable outbound delivery state:
+
+```jsonc
+{
+  "action": "list_outbound_deliveries",
+  "providerConnectionId": "connection-generic",
+  "externalChannelId": "channel-shared",
+  "deliveryStatus": "retryable_failure",
+  "limit": 25
+}
+```
+
+Delivery statuses include `pending`, `sending`, `delivered`, `retryable_failure`, `processed`,
+`failed`, `duplicate`, and `cancelled`.
+
 ## `search_knowledge`
 
 Semantic search over the knowledge base subscribed to the caller — scoped to the caller's own

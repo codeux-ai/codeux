@@ -629,10 +629,65 @@ For preview calls:
 
 For external chat provider calls:
 - `manage_chat_providers` supports `list_provider_definitions`, `list_connections`, `get_connection`, `create_connection`, `update_connection`, `delete_connection`, `list_channel_bindings`, `create_channel_binding`, `update_channel_binding`, `delete_channel_binding`, and `list_outbound_deliveries`.
-- Connection responses return redacted credential metadata and generated ingress URL templates; raw `secrets` are not exposed.
+- Supported provider kinds are `whatsapp`, `imessage`, `telegram`, `slack`, `microsoft-teams`, and `discord`, delivered through the implemented `openclaw`, `webhook`, or `native_bridge` bridge contracts. The tool does not claim direct official API integration with those providers.
+- Connection responses return redacted credential metadata and generated ingress URL guidance; raw `secrets` are not exposed in success responses, validation errors, or approval envelopes.
 - `delete_connection` and `delete_channel_binding` require approval confirmation.
-- `update_connection` requires a one-use approval handshake before replacing a non-empty `secrets` payload. The preflight response does not echo secret values.
-- The management surface only configures providers, bindings, setup definitions, ingress URL guidance, and outbound delivery inspection. Inbound routing and outbound sending remain outside this contract.
+- `update_connection` requires a one-use approval handshake before replacing a non-empty `secrets` payload. The preflight response is bound to a redacted payload plus secret hash and does not echo secret values.
+- Channel bindings attach an external channel to a project with optional routing hints, inbound/outbound flags, and `suppressRichWidgets`. Multiple projects may share one external channel; runtime ingress uses selectors and records `disambiguation_needed` instead of guessing when no selector chooses exactly one project.
+- `list_outbound_deliveries` is read-only delivery-state inspection. It can filter by provider connection, channel binding, external channel, delivery status, and limit. Delivery statuses include `pending`, `sending`, `delivered`, `retryable_failure`, `processed`, `failed`, `duplicate`, and `cancelled`.
+- The management surface only configures providers, bindings, setup definitions, ingress URL guidance, and outbound delivery inspection. Authenticated ingress and outbound sending remain runtime services outside this management contract.
+
+Create a webhook-backed connection:
+
+```json
+{
+  "action": "create_connection",
+  "providerKind": "slack",
+  "displayName": "Team chat bridge",
+  "bridgeMode": "webhook",
+  "status": "active",
+  "enabled": true,
+  "setup": {
+    "eventsUrl": "https://bridge.example.test/events",
+    "appId": "app-generic"
+  },
+  "secrets": {
+    "signingSecret": "replace-with-secret",
+    "botToken": "replace-with-token"
+  }
+}
+```
+
+Bind a shared channel to a project:
+
+```json
+{
+  "action": "create_channel_binding",
+  "providerConnectionId": "connection-generic",
+  "externalChannelId": "channel-shared",
+  "externalChannelName": "Shared engineering channel",
+  "projectId": "project-alpha",
+  "routingHints": {
+    "projectSelectorPrefix": "alpha",
+    "aliases": ["alpha", "project-alpha"]
+  },
+  "inboundEnabled": true,
+  "outboundEnabled": true,
+  "suppressRichWidgets": true
+}
+```
+
+Inspect retryable outbound delivery state:
+
+```json
+{
+  "action": "list_outbound_deliveries",
+  "providerConnectionId": "connection-generic",
+  "externalChannelId": "channel-shared",
+  "deliveryStatus": "retryable_failure",
+  "limit": 25
+}
+```
 
 For settings patch calls, `value` may be any JSON value, including strings, booleans, numbers, `null`, arrays, or objects.
 Settings patch and replacement calls still require the stateful human-confirmation gate described above.
