@@ -48,6 +48,7 @@ Focuses on provider usage, telemetry confidence, failure pressure, latency signa
 Provides tabbed telemetry tables containing raw Task and Sprint data.
 - Supports searching and sorting by recency, tokens, time, input/output volume, or name.
 - Richer token and time breakdowns compared to standard views.
+- Task, sprint, and Git ledger rows use the same flat dense cards, chips, search fields, sort buttons, count badges, empty states, and progressive loading sentinel as the rest of Stats, without glass blur or elevated hover treatments.
 
 ### System
 Exposes administrative invocation telemetry:
@@ -55,6 +56,7 @@ Exposes administrative invocation telemetry:
 - Classified external API activity.
 - Error categories for recorded invocation failures.
 - Filtered invocation records with expandable transcript details.
+- Summary sections, filter chips, invocation rows, sticky table headers, loading states, and transcript panels use the flat Stats surface system while preserving sortable headers, filters, pagination, and expandable message details.
 
 ## Cost Metrics and Pricing
 

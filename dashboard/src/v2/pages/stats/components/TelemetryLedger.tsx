@@ -462,7 +462,7 @@ export const TelemetryLedger: FunctionComponent<{
                     <div className="flex flex-col gap-4">
                       <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
                         <div className="flex min-w-0 items-start gap-3">
-                          <div className="flex h-10 w-10 shrink-0 flex-col items-center justify-center rounded-xl border border-[color:var(--stats-card-border)] bg-[color:var(--stats-card-bg)] text-[10px] font-semibold uppercase leading-none text-[color:var(--stats-value-color)] shadow-sm backdrop-blur-xl">
+                          <div className="flex h-10 w-10 shrink-0 flex-col items-center justify-center rounded-[var(--stats-chip-radius)] border border-[color:var(--stats-card-border)] bg-[color:var(--stats-surface-subpanel)] text-[10px] font-semibold uppercase leading-none text-[color:var(--stats-value-color)]">
                             <span className="text-[8px] tracking-[0.12em] text-[color:var(--stats-label-color)]">Rank</span>
                             <span className="mt-0.5 text-xs">{index + 1}</span>
                           </div>
@@ -544,7 +544,7 @@ export const TelemetryLedger: FunctionComponent<{
                         >
                           <div
                             aria-hidden="true"
-                            className="h-1 rounded-full bg-[color:var(--stats-positive-text)] motion-safe:transition-all"
+                            className="h-1 rounded-full bg-[color:var(--stats-positive-text)] motion-safe:transition-[width]"
                             style={{ transitionDuration: interactionTokens.listReorder.duration, transitionTimingFunction: interactionTokens.listReorder.ease, width: `${Math.min(100, Math.max(shareOfLeader > 0 ? 3 : 0, shareOfLeader))}%` }}
                           />
                         </div>
