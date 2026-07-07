@@ -9,6 +9,7 @@ import { areTaskRecordListsEqual, shouldUseForegroundLoading } from "./project-r
 interface UseProjectTasksResult {
   tasks: Task[];
   loading: boolean;
+  loaded: boolean;
   error: string | null;
   refresh: () => Promise<void>;
 }
@@ -33,8 +34,10 @@ export function useProjectTasks(
 ): UseProjectTasksResult {
   const [taskRecords, setTaskRecords] = useState<TaskRecord[]>([]);
   const [loading, setLoading] = useState(false);
+  const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const hasLoadedRef = useRef(false);
+  const loadedResourceKeyRef = useRef<string | null>(null);
   const enabled = options?.enabled ?? true;
   const resourceKey = projectId ? getTaskRecordsKey(projectId, sprintId) : null;
 
@@ -43,7 +46,9 @@ export function useProjectTasks(
       setTaskRecords([]);
       setError(null);
       setLoading(false);
+      setLoaded(false);
       hasLoadedRef.current = false;
+      loadedResourceKeyRef.current = null;
       return;
     }
 
@@ -68,6 +73,8 @@ export function useProjectTasks(
       taskRecordsCache.set(key, nextTaskRecords);
       setTaskRecords((current) => (areTaskRecordListsEqual(current, nextTaskRecords) ? current : nextTaskRecords));
       hasLoadedRef.current = true;
+      loadedResourceKeyRef.current = key;
+      setLoaded(true);
       setError(null);
     } catch (fetchError) {
       setError(fetchError instanceof Error ? fetchError.message : String(fetchError));
@@ -83,6 +90,11 @@ export function useProjectTasks(
     if (resourceKey && taskRecordsCache.has(resourceKey)) {
       setTaskRecords(taskRecordsCache.get(resourceKey)!);
       hasLoadedRef.current = true;
+      loadedResourceKeyRef.current = resourceKey;
+      setLoaded(true);
+    } else {
+      loadedResourceKeyRef.current = null;
+      setLoaded(false);
     }
     void refreshInternal();
   }, [enabled, projectId, resourceKey, sprintId, refreshInternal]);
@@ -139,5 +151,11 @@ export function useProjectTasks(
     await refreshInternal({ silent: true });
   }, [refreshInternal]);
 
-  return { tasks, loading, error, refresh };
+  return {
+    tasks,
+    loading,
+    loaded: Boolean(resourceKey && loaded && loadedResourceKeyRef.current === resourceKey),
+    error,
+    refresh,
+  };
 }

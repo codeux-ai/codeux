@@ -198,7 +198,11 @@ describe("Chat Widget View Models", () => {
       const result = getChatWidgetData(message, {
         projectId: "project-1",
         projectTasks,
+        projectTasksLoading: false,
+        projectTasksLoaded: true,
         execution: createExecution({ sprintRuns: [createExecution().sprintRuns[0]!, { ...createExecution().sprintRuns[0]!, id: "run-queued", status: "queued" }] }),
+        executionLoading: false,
+        executionLoaded: true,
         sprintKeyPrefix: "SPR",
       });
 
@@ -233,11 +237,15 @@ describe("Chat Widget View Models", () => {
           createTask({ recordId: "task-2", id: "TASK-2", status: "completed", title: "Completed two" }),
           createTask({ recordId: "task-3", id: "TASK-3", status: "in_progress", title: "Running task" }),
         ],
+        projectTasksLoading: false,
+        projectTasksLoaded: true,
         execution: createExecution({
           taskDispatches: [
             createDispatch({ id: "dispatch-3", taskId: "task-3", taskKey: "TASK-3", status: "running", taskRunState: "RUNNING" }),
           ],
         }),
+        executionLoading: false,
+        executionLoaded: true,
       });
 
       expect(result.liveStatus?.progressLabel).toBe("2/3 · 67%");
@@ -261,6 +269,8 @@ describe("Chat Widget View Models", () => {
           createTask({ recordId: "task-blocked", id: "TASK-B", title: "Blocked task" }),
           createTask({ recordId: "task-quota", id: "TASK-Q", title: "Quota task" }),
         ],
+        projectTasksLoading: false,
+        projectTasksLoaded: true,
         execution: createExecution({
           taskDispatches: [
             createDispatch({ id: "dispatch-failed", taskId: "task-failed", taskKey: "TASK-F", status: "failed", taskRunState: "FAILED", finishedAt: "2026-03-10T12:05:00.000Z" }),
@@ -268,9 +278,34 @@ describe("Chat Widget View Models", () => {
             createDispatch({ id: "dispatch-quota", taskId: "task-quota", taskKey: "TASK-Q", status: "quota", taskRunState: "QUOTA", finishedAt: "2026-03-10T12:07:00.000Z" }),
           ],
         }),
+        executionLoading: false,
+        executionLoaded: true,
       });
 
       expect(result.liveStatus?.tasks.map((task) => task.statusLabel)).toEqual(["Failed", "Blocked", "Quota wait"]);
+    });
+
+    it("keeps the generic planning fallback while execution and task data are still loading", () => {
+      const message = {
+        metadata: {
+          type: "planning",
+          status: "queued",
+          planName: "Sprint request",
+          sprintId: "sprint-1",
+        }
+      } as unknown as ChatMessageRecord;
+
+      const result = getChatWidgetData(message, {
+        projectId: "project-1",
+        projectTasks: [createTask()],
+        projectTasksLoading: true,
+        projectTasksLoaded: false,
+        execution: createExecution(),
+        executionLoading: false,
+        executionLoaded: true,
+      });
+
+      expect(result).toEqual({ type: "planning", status: "queued", planName: "Sprint request" });
     });
   });
 

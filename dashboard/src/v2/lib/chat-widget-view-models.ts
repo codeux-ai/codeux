@@ -68,7 +68,11 @@ export interface LivePlanningWidgetState {
 export interface ChatWidgetLiveData {
   projectId: string | null;
   projectTasks?: Task[] | null;
+  projectTasksLoading?: boolean;
+  projectTasksLoaded?: boolean;
   execution?: ExecutionDashboardSnapshot | null;
+  executionLoading?: boolean;
+  executionLoaded?: boolean;
   sprintKeyPrefix?: string;
 }
 
@@ -275,7 +279,14 @@ const buildLivePlanningWidgetState = (
   fallbackPlanName: string,
   liveData?: ChatWidgetLiveData,
 ): LivePlanningWidgetState | null => {
-  if (!liveData?.execution || !Array.isArray(liveData.projectTasks)) {
+  if (
+    !liveData?.execution
+    || !Array.isArray(liveData.projectTasks)
+    || liveData.executionLoading
+    || liveData.projectTasksLoading
+    || liveData.executionLoaded !== true
+    || liveData.projectTasksLoaded !== true
+  ) {
     return null;
   }
 
