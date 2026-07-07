@@ -507,6 +507,122 @@ describe("Chat Message Bubbles", () => {
       expect(container.textContent).toContain("Preparing to plan...");
     });
 
+    it("renders passing planning self-reflection as a rich widget", () => {
+      const message: ExecutionInvocationMessageRecord = {
+        id: "msg_reflection_pass",
+        invocationId: "inv_1",
+        role: "system",
+        contentMarkdown: "Self-reflection reflection_evaluated for planning: passed.",
+        toolCallsJson: null,
+        createdAt: new Date().toISOString(),
+        metadata: {
+          reflection: {
+            event: "reflection_evaluated",
+            purpose: "planning",
+            attempt: 0,
+            criteria: [{ id: "coverage", label: "Coverage", threshold: 0.8 }],
+            scores: [{
+              id: "coverage",
+              score: 9,
+              threshold: 0.8,
+              passed: true,
+              rationale: "The plan covers the required integration contracts.",
+              improvementInstructions: "",
+            }],
+            passed: true,
+            finalDecision: "passed",
+          },
+        },
+      };
+
+      const { container } = render(<InvocationMessageBubble message={message} />);
+      const view = within(container);
+
+      expect(view.getByRole("region", { name: /Planning self-reflection/i })).toBeInTheDocument();
+      expect(view.getByText("Planning self-reflection")).toBeInTheDocument();
+      expect(view.getByText("Final decision:")).toBeInTheDocument();
+      expect(view.getAllByText("Passed").length).toBeGreaterThan(0);
+      expect(view.getByRole("img", { name: /Rating 5 of 5 stars for Coverage; score 9\/10/i })).toBeInTheDocument();
+      expect(view.getByText("Threshold 8/10")).toBeInTheDocument();
+      expect(view.getByText("The plan covers the required integration contracts.")).toBeInTheDocument();
+      expect(view.queryByText("Self-reflection reflection_evaluated for planning: passed.")).not.toBeInTheDocument();
+    });
+
+    it("renders failing QA self-reflection with rationale and improvement details", () => {
+      const message: ExecutionInvocationMessageRecord = {
+        id: "msg_reflection_fail",
+        invocationId: "inv_1",
+        role: "system",
+        contentMarkdown: "Self-reflection reflection_evaluated for qa_review: improvement_requested.",
+        toolCallsJson: null,
+        createdAt: new Date().toISOString(),
+        metadata: {
+          reflection: {
+            purpose: "qa_review",
+            attempt: 1,
+            criteria: [{ id: "correctness", label: "Correctness", threshold: 0.85 }],
+            scores: [{
+              id: "correctness",
+              score: 6,
+              threshold: 0.85,
+              passed: false,
+              rationale: "The QA review missed a blocking defect.",
+              improvementInstructions: "Add the missing regression finding.",
+            }],
+            passed: false,
+            finalDecision: "improvement_requested",
+          },
+        },
+      };
+
+      const { container } = render(<InvocationMessageBubble message={message} />);
+      const view = within(container);
+
+      expect(view.getByRole("region", { name: /QA self-reflection/i })).toBeInTheDocument();
+      expect(view.getByText("QA self-reflection")).toBeInTheDocument();
+      expect(view.getAllByText("Needs improvement").length).toBeGreaterThan(0);
+      expect(view.getByText("Improvement Requested")).toBeInTheDocument();
+      expect(view.getByRole("img", { name: /Rating 3 of 5 stars for Correctness; score 6\/10/i })).toBeInTheDocument();
+      expect(view.getByText("Threshold 8.5/10")).toBeInTheDocument();
+      expect(view.getByText("The QA review missed a blocking defect.")).toBeInTheDocument();
+      expect(view.getByText("Improvement:")).toBeInTheDocument();
+      expect(view.getByText("Add the missing regression finding.")).toBeInTheDocument();
+    });
+
+    it("renders reflection error metadata without criterion scores", () => {
+      const message: ExecutionInvocationMessageRecord = {
+        id: "msg_reflection_error",
+        invocationId: "inv_1",
+        role: "system",
+        contentMarkdown: "Self-reflection reflection_failed for planning: reflection_failed.",
+        toolCallsJson: null,
+        createdAt: new Date().toISOString(),
+        metadata: {
+          reflection: {
+            event: "reflection_failed",
+            purpose: "planning",
+            attempt: 0,
+            criteria: [{ id: "coverage", label: "Coverage", threshold: 0.8 }],
+            scores: [],
+            passed: false,
+            finalDecision: "reflection_failed",
+            errorMessage: "Reflection JSON could not be parsed.",
+          },
+        },
+      };
+
+      const { container } = render(<InvocationMessageBubble message={message} />);
+      const view = within(container);
+
+      expect(view.getByRole("region", { name: /Planning self-reflection.*Reflection error/i })).toBeInTheDocument();
+      expect(view.getAllByText("Reflection error").length).toBeGreaterThan(0);
+      expect(view.getByText("Reflection Failed")).toBeInTheDocument();
+      expect(view.getByRole("alert")).toHaveTextContent("Reflection JSON could not be parsed.");
+      expect(view.getByText("Coverage")).toBeInTheDocument();
+      expect(view.getByText("No score")).toBeInTheDocument();
+      expect(view.getByRole("img", { name: /Rating unavailable for Coverage/i })).toBeInTheDocument();
+    });
+
     it("renders the live sprint status widget for invocation planning messages", () => {
       const message: ExecutionInvocationMessageRecord = {
         id: "msg_inv_live",
