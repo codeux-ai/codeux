@@ -30,6 +30,7 @@ for destructive actions.
 | Tool | Category | Purpose |
 | --- | --- | --- |
 | `manage_projects` | orchestration | List, get, create, update, select, set up, and delete projects. |
+| `manage_code_ux` | advanced | (Deprecated) Manage internal Code UX state. Used for configuration and destructive actions. |
 | `manage_sprints` | orchestration | Plan, start, pause, cancel, inspect, import issues into, and edit sprints. |
 | `manage_tasks` | orchestration | Create, edit, start, stop, pause, and inspect tasks. |
 | `manage_quicksprints` | orchestration | Manage quicksprint templates and execute them. |
@@ -48,6 +49,7 @@ Every tool requires `runtimeRoles: ["project_manager"]` and is enabled by defaul
 | Tool | `action` values |
 | --- | --- |
 | `manage_projects` | `list`, `get`, `create`, `update`, `select`, `setup`, `delete` |
+| `manage_code_ux` | Domain/action specific (Deprecated) |
 | `manage_sprints` | `list`, `get`, `create`, `update`, `delete`, `start`, `pause`, `cancel`, `force_cancel`, `inspect_run`, `import_issues`, `plan` |
 | `manage_tasks` | `list`, `get`, `create`, `update`, `delete`, `start`, `stop`, `force_stop`, `pause`, `inspect_run` |
 | `manage_quicksprints` | `list_templates`, `get_template`, `create_template`, `update_template`, `delete_template`, `execute`, `start` |

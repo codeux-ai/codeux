@@ -10,6 +10,7 @@ Implemented in:
 
 These cover:
 - `manage_projects`
+- `manage_code_ux` (Deprecated)
 - `manage_sprints`
 - `manage_tasks`
 - `manage_quicksprints`
@@ -418,7 +419,7 @@ Persistence and prompt behavior:
 For task create/update calls:
 - `title` is canonical; `name` is accepted as an alias.
 - `projectId` is required for list/create, and `sprintId` is required for create. List can omit `sprintId` to return all project tasks.
-- Supported edit fields include `promptMarkdown`, `description`, `status`, `priority`, `executorType`, `agentPresetId`, `model`, `sortOrder`, `dependsOnTaskIds`, `isIndependent`, and `isMerged`.
+- Supported edit fields include `promptMarkdown`, `description`, `status`, `priority`, `executorType`, `agentPresetId` (`model` is accepted as an alias), `sortOrder`, `dependsOnTaskIds`, `isIndependent`, and `isMerged`.
 
 For quicksprint calls:
 - `manage_quicksprints` supports `list_templates`, `get_template`, `create_template`, `update_template`, `delete_template`, `execute`, and `start`.
@@ -426,12 +427,13 @@ For quicksprint calls:
 - `execute` defaults to `submitMode: "plan_only"` when no submit mode is supplied.
 - `taskCount` is the canonical task-number field for execution. MCP accepts it as a number or numeric string.
 - `noTaskLimit: true` lets the planner choose the number of subtasks and disables the fixed-count prompt.
+- Flattened target fields (like `promptMarkdown`, `modelOverride`, etc.) are also accepted when scheduling or executing templates.
 - `delete_template` requires approval confirmation. Custom templates are removed from the project template directory; built-in/default templates are hidden for the project by writing a local tombstone marker instead of deleting shared bundled assets.
 
 For scheduler calls:
 - `manage_scheduler` supports `list`, `create`, `schedule_sprint`, `schedule_quicksprint`, `schedule_chat`, `update`, `delete`, and `run_due`.
 - Generic `create` requires `targetType: "sprint" | "quicksprint" | "chat"`.
-- The `schedule_*` aliases infer the target type and accept flattened target fields.
+- The `schedule_*` aliases infer the target type and accept flattened target fields (e.g. properties from the target type passed directly rather than nested).
 - Recurrence `frequency` accepts `minutely`, `hourly`, `daily`, `weekly`, and `monthly`; the dashboard renders `minutely` as `Minutes` and the matching recurrence summaries use labels such as `Every minute` and `Every 15 minutes`.
 - Minute recurrence uses the same UTC scheduler math as longer intervals, so the normalized rule advances `nextRunAt` and expands occurrences exactly like other frequencies once the minute literal has been parsed.
 - Scheduled quicksprints use the same `taskCount` number or numeric-string normalization as direct quicksprints.
