@@ -37,7 +37,7 @@ Each row has a **⋯** menu with:
 - **Rerun** — start a fresh dispatch. Options: choose `provider`, `clearWorktree` (delete the existing worktree first), `resetDependents` (cascade reset to dependent tasks).
 - **Stop** / **Force stop** — halt the active dispatch.
 - **Pause** — pause the active dispatch.
-- **Edit** — open the full-height task editor for title, description, markdown prompt, dependencies, status, priority, executor, and worker-agent preset selection.
+- **Edit** — open the full-height task editor in the page workspace for title, description, markdown prompt, dependencies, status, priority, executor, and worker-agent preset selection. On wide screens the editor appears as a right-side viewbox while the board remains available beside it; on narrow screens it becomes the primary full-width panel above the board.
 - **Delete** — destructive; requires confirmation.
 
 These also map directly to MCP `manage_code_ux` actions on the `tasks` domain (`start`, `stop`, `force_stop`, `pause`, `update`, `delete`).

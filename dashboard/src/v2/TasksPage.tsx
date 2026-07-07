@@ -223,6 +223,7 @@ export const TasksPage: FunctionComponent = () => {
     boardViewModel,
     draggedTaskId,
     dropTargetContext,
+    agentPresets,
     agentPresetsMap,
     resolvedTaskId,
     clearResolvedTaskId,
@@ -383,28 +384,6 @@ export const TasksPage: FunctionComponent = () => {
         }
       />
 
-      {isTaskScopeReady && (
-        <TaskBoardFilters
-          sprints={sprints}
-          selectedSprintId={taskScopeSprintId}
-          onSelectSprint={handleSprintScopeSelect}
-          sprintKeyPrefix={sprintKeyPrefix}
-          sprintsLoading={sprintsLoading}
-          statusFilter={statusFilter}
-          onStatusFilterChange={setStatusFilter}
-          priorityFilter={priorityFilter}
-          onPriorityFilterChange={setPriorityFilter}
-          listWindow={listWindow}
-          onListWindowChange={setListWindow}
-        />
-      )}
-
-      {isTaskScopeReady && selectedSprintModel && (
-        <div className="-mt-6">
-          <SprintProgressCard sprint={selectedSprintModel} tasks={filteredTasks} />
-        </div>
-      )}
-
       {!selectedProject && (
         <TaskScopePlaceholder
           mode="project"
@@ -421,60 +400,97 @@ export const TasksPage: FunctionComponent = () => {
         />
       )}
 
-      {isTaskScopeReady && error && (
-        <div role="alert" aria-live="assertive" className="px-6 py-4 rounded-2xl border border-status-red/20 bg-status-red/[0.06] text-status-red text-sm">
-          {error}
-        </div>
-      )}
-
-      {isTaskScopeReady && (showComposer || editingTask) && (
-        <div ref={composerRef} className="scroll-mt-8">
-          <TaskComposer
-            key={editingTask?.recordId || "new"}
-            sprints={sprints}
-            availableTasks={tasks}
-            initialTask={editingTask}
-            initialSprintId={selectedSprintId}
-            onClose={handleComposerClose}
-            onSubmit={handleTaskSubmit}
-          />
-        </div>
-      )}
-
       {isTaskScopeReady && (
-        <section aria-labelledby="task-board-heading" className="space-y-4">
-        <div className="sr-only" aria-live="polite" aria-atomic="true">
-          {boardCountAnnouncement}
-        </div>
-        {filterTransitionPending && (
-          <div role="status" aria-live="polite" className="rounded-2xl border border-signal-500/15 bg-signal-500/[0.06] px-4 py-3 text-xs font-bold uppercase tracking-[0.14em] text-signal-600 dark:text-signal-400">
-            Updating task board filters. Current cards remain visible until results settle.
-          </div>
-        )}
-        <h2 id="task-board-heading" className="sr-only">Task board</h2>
-        <TaskBoardColumns
-          boardRef={boardRef}
-          columns={columns}
-          taskViewModels={taskViewModels}
-          allTasks={tasks}
-          agentPresetsMap={agentPresetsMap}
-          loading={loading}
-          showSkeletons={showSkeletons}
-          filterTransitionPending={filterTransitionPending}
-          statusFilter={statusFilter}
-          priorityFilter={priorityFilter}
-          taskScopeSprintId={taskScopeSprintId}
-          reducedMotion={reducedMotion}
-          draggedTaskId={draggedTaskId}
-          dropTargetContext={dropTargetContext}
-          listTransitionStyle={listTransitionStyle}
-          onDragOver={handleDragOver}
-          onDrop={handleDrop}
-          onDragStart={handleDragStart}
-          onDragEnd={handleDragEnd}
-          onEditTask={handleEditClick}
-          onDeleteTask={handleDeleteTask}
-        />
+        <section
+          aria-labelledby="task-workspace-heading"
+          className={`grid items-start gap-6 ${showComposer || editingTask ? "xl:grid-cols-[minmax(0,1fr)_minmax(28rem,42vw)]" : "grid-cols-1"}`}
+        >
+          <h2 id="task-workspace-heading" className="sr-only">Task workspace</h2>
+
+          <section
+            aria-labelledby="task-board-heading"
+            className={`${showComposer || editingTask ? "order-2 xl:order-1" : ""} min-w-0 space-y-6`}
+          >
+            <h3 id="task-board-heading" className="sr-only">Task board</h3>
+            <TaskBoardFilters
+              sprints={sprints}
+              selectedSprintId={taskScopeSprintId}
+              onSelectSprint={handleSprintScopeSelect}
+              sprintKeyPrefix={sprintKeyPrefix}
+              sprintsLoading={sprintsLoading}
+              statusFilter={statusFilter}
+              onStatusFilterChange={setStatusFilter}
+              priorityFilter={priorityFilter}
+              onPriorityFilterChange={setPriorityFilter}
+              listWindow={listWindow}
+              onListWindowChange={setListWindow}
+            />
+
+            {selectedSprintModel && (
+              <SprintProgressCard sprint={selectedSprintModel} tasks={filteredTasks} />
+            )}
+
+            {error && (
+              <div role="alert" aria-live="assertive" className="px-6 py-4 rounded-2xl border border-status-red/20 bg-status-red/[0.06] text-status-red text-sm">
+                {error}
+              </div>
+            )}
+
+            <div className="sr-only" aria-live="polite" aria-atomic="true">
+              {boardCountAnnouncement}
+            </div>
+            {filterTransitionPending && (
+              <div role="status" aria-live="polite" className="rounded-2xl border border-signal-500/15 bg-signal-500/[0.06] px-4 py-3 text-xs font-bold uppercase tracking-[0.14em] text-signal-600 dark:text-signal-400">
+                Updating task board filters. Current cards remain visible until results settle.
+              </div>
+            )}
+            <TaskBoardColumns
+              boardRef={boardRef}
+              columns={columns}
+              taskViewModels={taskViewModels}
+              allTasks={tasks}
+              agentPresetsMap={agentPresetsMap}
+              loading={loading}
+              showSkeletons={showSkeletons}
+              filterTransitionPending={filterTransitionPending}
+              statusFilter={statusFilter}
+              priorityFilter={priorityFilter}
+              taskScopeSprintId={taskScopeSprintId}
+              reducedMotion={reducedMotion}
+              draggedTaskId={draggedTaskId}
+              dropTargetContext={dropTargetContext}
+              listTransitionStyle={listTransitionStyle}
+              onDragOver={handleDragOver}
+              onDrop={handleDrop}
+              onDragStart={handleDragStart}
+              onDragEnd={handleDragEnd}
+              onEditTask={handleEditClick}
+              onDeleteTask={handleDeleteTask}
+            />
+          </section>
+
+          {(showComposer || editingTask) && (
+            <aside
+              ref={composerRef}
+              role="region"
+              aria-labelledby="task-editor-heading"
+              className="order-1 min-w-0 scroll-mt-8 xl:sticky xl:top-6 xl:order-2"
+            >
+              <h3 id="task-editor-heading" className="sr-only">
+                {editingTask ? "Edit task editor" : "New task editor"}
+              </h3>
+              <TaskComposer
+                key={editingTask?.recordId || "new"}
+                sprints={sprints}
+                availableTasks={tasks}
+                agentPresets={agentPresets}
+                initialTask={editingTask}
+                initialSprintId={taskScopeSprintId}
+                onClose={handleComposerClose}
+                onSubmit={handleTaskSubmit}
+              />
+            </aside>
+          )}
         </section>
       )}
 
