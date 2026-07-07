@@ -1,7 +1,11 @@
-import type { ChatMessageRecord, ExecutionInvocationMessageRecord } from "../types.js";
-import type { ConversationRuntimeState } from "../types.js";
+import type { ChatMessageRecord, ConversationRuntimeState, ExecutionInvocationMessageRecord, Task } from "../types.js";
+import type {
+  ExecutionDashboardSnapshot,
+  ExecutionSprintRunSummary,
+} from "../../types.js";
 import type { ExecutionStatus } from "../components/chat/widgets/ChatWidgetFrame.js";
 import { formatChatTime } from "./chat-time.js";
+import { buildLiveSessionTasks } from "./live-session-task-structure.js";
 
 export type ChatWidgetType = "planning" | "none";
 
@@ -20,6 +24,56 @@ export interface ChatWidgetState {
   status: ExecutionStatus;
   planName: string;
   targetWorker?: string;
+  liveStatus?: LivePlanningWidgetState;
+}
+
+export type LivePlanningTaskStatusKind =
+  | "queued"
+  | "running"
+  | "review"
+  | "completed"
+  | "failed"
+  | "blocked"
+  | "quota"
+  | "unknown";
+
+export interface LivePlanningTaskState {
+  id: string;
+  title: string;
+  statusKind: LivePlanningTaskStatusKind;
+  statusLabel: string;
+  detailLabel: string | null;
+}
+
+export interface LivePlanningMaterializationState {
+  requestLabel: string;
+  taskRecordsLabel: string;
+  runLabel: string;
+}
+
+export interface LivePlanningWidgetState {
+  sprintId: string;
+  sprintKey: string;
+  sprintName: string;
+  runStatus: string | null;
+  totalTasks: number;
+  completedTasks: number;
+  queuedTasks: number;
+  percentComplete: number;
+  progressLabel: string;
+  materialization: LivePlanningMaterializationState;
+  tasks: LivePlanningTaskState[];
+}
+
+export interface ChatWidgetLiveData {
+  projectId: string | null;
+  projectTasks?: Task[] | null;
+  projectTasksLoading?: boolean;
+  projectTasksLoaded?: boolean;
+  execution?: ExecutionDashboardSnapshot | null;
+  executionLoading?: boolean;
+  executionLoaded?: boolean;
+  sprintKeyPrefix?: string;
 }
 
 export interface WorkingBubbleState {
@@ -41,6 +95,8 @@ export interface ReasoningWidgetState {
 const BOOTSTRAP_BRANCH_FATAL_LINE_PATTERN =
   /^fatal:\s+your current branch 'code-ux-bootstrap-[^']+' does not have any commits yet\s*$/i;
 const TOKEN_COUNT_FORMATTER = new Intl.NumberFormat("en-US");
+const ACTIVE_SPRINT_RUN_STATUSES = new Set(["queued", "running", "dispatching", "paused", "pausing", "resuming", "cancelling"]);
+const TERMINAL_SPRINT_RUN_STATUSES = new Set(["completed", "failed", "cancelled", "canceled"]);
 
 export const sanitizeInvocationOutputText = (value: string): string => {
   if (!value) {
@@ -52,25 +108,260 @@ export const sanitizeInvocationOutputText = (value: string): string => {
     .join("\n");
 };
 
+const readString = (value: unknown): string | null => {
+  const normalized = typeof value === "string" ? value.trim() : "";
+  return normalized.length > 0 ? normalized : null;
+};
+
+const readNumber = (value: unknown): number | null => (
+  typeof value === "number" && Number.isFinite(value) ? value : null
+);
+
+const getWidgetMetadata = (metadata: Record<string, unknown> | null | undefined): Record<string, unknown> | null => {
+  const value = metadata?.widget_metadata;
+  return value && typeof value === "object" ? value as Record<string, unknown> : null;
+};
+
+const readMetadataString = (
+  metadata: Record<string, unknown> | null | undefined,
+  widgetMetadata: Record<string, unknown> | null,
+  keys: string[],
+): string | null => {
+  for (const key of keys) {
+    const widgetValue = readString(widgetMetadata?.[key]);
+    if (widgetValue) {
+      return widgetValue;
+    }
+    const metadataValue = readString(metadata?.[key]);
+    if (metadataValue) {
+      return metadataValue;
+    }
+  }
+  return null;
+};
+
+const readMetadataNumber = (
+  metadata: Record<string, unknown> | null | undefined,
+  widgetMetadata: Record<string, unknown> | null,
+  keys: string[],
+): number | null => {
+  for (const key of keys) {
+    const widgetValue = readNumber(widgetMetadata?.[key]);
+    if (widgetValue !== null) {
+      return widgetValue;
+    }
+    const metadataValue = readNumber(metadata?.[key]);
+    if (metadataValue !== null) {
+      return metadataValue;
+    }
+  }
+  return null;
+};
+
+const compareRunRecency = (left: ExecutionSprintRunSummary, right: ExecutionSprintRunSummary): number => {
+  const leftRecency = left.startedAt || left.createdAt || "";
+  const rightRecency = right.startedAt || right.createdAt || "";
+  return leftRecency.localeCompare(rightRecency);
+};
+
+const isActiveSprintRun = (run: ExecutionSprintRunSummary): boolean => (
+  ACTIVE_SPRINT_RUN_STATUSES.has(run.status.toLowerCase())
+);
+
+const findSprintRun = (
+  metadata: Record<string, unknown> | null | undefined,
+  widgetMetadata: Record<string, unknown> | null,
+  execution: ExecutionDashboardSnapshot,
+  tasks: Task[],
+): ExecutionSprintRunSummary | null => {
+  const sprintRunId = readMetadataString(metadata, widgetMetadata, ["sprintRunId", "sprint_run_id", "runId", "run_id"]);
+  if (sprintRunId) {
+    return execution.sprintRuns.find((run) => run.id === sprintRunId) ?? null;
+  }
+
+  const sprintId = readMetadataString(metadata, widgetMetadata, ["sprintId", "sprint_id"]);
+  if (sprintId) {
+    return [...execution.sprintRuns]
+      .filter((run) => run.sprintId === sprintId)
+      .sort(compareRunRecency)
+      .at(-1) ?? null;
+  }
+
+  const taskSprintIds = new Set(tasks.map((task) => task.sprintId).filter(Boolean));
+  const activeRuns = [...execution.sprintRuns]
+    .filter((run) => isActiveSprintRun(run) && (taskSprintIds.size === 0 || taskSprintIds.has(run.sprintId)))
+    .sort(compareRunRecency);
+  if (activeRuns.length > 0) {
+    return activeRuns.at(-1) ?? null;
+  }
+
+  return null;
+};
+
+const resolveSprintId = (
+  metadata: Record<string, unknown> | null | undefined,
+  widgetMetadata: Record<string, unknown> | null,
+  execution: ExecutionDashboardSnapshot,
+  tasks: Task[],
+): string | null => {
+  const metadataSprintId = readMetadataString(metadata, widgetMetadata, ["sprintId", "sprint_id"]);
+  if (metadataSprintId) {
+    return metadataSprintId;
+  }
+  return findSprintRun(metadata, widgetMetadata, execution, tasks)?.sprintId ?? null;
+};
+
+const mapSprintRunStatusToExecutionStatus = (
+  runStatus: string | null,
+  fallbackStatus: ExecutionStatus,
+): ExecutionStatus => {
+  const normalized = runStatus?.toLowerCase() ?? "";
+  if (normalized === "completed") {
+    return "completed";
+  }
+  if (normalized === "failed" || normalized === "cancelled" || normalized === "canceled") {
+    return "failed";
+  }
+  if (normalized === "queued") {
+    return "queued";
+  }
+  if (normalized && !TERMINAL_SPRINT_RUN_STATUSES.has(normalized)) {
+    return "running";
+  }
+  return fallbackStatus;
+};
+
+const formatStatusLabel = (value: string | null | undefined): string => {
+  const normalized = readString(value);
+  if (!normalized) {
+    return "Unknown";
+  }
+  return normalized
+    .replace(/^PENDING_cap_.+$/i, "PENDING")
+    .replace(/_/g, " ")
+    .toLowerCase()
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+};
+
+const resolveTaskStatus = (phase: string | undefined): Pick<LivePlanningTaskState, "statusKind" | "statusLabel" | "detailLabel"> => {
+  if (!phase) {
+    return { statusKind: "unknown", statusLabel: "Unknown", detailLabel: null };
+  }
+  if (phase.startsWith("PENDING_cap_")) {
+    const [, , currentCount, limit] = phase.split("_");
+    const detailLabel = currentCount && limit ? `Provider cap ${currentCount}/${limit}` : "Provider cap";
+    return { statusKind: "queued", statusLabel: "Queued", detailLabel };
+  }
+
+  switch (phase) {
+    case "PENDING":
+      return { statusKind: "queued", statusLabel: "Queued", detailLabel: null };
+    case "RUNNING":
+      return { statusKind: "running", statusLabel: "Running", detailLabel: null };
+    case "CODING_COMPLETED":
+      return { statusKind: "review", statusLabel: "Review", detailLabel: "Code complete" };
+    case "COMPLETED":
+      return { statusKind: "completed", statusLabel: "Completed", detailLabel: null };
+    case "FAILED":
+      return { statusKind: "failed", statusLabel: "Failed", detailLabel: null };
+    case "BLOCKED":
+      return { statusKind: "blocked", statusLabel: "Blocked", detailLabel: null };
+    case "QUOTA":
+      return { statusKind: "quota", statusLabel: "Quota wait", detailLabel: null };
+    default:
+      return { statusKind: "unknown", statusLabel: formatStatusLabel(phase), detailLabel: null };
+  }
+};
+
+const buildLivePlanningWidgetState = (
+  metadata: Record<string, unknown> | null | undefined,
+  fallbackStatus: ExecutionStatus,
+  fallbackPlanName: string,
+  liveData?: ChatWidgetLiveData,
+): LivePlanningWidgetState | null => {
+  if (
+    !liveData?.execution
+    || !Array.isArray(liveData.projectTasks)
+    || liveData.executionLoading
+    || liveData.projectTasksLoading
+    || liveData.executionLoaded !== true
+    || liveData.projectTasksLoaded !== true
+  ) {
+    return null;
+  }
+
+  const widgetMetadata = getWidgetMetadata(metadata);
+  const sprintId = resolveSprintId(metadata, widgetMetadata, liveData.execution, liveData.projectTasks);
+  if (!sprintId) {
+    return null;
+  }
+
+  const sprintRun = findSprintRun(metadata, widgetMetadata, liveData.execution, liveData.projectTasks);
+  const sprintTasks = liveData.projectTasks.filter((task) => task.sprintId === sprintId);
+  const sprintDispatches = liveData.execution.taskDispatches.filter((dispatch) => dispatch.sprintId === sprintId);
+  const sprintEvents = liveData.execution.recentEvents.filter((event) => event.sprintId === sprintId);
+  const liveTasks = buildLiveSessionTasks(sprintTasks, [], liveData.projectId, sprintDispatches, sprintEvents);
+  const taskStates = liveTasks.map((task): LivePlanningTaskState => ({
+    id: task.id,
+    title: task.title,
+    ...resolveTaskStatus(task.status),
+  }));
+  const completedTasks = taskStates.filter((task) => task.statusKind === "completed").length;
+  const queuedTasks = taskStates.filter((task) => task.statusKind === "queued").length;
+  const totalTasks = taskStates.length;
+  const percentComplete = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
+  const sprintNumber = readMetadataNumber(metadata, widgetMetadata, ["sprintNumber", "sprint_number"]) ?? sprintRun?.sprintNumber ?? null;
+  const sprintKey = readMetadataString(metadata, widgetMetadata, ["sprintKey", "sprint_key"]) ||
+    (sprintNumber !== null ? `${liveData.sprintKeyPrefix || "SPR"}-${sprintNumber}` : sprintId);
+  const sprintName = readMetadataString(metadata, widgetMetadata, ["sprintName", "sprint_name"]) ||
+    sprintRun?.sprintName ||
+    sprintTasks[0]?.sprint ||
+    fallbackPlanName;
+  const runStatus = sprintRun?.status ?? null;
+  const requestLabel = formatStatusLabel(fallbackStatus);
+  const runLabel = sprintRun ? formatStatusLabel(sprintRun.status) : "Awaiting run";
+
+  return {
+    sprintId,
+    sprintKey,
+    sprintName,
+    runStatus,
+    totalTasks,
+    completedTasks,
+    queuedTasks,
+    percentComplete,
+    progressLabel: `${completedTasks}/${totalTasks} · ${percentComplete}%`,
+    materialization: {
+      requestLabel,
+      taskRecordsLabel: totalTasks > 0 ? `${totalTasks} task${totalTasks === 1 ? "" : "s"} materialized` : "Awaiting task records",
+      runLabel,
+    },
+    tasks: taskStates,
+  };
+};
+
 const extractWidgetStateFromMetadata = (
   metadata: Record<string, unknown> | null | undefined,
-  bodyMarkdown?: string
+  bodyMarkdown?: string,
+  liveData?: ChatWidgetLiveData,
 ): ChatWidgetState => {
   if (!metadata) {
     return { type: "none", status: "completed", planName: "" };
   }
 
-  const widgetMetadata = metadata.widget_metadata as Record<string, unknown> | undefined;
+  const widgetMetadata = getWidgetMetadata(metadata);
 
   if (widgetMetadata && widgetMetadata.type === "planning_request") {
     const status = (widgetMetadata.status as ExecutionStatus) || (metadata.status as ExecutionStatus) || "completed";
     const planName = (widgetMetadata.route_path as string) || (metadata.planName as string) || (metadata.title as string) || "Execution Plan";
     const targetWorker = widgetMetadata.target_worker as string | undefined;
+    const liveStatus = buildLivePlanningWidgetState(metadata, status, planName, liveData);
     return {
       type: "planning",
-      status,
+      status: liveStatus ? mapSprintRunStatusToExecutionStatus(liveStatus.runStatus, status) : status,
       planName,
       targetWorker,
+      ...(liveStatus ? { liveStatus } : {}),
     };
   }
 
@@ -80,22 +371,24 @@ const extractWidgetStateFromMetadata = (
   if (isPlanning || metadata.routeKind === "virtual" || metadata.routeKind === "worker") {
     const status = (metadata.status as ExecutionStatus) || "completed";
     const planName = (metadata.planName as string) || (metadata.title as string) || "Execution Plan";
+    const liveStatus = buildLivePlanningWidgetState(metadata, status, planName, liveData);
     return {
       type: "planning",
-      status,
+      status: liveStatus ? mapSprintRunStatusToExecutionStatus(liveStatus.runStatus, status) : status,
       planName,
+      ...(liveStatus ? { liveStatus } : {}),
     };
   }
 
   return { type: "none", status: "completed", planName: "" };
 };
 
-export const getChatWidgetData = (message: ChatMessageRecord): ChatWidgetState => {
-  return extractWidgetStateFromMetadata(message.metadata, message.bodyMarkdown);
+export const getChatWidgetData = (message: ChatMessageRecord, liveData?: ChatWidgetLiveData): ChatWidgetState => {
+  return extractWidgetStateFromMetadata(message.metadata, message.bodyMarkdown, liveData);
 };
 
-export const getInvocationWidgetData = (message: ExecutionInvocationMessageRecord): ChatWidgetState => {
-  return extractWidgetStateFromMetadata(message.metadata, message.contentMarkdown);
+export const getInvocationWidgetData = (message: ExecutionInvocationMessageRecord, liveData?: ChatWidgetLiveData): ChatWidgetState => {
+  return extractWidgetStateFromMetadata(message.metadata, message.contentMarkdown, liveData);
 };
 
 const metaKind = (message: ExecutionInvocationMessageRecord): string | undefined =>

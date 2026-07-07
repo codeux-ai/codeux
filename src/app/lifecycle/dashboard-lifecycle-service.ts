@@ -458,6 +458,7 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<DashboardS
     // `/api/projects/:id/execution` (sprints/overview/chat) — feed-less.
     getProjectExecutionSnapshot: cache.getProjectExecutionSnapshotLean,
     getProjectStatsSnapshot: cache.getProjectStatsSnapshot,
+    getHeaderTokenThroughputSnapshot: cache.getHeaderTokenThroughputSnapshot,
     setPreferredWorker: (projectId, input) => {
       requireProject(deps, projectId);
       const assignments = deps.projectWorkerAssignmentService.setProjectPreferredWorker(projectId, input);

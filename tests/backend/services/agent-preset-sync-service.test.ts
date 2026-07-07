@@ -268,7 +268,9 @@ describe("AgentPresetSyncService", () => {
       "Worker",
     ]);
     expect(initial.find((preset) => preset.name === "Worker")?.mcpAccess?.linkedServerIds).toEqual([DEFAULT_PLAYWRIGHT_MCP_SERVER_ID]);
+    expect(initial.find((preset) => preset.name === "Worker")?.mcpAccess?.codeUxEnabled).toBe(false);
     expect(initial.find((preset) => preset.name === "Project manager")?.mcpAccess?.linkedServerIds).toEqual([DEFAULT_PLAYWRIGHT_MCP_SERVER_ID]);
+    expect(initial.find((preset) => preset.name === "Project manager")?.mcpAccess?.codeUxEnabled).toBe(false);
     expect(initial.find((preset) => preset.name === "Planning agent")?.mcpAccess).toBeUndefined();
     expect(initial.find((preset) => preset.name === "Quality assurance agent")?.mcpAccess).toBeUndefined();
     expect(agentPresetRepository.hasCopiedDefaultAgentPresets(project.id)).toBe(false);
@@ -325,6 +327,56 @@ describe("AgentPresetSyncService", () => {
     expect(resolved.name).toBe("Project manager");
     expect(resolved.instructionMarkdown).toContain("Answer Jules clarification requests.");
     expect(resolved.mcpAccess?.linkedServerIds).toEqual([DEFAULT_PLAYWRIGHT_MCP_SERVER_ID]);
+    expect(resolved.mcpAccess?.codeUxEnabled).toBe(false);
+  });
+
+  it("preserves existing explicit MCP access when syncing markdown agents", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-agent-explicit-mcp-"));
+    tempDirs.push(dir);
+
+    const repoPath = path.join(dir, "repo");
+    await fs.mkdir(path.join(repoPath, ".code-ux", "agents"), { recursive: true });
+    await fs.writeFile(
+      path.join(repoPath, ".code-ux", "agents", "worker.md"),
+      "Use explicit MCP access from the existing preset.\n",
+      "utf8",
+    );
+
+    const storage = createAppStorage(path.join(dir, "app.db"));
+    const projectRepository = new ProjectManagementRepository(storage);
+    const agentPresetRepository = new AgentPresetRepository(storage);
+    const settingsRepository = createSettingsRepository(path.join(dir, "settings.db"));
+    const syncService = new AgentPresetSyncService({
+      projectManagementRepository: projectRepository,
+      agentPresetRepository,
+      settingsRepository,
+      projectRoot: dir,
+    });
+
+    const project = projectRepository.createProject({
+      name: "Explicit MCP Project",
+      sourceType: "local",
+      sourceRef: repoPath,
+    });
+    agentPresetRepository.createAgentPreset(project.id, {
+      name: "Worker",
+      instructionMarkdown: "Existing worker.",
+      mcpAccess: {
+        codeUxEnabled: true,
+        codeUxToolToggles: [{ name: "manage_tasks", enabled: false, isInternal: true }],
+        linkedServerIds: ["custom-docs"],
+      },
+    });
+
+    const presets = await syncService.listAgentPresets(project.id);
+    const worker = presets.find((preset) => preset.name === "Worker");
+
+    expect(worker?.instructionMarkdown).toContain("Use explicit MCP access");
+    expect(worker?.mcpAccess).toEqual({
+      codeUxEnabled: true,
+      codeUxToolToggles: [{ name: "manage_tasks", enabled: false, isInternal: true }],
+      linkedServerIds: ["custom-docs"],
+    });
   });
 
   it("seeds Code UX internal docs as a default Project manager knowledge subscription once", async () => {

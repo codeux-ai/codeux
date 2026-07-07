@@ -20,6 +20,7 @@ const requestedArtifacts = (options: ProjectSetupOptions): string[] => {
   if (options.quicksprints) artifacts.push("Quicksprint Templates");
   if (options.previewScript) artifacts.push("Preview Container Script");
   if (options.ci) artifacts.push("GitHub/GitLab CI");
+  if (options.techstack) artifacts.push("Techstack Detection");
   return artifacts;
 };
 
@@ -260,6 +261,7 @@ export function buildProjectSetupPrompt(args: ProjectSetupPromptArgs): string {
     "- Start by listing the repository root and identifying the package manager, primary language(s), framework(s), app entrypoints, scripts, and test commands.",
     "- Read all assistant and CLI instruction markdown files that exist, especially AGENTS.md, GEMINI.md, Gemini.md, CLAUDE.md, Claude.md, README.md, docs/**/*.md, and equivalent local convention files.",
     "- Read dependency manifests and configuration that determine architecture or commands, including package.json and relevant workspace/config files.",
+    "- When techstack detection is requested, inspect dependency manifests carefully, especially package.json dependencies/devDependencies/peerDependencies/optionalDependencies, lockfiles, workspace manifests, and framework config files before naming the stack.",
     "- Read enough source files to identify the app's important subsystems and boundaries before proposing agents.",
     "",
     "## Output Contract",
@@ -296,11 +298,32 @@ export function buildProjectSetupPrompt(args: ProjectSetupPromptArgs): string {
     '      "path": ".github/workflows/code-ux-basic-checks.yml",',
     '      "content": "name: Code UX Basic Checks\\n..."',
     "    }",
-    "  ]",
+    "  ],",
+    ...(args.options.techstack ? [
+      '  "techstack": {',
+      '    "name": "React Vite TypeScript",',
+      '    "description": "Short evidence-based description of the detected application stack.",',
+      '    "detectedFrameworks": ["Vite", "React"],',
+      '    "detectedLibraries": ["TypeScript", "Vitest", "Tailwind CSS"]',
+      "  }",
+    ] : [
+      '  "techstack": null',
+    ]),
     "}",
     "",
     "## Artifact Rules",
     "",
+    ...(args.options.techstack ? [
+      "### Techstack Detection Rules",
+      "",
+      "- Return exactly one `techstack` object when the repository evidence supports a coherent stack.",
+      "- Base the techstack on repository evidence, especially package.json dependency sections, package scripts, lockfiles, workspace manifests, framework config files, and source entrypoints.",
+      "- The `name` must be concise and human-readable, such as `Next.js TypeScript`, `Preact Vite`, `Electron React`, or `Node API`.",
+      "- The `description` must explain the evidence used to identify the stack in one compact sentence.",
+      "- Put detected frameworks in `detectedFrameworks` and reusable libraries/tools in `detectedLibraries`. Include only items supported by manifests or source/config evidence.",
+      "- If evidence is too weak or contradictory, set `techstack` to null rather than guessing.",
+      "",
+    ] : ["- Set `techstack` to null.", ""]),
     ...(args.options.agents ? [
       "### Agent Rules",
       "",

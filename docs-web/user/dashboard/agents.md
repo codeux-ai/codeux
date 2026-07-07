@@ -8,6 +8,7 @@ An *agent preset* is a reusable persona consisting of:
 - A markdown **system instruction** that prepends every session this agent runs.
 - An optional **memory template** — controls how project / sprint memory is injected into prompts.
 - Optional persistent skill storage attachments, stored as shared project skill storage IDs for future retrieval.
+- Optional MCP access, including default-off Code UX built-in tools and custom MCP server links.
 - A set of **labels** for tagging and filtering.
 
 Agent presets show up wherever a chat thread or planning request needs to choose an agent.
@@ -85,3 +86,13 @@ The dashboard can attach an agent to one or more named persistent skill storage 
 Create and delete project skill storages in **Settings → Agents**, then attach them from either the settings attachment matrix or the agent editor. Persistent skill retrieval stays **off by default**: an agent must have at least one storage attached and the explicit persistent skills toggle enabled before runtime retrieval can use it.
 
 The agent detail panel shows attached storage names and whether persistent skills are enabled. Empty storage state means no persistent skills are available for that agent; it does not affect ordinary memory or knowledge subscriptions.
+
+## MCP access
+
+Agent MCP access is default-deny. If a preset has no saved MCP access record, Code UX built-in tools display as disabled and the agent does not inherit broad project-manager tool access. Custom MCP server links, such as Playwright, are controlled separately and can remain linked without enabling Code UX built-in tools.
+
+The **Connected MCPs** editor panel opens a risk-gated manager for Code UX tools. Turning on Code UX starts with **scheduler-only** access: only the restricted `scheduler` tool is enabled, while broader tools such as `manage_scheduler`, `manage_tasks`, `manage_sprints`, and settings or memory management stay disabled until you explicitly enable them.
+
+Scheduler-only access lets an agent create its own wakeups or task reruns through the secured agent scheduler surface. It does not grant full scheduler administration, due-entry execution, recurrence editing, sprint scheduling, or destructive scheduler actions.
+
+The dashboard reply route is the safe default use case for scheduler-only access because it supports chat replies that need to schedule follow-up wakeups. Enabling scheduler or any other Code UX tool for planning, coding, QA, CI repair, merge-conflict, or other non-chat agents is riskier because those agents run during operational workflows and can affect project state without being part of a direct dashboard chat exchange.

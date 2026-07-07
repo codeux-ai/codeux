@@ -26,6 +26,8 @@ import type {
   RestartInvocationPolicy,
   RestartSprintPolicy,
   JiraSettings,
+  TechstackCatalogSettings,
+  TechstackSelectionSettings,
 } from "./app-types.js";
 import type { MemorySettings } from "./memory-types.js";
 import type { WorkerRuntimeSettings } from "./worker-types.js";
@@ -76,6 +78,7 @@ export interface ProjectSettings {
   automationLevel: AutomationLevel;
   automationInterventions: AutomationInterventionsSettings;
   aiProvider: ProjectAiProviderSettings;
+  techstack: TechstackSelectionSettings;
   git: ProjectGitSettings;
   jira: JiraSettings;
   ciIntelligence: CiIntelligenceSettings;
@@ -157,6 +160,7 @@ export interface QwenModelProviderSettings {
 export interface SystemSettings {
   runtime: SystemRuntimeSettings;
   integrations: SystemIntegrationSettings;
+  techstackCatalog: TechstackCatalogSettings;
   defaults: ProjectSettings;
   mcpTools: McpToolToggle[];
   customMcpServers: CustomMcpServer[];

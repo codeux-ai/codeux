@@ -1,7 +1,7 @@
 import * as fs from "fs/promises";
 import * as path from "path";
 import { randomUUID } from "crypto";
-import type { DashboardSettings, ProviderId } from "../contracts/app-types.js";
+import type { DashboardSettings, ProviderId, TechstackCatalogEntrySettings, TechstackItemSettings } from "../contracts/app-types.js";
 import type {
   ProjectSetupArtifactPayload,
   ProjectSetupOptions,
@@ -41,6 +41,29 @@ const DEFAULT_OPTIONS: ProjectSetupOptions = {
   quicksprints: true,
   previewScript: true,
   ci: true,
+  techstack: true,
+};
+
+const TECHSTACK_ID_MAX_LENGTH = 80;
+
+const normalizeComparableText = (value: string): string => value.trim().toLowerCase();
+
+const toTechstackIdSegment = (value: string): string => {
+  const slug = value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return slug || "detected";
+};
+
+const toDetectedTechstackId = (name: string): string => {
+  const base = `detected-${toTechstackIdSegment(name)}`;
+  return base.slice(0, TECHSTACK_ID_MAX_LENGTH).replace(/-+$/g, "") || "detected-techstack";
+};
+
+const toDetectedTechstackItemId = (label: string): string => {
+  return toTechstackIdSegment(label).slice(0, TECHSTACK_ID_MAX_LENGTH).replace(/-+$/g, "") || "detected-item";
 };
 
 interface ProjectSetupServiceDeps {
@@ -344,6 +367,7 @@ export class ProjectSetupService {
       quicksprints: options?.quicksprints ?? DEFAULT_OPTIONS.quicksprints,
       previewScript: options?.previewScript ?? DEFAULT_OPTIONS.previewScript,
       ci: options?.ci ?? DEFAULT_OPTIONS.ci,
+      techstack: options?.techstack ?? DEFAULT_OPTIONS.techstack,
     };
   }
 
@@ -515,7 +539,120 @@ export class ProjectSetupService {
       }
     }
 
+    if (options.techstack) {
+      try {
+        this.applyDetectedTechstack(projectId, payload.techstack);
+      } catch (error) {
+        this.deps.logger?.warn("Failed to apply project setup techstack detection; continuing with other artifacts.", {
+          projectId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+
     return { createdAgentIds, createdQuicksprintTemplateIds, writtenFiles };
+  }
+
+  private applyDetectedTechstack(
+    projectId: string,
+    techstack: ProjectSetupArtifactPayload["techstack"],
+  ): void {
+    const detected = this.normalizeDetectedTechstack(projectId, techstack);
+    if (!detected) {
+      return;
+    }
+
+    const systemSettings = this.deps.settingsRepository.getSystemSettings();
+    const existingEntry = systemSettings.techstackCatalog.entries.find((entry) =>
+      entry.id === detected.id
+      || normalizeComparableText(entry.label) === normalizeComparableText(detected.label)
+    );
+    const selectedTechstackId = existingEntry?.id || detected.id;
+
+    if (!existingEntry) {
+      this.deps.settingsRepository.saveSystemSettings({
+        ...systemSettings,
+        techstackCatalog: {
+          ...systemSettings.techstackCatalog,
+          entries: [
+            ...systemSettings.techstackCatalog.entries,
+            detected,
+          ],
+        },
+      });
+    }
+
+    const current = this.deps.settingsRepository.getProjectSettings(projectId);
+    const effectiveTechstack = this.deps.settingsRepository.resolveProjectDashboardSettings(projectId).settings.techstack;
+    this.deps.settingsRepository.saveProjectSettings(projectId, {
+      ...current,
+      techstack: {
+        ...effectiveTechstack,
+        ...current.techstack,
+        selectedTechstackId,
+      },
+    });
+  }
+
+  private normalizeDetectedTechstack(
+    projectId: string,
+    techstack: ProjectSetupArtifactPayload["techstack"],
+  ): TechstackCatalogEntrySettings | null {
+    if (!techstack || typeof techstack !== "object") {
+      if (techstack !== null && techstack !== undefined) {
+        this.warnIgnoredTechstack(projectId, "artifact must be an object or null");
+      }
+      return null;
+    }
+
+    const name = typeof techstack.name === "string" ? techstack.name.trim() : "";
+    const description = typeof techstack.description === "string" ? techstack.description.trim() : "";
+    const items = this.normalizeDetectedTechstackItems([
+      ...(Array.isArray(techstack.detectedFrameworks) ? techstack.detectedFrameworks : []),
+      ...(Array.isArray(techstack.detectedLibraries) ? techstack.detectedLibraries : []),
+    ]);
+
+    if (!name || !description || items.length === 0) {
+      this.warnIgnoredTechstack(
+        projectId,
+        "artifact requires a name, description, and at least one detected framework or library",
+      );
+      return null;
+    }
+
+    return {
+      id: toDetectedTechstackId(name),
+      label: name,
+      items,
+    };
+  }
+
+  private normalizeDetectedTechstackItems(values: unknown[]): TechstackItemSettings[] {
+    const items: TechstackItemSettings[] = [];
+    const seenIds = new Set<string>();
+    for (const value of values) {
+      if (typeof value !== "string") {
+        continue;
+      }
+      const label = value.trim();
+      if (!label) {
+        continue;
+      }
+      const id = toDetectedTechstackItemId(label);
+      if (seenIds.has(id)) {
+        continue;
+      }
+      items.push({ id, label });
+      seenIds.add(id);
+    }
+    return items;
+  }
+
+  private warnIgnoredTechstack(projectId: string, reason: string): void {
+    this.deps.logger?.warn("Ignoring project setup techstack detection.", {
+      projectId,
+      reason,
+    });
   }
 
   private async createOrUpdateAgent(

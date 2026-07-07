@@ -241,6 +241,17 @@ export const SETTINGS_SUBCATEGORY_DOCS = {
     risks: "Port collisions or wrong startup scripts prevent previews from becoming reachable.",
     relatedDocs: ["Browser Preview", "Security Hardening"],
   },
+  techstacks: {
+    id: "techstacks",
+    title: "Techstacks",
+    titleAliases: ["Techstacks Catalog", "Project Techstack"],
+    docsHref: settingsDocsPath("techstacks"),
+    summary: "Manages the system techstack catalog and per-project techstack/application-kind assignment.",
+    controls: "System scope owns stack entries, default-stack selection, and technology items; project scope chooses a stack, clears to Unassigned, and selects web or desktop app kind.",
+    recommended: "Keep imported projects unassigned until setup or an operator identifies the stack; use the built-in Code UX stack only for Code UX-style Preact dashboards.",
+    risks: "Deleting custom stacks clears references to them, while the built-in Code UX internal stack is protected and restored by settings normalization.",
+    relatedDocs: ["Configuration and Storage", "Settings Reference"],
+  },
   "project-markdown-mirror": {
     id: "project-markdown-mirror",
     title: "Project Markdown Mirror",

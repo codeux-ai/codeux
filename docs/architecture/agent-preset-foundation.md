@@ -112,7 +112,11 @@ The dashboard editor now initializes that config from the preset, exposes it thr
 
 Agent labels are still stored in the data model for markdown sync and built-in preset conventions, but the dashboard no longer exposes custom label editing. The Agents page displays computed route-assignment tags from effective project settings instead, including tags for built-in fallback selections on Planning agent, Worker, Project manager, and Quality assurance agent.
 
-Built-in Worker and Project manager presets seed `mcp_access_json` with `code_ux` enabled and the default `playwright` custom MCP server linked. Planning and QA presets do not receive that link by default. Existing agents with a user-edited MCP access payload keep their selections; only newly imported/generated defaults or previously unconfigured built-in Worker/Project manager records receive the seeded link.
+Agent MCP access is default-deny for built-in Code UX tools. Absent, malformed, or previously unconfigured agent access resolves with `codeUxEnabled: false`, so provider runs do not inherit management tools from the system-level MCP settings merely because they are agent-scoped.
+
+Built-in Worker and Project manager presets seed `mcp_access_json` with the default `playwright` custom MCP server linked, but `code_ux` remains disabled in that seeded access. Planning and QA presets do not receive that link by default. Existing agents with a user-edited MCP access payload keep their selections; only newly imported/generated defaults or previously unconfigured built-in Worker/Project manager records receive the seeded custom-server-only link.
+
+Dashboard chat replies are the only default exception. When the reply route uses the built-in/default reply agent or a configured reply preset without explicit MCP access, runtime dispatch applies scheduler-only Code UX access for that chat turn: the restricted `scheduler` tool is enabled and all other built-in Code UX tools, including `manage_scheduler`, `manage_tasks`, `manage_sprints`, `manage_settings`, and `manage_code_ux`, are disabled. Planning, coding, CI fix, merge-conflict, clarification, QA, generated setup, and general Project manager agent runs remain denied unless their preset explicitly enables Code UX tools.
 
 ## Dashboard Interaction Contract
 

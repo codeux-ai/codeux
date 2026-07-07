@@ -2,6 +2,8 @@
 
 The **Stats** page (`/stats`) is the analytics surface for the active project. It shows project execution, usage, cost, Git, and invocation telemetry in one workspace with visual-mode navigation, responsive layouts, and light/dark mode support.
 
+The top dashboard header also shows a compact recent token-throughput summary for the whole app and the selected project, alongside running and queued task counts near the runtime controls. Use it for a live pulse check; use the Stats page for detailed analysis.
+
 ## Time windows
 
 A selector at the top lets you pick the analysis window:
@@ -64,5 +66,6 @@ Cost data is visualized directly within the Usage Graph and Composition views, f
 The page remains live and uses project realtime invalidation channels to stay current during active sprint execution, falling back to background polling when websocket updates aren't available.
 
 It is backed by:
+- `GET /api/stats/header-throughput?projectId=...&window=...` — compact app and selected-project token throughput for dashboard header metrics.
 - `GET /api/projects/:projectId/stats?window=...` — aggregated metrics for charts and summaries.
 - `GET /api/projects/:projectId/execution/invocations` — raw MCP invocation log.

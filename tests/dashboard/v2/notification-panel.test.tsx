@@ -1,7 +1,7 @@
 /** @vitest-environment happy-dom */
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { fireEvent, render, screen, cleanup } from "@testing-library/preact";
-import { HelpCircle } from "lucide-preact";
+import { CalendarClock, HelpCircle } from "lucide-preact";
 import * as matchers from "@testing-library/jest-dom/matchers";
 import { NotificationPanel } from "../../../dashboard/src/v2/components/NotificationPanel.js";
 
@@ -123,5 +123,44 @@ describe("NotificationPanel", () => {
     expect(onMarkRead).toHaveBeenCalledWith("retry-1");
     expect(onAction).toHaveBeenCalledTimes(1);
     expect(document.activeElement).toBe(screen.getByLabelText("Notifications Panel"));
+  });
+
+  it("renders scheduler notification details while preserving critical precedence", () => {
+    render(
+      <NotificationPanel
+        notifications={[
+          {
+            id: "scheduler-agent-entry-1",
+            severity: "info",
+            title: "Task run scheduled",
+            body: "Retry blocked task. Task task-42 · codex. Scheduled for Jul 7, 09:00 AM. Status: scheduled.",
+            time: "Scheduled",
+            unread: true,
+            dismissible: true,
+            icon: CalendarClock,
+          },
+          {
+            id: "startup-cluster-not-ready",
+            severity: "critical",
+            title: "Cluster not ready",
+            body: "Docker must be available before containerized provider CLIs can run.",
+            time: "just now",
+            unread: true,
+            dismissible: false,
+            icon: HelpCircle,
+          },
+        ]}
+        unreadCount={2}
+        onMarkAllRead={vi.fn()}
+        onMarkRead={vi.fn()}
+        onDismiss={vi.fn()}
+        onRefresh={vi.fn()}
+      />,
+    );
+
+    const items = Array.from(document.querySelectorAll("[data-notification-item]"));
+    expect(items[0]).toHaveTextContent("Cluster not ready");
+    expect(items[1]).toHaveTextContent("Task run scheduled");
+    expect(screen.getByText("Retry blocked task. Task task-42 · codex. Scheduled for Jul 7, 09:00 AM. Status: scheduled.")).toBeInTheDocument();
   });
 });

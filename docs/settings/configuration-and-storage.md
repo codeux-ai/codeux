@@ -35,6 +35,12 @@ System settings hold global state, runtime behavior (e.g., ports, `consoleLogLev
 
 Project and sprint scopes can override execution-specific settings, such as `aiProvider` routes (which now include provider instances and `invocationRouting` as first-class citizens instead of legacy top-level keys), `cliWorkflow` settings (like `gitMode`, `executionMode`, `containerImage`, `containerSetupScriptPath`), and preview defaults (like `sprintPreview.startupScriptPath` defaulting to `.code-ux/browser/start-preview.sh`). `git.defaultBranch` fallback is resolved based on scoped overrides too. Jira and GitLab integration configurations are also scoped and can be overridden.
 
+Techstack settings are split across scopes:
+- system settings own `techstackCatalog`, a catalog with `defaultTechstackId` and `entries`
+- project and sprint settings own `techstack`, a selection with `selectedTechstackId` and `applicationKind`
+
+The built-in catalog always includes the Code UX internal stack (`code-ux-internal`) with Preact, TanStack Router, GSAP, Three.js, and Lucide Icons. Catalog sanitization trims ids and labels, drops malformed or duplicate ids, preserves the built-in entry, and falls back `defaultTechstackId` to `code-ux-internal` if the saved default is missing or invalid. Project defaults intentionally keep `techstack.selectedTechstackId = null` and `techstack.applicationKind = null`; existing and imported projects therefore do not inherit the internal techstack automatically. New-project flows must apply a catalog default explicitly when they need one.
+
 For `.code-ux/settings.json` (used primarily for credential hints during initial onboarding), search roots include:
 - current working directory
 - project root
@@ -137,6 +143,11 @@ Runtime resolution:
   - `gitlabToken`
 - `defaults`
   - full inheritable project settings baseline
+- `techstackCatalog`
+  - `defaultTechstackId` (`code-ux-internal` by default)
+  - `entries`
+    - each entry has `id`, `label`, and `items`
+    - each item has `id` and `label`
 - `mcpTools`
 
 `project_settings` fields:
@@ -149,6 +160,7 @@ Runtime resolution:
   - `sprintLoopSteps`
   - `cliWorkflow`
   - `sprintPreview`
+  - `techstack`
   - `agents`
   - `skills`
 
@@ -178,6 +190,8 @@ System-level integrations are injected into effective dashboard settings at reso
 - runtime fields like `dashboardPort`, `consoleLogLevel`, `debugLogFileLevel`, and `consoleLogMode` are system-scoped
 - project and sprint scopes still own `cliWorkflow.containerMountGithubAuth`, `cliWorkflow.containerGithubAuthPath`, `cliWorkflow.containerMountGitConfig`, `cliWorkflow.containerGitUserName`, and `cliWorkflow.containerGitUserEmail`
 - `agents.selfReflection` is default-off for both `planning` and `qualityAssurance`. Each loop stores an `enabled` flag, senior engineering criteria with per-criterion thresholds, and `maxImprovementAttempts`; sanitization dedupes criteria by id, clamps thresholds to `0..1`, clamps attempts to `0..10`, and falls back to default criteria for malformed legacy payloads. These settings are contracts only in this phase; no provider reflection calls or dashboard controls are wired yet.
+- `techstackCatalog` is system-owned. It stores the available techstack records and the catalog default id. The built-in `code-ux-internal` entry is restored on every load even when saved settings omit or override it.
+- `techstack` is project/sprint-owned. It stores `{ selectedTechstackId: string|null, applicationKind: "web"|"desktop"|null }`. The default project selection is null by design so imported projects remain unclassified until a later explicit project override selects a stack.
 
 Backend contract:
 - `src/contracts/app-types.ts`
@@ -216,7 +230,7 @@ Dashboard behavior:
 - project settings now render a per-setting override badge only when a control is actually overridden at project scope
 - settings UI path pickers can browse allowed local roots for custom container setup script paths. The local browser APIs are limited to the home directory, current working directory, and `CODE_UX_DIRECTORY_BROWSER_ROOTS`; `/api/local-files` returns navigation metadata plus directory and file names/absolute paths only, never file contents.
 - sprint override dialogs use the same field-level source metadata and show override badges only for sprint-local overrides
-- the v2 settings page includes a quick-find field (keyboard shortcut `/`) that filters categories without changing the scoped settings model. Smart Find uses a centralized typed settings search index spanning category metadata, provider and integration labels, invocation routes, instruction templates, and important field synonyms, so provider searches such as `claude` surface both AI model routing and Integrations matches with visible match context. The search UI announces live result counts, active-category match previews, no-match recovery suggestions, and keyboard-friendly quick category chips.
+- the v2 settings page includes a quick-find field (keyboard shortcut `/`) that filters categories without changing the scoped settings model. Smart Find uses a centralized typed settings search index spanning category metadata, provider and integration labels, invocation routes, instruction templates, and important field synonyms, so provider searches such as `claude` surface both AI model routing and Integrations matches with visible match context. Idle search copy stays quiet while keeping the exact category total available to assistive technology; active searches announce live result counts, matching-category counts, active-category context, match previews, no-match recovery suggestions, and keyboard-friendly quick category chips.
 - settings scope selection is a radiogroup with explicit selected state and disabled project-scope guidance when no project is selected. Save, project reset, dirty, saved, and error states are announced in the active settings panel while visible form values stay mounted during pending operations.
 - Settings category transitions use shared interaction motion tokens and snap directly to the selected category for reduced-motion users, avoiding intermediate fade states.
 - settings field controls expose field-level confidence through error text and ready-to-save cues where validation is available. Single-choice pill controls keep radiogroup/radio semantics and wire helper, valid, pending, and error copy through `aria-describedby`, `aria-errormessage`, and `aria-busy` instead of relying on visual styling alone. Numeric fields derive local min/max validation from their mounted control metadata; Save Changes focuses the first visible invalid field and blocks the patch request until the value is corrected.

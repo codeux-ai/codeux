@@ -18,6 +18,7 @@ import {
   cloneSystemSettings,
   dashboardSettingsToProjectSettings,
 } from "../lib/settings-view-models.js";
+import { DEFAULT_DASHBOARD_SETTINGS } from "../../lib/settings.js";
 import {
   buildSettingsSearchIndex,
   searchSettingsCategories,
@@ -38,7 +39,7 @@ import type { AgentAvatarConfig, AgentPreset } from "../types.js";
 import { AlertTriangle, Bot, BrainCircuit, Cpu, Plug, Settings, SlidersHorizontal, Target } from "lucide-preact";
 
 type SettingsScope = "system" | "project";
-type CategoryId = "general" | "appearance" | "models" | "sprint" | "browser" | "agents" | "memory" | "integrations" | "mcp" | "danger";
+type CategoryId = "general" | "appearance" | "models" | "sprint" | "browser" | "techstacks" | "agents" | "memory" | "integrations" | "mcp" | "danger";
 type AgentInstructionTemplateId = keyof ProjectSettings["agents"]["instructionTemplates"];
 
 interface Category {
@@ -53,6 +54,11 @@ interface Category {
 
 
 
+
+const normalizeSystemSettingsPayload = (settings: SystemSettings): SystemSettings => ({
+  ...settings,
+  techstackCatalog: settings.techstackCatalog ?? DEFAULT_DASHBOARD_SETTINGS.techstackCatalog,
+});
 
 const thinkingModeOptions: Array<{ value: ThinkingMode; label: string }> = [
   { value: "SMALL", label: "Small" },
@@ -222,12 +228,14 @@ export const useSettingsPageState = (
         setActiveScope(initialScope);
       }
 
+      const normalizedSystem = normalizeSystemSettingsPayload(nextSystem);
+
       // Preserve local dirty edits during background reload
       if (!isDirtyRef.current || !systemSettings) {
-        setSystemSettings(cloneSystemSettings(nextSystem));
+        setSystemSettings(cloneSystemSettings(normalizedSystem));
       }
 
-      setSavedSystemSettings(cloneSystemSettings(nextSystem));
+      setSavedSystemSettings(cloneSystemSettings(normalizedSystem));
       setExternalHints(hints);
 
       if (selectedProjectId) {
@@ -422,8 +430,9 @@ export const useSettingsPageState = (
       setSavingSystem(true);
       try {
         const saved = await saveSystemSettings(systemSettings);
-        setSystemSettings(cloneSystemSettings(saved));
-        setSavedSystemSettings(cloneSystemSettings(saved));
+        const normalizedSaved = normalizeSystemSettingsPayload(saved);
+        setSystemSettings(cloneSystemSettings(normalizedSaved));
+        setSavedSystemSettings(cloneSystemSettings(normalizedSaved));
 
         if (selectedProject && !projectDirty) {
           const effectiveProject = await fetchProjectEffectiveSettings(selectedProject.id, { cache: "reload" });
@@ -606,10 +615,11 @@ export const useSettingsPageState = (
   const setPersistedActiveScope = useCallback(async (scope: SettingsScope) => {
     setActiveScope(scope);
     if (systemSettings) {
+      const normalizedSystemSettings = normalizeSystemSettingsPayload(systemSettings);
       const updatedSystem = {
-        ...systemSettings,
+        ...normalizedSystemSettings,
         runtime: {
-          ...systemSettings.runtime,
+          ...normalizedSystemSettings.runtime,
           lastActiveScope: scope,
         },
       };

@@ -26,6 +26,8 @@ import type {
   FileBrowserFileContent,
   FileBrowserChangeSet,
   FileBrowserDiff,
+  HeaderTokenThroughputQuery,
+  HeaderTokenThroughputSnapshot,
 } from "../contracts/app-types.js";
 import type { OnboardingStateRecord } from "../domain/user/onboarding-state.js";
 import type {
@@ -157,6 +159,7 @@ export interface DashboardServerOptions {
   getExecutionSnapshot: () => ExecutionDashboardSnapshot;
   getProjectExecutionSnapshot: (projectId: string) => ExecutionDashboardSnapshot;
   getProjectStatsSnapshot: (projectId: string, query?: ProjectStatsQuery) => ProjectExecutionStatsSnapshot;
+  getHeaderTokenThroughputSnapshot: (query?: HeaderTokenThroughputQuery) => HeaderTokenThroughputSnapshot;
   setPreferredWorker?: (
     projectId: string,
     input?: {

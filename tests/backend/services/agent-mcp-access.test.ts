@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   defaultAgentMcpAccess,
+  defaultCodingAgentMcpAccess,
+  schedulerOnlyAgentMcpAccess,
   sanitizeAgentMcpAccess,
   resolveAgentMcpRuntime,
   mergeCodeUxToolToggles,
@@ -17,12 +19,13 @@ describe("sanitizeAgentMcpAccess", () => {
   it("returns defaults for empty/invalid input", () => {
     expect(sanitizeAgentMcpAccess(undefined)).toEqual(defaultAgentMcpAccess());
     expect(sanitizeAgentMcpAccess(null)).toEqual(defaultAgentMcpAccess());
-    expect(defaultAgentMcpAccess()).toEqual({ codeUxEnabled: true, codeUxToolToggles: [], linkedServerIds: [] });
+    expect(defaultAgentMcpAccess()).toEqual({ codeUxEnabled: false, codeUxToolToggles: [], linkedServerIds: [] });
   });
 
-  it("defaults codeUxEnabled to true unless explicitly false", () => {
-    expect(sanitizeAgentMcpAccess({ linkedServerIds: [] }).codeUxEnabled).toBe(true);
+  it("defaults codeUxEnabled to false unless explicitly true", () => {
+    expect(sanitizeAgentMcpAccess({ linkedServerIds: [] }).codeUxEnabled).toBe(false);
     expect(sanitizeAgentMcpAccess({ codeUxEnabled: false }).codeUxEnabled).toBe(false);
+    expect(sanitizeAgentMcpAccess({ codeUxEnabled: true }).codeUxEnabled).toBe(true);
   });
 
   it("dedupes linked ids and drops unknown tool toggles", () => {
@@ -43,20 +46,44 @@ describe("sanitizeAgentMcpAccess", () => {
   });
 });
 
+describe("agent MCP defaults", () => {
+  it("keeps coding-agent custom links without implying Code UX access", () => {
+    expect(defaultCodingAgentMcpAccess()).toEqual({
+      codeUxEnabled: false,
+      codeUxToolToggles: [],
+      linkedServerIds: ["playwright"],
+    });
+  });
+
+  it("builds scheduler-only Code UX access with every other built-in tool disabled", () => {
+    const access = schedulerOnlyAgentMcpAccess(["playwright", "playwright", " docs "]);
+    const enabledTools = access.codeUxToolToggles.filter((toggle) => toggle.enabled).map((toggle) => toggle.name);
+
+    expect(access.codeUxEnabled).toBe(true);
+    expect(enabledTools).toEqual(["scheduler"]);
+    expect(access.codeUxToolToggles.find((toggle) => toggle.name === "manage_scheduler")?.enabled).toBe(false);
+    expect(access.codeUxToolToggles.find((toggle) => toggle.name === "manage_tasks")?.enabled).toBe(false);
+    expect(access.codeUxToolToggles.find((toggle) => toggle.name === "manage_sprints")?.enabled).toBe(false);
+    expect(access.codeUxToolToggles.find((toggle) => toggle.name === "manage_settings")?.enabled).toBe(false);
+    expect(access.codeUxToolToggles.find((toggle) => toggle.name === "manage_code_ux")?.enabled).toBe(false);
+    expect(access.linkedServerIds).toEqual(["playwright", "docs"]);
+  });
+});
+
 describe("resolveAgentMcpRuntime", () => {
   const conn: McpConnectionInfo = { url: "http://127.0.0.1:3000/mcp", authToken: "secret" };
   const servers = [server("1", "docs"), server("2", "search")];
 
-  it("inherits provider-wide MCP servers when access is undefined", () => {
+  it("inherits provider-wide MCP servers when access is undefined for a non-agent run", () => {
     const result = resolveAgentMcpRuntime({ access: undefined, agentId: undefined, customMcpServers: servers, mcpConnection: conn });
     expect(result.customMcpServers).toBe(servers);
     expect(result.mcpConnection).toBe(conn);
   });
 
-  it("inherits provider-wide MCP servers and still tags code_ux when access is null", () => {
+  it("defaults missing agent-scoped access to no custom servers and no code_ux", () => {
     const result = resolveAgentMcpRuntime({ access: null, agentId: "a", customMcpServers: servers, mcpConnection: conn });
-    expect(result.customMcpServers).toBe(servers);
-    expect(result.mcpConnection).toEqual({ ...conn, agentId: "a" });
+    expect(result.customMcpServers).toEqual([]);
+    expect(result.mcpConnection).toBeNull();
   });
 
   it("narrows custom servers to linked ids and attaches the agent id to code_ux", () => {

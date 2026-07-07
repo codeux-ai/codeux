@@ -151,6 +151,7 @@ vi.mock("../../../dashboard/src/v2/components/agents/AgentPresetEditorPanel.js",
       const { props, state } = this;
       return h("div", { "data-testid": "editor-panel" },
         h("h2", null, "Edit Agent"),
+        h("div", null, props.isDashboardReplyAgent ? "Dashboard reply MCP context" : "Standard MCP context"),
         h("input", { defaultValue: props.preset.name, "aria-label": "Name" }),
         h("input", {
           type: "checkbox",
@@ -638,6 +639,20 @@ describe("AgentsPage", () => {
         persistentSkillStorageIds: ["storage-1"],
         persistentSkillStorage: { enabled: true },
       }));
+    });
+  });
+
+  it("passes dashboard reply route context to the agent editor", async () => {
+    const effective = createEffectiveSettings();
+    effective.settings.agents.routing.dashboardReply.agentPresetId = "agent-1";
+    vi.mocked(settingsApi.fetchProjectEffectiveSettings).mockResolvedValue(effective as any);
+
+    await renderPage();
+    const editBtn = await screen.findByText("Edit Agent");
+    fireEvent.click(editBtn);
+
+    await waitFor(() => {
+      expect(screen.getByText("Dashboard reply MCP context")).toBeInTheDocument();
     });
   });
 });

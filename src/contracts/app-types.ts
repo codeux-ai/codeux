@@ -537,6 +537,37 @@ export interface ProjectExecutionStatsSnapshot {
   chartSeries: ProjectExecutionStatsChartSeries[];
 }
 
+export type HeaderTokenThroughputWindow = Exclude<ProjectStatsWindow, "custom">;
+
+export interface HeaderTokenThroughputQuery {
+  window: HeaderTokenThroughputWindow;
+  projectId?: string | null;
+}
+
+export interface HeaderTokenThroughputTotals {
+  totalTokens: number;
+  inputTokens: number;
+  cachedInputTokens: number;
+  outputTokens: number;
+  reasoningTokens: number;
+  invocationCount: number;
+  activeTimeMs: number;
+  tokensPerMinute: number;
+}
+
+export interface HeaderTokenThroughputProjectSnapshot extends HeaderTokenThroughputTotals {
+  projectId: string;
+  projectName: string;
+}
+
+export interface HeaderTokenThroughputSnapshot {
+  generatedAt: string;
+  window: HeaderTokenThroughputWindow;
+  range: ProjectStatsRangeSummary;
+  app: HeaderTokenThroughputTotals;
+  project: HeaderTokenThroughputProjectSnapshot | null;
+}
+
 export interface OverviewTelemetryProjectSummary {
   projectId: string;
   projectName: string;
@@ -718,6 +749,29 @@ export interface AiProviderSettings {
   strategy: ProviderStrategy;
   providers: Record<ProviderConfigId, ProviderSettings>;
   invocationRouting: Record<InvocationRoutingId, InvocationRoutingSettings>;
+}
+
+export type ApplicationKind = "web" | "desktop";
+
+export interface TechstackItemSettings {
+  id: string;
+  label: string;
+}
+
+export interface TechstackCatalogEntrySettings {
+  id: string;
+  label: string;
+  items: TechstackItemSettings[];
+}
+
+export interface TechstackCatalogSettings {
+  defaultTechstackId: string;
+  entries: TechstackCatalogEntrySettings[];
+}
+
+export interface TechstackSelectionSettings {
+  selectedTechstackId: string | null;
+  applicationKind: ApplicationKind | null;
 }
 
 /** Toggles for what appears in an automated Task PR description. See src/domain/sprint/composer/pr-description-composer.ts. */
@@ -1114,6 +1168,8 @@ export interface DashboardSettings {
   automationLevel: AutomationLevel;
   automationInterventions: AutomationInterventionsSettings;
   aiProvider: AiProviderSettings;
+  techstackCatalog: TechstackCatalogSettings;
+  techstack: TechstackSelectionSettings;
   git: GitSettings;
   jira: JiraSettings;
   ciIntelligence: CiIntelligenceSettings;

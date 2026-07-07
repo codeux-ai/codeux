@@ -1,4 +1,4 @@
-import type { DashboardSettings, ExternalSettingsHints, GuardrailSettings } from "../types.js";
+import type { DashboardSettings, ExternalSettingsHints, GuardrailSettings, TechstackCatalogSettings } from "../types.js";
 import { DEFAULT_DASHBOARD_SETTINGS } from "../../../src/repositories/settings-defaults.js";
 
 export { DEFAULT_DASHBOARD_SETTINGS };
@@ -14,6 +14,14 @@ export const cloneGuardrails = (guardrails: GuardrailSettings): GuardrailSetting
     planning: { ...guardrails.jobs.planning },
     remediation: { ...guardrails.jobs.remediation },
   },
+});
+
+export const cloneTechstackCatalog = (catalog: TechstackCatalogSettings): TechstackCatalogSettings => ({
+  defaultTechstackId: catalog.defaultTechstackId,
+  entries: catalog.entries.map((entry) => ({
+    ...entry,
+    items: entry.items.map((item) => ({ ...item })),
+  })),
 });
 
 export const cloneDefaultSettings = (): DashboardSettings => ({
@@ -47,6 +55,8 @@ export const cloneDefaultSettings = (): DashboardSettings => ({
       ]),
     ) as DashboardSettings["aiProvider"]["invocationRouting"],
   },
+  techstackCatalog: cloneTechstackCatalog(DEFAULT_DASHBOARD_SETTINGS.techstackCatalog),
+  techstack: { ...DEFAULT_DASHBOARD_SETTINGS.techstack },
   git: { ...DEFAULT_DASHBOARD_SETTINGS.git },
   jira: { ...DEFAULT_DASHBOARD_SETTINGS.jira },
   ciIntelligence: { ...DEFAULT_DASHBOARD_SETTINGS.ciIntelligence },

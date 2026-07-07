@@ -8,6 +8,15 @@ const effectiveSettingsCache = new Map<string, EffectiveSettingsResponse>();
 const effectiveSettingsInflightRequests = new Map<string, Promise<EffectiveSettingsResponse>>();
 
 export const clearEffectiveSettingsCacheForTests = (): void => {
+  clearProjectEffectiveSettingsCache();
+};
+
+export const clearProjectEffectiveSettingsCache = (projectId?: string): void => {
+  if (projectId) {
+    effectiveSettingsCache.delete(projectId);
+    effectiveSettingsInflightRequests.delete(projectId);
+    return;
+  }
   effectiveSettingsCache.clear();
   effectiveSettingsInflightRequests.clear();
 };
