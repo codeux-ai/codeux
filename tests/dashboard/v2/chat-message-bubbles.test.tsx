@@ -2,20 +2,75 @@
 // @vitest-environment happy-dom
 import { h } from "preact";
 import { describe, it, expect, vi } from "vitest";
-import { fireEvent, render } from "@testing-library/preact";
+import { fireEvent, render, within } from "@testing-library/preact";
 import * as matchers from "@testing-library/jest-dom/matchers";
 import { ChatMessageBubble } from "../../../dashboard/src/v2/components/chat/ChatMessageBubble.js";
 import { InvocationMessageBubble } from "../../../dashboard/src/v2/components/chat/InvocationMessageBubble.js";
 import { InvocationListCard } from "../../../dashboard/src/v2/components/chat/InvocationListCard.js";
 import { ThreadListCard } from "../../../dashboard/src/v2/components/chat/ThreadListCard.js";
 import { WorkingBubble } from "../../../dashboard/src/v2/components/chat/WorkingBubble.js";
-import type { ChatMessageRecord, ExecutionInvocationMessageRecord, ConversationRuntimeState, ExecutionInvocationRecord, ChatThread } from "../../../dashboard/src/v2/types.js";
+import type { ExecutionDashboardSnapshot } from "../../../dashboard/src/types.js";
+import type { ChatMessageRecord, ExecutionInvocationMessageRecord, ConversationRuntimeState, ExecutionInvocationRecord, ChatThread, Task } from "../../../dashboard/src/v2/types.js";
 
 expect.extend(matchers);
 
 vi.mock("../../../dashboard/src/v2/lib/markdown.js", () => ({
   renderMarkdown: (md: string) => `<p>${md}</p>`
 }));
+
+const createWidgetTask = (overrides: Partial<Task> = {}): Task => ({
+  recordId: "task-1",
+  id: "TASK-1",
+  source: "Test Project",
+  sprint: "Sprint Alpha",
+  sprintId: "sprint-1",
+  title: "Build first task",
+  status: "pending",
+  priority: "medium",
+  executorType: "docker_cli",
+  assignee: "Runner",
+  time: "--",
+  createdAt: "2026-03-10T12:00:00.000Z",
+  updatedAt: "2026-03-10T12:00:00.000Z",
+  promptMarkdown: "Do the work",
+  description: "",
+  dependsOnTaskIds: [],
+  isIndependent: true,
+  isMerged: false,
+  mergeIndicator: null,
+  ...overrides,
+});
+
+const createWidgetExecution = (overrides: Partial<ExecutionDashboardSnapshot> = {}): ExecutionDashboardSnapshot => ({
+  projectId: "project-1",
+  projectName: "Test Project",
+  sprintRuns: [{
+    id: "run-1",
+    projectId: "project-1",
+    sprintId: "sprint-1",
+    sprintName: "Sprint Alpha",
+    sprintNumber: 12,
+    status: "queued",
+    triggerType: "manual",
+    triggeredBy: null,
+    executorMode: "DOCKER",
+    startedAt: null,
+    finishedAt: null,
+    lastHeartbeatAt: null,
+    createdAt: "2026-03-10T12:00:00.000Z",
+    activeLeaseOwnerKey: null,
+    activeLeaseExpiresAt: null,
+    humanIntervention: null,
+  }],
+  taskDispatches: [],
+  connections: [],
+  primaryAssignedWorker: null,
+  overflowAssignedWorkers: [],
+  attentionItems: [],
+  recentEvents: [],
+  updatedAt: "2026-03-10T12:00:00.000Z",
+  ...overrides,
+});
 
 describe("Chat Message Bubbles", () => {
   describe("ChatMessageBubble", () => {
@@ -73,6 +128,46 @@ describe("Chat Message Bubbles", () => {
       const { container, getByText } = render(<ChatMessageBubble message={message} />);
       expect(getByText("My special plan")).toBeInTheDocument();
       expect(getByText("Navigating solutions...")).toBeInTheDocument();
+    });
+
+    it("renders live sprint task progress when planning metadata can be matched to project state", () => {
+      const message: ChatMessageRecord = {
+        id: "msg_live",
+        threadId: "thread_1",
+        direction: "dashboard_to_connection",
+        authorType: "dashboard_user",
+        authorConnectionId: null,
+        bodyMarkdown: "Start the sprint",
+        deliveryStatus: "delivered",
+        createdAt: new Date().toISOString(),
+        metadata: {
+          type: "planning",
+          status: "queued",
+          sprintId: "sprint-1",
+        },
+      };
+
+      const { container } = render(
+        <ChatMessageBubble
+          message={message}
+          widgetLiveData={{
+            projectId: "project-1",
+            projectTasks: [
+              createWidgetTask({ recordId: "task-1", id: "TASK-1", title: "Create first file" }),
+              createWidgetTask({ recordId: "task-2", id: "TASK-2", title: "Create second file" }),
+            ],
+            execution: createWidgetExecution(),
+            sprintKeyPrefix: "SPR",
+          }}
+        />
+      );
+      const view = within(container);
+
+      expect(view.getByText("SPR-12")).toBeInTheDocument();
+      expect(view.getByText("0/2 · 0%")).toBeInTheDocument();
+      expect(view.getByRole("progressbar", { name: "Sprint progress for Sprint Alpha" })).toHaveAttribute("aria-valuenow", "0");
+      expect(view.getByText("Create first file")).toBeInTheDocument();
+      expect(view.getAllByText("Queued").length).toBeGreaterThan(0);
     });
 
     it("resolves dashboard message initially showing Queued to Processed when a later agent reply is present", () => {
@@ -316,9 +411,46 @@ describe("Chat Message Bubbles", () => {
         }
       };
 
-      const { getByText } = render(<InvocationMessageBubble message={message} />);
-      expect(getByText("Execution Plan")).toBeInTheDocument();
-      expect(getByText("Preparing to plan...")).toBeInTheDocument();
+      const { container } = render(<InvocationMessageBubble message={message} />);
+      expect(container.textContent).toContain("Execution Plan");
+      expect(container.textContent).toContain("Preparing to plan...");
+    });
+
+    it("renders the live sprint status widget for invocation planning messages", () => {
+      const message: ExecutionInvocationMessageRecord = {
+        id: "msg_inv_live",
+        invocationId: "inv_1",
+        role: "assistant",
+        contentMarkdown: "Sprint is queued",
+        toolCallsJson: null,
+        createdAt: new Date().toISOString(),
+        metadata: {
+          routeKind: "virtual",
+          status: "queued",
+          sprintId: "sprint-1",
+        },
+      };
+
+      const { container } = render(
+        <InvocationMessageBubble
+          message={message}
+          widgetLiveData={{
+            projectId: "project-1",
+            projectTasks: [
+              createWidgetTask({ recordId: "task-1", id: "TASK-1", title: "Prepare runtime" }),
+              createWidgetTask({ recordId: "task-2", id: "TASK-2", title: "Run validation" }),
+            ],
+            execution: createWidgetExecution(),
+            sprintKeyPrefix: "SPR",
+          }}
+        />
+      );
+      const view = within(container);
+
+      expect(view.getByText("SPR-12")).toBeInTheDocument();
+      expect(view.getByText("0/2 · 0%")).toBeInTheDocument();
+      expect(view.getByRole("progressbar", { name: "Sprint progress for Sprint Alpha" })).toBeInTheDocument();
+      expect(view.getByText("Prepare runtime")).toBeInTheDocument();
     });
 
     it("renders a classified error badge when invocation metadata includes an error category", () => {

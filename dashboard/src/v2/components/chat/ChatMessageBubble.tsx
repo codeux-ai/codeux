@@ -11,6 +11,7 @@ import { ChatAvatar, type AvatarRole } from "./ChatAvatar.js";
 import { resolveDisplayDeliveryStatus } from "../../hooks/use-chat-thread-data.js";
 import { useGsapDurations } from "../../lib/motion/constants.js";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
+import type { ChatWidgetLiveData } from "../../lib/chat-widget-view-models.js";
 
 export interface ChatMessageBubbleProps {
   message: ChatMessageRecord;
@@ -18,6 +19,7 @@ export interface ChatMessageBubbleProps {
   agentAvatarConfig?: AgentAvatarConfig;
   agentName?: string;
   animationDelay?: number;
+  widgetLiveData?: ChatWidgetLiveData;
 }
 
 export const ChatMessageBubble: FunctionComponent<ChatMessageBubbleProps> = ({
@@ -26,9 +28,10 @@ export const ChatMessageBubble: FunctionComponent<ChatMessageBubbleProps> = ({
   agentAvatarConfig,
   agentName,
   animationDelay = 0,
+  widgetLiveData,
 }) => {
   const fromDashboard = message.direction === "dashboard_to_connection";
-  const widgetData = getChatWidgetData(message);
+  const widgetData = getChatWidgetData(message, widgetLiveData);
 
   const bubbleRef = useRef<HTMLDivElement>(null);
   const durations = useGsapDurations();
@@ -104,7 +107,7 @@ export const ChatMessageBubble: FunctionComponent<ChatMessageBubbleProps> = ({
           {/* Widget Slot */}
           {widgetData.type === "planning" && (
             <div className="mt-4 border-t border-white/5 pt-4">
-              <PlanningRequestWidget status={widgetData.status} planName={widgetData.planName} />
+              <PlanningRequestWidget status={widgetData.status} planName={widgetData.planName} liveStatus={widgetData.liveStatus} />
             </div>
           )}
 
