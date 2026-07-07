@@ -7,7 +7,8 @@ Code UX uses **Vitest** as its single test runner across server and dashboard. C
 ```
 tests/
 ├── backend/         # server / orchestrator / mcp tests
-└── dashboard/       # Preact component tests
+├── dashboard/       # Preact component tests
+└── e2e/             # Playwright browser tests against dist/index.js
 
 src/**/*.test.ts     # co-located unit tests
 ```
@@ -21,10 +22,22 @@ pnpm run test                   # full suite, single run
 pnpm run test:watch             # watch mode
 pnpm run test:backend           # backend only
 pnpm run test:dashboard         # dashboard only
+pnpm run test:e2e               # Playwright E2E against the compiled app
 pnpm run test:coverage          # full coverage with thresholds
 pnpm run test:backend:coverage  # backend coverage with thresholds
 npx vitest run tests/backend/smoke.test.ts # single file
 ```
+
+Build before Playwright from a clean checkout:
+
+```bash
+pnpm run build
+pnpm run test:e2e -- tests/e2e/product-smoke.spec.ts
+```
+
+Playwright starts `node dist/index.js` on `http://127.0.0.1:4444` with an isolated temporary HOME/USERPROFILE/XDG home. The server receives `CODEUX_E2E_PROVIDER_CLI_SHIM`, which points at `scripts/e2e/mock-provider-cli.mjs`; provider command specs only use that fake provider when the explicit env var is present.
+
+Use `tests/e2e/helpers/e2e-fixtures.ts` for deterministic browser tests that need temporary git repositories, selected Code UX projects, public-API sprint/task seeding, local-git HOST execution, QA-disabled project settings, API polling, or onboarding/tour suppression. The fake provider supports prompt markers such as `[mock-provider:sleep=250]`, `[mock-provider:fail]`, `[mock-provider:exit=2]`, `[mock-provider:no-op]`, and `[mock-provider:write=relative/path.txt]`.
 
 ## Coverage thresholds
 
