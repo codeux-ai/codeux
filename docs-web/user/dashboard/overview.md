@@ -37,7 +37,8 @@ The background is an animated Three.js scene ("Deep Ocean") that lazy-loads afte
 | `/live` | [Live Session](./live-session.md) | Real-time view of the active sprint run |
 | `/chat` | [Chat](./chat.md) | Conversation threads with agents, plus invocation logs |
 | `/agents` | [Agents](./agents.md) | Agent presets — system instructions, avatars, memory templates |
-| `/scheduler` | [Scheduler](./scheduler.md) | Scheduled sprints, quicksprints, and messages with recurrence |
+| `/nodes` | [Node Flows](./node-flows.md) | Create, validate, run, schedule, and attach repeatable node workflows |
+| `/scheduler` | [Scheduler](./scheduler.md) | Scheduled sprints, quicksprints, node flows, messages, and memory remediation |
 | `/memory` | [Memory](./memory.md) | Short/long-term memory, embedding model management, semantic search |
 | `/knowledge` | [Knowledge](./knowledge.md) | Project knowledge base — documents, embeddings, semantic search |
 | `/files` | [File Browser](./file-browser.md) | Browse project files and review sprint Git changes |

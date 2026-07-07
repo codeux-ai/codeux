@@ -24,8 +24,8 @@ Each scheduler entry has a **target** — the thing that runs when it fires:
 
 Node-flow entries store `nodeFlowTarget = { flowId, input?, flowVersion? }` inside the existing
 target JSON payload, validate that the flow belongs to the selected project, and run through the
-node-flow runtime with scheduler trigger metadata when due. Blank dashboard JSON input is omitted,
-and invalid JSON is rejected before submission.
+node-flow runtime with scheduler trigger metadata when due. Blank dashboard input is omitted, and
+supplied input must be a JSON object.
 
 The backend scheduler contract also supports agent-created wakeups and scheduled task reruns.
 Agent wakeups and task reruns are stored in the same target JSON payload with `origin` and `source` set to
@@ -43,6 +43,12 @@ agent wakeups and task reruns can still be paused, resumed, or deleted from the 
 
 An entry can run once at a specific time or repeat on a **recurrence rule** (for example daily or
 weekly). The page previews the next occurrences so you can confirm the cadence before saving.
+
+For node-flow schedules, recurrence uses the same model as other targets. Due runs call the node-flow
+runtime with `triggerType = "scheduler"` and trigger metadata containing the scheduler entry id,
+scheduled occurrence time, target type, and stored flow version when present. Node-flow schedules
+advance only after runtime startup succeeds; failures move the entry to `failed` with the last error
+visible in the list.
 
 ## Managing entries
 
