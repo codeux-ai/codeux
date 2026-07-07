@@ -2,7 +2,7 @@
 
 This page enumerates every settings field, its type, default, range (if applicable), and the JSON path you would use with `manage_settings` → `patch_*_setting`.
 
-Settings are evaluated in cascade: **Defaults → System → Project → Sprint**. Higher-level fields override lower; unspecified fields inherit.
+Settings are evaluated in cascade: **System → Project → Sprint** (with built-in defaults folded into System). Higher-level fields override lower; unspecified fields inherit. Effective settings API responses include a `sources` object mapping JSON paths to their originating scope (`system`, `project`, or `sprint`).
 
 ## Top-level structure
 

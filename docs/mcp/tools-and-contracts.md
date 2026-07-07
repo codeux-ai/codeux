@@ -10,7 +10,6 @@ Implemented in:
 
 These cover:
 - `manage_projects`
-- `manage_code_ux` (Deprecated)
 - `manage_sprints`
 - `manage_tasks`
 - `manage_quicksprints`
@@ -21,8 +20,9 @@ These cover:
 - `manage_settings`
 - `manage_preview`
 - `manage_telemetry`
+- `manage_code_ux` (Deprecated compatibility surface)
 
-The same management domains are also exposed through the direct `codeux` CLI management surface. See [CLI Commands Reference](../reference/cli-commands.md) for the command syntax, aliases, interactive prompting behavior, and approval handling.
+The grouped management domains are the primary surface. `manage_code_ux` remains registered for compatibility, but it is deprecated. The same management domains are also exposed through the direct `codeux` CLI management surface. See [CLI Commands Reference](../reference/cli-commands.md) for the command syntax, aliases, interactive prompting behavior, and approval handling.
 
 ### Core tools
 Implemented in:
@@ -51,6 +51,7 @@ These cover:
 - `manage_settings`
 - `manage_preview`
 - `manage_telemetry`
+- `manage_code_ux` (Deprecated)
 
 ## Registered Tools
 
@@ -58,7 +59,6 @@ Defined in `src/contracts/mcp-tool-definitions.ts`.
 
 Typed tool argument contracts and registry dispatch are defined in `src/api/mcp/tool-registry.ts`.
 
-- `get_session`
 ### Listen mode
 - `listen`
 - `start_listen`
@@ -206,7 +206,7 @@ For payload normalization in management tools, Code UX centralizes parsing behav
 - **Validation Errors**: Parser failures throw `ManagementValidationError`, which the management tool handler serializes as the standardized `result.status: "error"` envelope with `errorType: "validation"` and `isError: true`.
 
 
-The dedicated management tools (`manage_sprints`, `manage_tasks`, `manage_quicksprints`, `manage_scheduler`, `manage_settings`) share the same action handlers.
+The dedicated management tools (`manage_projects`, `manage_sprints`, `manage_tasks`, `manage_quicksprints`, `manage_scheduler`, `manage_agents`, `manage_memory`, `search_knowledge`, `manage_settings`, `manage_preview`, and `manage_telemetry`) share the same action handlers. `manage_code_ux` remains as a deprecated compatibility entry point.
 
 ### `manage_memory` claim actions
 
@@ -423,8 +423,10 @@ For task create/update calls:
 
 For quicksprint calls:
 - `manage_quicksprints` supports `list_templates`, `get_template`, `create_template`, `update_template`, `delete_template`, `execute`, and `start`.
+- `create_template` requires `name`, `description`, `icon`, `category`, and `agentInstructionMarkdown`. Optional fields include `categoryColor`, and `defaultTaskCount`.
+- `update_template` supports partial updates to the same fields as `create_template`.
 - `start` is an MCP-friendly alias for execution with `submitMode: "plan_and_start"`.
-- `execute` defaults to `submitMode: "plan_only"` when no submit mode is supplied.
+- `execute` defaults to `submitMode: "plan_only"` when no submit mode is supplied. Both `execute` and `start` accept optional execution modifiers: `routeOverride`, and `modelOverride`.
 - `taskCount` is the canonical task-number field for execution. MCP accepts it as a number or numeric string.
 - `noTaskLimit: true` lets the planner choose the number of subtasks and disables the fixed-count prompt.
 - Flattened target fields (like `promptMarkdown`, `modelOverride`, etc.) are also accepted when scheduling or executing templates.
@@ -432,8 +434,10 @@ For quicksprint calls:
 
 For scheduler calls:
 - `manage_scheduler` supports `list`, `create`, `schedule_sprint`, `schedule_quicksprint`, `schedule_chat`, `update`, `delete`, and `run_due`.
-- Generic `create` requires `targetType: "sprint" | "quicksprint" | "chat"`.
-- The `schedule_*` aliases infer the target type and accept flattened target fields (e.g. properties from the target type passed directly rather than nested).
+- `run_due` accepts an optional `now` ISO date override.
+- Generic `create` requires `targetType: "sprint" | "quicksprint" | "chat" | "memory_remediation"`. Memory remediation targets are also managed via their dedicated `/api/projects/:projectId/scheduler/memory-remediation` routes.
+- The `schedule_*` aliases infer the target type and accept flattened target fields. `create` accepts nested targets (`sprintTarget`, `quicksprintTarget`, `chatTarget`).
+- Scheduling supports an absolute date/time (`scheduledFor`) or an `after_sprint_end` anchor using `scheduleMode: "after_sprint_end"` or `anchorMode: "after_sprint_end"` with `sourceSprintId` / `anchorSourceSprintId` and an optional `offsetMinutes` / `anchorOffsetMinutes`.
 - Recurrence `frequency` accepts `minutely`, `hourly`, `daily`, `weekly`, and `monthly`; the dashboard renders `minutely` as `Minutes` and the matching recurrence summaries use labels such as `Every minute` and `Every 15 minutes`.
 - Minute recurrence uses the same UTC scheduler math as longer intervals, so the normalized rule advances `nextRunAt` and expands occurrences exactly like other frequencies once the minute literal has been parsed.
 - Scheduled quicksprints use the same `taskCount` number or numeric-string normalization as direct quicksprints.

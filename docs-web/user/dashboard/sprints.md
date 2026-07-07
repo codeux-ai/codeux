@@ -77,8 +77,6 @@ Sprints are portable as Markdown bundles:
 - **Export** — Click **⋯ → Export markdown**. You receive a downloadable bundle: one file per subtask plus a `sprint.md` describing the sprint.
 - **Import** — Click **+ → Import**. Drop a previously exported bundle (or a hand-written one). Code UX validates and creates the sprint.
 
-Importing is the recommended way to template sprints across projects when [Quicksprints](../quicksprints.md) are not flexible enough.
-
 ## Sprint settings overrides
 
 Each sprint can override project settings, which in turn override system settings. Open the **⚙ Sprint settings** panel from the sprint detail view to edit. Common overrides:

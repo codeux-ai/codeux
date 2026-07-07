@@ -18,6 +18,9 @@ Code UX now separates:
 - optional per-agent provider/model preferences
 - provider credentials/instances managed by Integrations
 
+Note that provider configuration is subject to the `system -> project -> sprint` resolution cascade and routing rules resolve against the effective settings at the current scope.
+Effective API responses include `sources` metadata mapping routing rules and provider configurations to the scope that provided them.
+
 *(Note: In routing contexts, `available` means detected credentials/auth presence or local auth enabled on that exact provider instance, whereas `enabled` means user-approved routing participation.)*
 
 ## Provider Runtime Artifacts

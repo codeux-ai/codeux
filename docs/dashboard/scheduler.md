@@ -76,13 +76,13 @@ The dashboard API routes are:
   - Updates status, timing, recurrence, or target payload.
   - Updating `scheduleAnchor` switches an entry to anchored semantics. Setting it to `null` returns the entry to absolute-time semantics with `scheduledFor`.
 - `DELETE /api/scheduler/:entryId`
-  - Deletes an entry.
+  - Deletes an entry. (Note: using the `manage_scheduler` MCP tool requires `approval: { confirmed: true }`).
 - `GET /api/projects/:projectId/scheduler/memory-remediation`
   - Returns the settings-managed long-term memory remediation entry, if one exists.
 - `PUT /api/projects/:projectId/scheduler/memory-remediation`
   - Creates, updates, or pauses the settings-managed long-term memory remediation entry.
 - `POST /api/scheduler/run-due`
-  - Processes due scheduler entries manually
+  - Processes due scheduler entries manually. Accepts an optional `now` ISO override for operational verification.
 
 ## Runtime Execution
 
