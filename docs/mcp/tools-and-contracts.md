@@ -20,8 +20,9 @@ These cover:
 - `manage_settings`
 - `manage_preview`
 - `manage_telemetry`
+- `manage_code_ux` (Deprecated compatibility surface)
 
-The same management domains are also exposed through the direct `codeux` CLI management surface. See [CLI Commands Reference](../reference/cli-commands.md) for the command syntax, aliases, interactive prompting behavior, and approval handling.
+The grouped management domains are the primary surface. `manage_code_ux` remains registered for compatibility, but it is deprecated. The same management domains are also exposed through the direct `codeux` CLI management surface. See [CLI Commands Reference](../reference/cli-commands.md) for the command syntax, aliases, interactive prompting behavior, and approval handling.
 
 ### Core tools
 Implemented in:
@@ -50,6 +51,7 @@ These cover:
 - `manage_settings`
 - `manage_preview`
 - `manage_telemetry`
+- `manage_code_ux` (Deprecated)
 
 ## Registered Tools
 
@@ -57,7 +59,6 @@ Defined in `src/contracts/mcp-tool-definitions.ts`.
 
 Typed tool argument contracts and registry dispatch are defined in `src/api/mcp/tool-registry.ts`.
 
-- `get_session`
 ### Listen mode
 - `listen`
 - `start_listen`
@@ -205,7 +206,7 @@ For payload normalization in management tools, Code UX centralizes parsing behav
 - **Validation Errors**: Parser failures throw `ManagementValidationError`, which the management tool handler serializes as the standardized `result.status: "error"` envelope with `errorType: "validation"` and `isError: true`.
 
 
-The dedicated management tools (`manage_sprints`, `manage_tasks`, `manage_quicksprints`, `manage_scheduler`, `manage_settings`) share the same action handlers.
+The dedicated management tools (`manage_projects`, `manage_sprints`, `manage_tasks`, `manage_quicksprints`, `manage_scheduler`, `manage_agents`, `manage_memory`, `search_knowledge`, `manage_settings`, `manage_preview`, and `manage_telemetry`) share the same action handlers. `manage_code_ux` remains as a deprecated compatibility entry point.
 
 ### `manage_memory` claim actions
 
@@ -418,7 +419,7 @@ Persistence and prompt behavior:
 For task create/update calls:
 - `title` is canonical; `name` is accepted as an alias.
 - `projectId` is required for list/create, and `sprintId` is required for create. List can omit `sprintId` to return all project tasks.
-- Supported edit fields include `promptMarkdown`, `description`, `status`, `priority`, `executorType`, `agentPresetId`, `model`, `sortOrder`, `dependsOnTaskIds`, `isIndependent`, and `isMerged`.
+- Supported edit fields include `promptMarkdown`, `description`, `status`, `priority`, `executorType`, `agentPresetId` (`model` is accepted as an alias), `sortOrder`, `dependsOnTaskIds`, `isIndependent`, and `isMerged`.
 
 For quicksprint calls:
 - `manage_quicksprints` supports `list_templates`, `get_template`, `create_template`, `update_template`, `delete_template`, `execute`, and `start`.
@@ -428,6 +429,7 @@ For quicksprint calls:
 - `execute` defaults to `submitMode: "plan_only"` when no submit mode is supplied. Both `execute` and `start` accept optional execution modifiers: `routeOverride`, and `modelOverride`.
 - `taskCount` is the canonical task-number field for execution. MCP accepts it as a number or numeric string.
 - `noTaskLimit: true` lets the planner choose the number of subtasks and disables the fixed-count prompt.
+- Flattened target fields (like `promptMarkdown`, `modelOverride`, etc.) are also accepted when scheduling or executing templates.
 - `delete_template` requires approval confirmation. Custom templates are removed from the project template directory; built-in/default templates are hidden for the project by writing a local tombstone marker instead of deleting shared bundled assets.
 
 For scheduler calls:

@@ -1,10 +1,11 @@
 # Management actions
 
-Code UX exposes **one MCP tool per management domain** — `manage_projects`, `manage_sprints`,
+Code UX exposes grouped MCP tools per management domain — `manage_projects`, `manage_sprints`,
 `manage_tasks`, `manage_quicksprints`, `manage_scheduler`, `manage_agents`, `manage_memory`,
-`manage_settings`, `manage_preview`, and `manage_telemetry` — ten domains, each with a set of
-**actions**. This page is the complete matrix. (See [MCP tools](./mcp-tools.md) for the tool list and
-schemas.)
+`search_knowledge`, `manage_settings`, `manage_preview`, and `manage_telemetry`. The deprecated
+`manage_code_ux` tool remains available for compatibility, but the grouped tools are the primary
+surface. Each domain has a set of **actions**. This page is the complete matrix. (See
+[MCP tools](./mcp-tools.md) for the tool list and schemas.)
 
 A dedicated-tool call takes the `action` plus action-specific fields:
 
@@ -99,7 +100,7 @@ Task create/update fields include `title`, `name`, `promptMarkdown`, `descriptio
 | Action | Destructive | Required payload | Description |
 | --- | --- | --- | --- |
 | `list` | – | `projectId`, optional `from`, `to` | List scheduler entries and occurrences for a project window. |
-| `create` | – | `projectId`, `targetType`, `scheduledFor`, target payload | Create a generic scheduler entry for `sprint`, `quicksprint`, or `chat`. |
+| `create` | – | `projectId`, `targetType`, `scheduledFor`, target payload | Create a generic scheduler entry for `sprint`, `quicksprint`, `chat`, or `memory_remediation`. |
 | `schedule_sprint` | – | `projectId`, `scheduledFor`, `sprintId` | Schedule a sprint orchestration. |
 | `schedule_quicksprint` | – | `projectId`, `scheduledFor`, `templateId` | Schedule a quicksprint. Optional `taskCount`, `submitMode`, `additionalPrompt`, `agentPresetId`, `planningOverrides`. |
 | `schedule_chat` | – | `projectId`, `scheduledFor`, `bodyMarkdown` | Schedule a chat message. Optional `threadId`, `connectionId`, `title`, `timezone`, `recurrence`. |
@@ -107,7 +108,7 @@ Task create/update fields include `title`, `name`, `promptMarkdown`, `descriptio
 | `delete` | ✅ | `entryId` | Delete a scheduler entry. |
 | `run_due` | – | optional `now` ISO date override | Evaluate due entries immediately, mostly for operational verification. |
 
-`create` accepts nested targets (`sprintTarget`, `quicksprintTarget`, `chatTarget`) or the flattened fields used by the `schedule_*` aliases. Scheduled chat entries post through the dashboard chat runtime when due, so they can target an existing thread with `threadId` or create/use a titled thread with `title`.
+`create` accepts nested targets (`sprintTarget`, `quicksprintTarget`, `chatTarget`) or the flattened fields used by the `schedule_*` aliases. `schedule_sprint`, `schedule_quicksprint`, and `schedule_chat` infer the target type. Scheduling supports an absolute time (`scheduledFor`) or an `after_sprint_end` anchor via `scheduleMode` or `anchorMode`, with `sourceSprintId` / `anchorSourceSprintId` and optional `offsetMinutes` / `anchorOffsetMinutes`.
 
 Memory remediation schedules use `targetType: "memory_remediation"` but have their own dedicated `/api/projects/:projectId/scheduler/memory-remediation` HTTP routes separate from the normal scheduler entries.
 
@@ -175,6 +176,19 @@ Manages agent presets per project.
 | `get_map` | – | `projectId`, optional `scope`, `sprintId`, `agentPresetId`, `topKPerNode` | Get embedding-map graph. |
 | `count` | – | `projectId`, `scope` | Count by scope. |
 | `model_status` | – | – | Get embedding model status. |
+
+### Claim actions
+
+The memory domain also exposes durable claim management:
+
+| Action | Destructive | Required payload | Description |
+| --- | --- | --- | --- |
+| `create_claim` | – | `projectId`, `claim` | Create a project claim. Accepts `category`, `confidence`, `durability`, `tags`, `appliesToPaths`, `sourceMemoryId`, `supersedesClaimId`, `supportType`, `weight`, and `evidenceWeight`. |
+| `list_claims` | – | `projectId` | List project claims. Accepts `status`, `category`, and `limit`. |
+| `get_claim` | – | `projectId`, `claimId` | Get a specific claim. |
+| `update_claim` | – | `projectId`, `claimId` | Update a claim. Accepts `claim`, `category`, `confidence`, `durability`, `status`, `tags`, `appliesToPaths`, and `supersedesClaimId`. |
+| `add_claim_evidence` | – | `projectId`, `claimId`, `memoryId` | Add evidence to a claim. Accepts `supportType` and `weight`. |
+| `deprecate_claim` | ✅ | `projectId`, `claimId` | Deprecate a claim and require approval confirmation. |
 
 ---
 

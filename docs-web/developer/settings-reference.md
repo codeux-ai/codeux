@@ -1,6 +1,6 @@
 # Settings schema reference
 
-This page enumerates every settings field, its type, default, range (if applicable), and the JSON path you would use with `manage_code_ux` → `settings` → `patch_*_setting`.
+This page enumerates every settings field, its type, default, range (if applicable), and the JSON path you would use with `manage_settings` → `patch_*_setting`.
 
 Settings are evaluated in cascade: **System → Project → Sprint** (with built-in defaults folded into System). Higher-level fields override lower; unspecified fields inherit. Effective settings API responses include a `sources` object mapping JSON paths to their originating scope (`system`, `project`, or `sprint`).
 
