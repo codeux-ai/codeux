@@ -37,7 +37,7 @@ The readiness payload reports:
   - Git CLI
 - Local provider auth detection for Gemini, Codex, Claude Code, Qwen Code, and OpenCode
 
-Docker is mandatory for the default containerized workflow. When Docker is missing or the daemon is stopped, the top-nav Docker control also shows a `Cluster not ready` badge and its popover explains that provider CLIs cannot execute until Docker is reachable.
+Docker is mandatory for the default containerized workflow. When Docker is missing or the daemon is stopped, the top-nav Docker control shows a red `Runtime not ready` alert badge with a static exclamation marker and motion-safe attention animation. The Docker status trigger also announces that the runtime is not ready, and its popover explains that provider CLIs cannot execute until Docker is reachable.
 
 The top-nav notification center also consumes this readiness payload. Startup notifications are generated from real checks instead of placeholder messages:
 - `Cluster not ready` is a non-dismissible critical notification when required dependencies are missing.
@@ -53,6 +53,7 @@ The flow currently contains nine detailed steps, with the provider configuration
 1. Installation
    - Checks Docker and Git availability.
    - Gives Docker installation/start guidance when required checks fail.
+   - Mirrors failed required checks in the header Docker status control as the red runtime-not-ready warning, backed by the same Docker CLI, Docker daemon, and Git CLI readiness payload.
 2. Introduction
    - Opens with a short `Welcome to Code UX` overview of the containerized agentic workspace.
    - Explains the container-first runtime model.
