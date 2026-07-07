@@ -113,10 +113,17 @@ export const saveProjectTechstackSettings = async (
   projectId: string,
   techstack: TechstackSelectionSettings,
 ): Promise<void> => {
+  const currentOverride = await fetchJson<Partial<ProjectSettings>>(
+    `/api/projects/${encodeURIComponent(projectId)}/settings`,
+    { cache: "reload" },
+  );
   await fetchJson(`/api/projects/${encodeURIComponent(projectId)}/settings`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ techstack }),
+    body: JSON.stringify({
+      ...currentOverride,
+      techstack,
+    }),
   });
   clearEffectiveSettingsRequests(projectId);
   if (typeof window !== "undefined") {
