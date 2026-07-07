@@ -116,6 +116,10 @@ function parseRawConfiguredHost(configuredHost: string): CanonicalHost | null {
   return { ...parsed, boundary: "dashboard" };
 }
 
+function isLocalDashboardHostname(hostname: string): boolean {
+  return LOCAL_DASHBOARD_HOSTS.has(hostname);
+}
+
 function parseConfiguredUrlHost(configuredHost: string): ParsedHost | null {
   if (CONTROL_CHAR_PATTERN.test(configuredHost) || configuredHost.includes(",")) {
     return null;
@@ -140,6 +144,30 @@ function isLocalPreviewHostname(hostname: string): boolean {
   return /^[a-z0-9][a-z0-9-]*$/i.test(sessionId);
 }
 
+function isSafeForwardedHost(actualHost: CanonicalHost, forwardedHost: CanonicalHost): boolean {
+  if (actualHost.host === forwardedHost.host) {
+    return true;
+  }
+
+  if (actualHost.boundary !== "dashboard" || forwardedHost.boundary !== "dashboard") {
+    return false;
+  }
+
+  const actualIsLocal = isLocalDashboardHostname(actualHost.hostname);
+  const forwardedIsLocal = isLocalDashboardHostname(forwardedHost.hostname);
+  if (actualIsLocal && forwardedIsLocal) {
+    return true;
+  }
+
+  // Reverse proxies should keep Code UX bound to loopback and present the
+  // externally routed hostname through X-Forwarded-Host. The forwarded hostname
+  // must be the explicit DASHBOARD_HOST value, not an arbitrary client header.
+  const configuredHost = parseConfiguredDashboardHost();
+  return actualIsLocal
+    && configuredHost !== null
+    && forwardedHost.hostname === configuredHost.hostname;
+}
+
 function getAllowedRequestHosts(req: Request): CanonicalHost[] | null {
   const actualHost = parseCanonicalHost(req.headers.host);
   if (!actualHost) {
@@ -152,7 +180,7 @@ function getAllowedRequestHosts(req: Request): CanonicalHost[] | null {
   }
 
   const forwardedHost = parseCanonicalHost(forwardedHostHeader);
-  if (!forwardedHost || forwardedHost.boundary !== actualHost.boundary) {
+  if (!forwardedHost || !isSafeForwardedHost(actualHost, forwardedHost)) {
     return null;
   }
 
@@ -173,7 +201,7 @@ export function isTrustedDashboardHost(hostHeader: HeaderValue, forwardedHostHea
   }
 
   const forwardedHost = parseCanonicalHost(forwardedHostHeader);
-  return forwardedHost !== null && forwardedHost.boundary === actualHost.boundary;
+  return forwardedHost !== null && isSafeForwardedHost(actualHost, forwardedHost);
 }
 
 export function isTrustedDashboardPreviewHost(hostHeader: HeaderValue): boolean {
