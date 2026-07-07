@@ -1,7 +1,7 @@
 import type { Express } from "express";
 import type { DashboardDependencies } from "./dashboard-server.js";
 import { asyncRoute, syncRoute } from "./route-utils.js";
-import { parseProjectStatsQuery, parseTrimmedString, requireTrimmedString, parsePreferredWorkerAssignment, parseClaimAttentionItemPayload, parseResolveAttentionItemPayload } from "./request-parsers.js";
+import { parseHeaderTokenThroughputQuery, parseProjectStatsQuery, parseTrimmedString, requireTrimmedString, parsePreferredWorkerAssignment, parseClaimAttentionItemPayload, parseResolveAttentionItemPayload } from "./request-parsers.js";
 import type { ProjectStatsQuery, ProjectStatsWindow } from "../contracts/app-types.js";
 
 export function registerRuntimeRoutes(app: Express, options: DashboardDependencies): void {
@@ -21,6 +21,10 @@ export function registerRuntimeRoutes(app: Express, options: DashboardDependenci
 
   app.get("/api/telemetry/overview", syncRoute((req, res) => {
     res.json(options.getOverviewTelemetrySnapshot());
+  }));
+
+  app.get("/api/stats/header-throughput", syncRoute((req, res) => {
+    res.json(options.getHeaderTokenThroughputSnapshot(parseHeaderTokenThroughputQuery(req.query as Record<string, unknown>)));
   }));
 
   app.get("/api/projects/:projectId/execution", syncRoute((req, res) => {

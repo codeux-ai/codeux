@@ -64,5 +64,6 @@ Cost data is visualized directly within the Usage Graph and Composition views, f
 The page remains live and uses project realtime invalidation channels to stay current during active sprint execution, falling back to background polling when websocket updates aren't available.
 
 It is backed by:
+- `GET /api/stats/header-throughput?projectId=...&window=...` — compact app and selected-project token throughput for dashboard header metrics.
 - `GET /api/projects/:projectId/stats?window=...` — aggregated metrics for charts and summaries.
 - `GET /api/projects/:projectId/execution/invocations` — raw MCP invocation log.

@@ -244,8 +244,12 @@ Usage data now appears in two read models:
 
 - `GET /api/projects/:projectId/execution`
   - task and sprint execution summaries now include usage rollups
+- `GET /api/stats/header-throughput?projectId=<id>&window=1h|24h|7d|30d|all`
+  - app-wide token-throughput snapshot for the dashboard header, with an optional selected-project section when `projectId` is supplied. The endpoint reads directly from `provider_invocations`, returns zero-filled numeric aggregates for empty windows, and rejects empty, unknown, or malformed `projectId` values instead of returning a misleading project subtotal. It is intentionally small: generated time, aligned range metadata, app totals, nullable project totals, token anatomy, invocation count, active provider time, and tokens per active minute.
 - `GET /api/projects/:projectId/stats?window=1h|24h|7d|30d|all|custom&from=YYYY-MM-DD&to=YYYY-MM-DD`
   - project-scoped statistics snapshot for the Stats page. Custom ranges must be parseable dates, where `from <= to`, and invalid or incomplete ranges fail with validation errors.
+
+The header throughput endpoint is a compact read model for shell chrome, not a replacement for the project stats snapshot. It shares the same normalized token columns and preset window semantics, but it avoids per-project fan-out by aggregating the whole app and the selected project in one backend call. The full project stats route remains the source for bucketed charts, task/sprint/provider/model ledgers, git rollups, pricing, status counts, custom date ranges, and Stats page behavior.
 
 Historical Docker-backed CLI invocations that were persisted as `unavailable` before container telemetry fallback support are backfilled at startup when they have prompt or transcript character counts. The backfill marks them as `estimated` using the same conservative character heuristic, preserving rows that already have provider-reported or provider-specific estimated usage.
 

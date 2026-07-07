@@ -91,6 +91,8 @@ import type {
   ExecutionSprintRunSummary,
   ExecutionTaskDispatchSummary,
   ExecutionGitMetrics,
+  HeaderTokenThroughputQuery,
+  HeaderTokenThroughputSnapshot,
 } from "../contracts/app-types.js";
 import type { DashboardRealtimeMutationNotifier } from "../services/dashboard-realtime-service.js";
 import type { ProviderId } from "../contracts/app-types.js";
@@ -103,6 +105,7 @@ import { queryExecutionTaskDispatches } from "./execution/execution-task-dispatc
 import { queryExecutionRuntimeEvents } from "./execution/execution-runtime-events-query.js";
 import { normalizeProjectStatsQuery } from "./execution/project-stats-query.js";
 import { queryProjectStatsSnapshot } from "./execution/project-stats-snapshot-query.js";
+import { queryHeaderTokenThroughputSnapshot } from "./execution/header-token-throughput-query.js";
 import { createSnapshotPricingResolver } from "./execution/project-stats-aggregation.js";
 import {
   queryUsageGroupsByTaskId,
@@ -1158,6 +1161,10 @@ export class ExecutionRepository {
 
   getOverviewTelemetrySnapshot(): OverviewTelemetrySnapshot {
     return new OverviewTelemetryQuery(this.db, this.storage).getOverviewTelemetrySnapshot();
+  }
+
+  getHeaderTokenThroughputSnapshot(input: HeaderTokenThroughputQuery = { window: "24h" }): HeaderTokenThroughputSnapshot {
+    return queryHeaderTokenThroughputSnapshot(this.db, input);
   }
 
   countRunningTasksPerProvider(projectId: string): Map<ProviderId, number> {
