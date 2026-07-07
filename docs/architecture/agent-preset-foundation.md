@@ -27,6 +27,7 @@ Foundation fields:
 - `labels_json`
 - `provider_config_id`
 - `model`
+- `container_run_as_root` stores a nullable per-agent Docker root-mode override; `NULL` inherits the resolved `cliWorkflow.containerRunAsRoot` setting
 - `memory_config_json` stores `AgentMemoryConfig` as a JSON blob
 - `persistent_skill_storage_enabled` reserves a default-off runtime enablement flag for future persistent skill retrieval
 - `created_at`
@@ -140,6 +141,8 @@ Agent preset avatars have two rendering tiers:
 The 3D scene owns WebGL lifecycle cleanup. On unmount, fallback transition, WebGL failure, or reduced-motion changes, it cancels animation frames, removes event listeners, disposes avatar geometries, materials, textures, particle resources, and the renderer, and forces context loss when supported.
 
 Provider and model preferences are intentionally nullable. They only take effect when a provider invocation route uses the `AGENT` strategy; otherwise the agent inherits the configured route, worker, or global defaults.
+
+The Docker root-mode preference is also nullable. For local CLI task execution, the resolved worker preset may set `containerRunAsRoot` to `true` or `false` to override the scoped `cliWorkflow.containerRunAsRoot` value for that run. `null` or an omitted value keeps inheritance. Hosted Jules sessions do not use this field because they do not run in local Docker provider containers.
 
 At runtime, the CLI workflow now reads `AgentMemoryConfig` from the resolved worker agent and post-filters injected memories by configured tier, categories, strength thresholds, and max counts before composing the prompt. When the config is absent, the workflow keeps the default unrestricted memory injection path.
 

@@ -350,7 +350,8 @@ Dashboard behavior:
 - agent presets also carry optional routing preferences:
   - `providerConfigId` (`ProviderConfigId|null`)
   - `model` (`string|null`)
-  - these fields are only applied by invocation routes using the `AGENT` provider strategy; blank values inherit the route, worker, or global default
+  - `containerRunAsRoot` (`boolean|null`): when the resolved worker preset sets an explicit boolean, local CLI task execution uses that value instead of the scoped `cliWorkflow.containerRunAsRoot`; `null` or an omitted field inherits the scoped setting
+  - provider and model preferences are only applied by invocation routes using the `AGENT` provider strategy; blank values inherit the route, worker, or global default
 - `qualityAssurance`
   - `enabled` (default `true`)
   - `maxTaskReviewRuns` (default `3` for new or unset settings)
@@ -410,7 +411,7 @@ QA merge-gate notes:
   - `containerCacheSetupScriptImage` (default `true`)
     - when enabled, Docker runtime builds and reuses a derived image keyed by the base image plus setup script contents
     - cache misses fall back to the current per-run setup script path if the image build fails
-  - `containerRunAsRoot` (default `false`): opt-in runtime mode for Docker provider containers that must run as root. Invalid or missing values sanitize back to `false`; unless this is explicitly `true`, provider containers run with the resolved host workspace UID/GID and receive a matching mounted `/etc/passwd` worker entry.
+  - `containerRunAsRoot` (default `false`): opt-in runtime mode for Docker provider containers that must run as root. Invalid or missing values sanitize back to `false`; unless this is explicitly `true`, provider containers run with the resolved host workspace UID/GID and receive a matching mounted `/etc/passwd` worker entry. A resolved worker agent preset can override this value for local CLI task execution with its nullable `containerRunAsRoot` field; hosted Jules sessions ignore the per-agent field because they do not run in local Docker provider containers.
   - `containerInstallPlaywrightBrowsers` (default `true`): provider coding containers set `CODE_UX_INSTALL_PLAYWRIGHT=1`, so the shared setup script installs Playwright Chromium plus OS dependencies for agent browser checks. With setup-image caching enabled, the setup-cache build also exports `PLAYWRIGHT_BROWSERS_PATH=/ms-playwright`, bakes Chromium into that image, and leaves the directory readable for non-root provider runs. Disable this setting to skip the browser download during setup; preview containers keep it disabled unless they opt into the provider setup path explicitly.
   - `containerMountGitConfig` (default `false`): copy the host `.gitconfig` into Docker. When disabled, Docker provider runs configure Git with `containerGitUserName` and `containerGitUserEmail` instead.
   - `containerGitUserName` (default `Code UX`)
