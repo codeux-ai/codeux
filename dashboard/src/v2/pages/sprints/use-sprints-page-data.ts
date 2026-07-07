@@ -117,6 +117,8 @@ export function useSprintsPageData() {
     setAddTaskSprintTasks,
     showQuicksprint,
     setShowQuicksprint,
+    projectManagementImportProvider,
+    setProjectManagementImportProvider,
   } = useSprintsPageModals();
 
   const [pendingActionIds, setPendingActionIds] = useState<Set<string>>(
@@ -496,6 +498,8 @@ export function useSprintsPageData() {
       defaultAgentRouting?.taskCoding.agentPresetId || null,
     showQuicksprint,
     setShowQuicksprint,
+    projectManagementImportProvider,
+    setProjectManagementImportProvider,
     quicksprintTemplates,
     quicksprintLoading,
 

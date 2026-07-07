@@ -15,6 +15,10 @@ describe("SprintImportMenu", () => {
       onImportMarkdown={vi.fn()}
       onImportGitHubIssues={vi.fn()}
       onImportGitLabIssues={vi.fn()}
+      onImportJira={vi.fn()}
+      onImportNotion={vi.fn()}
+      onImportAsana={vi.fn()}
+      onImportLinear={vi.fn()}
       {...overrides}
     />,
   );
@@ -48,6 +52,9 @@ describe("SprintImportMenu", () => {
     expect(screen.getByText("Search, filter, and multi-select")).toBeInTheDocument();
     expect(screen.getByText("Import issue scope from GitLab")).toBeInTheDocument();
     expect(screen.getByText("Import issue scope from Jira")).toBeInTheDocument();
+    expect(screen.getByText("Import page or database scope")).toBeInTheDocument();
+    expect(screen.getByText("Import task scope from Asana")).toBeInTheDocument();
+    expect(screen.getByText("Import issue scope from Linear")).toBeInTheDocument();
 
     const markdownBtn = screen.getByRole("menuitem", { name: /markdown/i });
     fireEvent.click(markdownBtn);
@@ -120,5 +127,28 @@ describe("SprintImportMenu", () => {
     const jiraBtn = screen.getByRole("menuitem", { name: /jira issues/i });
     fireEvent.click(jiraBtn);
     expect(onImportJira).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    ["Notion", "onImportNotion"],
+    ["Asana", "onImportAsana"],
+    ["Linear", "onImportLinear"],
+  ] as const)("clicks %s import", (label, handlerName) => {
+    const handlers = {
+      onImportMarkdown: vi.fn(),
+      onImportGitHubIssues: vi.fn(),
+      onImportGitLabIssues: vi.fn(),
+      onImportJira: vi.fn(),
+      onImportNotion: vi.fn(),
+      onImportAsana: vi.fn(),
+      onImportLinear: vi.fn(),
+    };
+    render(<SprintImportMenu disabled={false} {...handlers} />);
+
+    const trigger = screen.getAllByRole("button").find(btn => btn.textContent?.includes("Import") && !btn.textContent?.includes("Markdown"));
+    fireEvent.click(trigger);
+
+    fireEvent.click(screen.getByRole("menuitem", { name: new RegExp(label, "i") }));
+    expect(handlers[handlerName]).toHaveBeenCalledTimes(1);
   });
 });
