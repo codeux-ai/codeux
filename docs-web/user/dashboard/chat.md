@@ -13,6 +13,8 @@ The **Chat** page (`/chat`) is a thread-based conversation surface that lets you
 
 The floating widget uses the configured Dashboard Reply agent avatar when a selected project has one. If no Dashboard Reply preset or project is available, it falls back to the generated Code UX avatar.
 
+3D chat and agent avatar surfaces may show a lightweight WebGL flashlight effect. It is a performant pseudo-raytraced presentation effect built from a translucent beam, target glow, accent-aware lighting, and material glow, not real ray tracing or post-processing. When motion is allowed, the flashlight can follow the pointer and gently scan while idle; reduced-motion settings or WebGL fallback mode use the static SVG avatar instead and skip scanning or flicker effects.
+
 ## No-project assistant
 
 The no-project assistant is local onboarding guidance for the browser page. Its five quick bubbles are:
@@ -43,7 +45,7 @@ Each post is a runtime operation that honors the explicit route chosen (worker r
 
 After you send a message, the thread transcript updates from the server's returned chat message. The **Invocations** rail updates separately from persisted server invocation records and realtime refreshes, so it shows only backend-confirmed invocation rows. The dashboard no longer inserts a frontend-only optimistic invocation placeholder while the backend is still creating the real row.
 
-While a reply or invocation container is active, the visible status line uses light deterministic humor instead of static `Initializing` or `Working` copy. These messages are keyed by the active agent, provider/model, and phase, and they remain stable for at least five seconds so live regions do not churn during rapid refreshes.
+While a reply or invocation container is active, the visible status line uses light deterministic humor instead of static `Initializing` or `Working` copy. These messages are keyed by the active agent, provider/model, and phase, and they remain stable for at least five seconds so live regions do not churn during rapid refreshes. The funny line is a UI adjunct only; it does not replace the actual agent reply, invocation status, or stored transcript.
 
 In 3D Chat, idle quick actions send project-scoped prompts directly through the active thread. **Web App** and **Desktop App** set up the currently selected project using its current techstack setting; an unassigned existing project stays `None`. They do not create or import a new Code UX project.
 
@@ -52,6 +54,8 @@ Planning messages can include a rich sprint status card. When Code UX can match 
 Virtual chat replies can persist structured prompt suggestions for quick next steps. JSON-mode providers may return optional `suggestions` alongside `replyMarkdown` and `action`; Code UX stores valid entries on the assistant/system message as `metadata.promptSuggestions` after trimming strings, dropping malformed entries, and capping the list at six. Suggestions appear as clickable tags below the normal markdown reply, so the transcript remains visible. Clicking a tag fills and focuses the composer with that prompt for review or editing; it does not auto-send. Invocation transcripts remain read-only and do not become composer actions.
 
 Assistant prose bubbles can also show a short italic project-manager thought below the provider text. The dashboard uses safe explicit metadata (`metadata.moodComment`, `metadata.thinkingLine`, or `metadata.pmAside`) when present, otherwise it chooses a deterministic line from the shared `mood` catalog. These asides are visual adjuncts only: they do not replace provider markdown, do not change stored chat contracts, and do not appear on user, system, tool, reasoning, tool-call, or tool-result cards.
+
+All playful chat-agent copy is curated to stay workplace-safe and non-offensive. Status jokes, tool-call quips, reasoning/thinking lines, assistant mood asides, and brief avatar low-battery messages are decorative context around the transcript. They never replace the provider response, tool name, arguments, output, reasoning text, debug metadata, or persisted conversation content.
 
 For integrators, the stored metadata uses `metadata.promptSuggestions` with `label`, `prompt`, and optional `icon` fields:
 
@@ -95,7 +99,7 @@ Use this for debugging provider runs and MCP client integrations, for example to
 
 Invocation transcripts use the same live sprint status card as thread messages when planning metadata links them to a sprint. This means a planning invocation and its related chat message should show consistent task progress without a separate refresh control. Parsed provider conversation turns stream into running invocation transcripts for provider-backed planning, QA review, dashboard/chat replies, CI repair, merge-conflict repair, memory remediation, setup, and task coding; text-only provider output is appended when the run completes.
 
-Tool-call and reasoning transcript cards can include compact workplace-safe contextual lines, such as search or terminal quips for tool calls and a short thinking line for reasoning turns. These lines are adjunct UI only: the raw tool name, status, call id, token count, arguments, output, and expandable reasoning text remain available in the transcript.
+Tool-call and reasoning transcript cards can include compact workplace-safe contextual lines, such as search or terminal quips for tool calls and a short thinking line for reasoning turns. These lines are adjunct UI only: the raw tool name, status, call id, token count, arguments, output, and expandable reasoning text remain available for debugging in the transcript.
 
 Invocation transcripts use the same external-reference cards as thread messages for recognized Jira, GitHub, and GitLab payloads, including JSON payloads that would otherwise appear as raw punctuation-heavy output. This keeps linked work readable while preserving the original backend metadata and message content.
 
