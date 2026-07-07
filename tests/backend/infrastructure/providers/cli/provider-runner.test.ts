@@ -67,6 +67,120 @@ describe("ProviderRunner", () => {
     }));
   });
 
+  it("executes mockup-cli in host mode without credentials and mutates only the workspace", async () => {
+    const repoPath = await fs.mkdtemp(path.join(os.tmpdir(), "mockup-cli-host-"));
+    const outsidePath = path.join(os.tmpdir(), "mockup-cli-outside.txt");
+
+    const result = await runner.runProviderForText({
+      provider: "mockup-cli",
+      prompt: [
+        "mockup-cli:write src/generated.txt :: hello from mockup",
+        "mockup-cli:append src/generated.txt :: second line",
+        `mockup-cli:run node -e "require('fs').accessSync('src/generated.txt')"`,
+      ].join("\n"),
+      cwd: repoPath,
+      model: "default",
+      apiKey: "",
+      sessionId: "mock-session-1",
+      workflowSettings: { executionMode: "HOST" } as any,
+      repoPath,
+      onActivity: vi.fn(),
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.nativeSessionId).toMatch(/^mockup-cli-[0-9a-f]{16}$/);
+    expect(result.text).toBe("Mockup CLI completed deterministic workspace task.");
+    expect(result.usageTelemetry).toMatchObject({
+      inputTokens: 0,
+      outputTokens: 0,
+      totalTokens: 0,
+      usageSource: "unsupported",
+      transcriptText: "Mockup CLI completed deterministic workspace task.",
+      nativeSessionId: result.nativeSessionId,
+    });
+    await expect(fs.readFile(path.join(repoPath, "src/generated.txt"), "utf8")).resolves.toBe("hello from mockup\nsecond line\n");
+    await expect(fs.access(outsidePath)).rejects.toThrow();
+    expect(runStreamingCommand).not.toHaveBeenCalled();
+
+    await fs.rm(repoPath, { recursive: true, force: true });
+  });
+
+  it("returns a nonzero mockup-cli failure for explicit failure directives", async () => {
+    const repoPath = await fs.mkdtemp(path.join(os.tmpdir(), "mockup-cli-fail-"));
+
+    const result = await runner.runProviderForText({
+      provider: "mockup-cli",
+      prompt: "mockup-cli:fail",
+      cwd: repoPath,
+      model: "default",
+      apiKey: "",
+      sessionId: "mock-session-fail",
+      workflowSettings: { executionMode: "HOST" } as any,
+      repoPath,
+      onActivity: vi.fn(),
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.code).toBe(1);
+    expect(result.stderr).toContain("mockup-cli intentional failure directive triggered");
+    expect(result.text).toBe("Mockup CLI intentional failure directive triggered.");
+    expect(result.nativeSessionId).toMatch(/^mockup-cli-[0-9a-f]{16}$/);
+
+    await fs.rm(repoPath, { recursive: true, force: true });
+  });
+
+  it("forwards mockup-cli through Docker command construction with no API key requirement", async () => {
+    await runner.runProvider({
+      provider: "mockup-cli",
+      prompt: "mockup-cli:write fixture.txt :: hello",
+      cwd: "/repo",
+      model: "default",
+      apiKey: "",
+      sessionId: "mock-docker-1",
+      workflowSettings: { executionMode: "DOCKER" } as any,
+      repoPath: "/repo",
+      onActivity: vi.fn(),
+    });
+
+    expect(dockerRunner.runProviderInDocker).toHaveBeenCalledWith(expect.objectContaining({
+      command: "node",
+      args: expect.arrayContaining(["-e", "mockup-cli:write fixture.txt :: hello"]),
+      providerLabel: "mockup-cli",
+      providerEnv: expect.objectContaining({
+        CODE_UX_MOCKUP_MODEL: "default",
+        CODE_UX_MOCKUP_SESSION_ID: "mock-docker-1",
+      }),
+    }));
+    const env = dockerRunner.runProviderInDocker.mock.calls[0][0].providerEnv;
+    expect(env.OPENAI_API_KEY).toBeUndefined();
+    expect(env.ANTHROPIC_API_KEY).toBeUndefined();
+    expect(env.GEMINI_API_KEY).toBeUndefined();
+  });
+
+  it("sanitizes mockup-cli transcript output", async () => {
+    const repoPath = await fs.mkdtemp(path.join(os.tmpdir(), "mockup-cli-sanitize-"));
+    const rawSecret = "sk-or-v1-mockupSecret1234567890";
+
+    const result = await runner.runProviderForText({
+      provider: "mockup-cli",
+      prompt: `mockup-cli:write secret.txt :: ${rawSecret}`,
+      cwd: repoPath,
+      model: "default",
+      apiKey: "",
+      sessionId: "mock-session-sanitize",
+      workflowSettings: { executionMode: "HOST" } as any,
+      repoPath,
+      onActivity: vi.fn(),
+    });
+
+    expect(result.stdout).not.toContain(rawSecret);
+    expect(result.text).not.toContain(rawSecret);
+    expect(result.usageTelemetry.transcriptText).not.toContain(rawSecret);
+    expect(await fs.readFile(path.join(repoPath, "secret.txt"), "utf8")).toContain(rawSecret);
+
+    await fs.rm(repoPath, { recursive: true, force: true });
+  });
+
   it("sanitizes bootstrap-branch fatal fallback text in runProviderForText", async () => {
     dockerRunner.readWorkspaceFile.mockResolvedValue("");
     dockerRunner.runProviderInDocker.mockResolvedValueOnce({

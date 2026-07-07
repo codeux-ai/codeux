@@ -75,6 +75,8 @@
 - Development and validation
   - [Testing and Quality](./development/testing-and-quality.md)
   - [OpenRouter Sprint Validation](./development/openrouter-sprint-validation.md)
+  - [Mockup Sprint Pentest](./development/mockup-sprint-pentest.md)
+  - [Mockup Sprint Pentest Scenarios](./development/mockup-sprint-pentest-scenarios.md)
   - [Documentation Standards](./development/documentation-standards.md)
 - [Operations Runbook](./operations/runbook.md)
 - [Security Hardening](./operations/security-hardening.md)

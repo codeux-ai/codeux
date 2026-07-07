@@ -93,7 +93,9 @@ Use this page as the main entrypoint.
 1. [Repository Map](./architecture/repository-map.md)
 2. [Testing and Quality](./development/testing-and-quality.md)
 3. [OpenRouter Sprint Validation](./development/openrouter-sprint-validation.md)
-4. [Documentation Standards](./development/documentation-standards.md)
+4. [Mockup Sprint Pentest](./development/mockup-sprint-pentest.md)
+5. [Mockup Sprint Pentest Scenarios](./development/mockup-sprint-pentest-scenarios.md)
+6. [Documentation Standards](./development/documentation-standards.md)
 
 ## Full Table of Contents
 
@@ -175,6 +177,8 @@ Use this page as the main entrypoint.
 - [CLI Management Surface](./operations/management-cli.md)
 - [Testing and Quality](./development/testing-and-quality.md)
 - [OpenRouter Sprint Validation](./development/openrouter-sprint-validation.md)
+- [Mockup Sprint Pentest](./development/mockup-sprint-pentest.md)
+- [Mockup Sprint Pentest Scenarios](./development/mockup-sprint-pentest-scenarios.md)
 - [Electron Desktop App](./deployment/electron-desktop.md)
 - [Documentation Standards](./development/documentation-standards.md)
 - [Glossary](./reference/glossary.md)

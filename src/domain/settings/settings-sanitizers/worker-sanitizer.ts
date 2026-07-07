@@ -1,4 +1,4 @@
-import type { DashboardSettings, WorkerExecutionMode } from "../../../contracts/app-types.js";
+import type { DashboardSettings, ProviderId, WorkerExecutionMode } from "../../../contracts/app-types.js";
 import { readInteger, readString } from "../../../shared/config/value-readers.js";
 import {
   DEFAULT_DASHBOARD_SETTINGS,
@@ -10,7 +10,7 @@ import {
 } from "../provider-config-utils.js";
 
 interface SanitizeWorkersOptions {
-  providers?: Record<string, { provider: "jules" | "gemini" | "codex" | "claude-code" | "qwen-code" | "opencode" | "antigravity" }>;
+  providers?: Record<string, { provider: ProviderId }>;
 }
 
 export const sanitizeWorkers = (

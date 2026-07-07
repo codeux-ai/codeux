@@ -182,6 +182,47 @@ describe("DockerRunner", () => {
     }));
   });
 
+  it("supports mockup-cli Docker labels, names, env files, and argv files", async () => {
+    await runner.runProviderInDocker({
+      command: "node",
+      args: ["-e", "console.log('mock')", "mockup-cli:write fixture.txt :: hello"],
+      cwd: "docker-volume://workspace-1",
+      providerEnv: {
+        CODE_UX_MOCKUP_MODEL: "default",
+        CODE_UX_MOCKUP_SESSION_ID: "mock-session-1",
+      },
+      sessionId: "mock-session-1",
+      providerLabel: "mockup-cli",
+      workflowSettings: {
+        executionMode: "DOCKER",
+        containerImage: "node:24",
+        containerSetupScriptPath: "",
+        containerCacheSetupScriptImage: false,
+      } as any,
+      repoPath: "/repo/project",
+      onActivity: vi.fn(),
+    });
+
+    const dockerArgs = vi.mocked(runStreamingCommand).mock.calls[0]?.[1] as string[];
+    expect(dockerArgs).toEqual(expect.arrayContaining([
+      "--name",
+      "code-ux-mockup-cli-mock-session-1",
+      "--label",
+      "code-ux.command=node",
+      "--label",
+      "code-ux.args-count=3",
+    ]));
+    expect(dockerArgs.slice(-2)).toEqual(["provider-runner", "node"]);
+    expect(dockerArgs).toContain("CODE_UX_PROVIDER_ARGV_FILE=/opt/code-ux/provider-argv.sh");
+
+    const envWrite = vi.mocked(fs.writeFile).mock.calls.find(([file]) => String(file).endsWith("provider.env"));
+    expect(envWrite?.[1]).toContain("CODE_UX_MOCKUP_MODEL=default");
+    expect(envWrite?.[1]).toContain("CODE_UX_MOCKUP_SESSION_ID=mock-session-1");
+
+    const argvWrite = vi.mocked(fs.writeFile).mock.calls.find(([file]) => String(file).endsWith("provider-argv.sh"));
+    expect(argvWrite?.[1]).toContain("mockup-cli:write fixture.txt :: hello");
+  });
+
   it("keeps Docker and provider execution behind mocked command runners", async () => {
     expect(vi.isMockFunction(runCommandStrict)).toBe(true);
     expect(vi.isMockFunction(runStreamingCommand)).toBe(true);

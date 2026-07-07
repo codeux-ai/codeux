@@ -38,6 +38,7 @@ import {
 import { readQwenLogData, readCodexLatestSessionJson, readClaudeSessionJsonl, parseAntigravityConversationId, readAntigravityTranscript } from "./provider-transcripts.js";
 import { parseOpenCodeJsonLines } from "./provider-logs/opencode-log-parser.js";
 import { parseAntigravityDatabase } from "./provider-logs/antigravity-log-parser.js";
+import { runMockupCliProvider } from "./mockup-cli-provider.js";
 import {
   collectProviderUsageTelemetry,
   readQwenOpenAiLogRecords,
@@ -249,6 +250,9 @@ export class ProviderRunner implements IProviderRunner {
         : resolveAntigravityHostLogPath(sessionId))
       : null;
     const providerEnv = this.withProviderEnv(provider, runModel, apiKey, workflowSettings, githubToken, providerMountAuth, input, qwenProcessLogDir, gitlabToken);
+    if (provider === "mockup-cli") {
+      providerEnv.CODE_UX_MOCKUP_SESSION_ID = sessionId;
+    }
     let nativeSessionId = provider === "opencode"
       ? isOpenCodeNativeSessionId(input.continueSessionId) ? input.continueSessionId! : null
       : provider === "qwen-code"
@@ -348,6 +352,18 @@ export class ProviderRunner implements IProviderRunner {
           try { await fs.access(cwd); trackingOnActivity(`Docker could not mount workspace path (${cwd}) even though it exists locally. Path visibility mismatch.`, "provider"); } catch { /* ignore */ }
         }
         return result;
+      }
+      if (provider === "mockup-cli") {
+        return await runMockupCliProvider({
+          prompt,
+          cwd,
+          model: runModel,
+          sessionId,
+          env: providerEnv,
+          signal,
+          onStdoutLine: (line) => trackingOnActivity(line, "agent"),
+          onStderrLine: (line) => trackingOnActivity(`[${provider}] ${line}`, "provider"),
+        });
       }
       return await runStreamingCommand(command, args, cwd, providerEnv, {
         signal,
@@ -1217,6 +1233,8 @@ export class ProviderRunner implements IProviderRunner {
         env.ANTIGRAVITY_MODEL = model;
         env.AGY_MODEL = model;
       }
+    } else if (provider === "mockup-cli") {
+      env.CODE_UX_MOCKUP_MODEL = model || "default";
     }
     return env;
   }

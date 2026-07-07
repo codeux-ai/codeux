@@ -54,6 +54,7 @@ Each `aiProvider.invocationRouting.<routeId>` entry contains:
 Provider instances are first-class routing targets:
 - the default built-in instances use ids `jules`, `gemini`, `codex`, `claude-code`, `qwen-code`, and `opencode`
 - additional instances can be added under the same provider type, such as multiple Codex credentials with different names and weights
+- the internal `mockup-cli` provider id is reserved for deterministic credential-free sprint validation and should only be configured by test and CI paths such as the [Mockup Sprint Pentest](../development/mockup-sprint-pentest.md)
 - each CLI instance also carries its own optional Docker auth-copy source (`mountAuth` + `authPath`), so routing one Codex, Qwen, or OpenCode instance vs another can change both credentials and local auth mount source
 - Qwen Code instances additionally carry auth mode metadata for local OAuth cache copying, Alibaba Cloud Coding Plan, or custom `modelProviders`-style endpoints
 - OpenCode instances additionally carry auth mode metadata for local `auth.json` cache copying, built-in provider API keys, or generated OpenAI-compatible custom provider config

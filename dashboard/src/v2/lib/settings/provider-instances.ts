@@ -20,6 +20,7 @@ export const providerLabels: Record<ProviderId, string> = {
   "qwen-code": "Qwen Code",
   opencode: "OpenCode",
   antigravity: "Antigravity",
+  "mockup-cli": "Mockup CLI",
 };
 
 export const getProviderTypeLabel = (providerId: ProviderId): string => providerLabels[providerId];
@@ -49,7 +50,7 @@ export const createProjectProviderDraft = (
 ): ProjectProviderSettings => ({
   provider: providerId,
   name,
-  enabled: providerId !== "claude-code" && providerId !== "qwen-code" && providerId !== "opencode",
+  enabled: providerId !== "claude-code" && providerId !== "qwen-code" && providerId !== "opencode" && providerId !== "mockup-cli",
   model: providerId === "codex"
     ? "gpt-5.5"
     : providerId === "qwen-code"
@@ -163,6 +164,9 @@ export const getHintApiKey = (
   if (providerId === "antigravity") {
     return hints?.resolved.antigravityApiKey || "";
   }
+  if (providerId === "mockup-cli") {
+    return "";
+  }
   return hints?.resolved.openCodeApiKey || "";
 };
 
@@ -188,6 +192,9 @@ export const getLegacyIntegrationApiKey = (
   }
   if (providerId === "antigravity") {
     return typeof integrations.antigravityApiKey === "string" ? integrations.antigravityApiKey : "";
+  }
+  if (providerId === "mockup-cli") {
+    return "";
   }
   return typeof integrations.openCodeApiKey === "string" ? integrations.openCodeApiKey : "";
 };

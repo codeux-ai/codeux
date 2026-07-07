@@ -18,6 +18,7 @@ const providerLabels: Record<ProviderId, string> = {
   "qwen-code": "Qwen Code",
   opencode: "OpenCode",
   antigravity: "Antigravity",
+  "mockup-cli": "Mockup CLI",
 };
 
 const defaultProviderAuthPaths: Record<ProviderId, string> = {
@@ -28,6 +29,7 @@ const defaultProviderAuthPaths: Record<ProviderId, string> = {
   "qwen-code": "~/.qwen",
   opencode: "~/.local/share/opencode",
   antigravity: "~/.antigravity",
+  "mockup-cli": "",
 };
 
 const cliMountFields: Partial<Record<ProviderId, keyof SystemSettings["defaults"]["cliWorkflow"]>> = {
@@ -47,6 +49,7 @@ const relevantProviderFiles: Record<ProviderId, string[]> = {
   "qwen-code": ["settings.json", "auth.json", "oauth_creds.json"],
   opencode: ["auth.json", "config.json", "opencode.json"],
   antigravity: ["settings.json"],
+  "mockup-cli": [],
 };
 
 const runCheck = async (id: string, label: string, command: string, args: string[], required: boolean, resolution: string): Promise<OnboardingDependencyCheck> => {

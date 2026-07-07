@@ -62,7 +62,8 @@ export const DEFAULT_PR_DESCRIPTION_SETTINGS: PrDescriptionSettings = {
   sprintSectionOrder: [...DEFAULT_SPRINT_SECTION_ORDER],
 };
 
-export const PROVIDER_IDS: ProviderId[] = ["jules", "gemini", "codex", "claude-code", "qwen-code", "opencode", "antigravity"];
+export const PROVIDER_IDS: ProviderId[] = ["jules", "gemini", "codex", "claude-code", "qwen-code", "opencode", "antigravity", "mockup-cli"];
+export const PUBLIC_PROVIDER_IDS: ProviderId[] = ["jules", "gemini", "codex", "claude-code", "qwen-code", "opencode", "antigravity"];
 export const THINKING_MODES: ThinkingMode[] = ["SMALL", "MEDIUM", "HIGH"];
 export const PROVIDER_STRATEGIES: ProviderStrategy[] = ["MANUAL", "WEIGHTED", "AGENT"];
 export const INVOCATION_ROUTING_PROFILES: InvocationRoutingProfile[] = ["GLOBAL", "WORKER"];
@@ -79,7 +80,8 @@ export const INVOCATION_ROUTING_IDS: InvocationRoutingId[] = [
 export const CLI_EXECUTION_MODES: CliExecutionMode[] = ["DOCKER", "HOST"];
 export const FEATURE_PR_AUTOMERGE_MODES: FeaturePrAutoMergeMode[] = ["OFF", "CREATE_PR", "WHEN_GREEN", "ALWAYS"];
 export const WORKER_EXECUTION_MODES: WorkerExecutionMode[] = ["VIRTUAL"];
-export const VIRTUAL_WORKER_PROVIDERS: VirtualWorkerProvider[] = ["gemini", "codex", "claude-code", "qwen-code", "opencode", "antigravity"];
+export const VIRTUAL_WORKER_PROVIDERS: VirtualWorkerProvider[] = ["gemini", "codex", "claude-code", "qwen-code", "opencode", "antigravity", "mockup-cli"];
+export const PUBLIC_VIRTUAL_WORKER_PROVIDERS: VirtualWorkerProvider[] = ["gemini", "codex", "claude-code", "qwen-code", "opencode", "antigravity"];
 export const RUNTIME_LOG_LEVELS = ["off", "debug", "info", "warn", "error"] as const;
 export const CONSOLE_LOG_MODES = ["standard", "full"] as const;
 export const DEFAULT_PROVIDER_CONFIG_IDS: Record<ProviderId, ProviderConfigId> = {
@@ -90,6 +92,7 @@ export const DEFAULT_PROVIDER_CONFIG_IDS: Record<ProviderId, ProviderConfigId> =
   "qwen-code": "qwen-code",
   opencode: "opencode",
   antigravity: "antigravity",
+  "mockup-cli": "mockup-cli",
 };
 
 export const DEFAULT_PLAYWRIGHT_MCP_SERVER_ID = "playwright";
@@ -113,6 +116,7 @@ export const DEFAULT_PROVIDER_CONFIG_NAMES: Record<ProviderId, string> = {
   "qwen-code": "Qwen Primary",
   opencode: "OpenCode Primary",
   antigravity: "Antigravity Primary",
+  "mockup-cli": "Mockup CLI",
 };
 export const DEFAULT_PROVIDER_AUTH_PATHS: Record<ProviderId, string> = {
   jules: "",
@@ -122,6 +126,7 @@ export const DEFAULT_PROVIDER_AUTH_PATHS: Record<ProviderId, string> = {
   "qwen-code": "~/.qwen",
   opencode: "~/.local/share/opencode",
   antigravity: "~/.antigravity",
+  "mockup-cli": "",
 };
 
 // AI Models catalog — available model identifiers per virtual worker provider
@@ -217,6 +222,7 @@ export const AI_MODEL_CATALOG: Record<string, string[]> = {
   "qwen-code": QWEN_MODELS,
   opencode: OPENCODE_MODELS,
   antigravity: ANTIGRAVITY_MODELS,
+  "mockup-cli": ["default"],
 };
 
 export const DEFAULT_VIRTUAL_WORKER_MODELS: Record<string, string> = {
@@ -226,6 +232,7 @@ export const DEFAULT_VIRTUAL_WORKER_MODELS: Record<string, string> = {
   "qwen-code": "qwen3-coder-plus",
   opencode: "anthropic/claude-sonnet-4-5",
   antigravity: "default",
+  "mockup-cli": "default",
 };
 
 export const MIN_WATCH_LOOP_INTERVAL_SECONDS = 1;
@@ -347,6 +354,18 @@ export const DEFAULT_PROVIDER_SETTINGS: Record<ProviderId, ProviderSettings> = {
     authPath: DEFAULT_PROVIDER_AUTH_PATHS.antigravity,
     maxConcurrentTasks: 0,
   },
+  "mockup-cli": {
+    provider: "mockup-cli",
+    name: DEFAULT_PROVIDER_CONFIG_NAMES["mockup-cli"],
+    enabled: false,
+    model: "default",
+    weight: 0,
+    thinkingMode: "MEDIUM",
+    apiKey: "",
+    mountAuth: false,
+    authPath: DEFAULT_PROVIDER_AUTH_PATHS["mockup-cli"],
+    maxConcurrentTasks: 0,
+  },
 };
 
 export const createDefaultProviderSettings = (
@@ -366,6 +385,7 @@ export const buildDefaultProviderSettingsMap = (): Record<ProviderConfigId, Prov
   [DEFAULT_PROVIDER_CONFIG_IDS["qwen-code"]]: createDefaultProviderSettings("qwen-code"),
   [DEFAULT_PROVIDER_CONFIG_IDS.opencode]: createDefaultProviderSettings("opencode"),
   [DEFAULT_PROVIDER_CONFIG_IDS.antigravity]: createDefaultProviderSettings("antigravity"),
+  [DEFAULT_PROVIDER_CONFIG_IDS["mockup-cli"]]: createDefaultProviderSettings("mockup-cli"),
 });
 
 export const DEFAULT_INVOCATION_ROUTING: Record<InvocationRoutingId, InvocationRoutingSettings> = {

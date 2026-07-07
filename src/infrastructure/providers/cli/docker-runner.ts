@@ -25,6 +25,7 @@ import { resolveDockerRuntimeRoot } from "./docker-runtime-paths.js";
 import { buildRuntimeVolumeName, WorkspaceManager, type SnapshotCheckout } from "./workspace-manager.js";
 import { workspaceVolumeHelperPool, type WorkspaceVolumeHelperPool } from "./workspace-volume-helper.js";
 import { CONTAINER_RUNTIME_HOME, CONTAINER_WORKSPACE_ROOT } from "./provider-runtime-artifacts.js";
+import type { CliProviderId } from "./provider-command-specs.js";
 import { getHomeCodeUxPath, getRepoCodeUxPath } from "../../../shared/config/code-ux-paths.js";
 import { ensureDefaultCodeUxAssetsInstalled } from "../../../services/code-ux-default-assets-service.js";
 import { sanitizeInvocationOutputText } from "../../../services/invocation-output-sanitizer.js";
@@ -52,7 +53,7 @@ export interface IDockerRunner {
     cwd: string;
     providerEnv: NodeJS.ProcessEnv;
     sessionId: string;
-    providerLabel: "gemini" | "codex" | "claude-code" | "qwen-code" | "opencode" | "antigravity";
+    providerLabel: CliProviderId;
     workflowSettings: CliWorkflowSettings;
     repoPath: string;
     providerMountAuth?: boolean;
@@ -110,7 +111,7 @@ export class DockerRunner implements IDockerRunner {
     cwd: string;
     providerEnv: NodeJS.ProcessEnv;
     sessionId: string;
-    providerLabel: "gemini" | "codex" | "claude-code" | "qwen-code" | "opencode" | "antigravity";
+    providerLabel: CliProviderId;
     workflowSettings: CliWorkflowSettings;
     repoPath: string;
     providerMountAuth?: boolean;
@@ -342,7 +343,7 @@ export class DockerRunner implements IDockerRunner {
   }
 
   private buildContainerName(
-    providerLabel: "gemini" | "codex" | "claude-code" | "qwen-code" | "opencode" | "antigravity",
+    providerLabel: CliProviderId,
     sessionId: string,
   ): string {
     const safeProvider = providerLabel.replace(/[^a-zA-Z0-9_.-]+/g, "-").toLowerCase();
@@ -503,7 +504,7 @@ export class DockerRunner implements IDockerRunner {
 
   private customServersForProvider(
     servers: CustomMcpServer[],
-    provider: "gemini" | "codex" | "claude-code" | "qwen-code" | "opencode" | "antigravity",
+    provider: CliProviderId,
   ): CustomMcpServer[] {
     return servers.filter((server) =>
       server.enabled
@@ -514,7 +515,7 @@ export class DockerRunner implements IDockerRunner {
 
   private async buildProviderConfigMounts(
     conn: McpConnectionInfo | null,
-    provider: "gemini" | "codex" | "claude-code" | "qwen-code" | "opencode" | "antigravity",
+    provider: CliProviderId,
     tempRoot: string,
     providerEnv: NodeJS.ProcessEnv,
     customServers: CustomMcpServer[] = [],

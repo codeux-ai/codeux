@@ -45,6 +45,12 @@ export const getHintApiKeyForProvider = (
   if (providerId === "qwen-code") {
     return externalHints?.resolved.qwenCodeApiKey || "";
   }
+  if (providerId === "antigravity") {
+    return externalHints?.resolved.antigravityApiKey || "";
+  }
+  if (providerId === "mockup-cli") {
+    return "";
+  }
   return externalHints?.resolved.openCodeApiKey || "";
 };
 
@@ -118,6 +124,14 @@ export const buildDefaultIntegrationProviders = (
     apiKey: getHintApiKeyForProvider("antigravity", externalHints),
     mountAuth: false,
     authPath: DEFAULT_PROVIDER_AUTH_PATHS.antigravity,
+    authType: "apiKey",
+  },
+  [DEFAULT_PROVIDER_CONFIG_IDS["mockup-cli"]]: {
+    provider: "mockup-cli",
+    name: DEFAULT_PROVIDER_CONFIG_NAMES["mockup-cli"],
+    apiKey: "",
+    mountAuth: false,
+    authPath: DEFAULT_PROVIDER_AUTH_PATHS["mockup-cli"],
     authType: "apiKey",
   },
 });

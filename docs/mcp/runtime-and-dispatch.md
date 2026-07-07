@@ -88,6 +88,16 @@ The built-in `code_ux` MCP tool surface is controlled separately from custom MCP
 
 By default, the built-in `Worker` and `Project manager` agents link the `playwright` server and keep `code_ux` enabled. Generated task-coding roster agents created by Project Setup use the same default link when they are first created. Existing agents keep user-edited MCP access selections, so setup and sync do not overwrite custom server choices after creation.
 
+## Internal Test Provider
+
+`mockup-cli` is an internal test-only CLI provider. Settings sanitization, provider defaults, and invocation routing preserve it when an explicit system or project settings payload includes it, so tests can route task coding, CI fixes, and merge-conflict repair through a deterministic mock provider. It has no credential or auth-mount requirement, uses the `default` model, and is disabled by default.
+
+The mock runtime executes in both host and Docker workspaces through a self-contained Node command, so it does not install packages or call a provider API. Prompts can include deterministic directives such as `mockup-cli:write <path> :: <content>`, `mockup-cli:append <path> :: <content>`, `mockup-cli:replace <path> :: <old> => <new>`, `mockup-cli:run <command>`, and `mockup-cli:fail`. Validation commands are parsed into explicit argv values and executed without shell interpretation. File paths are resolved inside the prepared provider workspace; attempts to write outside that workspace fail. Merge-conflict test prompts can use `mockup-cli:conflict <path> :: <content>` or mention a merge-conflict task to produce deterministic conflict markers.
+
+Mock usage telemetry is reported as zero-token, `unsupported` mock telemetry with a stable native session id and a sanitized assistant transcript.
+
+Normal dashboard onboarding and provider selection surfaces use public provider lists and do not advertise `mockup-cli`. The default Playwright MCP server also remains linked only to public local CLI providers unless a settings payload explicitly opts into a different provider list.
+
 ## Transport Model
 
 Code UX now uses two MCP transport classes:
