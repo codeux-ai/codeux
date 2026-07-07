@@ -72,8 +72,8 @@ This is acceptable because clients are expected to re-`initialize` after restart
 ## Tool registry
 
 The request router (`src/server/mcp-request-router.ts`) is a `name → handler` map populated at boot.
-There is **one tool per management domain**, plus `search_knowledge` and the deprecated unified
-`manage_code_ux`:
+There is **one tool per management domain**, plus retrieval tools such as `search_knowledge` and
+`search_skills`, and the deprecated unified `manage_code_ux`:
 
 ```ts
 router
@@ -85,10 +85,12 @@ router
   .register("manage_scheduler",   h.handleManageScheduler)
   .register("manage_agents",      h.handleManageAgents)
   .register("manage_memory",      h.handleManageMemory)
+  .register("manage_skills",      h.handleManageSkills)
   .register("manage_settings",    h.handleManageSettings)
   .register("manage_preview",     h.handleManagePreview)
   .register("manage_telemetry",   h.handleManageTelemetry)
-  .register("search_knowledge",   h.handleSearchKnowledge);
+  .register("search_knowledge",   h.handleSearchKnowledge)
+  .register("search_skills",      h.handleSearchSkills);
 ```
 
 Every tool's input schema is declared in `TOOL_DEFINITIONS` (`src/contracts/mcp-tool-definitions.ts`).
@@ -102,16 +104,21 @@ Source: `src/server/mcp-request-router.ts`.
 ```
 Server returns getEnabledToolDefinitions(settings, runtimeRole)
   ├── Filter by settings.mcpTools[].enabled
+  ├── Filter by advertised agent Code UX policy, when present
   └── Filter by tool.runtimeRoles ⊇ runtimeRole
 ```
+
+Advertised agent identities fail closed when malformed, unknown, or missing an explicit MCP access
+policy. This prevents an unknown worker agent from inheriting broad project-manager tools.
 
 ### `CallTool`
 
 ```
 1. Validate tool name against the enabled set.
-2. AJV-validate args against TOOL_DEFINITIONS[name].inputSchema.
-3. toolRegistry.dispatch(name, args).
-4. Wrap handler errors via formatError().
+2. Apply the same per-agent enabled-set filtering used by `ListTools`.
+3. AJV-validate args against TOOL_DEFINITIONS[name].inputSchema.
+4. toolRegistry.dispatch(name, args).
+5. Wrap handler errors via formatError().
 ```
 
 Errors:
@@ -133,7 +140,9 @@ Each tool has an entry in `settings.mcpTools` (`McpToolToggle[]`). Defaults:
   { "name": "manage_scheduler",    "enabled": true, "isInternal": true },
   { "name": "manage_agents",       "enabled": true, "isInternal": true },
   { "name": "manage_memory",       "enabled": true, "isInternal": true },
+  { "name": "manage_skills",       "enabled": true, "isInternal": true },
   { "name": "search_knowledge",    "enabled": true, "isInternal": true },
+  { "name": "search_skills",       "enabled": true, "isInternal": true },
   { "name": "manage_settings",     "enabled": true, "isInternal": true },
   { "name": "manage_preview",      "enabled": true, "isInternal": true },
   { "name": "manage_telemetry",    "enabled": true, "isInternal": true },
@@ -142,6 +151,10 @@ Each tool has an entry in `settings.mcpTools` (`McpToolToggle[]`). Defaults:
 ```
 
 Disabling a tool removes it from `ListTools` and rejects `CallTool`.
+
+Per-agent overrides are layered over these system toggles. A project can expose `search_skills` to an
+agent while disabling `manage_skills`, which gives the agent persistent skill retrieval without
+storage mutation, markdown export, delete, or reset authority.
 
 ## Approval handshake
 
@@ -157,6 +170,13 @@ Settings mutations record the exact action/payload for up to 15 minutes and the 
 single-use.
 
 Source: `src/mcp/management-tool-handler.ts`.
+
+## Persistent skill dispatch
+
+Persistent skills use `SkillService` as the backend boundary. `manage_skills` routes storage CRUD,
+skill markdown import/export, agent storage attachment management, and the authoring prompt through
+`SkillActions`. `search_skills` is registered separately as a retrieval tool and returns concise
+ranked summaries with IDs and metadata. Full markdown retrieval stays behind `manage_skills`.
 
 ## Connection registry
 

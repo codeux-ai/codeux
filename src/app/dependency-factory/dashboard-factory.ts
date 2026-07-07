@@ -93,6 +93,7 @@ export function createDashboardDependencies(
     memoryService: coreDeps.memoryService,
     memoryPromotionService: coreDeps.memoryPromotionService,
     embeddingModelManager: coreDeps.embeddingModelManager,
+    skillService: coreDeps.skillService,
     knowledgeService: coreDeps.knowledgeService,
     planningAgentService: planningAgentServiceRef,
     projectSetupService: projectSetupServiceRef,

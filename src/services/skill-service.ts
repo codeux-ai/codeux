@@ -10,6 +10,7 @@ import type {
   SkillSourceType,
   SkillStorageRecord,
   UpdateSkillStorageInput,
+  AgentSkillStorageAttachment,
 } from "../contracts/skill-types.js";
 
 export interface SkillEmbeddingProvider {
@@ -41,6 +42,10 @@ export class SkillService {
     return this.skillRepository.listStorages(projectId);
   }
 
+  getStorage(projectId: string, storageId: string): SkillStorageRecord | null {
+    return this.skillRepository.getStorage(projectId, storageId);
+  }
+
   updateStorage(projectId: string, storageId: string, input: UpdateSkillStorageInput): SkillStorageRecord {
     return this.skillRepository.updateStorage(projectId, storageId, input);
   }
@@ -55,6 +60,10 @@ export class SkillService {
 
   detachStorageFromAgent(projectId: string, agentPresetId: string, storageId: string): void {
     this.skillRepository.detachStorageFromAgent(projectId, agentPresetId, storageId);
+  }
+
+  listAttachmentsForAgent(projectId: string, agentPresetId: string): AgentSkillStorageAttachment[] {
+    return this.skillRepository.listAttachmentsForAgent(projectId, agentPresetId);
   }
 
   async writeSkillFromMarkdown(
@@ -89,6 +98,10 @@ export class SkillService {
     return renderSkillMarkdown(skill);
   }
 
+  getSkill(projectId: string, skillId: string): SkillRecord | null {
+    return this.skillRepository.getSkill(projectId, skillId);
+  }
+
   listByStorage(projectId: string, storageId: string, limit?: number): SkillRecord[] {
     return this.skillRepository.listSkills(projectId, storageId, limit);
   }
@@ -103,6 +116,18 @@ export class SkillService {
       results.push(...this.skillRepository.listSkills(projectId, storage.id, limit - results.length));
     }
     return results;
+  }
+
+  async deleteSkill(projectId: string, skillId: string): Promise<void> {
+    this.skillRepository.deleteSkill(projectId, skillId);
+  }
+
+  async resetStorage(projectId: string, storageId: string): Promise<number> {
+    const skills = this.skillRepository.listSkills(projectId, storageId, MAX_SEARCH_CANDIDATES);
+    for (const skill of skills) {
+      this.skillRepository.deleteSkill(projectId, skill.id);
+    }
+    return skills.length;
   }
 
   async search(query: SkillSearchQuery): Promise<SkillSearchResult[]> {

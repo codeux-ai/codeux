@@ -295,6 +295,37 @@ export const TOOL_DEFINITIONS = [
     },
   },
   {
+    name: "manage_skills",
+    runtimeRoles: ["project_manager"],
+    category: "agents_memory",
+    description: "Manage persistent Code UX skills. Used to create and manage skill storages, attach storages to agents, import/export markdown skills, and retrieve the skill authoring guide. Destructive actions require approval confirmation.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        action: { type: "string", enum: ["authoring_prompt", "list_storages", "get_storage", "create_storage", "update_storage", "delete_storage", "reset_storage", "list_agent_storages", "attach_storage", "detach_storage", "list_skills", "get_skill", "create_skill", "update_skill", "delete_skill", "import_markdown", "export_markdown"], description: "The skill management action to perform." },
+        projectId: { type: "string", description: "Required for project-scoped storage, attachment, and skill actions." },
+        storageId: { type: "string", description: "Required for storage update/delete/reset, listing skills, imports, and new skill creation." },
+        skillId: { type: "string", description: "Required for get_skill, update_skill, delete_skill, export_markdown, and import_markdown updates." },
+        agentPresetId: { type: "string", description: "Required for list_agent_storages, attach_storage, detach_storage, and optional for retrieval scoping." },
+        name: { type: "string", description: "Required for create_storage. Optional storage name for update_storage." },
+        description: { type: "string", description: "Optional storage description." },
+        storageKind: { type: "string", enum: ["project", "shared"], description: "Optional storage kind. Defaults to project." },
+        markdown: { type: "string", description: "Required for import_markdown, create_skill, and update_skill. Includes frontmatter plus instruction body." },
+        sourceType: { type: "string", enum: ["manual", "imported", "generated"], description: "Optional source type for imported skills." },
+        sourceRef: { type: ["string", "null"], description: "Optional source reference for imported skills." },
+        limit: { type: "number", description: "Optional result limit for list_skills." },
+        includeContent: { type: "boolean", description: "When true, get_skill includes full contentMarkdown. List and search responses stay concise." },
+        approval: {
+          type: "object",
+          properties: {
+            confirmed: { type: "boolean" },
+          },
+        },
+      },
+      required: ["action"],
+    },
+  },
+  {
     name: "search_knowledge",
     runtimeRoles: ["project_manager"],
     category: "agents_memory",
@@ -307,6 +338,24 @@ export const TOOL_DEFINITIONS = [
         minSimilarity: { type: "number", description: "Optional minimum cosine similarity threshold (0-1)." },
       },
       required: ["query"],
+    },
+  },
+  {
+    name: "search_skills",
+    runtimeRoles: ["project_manager"],
+    category: "agents_memory",
+    description: "Search persistent Code UX skills by project, optional agent attachment, or optional storage. Returns concise ranked skill summaries with IDs and metadata; use manage_skills export_markdown or get_skill with includeContent for a full skill.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        projectId: { type: "string", description: "Project whose persistent skill storage should be searched." },
+        query: { type: "string", description: "Natural-language search query describing the skill guidance needed." },
+        agentPresetId: { type: "string", description: "Optional agent preset id. When provided without storageId, only that agent's attached storages are searched." },
+        storageId: { type: "string", description: "Optional storage id. When provided, search is limited to that project-owned storage." },
+        limit: { type: "number", description: "Maximum number of skills to return. Defaults to 10 and is capped by the handler." },
+        minSimilarity: { type: "number", description: "Optional minimum cosine similarity threshold from 0 to 1." },
+      },
+      required: ["projectId", "query"],
     },
   },
   {
