@@ -1,6 +1,6 @@
 # External chat providers
 
-Code UX persists external chat provider configuration separately from MCP listener connections and dashboard conversation messages. The foundation is adapter-neutral: it records provider setup, bridge mode, channel routing, inbound dedupe, and outbound delivery state without adding provider SDK dependencies.
+Code UX persists external chat provider configuration separately from MCP listener connections and dashboard conversation messages. The runtime stays adapter-neutral: it records provider setup, bridge mode, channel routing, inbound dedupe, outbound delivery state, and bridge attempts without adding provider SDK dependencies.
 
 ## Contracts
 
@@ -28,14 +28,14 @@ Public records expose redacted credential metadata only. Runtime code that needs
 
 ## MCP management
 
-The `manage_chat_providers` MCP tool exposes provider configuration management without routing inbound messages or sending outbound messages.
+The `manage_chat_providers` MCP tool exposes provider configuration management and outbound delivery inspection.
 
 Supported actions:
 
 - Provider setup definitions: `list_provider_definitions`.
 - Provider connections: `list_connections`, `get_connection`, `create_connection`, `update_connection`, `delete_connection`.
 - Channel bindings: `list_channel_bindings`, `create_channel_binding`, `update_channel_binding`, `delete_channel_binding`.
-- Delivery inspection: `list_outbound_deliveries` for outbound records, optionally filtered by delivery status.
+- Delivery inspection: `list_outbound_deliveries` for outbound records, optionally filtered by delivery status including `retryable_failure`.
 
 Connection and binding responses include stable IDs plus generated ingress URL guidance under `ingressUrls`. Connection responses expose `credentials` with redacted configured-state metadata only; raw `secrets` are never returned.
 
@@ -66,9 +66,40 @@ Bindings allow many projects to point at the same external channel and one proje
 - Channel binding create/update/list/get/delete.
 - Inbound duplicate lookup by `(providerConnectionId, externalMessageId)`.
 - Outbound delivery upsert and state transitions.
-- Outbound delivery listing scoped to a provider connection or channel binding for dashboard status views, plus pending outbound delivery listing for future send workers.
+- Outbound delivery listing scoped to a provider connection or channel binding for dashboard status views, plus pending/retryable outbound delivery scans for retry workers.
 
-Indexes cover provider kind, enabled status, project lookup, provider/channel lookup, inbound dedupe, and pending outbound delivery scans.
+Indexes cover provider kind, enabled status, project lookup, provider/channel lookup, inbound dedupe, and pending/retryable outbound delivery scans.
+
+## Outbound delivery
+
+`ChatProviderOutboundService` sends assistant/system replies back to external chat channels only for threads sourced from chat provider ingress metadata. Dashboard-originated chat keeps the existing rich widget behavior and does not create outbound provider deliveries.
+
+The outbound runtime builds one delivery payload per persisted reply with:
+
+- Provider kind and provider connection id.
+- External channel id and channel binding id.
+- Conversation thread id and reply conversation message id.
+- Plain markdown reply text.
+- Reply-to external message id from the inbound delivery when available.
+- Redacted metadata linking the inbound delivery and source conversation message.
+
+Bridge execution is isolated behind `src/services/chat-provider-adapters.ts`:
+
+- `openclaw`: HTTP `POST` to a configured OpenClaw bridge URL such as `openclawBridgeUrl`, using bridge credentials as transport headers.
+- `webhook`: HTTP `POST` to configured generic bridge URLs such as `webhookUrl`, `eventsUrl`, `botEndpointUrl`, or `gatewayUrl`.
+- `native_bridge`: local command execution for macOS/iMessage-style bridge scripts. The payload is written as JSON on stdin and optional bridge tokens are supplied through environment variables.
+
+The runtime never calls WhatsApp, iMessage, Telegram, Slack, Microsoft Teams, or Discord APIs directly. Provider-specific SDKs are not required.
+
+Outbound delivery lifecycle:
+
+- `pending`: reply has been persisted and queued for bridge delivery.
+- `sending`: an adapter attempt is in progress.
+- `delivered`: the bridge accepted the reply; `externalMessageId` is stored when the bridge returns one.
+- `retryable_failure`: a retryable bridge failure occurred and the payload contains `delivery.nextAttemptAt`.
+- `failed`: delivery is terminal, such as disabled outbound routing, missing bridge configuration, non-retryable HTTP response, or exhausted attempts.
+
+Retryable HTTP/network/native bridge failures use exponential backoff. The dashboard lifecycle starts the outbound retry loop, and status APIs/MCP reads expose delivery status, attempt count, last error, linked conversation message id, and redacted payload state. Secrets are redacted from logs, payloads, stored errors, dashboard responses, and MCP responses.
 
 ## Dashboard API
 
@@ -107,4 +138,6 @@ Inbound messages normalize to provider connection id, provider kind, external ch
 
 Channel resolution only considers enabled bindings with inbound enabled for the provider connection and external channel. If multiple projects share a channel, routing hints such as `projectSelectorPrefix`, `projectSelector`, `projectAlias`, `aliases`, or payload-level project selectors are applied first. If no hint selects exactly one binding, the runtime records a `disambiguation_needed` inbound delivery state and returns a conflict response instead of guessing a project.
 
-Routed inbound text is posted through `ChatThreadRuntimeService.postMessage` with metadata marking `source: "chat_provider"`, provider kind, external channel id, external sender, inbound delivery id, and `suppressRichWidgets: true`. Outbound provider replies and widget stripping remain separate follow-up work.
+Routed inbound text is posted through `ChatThreadRuntimeService.postMessage` with metadata marking `source: "chat_provider"`, provider kind, external channel id, external sender, inbound delivery id, and `suppressRichWidgets: true`.
+
+Chat-provider-sourced prompts omit the dashboard `codeux:*` rich widget instruction block. If a provider reply still contains a dashboard-only widget fence, outbound delivery strips or downgrades it to readable markdown before sending externally. Approval prompts and management-action result summaries remain plain markdown and continue to be delivered to the external channel.

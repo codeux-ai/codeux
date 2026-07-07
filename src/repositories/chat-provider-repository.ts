@@ -48,6 +48,7 @@ const DELIVERY_STATUSES = new Set<ChatProviderDeliveryStatus>([
   "pending",
   "sending",
   "delivered",
+  "retryable_failure",
   "processed",
   "failed",
   "duplicate",
@@ -587,7 +588,7 @@ export class ChatProviderRepository {
       FROM chat_provider_message_deliveries d
       INNER JOIN chat_provider_connections c ON c.id = d.provider_connection_id
       WHERE d.direction = 'outbound'
-        AND d.status IN ('pending', 'sending')
+        AND d.status IN ('pending', 'sending', 'retryable_failure')
       ORDER BY d.updated_at ASC
       LIMIT ${boundedLimit}
     `).all() as unknown as ChatProviderMessageDeliveryRow[];

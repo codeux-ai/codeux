@@ -49,6 +49,7 @@ import type { DashboardRealtimeService } from "../../services/dashboard-realtime
 import type { PlanningAgentService } from "../../services/planning-agent-service.js";
 import type { ExecutionInvocationControlService } from "../../services/execution-invocation-control-service.js";
 import type { ChatThreadRuntimeService } from "../../services/chat-thread-runtime-service.js";
+import type { ChatProviderOutboundService } from "../../services/chat-provider-outbound-service.js";
 import type { QuicksprintService } from "../../services/quicksprint-service.js";
 import type { ProjectSetupService } from "../../services/project-setup-service.js";
 import type { SchedulerService } from "../../services/scheduler-service.js";
@@ -111,6 +112,7 @@ export interface BootDashboardDeps {
   sprintIssueService: SprintIssueService;
   chatThreadRuntimeService: ChatThreadRuntimeService;
   chatProviderIngressService: ChatProviderIngressService;
+  chatProviderOutboundService?: ChatProviderOutboundService;
   dashboardRealtimeService: DashboardRealtimeService;
   logger: Logger;
   getLiveActivitiesForActiveTasks: () => Promise<Record<string, JulesActivity[]>>;
@@ -396,6 +398,7 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<DashboardS
     deps.logger.warn(`Embedding model auto-restore failed: ${error}`);
   });
   deps.schedulerService?.start();
+  deps.chatProviderOutboundService?.start();
 
   const instructionFileService = new InstructionFileService({
     projectManagementRepository: deps.projectManagementRepository,
@@ -802,5 +805,11 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<DashboardS
       error: error instanceof Error ? error.message : String(error),
     });
   });
-  return handle;
+  return {
+    ...handle,
+    close: async () => {
+      deps.chatProviderOutboundService?.stop();
+      await handle.close?.();
+    },
+  };
 }
