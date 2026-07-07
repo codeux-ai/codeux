@@ -18,6 +18,10 @@ Project
 │   └── PreviewSession
 ├── AgentPreset
 │   └── SkillStorageBinding
+├── NodeWorkflow
+│   ├── AgentAttachment
+│   └── WorkflowRun
+│       └── StepRun
 ├── SkillStorage
 │   ├── Skill
 │   └── SkillEmbedding
@@ -163,6 +167,19 @@ Persistent skills are stored separately from project workspaces, memories, knowl
 | `agent_skill_storage_bindings` | Normalized agent-to-storage attachments keyed by `(agent_preset_id, storage_id)`. |
 
 Skill markdown is imported from YAML-like frontmatter plus a body. Frontmatter maps to metadata; the body remains the authoritative agent instruction. Backend retrieval can search all project storages, one storage, or the storages attached to an agent preset. Enabled attached agents receive provider prompt guidance, retrieval-only `search_skills` MCP access where eligible, and writable persistent-skill mounts outside the project workspace.
+
+## NodeWorkflow
+
+Node workflows are project-owned Code UX-native execution graphs persisted for future APIs, MCP tools, schedulers, execution surfaces, and dashboard editors. The current foundation is persistence-only.
+
+| Table | Purpose |
+| --- | --- |
+| `node_workflows` | Stores workflow name, status, version, graph nodes, graph edges, widget definitions, widget values, and metadata. |
+| `node_workflow_agent_attachments` | Stores optional workflow or node agent bindings with `agent_preset_id` set to null when the preset is deleted. |
+| `node_workflow_runs` | Stores workflow run status, trigger, input, output, error, and timestamps. |
+| `node_workflow_run_steps` | Stores per-node step status, attempt, agent/provider reference, input, output, error, and timestamps. |
+
+Workflow deletes cascade to attachments, runs, and step runs. Project deletes cascade through all workflow tables. See [Node workflow persistence](./node-workflow-persistence.md) for validation and contract details.
 
 ## Memory
 

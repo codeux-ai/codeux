@@ -46,6 +46,7 @@ export type DocsSlug =
   | 'architecture-ci-integration'
   | 'architecture-dashboard-architecture'
   | 'architecture-data-model'
+  | 'architecture-node-workflow-persistence'
   | 'architecture-external-chat-providers'
   | 'architecture-configuration-resolution'
   | 'architecture-security'
@@ -362,6 +363,13 @@ export const docsRegistry: Record<DocsSlug, DocsRegistryEntry> = {
     title: "Data model",
     description: "This page describes the entities Code UX persists and how they relate. The default backend is SQLite; a Postgres migration is planned but not yet shipped.",
   },
+  'architecture-node-workflow-persistence': {
+    id: 'architecture-node-workflow-persistence',
+    path: '/docs/architecture-node-workflow-persistence',
+    section: 'Architecture',
+    title: "Node workflow persistence",
+    description: "Node workflows are the durable Code UX-native graph model for future workflow APIs, MCP tools, schedulers, execution paths, and dashboard surfaces. This foundation is persistence-only: it does not dispatch providers,...",
+  },
   'architecture-external-chat-providers': {
     id: 'architecture-external-chat-providers',
     path: '/docs/architecture-external-chat-providers',
@@ -443,6 +451,7 @@ export const orderedDocs: DocsRegistryEntry[] = [
   docsRegistry['architecture-ci-integration'],
   docsRegistry['architecture-dashboard-architecture'],
   docsRegistry['architecture-data-model'],
+  docsRegistry['architecture-node-workflow-persistence'],
   docsRegistry['architecture-external-chat-providers'],
   docsRegistry['architecture-configuration-resolution'],
   docsRegistry['architecture-security'],

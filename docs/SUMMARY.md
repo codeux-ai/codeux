@@ -31,6 +31,7 @@
 - [Project Worker Assignment Foundation](./architecture/project-worker-assignment-foundation.md)
 - [Project Attention Foundation](./architecture/project-attention-foundation.md)
 - [Agent Preset Foundation](./architecture/agent-preset-foundation.md)
+- [Node Workflow Persistence](./architecture/node-workflow-persistence.md)
 - [Agents Design System](./dashboard/design-system-agents.md)
 - [Agent Sync And Planning Agent](./architecture/agent-sync-and-planning-agent.md)
 - [Agent Routing](./architecture/agent-routing.md)

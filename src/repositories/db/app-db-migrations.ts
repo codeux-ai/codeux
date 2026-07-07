@@ -113,6 +113,99 @@ export function ensureChatProviderTables(db: DatabaseAdapter): void {
   `);
 }
 
+export function ensureNodeWorkflowTables(db: DatabaseAdapter): void {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS node_workflows (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      description TEXT NOT NULL DEFAULT '',
+      status TEXT NOT NULL DEFAULT 'draft',
+      version INTEGER NOT NULL DEFAULT 1,
+      widget_definitions_json TEXT NOT NULL DEFAULT '[]',
+      widget_values_json TEXT NOT NULL DEFAULT '{}',
+      nodes_json TEXT NOT NULL DEFAULT '[]',
+      edges_json TEXT NOT NULL DEFAULT '[]',
+      metadata_json TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+    )
+  `);
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS node_workflow_agent_attachments (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL,
+      workflow_id TEXT NOT NULL,
+      node_id TEXT,
+      agent_preset_id TEXT,
+      provider TEXT,
+      role TEXT NOT NULL DEFAULT 'specialist',
+      label TEXT NOT NULL DEFAULT '',
+      config_json TEXT NOT NULL DEFAULT '{}',
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+      FOREIGN KEY (workflow_id) REFERENCES node_workflows(id) ON DELETE CASCADE,
+      FOREIGN KEY (agent_preset_id) REFERENCES agent_presets(id) ON DELETE SET NULL
+    )
+  `);
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS node_workflow_runs (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL,
+      workflow_id TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'queued',
+      trigger_type TEXT NOT NULL DEFAULT 'manual',
+      input_json TEXT NOT NULL DEFAULT '{}',
+      output_json TEXT,
+      error_message TEXT,
+      started_at TEXT,
+      finished_at TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+      FOREIGN KEY (workflow_id) REFERENCES node_workflows(id) ON DELETE CASCADE
+    )
+  `);
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS node_workflow_run_steps (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL,
+      workflow_id TEXT NOT NULL,
+      workflow_run_id TEXT NOT NULL,
+      node_id TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'queued',
+      attempt INTEGER NOT NULL DEFAULT 1,
+      agent_attachment_id TEXT,
+      agent_preset_id TEXT,
+      provider TEXT,
+      input_json TEXT NOT NULL DEFAULT '{}',
+      output_json TEXT,
+      error_message TEXT,
+      started_at TEXT,
+      finished_at TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+      FOREIGN KEY (workflow_id) REFERENCES node_workflows(id) ON DELETE CASCADE,
+      FOREIGN KEY (workflow_run_id) REFERENCES node_workflow_runs(id) ON DELETE CASCADE,
+      FOREIGN KEY (agent_attachment_id) REFERENCES node_workflow_agent_attachments(id) ON DELETE SET NULL,
+      FOREIGN KEY (agent_preset_id) REFERENCES agent_presets(id) ON DELETE SET NULL
+    )
+  `);
+
+  ensureIndex(db, "idx_node_workflows_project_updated", "node_workflows", "project_id, updated_at DESC");
+  ensureIndex(db, "idx_node_workflows_project_status", "node_workflows", "project_id, status, updated_at DESC");
+  ensureIndex(db, "idx_node_workflow_agent_attachments_workflow", "node_workflow_agent_attachments", "workflow_id, node_id");
+  ensureIndex(db, "idx_node_workflow_agent_attachments_agent", "node_workflow_agent_attachments", "agent_preset_id");
+  ensureIndex(db, "idx_node_workflow_runs_project_recent", "node_workflow_runs", "project_id, started_at DESC, created_at DESC");
+  ensureIndex(db, "idx_node_workflow_runs_workflow_recent", "node_workflow_runs", "workflow_id, started_at DESC, created_at DESC");
+  ensureIndex(db, "idx_node_workflow_runs_status_recent", "node_workflow_runs", "status, started_at DESC");
+  ensureIndex(db, "idx_node_workflow_run_steps_run_node", "node_workflow_run_steps", "workflow_run_id, node_id");
+  ensureIndex(db, "idx_node_workflow_run_steps_status_started", "node_workflow_run_steps", "status, started_at DESC");
+}
+
 export function migrateSprintLinkedIssuesExternalSources(db: DatabaseAdapter): void {
   ensureColumn(db, "sprint_linked_issues", "project_key", "TEXT");
   ensureColumn(db, "sprint_linked_issues", "external_id", "TEXT");
@@ -320,6 +413,7 @@ export function runMigrations(db: DatabaseAdapter): void {
   // The current phase 1 approach calls schema definitions directly, but these ensure*
   // helpers allow progressive column additions safely.
   ensureChatProviderTables(db);
+  ensureNodeWorkflowTables(db);
 
   ensureColumn(db, "provider_invocations", "tool_call_count", "INTEGER NOT NULL DEFAULT 0");
 
