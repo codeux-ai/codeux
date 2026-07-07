@@ -32,7 +32,7 @@ When the frontend queries for Git analytics, the payload returned from `GET /api
 
 ## Analysis Studio Git Behavior
 
-The dashboard incorporates these fields directly into the unified **Analysis Studio** on the Stats page (`/stats`).
+The dashboard incorporates these fields directly into the unified **Analysis Studio** on the Stats page (`/stats`). The `useStatsPageData` hook coordinates the visual state and fetches the snapshot payload so Git analytics respects the same time windows and snapshot structures as standard token telemetry.
 
 - Git metrics are part of the embedded grouped metric selector, alongside the **Tokens** and **Time** groupings.
 - Changing the time window (e.g., from `7d` to `30d`) re-fetches the underlying snapshot and updates the Git metrics dynamically.
