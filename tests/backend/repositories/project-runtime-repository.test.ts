@@ -200,6 +200,74 @@ describe("ProjectRuntimeRepository", () => {
     expect(realtimeNotifier.scheduleProjectRuntimeStatusRefresh).toHaveBeenCalledWith(project.id);
   });
 
+  it("does not churn status sync events for code-complete tasks persisted as completed runs", async () => {
+    const { storage, projectRepository, runtimeRepository } = await createRepositories();
+
+    const project = projectRepository.createProject({
+      name: "Runtime Stable Project",
+      sourceType: "local",
+      sourceRef: "/workspace/runtime-stable",
+    });
+    const sprint = projectRepository.createSprint(project.id, {
+      name: "Stable Sprint",
+      number: 9,
+      status: "running",
+    });
+    projectRepository.createTask(project.id, {
+      sprintId: sprint.id,
+      taskKey: "T01",
+      title: "Merge pending worker",
+      promptMarkdown: "Produce branch work.",
+      status: "coding_completed",
+    });
+
+    const payload = {
+      project_id: project.id,
+      sprint_id: sprint.id,
+      sprint_number: 9,
+      repo_path: "/workspace/runtime-stable",
+      feature_branch: "feature/stable",
+      subtasks: [
+        {
+          id: "T01",
+          title: "Merge pending worker",
+          prompt: "Produce branch work.",
+          depends_on: [],
+          is_independent: true,
+          status: "CODING_COMPLETED" as const,
+          session_id: "cli-mockup-terminal",
+          session_name: "sessions/cli-mockup-terminal",
+          session_state: "COMPLETED",
+          provider: "mockup-cli" as const,
+          worker_branch: "task/feature/stable-t01",
+          is_merged: false,
+        },
+      ],
+    };
+
+    runtimeRepository.syncDashboardStatus(payload);
+    runtimeRepository.syncDashboardStatus(payload);
+
+    const db = storage.getDatabase().getRawDatabase();
+    const runRows = db.prepare(`
+      SELECT state, worker_branch
+      FROM task_runs
+    `).all() as Array<{ state: string; worker_branch: string | null }>;
+    expect(runRows).toEqual([
+      {
+        state: "COMPLETED",
+        worker_branch: "task/feature/stable-t01",
+      },
+    ]);
+
+    const eventCount = db.prepare(`
+      SELECT COUNT(*) AS count
+      FROM task_run_events
+      WHERE event_type = 'status_sync'
+    `).get() as { count: number };
+    expect(eventCount.count).toBe(1);
+  });
+
   it("deduplicates run events by source event key for the same task run", async () => {
     const { executionRepository, projectRepository, storage } = await createRepositories();
 
@@ -1052,5 +1120,80 @@ describe("ProjectRuntimeRepository", () => {
         },
       }),
     ]);
+  });
+
+  it("does not resurrect a worker-resolved merge conflict from a stale sprint snapshot", async () => {
+    const { projectRepository, runtimeRepository, storage } = await createRepositories();
+
+    const project = projectRepository.createProject({
+      name: "Resolved Conflict Project",
+      sourceType: "local",
+      sourceRef: "/workspace/resolved-conflict",
+    });
+    const sprint = projectRepository.createSprint(project.id, {
+      name: "Resolved Conflict Sprint",
+      number: 31,
+      status: "running",
+    });
+    const task = projectRepository.createTask(project.id, {
+      sprintId: sprint.id,
+      taskKey: "T01",
+      title: "Merge once",
+      promptMarkdown: "Resolve a conflict.",
+      status: "coding_completed",
+      mergeIndicator: "MERGE_CONFLICT",
+    });
+
+    const now = "2026-07-07T12:00:00.000Z";
+    storage.getDatabase().getRawDatabase().prepare(`
+      INSERT INTO project_attention_items (
+        id, project_id, sprint_id, task_id, sprint_run_id, dispatch_id,
+        attention_type, severity, owner_type, status, assigned_worker_endpoint_id,
+        title, summary_markdown, payload_json, opened_at, claimed_at, resolved_at, updated_at
+      ) VALUES (?, ?, ?, ?, NULL, NULL, ?, ?, ?, ?, NULL, ?, ?, ?, ?, NULL, ?, ?)
+    `).run(
+      "resolved-conflict-attention",
+      project.id,
+      sprint.id,
+      task.id,
+      "merge_conflict",
+      "high",
+      "worker",
+      "resolved",
+      "Merge conflict for T01",
+      "Virtual worker resolved this conflict.",
+      JSON.stringify({
+        resolutionReason: "virtual_worker_merge_conflict_already_resolved",
+        conflictingBranches: {
+          source: "task/resolved-conflict-t01",
+          target: "feature/resolved-conflict",
+        },
+      }),
+      now,
+      now,
+      now,
+    );
+
+    runtimeRepository.syncDashboardStatus({
+      project_id: project.id,
+      sprint_id: sprint.id,
+      sprint_number: 31,
+      feature_branch: "feature/resolved-conflict",
+      subtasks: [
+        {
+          id: "T01",
+          record_id: task.id,
+          title: "Merge once",
+          prompt: "Resolve a conflict.",
+          depends_on: [],
+          status: "CODING_COMPLETED",
+          worker_branch: "task/resolved-conflict-t01",
+          merge_indicator: "MERGE_CONFLICT",
+        },
+      ],
+      reportText: "Stale cycle still had the old conflict marker.",
+    });
+
+    expect(projectRepository.getTask(task.id)?.mergeIndicator).toBeNull();
   });
 });

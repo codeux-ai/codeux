@@ -1646,4 +1646,62 @@ describe("ProjectManagementRepository", () => {
 
     expect(cleared.model).toBeNull();
   });
+
+  it("does not restore a worker-resolved merge conflict marker during direct task updates", async () => {
+    const { repository, storage } = await createRepository();
+    const project = repository.createProject({
+      name: "Direct Resolved Conflict",
+      sourceType: "local",
+      sourceRef: "/workspace/direct-resolved-conflict",
+    });
+    const sprint = repository.createSprint(project.id, {
+      name: "Sprint 1",
+    });
+    const task = repository.createTask(project.id, {
+      sprintId: sprint.id,
+      title: "Resolved conflict task",
+      promptMarkdown: "Resolve the branch conflict.",
+      status: "coding_completed",
+      mergeIndicator: "MERGE_CONFLICT",
+    });
+
+    const now = "2026-07-07T12:00:00.000Z";
+    storage.getDatabase().getRawDatabase().prepare(`
+      INSERT INTO project_attention_items (
+        id, project_id, sprint_id, task_id, sprint_run_id, dispatch_id,
+        attention_type, severity, owner_type, status, assigned_worker_endpoint_id,
+        title, summary_markdown, payload_json, opened_at, claimed_at, resolved_at, updated_at
+      ) VALUES (?, ?, ?, ?, NULL, NULL, ?, ?, ?, ?, NULL, ?, ?, ?, ?, NULL, ?, ?)
+    `).run(
+      "direct-resolved-conflict-attention",
+      project.id,
+      sprint.id,
+      task.id,
+      "merge_conflict",
+      "high",
+      "worker",
+      "resolved",
+      "Merge conflict for T01",
+      "Virtual worker resolved this conflict.",
+      JSON.stringify({
+        resolutionReason: "virtual_worker_merge_conflict_already_resolved",
+        conflictingBranches: {
+          source: "task/direct-resolved-conflict-t01",
+          target: "feature/direct-resolved-conflict",
+        },
+      }),
+      now,
+      now,
+      now,
+    );
+
+    const updated = repository.updateTask(task.id, {
+      status: "coding_completed",
+      mergeIndicator: "MERGE_CONFLICT",
+      mergeConflictSourceBranch: "task/direct-resolved-conflict-t01",
+      mergeConflictTargetBranch: "feature/direct-resolved-conflict",
+    });
+
+    expect(updated.mergeIndicator).toBeNull();
+  });
 });

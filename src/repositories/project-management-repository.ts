@@ -765,7 +765,10 @@ export class ProjectManagementRepository {
       const nextSortOrder = input.sortOrder === undefined ? current.sortOrder : input.sortOrder;
       const nextIsIndependent = input.isIndependent === undefined ? current.isIndependent : input.isIndependent;
       const nextIsMerged = input.isMerged === undefined ? current.isMerged : input.isMerged;
-      const nextMergeIndicator = input.mergeIndicator === undefined ? current.mergeIndicator : input.mergeIndicator;
+      const requestedMergeIndicator = input.mergeIndicator === undefined ? current.mergeIndicator : input.mergeIndicator;
+      const nextMergeIndicator = this.shouldSuppressResolvedWorkerMergeConflict(current.id, input)
+        ? null
+        : requestedMergeIndicator;
       const nextSourceType = input.sourceType === undefined ? current.sourceType : input.sourceType;
       const nextSourcePath = input.sourcePath === undefined ? current.sourcePath : input.sourcePath;
       const nextDependsOnTaskIds = input.dependsOnTaskIds
@@ -848,6 +851,36 @@ export class ProjectManagementRepository {
       this.logger.error("Operation failed", { error, taskId });
       throw new RepositoryError(error instanceof Error ? error.message : "Operation failed", error);
     }
+  }
+
+  private shouldSuppressResolvedWorkerMergeConflict(taskId: string, input: UpdateTaskInput): boolean {
+    if (input.mergeIndicator !== "MERGE_CONFLICT") {
+      return false;
+    }
+
+    const sourceBranch = input.mergeConflictSourceBranch?.trim() || null;
+    const targetBranch = input.mergeConflictTargetBranch?.trim() || null;
+    if (!sourceBranch || !targetBranch) {
+      return false;
+    }
+
+    const row = this.db.prepare(`
+      SELECT 1
+      FROM project_attention_items
+      WHERE task_id = ?
+        AND attention_type = 'merge_conflict'
+        AND owner_type = 'worker'
+        AND status = 'resolved'
+        AND json_extract(payload_json, '$.resolutionReason') IN (
+          'virtual_worker_merge_conflict_resolved',
+          'virtual_worker_merge_conflict_already_resolved'
+        )
+        AND json_extract(payload_json, '$.conflictingBranches.source') = ?
+        AND json_extract(payload_json, '$.conflictingBranches.target') = ?
+      LIMIT 1
+    `).get(taskId, sourceBranch, targetBranch);
+
+    return Boolean(row);
   }
 
   deleteTask(taskId: string): void {

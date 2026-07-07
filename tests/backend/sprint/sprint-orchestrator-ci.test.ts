@@ -7,6 +7,10 @@ import { DEFAULT_DASHBOARD_SETTINGS } from "../../../src/repositories/settings-d
 import { buildTaskRunTag } from "../../../src/services/task-run-key.js";
 import { buildDeps } from "./sprint-orchestrator.setup.js";
 
+async function removeTempRoot(tmpRoot: string): Promise<void> {
+  await fs.rm(tmpRoot, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+}
+
 describe("SprintOrchestrator CI logic", () => {
   it("keeps completed tasks in work state while feature PR CI is failing when autofix wait is enabled", async () => {
     const { deps, listSessions, subtaskRepository } = buildDeps();
@@ -124,7 +128,7 @@ describe("SprintOrchestrator CI logic", () => {
       expect.stringContaining("unit test failed")
     );
 
-    await fs.rm(tmpRoot, { recursive: true, force: true });
+    await removeTempRoot(tmpRoot);
   });
 
   it("escalates CI autofix after max retries with task id and PR link context", async () => {
@@ -209,7 +213,7 @@ describe("SprintOrchestrator CI logic", () => {
     expect(text).toContain("Escalation (AGENT)");
     expect(deps.sendSessionMessage).not.toHaveBeenCalled();
 
-    await fs.rm(tmpRoot, { recursive: true, force: true });
+    await removeTempRoot(tmpRoot);
   });
 
   it("auto merges feature PR when checks are green and review blockers are clear", async () => {
@@ -301,7 +305,7 @@ describe("SprintOrchestrator CI logic", () => {
       "task-record-1",
       expect.objectContaining({ isMerged: true, mergeIndicator: "AUTOMERGE" }),
     );
-    await fs.rm(tmpRoot, { recursive: true, force: true });
+    await removeTempRoot(tmpRoot);
   });
 
   it("auto merges in always mode even when checks are pending", async () => {
@@ -393,7 +397,7 @@ describe("SprintOrchestrator CI logic", () => {
       "task-record-1",
       expect.objectContaining({ isMerged: true, mergeIndicator: "AUTOMERGE" }),
     );
-    await fs.rm(tmpRoot, { recursive: true, force: true });
+    await removeTempRoot(tmpRoot);
   });
 
   it("auto merges feature PR without waiting for CI in always mode", async () => {
@@ -475,7 +479,7 @@ describe("SprintOrchestrator CI logic", () => {
     const text = result.content[0].text as string;
     expect(text).toContain("Auto-Merged");
     expect(deps.autoMergeFeaturePr).toHaveBeenCalledWith({ repoPath: tmpRoot, prNumber: 24 });
-    await fs.rm(tmpRoot, { recursive: true, force: true });
+    await removeTempRoot(tmpRoot);
   });
 
   it("respects project-scoped merge mode overrides during orchestration", async () => {
@@ -574,7 +578,7 @@ describe("SprintOrchestrator CI logic", () => {
       sprintId: "sprint-1",
     }));
 
-    await fs.rm(tmpRoot, { recursive: true, force: true });
+    await removeTempRoot(tmpRoot);
   });
 
   it("keeps task running when worker branch is missing but PR is matched by pr_url and checks are pending", async () => {
@@ -658,7 +662,7 @@ describe("SprintOrchestrator CI logic", () => {
     expect(text).toContain("PR #20");
     expect(text).toContain("`RUNNING`");
 
-    await fs.rm(tmpRoot, { recursive: true, force: true });
+    await removeTempRoot(tmpRoot);
   });
 
   it("dispatches worker CI fix when the Jules notification wait is disabled", async () => {
@@ -764,7 +768,7 @@ describe("SprintOrchestrator CI logic", () => {
       mergeIndicator: "CI",
     }));
 
-    await fs.rm(tmpRoot, { recursive: true, force: true });
+    await removeTempRoot(tmpRoot);
   });
 
 });

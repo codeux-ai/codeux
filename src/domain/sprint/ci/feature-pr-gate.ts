@@ -1,7 +1,8 @@
 import { evaluateMergeReadiness } from "./feature-pr/merge-readiness-policy.js";
 import { deriveChecksFromCiRuns } from "../../../sprint/ci-status-utils.js";
+import { runCommandStrict } from "../../../services/cli-process-runner.js";
 import type { GuardrailService } from "../../../services/guardrail-service.js";
-import { deleteBranchLocally, findRecoverableWorkerBranch, getCheckedOutRef, mergeBranchLocally, restoreCheckedOutRef, workerBranchHasMergeWork } from "../../../infrastructure/git/local-merge.js";
+import { deleteBranchLocally, findRecoverableWorkerBranch, getCheckedOutRef, mergeBranchLocallyInTemporaryWorktree, restoreCheckedOutRef, workerBranchHasMergeWork } from "../../../infrastructure/git/local-merge.js";
 import { buildWorkerBranchPrefix } from "../../../services/cli-workflow-utils.js";
 import { matchMergedPrForTask, matchPrForTask } from "./feature-pr/pr-matcher.js";
 import { attemptAutoMerge } from "./feature-pr/automerge-policy.js";
@@ -105,6 +106,12 @@ export class FeaturePrGateService {
       const taskRun = context.executionRepository && context.sprintRunId && task.record_id
         ? context.executionRepository.getLatestTaskRun(task.record_id, context.sprintRunId)
         : null;
+      if (
+        taskRun?.workerBranch
+        && (typeof task.worker_branch !== "string" || task.worker_branch.trim().length === 0)
+      ) {
+        task.worker_branch = taskRun.workerBranch;
+      }
       const isExecutionCompleted = task.session_state === "COMPLETED" || taskRun?.state === "COMPLETED";
 
       taskCiInfoMap.set(task.id, { pr, mergedPr, hasPr, isExecutionCompleted, error });
@@ -184,26 +191,69 @@ export class FeaturePrGateService {
           }
         }
       }
+    }
 
-      const completedAwaitingMerge = updatedSubtasks.filter((task) => {
-        const info = taskCiInfoMap.get(task.id)!;
-        return isCompletedTaskAwaitingMerge(task, {
-          githubMode: context.githubMode,
-          hasPr: info.hasPr,
-          isExecutionCompleted: info.isExecutionCompleted,
-        });
+    const completedAwaitingBranchMerge = updatedSubtasks.filter((task) => {
+      const info = taskCiInfoMap.get(task.id)!;
+      if (context.githubMode === "REMOTE" && info.hasPr) {
+        return false;
+      }
+      if (context.githubMode === "REMOTE" && !info.isExecutionCompleted) {
+        return false;
+      }
+      return isCompletedTaskAwaitingMerge(task, {
+        githubMode: context.githubMode,
+        hasPr: info.hasPr,
+        isExecutionCompleted: info.isExecutionCompleted,
       });
-      if (completedAwaitingMerge.length > 0) {
-        let reportText = "";
-        // The host repo is the user's own working directory — capture whatever ref is
-        // checked out so we can restore it once after merging every worker branch,
-        // rather than leaving the repo parked on the feature branch (and without
-        // churning the working tree by checking it out per task).
-        const originalRef = await getCheckedOutRef(context.repoPath);
-        try {
-          for (const task of completedAwaitingMerge) {
-            const workerBranch = typeof task.worker_branch === "string" ? task.worker_branch : null;
-            if (!workerBranch) continue;
+    });
+    if (completedAwaitingBranchMerge.length > 0) {
+      context.logger?.info("Branch-only merge gate found completed tasks awaiting branch merge", {
+        githubMode: context.githubMode,
+        featureBranch: context.featureBranch,
+        taskCount: completedAwaitingBranchMerge.length,
+        taskIds: completedAwaitingBranchMerge.map((task) => task.id),
+      });
+    }
+    if (completedAwaitingBranchMerge.length > 0) {
+      let reportText = "";
+      // The host repo is the user's own working directory — capture whatever ref is
+      // checked out so we can restore it once after merging every worker branch,
+      // rather than leaving the repo parked on the feature branch (and without
+      // churning the working tree by checking it out per task).
+      const originalRef = await getCheckedOutRef(context.repoPath);
+      try {
+        for (const task of completedAwaitingBranchMerge) {
+          const workerBranch = typeof task.worker_branch === "string" ? task.worker_branch : null;
+          if (!workerBranch) continue;
+
+          const hasMergeWork = await workerBranchHasMergeWork({
+            repoPath: context.repoPath,
+            featureBranch: context.featureBranch,
+            workerBranch,
+          });
+          if (!hasMergeWork) {
+            task.status = "COMPLETED";
+            task.merge_indicator = undefined;
+            task.worker_branch = undefined;
+            if (context.executionRepository && context.sprintRunId && task.record_id) {
+              const taskRun = context.executionRepository.getLatestTaskRun(task.record_id, context.sprintRunId);
+              if (taskRun?.id) {
+                context.executionRepository.updateTaskRun(taskRun.id, { workerBranch: null });
+                context.executionRepository.appendTaskRunEvent(taskRun.id, "ci_gate_status", "system", {
+                  state: "no_merge_work",
+                  taskId: task.id,
+                  featureBranch: context.featureBranch,
+                  workerBranch,
+                }, {
+                  sourceEventKey: `ci-gate:no_merge_work:none:${workerBranch}`,
+                });
+              }
+            }
+            await context.persistMergedTask(task);
+            reportText += `- ✅ **No merge work:** Task \`${task.id}\` completed without a PR because no worker branch with unmerged commits exists.\n`;
+            continue;
+          }
 
             // Check if there is QA gate blocking us
             const qaGate = context.evaluateTaskQaGate?.(task);
@@ -215,20 +265,59 @@ export class FeaturePrGateService {
               continue;
             }
 
-            context.logger?.info(`LOCAL Mode: Merging worker branch ${workerBranch} into feature branch ${context.featureBranch}`);
-            const merge = await mergeBranchLocally({
+            const modeLabel = context.githubMode === "LOCAL" ? "LOCAL" : "REMOTE branch-only";
+            context.logger?.info(`${modeLabel} Mode: Merging worker branch ${workerBranch} into feature branch ${context.featureBranch}`);
+            const mergeArgs = {
               repoPath: context.repoPath,
               targetBranch: context.featureBranch,
               sourceBranch: workerBranch,
               commitMessage: `Merge branch '${workerBranch}' into ${context.featureBranch}`,
-            });
+            };
+            const merge = await mergeBranchLocallyInTemporaryWorktree(mergeArgs);
 
             if (merge.ok) {
+              if (context.githubMode === "REMOTE") {
+                try {
+                  await runCommandStrict(
+                    "git",
+                    ["push", "origin", `refs/heads/${context.featureBranch}:refs/heads/${context.featureBranch}`],
+                    context.repoPath,
+                  );
+                } catch (error) {
+                  const message = error instanceof Error ? error.message : String(error);
+                  context.logger?.error(`REMOTE branch-only Mode: Failed to push feature branch ${context.featureBranch}: ${message}`);
+                  task.status = "CODING_COMPLETED";
+                  task.is_merged = false;
+                  task.merge_indicator = "MERGE_BLOCKED";
+                  task.intervention_owner = "HUMAN";
+                  task.intervention_hint = `Merged ${workerBranch} into ${context.featureBranch} locally, but could not push the feature branch: ${message}`;
+                  await context.persistMergedTask(task);
+                  reportText += `- ⚠️ **Remote branch push failed:** Task \`${task.id}\` — merged \`${workerBranch}\` into \`${context.featureBranch}\` locally, but pushing the feature branch failed: ${message}\n`;
+                  continue;
+                }
+              }
+
               task.status = "COMPLETED";
               task.is_merged = true;
               task.merge_indicator = "MERGED";
+              task.worker_branch = undefined;
               task.intervention_owner = undefined;
               task.intervention_hint = undefined;
+              if (context.executionRepository && context.sprintRunId && task.record_id) {
+                const taskRun = context.executionRepository.getLatestTaskRun(task.record_id, context.sprintRunId);
+                if (taskRun?.id) {
+                  context.executionRepository.updateTaskRun(taskRun.id, { workerBranch: null });
+                  context.executionRepository.appendTaskRunEvent(taskRun.id, "ci_gate_status", "system", {
+                    state: "merged_branch",
+                    taskId: task.id,
+                    featureBranch: context.featureBranch,
+                    workerBranch,
+                    githubMode: context.githubMode,
+                  }, {
+                    sourceEventKey: `ci-gate:merged_branch:${context.featureBranch}:${workerBranch}`,
+                  });
+                }
+              }
               await context.persistMergedTask(task);
 
               // Worker branch is now fully contained in the feature branch; drop it so dead
@@ -240,9 +329,11 @@ export class FeaturePrGateService {
                 }
               }
 
-              reportText += `- ✅ **Merged locally:** Task \`${task.id}\` — branch \`${workerBranch}\` merged into \`${context.featureBranch}\`.\n`;
+              reportText += context.githubMode === "LOCAL"
+                ? `- ✅ **Merged locally:** Task \`${task.id}\` — branch \`${workerBranch}\` merged into \`${context.featureBranch}\`.\n`
+                : `- ✅ **Merged branch:** Task \`${task.id}\` — branch \`${workerBranch}\` merged into \`${context.featureBranch}\` and pushed.\n`;
             } else {
-              context.logger?.error(`LOCAL Mode: Failed to merge worker branch ${workerBranch} into ${context.featureBranch}: ${merge.error}`);
+              context.logger?.error(`${modeLabel} Mode: Failed to merge worker branch ${workerBranch} into ${context.featureBranch}: ${merge.error}`);
               task.status = "CODING_COMPLETED";
               task.merge_indicator = "MERGE_CONFLICT";
               task.intervention_owner = "HUMAN";
@@ -252,15 +343,17 @@ export class FeaturePrGateService {
               await context.persistMergedTask(task);
 
               reportText += merge.conflict
-                ? `- ⚠️ **Merge Conflict locally:** Task \`${task.id}\` — Conflict merging \`${workerBranch}\` into \`${context.featureBranch}\`.\n`
-                : `- ⚠️ **Local merge failed:** Task \`${task.id}\` — Could not merge \`${workerBranch}\` into \`${context.featureBranch}\`: ${merge.error}\n`;
+                ? `- ⚠️ **Merge Conflict:** Task \`${task.id}\` — conflict merging \`${workerBranch}\` into \`${context.featureBranch}\`.\n`
+                : `- ⚠️ **Branch merge failed:** Task \`${task.id}\` — could not merge \`${workerBranch}\` into \`${context.featureBranch}\`: ${merge.error}\n`;
             }
-          }
-        } finally {
-          await restoreCheckedOutRef(context.repoPath, originalRef);
         }
-        return { subtasks: updatedSubtasks, reportText };
+      } finally {
+        await restoreCheckedOutRef(context.repoPath, originalRef);
       }
+      return { subtasks: updatedSubtasks, reportText };
+    }
+
+    if (context.githubMode === "LOCAL") {
       return { subtasks: updatedSubtasks, reportText: "" };
     }
 

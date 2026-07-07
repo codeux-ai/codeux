@@ -23,6 +23,74 @@ import {
   resolveDispatchErrorMessage,
 } from "../../domain/sprint/session-sync/session-state-mapping.js";
 
+const LOCAL_CLI_SESSION_PROVIDERS = new Set([
+  "antigravity",
+  "claude-code",
+  "codex",
+  "gemini",
+  "mockup-cli",
+  "opencode",
+  "qwen-code",
+]);
+
+const TERMINAL_DISPATCH_STATUSES = new Set([
+  "completed",
+  "failed",
+  "cancelled",
+  "blocked",
+  "quota",
+]);
+
+const isLocalCliSessionProvider = (provider: string | null | undefined): boolean => (
+  LOCAL_CLI_SESSION_PROVIDERS.has(String(provider || ""))
+);
+
+const isFinishedLocalCliTaskRun = (
+  taskRun: TaskRunRecord,
+  provider: string | null | undefined,
+): boolean => (
+  isLocalCliSessionProvider(provider)
+  && taskRun.finishedAt !== null
+);
+
+const isTerminalSessionState = (state: string | null | undefined): boolean => {
+  const normalized = String(state || "").toUpperCase();
+  return normalized === "COMPLETED" || normalized === "FAILED" || normalized === "CANCELLED";
+};
+
+const shouldSkipTerminalLocalCliSessionPolling = (subtasks: Subtask[]): boolean => {
+  let sawTerminalLocalCliSession = false;
+
+  for (const task of subtasks) {
+    const sessionId = resolveTaskSessionId(task);
+    if (!sessionId) {
+      continue;
+    }
+
+    if (!isLocalCliSessionProvider(task.provider)) {
+      return false;
+    }
+    if (!isTerminalSessionState(task.session_state)) {
+      return false;
+    }
+    if (task.status === "RUNNING" || task.status === "BLOCKED" || task.status === "QUOTA") {
+      return false;
+    }
+    if (
+      task.status === "CODING_COMPLETED"
+      && !task.is_merged
+      && !task.worker_branch
+      && !task.pr_url
+    ) {
+      return false;
+    }
+
+    sawTerminalLocalCliSession = true;
+  }
+
+  return sawTerminalLocalCliSession;
+};
+
 const extractGitMetrics = (session: JulesSession): Record<string, unknown> | null => {
   const pullRequestOutput = Array.isArray(session.outputs)
     ? session.outputs.find((entry) => entry && typeof entry === "object" && "pullRequest" in entry)
@@ -461,13 +529,19 @@ const syncExecutionRunState = async (
     }
   }
 
-  const wasTerminal = taskRun.state === "COMPLETED" || taskRun.state === "FAILED";
   const currentDispatch = taskRun.dispatchId
     ? deps.executionRepository.getTaskDispatch(taskRun.dispatchId)
     : null;
-  const wasDispatchTerminal = !currentDispatch || currentDispatch.finishedAt !== null;
+  const wasDispatchTerminal = !currentDispatch
+    || currentDispatch.finishedAt !== null
+    || TERMINAL_DISPATCH_STATUSES.has(currentDispatch.status);
   const actionRequiredReplyPending = hasSubmittedReplyForActionRequiredState(task, session.state, activities);
   const nextRunState = mapSessionStateToTaskRunState(session.state, deps.isActionRequiredState, actionRequiredReplyPending);
+  const sessionProvider = session.provider || taskRun.provider;
+  const isFinishedLocalCliRun = isFinishedLocalCliTaskRun(taskRun, sessionProvider);
+  const wasTerminal = taskRun.state === "COMPLETED"
+    || taskRun.state === "FAILED"
+    || isFinishedLocalCliRun;
   // A provider session can come back to life after it had finished — e.g. a
   // Jules session continued with QA follow-up work, or a task that was rerun.
   // When that happens the local run is terminal but the remote session is
@@ -476,14 +550,25 @@ const syncExecutionRunState = async (
   // session is actively working (the stale-status-on-rerun bug). A genuinely
   // merged task is excluded — it is done for good and its session activity, if
   // any, is stale.
-  const sessionReactivated = !task.is_merged
+  const sessionReactivated = !isLocalCliSessionProvider(sessionProvider)
+    && !task.is_merged
     && (nextRunState === "RUNNING" || nextRunState === "BLOCKED");
 
   if (wasTerminal && wasDispatchTerminal && !sessionReactivated) {
     if (currentDispatch && taskRun.dispatchId) {
-      const expectedStatus = mapTaskRunStateToDispatchStatus(taskRun.state, session.state);
-      const expectedErrorMessage = resolveDispatchErrorMessage(currentDispatch.errorMessage, taskRun.state, session.state);
-      if (currentDispatch.status !== expectedStatus || currentDispatch.errorMessage !== expectedErrorMessage) {
+      const preserveCancelledDispatch = isFinishedLocalCliRun && currentDispatch.status === "cancelled";
+      const expectedStatus = preserveCancelledDispatch
+        ? "cancelled"
+        : mapTaskRunStateToDispatchStatus(taskRun.state, session.state);
+      const expectedErrorMessage = preserveCancelledDispatch
+        ? currentDispatch.errorMessage
+        : resolveDispatchErrorMessage(currentDispatch.errorMessage, taskRun.state, session.state);
+      if (
+        currentDispatch.status !== expectedStatus
+        || currentDispatch.errorMessage !== expectedErrorMessage
+        || currentDispatch.startedAt === null
+        || currentDispatch.finishedAt === null
+      ) {
         deps.executionRepository.updateTaskDispatch(taskRun.dispatchId, {
           status: expectedStatus,
           startedAt: currentDispatch.startedAt || taskRun.startedAt || new Date().toISOString(),
@@ -499,7 +584,7 @@ const syncExecutionRunState = async (
   const sessionMetadata = sessionMetadataLookup.getForSession(session);
   const sessionName = sessionMetadata.sessionName || taskRun.sessionName;
   const sessionId = sessionMetadata.sessionId || taskRun.sessionId;
-  const provider = session.provider || taskRun.provider;
+  const provider = sessionProvider;
   const workerBranch = resolveWorkerBranch(session) || taskRun.workerBranch;
   const prUrl = resolvePrUrl(session) || taskRun.prUrl;
   const now = new Date().toISOString();
@@ -661,6 +746,10 @@ export const runSessionSyncStep = async (
     githubMode?: "REMOTE" | "LOCAL";
   },
 ): Promise<{ subtasks: Subtask[]; sessions: JulesSession[] }> => {
+  if (shouldSkipTerminalLocalCliSessionPolling(subtasks)) {
+    return { subtasks, sessions: [] };
+  }
+
   const sessionsResponse = await deps.listSessions();
   const sessions = sessionsResponse.sessions || [];
   const sessionMetadataLookup = createSessionMetadataLookup(deps);

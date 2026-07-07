@@ -89,7 +89,7 @@ function resolveConflictBlock(filePath, ours, theirs) {
 
 function resolveConflictContent(filePath, content) {
   const resolved = String(content).replace(
-    /^<<<<<<<[^\n]*\n([\s\S]*?)\n=======\n([\s\S]*?)\n>>>>>>>[^\n]*(?:\n|$)/gm,
+    /^<<<<<<<[^\n]*\n([\s\S]*?)(?:\n\|\|\|\|\|\|\|[^\n]*\n[\s\S]*?)?\n=======\n([\s\S]*?)\n>>>>>>>[^\n]*(?:\n|$)/gm,
     (_match, ours, theirs) => {
       const resolved = resolveConflictBlock(filePath, ours, theirs);
       return resolved.endsWith("\n") ? resolved : resolved + "\n";
@@ -233,34 +233,44 @@ function parseOperations() {
 
   const operations = [];
   const validations = [];
+  let hasExplicitMockupDirectives = /(^|\n)\s*mockup-cli:(?:file|write|append|conflict|replace|delete|run)\b/i.test(prompt);
   const fileFence = /mockup-cli:file\s+([^\n]+)\n\x60{3}[^\n]*\n([\s\S]*?)\n\x60{3}/gi;
   for (const match of prompt.matchAll(fileFence)) {
     addWrite(operations, "write", match[1], match[2]);
+    hasExplicitMockupDirectives = true;
   }
   const heredoc = /mockup-cli:file\s+(.+?)\s+<<([A-Za-z0-9_-]+)\n([\s\S]*?)\n\2/g;
   for (const match of prompt.matchAll(heredoc)) {
     addWrite(operations, "write", match[1], match[3]);
+    hasExplicitMockupDirectives = true;
   }
 
   for (const line of prompt.split(/\r?\n/)) {
     let match = line.match(/^mockup-cli:(write|append|conflict)\s+(.+?)\s*::\s*(.*)$/i);
     if (match) {
       addWrite(operations, match[1].toLowerCase(), match[2], match[3]);
+      hasExplicitMockupDirectives = true;
       continue;
     }
     match = line.match(/^mockup-cli:replace\s+(.+?)\s*::\s*(.*?)\s*=>\s*(.*)$/i);
     if (match) {
       operations.push({ type: "replace", filePath: match[1].trim(), from: normalizeContent(match[2]), to: normalizeContent(match[3]) });
+      hasExplicitMockupDirectives = true;
       continue;
     }
     match = line.match(/^mockup-cli:delete\s+(.+)$/i);
     if (match) {
       operations.push({ type: "delete", filePath: match[1].trim() });
+      hasExplicitMockupDirectives = true;
       continue;
     }
     match = line.match(/^mockup-cli:run\s+(.+)$/i);
     if (match) {
       validations.push(match[1].trim());
+      hasExplicitMockupDirectives = true;
+      continue;
+    }
+    if (hasExplicitMockupDirectives) {
       continue;
     }
     match = line.match(/(?:create|write)\s+(?:a\s+)?file\s+[\x60'"]?([^\x60'":\s]+)[\x60'"]?\s+(?:with|containing)\s+(?:content|text)?[:\s]+(.+)$/i);

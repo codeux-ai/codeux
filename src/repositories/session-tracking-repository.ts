@@ -59,6 +59,7 @@ const TRACKED_CLI_PROVIDERS: Array<Exclude<ProviderId, "jules">> = [
   "qwen-code",
   "opencode",
   "antigravity",
+  "mockup-cli",
 ];
 
 const TRACKED_CLI_PROVIDER_SQL = TRACKED_CLI_PROVIDERS.map((provider) => `'${provider}'`).join(", ");
@@ -382,7 +383,7 @@ export class SessionTrackingRepository {
   }): CliSessionWorkspaceTarget | null {
     const providers = (args.providers && args.providers.length > 0)
       ? args.providers
-      : ["gemini", "codex", "claude-code", "qwen-code", "opencode", "antigravity"];
+      : ["gemini", "codex", "claude-code", "qwen-code", "opencode", "antigravity", "mockup-cli"];
     const placeholders = providers.map(() => "?").join(", ");
     const normalizedPath = path.resolve(args.repoPath).replace(/\\/g, "/");
     const row = this.db.prepare(`

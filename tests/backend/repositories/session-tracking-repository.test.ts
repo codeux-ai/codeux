@@ -184,6 +184,63 @@ describe("SessionTrackingRepository", () => {
     });
   });
 
+  it("tracks cancelled mockup CLI sessions so startup pruning preserves resumable workspaces", async () => {
+    const repo = await createRepo();
+
+    repo.createSession({
+      id: "cli-mockup-cli-cancelled",
+      provider: "mockup-cli",
+      state: "CANCELLED",
+      prompt: "prompt",
+      title: "Sprint 1: [task-1] test",
+      taskId: "task-1",
+      featureBranch: "feature/sprint1",
+      workerBranch: "task/feature-sprint1-task-1-mockup-cli-cancelled",
+      repoPath: "/tmp/repo-a",
+    });
+
+    expect(repo.listTrackedCliSessions()).toEqual([
+      expect.objectContaining({
+        id: "cli-mockup-cli-cancelled",
+        provider: "mockup-cli",
+        state: "CANCELLED",
+      }),
+    ]);
+    expect(repo.findLatestResumableCliSessionForTask({
+      provider: "mockup-cli",
+      taskId: "task-1",
+      featureBranch: "feature/sprint1",
+      repoPath: "/tmp/repo-a",
+    })).toEqual({
+      sessionId: "cli-mockup-cli-cancelled",
+      workerBranch: "task/feature-sprint1-task-1-mockup-cli-cancelled",
+    });
+  });
+
+  it("tracks completed mockup CLI sessions so finished workspaces survive restarts", async () => {
+    const repo = await createRepo();
+
+    repo.createSession({
+      id: "cli-mockup-cli-completed",
+      provider: "mockup-cli",
+      state: "COMPLETED",
+      prompt: "prompt",
+      title: "Sprint 1: [task-1] test",
+      taskId: "task-1",
+      featureBranch: "feature/sprint1",
+      workerBranch: "task/feature-sprint1-task-1-mockup-cli-completed",
+      repoPath: "/tmp/repo-a",
+    });
+
+    expect(repo.listTrackedCliSessions()).toEqual([
+      expect.objectContaining({
+        id: "cli-mockup-cli-completed",
+        provider: "mockup-cli",
+        state: "COMPLETED",
+      }),
+    ]);
+  });
+
   it("finds latest failed cli session using container path /workspace fallback and POSIX path normalization", async () => {
     const repo = await createRepo();
 

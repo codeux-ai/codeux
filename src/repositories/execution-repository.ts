@@ -1194,6 +1194,16 @@ export class ExecutionRepository {
       SELECT provider, COUNT(*) as count
       FROM task_runs
       WHERE ${where}
+        AND NOT EXISTS (
+          SELECT 1
+          FROM provider_invocations pi
+          WHERE pi.provider = task_runs.provider
+            AND (
+              pi.task_run_id = task_runs.id
+              OR (task_runs.dispatch_id IS NOT NULL AND pi.dispatch_id = task_runs.dispatch_id)
+            )
+            AND pi.status IN ('completed', 'failed', 'cancelled')
+        )
       GROUP BY provider
     `).all(...providerFilter) as Array<{ provider: string; count: number | string }>;
 

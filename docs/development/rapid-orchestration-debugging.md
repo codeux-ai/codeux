@@ -38,11 +38,13 @@ Use this lane first for:
 
 - LOCAL runs stuck at remote-style `ready_for_merge` feedback.
 - LOCAL final merge conflicts or temporary-worktree failures.
-- Dirty visible checkouts that must be preserved before final merge.
+- Dirty visible checkouts that must be preserved before final merge, including the rule that `.code-ux/` dirt is ignored.
+- LOCAL no-PR task branch merges where untracked `.code-ux/**` files in the visible checkout would otherwise block `git checkout`.
 - Worker-owned merge-conflict attention items being opened, resolved, or retried incorrectly.
 - Mockup virtual-worker routes falling back to credentialed providers.
 - Mockup virtual merge-conflict workers completing without removing active conflict markers.
 - Virtual conflict repair falling back when container Git cannot list unresolved files with `git diff`.
+- Virtual conflict repair auto-resolving `.code-ux/**` conflicts to the target branch side and reseeding invalid Docker repair workspaces before provider execution.
 - Task dependency unlocks after worker branch merges into the sprint feature branch.
 
 The lane must stay credential-free and isolated. It should mock provider, GitHub, Docker, and external network boundaries unless a test specifically targets host Git behavior.
@@ -139,6 +141,8 @@ During a healthy run, the active task-run count should stay near the fixture pro
 
 The provider call is not the only timing that matters. For Docker-backed CLI tasks, compare `cli_prepare_started -> cli_prepare_completed`, provider invocation duration, and `provider_completed -> git_pushed`. Wide DAGs should not show a staircase where each task's prepare phase starts only after another workspace seed finishes. Docker workspaces are independent volumes, so only same-workspace preparation and host `git worktree` metadata operations should serialize; repo-wide locks must not wrap Docker volume creation, bundle seeding, or checkout. Patch export should run as one workspace shell command that lets Git stream untracked paths internally instead of starting several helper containers for `read-tree`, `ls-files`, `add`, `diff`, and cleanup. Patch materialization on the host should also stay collapsed into one shell command for local mode and the non-network part of remote mode; remote fetch/push retry remains separate because it is network-sensitive.
 
+Restart testing must preserve local CLI workspaces. Startup recovery may cancel and redispatch interrupted local CLI task runs, but it removes surviving task containers without deleting their workspace volumes and session sync treats any finished local CLI task run as terminal even when a stale cached session snapshot still says `RUNNING`.
+
 Check this while the run is active:
 
 ```bash
@@ -223,8 +227,11 @@ Exercise these cases with an approved local test project or a temporary fixture:
 | Case | Setup | Expected behavior |
 | --- | --- | --- |
 | Clean checkout | No uncommitted files. | Temporary worktree merges sprint feature branch into default branch. |
-| Dirty non-conflicting file | Modify a file outside the sprint diff. | Dirty work is committed to `dirty-ref-<uuid>`, final sprint merge completes, dirty branch merges back if clean. |
-| Dirty conflicting file | Modify the same path as sprint output. | Dirty work is preserved on `dirty-ref-<uuid>`, sprint merge completes, dirty branch remains as backup if it cannot merge cleanly. |
+| Dirty non-conflicting file | Modify a file outside the sprint diff. | Dirty work is committed to `dirty-ref-<uuid>`, a dashboard notification names that branch, and the sprint merge completes without auto-merging the preserved branch. |
+| Dirty conflicting file | Modify the same path as sprint output. | User dirty work is preserved on `dirty-ref-<uuid>`, a dashboard notification names that branch, and the sprint merge completes without auto-merging the preserved branch. |
+| Dirty `.code-ux/` runtime file | Write or modify `.code-ux/**` during a LOCAL final merge. | Dirty preservation is skipped for those runtime artifacts and the sprint merge proceeds as if the checkout were clean. |
+| Untracked `.code-ux/` file during task branch merge | Leave untracked `.code-ux/**` files in the visible checkout while completed CLI task branches wait for feature-branch merge. | The branch-only task merge runs in a temporary worktree, marks the tasks `MERGED`, clears task-run worker-branch evidence, and does not switch or clean the visible checkout. |
+| Merge conflict only in `.code-ux/` | Create conflicting `.code-ux/**` edits on source and target branches. | Worker merge repair and LOCAL task-branch merges resolve those paths to the target branch side without dispatching a provider solely for Code UX artifacts. |
 | Checked-out default branch | Visible checkout is on the default branch. | After final merge, visible checkout refreshes to the merged commit. |
 | Checked-out non-default branch | Visible checkout is on a worker or unrelated branch. | Final merge updates the default branch without switching the visible checkout. |
 
@@ -236,21 +243,30 @@ Exercise these cases with an approved local test project or a temporary fixture:
 | Main-merge attention opens and closes repeatedly. | `project_attention_items`, worker-owned conflict tests. | Remote feedback reconciliation is clearing LOCAL worker-owned attention. |
 | Final merge fails only when visible checkout has edits. | `local-merge.test.ts`, dirty checkout branches. | Dirty preservation or refresh behavior regressed. |
 | Dependent tasks never start after a worker branch completes. | `feature-pr-gate.test.ts`, task merge indicators. | Worker branch merge evidence is missing or stale. |
+| Code-complete LOCAL task branches repeatedly become `MERGE_CONFLICT` but raw Git merges cleanly. | Fast branch-only gate logs, `local-merge.test.ts`, visible checkout status. | The visible checkout is blocking host `git checkout`; task branch settlement must use the temporary-worktree path instead of the visible worktree. |
 | Mockup merge E2E passes but live provider fails. | Provider invocation row, Docker logs, provider transcript metadata. | Provider-specific output, workspace, or session-sync issue rather than orchestration policy. |
 | Mockup merge E2E selects a credentialed provider. | `provider_invocations`, mockup runner `server.log`, virtual-worker provider pool. | The credential-free mockup route is being filtered before virtual-worker conflict or CI repair. |
+| Merge-conflict attention resolves but reopens until the guardrail escalates. | Task `merge_indicator`, project attention payload, virtual-worker resolution logs. | The worker resolved the branch but did not clear the stale task `MERGE_CONFLICT` marker, so the next protocol pass recreated the same conflict. |
+| Merge-conflict attention resolves and the sprint pauses as generic manual attention. | Task `worker_branch`, `task_runs.worker_branch`, `git rev-list feature..worker`. | Resolved-conflict clear history is being reused as merge-required suppression. Suppression must apply only after the source branch has no commits ahead of the feature branch. |
+| Human merge-conflict handoffs remain open after the task marker clears. | `project_attention_items.payload_json`, task `merge_indicator`, sprint cycle logs. | The cycle must dismiss only task-level handoffs whose payload source is `merge_conflict` and whose task no longer has `MERGE_CONFLICT`; main-merge/manual handoffs must remain open. |
+| Code-complete tasks with completed task runs do not enter branch-only merge. | Compare subtask `worker_branch` with `task_runs.worker_branch`. | The branch-only gate must recover worker-branch evidence from the latest completed task run before calculating merge readiness. |
 | 100+ task mockup DAG progresses slowly while provider calls complete quickly. | `task_runs`, `task_dispatches`, `provider_invocations`, `ProviderConcurrencyService.getGlobalRunningCounts`. | Scheduler capacity is counting provider invocations only, so queued CLI task runs overload session sync and dispatch state. |
 | 100+ task mockup DAG stays capped correctly but each task takes tens of seconds. | Task-run activity timestamps around `cli_prepare_*`, provider invocation rows, and `git_pushed` events. | Git/workspace helpers are serializing independent Docker volume seeds or exporting patches with too many helper container round trips. |
 
 ## Performance Guardrails
 
 - Provider-specific live usage sync must only run for the matching provider. Jules live invocation sync and token estimation are Jules-only; mockup, Codex, Gemini, Claude Code, Qwen, OpenCode, and Antigravity CLI sessions should not enter Jules usage code paths.
+- Provider routing must resolve exact provider-config ids. A provider type such as `gemini` is valid only when a configured provider instance with id `gemini` exists; it must not silently select another instance such as `gemini-fast`. Sprint/project overrides may introduce a credential-free provider instance such as `mockup-cli`, and the sanitizer must preserve that instance before validating route providers, allowed-provider pools, worker providers, and per-route overrides.
+- Project and sprint route-provider maps are replace-on-write for each invocation route. A scoped override for `task_coding.providers`, `merge_conflict.providers`, or `qa_review.providers` narrows that route to the declared provider-config ids instead of inheriting parent route providers and accidentally admitting live providers into a mockup-only run.
 - Provider-cap admission should happen before dispatch whenever the provider can be resolved from task routing. This keeps unlocked tasks pending instead of creating hidden running backlog.
 - If a lower provider stage still reports `ProviderCapReachedError` after dispatch rows were created, the dispatch must be restored to `queued`, the task run to `PENDING`, and the project task to `pending`. Capacity deferral is not a task failure.
 - Global provider counts should use the larger of running provider invocations and running task runs. CLI task runs can exist before their provider invocation starts.
 - CLI task runs should transition to `COMPLETED` immediately after the worker branch is materialized and `cli_git_pushed` is recorded. PR finalization may enrich the row with a PR URL afterwards, but it should not keep a provider slot reserved while code work is already complete.
 - Docker workspace preparation must lock by workspace, not by repository. Host worktree mode still needs a repo lock around `git worktree` metadata, but Docker volume seeding and checkout should proceed concurrently for different task workspaces.
+- LOCAL and REMOTE no-PR worker-branch merges should run through a temporary worktree; REMOTE pushes only the sprint feature branch after the merge. The visible project checkout should not be switched or dirtied by this path, and settled tasks should not keep stale worker-branch evidence in runtime projection.
 - Exact remote branch fetches should be narrow and in-flight deduplicated per repo and branch. Do not reintroduce broad `git fetch origin` calls in the task prepare hot path.
 - Docker workspace seed bundles should reuse identical targeted bundles across a concurrent wave. Reuse must be keyed by repo, exact ref list, and current ref tips, and should be short-lived; broad `--all` bundles are in-flight-only to avoid stale all-ref snapshots.
+- Docker helper image readiness should be cached per process after a successful `docker image inspect`/pull. High-concurrency DAGs must not run `docker image inspect alpine/git` before every helper command.
 - Docker patch export should remain a single workspace command with `git ls-files -z` piped through `xargs -0 git add --intent-to-add --`, followed by `git diff --binary`. This avoids repeated Docker helper startup and avoids passing large untracked path lists through host or Docker argv.
 - Host patch materialization should remain a single shell command that applies the temporary index, writes the tree, creates the commit, updates the worker branch, optionally refreshes a clean checked-out worker branch, and emits `git diff --numstat` for activity stats. Local-git mode should not probe or push remotes during this stage.
 - Expected terminal-session activity skips should be debug-level. Warning-level logging is reserved for foreign-session matches or data-integrity risks.

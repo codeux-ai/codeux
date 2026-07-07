@@ -496,6 +496,8 @@ export interface UpdateTaskInput {
   isIndependent?: boolean;
   isMerged?: boolean;
   mergeIndicator?: string | null;
+  mergeConflictSourceBranch?: string | null;
+  mergeConflictTargetBranch?: string | null;
   sourceType?: string | null;
   sourcePath?: string | null;
 }

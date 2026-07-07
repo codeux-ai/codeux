@@ -183,6 +183,7 @@ export class WorkspaceManager implements IWorkspaceManager {
   private readonly remoteFetches = new Map<string, Promise<void>>();
   private readonly runtimeVolumesWithInitializedOwnership = new Set<string>();
   private readonly gitBundleLeases = new Map<string, GitBundleLease>();
+  private readonly publicHelperImageChecks = new Map<string, Promise<void>>();
 
   buildWorktreePath(repoPath: string, sessionId: string, executionMode: CliWorkflowSettings["executionMode"]): string {
     return this.buildWorkspaceRef(repoPath, sessionId, executionMode);
@@ -378,6 +379,20 @@ export class WorkspaceManager implements IWorkspaceManager {
         // Coding tasks only need the worker and feature branches to resolve the start ref; seed just
         // those instead of every accumulated branch (falls back to the full seed if a ref is missing).
         await this.seedAndCheckoutBranchVolume(repoPath, workspaceRef, [workerBranch, featureBranch], workerBranch, startRef, refLookup);
+        try {
+          await this.assertWorkspaceHasHead(workspaceRef);
+        } catch {
+          await this.removeWorktree(repoPath, workspaceRef).catch(() => undefined);
+          await this.createVolume(workspaceRef);
+          await this.seedWorkspaceFromBundle(
+            repoPath,
+            workspaceRef,
+            undefined,
+            [workerBranch, featureBranch],
+            { branch: workerBranch, startRef },
+          );
+          await this.assertWorkspaceHasHead(workspaceRef);
+        }
       } else {
         await this.withRepoLock(repoPath, async () => {
           await this.removeWorktree(repoPath, workspaceRef).catch(() => undefined);
@@ -394,6 +409,10 @@ export class WorkspaceManager implements IWorkspaceManager {
     });
 
     return { worktreePath: workspaceRef, resumed };
+  }
+
+  private async assertWorkspaceHasHead(worktreePath: string): Promise<void> {
+    await this.runWorkspaceCommand(worktreePath, "git", ["rev-parse", "--verify", "HEAD"]);
   }
 
   /**
@@ -1067,6 +1086,21 @@ export class WorkspaceManager implements IWorkspaceManager {
   }
 
   private async ensurePublicHelperImage(image: string, cwd: string, env: NodeJS.ProcessEnv): Promise<void> {
+    const existingCheck = this.publicHelperImageChecks.get(image);
+    if (existingCheck) {
+      await existingCheck;
+      return;
+    }
+
+    const check = this.ensurePublicHelperImageUncached(image, cwd, env).catch((error) => {
+      this.publicHelperImageChecks.delete(image);
+      throw error;
+    });
+    this.publicHelperImageChecks.set(image, check);
+    await check;
+  }
+
+  private async ensurePublicHelperImageUncached(image: string, cwd: string, env: NodeJS.ProcessEnv): Promise<void> {
     try {
       await runCommandStrict("docker", ["image", "inspect", image], cwd, env);
       return;

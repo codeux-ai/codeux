@@ -3105,8 +3105,9 @@ describe("ExecutionRepository", () => {
     const task2 = projectRepository.createTask(project.id, { sprintId: sprint.id, title: "Task 2", promptMarkdown: "Prompt 2" });
     const task3 = projectRepository.createTask(project2.id, { sprintId: sprint2.id, title: "Task 3", promptMarkdown: "Prompt 3" });
     const task4 = projectRepository.createTask(project2.id, { sprintId: sprint2.id, title: "Task 4", promptMarkdown: "Prompt 4" });
+    const task5 = projectRepository.createTask(project2.id, { sprintId: sprint2.id, title: "Task 5", promptMarkdown: "Prompt 5" });
 
-    executionRepository.createTaskRun({
+    const terminalTaskRun = executionRepository.createTaskRun({
       projectId: project.id,
       sprintId: sprint.id,
       taskId: task1.id,
@@ -3133,6 +3134,23 @@ describe("ExecutionRepository", () => {
       taskId: task4.id,
       provider: "mockup-cli",
       state: "COMPLETED",
+    });
+    executionRepository.createTaskRun({
+      projectId: project2.id,
+      sprintId: sprint2.id,
+      taskId: task5.id,
+      provider: "mockup-cli",
+      state: "RUNNING",
+    });
+    executionRepository.createProviderInvocationUsage({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task1.id,
+      taskRunId: terminalTaskRun.id,
+      provider: "mockup-cli",
+      purpose: "task_coding",
+      sessionId: terminalTaskRun.id,
+      status: "completed",
     });
 
     const allCounts = executionRepository.countGlobalRunningTaskRunsPerProvider();

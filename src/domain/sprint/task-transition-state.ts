@@ -186,10 +186,19 @@ export function decideTaskStatusDerivation(
     return { status: "BLOCKED", resetRuntime: false };
   }
 
+  if (task.status === "CODING_COMPLETED" || task.status === "COMPLETED") {
+    const projection = resolveTaskPipelineStage({
+      status: task.status,
+      isMerged: Boolean(task.is_merged),
+      mergeIndicator: task.merge_indicator,
+      workerBranch: task.worker_branch,
+      prUrl: task.pr_url,
+    }, options);
+    return { status: projection.status, resetRuntime: false };
+  }
+
   if (
     task.status === "RUNNING"
-    || task.status === "CODING_COMPLETED"
-    || task.status === "COMPLETED"
     || task.status === "FAILED"
     || task.status === "QA_REVIEW_FAILED"
   ) {

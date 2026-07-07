@@ -51,6 +51,7 @@ function buildDeps(): SprintOrchestratorDependencies {
     } as any,
     projectAttentionService: {
       resolveItems: vi.fn(),
+      resolveItem: vi.fn(),
       openItems: vi.fn(),
       resolveItemsForTask: vi.fn(),
       resolveItemsForSprintRun: vi.fn(),
@@ -89,6 +90,56 @@ function buildDeps(): SprintOrchestratorDependencies {
 }
 
 describe("CycleRunner attention sync", () => {
+  it("consumes duplicate resolved worker conflict signals that no longer have merge work", async () => {
+    const deps = buildDeps();
+    deps.projectAttentionService = {
+      ...deps.projectAttentionService,
+      listResolvedWorkerMergeConflicts: vi.fn().mockReturnValue([
+        {
+          itemId: "attention-1",
+          taskId: "task-1",
+          sourceBranch: null,
+          targetBranch: null,
+        },
+        {
+          itemId: "attention-2",
+          taskId: "task-1",
+          sourceBranch: null,
+          targetBranch: null,
+        },
+      ]),
+      patchItemPayload: vi.fn(),
+    } as any;
+    const runner = new CycleRunner(deps);
+
+    const result = await (runner as any).collectResolvedWorkerMergeConflictState({
+      executionContext: {
+        project: { id: "project-1" },
+        sprint: { id: "sprint-1" },
+      },
+      repoPath: "/repo/project-1",
+      sprintRunId: "run-1",
+    });
+
+    expect(result.clearKeys).toEqual(new Set(["task-1\u0000\u0000"]));
+    expect(result.suppressKeys).toEqual(new Set(["task-1\u0000\u0000"]));
+    expect(deps.projectAttentionService.patchItemPayload).toHaveBeenCalledTimes(2);
+    expect(deps.projectAttentionService.patchItemPayload).toHaveBeenCalledWith(
+      "attention-1",
+      expect.objectContaining({
+        branchMergeRetryConsumed: true,
+        branchMergeRetryHadWork: false,
+      }),
+    );
+    expect(deps.projectAttentionService.patchItemPayload).toHaveBeenCalledWith(
+      "attention-2",
+      expect.objectContaining({
+        branchMergeRetryConsumed: true,
+        branchMergeRetryHadWork: false,
+      }),
+    );
+  });
+
   it("opens merge and action attention items and resolves cleared task attention", async () => {
     const deps = buildDeps();
     const runner = new CycleRunner(deps);
@@ -191,6 +242,101 @@ describe("CycleRunner attention sync", () => {
     expect(deps.projectAttentionService.resolveItems).toHaveBeenCalledWith(expect.arrayContaining([
       { filter: { projectId: "project-1", taskId: "task-3", attentionTypes: ["action_required"] }, resolution: { status: "resolved", reason: "action_required_cleared" } }
     ]));
+  });
+
+  it("settles branch-only completed tasks before feature PR polling and starts newly unblocked dependents", async () => {
+    const deps = buildDeps();
+    deps.getCiStatusForScope = vi.fn().mockResolvedValue(null) as any;
+    deps.startTask = vi.fn().mockResolvedValue({
+      id: "session-2",
+      name: "sessions/session-2",
+      provider: "mockup-cli",
+      runtimeLabel: "MOCKUP",
+    }) as any;
+    const runner = new CycleRunner(deps);
+    const evaluateCiGate = vi.fn().mockImplementation(async (subtasks, context) => {
+      for (const task of subtasks) {
+        task.status = "COMPLETED";
+        task.is_merged = false;
+        task.merge_indicator = undefined;
+        task.worker_branch = undefined;
+        await context.persistMergedTask(task);
+      }
+      return { subtasks, reportText: "fast branch-only settled\n" };
+    });
+    (runner as any).featurePrGate = { evaluateCiGate };
+
+    vi.mocked(deps.sprintExecutionStateService.loadSubtasks).mockResolvedValue([
+      {
+        id: "T1",
+        record_id: "task-1",
+        title: "Finished parent",
+        prompt: "parent",
+        depends_on: [],
+        status: "CODING_COMPLETED",
+        session_state: "COMPLETED",
+        provider: "mockup-cli",
+        worker_branch: "task/feature-parent",
+        is_merged: false,
+      },
+      {
+        id: "T2",
+        record_id: "task-2",
+        title: "Dependent",
+        prompt: "dependent",
+        depends_on: ["T1"],
+        status: "PENDING",
+        is_merged: false,
+      },
+    ] as any);
+
+    const result = await runner.run({
+      action: "orchestrate",
+      automationLevel: "SEMI_AUTO",
+      automationInterventions: DEFAULT_DASHBOARD_SETTINGS.automationInterventions,
+      executionContext: {
+        project: { id: "project-1", name: "Project 1" } as any,
+        sprint: { id: "sprint-1", name: "Sprint 1" } as any,
+        sprintNumber: 1,
+        repoPath: "/repo/project-1",
+        featureBranch: "feature/sprint-1",
+        defaultBranch: "main",
+      },
+      repoPath: "/repo/project-1",
+      defaultFeatureBranch: "feature/sprint-1",
+      retryFailed: false,
+      loopSteps: {
+        loadSubtasks: true,
+        sessionSync: false,
+        statusDerivation: true,
+        startReadyTasks: true,
+        statusTable: false,
+        mergeProtocol: false,
+        actionRequiredProtocol: false,
+      } as any,
+      ciIntelligence: {
+        enabled: false,
+      } as any,
+      githubMode: "REMOTE",
+      defaultBranch: "main",
+      featureBranchPrefix: "feature/",
+      sprintRunId: "run-1",
+    });
+
+    expect(evaluateCiGate).toHaveBeenCalledTimes(1);
+    expect(deps.getCiStatusForScope).not.toHaveBeenCalled();
+    expect(deps.projectManagementRepository.updateTask).toHaveBeenCalledWith("task-1", expect.objectContaining({
+      status: "completed",
+      isMerged: false,
+      mergeIndicator: null,
+      mergeConflictSourceBranch: null,
+    }));
+    expect(deps.startTask).toHaveBeenCalledWith(expect.objectContaining({ id: "T2" }), expect.objectContaining({
+      sprintRunId: "run-1",
+      featureBranch: "feature/sprint-1",
+    }));
+    expect(result.subtasks.find((task) => task.id === "T1")?.status).toBe("COMPLETED");
+    expect(result.subtasks.find((task) => task.id === "T2")?.status).toBe("RUNNING");
   });
 
   it("escalates a merge_conflict only after the PR stays DIRTY across cycles (debounced)", async () => {
@@ -524,6 +670,104 @@ describe("CycleRunner attention sync", () => {
         resolution: { status: "resolved", reason: "merge_conflict_human_escalation_active" },
       },
     ]));
+  });
+
+  it("dismisses stale worker merge_conflict attention once the task conflict marker is cleared", async () => {
+    const deps = buildDeps();
+    const runner = new CycleRunner(deps);
+    vi.mocked(deps.sprintExecutionStateService.loadSubtasks).mockResolvedValue([
+      {
+        id: "T1",
+        record_id: "task-1",
+        title: "Resolved conflict task",
+        prompt: "Merge the fixed branch.",
+        depends_on: [],
+        is_independent: true,
+        status: "CODING_COMPLETED",
+        is_merged: false,
+        merge_indicator: null,
+        worker_branch: "worker/T1",
+      },
+    ] as any);
+    vi.mocked(deps.projectAttentionService.listActiveProjectItems).mockReturnValue([
+      {
+        id: "attention-worker-1",
+        projectId: "project-1",
+        sprintId: "sprint-1",
+        taskId: "task-1",
+        sprintRunId: "run-1",
+        dispatchId: null,
+        attentionType: "merge_conflict",
+        severity: "high",
+        ownerType: "worker",
+        status: "open",
+        assignedWorkerEndpointId: null,
+        title: "Merge conflict for T1",
+        summaryMarkdown: "Conflict was previously detected.",
+        payload: {
+          taskKey: "T1",
+          workerBranch: "worker/T1",
+          conflictingBranches: { source: "worker/T1", target: "feature/sprint-1" },
+        },
+        openedAt: "2026-03-15T08:00:00.000Z",
+        claimedAt: null,
+        resolvedAt: null,
+        updatedAt: "2026-03-15T08:00:00.000Z",
+      },
+    ]);
+    deps.getCiStatusForScope = vi.fn().mockResolvedValue({
+      available: true,
+      openPullRequests: [],
+      ciRuns: [],
+      mergedPullRequests: [],
+    });
+
+    await runner.run({
+      action: "status",
+      automationLevel: "SEMI_AUTO",
+      automationInterventions: DEFAULT_DASHBOARD_SETTINGS.automationInterventions,
+      executionContext: {
+        project: { id: "project-1", name: "Project 1" } as any,
+        sprint: { id: "sprint-1", name: "Sprint 1" } as any,
+        sprintNumber: 1,
+        repoPath: "/repo/project-1",
+        featureBranch: "feature/sprint-1",
+        defaultBranch: "main",
+      },
+      repoPath: "/repo/project-1",
+      defaultFeatureBranch: "feature/sprint-1",
+      retryFailed: false,
+      loopSteps: {
+        loadSubtasks: true,
+        sessionSync: false,
+        statusDerivation: false,
+        startReadyTasks: false,
+        statusTable: false,
+        mergeProtocol: true,
+        actionRequiredProtocol: true,
+        watchLoopIntervalSeconds: 2,
+      } as any,
+      ciIntelligence: {
+        ...DEFAULT_DASHBOARD_SETTINGS.ciIntelligence,
+        enabled: false,
+        resolveMergeConflicts: true,
+      },
+      githubMode: "REMOTE",
+      defaultBranch: "main",
+      featureBranchPrefix: "feature/",
+      sprintRunId: "run-1",
+    });
+
+    expect(deps.projectAttentionService.resolveItem).toHaveBeenCalledWith(
+      "attention-worker-1",
+      expect.objectContaining({
+        status: "dismissed",
+        reason: "stale_worker_merge_conflict_cleared",
+        payloadPatch: expect.objectContaining({
+          staleWorkerConflictClearedByCycle: true,
+        }),
+      }),
+    );
   });
 
   it("escalates auto-merge conflict failures to worker-owned merge_conflict attention", async () => {

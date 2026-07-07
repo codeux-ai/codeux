@@ -724,6 +724,19 @@ export class ProviderExecutionService {
       }
 
       if (classification.category !== "UNKNOWN") {
+        if (execInvocationId && this.isExecutionInvocationStillRunning(execInvocationId) && !isRuntimeShutdownInProgress()) {
+          const terminalStatus = args.signal?.aborted ? "cancelled" : "failed";
+          this.deps.executionRepository?.updateExecutionInvocation(execInvocationId, {
+            status: terminalStatus,
+            provider: args.provider,
+            model: effectiveModel,
+            finishedAt: new Date().toISOString(),
+            errorMessage: classification.userMessage,
+            lastErrorCategory: classification.category,
+            lastErrorMessage: classification.userMessage,
+            lastRetryAfterIso: retryAfterIso,
+          });
+        }
         throw new ProviderQuotaError({
           ...classification,
           resetAtIso: retryAfterIso,

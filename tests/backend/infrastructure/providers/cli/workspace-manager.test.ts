@@ -456,6 +456,64 @@ describe("WorkspaceManager", () => {
     ]);
   });
 
+  it("reseeds a Docker prepare worktree when the prepared volume has no HEAD", async () => {
+    let headChecks = 0;
+    vi.mocked(runCommandStrict).mockImplementation(async (command, args) => {
+      if (command === "git" && args[0] === "rev-parse" && args[1] === "--show-toplevel") {
+        return { ok: true, stdout: "/repo/project\n", stderr: "" } as any;
+      }
+      if (command === "git" && args[0] === "remote" && args[1] === "get-url") {
+        return { ok: true, stdout: "https://github.com/example/project.git\n", stderr: "" } as any;
+      }
+      if (command === "git" && args[0] === "fetch") {
+        return { ok: true, stdout: "", stderr: "" } as any;
+      }
+      if (command === "git" && args[0] === "show-ref") {
+        if (args.includes("refs/remotes/origin/feature/task-1")
+          || args.includes("refs/remotes/origin/feature/sprint-1")) {
+          return { ok: true, stdout: "", stderr: "" } as any;
+        }
+        throw new Error("missing ref");
+      }
+      if (command === "docker" && args[0] === "volume" && args[1] === "inspect") {
+        throw new Error("missing");
+      }
+      if (
+        command === "docker"
+        && args.includes("--entrypoint")
+        && args.includes("git")
+        && args.includes("rev-parse")
+        && args.includes("--verify")
+        && args.includes("HEAD")
+      ) {
+        headChecks += 1;
+        if (headChecks === 1) {
+          throw new Error("not a git repository");
+        }
+        return { ok: true, stdout: "abc123\n", stderr: "", code: 0, signal: null } as any;
+      }
+      return { ok: true, stdout: "", stderr: "", code: 0, signal: null } as any;
+    });
+
+    await manager.prepareWorktree(
+      "/repo/project",
+      "docker-volume://code-ux-project-abcd1234ef56-session-1",
+      "feature/task-1",
+      "feature/sprint-1",
+    );
+
+    expect(headChecks).toBe(2);
+    const seedCalls = vi.mocked(runCommandStrict).mock.calls.filter((call) =>
+      call[0] === "docker"
+      && call[1].includes("--entrypoint")
+      && call[1].includes("sh")
+      && call[4]
+      && typeof call[4] === "object"
+      && "stdinFile" in call[4]
+    );
+    expect(seedCalls.length).toBeGreaterThanOrEqual(2);
+  });
+
   it("prepares different Docker workspaces concurrently instead of serializing the whole repo", async () => {
     let firstSeedStarted!: () => void;
     const firstSeedStartedPromise = new Promise<void>((resolve) => { firstSeedStarted = resolve; });
@@ -795,6 +853,25 @@ describe("WorkspaceManager", () => {
       "GIT_CONFIG_VALUE_0=Authorization: Basic redacted",
     ]));
     expect(call?.[1]).not.toContain("APP_SECRET_SHOULD_NOT_LEAK=secret");
+  });
+
+  it("reuses successful public helper image checks across Docker workspace commands", async () => {
+    vi.mocked(runCommandStrict).mockResolvedValue({ ok: true, stdout: "", stderr: "" } as any);
+
+    await Promise.all([
+      manager.runWorkspaceCommand("docker-volume://workspace-1", "git", ["status", "--short"]),
+      manager.runWorkspaceCommand("docker-volume://workspace-2", "git", ["status", "--short"]),
+      manager.runWorkspaceCommand("docker-volume://workspace-3", "git", ["status", "--short"]),
+    ]);
+
+    const inspectCalls = vi.mocked(runCommandStrict).mock.calls.filter((call) =>
+      call[0] === "docker" && call[1][0] === "image" && call[1][1] === "inspect"
+    );
+    const runCalls = vi.mocked(runCommandStrict).mock.calls.filter((call) =>
+      call[0] === "docker" && call[1][0] === "run"
+    );
+    expect(inspectCalls).toHaveLength(1);
+    expect(runCalls).toHaveLength(3);
   });
 
   it("allows callers to override Docker workspace Git identity env", async () => {

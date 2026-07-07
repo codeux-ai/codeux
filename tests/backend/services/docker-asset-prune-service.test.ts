@@ -139,6 +139,54 @@ describe("DockerAssetPruneService", () => {
     );
   });
 
+  it("preserves completed tracked CLI workspace volumes until explicit cleanup", async () => {
+    const sessionTracking = {
+      listTrackedCliSessions: vi.fn(() => [
+        { id: "cli-mockup-cli-completed", state: "COMPLETED", provider: "mockup-cli", repoPath: "/repo/a", updateTime: "" },
+      ]),
+    } as unknown as SessionTrackingRepository;
+
+    vi.mocked(runCommandStrict).mockImplementation(async (_command, args) => {
+      if (args[0] === "volume" && args[1] === "ls" && args.includes("label=code-ux.workspace=true")) {
+        return {
+          ok: true,
+          stdout: [
+            "code-ux-repo-aaaaaaaaaaaa-cli-mockup-cli-completed",
+            "code-ux-repo-aaaaaaaaaaaa-cli-mockup-cli-orphaned",
+          ].join("\n"),
+          stderr: "",
+          code: 0,
+        } as any;
+      }
+      if (args[0] === "volume" && args[1] === "ls" && args.includes("label=code-ux.workspace-runtime=true")) {
+        return {
+          ok: true,
+          stdout: [
+            "code-ux-repo-aaaaaaaaaaaa-cli-mockup-cli-completed-runtime",
+            "code-ux-repo-aaaaaaaaaaaa-cli-mockup-cli-orphaned-runtime",
+          ].join("\n"),
+          stderr: "",
+          code: 0,
+        } as any;
+      }
+      return {
+        ok: true,
+        stdout: "",
+        stderr: "",
+        code: 0,
+      } as any;
+    });
+
+    const result = await new DockerAssetPruneService(sessionTracking).cleanupOnStartup();
+
+    expect(result.prunedWorkspaceVolumes).toEqual([
+      "code-ux-repo-aaaaaaaaaaaa-cli-mockup-cli-orphaned",
+      "code-ux-repo-aaaaaaaaaaaa-cli-mockup-cli-orphaned-runtime",
+    ]);
+    expect(result.prunedWorkspaceVolumes).not.toContain("code-ux-repo-aaaaaaaaaaaa-cli-mockup-cli-completed");
+    expect(result.prunedWorkspaceVolumes).not.toContain("code-ux-repo-aaaaaaaaaaaa-cli-mockup-cli-completed-runtime");
+  });
+
   it("prunes orphaned login containers on startup", async () => {
     const sessionTracking = {
       listTrackedCliSessions: vi.fn(() => []),

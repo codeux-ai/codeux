@@ -102,9 +102,9 @@ describe("RuntimeStatusProjection", () => {
     `).run("run-1", project.id, sprint.id, task.id, "COMPLETED", "2024-01-01T10:00:00Z", "2024-01-01T10:05:00Z");
 
     db.prepare(`
-      INSERT INTO task_runs (id, project_id, sprint_id, task_id, state, started_at, finished_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-    `).run("run-2", project.id, sprint.id, task.id, "FAILED", "2024-01-01T11:00:00Z", "2024-01-01T11:01:00Z");
+      INSERT INTO task_runs (id, project_id, sprint_id, task_id, state, worker_branch, started_at, finished_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `).run("run-2", project.id, sprint.id, task.id, "FAILED", "task/stale-merged-branch", "2024-01-01T11:00:00Z", "2024-01-01T11:01:00Z");
 
     const status = projection.buildProjectStatus(project.id, sprint.id, null);
 
@@ -114,6 +114,7 @@ describe("RuntimeStatusProjection", () => {
       is_merged: true,
       merge_indicator: "MERGED",
     });
+    expect(status.subtasks[0]?.worker_branch).toBeUndefined();
   });
 
   it("projects latest task QA review summaries for live status", async () => {

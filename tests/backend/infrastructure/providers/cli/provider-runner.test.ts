@@ -105,6 +105,38 @@ describe("ProviderRunner", () => {
     await fs.rm(repoPath, { recursive: true, force: true });
   });
 
+  it("ignores generic validation language outside explicit mockup directives", async () => {
+    const repoPath = await fs.mkdtemp(path.join(os.tmpdir(), "mockup-cli-explicit-only-"));
+
+    const result = await runner.runProviderForText({
+      provider: "mockup-cli",
+      prompt: [
+        "## SYSTEM INSTRUCTIONS",
+        "2. **Unit & Integration**: `npm run test` and `npm run test:coverage` must pass.",
+        "",
+        "## SUBTASK TO EXECUTE",
+        "Use only the deterministic mockup-cli directives below.",
+        "mockup-cli:write src/generated.txt :: explicit directives only",
+        "",
+        "## MEMORY CONTEXT",
+        "- [patterns] Run validation commands: npm run missing-script",
+      ].join("\n"),
+      cwd: repoPath,
+      model: "default",
+      apiKey: "",
+      sessionId: "mock-session-explicit-only",
+      workflowSettings: { executionMode: "HOST" } as any,
+      repoPath,
+      onActivity: vi.fn(),
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.text).toBe("Mockup CLI completed deterministic workspace task.");
+    await expect(fs.readFile(path.join(repoPath, "src/generated.txt"), "utf8")).resolves.toBe("explicit directives only\n");
+
+    await fs.rm(repoPath, { recursive: true, force: true });
+  });
+
   it("returns a nonzero mockup-cli failure for explicit failure directives", async () => {
     const repoPath = await fs.mkdtemp(path.join(os.tmpdir(), "mockup-cli-fail-"));
 
@@ -183,6 +215,17 @@ describe("ProviderRunner", () => {
       "}",
       "",
     ].join("\n"), "utf8");
+    await fs.mkdir(path.join(repoPath, ".code-ux"), { recursive: true });
+    await fs.writeFile(path.join(repoPath, ".code-ux", "mockup-pentest.log"), [
+      "<<<<<<< HEAD",
+      "left task completed",
+      "||||||| merged common ancestors",
+      "root task completed",
+      "=======",
+      "right task completed",
+      ">>>>>>> task/right",
+      "",
+    ].join("\n"), "utf8");
 
     const result = await runner.runProviderForText({
       provider: "mockup-cli",
@@ -203,6 +246,11 @@ describe("ProviderRunner", () => {
     expect(readme).not.toContain("<<<<<<<");
     expect(readme).not.toContain(">>>>>>>");
     await expect(fs.readFile(path.join(repoPath, "src", "conflict-target.js"), "utf8")).resolves.toContain("return 'left+right';");
+    const pentestLog = await fs.readFile(path.join(repoPath, ".code-ux", "mockup-pentest.log"), "utf8");
+    expect(pentestLog).toContain("left task completed");
+    expect(pentestLog).toContain("right task completed");
+    expect(pentestLog).not.toContain("|||||||");
+    expect(pentestLog).not.toContain("<<<<<<<");
 
     await fs.rm(repoPath, { recursive: true, force: true });
   });

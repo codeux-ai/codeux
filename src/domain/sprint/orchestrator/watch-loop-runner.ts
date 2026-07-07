@@ -474,15 +474,25 @@ export class WatchLoopRunner {
     allTasksSettled?: boolean;
     allTerminal: boolean;
     noMoreActionPossible: boolean;
-    activeMainMergeAttentionItems: Array<{ id: string; sprintRunId: string | null; attentionType: string; ownerType?: string; status?: string; summaryMarkdown: string; payload: Record<string, unknown> | null }>;
+    activeMainMergeAttentionItems: Array<{ id: string; sprintId?: string | null; sprintRunId: string | null; attentionType: string; ownerType?: string; status?: string; summaryMarkdown: string; payload: Record<string, unknown> | null }>;
   }): Promise<{ status: "continue" | "exit" | "wait"; report: string }> {
     const {
       scopedExecutionContext, sprintRunId, repoPath, defaultFeatureBranch, defaultBranch,
       featureBranchPrefix, githubMode, ciIntelligence, subtasks, runningTasks, readyTasks,
-      manualMergeTasks, needsManualMerge, allTasksSettled, allTerminal, noMoreActionPossible, activeMainMergeAttentionItems
+      manualMergeTasks, needsManualMerge, allTasksSettled, allTerminal, noMoreActionPossible
     } = params;
 
     let report = "";
+    const mainMergeAttentionItems = collectActiveMainMergeAttentionItems(
+      this.deps.projectAttentionService,
+      scopedExecutionContext.project.id,
+      {
+        sprintId: scopedExecutionContext.sprint.id,
+        sprintRunId,
+        sourceBranch: defaultFeatureBranch,
+        targetBranch: defaultBranch,
+      },
+    );
     const allTasksSettledForFinalization = allTasksSettled ?? (
       subtasks.length > 0
       && evaluateSprintTransitionState({
@@ -578,7 +588,7 @@ export class WatchLoopRunner {
           githubMode !== "LOCAL"
           && ciIntelligence.resolveMainMergeConflicts
           && mergeFeedback.hasMergeConflict
-          && activeMainMergeAttentionItems.length === 0
+          && mainMergeAttentionItems.length === 0
         ) {
           this.deps.projectAttentionService.openItems([buildTaskAttentionPayload({
             projectId: scopedExecutionContext.project.id,
@@ -622,7 +632,12 @@ export class WatchLoopRunner {
           resolveMainMergeAttentionItems(
             this.deps.projectAttentionService,
             scopedExecutionContext.project.id,
-            sprintRunId,
+            {
+              sprintId: scopedExecutionContext.sprint.id,
+              sprintRunId,
+              sourceBranch: defaultFeatureBranch,
+              targetBranch: defaultBranch,
+            },
             {
               kinds: ["merge_conflict"],
               reason: "main_merge_conflict_cleared",
@@ -638,7 +653,7 @@ export class WatchLoopRunner {
           && ciIntelligence.resolveMainMergeFailedChecks
           && mergeFeedback.state === "failed_checks"
           && mergeFeedback.hasFailedChecks
-          && activeMainMergeAttentionItems.length === 0
+          && mainMergeAttentionItems.length === 0
         ) {
           this.deps.projectAttentionService.openItems([buildTaskAttentionPayload({
             projectId: scopedExecutionContext.project.id,
@@ -682,7 +697,12 @@ export class WatchLoopRunner {
           resolveMainMergeAttentionItems(
             this.deps.projectAttentionService,
             scopedExecutionContext.project.id,
-            sprintRunId,
+            {
+              sprintId: scopedExecutionContext.sprint.id,
+              sprintRunId,
+              sourceBranch: defaultFeatureBranch,
+              targetBranch: defaultBranch,
+            },
             {
               kinds: ["ci_fix_required"],
               reason: "main_merge_checks_passed",
@@ -693,7 +713,12 @@ export class WatchLoopRunner {
         const remainingMainMergeAttentionItems = collectActiveMainMergeAttentionItems(
           this.deps.projectAttentionService,
           scopedExecutionContext.project.id,
-          sprintRunId,
+          {
+            sprintId: scopedExecutionContext.sprint.id,
+            sprintRunId,
+            sourceBranch: defaultFeatureBranch,
+            targetBranch: defaultBranch,
+          },
         );
         const mainMergeMode = ciIntelligence.mainBranchAutoMergeMode;
         const decision = decideMainMergeWaitOrPause({
@@ -728,8 +753,8 @@ export class WatchLoopRunner {
         }
 
         if (githubMode === "LOCAL") {
-          if (activeMainMergeAttentionItems.length > 0) {
-            const humanMustAct = activeMainMergeAttentionItems.some((item) => isHumanEscalatedAttentionItem(item));
+          if (mainMergeAttentionItems.length > 0) {
+            const humanMustAct = mainMergeAttentionItems.some((item) => isHumanEscalatedAttentionItem(item));
             if (!humanMustAct) {
               return {
                 status: "wait",
@@ -767,7 +792,24 @@ export class WatchLoopRunner {
           }
 
           if (dirtyCheckout) {
-            report += `- ⚠️ **Dirty checkout preserved:** Committed dirty work on \`${dirtyCheckout.dirtyRefBranch}\` before the local merge continued.\n`;
+            this.deps.projectAttentionService.openItems([{
+              projectId: scopedExecutionContext.project.id,
+              sprintId: scopedExecutionContext.sprint.id,
+              sprintRunId,
+              attentionType: "action_required",
+              severity: "medium",
+              ownerType: "system",
+              title: "Local dirty work preserved",
+              summaryMarkdown: `User-created dirty work was moved to branch \`${dirtyCheckout.dirtyRefBranch}\` before Code UX merged the sprint. Review that branch when you are ready; Code UX did not merge it automatically.`,
+              payload: {
+                reason: "local_dirty_checkout_preserved",
+                dirtyRefBranch: dirtyCheckout.dirtyRefBranch,
+                originalRef: dirtyCheckout.originalRef,
+                defaultBranch,
+                featureBranch: defaultFeatureBranch,
+              },
+            }]);
+            report += `- ⚠️ **Dirty checkout preserved:** User-created dirty work was committed on \`${dirtyCheckout.dirtyRefBranch}\` and left there for manual review.\n`;
           }
 
           let mainMerge: LocalMergeResult = {
@@ -797,41 +839,6 @@ export class WatchLoopRunner {
 
           if (mainMerge.ok) {
             report += `- ✅ **Merged locally:** Sprint feature branch \`${defaultFeatureBranch}\` merged into default branch \`${defaultBranch}\`.\n`;
-            if (dirtyCheckout) {
-              let dirtyMerge: LocalMergeResult = {
-                ok: false,
-                conflict: false,
-                error: "Dirty checkout merge did not run.",
-              };
-              try {
-                dirtyMerge = await mergeBranchLocallyInTemporaryWorktree({
-                  repoPath,
-                  targetBranch: defaultBranch,
-                  sourceBranch: dirtyCheckout.dirtyRefBranch,
-                  commitMessage: `Merge preserved dirty checkout '${dirtyCheckout.dirtyRefBranch}' into ${defaultBranch}`,
-                  fallbackTargetBranches: [
-                    scopedExecutionContext.project.defaultBranch || "",
-                    "main",
-                    "master",
-                  ],
-                });
-              } catch (err) {
-                dirtyMerge = {
-                  ok: false,
-                  conflict: false,
-                  error: err instanceof Error ? err.message : String(err),
-                };
-              }
-
-              if (dirtyMerge.ok) {
-                report += `- ✅ **Dirty checkout merged:** Preserved branch \`${dirtyCheckout.dirtyRefBranch}\` merged into default branch \`${defaultBranch}\` after the sprint merge.\n`;
-              } else {
-                report += `- ⚠️ **Dirty checkout preserved:** Branch \`${dirtyCheckout.dirtyRefBranch}\` could not merge cleanly after the sprint merge and was kept as a backup.\n`;
-                this.deps.logger.warn(
-                  `LOCAL Mode: Preserved dirty checkout ${dirtyCheckout.dirtyRefBranch} could not merge cleanly into ${defaultBranch}: ${dirtyMerge.error}`,
-                );
-              }
-            }
             // The sprint's work is now on the default branch; drop the feature branch so finished
             // sprints don't leave dead branches behind. Temporary-worktree merges leave the visible
             // checkout untouched, and git refuses to delete the currently checked-out branch anyway.
@@ -848,7 +855,12 @@ export class WatchLoopRunner {
             resolveMainMergeAttentionItems(
               this.deps.projectAttentionService,
               scopedExecutionContext.project.id,
-              sprintRunId,
+              {
+                sprintId: scopedExecutionContext.sprint.id,
+                sprintRunId,
+                sourceBranch: defaultFeatureBranch,
+                targetBranch: defaultBranch,
+              },
               {
                 kinds: ["merge_conflict", "ci_fix_required"],
                 reason: "main_merge_completed",
@@ -859,7 +871,7 @@ export class WatchLoopRunner {
             this.deps.logger.error(`LOCAL Mode: Failed to merge feature branch ${defaultFeatureBranch} into ${defaultBranch}: ${mainMerge.error}`);
 
             const isWorkerOwned = ciIntelligence.resolveMainMergeConflicts;
-            if (activeMainMergeAttentionItems.length === 0) {
+            if (mainMergeAttentionItems.length === 0) {
               this.deps.projectAttentionService.openItems([buildTaskAttentionPayload({
                 projectId: scopedExecutionContext.project.id,
                 sprintId: scopedExecutionContext.sprint.id,
@@ -896,7 +908,7 @@ export class WatchLoopRunner {
             // worker resolution is disabled, so a human must act from the start).
             const humanMustAct =
               !isWorkerOwned ||
-              activeMainMergeAttentionItems.some((item) => isHumanEscalatedAttentionItem(item));
+              mainMergeAttentionItems.some((item) => isHumanEscalatedAttentionItem(item));
 
             if (!humanMustAct) {
               return {
@@ -1216,6 +1228,7 @@ function resolveMainMergeAttentionItems(
   projectAttentionService: {
     listActiveProjectItems: (projectId: string) => Array<{
       id: string;
+      sprintId?: string | null;
       sprintRunId: string | null;
       attentionType: string;
       summaryMarkdown: string;
@@ -1230,7 +1243,12 @@ function resolveMainMergeAttentionItems(
     }) => unknown;
   },
   projectId: string,
-  sprintRunId: string,
+  scope: {
+    sprintId: string;
+    sprintRunId: string;
+    sourceBranch: string;
+    targetBranch: string;
+  },
   options: {
     kinds: Array<"merge_conflict" | "ci_fix_required">;
     reason: string;
@@ -1239,7 +1257,7 @@ function resolveMainMergeAttentionItems(
 ): void {
   const activeItems = projectAttentionService.listActiveProjectItems(projectId);
   for (const item of activeItems) {
-    if (item.sprintRunId !== sprintRunId) {
+    if (!isMainMergeAttentionInScope(item, scope)) {
       continue;
     }
     const kind = mainMergeAttentionItemKind(item);
@@ -1263,6 +1281,7 @@ function collectActiveMainMergeAttentionItems(
   projectAttentionService: {
     listActiveProjectItems: (projectId: string) => Array<{
       id: string;
+      sprintId?: string | null;
       sprintRunId: string | null;
       attentionType: string;
       ownerType?: string;
@@ -1272,17 +1291,70 @@ function collectActiveMainMergeAttentionItems(
     }>;
   },
   projectId: string,
-  sprintRunId: string,
+  scope: {
+    sprintId: string;
+    sprintRunId: string;
+    sourceBranch: string;
+    targetBranch: string;
+  },
 ): Array<{
   id: string;
+  sprintId?: string | null;
   sprintRunId: string | null;
   attentionType: string;
+  ownerType?: string;
+  status?: string;
   summaryMarkdown: string;
   payload: Record<string, unknown> | null;
 }> {
   return projectAttentionService.listActiveProjectItems(projectId).filter((item) => (
-    item.sprintRunId === sprintRunId && isMainMergeAttentionItem(item)
+    isMainMergeAttentionInScope(item, scope)
   ));
+}
+
+function isMainMergeAttentionInScope(
+  item: {
+    sprintId?: string | null;
+    sprintRunId: string | null;
+    attentionType: string;
+    payload: Record<string, unknown> | null;
+  },
+  scope: {
+    sprintId: string;
+    sprintRunId: string;
+    sourceBranch: string;
+    targetBranch: string;
+  },
+): boolean {
+  if (!isMainMergeAttentionItem(item)) {
+    return false;
+  }
+
+  if (item.sprintId && item.sprintId !== scope.sprintId) {
+    return false;
+  }
+
+  if (!item.sprintId && item.sprintRunId !== scope.sprintRunId) {
+    return false;
+  }
+
+  const payload = item.payload || {};
+  const conflictingBranches = typeof payload.conflictingBranches === "object" && payload.conflictingBranches !== null
+    ? payload.conflictingBranches as Record<string, unknown>
+    : null;
+  const sourceBranch = typeof conflictingBranches?.source === "string"
+    ? conflictingBranches.source
+    : typeof payload.featureBranch === "string"
+      ? payload.featureBranch
+      : null;
+  const targetBranch = typeof conflictingBranches?.target === "string"
+    ? conflictingBranches.target
+    : typeof payload.defaultBranch === "string"
+      ? payload.defaultBranch
+      : null;
+
+  return (!sourceBranch || sourceBranch === scope.sourceBranch)
+    && (!targetBranch || targetBranch === scope.targetBranch);
 }
 
 function buildMainMergeConflictSummary(args: {

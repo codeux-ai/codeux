@@ -3124,7 +3124,7 @@ describe.skip("Sprint Run Heartbeat", () => {
     );
   });
 
-  it("preserves dirty local checkout work and attempts to merge the backup after the clean merge", async () => {
+  it("preserves dirty local checkout work on a backup branch and opens a dashboard notification", async () => {
     const deps = buildDeps();
     const cycleRunner = buildCycleRunner();
     cycleRunner.run.mockResolvedValue({
@@ -3155,7 +3155,6 @@ describe.skip("Sprint Run Heartbeat", () => {
       originalRef: { ref: "main", detached: false },
     });
     const mergeSpy = vi.spyOn(localMerge, "mergeBranchLocallyInTemporaryWorktree")
-      .mockResolvedValueOnce({ ok: true, conflict: false })
       .mockResolvedValueOnce({ ok: true, conflict: false });
 
     try {
@@ -3189,13 +3188,22 @@ describe.skip("Sprint Run Heartbeat", () => {
         targetBranch: "main",
         sourceBranch: "feat",
       }));
-      expect(mergeSpy).toHaveBeenNthCalledWith(2, expect.objectContaining({
-        repoPath: "/tmp",
-        targetBranch: "main",
-        sourceBranch: "dirty-ref-123",
-      }));
+      expect(mergeSpy).toHaveBeenCalledTimes(1);
+      expect(deps.projectAttentionService.openItems).toHaveBeenCalledWith([
+        expect.objectContaining({
+          projectId: "project-1",
+          sprintId: "sprint-1",
+          sprintRunId: "run-1",
+          attentionType: "action_required",
+          ownerType: "human",
+          payload: expect.objectContaining({
+            reason: "local_dirty_checkout_preserved",
+            dirtyRefBranch: "dirty-ref-123",
+          }),
+        }),
+      ]);
       expect(result).toContain("Dirty checkout preserved");
-      expect(result).toContain("Dirty checkout merged");
+      expect(result).not.toContain("Dirty checkout merged");
     } finally {
       preserveSpy.mockRestore();
       mergeSpy.mockRestore();

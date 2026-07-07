@@ -122,15 +122,31 @@ export class ProjectRuntimeRepository {
         // After a rerun, the management API sets the DB task to status='pending' and
         // merge_indicator=null. A concurrent sprint cycle that loaded the task before
         // the rerun may still attempt to write the old merge_indicator (e.g. 'CI').
-        // The CASE expression below uses the pre-UPDATE DB status column value: when it
-        // is 'pending' (i.e. the task was just reset), always write NULL so that stale
-        // in-memory cycle data cannot restore a cleared indicator.
+        // The CASE expression below uses pre-UPDATE DB column values. It also blocks
+        // stale MERGE_CONFLICT snapshots from resurrecting a marker that a virtual
+        // worker just cleared after resolving the matching attention item.
         this.db.prepare(`
           UPDATE tasks
           SET status = COALESCE(?, status),
               is_merged = ?,
               merge_indicator = CASE
                 WHEN status = 'pending' THEN NULL
+                WHEN ? = 'MERGE_CONFLICT'
+                  AND EXISTS (
+                    SELECT 1
+                    FROM project_attention_items
+                    WHERE task_id = tasks.id
+                      AND attention_type = 'merge_conflict'
+                      AND owner_type = 'worker'
+                      AND status = 'resolved'
+                      AND json_extract(payload_json, '$.resolutionReason') IN (
+                        'virtual_worker_merge_conflict_resolved',
+                        'virtual_worker_merge_conflict_already_resolved'
+                      )
+                      AND (? IS NULL OR json_extract(payload_json, '$.conflictingBranches.source') = ?)
+                      AND (? IS NULL OR json_extract(payload_json, '$.conflictingBranches.target') = ?)
+                  )
+                THEN NULL
                 WHEN ? IS NOT NULL THEN ?
                 ELSE merge_indicator
               END,
@@ -139,6 +155,11 @@ export class ProjectRuntimeRepository {
         `).run(
           planningStatus,
           Number(Boolean(subtask.is_merged)),
+          scopedSubtask.merge_indicator || null,
+          scopedSubtask.worker_branch || null,
+          scopedSubtask.worker_branch || null,
+          status.feature_branch || null,
+          status.feature_branch || null,
           scopedSubtask.merge_indicator || null,
           scopedSubtask.merge_indicator || null,
           now,
