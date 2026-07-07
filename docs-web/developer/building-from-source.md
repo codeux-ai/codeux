@@ -100,6 +100,7 @@ codeux --help
 ```
 src/
 ├── index.ts                  # CLI entry
+├── electron/                 # desktop shell entrypoint and policies (does not own orchestration)
 ├── app/                      # lifecycle, dependency factory
 ├── config/                   # CLI flag + env parsing
 ├── contracts/                # shared types, MCP tool definitions
@@ -110,11 +111,11 @@ src/
 ├── integrations/             # Jules API client
 ├── mcp/                      # MCP server, request router, tool handlers
 ├── repositories/             # settings, agents, memory, project
-├── server/                   # Express dashboard server, routes, websocket
+├── server/                   # Express dashboard server (default port 4444), routes, websocket
 ├── services/                 # virtual-worker-service, sprint-markdown-service, etc.
 ├── shared/                   # config search paths, common utils
 ├── sprint/                   # cycle steps (start-ready-tasks, etc.)
-└── worker/                   # worker-mode entry (reserved)
+└── worker/                   # worker-host mode entrypoint (separate from main server)
 
 dashboard/
 ├── index.html
@@ -149,13 +150,13 @@ tests/
 pnpm run typecheck             # tsc --noEmit (server)
 pnpm run typecheck:dashboard   # tsc --noEmit (dashboard)
 pnpm run lint                  # alias for typecheck (no eslint shipped)
-pnpm test                      # vitest run (full suite)
+pnpm run test                  # vitest run (full suite)
 pnpm run test:watch            # vitest watch mode
 pnpm run test:backend          # backend only
 pnpm run test:dashboard        # dashboard only
 pnpm run test:coverage         # full coverage report
 pnpm run test:backend:coverage # backend coverage with threshold gate
-pnpm run ci                    # local CI: guardrails + audit + lint + backend coverage + dashboard tests + build
+pnpm run ci                    # local CI: quality:guardrails -> audit -> lint -> test:backend:coverage -> test:dashboard -> build
 pnpm run audit                 # pnpm audit --audit-level=high
 pnpm run smoke-test            # node dist/index.js --help
 pnpm run dev:server-only       # boot just the server from source
@@ -194,6 +195,6 @@ The CI tag pipeline runs the full build, runs the audit, and publishes to npm.
 
 ## Development tips
 
-- Use `pnpm run dev` + `pnpm run dev:dashboard` in two terminals for the fastest iteration loop.
+- Use `pnpm run dev` in one terminal (which starts both the server and dashboard watcher) for the fastest iteration loop.
 - The MCP stdio server only activates if stdin is not a TTY. To exercise it locally, pipe a JSON-RPC request: `echo '{"jsonrpc":"2.0","id":1,"method":"initialize"}' | node dist/index.js`.
 - For one-off MCP integration tests, the `--mcp-https` flag plus `curl` is the simplest harness.

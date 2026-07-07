@@ -8,7 +8,7 @@ Use it when you want to find a task by name, see what is running right now, or b
 
 | Column | Description |
 | --- | --- |
-| **Status** | One of `PENDING`, `RUNNING`, `CODING_COMPLETED`, `COMPLETED`, `FAILED`, `BLOCKED`, `QUOTA`, `QA_REVIEW_FAILED`. |
+| **Status** | One of `PENDING`, `RUNNING`, `CODING_COMPLETED`, `COMPLETED`, `FAILED`, `BLOCKED`, `QUOTA`, `QA_REVIEW_FAILED`. Dependencies show as blocked (`pending`), in progress (`coding_completed`/`in_progress`), QA failed (`QA_REVIEW_FAILED`), or resolved (`completed`). Live duration, PR links, and QA review states are also exposed here. |
 | **Title** | Task title from the markdown frontmatter. |
 | **Sprint** | The owning sprint. Click to jump to it. |
 | **Provider** | Which provider executed this task (`jules`, `gemini`, `codex`, `claude-code`, `qwen-code`, `opencode`). |
@@ -40,7 +40,7 @@ Each row has a **⋯** menu with:
 - **Edit** — open the task editor (title, prompt, dependencies, priority).
 - **Delete** — destructive; requires confirmation.
 
-These also map directly to MCP `manage_code_ux` actions on the `tasks` domain (`start`, `stop`, `force_stop`, `pause`, `update`, `delete`).
+These also map directly to MCP actions via the `manage_tasks` tool (`start`, `stop`, `force_stop`, `pause`, `update`, `delete`).
 
 ## Task details panel
 

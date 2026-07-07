@@ -28,7 +28,7 @@ Package manager is **pnpm** (`pnpm@10.33.0`), Node **22+**. Use `pnpm`, not `npm
 - `pnpm run typecheck` / `pnpm run lint`: strict `tsc --noEmit` (the two are the same command).
 - `pnpm run test`: full Vitest run. `pnpm run test:backend` / `pnpm run test:dashboard`: scoped suites.
 - `pnpm run test:watch`: watch mode. `pnpm run test:coverage`: coverage with threshold enforcement.
-- `pnpm run ci`: local CI equivalent (`lint` → `test:backend:coverage` → `test:dashboard` → `build`).
+- `pnpm run ci`: local CI equivalent (`quality:guardrails -> audit -> lint -> test:backend:coverage -> test:dashboard -> build`).
 - `pnpm run audit`: `pnpm audit --audit-level=high`.
 - `pnpm start`: run compiled `dist/index.js`. `node dist/index.js --help`: list CLI flags / env vars.
 - Electron: `pnpm run electron:dev`, `pnpm run electron:dist[:linux|:mac|:win]`.
@@ -75,7 +75,7 @@ Package manager is **pnpm** (`pnpm@10.33.0`), Node **22+**. Use `pnpm`, not `npm
   - `dev` is the integration branch. Always create and work from a feature branch off `dev` (never commit directly to `dev` or `main`).
   - Use descriptive branch names such as `feat/<scope>`, `fix/<scope>`, or `chore/<scope>`.
   - Merge changes into `dev` only via pull requests after required CI checks pass (not into `main`).
-  - Push branches to `origin` (`codeux-ai/codeux`) and target it for PRs.
+  - Push branches to `origin` (the `numnx/codeux` fork) and target it for PRs. `upstream` is `codeux-ai/codeux`.
   - Use GitHub CLI (`gh`) for PR workflow when available (for example `gh pr create --base dev`, `gh pr view`, `gh pr merge`).
 - PRs should include:
   - What changed and why.
@@ -165,7 +165,7 @@ Release note rules:
 - Default working flow for our collaboration:
   - Start every change on a new feature branch off `dev`.
   - Implement and validate locally (`pnpm run build` minimum; `pnpm run ci` preferred).
-  - Open a PR into `dev` against `origin` (`codeux-ai/codeux`) using GitHub CLI.
+  - Open a PR into `dev` against `origin` (the `numnx/codeux` fork) using GitHub CLI.
   - Monitor CI continuously after opening the PR.
   - Merge only through PR after all required CI checks pass without errors.
   - Delete merged feature branches to keep the branch list clean.

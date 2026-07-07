@@ -33,7 +33,7 @@ The browser preview provides an integrated environment for interacting with runn
 - Session removal actions keep the card mounted while removal is pending, set `aria-busy` on the card and remove button, suppress duplicate removal, and describe the pending reason from the disabled control.
 - The active sessions menu opens predictably from hover, click, focus, `Enter`, `Space`, `ArrowDown`, and `ArrowUp`; supports `ArrowUp`/`ArrowDown`/`Home`/`End` within enabled menu items; and restores focus to the trigger after `Escape` or outside-click close.
 - File-browser trees and change lists should expose tree/listbox semantics, selected file state, loading/error/empty regions, and wrapping long paths so keyboard users do not need pointer hover to inspect files or diffs.
-- Rebuild and stop track distinct pending actions. The active operation owns the button label, `aria-busy`, and status text; sibling controls are disabled with visible recovery text instead of relying on click-time announcements.
+- Rebuild, stop, and remove track distinct pending actions. The active operation owns the button label, `aria-busy`, and status text; sibling controls are disabled with visible recovery text instead of relying on click-time announcements. Preview sessions are explicitly scoped per project/sprint pair.
 - Launch controls set `aria-busy` on both the launch region and launch button while a container is starting. The selected session iframe remains mounted during refresh/starting states when a previous frame exists; do not replace stale preview content with a blank loading placeholder unless no frame exists.
 - Launch pending state keeps the selected sprint value visible, explains the disabled select and launch controls through status text and control titles, and prevents duplicate launch submission until the start request settles.
 - Startup-script saving sets `aria-busy` on the save button and textarea and pauses editing until the save completes. Script save status is a polite live region connected through `aria-describedby`.
@@ -61,6 +61,25 @@ The browser preview has two proxy paths with different credential rules:
 - Preview-host iframe requests on `preview-<session>.localhost` are the preview app's own origin. Those requests may forward the preview app's own `Authorization` and `Cookie` headers so stateful login/session flows continue to work inside the iframe. Transport, proxy-control, and Code UX control headers are still stripped before the request reaches the container.
 
 Both paths only route to loopback host ports recorded on the active preview session. The dashboard API proxy also removes `Set-Cookie`, CSP, CSP report-only, and `X-Frame-Options` response headers before writing the response on the dashboard origin. Preview-host HTML keeps iframe compatibility by stripping upstream document CSP and frame-blocking headers while allowing preview-origin app cookies to reach that preview host.
+
+## File Browser Comparison
+
+The File Browser is a distinct dashboard surface and runtime capability separate from Browser Preview. While Browser Preview proxies live container ports to a dashboard iframe, the File Browser manages its own dedicated sessions to provide filesystem inspection and Git change reviews.
+
+File Browser sessions expose their own API routes:
+- `/api/projects/:projectId/file-browser/sessions` (list sessions)
+- `/api/projects/:projectId/sprints/:sprintId/file-browser/start` (launch session)
+- `/api/file-browser/sessions/:sessionId/rebuild` (rebuild session)
+- `/api/file-browser/sessions/:sessionId/stop` (stop session)
+- `/api/file-browser/sessions/:sessionId` (DELETE to remove session)
+- `/api/file-browser/sessions/:sessionId/tree` (fetch folder tree)
+- `/api/file-browser/sessions/:sessionId/file` (fetch file content)
+- `/api/file-browser/sessions/:sessionId/changes` (fetch Git status changes)
+- `/api/file-browser/sessions/:sessionId/diff` (fetch Git diff)
+
+The UI provides two primary views:
+- **Files mode**: Shows a complete workspace tree and syntax-highlighted file viewer.
+- **Changes mode**: Shows a list of modified files in the sprint branch and a diff viewer.
 
 ## Verification Notes
 

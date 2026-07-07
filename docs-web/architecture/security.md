@@ -26,7 +26,7 @@ Two listeners:
 | Listener | Default bind | Default auth |
 | --- | --- | --- |
 | Dashboard server (REST + WebSocket + UI) | `127.0.0.1:4444` | None |
-| MCP HTTPS worker gateway (on by default; `--no-mcp-https` to disable) | `127.0.0.1:<dashboardPort+1>` | Bearer token required on non-loopback hosts |
+| MCP HTTP worker gateway (on by default; `--no-mcp-http` to disable) | `127.0.0.1:<dashboardPort+1>` | Bearer token required on non-loopback hosts |
 
 ### Dashboard server
 
@@ -34,11 +34,12 @@ Two listeners:
 - Bind only to loopback in production (the default).
 - If exposing remotely, **front with a reverse proxy** that handles auth (basic auth, OAuth proxy, mTLS, …).
 - The WebSocket inherits the same security posture.
+- Sets `X-Frame-Options: SAMEORIGIN` and `Permissions-Policy: camera=(), microphone=(), geolocation=()` to harden the UI against framing and unexpected hardware access.
 
 ### MCP HTTP gateway
 
 - Loopback-only by default.
-- Bearer token via `--mcp-https-auth-token` (or `MCP_HTTPS_AUTH_TOKEN`).
+- Bearer token via `--mcp-http-auth-token` (or `MCP_HTTP_AUTH_TOKEN`).
 - **Required** when binding non-loopback hosts. Code UX rejects unauthenticated requests with HTTP 401 + JSON-RPC error `-32001`.
 - Does not perform TLS itself — front with a reverse proxy (nginx, Caddy, Traefik) for HTTPS in production.
 
@@ -48,7 +49,7 @@ The stdio transport exists only when stdin is not a TTY. Since the MCP client la
 
 ## Authentication & authorisation
 
-There is no in-process user model. All authenticated callers (including `manage_code_ux`) have the same level of access — read, mutate, destroy.
+There is no in-process user model. All authenticated callers (including management tools and the deprecated `manage_code_ux` compatibility tool) have the same level of access — read, mutate, destroy.
 
 The only protection layer is the **destructive-action approval handshake**:
 
@@ -84,7 +85,7 @@ This avoids storing literal secrets in the DB.
 
 ### DOCKER mode
 
-- Workers run inside a Docker container isolated from the host filesystem (only the worktree path and optionally the auth path are mounted).
+- Workers run inside a Docker container isolated from the host filesystem (the worktree path is mounted, and provider credentials use explicit isolated mounts like `~/.gemini`, `~/.codex`, `~/.claude`, `~/.qwen`, and OpenCode rather than broad workspace root exposure).
 - Container is removed on completion.
 - Workers cannot access other projects' worktrees within the same Code UX install.
 
@@ -95,11 +96,11 @@ This avoids storing literal secrets in the DB.
 
 ## Audit trail
 
-Every `manage_code_ux` invocation, every cycle event, every dispatch, and every gate decision is recorded in `ExecutionInvocations`. Inspect via:
+Every management tool invocation, every cycle event, every dispatch, and every gate decision is recorded in `ExecutionInvocations`. Inspect via:
 
 - Dashboard → Chat → Invocations.
 - `GET /api/projects/:projectId/execution/invocations`.
-- `manage_code_ux` → `telemetry` → `list_execution_invocations`.
+- `manage_telemetry` → `list_execution_invocations`.
 
 ## Recommended deployment
 

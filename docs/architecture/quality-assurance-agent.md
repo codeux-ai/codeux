@@ -146,7 +146,7 @@ Task-level prompt scope:
 - QA must not tell the current coding session to implement, restore, or modify another task's scope
 - when task-level QA requests changes, `fixInstructions` must target the current task's coding session and `targetTaskKey` must identify that current task
 
-If task QA is still pending, running, or has failed without exhausting `maxTaskReviewRuns`, Code UX marks the task merge state as `QA_PENDING` and keeps the sprint active instead of auto-merging.
+If task QA is still pending, running, or has failed without exhausting `maxTaskReviewRuns`, Code UX marks the task merge state as `QA_PENDING` and keeps the sprint active instead of auto-merging. If QA is exhausted and configured to `ESCALATE_TO_HUMAN`, the task is held in `QA_REVIEW_FAILED` and will not be merged or marked complete until a human resolves it.
 
 Recovery guarantees:
 
@@ -238,7 +238,7 @@ For CLI follow-up runs, Code UX:
 - refreshes `origin` and starts follow-up work from the latest remote feature branch when remote GitHub mode is enabled
 - resolves the expected resume workspace from `sessionId` plus CLI execution mode and recovers the current branch from that workspace when `task.worker_branch` and `taskRun.workerBranch` are empty
 - resets a reused task workspace to the latest remote worker branch when that branch already exists, so QA fixes build on the current task PR tip
-- creates a missing local feature branch from `origin/<feature>` instead of recreating it from the default branch when the remote feature branch already exists
+- creates a missing local feature branch from `origin/<feature>` instead of recreating it from the default branch when the remote tracking base branch exists, or falls back to resolving a repository default branch start point
 - resumes the worker branch
 - records the follow-up invocation in execution tracking
 - pushes/publishes any resulting PR updates when needed

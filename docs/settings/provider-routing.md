@@ -18,6 +18,9 @@ Code UX now separates:
 - optional per-agent provider/model preferences
 - provider credentials/instances managed by Integrations
 
+Note that provider configuration is subject to the `system -> project -> sprint` resolution cascade and routing rules resolve against the effective settings at the current scope.
+Effective API responses include `sources` metadata mapping routing rules and provider configurations to the scope that provided them.
+
 *(Note: In routing contexts, `available` means detected credentials/auth presence or local auth enabled on that exact provider instance, whereas `enabled` means user-approved routing participation.)*
 
 ## Provider Runtime Artifacts
@@ -45,11 +48,11 @@ Each `aiProvider.invocationRouting.<routeId>` entry contains:
 - `strategy`
   - `MANUAL`, `WEIGHTED`, or `AGENT`
 - `provider`
-  - explicit manual provider instance id, or `null` to inherit the profile default
+  - explicit manual provider config id, or `null` to inherit the profile default
 - `allowedProviders`
-  - optional provider-instance subset for that invocation; empty means "all enabled providers"
+  - optional provider config id subset for that invocation; empty means "all enabled providers"
 - `providers`
-  - sparse per-provider-instance overrides for `enabled`, `model`, `weight`, and `thinkingMode`
+  - sparse overrides for `enabled`, `model`, `weight`, and `thinkingMode`, keyed by provider config id
 
 Provider instances are first-class routing targets:
 - the default built-in instances use ids `jules`, `gemini`, `codex`, `claude-code`, `qwen-code`, and `opencode`
@@ -146,9 +149,8 @@ Provider-cap queueing is not a task creation failure. It must not increment the 
   - CI fix and merge-conflict worker-owned repair flows
 - `src/services/memory-remediation-service.ts`
   - post-sprint memory curation and scheduled long-term memory cleanup
-- `src/services/cli-workflow/pipeline/prepare-stage.ts`
-- `src/services/cli-workflow/pipeline/execute-provider-stage.ts`
-  - consume explicit per-run provider settings instead of implicitly borrowing worker model overrides
+- `src/services/cli-workflow/pipeline/*.ts`
+  - stages including `prepare`, `execute-provider`, `memory-capture`, `git-finalize`, `pr-finalize`, and `cleanup` consume explicit per-run provider settings instead of implicitly borrowing worker model overrides
 
 ## Dashboard Surface
 
@@ -176,7 +178,7 @@ Dashboard route and model controls share provider display metadata from the sett
 - default route/model options show the resolved inherited worker defaults when available, such as `Default Route (Codex Primary)` and `Default Model (gpt-5.5)`
 - custom endpoint provider instances display their effective configured model in Settings defaults, route cards, and default model labels. Codex and Claude Code API-key custom endpoint instances use `customModel` and their custom base URL when local auth is not mounted; Qwen Code `MODEL_PROVIDER` and OpenCode `CUSTOM_PROVIDER` instances use their generated configured model ids and endpoint metadata. Mounted/local-auth and dashboard-auth instances ignore stale custom model or base URL fields and keep showing the saved provider default.
 - Sprint Composer and Quicksprint default route/model labels resolve from the `planning` invocation route mapping. A pinned Planning Route provider and its route-specific model override are displayed as the default, even when the worker default points at a different provider.
-- Sprint Composer and Quicksprint explicit route selections keep the selected provider-instance id as the option value for UI state, but send the underlying CLI provider type in `PlanningOverrides.virtualProvider`. That keeps a selected instance such as `Claude Live` paired with the `claude-code` runtime when a model override is also selected.
+- Sprint Composer and Quicksprint explicit route selections keep the selected provider-instance id as the option value for UI state, but send the underlying CLI provider type in `PlanningOverrides.virtualProvider`. This selects by CLI provider type for planning/prompt-improvement runs, and `virtualModel` only overrides that planning run's selected provider model (it is not a general task-coding model override).
 - model option values remain the provider catalog values returned by `getProviderModelOptions`; only labels and icons are display metadata
 
 File:

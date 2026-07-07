@@ -21,7 +21,7 @@ pnpm run lint
 
 - Run tests
 ```bash
-pnpm test
+pnpm run test
 ```
 
 - Run backend tests only
@@ -65,9 +65,9 @@ Provider invocation persistence tests should cover required observability fields
 pnpm run ci
 ```
 
-`pnpm run ci` starts with `pnpm run quality:guardrails`, then runs audit, lint, backend coverage, dashboard tests, and build. Run `pnpm run quality:guardrails` directly after changes that affect shared implementation structure, large modules, duplicate logic, dependency factory wiring, realtime snapshot persistence, optimistic task insertion, or the guardrail script itself. Treat blocking guardrail output as CI-equivalent; advisory oversized-file and broad-`any` reports identify cleanup targets but do not fail the command.
+`pnpm run ci` executes `quality:guardrails -> audit -> lint -> test:backend:coverage -> test:dashboard -> build`.
 
-GitHub Actions runs the same signals as separate jobs so a vulnerability finding does not obscure compile, test, or build failures. The `Security Audit` job runs `pnpm run audit` independently, while `Typecheck & Lint`, `Backend Tests & Coverage`, `Dashboard Tests`, and `Build` run the repository quality, TypeScript, Vitest, and bundle checks on Node 22 with pnpm 10.33.0. Workflow health tests under `tests/backend/ci/workflow-health.test.ts` assert this split, the `package.json` audit script value, the absence of audit execution from build and Playwright lanes, the pinned `pnpm/action-setup` and `actions/setup-node` versions, frozen `pnpm install --frozen-lockfile --ignore-scripts` installs, concurrency cancellation, and cache keys that include runner OS, Node 22, pnpm 10.33.0, and dependency/config hash inputs.
+GitHub Actions runs the same signals as separate jobs so a vulnerability finding does not obscure compile, test, or build failures. The `Security Audit` job runs `pnpm run audit` independently, while `Typecheck & Lint` runs `pnpm run quality:guardrails`, `pnpm run typecheck`, and `pnpm run typecheck:dashboard`, `Backend Tests & Coverage` runs the backend Vitest coverage pass, `Dashboard Tests` runs the dashboard Vitest pass, and `Build` runs the repository bundle checks on Node 22 with pnpm 10.33.0. Workflow health tests under `tests/backend/ci/workflow-health.test.ts` assert this split, the `package.json` audit script value, the absence of audit execution from build and Playwright lanes, the pinned `pnpm/action-setup` and `actions/setup-node` versions, frozen `pnpm install --frozen-lockfile --ignore-scripts` installs, concurrency cancellation, and cache keys that include runner OS, Node 22, pnpm 10.33.0, and dependency/config hash inputs.
 The quality guardrail script also audits `vitest.config.ts` directly. It fails if `coverage.include` stops observing `src/**/*.ts`, if any global coverage threshold drops below the locked floors, if the `src/server/activity-cache-service.ts` line threshold is missing, malformed, below 80%, or if that file is excluded from coverage observability. The enforced global thresholds in `vitest.config.ts` are:
 
 | Metric | Threshold |

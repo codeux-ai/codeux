@@ -14,10 +14,12 @@ The page is composed of stacked panels:
    - Live activity preview (the latest line of agent output).
    - Duration and ETA.
    - Buttons to stop, retry, or open the detail panel.
-3. **Execution timeline** — A horizontal timeline of every event in the run: cycle starts, task transitions, PR opens, merges, attention items.
-4. **Runtime event feed** — A streaming log of orchestrator events.
-5. **Git CI status panel** — PR status table for the feature branch: open PRs, CI status, merge conflicts.
-6. **Human intervention badge** — Pulses when a merge conflict, CI failure, or other attention item needs you.
+3. **Live Session Runtime Sidebar** — Contains the following collapsible panels:
+   - **Invocation feed panel** — A real-time log of individual provider invocations with restart and cancel controls.
+   - **Execution timeline** — A horizontal timeline of every event in the run: cycle starts, task transitions, PR opens, merges, attention items.
+   - **Git CI status panel** — PR status table for the feature branch: open PRs, CI status, merge conflicts.
+   - **Attention ledger** — A dedicated queue for managing human-intervention attention items.
+   - **Execution runtime panel** — Core runtime metrics, build statuses, and summary badges.
 
 ## Real-time updates
 
@@ -31,13 +33,14 @@ If the project has no active sprint run, the page shows the **Idle Runtime State
 
 ## Attention items
 
-When the engine cannot proceed without input, an attention item is created. It appears as a card in the live session view with:
+When the engine cannot proceed without input, an attention item is created. It appears as a row in the **Attention ledger** sidebar panel with:
 
 - Category — `merge_conflict`, `ci_failure`, `action_required`, `qa_review_failed`.
 - Linked task and PR.
 - Recommended action.
 - **Claim** button — Mark that you (or a virtual worker) are working on it.
 - **Resolve** button — Mark it resolved; the engine will reattempt the cycle.
+- **Dismiss** button — Clear the item from the queue when it is no longer relevant.
 
 A virtual worker can claim an attention item too. If you have configured `virtualWorkerProvider` in settings, the engine will offer eligible items to a worker before showing them to you.
 
@@ -49,6 +52,13 @@ Two large buttons in the page header:
 - **Cancel** — graceful cancellation; live dispatches are signalled to stop.
 
 A **Force cancel** option is hidden behind a confirm dialog.
+
+### Invocation restart/cancel
+
+Individual provider invocations can be managed directly from the **Invocation feed panel** in the sidebar:
+- **Cancel** — Stops a running provider invocation.
+- **Restart / Continue** — Restarts a failed planning invocation or continues a disconnected session.
+- **Reset timer** — Resets the rate-limit timeout for a quota-blocked invocation.
 
 ## Finalisation
 

@@ -7,8 +7,10 @@ The **Settings** page (`/config`) is the unified configuration surface. It expos
 Settings are evaluated as a cascade:
 
 ```
-Defaults → System → Project → Sprint
+System → Project → Sprint
 ```
+
+(System settings contain the built-in defaults.)
 
 You can edit at any level. Higher levels override lower ones; unspecified fields inherit. The side panel always shows the **effective** (merged) value.
 
@@ -16,7 +18,7 @@ Switch scope with the selector at the top:
 
 - **System** — applies to all projects.
 - **Project** — applies to the active project.
-- **Sprint** — applies to the selected sprint within the active project.
+- **Sprint** — sparse overrides applied from the sprint page through the live override modal (persists only the delta relative to resolved project defaults).
 
 ## Categories
 
@@ -24,18 +26,16 @@ The category rail on the left includes:
 
 | Category | What it covers |
 | --- | --- |
-| **AI providers** | Provider configs (model, thinking mode, weight, API key, auth path, max concurrency, token pricing). |
-| **Routing** | Per-invocation-type routing (`task_coding`, `planning`, …). Profiles: `GLOBAL` and `WORKER`. |
-| **Workers** | Virtual worker provider, execution mode (DOCKER/HOST), Docker image, mount paths. |
-| **CI & Merge** | `ciIntelligence` block — autofix retries, comment resolution, auto-merge modes. |
-| **Automation** | `automationLevel` (`FULL`/`SEMI_AUTO`/`ALWAYS_ASK`), action-required automation toggles. |
-| **Sprint loop** | Watch loop intervals, which loop steps are enabled. |
-| **Git** | Default branch, feature branch prefix, branch scheme, GitHub mode. |
-| **Skills** | Internal skill toggles (`git_manager_remote`, `git_manager_local`, etc.). |
-| **MCP tools** | Per-tool enable / disable. |
-| **Memory** | Active embedding model selection. |
-| **Appearance** | Theme, navigation mode override, dashboard density. |
-| **Limits** | `maxFailures` emergency stop threshold and other safety caps. |
+| **01: General** | Scope, runtime, and automation posture |
+| **02: Appearance** | Dashboard layout and theme preferences |
+| **03: AI Models** | Provider routing, models, and weighting |
+| **04: Sprint & Git** | Git flow, branch naming, merge rules, and execution runtime |
+| **05: Browser Preview** | Preview runtime, browser visibility, and container policy |
+| **06: Agents** | Project-local markdown mirrors and agent authoring behavior |
+| **07: Memory** | Embedding models, auto-capture, and promotion policy |
+| **08: Integrations** | Provider keys, Git hosts, and external connection policy |
+| **09: MCP** | MCP servers injected into CLIs and built-in tool access |
+| **10: Danger Zone** | Reset project overrides only when needed (destructive, irreversible actions) |
 
 Each category opens one or more **content panels** with grouped fields. Inputs are typed (text, number with min/max, toggle, multi-select) and validate inline.
 
@@ -54,15 +54,21 @@ You can also fetch effective settings programmatically:
 - `GET /api/projects/:projectId/settings/effective`
 - `GET /api/projects/:projectId/sprints/:sprintId/settings/effective`
 
+These endpoints return both the merged `settings` tree and a `sources` dictionary that tells you whether each setting value came from `system`, `project`, or `sprint`.
+
 ## External settings hints
 
-The **AI providers** category includes a **Detected** column. Code UX inspects:
+The **Integrations** category includes a **Detected** column for AI provider credentials. Code UX inspects:
 
 - `JULES_API_KEY` / `JULES_KEY` env vars.
 - `~/.gemini/`, `~/.codex/`, `~/.claude/`, `~/.qwen/`, `~/.local/share/opencode/` for installed-CLI auth.
 - `GITHUB_TOKEN` / `GH_TOKEN` env vars and `gh auth status`.
 
 If a hint is detected, the panel offers a one-click **Use detected value** button so you don't paste secrets manually.
+
+## Provider instances
+
+Provider instances are configured via individual cards that support **Terminal login** UI for interactive dashboard-driven authentication, and expose granular **Auth modes** (e.g., `LOCAL_AUTH`, `ENV_KEY`, `CUSTOM_PROVIDER`). Actions on a provider instance card suppress duplicate activation while pending, and removal requires two-step confirmation.
 
 ## Connections panel
 
