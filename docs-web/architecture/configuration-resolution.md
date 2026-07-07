@@ -29,6 +29,7 @@ Loaded by `loadAppConfig` (`src/config/app-config.ts`) given `process.argv` and 
 | `mcpHttp.authToken` | `--mcp-https-auth-token` CLI → `MCP_HTTPS_AUTH_TOKEN` env → generated/reused from `~/.code-ux/security.json` when the HTTP gateway is enabled |
 | `runtimeRole` | `--runtime-role` CLI → `project_manager` |
 | `headless` | `--headless` or `--no-dashboard` CLI → `false` |
+| `serverMode` | `--server-mode` CLI → `CODE_UX_SERVER_MODE=true` env → `false` |
 
 ### Config search path
 
@@ -48,6 +49,8 @@ The first file found at each path *wins for its specific key*. There is **no mer
 `dotenv` loads `<projectRoot>/.env` very early (before any config resolution). This means any of the above env-driven fields can be set in `.env` and behave identically.
 
 When the MCP HTTP gateway is enabled and no explicit auth token is supplied, bootstrap config creates a user-scoped bearer token in `~/.code-ux/security.json` with restrictive file permissions where the filesystem supports them. The Settings → MCP page can regenerate that token and install the current URL/token into supported local CLI config files.
+
+Server mode is stricter than local headless mode. `--server-mode` or `CODE_UX_SERVER_MODE=true` disables dashboard binding, starts MCP HTTP by default, and requires an explicit non-empty token from the CLI or `MCP_HTTPS_AUTH_TOKEN`/`MCP_HTTP_AUTH_TOKEN`; it does not use the generated user token fallback.
 
 ## Settings tree
 

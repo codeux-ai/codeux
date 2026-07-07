@@ -7,6 +7,7 @@ import {
   apiKeyLoader, 
   dashboardPortLoader, 
   hasHeadlessArg,
+  hasServerModeArg,
   parseApiKeyArg,
   parseRuntimeRoleArg,
 } from "../../../src/config/app-config.js";
@@ -31,6 +32,7 @@ beforeEach(async () => {
   delete process.env.MCP_HTTPS_HOST;
   delete process.env.MCP_HTTPS_PATH;
   delete process.env.MCP_HTTPS_AUTH_TOKEN;
+  delete process.env.CODE_UX_SERVER_MODE;
   tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "jules-app-config-"));
   tempHome = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-home-"));
   process.env.HOME = tempHome;
@@ -83,6 +85,11 @@ describe("runtime flags", () => {
     expect(hasHeadlessArg(["node", "index.js", "--headless"])).toBe(true);
     expect(hasHeadlessArg(["node", "index.js", "--no-dashboard"])).toBe(true);
     expect(hasHeadlessArg(["node", "index.js"])).toBe(false);
+  });
+
+  it("detects server mode flag", () => {
+    expect(hasServerModeArg(["node", "index.js", "--server-mode"])).toBe(true);
+    expect(hasServerModeArg(["node", "index.js"])).toBe(false);
   });
 });
 
@@ -154,6 +161,7 @@ describe("loadAppConfig", () => {
     expect(config.apiKeyArg).toBe("cli-key");
     expect(config.dashboardPort).toBe(4444);
     expect(config.runtimeRole).toBe("project_manager");
+    expect(config.serverMode).toBe(false);
     expect(config.dashboardEnabled).toBe(true);
     expect(config.mcpHttpEnabled).toBe(false);
     expect(config.mcpHttpPort).toBeNull();
@@ -239,7 +247,43 @@ describe("loadAppConfig", () => {
   it("supports explicit headless project-manager mode", () => {
     const config = loadAppConfig(["node", "index.js", "--headless", "--no-mcp-https"], tempDir);
     expect(config.runtimeRole).toBe("project_manager");
+    expect(config.serverMode).toBe(false);
     expect(config.dashboardEnabled).toBe(false);
+  });
+
+  it("enables authenticated server mode from CLI and forces MCP HTTP while skipping dashboard", () => {
+    const config = loadAppConfig([
+      "node",
+      "index.js",
+      "--server-mode",
+      "--no-mcp-https",
+      "--mcp-https-auth-token",
+      "server-token",
+    ], tempDir);
+
+    expect(config.serverMode).toBe(true);
+    expect(config.dashboardEnabled).toBe(false);
+    expect(config.mcpHttpEnabled).toBe(true);
+    expect(config.mcpHttpPort).toBe(4445);
+    expect(config.mcpHttpAuthToken).toBe("server-token");
+  });
+
+  it("enables authenticated server mode from env", () => {
+    process.env.CODE_UX_SERVER_MODE = "true";
+    process.env.MCP_HTTPS_AUTH_TOKEN = "env-server-token";
+
+    const config = loadAppConfig(["node", "index.js", "--no-dashboard"], tempDir);
+
+    expect(config.serverMode).toBe(true);
+    expect(config.dashboardEnabled).toBe(false);
+    expect(config.mcpHttpEnabled).toBe(true);
+    expect(config.mcpHttpAuthToken).toBe("env-server-token");
+  });
+
+  it("rejects server mode without an explicit MCP HTTP bearer token", async () => {
+    expect(() => loadAppConfig(["node", "index.js", "--server-mode"], tempDir))
+      .toThrow("CODE_UX_SERVER_MODE requires a non-empty MCP HTTP auth token");
+    await expect(fs.stat(path.join(tempHome, ".code-ux", "security.json"))).rejects.toMatchObject({ code: "ENOENT" });
   });
 
   it("enables MCP HTTP worker gateway from CLI flags", () => {

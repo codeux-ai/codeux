@@ -14,6 +14,7 @@ codeux [options]
 | `--runtime-role VALUE` | string | `project_manager` | Role advertised to the MCP layer. (Currently only `project_manager` is functional; `worker-host` is reserved.) |
 | `--headless` | flag | off | Start MCP server without binding the dashboard. |
 | `--no-dashboard` | flag | off | Alias for `--headless`. |
+| `--server-mode` | flag | off | Start authenticated MCP HTTP server mode without binding dashboard routes or websockets. Requires an explicit bearer token. |
 | `--mcp-https` / `--no-mcp-https` | flag | on | MCP Streamable HTTP gateway, enabled by default; use `--no-mcp-https` to disable. |
 | `--mcp-https-port N` | number | `dashboardPort + 1` | Port for the HTTP gateway. |
 | `--mcp-https-host H` | string | `127.0.0.1` | Host/interface for the HTTP gateway. |
@@ -33,7 +34,8 @@ Flags can be passed in any order. Anything after `--` is ignored.
 | `JULES_API_MAX_FAILS` | int | `5` | Emergency-stop threshold (`maxFailures`). |
 | `DASHBOARD_PORT` | int | `4444` | Dashboard HTTP port. |
 | `DASHBOARD_HOST` | string | `127.0.0.1` | Dashboard bind address. |
-| `MCP_HTTPS_ENABLED` | bool | `false` | Enable the MCP HTTP gateway. |
+| `CODE_UX_SERVER_MODE` | bool | `false` | Enable authenticated MCP HTTP server mode and disable dashboard binding. |
+| `MCP_HTTPS_ENABLED` | bool | `true` | Enable the MCP HTTP gateway. |
 | `MCP_HTTPS_PORT` | int | – | MCP HTTP port. |
 | `MCP_HTTPS_HOST` | string | `127.0.0.1` | MCP HTTP bind. |
 | `MCP_HTTPS_PATH` | string | `/mcp` | MCP HTTP path. |
@@ -100,6 +102,8 @@ If the chosen port is in use, Code UX increments and retries until it finds a fr
 --mcp-https-path  >  MCP_HTTPS_PATH env  >  /mcp
 --mcp-https-auth-token  >  MCP_HTTPS_AUTH_TOKEN env  >  ~/.code-ux/security.json auto-generated token
 ```
+
+Server mode requires the token to come from the explicit CLI/env sources and rejects startup when the token is empty.
 
 The MCP listener is authenticated HTTP. The historical `mcp-https` option names remain supported for compatibility, but TLS requires a trusted reverse proxy/certificate in front of the listener.
 

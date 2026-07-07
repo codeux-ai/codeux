@@ -45,10 +45,13 @@ By default (disable with `--no-mcp-https` or `MCP_HTTPS_ENABLED=false`), Code UX
   - Server returns `mcp-session-id` header; client must echo it on subsequent calls.
   - `DELETE` against the path with `mcp-session-id` closes the session.
 - `GET /health` — `{ "status": "UP" }`.
+- `GET /ready` — readiness from the Code UX runtime, available on the MCP HTTP listener for headless server processes.
 
 #### Authentication
 
 Bearer token via `Authorization: Bearer <token>` header.
+
+Server mode requires an explicit bearer token from CLI or environment even when binding to loopback.
 
 | Host class | Token required? |
 | --- | --- |

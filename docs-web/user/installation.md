@@ -66,6 +66,7 @@ Run `codeux --help` for the authoritative list. The current flags are:
 | `--api-key VALUE` | Set the Jules API key (overrides env and settings). |
 | `--runtime-role VALUE` | Runtime role: `project_manager` (default) or `worker-host`. |
 | `--headless` (alias `--no-dashboard`) | Start MCP-only without binding the dashboard. |
+| `--server-mode` | Start authenticated MCP HTTP server mode without binding dashboard routes or websockets. Requires an explicit bearer token. |
 | `--mcp-https` / `--no-mcp-https` | Enable/disable the MCP Streamable HTTP gateway (**enabled by default**; legacy flag name). |
 | `--mcp-https-port N` | Port for the MCP HTTP gateway. |
 | `--mcp-https-host H` | Host/interface for the MCP HTTP gateway. |
@@ -79,11 +80,14 @@ Run `codeux --help` for the authoritative list. The current flags are:
 | --- | --- |
 | `JULES_API_KEY` | Jules API key (also accepted as `JULES_KEY`). |
 | `DASHBOARD_PORT` | Dashboard port (default `4444`). |
+| `CODE_UX_SERVER_MODE` | Set to `true` for authenticated MCP HTTP server mode without dashboard binding. Requires an explicit bearer token. |
 | `MCP_HTTPS_ENABLED` | Enable the MCP HTTP gateway (default `true`). |
 | `MCP_HTTPS_PORT` | Port for the MCP HTTP gateway. |
 | `MCP_HTTPS_HOST` | Host/interface for the MCP HTTP gateway. |
 | `MCP_HTTPS_PATH` | Path for the MCP HTTP gateway. |
 | `MCP_HTTPS_AUTH_TOKEN` | Bearer token for MCP HTTP requests; if unset, Code UX creates `~/.code-ux/security.json`. |
+
+In server mode, `MCP_HTTPS_AUTH_TOKEN`, `MCP_HTTP_AUTH_TOKEN`, `--mcp-https-auth-token`, or `--mcp-http-auth-token` must be non-empty. Server mode does not fall back to the generated user token.
 
 A project-local `.env` file is read on startup, so you can keep settings per repository:
 

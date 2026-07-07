@@ -156,9 +156,9 @@ http://<host>:4445/mcp
 
 …with header `Authorization: Bearer <token>`.
 
-A `GET /health` endpoint returns `{ "status": "UP" }` and is the recommended liveness check.
+A `GET /health` endpoint returns `{ "status": "UP" }` and is the recommended liveness check. A `GET /ready` endpoint reports runtime readiness from the same listener, so `--server-mode` processes can be probed without a dashboard server.
 
-> **Security:** Normal Code UX startup always has a bearer token for the MCP HTTP gateway, either explicit or generated in `~/.code-ux/security.json`. Always use HTTPS in production via a reverse proxy or another trusted TLS termination layer.
+> **Security:** Normal Code UX startup always has a bearer token for the MCP HTTP gateway, either explicit or generated in `~/.code-ux/security.json`. Server mode (`--server-mode` or `CODE_UX_SERVER_MODE=true`) requires an explicit non-empty token and does not use the generated fallback. Always use HTTPS in production via a reverse proxy or another trusted TLS termination layer.
 
 For the wire protocol, see [Architecture → MCP server](../architecture/mcp-server.md).
 

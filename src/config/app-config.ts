@@ -12,6 +12,7 @@ export interface AppConfig {
   dashboardPort: number;
   apiKeyArg: string | null;
   runtimeRole: "project_manager";
+  serverMode: boolean;
   dashboardEnabled: boolean;
   mcpHttpEnabled: boolean;
   mcpHttpHost: string;
@@ -178,6 +179,15 @@ export const hasHeadlessArg = (argv: string[]): boolean => {
   return args.includes("--headless") || args.includes("--no-dashboard");
 };
 
+export const hasServerModeArg = (argv: string[]): boolean => {
+  const args = argv.slice(2);
+  return args.includes("--server-mode");
+};
+
+const isServerModeEnabled = (argv: string[]): boolean => (
+  hasServerModeArg(argv) || parseBooleanEnv(process.env.CODE_UX_SERVER_MODE) === true
+);
+
 /**
  * Resolves the API key from environment variables or settings files.
  * Precedence: Env > .code-ux/settings.json
@@ -302,14 +312,16 @@ export const loadAppConfig = (argv: string[], projectRoot: string): AppConfig =>
   const baseUrl = process.env.JULES_API_BASE_URL || "https://jules.googleapis.com/v1alpha";
   const dashboardPort = dashboardPortLoader(projectRoot);
   const runtimeRole = parseRuntimeRoleArg(argv);
-  const dashboardEnabled = !hasHeadlessArg(argv);
+  const serverMode = isServerModeEnabled(argv);
+  const dashboardEnabled = serverMode ? false : !hasHeadlessArg(argv);
   const explicitMcpHttpHost = parseStringFlag(argv, "--mcp-https-host")?.trim()
     || parseStringFlag(argv, "--mcp-http-host")?.trim()
     || process.env.MCP_HTTPS_HOST?.trim()
     || process.env.MCP_HTTP_HOST?.trim()
     || "";
   const mcpHttpHost = explicitMcpHttpHost || defaultMcpHttpHost();
-  const mcpHttpPort = mcpHttpPortLoader(argv, projectRoot, dashboardPort);
+  const loadedMcpHttpPort = mcpHttpPortLoader(argv, projectRoot, dashboardPort);
+  const mcpHttpPort = serverMode && loadedMcpHttpPort === null ? dashboardPort + 1 : loadedMcpHttpPort;
   const mcpHttpEnabled = mcpHttpPort !== null && mcpHttpPort > 0;
   const mcpHttpPath = normalizePathValue(
     parseStringFlag(argv, "--mcp-https-path")?.trim()
@@ -323,6 +335,10 @@ export const loadAppConfig = (argv: string[], projectRoot: string): AppConfig =>
     || process.env.MCP_HTTPS_AUTH_TOKEN?.trim()
     || process.env.MCP_HTTP_AUTH_TOKEN?.trim()
     || null;
+  if (serverMode && !explicitMcpHttpAuthToken) {
+    throw new Error("CODE_UX_SERVER_MODE requires a non-empty MCP HTTP auth token via MCP_HTTPS_AUTH_TOKEN, MCP_HTTP_AUTH_TOKEN, --mcp-https-auth-token, or --mcp-http-auth-token.");
+  }
+
   const mcpHttpAuthToken = explicitMcpHttpAuthToken || (mcpHttpEnabled ? loadOrCreateUserMcpHttpAuthToken() : null);
 
   if (mcpHttpEnabled && !isLoopbackHost(mcpHttpHost) && !mcpHttpAuthToken) {
@@ -335,6 +351,7 @@ export const loadAppConfig = (argv: string[], projectRoot: string): AppConfig =>
     dashboardPort,
     apiKeyArg,
     runtimeRole,
+    serverMode,
     dashboardEnabled,
     mcpHttpEnabled,
     mcpHttpHost,
