@@ -36,7 +36,9 @@ Click **Plan sprint**. The planner agent (typically a Gemini, Codex or Claude se
 - Inferred `depends_on` edges.
 - A best-effort `is_independent` flag.
 
-While planning is in flight, the dashboard shows an ETA/elapsed overlay with a course indicator, request-specific status copy, minimize controls, and cancel/recovery actions when they are available.
+While planning is in flight, the dashboard shows a shared planning overlay for normal sprints and quicksprints. It includes ETA and elapsed timers, request-specific status copy, a vessel that travels across the course and respawns smoothly, and minimize, cancel, and new sprint/quicksprint recovery actions when they are available. The ETA is a visual planning estimate; it does not change how the backend planner runs.
+
+The vessel can also be activated as a small coffee reminder. Planning continues normally, and the minimize, new sprint/quicksprint, and cancellation controls remain available.
 
 You can:
 
