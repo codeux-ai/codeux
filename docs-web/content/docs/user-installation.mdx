@@ -31,6 +31,12 @@ Linux privilege handling is noninteractive. Root runs package commands directly;
 `sudo -n`. If passwordless sudo is unavailable, Code UX returns the display commands and privilege
 guidance instead of prompting for a password.
 
+In onboarding, missing Docker/Git checks show an explicit **Auto Install dependencies** action when
+the recommended installer is available. Clicking it lets Code UX run the detected OS package manager
+for Docker and Git. The same step also keeps advanced **Docker Desktop + Git** and **Docker Engine +
+Git** choices visible with platform availability, degraded/manual-download guidance, privilege notes,
+live progress, command summaries, retry, recheck, and manual Docker/Git links for fallback.
+
 ## Option 1 — Desktop app (recommended)
 
 Download the latest installer for your platform from

@@ -54,6 +54,8 @@ Installer support matrix:
 
 Linux Engine installation handles privileges noninteractively. Root runs package and service commands directly. Non-root runs use `sudo -n`; when passwordless sudo is unavailable, commands are returned as skipped display commands with `requiresPrivilege` guidance instead of hanging on a password prompt. Installer results include per-command status, bounded stdout/stderr summaries, skipped dependency groups, manual-download flags, privilege flags, and post-install guidance such as starting Docker, refreshing PATH, or installing through a package manager manually.
 
+The reusable Installation step component stays presentational. It receives readiness metadata, selected/running installer mode, latest installer result or error, and callback props from its parent instead of calling installer APIs directly. When required Docker/Git checks are missing and the recommended installer is available, it shows the primary `Auto Install dependencies` action with copy that explains Code UX will run the detected OS package manager only after the operator clicks. The advanced area exposes both `Docker Desktop + Git` and `Docker Engine + Git`, including availability, recommended state, degraded/manual-download guidance, privilege guidance, per-mode actions, preserved manual Docker/Git links, live progress, structured command results, retry, and readiness recheck paths.
+
 The top-nav notification center also consumes this readiness payload. Startup notifications are generated from real checks instead of placeholder messages:
 - `Cluster not ready` is a non-dismissible critical notification when required dependencies are missing.
 - `Startup checks passed` is a dismissible success notification when required checks pass.
@@ -67,7 +69,9 @@ The flow currently contains nine detailed steps, with the provider configuration
 
 1. Installation
    - Checks Docker and Git availability.
-   - Gives Docker installation/start guidance when required checks fail.
+   - Shows `Auto Install dependencies` when the recommended Docker/Git installer can run.
+   - Offers advanced Docker Desktop + Git and Docker Engine + Git choices, including degraded/manual setup guidance.
+   - Gives Docker installation/start guidance and manual download links when required checks fail or installer results need follow-up.
 2. Introduction
    - Opens with a short `Welcome to Code UX` overview of the containerized agentic workspace.
    - Explains the container-first runtime model.
