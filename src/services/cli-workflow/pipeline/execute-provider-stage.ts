@@ -29,6 +29,12 @@ export async function executeProviderStage(ctx: PipelineContext, providerPrompt:
   const providerAuthPath = "authPath" in providerSettings
     ? (providerSettings as any).authPath
     : (providerSettings as any).providerAuthPath;
+  const providerConfigMode = "providerConfigMode" in providerSettings
+    ? providerSettings.providerConfigMode
+    : undefined;
+  const providerConfigPath = "providerConfigPath" in providerSettings
+    ? providerSettings.providerConfigPath
+    : undefined;
 
   const taskRun = ctx.taskRunId && ctx.deps.executionRepository
     ? ctx.deps.executionRepository.getTaskRun(ctx.taskRunId)
@@ -87,6 +93,8 @@ export async function executeProviderStage(ctx: PipelineContext, providerPrompt:
     openCodePackage: providerSettings.openCodePackage,
     providerMountAuth,
     providerAuthPath,
+    providerConfigMode,
+    providerConfigPath,
     customBaseUrl: providerSettings.customBaseUrl,
     customModel: providerSettings.customModel,
     sessionId: ctx.sessionId,

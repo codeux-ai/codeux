@@ -8,6 +8,7 @@ import type {
   CustomMcpServer,
   GuardrailSettings,
   ProviderConfigId,
+  ProviderConfigMode,
   DashboardSettings,
   InvocationProviderOverrideSettings,
   InvocationRoutingId,
@@ -109,6 +110,8 @@ export interface SystemProviderCredentialSettings {
   apiKey: string;
   mountAuth: boolean;
   authPath: string;
+  providerConfigMode: ProviderConfigMode;
+  providerConfigPath: string;
   authType?: "apiKey" | "localAuth" | "dashboardAuth";
   lastLoginAt?: number;
   /** Custom API endpoint base URL for providers that support it (claude-code, codex). */

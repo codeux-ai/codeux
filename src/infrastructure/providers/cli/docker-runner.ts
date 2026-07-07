@@ -3,7 +3,7 @@ import * as os from "os";
 import * as path from "path";
 import * as pathPosix from "path/posix";
 import { fileURLToPath } from "url";
-import { CliWorkflowSettings, type CustomMcpServer } from "../../../contracts/app-types.js";
+import { CliWorkflowSettings, type CustomMcpServer, type ProviderConfigMode } from "../../../contracts/app-types.js";
 import { isUsableCustomMcpServer } from "../../../mcp/mcp-tool-availability.js";
 import { buildProviderMcpConfigArtifact } from "./mcp-config-format.js";
 import type { McpConnectionInfo } from "../../../contracts/mcp-connection-types.js";
@@ -58,6 +58,8 @@ export interface IDockerRunner {
     repoPath: string;
     providerMountAuth?: boolean;
     providerAuthPath?: string;
+    providerConfigMode?: ProviderConfigMode;
+    providerConfigPath?: string;
     signal?: AbortSignal;
     onActivity: (desc: string, originator?: string) => void;
     onSetupImageProgress?: (progress: DockerSetupImageCacheProgress) => void;
@@ -116,6 +118,8 @@ export class DockerRunner implements IDockerRunner {
     repoPath: string;
     providerMountAuth?: boolean;
     providerAuthPath?: string;
+    providerConfigMode?: ProviderConfigMode;
+    providerConfigPath?: string;
     signal?: AbortSignal;
     onActivity: (desc: string, originator?: string) => void;
     onSetupImageProgress?: (progress: DockerSetupImageCacheProgress) => void;
@@ -249,6 +253,11 @@ export class DockerRunner implements IDockerRunner {
           provider: providerLabel,
           enabled: Boolean(input.providerMountAuth),
           path: input.providerAuthPath || "",
+        },
+        {
+          provider: providerLabel,
+          mode: input.providerConfigMode || "copyHost",
+          path: input.providerConfigPath || "",
         },
       );
       const providerConfigMounts = await this.buildProviderConfigMounts(

@@ -2,7 +2,7 @@ import type {
   ThinkingMode,
   QwenModelProviderSettings,
   ProviderSettings,
-  ProviderId
+  ProviderConfigMode,
 } from "../contracts/app-types.js";
 
 export interface ProviderSettingsOverride {
@@ -25,6 +25,8 @@ export interface ProviderSettingsOverride {
   openCodePackage?: string;
   providerMountAuth?: boolean;
   providerAuthPath?: string;
+  providerConfigMode?: ProviderConfigMode;
+  providerConfigPath?: string;
   customBaseUrl?: string;
   customModel?: string;
 }
@@ -59,6 +61,8 @@ export function buildProviderSettingsOverride(
     openCodePackage: providerSettings.openCodePackage,
     providerMountAuth: providerSettings.mountAuth,
     providerAuthPath: providerSettings.authPath,
+    providerConfigMode: providerSettings.providerConfigMode,
+    providerConfigPath: providerSettings.providerConfigPath,
     customBaseUrl: usesMountedAuth ? undefined : providerSettings.customBaseUrl,
     customModel: usesMountedAuth ? undefined : providerSettings.customModel,
   };

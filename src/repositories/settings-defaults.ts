@@ -129,6 +129,17 @@ export const DEFAULT_PROVIDER_AUTH_PATHS: Record<ProviderId, string> = {
   "mockup-cli": "",
 };
 
+export const DEFAULT_PROVIDER_CONFIG_FILE_PATHS: Record<ProviderId, string> = {
+  jules: "",
+  gemini: "~/.gemini/settings.json",
+  codex: "~/.codex/config.toml",
+  "claude-code": "~/.claude.json",
+  "qwen-code": "~/.qwen/settings.json",
+  opencode: "~/.config/opencode/opencode.json",
+  antigravity: "~/.gemini/antigravity-cli/mcp_config.json",
+  "mockup-cli": "",
+};
+
 // AI Models catalog — available model identifiers per virtual worker provider
 export const GEMINI_MODELS: string[] = [
   "auto",
@@ -283,6 +294,8 @@ export const DEFAULT_PROVIDER_SETTINGS: Record<ProviderId, ProviderSettings> = {
     apiKey: "",
     mountAuth: false,
     authPath: DEFAULT_PROVIDER_AUTH_PATHS.jules,
+    providerConfigMode: "none",
+    providerConfigPath: "",
     maxConcurrentTasks: 15,
   },
   gemini: {
@@ -295,6 +308,8 @@ export const DEFAULT_PROVIDER_SETTINGS: Record<ProviderId, ProviderSettings> = {
     apiKey: "",
     mountAuth: false,
     authPath: DEFAULT_PROVIDER_AUTH_PATHS.gemini,
+    providerConfigMode: "copyHost",
+    providerConfigPath: DEFAULT_PROVIDER_CONFIG_FILE_PATHS.gemini,
     maxConcurrentTasks: 0,
   },
   codex: {
@@ -307,6 +322,8 @@ export const DEFAULT_PROVIDER_SETTINGS: Record<ProviderId, ProviderSettings> = {
     apiKey: "",
     mountAuth: false,
     authPath: DEFAULT_PROVIDER_AUTH_PATHS.codex,
+    providerConfigMode: "copyHost",
+    providerConfigPath: DEFAULT_PROVIDER_CONFIG_FILE_PATHS.codex,
     maxConcurrentTasks: 0,
   },
   "claude-code": {
@@ -319,6 +336,8 @@ export const DEFAULT_PROVIDER_SETTINGS: Record<ProviderId, ProviderSettings> = {
     apiKey: "",
     mountAuth: false,
     authPath: DEFAULT_PROVIDER_AUTH_PATHS["claude-code"],
+    providerConfigMode: "copyHost",
+    providerConfigPath: DEFAULT_PROVIDER_CONFIG_FILE_PATHS["claude-code"],
     maxConcurrentTasks: 0,
   },
   "qwen-code": {
@@ -331,6 +350,8 @@ export const DEFAULT_PROVIDER_SETTINGS: Record<ProviderId, ProviderSettings> = {
     apiKey: "",
     mountAuth: false,
     authPath: DEFAULT_PROVIDER_AUTH_PATHS["qwen-code"],
+    providerConfigMode: "copyHost",
+    providerConfigPath: DEFAULT_PROVIDER_CONFIG_FILE_PATHS["qwen-code"],
     maxConcurrentTasks: 0,
   },
   opencode: {
@@ -343,6 +364,8 @@ export const DEFAULT_PROVIDER_SETTINGS: Record<ProviderId, ProviderSettings> = {
     apiKey: "",
     mountAuth: false,
     authPath: DEFAULT_PROVIDER_AUTH_PATHS.opencode,
+    providerConfigMode: "copyHost",
+    providerConfigPath: DEFAULT_PROVIDER_CONFIG_FILE_PATHS.opencode,
     maxConcurrentTasks: 0,
   },
   antigravity: {
@@ -355,6 +378,8 @@ export const DEFAULT_PROVIDER_SETTINGS: Record<ProviderId, ProviderSettings> = {
     apiKey: "",
     mountAuth: false,
     authPath: DEFAULT_PROVIDER_AUTH_PATHS.antigravity,
+    providerConfigMode: "copyHost",
+    providerConfigPath: DEFAULT_PROVIDER_CONFIG_FILE_PATHS.antigravity,
     maxConcurrentTasks: 0,
   },
   "mockup-cli": {
@@ -367,6 +392,8 @@ export const DEFAULT_PROVIDER_SETTINGS: Record<ProviderId, ProviderSettings> = {
     apiKey: "",
     mountAuth: false,
     authPath: DEFAULT_PROVIDER_AUTH_PATHS["mockup-cli"],
+    providerConfigMode: "none",
+    providerConfigPath: "",
     maxConcurrentTasks: 0,
   },
 };

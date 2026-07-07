@@ -15,6 +15,12 @@ export const GEMINI_MCP_SETTINGS_MOUNT = "/opt/provider-config/gemini-settings.j
 export const CODEX_MCP_CONFIG_MOUNT = "/opt/provider-config/codex-config.toml";
 export const QWEN_CODE_SETTINGS_MOUNT = "/opt/provider-config/qwen-settings.json";
 export const ANTIGRAVITY_MCP_CONFIG_MOUNT = "/opt/provider-config/antigravity-mcp.json";
+export const CODEX_HOST_CONFIG_MOUNT = "/opt/provider-config/host-codex-config.toml";
+export const GEMINI_HOST_CONFIG_MOUNT = "/opt/provider-config/host-gemini-settings.json";
+export const CLAUDE_CODE_HOST_CONFIG_MOUNT = "/opt/provider-config/host-claude.json";
+export const QWEN_CODE_HOST_CONFIG_MOUNT = "/opt/provider-config/host-qwen-settings.json";
+export const OPENCODE_HOST_CONFIG_MOUNT = "/opt/provider-config/host-opencode.json";
+export const ANTIGRAVITY_HOST_CONFIG_MOUNT = "/opt/provider-config/host-antigravity-mcp.json";
 
 export interface DockerBootstrapOptions {
   runtimeNpmPrefix: string;
@@ -52,20 +58,21 @@ export class DockerBootstrapBuilder {
       "sync_dir_contents() { local source=\"$1\"; local destination=\"$2\"; local label=\"$3\"; mkdir -p \"$destination\"; if ! cp -r \"$source/.\" \"$destination/\"; then echo \"provider-runner: warning: failed to copy $label credentials\" >&2; fi; }",
       "copy_if_present() { local source=\"$1\"; local destination=\"$2\"; local label=\"$3\"; if [ -e \"$source\" ]; then mkdir -p \"$(dirname \"$destination\")\"; if ! cp -f \"$source\" \"$destination\"; then echo \"provider-runner: warning: failed to copy $label\" >&2; fi; fi; }",
       "merge_json_file() { local source=\"$1\"; local destination=\"$2\"; local label=\"$3\"; if [ ! -e \"$source\" ]; then return 0; fi; mkdir -p \"$(dirname \"$destination\")\"; if ! node -e 'const fs=require(\"fs\"); const [source,destination]=process.argv.slice(1); const read=(file)=>{ try { return JSON.parse(fs.readFileSync(file,\"utf8\")); } catch { return {}; } }; const sourceJson=read(source); const destinationJson=read(destination); const merged={...destinationJson,...sourceJson}; if (destinationJson.mcpServers || sourceJson.mcpServers) merged.mcpServers={...(destinationJson.mcpServers||{}), ...(sourceJson.mcpServers||{})}; if (destinationJson.memory || sourceJson.memory) merged.memory={...(destinationJson.memory||{}), ...(sourceJson.memory||{})}; fs.writeFileSync(destination, `${JSON.stringify(merged, null, 2)}\\n`);' \"$source\" \"$destination\"; then echo \"provider-runner: warning: failed to merge $label\" >&2; fi; }",
+      "merge_json_content() { local content=\"$1\"; local destination=\"$2\"; local label=\"$3\"; if [ -z \"$content\" ]; then return 0; fi; local source; source=$(mktemp); printf '%s\\n' \"$content\" > \"$source\"; merge_json_file \"$source\" \"$destination\" \"$label\"; rm -f \"$source\"; }",
       "remove_json_key() { local destination=\"$1\"; local key=\"$2\"; local label=\"$3\"; if [ ! -f \"$destination\" ]; then return 0; fi; if ! node -e 'const fs=require(\"fs\"); const [destination,key]=process.argv.slice(1); let parsed={}; try { parsed=JSON.parse(fs.readFileSync(destination,\"utf8\")); } catch { process.exit(0); } if (Object.prototype.hasOwnProperty.call(parsed,key)) { delete parsed[key]; fs.writeFileSync(destination, `${JSON.stringify(parsed, null, 2)}\\n`); }' \"$destination\" \"$key\"; then echo \"provider-runner: warning: failed to update $label\" >&2; fi; }",
       "remove_codex_mcp_servers() { local destination=\"$1\"; local label=\"$2\"; if [ ! -f \"$destination\" ]; then return 0; fi; if ! node -e 'const fs=require(\"fs\"); const [destination]=process.argv.slice(1); let content=\"\"; try { content=fs.readFileSync(destination,\"utf8\"); } catch { process.exit(0); } let skipping=false; const kept=[]; for (const line of content.split(/\\r?\\n/)) { const trimmed=line.trim(); if (/^\\[mcp_servers\\.[^\\]]+\\]$/.test(trimmed)) { skipping=true; continue; } if (/^\\[.+\\]$/.test(trimmed)) skipping=false; if (!skipping) kept.push(line); } fs.writeFileSync(destination, `${kept.join(\"\\n\").trimEnd()}\\n`);' \"$destination\"; then echo \"provider-runner: warning: failed to update $label\" >&2; fi; }",
       "append_if_missing_literal() { local source=\"$1\"; local destination=\"$2\"; local literal=\"$3\"; local label=\"$4\"; if [ ! -e \"$source\" ]; then return 0; fi; mkdir -p \"$(dirname \"$destination\")\"; if [ -f \"$destination\" ] && grep -Fq \"$literal\" \"$destination\"; then return 0; fi; if [ -s \"$destination\" ]; then printf '\\n' >> \"$destination\"; fi; if ! cat \"$source\" >> \"$destination\"; then echo \"provider-runner: warning: failed to append $label\" >&2; fi; }",
       "ensure_json_file() { local destination=\"$1\"; local content=\"$2\"; mkdir -p \"$(dirname \"$destination\")\"; if [ ! -f \"$destination\" ]; then printf '%s\\n' \"$content\" > \"$destination\"; fi; }",
       ENSURE_CURL_SHELL_FUNCTION,
       "configure_git_identity() { if ! command -v git >/dev/null 2>&1; then echo \"provider-runner: warning: git is unavailable; skipped git identity configuration\" >&2; return 0; fi; git config --global user.name \"${CODE_UX_GIT_USER_NAME:-Code UX}\" || echo \"provider-runner: warning: failed to configure git user.name\" >&2; git config --global user.email \"${CODE_UX_GIT_USER_EMAIL:-agents@codeux.ai}\" || echo \"provider-runner: warning: failed to configure git user.email\" >&2; }",
-      "materialize_opencode_config() { if [ -z \"${OPENCODE_CONFIG_CONTENT:-}\" ]; then return 0; fi; local destination=\"$HOME/.config/opencode/opencode.json\"; mkdir -p \"$(dirname \"$destination\")\"; printf '%s\\n' \"$OPENCODE_CONFIG_CONTENT\" > \"$destination\"; export OPENCODE_CONFIG=\"$destination\"; }",
+      "materialize_opencode_config() { local destination=\"$HOME/.config/opencode/opencode.json\"; if [ -z \"${OPENCODE_CONFIG_CONTENT:-}\" ]; then export OPENCODE_CONFIG=\"$destination\"; return 0; fi; mkdir -p \"$(dirname \"$destination\")\"; remove_json_key \"$destination\" \"mcp\" \"opencode local mcp servers\"; merge_json_content \"$OPENCODE_CONFIG_CONTENT\" \"$destination\" \"opencode runtime config\"; export OPENCODE_CONFIG=\"$destination\"; }",
     ].join("\n");
   }
 
   private credentialSync(): string {
     return [
       `if [ -e "${GITCONFIG_CREDENTIALS_MOUNT}" ]; then cp -f "${GITCONFIG_CREDENTIALS_MOUNT}" "$HOME/.gitconfig" || echo "provider-runner: warning: failed to copy .gitconfig" >&2; else configure_git_identity; fi`,
-      `if [ -d "${CODEX_CREDENTIALS_MOUNT}" ]; then [ -f "${CODEX_CREDENTIALS_MOUNT}/auth.json" ] && cp -f "${CODEX_CREDENTIALS_MOUNT}/auth.json" "$HOME/.codex/auth.json"; [ -f "${CODEX_CREDENTIALS_MOUNT}/config.toml" ] && cp -f "${CODEX_CREDENTIALS_MOUNT}/config.toml" "$HOME/.codex/config.toml"; fi`,
+      `if [ -d "${CODEX_CREDENTIALS_MOUNT}" ]; then [ -f "${CODEX_CREDENTIALS_MOUNT}/auth.json" ] && cp -f "${CODEX_CREDENTIALS_MOUNT}/auth.json" "$HOME/.codex/auth.json"; fi`,
       `if [ -d "${GITHUB_CREDENTIALS_MOUNT}" ]; then sync_dir_contents "${GITHUB_CREDENTIALS_MOUNT}" "$HOME/.config/gh" "gh"; fi`,
     ].join("\n");
   }
@@ -111,27 +118,32 @@ export class DockerBootstrapBuilder {
       `  copy_if_present "${GEMINI_CREDENTIALS_MOUNT}/installation_id" "$HOME/.gemini/installation_id" "gemini installation_id"`,
       `  copy_if_present "${GEMINI_CREDENTIALS_MOUNT}/state.json" "$HOME/.gemini/state.json" "gemini state.json"`,
       `  copy_if_present "${GEMINI_CREDENTIALS_MOUNT}/trustedFolders.json" "$HOME/.gemini/trustedFolders.json" "gemini trustedFolders.json"`,
+      `  copy_if_present "${GEMINI_HOST_CONFIG_MOUNT}" "$HOME/.gemini/settings.json" "gemini config file"`,
       `  remove_json_key "$HOME/.gemini/settings.json" "mcpServers" "gemini local mcp servers"`,
       `  merge_json_file "${GEMINI_MCP_SETTINGS_MOUNT}" "$HOME/.gemini/settings.json" "gemini mcp settings.json"`,
       "fi",
       "if [ \"$1\" = \"claude\" ]; then",
       `  if [ -f "${CLAUDE_CODE_CREDENTIALS_MOUNT}/.credentials.json" ]; then cp -f "${CLAUDE_CODE_CREDENTIALS_MOUNT}/.credentials.json" "$HOME/.claude/.credentials.json"; fi`,
       `  if [ -f "${CLAUDE_CODE_AUTH_JSON_MOUNT}" ]; then cp -f "${CLAUDE_CODE_AUTH_JSON_MOUNT}" "$HOME/.claude.json"; fi`,
+      `  copy_if_present "${CLAUDE_CODE_HOST_CONFIG_MOUNT}" "$HOME/.claude.json" "claude config file"`,
       `  remove_json_key "$HOME/.claude.json" "mcpServers" "claude local mcp servers"`,
       `  merge_json_file "${CLAUDE_CODE_MCP_CONFIG_MOUNT}" "$HOME/.claude.json" "claude mcp config"`,
       "fi",
       "if [ \"$1\" = \"qwen\" ]; then",
       `  if [ -d "${QWEN_CODE_CREDENTIALS_MOUNT}" ]; then sync_dir_contents "${QWEN_CODE_CREDENTIALS_MOUNT}" "$HOME/.qwen" "qwen"; fi`,
+      `  copy_if_present "${QWEN_CODE_HOST_CONFIG_MOUNT}" "$HOME/.qwen/settings.json" "qwen config file"`,
       `  remove_json_key "$HOME/.qwen/settings.json" "mcpServers" "qwen local mcp servers"`,
       `  merge_json_file "${QWEN_CODE_SETTINGS_MOUNT}" "$HOME/.qwen/settings.json" "qwen settings.json"`,
       `  remove_json_key "$HOME/.qwen/settings.json" "enableOpenAILogging" "qwen legacy enableOpenAILogging"`,
       "fi",
       "if [ \"$1\" = \"codex\" ]; then",
+      `  copy_if_present "${CODEX_HOST_CONFIG_MOUNT}" "$HOME/.codex/config.toml" "codex config file"`,
       `  remove_codex_mcp_servers "$HOME/.codex/config.toml" "codex local mcp servers"`,
       `  append_if_missing_literal "${CODEX_MCP_CONFIG_MOUNT}" "$HOME/.codex/config.toml" "[mcp_servers.code-ux]" "codex mcp config"`,
       "fi",
       "if [ \"$1\" = \"opencode\" ]; then",
       `  if [ -d "${OPENCODE_CREDENTIALS_MOUNT}" ]; then sync_dir_contents "${OPENCODE_CREDENTIALS_MOUNT}" "$HOME/.local/share/opencode" "opencode"; fi`,
+      `  copy_if_present "${OPENCODE_HOST_CONFIG_MOUNT}" "$HOME/.config/opencode/opencode.json" "opencode config file"`,
       "  materialize_opencode_config",
       "fi",
       "if [ \"$1\" = \"antigravity\" ] || [ \"$1\" = \"agy\" ]; then",
@@ -142,6 +154,7 @@ export class DockerBootstrapBuilder {
       `    sync_dir_contents "${ANTIGRAVITY_CREDENTIALS_MOUNT}" "$HOME/.gemini" "antigravity-gemini"`,
       `  fi`,
       `  mkdir -p "$HOME/.gemini/antigravity-cli"`,
+      `  copy_if_present "${ANTIGRAVITY_HOST_CONFIG_MOUNT}" "$HOME/.gemini/antigravity-cli/mcp_config.json" "antigravity config file"`,
       `  remove_json_key "$HOME/.gemini/antigravity-cli/mcp_config.json" "mcpServers" "antigravity local mcp servers"`,
       `  merge_json_file "${ANTIGRAVITY_MCP_CONFIG_MOUNT}" "$HOME/.gemini/antigravity-cli/mcp_config.json" "antigravity mcp config"`,
       "  if ! command -v dbus-daemon >/dev/null 2>&1 || ! command -v gnome-keyring-daemon >/dev/null 2>&1; then",
