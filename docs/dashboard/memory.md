@@ -12,9 +12,12 @@ Memory embeddings can run through either backend:
   - `bge-base-en-v1.5`
   - `bge-large-en-v1.5`
   - `multilingual-e5-large`
+- Custom in-app entries are stored in memory settings under `customEmbeddingModels`. The backend accepts only Hugging Face model repositories or `https://huggingface.co/...` file URLs, normalizes them to `owner/repo` plus repository-relative ONNX/tokenizer paths, and downloads through Hugging Face `resolve/main` URLs. Custom entries keep their own display name, ONNX model path, tokenizer files, dimension, approximate size, language, and validation status.
 - `external_api`: an OpenAI-compatible embeddings endpoint configured in Settings → Memory with `baseUrl`, `apiKey`, `model`, and optional `dimensions`.
 
 `MemoryService` resolves the effective project settings before capture, search, map generation, stale-count checks, and re-embedding. External API dimensions can be inferred from the returned vector, so models with custom vector sizes can be stored safely in `embeddingDimension`.
+
+Custom in-app models appear beside built-ins in `GET /api/embedding-models`. `POST /api/embedding-models/custom` creates or updates a sanitized Hugging Face catalog entry, while the existing download, cancel, select, delete, and status routes accept custom IDs after the entry exists. Selection still requires the local ONNX file and required tokenizer files to be present, so a custom model cannot become active before its download completes.
 
 ## Memory Search Behavior
 
@@ -151,8 +154,10 @@ If deterministic prefiltering finds no cleanup candidates, Code UX records a com
 The Memory settings panel also manages one project-scoped scheduler entry for long-term remediation. Users can set it to Off, Every day, or Every week without leaving Settings. Entries created this way are marked as `memoryRemediationTarget.source = "memory_settings"` so manually created Scheduler page entries are not overwritten.
 
 ## UI Updates and Accessibility
-- The Memory page model catalog is presented as a Warm Void panel with a state summary and responsive model cards. It distinguishes active, downloaded, downloading, stale, and unavailable models without using legacy violet action styling.
-- Model catalog primary actions use Signal Jade for download and activation, stale re-embedding warnings use Ember, and destructive/error states use status red. The downloaded-model delete action is icon-only with an accessible label and is disabled while the model is active.
+- The Memory page model catalog is presented as a compact model browser with grouped sections for memory embedding models, custom Hugging Face embedding entry, and TTS/speech-adjacent Hugging Face models. Speech-only rows are informational and do not expose embedding download, activation, deletion, or re-embedding actions.
+- Embedding model rows distinguish active, downloaded, downloading, stale, custom, and unavailable states without using legacy violet action styling. Primary actions use Signal Jade for download and activation, stale re-embedding warnings use Ember, and destructive/error states use status red. The downloaded-model delete action is icon-only with an accessible label and is disabled while the model is active.
+- The custom Hugging Face form accepts `owner/repo` or `https://huggingface.co/...` model/file URLs plus required ONNX path, tokenizer files, dimension, approximate size, display name, and language. Client-side validation catches malformed sources and missing tokenizer metadata before `POST /api/embedding-models/custom`, then refreshes the embedding model list after success.
+- Hugging Face source links in model rows are constructed from sanitized catalog metadata and passed through dashboard URL hygiene before opening in a new tab.
 - The memory sidebar now starts collapsed by default and exposes a compact rail/tab so the graph canvas remains visible until the user explicitly expands it.
 - Expanding the sidebar opens directly to the current alive memory list for the selected tier, sprint, and agent filter set, with an embedded search input above the list. Browsing all visible memories is still the default path; search is not required before the list is useful.
 - Closing the sidebar clears the current search query and selected memory IDs so returning to the sidebar starts from the current visible memory list.

@@ -38,6 +38,7 @@
 - [Node Flow Foundation](./architecture/node-flow-foundation.md)
 - [Node Flows](./architecture/node-flows.md)
 - [Memory Claims and Evidence](./architecture/memory-claims.md)
+- [Speech Input Architecture](./architecture/speech-input.md)
 - [Quality Assurance Agent](./architecture/quality-assurance-agent.md)
 - [Live Connections Runtime Surface](./architecture/live-connections-runtime-surface.md)
 - [Postgres Migration Plan](./architecture/postgres-migration-plan.md)

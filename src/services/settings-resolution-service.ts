@@ -33,6 +33,7 @@ import { sanitizeGit } from "../domain/settings/settings-sanitizers/git-sanitize
 import { sanitizeJira } from "../domain/settings/settings-sanitizers/jira-sanitizer.js";
 import { sanitizeSprintLoopSteps } from "../domain/settings/settings-sanitizers/sprint-loop-sanitizer.js";
 import { sanitizeMemory } from "../domain/settings/settings-sanitizers/memory-sanitizer.js";
+import { sanitizeSpeech } from "../domain/settings/settings-sanitizers/speech-sanitizer.js";
 import { sanitizeModelPricing } from "../domain/settings/settings-sanitizers/model-pricing-sanitizer.js";
 import { sanitizeWorkers } from "../domain/settings/settings-sanitizers/worker-sanitizer.js";
 import { sanitizeExternalImporterSettings } from "../repositories/settings-sanitizer.js";
@@ -785,7 +786,15 @@ export function buildDefaultProjectSettings(externalHints?: ExternalSettingsHint
     skills: cloneSkills(DEFAULT_SKILLS),
     memory: {
       ...DEFAULT_DASHBOARD_SETTINGS.memory,
+      customEmbeddingModels: DEFAULT_DASHBOARD_SETTINGS.memory.customEmbeddingModels.map((model) => ({
+        ...model,
+        tokenizerFiles: [...model.tokenizerFiles],
+      })),
       externalEmbedding: { ...DEFAULT_DASHBOARD_SETTINGS.memory.externalEmbedding },
+    },
+    speech: {
+      ...DEFAULT_DASHBOARD_SETTINGS.speech,
+      externalTranscription: { ...DEFAULT_DASHBOARD_SETTINGS.speech.externalTranscription },
     },
   };
 }
@@ -972,6 +981,7 @@ export function sanitizeProjectSettings(value: unknown, externalHints?: External
       ),
     } : {}),
     memory: sanitizeMemory(input as Partial<DashboardSettings>),
+    speech: sanitizeSpeech(input as Partial<DashboardSettings>),
   };
 }
 
@@ -1369,7 +1379,15 @@ export function resolveDashboardSettings(args: {
     skills: cloneSkills(sprintSettings.skills),
     mcpTools: resolveEffectiveMcpTools(args.systemSettings.mcpTools, sprintSettings.mcpTools),
     customMcpServers: resolveEffectiveCustomMcpServers(args.systemSettings.customMcpServers, sprintSettings.customMcpServers),
-    memory: { ...sprintSettings.memory, externalEmbedding: { ...sprintSettings.memory.externalEmbedding } },
+    memory: {
+      ...sprintSettings.memory,
+      customEmbeddingModels: sprintSettings.memory.customEmbeddingModels.map((model) => ({
+        ...model,
+        tokenizerFiles: [...model.tokenizerFiles],
+      })),
+      externalEmbedding: { ...sprintSettings.memory.externalEmbedding },
+    },
+    speech: { ...sprintSettings.speech, externalTranscription: { ...sprintSettings.speech.externalTranscription } },
     modelPricing: { overrides: { ...args.systemSettings.modelPricing?.overrides } },
   };
 

@@ -18,6 +18,11 @@ const cloneMemorySettings = (memory: ProjectSettings["memory"]): ProjectSettings
   externalEmbedding: { ...memory.externalEmbedding },
 });
 
+const cloneSpeechSettings = (speech: ProjectSettings["speech"]): ProjectSettings["speech"] => ({
+  ...speech,
+  externalTranscription: { ...speech.externalTranscription },
+});
+
 const cloneJiraSettings = (jira: SystemSettings["integrations"]["jira"]): SystemSettings["integrations"]["jira"] => ({ ...jira });
 const cloneImporterSettings = (
   settings: SystemSettings["integrations"]["notion"],
@@ -213,6 +218,7 @@ export const dashboardSettingsToProjectSettings = (settings: DashboardSettings):
   mcpTools: cloneMcpTools(settings.mcpTools),
   customMcpServers: cloneCustomMcpServers(settings.customMcpServers),
   memory: cloneMemorySettings(settings.memory),
+  speech: cloneSpeechSettings(settings.speech),
 });
 
 export const cloneProjectSettings = (settings: ProjectSettings): ProjectSettings => ({
@@ -262,6 +268,7 @@ export const cloneProjectSettings = (settings: ProjectSettings): ProjectSettings
   mcpTools: settings.mcpTools ? cloneMcpTools(settings.mcpTools) : undefined,
   customMcpServers: settings.customMcpServers ? cloneCustomMcpServers(settings.customMcpServers) : undefined,
   memory: cloneMemorySettings(settings.memory),
+  speech: cloneSpeechSettings(settings.speech),
 });
 
 export const cloneSystemSettings = (settings: SystemSettings): SystemSettings => ({

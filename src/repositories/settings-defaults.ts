@@ -961,6 +961,7 @@ export const DEFAULT_DASHBOARD_SETTINGS: DashboardSettings = {
     enabled: true,
     embeddingProvider: "in_app",
     embeddingModel: null,
+    customEmbeddingModels: [],
     externalEmbedding: {
       baseUrl: "https://api.openai.com/v1/embeddings",
       apiKey: "",
@@ -1009,6 +1010,18 @@ export const DEFAULT_DASHBOARD_SETTINGS: DashboardSettings = {
       "Each bullet should be a self-contained statement (1-2 sentences) that would be useful context for a future developer or AI working on this project.",
       "The self-reflection rating is optional but, when present, should use numeric 0-5 scores.",
     ].join("\n"),
+  },
+  speech: {
+    enabled: false,
+    providerMode: "auto",
+    localModelId: "onnx-community/whisper-base.en",
+    maxAudioSeconds: 120,
+    externalTranscription: {
+      baseUrl: "https://api.openai.com/v1/audio/transcriptions",
+      apiKey: "",
+      model: "whisper-1",
+      language: null,
+    },
   },
   modelPricing: {
     overrides: {},

@@ -121,6 +121,16 @@ import type {
   SystemSettings,
 } from "../../src/contracts/settings-scope-types.js";
 import type {
+  ExternalTranscriptionSettings,
+  SpeechProviderMode,
+  SpeechSettings,
+  SpeechTranscriptionError,
+  SpeechTranscriptionErrorCode,
+  SpeechTranscriptionProvider,
+  SpeechTranscriptionRequestMetadata,
+  SpeechTranscriptionResult,
+} from "../../src/contracts/speech-types.js";
+import type {
   ExecutionInvocationRecord,
   ExecutionInvocationMessageRecord,
 } from "../../src/contracts/invocation-types.js";
@@ -294,6 +304,14 @@ export type {
   SprintSettingsOverride,
   SystemProviderCredentialSettings,
   SystemSettings,
+  ExternalTranscriptionSettings,
+  SpeechProviderMode,
+  SpeechSettings,
+  SpeechTranscriptionError,
+  SpeechTranscriptionErrorCode,
+  SpeechTranscriptionProvider,
+  SpeechTranscriptionRequestMetadata,
+  SpeechTranscriptionResult,
 };
 
 export type {

@@ -21,6 +21,8 @@ import type {
 } from "../../contracts/app-types.js";
 import { EMBEDDING_MODEL_IDS } from "../../contracts/memory-types.js";
 import type { EmbeddingModelId } from "../../contracts/memory-types.js";
+import { SPEECH_PROVIDER_MODES } from "../../contracts/speech-types.js";
+import type { SpeechProviderMode } from "../../contracts/speech-types.js";
 import {
   PROVIDER_IDS,
   THINKING_MODES,
@@ -904,8 +906,45 @@ const validateMemory = (
   }
   if (value.embeddingModel !== null && typeof value.embeddingModel !== "string") {
     issues.push({ path: `${path}.embeddingModel`, message: "Expected null or a model id string" });
-  } else if (value.embeddingProvider !== "external_api" && value.embeddingModel !== null && !EMBEDDING_MODEL_IDS.includes(value.embeddingModel as EmbeddingModelId as any)) {
-    issues.push({ path: `${path}.embeddingModel`, message: `Expected null or one of: ${EMBEDDING_MODEL_IDS.join(", ")}` });
+  } else if (value.embeddingProvider !== "external_api" && value.embeddingModel !== null) {
+    const customModelIds = Array.isArray(value.customEmbeddingModels)
+      ? new Set(value.customEmbeddingModels
+        .filter((model): model is Record<string, unknown> => isRecord(model))
+        .map((model) => model.id)
+        .filter((id): id is string => typeof id === "string"))
+      : new Set<string>();
+    if (!EMBEDDING_MODEL_IDS.includes(value.embeddingModel as EmbeddingModelId as any) && !customModelIds.has(value.embeddingModel)) {
+      issues.push({ path: `${path}.embeddingModel`, message: `Expected null, one of: ${EMBEDDING_MODEL_IDS.join(", ")}, or a custom embedding model id` });
+    }
+  }
+  if (!Array.isArray(value.customEmbeddingModels)) {
+    issues.push({ path: `${path}.customEmbeddingModels`, message: "Expected an array" });
+  } else {
+    value.customEmbeddingModels.forEach((model, index) => {
+      const modelPath = `${path}.customEmbeddingModels[${index}]`;
+      if (!isRecord(model)) {
+        issues.push({ path: modelPath, message: "Expected an object" });
+        return;
+      }
+      if (typeof model.id !== "string" || !model.id.trim()) issues.push({ path: `${modelPath}.id`, message: "Expected a model id string" });
+      if (typeof model.displayName !== "string" || !model.displayName.trim()) issues.push({ path: `${modelPath}.displayName`, message: "Expected a display name string" });
+      if (typeof model.huggingFaceRepo !== "string" || !model.huggingFaceRepo.trim()) issues.push({ path: `${modelPath}.huggingFaceRepo`, message: "Expected a Hugging Face repo string" });
+      if (typeof model.huggingFaceUrl !== "string" || !model.huggingFaceUrl.trim()) issues.push({ path: `${modelPath}.huggingFaceUrl`, message: "Expected a Hugging Face URL string" });
+      if (typeof model.onnxModelFile !== "string" || !model.onnxModelFile.trim()) issues.push({ path: `${modelPath}.onnxModelFile`, message: "Expected an ONNX model file path string" });
+      if (!Array.isArray(model.tokenizerFiles) || model.tokenizerFiles.some((file) => typeof file !== "string" || !file.trim())) {
+        issues.push({ path: `${modelPath}.tokenizerFiles`, message: "Expected tokenizer file path strings" });
+      }
+      if (typeof model.dimension !== "number" || !Number.isInteger(model.dimension) || model.dimension <= 0) {
+        issues.push({ path: `${modelPath}.dimension`, message: "Expected a positive integer" });
+      }
+      if (typeof model.approximateSizeBytes !== "number" || !Number.isInteger(model.approximateSizeBytes) || model.approximateSizeBytes < 0) {
+        issues.push({ path: `${modelPath}.approximateSizeBytes`, message: "Expected a non-negative integer" });
+      }
+      if (typeof model.language !== "string" || !model.language.trim()) issues.push({ path: `${modelPath}.language`, message: "Expected a language string" });
+      if (model.validationStatus !== "valid" && model.validationStatus !== "invalid") {
+        issues.push({ path: `${modelPath}.validationStatus`, message: "Expected valid or invalid" });
+      }
+    });
   }
   if (!isRecord(value.externalEmbedding)) {
     issues.push({ path: `${path}.externalEmbedding`, message: "Expected an object" });
@@ -935,6 +974,54 @@ const validateMemory = (
   if (typeof value.promotionThreshold !== "number") issues.push({ path: `${path}.promotionThreshold`, message: "Expected a number" });
   if (typeof value.maxSprintMemories !== "number") issues.push({ path: `${path}.maxSprintMemories`, message: "Expected a number" });
   if (typeof value.maxProjectMemories !== "number") issues.push({ path: `${path}.maxProjectMemories`, message: "Expected a number" });
+};
+
+const validateSpeech = (
+  value: unknown,
+  path: string,
+  issues: ValidationIssue[],
+) => {
+  if (!isRecord(value)) {
+    issues.push({ path, message: "Expected an object" });
+    return;
+  }
+  if (typeof value.enabled !== "boolean") {
+    issues.push({ path: `${path}.enabled`, message: "Expected a boolean" });
+  }
+  if (typeof value.providerMode !== "string" || !SPEECH_PROVIDER_MODES.includes(value.providerMode as SpeechProviderMode)) {
+    issues.push({ path: `${path}.providerMode`, message: `Expected one of: ${SPEECH_PROVIDER_MODES.join(", ")}` });
+  }
+  if (typeof value.localModelId !== "string" || value.localModelId.trim().length === 0) {
+    issues.push({ path: `${path}.localModelId`, message: "Expected a non-empty string" });
+  }
+  if (
+    typeof value.maxAudioSeconds !== "number"
+    || !Number.isFinite(value.maxAudioSeconds)
+    || value.maxAudioSeconds < 1
+    || value.maxAudioSeconds > 600
+  ) {
+    issues.push({ path: `${path}.maxAudioSeconds`, message: "Expected a finite number between 1 and 600" });
+  }
+  if (!isRecord(value.externalTranscription)) {
+    issues.push({ path: `${path}.externalTranscription`, message: "Expected an object" });
+    return;
+  }
+  if (typeof value.externalTranscription.baseUrl !== "string" || value.externalTranscription.baseUrl.trim().length === 0) {
+    issues.push({ path: `${path}.externalTranscription.baseUrl`, message: "Expected a non-empty string" });
+  }
+  if (typeof value.externalTranscription.apiKey !== "string") {
+    issues.push({ path: `${path}.externalTranscription.apiKey`, message: "Expected a string" });
+  }
+  if (typeof value.externalTranscription.model !== "string" || value.externalTranscription.model.trim().length === 0) {
+    issues.push({ path: `${path}.externalTranscription.model`, message: "Expected a non-empty string" });
+  }
+  if (
+    value.externalTranscription.language !== undefined
+    && value.externalTranscription.language !== null
+    && typeof value.externalTranscription.language !== "string"
+  ) {
+    issues.push({ path: `${path}.externalTranscription.language`, message: "Expected null or a string" });
+  }
 };
 
 export const validateSettingsPayload = (payload: unknown): ValidationResult<DashboardSettings> => {
@@ -1002,6 +1089,7 @@ export const validateSettingsPayload = (payload: unknown): ValidationResult<Dash
     validateCustomMcpServers(payload.customMcpServers, "customMcpServers", issues);
   }
   validateMemory(payload.memory, "memory", issues);
+  validateSpeech(payload.speech, "speech", issues);
 
   if (issues.length > 0) {
     return { success: false, issues };

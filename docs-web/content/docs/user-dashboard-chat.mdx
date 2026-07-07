@@ -46,7 +46,6 @@ Each post is a runtime operation that honors the explicit route chosen (worker r
 After you send a message, the thread transcript updates from the server's returned chat message. The **Invocations** rail updates separately from persisted server invocation records and realtime refreshes, so it shows only backend-confirmed invocation rows. The dashboard no longer inserts a frontend-only optimistic invocation placeholder while the backend is still creating the real row.
 
 While a reply or invocation container is active, the visible status line uses light deterministic humor instead of static `Initializing` or `Working` copy. These messages are keyed by the active agent, provider/model, and phase, and they remain stable for at least five seconds so live regions do not churn during rapid refreshes. The funny line is a UI adjunct only; it does not replace the actual agent reply, invocation status, or stored transcript.
-
 ## Create app quickactions
 
 Use **Create Web App** or **Create Desktop App** when you want Code UX to start an app-building sprint in the selected project from chat. In Threads mode, the buttons sit beside the composer and are also available in an empty thread. In 3D Chat, the idle Web App and Desktop App quickactions send the same kind of request through the active thread and set up the currently selected project using its current techstack setting; an unassigned existing project stays `None`. They do not create or import a new Code UX project.
@@ -64,6 +63,7 @@ The transcript then shows an app progress widget instead of raw status data. The
 - suggestion tags that can guide your next message
 
 You can keep sending messages in the same thread while planning runs. If the planner has not created tasks yet, Code UX queues those follow-ups and applies them to the sprint when planning finishes. Once tasks exist, follow-ups update the sprint direction immediately and the thread confirms the update. The added direction appears on the sprint goal under `Additional direction from chat`; generated task prompts are not rewritten by those follow-ups. Non-app quickactions still use the normal routed chat reply path.
+In 3D Chat, idle quick actions send project-scoped prompts directly through the active thread. **Web App** and **Desktop App** set up the currently selected project using its current techstack setting; an unassigned existing project stays `None`. They do not create or import a new Code UX project.
 
 Planning messages can include a rich sprint status card. When Code UX can match the message to loaded live project data, the card is backed by the current task records and execution snapshot, so it updates as tasks move from queued to running, completed, failed, blocked, or quota-waiting. It shows the sprint key/name, request/task/run materialization, overall progress such as `0/7 · 0%`, queued task count, and a compact task list. If either task records or the execution snapshot are still loading, the chat keeps the generic planning status card until both live records are available for the active project.
 
@@ -126,7 +126,12 @@ Planning and QA self-reflection messages appear as structured cards instead of r
 The composer at the bottom supports:
 
 - **Multi-line input** with Enter to send, Shift+Enter for newline.
+- **Speech input** with the microphone control beside Send in project Threads mode.
 - **Slash commands** that invoke management actions inline.
 - **Attachments** *(planned)*.
+
+Use the microphone control to dictate into the current thread draft. When transcription succeeds, Code UX inserts the transcript at the current caret position when the composer selection is available; otherwise it appends the text to the end of the draft with normal spacing. The composer resizes after insertion, and you can edit the dictated text before pressing Enter or Send.
+
+Speech input is only available for project thread composers. It is disabled while a message is sending and is not shown in no-project assistant chat or invocation transcripts. If the browser cannot record audio, microphone permission is denied, the local speech model is missing, or the configured provider fails, the button reports the failure and leaves the draft unchanged so you can retry or type normally.
 
 The active thread can be deleted from the **⋯** menu. Deletion is local (the underlying provider session is closed) and does not affect sprints or tasks. You can also cancel the currently running turn for a specific thread, which aborts only the matching in-flight thread turn.

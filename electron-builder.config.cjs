@@ -1,5 +1,11 @@
 const compression = process.env.CODE_UX_ELECTRON_COMPRESSION || "normal";
 const output = process.env.CODE_UX_ELECTRON_OUTPUT || "release/electron";
+const nativeRuntimePackages = [
+  // Local speech transcription loads ONNX Runtime from the packaged Node
+  // runtime tree. Keep it outside ASAR so native bindings and provider
+  // metadata remain loadable after installation.
+  "node_modules/onnxruntime-node/**",
+];
 
 const removableNodeModuleFile = /(?:^|[\\/])(?:readme(?:\.[^\\/]*)?|changelog(?:\.[^\\/]*)?|history(?:\.[^\\/]*)?)$/i;
 const removableNodeModulePath = /[\\/](?:docs?|examples?|test|tests|__tests__|coverage|benchmarks?)[\\/]/i;
@@ -45,7 +51,7 @@ module.exports = {
   asar: true,
   asarUnpack: [
     "node_modules/**/*.node",
-    "node_modules/onnxruntime-node/**",
+    ...nativeRuntimePackages,
   ],
   onNodeModuleFile,
   extraResources: [

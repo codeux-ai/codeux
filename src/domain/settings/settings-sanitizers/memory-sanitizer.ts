@@ -1,10 +1,21 @@
 import type { DashboardSettings } from "../../../contracts/app-types.js";
-import type { EmbeddingModelId, EmbeddingProviderMode, MemoryRemediationMode, MemorySettings } from "../../../contracts/memory-types.js";
+import type {
+  CustomEmbeddingModelDefinition,
+  EmbeddingModelId,
+  EmbeddingProviderMode,
+  MemoryRemediationMode,
+  MemorySettings,
+} from "../../../contracts/memory-types.js";
 import { EMBEDDING_MODEL_IDS } from "../../../contracts/memory-types.js";
 import { readBoolean, readInteger } from "../../../shared/config/value-readers.js";
 import { DEFAULT_DASHBOARD_SETTINGS } from "../../../repositories/settings-defaults.js";
+import { sanitizeCustomEmbeddingModelDefinitions } from "../../../services/embedding-model-catalog.js";
 
-const readEmbeddingModelId = (value: unknown, provider: EmbeddingProviderMode): EmbeddingModelId | null => {
+const readEmbeddingModelId = (
+  value: unknown,
+  provider: EmbeddingProviderMode,
+  customModels: readonly CustomEmbeddingModelDefinition[],
+): EmbeddingModelId | null => {
   if (typeof value !== "string" || value.trim().length === 0) {
     return null;
   }
@@ -13,6 +24,9 @@ const readEmbeddingModelId = (value: unknown, provider: EmbeddingProviderMode): 
     return trimmed as EmbeddingModelId;
   }
   if (EMBEDDING_MODEL_IDS.includes(trimmed as any)) {
+    return trimmed as EmbeddingModelId;
+  }
+  if (customModels.some((model) => model.id === trimmed && model.validationStatus === "valid")) {
     return trimmed as EmbeddingModelId;
   }
   return null;
@@ -47,6 +61,7 @@ export const sanitizeMemory = (
 
   const defaults = DEFAULT_DASHBOARD_SETTINGS.memory;
   const embeddingProvider = readEmbeddingProvider(memInput.embeddingProvider, defaults.embeddingProvider);
+  const customEmbeddingModels = sanitizeCustomEmbeddingModelDefinitions(memInput.customEmbeddingModels);
   const externalInput = memInput.externalEmbedding && typeof memInput.externalEmbedding === "object"
     ? memInput.externalEmbedding as Partial<MemorySettings["externalEmbedding"]>
     : {};
@@ -54,7 +69,8 @@ export const sanitizeMemory = (
   return {
     enabled: readBoolean(memInput.enabled, defaults.enabled),
     embeddingProvider,
-    embeddingModel: readEmbeddingModelId(memInput.embeddingModel, embeddingProvider),
+    embeddingModel: readEmbeddingModelId(memInput.embeddingModel, embeddingProvider, customEmbeddingModels),
+    customEmbeddingModels,
     externalEmbedding: {
       baseUrl: readTrimmedString(externalInput.baseUrl, defaults.externalEmbedding.baseUrl),
       apiKey: readTrimmedString(externalInput.apiKey, defaults.externalEmbedding.apiKey),
