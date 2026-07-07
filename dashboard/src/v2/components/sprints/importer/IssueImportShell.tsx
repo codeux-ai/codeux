@@ -1,5 +1,5 @@
 import type { ComponentChildren, FunctionComponent } from "preact";
-import { AlertTriangle, ChevronDown, Github, Gitlab, SlidersHorizontal, X } from "lucide-preact";
+import { AlertTriangle, CheckSquare, ChevronDown, FileText, Github, Gitlab, ListTodo, SlidersHorizontal, X } from "lucide-preact";
 import type {
   IssueImportErrorCopy,
   IssueImportProviderMetadata,
@@ -193,6 +193,15 @@ const ProviderIcon: FunctionComponent<{ provider: IssueImportProviderMetadata }>
   }
   if (provider.icon === "jira") {
     return <JiraIcon className="h-3.5 w-3.5" />;
+  }
+  if (provider.icon === "notion") {
+    return <FileText className="h-3.5 w-3.5" strokeWidth={2.2} aria-hidden="true" />;
+  }
+  if (provider.icon === "asana") {
+    return <CheckSquare className="h-3.5 w-3.5" strokeWidth={2.2} aria-hidden="true" />;
+  }
+  if (provider.icon === "linear") {
+    return <ListTodo className="h-3.5 w-3.5" strokeWidth={2.2} aria-hidden="true" />;
   }
   return <Github className="h-3.5 w-3.5" strokeWidth={2.2} aria-hidden="true" />;
 };

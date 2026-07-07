@@ -34,6 +34,7 @@ vi.mock("../../../dashboard/src/v2/components/ui/SprintMarkdownModal", () => ({
 }));
 
 let issueImportModalProps: any = null;
+let projectManagementImportModalProps: any = null;
 vi.mock("../../../dashboard/src/v2/components/sprints/SprintIssueImportModal", () => ({
   SprintIssueImportModal: (props: any) => {
     issueImportModalProps = props;
@@ -96,6 +97,42 @@ vi.mock("../../../dashboard/src/v2/components/sprints/SprintIssueImportModal", (
   }
 }));
 
+vi.mock("../../../dashboard/src/v2/components/sprints/SprintProjectManagementImportModal", () => ({
+  SprintProjectManagementImportModal: (props: any) => {
+    projectManagementImportModalProps = props;
+    return (
+      <div data-testid="sprint-pm-import-modal">
+        <button type="button" data-testid="close-pm-modal" onClick={props.onClose}>Close PM import</button>
+        <button
+          type="button"
+          data-testid="pm-import-linked"
+          onClick={() => props.onImport?.([
+            {
+              provider: props.provider,
+              sourceProvider: props.provider,
+              sourceKind: props.provider === "notion" ? "page" : props.provider === "asana" ? "task" : "issue",
+              externalId: `${props.provider}-external-1`,
+              hostDomain: props.provider === "notion" ? "notion.so" : props.provider === "asana" ? "app.asana.com" : "linear.app",
+              repository: props.provider === "linear" ? "LIN" : props.provider === "asana" ? "tasks" : "page",
+              projectKey: props.provider === "linear" ? "LIN" : undefined,
+              issueNumber: null,
+              issueKey: props.provider === "linear" ? "LIN-42" : `${props.provider}-external-1`,
+              title: `${props.provider} imported scope`,
+              url: `https://example.test/${props.provider}/external-1`,
+              state: "open",
+              labels: ["triage"],
+              assignees: ["Avery"],
+              includeConversation: true,
+            },
+          ])}
+        >
+          Import PM linked
+        </button>
+      </div>
+    );
+  }
+}));
+
 vi.mock("../../../dashboard/src/v2/components/sprints/SprintJiraImportModal", () => ({
   SprintJiraImportModal: ({ onClose, onImport }: { onClose: () => void; onImport?: (issues: any[]) => void }) => (
     <div data-testid="sprint-jira-import-modal">
@@ -151,6 +188,7 @@ describe("SprintsPage", () => {
     cleanup();
     vi.clearAllMocks();
     issueImportModalProps = null;
+    projectManagementImportModalProps = null;
     window.localStorage.clear();
   });
 
@@ -217,7 +255,7 @@ describe("SprintsPage", () => {
     expect(screen.getByTestId("sprint-markdown-modal")).toBeInTheDocument();
   });
 
-  it("shows GitHub, GitLab, and Jira issue import options without throwing an error", () => {
+  it("shows repository, Jira, and project-management import options without throwing an error", () => {
     vi.mocked(useSprintsPageData).mockReturnValue({
       selectedProject: { id: "proj-1" },
       planningRoute: { available: true },
@@ -246,6 +284,9 @@ describe("SprintsPage", () => {
     expect(screen.getAllByText("GitHub Issues")[0]).toBeInTheDocument();
     expect(screen.getAllByText("GitLab Issues")[0]).toBeInTheDocument();
     expect(screen.getAllByText("Jira Issues")[0]).toBeInTheDocument();
+    expect(screen.getAllByText("Notion")[0]).toBeInTheDocument();
+    expect(screen.getAllByText("Asana")[0]).toBeInTheDocument();
+    expect(screen.getAllByText("Linear")[0]).toBeInTheDocument();
   });
 
   it("opens provider-specific issue import entries and passes the selected provider into the modal", () => {
@@ -393,6 +434,116 @@ describe("SprintsPage", () => {
     fireEvent.click(jiraOption);
 
     expect(screen.getByTestId("sprint-jira-import-modal")).toBeInTheDocument();
+  });
+
+  it("opens project-management import entries from the menu", () => {
+    const setProjectManagementImportProvider = vi.fn();
+    vi.mocked(useSprintsPageData).mockReturnValue({
+      selectedProject: { id: "proj-1" },
+      planningRoute: { available: true },
+      sortedSprints: [],
+      showcaseSprints: [],
+      activeRunsBySprintId: new Map(),
+      interventionBySprintId: new Map(),
+      nextId: "spr-123",
+      virtualProviders: [],
+      pendingActionIds: new Set(),
+      planningPresets: [],
+      quicksprintTemplates: [],
+      showImportModal: false,
+      setShowImportModal: vi.fn(),
+      projectManagementImportProvider: null,
+      setProjectManagementImportProvider,
+      editingSprint: null,
+      feedback: { status: "idle", message: null },
+      clearFeedback: vi.fn(),
+    } as any);
+
+    const { rerender } = render(<SprintsPage />);
+
+    const importTrigger = screen.getAllByRole("button").find((btn) => btn.textContent?.includes("Import") && !btn.textContent?.includes("Markdown")) || screen.getAllByRole("button").find((btn) => btn.textContent?.includes("Import"))!;
+    fireEvent.click(importTrigger);
+    fireEvent.click(screen.getByRole("menuitem", { name: /notion/i }));
+    expect(setProjectManagementImportProvider).toHaveBeenCalledWith("notion");
+
+    vi.mocked(useSprintsPageData).mockReturnValue({
+      selectedProject: { id: "proj-1" },
+      planningRoute: { available: true },
+      sortedSprints: [],
+      showcaseSprints: [],
+      activeRunsBySprintId: new Map(),
+      interventionBySprintId: new Map(),
+      nextId: "spr-123",
+      virtualProviders: [],
+      pendingActionIds: new Set(),
+      planningPresets: [],
+      quicksprintTemplates: [],
+      showImportModal: false,
+      setShowImportModal: vi.fn(),
+      projectManagementImportProvider: "linear",
+      setProjectManagementImportProvider,
+      editingSprint: null,
+      feedback: { status: "idle", message: null },
+      clearFeedback: vi.fn(),
+    } as any);
+    rerender(<SprintsPage />);
+
+    expect(screen.getByTestId("sprint-pm-import-modal")).toBeInTheDocument();
+    expect(projectManagementImportModalProps).toEqual(expect.objectContaining({
+      projectId: "proj-1",
+      provider: "linear",
+    }));
+  });
+
+  it("flows imported project-management linked scope into composer linked issue cards", () => {
+    const setShowCreateComposer = vi.fn();
+    const setProjectManagementImportProvider = vi.fn();
+
+    vi.mocked(useSprintsPageData).mockReturnValue({
+      selectedProject: { id: "proj-1" },
+      planningRoute: { available: true },
+      sortedSprints: [],
+      showcaseSprints: [],
+      activeRunsBySprintId: new Map(),
+      interventionBySprintId: new Map(),
+      nextId: "spr-123",
+      virtualProviders: [],
+      pendingActionIds: new Set(),
+      planningPresets: [],
+      quicksprintTemplates: [],
+      planningEta: 60000,
+      agentPresets: [],
+      defaultPlanningAgentPresetId: null,
+      defaultAgentRoutingMode: "MANUAL",
+      defaultWorkerAgentPresetId: null,
+      showCreateComposer: true,
+      setShowCreateComposer,
+      showQuicksprint: false,
+      setShowQuicksprint: vi.fn(),
+      editingSprint: null,
+      setEditingSprint: vi.fn(),
+      showImportModal: false,
+      setShowImportModal: vi.fn(),
+      projectManagementImportProvider: "notion",
+      setProjectManagementImportProvider,
+      feedback: { status: "idle", message: null },
+      clearFeedback: vi.fn(),
+      clearError: vi.fn(),
+      handleSubmitSprint: vi.fn(),
+    } as any);
+
+    render(<SprintsPage />);
+
+    fireEvent.click(screen.getByTestId("pm-import-linked"));
+
+    expect(setProjectManagementImportProvider).toHaveBeenCalledWith(null);
+    expect(setShowCreateComposer).not.toHaveBeenCalledWith(false);
+    expect(screen.getByText("Linked Issues")).toBeInTheDocument();
+    expect(screen.getByText("1 imported")).toBeInTheDocument();
+    expect(screen.getAllByText("Notion").length).toBeGreaterThan(0);
+    expect(screen.getByText("notion-external-1")).toBeInTheDocument();
+    expect(screen.getByText("notion imported scope")).toBeInTheDocument();
+    expect(screen.getByText("Conversation included")).toBeInTheDocument();
   });
 
   it("passes special imported task selections through the issue import modal callback", () => {

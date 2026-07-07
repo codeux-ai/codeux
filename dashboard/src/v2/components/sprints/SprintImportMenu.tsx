@@ -2,7 +2,7 @@
 import { h } from "preact";
 import { createPortal } from "preact/compat";
 import { useCallback, useState, useRef, useEffect, useLayoutEffect } from "preact/hooks";
-import { Download, FileText, Github, Gitlab } from "lucide-preact";
+import { CheckSquare, Download, FileText, Github, Gitlab, ListTodo } from "lucide-preact";
 import { JiraIcon } from "../icons/JiraIcon.js";
 
 interface SprintImportMenuProps {
@@ -11,6 +11,9 @@ interface SprintImportMenuProps {
   onImportGitHubIssues: () => void;
   onImportGitLabIssues: () => void;
   onImportJira?: () => void;
+  onImportNotion?: () => void;
+  onImportAsana?: () => void;
+  onImportLinear?: () => void;
 }
 
 export const SprintImportMenu = ({
@@ -19,6 +22,9 @@ export const SprintImportMenu = ({
   onImportGitHubIssues,
   onImportGitLabIssues,
   onImportJira,
+  onImportNotion,
+  onImportAsana,
+  onImportLinear,
 }: SprintImportMenuProps) => {
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -33,7 +39,7 @@ export const SprintImportMenu = ({
     }
     const triggerRect = triggerRef.current.getBoundingClientRect();
     const menuWidth = 288;
-    const menuHeight = menuRef.current?.getBoundingClientRect().height ?? 238;
+    const menuHeight = menuRef.current?.getBoundingClientRect().height ?? 420;
     const viewportPadding = 16;
     const maxLeft = Math.max(viewportPadding, window.innerWidth - menuWidth - viewportPadding);
     const maxTop = Math.max(viewportPadding, window.innerHeight - menuHeight - viewportPadding);
@@ -129,7 +135,7 @@ export const SprintImportMenu = ({
           ref={menuRef}
           role="menu"
           id={menuId}
-          className="fixed z-[9999] w-72 origin-top overflow-hidden rounded-[1.2rem] border border-black/[0.08] bg-white p-2 shadow-[0_18px_38px_rgba(15,23,42,0.18)] ring-1 ring-black/[0.03] dark:border-white/[0.08] dark:bg-void-800 dark:ring-white/[0.03]"
+          className="fixed z-[9999] max-h-[calc(100vh-2rem)] w-72 origin-top overflow-y-auto rounded-[1.2rem] border border-black/[0.08] bg-white p-2 shadow-[0_18px_38px_rgba(15,23,42,0.18)] ring-1 ring-black/[0.03] dark:border-white/[0.08] dark:bg-void-800 dark:ring-white/[0.03]"
           style={{ top: menuPosition.top, left: menuPosition.left }}
         >
         <div className="flex flex-col gap-1">
@@ -217,6 +223,72 @@ export const SprintImportMenu = ({
               </span>
               <span className="text-[10px] text-slate-500 dark:text-slate-400">
                 Import issue scope from Jira
+              </span>
+            </div>
+          </button>
+
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              setIsOpen(false);
+              onImportNotion?.();
+            }}
+            className="group flex w-full items-center gap-3 rounded-[0.9rem] px-3 py-2.5 text-left transition-all hover:bg-black/[0.04] dark:hover:bg-white/[0.05]"
+          >
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-900/[0.07] text-slate-800 transition-transform group-hover:scale-110 group-hover:bg-slate-900/[0.12] dark:bg-white/[0.08] dark:text-white">
+              <FileText className="h-4 w-4" strokeWidth={2} />
+            </div>
+            <div className="flex flex-1 flex-col">
+              <span className="text-xs font-bold text-slate-700 transition-colors group-hover:text-slate-900 dark:text-slate-300 dark:group-hover:text-white">
+                Notion
+              </span>
+              <span className="text-[10px] text-slate-500 dark:text-slate-400">
+                Import page or database scope
+              </span>
+            </div>
+          </button>
+
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              setIsOpen(false);
+              onImportAsana?.();
+            }}
+            className="group flex w-full items-center gap-3 rounded-[0.9rem] px-3 py-2.5 text-left transition-all hover:bg-black/[0.04] dark:hover:bg-white/[0.05]"
+          >
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#FC636B]/10 text-[#B42334] transition-transform group-hover:scale-110 group-hover:bg-[#FC636B]/20 dark:text-[#FDA4AF]">
+              <CheckSquare className="h-4 w-4" strokeWidth={2} />
+            </div>
+            <div className="flex flex-1 flex-col">
+              <span className="text-xs font-bold text-slate-700 transition-colors group-hover:text-slate-900 dark:text-slate-300 dark:group-hover:text-white">
+                Asana
+              </span>
+              <span className="text-[10px] text-slate-500 dark:text-slate-400">
+                Import task scope from Asana
+              </span>
+            </div>
+          </button>
+
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              setIsOpen(false);
+              onImportLinear?.();
+            }}
+            className="group flex w-full items-center gap-3 rounded-[0.9rem] px-3 py-2.5 text-left transition-all hover:bg-black/[0.04] dark:hover:bg-white/[0.05]"
+          >
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#5E6AD2]/10 text-[#3F46A3] transition-transform group-hover:scale-110 group-hover:bg-[#5E6AD2]/20 dark:text-[#B8BCF8]">
+              <ListTodo className="h-4 w-4" strokeWidth={2} />
+            </div>
+            <div className="flex flex-1 flex-col">
+              <span className="text-xs font-bold text-slate-700 transition-colors group-hover:text-slate-900 dark:text-slate-300 dark:group-hover:text-white">
+                Linear
+              </span>
+              <span className="text-[10px] text-slate-500 dark:text-slate-400">
+                Import issue scope from Linear
               </span>
             </div>
           </button>
