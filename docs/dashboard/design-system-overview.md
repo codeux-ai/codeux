@@ -3,7 +3,7 @@
 This document outlines the architectural and stylistic guidelines for the Dashboard's primary Overview command surface.
 
 ## Goal
-The overview page acts as a centralized "Polished Operational Command Surface." It is a dense, responsive workspace intended for real-time monitoring and routing, avoiding the loose, airy feel of a marketing landing page.
+The overview page acts as a centralized "Polished Operational Command Surface." It is a dense, responsive workspace intended for real-time monitoring and routing, avoiding the loose, airy feel of a marketing landing page. The active UI runs on v2 pages (`/` Overview, `/projects`, `/sprints`, `/tasks`, `/agents`, `/stats`, `/scheduler`, `/memory`, `/knowledge`, `/browser`, `/files`, `/live`, `/chat`, and `/config`).
 
 ## Layout Hierarchy
 

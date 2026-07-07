@@ -35,7 +35,7 @@ Stable layouts on narrow widths (especially mobile or multi-panel layouts) must 
 - **Search and Telemetry Layout:** Components should gracefully hide text or collapse altogether (e.g. icon-only triggers) instead of overflowing the flex container.
 
 ### 5. Standardized Components
-The shell relies on reusable layout components from `dashboard/src/v2/components/layout/` (such as `Sidebar` and `NavItem`) and top navigation components from `dashboard/src/v2/components/top-nav/` (such as `BrandSection`, `GlobalSearch`, and `TelemetryStats`).
+The shell relies on reusable layout components from `dashboard/src/v2/components/layout/` (such as `Sidebar`, `NavItem`, and `KineticDock` which features labels for Overview, Sprints, Tasks, Agents, Stats, Schedule, Memory, Knowledge, Browser, Files, Live, Config, and Chat) and top navigation components from `dashboard/src/v2/components/top-nav/` (such as `BrandSection`, `GlobalSearch`, and `TelemetryStats`).
 
 ### 6. Hover and Active Indicators
 - **Motion Tokens:** Shell navigation must use the interaction contracts in `dashboard/src/v2/lib/motion`. Use `controlFeedback` for hover, focus, icon color, and label feedback; `selectionMovement` for active route backgrounds, vertical markers, and minimized/expanded label reveal; and `enterExit` for mobile drawer and backdrop transitions.
