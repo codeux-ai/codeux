@@ -224,6 +224,41 @@ describe("NodeFlowRuntimeService", () => {
     expect(result.output?.recovered).toMatch(/http or https/i);
   });
 
+  it("preserves cancelled run status when an abort is observed during node execution", async () => {
+    const controller = new AbortController();
+    const executeProvider = vi.fn().mockImplementation(() => {
+      controller.abort("test_cancel");
+      throw new Error("provider cancelled");
+    });
+    const { dir, projectRepository, nodeFlowRepository, executionRepository, runtime } = await createRuntime({ executeProvider } as Partial<ProviderExecutionService>);
+    const project = projectRepository.createProject({ name: "Cancelled Project", sourceType: "local", sourceRef: dir });
+    const flow = nodeFlowRepository.createFlow(project.id, {
+      title: "Cancelled",
+      graph: {
+        nodes: [
+          { id: "input", type: "input", title: "Input" },
+          { id: "prompt", type: "provider_prompt", title: "Prompt", data: { provider: "mockup-cli", prompt: "Answer {{input.question}}" } },
+          { id: "output", type: "output", title: "Output" },
+        ],
+        edges: [
+          { fromNodeId: "input", toNodeId: "prompt" },
+          { fromNodeId: "prompt", toNodeId: "output" },
+        ],
+      },
+    });
+
+    const result = await runtime.runFlow(project.id, flow.id, { question: "now" }, { signal: controller.signal });
+
+    expect(result.run.status).toBe("cancelled");
+    expect(result.run.errorMessage).toBe("provider cancelled");
+    expect(result.nodeRuns.map((nodeRun) => [nodeRun.nodeId, nodeRun.status])).toEqual([
+      ["input", "succeeded"],
+      ["prompt", "cancelled"],
+      ["output", "cancelled"],
+    ]);
+    expect(executionRepository.getExecutionInvocation(result.run.executionInvocationId!)?.status).toBe("cancelled");
+  });
+
   it("masks secrets in run payloads, node payloads, and invocation messages", async () => {
     const { dir, projectRepository, nodeFlowRepository, executionRepository, runtime } = await createRuntime();
     const project = projectRepository.createProject({ name: "Secret Project", sourceType: "local", sourceRef: dir });

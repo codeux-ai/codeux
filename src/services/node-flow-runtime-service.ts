@@ -125,7 +125,8 @@ export class NodeFlowRuntimeService {
     let terminalStatus: NodeFlowRunRecord["status"] = "succeeded";
     let terminalError: string | null = null;
 
-    for (const nodeId of executionOrder) {
+    for (let nodeIndex = 0; nodeIndex < executionOrder.length; nodeIndex += 1) {
+      const nodeId = executionOrder[nodeIndex]!;
       const node = graph.nodes.find((candidate) => candidate.id === nodeId);
       if (!node) {
         continue;
@@ -168,15 +169,27 @@ export class NodeFlowRuntimeService {
         });
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
+        const wasCancelled = options.signal?.aborted === true;
         const continueOnError = node.data?.continueOnError === true;
         const failureOutput = { error: message };
         context.outputs.set(node.id, failureOutput);
         this.deps.nodeFlowRepository.updateNodeRun(nodeRun.id, {
-          status: options.signal?.aborted ? "cancelled" : "failed",
+          status: wasCancelled ? "cancelled" : "failed",
           output: maskSecrets(failureOutput),
           errorMessage: message,
           finishedAt: new Date().toISOString(),
         });
+        if (wasCancelled) {
+          terminalStatus = "cancelled";
+          terminalError ??= message || "Node flow run was cancelled.";
+          for (const remainingNodeId of executionOrder.slice(nodeIndex + 1)) {
+            const remaining = graph.nodes.find((candidate) => candidate.id === remainingNodeId);
+            if (remaining) {
+              await this.persistSkippedNode(context, remaining, "cancelled", terminalError);
+            }
+          }
+          break;
+        }
         if (!continueOnError) {
           terminalStatus = "failed";
           terminalError ??= message;

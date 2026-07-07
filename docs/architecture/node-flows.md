@@ -75,7 +75,7 @@ Cancellation records cancelled node rows for the current and remaining nodes. At
 
 Scheduler entries with `targetType: "node_flow"` persist `nodeFlowTarget = { flowId, input?, flowVersion? }` inside `scheduler_entries.target_json`. Ownership is validated when entries are created or updated and again before due-run execution.
 
-Due runs call `NodeFlowRuntimeService.runFlow` with `triggerType = "scheduler"` and trigger payload metadata for the scheduler entry id, scheduled occurrence time, target type, and persisted flow version when present. Node-flow schedules advance only after `runFlow` returns, so runtime startup failures do not create a false successful schedule run.
+Due runs call `NodeFlowRuntimeService.runFlow` with `triggerType = "scheduler"` and trigger payload metadata for the scheduler entry id, scheduled occurrence time, target type, and persisted flow version when present. Node-flow schedules advance only when `runFlow` returns a run status of `succeeded`. Returned `failed` or `cancelled` runs mark the scheduler entry `failed` with the run error and still count the attempted occurrence in `lastRunAt` and `runCount`; runtime startup rejections mark failure without creating a false successful schedule run.
 
 ## Agent Skill Attachment
 
