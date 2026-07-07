@@ -99,6 +99,7 @@ The `pnpm run test:e2e` wrapper chooses an isolated dashboard/MCP port pair, exp
 Focused examples:
 ```bash
 pnpm run test:e2e -- tests/e2e/product-smoke.spec.ts
+pnpm run test:e2e -- tests/e2e/dashboard-workflows.spec.ts
 pnpm run test:e2e -- tests/e2e/sprint-task-lifecycle.spec.ts
 pnpm run test:e2e -- tests/e2e/app-release-smoke.spec.ts
 pnpm run test:e2e -- tests/e2e/project-setup-release.spec.ts
@@ -111,6 +112,7 @@ The release-style E2E suite lives under `tests/e2e` and exercises the production
 
 - `tests/e2e/app-release-smoke.spec.ts`, which verifies the normal app shell, core dashboard routes, responsive task-board behavior, route landmarks, and unexpected browser errors.
 - `tests/e2e/project-setup-release.spec.ts`, which verifies first-run onboarding completion, visible Add Project modal behavior for a credential-free local directory under the OS temp path, dashboard project selection, `/projects` landmarks, `/tasks` navigation, loading/error checks, and desktop/mobile overflow checks without provider secrets or orchestration endpoints.
+- `tests/e2e/dashboard-workflows.spec.ts`, which verifies isolated local-git project selection, draft sprint creation, dependent task creation, collection API visibility, core route landmarks, and unhandled browser error capture without starting planning or provider execution.
 - `tests/e2e/sprint-task-lifecycle.spec.ts`, which verifies draft sprint and implementation task create/edit/delete behavior through the visible dashboard flows and collection API assertions.
 - `tests/e2e/helpers/prepare-app.ts`, which prepares deterministic app state through dashboard HTTP APIs for onboarding, local project selection, draft sprint setup, task setup, updates, deletes, and cleanup.
 - `tests/e2e/helpers/e2e-fixtures.ts`, which adds reusable helpers for temporary git repositories, selected Code UX project seeding, project settings overrides for local-git HOST execution, QA-disabled deterministic sprint/task fixtures, API polling, and dashboard onboarding/tour suppression.
