@@ -35,7 +35,7 @@ Long threads accumulate context cost. Click **Compact** to:
 
 1. Ask the assigned CLI provider to run its native compact command in the current session.
 2. Store the provider's compaction output on the thread for audit and recovery.
-3. Continue the conversation in the same provider session with a smaller context.
+3. Continue the conversation in the same provider session with a smaller context when one is active; otherwise keep the thread marked for replay from the stored handoff summary on the next turn.
 
 ## Invocations
 

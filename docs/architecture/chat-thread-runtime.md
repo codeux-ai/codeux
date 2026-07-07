@@ -72,7 +72,8 @@ When triggered on a connected MCP chat route, the dashboard now sends a hidden c
 
 The compact action then:
 - stores the provider's compaction output in `runtimeState.compactionSummary`
-- preserves the active native provider `sessionIds` for virtual CLI routes after native compaction
+- preserves the active native provider `sessionIds` for virtual CLI routes after native compaction when a live session exists
+- leaves `sessionIds` empty and keeps `replayRequired` enabled when compaction is only producing a stored handoff summary for a thread that does not already have an active provider session
 - sets `replayRequired` only when a route needs to restart from a stored handoff
 
 The original visible `ConversationMessageRecord` history remains intact in the dashboard. Virtual CLI routes continue from the compacted provider-native session, while any route that must start fresh can replay from the compacted summary plus only the messages created after that summary was generated.

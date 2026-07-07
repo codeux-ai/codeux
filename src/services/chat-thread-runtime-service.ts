@@ -245,6 +245,8 @@ export class ChatThreadRuntimeService {
       throw new Error(`Project not found: ${thread.projectId}`);
     }
     const messages = this.deps.connectionChatRepository.listMessages(thread.id);
+    const activeSessionId = thread.runtimeState?.sessionIds?.[0]?.trim() || null;
+    const preserveActiveSession = !!activeSessionId;
     if (messages.length === 0) {
       return this.deps.connectionChatRepository.updateThread(thread.id, {
         runtimeState: {
@@ -262,12 +264,22 @@ export class ChatThreadRuntimeService {
       throw new Error("Failed to resolve a chat worker for thread compaction.");
     }
 
-    const compacted = await this.generateThreadCompaction(project.id, project.baseDir, thread, messages, route);
+    const compacted = await this.generateThreadCompaction(
+      project.id,
+      project.baseDir,
+      thread,
+      messages,
+      route,
+      activeSessionId || thread.id,
+      preserveActiveSession,
+    );
 
     const newRuntimeState: ConversationRuntimeState = {
       ...thread.runtimeState,
-      replayRequired: false,
-      sessionIds: [compacted.nativeSessionId || compacted.summary.nativeSessionId || compacted.continueSessionId],
+      replayRequired: preserveActiveSession ? false : true,
+      sessionIds: preserveActiveSession
+        ? [compacted.nativeSessionId || compacted.summary.nativeSessionId || compacted.continueSessionId]
+        : [],
       compactionSummary: compacted.summary,
     };
 
@@ -632,6 +644,8 @@ export class ChatThreadRuntimeService {
     thread: ConversationThreadRecord,
     messages: ConversationMessageRecord[],
     route: ThreadRouteResolution,
+    continueSessionId: string,
+    preserveActiveSession: boolean,
   ): Promise<{ summary: ConversationCompactionSummary & { nativeSessionId?: string | null }; nativeSessionId: string | null; continueSessionId: string }> {
     const provider = route.providerId!;
     // Fold customModel into the model so a local-redirect instance (customModel/customBaseUrl)
@@ -654,7 +668,6 @@ export class ChatThreadRuntimeService {
     const project = this.deps.projectManagementRepository.getProject(projectId);
     const defaultBranch = resolveEffectiveDefaultBranch(project ?? {}, dashboardSettings);
     const githubToken = this.deps.getGithubToken();
-    const continueSessionId = thread.runtimeState?.sessionIds?.[0]?.trim();
     if (!continueSessionId) {
       throw new Error("Native chat compaction requires an active provider session to continue.");
     }
@@ -746,7 +759,7 @@ export class ChatThreadRuntimeService {
           model,
           sourceMessageId: messages[messages.length - 1]?.id || null,
           sourceMessageCount: messages.length,
-          nativeSessionId,
+          ...(preserveActiveSession ? { nativeSessionId } : {}),
         },
         nativeSessionId,
         continueSessionId,
