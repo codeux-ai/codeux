@@ -171,4 +171,70 @@ describe("NodeFlowRepository", () => {
       output: { response: "Done" },
     });
   });
+
+  it("creates and updates flow runs and node runs with linked invocation ids", async () => {
+    const { dir, storage, projectRepository, nodeFlowRepository } = await createRepositories();
+    const project = projectRepository.createProject({
+      name: "Node Flow Project",
+      sourceType: "local",
+      sourceRef: dir,
+    });
+    const flow = nodeFlowRepository.createFlow(project.id, {
+      title: "Release checklist",
+      graph: graph(),
+    });
+    const now = "2026-07-07T00:00:00.000Z";
+    storage.getDatabase().prepare(`
+      INSERT INTO execution_invocations (
+        id, project_id, type, status, started_at, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).run("xi-node-flow-test", project.id, "node_flow", "running", now, now, now);
+    storage.getDatabase().prepare(`
+      INSERT INTO execution_invocations (
+        id, project_id, type, status, started_at, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).run("xi-node-test", project.id, "node_flow_node", "running", now, now, now);
+
+    const run = nodeFlowRepository.createRun({
+      flowId: flow.id,
+      projectId: project.id,
+      version: flow.version,
+      executionInvocationId: "xi-node-flow-test",
+      input: { prompt: "Ship" },
+      startedAt: now,
+    });
+    const nodeRun = nodeFlowRepository.createNodeRun({
+      runId: run.id,
+      flowId: flow.id,
+      projectId: project.id,
+      nodeId: "one",
+      status: "running",
+      executionInvocationId: "xi-node-test",
+      input: { prompt: "Ship" },
+      startedAt: now,
+    });
+
+    const updatedNodeRun = nodeFlowRepository.updateNodeRun(nodeRun.id, {
+      status: "succeeded",
+      output: { response: "Done" },
+      finishedAt: now,
+    });
+    const updatedRun = nodeFlowRepository.updateRun(run.id, {
+      status: "succeeded",
+      output: { ok: true },
+      finishedAt: now,
+    });
+
+    expect(updatedRun).toMatchObject({
+      status: "succeeded",
+      executionInvocationId: "xi-node-flow-test",
+      output: { ok: true },
+    });
+    expect(updatedNodeRun).toMatchObject({
+      status: "succeeded",
+      executionInvocationId: "xi-node-test",
+      output: { response: "Done" },
+    });
+    expect(nodeFlowRepository.listNodeRuns(run.id)[0]?.executionInvocationId).toBe("xi-node-test");
+  });
 });

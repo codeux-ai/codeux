@@ -1,12 +1,13 @@
 import type { Express } from "express";
 import type { DashboardDependencies } from "./dashboard-server.js";
 import { HttpRouteError } from "./http-errors.js";
-import { syncRoute } from "./route-utils.js";
+import { asyncRoute, syncRoute } from "./route-utils.js";
 import { requireTrimmedString, parseOptionalInteger } from "./request-parsers.js";
 import type {
   AttachNodeFlowSkillInput,
   CreateNodeFlowInput,
   NodeFlowGraph,
+  NodeFlowJsonObject,
   UpdateNodeFlowInput,
 } from "../contracts/node-flow-types.js";
 
@@ -57,6 +58,25 @@ export function registerNodeFlowRoutes(app: Express, deps: DashboardDependencies
       requireTrimmedString(req.params.flowId, "flowId"),
       body.graph,
     ));
+  }));
+
+  app.post("/api/node-flows/:flowId/run", asyncRoute(async (req, res) => {
+    const body = req.body as {
+      projectId?: string;
+      input?: Record<string, unknown>;
+      triggerType?: string;
+      triggerPayload?: NodeFlowJsonObject;
+    };
+    const result = await requireNodeFlowService(deps).runFlow(
+      requireTrimmedString(body.projectId, "projectId"),
+      requireTrimmedString(req.params.flowId, "flowId"),
+      body.input,
+      {
+        triggerType: body.triggerType,
+        triggerPayload: body.triggerPayload,
+      },
+    );
+    res.status(201).json(result);
   }));
 
   app.get("/api/node-flows/:flowId/agent-skills", syncRoute((req, res) => {

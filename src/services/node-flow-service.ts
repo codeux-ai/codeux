@@ -5,18 +5,25 @@ import type {
   AttachNodeFlowSkillInput,
   CreateNodeFlowInput,
   NodeFlowGraph,
+  NodeFlowJsonObject,
   NodeFlowListResponse,
   NodeFlowNodeRunListResponse,
   NodeFlowRecord,
   NodeFlowRunListResponse,
   NodeFlowRunRecord,
+  NodeFlowRunSummaryResponse,
   NodeFlowSkillAttachment,
   NodeFlowValidationResponse,
+  RunNodeFlowOptions,
   UpdateNodeFlowInput,
 } from "../contracts/node-flow-types.js";
+import type { NodeFlowRuntimeService } from "./node-flow-runtime-service.js";
 
 export class NodeFlowService {
-  constructor(private readonly repository: NodeFlowRepository = new NodeFlowRepository()) {}
+  constructor(
+    private readonly repository: NodeFlowRepository = new NodeFlowRepository(),
+    private readonly runtimeService?: NodeFlowRuntimeService,
+  ) {}
 
   list(projectId: string): NodeFlowListResponse {
     return { flows: this.repository.listFlows(projectId) };
@@ -99,6 +106,23 @@ export class NodeFlowService {
   listNodeRuns(runId: string): NodeFlowNodeRunListResponse {
     return { nodeRuns: this.repository.listNodeRuns(runId) };
   }
+
+  async runFlow(
+    projectId: string,
+    flowId: string,
+    input: Record<string, unknown> | undefined,
+    options?: RunNodeFlowOptions,
+  ): Promise<NodeFlowRunSummaryResponse> {
+    if (!this.runtimeService) {
+      throw new ValidationError("Node flow runtime is not configured.");
+    }
+    return await this.runtimeService.runFlow(
+      normalizeRequiredText(projectId, "projectId"),
+      normalizeRequiredText(flowId, "flowId"),
+      normalizeJsonObject(input ?? {}, "input"),
+      options,
+    );
+  }
 }
 
 function normalizeRequiredText(value: string | undefined, label: string): string {
@@ -111,4 +135,31 @@ function normalizeRequiredText(value: string | undefined, label: string): string
 
 function normalizeOptionalText(value: string | undefined): string {
   return value?.trim() || "";
+}
+
+function normalizeJsonObject(value: unknown, label: string): NodeFlowJsonObject {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new ValidationError(`${label} must be a JSON object.`);
+  }
+  if (!isJsonValue(value)) {
+    throw new ValidationError(`${label} must be JSON-serializable.`);
+  }
+  return value as NodeFlowJsonObject;
+}
+
+function isJsonValue(value: unknown): boolean {
+  if (value === null) {
+    return true;
+  }
+  if (typeof value === "string" || typeof value === "boolean") {
+    return true;
+  }
+  if (typeof value === "number") {
+    return Number.isFinite(value);
+  }
+  if (Array.isArray(value)) {
+    return value.every((entry) => isJsonValue(entry));
+  }
+  return typeof value === "object"
+    && Object.values(value as Record<string, unknown>).every((entry) => isJsonValue(entry));
 }
