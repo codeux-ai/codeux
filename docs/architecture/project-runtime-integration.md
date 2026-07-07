@@ -57,6 +57,9 @@ Legacy cleanup:
 - unscoped project-level runtime rows from the pre-multi-sprint bridge are treated as deprecated
 - explicit sprint reads and rerun flows now use sprint-scoped runtime only, so stale data from an old sprint cannot override the active sprint branch
 
+Runtime cleanup:
+- Dedicated cleanup paths (`RuntimeCleanupService`, `DockerRuntimePruneService`, `DockerAssetPruneService`) handle stale previews, orphaned containers, setup images, and workspace/runtime volumes, keeping execution state aligned with container assets.
+
 ## Current Boundaries
 
 This is still a bridge layer, not the final runtime architecture.
