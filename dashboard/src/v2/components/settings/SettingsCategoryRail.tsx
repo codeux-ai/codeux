@@ -32,6 +32,7 @@ export interface SettingsCategoryRailProps {
   onSwitchCategory: (categoryId: CategoryId) => void;
   pendingCategory?: CategoryId | null;
   disabledCategoryReason?: string | null;
+  className?: string;
 }
 
 export const SettingsCategoryRail: FunctionComponent<SettingsCategoryRailProps> = ({
@@ -42,6 +43,7 @@ export const SettingsCategoryRail: FunctionComponent<SettingsCategoryRailProps> 
   onSwitchCategory,
   pendingCategory = null,
   disabledCategoryReason = null,
+  className,
 }) => {
   const normalizedSearch = settingsSearch.trim().toLowerCase();
   const railRef = useRef<HTMLElement | null>(null);
@@ -126,7 +128,10 @@ export const SettingsCategoryRail: FunctionComponent<SettingsCategoryRailProps> 
       onScroll={updateRailMetrics}
       style={railHeightStyle}
       data-motion-contract="selectionMovement"
-      className="scrollbar-hide flex min-w-0 flex-col gap-3 rounded-[1.75rem] border border-[color:var(--border-hairline)] bg-[var(--surface-glass)] p-3 backdrop-blur-2xl shadow-[var(--elevation-base)] lg:sticky lg:top-16 lg:max-h-[var(--settings-category-rail-available-height)] lg:overflow-y-auto lg:overscroll-contain"
+      className={[
+        "scrollbar-hide flex min-w-0 flex-col gap-3 rounded-[1.75rem] border border-[color:var(--border-hairline)] bg-[var(--surface-glass)] p-3 backdrop-blur-2xl shadow-[var(--elevation-base)] lg:sticky lg:top-16 lg:max-h-[var(--settings-category-rail-available-height)] lg:overflow-y-auto lg:overscroll-contain",
+        className,
+      ].filter(Boolean).join(" ")}
     >
       <div
         id={instructionsId}
