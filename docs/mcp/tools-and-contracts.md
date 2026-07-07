@@ -267,7 +267,23 @@ The dedicated management tools (`manage_sprints`, `manage_tasks`, `manage_quicks
 
 Node-flow management always delegates graph validation and persistence to `NodeFlowService`; `run` delegates execution through the configured node-flow runtime service. Create and update calls reject malformed graph specs before repository writes. `delete` uses the standard stateful approval handshake.
 
-Agents should build Code UX-adapted flows from structured graph specs instead of cloning n8n workflows one-to-one. Graphs should include widget schemas for editable inputs and node fields; MCP callers can provide `widgets` as a graph-level `{ fields: [...] }` schema or as node-id keys mapped to each node's widget schema. Flow and run responses mask secret-shaped graph data, inputs, and outputs before returning them through MCP.
+The graph payload is the shared `NodeFlowGraph` contract:
+
+- `nodes`: `{ id, type, title, description?, position?, widgetSchema?, data? }`
+- `edges`: `{ id?, fromNodeId, toNodeId, fromHandle?, toHandle? }`
+- `inputSchema`: optional graph-level widget schema for run input
+- `metadata`: optional JSON object
+
+Validation checks graph shape, unique node ids, edge endpoints, acyclicity, JSON-safe node data, widget schema fields, select options, finite numeric constraints, and default values that match field types. Runtime support is narrower than graph storage: executable node types are currently `input`, `set_fields`, `template`, `provider_prompt`, `http_request`, and `output`.
+
+Agents should build Code UX-adapted flows from structured graph specs instead of cloning n8n workflows one-to-one. A good flow exposes the values an operator or agent should edit, keeps runtime behavior repeatable, names nodes by Code UX behavior, and validates every required field before saving. MCP callers can provide `widgets` as a graph-level `{ fields: [...] }` schema or as node-id keys mapped to each node's `widgetSchema`.
+
+Secret-safe widget guidance:
+
+- use `secretRef` for credential references, not raw secret values
+- do not put API keys, bearer tokens, cookies, passwords, or private headers in `graph.metadata`, `node.data`, widget defaults, run `input`, or examples
+- use placeholder references such as `settings.provider.default` or `secret://service/token`
+- treat MCP responses as redacted summaries; flow and run responses mask secret-shaped graph data, inputs, trigger payloads, node payloads, and outputs before returning them through MCP
 
 Attach a flow as an agent skill:
 
@@ -291,6 +307,116 @@ Run a flow:
   "input": {
     "prompt": "Review the current diff"
   }
+}
+```
+
+Create a small executable flow with graph-level run widgets:
+
+```json
+{
+  "action": "create",
+  "projectId": "project-123",
+  "name": "Daily API Check",
+  "description": "Fetches a status endpoint and returns a compact result.",
+  "graph": {
+    "nodes": [
+      { "id": "input", "type": "input", "title": "Run input" },
+      {
+        "id": "request",
+        "type": "http_request",
+        "title": "Fetch status",
+        "data": {
+          "method": "GET",
+          "url": "{{ input.statusUrl }}",
+          "headers": { "authorization": "Bearer {{ input.apiTokenRef }}" },
+          "responsePath": "status"
+        }
+      },
+      {
+        "id": "output",
+        "type": "output",
+        "title": "Return status",
+        "data": { "fields": { "status": "{{ nodes.request.extracted }}" } }
+      }
+    ],
+    "edges": [
+      { "fromNodeId": "input", "toNodeId": "request" },
+      { "fromNodeId": "request", "toNodeId": "output" }
+    ]
+  },
+  "widgets": {
+    "fields": [
+      { "id": "statusUrl", "type": "text", "label": "Status URL", "required": true },
+      { "id": "apiTokenRef", "type": "secretRef", "label": "API token reference", "required": true }
+    ]
+  }
+}
+```
+
+Use node-id keyed widgets when node configuration should stay editable in the dashboard inspector:
+
+```json
+{
+  "action": "update",
+  "flowId": "flow-123",
+  "graph": {
+    "nodes": [
+      { "id": "request", "type": "http_request", "title": "Fetch status" }
+    ],
+    "edges": []
+  },
+  "widgets": {
+    "request": {
+      "fields": [
+        {
+          "id": "method",
+          "type": "select",
+          "label": "HTTP method",
+          "defaultValue": "GET",
+          "options": [
+            { "label": "GET", "value": "GET" },
+            { "label": "POST", "value": "POST" }
+          ]
+        },
+        { "id": "url", "type": "text", "label": "URL", "required": true }
+      ]
+    }
+  }
+}
+```
+
+Validate a draft graph without saving:
+
+```json
+{
+  "action": "validate",
+  "projectId": "project-123",
+  "graph": {
+    "nodes": [
+      { "id": "input", "type": "input", "title": "Run input" }
+    ],
+    "edges": []
+  }
+}
+```
+
+Inspect runs:
+
+```json
+{ "action": "list_runs", "flowId": "flow-123" }
+```
+
+```json
+{ "action": "get_run", "runId": "run-123" }
+```
+
+Detach a flow from an agent:
+
+```json
+{
+  "action": "detach_from_agent",
+  "flowId": "flow-123",
+  "agentPresetId": "agent-123"
 }
 ```
 

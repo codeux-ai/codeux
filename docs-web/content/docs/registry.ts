@@ -22,6 +22,7 @@ export type DocsSlug =
   | 'user-dashboard-chat'
   | 'user-dashboard-agents'
   | 'user-dashboard-nodes'
+  | 'user-dashboard-node-flows'
   | 'user-dashboard-scheduler'
   | 'user-dashboard-memory'
   | 'user-dashboard-knowledge'
@@ -194,6 +195,13 @@ export const docsRegistry: Record<DocsSlug, DocsRegistryEntry> = {
     section: 'User Guide',
     title: "Nodes",
     description: "The Nodes page (/nodes) manages project-scoped workflow graphs for editing, widget configuration, agent attachments, validation, and persisted run inspection.",
+  },
+  'user-dashboard-node-flows': {
+    id: 'user-dashboard-node-flows',
+    path: '/docs/user-dashboard-node-flows',
+    section: 'User Guide',
+    title: "Node Flows",
+    description: "Create and operate saved node-flow workflows for the active project, including dynamic widgets, validation, manual runs, scheduling, run inspection, and agent skill attachments.",
   },
   'user-dashboard-scheduler': {
     id: 'user-dashboard-scheduler',
@@ -427,6 +435,7 @@ export const orderedDocs: DocsRegistryEntry[] = [
   docsRegistry['user-dashboard-chat'],
   docsRegistry['user-dashboard-agents'],
   docsRegistry['user-dashboard-nodes'],
+  docsRegistry['user-dashboard-node-flows'],
   docsRegistry['user-dashboard-scheduler'],
   docsRegistry['user-dashboard-memory'],
   docsRegistry['user-dashboard-knowledge'],

@@ -114,6 +114,61 @@ Agents should build Code UX-adapted node flows rather than cloning n8n workflows
 should include dynamic widget schemas for editable graph inputs and node fields; callers can provide
 `widgets` as a graph-level `{ fields: [...] }` schema or as node-id keys mapped to node widget schemas.
 
+Executable node types are currently `input`, `set_fields`, `template`, `provider_prompt`,
+`http_request`, and `output`. Graph validation accepts structured drafts, but runtime execution rejects
+unsupported node types.
+
+Minimal create payload:
+
+```jsonc
+{
+  "action": "create",
+  "projectId": "project-123",
+  "name": "Daily API Check",
+  "graph": {
+    "nodes": [
+      { "id": "input", "type": "input", "title": "Run input" },
+      {
+        "id": "request",
+        "type": "http_request",
+        "title": "Fetch status",
+        "data": {
+          "method": "GET",
+          "url": "{{ input.statusUrl }}",
+          "headers": { "authorization": "Bearer {{ input.apiTokenRef }}" }
+        }
+      },
+      { "id": "output", "type": "output", "title": "Output" }
+    ],
+    "edges": [
+      { "fromNodeId": "input", "toNodeId": "request" },
+      { "fromNodeId": "request", "toNodeId": "output" }
+    ]
+  },
+  "widgets": {
+    "fields": [
+      { "id": "statusUrl", "type": "text", "label": "Status URL", "required": true },
+      { "id": "apiTokenRef", "type": "secretRef", "label": "API token reference", "required": true }
+    ]
+  }
+}
+```
+
+Attach and run:
+
+```jsonc
+{ "action": "attach_to_agent", "flowId": "flow-123", "agentPresetId": "agent-123", "skillAlias": "Daily API Check" }
+```
+
+```jsonc
+{ "action": "run", "projectId": "project-123", "flowId": "flow-123", "input": { "statusUrl": "https://example.test/status", "apiTokenRef": "secret://status/token" } }
+```
+
+Use `validate` to inspect a draft graph without saving, `list_runs` for recent run summaries, and
+`get_run` for the parent run plus per-node rows. Keep raw secrets out of MCP payloads; use references
+and let Code UX redaction mask any secret-shaped keys in returned graph, input, trigger, and output
+payloads.
+
 ## Approval handshake (destructive actions)
 
 Destructive and mutating actions require a two-step confirmation. The first call returns an approval

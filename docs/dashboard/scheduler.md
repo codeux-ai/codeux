@@ -28,7 +28,7 @@ Those agent-created target types are intentionally backend-only in this task. Th
 
 When `agent_wakeup` or `task` entries are created by the secured MCP scheduler tool, the Scheduler page can display them in the calendar, 24-hour view, stats, and scheduled-entry list. They use their own concise target labels, chips, and summaries, for example an agent wakeup thread or task rerun ID, instead of falling back to chat labels.
 
-The dashboard form supports operator-created sprint, quicksprint, node-flow, chat, and memory remediation targets. Node-flow entries select a saved project flow and may include optional JSON input; blank input is omitted from the scheduler payload, and invalid JSON is rejected before submission. MCP-created `agent_wakeup` and `task` entries cannot be safely edited in that form, so their Edit action explains that dashboard editing is unavailable while Pause, Resume, and Delete remain available.
+The dashboard form supports operator-created sprint, quicksprint, node-flow, chat, and memory remediation targets. Node-flow entries select a saved project flow and may include optional JSON object input; blank input is omitted from the scheduler payload, and invalid JSON or non-object JSON is rejected before submission. MCP-created `agent_wakeup` and `task` entries cannot be safely edited in that form, so their Edit action explains that dashboard editing is unavailable while Pause, Resume, and Delete remain available.
 
 The Sprint Composer also exposes a `Schedule` execution mode. That path saves the sprint definition first, including the sprint key override, name, goal, original prompt, planning route/model overrides, agent preset selections, linked issues, and imported tasks, then creates a scheduler entry targeting the saved sprint. It does not call planning or execution immediately.
 
@@ -78,7 +78,7 @@ The target payload keys are:
 - `nodeFlowTarget`: `{ flowId, input?, flowVersion? }`
 - `agentWakeupTarget`: `{ bodyMarkdown, threadId?, title?, connectionId?, origin: "agent_scheduler", source: "agent_scheduler", createdByAgentId? }`
 
-`node_flow` entries keep their flow id and optional input in `target_json`; ownership is checked when entries are created or updated and again before due-run execution. `agent_wakeup` and `task` entries always normalize `origin` and `source` to `agent_scheduler` in `target_json`. When the creator supplies `createdByAgentId`, it is preserved with the target payload for later authorization, audit, and notification work. Existing sprint, quicksprint, chat, memory remediation, recurrence, pause/resume, and `after_sprint_end` anchor rows continue to hydrate from the same JSON payload without a schema migration.
+`node_flow` entries keep their flow id and optional input in `target_json`; ownership is checked when entries are created or updated and again before due-run execution. The persisted `flowVersion` is target metadata and is passed in scheduler trigger payloads for auditability; the current runtime executes through the latest node-flow runtime API. `agent_wakeup` and `task` entries always normalize `origin` and `source` to `agent_scheduler` in `target_json`. When the creator supplies `createdByAgentId`, it is preserved with the target payload for later authorization, audit, and notification work. Existing sprint, quicksprint, chat, memory remediation, recurrence, pause/resume, and `after_sprint_end` anchor rows continue to hydrate from the same JSON payload without a schema migration.
 
 The shared TypeScript contract lives in:
 - `src/contracts/scheduler-types.ts`
@@ -142,6 +142,22 @@ Due entries execute through existing production paths:
 AI memory remediation entries create a `remediation` invocation record even when no cleanup candidates are found; in that case the invocation is completed with a skipped reason instead of dispatching an empty provider request.
 
 After a successful run, the service advances `nextRunAt` from the scheduled occurrence time. One-time entries move to `completed`; recurring entries stay `scheduled` until their count or end date/time is exhausted. Failed entries move to `failed` with `lastError` for operator visibility. Node-flow entries advance only after `runFlow` returns, so a runtime startup failure does not mark the schedule succeeded.
+
+### Node-Flow Schedules
+
+Node-flow schedules use `targetType: "node_flow"` and `nodeFlowTarget = { flowId, input?, flowVersion? }`.
+
+Behavior:
+
+- `flowId` must reference a saved flow owned by the selected project.
+- `input` is optional and must be a JSON object when supplied; dashboard blank input is omitted.
+- Absolute and recurring node-flow schedules use the same recurrence model as sprint, quicksprint, chat, and memory remediation entries.
+- Pause changes status to `paused` and prevents automated due execution without deleting the entry.
+- Resume recomputes `nextRunAt` to the first future occurrence so missed runs are not replayed immediately.
+- Due execution calls `NodeFlowRuntimeService.runFlow(projectId, flowId, input, { triggerType: "scheduler", triggerPayload })`.
+- The trigger payload includes scheduler entry id, scheduled occurrence time, target type, and `flowVersion` when the schedule stored one.
+- On success, one-time entries complete and recurring entries advance to the next occurrence.
+- On failure, the schedule moves to `failed` with `lastError`; for node flows, `nextRunAt` is not advanced before runtime startup succeeds.
 
 Anchored entries are evaluated separately from absolute `nextRunAt` polling:
 - An `after_sprint_end` entry is due only after the source sprint reaches `completed`, `failed`, or `cancelled`.
