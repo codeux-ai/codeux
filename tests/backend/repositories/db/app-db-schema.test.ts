@@ -103,6 +103,9 @@ describe("AppDbSchema", () => {
       expect(getIndex("idx_provider_invocations_provider_status")).toBeDefined();
       expect(getIndex("idx_task_dispatches_project_executor_status_priority")).toBeDefined();
       expect(getIndex("idx_task_runs_task_sprint_session")).toBeDefined();
+      expect(getIndex("idx_task_self_reflection_ratings_task_run")).toBeDefined();
+      expect(getIndex("idx_task_self_reflection_ratings_task_latest")).toBeDefined();
+      expect(getIndex("idx_task_self_reflection_ratings_project_task_latest")).toBeDefined();
       expect(getIndex("idx_project_attention_items_project_owner_status")).toBeDefined();
       expect(getIndex("idx_execution_invocations_provider_invocation")).toBeDefined();
       for (const indexName of liveSnapshotIndexNames) {
@@ -163,6 +166,7 @@ describe("AppDbSchema", () => {
       expect(getTable("memory_claims")).toBeDefined();
       expect(getTable("knowledge_documents")).toBeDefined();
       expect(getTable("sprint_file_browser_sessions")).toBeDefined();
+      expect(getTable("task_self_reflection_ratings")).toBeDefined();
       expect(getColumnNames("provider_invocations")).toEqual(expect.arrayContaining([
         "tool_call_count",
         "execution_mode",
@@ -172,6 +176,7 @@ describe("AppDbSchema", () => {
       ]));
       expect(getColumnNames("task_run_events")).toContain("project_id");
       expect(getIndexCount("idx_task_run_events_project_created")).toBe(1);
+      expect(getIndexCount("idx_task_self_reflection_ratings_task_latest")).toBe(1);
       expect(getIndexCount("idx_guardrail_ledger_task_purpose")).toBe(1);
       expect(getIndexCount("idx_memory_claims_project_fingerprint_active")).toBe(1);
     } finally {

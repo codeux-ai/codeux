@@ -46,6 +46,7 @@ import { SERVER_SHUTDOWN_STOP_REASON } from "./active-dispatch-registry.js";
 import { isRuntimeShutdownInProgress } from "./shutdown-state.js";
 import type { AgentPresetSyncService } from "./agent-preset-sync-service.js";
 import type { MemoryService } from "./memory-service.js";
+import type { TaskSelfReflectionRatingRepository } from "../repositories/task-self-reflection-rating-repository.js";
 import type { ProviderConcurrencyService } from "./provider-concurrency-service.js";
 import { ProviderQuotaError } from "../shared/providers/provider-error-classifier.js";
 import type { SprintRunLifecycleService } from "./sprint-run-lifecycle-service.js";
@@ -60,6 +61,7 @@ interface CliWorkflowServiceDependencies {
   projectManagementRepository?: ProjectManagementRepository;
   activeDispatchRegistry?: ActiveDispatchRegistry;
   memoryService?: MemoryService;
+  taskSelfReflectionRatingRepository?: TaskSelfReflectionRatingRepository;
   skillService?: SkillService;
   agentPresetRepository?: AgentPresetRepository;
   providerConcurrencyService?: ProviderConcurrencyService;
