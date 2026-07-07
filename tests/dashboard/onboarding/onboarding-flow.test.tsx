@@ -1,10 +1,10 @@
 /**
  * @vitest-environment jsdom
  */
-import { render, screen, waitFor } from "@testing-library/preact";
+import { fireEvent, render, screen, waitFor } from "@testing-library/preact";
 import { cleanup } from "@testing-library/preact";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi, afterEach } from "vitest";
+import { describe, expect, it, vi, afterEach, beforeEach } from "vitest";
 import { useOnboardingState } from "../../../dashboard/src/v2/hooks/useOnboardingState.js";
 import { OnboardingExperience } from "../../../dashboard/src/v2/components/onboarding/OnboardingExperience.js";
 import { GuidedDashboardTour } from "../../../dashboard/src/v2/components/onboarding/GuidedDashboardTour.js";
@@ -42,8 +42,13 @@ vi.mock("../../../dashboard/src/v2/components/onboarding/OnboardingIntro.js", ()
   },
 }));
 
+const deepOceanBackgroundMock = vi.hoisted(() => vi.fn());
+
 vi.mock("../../../dashboard/src/v2/components/chat/DeepOceanBackground.js", () => ({
-  DeepOceanBackground: () => null,
+  DeepOceanBackground: (props: { forceDark?: boolean; className?: string }) => {
+    deepOceanBackgroundMock(props);
+    return null;
+  },
 }));
 
 vi.mock("../../../dashboard/src/v2/lib/settings-api.js", () => ({
@@ -843,10 +848,20 @@ describe("OnboardingExperience integration", () => {
 });
 
 describe("onboarding appearance step", () => {
+  beforeEach(() => {
+    deepOceanBackgroundMock.mockClear();
+    document.documentElement.className = "";
+    document.documentElement.style.background = "";
+    document.body.style.background = "";
+  });
+
   afterEach(() => {
     vi.restoreAllMocks();
     cleanup();
     delete (globalThis.window as any).codeUxDesktop;
+    document.documentElement.className = "";
+    document.documentElement.style.background = "";
+    document.body.style.background = "";
   });
 
   it("renders onboarding appearance controls and omits settings-only background controls", async () => {
@@ -932,7 +947,7 @@ describe("onboarding appearance step", () => {
     expect(screen.queryByText("Upload Image")).toBeNull();
   });
 
-  it("publishes draft appearance previews and clears them when onboarding closes", async () => {
+  it("previews Light theme immediately without leaking dark-mode onboarding background state", async () => {
     const mockSystemSettings = createSystemSettings();
     mockSystemSettings.defaults.appearance = {
       ...mockSystemSettings.defaults.appearance,
@@ -972,11 +987,18 @@ describe("onboarding appearance step", () => {
     await waitFor(() => {
       expect(previews.some((appearance) => appearance?.theme === "DARK")).toBe(true);
     });
+    await waitFor(() => {
+      expect(document.documentElement.classList.contains("dark")).toBe(true);
+    });
 
     await userEvent.click(screen.getByRole("button", { name: "Go to Appearance" }));
     await userEvent.click(await screen.findByRole("radio", { name: /^Light\b/i }));
     await waitFor(() => {
       expect(previews.some((appearance) => appearance?.theme === "LIGHT")).toBe(true);
+    });
+    await waitFor(() => {
+      expect(document.documentElement.classList.contains("dark")).toBe(false);
+      expect(deepOceanBackgroundMock.mock.calls.some(([props]) => props.forceDark === false)).toBe(true);
     });
 
     await userEvent.click(screen.getByRole("button", { name: "Close onboarding" }));
@@ -986,7 +1008,65 @@ describe("onboarding appearance step", () => {
     window.removeEventListener(APPEARANCE_PREVIEW_EVENT, listener);
   });
 
-  it("does not publish a loaded appearance preview after onboarding unmounts", async () => {
+  it("publishes static background previews from unsaved onboarding changes", async () => {
+    const mockSystemSettings = createSystemSettings();
+    mockSystemSettings.defaults.appearance = {
+      ...mockSystemSettings.defaults.appearance,
+      theme: "LIGHT",
+      backgroundMode: "ANIMATED",
+      staticBackgroundColor: "#0d0f12",
+    };
+    const previewDetails: Array<{ appearance: SystemSettings["defaults"]["appearance"] | null }> = [];
+    const listener = (event: Event) => {
+      previewDetails.push((event as CustomEvent<{ appearance: SystemSettings["defaults"]["appearance"] | null }>).detail);
+    };
+    window.addEventListener(APPEARANCE_PREVIEW_EVENT, listener);
+    vi.mocked(settingsApi.fetchSystemSettings).mockResolvedValue(mockSystemSettings);
+
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = typeof input === "string" ? input : input.url;
+      if (url.endsWith("/api/user/onboarding")) {
+        return new Response(JSON.stringify({ completed: false, onboardingCompletedAt: null }), { status: 200 });
+      }
+      if (url.endsWith("/api/onboarding/readiness")) {
+        return new Response(JSON.stringify({
+          checkedAt: "2026-06-01T00:00:00.000Z",
+          cluster: { status: "ready" },
+          dependencies: [],
+          providers: [],
+        }), { status: 200 });
+      }
+      return new Response(JSON.stringify({}), { status: 404 });
+    });
+
+    render(<OnboardingExperience />);
+
+    await screen.findByRole("button", { name: "Go to Appearance" });
+    await userEvent.click(screen.getByRole("button", { name: "Go to Appearance" }));
+    await userEvent.click(await screen.findByRole("radio", { name: /^Static\b/i }));
+
+    await waitFor(() => {
+      expect(previewDetails.some(({ appearance }) => (
+        appearance?.backgroundMode === "STATIC"
+          && appearance.staticBackgroundColor === "#0d0f12"
+      ))).toBe(true);
+    });
+
+    const staticColorInput = document.querySelector<HTMLInputElement>('input[type="color"]');
+    expect(staticColorInput).not.toBeNull();
+    fireEvent.input(staticColorInput!, { target: { value: "#123456" } });
+
+    await waitFor(() => {
+      expect(previewDetails.some(({ appearance }) => (
+        appearance?.backgroundMode === "STATIC"
+          && appearance.staticBackgroundColor === "#123456"
+      ))).toBe(true);
+    });
+
+    window.removeEventListener(APPEARANCE_PREVIEW_EVENT, listener);
+  });
+
+  it("emits a null appearance preview when onboarding unmounts before settings finish loading", async () => {
     const mockSystemSettings = createSystemSettings();
     mockSystemSettings.defaults.appearance = {
       ...mockSystemSettings.defaults.appearance,
@@ -1026,6 +1106,8 @@ describe("onboarding appearance step", () => {
     resolveSettings(mockSystemSettings);
     await new Promise((resolve) => setTimeout(resolve, 0));
 
+    expect(previews.length).toBeGreaterThan(0);
+    expect(previews[previews.length - 1]).toBeNull();
     expect(previews.every((appearance) => appearance === null)).toBe(true);
     window.removeEventListener(APPEARANCE_PREVIEW_EVENT, listener);
   });
