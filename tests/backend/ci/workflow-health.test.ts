@@ -226,7 +226,7 @@ describe("GitHub workflow health", () => {
 
     expect(config).toContain("command: 'node dist/index.js'");
     expect(config).toContain("url: 'http://127.0.0.1:4444/health'");
-    expect(config).toContain("reuseExistingServer: false");
+    expect(config).toContain("reuseExistingServer: process.env.CODEUX_E2E_REUSE_EXISTING_SERVER === '1'");
     expect(config).toContain("workers: 1");
     expect(config).toContain("trace: 'retain-on-failure'");
     expect(config).toContain("screenshot: 'only-on-failure'");
