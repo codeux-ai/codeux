@@ -24,7 +24,12 @@ import {
 import { SectionCard, getBadge as getBadgeHelper, getFieldBadge as getFieldBadgeHelper } from "./SharedPanelComponents.js";
 import { sanitizeSystemProviderConfig } from "../../../lib/provider-runtime-preview.js";
 
-const PROVIDER_TYPES: ProviderId[] = ["jules", "gemini", "antigravity", "codex", "claude-code", "qwen-code", "opencode"];
+type PublicProviderId = Exclude<ProviderId, "mockup-cli">;
+
+const PROVIDER_TYPES: PublicProviderId[] = ["jules", "gemini", "antigravity", "codex", "claude-code", "qwen-code", "opencode"];
+const isPublicProviderId = (value: unknown): value is PublicProviderId => (
+  typeof value === "string" && (PROVIDER_TYPES as readonly string[]).includes(value)
+);
 
 const DEFAULT_JIRA_SETTINGS: SystemSettings["integrations"]["jira"] = {
   host: "",
@@ -275,7 +280,7 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
       id: "cli",
       label: "CLI",
       purpose: "Provider credentials and local auth-copy settings",
-      items: integrations.filter((integration) => PROVIDER_TYPES.includes(integration.id as ProviderId) && integration.id !== "jules"),
+      items: integrations.filter((integration) => isPublicProviderId(integration.id) && integration.id !== "jules"),
     },
     {
       id: "git",
@@ -313,7 +318,7 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
     });
   };
 
-  const addProviderInstance = (providerId: ProviderId): void => {
+  const addProviderInstance = (providerId: PublicProviderId): void => {
     if (activeScope !== "system") {
       setSelectedIntegration(providerId);
       return;
@@ -644,7 +649,11 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
       );
     }
 
-    const providerId = integrationId as ProviderId;
+    if (!isPublicProviderId(integrationId)) {
+      return null;
+    }
+
+    const providerId = integrationId;
     const providerEntries = sortProviderConfigEntries(getSystemProvidersByType(systemSettings, providerId));
 
     if (activeScope !== "system") {
@@ -790,7 +799,11 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
                     );
                   }
 
-                  const providerId = integration.id as ProviderId;
+                  if (!isPublicProviderId(integration.id)) {
+                    return null;
+                  }
+
+                  const providerId = integration.id;
                   const connectedCount = countConnectedProviders(providerId, systemSettings, externalHints);
                   const active = isProviderAvailable(providerId, systemSettings, externalHints);
                   const authLabel = getProviderAuthLabel(providerId, systemSettings, externalHints, dockerExecutionEnabled);

@@ -13,6 +13,7 @@ import {
   ANTIGRAVITY_CREDENTIALS_MOUNT,
   GITCONFIG_CREDENTIALS_MOUNT,
 } from "./docker-bootstrap-builder.js";
+import type { CliProviderId } from "./provider-command-specs.js";
 
 export class DockerCredentialMountBuilder {
   async build(
@@ -20,7 +21,7 @@ export class DockerCredentialMountBuilder {
     repoPath: string,
     onActivity: (desc: string) => void,
     providerAuthOverride?: {
-      provider: "gemini" | "codex" | "claude-code" | "qwen-code" | "opencode" | "antigravity";
+      provider: CliProviderId;
       enabled: boolean;
       path: string;
     },

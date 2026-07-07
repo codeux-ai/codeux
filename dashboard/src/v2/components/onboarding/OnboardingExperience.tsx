@@ -133,6 +133,7 @@ const providerLabels: Record<ProviderId, string> = {
   "qwen-code": "Qwen Code",
   opencode: "OpenCode",
   antigravity: "Antigravity",
+  "mockup-cli": "Mockup CLI",
 };
 
 const PROVIDER_TYPES = onboardingProviderTypes;
@@ -145,6 +146,7 @@ const providerDescriptions: Record<ProviderId, string> = {
   "qwen-code": "Qwen Code CLI with OAuth, Alibaba Coding Plan, or custom model provider config.",
   opencode: "OpenCode CLI with local auth, provider keys, or OpenAI-compatible endpoints.",
   antigravity: "Antigravity CLI (agy) for Google-powered local container execution.",
+  "mockup-cli": "Internal test-only mock provider.",
 };
 
 const getProviderWatermark = (providerId: ProviderId): string => (
