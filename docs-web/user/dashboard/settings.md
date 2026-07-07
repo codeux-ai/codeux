@@ -155,9 +155,11 @@ Defines the default container environment used by Docker-backed provider CLIs.
 
 **What it controls:** Image, setup script, memory limit, setup image caching, root execution posture, and Playwright browser preinstall shape each worker container.
 
-**Recommended defaults:** Keep the default image unless your repo needs a custom toolchain; keep root mode off unless a tool requires package-manager or OS-level writes; enable Playwright preinstall for browser-heavy QA.
+**Recommended defaults:** Keep the default image unless your repo needs a custom toolchain; keep `cliWorkflow.containerRunAsRoot` off unless a trusted tool requires package-manager or OS-level writes; enable Playwright preinstall for browser-heavy QA.
 
-With setup-image caching enabled, Playwright preinstall is baked into the derived image at `/ms-playwright` and reused by later non-root provider runs without rerunning the browser download.
+`cliWorkflow.containerRunAsRoot` defaults to `false` and inherits through the settings cascade. Project overrides inherit the system value until changed. Agent presets can override only local Docker-backed CLI task runs with nullable `containerRunAsRoot`: **Inherit** stores `null`, **Force non-root** stores `false`, and **Force root** stores `true`. Root mode is privileged and is not a safety boundary for untrusted code.
+
+With setup-image caching enabled, Playwright preinstall is baked into the derived image at `/ms-playwright` and reused by later non-root provider runs without rerunning the browser download. Cache-disabled workflows and custom setup scripts must opt into this by honoring `CODE_UX_INSTALL_PLAYWRIGHT=1` and installing Chromium in the setup script when browser automation is required.
 
 **Risks and gotchas:** Broken setup scripts or overly tight memory limits can fail every provider invocation in the scope. Root mode changes the Docker user posture for provider containers in that scope, though an agent preset can still force non-root or force root for a specific local CLI worker.
 

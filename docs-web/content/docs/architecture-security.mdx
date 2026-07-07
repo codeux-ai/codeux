@@ -32,8 +32,10 @@ Two listeners:
 
 - **Unauthenticated.** Designed for trusted local consumption.
 - Bind only to loopback in production (the default). Non-loopback `DASHBOARD_HOST` values are rejected unless `CODE_UX_ALLOW_PUBLIC_DASHBOARD=1` is set for that startup.
+- `CODE_UX_ALLOW_PUBLIC_DASHBOARD=1` only permits the listener to bind outside loopback. It does not add dashboard authentication and does not relax runtime API protections: dashboard REST, health, readiness, and WebSocket paths still enforce trusted-host, origin, referer, and fetch-metadata checks.
 - If exposing remotely, **front with a reverse proxy** that handles auth (basic auth, OAuth proxy, mTLS, …).
 - The WebSocket inherits the same security posture.
+- Interactive dashboard-login containers keep OAuth callback ports bound to host loopback, for example `127.0.0.1:<port>:<port>`, and do not switch to public callback ports when the dashboard listener is public.
 
 ### MCP HTTP gateway
 
@@ -87,6 +89,7 @@ This avoids storing literal secrets in the DB.
 ### DOCKER mode
 
 - Workers run inside a Docker container isolated from the host filesystem (only the worktree path and optionally the auth path are mounted).
+- Docker provider containers run as the resolved host workspace UID/GID by default. `cliWorkflow.containerRunAsRoot` is `false` by default; enabling it is a privileged opt-in for trusted local Docker-backed provider runs, not a safe mode for untrusted code.
 - Container is removed on completion.
 - Workers cannot access other projects' worktrees within the same Code UX install.
 
