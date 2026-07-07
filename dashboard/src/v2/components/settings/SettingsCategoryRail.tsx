@@ -17,7 +17,7 @@ export const CATEGORIES: Category[] = [
   { id: "models", num: "03", label: "AI Models", icon: Cpu, description: "Provider routing, models, and weighting" },
   { id: "sprint", num: "04", label: "Sprint & Git", icon: Target, description: "Git flow, branch naming, merge rules, and execution runtime" },
   { id: "browser", num: "05", label: "Browser Preview", icon: Compass, description: "Preview runtime, browser visibility, and container policy" },
-  { id: "agents", num: "06", label: "Agents", icon: Bot, description: "Project-local markdown mirrors and agent authoring behavior" },
+  { id: "agents", num: "06", label: "Agents", icon: Bot, description: "Agent routing, skill storage, reflection, and authoring behavior" },
   { id: "memory", num: "07", label: "Memory", icon: BrainCircuit, description: "Embedding models, auto-capture, and promotion policy" },
   { id: "integrations", num: "08", label: "Integrations", icon: Plug, description: "Provider keys, Git hosts, and external connection policy" },
   { id: "mcp", num: "09", label: "MCP", icon: Server, description: "MCP servers injected into CLIs and built-in tool access" },

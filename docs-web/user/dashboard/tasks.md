@@ -4,6 +4,12 @@ The **Tasks** page (`/tasks`) is a Kanban-style task board for the active projec
 
 Use it when you want to review planned work, create or edit a task, check dependency blockers, or choose how a specific task should be executed.
 
+## Project and sprint scope
+
+The global project selector in the navbar owns the active project. Changing projects while you are on `/tasks` keeps the newly selected project active and resets any stale sprint filter that belonged to the previous project.
+
+The sprint selector inside the Tasks page only scopes the board for the current project. Choosing a sprint updates the URL to `/tasks?sprintId=<id>` and stores that sprint selection for the active project. Links from the Sprints page still use the same deep link, but the Tasks page applies it only when the sprint belongs to the currently selected project.
+
 ## Board workflow
 
 The board keeps the current sprint scope and filters visible while you work:
@@ -12,6 +18,8 @@ The board keeps the current sprint scope and filters visible while you work:
 - **Status and priority filters** refine the visible cards without losing the current board context.
 - **Search** matches task titles and task text.
 - **Visible count controls** limit how many cards render in each lane for larger projects.
+
+## Columns
 
 Task cards show the task title, status, priority, dependency state, downstream dependents, executor metadata, recent activity context, and available actions. Dragging a card to another lane changes its status when that transition is available.
 

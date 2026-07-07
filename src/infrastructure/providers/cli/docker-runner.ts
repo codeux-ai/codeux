@@ -3,7 +3,7 @@ import * as os from "os";
 import * as path from "path";
 import * as pathPosix from "path/posix";
 import { fileURLToPath } from "url";
-import { CliWorkflowSettings, type CustomMcpServer } from "../../../contracts/app-types.js";
+import { CliWorkflowSettings, type CustomMcpServer, type ProviderConfigMode } from "../../../contracts/app-types.js";
 import { isUsableCustomMcpServer } from "../../../mcp/mcp-tool-availability.js";
 import { buildProviderMcpConfigArtifact } from "./mcp-config-format.js";
 import type { McpConnectionInfo } from "../../../contracts/mcp-connection-types.js";
@@ -29,6 +29,7 @@ import type { CliProviderId } from "./provider-command-specs.js";
 import { getHomeCodeUxPath, getRepoCodeUxPath } from "../../../shared/config/code-ux-paths.js";
 import { ensureDefaultCodeUxAssetsInstalled } from "../../../services/code-ux-default-assets-service.js";
 import { sanitizeInvocationOutputText } from "../../../services/invocation-output-sanitizer.js";
+import type { PersistentSkillStorageRuntimeMount } from "../../../services/skill-service.js";
 
 
 const BUNDLED_CONTAINER_SETUP_SCRIPT = path.resolve(
@@ -58,11 +59,14 @@ export interface IDockerRunner {
     repoPath: string;
     providerMountAuth?: boolean;
     providerAuthPath?: string;
+    providerConfigMode?: ProviderConfigMode;
+    providerConfigPath?: string;
     signal?: AbortSignal;
     onActivity: (desc: string, originator?: string) => void;
     onSetupImageProgress?: (progress: DockerSetupImageCacheProgress) => void;
     mcpConnection?: McpConnectionInfo | null;
     customMcpServers?: CustomMcpServer[];
+    persistentSkillStorageMounts?: PersistentSkillStorageRuntimeMount[];
   }): Promise<CommandResult>;
   readWorkspaceFile?(cwd: string, targetPath: string): Promise<string | null>;
   readWorkspaceFileBase64?(cwd: string, targetPath: string): Promise<string | null>;
@@ -116,11 +120,14 @@ export class DockerRunner implements IDockerRunner {
     repoPath: string;
     providerMountAuth?: boolean;
     providerAuthPath?: string;
+    providerConfigMode?: ProviderConfigMode;
+    providerConfigPath?: string;
     signal?: AbortSignal;
     onActivity: (desc: string, originator?: string) => void;
     onSetupImageProgress?: (progress: DockerSetupImageCacheProgress) => void;
     mcpConnection?: McpConnectionInfo | null;
     customMcpServers?: CustomMcpServer[];
+    persistentSkillStorageMounts?: PersistentSkillStorageRuntimeMount[];
   }): Promise<CommandResult> {
     const { command, args, cwd, providerEnv, sessionId, providerLabel, workflowSettings, repoPath, signal, onActivity } = input;
     const emitActivity = (desc: string, originator?: string): void => {
@@ -250,6 +257,11 @@ export class DockerRunner implements IDockerRunner {
           enabled: Boolean(input.providerMountAuth),
           path: input.providerAuthPath || "",
         },
+        {
+          provider: providerLabel,
+          mode: input.providerConfigMode || "copyHost",
+          path: input.providerConfigPath || "",
+        },
       );
       const providerConfigMounts = await this.buildProviderConfigMounts(
         input.mcpConnection || null,
@@ -263,6 +275,15 @@ export class DockerRunner implements IDockerRunner {
       for (const mount of [...credentialMounts, ...providerConfigMounts]) {
         const source = this.mapDockerSourcePathForDaemon(mount.source, repoPath, sessionId, "credentials", emitActivity);
         dockerArgs.push("--mount", toDockerMountArg({ ...mount, source }));
+      }
+
+      for (const mount of input.persistentSkillStorageMounts || []) {
+        const source = this.mapDockerSourcePathForDaemon(mount.hostPath, repoPath, sessionId, "persistent skill storage", emitActivity);
+        dockerArgs.push("--mount", toDockerMountArg({
+          source,
+          destination: mount.containerPath,
+          readonly: false,
+        }));
       }
 
       const bootstrapScript = new DockerBootstrapBuilder().build({

@@ -67,7 +67,7 @@ export function createUsageBuckets(
 }
 
 function formatBucketLabel(date: Date, resolution: ProjectStatsResolution): string {
-  if (resolution === "hour") {
+  if (resolution === "5min" || resolution === "hour") {
     return date.toISOString().slice(11, 16);
   }
   if (resolution === "week") {

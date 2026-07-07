@@ -17,6 +17,8 @@ describe("dashboard settings helpers", () => {
     first.cliWorkflow.executionMode = "DOCKER";
     first.cliWorkflow.containerImage = "custom:image";
     first.cliWorkflow.containerCacheSetupScriptImage = true;
+    first.agents.selfReflection.planning.enabled = true;
+    first.agents.selfReflection.planning.criteria[0]!.threshold = 0.1;
     first.mcpTools[0].enabled = false;
     expect(second.git.defaultBranch).toBe("main");
     expect(second.dashboardPort).toBe(4444);
@@ -30,6 +32,8 @@ describe("dashboard settings helpers", () => {
     expect(second.cliWorkflow.executionMode).toBe("DOCKER");
     expect(second.cliWorkflow.containerImage).toBe("node:24-bookworm");
     expect(second.cliWorkflow.containerCacheSetupScriptImage).toBe(true);
+    expect(second.agents.selfReflection.planning.enabled).toBe(false);
+    expect(second.agents.selfReflection.planning.criteria[0]!.threshold).toBe(0.85);
     expect(second.mcpTools[0].enabled).toBe(true);
   });
 

@@ -60,6 +60,7 @@ Storage:
   - includes project planning tables (sprints with `original_prompt` and `goal`) plus sprint-scoped runtime projection in `app_settings`, `task_runs`, and `task_run_events`
   - runtime context rows are keyed by sprint (`runtime_context:<projectId>:<sprintId>`); legacy unscoped project-level runtime rows are deprecated and are no longer used for explicit sprint reads or rerun context
   - also stores sprint preview runtime state in `sprint_preview_sessions`
+  - persistent agent skill storage uses separate `skill_storages`, `skills`, `skill_embeddings`, and `agent_skill_storage_bindings` tables. These are distinct from project workspaces, `memories`, and `knowledge_documents`; agent presets attach to named storage records through normalized bindings rather than by storing workspace paths on the preset row.
 
 Runtime resolution:
 - effective runtime settings always resolve as `system -> project -> sprint`
@@ -157,10 +158,16 @@ Runtime resolution:
 
 System-level integrations are injected into effective dashboard settings at resolution time:
 - provider credentials are system-scoped under `integrations.providers`
-  - each entry is a named provider instance with `{ provider, name, apiKey, mountAuth, authPath, authType }`
+  - each entry is a named provider instance with `{ provider, name, apiKey, mountAuth, authPath, authType, providerConfigMode, providerConfigPath }`
   - default instance ids intentionally match the base provider ids (`jules`, `gemini`, `codex`, `claude-code`) for compatibility with older settings payloads
   - additional instances can coexist under the same CLI type
-  - for CLI providers, `mountAuth`, `authPath`, and `authType` are instance-specific Docker auth-copy/login settings. The `authType` property can be set to `"apiKey"` (uses API key text override), `"localAuth"` (mounts a custom local directory like `~/.gemini`), or `"dashboardAuth"` (launches an interactive terminal inside the container and saves tokens directly to a dedicated `~/.code-ux/credentials/<provider-name>` folder on the host). For dynamically-generated unsaved provider configurations (e.g. during onboarding or settings setup prior to saving), the dashboard is directly able to launch interactive login containers by automatically resolving the underlying provider type via prefix-matching on the transient instance ID (such as `gemini-mptfvpkk-u1fui` prefix-matching to `gemini`). To guarantee a fresh login, launching a `dashboardAuth` terminal session automatically clears the target provider credentials directory on the host first, ensuring that stale tokens or cached sessions do not interfere.
+  - for CLI providers, `mountAuth`, `authPath`, and `authType` are instance-specific Docker auth-copy/login settings. The `authType` property can be set to `"apiKey"` (uses API key text override), `"localAuth"` (mounts a custom local directory like `~/.gemini`), or `"dashboardAuth"` (launches an interactive terminal inside the container and saves tokens directly to a dedicated `~/.code-ux/credentials/<provider-name>` folder on the host). `providerConfigMode` is independent of auth mode and controls only Docker config-file materialization:
+    - `"none"` copies no provider config file and stores `providerConfigPath` as an empty string.
+    - `"copyHost"` copies the provider's standard host config file path and stores that standard path.
+    - `"file"` copies the user-selected file from `providerConfigPath`; an empty path is normalized back to `"copyHost"`.
+  - standard config file paths are Codex `~/.codex/config.toml`, Gemini `~/.gemini/settings.json`, Claude Code `~/.claude.json`, Qwen `~/.qwen/settings.json`, OpenCode `~/.config/opencode/opencode.json`, and Antigravity `~/.gemini/antigravity-cli/mcp_config.json`. Jules and mock providers ignore these fields and normalize to `"none"` with an empty path.
+  - Docker-backed CLI runs mount selected config files separately from credential directories under `/opt/provider-config/host-*`, copy them into the provider's expected runtime-home destination, then strip local MCP declarations and apply Code UX generated MCP fragments from the existing `/opt/provider-config/*` mounts. This preserves managed MCP server injection while allowing provider instances to use no copied config, the normal host config, or a selected config file without changing API-key/local-auth/dashboard-auth mutual exclusion. Activity logs may mention resolved config paths but never print file contents.
+  - For dynamically-generated unsaved provider configurations (e.g. during onboarding or settings setup prior to saving), the dashboard is directly able to launch interactive login containers by automatically resolving the underlying provider type via prefix-matching on the transient instance ID (such as `gemini-mptfvpkk-u1fui` prefix-matching to `gemini`). To guarantee a fresh login, launching a `dashboardAuth` terminal session automatically clears the target provider credentials directory on the host first, ensuring that stale tokens or cached sessions do not interfere.
 
     #### Interactive Login Container Lifecycle Management
     Interactive login containers have strict lifecycle gates:
@@ -170,6 +177,7 @@ System-level integrations are injected into effective dashboard settings at reso
 - `git.githubToken` and `git.gitlabToken` are system-scoped
 - runtime fields like `dashboardPort`, `consoleLogLevel`, `debugLogFileLevel`, and `consoleLogMode` are system-scoped
 - project and sprint scopes still own `cliWorkflow.containerMountGithubAuth`, `cliWorkflow.containerGithubAuthPath`, `cliWorkflow.containerMountGitConfig`, `cliWorkflow.containerGitUserName`, and `cliWorkflow.containerGitUserEmail`
+- `agents.selfReflection` is default-off for both `planning` and `qualityAssurance`. Each loop stores an `enabled` flag, senior engineering criteria with per-criterion thresholds, and `maxImprovementAttempts`; sanitization dedupes criteria by id, clamps thresholds to `0..1`, clamps attempts to `0..10`, and falls back to default criteria for malformed legacy payloads. These settings are contracts only in this phase; no provider reflection calls or dashboard controls are wired yet.
 
 Backend contract:
 - `src/contracts/app-types.ts`

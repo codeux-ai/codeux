@@ -11,6 +11,7 @@ import { SprintKeyEditor } from "../SprintKeyEditor.js";
 import { InfoIconPopover } from "../../ui/InfoIconPopover.js";
 import { BranchNameSchemeEditor } from "../BranchNameSchemeEditor.js";
 import { PrTemplateEditorModal } from "../PrTemplateEditorModal.js";
+import { DEFAULT_DASHBOARD_SETTINGS } from "../../../../lib/settings.js";
 import { updateGitHubModeForSettings } from "../../../../lib/settings-updaters.js";
 
 const GUARDRAIL_JOB_META: Array<{ key: GuardrailJobType; label: string; description: string }> = [
@@ -50,6 +51,9 @@ export const SettingsSprintPanel: FunctionComponent<{ state: SettingsPageState }
   }
 
   const qaSettings = projectSettings?.agents.qualityAssurance ?? editableSettings.agents.qualityAssurance;
+  const qaSelfReflectionSettings = projectSettings?.agents.selfReflection?.qualityAssurance
+    ?? editableSettings.agents.selfReflection?.qualityAssurance
+    ?? DEFAULT_DASHBOARD_SETTINGS.agents.selfReflection.qualityAssurance;
   const projectAgentSelectOptions = projectAgentPresetOptions.map((option) => ({
     ...option,
     icon: () => <AgentSelectAvatarIcon avatarConfig={option.avatarConfig} seed={`${option.value}:${option.label}`} />,
@@ -85,6 +89,36 @@ export const SettingsSprintPanel: FunctionComponent<{ state: SettingsPageState }
       agents: {
         ...current.agents,
         qualityAssurance: recipe(current.agents.qualityAssurance),
+      },
+    }));
+  };
+
+  const updateQaSelfReflectionSettings = (recipe: (current: typeof qaSelfReflectionSettings) => typeof qaSelfReflectionSettings): void => {
+    if (selectedProject && projectSettings) {
+      if (activeScope !== "project") {
+        setActiveScope("project");
+      }
+      updateProject((current) => ({
+        ...current,
+        agents: {
+          ...current.agents,
+          selfReflection: {
+            ...(current.agents.selfReflection ?? DEFAULT_DASHBOARD_SETTINGS.agents.selfReflection),
+            qualityAssurance: recipe(current.agents.selfReflection?.qualityAssurance ?? DEFAULT_DASHBOARD_SETTINGS.agents.selfReflection.qualityAssurance),
+          },
+        },
+      }));
+      return;
+    }
+
+    updateEditableSettings((current) => ({
+      ...current,
+      agents: {
+        ...current.agents,
+        selfReflection: {
+          ...(current.agents.selfReflection ?? DEFAULT_DASHBOARD_SETTINGS.agents.selfReflection),
+          qualityAssurance: recipe(current.agents.selfReflection?.qualityAssurance ?? DEFAULT_DASHBOARD_SETTINGS.agents.selfReflection.qualityAssurance),
+        },
       },
     }));
   };
@@ -347,6 +381,8 @@ export const SettingsSprintPanel: FunctionComponent<{ state: SettingsPageState }
         selectorsDisabled={qaPresetSelectorsDisabled}
         selectedProjectName={selectedProject?.name}
         activeScope={activeScope}
+        selfReflection={qaSelfReflectionSettings}
+        updateSelfReflection={(settings) => updateQaSelfReflectionSettings(() => settings)}
       />
 
       <SectionCard title="Guardrails" watermark="CAP" badge={getBadge("guardrails")} icon={<ShieldAlert strokeWidth={2.4} />}>

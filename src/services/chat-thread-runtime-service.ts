@@ -1,4 +1,4 @@
-import type { DashboardSettings, DashboardSettingsScope, ProviderId, QwenModelProviderSettings, Subtask } from "../contracts/app-types.js";
+import type { DashboardSettings, DashboardSettingsScope, ProviderConfigMode, ProviderId, QwenModelProviderSettings, Subtask } from "../contracts/app-types.js";
 import * as fs from "fs/promises";
 import * as path from "path";
 import type { ConnectionChatRepository } from "../repositories/connection-chat-repository.js";
@@ -62,6 +62,8 @@ export interface ThreadRouteResolution {
   openCodePackage?: string;
   providerMountAuth?: boolean;
   providerAuthPath?: string;
+  providerConfigMode?: ProviderConfigMode;
+  providerConfigPath?: string;
   customBaseUrl?: string;
   customModel?: string;
   thinkingMode?: string;
@@ -179,6 +181,8 @@ export class ChatThreadRuntimeService {
         openCodePackage: providerSettings.openCodePackage,
       providerMountAuth: providerSettings.mountAuth,
       providerAuthPath: providerSettings.authPath,
+      providerConfigMode: providerSettings.providerConfigMode,
+      providerConfigPath: providerSettings.providerConfigPath,
       customBaseUrl: providerSettings.customBaseUrl,
       customModel: providerSettings.customModel,
       thinkingMode: providerSettings.thinkingMode,
@@ -524,6 +528,8 @@ export class ChatThreadRuntimeService {
       openCodePackage: route.openCodePackage,
       providerMountAuth: route.providerMountAuth,
       providerAuthPath: route.providerAuthPath,
+      providerConfigMode: route.providerConfigMode,
+      providerConfigPath: route.providerConfigPath,
       customBaseUrl: route.customBaseUrl,
       customModel: route.customModel,
       sessionId: thread.id,
@@ -682,6 +688,8 @@ export class ChatThreadRuntimeService {
         openCodePackage: route.openCodePackage,
         providerMountAuth: route.providerMountAuth,
         providerAuthPath: route.providerAuthPath,
+        providerConfigMode: route.providerConfigMode,
+        providerConfigPath: route.providerConfigPath,
         customBaseUrl: route.customBaseUrl,
         customModel: route.customModel,
         sessionId: `${thread.id}:compaction`,

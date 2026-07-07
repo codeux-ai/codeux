@@ -39,7 +39,8 @@ claude-fable-5
 
 ### Codex (OpenAI)
 ```
-gpt-5.5, gpt-5.4, gpt-5.4-mini,
+gpt-5.5, gpt-5.6-sol, gpt-5.6-terra, gpt-5.6-luna,
+gpt-5.4, gpt-5.4-mini,
 gpt-5.3-codex, gpt-5.3-codex-spark,
 gpt-5.2-codex, gpt-5.2,
 gpt-5.1-codex-max, gpt-5.1, gpt-5.1-codex,
@@ -192,7 +193,7 @@ Rules of thumb:
 | You want… | Provider |
 | --- | --- |
 | Hosted, no local install | `jules` |
-| Best raw code generation | `codex` (gpt-5.3-codex / gpt-5.4) |
+| Best raw code generation | `codex` (gpt-5.5 / gpt-5.6-sol / gpt-5.6-terra / gpt-5.6-luna) |
 | Best reasoning / planning | `claude-code` (opus / sonnet[1m]) |
 | Cheap, fast iteration | `gemini` (flash) |
 | Privacy / on-prem | `qwen-code` (local-model) |

@@ -1,6 +1,8 @@
-import type { ProviderConfigId, SystemSettings, ProviderId } from "../../types.js";
+import type { ProviderConfigId, SystemSettings, ProviderId, SystemProviderCredentialSettings } from "../../types.js";
+import { DEFAULT_PROVIDER_CONFIG_FILE_PATHS } from "../../../../src/repositories/settings-defaults.js";
 
 export type SystemProviderConfig = SystemSettings["integrations"]["providers"][ProviderConfigId];
+export type ProviderConfigMode = SystemProviderCredentialSettings["providerConfigMode"];
 
 export interface SanitizableProviderConfig {
   provider: ProviderId;
@@ -26,16 +28,63 @@ export interface SanitizableProviderConfig {
   openCodeBaseUrl?: string;
   openCodeEnvKey?: string;
   openCodePackage?: string;
+  providerConfigMode?: ProviderConfigMode;
+  providerConfigPath?: string;
 }
+
+export const supportsProviderConfigFile = (providerId: ProviderId): boolean => (
+  providerId !== "jules" && providerId !== "mockup-cli"
+);
+
+export const getProviderStandardConfigPath = (providerId: ProviderId): string => (
+  DEFAULT_PROVIDER_CONFIG_FILE_PATHS[providerId] || ""
+);
+
+export const normalizeProviderConfigSelection = (
+  providerId: ProviderId,
+  modeValue: unknown,
+  pathValue: unknown,
+): Pick<SystemProviderCredentialSettings, "providerConfigMode" | "providerConfigPath"> => {
+  if (!supportsProviderConfigFile(providerId)) {
+    return { providerConfigMode: "none", providerConfigPath: "" };
+  }
+
+  const standardPath = getProviderStandardConfigPath(providerId);
+  const requestedMode: ProviderConfigMode = modeValue === "none" || modeValue === "copyHost" || modeValue === "file"
+    ? modeValue
+    : "copyHost";
+
+  if (requestedMode === "none") {
+    return { providerConfigMode: "none", providerConfigPath: "" };
+  }
+
+  if (requestedMode === "file") {
+    const customPath = typeof pathValue === "string" ? pathValue.trim() : "";
+    if (customPath) {
+      return { providerConfigMode: "file", providerConfigPath: customPath };
+    }
+    return { providerConfigMode: "copyHost", providerConfigPath: standardPath };
+  }
+
+  return { providerConfigMode: "copyHost", providerConfigPath: standardPath };
+};
 
 export const sanitizeSystemProviderConfig = <T extends SanitizableProviderConfig>(
   provider: T,
 ): T => {
-  if (provider.provider === "jules") {
-    return provider;
+  const sanitized = { ...provider };
+  const providerConfig = normalizeProviderConfigSelection(
+    sanitized.provider,
+    sanitized.providerConfigMode,
+    sanitized.providerConfigPath,
+  );
+  sanitized.providerConfigMode = providerConfig.providerConfigMode;
+  sanitized.providerConfigPath = providerConfig.providerConfigPath;
+
+  if (provider.provider === "jules" || provider.provider === "mockup-cli") {
+    return sanitized;
   }
 
-  const sanitized = { ...provider };
   const authType = sanitized.authType || (sanitized.mountAuth ? "localAuth" : "apiKey");
   sanitized.authType = authType;
 

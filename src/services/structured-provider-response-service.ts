@@ -18,6 +18,7 @@ export interface StructuredProviderResult<T> {
   parsed: T;
   nativeSessionId: string | null;
   bodyMarkdown: string;
+  openCodeBaselineRawUsageJson?: Record<string, unknown> | null;
 }
 
 export class ProviderTransportError extends Error {
@@ -153,6 +154,7 @@ export class StructuredProviderResponseService {
           parsed,
           nativeSessionId,
           bodyMarkdown,
+          openCodeBaselineRawUsageJson,
         };
       } catch (error) {
         lastError = error instanceof Error ? error : new Error(String(error));
