@@ -1,7 +1,7 @@
 import type { FunctionComponent } from "preact";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "preact/hooks";
 import gsap from "gsap";
-import { ArrowLeft, ArrowRight, BookOpen, Box, CalendarDays, Check, Compass, EyeOff, FolderOpen, FolderTree, Library, MessageCircle, Sparkles } from "lucide-preact";
+import { ArrowLeft, ArrowRight, BookOpen, Box, CalendarDays, Check, Compass, EyeOff, FolderOpen, FolderTree, LayoutDashboard, Library, MessageCircle, Sparkles } from "lucide-preact";
 import { DASHBOARD_TOUR_START_EVENT, DASHBOARD_TOUR_STORAGE_KEY } from "../../lib/onboarding-control.js";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 import { useInteractionTokens } from "../../lib/motion/tokens.js";
@@ -93,6 +93,14 @@ const TOUR_STEPS: TourStep[] = [
     eyebrow: "Workflow graph",
     title: "Nodes",
     body: "Nodes lets you compose project workflow graphs, configure node widgets, attach flows to agents, and inspect persisted runs.",
+    accent: "signal",
+  },
+  {
+    id: "custom-dashboards",
+    targetId: "nav-custom-dashboards",
+    eyebrow: "Dashboard lab",
+    title: "Dashboards",
+    body: "Dashboards lets you manage generated dashboard manifests, file bundles, validation previews, and validated publication state for the active project.",
     accent: "signal",
   },
   {
@@ -520,7 +528,7 @@ export const GuidedDashboardTour: FunctionComponent = () => {
 
           <div className="mt-5 flex items-start gap-4">
             <div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl ${accent.bgPanel} ${accent.text} ring-1 ring-white/10`}>
-              {activeStep.id === "projects" ? <FolderOpen className="h-5 w-5" /> : activeStep.id === "docker" ? <Box className="h-5 w-5" /> : activeStep.id === "chat" ? <MessageCircle className="h-5 w-5" /> : activeStep.id === "schedule" ? <CalendarDays className="h-5 w-5" /> : activeStep.id === "knowledge" ? <Library className="h-5 w-5" /> : activeStep.id === "files" ? <FolderTree className="h-5 w-5" /> : activeStep.id === "docs" ? <BookOpen className="h-5 w-5" /> : <Compass className="h-5 w-5" />}
+              {activeStep.id === "projects" ? <FolderOpen className="h-5 w-5" /> : activeStep.id === "docker" ? <Box className="h-5 w-5" /> : activeStep.id === "chat" ? <MessageCircle className="h-5 w-5" /> : activeStep.id === "schedule" ? <CalendarDays className="h-5 w-5" /> : activeStep.id === "custom-dashboards" ? <LayoutDashboard className="h-5 w-5" /> : activeStep.id === "knowledge" ? <Library className="h-5 w-5" /> : activeStep.id === "files" ? <FolderTree className="h-5 w-5" /> : activeStep.id === "docs" ? <BookOpen className="h-5 w-5" /> : <Compass className="h-5 w-5" />}
             </div>
             <div>
               <h2 id="dashboard-tour-title" className="font-display text-xl font-semibold leading-none tracking-tight">{activeStep.title}</h2>

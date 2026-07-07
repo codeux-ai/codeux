@@ -173,6 +173,23 @@ import type {
   NodeWidgetSelectOption,
   UpdateNodeFlowInput,
 } from "../../../src/contracts/node-flow-types.js";
+import type {
+  CreateCustomDashboardDraftInput,
+  CreateCustomDashboardRevisionInput,
+  CustomDashboardDataSourceNodeGraph,
+  CustomDashboardFileBundle,
+  CustomDashboardFileBundleEntry,
+  CustomDashboardJsonObject,
+  CustomDashboardJsonValue,
+  CustomDashboardManifest,
+  CustomDashboardRecord,
+  CustomDashboardRevisionRecord,
+  CustomDashboardStatus,
+  CustomDashboardValidationReport,
+  CustomDashboardValidationSessionRecord,
+  CustomDashboardValidationStatus,
+  UpdateCustomDashboardDraftInput,
+} from "../../../src/contracts/custom-dashboard-types.js";
 
 export interface SegmentDefinition {
   label: string;
@@ -187,6 +204,23 @@ export type AgentConnection = McpConnectionRecord;
 export type AgentPreset = AgentPresetRecord;
 export type ChatThread = ConversationThreadRecord;
 export type ChatMessageRecord = ConversationMessageRecord;
+export type {
+  CreateCustomDashboardDraftInput,
+  CreateCustomDashboardRevisionInput,
+  CustomDashboardDataSourceNodeGraph,
+  CustomDashboardFileBundle,
+  CustomDashboardFileBundleEntry,
+  CustomDashboardJsonObject,
+  CustomDashboardJsonValue,
+  CustomDashboardManifest,
+  CustomDashboardRecord,
+  CustomDashboardRevisionRecord,
+  CustomDashboardStatus,
+  CustomDashboardValidationReport,
+  CustomDashboardValidationSessionRecord,
+  CustomDashboardValidationStatus,
+  UpdateCustomDashboardDraftInput,
+};
 
 export type ProjectCardSourceBadgeKind = "local" | "remote-git" | "local-repository";
 export type ProjectCardActionKind = "open-project" | "settings" | "setup-project" | "delete";

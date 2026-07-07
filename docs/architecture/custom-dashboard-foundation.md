@@ -1,6 +1,6 @@
 # Custom Dashboard Foundation
 
-Custom dashboards are a persisted domain model for project-scoped dashboard generation. The foundation stores manifests, generated file bundles, data-source node graphs, validation history, and publication state, and the server-side validation runtime can now build and health-check a revision in an isolated Docker session. HTTP routes, MCP tools, and frontend UI are layered separately.
+Custom dashboards are a persisted domain model for project-scoped dashboard generation. The foundation stores manifests, generated file bundles, data-source node graphs, validation history, and publication state, and the server-side validation runtime can build and health-check a revision in an isolated Docker session. HTTP routes, MCP tools, and the Preact management workspace are thin layers over the repository and validation-service boundaries.
 
 ## Contracts
 
@@ -67,6 +67,22 @@ Dashboard HTTP routes live in `src/server/custom-dashboard-routes.ts` and are re
 The MCP management surface is `manage_custom_dashboards` in `src/mcp/management/custom-dashboard-actions.ts`. It supports `list`, `get`, `create`, `update`, `create_revision`, `validate_revision`, `validation_status`, `validation_logs`, `publish_revision`, `archive`, and `data_catalog`. `archive` follows the same approval fingerprint flow as other destructive management actions.
 
 Validation proxy requests reuse the preview proxy boundary: request bodies are capped at 5 MB, dashboard credentials and hop-by-hop/proxy/control headers are stripped before upstream forwarding, `Origin`/`Referer`/`Sec-Fetch-Site` are normalized to the loopback upstream, and upstream `Set-Cookie`, CSP, CSP report-only, and `X-Frame-Options` response headers are removed before returning to the dashboard origin.
+
+## Frontend Workspace
+
+The Preact workspace is reachable at `/custom-dashboards` and is lazy-loaded from `dashboard/src/v2/CustomDashboardsPage.tsx`. It is project-scoped through the existing selected-project context and uses typed helpers in `dashboard/src/v2/lib/custom-dashboard-api.ts` for list/get/create/update, revision creation, detached validation sessions, logs, publication, archiving, and data catalog lookup.
+
+The page manages mutable draft text for:
+
+- manifest JSON
+- generated file bundle entries and file content
+- source node graph JSON
+- styleguide JSON
+- data catalog source selection
+
+Draft edits remain persisted bundle text sent back through API calls; generated dashboard code is not imported from `dashboard/src` at runtime. Revisions are created as immutable snapshots, then validated through a detached session. The validation panel shows build/start/health stage state, renders refreshed logs, links to the validation proxy preview, and disables publication until the selected revision has a passed validation report or a matching passed validation session.
+
+Navigation is centralized through `dashboard/src/v2/lib/navigation-items.ts`, so both the kinetic dock and sidebar expose the Dashboards destination with stable labels, tour markers, and route prefetching.
 
 ## Docker and Logs
 
