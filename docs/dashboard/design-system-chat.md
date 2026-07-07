@@ -24,8 +24,31 @@ The chat and invocation design system for the Code UX dashboard defines the layo
 - **Empty**: `EmptyChat` variants provide clear explanations and next steps (e.g., "Create a Thread") when no content exists. Empty state cards use standard utility classes (`rounded-3xl`, `rounded-2xl`, `rounded-xl`) for visual rhythm.
 - **Pending/Working**: Animated indicators (e.g., `WorkingBubble`, pulsing dots, animated ships) signal active agent processing.
 
+## Cinematic 3D Chat (default mode)
+The chat page opens in a cinematic "3D Chat" stage (`components/chat/cinematic/CinematicStage.tsx`) — the third mode alongside Threads and Invocations, remembered per browser via `localStorage` (`codeux.chat.mode`, URL `?mode=` still wins).
+
+- **Full-bleed stage**: no card chrome; the animated project-manager bot (the brand-mark WebGL avatar) sits center stage on a CSS-only aurora backdrop. A GSAP drift layer floats/leans the whole bot on top of the scene's own idle bob.
+- **Busy signal**: the stage treats the runtime as working when a thread reply is awaited (`delivered`, unanswered) **or** a running/optimistic execution invocation exists — the latter is what fires on the virtual-worker path, where thread messages stay `pending` during work. The backend chat prompt (`src/services/chat-reply-prompt.ts`, `buildStageWidgetInstructions`) teaches models the widget vocabulary; keep it in sync with `StageWidgets.tsx`.
+- **Alive by state, never faked**: `use-agent-mood.ts` maps real runtime state to expressions — `nod` while routing a send, `thinking` + a cloud thought bubble while a reply is being prepared (starting → working phases), `excited` for ~2.6s when a reply lands, `sad` on errors, `curious` while the user types, and idle decay to `bored` (90s) then `sleepy` (240s) that wakes on engagement. Calm moods fire random 2.2s micro-expressions (`nod`, `curious`, `wink`, `excited`, `dance`, `proud`, `laughing`) every 9–20s.
+- **Window-level gaze**: on the stage the avatar uses `pointerTracking="window"` — it watches the cursor anywhere on the page and releases back to idle drift ~3s after the mouse stops. Other surfaces (Agents page) keep the hover-only default.
+- **Latest exchange spotlight**: the stage shows only the current beat — the newest agent reply as one glass speech bubble (markdown + widgets; long replies scroll *inside* the bubble) plus up to two user messages sent after it. A "Full conversation · N messages" link jumps to Threads for history. Quick actions arc on the bot's left; the bubble owns the right side, so the two can never collide. An empty thread shows a scripted greeting with suggestion chips that prefill the composer.
+- **Floating composer**: a bottom-center glass pill shared with the Threads data flow — Enter sends, first send auto-creates the thread, ArrowUp/Down recalls history.
+- **Expressions catalog**: the avatar vocabulary (SVG + WebGL, kept in sync) now includes `curious`, `thinking`, `excited`, `laughing`, `surprised`, `wink`, `dance`, and `proud` in addition to the original eight.
+- **Work tools**: while the runtime is in the working phase the bot pulls an animated 3D tool from its toolbox beside itself — cordless screwdriver (spinning bit), jackhammer (hammering chisel + judder), wrench (ratcheting swing), welding torch (flickering glow) — swapping every ~7s (`tool` prop on `AgentAvatarScene`; pin one for design review with `/chat?stageTool=<kind>`).
+- **Idle quick actions**: four glass chips float around the idle bot (status report, sprint progress, what's failing, plan next steps). Clicking **sends the prompt immediately** via `handleSend(overrideText)` — no composer round-trip. They hide while sending/working/error and on small screens.
+- **Reduced motion**: the scene falls back to the static SVG bot; aurora, thinking dots, quick-action float, and drift animations are disabled via `prefers-reduced-motion`.
+
+### Stage widget vocabulary (agent-facing)
+Agent replies are ordinary markdown; embedding a fenced block renders a designed widget in place (`components/chat/cinematic/StageWidgets.tsx`). Malformed JSON or unknown types fall back to the raw fence — nothing is dropped. GFM tables in replies also get glass-table styling automatically. Add these to an agent preset's instructions so the PM knows to use them:
+
+- ` ```codeux:status ` — health card: `{ "title", "state": "ok|warn|error|running", "items": [{ "label", "state", "value?" }], "note?" }`. Every state renders icon + label, never color alone.
+- ` ```codeux:tasks ` — checklist with progress bar: `{ "title?", "items": [{ "title", "status": "done|active|todo|blocked", "meta?" }] }`.
+- ` ```codeux:sprint ` — sprint hero card: `{ "key", "name", "status", "done", "total", "branch?", "pr?" }`.
+- ` ```codeux:metrics ` — stat tile row: `{ "title?", "items": [{ "label", "value", "delta?", "tone": "up|down|flat" }] }`.
+- ` ```codeux:actions ` — suggested next steps: `{ "items": [{ "label", "prompt" }] }`; clicking prefills the composer with the prompt.
+
 ## Interaction
-- Seamless mode switching between standard "Threads" (user-facing chat) and "Invocations" (runtime debugging transcript).
+- Seamless mode switching between the cinematic "3D Chat" stage, standard "Threads" (user-facing chat), and "Invocations" (runtime debugging transcript).
 - Consistent padding and gap spacing to prevent layout jitter during these transitions.
 - The invocation rail renders the first 40 newest invocations by default, then lazy-loads additional pages as the user scrolls near the bottom of the rail. The rail header and mode tab use the backend `totalCount`, not the number of loaded rows, so long-running projects show the real invocation total while keeping initial load lightweight.
 

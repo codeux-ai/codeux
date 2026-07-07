@@ -429,6 +429,44 @@ html.is-electron.is-fullscreen .app-shell {
     30%            { transform: translateY(-4px); opacity: 1;    }
   }
 
+  /* Chat stage — thought-bubble thinking dots */
+  .stage-thinking-dot {
+    animation: typing-dot 1.2s ease-in-out infinite;
+  }
+
+  /* Chat stage — slow ambient aurora drift behind the 3D agent */
+  @keyframes stage-aurora {
+    0%, 100% { transform: translate3d(0, 0, 0) scale(1);        opacity: 0.45; }
+    50%       { transform: translate3d(4%, -3%, 0) scale(1.12); opacity: 0.75; }
+  }
+
+  .stage-aurora {
+    animation: stage-aurora 14s ease-in-out infinite;
+  }
+
+  .stage-aurora-slow {
+    animation: stage-aurora 22s ease-in-out infinite reverse;
+  }
+
+  /* Chat stage — gentle bob for the floating quick-action chips */
+  @keyframes stage-quick-float {
+    0%, 100% { transform: translateY(0); }
+    50%       { transform: translateY(-9px); }
+  }
+
+  .stage-quick-float {
+    animation: stage-quick-float 5.5s ease-in-out infinite;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .stage-aurora,
+    .stage-aurora-slow,
+    .stage-thinking-dot,
+    .stage-quick-float {
+      animation: none;
+    }
+  }
+
   /* Memory page — neural pulse traveling along SVG connection lines */
   @keyframes dash-travel {
     from { stroke-dashoffset: 24; }

@@ -114,6 +114,26 @@ function buildMcpNativeOutputInstructions(): string {
   ].join("\n");
 }
 
+/**
+ * The dashboard's cinematic chat stage renders `codeux:*` fenced blocks as
+ * designed UI widgets. This section teaches the model the vocabulary; keep it
+ * in sync with dashboard/src/v2/components/chat/cinematic/StageWidgets.tsx.
+ */
+export function buildStageWidgetInstructions(): string {
+  return [
+    "The dashboard renders rich UI widgets from fenced code blocks embedded in your markdown reply.",
+    "Use them whenever they fit the answer (status reports, sprint or task summaries, metrics, suggested next steps).",
+    "Each block must contain ONLY valid JSON and use one of these exact fence tags:",
+    "- ```codeux:status — health card: { \"title\": string, \"state\": \"ok\"|\"warn\"|\"error\"|\"running\", \"items\": [{ \"label\": string, \"state\": \"ok\"|\"warn\"|\"error\"|\"running\"|\"todo\", \"value\"?: string }], \"note\"?: string }",
+    "- ```codeux:tasks — checklist with progress bar: { \"title\"?: string, \"items\": [{ \"title\": string, \"status\": \"done\"|\"active\"|\"todo\"|\"blocked\", \"meta\"?: string }] }",
+    "- ```codeux:sprint — sprint summary card: { \"key\": string, \"name\": string, \"status\": string, \"done\": number, \"total\": number, \"branch\"?: string, \"pr\"?: string }",
+    "- ```codeux:metrics — stat tile row: { \"title\"?: string, \"items\": [{ \"label\": string, \"value\": string, \"delta\"?: string, \"tone\"?: \"up\"|\"down\"|\"flat\" }] }",
+    "- ```codeux:actions — 2-3 suggested next steps: { \"items\": [{ \"label\": string, \"prompt\": string }] } where `prompt` is the literal message the user would send next.",
+    "Mix widgets with short markdown prose. Only put truthful, known data in widgets — never invent numbers.",
+    "For status/summary style answers, prefer widgets over long prose and end the reply with one codeux:actions block.",
+  ].join("\n");
+}
+
 export function buildChatReplayPrompt(args: {
   projectId: string;
   repoPath: string;
@@ -199,6 +219,9 @@ export function buildChatReplayPrompt(args: {
     ]),
     history || fallbackBody,
     "",
+    "## RICH WIDGETS",
+    buildStageWidgetInstructions(),
+    "",
     "## REQUIRED OUTPUT",
     outputInstructions,
   ].filter((part) => part.trim().length > 0).join("\n");
@@ -220,6 +243,7 @@ export function buildChatContinuationPrompt(message: ConversationMessageRecord, 
     "## DASHBOARD CHAT CONTINUATION",
     "The dashboard user's latest message is below.",
     "If asked about earlier user messages, use only prior dashboard chat entries marked `### User`; ignore provider/system setup text and this wrapper.",
+    "Remember: the dashboard renders ```codeux:status / codeux:tasks / codeux:sprint / codeux:metrics / codeux:actions fenced JSON blocks in your reply as rich UI widgets — use them for status, summaries, and next steps.",
     "",
     "### User",
     message.bodyMarkdown.trim(),

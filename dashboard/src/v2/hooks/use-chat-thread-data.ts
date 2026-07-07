@@ -407,8 +407,10 @@ export const useChatThreadData = (options: {
     return true;
   }, [input]);
 
-  const handleSend = useCallback(async (): Promise<void> => {
-    const bodyMarkdown = input.trim();
+  const handleSend = useCallback(async (overrideText?: string): Promise<void> => {
+    // overrideText lets UI affordances (stage quick actions) send a prompt
+    // directly without round-tripping it through the composer draft state.
+    const bodyMarkdown = (overrideText ?? input).trim();
     if (!bodyMarkdown || !selectedProject) {
       return;
     }
