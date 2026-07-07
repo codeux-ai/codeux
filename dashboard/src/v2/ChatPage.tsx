@@ -18,6 +18,7 @@ import { EmptyState } from "./components/ui/EmptyState.js";
 import { MessageCircle } from "lucide-preact";
 import { ChatMessageBubble } from "./components/chat/ChatMessageBubble.js";
 import { ChatCreateAppQuickActions } from "./components/chat/ChatCreateAppQuickActions.js";
+import { SpeechInputButton } from "./components/speech/SpeechInputButton.js";
 import { useChatPageData } from "./hooks/use-chat-page-data.js";
 import { formatInvocationPurpose, formatInvocationDuration, InvocationContextChips } from "./components/chat/invocation-display.js";
 import { InvocationMessageBubble } from "./components/chat/InvocationMessageBubble.js";
@@ -68,9 +69,17 @@ const hasUsageLimitTimer = (invocation: ExecutionInvocationRecord | null | undef
   );
 };
 
+const getTranscriptJoiner = (before: string, after: string): string => {
+  if (!before || !after) {
+    return "";
+  }
+  return /\s$/.test(before) || /^\s/.test(after) ? "" : " ";
+};
+
 export const ChatPage: FunctionComponent = () => {
   const messagesRef = useRef<HTMLDivElement>(null);
   const composerRef = useRef<HTMLTextAreaElement>(null);
+  const composerSelectionRef = useRef<{ start: number; end: number } | null>(null);
   const [workingTimerPhase, setWorkingTimerPhase] = useState<"starting" | "working" | null>(null);
   const [restartingInvocation, setRestartingInvocation] = useState<{ id: string; mode: InvocationRestartMode } | null>(null);
   const [cancellingInvocationId, setCancellingInvocationId] = useState<string | null>(null);
@@ -185,8 +194,54 @@ export const ChatPage: FunctionComponent = () => {
       composer.style.height = "auto";
       composer.style.height = `${composer.scrollHeight}px`;
       composer.setSelectionRange(composer.value.length, composer.value.length);
+      composerSelectionRef.current = { start: composer.value.length, end: composer.value.length };
     });
   }, [setInput]);
+
+  const rememberComposerSelection = useCallback((element: HTMLTextAreaElement): void => {
+    composerSelectionRef.current = {
+      start: element.selectionStart,
+      end: element.selectionEnd,
+    };
+  }, []);
+
+  const handleSpeechTranscript = useCallback((transcript: string) => {
+    const trimmedTranscript = transcript.trim();
+    if (!trimmedTranscript) {
+      return;
+    }
+
+    const composer = composerRef.current;
+    const sourceValue = composer?.value ?? input;
+    const rememberedSelection = composerSelectionRef.current;
+    const canUseRememberedSelection = Boolean(
+      rememberedSelection
+        && rememberedSelection.start >= 0
+        && rememberedSelection.end >= rememberedSelection.start
+        && rememberedSelection.end <= sourceValue.length
+    );
+
+    const selectionStart = canUseRememberedSelection ? rememberedSelection!.start : sourceValue.length;
+    const selectionEnd = canUseRememberedSelection ? rememberedSelection!.end : sourceValue.length;
+    const before = sourceValue.slice(0, selectionStart);
+    const after = sourceValue.slice(selectionEnd);
+    const insert = `${getTranscriptJoiner(before, trimmedTranscript)}${trimmedTranscript}${getTranscriptJoiner(trimmedTranscript, after)}`;
+    const nextValue = `${before}${insert}${after}`;
+    const nextCaret = before.length + insert.length;
+
+    setInput(nextValue);
+    requestAnimationFrame(() => {
+      const nextComposer = composerRef.current;
+      if (!nextComposer) {
+        return;
+      }
+      nextComposer.focus();
+      nextComposer.style.height = "auto";
+      nextComposer.style.height = `${nextComposer.scrollHeight}px`;
+      nextComposer.setSelectionRange(nextCaret, nextCaret);
+      composerSelectionRef.current = { start: nextCaret, end: nextCaret };
+    });
+  }, [input, setInput]);
 
   const handleRestartInvocation = useCallback(async (mode: InvocationRestartMode = "retry_full_prompt") => {
     if (!selectedInvocation || selectedInvocation.status !== "failed" || restartingInvocation || cancellingInvocationId || resettingUsageLimitInvocationId) {
@@ -537,8 +592,13 @@ export const ChatPage: FunctionComponent = () => {
                   const element = event.currentTarget;
                   element.style.height = "auto";
                   element.style.height = `${element.scrollHeight}px`;
+                  rememberComposerSelection(element);
                   setInput(element.value);
                 }}
+                onFocus={(event) => rememberComposerSelection(event.currentTarget)}
+                onClick={(event) => rememberComposerSelection(event.currentTarget)}
+                onSelect={(event) => rememberComposerSelection(event.currentTarget)}
+                onKeyUp={(event) => rememberComposerSelection(event.currentTarget)}
                 onKeyDown={(event) => {
                   if (event.isComposing) {
                     return;
@@ -567,6 +627,7 @@ export const ChatPage: FunctionComponent = () => {
                         composerRef.current.style.height = `${composerRef.current.scrollHeight}px`;
                         const pos = direction === "up" ? 0 : composerRef.current.value.length;
                         composerRef.current.setSelectionRange(pos, pos);
+                        composerSelectionRef.current = { start: pos, end: pos };
                       });
                     }
                   }
@@ -582,22 +643,29 @@ export const ChatPage: FunctionComponent = () => {
                   {sending ? "Sending message..." : ""}
                   {error ? `Failed: ${error}` : ""}
                 </div>
-                <button
-                  aria-label={sending ? "Sending message" : "Send message"}
-                  aria-busy={sending}
-                  type="button"
-                  onClick={() => void handleSend()}
-                  disabled={!selectedProject || !input.trim() || sending}
-                  className={`inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-[1rem] transition-all self-end sm:self-auto ${
-                    !selectedProject || (!input.trim() && !sending)
-                      ? "cursor-not-allowed bg-black/[0.06] text-slate-400 shadow-none dark:bg-white/[0.06]"
-                      : sending
-                        ? "cursor-wait bg-signal-500/50 text-white dark:text-void-900 shadow-none scale-95"
-                        : "bg-signal-500 text-white dark:text-void-900 shadow-[0_0_24px_rgba(0,224,160,0.28)] hover:bg-signal-400 hover:scale-105 active:scale-95"
-                  }`}
-                >
-                  {sending ? <RefreshCw className="h-4 w-4 animate-spin text-void-900/70 motion-reduce:animate-none" /> : <ArrowUp className="h-5 w-5" strokeWidth={2.5} />}
-                </button>
+                <div className="flex w-full flex-wrap items-center justify-end gap-2 sm:w-auto">
+                  <SpeechInputButton
+                    disabled={!selectedProject || sending}
+                    onTranscript={handleSpeechTranscript}
+                    className="h-11 min-w-[7.5rem] sm:min-w-[8.75rem]"
+                  />
+                  <button
+                    aria-label={sending ? "Sending message" : "Send message"}
+                    aria-busy={sending}
+                    type="button"
+                    onClick={() => void handleSend()}
+                    disabled={!selectedProject || !input.trim() || sending}
+                    className={`inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-[1rem] transition-all ${
+                      !selectedProject || (!input.trim() && !sending)
+                        ? "cursor-not-allowed bg-black/[0.06] text-slate-400 shadow-none dark:bg-white/[0.06]"
+                        : sending
+                          ? "cursor-wait bg-signal-500/50 text-white dark:text-void-900 shadow-none scale-95"
+                          : "bg-signal-500 text-white dark:text-void-900 shadow-[0_0_24px_rgba(0,224,160,0.28)] hover:bg-signal-400 hover:scale-105 active:scale-95"
+                    }`}
+                  >
+                    {sending ? <RefreshCw className="h-4 w-4 animate-spin text-void-900/70 motion-reduce:animate-none" /> : <ArrowUp className="h-5 w-5" strokeWidth={2.5} />}
+                  </button>
+                </div>
               </div>
             </div>
           </div>
