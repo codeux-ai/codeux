@@ -16,7 +16,11 @@ sprint is producing. A session has a status:
 | **Error** | The session failed to start or crashed. |
 
 You can **start**, **stop**, **rebuild**, and **remove** sessions, and pick which sprint to launch a
-session for.
+session for. These correspond directly to the technical backend API routes:
+- `/api/projects/:projectId/sprints/:sprintId/file-browser/start`
+- `/api/file-browser/sessions/:sessionId/stop`
+- `/api/file-browser/sessions/:sessionId/rebuild`
+- `DELETE /api/file-browser/sessions/:sessionId` (remove)
 
 ## Files mode
 

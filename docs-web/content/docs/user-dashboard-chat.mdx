@@ -1,13 +1,29 @@
 # Chat
 
-The **Chat** page (`/chat`) is a thread-based conversation surface that lets you talk to agents — both for free-form Q&A and to inspect MCP tool invocations.
+The **Chat** page (`/chat`) is a conversation surface that lets you talk to agents for project-backed Q&A, inspect MCP tool invocations, and get local onboarding help before any project exists.
 
 ## Layout
 
-- **Left rail** — Two tabs:
+- **No-project assistant** — When no project is selected, `/chat` shows a local onboarding assistant instead of a project-required empty state. It presents the Code UX assistant avatar, five quick bubbles, local replies, and explicit buttons for Add Project, Projects, Settings, onboarding, and docs. It does not create conversation threads, persist messages, or call project-scoped chat APIs.
+- **Floating assistant widget** — Every dashboard subpage except `/chat` has a compact assistant entry point in the corner. Submitting text opens `/chat` with that text as a draft. If a project is selected, the draft appears in the normal composer; if no project is selected, it becomes a local no-project assistant turn. Nothing is sent automatically.
+- **Left rail** — In project chat, two tabs:
   - **Threads** — Conversation threads scoped to the active project.
   - **Invocations** — A historical log of MCP `CallTool` invocations, useful for debugging integrations.
 - **Main panel** — The active thread (or invocation), rendered as a chat transcript with user, assistant, and tool messages. Markdown is rendered with `marked`, including code blocks.
+
+The floating widget uses the configured Dashboard Reply agent avatar when a selected project has one. If no Dashboard Reply preset or project is available, it falls back to the generated Code UX avatar.
+
+## No-project assistant
+
+The no-project assistant is local onboarding guidance for the browser page. Its five quick bubbles are:
+
+- Add my first project.
+- Build a desktop app.
+- Build a web app.
+- Explain Code UX.
+- Change settings.
+
+Quick bubbles only add local user/assistant turns. Actions such as creating a project, opening settings, restarting onboarding, or reading docs remain explicit buttons and continue through the existing dashboard flows. Provider-backed chat is project-scoped; it starts only after a project exists and a persistent thread can be created or selected.
 
 ## Threads
 
@@ -23,7 +39,7 @@ To rename a thread, use the edit control beside the active thread title. The inl
 
 To start a new thread, click **+ New thread**. To change the responding agent, open the thread header dropdown and pick from the list of agent presets defined for this project.
 
-Each post triggers a routed invocation: the dashboard records the request, dispatches it to the chosen provider via the worker assignment service (routed through the `dashboard_reply` invocation type), and streams the reply back into the thread.
+Each post is a runtime operation that honors the explicit route chosen (worker route, virtual provider route, automatic live-worker pickup, or fallback). The dashboard exposes in-flight state locally, allowing you to cancel active thread turns or invocations. Failed invocation restarts preserve the failed invocation transcript and expose the existing sanitized error message with a retry action.
 
 In 3D Chat, idle quick actions send project-scoped prompts directly through the active thread. **Web App** and **Desktop App** set up the currently selected project using its current techstack setting; an unassigned existing project stays `None`. They do not create or import a new Code UX project.
 
@@ -33,9 +49,11 @@ Planning messages can include a rich sprint status card. When Code UX can match 
 
 Long threads accumulate context cost. Click **Compact** to:
 
-1. Ask the assigned CLI provider to run its native compact command in the current session.
+1. Ask the assigned non-Jules CLI provider to run its native compact command inside the current provider session.
 2. Store the provider's compaction output on the thread for audit and recovery.
-3. Continue the conversation in the same provider session with a smaller context when one is active; otherwise keep the thread marked for replay from the stored handoff summary on the next turn.
+3. Continue the conversation in the same compacted provider session with a smaller context, preserving that native session id on the thread when the provider returns one.
+
+Code UX does not create a separate `:compaction` chat session for CLI providers. If a thread has no saved active session, providers with a logical continue/resume fallback can still compact through that same thread session; providers that require a concrete native session ask you to send a message in the thread before compacting.
 
 ## Invocations
 
@@ -46,9 +64,11 @@ The **Invocations** tab is a structured log of every `CallTool` MCP invocation r
 - **Timing** — start, end, duration.
 - **Linked task / sprint** — when an invocation arose from sprint orchestration.
 
-Use this for debugging your MCP client integrations — for example to see exactly what arguments your LLM is passing to tools like `manage_memory` or `manage_settings` (Note: The legacy unified `manage_code_ux` tool is deprecated).
+Use this for debugging your MCP client integrations — for example to see exactly what arguments your LLM is passing to tools like `manage_memory` or `manage_settings`.
 
 Invocation transcripts use the same live sprint status card as thread messages when planning metadata links them to a sprint. This means a planning invocation and its related chat message should show consistent task progress without a separate refresh control.
+
+Planning and QA self-reflection messages appear as structured cards instead of raw system text. Each card shows whether the reflection passed, needed improvement, or hit an error; the final decision; the attempt number; and each criterion's 5-star rating, numeric score, threshold, rationale, and improvement instructions when available.
 
 ## Posting messages
 
@@ -58,4 +78,4 @@ The composer at the bottom supports:
 - **Slash commands** that invoke management actions inline.
 - **Attachments** *(planned)*.
 
-The active thread can be deleted from the **⋯** menu. Deletion is local (the underlying provider session is closed) and does not affect sprints or tasks.
+The active thread can be deleted from the **⋯** menu. Deletion is local (the underlying provider session is closed) and does not affect sprints or tasks. You can also cancel the currently running turn for a specific thread, which aborts only the matching in-flight thread turn.
