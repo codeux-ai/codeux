@@ -396,7 +396,7 @@ export class CustomDashboardRepository {
     return this.requireRevision(revision.id);
   }
 
-  publishRevision(dashboardId: string, revisionId: string): CustomDashboardRecord {
+  publishRevision(dashboardId: string, revisionId: string, validationSessionId?: string): CustomDashboardRecord {
     const dashboard = this.requireDashboard(dashboardId);
     if (dashboard.status === "archived") {
       throw new ValidationError("Archived custom dashboards cannot be published.");
@@ -404,6 +404,26 @@ export class CustomDashboardRepository {
     const revision = this.requireRevision(revisionId);
     if (revision.dashboardId !== dashboard.id || revision.projectId !== dashboard.projectId) {
       throw new ValidationError("Custom dashboard revision does not belong to the requested dashboard.");
+    }
+    if (validationSessionId !== undefined) {
+      const normalizedSessionId = validationSessionId.trim();
+      if (!normalizedSessionId) {
+        throw new ValidationError("Custom dashboard validation session id is required.");
+      }
+      const session = this.getValidationSessionById(normalizedSessionId);
+      if (!session) {
+        throw new ValidationError(`Custom dashboard validation session not found: ${normalizedSessionId}`);
+      }
+      if (
+        session.dashboardId !== dashboard.id
+        || session.revisionId !== revision.id
+        || session.projectId !== dashboard.projectId
+      ) {
+        throw new ValidationError("Custom dashboard validation session does not belong to the requested revision.");
+      }
+      if (session.status !== "passed" || session.validationReport?.valid !== true) {
+        throw new ValidationError(`Only passed custom dashboard validation sessions can be published. Current validation status: ${session.status}.`);
+      }
     }
     if (revision.validationStatus !== "passed" || !revision.validatedAt || revision.validationReport?.valid !== true) {
       throw new ValidationError("Only validated custom dashboard revisions can be published.");

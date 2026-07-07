@@ -42,6 +42,7 @@ export const registerMcpRequestHandlers = (args: McpRequestRouterArgs): void => 
     .register("manage_skills", async (input) => (await args.managementToolHandler.handleManageSkills(input)) as McpToolResponse)
     .register("manage_settings", async (input) => (await args.managementToolHandler.handleManageSettings(input)) as McpToolResponse)
     .register("manage_preview", async (input) => (await args.managementToolHandler.handleManagePreview(input)) as McpToolResponse)
+    .register("manage_custom_dashboards", async (input) => (await args.managementToolHandler.handleManageCustomDashboards(input)) as McpToolResponse)
     .register("manage_chat_providers", async (input) => (await args.managementToolHandler.handleManageChatProviders(input)) as McpToolResponse)
     .register("manage_telemetry", async (input) => (await args.managementToolHandler.handleManageTelemetry(input)) as McpToolResponse)
     .register("search_knowledge", async (input) => (await args.managementToolHandler.handleSearchKnowledge(input)) as McpToolResponse)

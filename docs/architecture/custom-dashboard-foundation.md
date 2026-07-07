@@ -43,7 +43,7 @@ Publishing rejects unvalidated, failed, cancelled, or cross-dashboard revisions.
 
 ## Validation Runtime
 
-`src/services/custom-dashboard-validation-service.ts` owns server-side validation execution. It consumes `CustomDashboardRepository`, `ProjectManagementRepository`, and `SettingsRepository` through the core dependency factory.
+`src/services/custom-dashboard-validation-service.ts` owns server-side validation execution. It consumes `CustomDashboardRepository`, `ProjectManagementRepository`, and `SettingsRepository` through the core dependency factory and is exposed to dashboard routes through the dashboard lifecycle dependency object.
 
 Validation flow:
 
@@ -53,7 +53,20 @@ Validation flow:
 - A validation session is marked `passed` only after install, build, start, and root URL health checks succeed. Build/start/health failures are recorded as failed validation reports with bounded log excerpts.
 - Runtime metadata persists the workspace path, log path, host port, container id/name, image, validation URL path, commands, and latest error/log excerpt so dashboard routes can reuse the detached session later.
 
-Validation does not publish or activate dashboards. A successful run only marks the revision validation status as `passed`; publication remains gated by `publishRevision`.
+Validation does not publish or activate dashboards. A successful run only marks the revision validation status as `passed`; publication remains gated by `publishRevision`. Publication accepts either a revision already marked `passed` with a valid report or an explicit passed validation session for that revision. Failed, queued, running, cancelled, missing, or cross-revision validation sessions are rejected before the publication pointer changes.
+
+## REST and MCP Surface
+
+Dashboard HTTP routes live in `src/server/custom-dashboard-routes.ts` and are registered with the existing dashboard route groups. They are thin adapters over `CustomDashboardRepository` and `CustomDashboardValidationService`:
+
+- project routes list/create dashboards and expose a data catalog at `/api/projects/:projectId/custom-dashboards/data-catalog`
+- dashboard routes get/update/archive a dashboard and create revisions
+- validation routes start validation, read status/logs, stop/remove validation sessions, and publish revisions
+- validation proxy routes forward same-origin requests to a running validation host port when the session runtime metadata exposes one
+
+The MCP management surface is `manage_custom_dashboards` in `src/mcp/management/custom-dashboard-actions.ts`. It supports `list`, `get`, `create`, `update`, `create_revision`, `validate_revision`, `validation_status`, `validation_logs`, `publish_revision`, `archive`, and `data_catalog`. `archive` follows the same approval fingerprint flow as other destructive management actions.
+
+Validation proxy requests reuse the preview proxy boundary: request bodies are capped at 5 MB, dashboard credentials and hop-by-hop/proxy/control headers are stripped before upstream forwarding, `Origin`/`Referer`/`Sec-Fetch-Site` are normalized to the loopback upstream, and upstream `Set-Cookie`, CSP, CSP report-only, and `X-Frame-Options` response headers are removed before returning to the dashboard origin.
 
 ## Docker and Logs
 

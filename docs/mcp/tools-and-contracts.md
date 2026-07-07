@@ -23,6 +23,7 @@ These cover:
 - `search_skills`
 - `manage_settings`
 - `manage_preview`
+- `manage_custom_dashboards`
 - `manage_chat_providers`
 - `manage_telemetry`
 - `register_worker_endpoint`
@@ -61,6 +62,7 @@ These cover:
 - `search_skills`
 - `manage_settings`
 - `manage_preview`
+- `manage_custom_dashboards`
 - `manage_chat_providers`
 - `manage_telemetry`
 
@@ -164,6 +166,19 @@ The restricted `scheduler_code_ux` tool accepts either an absolute `scheduledFor
 Every `scheduler_code_ux` entry is persisted as an `agent_scheduler` target. The runtime stamps `origin: "agent_scheduler"`, `source: "agent_scheduler"`, and `createdByAgentId` from the current MCP agent context. `list` returns only entries created by the calling agent. `cancel` changes the matching entry status to `cancelled` only when the entry is an agent-scheduler wakeup or task entry created by that same agent. Dashboard-created entries, `manage_scheduler` entries, entries without agent-scheduler metadata, and entries created by another agent are rejected with the standard management validation envelope.
 
 The restricted tool intentionally does not expose due-entry execution, arbitrary update, recurrence editing, sprint scheduling, quicksprint scheduling, memory remediation scheduling, or global scheduler destructive controls.
+
+## Custom Dashboard Management
+
+`manage_custom_dashboards` exposes the custom dashboard repository and validation runtime to agents through stable management actions:
+
+- `list`, `get`, `create`, and `update` manage project-scoped dashboard drafts.
+- `create_revision` snapshots the current draft or provided bundle fields into an immutable revision.
+- `validate_revision`, `validation_status`, and `validation_logs` delegate to the validation runtime.
+- `publish_revision` publishes only a revision that is already marked passed with a valid report or a revision accompanied by a passed `validationSessionId`.
+- `archive` clears any active publication and marks the dashboard archived. It follows the normal destructive-action approval fingerprint flow.
+- `data_catalog` returns project dashboard summaries and declared source nodes for agents building or inspecting generated dashboards.
+
+Failed, queued, running, cancelled, missing, or cross-revision validation sessions are rejected before publication state changes, so the prior published revision remains active.
 
 ### Destructive Action Approvals
 

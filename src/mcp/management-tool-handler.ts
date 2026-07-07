@@ -13,6 +13,7 @@ import type {
   ManageSkillsArgs,
   ManageSettingsArgs,
   ManagePreviewArgs,
+  ManageCustomDashboardsArgs,
   ManageTelemetryArgs,
   ManageChatProvidersArgs,
   SearchKnowledgeArgs,
@@ -21,6 +22,8 @@ import type {
 import type { KnowledgeService } from "../services/knowledge-service.js";
 import { getCurrentMcpAgentId } from "../server/mcp-agent-context.js";
 import type { SprintPreviewService } from "../services/sprint-preview-service.js";
+import type { CustomDashboardRepository } from "../repositories/custom-dashboard-repository.js";
+import type { CustomDashboardValidationService } from "../services/custom-dashboard-validation-service.js";
 import type { ExecutionRepository } from "../repositories/execution-repository.js";
 import type { DashboardSettings } from "../contracts/app-types.js";
 import type { ProjectManagementRepository } from "../repositories/project-management-repository.js";
@@ -51,6 +54,7 @@ import { initializeProject } from "../domain/projects/project-initializer.js";
 import { prepareGitProjectCreateInput } from "../services/project-git-clone-service.js";
 
 import { PreviewActions } from "./management/preview-actions.js";
+import { CustomDashboardActions } from "./management/custom-dashboard-actions.js";
 import { handleTelemetryActions } from "./management/telemetry-actions.js";
 import { handleProjectAction } from "./management/project-actions.js";
 import { SprintActions } from "./management/sprint-actions.js";
@@ -69,6 +73,8 @@ import { resolveLateBoundDependency, type LateBoundOrValue } from "../shared/lat
 
 export interface ManagementToolHandlerDeps {
   sprintPreviewService: SprintPreviewService;
+  customDashboardRepository: CustomDashboardRepository;
+  customDashboardValidationService: CustomDashboardValidationService;
   executionRepository: ExecutionRepository;
   getDashboardSettings: () => DashboardSettings;
   projectManagementRepository: ProjectManagementRepository;
@@ -104,6 +110,7 @@ export class ManagementToolHandler {
   private readonly memoryActions: MemoryActions;
   private readonly skillActions: SkillActions;
   private readonly previewActions: PreviewActions;
+  private readonly customDashboardActions: CustomDashboardActions;
   private readonly chatProviderActions: ChatProviderActions;
 
   constructor(private readonly deps: ManagementToolHandlerDeps) {
@@ -113,6 +120,10 @@ export class ManagementToolHandler {
     this.memoryActions = new MemoryActions(deps.memoryService, deps.memoryPromotionService, deps.embeddingModelManager);
     this.skillActions = new SkillActions(deps.skillService);
     this.previewActions = new PreviewActions(deps.sprintPreviewService);
+    this.customDashboardActions = new CustomDashboardActions(
+      deps.customDashboardRepository,
+      deps.customDashboardValidationService,
+    );
     this.chatProviderActions = new ChatProviderActions(deps.chatProviderRepository);
   }
 
@@ -215,6 +226,7 @@ export class ManagementToolHandler {
       || args.action.startsWith("reset_")
       || args.action.startsWith("replace_")
       || args.action === "remove_session"
+      || args.action === "archive"
       || args.action === "deprecate_claim";
   }
 
@@ -295,6 +307,8 @@ export class ManagementToolHandler {
     } else if (args.domain === "preview") {
       const currentHost = null; // serverHost is not available on DashboardSettings, we'll fall back to localhost in preview-origin
       return this.previewActions.handlePreviewAction(args, currentHost);
+    } else if (args.domain === "custom_dashboards") {
+      return this.customDashboardActions.handleCustomDashboardAction(args);
     } else if (args.domain === "chat_providers") {
       return this.chatProviderActions.handleChatProviderAction(args);
     } else if (args.domain === "telemetry") {
@@ -478,6 +492,18 @@ export class ManagementToolHandler {
       return { content: [{ type: "text", text: JSON.stringify(envelope, null, 2) }] };
     } catch (error) {
       return this.formatError("preview", args.action, error);
+    }
+  }
+
+  async handleManageCustomDashboards(args: ManageCustomDashboardsArgs): Promise<{ content: Array<{ type: string; text: string }> }> {
+    try {
+      const managementArgs = { domain: "custom_dashboards", action: args.action, payload: args as unknown as Record<string, unknown>, approval: args.approval };
+      const dispatch = (approval = args.approval) => this.customDashboardActions.handleCustomDashboardAction({ ...managementArgs, approval });
+      const approvalGate = await this.requireStatefulApproval(managementArgs, () => dispatch({ confirmed: false }));
+      const envelope = approvalGate ?? this.recordStatefulApprovalRequirement(managementArgs, await dispatch());
+      return { content: [{ type: "text", text: JSON.stringify(envelope, null, 2) }] };
+    } catch (error) {
+      return this.formatError("custom_dashboards", args.action, error);
     }
   }
 

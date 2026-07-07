@@ -246,6 +246,29 @@ This page lists every endpoint, grouped by domain. Path parameters use `:name` n
 
 ---
 
+## Custom Dashboards
+
+| Method | Path | Description |
+| --- | --- | --- |
+| `GET` | `/api/projects/:projectId/custom-dashboards` | List project custom dashboards. |
+| `POST` | `/api/projects/:projectId/custom-dashboards` | Create a draft custom dashboard. |
+| `GET` | `/api/projects/:projectId/custom-dashboards/data-catalog` | List dashboard data-source catalog entries for a project. |
+| `GET` | `/api/custom-dashboards/:dashboardId` | Get a dashboard with revisions. |
+| `PATCH` | `/api/custom-dashboards/:dashboardId` | Update draft dashboard metadata and bundle fields. |
+| `DELETE` | `/api/custom-dashboards/:dashboardId` | Archive a dashboard and clear its active publication. |
+| `POST` | `/api/custom-dashboards/:dashboardId/revisions` | Create an immutable revision. |
+| `POST` | `/api/custom-dashboards/:dashboardId/revisions/:revisionId/validate` | Start validation for a revision. |
+| `POST` | `/api/custom-dashboards/:dashboardId/revisions/:revisionId/publish` | Publish a validated revision. |
+| `GET` | `/api/custom-dashboard-validations/:sessionId` | Get validation session status. |
+| `GET` | `/api/custom-dashboard-validations/:sessionId/logs` | Get validation logs. |
+| `POST` | `/api/custom-dashboard-validations/:sessionId/stop` | Stop a validation runtime. |
+| `DELETE` | `/api/custom-dashboard-validations/:sessionId` | Remove a validation session after cleanup. |
+| `ALL` | `/api/custom-dashboard-validations/:sessionId/proxy{*rest}` | Proxy same-origin traffic to the validation runtime host port. |
+
+Publishing rejects failed, queued, running, cancelled, missing, or cross-revision validation sessions and keeps the previously published revision unchanged.
+
+---
+
 ## Sprint preview
 
 | Method | Path | Description |
