@@ -8,6 +8,8 @@ import type {
 } from "../../types.js";
 import {
   type JiraIssueSearchResult,
+  type JiraProjectStatus,
+  fetchJiraProjectStatuses,
   fetchProjectIssuePromptContexts,
   searchJiraIssues,
 } from "../../lib/project-api.js";
@@ -53,12 +55,17 @@ type JiraStatusFilter = "open" | "in_progress" | "done" | "all";
 type JiraSortField = "updated" | "created" | "priority" | "status" | "assignee" | "reporter";
 type JiraSortDirection = "desc" | "asc";
 type ImportedTaskMode = "linked" | SprintImportedTaskInput["kind"];
+type JiraStatusSelection =
+  | { mode: "all" }
+  | { mode: "status"; name: string }
+  | { mode: "category"; value: JiraStatusFilter };
+type JiraStatusLoadState = "idle" | "loading" | "loaded" | "fallback";
 
 const STATUS_OPTIONS: Array<{ value: JiraStatusFilter; label: string }> = [
   { value: "open", label: "Open" },
   { value: "in_progress", label: "In Progress" },
   { value: "done", label: "Done" },
-  { value: "all", label: "All" },
+  { value: "all", label: "All statuses" },
 ];
 
 const SORT_FIELD_OPTIONS: Array<{ value: JiraSortField; label: string }> = [
@@ -76,6 +83,8 @@ const SORT_DIRECTION_OPTIONS: Array<{ value: JiraSortDirection; label: string }>
 ];
 
 const JIRA_PROVIDER = getIssueImportProviderMetadata("jira");
+const DEFAULT_CATEGORY_STATUS_SELECTION: JiraStatusSelection = { mode: "category", value: "open" };
+const ALL_STATUS_SELECTION: JiraStatusSelection = { mode: "all" };
 
 export const SprintJiraImportModal = ({
   projectId,
@@ -86,7 +95,11 @@ export const SprintJiraImportModal = ({
   const [projectKey, setProjectKey] = useState("");
   const [issueKey, setIssueKey] = useState("");
   const [search, setSearch] = useState("");
-  const [status, setStatus] = useState<JiraStatusFilter>("open");
+  const [statusSelection, setStatusSelection] = useState<JiraStatusSelection>(DEFAULT_CATEGORY_STATUS_SELECTION);
+  const [jiraStatuses, setJiraStatuses] = useState<JiraProjectStatus[]>([]);
+  const [statusLoadState, setStatusLoadState] = useState<JiraStatusLoadState>("idle");
+  const [statusFallbackReason, setStatusFallbackReason] = useState<string | null>(null);
+  const [jiraDefaultsLoaded, setJiraDefaultsLoaded] = useState(false);
   const [assigneeText, setAssigneeText] = useState("");
   const [reporterText, setReporterText] = useState("");
   const [issueType, setIssueType] = useState("");
@@ -110,6 +123,9 @@ export const SprintJiraImportModal = ({
   const [importing, setImporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const statusAbortRef = useRef<AbortController | null>(null);
+  const statusSelectionRef = useRef<JiraStatusSelection>(DEFAULT_CATEGORY_STATUS_SELECTION);
+  const initialSearchStartedRef = useRef(false);
   const hideInWorkRef = useRef(true);
 
   const selectedIssues = useMemo(() => (
@@ -145,6 +161,14 @@ export const SprintJiraImportModal = ({
   );
   const visibleSelectedCount = results.filter((issue) => selectedKeys.has(issue.key)).length;
   const emptyStateCopy = getIssueImportEmptyStateCopy("jira", hasSearched);
+  const normalizedProjectKey = useMemo(() => projectKey.trim().toUpperCase(), [projectKey]);
+  const jiraStatusNames = useMemo(() => getUniqueJiraStatusNames(jiraStatuses), [jiraStatuses]);
+  const useCategoryStatusFallback = statusLoadState === "fallback";
+  const statusSelectionValue = getStatusSelectionFilterValue(statusSelection);
+  const statusSelectionLabel = getStatusSelectionLabel(statusSelection);
+  const defaultStatusSelectionValue = useCategoryStatusFallback
+    ? getStatusSelectionFilterValue(DEFAULT_CATEGORY_STATUS_SELECTION)
+    : getStatusSelectionFilterValue(ALL_STATUS_SELECTION);
   const compactState = buildIssueImportCompactState({
     filters: [
       {
@@ -158,10 +182,10 @@ export const SprintJiraImportModal = ({
       {
         id: "status",
         label: "Status",
-        value: status,
-        defaultValue: "open",
-        valueLabel: getOptionLabel(STATUS_OPTIONS, status),
-        defaultLabel: "Open",
+        value: statusSelectionValue,
+        defaultValue: defaultStatusSelectionValue,
+        valueLabel: statusSelectionLabel,
+        defaultLabel: useCategoryStatusFallback ? "Open" : "All statuses",
         alwaysShow: true,
         priority: 0,
       },
@@ -185,16 +209,19 @@ export const SprintJiraImportModal = ({
     sortFieldOptions: SORT_FIELD_OPTIONS,
     sortDirectionOptions: SORT_DIRECTION_OPTIONS,
   });
-  const guidedSearchSummary = status === "open" && sortField === "updated" && sortDirection === "desc"
-    ? "Default: open Jira issues, recently updated first."
-    : `Showing ${getOptionLabel(STATUS_OPTIONS, status).toLowerCase()} Jira issues sorted by ${compactState.sortLabel.toLowerCase()}.`;
+  const guidedSearchSummary = getGuidedSearchSummary(statusSelection, compactState.sortLabel, sortField, sortDirection);
+
+  const updateStatusSelection = (selection: JiraStatusSelection): void => {
+    statusSelectionRef.current = selection;
+    setStatusSelection(selection);
+  };
 
   const runSearch = async (
     overrides: Partial<{
       projectKey: string;
       issueKey: string;
       search: string;
-      status: JiraStatusFilter;
+      statusSelection: JiraStatusSelection;
       assigneeText: string;
       reporterText: string;
       issueType: string;
@@ -215,13 +242,14 @@ export const SprintJiraImportModal = ({
     setError(null);
     setHasSearched(true);
     try {
+      const searchStatusSelection = overrides.statusSelection ?? statusSelectionRef.current;
       const data = await searchJiraIssues(
         projectId,
         {
           projectKey: normalizeOptionalText(overrides.projectKey ?? projectKey).toUpperCase(),
           issueKey: normalizeOptionalText(overrides.issueKey ?? issueKey).toUpperCase(),
           search: normalizeOptionalText(overrides.search ?? search),
-          status: overrides.status ?? status,
+          ...getJiraStatusSearchInput(searchStatusSelection),
           assigneeText: normalizeOptionalText(overrides.assigneeText ?? assigneeText),
           reporterText: normalizeOptionalText(overrides.reporterText ?? reporterText),
           issueType: normalizeOptionalText(overrides.issueType ?? issueType),
@@ -258,6 +286,12 @@ export const SprintJiraImportModal = ({
 
   useEffect(() => {
     let cancelled = false;
+    initialSearchStartedRef.current = false;
+    setJiraDefaultsLoaded(false);
+    setJiraStatuses([]);
+    setStatusLoadState("idle");
+    setStatusFallbackReason(null);
+    updateStatusSelection(DEFAULT_CATEGORY_STATUS_SELECTION);
     const loadDefaults = async (): Promise<void> => {
       try {
         const effective = await fetchProjectEffectiveSettings(projectId);
@@ -266,7 +300,7 @@ export const SprintJiraImportModal = ({
           return;
         }
         setProjectKey(defaultProject);
-        await runSearch({ projectKey: defaultProject });
+        setJiraDefaultsLoaded(true);
       } catch (err) {
         if (cancelled) {
           return;
@@ -280,8 +314,100 @@ export const SprintJiraImportModal = ({
     return () => {
       cancelled = true;
       abortRef.current?.abort();
+      statusAbortRef.current?.abort();
     };
   }, [projectId]);
+
+  useEffect(() => {
+    if (!jiraDefaultsLoaded) {
+      return;
+    }
+
+    statusAbortRef.current?.abort();
+    const controller = new AbortController();
+    statusAbortRef.current = controller;
+    const projectKeyForStatuses = normalizedProjectKey;
+    const shouldRunInitialSearch = !initialSearchStartedRef.current;
+    setJiraStatuses([]);
+
+    const finishInitialSearch = (selection: JiraStatusSelection): void => {
+      if (!shouldRunInitialSearch || controller.signal.aborted) {
+        return;
+      }
+      initialSearchStartedRef.current = true;
+      void runSearch({
+        projectKey: projectKeyForStatuses,
+        statusSelection: selection,
+      });
+    };
+
+    if (!projectKeyForStatuses) {
+      const fallbackReason = "Enter a Jira project key to load workflow statuses. Category filters are available as a fallback.";
+      setStatusLoadState("fallback");
+      setStatusFallbackReason(fallbackReason);
+      updateStatusSelection(DEFAULT_CATEGORY_STATUS_SELECTION);
+      finishInitialSearch(DEFAULT_CATEGORY_STATUS_SELECTION);
+      return () => {
+        controller.abort();
+      };
+    }
+
+    setStatusLoadState("loading");
+    setStatusFallbackReason(null);
+    updateStatusSelection(ALL_STATUS_SELECTION);
+
+    const loadStatuses = async (): Promise<void> => {
+      try {
+        const statuses = await fetchJiraProjectStatuses(projectId, projectKeyForStatuses, controller.signal);
+        if (controller.signal.aborted) {
+          return;
+        }
+        const statusNames = getUniqueJiraStatusNames(statuses);
+        if (statusNames.length === 0) {
+          const fallbackReason = "No Jira workflow statuses were returned for this project. Category filters are available as a fallback.";
+          setJiraStatuses([]);
+          setStatusLoadState("fallback");
+          setStatusFallbackReason(fallbackReason);
+          updateStatusSelection(DEFAULT_CATEGORY_STATUS_SELECTION);
+          finishInitialSearch(DEFAULT_CATEGORY_STATUS_SELECTION);
+          return;
+        }
+        setJiraStatuses(statuses);
+        setStatusLoadState("loaded");
+        setStatusFallbackReason(null);
+        setStatusSelection((current) => {
+          const nextSelection = current.mode === "status" && statusNames.includes(current.name)
+            ? current
+            : ALL_STATUS_SELECTION;
+          statusSelectionRef.current = nextSelection;
+          return nextSelection;
+        });
+        finishInitialSearch(ALL_STATUS_SELECTION);
+      } catch (err) {
+        if (err instanceof DOMException && err.name === "AbortError") {
+          return;
+        }
+        if (controller.signal.aborted) {
+          return;
+        }
+        const copy = getIssueImportErrorCopy(err, "Could not load Jira statuses.");
+        setJiraStatuses([]);
+        setStatusLoadState("fallback");
+        setStatusFallbackReason(`${copy.message} Category filters are available as a fallback.`);
+        updateStatusSelection(DEFAULT_CATEGORY_STATUS_SELECTION);
+        finishInitialSearch(DEFAULT_CATEGORY_STATUS_SELECTION);
+      } finally {
+        if (statusAbortRef.current === controller) {
+          statusAbortRef.current = null;
+        }
+      }
+    };
+
+    void loadStatuses();
+    return () => {
+      controller.abort();
+    };
+  }, [jiraDefaultsLoaded, normalizedProjectKey, projectId]);
 
   useEffect(() => {
     const handleEscape = (event: KeyboardEvent): void => {
@@ -531,18 +657,56 @@ export const SprintJiraImportModal = ({
                 />
               </IssueImportField>
 
-              <IssueImportField label="Status">
+              <IssueImportField
+                label="Status"
+                hint={
+                  useCategoryStatusFallback
+                    ? statusFallbackReason ?? "Category filters are available because Jira workflow statuses were not loaded."
+                    : statusLoadState === "loading"
+                      ? "Loading workflow labels for this Jira project."
+                      : "Uses the active Jira project's workflow labels."
+                }
+              >
                 <IssueImportSelect
                   provider={JIRA_PROVIDER}
                   aria-label="Jira status"
-                  value={status}
-                  onChange={(event) => setStatus((event.target as HTMLSelectElement).value as JiraStatusFilter)}
+                  value={getStatusSelectValue(statusSelection, jiraStatusNames, useCategoryStatusFallback)}
+                  onInput={(event) => {
+                    updateStatusSelection(parseStatusSelectValue(
+                      (event.target as HTMLSelectElement).value,
+                      jiraStatusNames,
+                      useCategoryStatusFallback,
+                    ));
+                  }}
+                  onChange={(event) => {
+                    updateStatusSelection(parseStatusSelectValue(
+                      (event.target as HTMLSelectElement).value,
+                      jiraStatusNames,
+                      useCategoryStatusFallback,
+                    ));
+                  }}
                 >
-                  {STATUS_OPTIONS.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
+                  {useCategoryStatusFallback ? (
+                    STATUS_OPTIONS.map((option) => (
+                      <option key={option.value} value={`category:${option.value}`}>
+                        {option.label}
+                      </option>
+                    ))
+                  ) : (
+                    <>
+                      <option value="all">All statuses</option>
+                      {statusLoadState === "loading" && jiraStatusNames.length === 0 && (
+                        <option value="loading" disabled>
+                          Loading Jira statuses...
+                        </option>
+                      )}
+                      {jiraStatusNames.map((statusName) => (
+                        <option key={statusName} value={`jira-status:${encodeURIComponent(statusName)}`}>
+                          {statusName}
+                        </option>
+                      ))}
+                    </>
+                  )}
                 </IssueImportSelect>
               </IssueImportField>
 
@@ -592,7 +756,7 @@ export const SprintJiraImportModal = ({
 
               <IssueImportField
                 label="Visibility"
-                hint="Client-side only. The Jira search still uses the selected status filter."
+                hint="Client-side only. Jira search still uses the selected status filter."
               >
                 <label className="inline-flex min-h-11 items-center gap-3 rounded-[1rem] border border-black/[0.06] bg-white px-4 py-3 text-sm font-semibold text-slate-600 transition-colors hover:text-slate-900 dark:border-white/[0.08] dark:bg-white/[0.05] dark:text-slate-300 dark:hover:text-white">
                   <input
@@ -967,6 +1131,122 @@ function normalizeOptionalText(value: string | undefined): string {
 
 function normalizeOptionalDate(value: string | undefined): string {
   return typeof value === "string" ? value.trim() : "";
+}
+
+function getUniqueJiraStatusNames(statuses: ReadonlyArray<JiraProjectStatus>): string[] {
+  const seen = new Set<string>();
+  const names: string[] = [];
+  for (const status of statuses) {
+    const name = status.name.trim();
+    const normalizedName = normalizeJiraStatusText(name);
+    if (!name || seen.has(normalizedName)) {
+      continue;
+    }
+    seen.add(normalizedName);
+    names.push(name);
+  }
+  return names;
+}
+
+function getStatusSelectionFilterValue(selection: JiraStatusSelection): string {
+  if (selection.mode === "category") {
+    return `category:${selection.value}`;
+  }
+  if (selection.mode === "status") {
+    return `status:${selection.name}`;
+  }
+  return "all";
+}
+
+function getStatusSelectionLabel(selection: JiraStatusSelection): string {
+  if (selection.mode === "category") {
+    return getOptionLabel(STATUS_OPTIONS, selection.value);
+  }
+  if (selection.mode === "status") {
+    return selection.name;
+  }
+  return "All statuses";
+}
+
+function getStatusSelectValue(
+  selection: JiraStatusSelection,
+  statusNames: ReadonlyArray<string>,
+  useCategoryFallback: boolean,
+): string {
+  if (useCategoryFallback) {
+    return selection.mode === "category"
+      ? `category:${selection.value}`
+      : getStatusSelectionFilterValue(DEFAULT_CATEGORY_STATUS_SELECTION);
+  }
+  if (selection.mode !== "status") {
+    return "all";
+  }
+  return statusNames.includes(selection.name) ? `jira-status:${encodeURIComponent(selection.name)}` : "all";
+}
+
+function parseStatusSelectValue(
+  value: string,
+  statusNames: ReadonlyArray<string>,
+  useCategoryFallback: boolean,
+): JiraStatusSelection {
+  if (useCategoryFallback) {
+    const categoryValue = value.startsWith("category:") ? value.slice("category:".length) : value;
+    if (isJiraStatusFilter(categoryValue)) {
+      return { mode: "category", value: categoryValue };
+    }
+    return DEFAULT_CATEGORY_STATUS_SELECTION;
+  }
+
+  if (value.startsWith("jira-status:")) {
+    const statusName = decodeStatusSelectName(value.slice("jira-status:".length));
+    if (statusName) {
+      return { mode: "status", name: statusName };
+    }
+  }
+  return ALL_STATUS_SELECTION;
+}
+
+function decodeStatusSelectName(value: string): string {
+  try {
+    return decodeURIComponent(value).trim();
+  } catch {
+    return "";
+  }
+}
+
+function isJiraStatusFilter(value: string): value is JiraStatusFilter {
+  return STATUS_OPTIONS.some((option) => option.value === value);
+}
+
+function getJiraStatusSearchInput(selection: JiraStatusSelection): {
+  status?: JiraStatusFilter;
+  statusNames?: string[];
+} {
+  if (selection.mode === "category") {
+    return { status: selection.value };
+  }
+  if (selection.mode === "status") {
+    return { statusNames: [selection.name] };
+  }
+  return {};
+}
+
+function getGuidedSearchSummary(
+  selection: JiraStatusSelection,
+  sortLabel: string,
+  sortField: JiraSortField,
+  sortDirection: JiraSortDirection,
+): string {
+  if (selection.mode === "category" && selection.value === "open" && sortField === "updated" && sortDirection === "desc") {
+    return "Default: open Jira issues, recently updated first.";
+  }
+  if (selection.mode === "status") {
+    return `Showing Jira status "${selection.name}" sorted by ${sortLabel.toLowerCase()}.`;
+  }
+  if (selection.mode === "all") {
+    return `Showing all Jira statuses sorted by ${sortLabel.toLowerCase()}.`;
+  }
+  return `Showing ${getOptionLabel(STATUS_OPTIONS, selection.value).toLowerCase()} Jira issues sorted by ${sortLabel.toLowerCase()}.`;
 }
 
 function getOptionLabel<TValue extends string>(
