@@ -66,16 +66,17 @@ On the next message, the orchestration engine intercepts the request, concatenat
 
 Long-running conversations accumulate large prompt histories, risking context window exhaustion or unbounded token costs. The chat runtime introduces a compact-conversation action (`compactThreadSession`).
 
-When triggered on a virtual chat route, the system runs a dedicated execution invocation against the selected virtual chat worker and asks it to produce a compacted markdown handoff of the full thread history.
+When triggered on a virtual CLI chat route, the system runs a `chat_compaction` execution invocation against the selected provider's existing native session. The provider runner sends the CLI's native compact command through the normal resume/continue path (`/compact` or `/compress`, depending on provider) instead of replaying the full transcript into a separate summarization session.
 
 When triggered on a connected MCP chat route, the dashboard now sends a hidden control message to the selected live worker, waits for that worker to answer with a hidden compaction result, and then stores the returned markdown as the thread handoff summary. Those internal control messages are excluded from visible thread history, badge counts, previews, and sidebar pending totals.
 
 The compact action then:
-- stores that generated handoff in `runtimeState.compactionSummary`
-- resets the native provider `sessionIds` to empty
-- sets `replayRequired` to `true`
+- stores the provider's compaction output in `runtimeState.compactionSummary`
+- preserves the active native provider `sessionIds` for virtual CLI routes after native compaction when a live session exists
+- leaves `sessionIds` empty and keeps `replayRequired` enabled when compaction is only producing a stored handoff summary for a thread that does not already have an active provider session
+- sets `replayRequired` only when a route needs to restart from a stored handoff
 
-The original visible `ConversationMessageRecord` history remains intact in the dashboard, but the next fresh session, whether virtual or connected, replays from the compacted summary plus only the messages created after that summary was generated.
+The original visible `ConversationMessageRecord` history remains intact in the dashboard. Virtual CLI routes continue from the compacted provider-native session, while any route that must start fresh can replay from the compacted summary plus only the messages created after that summary was generated.
 
 
 ### Repository Read Optimizations
