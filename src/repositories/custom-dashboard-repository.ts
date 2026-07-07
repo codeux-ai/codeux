@@ -298,7 +298,7 @@ export class CustomDashboardRepository {
         now,
         now,
       );
-      this.applyValidationStatus(revision, status, validationReport, now);
+      this.applyValidationStatus(revision, status, validationReport, now, runtimeMetadata);
     });
 
     return this.requireValidationSession(id);
@@ -342,7 +342,7 @@ export class CustomDashboardRepository {
         now,
         sessionId,
       );
-      this.applyValidationStatus(revision, status, validationReport, now);
+      this.applyValidationStatus(revision, status, validationReport, now, runtimeMetadata);
     });
 
     return this.requireValidationSession(sessionId);
@@ -471,25 +471,48 @@ export class CustomDashboardRepository {
     status: CustomDashboardValidationStatus,
     validationReport: CustomDashboardValidationReport | null,
     now: string,
+    runtimeMetadataPatch?: CustomDashboardJsonObject,
   ): void {
     if (status === "passed" && validationReport?.valid !== true) {
       throw new ValidationError("Passed custom dashboard validation requires a valid report.");
     }
     const validatedAt = status === "passed" ? now : null;
-    this.db.prepare(`
-      UPDATE custom_dashboard_revisions
-      SET validation_status = ?,
-          validation_report_json = ?,
-          validated_at = ?,
-          updated_at = ?
-      WHERE id = ?
-    `).run(
-      status,
-      this.serializeNullableJson(validationReport),
-      validatedAt,
-      now,
-      revision.id,
-    );
+    const nextRuntimeMetadata = status === "passed" && runtimeMetadataPatch
+      ? this.normalizeJsonObject({ ...revision.runtimeMetadata, ...runtimeMetadataPatch })
+      : null;
+    if (nextRuntimeMetadata) {
+      this.db.prepare(`
+        UPDATE custom_dashboard_revisions
+        SET validation_status = ?,
+            validation_report_json = ?,
+            validated_at = ?,
+            runtime_metadata_json = ?,
+            updated_at = ?
+        WHERE id = ?
+      `).run(
+        status,
+        this.serializeNullableJson(validationReport),
+        validatedAt,
+        this.serializeJson(nextRuntimeMetadata),
+        now,
+        revision.id,
+      );
+    } else {
+      this.db.prepare(`
+        UPDATE custom_dashboard_revisions
+        SET validation_status = ?,
+            validation_report_json = ?,
+            validated_at = ?,
+            updated_at = ?
+        WHERE id = ?
+      `).run(
+        status,
+        this.serializeNullableJson(validationReport),
+        validatedAt,
+        now,
+        revision.id,
+      );
+    }
 
     if (status === "passed") {
       this.setDashboardStatus(revision.dashboardId, "validated", now);

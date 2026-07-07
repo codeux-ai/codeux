@@ -11,7 +11,7 @@ The source of truth is the Code UX database. Drafts stay mutable, revisions are 
 3. Ask for changes or edit the draft before creating a revision. Draft edits do not change previous revisions or the currently published dashboard.
 4. Create a revision when the draft is ready. A revision snapshots the current manifest, file bundle, source graph, styleguide, and runtime metadata.
 5. Run detached validation for the revision. Code UX materializes the bundle under the project `.code-ux/runtime/custom-dashboards/...` directory, builds it in Docker, starts a detached preview container, and health-checks the root URL.
-6. Inspect validation status, logs, and the proxied preview link. Validation passes only after install, build, container start, and root health checks succeed. A passed validation does not publish by itself.
+6. Inspect validation status, logs, and the proxied preview link. Validation passes only after install, build, browser artifact capture, container start, and root health checks succeed. A passed validation does not publish by itself.
 7. Publish the validated revision. The UI and repository gate publication to revisions with `validationStatus: "passed"` and a valid validation report. Publishing another passed revision is the rollback path.
 8. Archive dashboards you no longer want active. Archiving clears the active publication and marks the dashboard archived while preserving revision and validation history.
 
@@ -110,6 +110,7 @@ During validation, Code UX:
 - writes the generated bundle plus a known Vite/Preact harness
 - injects a read-only `codeUxDataBridge` / `CodeUXCustomDashboard` object
 - runs install and build in Docker using the resolved CLI workflow image
+- persists the built Vite `dist` files on the validated revision as the published-viewer artifact
 - starts a detached preview container on an allocated localhost port
 - health-checks the root URL before marking the session passed
 - records workspace path, log path, container id/name, host port, validation proxy path, commands, and log excerpts in runtime metadata
@@ -118,6 +119,6 @@ Stopping a validation session removes the detached container. It does not invali
 
 ## Published Viewer and Rollback
 
-The in-app viewer renders only published dashboards whose active `publishedRevisionId` points to a revision with a passed validation report. Generated code runs inside a sandboxed iframe document and talks to the parent app through a constrained `postMessage` bridge. The parent serves only declared source-node requests.
+The in-app viewer renders only published dashboards whose active `publishedRevisionId` points to a revision with a passed validation report. For the default `src/dashboard.tsx` draft and other TSX/Preact revisions validated through the harness, the viewer uses the persisted Vite `dist` artifact instead of the source entry file, so publication does not depend on the detached validation container still running. Generated code runs inside a sandboxed iframe document and talks to the parent app through a constrained `postMessage` bridge. The parent serves only declared source-node requests.
 
 Rollback is publish-based: select an earlier passed revision and publish it again. The publication pointer moves back to that immutable revision. Archive is the safe removal path when no dashboard should be active; it clears the publication pointer while preserving history.
