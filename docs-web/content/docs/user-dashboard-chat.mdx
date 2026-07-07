@@ -1,13 +1,29 @@
 # Chat
 
-The **Chat** page (`/chat`) is a thread-based conversation surface that lets you talk to agents — both for free-form Q&A and to inspect MCP tool invocations.
+The **Chat** page (`/chat`) is a conversation surface that lets you talk to agents for project-backed Q&A, inspect MCP tool invocations, and get local onboarding help before any project exists.
 
 ## Layout
 
-- **Left rail** — Two tabs:
+- **No-project assistant** — When no project is selected, `/chat` shows a local onboarding assistant instead of a project-required empty state. It presents the Code UX assistant avatar, five quick bubbles, local replies, and explicit buttons for Add Project, Projects, Settings, onboarding, and docs. It does not create conversation threads or call project-scoped chat APIs.
+- **Floating assistant widget** — Every dashboard subpage except `/chat` has a compact assistant entry point in the corner. Submitting text opens `/chat` with that text as a draft. If a project is selected, the draft appears in the normal composer; if no project is selected, it becomes a local no-project assistant turn. Nothing is sent automatically.
+- **Left rail** — In project chat, two tabs:
   - **Threads** — Conversation threads scoped to the active project.
   - **Invocations** — A historical log of MCP `CallTool` invocations, useful for debugging integrations.
 - **Main panel** — The active thread (or invocation), rendered as a chat transcript with user, assistant, and tool messages. Markdown is rendered with `marked`, including code blocks.
+
+The floating widget uses the configured Dashboard Reply agent avatar when a selected project has one. If no Dashboard Reply preset or project is available, it falls back to the generated Code UX avatar.
+
+## No-project assistant
+
+The no-project assistant is local to the browser page. Its quick bubbles cover:
+
+- Add my first project.
+- Add a project and build a desktop app.
+- Add a project and build a web app.
+- Explain Code UX.
+- Change settings.
+
+Quick bubbles only add local user/assistant turns. Actions such as creating a project, opening settings, restarting onboarding, or reading docs remain explicit buttons and continue through the existing dashboard flows.
 
 ## Threads
 

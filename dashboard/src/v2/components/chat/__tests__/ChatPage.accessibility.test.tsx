@@ -86,7 +86,7 @@ const mocks = vi.hoisted(() => {
 // Mock router
 vi.mock('@tanstack/react-router', () => ({
   useNavigate: () => vi.fn(),
-  Link: ({ children }: any) => <div>{children}</div>
+  Link: ({ children, to, ...props }: any) => <a href={to} {...props}>{children}</a>
 }));
 
 // Mock page data hook
@@ -113,6 +113,7 @@ vi.mock('../../../hooks/use-project-effective-settings.js', () => ({
 describe('ChatPage Accessibility', () => {
   afterEach(() => {
     cleanup();
+    window.history.pushState({}, "", "/");
   });
 
   beforeEach(() => {
@@ -127,10 +128,20 @@ describe('ChatPage Accessibility', () => {
       selectedInvocationId: null,
       invocationMessages: [],
       invocationMessagesLoading: false,
+      selectedProject: { id: "p1", name: "Project 1" },
+      selectedThread: null,
+      selectedThreadId: "thread1",
+      activeConnection: null,
+      pendingDashboardMessages: 0,
+      hasWorkingReply: false,
+      threadsLoading: false,
+      threadMessagesLoading: false,
       sending: true,
       input: "Ship it",
       error: "Test error",
       feedback: { status: "idle", message: null },
+      createThreadForCompose: vi.fn(),
+      handleSend: vi.fn(),
       handleRenameThread: vi.fn(() => Promise.resolve()),
     };
   });
@@ -262,6 +273,73 @@ describe('ChatPage Accessibility', () => {
     // Check if error is correctly displayed as well
     const liveError = screen.getByText(/Failed: Test error/);
     expect(liveError).toHaveAttribute('aria-live', 'polite');
+  });
+
+  it('renders local no-project onboarding assistant without the project composer', async () => {
+    const user = userEvent.setup();
+    mocks.reducedMotion.value = true;
+    mocks.data = {
+      ...mocks.data,
+      selectedProject: null,
+      chatMode: "threads",
+      sending: false,
+      input: "",
+      error: null,
+      pendingDashboardMessages: 0,
+    };
+
+    render(
+      <ProjectDataContext.Provider value={{ projects: [], selectedProject: null } as any}>
+        <ChatPage />
+      </ProjectDataContext.Provider>
+    );
+
+    expect(screen.getByRole("heading", { name: "Code UX Assistant" })).toBeInTheDocument();
+    expect(screen.getByRole("log", { name: "No-project assistant replies" })).toBeInTheDocument();
+    expect(screen.queryByRole("textbox", { name: "Message" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("tablist", { name: "Chat Mode" })).not.toBeInTheDocument();
+
+    const quickBubbles = [
+      "Add my first project",
+      "Build a desktop app",
+      "Build a web app",
+      "Explain Code UX",
+      "Change settings",
+    ];
+    for (const label of quickBubbles) {
+      expect(screen.getByRole("button", { name: label })).toBeInTheDocument();
+    }
+
+    await user.click(screen.getByRole("button", { name: "Explain Code UX" }));
+
+    expect(screen.getByText("Explain what Code UX does before I add a project.")).toBeInTheDocument();
+    expect(screen.getByText(/Code UX is a local-first runtime/i)).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: /Start Onboarding/i }).length).toBeGreaterThan(0);
+  });
+
+  it('turns no-project URL drafts into local assistant turns without sending', () => {
+    mocks.reducedMotion.value = true;
+    mocks.data = {
+      ...mocks.data,
+      selectedProject: null,
+      chatMode: "threads",
+      sending: false,
+      input: "",
+      error: null,
+      handleSend: vi.fn(),
+    };
+    window.history.pushState({}, "", "/chat?draft=Can%20you%20help%20me%20get%20started%3F");
+
+    render(
+      <ProjectDataContext.Provider value={{ projects: [], selectedProject: null } as any}>
+        <ChatPage />
+      </ProjectDataContext.Provider>
+    );
+
+    expect(screen.getByText("Can you help me get started?")).toBeInTheDocument();
+    expect(screen.getByText(/I can help once a project exists/i)).toBeInTheDocument();
+    expect(mocks.data.handleSend).not.toHaveBeenCalled();
+    expect(window.location.search).not.toContain("draft=");
   });
 
   it('sends web and desktop setup as idle 3D chat quick actions for the active project', async () => {

@@ -13,6 +13,7 @@ import { ChatRail } from "./components/chat/ChatRail.js";
 import { ThreadListCard } from "./components/chat/ThreadListCard.js";
 import { InvocationListCard } from "./components/chat/InvocationListCard.js";
 import { ChatRailPlaceholder, EmptyChat, LoadingChat } from "./components/chat/ChatEmptyState.js";
+import { NoProjectAssistantPanel } from "./components/chat/NoProjectAssistantPanel.js";
 import { EmptyState } from "./components/ui/EmptyState.js";
 import { MessageCircle } from "lucide-preact";
 import { ChatMessageBubble } from "./components/chat/ChatMessageBubble.js";
@@ -37,6 +38,7 @@ import {
   formatTokenCount,
   mergeInvocationToolMessages
 } from "./lib/chat-widget-view-models.js";
+import { clearChatDraftFromUrl, readChatDraftFromLocation } from "./lib/no-project-chat-assistant.js";
 
 
 const formatInvocationErrorCategory = (value: ExecutionInvocationRecord["lastErrorCategory"]): string | null => {
@@ -72,6 +74,9 @@ export const ChatPage: FunctionComponent = () => {
   const [restartingInvocation, setRestartingInvocation] = useState<{ id: string; mode: InvocationRestartMode } | null>(null);
   const [cancellingInvocationId, setCancellingInvocationId] = useState<string | null>(null);
   const [resettingUsageLimitInvocationId, setResettingUsageLimitInvocationId] = useState<string | null>(null);
+  const [noProjectDraft, setNoProjectDraft] = useState<string | null>(() => (
+    typeof window === "undefined" ? null : readChatDraftFromLocation(window.location)
+  ));
   const invocationFeedback = useActionFeedback();
 
   const {
@@ -133,6 +138,13 @@ export const ChatPage: FunctionComponent = () => {
     projectTasksLoaded,
     sprintKeyPrefix,
   } = useChatPageData({ composerRef, messagesRef });
+
+  useEffect(() => {
+    if (typeof window === "undefined" || selectedProject) {
+      return;
+    }
+    setNoProjectDraft(readChatDraftFromLocation(window.location));
+  }, [selectedProject]);
 
   const projectThreads = useMemo(() => threads.filter((thread) => thread.scope === "project"), [threads]);
   const displayedInvocationTotal = invocationTotalCount ?? invocations.length;
@@ -855,7 +867,7 @@ export const ChatPage: FunctionComponent = () => {
     return (
       <ChatPageShell
         selectedProject={null}
-        chatMode={chatMode}
+        chatMode="stage"
         onSetChatMode={setChatMode}
         onCreateThread={() => void createThreadForCompose()}
         pendingDashboardMessages={pendingDashboardMessages}
@@ -863,20 +875,19 @@ export const ChatPage: FunctionComponent = () => {
         invocationCount={displayedInvocationTotal}
         runningInvocationCount={runningInvocationCount}
         error={error}
-        railSlot={(
-          <ChatRail title="Threads" count={0} secondaryTitle="Listeners" secondaryCount={0}>
-            <ChatRailPlaceholder
-              title="No Project Scope"
-              message="Connect a project first; the thread rail will then become the live inbox for that workspace."
-              actionLabel="Add Project"
-              actionTo="/projects"
-            />
-          </ChatRail>
-        )}
+        title="Code UX Assistant"
+        subtitle="Ask setup questions before a project exists, then continue through explicit dashboard actions."
+        showProjectControls={false}
+        railSlot={null}
         detailSlot={(
-          <EmptyChat
-            tone="project"
-            message="Choose or add a project from the top navigation to unlock stored chat threads, listener routing, and project-scoped conversation history."
+          <NoProjectAssistantPanel
+            initialDraft={noProjectDraft}
+            onInitialDraftConsumed={() => {
+              setNoProjectDraft(null);
+              if (typeof window !== "undefined") {
+                clearChatDraftFromUrl(window);
+              }
+            }}
           />
         )}
       />
