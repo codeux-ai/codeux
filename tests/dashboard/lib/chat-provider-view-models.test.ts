@@ -16,19 +16,19 @@ import {
 const definition: DashboardChatProviderSetupDefinition = {
   kind: "slack",
   label: "Slack",
-  defaultBridgeMode: "openclaw",
+  defaultBridgeMode: "managed_bridge",
   ingressUrlTemplate: "http://localhost/api/chat-providers/ingress/{connectionId}",
   bridgeModes: [
     {
-      mode: "openclaw",
-      label: "OpenClaw Slack plugin",
-      integration: "openclaw_plugin",
+      mode: "managed_bridge",
+      label: "Managed Slack bridge",
+      integration: "managed_plugin",
       setupFields: [
         { key: "pluginName", label: "Plugin name", type: "string", required: true, defaultValue: "slack" },
         { key: "workspaceId", label: "Workspace", type: "string", required: false },
       ],
       secretFields: [
-        { key: "openclawApiKey", label: "OpenClaw API key", required: true },
+        { key: "bridgeApiKey", label: "Bridge API key", required: true },
       ],
     },
   ],
@@ -38,19 +38,19 @@ const connection: DashboardChatProviderConnectionRecord = {
   id: "conn-1",
   providerKind: "slack",
   displayName: "Slack Bridge",
-  bridgeMode: "openclaw",
+  bridgeMode: "managed_bridge",
   status: "active",
   enabled: true,
   setup: { pluginName: "slack" },
   credentials: [
-    { key: "openclawApiKey", label: "OpenClaw API key", configured: true, redactedValue: "••••••••" },
+    { key: "bridgeApiKey", label: "Bridge API key", configured: true, redactedValue: "••••••••" },
   ],
   ingressUrl: "http://localhost/api/chat-providers/ingress/conn-1",
   setupHints: {
-    bridgeModeLabel: "OpenClaw Slack plugin",
-    integration: "openclaw_plugin",
+    bridgeModeLabel: "Managed Slack bridge",
+    integration: "managed_plugin",
     requiredSetupFields: ["pluginName"],
-    requiredSecretFields: ["openclawApiKey"],
+    requiredSecretFields: ["bridgeApiKey"],
   },
   createdAt: "2026-01-01T00:00:00.000Z",
   updatedAt: "2026-01-01T00:00:00.000Z",
@@ -124,7 +124,7 @@ describe("chat provider view models", () => {
   });
 
   it("creates default setup and redacts common credential patterns", () => {
-    expect(createDefaultSetupForBridge(definition, "openclaw")).toEqual({ pluginName: "slack" });
+    expect(createDefaultSetupForBridge(definition, "managed_bridge")).toEqual({ pluginName: "slack" });
     expect(redactChatProviderError("token=abc123 secret: super-secret password=hunter2")).toBe("token=[redacted] secret: [redacted] password=[redacted]");
   });
 });

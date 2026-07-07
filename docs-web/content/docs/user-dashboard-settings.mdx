@@ -713,18 +713,18 @@ Related docs:
 
 <a id="provider-integration"></a>
 
-Explains that AI provider credentials are system-owned while project scopes still control routing and auth-copy behavior. External chat provider connections also appear under Settings -> Providers, but they use a separate chat-provider runtime path for ingress, channel binding, and outbound reply delivery.
+Explains that AI provider credentials are system-owned while project scopes still control routing and auth-copy behavior. External chat connector connections appear under Settings -> Integrations -> Chat Connectors, but they use a separate chat-provider runtime path for ingress, channel binding, and outbound reply delivery.
 
-**What it controls:** The notices clarify where AI provider instances live, which settings remain project-scoped, and why chat provider connections are configured beside provider credentials without participating in AI model routing.
+**What it controls:** The notices clarify where AI provider instances live, which settings remain project-scoped, and why chat connector connections are configured beside provider credentials without participating in AI model routing.
 
-**Recommended defaults:** Switch to system scope to add AI provider credentials, then route them from AI Models. Configure chat provider connections from the provider integration cards only when an external chat bridge is ready to send authenticated ingress.
+**Recommended defaults:** Switch to system scope to add AI provider credentials, then route them from AI Models. Configure chat connector connections from the provider integration cards only when an external chat bridge is ready to send authenticated ingress.
 
-**Risks and gotchas:** Expecting project scope to create AI provider credentials can leave routes without provider instances. Expecting chat provider credentials to affect AI routing can also be misleading: chat provider connections bind external channels to projects, while AI provider credentials decide which model runs Code UX work.
+**Risks and gotchas:** Expecting project scope to create AI provider credentials can leave routes without provider instances. Expecting chat provider credentials to affect AI routing can also be misleading: chat connector connections bind external channels to projects, while AI provider credentials decide which model runs Code UX work.
 
 Related docs:
 
 - [Provider Routing](/docs/user-providers-and-models)
-- [External chat providers](/docs/architecture-external-chat-providers)
+- [External chat connectors](/docs/architecture-external-chat-providers)
 - [Configuration and Storage](/docs/developer-settings-reference)
 
 ### Provider Credentials

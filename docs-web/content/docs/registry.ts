@@ -364,7 +364,7 @@ export const docsRegistry: Record<DocsSlug, DocsRegistryEntry> = {
     id: 'architecture-external-chat-providers',
     path: '/docs/architecture-external-chat-providers',
     section: 'Architecture',
-    title: "External chat providers",
+    title: "External chat connectors",
     description: "Code UX persists external chat provider configuration separately from MCP listener connections and dashboard conversation messages. The runtime stays adapter-neutral: it records provider setup, bridge mode, channel ro...",
   },
   'architecture-configuration-resolution': {
