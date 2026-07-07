@@ -540,7 +540,7 @@ function parseTimestamp(value: unknown): string | null {
   if (typeof value === "string" && value.trim()) {
     const numeric = Number(value);
     const date = Number.isFinite(numeric)
-      ? new Date(value.trim().length <= 10 ? numeric * 1000 : numeric)
+      ? new Date(Math.abs(numeric) < 10_000_000_000 ? numeric * 1000 : numeric)
       : new Date(value);
     if (Number.isFinite(date.getTime())) {
       return date.toISOString();

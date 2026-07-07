@@ -190,6 +190,21 @@ describe("ChatProviderIngressService", () => {
     expect(context.postMessage).not.toHaveBeenCalled();
   });
 
+  it("normalizes fractional second provider timestamps as seconds instead of millisecond epochs", () => {
+    const normalized = normalizeInboundPayload(buildConnection("slack"), {
+      event_id: "event-fractional-ts",
+      event: {
+        channel: "C1",
+        user: "U1",
+        text: "Timestamp check",
+        event_ts: "1783430400.000100",
+      },
+    });
+
+    expect(normalized.timestamp).toBe("2026-07-07T13:20:00.000Z");
+    expect(normalized.timestamp.startsWith("1970")).toBe(false);
+  });
+
   it.each([
     ["whatsapp", {
       entry: [{

@@ -123,6 +123,13 @@ describe("chat provider ingress routes", () => {
     const body = JSON.stringify(payload);
     const signature = `sha256=${createHmac("sha256", "signing-secret").update(`${timestamp}.${body}`).digest("hex")}`;
 
+    const bearerOnly = await postIngress(context, connection.id, payload, {
+      Authorization: "Bearer bot-token",
+      "x-code-ux-timestamp": timestamp,
+    });
+    expect(bearerOnly.status).toBe(401);
+    expect(context.postMessage).not.toHaveBeenCalled();
+
     const response = await postIngress(context, connection.id, payload, {
       "x-code-ux-timestamp": timestamp,
       "x-code-ux-signature": signature,
@@ -176,9 +183,9 @@ describe("chat provider ingress routes", () => {
     const connection = context.chatProviderRepository.createConnection({
       providerKind: "telegram",
       displayName: "Telegram gateway",
-      bridgeMode: "webhook",
+      bridgeMode: "openclaw",
       status: "active",
-      secrets: { botToken: "telegram-token" },
+      secrets: { openclawApiKey: "telegram-token" },
     });
     for (const project of [projectA, projectB]) {
       context.chatProviderRepository.createChannelBinding({

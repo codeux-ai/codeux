@@ -26,7 +26,6 @@ interface ReplayEntry {
 const DEFAULT_TIMESTAMP_TOLERANCE_MS = 5 * 60 * 1000;
 const MAX_REPLAY_CACHE_SIZE = 2_000;
 const HMAC_SECRET_KEYS = ["signingSecret", "webhookSecret", "botAppPassword"];
-const BEARER_SECRET_KEYS = ["openclawApiKey", "bridgeToken", "botToken", "webhookSecret", "signingSecret", "botAppPassword"];
 
 export class ChatProviderIngressSecurity {
   private readonly replayCache = new Map<string, ReplayEntry>();
@@ -51,10 +50,13 @@ export class ChatProviderIngressSecurity {
       "x-signature",
     ]);
 
-    if (connection.bridgeMode === "webhook" && signature) {
+    if (connection.bridgeMode === "webhook") {
       const hmacSecret = firstConfiguredSecret(connection.secrets, HMAC_SECRET_KEYS);
       if (!hmacSecret) {
         throw new ChatProviderIngressSecurityError("missing_hmac_secret", "Webhook signing secret is not configured.", 403);
+      }
+      if (!signature) {
+        throw new ChatProviderIngressSecurityError("missing_signature", "Missing chat provider ingress signature.", 401);
       }
       this.verifyHmacSignature({
         connectionId: connection.id,
@@ -69,7 +71,7 @@ export class ChatProviderIngressSecurity {
 
     const expectedBearer = firstConfiguredSecret(
       connection.secrets,
-      connection.bridgeMode === "native_bridge" ? ["bridgeToken"] : BEARER_SECRET_KEYS,
+      connection.bridgeMode === "native_bridge" ? ["bridgeToken"] : ["openclawApiKey"],
     );
     if (!expectedBearer) {
       throw new ChatProviderIngressSecurityError("missing_bridge_secret", "Chat provider bridge secret is not configured.", 403);
