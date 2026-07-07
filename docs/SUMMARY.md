@@ -67,6 +67,7 @@
 - [Project Initialization](./dashboard/project-initialization.md)
 - [Sprint Imports](./dashboard/sprint-imports.md)
 - [Quicksprint Templates](./dashboard/quicksprint-templates.md)
+- [Nodes](./dashboard/nodes.md)
 - [Scheduler](./dashboard/scheduler.md)
 - [Memory Architecture and Search](./dashboard/memory.md)
 - [Browser Preview](./dashboard/browser-preview.md)

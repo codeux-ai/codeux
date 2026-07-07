@@ -22,11 +22,12 @@ Use this page as the main entrypoint.
 13. [Sprint Imports](./dashboard/sprint-imports.md)
 14. [Project Initialization](./dashboard/project-initialization.md)
 15. [Quicksprint Templates](./dashboard/quicksprint-templates.md)
-16. [Scheduler](./dashboard/scheduler.md)
-17. [Memory Architecture and Search](./dashboard/memory.md)
-18. [Mobile Responsiveness](./dashboard/mobile-responsiveness.md)
-19. [Testing and Quality](./development/testing-and-quality.md)
-20. [Glossary](./reference/glossary.md)
+16. [Nodes](./dashboard/nodes.md)
+17. [Scheduler](./dashboard/scheduler.md)
+18. [Memory Architecture and Search](./dashboard/memory.md)
+19. [Mobile Responsiveness](./dashboard/mobile-responsiveness.md)
+20. [Testing and Quality](./development/testing-and-quality.md)
+21. [Glossary](./reference/glossary.md)
 
 ### Path 2: Building or modifying orchestration behavior
 1. [System Overview](./architecture/system-overview.md)
