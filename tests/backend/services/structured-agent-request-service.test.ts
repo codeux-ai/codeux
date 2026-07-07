@@ -644,6 +644,13 @@ describe("StructuredAgentRequestService", () => {
     });
 
     expect(result.parsed).toEqual({ result: "ok" });
+    expect(result.selfReflection).toEqual({
+      enabled: false,
+      finalDecision: "disabled",
+      attemptCount: 0,
+      passed: true,
+      scores: [],
+    });
     expect(mockProviderExecutionService.executeProvider).toHaveBeenCalledTimes(1);
   });
 
@@ -685,6 +692,20 @@ describe("StructuredAgentRequestService", () => {
     });
 
     expect(result.parsed).toEqual({ result: "better" });
+    expect(result.selfReflection).toMatchObject({
+      enabled: true,
+      finalDecision: "passed",
+      attemptCount: 1,
+      passed: true,
+    });
+    expect(result.selfReflection.scores).toEqual([
+      expect.objectContaining({
+        id: "correctness",
+        score: 9,
+        threshold: 0.8,
+        passed: true,
+      }),
+    ]);
     expect(mockProviderExecutionService.executeProvider).toHaveBeenCalledTimes(4);
     const calls = vi.mocked(mockProviderExecutionService.executeProvider).mock.calls;
     expect(calls[1]?.[0].continueSessionId).toBe("native-1");
@@ -726,6 +747,19 @@ describe("StructuredAgentRequestService", () => {
     });
 
     expect(result.parsed).toEqual({ result: "rough" });
+    expect(result.selfReflection).toMatchObject({
+      enabled: true,
+      finalDecision: "max_attempts_reached",
+      attemptCount: 0,
+      passed: false,
+    });
+    expect(result.selfReflection.scores).toEqual([
+      expect.objectContaining({
+        id: "correctness",
+        score: 5,
+        passed: false,
+      }),
+    ]);
     expect(mockProviderExecutionService.executeProvider).toHaveBeenCalledTimes(2);
   });
 
@@ -760,6 +794,13 @@ describe("StructuredAgentRequestService", () => {
     });
 
     expect(result.parsed).toEqual({ result: "accepted" });
+    expect(result.selfReflection).toEqual({
+      enabled: true,
+      finalDecision: "reflection_failed",
+      attemptCount: 0,
+      passed: false,
+      scores: [],
+    });
     expect(mockProviderExecutionService.executeProvider).toHaveBeenCalledTimes(2);
   });
 
@@ -810,6 +851,12 @@ describe("StructuredAgentRequestService", () => {
     });
 
     expect(result.parsed.tasks[0]?.title).toBe("Implement first task");
+    expect(result.selfReflection).toMatchObject({
+      enabled: true,
+      finalDecision: "improvement_failed",
+      attemptCount: 1,
+      passed: false,
+    });
     expect(mockProviderExecutionService.executeProvider).toHaveBeenCalledTimes(3);
   });
 
@@ -848,6 +895,12 @@ describe("StructuredAgentRequestService", () => {
 
     expect(result.parsed.verdict).toBe("pass");
     expect(result.parsed.summary).toBe("Looks good.");
+    expect(result.selfReflection).toMatchObject({
+      enabled: true,
+      finalDecision: "improvement_failed",
+      attemptCount: 1,
+      passed: false,
+    });
     expect(mockProviderExecutionService.executeProvider).toHaveBeenCalledTimes(3);
   });
 });
