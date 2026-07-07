@@ -12,9 +12,17 @@ Use it to:
 - run a flow manually through the node-flow runtime
 - inspect the run summary, persisted history, per-node status records, and linked invocation ids
 
+Editable side panels keep node work on the canvas. The palette adds trigger, agent, task, condition, and
+output templates; the inspector edits selected node labels, descriptions, intents, configuration, and
+enabled state; edge selection shows read-only source and target wiring. Port lists separate inputs from
+outputs and show compatible wiring hints.
+
 Node widget fields support text, textarea, numbers, booleans, selects, JSON, secret references, and
 key-value entries. Secret fields store references rather than secret values, and rendered run output
 redacts secret-shaped keys before display.
+
+Validation issues are grouped by affected node or edge with severity labels and select/focus actions so
+operators can jump directly to the problem area before saving.
 
 When no project is selected, Nodes shows a project-required placeholder because flows, runs, and agent
 attachments all belong to a project.
