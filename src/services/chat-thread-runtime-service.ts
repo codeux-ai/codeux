@@ -24,6 +24,11 @@ import type { KnowledgeService } from "./knowledge-service.js";
 import type { McpConnectionInfo } from "../contracts/mcp-connection-types.js";
 import type { McpApprovalTracker } from "./mcp-approval-tracker.js";
 import { getCorrelationId } from "../shared/logging/correlation-id.js";
+import type { AgentMcpAccessConfig } from "../contracts/agent-preset-types.js";
+import {
+  isSchedulerOnlyAgentMcpAccess,
+  schedulerOnlyAgentMcpAccess,
+} from "./agent-mcp-access.js";
 
 interface ChatThreadRuntimeServiceDependencies {
   connectionChatRepository: ConnectionChatRepository;
@@ -467,7 +472,6 @@ export class ChatThreadRuntimeService {
     let promptContent = "";
     let continueSessionId: string | null = null;
     const mcpConnection = this.deps.getMcpConnectionInfo?.() ?? null;
-    const mcpAvailable = mcpConnection !== null;
 
     const allMessages = this.deps.connectionChatRepository.listMessages(thread.id);
 
@@ -477,6 +481,12 @@ export class ChatThreadRuntimeService {
         dashboardSettings.agents?.routing?.dashboardReply?.agentPresetId ?? null,
       )
       : await this.deps.agentPresetSyncService.getWorkerAgent(projectId);
+    const dashboardReplyAgentPresetId = dashboardSettings.agents?.routing?.dashboardReply?.agentPresetId ?? null;
+    const agentMcpAccess = this.resolveDashboardReplyMcpAccess(
+      respondingAgent.mcpAccess,
+      dashboardReplyAgentPresetId,
+    );
+    const mcpAvailable = mcpConnection !== null && agentMcpAccess.codeUxEnabled;
 
     if (replayRequired) {
       const workerInstructions = respondingAgent.instructionMarkdown.trim();
@@ -490,6 +500,7 @@ export class ChatThreadRuntimeService {
         workerInstructions,
         isDashboardReply: false,
         mcpAvailable,
+        mcpAccessMode: mcpAvailable && isSchedulerOnlyAgentMcpAccess(agentMcpAccess) ? "scheduler_only" : undefined,
         knowledgeManifest,
       });
     } else {
@@ -540,7 +551,7 @@ export class ChatThreadRuntimeService {
       repoPath: project.baseDir,
       snapshotCheckout,
       mcpConnection,
-      agentMcpAccess: respondingAgent.mcpAccess ?? null,
+      agentMcpAccess,
       mcpAgentId: respondingAgent.id,
       signal,
     });
@@ -604,6 +615,16 @@ export class ChatThreadRuntimeService {
       connectionId: null,
       runtimeState: newRuntimeState,
     });
+  }
+
+  private resolveDashboardReplyMcpAccess(
+    access: AgentMcpAccessConfig | undefined,
+    dashboardReplyAgentPresetId: string | null,
+  ): AgentMcpAccessConfig {
+    if (dashboardReplyAgentPresetId && access) {
+      return access;
+    }
+    return schedulerOnlyAgentMcpAccess(access?.linkedServerIds ?? []);
   }
 
   private async generateThreadCompaction(
