@@ -207,6 +207,16 @@ For payload normalization in management tools, Code UX centralizes parsing behav
 
 The dedicated management tools (`manage_projects`, `manage_sprints`, `manage_tasks`, `manage_quicksprints`, `manage_scheduler`, `manage_agents`, `manage_memory`, `search_knowledge`, `manage_settings`, `manage_preview`, and `manage_telemetry`) share the same action handlers. `manage_code_ux` remains as a deprecated compatibility entry point.
 
+### `manage_telemetry` actions
+
+`manage_telemetry` lists execution invocations and messages. Available telemetry actions:
+- `get_project_execution_snapshot`: requires `projectId`.
+- `get_project_stats_snapshot`: requires `projectId`.
+- `list_sprint_runs`: requires `projectId` and `sprintId`.
+- `list_task_dispatches`: requires `projectId`, `sprintId`, and `taskId`.
+- `list_execution_invocations`: requires `projectId`; optional `sprintId`, `taskId`, and `type`.
+- `list_execution_invocation_messages`: requires `invocationId`.
+
 ### `manage_memory` claim actions
 
 `manage_memory` supports durable long-term memory claim management in addition to raw memory actions. These actions are available to `project_manager` runtime roles and let project managers create canonical project claims directly without a sprint ID:

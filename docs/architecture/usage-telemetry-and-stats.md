@@ -308,6 +308,8 @@ The page focuses on:
 
 This page is intentionally separate from the live execution view so the live dashboard can stay optimized for orchestration while the Stats page handles historical analysis.
 
+The same telemetry bounds are also exposed through the `manage_telemetry` MCP tool, which mirrors the dashboard telemetry requests and allows programmatic inspection of execution snapshots, task dispatches, sprint runs, invocations, and individual execution invocation messages (via `list_execution_invocation_messages`).
+
 ## Realtime And Refresh
 
 Project stats refresh on:
