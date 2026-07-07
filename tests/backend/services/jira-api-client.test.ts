@@ -23,6 +23,47 @@ describe("jira-api-client", () => {
     })).toBe('project = OPS AND key = OPS-123 AND statusCategory = "In Progress" AND assignee = "dev@example.com" AND reporter = currentUser() AND issuetype = "Bug" AND priority = "High" AND updated >= "2026-05-01" AND updated <= "2026-05-31" AND labels in ("customer escalation", "p0") ORDER BY priority ASC');
   });
 
+  it("keeps default in-work guided searches on the Jira status category", () => {
+    expect(buildJiraSearchJql({
+      projectKey: "ops",
+      status: "in_progress",
+    })).toBe('project = OPS AND statusCategory = "In Progress" ORDER BY updated DESC');
+  });
+
+  it("uses the configured in-work status name for guided in-progress searches", () => {
+    expect(buildJiraSearchJql({
+      projectKey: "ops",
+      status: "in_progress",
+      inProgressStatusName: 'Ready / "Build" \\ Work',
+    })).toBe('project = OPS AND status = "Ready / \\"Build\\" \\\\ Work" ORDER BY updated DESC');
+  });
+
+  it("lets custom JQL bypass guided status filters", () => {
+    expect(buildJiraSearchJql({
+      jql: "project = OPS AND labels in (security)",
+      projectKey: "ops",
+      status: "in_progress",
+      inProgressStatusName: "In Work",
+    })).toBe("project = OPS AND labels in (security)");
+  });
+
+  it("preserves open, done, and all status JQL output", () => {
+    expect(buildJiraSearchJql({
+      projectKey: "ops",
+      status: "open",
+    })).toBe("project = OPS AND statusCategory != Done ORDER BY updated DESC");
+    expect(buildJiraSearchJql({
+      projectKey: "ops",
+      status: "done",
+      inProgressStatusName: "In Work",
+    })).toBe("project = OPS AND statusCategory = Done ORDER BY updated DESC");
+    expect(buildJiraSearchJql({
+      projectKey: "ops",
+      status: "all",
+      inProgressStatusName: "In Work",
+    })).toBe("project = OPS ORDER BY updated DESC");
+  });
+
   it("keeps text assignee shortcuts for current user and unassigned issues", () => {
     expect(buildJiraSearchJql({ assigneeText: "me" })).toBe("statusCategory != Done AND assignee = currentUser() ORDER BY updated DESC");
     expect(buildJiraSearchJql({ assigneeText: "currentUser()" })).toBe("statusCategory != Done AND assignee = currentUser() ORDER BY updated DESC");
