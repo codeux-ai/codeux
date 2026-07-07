@@ -200,6 +200,7 @@ function makeBasePayload() {
       containerMemoryLimitMb: 6144,
       containerCacheSetupScriptImage: true,
       containerInstallPlaywrightBrowsers: true,
+      containerRunAsRoot: false,
       containerMountGitConfig: true,
       containerGitUserName: "Jules",
       containerGitUserEmail: "jules@example.com",
