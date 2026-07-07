@@ -43,9 +43,11 @@ import { ProviderInstanceCard } from "../settings/ProviderInstanceCard.js";
 import { sanitizeSystemProviderConfig } from "../../lib/provider-runtime-preview.js";
 import { PillChoiceGroup, Row, SelectInput, TextInput, Toggle } from "../settings/SettingsFormFields.js";
 import { applyAppearanceSettings } from "../../lib/apply-appearance.js";
+import { clearAppearancePreview, publishAppearancePreview } from "../../lib/appearance-preview.js";
 import { SectionCard } from "../settings/panels/SharedPanelComponents.js";
 import { JiraIcon } from "../icons/JiraIcon.js";
 import { OnboardingInstallationStep } from "./OnboardingInstallationStep.js";
+import { OnboardingAppearanceStep } from "./OnboardingAppearanceStep.js";
 
 type IntroPhase = "intro" | "transitioning" | "onboarding";
 import type {
@@ -267,12 +269,37 @@ export const OnboardingExperience: FunctionComponent = () => {
   const gsapTokens = useGsapInteractionTokens();
   const interactionTokens = useInteractionTokens();
   const validationRef = useRef<HTMLDivElement>(null);
+  const openRef = useRef(open);
+  const mountedRef = useRef(true);
+  const loadRequestRef = useRef(0);
   const {
     state: onboardingUserState,
     loading: onboardingStateLoading,
     markCompleted: markOnboardingCompleted,
     reset: resetOnboardingState,
   } = useOnboardingState();
+
+  useEffect(() => {
+    openRef.current = open;
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) {
+      loadRequestRef.current += 1;
+      clearAppearancePreview();
+    }
+  }, [open]);
+
+  useEffect(() => () => {
+    mountedRef.current = false;
+    loadRequestRef.current += 1;
+    clearAppearancePreview();
+  }, []);
+
+  const closeOnboarding = (): void => {
+    clearAppearancePreview();
+    dispatch({ type: "close" });
+  };
 
   useEffect(() => {
     if (onboardingStateLoading) {
@@ -299,7 +326,7 @@ export const OnboardingExperience: FunctionComponent = () => {
       if (e.key === "Escape") {
         void markOnboardingCompleted("cancel");
         window.localStorage.setItem(ONBOARDING_STORAGE_KEY, "true");
-        dispatch({ type: "close" });
+        closeOnboarding();
       }
     };
     window.addEventListener("keydown", handleKeyDown);
@@ -314,18 +341,30 @@ export const OnboardingExperience: FunctionComponent = () => {
     setIntroPhase("onboarding");
   };
 
-  const load = async () => {
+  const load = async (): Promise<void> => {
+    const requestId = loadRequestRef.current + 1;
+    loadRequestRef.current = requestId;
     setCheckingReadiness(true);
     try {
       const [nextReadiness, nextSettings] = await Promise.all([
         fetchOnboardingReadiness(),
         fetchSystemSettings(),
       ]);
+      if (!mountedRef.current || requestId !== loadRequestRef.current || !openRef.current) {
+        return;
+      }
       dispatch({ type: "load-success", readiness: normalizeOnboardingReadiness(nextReadiness), settings: nextSettings });
+      applyAppearanceSettings(nextSettings.defaults.appearance);
+      publishAppearancePreview(nextSettings.defaults.appearance);
     } catch (loadError) {
+      if (!mountedRef.current || requestId !== loadRequestRef.current || !openRef.current) {
+        return;
+      }
       dispatch({ type: "load-failure", error: loadError instanceof Error ? loadError.message : String(loadError) });
     } finally {
-      setCheckingReadiness(false);
+      if (mountedRef.current && requestId === loadRequestRef.current && openRef.current) {
+        setCheckingReadiness(false);
+      }
     }
   };
 
@@ -437,6 +476,7 @@ export const OnboardingExperience: FunctionComponent = () => {
         ...updates,
       };
       applyAppearanceSettings(nextAppearance);
+      publishAppearancePreview(nextAppearance);
       return {
         ...current,
         defaults: {
@@ -665,7 +705,7 @@ export const OnboardingExperience: FunctionComponent = () => {
     if (!settings) {
       await markOnboardingCompleted("complete");
       window.localStorage.setItem(ONBOARDING_STORAGE_KEY, "true");
-      dispatch({ type: "close" });
+      closeOnboarding();
       await navigate({ to: "/" });
       window.setTimeout(startDashboardTour, 260);
       return;
@@ -736,7 +776,7 @@ export const OnboardingExperience: FunctionComponent = () => {
       dispatch({ type: "set-settings", settings: nextSettings });
       await markOnboardingCompleted("complete");
       window.localStorage.setItem(ONBOARDING_STORAGE_KEY, "true");
-      dispatch({ type: "close" });
+      closeOnboarding();
       await navigate({ to: "/" });
       window.setTimeout(startDashboardTour, 260);
     } catch (saveError) {
@@ -769,6 +809,21 @@ export const OnboardingExperience: FunctionComponent = () => {
     }));
   const stepProgressValue = Math.round(((activeStep + 1) / steps.length) * 100);
   const stepProgressLabel = `Step ${activeStep + 1} of ${steps.length}: ${active.label}`;
+  const draftAppearance = settings?.defaults.appearance;
+  const onboardingBackgroundDark = (() => {
+    if (draftAppearance?.theme === "DARK") {
+      return true;
+    }
+    if (draftAppearance?.theme === "LIGHT") {
+      return false;
+    }
+    if (typeof window !== "undefined" && typeof window.matchMedia === "function") {
+      return window.matchMedia("(prefers-color-scheme: dark)").matches;
+    }
+    return typeof document !== "undefined" && document.documentElement.classList.contains("dark");
+  })();
+  const onboardingBackgroundMode = draftAppearance?.backgroundMode ?? "ANIMATED";
+  const onboardingStaticBackgroundColor = draftAppearance?.staticBackgroundColor ?? "#0d0f12";
   const saveStatusText = saving
     ? "Saving onboarding settings"
     : error
@@ -795,55 +850,59 @@ export const OnboardingExperience: FunctionComponent = () => {
         <OnboardingIntro onExitStart={handleIntroExitStart} onComplete={handleIntroComplete} />
       )}
       {introPhase !== "intro" && (
-    <div ref={backdropRef} style={motionStyle} className="fixed inset-0 z-[200] flex items-center justify-center overflow-hidden bg-[#060A0D] px-3 py-4 md:px-6 md:py-8">
+    <div ref={backdropRef} style={motionStyle} className="fixed inset-0 z-[200] flex items-center justify-center overflow-hidden bg-[#F3F7F5] px-3 py-4 text-slate-900 dark:bg-[#060A0D] dark:text-slate-100 md:px-6 md:py-8">
       <div aria-hidden className="pointer-events-none absolute inset-0">
-        <Suspense fallback={<div className="absolute inset-0 bg-[#060A0D]" />}>
-          <DeepOceanBackground forceDark className="opacity-75 saturate-[0.86] contrast-[0.92]" />
-        </Suspense>
-        <div className="absolute inset-0 bg-[#05070B]/54 backdrop-blur-[1px]" />
-        <div className="absolute inset-x-0 top-0 h-56 bg-[linear-gradient(180deg,rgba(0,224,160,0.12),rgba(5,7,11,0.02)_58%,transparent)]" />
-        <div className="absolute inset-x-0 bottom-0 h-72 bg-[linear-gradient(0deg,rgba(255,184,0,0.08),rgba(5,7,11,0.02)_62%,transparent)]" />
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_17%_16%,rgba(0,224,160,0.1),transparent_31%),radial-gradient(circle_at_80%_78%,rgba(255,184,0,0.075),transparent_34%),linear-gradient(115deg,rgba(255,255,255,0.055)_0%,transparent_20%,transparent_72%,rgba(0,224,160,0.05)_100%)]" />
-        <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(4,7,10,0.18),rgba(4,7,10,0.62))]" />
+        {onboardingBackgroundMode === "STATIC" ? (
+          <div className="absolute inset-0" style={{ backgroundColor: onboardingStaticBackgroundColor }} />
+        ) : (
+          <Suspense fallback={<div className="absolute inset-0 bg-[#F3F7F5] dark:bg-[#060A0D]" />}>
+            <DeepOceanBackground forceDark={onboardingBackgroundDark} className="opacity-75 saturate-[0.86] contrast-[0.92]" />
+          </Suspense>
+        )}
+        <div className="absolute inset-0 bg-white/58 backdrop-blur-[1px] dark:bg-[#05070B]/54" />
+        <div className="absolute inset-x-0 top-0 h-56 bg-[linear-gradient(180deg,rgba(0,153,112,0.14),rgba(255,255,255,0.14)_58%,transparent)] dark:bg-[linear-gradient(180deg,rgba(0,224,160,0.12),rgba(5,7,11,0.02)_58%,transparent)]" />
+        <div className="absolute inset-x-0 bottom-0 h-72 bg-[linear-gradient(0deg,rgba(226,146,0,0.12),rgba(255,255,255,0.12)_62%,transparent)] dark:bg-[linear-gradient(0deg,rgba(255,184,0,0.08),rgba(5,7,11,0.02)_62%,transparent)]" />
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_17%_16%,rgba(0,153,112,0.12),transparent_31%),radial-gradient(circle_at_80%_78%,rgba(226,146,0,0.1),transparent_34%),linear-gradient(115deg,rgba(255,255,255,0.36)_0%,transparent_20%,transparent_72%,rgba(0,153,112,0.08)_100%)] dark:bg-[radial-gradient(circle_at_17%_16%,rgba(0,224,160,0.1),transparent_31%),radial-gradient(circle_at_80%_78%,rgba(255,184,0,0.075),transparent_34%),linear-gradient(115deg,rgba(255,255,255,0.055)_0%,transparent_20%,transparent_72%,rgba(0,224,160,0.05)_100%)]" />
+        <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.08),rgba(237,242,240,0.48))] dark:bg-[linear-gradient(180deg,rgba(4,7,10,0.18),rgba(4,7,10,0.62))]" />
       </div>
       <section
         ref={shellRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby="onboarding-title"
-        className="relative z-10 grid h-[calc(100vh-2rem)] max-h-[940px] min-h-0 w-full max-w-[1360px] grid-rows-[minmax(0,1fr)] overflow-hidden rounded-[2rem] border border-white/15 bg-[#F9F8F4]/96 shadow-[0_30px_90px_rgba(0,0,0,0.46)] backdrop-blur-2xl dark:bg-void-900/96 md:h-[calc(100vh-4rem)] md:grid-cols-[330px_1fr]"
+        className="relative z-10 grid h-[calc(100vh-2rem)] max-h-[940px] min-h-0 w-full max-w-[1360px] grid-rows-[minmax(0,1fr)] overflow-hidden rounded-[2rem] border border-black/[0.08] bg-[#F9F8F4]/96 shadow-[0_30px_90px_rgba(15,23,42,0.2)] backdrop-blur-2xl dark:border-white/15 dark:bg-void-900/96 dark:shadow-[0_30px_90px_rgba(0,0,0,0.46)] md:h-[calc(100vh-4rem)] md:grid-cols-[330px_1fr]"
       >
-        <div aria-hidden className="pointer-events-none absolute inset-0 z-20 rounded-[2rem] ring-1 ring-inset ring-white/10" />
-        <aside ref={sideRef} className="relative hidden h-full min-h-0 overflow-hidden border-r border-white/10 bg-[#0B0F14] p-7 text-white md:block">
-          <div className="absolute inset-0 bg-[linear-gradient(145deg,rgba(0,224,160,0.16),transparent_34%),linear-gradient(330deg,rgba(255,184,0,0.13),transparent_38%)]" />
-          <span className="pointer-events-none absolute -left-5 -top-3 select-none font-display text-[8rem] font-black leading-none tracking-tighter text-white/[0.035]">
+        <div aria-hidden className="pointer-events-none absolute inset-0 z-20 rounded-[2rem] ring-1 ring-inset ring-black/[0.06] dark:ring-white/10" />
+        <aside ref={sideRef} className="relative hidden h-full min-h-0 overflow-hidden border-r border-black/[0.07] bg-white/82 p-7 text-slate-900 dark:border-white/10 dark:bg-[#0B0F14] dark:text-white md:block">
+          <div className="absolute inset-0 bg-[linear-gradient(145deg,rgba(0,153,112,0.12),transparent_34%),linear-gradient(330deg,rgba(226,146,0,0.1),transparent_38%)] dark:bg-[linear-gradient(145deg,rgba(0,224,160,0.16),transparent_34%),linear-gradient(330deg,rgba(255,184,0,0.13),transparent_38%)]" />
+          <span className="pointer-events-none absolute -left-5 -top-3 select-none font-display text-[8rem] font-black leading-none tracking-tighter text-black/[0.035] dark:text-white/[0.035]">
             RUN
           </span>
           <div aria-hidden className="pointer-events-none absolute inset-0 flex items-center justify-center">
-            <div className="h-56 w-56 animate-organic bg-signal-500/[0.08]" style={{ borderRadius: "40% 60% 70% 30% / 40% 50% 60% 50%" }} />
-            <div className="absolute h-40 w-40 animate-organic-reverse bg-ember-500/[0.12]" style={{ borderRadius: "40% 60% 70% 30% / 40% 50% 60% 50%" }} />
-            <div className="absolute h-24 w-24 animate-organic bg-signal-500/[0.18]" style={{ borderRadius: "40% 60% 70% 30% / 40% 50% 60% 50%" }} />
+            <div className="h-56 w-56 animate-organic bg-signal-500/[0.08] motion-reduce:animate-none" style={{ borderRadius: "40% 60% 70% 30% / 40% 50% 60% 50%" }} />
+            <div className="absolute h-40 w-40 animate-organic-reverse bg-ember-500/[0.12] motion-reduce:animate-none" style={{ borderRadius: "40% 60% 70% 30% / 40% 50% 60% 50%" }} />
+            <div className="absolute h-24 w-24 animate-organic bg-signal-500/[0.18] motion-reduce:animate-none" style={{ borderRadius: "40% 60% 70% 30% / 40% 50% 60% 50%" }} />
           </div>
-          <div className="absolute inset-x-7 top-24 h-px bg-gradient-to-r from-transparent via-white/20 to-transparent" />
+          <div className="absolute inset-x-7 top-24 h-px bg-gradient-to-r from-transparent via-black/10 to-transparent dark:via-white/20" />
           <div className="relative z-10">
-            <div data-sidebar-copy className="flex h-12 w-12 items-center justify-center rounded-2xl border border-white/10 bg-white/10 shadow-[0_0_35px_rgba(0,224,160,0.12)]">
-              <Compass className="h-5 w-5 text-signal-300" />
+            <div data-sidebar-copy className="flex h-12 w-12 items-center justify-center rounded-2xl border border-black/[0.07] bg-white/70 shadow-[0_0_35px_rgba(0,153,112,0.12)] dark:border-white/10 dark:bg-white/10 dark:shadow-[0_0_35px_rgba(0,224,160,0.12)]">
+              <Compass className="h-5 w-5 text-signal-700 dark:text-signal-300" />
             </div>
-            <div data-sidebar-copy className="mt-8 text-[10px] font-bold uppercase tracking-[0.24em] text-signal-300">Code UX Setup</div>
-            <h2 data-sidebar-copy id="onboarding-title" className="mt-3 font-display text-4xl font-semibold leading-[0.95] tracking-tight text-white">
+            <div data-sidebar-copy className="mt-8 text-[10px] font-bold uppercase tracking-[0.24em] text-signal-700 dark:text-signal-300">Code UX Setup</div>
+            <h2 data-sidebar-copy id="onboarding-title" className="mt-3 font-display text-4xl font-semibold leading-[0.95] tracking-tight text-slate-950 dark:text-white">
               Make the runtime ready.
             </h2>
-            <div data-sidebar-copy className="mt-5 text-sm font-medium leading-relaxed text-slate-300">
+            <div data-sidebar-copy className="mt-5 text-sm font-medium leading-relaxed text-slate-600 dark:text-slate-300">
               Configure containers, provider auth, automation, and the workspace shell before the first sprint starts.
             </div>
             <div data-sidebar-copy className="mt-6 grid grid-cols-2 gap-2">
-              <div className="rounded-2xl border border-white/10 bg-white/[0.06] p-3">
-                <div className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400">Providers</div>
-                <div className="mt-1 text-xl font-semibold text-white">{selectedProviders.length}</div>
+              <div className="rounded-2xl border border-black/[0.07] bg-white/64 p-3 dark:border-white/10 dark:bg-white/[0.06]">
+                <div className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">Providers</div>
+                <div className="mt-1 text-xl font-semibold text-slate-950 dark:text-white">{selectedProviders.length}</div>
               </div>
-              <div className="rounded-2xl border border-white/10 bg-white/[0.06] p-3">
-                <div className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400">Cluster</div>
-                <div aria-live="polite" className={`mt-2 inline-flex rounded-full px-2 py-1 text-[9px] font-bold uppercase tracking-[0.14em] ${clusterReady ? "bg-signal-400/15 text-signal-200" : "bg-status-amber/15 text-status-amber"}`}>
+              <div className="rounded-2xl border border-black/[0.07] bg-white/64 p-3 dark:border-white/10 dark:bg-white/[0.06]">
+                <div className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">Cluster</div>
+                <div aria-live="polite" className={`mt-2 inline-flex rounded-full px-2 py-1 text-[9px] font-bold uppercase tracking-[0.14em] ${clusterReady ? "bg-signal-500/12 text-signal-700 dark:bg-signal-400/15 dark:text-signal-200" : "bg-status-amber/15 text-amber-700 dark:text-status-amber"}`}>
                   {clusterReady ? "Ready" : "Blocked"}
                 </div>
               </div>
@@ -917,11 +976,11 @@ export const OnboardingExperience: FunctionComponent = () => {
                     aria-current={activeItem ? "step" : undefined}
                     onClick={step.onClick}
                     className={`group flex w-full items-center gap-3 rounded-2xl border px-3 py-3 text-left transition-[background-color,border-color,transform] hover:translate-x-1 ${
-                      activeItem ? "border-white/30 bg-white text-slate-950 shadow-[0_16px_40px_rgba(0,0,0,0.18)]" : "border-white/0 text-slate-300 hover:border-white/10 hover:bg-white/8 hover:text-white"
+                      activeItem ? "border-signal-500/28 bg-white text-slate-950 shadow-[0_16px_40px_rgba(15,23,42,0.12)] dark:border-white/30 dark:shadow-[0_16px_40px_rgba(0,0,0,0.18)]" : "border-black/0 text-slate-500 hover:border-black/[0.07] hover:bg-black/[0.035] hover:text-slate-900 dark:border-white/0 dark:text-slate-300 dark:hover:border-white/10 dark:hover:bg-white/8 dark:hover:text-white"
                     }`}
                     style={{ transitionDuration: "var(--onboarding-selection-duration)", transitionTimingFunction: "var(--onboarding-selection-ease)" }}
                   >
-                    <span className={`flex h-8 w-8 items-center justify-center rounded-xl ${activeItem ? "bg-signal-500/14 text-signal-700" : complete ? "bg-signal-400/15 text-signal-300" : "bg-white/8 text-slate-300"}`}>
+                    <span className={`flex h-8 w-8 items-center justify-center rounded-xl ${activeItem ? "bg-signal-500/14 text-signal-700" : complete ? "bg-signal-500/12 text-signal-700 dark:bg-signal-400/15 dark:text-signal-300" : "bg-black/[0.04] text-slate-500 dark:bg-white/8 dark:text-slate-300"}`}>
                       {complete ? <Check className="h-4 w-4" /> : <StepIcon className="h-4 w-4" />}
                     </span>
                     <span className="text-sm font-bold">{step.label}</span>
@@ -955,7 +1014,7 @@ export const OnboardingExperience: FunctionComponent = () => {
               onClick={async () => {
                 await markOnboardingCompleted("cancel");
                 window.localStorage.setItem(ONBOARDING_STORAGE_KEY, "true");
-                dispatch({ type: "close" });
+                closeOnboarding();
               }}
               className="flex h-10 w-10 items-center justify-center rounded-xl text-slate-400 transition-colors hover:bg-black/[0.05] hover:text-slate-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 dark:hover:bg-white/[0.06] dark:hover:text-white"
               aria-label="Close onboarding"
@@ -1377,122 +1436,7 @@ export const OnboardingExperience: FunctionComponent = () => {
             ) : null}
 
             {active.id === "appearance" && settings ? (
-              <div className="space-y-6">
-                <div className="grid gap-6 md:grid-cols-2">
-                  {/* Left Column: Core Layout & Feel */}
-                  <div className="space-y-4">
-                    <h4 className="text-xs font-black uppercase tracking-[0.2em] text-signal-400">Core Display</h4>
-
-                    <div className="rounded-3xl border border-black/[0.06] bg-white/75 p-5 shadow-[0_16px_42px_rgba(15,23,42,0.04)] dark:border-white/[0.06] dark:bg-white/[0.04]">
-                      <div className="text-sm font-semibold text-slate-900 dark:text-white">Theme</div>
-                      <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">Select light, dark, or sync with your system.</div>
-                      <div className="mt-4">
-                        <PillChoiceGroup
-                          value={settings.defaults.appearance.theme}
-                          onChange={(value) => updateAppearance({ theme: value as any })}
-                          options={[
-                            { value: "SYSTEM", label: "System" },
-                            { value: "LIGHT", label: "Light" },
-                            { value: "DARK", label: "Dark" },
-                          ]}
-                        />
-                      </div>
-                    </div>
-
-                    <div className="rounded-3xl border border-black/[0.06] bg-white/75 p-5 shadow-[0_16px_42px_rgba(15,23,42,0.04)] dark:border-white/[0.06] dark:bg-white/[0.04]">
-                      <div className="text-sm font-semibold text-slate-900 dark:text-white">Navigation Mode</div>
-                      <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">Choose between floating dock or sidebar.</div>
-                      <div className="mt-4">
-                        <PillChoiceGroup
-                          value={settings.defaults.appearance.navigationMode}
-                          onChange={(value) => updateAppearance({ navigationMode: value as any })}
-                          options={[
-                            { value: "SIDEBAR", label: "Sidebar" },
-                            { value: "DOCK", label: "Dock" },
-                          ]}
-                        />
-                      </div>
-                    </div>
-
-                    <div className="rounded-3xl border border-black/[0.06] bg-white/75 p-5 shadow-[0_16px_42px_rgba(15,23,42,0.04)] dark:border-white/[0.06] dark:bg-white/[0.04]">
-                      <div className="text-sm font-semibold text-slate-900 dark:text-white">Reduced Motion</div>
-                      <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">Limit interface animations.</div>
-                      <div className="mt-4">
-                        <PillChoiceGroup
-                          value={settings.defaults.appearance.reducedMotion}
-                          onChange={(value) => updateAppearance({ reducedMotion: value as any })}
-                          options={[
-                            { value: "AUTO", label: "Auto" },
-                            { value: "REDUCE", label: "Reduce" },
-                            { value: "NONE", label: "None" },
-                          ]}
-                        />
-                      </div>
-                    </div>
-
-                    {typeof window !== "undefined" && Boolean(window.codeUxDesktop?.setZoom) && (
-                      <div className="rounded-3xl border border-black/[0.06] bg-white/75 p-5 shadow-[0_16px_42px_rgba(15,23,42,0.04)] dark:border-white/[0.06] dark:bg-white/[0.04]">
-                        <div className="text-sm font-semibold text-slate-900 dark:text-white">Zoom Level</div>
-                        <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">Scale the desktop interface size.</div>
-                        <div className="mt-4">
-                          <SelectInput
-                            value={String(settings.defaults.appearance.zoomLevel ?? 1)}
-                            onChange={(value) => updateAppearance({ zoomLevel: Number(value) })}
-                            options={[
-                              { value: "0.75", label: "75%" },
-                              { value: "0.9", label: "90%" },
-                              { value: "1", label: "100%" },
-                              { value: "1.1", label: "110%" },
-                              { value: "1.25", label: "125%" },
-                              { value: "1.5", label: "150%" },
-                              { value: "1.75", label: "175%" },
-                              { value: "2", label: "200%" },
-                            ]}
-                          />
-                        </div>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Right Column: Custom Aesthetics & Background */}
-                  <div className="space-y-4">
-                    <h4 className="text-xs font-black uppercase tracking-[0.2em] text-signal-400">Background & Styling</h4>
-
-                    <div className="rounded-3xl border border-black/[0.06] bg-white/75 p-5 shadow-[0_16px_42px_rgba(15,23,42,0.04)] dark:border-white/[0.06] dark:bg-white/[0.04]">
-                      <div className="text-sm font-semibold text-slate-900 dark:text-white">Background Mode</div>
-                      <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">Select animated textures or a flat color.</div>
-                      <div className="mt-4">
-                        <PillChoiceGroup
-                          value={settings.defaults.appearance.backgroundMode || "ANIMATED"}
-                          onChange={(value) => updateAppearance({ backgroundMode: value as any })}
-                          options={[
-                            { value: "ANIMATED", label: "Animated" },
-                            { value: "STATIC", label: "Static" },
-                          ]}
-                        />
-                      </div>
-                    </div>
-
-                    {(settings.defaults.appearance.backgroundMode || "ANIMATED") === "STATIC" && (
-                      <div className="rounded-3xl border border-black/[0.06] bg-white/75 p-5 shadow-[0_16px_42px_rgba(15,23,42,0.04)] dark:border-white/[0.06] dark:bg-white/[0.04]">
-                        <div className="text-sm font-semibold text-slate-900 dark:text-white">Static Color</div>
-                        <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">Choose a solid solid back color.</div>
-                        <div className="mt-4 flex items-center gap-3">
-                          <input
-                            type="color"
-                            value={settings.defaults.appearance.staticBackgroundColor || "#0d0f12"}
-                            onInput={(e) => updateAppearance({ staticBackgroundColor: (e.target as HTMLInputElement).value })}
-                            className="h-10 w-20 cursor-pointer rounded-lg border-2 border-black/[0.06] bg-transparent p-1 focus:outline-none focus:ring-2 focus:ring-signal-500 dark:border-white/[0.06]"
-                          />
-                          <span className="font-mono text-sm uppercase text-slate-500 dark:text-slate-400">
-                            {settings.defaults.appearance.staticBackgroundColor || "#0d0f12"}
-                          </span>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
+              <OnboardingAppearanceStep settings={settings} updateAppearance={updateAppearance} />
             ) : null}
 
             {active.id === "defaults" && settings ? (
