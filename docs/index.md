@@ -102,10 +102,11 @@ Use this page as the main entrypoint.
 ### Path 4: Development and validation
 1. [Repository Map](./architecture/repository-map.md)
 2. [Testing and Quality](./development/testing-and-quality.md)
-3. [OpenRouter Sprint Validation](./development/openrouter-sprint-validation.md)
-4. [Mockup Sprint Pentest](./development/mockup-sprint-pentest.md)
-5. [Mockup Sprint Pentest Scenarios](./development/mockup-sprint-pentest-scenarios.md)
-6. [Documentation Standards](./development/documentation-standards.md)
+3. [Rapid Orchestration Debugging Suite](./development/rapid-orchestration-debugging.md)
+4. [OpenRouter Sprint Validation](./development/openrouter-sprint-validation.md)
+5. [Mockup Sprint Pentest](./development/mockup-sprint-pentest.md)
+6. [Mockup Sprint Pentest Scenarios](./development/mockup-sprint-pentest-scenarios.md)
+7. [Documentation Standards](./development/documentation-standards.md)
 
 ## Full Table of Contents
 
@@ -195,6 +196,7 @@ Use this page as the main entrypoint.
 - [CLI Commands Reference](./reference/cli-commands.md) - `codeux` management syntax, aliases, prompting, JSON payloads, and approvals
 - [CLI Management Surface](./operations/management-cli.md)
 - [Testing and Quality](./development/testing-and-quality.md)
+- [Rapid Orchestration Debugging Suite](./development/rapid-orchestration-debugging.md)
 - [OpenRouter Sprint Validation](./development/openrouter-sprint-validation.md)
 - [Mockup Sprint Pentest](./development/mockup-sprint-pentest.md)
 - [Mockup Sprint Pentest Scenarios](./development/mockup-sprint-pentest-scenarios.md)

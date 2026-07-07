@@ -399,6 +399,47 @@ describe("Provider Routing Logic", () => {
       expect(result.enabledProviders).toContain("mockup-cli");
       expect(result.providers["mockup-cli"].model).toBe("default");
     });
+
+    it("keeps mockup-cli selectable for merge-conflict virtual workers when the provider pool allows it", () => {
+      const settings = mockSettings("MANUAL", "jules", { "mockup-cli": false });
+      settings.workers.virtualWorkerProvider = "mockup-cli";
+      settings.workers.model = "default";
+      settings.aiProvider.providers["mockup-cli"] = {
+        provider: "mockup-cli",
+        name: "Mockup CLI",
+        enabled: false,
+        model: "default",
+        weight: 0,
+        thinkingMode: "MEDIUM",
+        apiKey: "",
+        mountAuth: false,
+        authPath: "",
+        maxConcurrentTasks: 0,
+      };
+      settings.aiProvider.invocationRouting.merge_conflict = {
+        ...settings.aiProvider.invocationRouting.merge_conflict,
+        profile: "WORKER",
+        strategy: "MANUAL",
+        provider: "mockup-cli",
+        allowedProviders: ["mockup-cli"],
+        providers: {
+          "mockup-cli": {
+            enabled: true,
+            model: "default",
+          },
+        },
+      };
+
+      const result = resolveProviderForInvocation(settings, {
+        invocation: "merge_conflict",
+        task: mockTask({ prompt: "Resolve a deterministic mock conflict" }),
+        providerPool: ["gemini", "codex", "claude-code", "qwen-code", "opencode", "antigravity", "mockup-cli"],
+      });
+
+      expect(result.provider).toBe("mockup-cli");
+      expect(result.providerConfigId).toBe("mockup-cli");
+      expect(result.enabledProviders).toContain("mockup-cli");
+    });
   });
 
   describe("chooseProviderForTask", () => {

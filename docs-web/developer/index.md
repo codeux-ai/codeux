@@ -17,6 +17,7 @@ If you are looking for narrative explanations, the [User Guide](../user/index.md
 | 7 | [Sprint and subtask file format](./sprint-format.md) | On-disk markdown format with YAML frontmatter |
 | 8 | [Building from source](./building-from-source.md) | Build, link, run from a clone |
 | 9 | [Testing & quality gates](./testing.md) | Vitest, coverage thresholds, CI gates |
+| 10 | [Rapid orchestration debugging suite](./orchestration-debugging.md) | Focused orchestration regressions, mockup sprint lanes, local merge triage, and profiling |
 
 ## Versioning
 
@@ -30,4 +31,3 @@ Unless explicitly marked `experimental` or `deprecated`, every contract document
 
 - The `preview` management domain (interface may evolve as Docker tooling matures).
 - The `WORKER` invocation routing profile.
-

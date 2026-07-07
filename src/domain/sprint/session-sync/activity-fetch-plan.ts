@@ -102,7 +102,7 @@ export function planSessionActivityFetches(
     const isLocalTerminal = isLocallyTerminal?.(sessionName, task) ?? false;
     const isRemoteTerminal = isRemoteTerminalSession(match);
     if (isLocalTerminal && isRemoteTerminal) {
-      logger.warn("Skipping activity fetch for fully synchronized terminal session", {
+      logger.debug("Skipping activity fetch for fully synchronized terminal session", {
         taskId: task.record_id || task.id,
         projectId: task.project_id,
         sprintId: task.sprint_id,

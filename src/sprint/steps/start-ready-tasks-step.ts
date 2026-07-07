@@ -49,6 +49,21 @@ export const runStartReadyTasksStep = async (
     }
 
     const provider = options.getProviderForTask(task);
+    if (provider) {
+      const providerSettings = options.getProviderSettings(provider);
+      const limit = providerSettings.maxConcurrentTasks ?? 0;
+      const runningCount = currentRunningCounts[provider] || 0;
+      if (limit > 0 && runningCount >= limit) {
+        task.status = "PENDING";
+        options.logger.info("Task blocked: provider concurrency cap reached before dispatch", {
+          taskId: task.id,
+          provider,
+          limit,
+          currentCount: runningCount,
+        });
+        continue;
+      }
+    }
 
     try {
       const session = await options.startTask(task);

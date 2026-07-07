@@ -1159,18 +1159,18 @@ describe("WatchLoopRunner", () => {
       return "";
     });
     deps.executionRepository.getSprintRun = vi.fn().mockReturnValue({ status: "running" });
+    const mainMergeAttentionItem = {
+      id: "main-conflict-1",
+      sprintRunId: "run-1",
+      attentionType: "merge_conflict",
+      ownerType: "worker",
+      status: "open",
+      summaryMarkdown: "Worker is resolving the main merge conflict.",
+      payload: { mergeStage: "main" },
+    };
     deps.projectAttentionService.listActiveProjectItems = vi.fn()
-      .mockReturnValueOnce([
-        {
-          id: "main-conflict-1",
-          sprintRunId: "run-1",
-          attentionType: "merge_conflict",
-          ownerType: "worker",
-          status: "open",
-          summaryMarkdown: "Worker is resolving the main merge conflict.",
-          payload: { mergeStage: "main" },
-        },
-      ])
+      .mockReturnValueOnce([mainMergeAttentionItem])
+      .mockReturnValueOnce([mainMergeAttentionItem])
       .mockReturnValue([]);
 
     cycleRunner.run.mockResolvedValue({
@@ -1229,11 +1229,89 @@ describe("WatchLoopRunner", () => {
     });
 
     expect(mergeAttempts).toBe(1);
+    expect(deps.projectAttentionService.resolveItem).not.toHaveBeenCalledWith(
+      "main-conflict-1",
+      expect.objectContaining({ reason: "main_merge_conflict_cleared" }),
+    );
     expect(result).toContain("Existing main-merge attention is still assigned to a worker");
     expect(result).toContain("Sprint Execution Finished");
 
     vi.mocked(runCommandStrict).mockResolvedValue({ stdout: "", stderr: "" } as any);
     nowSpy.mockRestore();
+  });
+
+  it("LOCAL: runs the final merge when completed tasks have no PR merge marker and main auto-merge mode is enabled", async () => {
+    const deps = buildDeps();
+    const cycleRunner = buildCycleRunner();
+    cycleRunner.run.mockResolvedValue({
+      subtasks: [buildMockSubtask({ status: "COMPLETED", is_merged: false })],
+      reportText: "REPORT",
+      statusTable: "TABLE",
+      instructions: "INST",
+      awaitingMerge: [],
+      manualMergeTasks: [],
+      workerEscalatedMergeConflictTasks: [],
+    });
+
+    const renderMergeFeedbackMock = vi.fn().mockResolvedValue({
+      text: "LOCAL_READY",
+      state: "ready_for_merge",
+      prNumber: null,
+      prUrl: null,
+      hasMergeConflict: false,
+      mergeStateStatus: null,
+      hasFailedChecks: false,
+      hasPendingChecks: false,
+      hasReviewBlockers: false,
+      failedChecks: [],
+    });
+
+    const preserveSpy = vi.spyOn(localMerge, "preserveDirtyCheckout").mockResolvedValue(null);
+    const mergeSpy = vi.spyOn(localMerge, "mergeBranchLocallyInTemporaryWorktree")
+      .mockResolvedValueOnce({ ok: true, conflict: false });
+
+    try {
+      const runner = new WatchLoopRunner(deps as any, cycleRunner as any, renderMergeFeedbackMock);
+      const result = await runner.run({
+        args: { sprint_number: 1, action: "orchestrate" } as any,
+        executionContext: {
+          project: { id: "project-1", name: "Test Project" },
+          sprint: { id: "sprint-1", name: "Sprint 1" },
+          sprintNumber: 1,
+          repoPath: "/tmp",
+          featureBranch: "feat",
+          defaultBranch: "main",
+        },
+        repoPath: "/tmp",
+        defaultFeatureBranch: "feat",
+        defaultBranch: "main",
+        githubMode: "LOCAL",
+        retryFailed: false,
+        loopSteps: { watchLoopOutputIntervalSeconds: 60, watchLoopIntervalSeconds: 1 } as any,
+        ciIntelligence: { mainBranchAutoMergeMode: "ALWAYS" } as any,
+        automationLevel: "SEMI_AUTO",
+        automationInterventions: {} as any,
+        dashboardPort: 4444,
+        sprintRunId: "run-1",
+      });
+
+      expect(mergeSpy).toHaveBeenCalledWith(expect.objectContaining({
+        repoPath: "/tmp",
+        targetBranch: "main",
+        sourceBranch: "feat",
+      }));
+      expect(result).toContain("Merged locally");
+      expect(result).toContain("Sprint Execution Finished");
+      expect(deps.sprintRunLifecycleService.transition).toHaveBeenCalledWith(
+        expect.objectContaining({
+          sprintRunId: "run-1",
+          status: "completed",
+        }),
+      );
+    } finally {
+      preserveSpy.mockRestore();
+      mergeSpy.mockRestore();
+    }
   });
 
   it("LOCAL: merges the sprint feature branch into a local-only default branch before completing", async () => {

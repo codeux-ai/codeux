@@ -575,7 +575,8 @@ export class WatchLoopRunner {
           });
         }
         if (
-          ciIntelligence.resolveMainMergeConflicts
+          githubMode !== "LOCAL"
+          && ciIntelligence.resolveMainMergeConflicts
           && mergeFeedback.hasMergeConflict
           && activeMainMergeAttentionItems.length === 0
         ) {
@@ -613,7 +614,11 @@ export class WatchLoopRunner {
               featureBranchTaskContexts: selectMergedTaskContexts(subtasks, { limit: 8 }),
             },
           })]);
-        } else if (ciIntelligence.resolveMainMergeConflicts && !mergeFeedback.hasMergeConflict) {
+        } else if (
+          githubMode !== "LOCAL"
+          && ciIntelligence.resolveMainMergeConflicts
+          && !mergeFeedback.hasMergeConflict
+        ) {
           resolveMainMergeAttentionItems(
             this.deps.projectAttentionService,
             scopedExecutionContext.project.id,
@@ -629,7 +634,8 @@ export class WatchLoopRunner {
         // to fix them (bounded by the ci_fix guardrail) rather than pausing for a human.
         // The worker escalates to a human once it exhausts its attempts.
         if (
-          ciIntelligence.resolveMainMergeFailedChecks
+          githubMode !== "LOCAL"
+          && ciIntelligence.resolveMainMergeFailedChecks
           && mergeFeedback.state === "failed_checks"
           && mergeFeedback.hasFailedChecks
           && activeMainMergeAttentionItems.length === 0
@@ -668,7 +674,8 @@ export class WatchLoopRunner {
             },
           })]);
         } else if (
-          ciIntelligence.resolveMainMergeFailedChecks
+          githubMode !== "LOCAL"
+          && ciIntelligence.resolveMainMergeFailedChecks
           && !mergeFeedback.hasFailedChecks
           && mergeFeedback.state !== "pending_checks"
         ) {
@@ -696,7 +703,7 @@ export class WatchLoopRunner {
           sprintNumber: scopedExecutionContext.sprintNumber,
         });
 
-        if (decision && !(githubMode === "LOCAL" && allTasksSettledForFinalization && subtasks.every(task => task.is_merged))) {
+        if (decision && githubMode !== "LOCAL") {
           report += completionGuidance;
           report += mergeFeedback.text;
 

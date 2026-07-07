@@ -138,6 +138,71 @@ describe("SprintTaskDispatchService", () => {
     });
   });
 
+  it("re-queues docker-cli dispatches when the provider cap is reached during startup", async () => {
+    const { projectManagementRepository, executionRepository, taskService, service } = await createFixture();
+    const project = projectManagementRepository.createProject({
+      name: "Dispatch Deferral Project",
+      sourceType: "local",
+      sourceRef: "/workspace/dispatch-deferral-project",
+    });
+    const sprint = projectManagementRepository.createSprint(project.id, {
+      name: "Dispatch Deferral Sprint",
+      number: 9,
+    });
+    const taskRecord = projectManagementRepository.createTask(project.id, {
+      sprintId: sprint.id,
+      title: "Wait for provider slot",
+      promptMarkdown: "The provider reaches its cap after task-run creation.",
+      executorType: "docker_cli",
+    });
+    const sprintRun = executionRepository.createSprintRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      status: "running",
+      executorMode: "mixed",
+    });
+
+    taskService.startSprintTask.mockRejectedValue(new ProviderCapReachedError("codex", 2, 2));
+
+    await expect(service.startTask({
+      task: {
+        id: taskRecord.taskKey,
+        record_id: taskRecord.id,
+        title: taskRecord.title,
+        prompt: taskRecord.promptMarkdown,
+        depends_on: [],
+        is_independent: true,
+        status: "PENDING",
+      },
+      projectId: project.id,
+      sprintId: sprint.id,
+      sprintRunId: sprintRun.id,
+      featureBranch: "feature/sprint-9",
+      repoPath: "/workspace/dispatch-deferral-project",
+      sprintNumber: 9,
+    })).rejects.toBeInstanceOf(ProviderCapReachedError);
+
+    const [dispatch] = executionRepository.listTaskDispatches({
+      projectId: project.id,
+      sprintRunId: sprintRun.id,
+    });
+    const taskRun = executionRepository.getLatestTaskRun(taskRecord.id, sprintRun.id);
+    const task = projectManagementRepository.getTask(taskRecord.id);
+
+    expect(dispatch).toMatchObject({
+      taskId: taskRecord.id,
+      status: "queued",
+      errorMessage: null,
+    });
+    expect(taskRun).toMatchObject({
+      state: "PENDING",
+      provider: "codex",
+      finishedAt: null,
+      durationMs: null,
+    });
+    expect(task).toMatchObject({ status: "pending" });
+  });
+
   it("does not revive a dispatch cancelled while session startup is in flight", async () => {
     const { projectManagementRepository, executionRepository, taskService, service } = await createFixture();
     const project = projectManagementRepository.createProject({

@@ -54,6 +54,15 @@ import { planVirtualWorkerCycle } from "../domain/workers/virtual-worker-cycle-p
 
 const VIRTUAL_WORKER_RECONCILE_MS = 3_000;
 const VIRTUAL_WORKER_SESSION_POLL_MS = 2_000;
+const VIRTUAL_WORKER_CLI_PROVIDER_POOL: ProviderId[] = [
+  "gemini",
+  "codex",
+  "claude-code",
+  "qwen-code",
+  "opencode",
+  "antigravity",
+  "mockup-cli",
+];
 
 function sleep(ms: number): Promise<void> {
   if (ms <= 0) {
@@ -662,7 +671,7 @@ export class VirtualWorkerService {
         is_independent: true,
         status: "PENDING",
       },
-      providerPool: ["gemini", "codex", "claude-code", "qwen-code", "opencode", "antigravity"],
+      providerPool: VIRTUAL_WORKER_CLI_PROVIDER_POOL,
       agentProvider: workerAgent
         ? {
           providerConfigId: workerAgent.providerConfigId,
@@ -1064,7 +1073,7 @@ export class VirtualWorkerService {
         is_independent: true,
         status: "PENDING",
       },
-      providerPool: ["gemini", "codex", "claude-code", "qwen-code", "opencode", "antigravity"],
+      providerPool: VIRTUAL_WORKER_CLI_PROVIDER_POOL,
       agentProvider: workerAgent
         ? {
           providerConfigId: workerAgent.providerConfigId,
@@ -1687,8 +1696,26 @@ export class VirtualWorkerService {
   }
 
   private async listUnresolvedFiles(worktreePath: string): Promise<string[]> {
-    const result = await this.runWorkspaceCommand(worktreePath, "git", ["diff", "--name-only", "--diff-filter=U"]);
-    return result.stdout.split("\n").map((entry) => entry.trim()).filter(Boolean);
+    try {
+      const result = await this.runWorkspaceCommand(worktreePath, "git", ["diff", "--name-only", "--diff-filter=U"]);
+      return result.stdout.split("\n").map((entry) => entry.trim()).filter(Boolean);
+    } catch (error) {
+      this.deps.logger?.warn("Failed to list unresolved merge files via git diff; falling back to git status.", {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+
+    const status = await this.runWorkspaceCommand(worktreePath, "git", ["status", "--porcelain", "-z"]);
+    return status.stdout
+      .split("\0")
+      .map((entry) => {
+        const code = entry.slice(0, 2);
+        if (!/U|AA|DD/.test(code)) {
+          return null;
+        }
+        return entry.slice(3).trim();
+      })
+      .filter((entry): entry is string => Boolean(entry));
   }
 
   private async listFilesWithConflictMarkers(worktreePath: string, files: string[]): Promise<string[]> {

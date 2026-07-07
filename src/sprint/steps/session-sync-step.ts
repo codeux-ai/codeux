@@ -595,7 +595,7 @@ const syncExecutionRunState = async (
   // conversation transcript and running usage estimate so the dashboard shows
   // messages and token counts in real time (matching the CLI providers). The
   // service throttles per session, so calling this every sync tick is cheap.
-  if (!isTerminal && deps.julesUsage?.syncLiveInvocation && task.project_id && task.record_id && sessionId) {
+  if (provider === "jules" && !isTerminal && deps.julesUsage?.syncLiveInvocation && task.project_id && task.record_id && sessionId) {
     deps.julesUsage.syncLiveInvocation(
       task.project_id,
       task.record_id,
@@ -631,7 +631,7 @@ const syncExecutionRunState = async (
 
       const hasCalculatedUsage = existingUsage && existingUsage.totalTokens !== undefined && existingUsage.totalTokens !== null && existingUsage.totalTokens > 0;
 
-      if (!hasCalculatedUsage && deps.julesUsage && task.project_id && task.record_id && (sessionId || sessionName || taskRun.id)) {
+      if (provider === "jules" && !hasCalculatedUsage && deps.julesUsage && task.project_id && task.record_id && (sessionId || sessionName || taskRun.id)) {
         deps.julesUsage.calculateAndSaveUsageForTask(
           task.project_id,
           task.record_id,

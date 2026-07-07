@@ -1185,6 +1185,27 @@ export class ExecutionRepository {
     return map;
   }
 
+  countGlobalRunningTaskRunsPerProvider(providers?: string[]): Map<ProviderId, number> {
+    const providerFilter = providers?.filter((provider) => provider.trim().length > 0) ?? [];
+    const where = providerFilter.length > 0
+      ? `state = 'RUNNING' AND provider IS NOT NULL AND provider IN (${providerFilter.map(() => "?").join(", ")})`
+      : "state = 'RUNNING' AND provider IS NOT NULL";
+    const rows = this.db.prepare(`
+      SELECT provider, COUNT(*) as count
+      FROM task_runs
+      WHERE ${where}
+      GROUP BY provider
+    `).all(...providerFilter) as Array<{ provider: string; count: number | string }>;
+
+    const map = new Map<ProviderId, number>();
+    for (const row of rows) {
+      if (row.provider) {
+        map.set(row.provider as ProviderId, toNumber(row.count));
+      }
+    }
+    return map;
+  }
+
   updateTaskRunsBatch(runs: Array<{id: string} & UpdateTaskRunInput>): void {
     if (runs.length === 0) return;
     this.db.transaction(() => {

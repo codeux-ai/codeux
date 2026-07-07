@@ -140,7 +140,7 @@ describe("start-ready-tasks-step", () => {
       getRunningCounts: () => ({ codex: 2 }),
     });
 
-    expect(startTask).toHaveBeenCalled();
+    expect(startTask).not.toHaveBeenCalled();
     expect(res.subtasks[0].status).toBe("PENDING");
     expect(fails).toBe(0);
     expect(setConsecutiveFailures).not.toHaveBeenCalled();
@@ -173,7 +173,7 @@ describe("start-ready-tasks-step", () => {
       getRunningCounts: () => ({ codex: 2 }),
     });
 
-    expect(startTask).toHaveBeenCalledTimes(3);
+    expect(startTask).not.toHaveBeenCalled();
     expect(res.subtasks.map(task => task.status)).toEqual(["PENDING", "PENDING", "PENDING"]);
     expect(fails).toBe(2);
     expect(setConsecutiveFailures).not.toHaveBeenCalled();

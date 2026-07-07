@@ -107,7 +107,7 @@ describe("planSessionActivityFetches", () => {
     const result = planSessionActivityFetches(subtasks, sessionMap, mockContext, mockSessionMetadataLookup, mockDeps.logger, isForeignSessionMatch, isLocallyTerminal);
 
     expect(result).toEqual([]);
-    expect(mockDeps.logger.warn).toHaveBeenCalledWith(
+    expect(mockDeps.logger.debug).toHaveBeenCalledWith(
       "Skipping activity fetch for fully synchronized terminal session",
       expect.objectContaining({
         taskId: "rec1",

@@ -161,6 +161,138 @@ describe("ProviderRunner", () => {
     await fs.rm(repoPath, { recursive: true, force: true });
   });
 
+  it("resolves active merge conflict markers for mockup virtual conflict workers", async () => {
+    const repoPath = await fs.mkdtemp(path.join(os.tmpdir(), "mockup-cli-conflict-resolve-"));
+    await fs.mkdir(path.join(repoPath, "src"), { recursive: true });
+    await fs.writeFile(path.join(repoPath, "README.md"), [
+      "# Fixture",
+      "<<<<<<< HEAD",
+      "Left sibling edited the conflict target.",
+      "=======",
+      "Right sibling edited the conflict target.",
+      ">>>>>>> task/right",
+      "",
+    ].join("\n"), "utf8");
+    await fs.writeFile(path.join(repoPath, "src", "conflict-target.js"), [
+      "export function conflictValue() {",
+      "<<<<<<< HEAD",
+      "  return 'left';",
+      "=======",
+      "  return 'right';",
+      ">>>>>>> task/right",
+      "}",
+      "",
+    ].join("\n"), "utf8");
+
+    const result = await runner.runProviderForText({
+      provider: "mockup-cli",
+      prompt: "Resolve the active Git merge conflict already present in this worktree.",
+      cwd: repoPath,
+      model: "default",
+      apiKey: "",
+      sessionId: "mock-session-conflict-resolve",
+      workflowSettings: { executionMode: "HOST" } as any,
+      repoPath,
+      onActivity: vi.fn(),
+    });
+
+    expect(result.ok).toBe(true);
+    const readme = await fs.readFile(path.join(repoPath, "README.md"), "utf8");
+    expect(readme).toContain("Left sibling edited the conflict target.");
+    expect(readme).toContain("Right sibling edited the conflict target.");
+    expect(readme).not.toContain("<<<<<<<");
+    expect(readme).not.toContain(">>>>>>>");
+    await expect(fs.readFile(path.join(repoPath, "src", "conflict-target.js"), "utf8")).resolves.toContain("return 'left+right';");
+
+    await fs.rm(repoPath, { recursive: true, force: true });
+  });
+
+  it("resolves final local merge conflict markers for mockup virtual conflict workers", async () => {
+    const repoPath = await fs.mkdtemp(path.join(os.tmpdir(), "mockup-cli-final-conflict-resolve-"));
+    await fs.mkdir(path.join(repoPath, "src"), { recursive: true });
+    await fs.writeFile(path.join(repoPath, "src", "final-merge-conflict.js"), [
+      "export function finalMergeValue() {",
+      "<<<<<<< HEAD",
+      "  return 'feature';",
+      "=======",
+      "  return 'default';",
+      ">>>>>>> main",
+      "}",
+      "",
+    ].join("\n"), "utf8");
+
+    const result = await runner.runProviderForText({
+      provider: "mockup-cli",
+      prompt: "Resolve the active Git merge conflict already present in this worktree.",
+      cwd: repoPath,
+      model: "default",
+      apiKey: "",
+      sessionId: "mock-session-final-conflict-resolve",
+      workflowSettings: { executionMode: "HOST" } as any,
+      repoPath,
+      onActivity: vi.fn(),
+    });
+
+    expect(result.ok).toBe(true);
+    const resolved = await fs.readFile(path.join(repoPath, "src", "final-merge-conflict.js"), "utf8");
+    expect(resolved).toContain("return 'feature+default';");
+    expect(resolved).not.toContain("<<<<<<<");
+    expect(resolved).not.toContain(">>>>>>>");
+
+    await fs.rm(repoPath, { recursive: true, force: true });
+  });
+
+  it("prioritizes active merge conflict repair over embedded mockup directives", async () => {
+    const repoPath = await fs.mkdtemp(path.join(os.tmpdir(), "mockup-cli-conflict-directives-"));
+    await fs.mkdir(path.join(repoPath, "src"), { recursive: true });
+    await fs.writeFile(path.join(repoPath, "README.md"), [
+      "# Fixture",
+      "<<<<<<< HEAD",
+      "Left sibling edited the conflict target.",
+      "=======",
+      "Right sibling edited the conflict target.",
+      ">>>>>>> task/right",
+      "",
+    ].join("\n"), "utf8");
+    await fs.writeFile(path.join(repoPath, "src", "conflict-target.js"), [
+      "export function conflictValue() {",
+      "<<<<<<< HEAD",
+      "  return 'left';",
+      "=======",
+      "  return 'right';",
+      ">>>>>>> task/right",
+      "}",
+      "",
+    ].join("\n"), "utf8");
+
+    const result = await runner.runProviderForText({
+      provider: "mockup-cli",
+      prompt: [
+        "Resolve the active Git merge conflict already present in this worktree.",
+        "",
+        "Original task prompt included for context:",
+        "mockup-cli:write src/conflict-target.js :: export function conflictValue() {\\n  return 'left+right';\\n}",
+      ].join("\n"),
+      cwd: repoPath,
+      model: "default",
+      apiKey: "",
+      sessionId: "mock-session-conflict-directives",
+      workflowSettings: { executionMode: "HOST" } as any,
+      repoPath,
+      onActivity: vi.fn(),
+    });
+
+    expect(result.ok).toBe(true);
+    const readme = await fs.readFile(path.join(repoPath, "README.md"), "utf8");
+    expect(readme).toContain("Left sibling edited the conflict target.");
+    expect(readme).toContain("Right sibling edited the conflict target.");
+    expect(readme).not.toContain("<<<<<<<");
+    expect(readme).not.toContain(">>>>>>>");
+    await expect(fs.readFile(path.join(repoPath, "src", "conflict-target.js"), "utf8")).resolves.toContain("left+right");
+
+    await fs.rm(repoPath, { recursive: true, force: true });
+  });
+
   it("forwards mockup-cli through Docker command construction with no API key requirement", async () => {
     await runner.runProvider({
       provider: "mockup-cli",

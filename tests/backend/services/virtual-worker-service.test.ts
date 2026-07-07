@@ -1762,6 +1762,31 @@ describe("VirtualWorkerService", () => {
     expect(calls).not.toContainEqual(["add", "-A"]);
   });
 
+  it("ensureMergeConflictResolved falls back to git status when diff cannot list unresolved files", async () => {
+    const { virtualWorkerService } = await setupServiceWithProject();
+
+    const calls: string[][] = [];
+    vi.spyOn((virtualWorkerService as any), "runWorkspaceCommand").mockImplementation(
+      async (_path: string, _cmd: string, args: string[]) => {
+        calls.push(args);
+        if (args[0] === "diff" && args.includes("--diff-filter=U")) {
+          throw new Error("git diff usage failed");
+        }
+        if (args[0] === "status") {
+          return { ok: true, stdout: "UU README.md\0M  src/clean.ts\0", stderr: "", code: 0 } as any;
+        }
+        if (args[0] === "grep") {
+          throw new Error("exit 1");
+        }
+        return { ok: true, stdout: "", stderr: "", code: 0 } as any;
+      },
+    );
+
+    await expect((virtualWorkerService as any).ensureMergeConflictResolved("/wt")).resolves.toBeUndefined();
+    expect(calls).toContainEqual(["status", "--porcelain", "-z"]);
+    expect(calls).toContainEqual(["grep", "--cached", "-l", "-E", "^(<{7}|>{7})( |$)", "--", "README.md"]);
+  });
+
   it("rejects merge conflict resolutions that mutate required timestamp marker literals", async () => {
     const { virtualWorkerService } = await setupServiceWithProject();
 

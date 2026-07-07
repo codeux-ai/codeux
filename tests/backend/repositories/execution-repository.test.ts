@@ -3087,6 +3087,63 @@ describe("ExecutionRepository", () => {
     expect(counts.size).toBe(2);
   });
 
+  it("counts global running task runs per provider", async () => {
+    const { projectRepository, executionRepository } = await createRepositories();
+    const project = projectRepository.createProject({
+      name: "Global Concurrency Project",
+      sourceType: "local",
+      sourceRef: "/workspace/global-concurrency",
+    });
+    const project2 = projectRepository.createProject({
+      name: "Global Concurrency Project 2",
+      sourceType: "local",
+      sourceRef: "/workspace/global-concurrency-2",
+    });
+    const sprint = projectRepository.createSprint(project.id, { name: "Sprint 1", number: 1 });
+    const sprint2 = projectRepository.createSprint(project2.id, { name: "Sprint 2", number: 1 });
+    const task1 = projectRepository.createTask(project.id, { sprintId: sprint.id, title: "Task 1", promptMarkdown: "Prompt 1" });
+    const task2 = projectRepository.createTask(project.id, { sprintId: sprint.id, title: "Task 2", promptMarkdown: "Prompt 2" });
+    const task3 = projectRepository.createTask(project2.id, { sprintId: sprint2.id, title: "Task 3", promptMarkdown: "Prompt 3" });
+    const task4 = projectRepository.createTask(project2.id, { sprintId: sprint2.id, title: "Task 4", promptMarkdown: "Prompt 4" });
+
+    executionRepository.createTaskRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task1.id,
+      provider: "mockup-cli",
+      state: "RUNNING",
+    });
+    executionRepository.createTaskRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task2.id,
+      provider: "codex",
+      state: "RUNNING",
+    });
+    executionRepository.createTaskRun({
+      projectId: project2.id,
+      sprintId: sprint2.id,
+      taskId: task3.id,
+      provider: "mockup-cli",
+      state: "RUNNING",
+    });
+    executionRepository.createTaskRun({
+      projectId: project2.id,
+      sprintId: sprint2.id,
+      taskId: task4.id,
+      provider: "mockup-cli",
+      state: "COMPLETED",
+    });
+
+    const allCounts = executionRepository.countGlobalRunningTaskRunsPerProvider();
+    expect(allCounts.get("mockup-cli")).toBe(2);
+    expect(allCounts.get("codex")).toBe(1);
+
+    const filteredCounts = executionRepository.countGlobalRunningTaskRunsPerProvider(["mockup-cli"]);
+    expect(filteredCounts.get("mockup-cli")).toBe(2);
+    expect(filteredCounts.has("codex")).toBe(false);
+  });
+
   describe("ExecutionInvocationMessageRecord Metadata", () => {
     it("persists and retrieves metadata for execution messages", async () => {
       const { projectRepository, executionRepository } = await createRepositories();

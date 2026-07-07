@@ -187,7 +187,9 @@ export class ProviderConcurrencyService {
   }
 
   /**
-   * Returns the current running invocation counts per provider across all projects.
+   * Returns the current provider load across all projects. CLI task runs reserve scheduler
+   * capacity before their provider invocation row starts, so use the larger of running task
+   * runs and running provider invocations for each provider.
    */
   getGlobalRunningCounts(providers?: string[]): Record<string, number> {
     const running = this.deps.executionRepository.listRunningProviderInvocationUsages(providers);
@@ -197,6 +199,17 @@ export class ProviderConcurrencyService {
         counts[inv.provider] = (counts[inv.provider] || 0) + 1;
       }
     }
+
+    const countTaskRuns = (this.deps.executionRepository as unknown as {
+      countGlobalRunningTaskRunsPerProvider?: (providers?: string[]) => Map<string, number>;
+    }).countGlobalRunningTaskRunsPerProvider;
+    if (typeof countTaskRuns === "function") {
+      const taskRunCounts = countTaskRuns.call(this.deps.executionRepository, providers);
+      for (const [provider, count] of taskRunCounts) {
+        counts[provider] = Math.max(counts[provider] || 0, count);
+      }
+    }
+
     return counts;
   }
 

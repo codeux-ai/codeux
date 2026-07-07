@@ -453,6 +453,32 @@ describe("ProviderConcurrencyService", () => {
         gemini: 1,
       });
     });
+
+    it("uses running task-run counts when they exceed active invocation counts", () => {
+      executionRepository.listRunningProviderInvocationUsages.mockReturnValue([
+        { provider: "mockup-cli" },
+        { provider: "jules" },
+        { provider: "jules" },
+      ]);
+      executionRepository.countGlobalRunningTaskRunsPerProvider = vi.fn().mockReturnValue(new Map([
+        ["mockup-cli", 5],
+        ["codex", 3],
+        ["jules", 1],
+      ]));
+
+      const counts = service.getGlobalRunningCounts(["mockup-cli", "codex", "jules"]);
+
+      expect(counts).toEqual({
+        "mockup-cli": 5,
+        codex: 3,
+        jules: 2,
+      });
+      expect(executionRepository.countGlobalRunningTaskRunsPerProvider).toHaveBeenCalledWith([
+        "mockup-cli",
+        "codex",
+        "jules",
+      ]);
+    });
   });
 
   describe("Reconciliation Throttling", () => {

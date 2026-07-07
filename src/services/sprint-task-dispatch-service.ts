@@ -318,6 +318,19 @@ export class SprintTaskDispatchService {
         provider: nextProvider || undefined,
       };
     } catch (error) {
+      const deferral = getTaskDispatchDeferral(error);
+      if (deferral) {
+        const deferredProvider = deferral.provider || provider || executorType;
+        throw this.deferForProviderCapacity(
+          args,
+          taskRecordId,
+          deferredProvider,
+          executorType,
+          deferral.limit ?? 0,
+          deferral.currentCount ?? 0,
+        );
+      }
+
       const message = error instanceof Error ? error.message : String(error);
       const finishedAt = new Date().toISOString();
       // Release the claimed Jules concurrency slot so a failed dispatch never leaks capacity.
@@ -477,13 +490,22 @@ export class SprintTaskDispatchService {
         state: "PENDING",
         provider,
         mode: executorType,
+        finishedAt: null,
+        durationMs: null,
       });
       if (dispatch) {
         this.executionRepository.updateTaskDispatch(dispatch.id, {
           status: "queued",
+          finishedAt: null,
+          errorMessage: null,
+          lastHeartbeatAt: null,
         });
       }
     }
+
+    this.projectManagementRepository.updateTask(taskRecordId, {
+      status: "pending",
+    });
 
     this.executionRepository.appendTaskRunEvent(taskRun.id, "provider_concurrency_wait", "system", {
       provider,

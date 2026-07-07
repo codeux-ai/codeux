@@ -57,6 +57,107 @@ describe("runSessionSyncStep", () => {
     });
   });
 
+  it("does not run Jules live usage sync for active mockup CLI sessions", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-session-sync-mockup-"));
+    tempDirs.push(dir);
+
+    const storage = new AppDbStorage(path.join(dir, "app.db"));
+    const projectRepository = new ProjectManagementRepository(storage);
+    const executionRepository = new ExecutionRepository(storage);
+
+    const project = projectRepository.createProject({
+      name: "Session Sync Mockup",
+      sourceType: "local",
+      sourceRef: "/tmp/mockup-repo",
+    });
+    const sprint = projectRepository.createSprint(project.id, {
+      name: "Sprint 3",
+      number: 3,
+    });
+    const task = projectRepository.createTask(project.id, {
+      sprintId: sprint.id,
+      taskKey: "mockup-task",
+      title: "Mockup task",
+    });
+    const sprintRun = executionRepository.createSprintRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      status: "running",
+    });
+    const dispatch = executionRepository.createTaskDispatch({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      sprintRunId: sprintRun.id,
+      executorType: "docker_cli",
+      status: "running",
+      startedAt: "2026-03-09T10:00:00.000Z",
+    } as any);
+    executionRepository.createTaskRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      sprintRunId: sprintRun.id,
+      dispatchId: dispatch.id,
+      provider: "mockup-cli",
+      mode: "docker_cli",
+      sessionId: "cli-mockup-cli-running",
+      sessionName: "sessions/cli-mockup-cli-running",
+      state: "RUNNING",
+      startedAt: "2026-03-09T10:00:00.000Z",
+    });
+
+    const subtasks: Subtask[] = [
+      {
+        id: task.taskKey,
+        record_id: task.id,
+        project_id: project.id,
+        sprint_id: sprint.id,
+        title: task.title,
+        prompt: task.promptMarkdown,
+        depends_on: [],
+        is_independent: true,
+        status: "RUNNING",
+      },
+    ];
+    const julesUsage = {
+      syncLiveInvocation: vi.fn(),
+      calculateAndSaveUsageForTask: vi.fn(),
+    };
+
+    await runSessionSyncStep(
+      subtasks,
+      {
+        listSessions: vi.fn().mockResolvedValue({
+          sessions: [
+            {
+              id: "cli-mockup-cli-running",
+              name: "sessions/cli-mockup-cli-running",
+              title: "Sprint 3: [run:mockup-repo/s3/mockup-task] [mockup-task] Mockup task",
+              state: "RUNNING",
+              provider: "mockup-cli",
+              prompt: "mockup prompt",
+            },
+          ],
+        }),
+        resolveSessionName: (session: { name?: string }) => session.name,
+        extractSessionId: (session: { id?: string }) => session.id,
+        fetchRecentActivities: vi.fn().mockResolvedValue([]),
+        isActionRequiredState: vi.fn().mockReturnValue(false),
+        executionRepository,
+        projectManagementRepository: projectRepository,
+        sprintRunId: sprintRun.id,
+        logger: { warn: vi.fn() },
+        julesUsage,
+      } as any,
+      false,
+      { repoPath: "/tmp/mockup-repo", sprintNumber: 3 },
+    );
+
+    expect(julesUsage.syncLiveInvocation).not.toHaveBeenCalled();
+    expect(julesUsage.calculateAndSaveUsageForTask).not.toHaveBeenCalled();
+  });
+
   it("fetches full transcript and syncs usage and git metrics on terminal session state without duplication", async () => {
     const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-session-sync-metrics-"));
     tempDirs.push(dir);
@@ -2446,7 +2547,7 @@ describe("runSessionSyncStep", () => {
 
     expect(getLatestTaskRun).toHaveBeenCalledWith("task-terminal-record", "sprint-run-123");
     expect(fetchRecentActivities).not.toHaveBeenCalled();
-    expect(logger.warn).toHaveBeenCalledWith(
+    expect(logger.debug).toHaveBeenCalledWith(
       "Skipping activity fetch for fully synchronized terminal session",
       expect.objectContaining({
         taskId: "task-terminal-record",
