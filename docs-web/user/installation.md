@@ -14,6 +14,23 @@ install and start Code UX with **no configuration**; providers are set up later 
 | **An agent provider** | Dispatching work | At least one of Jules, Claude Code, Codex, Gemini, Qwen Code, OpenCode, or Antigravity. See [Providers and models](./providers-and-models.md). |
 | **GitHub CLI (`gh`)** | Remote merge protocol *(optional)* | Used when GitHub operations run in remote mode. |
 
+## Onboarding dependency installers
+
+First-run readiness checks report Docker CLI, Docker daemon, and Git CLI status. The backend also
+advertises safe installer options for Docker/Git setup. These options are structured metadata only
+until an installer action is invoked, and installer execution is limited to hardcoded command and
+argument arrays with bounded output capture.
+
+| Platform | Recommended mode | Automated behavior | Manual or degraded behavior |
+| --- | --- | --- | --- |
+| **macOS** | `docker-desktop-git` | Uses Homebrew to install Docker Desktop and Git when Homebrew is available. | `docker-engine-git` is degraded because standalone Docker Engine needs a Linux VM; use Docker Desktop unless you manage that VM yourself. |
+| **Windows** | `docker-desktop-git` | Uses winget exact package installs for Docker Desktop and Git. | `docker-engine-git` is degraded with WSL/Docker Desktop guidance. |
+| **Linux** | `docker-engine-git` | Uses a supported package manager (`apt`, `dnf`, `yum`, `zypper`, or `pacman`) to install Docker Engine packages and Git, then attempts to start Docker with `systemctl` when available. | `docker-desktop-git` only automates Git and points to Docker's official distro-specific Desktop downloads. |
+
+Linux privilege handling is noninteractive. Root runs package commands directly; non-root runs use
+`sudo -n`. If passwordless sudo is unavailable, Code UX returns the display commands and privilege
+guidance instead of prompting for a password.
+
 ## Option 1 — Desktop app (recommended)
 
 Download the latest installer for your platform from

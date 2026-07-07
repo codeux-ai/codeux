@@ -9,6 +9,7 @@ import type {
 import type { SystemSettings } from "../contracts/settings-scope-types.js";
 import { commandRunner } from "../shared/subprocess/command-runner.js";
 import { expandHomePath } from "../shared/config/home-path.js";
+import { planOnboardingDependencyInstallerOptions } from "./onboarding-dependency-installer-service.js";
 
 const providerLabels: Record<ProviderId, string> = {
   jules: "Jules",
@@ -139,6 +140,11 @@ let cachedReadiness: OnboardingRuntimeReadiness | null = null;
 let lastCheckTime = 0;
 const CACHE_TTL_MS = 6000;
 
+export const invalidateOnboardingRuntimeReadinessCache = (): void => {
+  cachedReadiness = null;
+  lastCheckTime = 0;
+};
+
 export const getOnboardingRuntimeReadiness = async (settings: SystemSettings): Promise<OnboardingRuntimeReadiness> => {
   const now = Date.now();
   if (cachedReadiness && (now - lastCheckTime < CACHE_TTL_MS)) {
@@ -201,6 +207,7 @@ export const getOnboardingRuntimeReadiness = async (settings: SystemSettings): P
     },
     dependencies,
     providers: providerStatuses,
+    installers: planOnboardingDependencyInstallerOptions(),
   };
   lastCheckTime = Date.now();
 

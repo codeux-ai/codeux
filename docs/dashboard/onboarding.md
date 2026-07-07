@@ -35,9 +35,24 @@ The readiness payload reports:
   - Docker CLI
   - Docker daemon
   - Git CLI
+- Structured installer metadata for safe Docker/Git setup options:
+  - `docker-desktop-git`
+  - `docker-engine-git`
 - Local provider auth detection for Gemini, Codex, Claude Code, Qwen Code, and OpenCode
 
 Docker is mandatory for the default containerized workflow. When Docker is missing or the daemon is stopped, the top-nav Docker control also shows a `Cluster not ready` badge and its popover explains that provider CLIs cannot execute until Docker is reachable.
+
+The backend installer contract is intentionally constrained. It advertises platform-specific options in the readiness payload, then the installer service executes only hardcoded executable/argument arrays. It does not run shell snippets, downloaded remote scripts, or interactive password prompts.
+
+Installer support matrix:
+
+| Platform | Recommended mode | Automated behavior | Degraded/manual behavior |
+| --- | --- | --- | --- |
+| macOS | `docker-desktop-git` | Homebrew installs Docker Desktop and Git when Homebrew is available. | `docker-engine-git` is degraded because standalone Docker Engine needs a Linux VM; it can only automate Git through Homebrew. |
+| Windows | `docker-desktop-git` | winget installs Docker Desktop and Git with exact package IDs and package/source agreement flags. | `docker-engine-git` is degraded with WSL/Docker Desktop guidance; it can only automate Git through winget. |
+| Linux | `docker-engine-git` | Supported package managers install Docker Engine packages and Git, then systemd startup is attempted when `systemctl` exists. | `docker-desktop-git` is degraded to automated Git installation plus official Docker Desktop manual-download guidance because Desktop artifacts are distro-specific. |
+
+Linux Engine installation handles privileges noninteractively. Root runs package and service commands directly. Non-root runs use `sudo -n`; when passwordless sudo is unavailable, commands are returned as skipped display commands with `requiresPrivilege` guidance instead of hanging on a password prompt. Installer results include per-command status, bounded stdout/stderr summaries, skipped dependency groups, manual-download flags, privilege flags, and post-install guidance such as starting Docker, refreshing PATH, or installing through a package manager manually.
 
 The top-nav notification center also consumes this readiness payload. Startup notifications are generated from real checks instead of placeholder messages:
 - `Cluster not ready` is a non-dismissible critical notification when required dependencies are missing.
