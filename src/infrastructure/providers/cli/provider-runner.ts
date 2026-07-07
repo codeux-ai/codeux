@@ -4,7 +4,7 @@ import { CliWorkflowSettings, ProviderId, type ProviderConfigMode } from "../../
 import type { CustomMcpServer, QwenModelProviderSettings } from "../../../contracts/app-types.js";
 import { buildProviderMcpConfigArtifact, buildClaudeMcpServerEntry, buildCodexMcpServerTomlLines, buildGeminiMcpServerEntry, escapeTomlString } from "./mcp-config-format.js";
 import type { McpConnectionInfo } from "../../../contracts/mcp-connection-types.js";
-import { CliProviderId, enabledCustomServersFor, isOpenCodeNativeSessionId, ProviderCommandSpec, providerSpecs } from "./provider-command-specs.js";
+import { CliProviderId, E2E_PROVIDER_CLI_SHIM_ENV, enabledCustomServersFor, isOpenCodeNativeSessionId, ProviderCommandSpec, providerSpecs } from "./provider-command-specs.js";
 import { CommandResult, runStreamingCommand } from "../../../services/cli-process-runner.js";
 import type { IDockerRunner } from "./docker-runner.js";
 import type { SnapshotCheckout } from "./workspace-manager.js";
@@ -998,6 +998,9 @@ export class ProviderRunner implements IProviderRunner {
     antigravityLogPath?: string | null,
   ): { command: string; args: string[] } {
     if (provider === "codex" && codexOutputPath) {
+      if (process.env[E2E_PROVIDER_CLI_SHIM_ENV]?.trim()) {
+        return providerSpecs[provider](model, prompt);
+      }
       // `codex exec resume --last` continues the most recent session in the cwd
       const args = continueSession
         ? ["exec", "resume", "--last", "--yolo", "--json", "--output-last-message", codexOutputPath]

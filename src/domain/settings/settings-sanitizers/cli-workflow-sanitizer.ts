@@ -11,11 +11,16 @@ export const sanitizeCliWorkflow = (
     ? input.cliWorkflow
     : {}) as Partial<DashboardSettings["cliWorkflow"]>;
 
-  const executionMode = readString(
+  // Execution is Docker-only in production. The Playwright fake-provider lane
+  // runs without Docker and is gated by an explicit E2E-only provider shim.
+  const requestedExecutionMode = readString(
     cliInput.executionMode,
-    DEFAULT_DASHBOARD_SETTINGS.cliWorkflow.executionMode
+    DEFAULT_DASHBOARD_SETTINGS.cliWorkflow.executionMode,
   ) as CliExecutionMode;
-  const normalizedExecutionMode: CliExecutionMode = executionMode === "HOST" ? "HOST" : "DOCKER";
+  const e2eProviderShimEnabled = Boolean(process.env.CODEUX_E2E_PROVIDER_CLI_SHIM?.trim());
+  const normalizedExecutionMode: CliExecutionMode = e2eProviderShimEnabled && requestedExecutionMode === "HOST"
+    ? "HOST"
+    : "DOCKER";
 
   const containerImage = readString(
     cliInput.containerImage,

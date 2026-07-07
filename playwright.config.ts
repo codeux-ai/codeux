@@ -5,8 +5,12 @@ import path from 'path';
 
 const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'codeux-e2e-home-'));
 const mockProviderCliPath = path.resolve(process.cwd(), 'scripts/e2e/mock-provider-cli.mjs');
-const e2eDashboardPort = Number.parseInt(process.env.CODEUX_E2E_DASHBOARD_PORT ?? '4544', 10);
-const e2eBaseUrl = `http://127.0.0.1:${e2eDashboardPort}`;
+const dashboardPort = Number.parseInt(
+  process.env.CODEUX_E2E_DASHBOARD_PORT || process.env.DASHBOARD_PORT || '4464',
+  10,
+);
+const resolvedDashboardPort = Number.isFinite(dashboardPort) ? dashboardPort : 4464;
+const dashboardBaseUrl = `http://127.0.0.1:${resolvedDashboardPort}`;
 
 /**
  * Read environment variables from file.
@@ -38,7 +42,7 @@ export default defineConfig({
   /* Shared settings for all the projects below. See https://playwright.dev/docs/api/class-testoptions. */
   use: {
     /* Base URL to use in actions like `await page.goto('')`. */
-    baseURL: e2eBaseUrl,
+    baseURL: dashboardBaseUrl,
 
     /* Preserve failure artifacts without producing heavy output for passing runs. */
     trace: 'retain-on-failure',
@@ -62,7 +66,10 @@ export default defineConfig({
   /* Run your local dev server before starting the tests */
   webServer: {
     command: 'node dist/index.js',
-    url: `${e2eBaseUrl}/ready`,
+    // Poll the liveness probe (/health) rather than the readiness probe (/ready).
+    // /ready only returns 200 once a project has a live-status timestamp, which
+    // never happens in a clean CI checkout, so it would hang until timeout.
+    url: `${dashboardBaseUrl}/health`,
     reuseExistingServer: false,
     timeout: 60000,
     stdout: 'pipe',
@@ -73,8 +80,8 @@ export default defineConfig({
       XDG_CONFIG_HOME: path.join(tempHome, '.config'),
       XDG_DATA_HOME: path.join(tempHome, '.local', 'share'),
       CODEUX_E2E_PROVIDER_CLI_SHIM: mockProviderCliPath,
-      DASHBOARD_PORT: String(e2eDashboardPort),
-      MCP_HTTP_PORT: String(e2eDashboardPort + 1),
+      DASHBOARD_PORT: String(resolvedDashboardPort),
+      MCP_HTTP_PORT: String(resolvedDashboardPort + 1),
       CODE_UX_CONTAINERIZED_GIT: '0',
       CODE_UX_GIT_CONTAINER_MODE: 'host',
     },

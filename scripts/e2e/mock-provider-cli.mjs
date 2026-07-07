@@ -64,6 +64,11 @@ function truncatePrompt(prompt) {
   return prompt.replace(/\s+/g, " ").trim().slice(0, 500);
 }
 
+function extractTaskMarker(prompt) {
+  const match = /TASK\s+T\d+\s+[^\n\r]+/i.exec(prompt);
+  return match?.[0]?.trim() || null;
+}
+
 async function sleep(ms) {
   if (ms <= 0) {
     return;
@@ -89,6 +94,7 @@ async function writeDeterministicFiles(cwd, run) {
     "Code UX mock provider output",
     `provider=${run.provider}`,
     `model=${run.model}`,
+    `task=${extractTaskMarker(run.prompt) || "unknown"}`,
     `prompt=${truncatePrompt(run.prompt)}`,
     "",
   ].join("\n");

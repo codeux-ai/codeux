@@ -225,10 +225,12 @@ describe("GitHub workflow health", () => {
     const config = await readRepoFile(PLAYWRIGHT_CONFIG);
 
     expect(config).toContain("command: 'node dist/index.js'");
-    expect(config).toContain("url: `${e2eBaseUrl}/ready`");
+    expect(config).toContain("process.env.CODEUX_E2E_DASHBOARD_PORT || process.env.DASHBOARD_PORT || '4464'");
+    expect(config).toContain("url: `${dashboardBaseUrl}/health`");
+    expect(config).toContain("DASHBOARD_PORT: String(resolvedDashboardPort)");
     expect(config).toContain("CODEUX_E2E_DASHBOARD_PORT");
-    expect(config).toContain("DASHBOARD_PORT: String(e2eDashboardPort)");
-    expect(config).toContain("MCP_HTTP_PORT: String(e2eDashboardPort + 1)");
+    expect(config).toContain("CODEUX_E2E_PROVIDER_CLI_SHIM: mockProviderCliPath");
+    expect(config).toContain("MCP_HTTP_PORT: String(resolvedDashboardPort + 1)");
     expect(config).toContain("reuseExistingServer: false");
     expect(config).toContain("workers: 1");
     expect(config).toContain("trace: 'retain-on-failure'");
