@@ -11,6 +11,9 @@ function parseArgs(argv) {
     provider: "unknown",
     model: "default",
     prompt: "",
+    codexOutputPath: null,
+    nativeSessionId: null,
+    continueSession: false,
   };
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -24,6 +27,14 @@ function parseArgs(argv) {
     } else if (arg === "--prompt") {
       parsed.prompt = argv[index + 1] || "";
       index += 1;
+    } else if (arg === "--codex-output-path") {
+      parsed.codexOutputPath = argv[index + 1] || null;
+      index += 1;
+    } else if (arg === "--native-session-id") {
+      parsed.nativeSessionId = argv[index + 1] || null;
+      index += 1;
+    } else if (arg === "--continue-session") {
+      parsed.continueSession = true;
     }
   }
 
@@ -90,6 +101,7 @@ async function currentCommit(cwd) {
 async function writeDeterministicFiles(cwd, run) {
   const outputPath = resolve(cwd, sanitizeRelativePath(readMarker(run.prompt, "write") || "mock-provider-output.txt"));
   const auditPath = join(cwd, ".codeux-mock-provider", "provider-run.json");
+  const responseText = "Mock provider completed successfully.";
   const summary = [
     "Code UX mock provider output",
     `provider=${run.provider}`,
@@ -102,13 +114,45 @@ async function writeDeterministicFiles(cwd, run) {
   await mkdir(dirname(outputPath), { recursive: true });
   await mkdir(dirname(auditPath), { recursive: true });
   await writeFile(outputPath, summary, "utf8");
+  if (run.codexOutputPath) {
+    await mkdir(dirname(resolve(cwd, run.codexOutputPath)), { recursive: true });
+    await writeFile(resolve(cwd, run.codexOutputPath), `${responseText}\n`, "utf8");
+  }
   await writeFile(auditPath, `${JSON.stringify({
     provider: run.provider,
     model: run.model,
     prompt: truncatePrompt(run.prompt),
     outputFile: basename(outputPath),
     commit: await currentCommit(cwd),
+    continued: run.continueSession,
   }, null, 2)}\n`, "utf8");
+}
+
+function writeProviderStdout(run) {
+  const nativeSessionId = run.nativeSessionId || `mock-${run.provider}-${Date.now().toString(36)}`;
+  const responseText = "Mock provider completed successfully.";
+  console.log(JSON.stringify({
+    type: "thread.started",
+    thread_id: nativeSessionId,
+  }));
+  console.log(JSON.stringify({
+    type: "item.completed",
+    item: {
+      id: "mock-response",
+      type: "agent_message",
+      text: responseText,
+    },
+  }));
+  console.log(JSON.stringify({
+    type: "turn.completed",
+    usage: {
+      input_tokens: 8,
+      cached_input_tokens: 0,
+      output_tokens: 6,
+      reasoning_output_tokens: 0,
+      total_tokens: 14,
+    },
+  }));
 }
 
 async function main() {
@@ -131,13 +175,7 @@ async function main() {
     process.exit(exitCode);
   }
 
-  console.log(JSON.stringify({
-    provider: run.provider,
-    model: run.model,
-    status: "completed",
-    message: "Mock provider completed successfully.",
-    wroteFiles: !noOp,
-  }));
+  writeProviderStdout(run);
 }
 
 main().catch((error) => {

@@ -998,8 +998,22 @@ export class ProviderRunner implements IProviderRunner {
     antigravityLogPath?: string | null,
   ): { command: string; args: string[] } {
     if (provider === "codex" && codexOutputPath) {
-      if (process.env[E2E_PROVIDER_CLI_SHIM_ENV]?.trim()) {
-        return providerSpecs[provider](model, prompt);
+      const e2eShimPath = process.env[E2E_PROVIDER_CLI_SHIM_ENV]?.trim();
+      if (e2eShimPath) {
+        const args = [
+          e2eShimPath,
+          "--provider", provider,
+          "--model", model || "default",
+          "--prompt", prompt,
+          "--codex-output-path", codexOutputPath,
+        ];
+        if (nativeSessionId) {
+          args.push("--native-session-id", nativeSessionId);
+        }
+        if (continueSession) {
+          args.push("--continue-session");
+        }
+        return { command: process.execPath, args };
       }
       // `codex exec resume --last` continues the most recent session in the cwd
       const args = continueSession
