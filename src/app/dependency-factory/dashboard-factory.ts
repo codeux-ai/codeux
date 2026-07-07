@@ -18,10 +18,12 @@ import { ProviderExecutionService } from "../../services/provider-execution-serv
 import { SchedulerService } from "../../services/scheduler-service.js";
 import { ExecutionInvocationControlService } from "../../services/execution-invocation-control-service.js";
 import { createLateBoundDependency } from "../../shared/late-bound-dependency.js";
+import { ChatProviderIngressService } from "../../services/chat-provider-ingress-service.js";
 
 export interface DashboardDependencies {
   chatThreadRuntimeService: ChatThreadRuntimeService;
   chatProviderRepository: CoreDependencies["chatProviderRepository"];
+  chatProviderIngressService: ChatProviderIngressService;
   activityCacheService: ActivityCacheService;
   taskRerunService: TaskRerunService;
   executionControlService: ExecutionControlService;
@@ -144,6 +146,12 @@ export function createDashboardDependencies(
     getMcpConnectionInfo: context.getMcpConnectionInfo,
     getMcpApprovalTracker: context.getMcpApprovalTracker,
     logger: logger.child({ component: "chat-thread-runtime-service" }),
+  });
+
+  const chatProviderIngressService = new ChatProviderIngressService({
+    chatProviderRepository,
+    chatThreadRuntimeService,
+    logger: logger.child({ component: "chat-provider-ingress-service" }),
   });
 
   const activityCacheService = new ActivityCacheService(
@@ -454,6 +462,7 @@ export function createDashboardDependencies(
   return {
     chatProviderRepository,
     chatThreadRuntimeService,
+    chatProviderIngressService,
     activityCacheService,
     taskRerunService,
     executionControlService,

@@ -177,7 +177,7 @@ function decorateSetupDefinition(req: Request, schema: ChatProviderSetupSchema):
 } {
   return {
     ...schema,
-    ingressUrlTemplate: `${getRequestOrigin(req)}/api/chat-providers/connections/{connectionId}/ingress`,
+    ingressUrlTemplate: `${getRequestOrigin(req)}/api/chat-providers/ingress/{connectionId}`,
     bridgeModes: schema.bridgeModes.map((bridgeMode) => ({
       ...bridgeMode,
       setupHints: buildSetupHints(schema.kind, bridgeMode.mode),
@@ -197,7 +197,7 @@ function decorateConnection(
 }
 
 function buildIngressUrl(req: Request, connectionId: string): string {
-  return `${getRequestOrigin(req)}/api/chat-providers/connections/${encodeURIComponent(connectionId)}/ingress`;
+  return `${getRequestOrigin(req)}/api/chat-providers/ingress/${encodeURIComponent(connectionId)}`;
 }
 
 function buildSetupHints(providerKind: ChatProviderKind, bridgeMode: ChatProviderBridgeMode): ChatProviderSetupHints {

@@ -106,13 +106,19 @@ export const applyDashboardPreRouteMiddleware = (
   app.use(express.json({
     limit: DASHBOARD_LARGE_SETTINGS_JSON_BODY_LIMIT,
     type: (req) => shouldParseDashboardJsonBody(req, "large"),
+    verify: captureRawJsonBody,
   }));
   app.use(express.json({
     limit: DASHBOARD_DEFAULT_JSON_BODY_LIMIT,
     type: (req) => shouldParseDashboardJsonBody(req, "default"),
+    verify: captureRawJsonBody,
   }));
   app.use(createDashboardJsonBodyErrorHandler(dashboardLogger));
 };
+
+function captureRawJsonBody(req: IncomingMessage, _res: unknown, buf: Buffer): void {
+  (req as IncomingMessage & { rawBody?: string }).rawBody = buf.toString("utf8");
+}
 
 function createDashboardJsonContentTypeGuard(dashboardLogger: Logger): RequestHandler {
   return (req, res, next) => {
