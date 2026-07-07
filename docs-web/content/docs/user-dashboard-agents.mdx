@@ -8,10 +8,11 @@ An *agent preset* is a reusable persona consisting of:
 - A markdown **system instruction** that prepends every session this agent runs.
 - An optional **memory template** — controls how project / sprint memory is injected into prompts.
 - Optional persistent skill storage attachments, stored as shared project skill storage IDs for future retrieval.
-- Optional runtime metadata such as provider/model preferences, a nullable Docker root-mode override for local CLI task runs, and optional MCP access including default-off Code UX built-in tools and custom MCP server links.
+- Optional MCP access, including default-off Code UX built-in tools and custom MCP server links.
+- Optional runtime metadata such as provider/model preferences and a nullable Docker root-mode override for local CLI task runs.
 - A set of **labels** for tagging and filtering.
 
-Agent presets show up wherever a chat thread or planning request needs to choose an agent.
+Agent presets show up wherever a chat thread or planning request needs to choose an agent. SQLite is the live authority for these presets; markdown files are the project-local import/export copy used for review and sharing.
 
 ## Project name privacy
 
@@ -55,11 +56,15 @@ Agent presets can be defined as markdown files inside `<repo>/.code-ux/agents/<p
 You are a planner agent. Decompose user requests into ...
 ```
 
-To import a single file: open the agent detail panel and click **Import markdown**.
+To import a single linked file into sqlite: open the agent detail panel and click **Import**.
 
-To explicitly pull project markdown into sqlite, use **Sync from markdown** in the page header. The backend discovers `.code-ux/agents/*.md`, applies the existing project/default/home precedence rules, imports new files, and refreshes out-of-sync linked agents.
+To explicitly pull project markdown into sqlite, use **Pull from files** in the page header. The backend discovers `.code-ux/agents/*.md`, applies the existing project/default/home precedence rules, imports new files, and refreshes out-of-sync linked agents.
 
-To explicitly push sqlite presets back to project files, use the markdown push action. Push writes only under the selected project’s `.code-ux/agents/` directory, exports manual, missing-source, out-of-sync, home-backed, and default-backed presets as project markdown overrides, and refuses to overwrite a file already linked to a different agent. Project markdown mirroring (`agents.saveToProjectDirectory`) must be enabled.
+To explicitly push sqlite presets back to project files, use **Push to files** in the page header. Push writes only under the selected project’s `.code-ux/agents/` directory, exports manual, missing-source, out-of-sync, home-backed, and default-backed presets as project markdown overrides, and refuses to overwrite a file already linked to a different agent. Project markdown mirroring (`agents.saveToProjectDirectory`) must be enabled.
+
+To push one sqlite preset to its project file, open the detail panel and click **Push to file**. This is useful when a single database-backed agent should become or refresh a repository-reviewed markdown file without exporting the whole roster.
+
+Older API clients may still call the legacy `sync-markdown` endpoint as a backward-compatible alias for pull, but the current dashboard action is **Pull from files**.
 
 This makes agent presets first-class repository content — you can check them in, code-review them, and share them across teammates.
 
