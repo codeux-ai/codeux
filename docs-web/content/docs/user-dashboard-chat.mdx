@@ -49,6 +49,8 @@ Planning messages can include a rich sprint status card. When Code UX can match 
 
 Virtual chat replies can persist structured prompt suggestions for quick next steps. JSON-mode providers may return optional `suggestions` alongside `replyMarkdown` and `action`; Code UX stores valid entries on the assistant/system message as `metadata.promptSuggestions` after trimming strings, dropping malformed entries, and capping the list at six. Suggestions appear as clickable tags below the normal markdown reply, so the transcript remains visible. Clicking a tag fills and focuses the composer with that prompt for review or editing; it does not auto-send. Invocation transcripts remain read-only and do not become composer actions.
 
+Assistant prose bubbles can also show a short italic project-manager thought below the provider text. The dashboard uses safe explicit metadata (`metadata.moodComment`, `metadata.thinkingLine`, or `metadata.pmAside`) when present, otherwise it chooses a deterministic line from the shared `mood` catalog. These asides are visual adjuncts only: they do not replace provider markdown, do not change stored chat contracts, and do not appear on user, system, tool, reasoning, tool-call, or tool-result cards.
+
 For integrators, the stored metadata uses `metadata.promptSuggestions` with `label`, `prompt`, and optional `icon` fields:
 
 ```json
@@ -65,7 +67,7 @@ For integrators, the stored metadata uses `metadata.promptSuggestions` with `lab
 
 Supported generic icon identifiers are `sparkles`, `search`, `edit`, `code`, `terminal`, `bug`, `check`, `play`, `refresh`, `settings`, `file`, `folder`, `git-branch`, `git-pull-request`, `database`, `shield`, `book-open`, `message-circle`, `list-checks`, `rocket`, `zap`, `lightbulb`, `clipboard`, `download`, `upload`, `eye`, `package`, `server`, `clock`, and `help-circle`.
 
-Messages can also render external work references as rich cards without changing the stored transcript. The dashboard recognizes Jira issues, GitHub issues and pull requests, and GitLab issues and merge requests from explicit message metadata first, then from JSON-looking message bodies with the same fields. Recognized cards show the provider, key or number, title, status, safe external link, repository or project path, labels, assignee or author, and a short preview. Malformed JSON or unsupported providers remain ordinary markdown instead of being dropped.
+Normal thread messages can also render external work references as rich cards without changing the stored transcript. The dashboard recognizes Jira issues, GitHub issues and pull requests, and GitLab issues and merge requests from explicit message metadata first, then from JSON-looking message bodies with the same fields. Recognized cards show the provider, key or number, title, status, safe external link, repository or project path, labels, assignee or author, and a short preview. Malformed JSON or unsupported providers remain ordinary markdown instead of being dropped.
 
 ## Compacting a thread
 
@@ -91,9 +93,9 @@ Use this for debugging provider runs and MCP client integrations, for example to
 
 Invocation transcripts use the same live sprint status card as thread messages when planning metadata links them to a sprint. This means a planning invocation and its related chat message should show consistent task progress without a separate refresh control. Parsed provider conversation turns stream into running invocation transcripts for provider-backed planning, QA review, dashboard/chat replies, CI repair, merge-conflict repair, memory remediation, setup, and task coding; text-only provider output is appended when the run completes.
 
-Planning and QA self-reflection messages appear as structured cards instead of raw system text. Each card shows whether the reflection passed, needed improvement, or hit an error; the final decision; the attempt number; and each criterion's 5-star rating, numeric score, threshold, rationale, and improvement instructions when available.
-
 Invocation transcripts use the same external-reference cards as thread messages for recognized Jira, GitHub, and GitLab payloads, including JSON payloads that would otherwise appear as raw punctuation-heavy output. This keeps linked work readable while preserving the original backend metadata and message content.
+
+Planning and QA self-reflection messages appear as structured cards instead of raw system text. Each card shows whether the reflection passed, needed improvement, or hit an error; the final decision; the attempt number; and each criterion's 5-star rating, numeric score, threshold, rationale, and improvement instructions when available.
 
 ## Posting messages
 

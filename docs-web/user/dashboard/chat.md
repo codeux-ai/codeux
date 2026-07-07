@@ -49,6 +49,8 @@ Planning messages can include a rich sprint status card. When Code UX can match 
 
 Virtual chat replies can persist structured prompt suggestions for quick next steps. JSON-mode providers may return optional `suggestions` alongside `replyMarkdown` and `action`; Code UX stores valid entries on the assistant/system message as `metadata.promptSuggestions` after trimming strings, dropping malformed entries, and capping the list at six. Suggestions appear as clickable tags below the normal markdown reply, so the transcript remains visible. Clicking a tag fills and focuses the composer with that prompt for review or editing; it does not auto-send. Invocation transcripts remain read-only and do not become composer actions.
 
+Assistant prose bubbles can also show a short italic project-manager thought below the provider text. The dashboard uses safe explicit metadata (`metadata.moodComment`, `metadata.thinkingLine`, or `metadata.pmAside`) when present, otherwise it chooses a deterministic line from the shared `mood` catalog. These asides are visual adjuncts only: they do not replace provider markdown, do not change stored chat contracts, and do not appear on user, system, tool, reasoning, tool-call, or tool-result cards.
+
 For integrators, the stored metadata uses `metadata.promptSuggestions` with `label`, `prompt`, and optional `icon` fields:
 
 ```json
