@@ -149,7 +149,7 @@ tests/
 pnpm run typecheck             # tsc --noEmit (server)
 pnpm run typecheck:dashboard   # tsc --noEmit (dashboard)
 pnpm run lint                  # alias for typecheck (no eslint shipped)
-pnpm test                      # vitest run (full suite)
+pnpm run test                  # vitest run (full suite)
 pnpm run test:watch            # vitest watch mode
 pnpm run test:backend          # backend only
 pnpm run test:dashboard        # dashboard only
