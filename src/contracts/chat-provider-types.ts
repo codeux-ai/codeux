@@ -190,6 +190,9 @@ export interface UpdateChatProviderDeliveryStateInput {
   attemptCount?: number;
   lastError?: string | null;
   externalMessageId?: string | null;
+  conversationThreadId?: string | null;
+  conversationMessageId?: string | null;
+  payload?: Record<string, unknown> | null;
 }
 
 export interface ChatProviderMessageDeliveryRecord {

@@ -48,7 +48,7 @@ describe("chat provider dashboard routes", () => {
     expect(body.providers).toEqual(expect.arrayContaining([
       expect.objectContaining({
         kind: "slack",
-        ingressUrlTemplate: `${context.baseUrl}/api/chat-providers/connections/{connectionId}/ingress`,
+        ingressUrlTemplate: `${context.baseUrl}/api/chat-providers/ingress/{connectionId}`,
       }),
       expect.objectContaining({ kind: "discord" }),
     ]));
@@ -82,7 +82,7 @@ describe("chat provider dashboard routes", () => {
       providerKind: "slack",
       displayName: "Operations Slack",
       bridgeMode: "openclaw",
-      ingressUrl: `${context.baseUrl}/api/chat-providers/connections/${created.id}/ingress`,
+      ingressUrl: `${context.baseUrl}/api/chat-providers/ingress/${created.id}`,
       credentials: [
         expect.objectContaining({
           key: "openclawApiKey",

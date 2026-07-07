@@ -116,6 +116,7 @@ import type { EmbeddingService } from "../services/embedding-service.js";
 import type { KnowledgeService } from "../services/knowledge-service.js";
 import type { UpdateStatus } from "../services/update-checker-service.js";
 import type { LocalMcpCliProvider, LocalMcpInstallResult, LocalMcpSetupInfo } from "../services/local-mcp-cli-config-service.js";
+import type { ChatProviderIngressService } from "../services/chat-provider-ingress-service.js";
 import {
   parsePreviewSessionIdFromHost,
   parseSelectedPreviewPortFromRequest,
@@ -152,6 +153,7 @@ export interface DashboardServerOptions {
   knowledgeService?: KnowledgeService;
   agentPresetRepository?: AgentPresetRepository;
   chatProviderRepository?: ChatProviderRepository;
+  chatProviderIngressService?: ChatProviderIngressService;
   projectManagementRepository?: ProjectManagementRepository;
   executionRepository?: ExecutionRepository;
   getStatus: () => unknown;

@@ -91,6 +91,7 @@ import { workspaceVolumeHelperPool } from "../infrastructure/providers/cli/works
 import { disposeCommandSpawner, shutdownGitHelperPool } from "../shared/subprocess/command-runner.js";
 import { LocalMcpCliConfigService } from "../services/local-mcp-cli-config-service.js";
 import type { McpConnectionInfo } from "../contracts/mcp-connection-types.js";
+import type { ChatProviderIngressService } from "../services/chat-provider-ingress-service.js";
 
 function detectMergeConflictMessage(message: string | null | undefined): boolean {
   const normalized = String(message || "").trim().toLowerCase();
@@ -187,6 +188,7 @@ export class CodeUxServer {
   private projectSetupService: import("../services/project-setup-service.js").ProjectSetupService;
   private schedulerService: import("../services/scheduler-service.js").SchedulerService;
   private chatThreadRuntimeService: import("../services/chat-thread-runtime-service.js").ChatThreadRuntimeService;
+  private chatProviderIngressService: ChatProviderIngressService;
   private runtimeCleanupService: RuntimeCleanupService;
   private runtimeStartupRecoveryService: RuntimeStartupRecoveryService;
   private dashboardRealtimeService: DashboardRealtimeService;
@@ -266,6 +268,7 @@ export class CodeUxServer {
     this.projectSetupService = deps.projectSetupService;
     this.schedulerService = deps.schedulerService;
     this.chatThreadRuntimeService = deps.chatThreadRuntimeService;
+    this.chatProviderIngressService = deps.chatProviderIngressService;
     this.runtimeCleanupService = deps.runtimeCleanupService;
     this.runtimeStartupRecoveryService = new RuntimeStartupRecoveryService({
       sessionTracking: this.sessionTracking,
@@ -1340,6 +1343,7 @@ export class CodeUxServer {
         projectSetupService: this.projectSetupService,
         schedulerService: this.schedulerService,
         chatThreadRuntimeService: this.chatThreadRuntimeService,
+        chatProviderIngressService: this.chatProviderIngressService,
         dashboardRealtimeService: this.dashboardRealtimeService,
         logger: this.logger,
         getLiveActivitiesForActiveTasks: () => this.getLiveActivitiesForActiveTasks(),

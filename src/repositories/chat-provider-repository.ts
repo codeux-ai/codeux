@@ -522,6 +522,9 @@ export class ChatProviderRepository {
         attempt_count = ?,
         last_error = ?,
         external_message_id = ?,
+        conversation_thread_id = ?,
+        conversation_message_id = ?,
+        payload_json = ?,
         updated_at = ?
       WHERE id = ?
     `).run(
@@ -529,6 +532,9 @@ export class ChatProviderRepository {
       input.attemptCount !== undefined ? this.requireNonNegativeInteger(input.attemptCount, "attemptCount") : existing.attemptCount,
       input.lastError !== undefined ? input.lastError : existing.lastError,
       input.externalMessageId !== undefined ? input.externalMessageId : existing.externalMessageId,
+      input.conversationThreadId !== undefined ? input.conversationThreadId : existing.conversationThreadId,
+      input.conversationMessageId !== undefined ? input.conversationMessageId : existing.conversationMessageId,
+      input.payload !== undefined ? this.stringifyNullableJson(input.payload) : this.stringifyNullableJson(existing.payload),
       now,
       deliveryId,
     );

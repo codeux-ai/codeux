@@ -72,5 +72,12 @@ Dashboard settings use `src/server/chat-provider-routes.ts` to manage chat provi
 | `DELETE /api/chat-providers/channel-bindings/:bindingId` | Deletes a channel binding. |
 | `GET /api/chat-providers/connections/:connectionId/delivery-status` | Lists recent outbound delivery records for one provider connection. |
 | `GET /api/chat-providers/channel-bindings/:bindingId/delivery-status` | Lists recent outbound delivery records for one channel binding. |
+| `POST /api/chat-providers/ingress/:providerConnectionId` | Accepts authenticated inbound bridge messages, normalizes provider payloads, deduplicates external message IDs, and posts routed text to dashboard chat threads. |
 
-These endpoints only manage configuration and status records. Inbound message processing, provider polling, and outbound provider delivery are implemented by later runtime adapters.
+The ingress endpoint supports OpenClaw, webhook, and native bridge payloads for WhatsApp, iMessage, Telegram, Slack, Microsoft Teams, and Discord. OpenClaw and native bridges authenticate with bearer tokens from the configured bridge secret. Webhook bridges verify HMAC signatures when a signing secret is configured and otherwise require an authenticated bearer bridge token. All ingress requests require a fresh timestamp, and signed requests or requests with explicit nonces are replay-checked before processing.
+
+Inbound messages normalize to provider connection id, provider kind, external channel id/name, external sender id/name, text, external message id, timestamp, and redacted raw metadata. The repository idempotency lookup runs before chat posting; duplicate external messages return the existing delivery record without creating another conversation message.
+
+Channel resolution only considers enabled bindings with inbound enabled for the provider connection and external channel. If multiple projects share a channel, routing hints such as `projectSelectorPrefix`, `projectSelector`, `projectAlias`, `aliases`, or payload-level project selectors are applied first. If no hint selects exactly one binding, the runtime records a `disambiguation_needed` inbound delivery state and returns a conflict response instead of guessing a project.
+
+Routed inbound text is posted through `ChatThreadRuntimeService.postMessage` with metadata marking `source: "chat_provider"`, provider kind, external channel id, external sender, inbound delivery id, and `suppressRichWidgets: true`. Outbound provider replies and widget stripping remain separate follow-up work.
