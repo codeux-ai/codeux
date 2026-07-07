@@ -136,7 +136,7 @@ Default project settings intentionally keep `selectedTechstackId` and `applicati
 
 Default `gitMode`: `remote`. Default `executionMode`: `DOCKER`.
 `containerMemoryLimitMb` is a MiB ceiling for every Docker-backed CLI provider container. Positive values are passed to Docker as both `--memory` and `--memory-swap`; set it to `0` to omit Docker memory flags.
-`containerRunAsRoot` is an opt-in persisted contract for Docker provider containers that must run as root. It defaults to `false`, and invalid or missing settings sanitize back to `false`.
+`containerRunAsRoot` is an opt-in runtime mode for Docker provider containers that must run as root. It defaults to `false`, and invalid or missing settings sanitize back to `false`; otherwise provider containers run with the resolved host workspace UID/GID and receive a matching mounted `/etc/passwd` worker entry. Provider containers use Docker bridge networking without published ports and keep managed labels for cleanup.
 
 `containerInstallPlaywrightBrowsers` defaults to `true` for provider coding containers. When `containerCacheSetupScriptImage` is also enabled, Code UX installs Playwright Chromium and OS dependencies during the setup-cache image build, stores the browser under `/ms-playwright`, and exposes `PLAYWRIGHT_BROWSERS_PATH=/ms-playwright` so non-root provider runs can reuse the baked browser without rerunning setup.
 

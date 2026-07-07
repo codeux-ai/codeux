@@ -173,6 +173,23 @@ describe("DockerRunner", () => {
     expect(dockerArgs).toContain("--env-file");
     expect(dockerArgs[dockerArgs.indexOf("--env-file") + 1]).toBe("/tmp/code-ux-docker-123/provider.env");
     expect(dockerArgs).toContain("CODE_UX_INSTALL_PLAYWRIGHT=1");
+    expect(dockerArgs).toEqual(expect.arrayContaining([
+      "--network",
+      "bridge",
+      "--security-opt",
+      "no-new-privileges",
+      "--label",
+      "code-ux.managed=true",
+      "--user",
+      "1000:1000",
+    ]));
+    expect(dockerArgs).not.toEqual(expect.arrayContaining(["--network", "host"]));
+    expect(dockerArgs).not.toContain("-p");
+    expect(dockerArgs).not.toContain("--publish");
+    expect(dockerArgs).toEqual(expect.arrayContaining([
+      "--mount",
+      expect.stringContaining("target=/etc/passwd"),
+    ]));
     expect(dockerArgs).not.toContain("HOME=/workspace/.code-ux-home");
     const cacheInstance = vi.mocked(DockerSetupImageCache).mock.results[0]?.value as any;
     expect(cacheInstance.resolveImage).toHaveBeenCalledWith(expect.objectContaining({
@@ -180,6 +197,35 @@ describe("DockerRunner", () => {
       runtimeRoot: "/runtime-root",
       onProgress: onSetupImageProgress,
     }));
+  });
+
+  it("honors explicit root mode by omitting Docker user and passwd injection", async () => {
+    await runner.runProviderInDocker({
+      command: "codex",
+      args: ["exec", "--help"],
+      cwd: "docker-volume://workspace-1",
+      providerEnv: {},
+      sessionId: "session-1",
+      providerLabel: "codex",
+      workflowSettings: {
+        executionMode: "DOCKER",
+        containerImage: "node:24",
+        containerSetupScriptPath: "",
+        containerCacheSetupScriptImage: false,
+        containerRunAsRoot: true,
+      } as any,
+      repoPath: "/repo/project",
+      onActivity: vi.fn(),
+    });
+
+    const dockerArgs = vi.mocked(runStreamingCommand).mock.calls[0]?.[1] as string[];
+    expect(dockerArgs).not.toContain("--user");
+    expect(dockerArgs).not.toEqual(expect.arrayContaining([
+      "--mount",
+      expect.stringContaining("target=/etc/passwd"),
+    ]));
+    const passwdWrite = vi.mocked(fs.writeFile).mock.calls.find(([file]) => String(file).endsWith("/passwd"));
+    expect(passwdWrite).toBeUndefined();
   });
 
   it("supports mockup-cli Docker labels, names, env files, and argv files", async () => {

@@ -9,6 +9,9 @@ import { buildProviderMcpConfigArtifact } from "./mcp-config-format.js";
 import type { McpConnectionInfo } from "../../../contracts/mcp-connection-types.js";
 import { CommandResult, runCommandStrict, runStreamingCommand } from "../../../services/cli-process-runner.js";
 import {
+  DOCKER_BRIDGE_NETWORK_ARGS,
+  DOCKER_HOST_GATEWAY_ARGS,
+  DOCKER_NO_NEW_PRIVILEGES_ARGS,
   getDockerUserSpec,
   mapPathPrefix,
   pickContainerEnv,
@@ -178,10 +181,12 @@ export class DockerRunner implements IDockerRunner {
         "-i",
         "--name",
         containerName,
-        "--network",
-        "host",
+        ...DOCKER_BRIDGE_NETWORK_ARGS,
+        ...DOCKER_NO_NEW_PRIVILEGES_ARGS,
         "--workdir",
         CONTAINER_WORKSPACE_ROOT,
+        "--label",
+        "code-ux.managed=true",
         "--label",
         `code-ux.session-id=${sessionId}`,
         "--label",
@@ -216,8 +221,13 @@ export class DockerRunner implements IDockerRunner {
         }),
       ];
 
-      const userSpec = await this.resolveDockerUserSpec(repoPath);
-      if (userSpec) {
+      if (this.shouldAddDockerHostGateway(workflowSettings)) {
+        dockerArgs.push(...DOCKER_HOST_GATEWAY_ARGS);
+      }
+
+      const runAsRoot = workflowSettings.containerRunAsRoot === true;
+      const userSpec = runAsRoot ? "" : await this.resolveDockerUserSpec(repoPath);
+      if (!runAsRoot && userSpec) {
         dockerArgs.push("--user", userSpec);
         const passwdPath = path.join(tempRoot, "passwd");
         const [uid, gid] = userSpec.split(":");
@@ -602,6 +612,10 @@ export class DockerRunner implements IDockerRunner {
     return process.platform === "darwin"
       || process.platform === "win32"
       || os.release().toLowerCase().includes("microsoft");
+  }
+
+  private shouldAddDockerHostGateway(workflowSettings: CliWorkflowSettings): boolean {
+    return this.shouldRewriteDockerLoopbackUrls(workflowSettings) && process.platform === "linux";
   }
 
   private rewriteLoopbackUrlForDocker(rawUrl: string, enabled: boolean): string {

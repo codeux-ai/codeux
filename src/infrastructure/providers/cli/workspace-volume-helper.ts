@@ -1,5 +1,9 @@
 import { CommandResult } from "../../../services/cli-process-runner.js";
-import { toDockerMountArg } from "../../../services/cli-docker-utils.js";
+import {
+  DOCKER_NETWORK_NONE_ARGS,
+  DOCKER_NO_NEW_PRIVILEGES_ARGS,
+  toDockerMountArg,
+} from "../../../services/cli-docker-utils.js";
 import {
   DockerHelperContainerPool,
   HELPER_LABEL,
@@ -48,6 +52,10 @@ export class WorkspaceVolumeHelperPool {
           "-d",
           "--name",
           name,
+          ...DOCKER_NETWORK_NONE_ARGS,
+          ...DOCKER_NO_NEW_PRIVILEGES_ARGS,
+          "--label",
+          "code-ux.managed=true",
           "--label",
           `${HELPER_LABEL}=volume`,
           "--workdir",
@@ -117,6 +125,8 @@ export class WorkspaceVolumeHelperPool {
     const args = [
       "run",
       "--rm",
+      ...DOCKER_NETWORK_NONE_ARGS,
+      ...DOCKER_NO_NEW_PRIVILEGES_ARGS,
       "--workdir",
       CONTAINER_WORKSPACE_ROOT,
       "--mount",

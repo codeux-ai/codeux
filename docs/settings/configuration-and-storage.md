@@ -410,7 +410,7 @@ QA merge-gate notes:
   - `containerCacheSetupScriptImage` (default `true`)
     - when enabled, Docker runtime builds and reuses a derived image keyed by the base image plus setup script contents
     - cache misses fall back to the current per-run setup script path if the image build fails
-  - `containerRunAsRoot` (default `false`): persisted opt-in contract for Docker provider containers that must run as root. Invalid or missing values sanitize back to `false`; runtime argument changes are handled separately from this storage contract.
+  - `containerRunAsRoot` (default `false`): opt-in runtime mode for Docker provider containers that must run as root. Invalid or missing values sanitize back to `false`; unless this is explicitly `true`, provider containers run with the resolved host workspace UID/GID and receive a matching mounted `/etc/passwd` worker entry.
   - `containerInstallPlaywrightBrowsers` (default `true`): provider coding containers set `CODE_UX_INSTALL_PLAYWRIGHT=1`, so the shared setup script installs Playwright Chromium plus OS dependencies for agent browser checks. With setup-image caching enabled, the setup-cache build also exports `PLAYWRIGHT_BROWSERS_PATH=/ms-playwright`, bakes Chromium into that image, and leaves the directory readable for non-root provider runs. Disable this setting to skip the browser download during setup; preview containers keep it disabled unless they opt into the provider setup path explicitly.
   - `containerMountGitConfig` (default `false`): copy the host `.gitconfig` into Docker. When disabled, Docker provider runs configure Git with `containerGitUserName` and `containerGitUserEmail` instead.
   - `containerGitUserName` (default `Code UX`)
@@ -534,6 +534,7 @@ Repository demo script:
   - container `/workspace` contains only the Git checkout used for the coding task
   - provider `HOME` lives in a sibling runtime volume mounted at `/code-ux-runtime-home`, so CLI auth/config/cache/session state does not appear inside the Git worktree
   - workspace and runtime volumes are created with deterministic Code UX names and labels; fresh provider containers should not create anonymous Docker volumes
+  - provider runtime containers use Docker bridge networking without published ports, add `no-new-privileges`, and keep managed labels for cleanup. Loopback MCP URLs can still be rewritten to `host.docker.internal` for Docker Desktop/WSL-style host reachability without exposing container ports.
   - write-back happens via Git patch artifacts applied on the host, not direct file sync from the container
   - patch export preserves raw `git diff --binary` output byte-for-byte so whitespace-only EOF hunks and `\ No newline at end of file` markers still apply cleanly on the host branch
   - patch export still excludes legacy `/workspace/.code-ux-home` paths and root `/workspace/.pnpm-store` package-cache paths as a defense-in-depth guard for older preserved volumes, and untracked export staging asks Git to discover paths internally so large file sets do not exceed Docker command-line limits; fresh Docker workspaces should not contain provider home/cache state
