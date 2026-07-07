@@ -230,6 +230,7 @@ export const useChatPageData = (options?: { composerRef?: RefObject<HTMLTextArea
     handleSend: threadData.handleSend,
     navigateHistory: threadData.navigateHistory,
     handleDeleteThread: threadData.handleDeleteThread,
+    handleRenameThread: threadData.handleRenameThread,
     createThreadForCompose: threadData.createThreadForCompose,
     threadIndex: threadData.threadIndex,
     invocationIndex: invocationData.invocationIndex,

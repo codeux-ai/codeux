@@ -32,6 +32,8 @@ Automatic worker pickup occurs seamlessly. If a project has an inherited worker 
 
 UI interactions like invocation stats visibility (`code-ux:invocation-stats-visible`) and optimistic feedback states (e.g., `ActionFeedbackRegion` for refresh/errors and `role='status'` for working bubbles) are explicitly managed and durable across navigation to preserve a responsive, readable chat experience. The Threads/Invocations mode switch is a keyboard-accessible tablist with arrow/Home/End navigation, visible selected-state cues, count/status copy, and static reduced-motion indicators so selection does not depend on animated movement.
 
+Thread title edits use the same durable thread record contract as routing updates. The dashboard sends `PATCH /api/conversations/threads/:threadId` with `{ title }`, blocks empty titles before dispatch, and replaces the returned `ChatThread` in the active thread snapshot and cached rail list so title-only changes are reflected without forcing a transcript reload.
+
 Route resolution now follows this precedence on each posted message:
 - honor an explicit thread-level worker route when the targeted worker endpoint is still live
 - otherwise honor an explicit thread-level virtual provider route using the stored provider plus current `dashboard_reply` provider settings for model, API key, and thinking mode
