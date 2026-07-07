@@ -118,6 +118,22 @@ vi.mock("../../../dashboard/src/v2/lib/preview-origin.js", () => ({
     }),
 }));
 
+vi.mock("../../../dashboard/src/v2/lib/settings-api.js", () => ({
+    fetchSystemSettings: vi.fn(() => Promise.resolve({
+        techstackCatalog: {
+            defaultTechstackId: "code-ux-internal",
+            entries: [
+                {
+                    id: "code-ux-internal",
+                    label: "Code UX Internal",
+                    items: [{ id: "preact", label: "Preact" }],
+                },
+            ],
+        },
+    })),
+    saveProjectTechstackSettings: vi.fn(() => Promise.resolve()),
+}));
+
 vi.mock("@tanstack/react-router", () => ({
     Link: ({ children, to, ...props }: any) => (
         <a href={to} data-testid="router-link" {...props}>
