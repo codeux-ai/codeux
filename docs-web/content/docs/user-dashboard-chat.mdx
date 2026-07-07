@@ -23,21 +23,39 @@ To rename a thread, use the edit control beside the active thread title. The inl
 
 To start a new thread, click **+ New thread**. To change the responding agent, open the thread header dropdown and pick from the list of agent presets defined for this project.
 
-Each post triggers a routed invocation: the dashboard records the request, dispatches it to the chosen provider via the worker assignment service (routed through the `dashboard_reply` invocation type), and streams the reply back into the thread.
+Each post is a runtime operation that honors the explicit route chosen (worker route, virtual provider route, automatic live-worker pickup, or fallback). The dashboard exposes in-flight state locally, allowing you to cancel active thread turns or invocations. Failed invocation restarts preserve the failed invocation transcript and expose the existing sanitized error message with a retry action.
 
 In 3D Chat, idle quick actions send project-scoped prompts directly through the active thread. **Web App** and **Desktop App** set up the currently selected project using its current techstack setting; an unassigned existing project stays `None`. They do not create or import a new Code UX project.
 
 Planning messages can include a rich sprint status card. When Code UX can match the message to loaded live project data, the card is backed by the current task records and execution snapshot, so it updates as tasks move from queued to running, completed, failed, blocked, or quota-waiting. It shows the sprint key/name, request/task/run materialization, overall progress such as `0/7 · 0%`, queued task count, and a compact task list. If either task records or the execution snapshot are still loading, the chat keeps the generic planning status card until both live records are available for the active project.
 
-Virtual chat replies can persist structured prompt suggestions for quick next steps. JSON-mode providers may return optional `suggestions` alongside `replyMarkdown` and `action`; Code UX stores valid entries on the assistant/system message as `metadata.promptSuggestions` after trimming strings, dropping malformed entries, and capping the list at six.
+Virtual chat replies can persist structured prompt suggestions for quick next steps. JSON-mode providers may return optional `suggestions` alongside `replyMarkdown` and `action`; Code UX stores valid entries on the assistant/system message as `metadata.promptSuggestions` after trimming strings, dropping malformed entries, and capping the list at six. Suggestions appear as clickable tags below the normal markdown reply, so the transcript remains visible. Clicking a tag fills and focuses the composer with that prompt for review or editing; it does not auto-send. Invocation transcripts remain read-only and do not become composer actions.
+
+For integrators, the stored metadata uses `metadata.promptSuggestions` with `label`, `prompt`, and optional `icon` fields:
+
+```json
+{
+  "promptSuggestions": [
+    {
+      "label": "Inspect worker logs",
+      "prompt": "Inspect the latest worker logs and summarize any failing step.",
+      "icon": "terminal"
+    }
+  ]
+}
+```
+
+Supported generic icon identifiers are `sparkles`, `search`, `edit`, `code`, `terminal`, `bug`, `check`, `play`, `refresh`, `settings`, `file`, `folder`, `git-branch`, `git-pull-request`, `database`, `shield`, `book-open`, `message-circle`, `list-checks`, `rocket`, `zap`, `lightbulb`, `clipboard`, `download`, `upload`, `eye`, `package`, `server`, `clock`, and `help-circle`.
 
 ## Compacting a thread
 
 Long threads accumulate context cost. Click **Compact** to:
 
-1. Ask the assigned CLI provider to run its native compact command in the current session.
+1. Ask the assigned non-Jules CLI provider to run its native compact command inside the current provider session.
 2. Store the provider's compaction output on the thread for audit and recovery.
-3. Continue the conversation in the same provider session with a smaller context when one is active; otherwise keep the thread marked for replay from the stored handoff summary on the next turn.
+3. Continue the conversation in the same compacted provider session with a smaller context, preserving that native session id on the thread when the provider returns one.
+
+Code UX does not create a separate `:compaction` chat session for CLI providers. If a thread has no saved active session, providers with a logical continue/resume fallback can still compact through that same thread session; providers that require a concrete native session ask you to send a message in the thread before compacting.
 
 ## Invocations
 
@@ -48,9 +66,11 @@ The **Invocations** tab is a structured log of every `CallTool` MCP invocation r
 - **Timing** — start, end, duration.
 - **Linked task / sprint** — when an invocation arose from sprint orchestration.
 
-Use this for debugging your MCP client integrations — for example to see exactly what arguments your LLM is passing to tools like `manage_memory` or `manage_settings` (Note: The legacy unified `manage_code_ux` tool is deprecated).
+Use this for debugging your MCP client integrations — for example to see exactly what arguments your LLM is passing to tools like `manage_memory` or `manage_settings`.
 
 Invocation transcripts use the same live sprint status card as thread messages when planning metadata links them to a sprint. This means a planning invocation and its related chat message should show consistent task progress without a separate refresh control.
+
+Planning and QA self-reflection messages appear as structured cards instead of raw system text. Each card shows whether the reflection passed, needed improvement, or hit an error; the final decision; the attempt number; and each criterion's 5-star rating, numeric score, threshold, rationale, and improvement instructions when available.
 
 ## Posting messages
 
@@ -60,4 +80,4 @@ The composer at the bottom supports:
 - **Slash commands** that invoke management actions inline.
 - **Attachments** *(planned)*.
 
-The active thread can be deleted from the **⋯** menu. Deletion is local (the underlying provider session is closed) and does not affect sprints or tasks.
+The active thread can be deleted from the **⋯** menu. Deletion is local (the underlying provider session is closed) and does not affect sprints or tasks. You can also cancel the currently running turn for a specific thread, which aborts only the matching in-flight thread turn.

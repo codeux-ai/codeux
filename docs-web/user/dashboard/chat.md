@@ -29,7 +29,23 @@ In 3D Chat, idle quick actions send project-scoped prompts directly through the 
 
 Planning messages can include a rich sprint status card. When Code UX can match the message to loaded live project data, the card is backed by the current task records and execution snapshot, so it updates as tasks move from queued to running, completed, failed, blocked, or quota-waiting. It shows the sprint key/name, request/task/run materialization, overall progress such as `0/7 · 0%`, queued task count, and a compact task list. If either task records or the execution snapshot are still loading, the chat keeps the generic planning status card until both live records are available for the active project.
 
-Virtual chat replies can persist structured prompt suggestions for quick next steps. JSON-mode providers may return optional `suggestions` alongside `replyMarkdown` and `action`; Code UX stores valid entries on the assistant/system message as `metadata.promptSuggestions` after trimming strings, dropping malformed entries, and capping the list at six.
+Virtual chat replies can persist structured prompt suggestions for quick next steps. JSON-mode providers may return optional `suggestions` alongside `replyMarkdown` and `action`; Code UX stores valid entries on the assistant/system message as `metadata.promptSuggestions` after trimming strings, dropping malformed entries, and capping the list at six. Suggestions appear as clickable tags below the normal markdown reply, so the transcript remains visible. Clicking a tag fills and focuses the composer with that prompt for review or editing; it does not auto-send. Invocation transcripts remain read-only and do not become composer actions.
+
+For integrators, the stored metadata uses `metadata.promptSuggestions` with `label`, `prompt`, and optional `icon` fields:
+
+```json
+{
+  "promptSuggestions": [
+    {
+      "label": "Inspect worker logs",
+      "prompt": "Inspect the latest worker logs and summarize any failing step.",
+      "icon": "terminal"
+    }
+  ]
+}
+```
+
+Supported generic icon identifiers are `sparkles`, `search`, `edit`, `code`, `terminal`, `bug`, `check`, `play`, `refresh`, `settings`, `file`, `folder`, `git-branch`, `git-pull-request`, `database`, `shield`, `book-open`, `message-circle`, `list-checks`, `rocket`, `zap`, `lightbulb`, `clipboard`, `download`, `upload`, `eye`, `package`, `server`, `clock`, and `help-circle`.
 
 ## Compacting a thread
 
