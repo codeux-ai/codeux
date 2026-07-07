@@ -9,6 +9,7 @@ import { useOnboardingState } from "../../../dashboard/src/v2/hooks/useOnboardin
 import { OnboardingExperience } from "../../../dashboard/src/v2/components/onboarding/OnboardingExperience.js";
 import { GuidedDashboardTour } from "../../../dashboard/src/v2/components/onboarding/GuidedDashboardTour.js";
 import { DASHBOARD_TOUR_START_EVENT } from "../../../dashboard/src/v2/lib/onboarding-control.js";
+import { APPEARANCE_PREVIEW_EVENT } from "../../../dashboard/src/v2/lib/appearance-preview.js";
 import { cloneDefaultSettings } from "../../../dashboard/src/lib/settings.js";
 import { clearLivePayloadCacheForTests } from "../../../dashboard/src/lib/api/dashboard-api.js";
 import { DEFAULT_DASHBOARD_SETTINGS } from "../../../src/repositories/settings-defaults.js";
@@ -848,7 +849,7 @@ describe("onboarding appearance step", () => {
     delete (globalThis.window as any).codeUxDesktop;
   });
 
-  it("renders remaining appearance controls and omits removed background controls", async () => {
+  it("renders onboarding appearance controls and omits settings-only background controls", async () => {
     globalThis.window.codeUxDesktop = {
       setZoom: vi.fn(),
     } as any;
@@ -886,6 +887,8 @@ describe("onboarding appearance step", () => {
       mcpTools: [],
     };
 
+    vi.mocked(settingsApi.fetchSystemSettings).mockResolvedValue(mockSystemSettings as SystemSettings);
+
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
       const url = typeof input === "string" ? input : input.url;
       if (url.endsWith("/api/user/onboarding")) {
@@ -898,9 +901,6 @@ describe("onboarding appearance step", () => {
           dependencies: [],
           providers: []
         }), { status: 200 });
-      }
-      if (url.endsWith("/api/system-settings")) {
-        return new Response(JSON.stringify(mockSystemSettings), { status: 200 });
       }
       return new Response(JSON.stringify({}), { status: 404 });
     });
@@ -917,8 +917,11 @@ describe("onboarding appearance step", () => {
     await screen.findByText("Theme");
     expect(screen.queryByText("Navigation Mode")).not.toBeNull();
     expect(screen.queryByText("Reduced Motion")).not.toBeNull();
-    // Zoom level omitted due to codeUxDesktop missing
-    // Background Mode omitted
+    expect(screen.queryByText("Zoom Level")).not.toBeNull();
+    expect(screen.queryByText("Background Mode")).not.toBeNull();
+
+    await userEvent.click(screen.getByRole("radio", { name: /^Static\b/i }));
+    expect(await screen.findByText("Static Color")).not.toBeNull();
 
     // Verify removed controls/options are ABSENT
     expect(screen.queryByText("Animation Style")).toBeNull();
@@ -927,5 +930,59 @@ describe("onboarding appearance step", () => {
     expect(screen.queryByText("Hexagons")).toBeNull();
     expect(screen.queryByText("Custom Background Image")).toBeNull();
     expect(screen.queryByText("Upload Image")).toBeNull();
+  });
+
+  it("publishes draft appearance previews and clears them when onboarding closes", async () => {
+    const mockSystemSettings = createSystemSettings();
+    mockSystemSettings.defaults.appearance = {
+      ...mockSystemSettings.defaults.appearance,
+      theme: "DARK",
+      backgroundMode: "ANIMATED",
+      staticBackgroundColor: "#0d0f12",
+    };
+    const previews: Array<SystemSettings["defaults"]["appearance"] | null> = [];
+    const listener = (event: Event) => {
+      previews.push((event as CustomEvent<{ appearance: SystemSettings["defaults"]["appearance"] | null }>).detail.appearance);
+    };
+    window.addEventListener(APPEARANCE_PREVIEW_EVENT, listener);
+    vi.mocked(settingsApi.fetchSystemSettings).mockResolvedValue(mockSystemSettings);
+
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = typeof input === "string" ? input : input.url;
+      if (url.endsWith("/api/user/onboarding")) {
+        return new Response(JSON.stringify({ completed: false, onboardingCompletedAt: null }), { status: 200 });
+      }
+      if (url.endsWith("/api/user/onboarding/cancel")) {
+        return new Response(JSON.stringify({ completed: true, onboardingCompletedAt: "2026-06-01T00:00:00.000Z" }), { status: 200 });
+      }
+      if (url.endsWith("/api/onboarding/readiness")) {
+        return new Response(JSON.stringify({
+          checkedAt: "2026-06-01T00:00:00.000Z",
+          cluster: { status: "ready" },
+          dependencies: [],
+          providers: [],
+        }), { status: 200 });
+      }
+      return new Response(JSON.stringify({}), { status: 404 });
+    });
+
+    render(<OnboardingExperience />);
+
+    await screen.findByRole("button", { name: "Go to Appearance" });
+    await waitFor(() => {
+      expect(previews.some((appearance) => appearance?.theme === "DARK")).toBe(true);
+    });
+
+    await userEvent.click(screen.getByRole("button", { name: "Go to Appearance" }));
+    await userEvent.click(await screen.findByRole("radio", { name: /^Light\b/i }));
+    await waitFor(() => {
+      expect(previews.some((appearance) => appearance?.theme === "LIGHT")).toBe(true);
+    });
+
+    await userEvent.click(screen.getByRole("button", { name: "Close onboarding" }));
+    await waitFor(() => {
+      expect(previews[previews.length - 1]).toBeNull();
+    });
+    window.removeEventListener(APPEARANCE_PREVIEW_EVENT, listener);
   });
 });

@@ -6,7 +6,9 @@ export function applyAppearanceSettings(appearance: Partial<import('../../types.
   if (appearance.theme !== undefined) {
     let isDark = false;
     if (appearance.theme === 'SYSTEM') {
-      isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      isDark = typeof window.matchMedia === 'function'
+        ? window.matchMedia('(prefers-color-scheme: dark)').matches
+        : document.documentElement.classList.contains('dark');
     } else {
       isDark = appearance.theme === 'DARK';
     }
