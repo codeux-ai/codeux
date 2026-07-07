@@ -26,7 +26,7 @@ Two listeners:
 | Listener | Default bind | Default auth |
 | --- | --- | --- |
 | Dashboard server (REST + WebSocket + UI) | `127.0.0.1:4444` | None |
-| MCP HTTP worker gateway (on by default; `--no-mcp-http` to disable) | `127.0.0.1:<dashboardPort+1>` | Bearer token required on non-loopback hosts |
+| MCP Streamable HTTP gateway (on by default; `--no-mcp-https` to disable) | `127.0.0.1:<dashboardPort+1>` | Bearer token, explicit or auto-generated |
 
 ### Dashboard server
 
@@ -34,13 +34,14 @@ Two listeners:
 - Bind only to loopback in production (the default).
 - If exposing remotely, **front with a reverse proxy** that handles auth (basic auth, OAuth proxy, mTLS, …).
 - The WebSocket inherits the same security posture.
-- Sets `X-Frame-Options: SAMEORIGIN` and `Permissions-Policy: camera=(), microphone=(), geolocation=()` to harden the UI against framing and unexpected hardware access.
 
 ### MCP HTTP gateway
 
 - Loopback-only by default.
-- Bearer token via `--mcp-http-auth-token` (or `MCP_HTTP_AUTH_TOKEN`).
-- **Required** when binding non-loopback hosts. Code UX rejects unauthenticated requests with HTTP 401 + JSON-RPC error `-32001`.
+- Bearer token via `--mcp-http-auth-token` / `--mcp-https-auth-token` or `MCP_HTTP_AUTH_TOKEN` / `MCP_HTTPS_AUTH_TOKEN`, falling back to an auto-generated user token in `~/.code-ux/security.json` during normal dashboard startup.
+- Server mode (`--server-mode` or `CODE_UX_SERVER_MODE=true`) requires an explicit bearer token with at least 32 bearer-safe characters even on loopback and does not bind dashboard routes or websockets.
+- Code UX normal startup always supplies a token; unauthenticated requests are rejected with HTTP 401 + JSON-RPC error `-32001`.
+- The gateway defaults to 100 active Streamable HTTP sessions and a one-hour idle timeout. Operators can raise the cap for large worker clusters; this is transport protection, not a worker license limit.
 - Does not perform TLS itself — front with a reverse proxy (nginx, Caddy, Traefik) for HTTPS in production.
 
 ### Stdio transport
@@ -49,7 +50,7 @@ The stdio transport exists only when stdin is not a TTY. Since the MCP client la
 
 ## Authentication & authorisation
 
-There is no in-process user model. All authenticated callers (including management tools and the deprecated `manage_code_ux` compatibility tool) have the same level of access — read, mutate, destroy.
+There is no in-process user model. All authenticated callers (including `manage_code_ux`) have the same level of access — read, mutate, destroy.
 
 The only protection layer is the **destructive-action approval handshake**:
 
@@ -85,7 +86,7 @@ This avoids storing literal secrets in the DB.
 
 ### DOCKER mode
 
-- Workers run inside a Docker container isolated from the host filesystem (the worktree path is mounted, and provider credentials use explicit isolated mounts like `~/.gemini`, `~/.codex`, `~/.claude`, `~/.qwen`, and OpenCode rather than broad workspace root exposure).
+- Workers run inside a Docker container isolated from the host filesystem (only the worktree path and optionally the auth path are mounted).
 - Container is removed on completion.
 - Workers cannot access other projects' worktrees within the same Code UX install.
 
@@ -96,11 +97,11 @@ This avoids storing literal secrets in the DB.
 
 ## Audit trail
 
-Every management tool invocation, every cycle event, every dispatch, and every gate decision is recorded in `ExecutionInvocations`. Inspect via:
+Every `manage_code_ux` invocation, every cycle event, every dispatch, and every gate decision is recorded in `ExecutionInvocations`. Inspect via:
 
 - Dashboard → Chat → Invocations.
 - `GET /api/projects/:projectId/execution/invocations`.
-- `manage_telemetry` → `list_execution_invocations`.
+- `manage_code_ux` → `telemetry` → `list_execution_invocations`.
 
 ## Recommended deployment
 
@@ -111,12 +112,13 @@ Run on `127.0.0.1`. No further hardening needed.
 ### Team / shared server
 
 1. Run Code UX inside a dedicated user (`useradd codeux`) with limited shell access.
-2. Bind the dashboard to `127.0.0.1` only.
-3. Front the dashboard with a reverse proxy (nginx + auth basic / OAuth) on a public port if needed.
-4. Front the MCP HTTP gateway with TLS termination, restrict by client certificate or IP allowlist if exposed.
-5. Use OS-level disk encryption.
-6. Rotate API keys quarterly.
-7. Set `automationLevel: "ALWAYS_ASK"` for untrusted teammates' projects.
+2. Prefer server mode for headless MCP control planes, with an explicit bearer token from a secret manager.
+3. Bind the dashboard to `127.0.0.1` only when a dashboard-mode process is required.
+4. Front the dashboard with a reverse proxy (nginx + auth basic / OAuth) on a public port if needed.
+5. Front the MCP HTTP gateway with TLS termination, restrict by client certificate or IP allowlist if exposed.
+6. Use OS-level disk encryption.
+7. Rotate API keys and MCP HTTP bearer tokens on a planned cadence.
+8. Set `automationLevel: "ALWAYS_ASK"` for untrusted teammates' projects.
 
 ### CI / scripted
 
@@ -125,8 +127,10 @@ Avoid storing API keys in the settings DB if the runner is ephemeral; use `JULES
 ## Known limitations
 
 - **Cross-Origin Protections**: Dashboard REST routes and WebSocket connections enforce strict `Origin` and `Sec-Fetch-Site` validation. External untrusted origins are actively blocked from performing mutations, mitigating standard CSRF vectors. Still, if exposing remotely, ensure your reverse proxy enforces strong authentication.
-- **No rate limiting** at the application layer (other than `express.json({ limit: "1mb" })` for body size). Reverse proxy if needed.
+- **Bounded but not per-user rate limiting**: MCP HTTP has gateway-level rate/session protections, but Code UX still has no per-user quota model. Use a reverse proxy for tenant, IP, or organization-level policy.
 - **No structured RBAC.** Add it at a layer above Code UX (proxy, separate service mesh).
+
+For secure headless startup, health checks, settings synchronization, worker enrollment, stale-worker handling, and token rotation, see [User Guide → Connecting MCP clients](../user/mcp-clients.md#secure-headless-server-mode).
 
 ## Reporting vulnerabilities
 

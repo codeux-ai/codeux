@@ -93,6 +93,7 @@ export function createDashboardDependencies(
     memoryService: coreDeps.memoryService,
     memoryPromotionService: coreDeps.memoryPromotionService,
     embeddingModelManager: coreDeps.embeddingModelManager,
+    skillService: coreDeps.skillService,
     knowledgeService: coreDeps.knowledgeService,
     planningAgentService: planningAgentServiceRef,
     projectSetupService: projectSetupServiceRef,
@@ -107,6 +108,9 @@ export function createDashboardDependencies(
     providerRunner,
     providerConcurrencyService: coreDeps.providerConcurrencyService,
     logger: logger.child({ component: "provider-execution-service" }),
+    getMcpConnectionInfo: () => context.getMcpConnectionInfo?.() ?? null,
+    skillService: coreDeps.skillService,
+    agentPresetRepository: coreDeps.agentPresetRepository,
   });
 
   const structuredProviderResponseService = new StructuredProviderResponseService({
@@ -438,6 +442,7 @@ export function createDashboardDependencies(
     quicksprintService,
     chatThreadRuntimeService,
     executionControlService,
+    taskRerunService,
     memoryRemediationService,
     logger: logger.child({ component: "scheduler-service" }),
   });

@@ -139,6 +139,92 @@ describe("ProviderExecutionService", () => {
     );
   });
 
+  it("does not append persistent skill instructions or mounts for disabled agents", async () => {
+    providerRunner.runProvider.mockResolvedValue(mockResult);
+    const skillService = {
+      resolvePersistentSkillStorageRuntime: vi.fn(),
+    };
+    service = new ProviderExecutionService({
+      providerRunner,
+      executionRepository,
+      logger: logger as any,
+      getGithubToken: vi.fn(),
+      getMcpConnectionInfo: vi.fn(),
+      agentPresetRepository: {
+        getAgentPreset: vi.fn().mockReturnValue({
+          id: "agent-1",
+          projectId: "proj-1",
+          persistentSkillStorage: { enabled: false },
+          persistentSkillStorageIds: ["storage-1"],
+        }),
+      } as any,
+      skillService: skillService as any,
+    });
+
+    await service.executeProvider({
+      ...defaultArgs,
+      agentMcpAccess: { codeUxEnabled: false, codeUxToolToggles: [], linkedServerIds: [] },
+      mcpAgentId: "agent-1",
+    });
+
+    expect(skillService.resolvePersistentSkillStorageRuntime).not.toHaveBeenCalled();
+    expect(providerRunner.runProvider).toHaveBeenCalledWith(expect.objectContaining({
+      prompt: "test prompt",
+      mcpConnection: null,
+      persistentSkillStorageMounts: undefined,
+    }));
+  });
+
+  it("appends persistent skill guidance, writable mounts, and retrieval MCP for enabled attached agents", async () => {
+    providerRunner.runProvider.mockResolvedValue(mockResult);
+    const skillRuntime = {
+      projectId: "proj-1",
+      agentPresetId: "agent-1",
+      instructionMarkdown: [
+        "## PERSISTENT SKILL STORAGE (Opt-in)",
+        "Use search_skills before creating duplicates.",
+      ].join("\n"),
+      mounts: [{
+        storageId: "storage-1",
+        storageName: "Runtime Skills",
+        hostPath: "/home/test/.code-ux/persistent-skill-storages/proj-1/agent-1/storage-1",
+        containerPath: "/code-ux/persistent-skills/storage-1",
+      }],
+    };
+    service = new ProviderExecutionService({
+      providerRunner,
+      executionRepository,
+      logger: logger as any,
+      getGithubToken: vi.fn(),
+      getMcpConnectionInfo: vi.fn().mockReturnValue({ url: "http://127.0.0.1:4444/mcp", authToken: "token" }),
+      agentPresetRepository: {
+        getAgentPreset: vi.fn().mockReturnValue({
+          id: "agent-1",
+          projectId: "proj-1",
+          persistentSkillStorage: { enabled: true },
+          persistentSkillStorageIds: ["storage-1"],
+        }),
+      } as any,
+      skillService: {
+        resolvePersistentSkillStorageRuntime: vi.fn().mockResolvedValue(skillRuntime),
+      } as any,
+    });
+
+    await service.executeProvider({
+      ...defaultArgs,
+      agentMcpAccess: { codeUxEnabled: false, codeUxToolToggles: [], linkedServerIds: [] },
+      mcpAgentId: "agent-1",
+    });
+
+    expect(providerRunner.runProvider).toHaveBeenCalledWith(expect.objectContaining({
+      prompt: expect.stringContaining("Use search_skills before creating duplicates."),
+      mcpConnection: { url: "http://127.0.0.1:4444/mcp", authToken: "token", agentId: "agent-1" },
+      persistentSkillStorageMounts: skillRuntime.mounts,
+    }));
+    expect(providerRunner.runProvider.mock.calls[0]![0].prompt).toContain("test prompt");
+    expect(providerRunner.runProvider.mock.calls[0]![0].prompt).toContain("## PERSISTENT SKILL STORAGE");
+  });
+
   it("logs provider subprocess crashes as invocation metadata without raw prompt, command payloads, or secrets", async () => {
     const rawPrompt = "implement the secret rollout transcript";
     const rawApiKey = "sk-provider-secret";
@@ -889,6 +975,11 @@ describe("ProviderExecutionService", () => {
     await expect(service.executeProvider({ ...defaultArgs, signal: abortController.signal }))
       .rejects.toThrow("Aborted");
 
-    expect(sleepWithSignal).toHaveBeenCalledWith(1000, abortController.signal);
+    expect(sleepWithSignal).toHaveBeenCalledWith(expect.any(Number), abortController.signal);
+    expect(sleepWithSignal).toHaveBeenCalledTimes(1);
+    const [delayMs, signal] = vi.mocked(sleepWithSignal).mock.calls[0] ?? [];
+    expect(delayMs).toBeGreaterThan(0);
+    expect(delayMs).toBeLessThanOrEqual(1000);
+    expect(signal).toBe(abortController.signal);
   });
 });

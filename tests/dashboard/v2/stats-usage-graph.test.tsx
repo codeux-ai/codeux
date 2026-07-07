@@ -96,8 +96,8 @@ describe("Chart View Models", () => {
       { id: "s3", grouping: "G2" },
     ] as any;
     const grouped = groupChartSeries(chartSeries);
-    expect(grouped["G1"]?.length).toBe(2);
-    expect(grouped["G2"]?.length).toBe(1);
+    expect(grouped.find((group) => group.label === "G1")?.series.length).toBe(2);
+    expect(grouped.find((group) => group.label === "G2")?.series.length).toBe(1);
   });
 
   it("groupChartSeries sorts long series lists into readable categories", () => {
@@ -111,7 +111,7 @@ describe("Chart View Models", () => {
       { id: "git_files", label: "Files Changed", grouping: "git" },
     ] as any);
 
-    expect(Object.keys(grouped)).toEqual([
+    expect(grouped.map((group) => group.label)).toEqual([
       "Totals",
       "Token details",
       "Source confidence",
@@ -119,7 +119,30 @@ describe("Chart View Models", () => {
       "Purpose calls",
       "Git",
     ]);
-    expect(grouped["Providers"]?.map((series) => series.label)).toEqual(["Alpha Tokens", "Beta Tokens"]);
+    expect(grouped.find((group) => group.label === "Providers")?.series.map((series) => series.label)).toEqual(["Alpha Tokens", "Beta Tokens"]);
+  });
+
+  it("groupChartSeries includes active, total, and default-enabled counts", () => {
+    const grouped = groupChartSeries([
+      { id: "tokens", label: "Tokens", grouping: "usage", defaultEnabled: true },
+      { id: "active", label: "Active Time", grouping: "usage", defaultEnabled: false },
+      { id: "git_files", label: "Files Changed", grouping: "git", defaultEnabled: false },
+    ] as any, { tokens: true, active: true, git_files: false });
+
+    expect(grouped).toEqual([
+      expect.objectContaining({
+        label: "Usage",
+        activeCount: 2,
+        totalCount: 2,
+        defaultEnabledCount: 1,
+      }),
+      expect.objectContaining({
+        label: "Git",
+        activeCount: 0,
+        totalCount: 1,
+        defaultEnabledCount: 0,
+      }),
+    ]);
   });
 
   it("formats cost values with exactly two decimal places", () => {
@@ -302,7 +325,9 @@ describe("UsageFilterMenu", () => {
         stats={stats}
         enabledSeries={{ tokens: true, active: false }}
         setEnabledSeries={vi.fn()}
+        resetEnabledSeries={vi.fn()}
         activeSeriesCount={1}
+        seriesGroups={groupChartSeries(stats.chartSeries, { tokens: true, active: false })}
       />
     );
 
@@ -349,6 +374,9 @@ describe("InteractiveUsageChart", () => {
       setDragCurrentIndex: vi.fn(),
       enabledSeries: { tokens: true, active: true },
       setEnabledSeries: vi.fn(),
+      resetEnabledSeries: vi.fn(),
+      activeSeriesCount: 2,
+      seriesGroups: groupChartSeries(stats.chartSeries, { tokens: true, active: true }),
     };
 
     render(<InteractiveUsageChart stats={stats} loading={false} error={null} refresh={vi.fn()} chartState={chartState} />);
@@ -387,6 +415,9 @@ describe("InteractiveUsageChart", () => {
       setDragCurrentIndex: vi.fn(),
       enabledSeries: { tokens: false, active: true },
       setEnabledSeries: vi.fn(),
+      resetEnabledSeries: vi.fn(),
+      activeSeriesCount: 1,
+      seriesGroups: groupChartSeries(stats.chartSeries, { tokens: false, active: true }),
     };
 
     const { rerender } = render(<InteractiveUsageChart stats={stats} loading={false} error={null} refresh={vi.fn()} chartState={chartState} />);
@@ -429,6 +460,7 @@ describe("InteractiveUsageChart", () => {
       visualMode: "trend" as any, setVisualMode: vi.fn(), zoomRange: null, setZoomRange: vi.fn(),
       hoveredIndex: null, setHoveredIndex: vi.fn(), dragStartIndex: null, setDragStartIndex: vi.fn(),
       dragCurrentIndex: null, setDragCurrentIndex: vi.fn(), enabledSeries: { tokens: true }, setEnabledSeries: vi.fn(),
+      resetEnabledSeries: vi.fn(), activeSeriesCount: 1, seriesGroups: groupChartSeries(stats.chartSeries, { tokens: true }),
     };
 
     const mockRefresh = vi.fn().mockResolvedValue(undefined);
@@ -456,6 +488,7 @@ describe("InteractiveUsageChart", () => {
       visualMode: "trend" as any, setVisualMode: vi.fn(), zoomRange: null, setZoomRange: vi.fn(),
       hoveredIndex: null, setHoveredIndex: vi.fn(), dragStartIndex: null, setDragStartIndex: vi.fn(),
       dragCurrentIndex: null, setDragCurrentIndex: vi.fn(), enabledSeries: { tokens: true }, setEnabledSeries: vi.fn(),
+      resetEnabledSeries: vi.fn(), activeSeriesCount: 1, seriesGroups: groupChartSeries(stats.chartSeries, { tokens: true }),
     };
 
     render(<InteractiveUsageChart stats={stats} loading={false} error={null} refresh={vi.fn()} chartState={chartState} />);

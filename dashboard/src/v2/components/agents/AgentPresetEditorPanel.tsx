@@ -20,8 +20,9 @@ import {
   Palette,
   SlidersHorizontal,
   Library,
+  Database,
 } from "lucide-preact";
-import type { AgentMcpAccessConfig, AgentPreset, CustomMcpServer } from "../../types.js";
+import type { AgentMcpAccessConfig, AgentPreset, CustomMcpServer, SkillStorageRecord } from "../../types.js";
 import type { AgentAvatarExpression } from "../../lib/agent-avatar.js";
 import { DEFAULT_AGENT_MEMORY_CONFIG, type AgentMemoryConfig } from "../../memory-types.js";
 import { AgentMemoryConfigPanel } from "./AgentMemoryConfigPanel.js";
@@ -216,9 +217,11 @@ export const AgentPresetEditorPanel: FunctionComponent<{
   defaultMemoryInstruction?: string;
   providerOptions?: AgentProviderOption[];
   availableMcpServers?: CustomMcpServer[];
+  availableSkillStorages?: SkillStorageRecord[];
+  isDashboardReplyAgent?: boolean;
   onSave: (id: string, updates: Partial<AgentPreset>) => void;
   onCancel: () => void;
-}> = ({ preset, saving, defaultMemoryInstruction = "", providerOptions = [], availableMcpServers = [], onSave, onCancel }) => {
+}> = ({ preset, saving, defaultMemoryInstruction = "", providerOptions = [], availableMcpServers = [], availableSkillStorages = [], isDashboardReplyAgent = false, onSave, onCancel }) => {
   const panelRef = useRef<HTMLFormElement>(null);
   const nameRef = useRef<HTMLInputElement>(null);
   const descriptionRef = useRef<HTMLTextAreaElement>(null);
@@ -242,6 +245,8 @@ export const AgentPresetEditorPanel: FunctionComponent<{
   const [memoryConfig, setMemoryConfig] = useState<AgentMemoryConfig>(
     preset.memoryConfig ?? DEFAULT_AGENT_MEMORY_CONFIG
   );
+  const [persistentSkillStorageIds, setPersistentSkillStorageIds] = useState<string[]>(preset.persistentSkillStorageIds ?? []);
+  const [persistentSkillsEnabled, setPersistentSkillsEnabled] = useState(Boolean(preset.persistentSkillStorage?.enabled));
   const [showMemoryPanel, setShowMemoryPanel] = useState(false);
   const memoryButtonRef = useRef<HTMLButtonElement>(null);
   const [touched, setTouched] = useState<Record<string, boolean>>({});
@@ -275,6 +280,8 @@ export const AgentPresetEditorPanel: FunctionComponent<{
     setAvatarConfig(preset.avatarConfig);
     setMcpAccess(normalizeAgentMcpAccess(preset.mcpAccess ?? defaultAgentMcpAccess()));
     setMemoryConfig(preset.memoryConfig ?? DEFAULT_AGENT_MEMORY_CONFIG);
+    setPersistentSkillStorageIds(preset.persistentSkillStorageIds ?? []);
+    setPersistentSkillsEnabled(Boolean(preset.persistentSkillStorage?.enabled));
     setShowMemoryPanel(false);
     setTouched({});
     setKnowledgeDirty(false);
@@ -314,6 +321,8 @@ export const AgentPresetEditorPanel: FunctionComponent<{
     if (JSON.stringify(avatarConfig ?? {}) !== JSON.stringify(preset.avatarConfig ?? {})) return true;
     if (JSON.stringify(mcpAccess) !== JSON.stringify(normalizeAgentMcpAccess(preset.mcpAccess ?? defaultAgentMcpAccess()))) return true;
     if (JSON.stringify(memoryConfig) !== JSON.stringify(preset.memoryConfig ?? DEFAULT_AGENT_MEMORY_CONFIG)) return true;
+    if (JSON.stringify(persistentSkillStorageIds) !== JSON.stringify(preset.persistentSkillStorageIds ?? [])) return true;
+    if (persistentSkillsEnabled !== Boolean(preset.persistentSkillStorage?.enabled)) return true;
     return false;
   }, [
     name,
@@ -326,6 +335,8 @@ export const AgentPresetEditorPanel: FunctionComponent<{
     avatarConfig,
     mcpAccess,
     memoryConfig,
+    persistentSkillStorageIds,
+    persistentSkillsEnabled,
     preset,
     knowledgeDirty,
   ]);
@@ -375,6 +386,8 @@ export const AgentPresetEditorPanel: FunctionComponent<{
       avatarConfig,
       mcpAccess,
       memoryConfig,
+      persistentSkillStorageIds,
+      persistentSkillStorage: { enabled: persistentSkillsEnabled && persistentSkillStorageIds.length > 0 },
     });
     setKnowledgeDirty(false);
   };
@@ -436,8 +449,19 @@ export const AgentPresetEditorPanel: FunctionComponent<{
   const visibleMcpItems = mcpItems.slice(0, 5);
   const hiddenMcpCount = mcpItems.length - visibleMcpItems.length;
   const activeMcpCount = mcpItems.filter((item) => item.active).length;
+  const persistentSkillsActive = persistentSkillsEnabled && persistentSkillStorageIds.length > 0;
 
   const toggleMcpItem = (item: (typeof mcpItems)[number]): void => {
+    if (item.kind === "code_ux" && !item.active) {
+      setMcpModalOpen(true);
+      setActionStatus({
+        tone: isDashboardReplyAgent ? "neutral" : "error",
+        message: isDashboardReplyAgent
+          ? "Review scheduler-only Code UX access before enabling it for the dashboard reply agent."
+          : "Code UX access is risk-gated for non-chat agents. Review the MCP manager warning before enabling it.",
+      });
+      return;
+    }
     setActionStatus({
       tone: "success",
       message: `${item.label} ${item.active ? "disabled" : "enabled"} for this agent. Save Agent to persist MCP access.`,
@@ -824,6 +848,70 @@ export const AgentPresetEditorPanel: FunctionComponent<{
               </div>
             </SectionCard>
 
+          <SectionCard icon={Database} eyebrow="Persistent Skills" title="Storage Attachments">
+            <div className="flex flex-col gap-4 rounded-2xl border border-black/[0.05] bg-white/30 p-5 backdrop-blur-md dark:border-white/[0.05] dark:bg-white/[0.02]">
+              <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                <div className="min-w-0">
+                  <div className="text-sm font-bold text-slate-800 dark:text-slate-100">
+                    Persistent skill retrieval
+                  </div>
+                  <p className="mt-1 text-[12px] leading-relaxed text-slate-500 dark:text-slate-400">
+                    Attach durable skill storages to this agent. Retrieval is disabled until storage is attached and this opt-in is enabled.
+                  </p>
+                </div>
+                <div className="flex shrink-0 items-center gap-3">
+                  <span className={`rounded-full border px-3 py-1 text-[10px] font-bold uppercase tracking-[0.14em] ${persistentSkillsActive ? "border-signal-500/25 bg-signal-500/[0.08] text-signal-700 dark:text-signal-200" : "border-black/[0.06] bg-black/[0.03] text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-400"}`}>
+                    {persistentSkillsActive ? "Enabled" : "Default off"}
+                  </span>
+                  <label className="relative inline-flex cursor-pointer shrink-0 items-center">
+                    <input
+                      type="checkbox"
+                      aria-label="Enable persistent skill retrieval"
+                      checked={persistentSkillsEnabled}
+                      disabled={saving || persistentSkillStorageIds.length === 0}
+                      onChange={(event) => setPersistentSkillsEnabled(event.currentTarget.checked)}
+                      className="peer sr-only"
+                    />
+                    <div className="h-6 w-11 rounded-full border border-black/[0.08] bg-slate-200 transition-colors peer-checked:border-signal-500/40 peer-checked:bg-signal-500/30 peer-focus-visible:ring-2 peer-focus-visible:ring-signal-500/30 peer-disabled:opacity-50 dark:border-white/[0.08] dark:bg-void-800" />
+                    <div className="absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white shadow-sm transition-all peer-checked:translate-x-5 peer-checked:bg-signal-500 dark:bg-slate-500 dark:peer-checked:bg-signal-400" />
+                  </label>
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {availableSkillStorages.length === 0 ? (
+                  <div className="rounded-[1rem] border border-dashed border-black/[0.06] bg-black/[0.02] px-4 py-3 text-xs leading-relaxed text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.02] dark:text-slate-400">
+                    No project skill storages are available. Create one in Settings, Agents.
+                  </div>
+                ) : availableSkillStorages.map((storage) => {
+                  const checked = persistentSkillStorageIds.includes(storage.id);
+                  return (
+                    <label
+                      key={storage.id}
+                      className={`inline-flex cursor-pointer items-center gap-2 rounded-full border px-3 py-2 text-[11px] font-semibold transition-colors ${checked ? "border-signal-500/30 bg-signal-500/[0.1] text-signal-800 dark:text-signal-100" : "border-black/[0.06] bg-black/[0.02] text-slate-600 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-300"}`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        disabled={saving}
+                        onChange={() => {
+                          const nextIds = checked
+                            ? persistentSkillStorageIds.filter((id) => id !== storage.id)
+                            : [...persistentSkillStorageIds, storage.id];
+                          setPersistentSkillStorageIds(nextIds);
+                          if (nextIds.length === 0) {
+                            setPersistentSkillsEnabled(false);
+                          }
+                        }}
+                        className="h-4 w-4 rounded border-black/20 text-signal-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-focus-ring)]"
+                      />
+                      {storage.name}
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+          </SectionCard>
+
           {/* Knowledge subscriptions */}
           <SectionCard icon={Library} eyebrow="Grounding" title="Knowledge Base">
             <p className="-mt-1 text-[12px] leading-relaxed text-slate-500 dark:text-slate-400">
@@ -931,6 +1019,7 @@ export const AgentPresetEditorPanel: FunctionComponent<{
                               setActionStatus({ tone: "success", message: "MCP access updated. Save Agent to persist tool access." });
                             }}
                             availableServers={availableMcpServers}
+                            isDashboardReplyAgent={isDashboardReplyAgent}
                             onClose={() => setMcpModalOpen(false)}
                           />
                         )}

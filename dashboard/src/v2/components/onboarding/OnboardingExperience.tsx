@@ -29,7 +29,7 @@ import {
   Star,
   X,
 } from "lucide-preact";
-import { fetchOnboardingReadiness } from "../../../lib/api/dashboard-api.js";
+import { fetchOnboardingReadiness, installOnboardingDependencies } from "../../../lib/api/dashboard-api.js";
 import { fetchSystemSettings, saveSystemSettings } from "../../lib/settings-api.js";
 import { ONBOARDING_OPEN_EVENT, ONBOARDING_STORAGE_KEY, startDashboardTour } from "../../lib/onboarding-control.js";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
@@ -45,9 +45,19 @@ import { PillChoiceGroup, Row, SelectInput, TextInput, Toggle } from "../setting
 import { applyAppearanceSettings } from "../../lib/apply-appearance.js";
 import { SectionCard } from "../settings/panels/SharedPanelComponents.js";
 import { JiraIcon } from "../icons/JiraIcon.js";
+import { OnboardingInstallationStep } from "./OnboardingInstallationStep.js";
 
 type IntroPhase = "intro" | "transitioning" | "onboarding";
-import type { OnboardingProviderCredentialStatus, ProviderConfigId, ProviderId, ProjectSettings, SystemSettings } from "../../../types.js";
+import type {
+  OnboardingDependencyInstallerResult,
+  OnboardingDependencyInstallMode,
+  OnboardingProviderCredentialStatus,
+  OnboardingRuntimeReadiness,
+  ProviderConfigId,
+  ProviderId,
+  ProjectSettings,
+  SystemSettings,
+} from "../../../types.js";
 import { getSafeUrl } from "../../lib/safe-url.js";
 import {
   buildProviderConfigId,
@@ -63,6 +73,7 @@ import {
 } from "../../lib/settings-view-models.js";
 import {
   cloneSystemSettings,
+  defaultOnboardingReadiness,
   onboardingProviderTypes,
   useOnboardingStepFlow,
   type StepId,
@@ -133,6 +144,7 @@ const providerLabels: Record<ProviderId, string> = {
   "qwen-code": "Qwen Code",
   opencode: "OpenCode",
   antigravity: "Antigravity",
+  "mockup-cli": "Mockup CLI",
 };
 
 const PROVIDER_TYPES = onboardingProviderTypes;
@@ -145,6 +157,7 @@ const providerDescriptions: Record<ProviderId, string> = {
   "qwen-code": "Qwen Code CLI with OAuth, Alibaba Coding Plan, or custom model provider config.",
   opencode: "OpenCode CLI with local auth, provider keys, or OpenAI-compatible endpoints.",
   antigravity: "Antigravity CLI (agy) for Google-powered local container execution.",
+  "mockup-cli": "Internal test-only mock provider.",
 };
 
 const getProviderWatermark = (providerId: ProviderId): string => (
@@ -200,6 +213,25 @@ const getOSInfo = (plat: string) => {
   };
 };
 
+const normalizeOnboardingReadiness = (nextReadiness: OnboardingRuntimeReadiness): OnboardingRuntimeReadiness => {
+  const installers = nextReadiness.installers ?? defaultOnboardingReadiness.installers;
+  return {
+    ...defaultOnboardingReadiness,
+    ...nextReadiness,
+    cluster: {
+      ...defaultOnboardingReadiness.cluster,
+      ...nextReadiness.cluster,
+    },
+    dependencies: nextReadiness.dependencies ?? [],
+    providers: nextReadiness.providers ?? [],
+    installers: {
+      ...defaultOnboardingReadiness.installers,
+      ...installers,
+      options: installers.options ?? [],
+    },
+  };
+};
+
 export const OnboardingExperience: FunctionComponent = () => {
   const navigate = useNavigate();
   const backdropRef = useRef<HTMLDivElement>(null);
@@ -227,6 +259,9 @@ export const OnboardingExperience: FunctionComponent = () => {
   } = useOnboardingStepFlow();
   const [introPhase, setIntroPhase] = useState<IntroPhase>("intro");
   const [checkingReadiness, setCheckingReadiness] = useState(false);
+  const [runningInstallMode, setRunningInstallMode] = useState<OnboardingDependencyInstallMode | null>(null);
+  const [lastInstallResult, setLastInstallResult] = useState<OnboardingDependencyInstallerResult | null>(null);
+  const [installError, setInstallError] = useState<string | null>(null);
   const [validationMessage, setValidationMessage] = useState<string | null>(null);
   const reducedMotion = useReducedMotion();
   const gsapTokens = useGsapInteractionTokens();
@@ -286,7 +321,7 @@ export const OnboardingExperience: FunctionComponent = () => {
         fetchOnboardingReadiness(),
         fetchSystemSettings(),
       ]);
-      dispatch({ type: "load-success", readiness: nextReadiness, settings: nextSettings });
+      dispatch({ type: "load-success", readiness: normalizeOnboardingReadiness(nextReadiness), settings: nextSettings });
     } catch (loadError) {
       dispatch({ type: "load-failure", error: loadError instanceof Error ? loadError.message : String(loadError) });
     } finally {
@@ -299,6 +334,29 @@ export const OnboardingExperience: FunctionComponent = () => {
       void load();
     }
   }, [open]);
+
+  const runDependencyInstall = async (mode: OnboardingDependencyInstallMode): Promise<void> => {
+    setRunningInstallMode(mode);
+    setInstallError(null);
+    try {
+      const result = await installOnboardingDependencies(mode);
+      setLastInstallResult(result);
+      await load();
+    } catch (dependencyInstallError) {
+      setInstallError(dependencyInstallError instanceof Error ? dependencyInstallError.message : String(dependencyInstallError));
+    } finally {
+      setRunningInstallMode(null);
+    }
+  };
+
+  const handleAutoInstall = (): void => {
+    const recommendedOption = readiness.installers.options.find((option) => option.mode === readiness.installers.recommendedMode);
+    if (!recommendedOption?.available) {
+      setInstallError("No recommended dependency installer is available for this platform. Use the manual links and recheck readiness after setup.");
+      return;
+    }
+    void runDependencyInstall(recommendedOption.mode);
+  };
 
   useLayoutEffect(() => {
     if (!open || !shellRef.current) {
@@ -929,79 +987,19 @@ export const OnboardingExperience: FunctionComponent = () => {
             ) : null}
 
             {active.id === "installation" ? (
-              <div className="space-y-5">
-                <div data-onboarding-card className={`relative overflow-hidden rounded-3xl border p-5 shadow-[0_18px_45px_rgba(15,23,42,0.05)] ${clusterReady ? "border-signal-500/20 bg-signal-500/8" : "border-status-amber/25 bg-status-amber/10"}`}>
-                  <div aria-hidden className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/70 to-transparent" />
-                  <div className="flex items-start gap-4">
-                    <div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl ${clusterReady ? "bg-signal-500/12 text-signal-600" : "bg-status-amber/15 text-status-amber"}`}>
-                      {clusterReady ? <Check className="h-6 w-6" /> : <Info className="h-6 w-6" />}
-                    </div>
-                    <div aria-live="polite">
-                      <div className="text-base font-semibold text-slate-900 dark:text-white">{readiness.cluster.label}</div>
-                      <div className="mt-1 text-sm leading-relaxed text-slate-500 dark:text-slate-400">{readiness.cluster.detail}</div>
-                    </div>
-                  </div>
-                </div>
-                <div className="grid gap-3 md:grid-cols-3">
-                  {readiness.dependencies.map((dependency) => (
-                    <div data-onboarding-card key={dependency.id} className="rounded-2xl border border-black/[0.06] bg-white/75 p-4 shadow-[0_10px_30px_rgba(15,23,42,0.035)] dark:border-white/[0.06] dark:bg-white/[0.04]">
-                      <div className="flex items-center justify-between gap-3">
-                        <div className="text-sm font-bold text-slate-900 dark:text-white">{dependency.label}</div>
-                        <span className={`rounded-full px-2 py-1 text-[9px] font-bold uppercase tracking-[0.14em] ${dependency.status === "ready" ? "bg-signal-500/10 text-signal-700 dark:text-signal-300" : "bg-status-amber/10 text-status-amber"}`}>
-                          {dependency.status}
-                        </span>
-                      </div>
-                      <div className="mt-2 text-xs leading-relaxed text-slate-500 dark:text-slate-400">{dependency.description}</div>
-                      {dependency.status !== "ready" ? (
-                        <div className="mt-3 space-y-2.5">
-                          <div className="rounded-xl bg-black/[0.04] p-3 text-xs leading-relaxed text-slate-600 dark:bg-white/[0.05] dark:text-slate-300">
-                            {dependency.resolution}
-                          </div>
-                          {(dependency.id === "docker-cli" || dependency.id === "docker-daemon") && (
-                            <div className="flex flex-col gap-2 pt-1">
-                              <a
-                                href={getSafeUrl(getOSInfo(platform).dockerDesktopLink)}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-signal-500/20 bg-signal-500/10 py-2 text-center text-xs font-bold uppercase tracking-[0.12em] text-signal-700 hover:bg-signal-500/15 dark:text-signal-200"
-                              >
-                                Docker Desktop for {getOSInfo(platform).osLabel}
-                              </a>
-                              <a
-                                href={getSafeUrl(getOSInfo(platform).dockerDownloadLink)}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-black/[0.06] bg-black/[0.03] py-2 text-center text-xs font-bold uppercase tracking-[0.12em] text-slate-600 hover:bg-black/[0.06] dark:border-white/[0.08] dark:bg-white/[0.05] dark:text-slate-300 dark:hover:bg-white/[0.08]"
-                              >
-                                Docker Download
-                              </a>
-                            </div>
-                          )}
-                          {dependency.id === "git-cli" && (
-                            <div className="flex flex-col gap-2 pt-1">
-                              <a
-                                href={getSafeUrl(getOSInfo(platform).gitLink)}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-signal-500/20 bg-signal-500/10 py-2 text-center text-xs font-bold uppercase tracking-[0.12em] text-signal-700 hover:bg-signal-500/15 dark:text-signal-200"
-                              >
-                                Download Git for {getOSInfo(platform).osLabel}
-                              </a>
-                              <div className="rounded-lg bg-black/[0.04] px-2.5 py-1.5 font-mono text-[10px] text-slate-500 dark:bg-white/[0.05] dark:text-slate-400">
-                                {getOSInfo(platform).gitInstruction}
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      ) : null}
-                    </div>
-                  ))}
-                </div>
-                <button type="button" onClick={() => void load()} disabled={checkingReadiness} aria-describedby="onboarding-status" className="inline-flex items-center gap-2 rounded-2xl border border-black/[0.08] bg-white px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50 disabled:cursor-wait disabled:opacity-60 dark:border-white/[0.08] dark:bg-white/[0.05] dark:text-slate-200">
-                  <RefreshCw className={`h-4 w-4 ${checkingReadiness ? "animate-spin motion-reduce:animate-none" : ""}`} />
-                  {checkingReadiness ? "Checking" : "Recheck"}
-                </button>
-              </div>
+              <OnboardingInstallationStep
+                clusterReady={clusterReady}
+                readiness={readiness}
+                osInfo={getOSInfo(platform)}
+                selectedInstallMode={runningInstallMode ?? lastInstallResult?.mode ?? null}
+                runningInstallMode={runningInstallMode}
+                lastInstallResult={lastInstallResult}
+                installError={installError}
+                checkingReadiness={checkingReadiness}
+                onAutoInstall={handleAutoInstall}
+                onInstallMode={(mode) => void runDependencyInstall(mode)}
+                onRecheck={() => void load()}
+              />
             ) : null}
 
             {active.id === "introduction" ? (

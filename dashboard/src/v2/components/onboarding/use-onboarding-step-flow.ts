@@ -36,6 +36,11 @@ export const defaultOnboardingReadiness: OnboardingRuntimeReadiness = {
   },
   dependencies: [],
   providers: [],
+  installers: {
+    platform: "unsupported",
+    recommendedMode: null,
+    options: [],
+  },
 };
 
 export interface OnboardingFlowState {

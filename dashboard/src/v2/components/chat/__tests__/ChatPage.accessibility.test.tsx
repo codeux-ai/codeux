@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
-import { fireEvent, render, screen } from '@testing-library/preact';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/preact';
+import userEvent from "@testing-library/user-event";
+import { afterEach, describe, it, expect, vi, beforeEach } from 'vitest';
 import * as matchers from '@testing-library/jest-dom/matchers';
 expect.extend(matchers);
 
@@ -59,6 +60,7 @@ const mocks = vi.hoisted(() => {
     handleSend: vi.fn(),
     navigateHistory: vi.fn(() => false),
     handleDeleteThread: vi.fn(),
+    handleRenameThread: vi.fn(() => Promise.resolve()),
     createThreadForCompose: vi.fn(),
     threadIndex: new Map(),
     invocationIndex: new Map(),
@@ -109,6 +111,10 @@ vi.mock('../../../hooks/use-project-effective-settings.js', () => ({
 }));
 
 describe('ChatPage Accessibility', () => {
+  afterEach(() => {
+    cleanup();
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.reducedMotion.value = false;
@@ -125,6 +131,7 @@ describe('ChatPage Accessibility', () => {
       input: "Ship it",
       error: "Test error",
       feedback: { status: "idle", message: null },
+      handleRenameThread: vi.fn(() => Promise.resolve()),
     };
   });
 
@@ -153,11 +160,13 @@ describe('ChatPage Accessibility', () => {
     expect(tablist).toHaveClass('flex-wrap');
 
     const tabs = screen.getAllByRole('tab');
-    expect(tabs).toHaveLength(2);
-    expect(tabs[0]).toHaveAttribute('aria-selected', 'true');
-    expect(tabs[0]).toHaveAccessibleName('Threads, 2 threads');
-    expect(tabs[1]).toHaveAttribute('aria-selected', 'false');
-    expect(tabs[1]).toHaveAccessibleName('Invocations, 1 running');
+    expect(tabs).toHaveLength(3);
+    expect(tabs[0]).toHaveAttribute('aria-selected', 'false');
+    expect(tabs[0]).toHaveAccessibleName('3D Chat, animated project manager, 2 threads');
+    expect(tabs[1]).toHaveAttribute('aria-selected', 'true');
+    expect(tabs[1]).toHaveAccessibleName('Threads, 2 threads');
+    expect(tabs[2]).toHaveAttribute('aria-selected', 'false');
+    expect(tabs[2]).toHaveAccessibleName('Invocations, 1 running');
     expect(screen.queryByRole('button', { name: /refresh/i })).not.toBeInTheDocument();
   });
 
@@ -220,9 +229,9 @@ describe('ChatPage Accessibility', () => {
     const detailPanel = screen.getByText('Transcript').closest('section');
     const splitPane = detailPanel?.parentElement;
 
-    expect(rail).toHaveClass('h-full', 'overflow-hidden', 'lg:max-h-full');
+    expect(rail).toHaveClass('overflow-hidden', 'md:h-full', 'md:max-h-none');
     expect(detailPanel).toHaveClass('min-h-0', 'overflow-hidden');
-    expect(splitPane).toHaveClass('min-h-0', 'overflow-hidden', 'lg:grid-rows-[minmax(0,1fr)]');
+    expect(splitPane).toHaveClass('min-h-0', 'overflow-hidden', 'md:grid-rows-[minmax(0,1fr)]');
   });
 
   it('has accessible message composer and regions', () => {
@@ -253,6 +262,84 @@ describe('ChatPage Accessibility', () => {
     // Check if error is correctly displayed as well
     const liveError = screen.getByText(/Failed: Test error/);
     expect(liveError).toHaveAttribute('aria-live', 'polite');
+  });
+
+  it('sends web and desktop setup as idle 3D chat quick actions for the active project', async () => {
+    const user = userEvent.setup();
+    mocks.reducedMotion.value = true;
+    const handleSend = vi.fn(() => Promise.resolve());
+    mocks.data = {
+      ...mocks.data,
+      chatMode: "stage",
+      sending: false,
+      input: "",
+      error: null,
+      hasWorkingReply: false,
+      runningInvocationCount: 0,
+      selectedThread: mocks.data.threads[0],
+      handleSend,
+    };
+
+    render(
+      <ProjectDataContext.Provider value={{ projects: [{ id: "p1", name: "P" } as any], selectedProject: { id: "p1", name: "P" } as any } as any}>
+        <ChatPage />
+      </ProjectDataContext.Provider>
+    );
+
+    const webAction = screen.getByRole("button", { name: "Web App" });
+    const desktopAction = screen.getByRole("button", { name: "Desktop App" });
+
+    expect(webAction).toBeInTheDocument();
+    expect(desktopAction).toBeInTheDocument();
+
+    await user.click(webAction);
+
+    expect(handleSend).toHaveBeenCalledWith(expect.stringContaining("Set up this existing project as a web app"));
+    expect(handleSend).toHaveBeenCalledWith(expect.stringContaining("Do not create or import a new Code UX project."));
+    expect(handleSend).toHaveBeenCalledWith(expect.stringContaining("current techstack setting"));
+  });
+
+  it('keeps the active header and thread rail synchronized after rename', async () => {
+    const user = userEvent.setup();
+    const initialThread = { ...mocks.data.threads[0], title: "Thread 1" };
+    mocks.data = {
+      ...mocks.data,
+      threads: [initialThread],
+      selectedThread: initialThread,
+      selectedThreadId: initialThread.id,
+      threadIndex: new Map([[initialThread.id, initialThread]]),
+      sending: false,
+      input: "",
+      error: null,
+    };
+    mocks.data.handleRenameThread = vi.fn(async (title: string) => {
+      const updatedThread = { ...initialThread, title, updatedAt: "2026-03-10T12:01:00.000Z" };
+      mocks.data.threads = [updatedThread];
+      mocks.data.selectedThread = updatedThread;
+      mocks.data.threadIndex = new Map([[updatedThread.id, updatedThread]]);
+    });
+
+    const renderPage = () => (
+      <ProjectDataContext.Provider value={{ projects: [{ id: "p1", name: "P" } as any], selectedProject: { id: "p1", name: "P" } as any } as any}>
+        <ChatPage />
+      </ProjectDataContext.Provider>
+    );
+    const { rerender } = render(renderPage());
+
+    await user.click(screen.getByRole("button", { name: "Rename Thread 1" }));
+    const titleInput = screen.getByRole("textbox", { name: "Thread title" });
+    await user.clear(titleInput);
+    await user.type(titleInput, "Renamed Session");
+    await user.click(screen.getByRole("button", { name: "Save thread title" }));
+
+    await waitFor(() => {
+      expect(mocks.data.handleRenameThread).toHaveBeenCalledWith("Renamed Session");
+    });
+
+    rerender(renderPage());
+
+    expect(screen.getAllByRole("heading", { name: "Renamed Session" })).toHaveLength(2);
+    expect(screen.getAllByText("Renamed Session")).toHaveLength(2);
   });
 
   it('suppresses duplicate invocation restarts and shows retry feedback', async () => {

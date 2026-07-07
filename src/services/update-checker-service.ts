@@ -1,10 +1,24 @@
 import { CODE_UX_VERSION } from "../shared/config/code-ux-paths.js";
 
+export type UpdateDownloadTargetKind = "npm" | "electron";
+
+export interface UpdateDownloadTarget {
+  kind: UpdateDownloadTargetKind;
+  label: string;
+  url: string;
+}
+
+export interface UpdateDownloadTargets {
+  npm: UpdateDownloadTarget & { kind: "npm" };
+  electron: UpdateDownloadTarget & { kind: "electron" };
+}
+
 export interface UpdateStatus {
   currentVersion: string;
   latestVersion: string | null;
   updateAvailable: boolean;
   releaseUrl: string;
+  downloadTargets: UpdateDownloadTargets;
   checkedAt: string;
   error?: string;
 }
@@ -12,6 +26,7 @@ export interface UpdateStatus {
 const DEFAULT_CACHE_TTL_MS = 30 * 60 * 1000;
 const DEFAULT_FETCH_TIMEOUT_MS = 2500;
 const UPDATE_REGISTRY_URL = "https://registry.npmjs.org/@codeuxai/codeux/latest";
+const CODE_UX_NPM_PACKAGE_URL = "https://www.npmjs.com/package/@codeuxai/codeux";
 const CODE_UX_RELEASES_URL = "https://github.com/codeux-ai/codeux/releases";
 
 function parseVersionSegment(segment: string): number {
@@ -47,6 +62,28 @@ function buildReleaseUrl(version: string | null): string {
     return CODE_UX_RELEASES_URL;
   }
   return `${CODE_UX_RELEASES_URL}/tag/v${encodeURIComponent(version)}`;
+}
+
+function buildNpmPackageUrl(version: string | null): string {
+  if (!version) {
+    return CODE_UX_NPM_PACKAGE_URL;
+  }
+  return `${CODE_UX_NPM_PACKAGE_URL}/v/${encodeURIComponent(version)}`;
+}
+
+export function buildUpdateDownloadTargets(version: string | null): UpdateDownloadTargets {
+  return {
+    npm: {
+      kind: "npm",
+      label: version ? `npm package @codeuxai/codeux ${version}` : "npm package @codeuxai/codeux",
+      url: buildNpmPackageUrl(version),
+    },
+    electron: {
+      kind: "electron",
+      label: version ? `Code UX desktop release ${version}` : "Code UX desktop releases",
+      url: buildReleaseUrl(version),
+    },
+  };
 }
 
 export class UpdateCheckerService {
@@ -99,6 +136,7 @@ export class UpdateCheckerService {
         latestVersion: normalizedLatestVersion,
         updateAvailable: compareDottedVersions(normalizedLatestVersion, CODE_UX_VERSION) > 0,
         releaseUrl: buildReleaseUrl(normalizedLatestVersion),
+        downloadTargets: buildUpdateDownloadTargets(normalizedLatestVersion),
         checkedAt,
       };
 
@@ -111,6 +149,7 @@ export class UpdateCheckerService {
         latestVersion: null,
         updateAvailable: false,
         releaseUrl: buildReleaseUrl(null),
+        downloadTargets: buildUpdateDownloadTargets(null),
         checkedAt,
         error: controller.signal.aborted
           ? `Update check timed out after ${this.fetchTimeoutMs}ms.`

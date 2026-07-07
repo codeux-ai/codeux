@@ -9,6 +9,10 @@ import type {
   RestartSprintPolicy,
   RuntimeLogLevel,
   SkillToggle,
+  TechstackCatalogEntrySettings,
+  TechstackCatalogSettings,
+  TechstackItemSettings,
+  TechstackSelectionSettings,
 } from "../contracts/app-types.js";
 import type { SettingsRepository } from "../repositories/settings-repository.js";
 import type {
@@ -36,7 +40,16 @@ import {
 } from "../domain/settings/provider-config-utils.js";
 import { sanitizeCustomMcpServersWithDefaults, sanitizeMcpToolToggles } from "../mcp/mcp-tool-availability.js";
 import { DEFAULT_INSTRUCTION_TEMPLATES, INSTRUCTION_TEMPLATE_IDS, type InstructionTemplateId } from "../instructions/instruction-template-catalog.js";
-import { DEFAULT_DASHBOARD_SETTINGS, DEFAULT_SKILLS, INTERNAL_SKILL_NAMES, INTERNAL_SKILL_SET } from "../repositories/settings-defaults.js";
+import {
+  BUILTIN_CODE_UX_TECHSTACK,
+  BUILTIN_CODE_UX_TECHSTACK_ID,
+  DEFAULT_AGENT_SELF_REFLECTION,
+  DEFAULT_DASHBOARD_SETTINGS,
+  DEFAULT_PROJECT_TECHSTACK,
+  DEFAULT_SKILLS,
+  INTERNAL_SKILL_NAMES,
+  INTERNAL_SKILL_SET,
+} from "../repositories/settings-defaults.js";
 
 function cloneSkills(skills: SkillToggle[]): SkillToggle[] {
   return skills.map((skill) => ({ ...skill }));
@@ -105,6 +118,40 @@ function cloneMcpTools(tools: McpToolToggle[]): McpToolToggle[] {
   return tools.map((tool) => ({ ...tool }));
 }
 
+function cloneUnknown(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map((entry) => cloneUnknown(entry));
+  }
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>).map(([key, nested]) => [key, cloneUnknown(nested)]),
+    );
+  }
+  return value;
+}
+
+function cloneTechstackItems(items: TechstackItemSettings[]): TechstackItemSettings[] {
+  return items.map((item) => ({ ...item }));
+}
+
+function cloneTechstackEntry(entry: TechstackCatalogEntrySettings): TechstackCatalogEntrySettings {
+  return {
+    ...entry,
+    items: cloneTechstackItems(entry.items),
+  };
+}
+
+function cloneTechstackCatalog(catalog: TechstackCatalogSettings): TechstackCatalogSettings {
+  return {
+    defaultTechstackId: catalog.defaultTechstackId,
+    entries: catalog.entries.map((entry) => cloneTechstackEntry(entry)),
+  };
+}
+
+function cloneTechstackSelection(selection: TechstackSelectionSettings): TechstackSelectionSettings {
+  return { ...selection };
+}
+
 function resolveEffectiveMcpTools(
   systemTools: McpToolToggle[],
   override?: McpToolToggle[],
@@ -168,6 +215,23 @@ function cloneQualityAssuranceSettings(
   };
 }
 
+function cloneSelfReflectionSettings(
+  settings: ProjectSettings["agents"]["selfReflection"],
+): ProjectSettings["agents"]["selfReflection"] {
+  return {
+    planning: {
+      enabled: settings.planning.enabled,
+      criteria: settings.planning.criteria.map((criterion) => ({ ...criterion })),
+      maxImprovementAttempts: settings.planning.maxImprovementAttempts,
+    },
+    qualityAssurance: {
+      enabled: settings.qualityAssurance.enabled,
+      criteria: settings.qualityAssurance.criteria.map((criterion) => ({ ...criterion })),
+      maxImprovementAttempts: settings.qualityAssurance.maxImprovementAttempts,
+    },
+  };
+}
+
 function cloneAgentRoutingSettings(
   settings: ProjectSettings["agents"]["routing"],
 ): ProjectSettings["agents"]["routing"] {
@@ -217,9 +281,7 @@ function deepMerge<T>(base: T, patch: unknown): T {
   for (const [key, value] of Object.entries(patchRecord)) {
     const current = result[key];
     if (Array.isArray(value)) {
-      result[key] = value.map((entry) => (
-        entry && typeof entry === "object" ? JSON.parse(JSON.stringify(entry)) : entry
-      ));
+      result[key] = cloneUnknown(value);
       continue;
     }
     if (value && typeof value === "object") {
@@ -330,6 +392,85 @@ function sanitizeSkills(value: unknown, githubMode: DashboardSettings["git"]["gi
   return [...internalSkills, ...customSkills];
 }
 
+const TECHSTACK_ID_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,79}$/;
+
+function isValidTechstackId(id: string): boolean {
+  return TECHSTACK_ID_PATTERN.test(id);
+}
+
+function sanitizeTechstackItem(value: unknown): TechstackItemSettings | null {
+  const input = toRecord(value);
+  const id = typeof input.id === "string" ? input.id.trim() : "";
+  const label = typeof input.label === "string" ? input.label.trim() : "";
+  if (!id || !label || !isValidTechstackId(id)) {
+    return null;
+  }
+  return { id, label };
+}
+
+function sanitizeTechstackEntry(value: unknown): TechstackCatalogEntrySettings | null {
+  const input = toRecord(value);
+  const id = typeof input.id === "string" ? input.id.trim() : "";
+  const label = typeof input.label === "string" ? input.label.trim() : "";
+  if (!id || !label || !isValidTechstackId(id)) {
+    return null;
+  }
+
+  const items: TechstackItemSettings[] = [];
+  const seenItems = new Set<string>();
+  if (Array.isArray(input.items)) {
+    for (const itemInput of input.items) {
+      const item = sanitizeTechstackItem(itemInput);
+      if (!item || seenItems.has(item.id)) {
+        continue;
+      }
+      items.push(item);
+      seenItems.add(item.id);
+    }
+  }
+
+  return { id, label, items };
+}
+
+function sanitizeTechstackCatalog(value: unknown): TechstackCatalogSettings {
+  const input = toRecord(value);
+  const entries: TechstackCatalogEntrySettings[] = [cloneTechstackEntry(BUILTIN_CODE_UX_TECHSTACK)];
+  const seenEntries = new Set<string>([BUILTIN_CODE_UX_TECHSTACK_ID]);
+
+  if (Array.isArray(input.entries)) {
+    for (const entryInput of input.entries) {
+      const entry = sanitizeTechstackEntry(entryInput);
+      if (!entry || seenEntries.has(entry.id)) {
+        continue;
+      }
+      entries.push(entry);
+      seenEntries.add(entry.id);
+    }
+  }
+
+  const defaultTechstackId = typeof input.defaultTechstackId === "string"
+    ? input.defaultTechstackId.trim()
+    : "";
+
+  return {
+    defaultTechstackId: seenEntries.has(defaultTechstackId) ? defaultTechstackId : BUILTIN_CODE_UX_TECHSTACK_ID,
+    entries,
+  };
+}
+
+function sanitizeTechstackSelection(value: unknown): TechstackSelectionSettings {
+  const input = toRecord(value);
+  const selectedTechstackId = typeof input.selectedTechstackId === "string"
+    ? input.selectedTechstackId.trim()
+    : "";
+  return {
+    selectedTechstackId: selectedTechstackId && isValidTechstackId(selectedTechstackId) ? selectedTechstackId : null,
+    applicationKind: input.applicationKind === "web" || input.applicationKind === "desktop"
+      ? input.applicationKind
+      : DEFAULT_PROJECT_TECHSTACK.applicationKind,
+  };
+}
+
 function sanitizeInstructionTemplates(value: unknown): Record<InstructionTemplateId, string> {
   const input = toRecord(value);
   const nextTemplates = { ...DEFAULT_INSTRUCTION_TEMPLATES };
@@ -428,6 +569,65 @@ function sanitizeQualityAssuranceSettings(
   };
 }
 
+const SELF_REFLECTION_MAX_ATTEMPTS_CEILING = 10;
+
+function sanitizeSelfReflectionCriteria(
+  value: unknown,
+  defaults: ProjectSettings["agents"]["selfReflection"]["planning"]["criteria"],
+): ProjectSettings["agents"]["selfReflection"]["planning"]["criteria"] {
+  if (!Array.isArray(value)) {
+    return defaults.map((criterion) => ({ ...criterion }));
+  }
+
+  const criteria: ProjectSettings["agents"]["selfReflection"]["planning"]["criteria"] = [];
+  const seen = new Set<string>();
+  for (const entry of value) {
+    const input = toRecord(entry);
+    const id = typeof input.id === "string" ? input.id.trim() : "";
+    const label = typeof input.label === "string" ? input.label.trim() : "";
+    const prompt = typeof input.prompt === "string" ? input.prompt.trim() : "";
+    if (!id || !label || !prompt || seen.has(id)) {
+      continue;
+    }
+    const rawThreshold = typeof input.threshold === "number" && Number.isFinite(input.threshold)
+      ? input.threshold
+      : defaults.find((criterion) => criterion.id === id)?.threshold ?? 0.8;
+    criteria.push({
+      id,
+      label,
+      prompt,
+      threshold: Math.max(0, Math.min(1, rawThreshold)),
+    });
+    seen.add(id);
+  }
+
+  return criteria.length > 0 ? criteria : defaults.map((criterion) => ({ ...criterion }));
+}
+
+function sanitizeSelfReflectionLoop(
+  value: unknown,
+  defaults: ProjectSettings["agents"]["selfReflection"]["planning"],
+): ProjectSettings["agents"]["selfReflection"]["planning"] {
+  const input = toRecord(value);
+  return {
+    enabled: typeof input.enabled === "boolean" ? input.enabled : defaults.enabled,
+    criteria: sanitizeSelfReflectionCriteria(input.criteria, defaults.criteria),
+    maxImprovementAttempts: typeof input.maxImprovementAttempts === "number" && Number.isFinite(input.maxImprovementAttempts)
+      ? Math.max(0, Math.min(SELF_REFLECTION_MAX_ATTEMPTS_CEILING, Math.round(input.maxImprovementAttempts)))
+      : defaults.maxImprovementAttempts,
+  };
+}
+
+function sanitizeSelfReflectionSettings(
+  value: unknown,
+): ProjectSettings["agents"]["selfReflection"] {
+  const input = toRecord(value);
+  return {
+    planning: sanitizeSelfReflectionLoop(input.planning, DEFAULT_AGENT_SELF_REFLECTION.planning),
+    qualityAssurance: sanitizeSelfReflectionLoop(input.qualityAssurance, DEFAULT_AGENT_SELF_REFLECTION.qualityAssurance),
+  };
+}
+
 function sanitizeSprintPreviewSettings(value: unknown): ProjectSettings["sprintPreview"] {
   const input = toRecord(value);
   const defaults = DEFAULT_DASHBOARD_SETTINGS.sprintPreview;
@@ -522,6 +722,7 @@ export function buildDefaultProjectSettings(externalHints?: ExternalSettingsHint
       ),
       invocationRouting: cloneInvocationRouting(aiProvider.invocationRouting),
     },
+    techstack: cloneTechstackSelection(DEFAULT_PROJECT_TECHSTACK),
     git: {
       githubMode: git.githubMode,
       githubToken: git.githubToken,
@@ -550,6 +751,7 @@ export function buildDefaultProjectSettings(externalHints?: ExternalSettingsHint
       routing: cloneAgentRoutingSettings(DEFAULT_DASHBOARD_SETTINGS.agents.routing),
       instructionTemplates: cloneInstructionTemplates(DEFAULT_DASHBOARD_SETTINGS.agents.instructionTemplates),
       qualityAssurance: cloneQualityAssuranceSettings(DEFAULT_DASHBOARD_SETTINGS.agents.qualityAssurance),
+      selfReflection: cloneSelfReflectionSettings(DEFAULT_DASHBOARD_SETTINGS.agents.selfReflection),
     },
     skills: cloneSkills(DEFAULT_SKILLS),
     memory: {
@@ -582,6 +784,7 @@ export function buildDefaultSystemSettings(externalHints?: ExternalSettingsHints
         apiToken: externalHints?.resolved.jiraToken || "",
       },
     },
+    techstackCatalog: cloneTechstackCatalog(DEFAULT_DASHBOARD_SETTINGS.techstackCatalog),
     defaults: buildDefaultProjectSettings(externalHints),
     mcpTools: cloneMcpTools(DEFAULT_DASHBOARD_SETTINGS.mcpTools),
     customMcpServers: sanitizeCustomMcpServersWithDefaults(
@@ -664,6 +867,7 @@ export function sanitizeProjectSettings(value: unknown, externalHints?: External
       ),
       invocationRouting: cloneInvocationRouting(aiProvider.invocationRouting),
     },
+    techstack: sanitizeTechstackSelection(input.techstack),
     git: {
       githubMode: git.githubMode,
       githubToken: git.githubToken,
@@ -704,6 +908,7 @@ export function sanitizeProjectSettings(value: unknown, externalHints?: External
       routing: sanitizeAgentRoutingSettings(toRecord(input.agents).routing),
       instructionTemplates: sanitizeInstructionTemplates(toRecord(input.agents).instructionTemplates),
       qualityAssurance: sanitizeQualityAssuranceSettings(toRecord(input.agents).qualityAssurance),
+      selfReflection: sanitizeSelfReflectionSettings(toRecord(input.agents).selfReflection),
     },
     skills: sanitizeSkills(input.skills, git.githubMode),
     ...(Array.isArray(input.mcpTools) ? { mcpTools: sanitizeMcpToolToggles(input.mcpTools) } : {}),
@@ -723,6 +928,7 @@ export function sanitizeSystemSettings(value: unknown, externalHints?: ExternalS
   const runtime = toRecord(input.runtime);
   const integrations = normalizeSystemIntegrationProviders(input.integrations, externalHints);
   const integrationInput = toRecord(input.integrations);
+  const techstackCatalog = sanitizeTechstackCatalog(input.techstackCatalog ?? defaults.techstackCatalog);
   const jiraSettings = sanitizeJira(integrationInput.jira, {
     ...DEFAULT_DASHBOARD_SETTINGS.jira,
     apiToken: externalHints?.resolved.jiraToken || DEFAULT_DASHBOARD_SETTINGS.jira.apiToken,
@@ -801,6 +1007,7 @@ export function sanitizeSystemSettings(value: unknown, externalHints?: ExternalS
       gitlabToken: systemGitlabToken,
       jira: jiraSettings,
     },
+    techstackCatalog,
     defaults: defaultsInput,
     mcpTools: sanitizeMcpToolToggles(input.mcpTools ?? defaults.mcpTools).map((tool) => ({ ...tool })),
     customMcpServers: sanitizeCustomMcpServersWithDefaults(
@@ -1010,6 +1217,7 @@ export function resolveDashboardSettings(args: {
   const baseProject = args.systemSettings.defaults;
   const projectSettings = resolveProjectSettings(args.systemSettings, args.projectOverride);
   const sprintSettings = resolveSprintProjectSettings(args.systemSettings, args.projectOverride, args.sprintOverride);
+  const techstackCatalog = args.systemSettings.techstackCatalog ?? DEFAULT_DASHBOARD_SETTINGS.techstackCatalog;
   // Provider concurrency caps: the system-level cap is a hard ceiling. Resolve the scoped
   // (project/sprint) caps, then clamp each provider to the system cap so an override can
   // only lower a cap, never raise it above the system value.
@@ -1033,6 +1241,8 @@ export function resolveDashboardSettings(args: {
     automationLevel: sprintSettings.automationLevel,
     automationInterventions: { ...sprintSettings.automationInterventions },
     aiProvider: resolvedAiProvider,
+    techstackCatalog: cloneTechstackCatalog(techstackCatalog),
+    techstack: cloneTechstackSelection(sprintSettings.techstack),
     // GitHub/GitLab/Jira resolve through the scoped project/sprint settings, which
     // inherit the system integration values unless a project or sprint overrides
     // them. A blank scoped value falls back to the system integration value.
@@ -1072,6 +1282,7 @@ export function resolveDashboardSettings(args: {
       routing: cloneAgentRoutingSettings(sprintSettings.agents.routing),
       instructionTemplates: cloneInstructionTemplates(sprintSettings.agents.instructionTemplates),
       qualityAssurance: cloneQualityAssuranceSettings(sprintSettings.agents.qualityAssurance),
+      selfReflection: cloneSelfReflectionSettings(sprintSettings.agents.selfReflection),
     },
     skills: cloneSkills(sprintSettings.skills),
     mcpTools: resolveEffectiveMcpTools(args.systemSettings.mcpTools, sprintSettings.mcpTools),

@@ -26,6 +26,8 @@ vi.mock("../../../src/services/cli-process-runner.js", () => {
 import { describe, it, expect, vi, beforeAll, beforeEach, afterAll, afterEach } from "vitest";
 import { CodeUxServer } from "../../../src/server/code-ux-server.js";
 import { loadAppConfig } from "../../../src/config/app-config.js";
+import { bootDashboard } from "../../../src/app/lifecycle/dashboard-lifecycle-service.js";
+import { bootMcpHttpTransport } from "../../../src/app/lifecycle/mcp-lifecycle-service.js";
 import axios from "axios";
 import path from "path";
 import { DEFAULT_DASHBOARD_SETTINGS } from "../../../src/repositories/settings-defaults.js";
@@ -75,6 +77,31 @@ describe("CodeUxServer", () => {
     expect(context.getProjectRoot()).toBe(projectRoot);
     expect(context.getAppConfig()).toEqual(appConfig);
     expect(context.runtimeContext).toBeDefined();
+  });
+
+  it("skips dashboard boot and starts authenticated MCP HTTP transport in server mode", async () => {
+    const serverModeConfig = loadAppConfig([
+      "node",
+      "index.js",
+      "--server-mode",
+      "--mcp-https-auth-token",
+      "cux_test_abcdefghijklmnopqrstuvwxyz123456",
+    ], projectRoot);
+    const serverModeServer = new CodeUxServer({ projectRoot, appConfig: serverModeConfig });
+
+    try {
+      await serverModeServer.run();
+
+      expect(bootDashboard).not.toHaveBeenCalled();
+      expect(bootMcpHttpTransport).toHaveBeenCalledWith(expect.objectContaining({
+        enabled: true,
+        authToken: "cux_test_abcdefghijklmnopqrstuvwxyz123456",
+        requireAuth: true,
+        getReady: expect.any(Function),
+      }));
+    } finally {
+      await serverModeServer.close();
+    }
   });
 
   describe("getEffectiveJulesApiKey", () => {

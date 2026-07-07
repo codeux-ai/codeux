@@ -68,7 +68,12 @@ describe("ManagementToolHandler", () => {
       settingsRepository: {
         getGlobalSettings: vi.fn(),
         getSystemSettings: vi.fn(() => ({ defaults: { automationLevel: "FULL" } })),
+        getProjectSettings: vi.fn(() => ({ automationLevel: "SEMI_AUTO" })),
+        getSprintSettings: vi.fn(() => ({ automationLevel: "MANUAL" })),
         saveSystemSettings: vi.fn((settings: unknown) => settings),
+        saveProjectSettings: vi.fn((projectId: string, settings: unknown) => settings),
+        saveSprintSettings: vi.fn((sprintId: string, base: unknown, settings: unknown) => settings),
+        getProjectResolvedSettings: vi.fn(() => ({})),
       },
       agentPresetSyncService: {
         syncPresets: vi.fn(),
@@ -82,6 +87,9 @@ describe("ManagementToolHandler", () => {
       embeddingModelManager: {
         getModelStatus: vi.fn(),
       },
+      skillService: {
+        listStorages: vi.fn(),
+      },
       planningAgentService: {
         planSprint: vi.fn(),
       },
@@ -94,6 +102,11 @@ describe("ManagementToolHandler", () => {
       },
       schedulerService: {
         listProjectSchedule: vi.fn(),
+      },
+      workerTaskDispatchService: {
+        registerExternalWorkerEndpoint: vi.fn(),
+        pullNextDispatch: vi.fn(),
+        updateDispatch: vi.fn(),
       },
     };
     handler = new ManagementToolHandler(deps);
@@ -264,6 +277,74 @@ describe("ManagementToolHandler", () => {
     expect(deps.settingsRepository.saveSystemSettings).not.toHaveBeenCalled();
   });
 
+  it("registers worker endpoints through the MCP worker control-plane tool", async () => {
+    deps.workerTaskDispatchService.registerExternalWorkerEndpoint.mockReturnValue({
+      id: "endpoint-1",
+      endpointKey: "mcp:worker-1",
+      connectionId: "conn-1",
+    });
+
+    const response = await handler.handleRegisterWorkerEndpoint({
+      connectionKey: "worker-1",
+      displayName: "Worker 1",
+      transport: "streamable-http",
+      projectIds: ["project-A", "project-B"],
+      activeProjectIds: ["project-B"],
+      capabilities: { canExecuteTasks: true, canSuperviseProjects: true },
+    });
+    const parsed = JSON.parse(response.content[0].text);
+
+    expect(parsed.endpoint.id).toBe("endpoint-1");
+    expect(deps.workerTaskDispatchService.registerExternalWorkerEndpoint).toHaveBeenCalledWith(expect.objectContaining({
+      connectionKey: "worker-1",
+      projectIds: ["project-A", "project-B"],
+      activeProjectIds: ["project-B"],
+    }));
+  });
+
+  it("claims and updates worker dispatches through the MCP worker control-plane tools", async () => {
+    deps.workerTaskDispatchService.pullNextDispatch.mockReturnValue({
+      dispatch: { id: "dispatch-1" },
+      leaseToken: "lease-1",
+    });
+    deps.workerTaskDispatchService.updateDispatch.mockReturnValue({
+      dispatch: { id: "dispatch-1", status: "running" },
+      controlAction: "cancel",
+    });
+
+    const claimResponse = await handler.handlePullTaskDispatch({
+      connectionKey: "worker-1",
+      projectId: "project-B",
+    });
+    const updateResponse = await handler.handleUpdateTaskDispatch({
+      connectionKey: "worker-1",
+      dispatchId: "dispatch-1",
+      leaseToken: "lease-1",
+      state: "RUNNING",
+      sessionId: "session-1",
+    });
+
+    expect(JSON.parse(claimResponse.content[0].text)).toMatchObject({
+      dispatch: { id: "dispatch-1" },
+      leaseToken: "lease-1",
+    });
+    expect(JSON.parse(updateResponse.content[0].text)).toMatchObject({
+      dispatch: { id: "dispatch-1" },
+      controlAction: "cancel",
+    });
+    expect(deps.workerTaskDispatchService.pullNextDispatch).toHaveBeenCalledWith(expect.objectContaining({
+      connectionKey: "worker-1",
+      projectId: "project-B",
+    }));
+    expect(deps.workerTaskDispatchService.updateDispatch).toHaveBeenCalledWith(expect.objectContaining({
+      connectionKey: "worker-1",
+      dispatchId: "dispatch-1",
+      leaseToken: "lease-1",
+      state: "RUNNING",
+      sessionId: "session-1",
+    }));
+  });
+
   it("should return approvalRequired for destructive actions without approval in handleManageCodeUx", async () => {
     const response = await handler.handleManageCodeUx({ domain: "unknown", action: "delete_something", payload: {} });
     const parsed = JSON.parse(response.content[0].text);
@@ -351,6 +432,67 @@ describe("ManagementToolHandler", () => {
     ]) {
       expect(properties[field], field).toBeDefined();
     }
+  });
+
+  it("exposes settings bundle actions and fields on manage_settings", () => {
+    const tool = TOOL_DEFINITIONS.find((definition) => definition.name === "manage_settings");
+    expect(tool).toBeDefined();
+
+    const schema = tool?.inputSchema as { properties: Record<string, JsonSchemaProperty> } | undefined;
+    const properties = schema?.properties ?? {};
+
+    expect(properties.action?.enum).toContain("export_settings_bundle");
+    expect(properties.action?.enum).toContain("apply_settings_bundle");
+    expect(properties.bundle).toMatchObject({ type: "object" });
+    expect(properties.includeSecrets).toMatchObject({ type: "boolean" });
+    expect(properties.scopes).toMatchObject({ type: "array" });
+    expect(properties.projectIds).toMatchObject({ type: "array", items: { type: "string" } });
+    expect(properties.sprintIds).toMatchObject({ type: "array", items: { type: "string" } });
+  });
+
+  it("routes settings bundle apply through the one-use approval flow", async () => {
+    const bundle = {
+      metadata: {
+        schemaVersion: 1,
+        exportedAt: "2026-07-07T00:00:00.000Z",
+        includedScopes: ["system"],
+        fingerprint: "fp",
+        containsSecrets: true,
+      },
+      system: {
+        integrations: {
+          providers: { codex: { provider: "codex", name: "Codex", apiKey: "sk-imported" } },
+          githubToken: "",
+          jira: { apiToken: "" },
+        },
+      },
+    };
+
+    let response = await handler.handleManageSettings({ action: "apply_settings_bundle", bundle });
+    let parsed = JSON.parse(response.content[0].text);
+    expect(parsed.approvalRequired).toBe(true);
+    expect(deps.settingsRepository.saveSystemSettings).not.toHaveBeenCalled();
+
+    response = await handler.handleManageSettings({ action: "apply_settings_bundle", bundle, approval: { confirmed: true } });
+    parsed = JSON.parse(response.content[0].text);
+    expect(parsed.result.applied).toEqual({ system: 1, projects: 0, sprints: 0 });
+    expect(deps.settingsRepository.saveSystemSettings).toHaveBeenCalledWith(bundle.system);
+  });
+
+  it("redacts secret-bearing settings validation errors in management envelopes", async () => {
+    const secret = "ghp-never-print-this";
+    const response = await handler.handleManageSettings({
+      action: "apply_settings_bundle",
+      bundle: {
+        metadata: { schemaVersion: 1, includedScopes: ["projects"], fingerprint: "fp", containsSecrets: true },
+        projects: [{ projectId: "proj-1", settings: "bad", githubToken: secret }],
+      },
+    });
+
+    const text = response.content[0].text;
+    expect(response.isError).toBe(true);
+    expect(text).not.toContain(secret);
+    expect(JSON.parse(text).result.message).toContain("bundle.projects[0]");
   });
 
   it("should execute handleManageProjects delete action only after exact approval is pending", async () => {

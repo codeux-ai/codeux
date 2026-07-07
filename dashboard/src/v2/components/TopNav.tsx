@@ -1,20 +1,24 @@
 import type { FunctionComponent, RefObject } from "preact";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "preact/hooks";
 import gsap from "gsap";
-import { Bell, Moon, Sun, ChevronDown, FolderOpen, ArrowRight } from "lucide-preact";
+import { Bell, CalendarClock, Moon, Sun, ChevronDown, FolderOpen, ArrowRight, Layers } from "lucide-preact";
 import { Link, useRouterState } from "@tanstack/react-router";
 import { StatusDot } from "./ui/StatusDot.js";
+import type { TechstackCatalogSettings } from "../../types.js";
 
 import { BrandSection } from "./top-nav/BrandSection.js";
 import { GlobalSearch } from "./top-nav/GlobalSearch.js";
 import { TelemetryStats } from "./top-nav/TelemetryStats.js";
 
 import { AddProjectModal, type AddProjectModalSubmission } from "./ui/AddProjectModal.js";
-import { buildGitHubModeProjectSettingsOverride } from "../../lib/settings-updaters.js";
+import { buildProjectCreationSettingsOverride } from "../../lib/settings-updaters.js";
+import { DEFAULT_DASHBOARD_SETTINGS } from "../../lib/settings.js";
 import { useProjectData } from "../context/project-data.js";
 import { useSprints } from "../../hooks/useSprints.js";
 import { formatSprintDisplay } from "../lib/format-sprint.js";
-import { useProjectEffectiveSettings } from "../hooks/use-project-effective-settings.js";
+import { clearProjectEffectiveSettingsCache, useProjectEffectiveSettings } from "../hooks/use-project-effective-settings.js";
+import { fetchSystemSettings, saveProjectTechstackSettings } from "../lib/settings-api.js";
+import { buildTechstackSelectorViewModel } from "../lib/settings/techstack-view-models.js";
 import { DockerStatusMenu } from "./DockerStatusMenu.js";
 import { BrowserSessionsMenu } from "./browser/BrowserSessionsMenu.js";
 import { NotificationPanel } from "./NotificationPanel.js";
@@ -22,6 +26,7 @@ import { Tooltip } from "./ui/Tooltip.js";
 import { useNotifications } from "../hooks/use-notifications.js";
 import { useThemeSetting } from "../hooks/useThemeSetting.js";
 import { useIsDark } from "../hooks/use-is-dark.js";
+import type { AgentSchedulerSummaryEntry } from "../lib/scheduler-api.js";
 
 export function useDropdownKeyboard(
     isOpen: boolean,
@@ -158,6 +163,88 @@ interface TopNavProps {
     isMobileMenuOpen?: boolean;
 }
 
+const ScheduledAgentIndicator: FunctionComponent<{ entries: AgentSchedulerSummaryEntry[] }> = ({ entries }) => {
+    const [detailsVisible, setDetailsVisible] = useState(false);
+    const containerRef = useRef<HTMLDivElement>(null);
+    const detailsId = "scheduled-agent-details";
+
+    if (entries.length === 0) {
+        return null;
+    }
+
+    const countLabel = `${entries.length} active scheduled agent ${entries.length === 1 ? "entry" : "entries"}`;
+
+    return (
+        <div
+            ref={containerRef}
+            className="relative inline-block"
+            onMouseEnter={() => setDetailsVisible(true)}
+            onMouseLeave={() => setDetailsVisible(false)}
+            onFocus={() => setDetailsVisible(true)}
+            onBlur={(event) => {
+                if (!containerRef.current?.contains(event.relatedTarget as Node)) {
+                    setDetailsVisible(false);
+                }
+            }}
+            onKeyDown={(event) => {
+                if (event.key === "Escape") {
+                    event.preventDefault();
+                    setDetailsVisible(false);
+                    (event.currentTarget.querySelector("button") as HTMLButtonElement | null)?.focus({ preventScroll: true });
+                }
+            }}
+        >
+            <button
+                type="button"
+                aria-label={`Scheduled agent work: ${countLabel}`}
+                aria-describedby={detailsVisible ? detailsId : undefined}
+                className="relative flex h-9 min-w-9 shrink-0 items-center justify-center gap-1.5 rounded-xl border border-signal-500/20 bg-signal-500/10 px-2.5 text-signal-700 transition-colors hover:bg-signal-500/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 dark:text-signal-300 dark:hover:bg-signal-500/20"
+            >
+                <CalendarClock className="h-3.5 w-3.5" strokeWidth={2.1} aria-hidden="true" />
+                <span className="min-w-4 text-center text-[11px] font-black tabular-nums leading-none">
+                    {entries.length > 9 ? "9+" : entries.length}
+                </span>
+            </button>
+            {detailsVisible ? (
+                <div
+                    id={detailsId}
+                    role="tooltip"
+                    className="absolute right-0 top-full z-50 mt-2 w-80 max-w-[calc(100vw-2rem)] rounded-2xl border border-black/[0.08] bg-white/95 p-3 text-left shadow-2xl backdrop-blur-2xl dark:border-white/[0.08] dark:bg-void-800/95"
+                >
+                    <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">
+                        Scheduled agent work
+                    </div>
+                    <div className="mt-1 text-xs font-semibold text-slate-600 dark:text-slate-300">
+                        {countLabel}
+                    </div>
+                    <ul className="mt-2 max-h-72 space-y-2 overflow-y-auto pr-1">
+                        {entries.map((entry) => (
+                            <li key={entry.id} className="rounded-xl border border-black/[0.05] bg-black/[0.025] p-2.5 dark:border-white/[0.06] dark:bg-white/[0.04]">
+                                <div className="flex items-start justify-between gap-2">
+                                    <div className="min-w-0">
+                                        <div className="text-[10px] font-black uppercase tracking-[0.12em] text-signal-700 dark:text-signal-300">
+                                            {entry.label}
+                                        </div>
+                                        <div className="mt-1 break-words text-xs font-bold text-slate-800 dark:text-slate-100">
+                                            {entry.title}
+                                        </div>
+                                    </div>
+                                    <span className="shrink-0 rounded-full bg-black/[0.04] px-1.5 py-0.5 text-[9px] font-black uppercase tracking-[0.12em] text-slate-500 dark:bg-white/[0.06] dark:text-slate-400">
+                                        {entry.statusLabel}
+                                    </span>
+                                </div>
+                                <div className="mt-1.5 text-[11px] leading-relaxed text-slate-500 dark:text-slate-400">
+                                    {entry.targetSummary} · {entry.timingSummary}
+                                </div>
+                            </li>
+                        ))}
+                    </ul>
+                </div>
+            ) : null}
+        </div>
+    );
+};
+
 export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile, hideLogo, isMobileMenuOpen }) => {
     const navRef = useRef<HTMLElement>(null);
 
@@ -165,7 +252,6 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
 
     const [dropdownOpen, setDropdownOpen] = useState(false);
     const [showAddProject, setShowAddProject] = useState(false);
-    const notifications = useNotifications();
     const isDark = useIsDark();
     const { setTheme } = useThemeSetting();
 
@@ -263,6 +349,11 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
     const [sprintDropdownOpen, setSprintDropdownOpen] = useState(false);
     const sprintDropdownRef = useRef<HTMLDivElement>(null);
     const [sprintDropdownWidth, setSprintDropdownWidth] = useState<number>(0);
+    const [techstackDropdownOpen, setTechstackDropdownOpen] = useState(false);
+    const [techstackSwitchBusy, setTechstackSwitchBusy] = useState(false);
+    const [systemTechstackCatalog, setSystemTechstackCatalog] = useState<TechstackCatalogSettings | null>(null);
+    const [systemSettingsLoading, setSystemSettingsLoading] = useState(true);
+    const techstackDropdownRef = useRef<HTMLDivElement>(null);
 
     const {
         projects,
@@ -272,7 +363,8 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
         loading,
     } = useProjectData();
     const projectId = selectedProject?.id || null;
-    const { data: effectiveSettings } = useProjectEffectiveSettings(projectId);
+    const { data: effectiveSettings, loading: effectiveSettingsLoading, refresh: refreshEffectiveSettings } = useProjectEffectiveSettings(projectId);
+    const notifications = useNotifications(projectId);
     const sprintKeyPrefix = effectiveSettings?.settings?.git?.sprintKeyPrefix || "SPR";
 
     const { data: sprints, selectedSprintId, selectedSprint, selectSprint, loading: sprintsLoading } = useSprints(selectedProject?.id || null);
@@ -283,9 +375,33 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
 
     const projectKb = useDropdownKeyboard(dropdownOpen, setDropdownOpen, dropdownRef, setProjectFilter);
     const sprintKb = useDropdownKeyboard(sprintDropdownOpen, setSprintDropdownOpen, sprintDropdownRef, setSprintFilter);
+    const techstackKb = useDropdownKeyboard(techstackDropdownOpen, setTechstackDropdownOpen, techstackDropdownRef);
 
     const filteredProjects = useMemo(() => projects.filter(p => p.name.toLowerCase().includes(projectFilter.toLowerCase())), [projects, projectFilter]);
     const filteredSprints = useMemo(() => sprints.filter(s => s.name.toLowerCase().includes(sprintFilter.toLowerCase())), [sprints, sprintFilter]);
+    const techstackCatalog = effectiveSettings?.settings.techstackCatalog
+        ?? systemTechstackCatalog
+        ?? DEFAULT_DASHBOARD_SETTINGS.techstackCatalog;
+    const techstackViewModel = useMemo(
+        () => buildTechstackSelectorViewModel(effectiveSettings?.settings.techstack, techstackCatalog),
+        [effectiveSettings?.settings.techstack, techstackCatalog],
+    );
+    const techstackSelectorLoading = !!selectedProject && (effectiveSettingsLoading || systemSettingsLoading);
+    const techstackSelectorDisabled = !selectedProject || techstackSelectorLoading || techstackSwitchBusy;
+    const techstackHelper = !selectedProject
+        ? "Select a project first"
+        : techstackSelectorLoading
+            ? "Loading settings"
+            : techstackViewModel.isUnassigned
+                ? "None"
+                : "Assigned";
+    const techstackTriggerLabel = !selectedProject
+        ? techstackHelper
+        : techstackSwitchBusy
+            ? "Saving..."
+            : techstackSelectorLoading
+                ? "Loading..."
+                : techstackViewModel.activeLabel;
 
     useEffect(() => {
         if (previousPathRef.current !== currentPath) {
@@ -318,10 +434,35 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
     }, [dropdownOpen, filteredProjects.length, loading, projectFilter]);
 
     useEffect(() => {
-        if (sprintDropdownOpen && !sprintsLoading && filteredSprints.length === 0 && !sprintFilter.toLowerCase().includes("all")) {
+        if (sprintDropdownOpen && !sprintsLoading && filteredSprints.length === 0) {
             setNavAnnouncement(sprintFilter ? `No sprints match ${sprintFilter}` : "No sprints available");
         }
     }, [filteredSprints.length, sprintDropdownOpen, sprintFilter, sprintsLoading]);
+
+    useEffect(() => {
+        let cancelled = false;
+        setSystemSettingsLoading(true);
+        fetchSystemSettings()
+            .then((settings) => {
+                if (!cancelled) {
+                    setSystemTechstackCatalog(settings.techstackCatalog);
+                }
+            })
+            .catch((error: unknown) => {
+                if (!cancelled) {
+                    const message = error instanceof Error ? error.message : "Unknown error";
+                    setNavAnnouncement(`Could not load techstack catalog. ${message}`);
+                }
+            })
+            .finally(() => {
+                if (!cancelled) {
+                    setSystemSettingsLoading(false);
+                }
+            });
+        return () => {
+            cancelled = true;
+        };
+    }, []);
 
     useLayoutEffect(() => {
         if (sprintDropdownOpen && sprintDropdownRef.current) {
@@ -343,10 +484,44 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
             if (sprintDropdownRef.current && !sprintDropdownRef.current.contains(e.target as Node)) {
                 setSprintDropdownOpen(false);
             }
+            if (techstackDropdownRef.current && !techstackDropdownRef.current.contains(e.target as Node)) {
+                setTechstackDropdownOpen(false);
+            }
         };
         document.addEventListener("mousedown", handler);
         return () => document.removeEventListener("mousedown", handler);
     }, []);
+
+    const handleTechstackSelection = async (nextTechstackId: string | null, label: string) => {
+        if (!projectId || techstackSwitchBusy || nextTechstackId === techstackViewModel.selectedTechstackId) {
+            setTechstackDropdownOpen(false);
+            return;
+        }
+
+        setTechstackSwitchBusy(true);
+        setNavAnnouncement(`Saving techstack ${label}...`);
+        try {
+            await saveProjectTechstackSettings(projectId, {
+                selectedTechstackId: nextTechstackId,
+                applicationKind: effectiveSettings?.settings.techstack.applicationKind ?? null,
+            });
+            clearProjectEffectiveSettingsCache(projectId);
+            await refreshEffectiveSettings();
+            setNavAnnouncement(nextTechstackId === null
+                ? "Techstack set to None."
+                : `Techstack switched to ${label.replace(" (default)", "")}`);
+            setTechstackDropdownOpen(false);
+        } catch (error) {
+            const message = error instanceof Error ? error.message : "Unknown error";
+            setNavAnnouncement(`Could not save techstack. ${message}`);
+        } finally {
+            setTechstackSwitchBusy(false);
+        }
+    };
+
+    const openAddProjectModal = () => {
+        setShowAddProject(true);
+    };
 
     const handleCreateProject = async (project: AddProjectModalSubmission) => {
         if (project.type === 'new_project') {
@@ -362,7 +537,11 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
                 initMode: project.initMode,
                 remoteProvider: project.remoteProvider,
                 isPrivate: project.isPrivate,
-                ...(isLocalProject ? { settingsOverrides: buildGitHubModeProjectSettingsOverride("LOCAL") } : {}),
+                settingsOverrides: buildProjectCreationSettingsOverride({
+                    ...(isLocalProject ? { githubMode: "LOCAL" as const } : {}),
+                    selectedTechstackId: project.selectedTechstackId ?? DEFAULT_DASHBOARD_SETTINGS.techstackCatalog.defaultTechstackId,
+                    applicationKind: project.applicationKind ?? null,
+                }),
             });
             return;
         }
@@ -372,7 +551,7 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
             sourceType: project.type,
             sourceRef: project.path,
             cloneDir: project.cloneDir,
-            ...(project.type === "local" ? { settingsOverrides: buildGitHubModeProjectSettingsOverride("LOCAL") } : {}),
+            ...(project.type === "local" ? { settingsOverrides: buildProjectCreationSettingsOverride({ githubMode: "LOCAL" }) } : {}),
         });
     };
 
@@ -392,7 +571,7 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
 
             <div className="flex items-center gap-1 sm:gap-2 md:gap-3 shrink-0 min-w-0 flex-wrap justify-end">
                 {/* Project Selector */}
-                <div className="relative min-w-0" ref={dropdownRef} onKeyDown={projectKb.onContainerKeyDown}>
+                <div className="relative -order-2 min-w-0" ref={dropdownRef} onKeyDown={projectKb.onContainerKeyDown}>
                     <button
                         ref={projectKb.toggleRef}
                         onKeyDown={projectKb.onToggleKeyDown}
@@ -435,7 +614,7 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
                                 />
                                 <span id="project-filter-desc" className="sr-only">Use arrow keys to navigate options.</span>
                             </div>
-                            <div className="max-h-[calc(100dvh-5rem)] overflow-y-auto dropdown-scrollbar">
+                            <div className="max-h-64 sm:max-h-72 md:max-h-80 overflow-y-auto dropdown-scrollbar">
                             {filteredProjects.length === 0 && (
                                 <div className="px-3 py-4 text-center text-sm text-slate-500 dark:text-slate-400">
                                     No projects found.
@@ -477,7 +656,7 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
                             )}
                             <div className="p-2 border-t border-black/[0.04] dark:border-white/[0.04] mt-1 flex flex-col gap-1">
                                 <button
-                                    onClick={() => { setDropdownOpen(false); setShowAddProject(true); }}
+                                    onClick={() => { setDropdownOpen(false); openAddProjectModal(); }}
                                     className="focus-visible:ring-2 focus-visible:ring-signal-500/50 w-full flex items-center gap-2 px-3 py-2 text-xs font-semibold text-ember-600 dark:text-ember-400 hover:bg-ember-500/[0.06] rounded-xl transition-colors"
                                 >
                                     <FolderOpen aria-hidden="true" className="w-3.5 h-3.5" strokeWidth={2} />
@@ -496,9 +675,86 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
                     )}
                 </div>
 
+                {/* Techstack Selector */}
+                <div className="relative -order-3 min-w-0" ref={techstackDropdownRef} onKeyDown={techstackKb.onContainerKeyDown}>
+                    <button
+                        ref={techstackKb.toggleRef}
+                        onKeyDown={(e) => {
+                            if (techstackSelectorDisabled) {
+                                if (e.key === "Enter" || e.key === " " || e.key === "ArrowDown" || e.key === "ArrowUp" || e.key === "Home" || e.key === "End") {
+                                    e.preventDefault();
+                                    setNavAnnouncement(techstackHelper);
+                                }
+                                return;
+                            }
+                            techstackKb.onToggleKeyDown(e);
+                        }}
+                        onClick={(e) => {
+                            if (techstackSelectorDisabled) {
+                                e.preventDefault();
+                                setNavAnnouncement(techstackHelper);
+                                return;
+                            }
+                            setTechstackDropdownOpen(!techstackDropdownOpen);
+                        }}
+                        aria-haspopup="listbox"
+                        aria-expanded={techstackDropdownOpen}
+                        id="techstack-selector-button"
+                        aria-label={`Techstack selector, active techstack: ${!selectedProject ? "No project selected" : techstackSelectorLoading ? "Loading settings" : techstackViewModel.activeLabel}`}
+                        aria-controls={techstackDropdownOpen ? "techstack-listbox" : undefined}
+                        aria-activedescendant={techstackDropdownOpen ? (techstackKb.activeDescendantId || (techstackViewModel.selectedTechstackId ? `techstack-option-${techstackViewModel.selectedTechstackId}` : "techstack-option-unassigned")) : undefined}
+                        aria-busy={techstackSwitchBusy || techstackSelectorLoading ? "true" : "false"}
+                        aria-disabled={techstackSelectorDisabled}
+                        disabled={techstackSelectorDisabled}
+                        className={`focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 flex h-9 min-w-0 max-w-[12rem] sm:max-w-[16rem] md:max-w-none items-center gap-2.5 rounded-xl border border-black/[0.06] bg-black/[0.04] px-3.5 py-0 transition-all group dark:border-white/[0.06] dark:bg-white/[0.04] ${
+                            techstackSelectorDisabled
+                                ? "opacity-60 cursor-not-allowed"
+                                : "hover:border-black/[0.08] dark:hover:border-white/[0.08] cursor-pointer"
+                        }`}
+                    >
+                        <Layers aria-hidden="true" className="h-3.5 w-3.5 shrink-0 text-slate-400" strokeWidth={1.7} />
+                        <span className="text-sm font-semibold text-slate-700 dark:text-slate-200 font-mono truncate max-w-[80px] sm:max-w-[140px] md:max-w-[200px]">
+                            {techstackTriggerLabel}
+                        </span>
+                        {!techstackSelectorDisabled && (
+                            <ChevronDown aria-hidden="true" className={`h-3.5 w-3.5 shrink-0 text-slate-400 transition-transform duration-300 ${techstackDropdownOpen ? "rotate-180" : ""}`} />
+                        )}
+                    </button>
+
+                    {techstackDropdownOpen && !techstackSelectorDisabled && (
+                        <div id="techstack-listbox" role="listbox" aria-label="Techstack list" className="absolute top-full right-0 mt-2 min-w-[14rem] w-64 max-w-[calc(100vw-2rem)] bg-white/95 dark:bg-void-800/95 backdrop-blur-2xl border border-black/[0.08] dark:border-white/[0.08] rounded-2xl shadow-2xl overflow-hidden z-50">
+                            <div className="px-3 pt-3 pb-1.5">
+                                <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Techstack</span>
+                            </div>
+                            <div className="max-h-64 sm:max-h-72 md:max-h-80 overflow-y-auto dropdown-scrollbar">
+                                {techstackViewModel.options.map((option) => {
+                                    const selected = option.techstackId === techstackViewModel.selectedTechstackId;
+                                    return (
+                                        <button
+                                            key={option.id}
+                                            id={option.kind === "unassigned" ? "techstack-option-unassigned" : `techstack-option-${option.id}`}
+                                            role="option"
+                                            aria-selected={selected}
+                                            onClick={() => void handleTechstackSelection(option.techstackId, option.label)}
+                                            className={`focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 w-full flex items-center gap-2.5 px-3 py-3 min-h-[44px] text-left hover:bg-signal-500/5 transition-colors group ${selected ? "bg-signal-500/8" : ""}`}
+                                        >
+                                            <span className={`text-sm font-medium font-mono truncate transition-colors ${selected ? "text-signal-600 dark:text-signal-400 font-semibold" : "text-slate-700 dark:text-slate-300"}`}>
+                                                {option.label}
+                                            </span>
+                                            {selected && (
+                                                <span className="ml-auto h-1.5 w-1.5 rounded-full bg-signal-500" />
+                                            )}
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    )}
+                </div>
+
                 {/* Sprint Selector */}
                 {selectedProject && (
-                    <div className="relative min-w-0" ref={sprintDropdownRef} onKeyDown={sprintKb.onContainerKeyDown}>
+                    <div className="relative -order-1 min-w-0" ref={sprintDropdownRef} onKeyDown={sprintKb.onContainerKeyDown}>
                         <button
                             ref={sprintKb.toggleRef}
                             onKeyDown={(e) => {
@@ -514,7 +770,7 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
                             id="sprint-selector-button"
                             aria-label={`Sprint selector, selected sprint: ${sprintsLoading ? "Loading..." : selectedSprint ? formatSprintDisplay(selectedSprint, sprintKeyPrefix) : "All Sprints"}`}
                             aria-controls={sprintDropdownOpen && sprints.length > 0 ? "sprint-listbox" : undefined}
-                            aria-activedescendant={sprintDropdownOpen && sprints.length > 0 ? (sprintKb.activeDescendantId || `sprint-option-${selectedSprintId || 'none'}`) : undefined}
+                            aria-activedescendant={sprintDropdownOpen && sprints.length > 0 ? (sprintKb.activeDescendantId || (selectedSprintId ? `sprint-option-${selectedSprintId}` : undefined)) : undefined}
                             aria-busy={sprintSwitchBusy || sprintsLoading ? "true" : "false"}
                             onClick={(e) => {
                                 if (sprints.length === 0) {
@@ -563,37 +819,11 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
                                     />
                                     <span id="sprint-filter-desc" className="sr-only">Use arrow keys to navigate options.</span>
                                 </div>
-                                <div className="max-h-[calc(100dvh-5rem)] overflow-y-auto dropdown-scrollbar">
-                                {filteredSprints.length === 0 && !sprintFilter.toLowerCase().includes('all') && (
+                                <div className="max-h-64 sm:max-h-72 md:max-h-80 overflow-y-auto dropdown-scrollbar">
+                                {filteredSprints.length === 0 && (
                                     <div className="px-3 py-4 text-center text-sm text-slate-500 dark:text-slate-400">
                                         No sprints found.
                                     </div>
-                                )}
-                                {(sprintFilter === '' || 'all sprints'.includes(sprintFilter.toLowerCase())) && (
-                                <button
-                                    id="sprint-option-none"
-                                    role="option"
-                                    aria-selected={selectedSprintId === null}
-                                    onClick={async () => {
-                                        setSprintSwitchBusy(true);
-                                        setNavAnnouncement('Switching sprint to All Sprints...');
-                                        try {
-                                            await selectSprint(null);
-                                            setNavAnnouncement('Sprint switched to All Sprints');
-                                            setSprintDropdownOpen(false);
-                                        } finally {
-                                            setSprintSwitchBusy(false);
-                                        }
-                                    }}
-                                    className={`focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 w-full flex items-center gap-2.5 px-3 py-3 min-h-[44px] text-left hover:bg-signal-500/5 transition-colors group ${selectedSprintId === null ? 'bg-signal-500/8' : ''}`}
-                                >
-                                    <span className={`text-sm font-medium font-mono truncate transition-colors ${selectedSprintId === null ? 'text-signal-600 dark:text-signal-400 font-semibold' : 'text-slate-700 dark:text-slate-300'}`}>
-                                        All Sprints
-                                    </span>
-                                    {selectedSprintId === null && (
-                                        <span className="ml-auto w-1.5 h-1.5 rounded-full bg-signal-500" />
-                                    )}
-                                </button>
                                 )}
                                 {filteredSprints.map((sprint) => (
                                     <button
@@ -638,6 +868,8 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
                 <DockerStatusMenu />
 
                 <BrowserSessionsMenu enabled={browserVisible} />
+
+                <ScheduledAgentIndicator entries={notifications.agentSchedules ?? []} />
 
                 {/* Notifications */}
                 <div
@@ -700,7 +932,9 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
 
             {showAddProject && (
                 <AddProjectModal
-                    onClose={() => setShowAddProject(false)}
+                    onClose={() => {
+                        setShowAddProject(false);
+                    }}
                     onAdd={(project) => { void handleCreateProject(project); }}
                 />
             )}

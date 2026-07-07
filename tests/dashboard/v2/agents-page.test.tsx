@@ -151,6 +151,7 @@ vi.mock("../../../dashboard/src/v2/components/agents/AgentPresetEditorPanel.js",
       const { props, state } = this;
       return h("div", { "data-testid": "editor-panel" },
         h("h2", null, "Edit Agent"),
+        h("div", null, props.isDashboardReplyAgent ? "Dashboard reply MCP context" : "Standard MCP context"),
         h("input", { defaultValue: props.preset.name, "aria-label": "Name" }),
         h("input", {
           type: "checkbox",
@@ -159,6 +160,24 @@ vi.mock("../../../dashboard/src/v2/components/agents/AgentPresetEditorPanel.js",
           onChange: (e: any) => this.setState({ override: e.target.checked })
         }),
         state.override && h("textarea", { placeholder: "Override the default memory prompt template for this agent." }),
+        h("div", null,
+          h("span", null, props.preset.persistentSkillStorage?.enabled ? "Persistent skills enabled" : "Persistent skills off until storage is attached and enabled."),
+          ...(props.availableSkillStorages || []).map((storage: any) => h("label", { key: storage.id },
+            h("input", {
+              type: "checkbox",
+              "aria-label": `Attach ${storage.name}`,
+              checked: (props.preset.persistentSkillStorageIds || []).includes(storage.id),
+              onChange: () => {}
+            }),
+            storage.name
+          )),
+          h("button", {
+            onClick: () => props.onSave(props.preset.id, {
+              persistentSkillStorageIds: ["storage-1"],
+              persistentSkillStorage: { enabled: true },
+            })
+          }, "Save Persistent Skills")
+        ),
         h("button", { onClick: () => props.onSave(props.preset.id, {}) }, "Save Agent"),
         h("button", { onClick: props.onCancel }, "Cancel")
       );
@@ -273,6 +292,17 @@ describe("AgentsPage", () => {
     };
 
     vi.mocked(agentPresetApi.fetchAgentPresets).mockResolvedValue(mockPresets as any);
+    vi.mocked(agentPresetApi.fetchSkillStorages).mockResolvedValue([
+      {
+        id: "storage-1",
+        projectId: "project-1",
+        name: "Review Playbooks",
+        description: "Durable review skills",
+        storageKind: "project",
+        createdAt: "2023-01-01T00:00:00.000Z",
+        updatedAt: "2023-01-01T00:00:00.000Z",
+      },
+    ] as any);
     vi.mocked(settingsApi.fetchProjectEffectiveSettings).mockResolvedValue(createEffectiveSettings() as any);
 
     mockProjectData.projects = [{ id: "project-1", name: "Test Project", status: "ready" }];
@@ -584,6 +614,46 @@ describe("AgentsPage", () => {
     // Textarea should now be visible
     const textarea = screen.getByPlaceholderText("Override the default memory prompt template for this agent.");
     expect(textarea).toBeInTheDocument();
+  });
+
+  it("persists persistent skill storage attachments in the agent update payload", async () => {
+    vi.mocked(agentPresetApi.updateAgentPreset).mockResolvedValue({
+      ...mockPresets[0],
+      persistentSkillStorageIds: ["storage-1"],
+      persistentSkillStorage: { enabled: true },
+    } as any);
+
+    await renderPage();
+    const editBtn = await screen.findByText("Edit Agent");
+    fireEvent.click(editBtn);
+
+    await waitFor(() => {
+      expect(screen.getByText("Persistent skills off until storage is attached and enabled.")).toBeInTheDocument();
+      expect(screen.getByRole("checkbox", { name: "Attach Review Playbooks" })).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByText("Save Persistent Skills"));
+
+    await waitFor(() => {
+      expect(agentPresetApi.updateAgentPreset).toHaveBeenCalledWith("agent-1", expect.objectContaining({
+        persistentSkillStorageIds: ["storage-1"],
+        persistentSkillStorage: { enabled: true },
+      }));
+    });
+  });
+
+  it("passes dashboard reply route context to the agent editor", async () => {
+    const effective = createEffectiveSettings();
+    effective.settings.agents.routing.dashboardReply.agentPresetId = "agent-1";
+    vi.mocked(settingsApi.fetchProjectEffectiveSettings).mockResolvedValue(effective as any);
+
+    await renderPage();
+    const editBtn = await screen.findByText("Edit Agent");
+    fireEvent.click(editBtn);
+
+    await waitFor(() => {
+      expect(screen.getByText("Dashboard reply MCP context")).toBeInTheDocument();
+    });
   });
 });
 

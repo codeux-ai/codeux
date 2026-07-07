@@ -1,6 +1,6 @@
 import { createLogger, type Logger } from "../../../shared/logging/logger.js";
 import { ProviderTelemetryWatcher } from "./provider-telemetry-watcher.js";
-import { CliWorkflowSettings, ProviderId } from "../../../contracts/app-types.js";
+import { CliWorkflowSettings, ProviderId, type ProviderConfigMode } from "../../../contracts/app-types.js";
 import type { CustomMcpServer, QwenModelProviderSettings } from "../../../contracts/app-types.js";
 import { buildProviderMcpConfigArtifact, buildClaudeMcpServerEntry, buildCodexMcpServerTomlLines, buildGeminiMcpServerEntry, escapeTomlString } from "./mcp-config-format.js";
 import type { McpConnectionInfo } from "../../../contracts/mcp-connection-types.js";
@@ -38,6 +38,7 @@ import {
 import { readQwenLogData, readCodexLatestSessionJson, readClaudeSessionJsonl, parseAntigravityConversationId, readAntigravityTranscript } from "./provider-transcripts.js";
 import { parseOpenCodeJsonLines } from "./provider-logs/opencode-log-parser.js";
 import { parseAntigravityDatabase } from "./provider-logs/antigravity-log-parser.js";
+import { runMockupCliProvider } from "./mockup-cli-provider.js";
 import {
   collectProviderUsageTelemetry,
   readQwenOpenAiLogRecords,
@@ -48,6 +49,7 @@ import {
   type ParsedConversationTurn,
 } from "./provider-usage.js";
 import { buildQwenRuntimeConfig, buildOpenCodeRuntimeConfig, type QwenRuntimeSettings, type OpenCodeRuntimeSettings } from "./provider-runtime-config.js";
+import type { PersistentSkillStorageRuntimeMount } from "../../../services/skill-service.js";
 
 export interface ProviderRunResult extends CommandResult {
   usageTelemetry: ProviderUsageTelemetry;
@@ -76,6 +78,8 @@ export interface ProviderRunInput {
   openCodePackage?: string;
   providerMountAuth?: boolean;
   providerAuthPath?: string;
+  providerConfigMode?: ProviderConfigMode;
+  providerConfigPath?: string;
   /** Override the default API endpoint for providers that support it.
    *  Sets ANTHROPIC_BASE_URL (claude-code) or OPENAI_BASE_URL (codex). */
   customBaseUrl?: string;
@@ -109,6 +113,8 @@ export interface ProviderRunInput {
   mcpConnection?: McpConnectionInfo | null;
   /** User-defined custom MCP servers injected into the CLI provider alongside code_ux. */
   customMcpServers?: CustomMcpServer[];
+  /** Writable persistent skill storage mounts available outside the project workspace. */
+  persistentSkillStorageMounts?: PersistentSkillStorageRuntimeMount[];
 }
 
 export interface IProviderRunner {
@@ -211,6 +217,8 @@ export class ProviderRunner implements IProviderRunner {
     openCodePackage?: string;
     providerMountAuth?: boolean;
     providerAuthPath?: string;
+    providerConfigMode?: ProviderConfigMode;
+    providerConfigPath?: string;
     customBaseUrl?: string;
     customModel?: string;
     sessionId: string;
@@ -229,6 +237,7 @@ export class ProviderRunner implements IProviderRunner {
     openCodeBaselineUsage?: Record<string, unknown> | null;
     mcpConnection?: McpConnectionInfo | null;
     customMcpServers?: CustomMcpServer[];
+    persistentSkillStorageMounts?: PersistentSkillStorageRuntimeMount[];
   }): Promise<ProviderRunResult> {
     const { provider, prompt, cwd, model, apiKey, providerMountAuth, providerAuthPath, sessionId, workflowSettings, repoPath, githubToken, gitlabToken, signal, onActivity, onTelemetry } = input;
     const startedMs = Date.now();
@@ -249,6 +258,9 @@ export class ProviderRunner implements IProviderRunner {
         : resolveAntigravityHostLogPath(sessionId))
       : null;
     const providerEnv = this.withProviderEnv(provider, runModel, apiKey, workflowSettings, githubToken, providerMountAuth, input, qwenProcessLogDir, gitlabToken);
+    if (provider === "mockup-cli") {
+      providerEnv.CODE_UX_MOCKUP_SESSION_ID = sessionId;
+    }
     let nativeSessionId = provider === "opencode"
       ? isOpenCodeNativeSessionId(input.continueSessionId) ? input.continueSessionId! : null
       : provider === "qwen-code"
@@ -341,13 +353,28 @@ export class ProviderRunner implements IProviderRunner {
           providerLabel: provider, workflowSettings, repoPath, signal, onActivity: trackingOnActivity,
           providerMountAuth,
           providerAuthPath,
+          providerConfigMode: input.providerConfigMode,
+          providerConfigPath: input.providerConfigPath,
           mcpConnection: input.mcpConnection,
           customMcpServers: input.customMcpServers,
+          persistentSkillStorageMounts: input.persistentSkillStorageMounts,
         });
         if (!result.ok && isDockerWorkspaceMountError(result)) {
           try { await fs.access(cwd); trackingOnActivity(`Docker could not mount workspace path (${cwd}) even though it exists locally. Path visibility mismatch.`, "provider"); } catch { /* ignore */ }
         }
         return result;
+      }
+      if (provider === "mockup-cli") {
+        return await runMockupCliProvider({
+          prompt,
+          cwd,
+          model: runModel,
+          sessionId,
+          env: providerEnv,
+          signal,
+          onStdoutLine: (line) => trackingOnActivity(line, "agent"),
+          onStderrLine: (line) => trackingOnActivity(`[${provider}] ${line}`, "provider"),
+        });
       }
       return await runStreamingCommand(command, args, cwd, providerEnv, {
         signal,
@@ -507,7 +534,15 @@ export class ProviderRunner implements IProviderRunner {
             sessionId,
             workflowSettings,
             repoPath,
-            { providerMountAuth, providerAuthPath, mcpConnection: input.mcpConnection, customMcpServers: input.customMcpServers, signal },
+            {
+              providerMountAuth,
+              providerAuthPath,
+              providerConfigMode: input.providerConfigMode,
+              providerConfigPath: input.providerConfigPath,
+              mcpConnection: input.mcpConnection,
+              customMcpServers: input.customMcpServers,
+              signal,
+            },
           );
         }
       }
@@ -678,6 +713,8 @@ export class ProviderRunner implements IProviderRunner {
     opts: {
       providerMountAuth?: boolean;
       providerAuthPath?: string;
+      providerConfigMode?: ProviderConfigMode;
+      providerConfigPath?: string;
       mcpConnection?: McpConnectionInfo | null;
       customMcpServers?: CustomMcpServer[];
       signal?: AbortSignal;
@@ -699,6 +736,8 @@ export class ProviderRunner implements IProviderRunner {
           onActivity: () => undefined,
           providerMountAuth: opts.providerMountAuth,
           providerAuthPath: opts.providerAuthPath,
+          providerConfigMode: opts.providerConfigMode,
+          providerConfigPath: opts.providerConfigPath,
           mcpConnection: opts.mcpConnection,
           customMcpServers: opts.customMcpServers,
         });
@@ -1217,6 +1256,8 @@ export class ProviderRunner implements IProviderRunner {
         env.ANTIGRAVITY_MODEL = model;
         env.AGY_MODEL = model;
       }
+    } else if (provider === "mockup-cli") {
+      env.CODE_UX_MOCKUP_MODEL = model || "default";
     }
     return env;
   }

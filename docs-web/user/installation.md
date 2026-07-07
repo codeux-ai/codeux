@@ -14,6 +14,40 @@ install and start Code UX with **no configuration**; providers are set up later 
 | **An agent provider** | Dispatching work | At least one of Jules, Claude Code, Codex, Gemini, Qwen Code, OpenCode, or Antigravity. See [Providers and models](./providers-and-models.md). |
 | **GitHub CLI (`gh`)** | Remote merge protocol *(optional)* | Used when GitHub operations run in remote mode. |
 
+## Onboarding dependency installers
+
+First-run readiness checks report Docker CLI, Docker daemon, and Git CLI status. The backend also
+probes installer prerequisites before advertising safe Docker/Git setup options: supported Linux
+package managers plus `systemctl`, Homebrew on macOS, and winget on Windows. These options are
+structured metadata only until an installer action is invoked, and installer execution is limited
+to hardcoded command and argument arrays with bounded output capture. Onboarding invokes installation through
+`POST /api/onboarding/dependencies/install` only after sending the selected `mode` with
+`confirmInstall: true`; unsupported modes and unconfirmed requests are rejected.
+
+| Platform | Recommended mode | Automated behavior | Manual or degraded behavior |
+| --- | --- | --- | --- |
+| **macOS** | `docker-desktop-git` | Uses Homebrew to install Docker Desktop and Git when Homebrew is available. | `docker-engine-git` is degraded because standalone Docker Engine requires a Linux VM; use Docker Desktop unless you manage that VM yourself. |
+| **Windows** | `docker-desktop-git` | Uses winget exact package installs for Docker Desktop and Git, including package/source agreement flags. | `docker-engine-git` is degraded because Docker Engine is not installed directly on Windows desktops; use Docker Desktop or WSL guidance instead. |
+| **Linux** | `docker-engine-git` | Uses `apt`, `dnf`, `yum`, `zypper`, or `pacman` to install Docker Engine packages and Git, then attempts to start Docker with `systemctl` when available. | Linux Docker Desktop artifacts are distro-specific, so `docker-desktop-git` automates Git when possible and points to Docker's official Desktop download guidance. |
+
+Linux privilege handling is noninteractive. Root runs package commands directly; non-root runs use
+`sudo -n`. If passwordless sudo is unavailable, Code UX returns the display commands and privilege
+guidance instead of prompting for a password.
+
+In onboarding, missing Docker/Git checks show an explicit **Auto Install dependencies** action when
+the recommended installer is available. Clicking it sends the recommended confirmed installer mode and
+lets Code UX run the detected OS package manager for Docker and Git. The same step also keeps advanced
+**Docker Desktop + Git** and **Docker Engine + Git** choices visible with platform availability,
+degraded/manual-download guidance, privilege notes, live progress, command summaries, retry, recheck,
+and manual Docker/Git links for fallback.
+
+Installer attempts do not mark onboarding complete. After any completed installer response, including
+permission-limited or manual-download outcomes, onboarding shows the structured result and rechecks
+readiness so Docker CLI, Docker daemon, and Git status refresh. You may still need to refresh your
+terminal PATH, start Docker Desktop or the Docker Engine daemon, add your user to the Docker group, or
+rerun from an elevated shell. Permission failures are shown as guidance with bounded command summaries
+and short command messages, not as raw full command output.
+
 ## Option 1 — Desktop app (recommended)
 
 Download the latest installer for your platform from
@@ -29,7 +63,10 @@ Download the latest installer for your platform from
 > code-signed. Choose **More info → Run anyway**. Only do this for builds downloaded from the official
 > releases page.
 
-The desktop app launches the runtime and opens the dashboard automatically.
+The desktop app launches the runtime and opens the dashboard automatically. When a newer desktop
+release is available, the title bar shows an **Update available** download notice. Activating it
+opens the official GitHub release download page in your default browser; the app does not navigate
+away from the dashboard.
 
 ## Option 2 — From source
 
@@ -51,11 +88,13 @@ See [Building from source](../developer/building-from-source.md) for the full de
 When Code UX starts it:
 
 1. Serves the dashboard at `http://localhost:4444`.
-2. Exposes an **MCP server** (over stdio, plus an optional HTTP worker gateway).
+2. Exposes an **MCP server** (over stdio, plus an authenticated Streamable HTTP gateway).
 3. Loads any settings it finds, then waits for you to add a project and configure providers.
 
 Nothing is required to reach this point — no API keys, no environment variables. Configure providers
 when you are ready to dispatch work (see [Configuring providers](#configuring-providers)).
+
+For headless server deployments, use `--server-mode` with an explicit MCP HTTP bearer token. Server mode does not bind dashboard routes or websockets; operators connect through authenticated MCP HTTP and probe `/health` and `/ready` on the MCP listener.
 
 ## CLI flags
 
@@ -66,11 +105,19 @@ Run `codeux --help` for the authoritative list. The current flags are:
 | `--api-key VALUE` | Set the Jules API key (overrides env and settings). |
 | `--runtime-role VALUE` | Runtime role: `project_manager` (default) or `worker-host`. |
 | `--headless` (alias `--no-dashboard`) | Start MCP-only without binding the dashboard. |
-| `--mcp-http` / `--no-mcp-http` | Enable/disable the remote MCP HTTP worker gateway (**enabled by default**). |
-| `--mcp-http-port N` | Port for the MCP HTTP worker gateway. |
-| `--mcp-http-host H` | Host/interface for the MCP HTTP worker gateway. |
-| `--mcp-http-path P` | Path for the MCP HTTP worker gateway (default `/mcp`). |
-| `--mcp-http-auth-token VALUE` | Bearer token required for MCP HTTP requests on a non-loopback host. |
+| `--server-mode` | Start authenticated MCP HTTP server mode without binding dashboard routes or websockets. Requires an explicit bearer token with at least 32 bearer-safe characters. |
+| `--no-mcp-http` | Preferred alias for disabling the MCP Streamable HTTP gateway outside server mode. |
+| `--mcp-https` / `--no-mcp-https` | Enable/disable the MCP Streamable HTTP gateway (**enabled by default**; legacy flag name). |
+| `--mcp-http-port N` | Preferred alias for the MCP HTTP gateway port. |
+| `--mcp-https-port N` | Port for the MCP HTTP gateway. |
+| `--mcp-http-host H` | Preferred alias for the MCP HTTP gateway host/interface. |
+| `--mcp-https-host H` | Host/interface for the MCP HTTP gateway. |
+| `--mcp-http-path P` | Preferred alias for the MCP HTTP gateway path. |
+| `--mcp-https-path P` | Path for the MCP HTTP gateway (default `/mcp`). |
+| `--mcp-http-auth-token VALUE` | Preferred alias for the MCP HTTP bearer token. |
+| `--mcp-https-auth-token VALUE` | Bearer token for MCP HTTP requests; overrides the generated user token. |
+| `--mcp-http-max-sessions N` | Preferred alias for the active Streamable HTTP session cap. |
+| `--mcp-http-session-timeout-ms N` | Preferred alias for the idle Streamable HTTP session timeout. |
 | `--help`, `-h` | Show help. |
 
 ## Environment variables
@@ -79,11 +126,23 @@ Run `codeux --help` for the authoritative list. The current flags are:
 | --- | --- |
 | `JULES_API_KEY` | Jules API key (also accepted as `JULES_KEY`). |
 | `DASHBOARD_PORT` | Dashboard port (default `4444`). |
-| `MCP_HTTP_ENABLED` | Enable the MCP HTTP worker gateway (default `true`). |
-| `MCP_HTTP_PORT` | Port for the MCP HTTP worker gateway. |
-| `MCP_HTTP_HOST` | Host/interface for the MCP HTTP worker gateway. |
-| `MCP_HTTP_PATH` | Path for the MCP HTTP worker gateway. |
-| `MCP_HTTP_AUTH_TOKEN` | Bearer token for MCP HTTP requests. |
+| `CODE_UX_SERVER_MODE` | Set to `true` for authenticated MCP HTTP server mode without dashboard binding. Requires an explicit bearer token with at least 32 bearer-safe characters. |
+| `MCP_HTTP_ENABLED` | Preferred alias to enable the MCP HTTP gateway. |
+| `MCP_HTTPS_ENABLED` | Enable the MCP HTTP gateway (default `true`). |
+| `MCP_HTTP_PORT` | Preferred alias for the MCP HTTP gateway port. |
+| `MCP_HTTPS_PORT` | Port for the MCP HTTP gateway. |
+| `MCP_HTTP_HOST` | Preferred alias for the MCP HTTP gateway host/interface. |
+| `MCP_HTTPS_HOST` | Host/interface for the MCP HTTP gateway. |
+| `MCP_HTTP_PATH` | Preferred alias for the MCP HTTP gateway path. |
+| `MCP_HTTPS_PATH` | Path for the MCP HTTP gateway. |
+| `MCP_HTTP_AUTH_TOKEN` | Preferred alias for the MCP HTTP bearer token. |
+| `MCP_HTTPS_AUTH_TOKEN` | Bearer token for MCP HTTP requests; if unset, Code UX creates `~/.code-ux/security.json`. |
+| `MCP_HTTP_MAX_SESSIONS` | Preferred alias for the active Streamable HTTP session cap. |
+| `MCP_HTTP_SESSION_TIMEOUT_MS` | Preferred alias for the idle Streamable HTTP session timeout. |
+
+In server mode, `MCP_HTTPS_AUTH_TOKEN`, `MCP_HTTP_AUTH_TOKEN`, `--mcp-https-auth-token`, or `--mcp-http-auth-token` must provide an explicit token with at least 32 bearer-safe characters. Server mode does not fall back to the generated user token.
+
+For server-mode startup commands, token handling, worker enrollment, settings synchronization, and troubleshooting, see [Connecting MCP clients](./mcp-clients.md#secure-headless-server-mode).
 
 A project-local `.env` file is read on startup, so you can keep settings per repository:
 
@@ -138,7 +197,7 @@ pnpm install
 pnpm run build
 
 # desktop app
-# download and run the latest installer from GitHub Releases
+# use the title-bar Update available notice, or download and run the latest installer from GitHub Releases
 ```
 
 ## Uninstall

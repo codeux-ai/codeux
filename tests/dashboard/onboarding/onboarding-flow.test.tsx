@@ -10,9 +10,16 @@ import { OnboardingExperience } from "../../../dashboard/src/v2/components/onboa
 import { GuidedDashboardTour } from "../../../dashboard/src/v2/components/onboarding/GuidedDashboardTour.js";
 import { DASHBOARD_TOUR_START_EVENT } from "../../../dashboard/src/v2/lib/onboarding-control.js";
 import { cloneDefaultSettings } from "../../../dashboard/src/lib/settings.js";
+import { clearLivePayloadCacheForTests } from "../../../dashboard/src/lib/api/dashboard-api.js";
 import { DEFAULT_DASHBOARD_SETTINGS } from "../../../src/repositories/settings-defaults.js";
 import * as settingsApi from "../../../dashboard/src/v2/lib/settings-api.js";
-import type { SystemSettings } from "../../../dashboard/src/types.js";
+import type {
+  OnboardingDependencyCheck,
+  OnboardingDependencyInstallMode,
+  OnboardingDependencyInstallerResult,
+  OnboardingRuntimeReadiness,
+  SystemSettings,
+} from "../../../dashboard/src/types.js";
 import {
   createInitialOnboardingFlowState,
   defaultOnboardingReadiness,
@@ -88,6 +95,108 @@ const createSystemSettings = (): SystemSettings => {
     modelPricing: { items: [] },
   } as SystemSettings;
 };
+
+const createDependencyCheck = (
+  id: string,
+  label: string,
+  status: OnboardingDependencyCheck["status"],
+): OnboardingDependencyCheck => ({
+  id,
+  label,
+  status,
+  required: true,
+  description: `${label} check`,
+  resolution: `Install ${label} and recheck readiness.`,
+  detail: `${label} is ${status}.`,
+});
+
+const createInstallerReadiness = (
+  recommendedMode: OnboardingDependencyInstallMode = "docker-engine-git",
+): OnboardingRuntimeReadiness => ({
+  checkedAt: "2026-07-07T00:00:00.000Z",
+  cluster: {
+    status: "not_ready",
+    label: "Cluster not ready",
+    detail: "Docker and Git are required before local container execution.",
+  },
+  dependencies: [
+    createDependencyCheck("docker-cli", "Docker CLI", "missing"),
+    createDependencyCheck("docker-daemon", "Docker daemon", "missing"),
+    createDependencyCheck("git-cli", "Git CLI", "ready"),
+  ],
+  providers: [],
+  installers: {
+    platform: "linux",
+    recommendedMode,
+    options: [
+      {
+        mode: "docker-desktop-git",
+        label: "Docker Desktop and Git",
+        platform: "linux",
+        recommended: recommendedMode === "docker-desktop-git",
+        automation: "partial",
+        description: "Automates Git and provides official Docker Desktop download guidance.",
+        dependencyIds: ["docker-cli", "docker-daemon", "git-cli"],
+        requiresPrivilege: true,
+        requiresManualDownload: true,
+        available: true,
+        guidance: ["Download Docker Desktop manually for this Linux distribution, then start the desktop app."],
+      },
+      {
+        mode: "docker-engine-git",
+        label: "Docker Engine and Git",
+        platform: "linux",
+        recommended: recommendedMode === "docker-engine-git",
+        automation: "automated",
+        description: "Installs Docker Engine packages and Git through the detected Linux package manager.",
+        dependencyIds: ["docker-cli", "docker-daemon", "git-cli"],
+        requiresPrivilege: true,
+        requiresManualDownload: false,
+        available: true,
+        guidance: ["The Docker service may need to be started after installation."],
+      },
+    ],
+  },
+});
+
+const createInstallerResult = (): OnboardingDependencyInstallerResult => ({
+  mode: "docker-engine-git",
+  platform: "linux",
+  status: "partial",
+  commands: [
+    {
+      id: "apt-install-docker-git",
+      groupId: "docker-engine",
+      label: "Install Docker Engine and Git",
+      command: "sudo",
+      args: ["-n", "apt-get", "install", "-y", "docker.io", "git"],
+      displayCommand: "sudo -n apt-get install -y docker.io git",
+      status: "skipped",
+      timeoutMs: 120000,
+      maxStdoutChars: 4000,
+      maxStderrChars: 4000,
+      code: null,
+      stdoutSummary: "",
+      stderrSummary: "",
+      message: "Passwordless sudo is required to run package-manager commands noninteractively.",
+    },
+  ],
+  skippedDependencyGroups: [
+    {
+      groupId: "git",
+      label: "Git CLI",
+      dependencyIds: ["git-cli"],
+      reason: "Git CLI is already ready.",
+    },
+  ],
+  requiresPrivilege: true,
+  requiresManualDownload: true,
+  postInstallGuidance: [
+    "Restart the terminal after installation so PATH changes are visible.",
+    "Start Docker manually, then rerun readiness checks.",
+  ],
+  message: "Installer completed with follow-up guidance.",
+});
 
 const HookProbe = () => {
   const { state, loading, markCompleted } = useOnboardingState();
@@ -325,6 +434,7 @@ describe("GuidedDashboardTour integration", () => {
 describe("OnboardingExperience integration", () => {
   afterEach(() => {
     vi.restoreAllMocks();
+    clearLivePayloadCacheForTests();
     cleanup();
   });
 
@@ -360,6 +470,67 @@ describe("OnboardingExperience integration", () => {
     const readinessRegion = await screen.findAllByText("Blocked");
     expect(readinessRegion.length).toBeGreaterThan(0);
     expect(readinessRegion[0]!.getAttribute("aria-live")).toBe("polite");
+  });
+
+  it("runs the recommended dependency installer and refreshes readiness after completion", async () => {
+    const systemSettings = createSystemSettings();
+    vi.mocked(settingsApi.fetchSystemSettings).mockResolvedValue(systemSettings);
+    const installResult = createInstallerResult();
+    let resolveInstall: (response: Response) => void = () => {};
+    const installResponse = new Promise<Response>((resolve) => {
+      resolveInstall = resolve;
+    });
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const url = typeof input === "string" ? input : input.url;
+      if (url.endsWith("/api/user/onboarding")) {
+        return new Response(JSON.stringify({ completed: false, onboardingCompletedAt: null }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+      if (url.endsWith("/api/onboarding/readiness")) {
+        return new Response(JSON.stringify(createInstallerReadiness()), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+      if (url.endsWith("/api/onboarding/dependencies/install")) {
+        expect(init?.method).toBe("POST");
+        expect(JSON.parse(String(init?.body))).toEqual({
+          mode: "docker-engine-git",
+          confirmInstall: true,
+        });
+        return installResponse;
+      }
+      return new Response(JSON.stringify({}), { status: 404 });
+    });
+    const user = userEvent.setup();
+
+    render(<OnboardingExperience />);
+
+    const autoInstallButton = await screen.findByRole("button", { name: "Auto Install dependencies" });
+    await user.click(autoInstallButton);
+
+    expect(await screen.findByText("Installing Docker Engine + Git")).not.toBeNull();
+    resolveInstall(new Response(JSON.stringify(installResult), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    }));
+
+    expect(await screen.findByRole("heading", { name: "Latest install result" })).not.toBeNull();
+    expect(screen.getByText("Installer completed with follow-up guidance.")).not.toBeNull();
+    expect(screen.getByText(/Administrator privileges or passwordless sudo are required/i)).not.toBeNull();
+    expect(screen.getByText(/Manual Docker download is still required/i)).not.toBeNull();
+    expect(screen.getByText(/Restart the terminal after installation/i)).not.toBeNull();
+    expect(screen.getByText(/Start Docker manually/i)).not.toBeNull();
+
+    await waitFor(() => {
+      const readinessCalls = fetchMock.mock.calls.filter(([input]) => {
+        const url = typeof input === "string" ? input : input.url;
+        return url.endsWith("/api/onboarding/readiness");
+      });
+      expect(readinessCalls).toHaveLength(2);
+    });
   });
 
   it("toggles Git onboarding between remote and local modes", async () => {

@@ -2,6 +2,21 @@
 
 The `codeux` CLI exposes the same management surface as the MCP tool handlers, but with a shell-friendly command layout for local operators and scripts.
 
+## Runtime Startup
+
+The same package also ships runtime entrypoints:
+
+```bash
+codeux
+codeux --headless
+codeux --server-mode --mcp-http-auth-token "$MCP_HTTP_AUTH_TOKEN"
+codeux-worker --server-url http://SERVER_HOST:4445/mcp --auth-token "$CODE_UX_WORKER_AUTH_TOKEN" --project-id project-id
+```
+
+Use `--server-mode` for secure headless MCP HTTP deployments. It disables dashboard routes and websockets, starts MCP HTTP by default, and requires an explicit bearer token. Use `codeux-worker` for external worker hosts; the worker connects to the server-mode control plane and starts its own local `worker-host` execution runtime.
+
+For full server-mode flags, health checks, token rotation, settings synchronization, and cluster worker troubleshooting, see [Secure Headless Server Mode](../operations/server-mode.md).
+
 ## Command Forms
 
 There are two supported entry points:

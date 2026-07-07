@@ -6,7 +6,96 @@ import {
   getWorkingBubbleData,
   sanitizeInvocationOutputText,
 } from "../../../dashboard/src/v2/lib/chat-widget-view-models.js";
-import type { ChatMessageRecord, ExecutionInvocationMessageRecord, ConversationRuntimeState } from "../../../dashboard/src/v2/types.js";
+import type { ExecutionDashboardSnapshot, ExecutionTaskDispatchSummary } from "../../../dashboard/src/types.js";
+import type { ChatMessageRecord, ExecutionInvocationMessageRecord, ConversationRuntimeState, Task } from "../../../dashboard/src/v2/types.js";
+
+const createTask = (overrides: Partial<Task> = {}): Task => ({
+  recordId: "task-1",
+  id: "TASK-1",
+  source: "Test Project",
+  sprint: "Sprint Alpha",
+  sprintId: "sprint-1",
+  title: "Build first task",
+  status: "pending",
+  priority: "medium",
+  executorType: "docker_cli",
+  assignee: "Runner",
+  time: "--",
+  createdAt: "2026-03-10T12:00:00.000Z",
+  updatedAt: "2026-03-10T12:00:00.000Z",
+  promptMarkdown: "Do the work",
+  description: "",
+  dependsOnTaskIds: [],
+  isIndependent: true,
+  isMerged: false,
+  mergeIndicator: null,
+  ...overrides,
+});
+
+const createDispatch = (overrides: Partial<ExecutionTaskDispatchSummary> = {}): ExecutionTaskDispatchSummary => ({
+  id: "dispatch-1",
+  projectId: "project-1",
+  sprintId: "sprint-1",
+  sprintRunId: "run-1",
+  sprintName: "Sprint Alpha",
+  sprintNumber: 7,
+  taskId: "task-1",
+  taskKey: "TASK-1",
+  taskTitle: "Build first task",
+  status: "running",
+  executorType: "docker_cli",
+  priority: 10,
+  connectionId: null,
+  connectionDisplayName: null,
+  connectionRole: null,
+  taskRunId: "task-run-1",
+  taskRunState: "RUNNING",
+  provider: "codex",
+  sessionId: "session-1",
+  sessionName: "sessions/session-1",
+  workerBranch: null,
+  prUrl: null,
+  queuedAt: "2026-03-10T12:00:00.000Z",
+  claimedAt: "2026-03-10T12:01:00.000Z",
+  startedAt: "2026-03-10T12:02:00.000Z",
+  finishedAt: null,
+  lastHeartbeatAt: "2026-03-10T12:03:00.000Z",
+  errorMessage: null,
+  activeLeaseOwnerKey: null,
+  activeLeaseExpiresAt: null,
+  ...overrides,
+});
+
+const createExecution = (overrides: Partial<ExecutionDashboardSnapshot> = {}): ExecutionDashboardSnapshot => ({
+  projectId: "project-1",
+  projectName: "Test Project",
+  sprintRuns: [{
+    id: "run-1",
+    projectId: "project-1",
+    sprintId: "sprint-1",
+    sprintName: "Sprint Alpha",
+    sprintNumber: 7,
+    status: "running",
+    triggerType: "manual",
+    triggeredBy: null,
+    executorMode: "DOCKER",
+    startedAt: "2026-03-10T12:00:00.000Z",
+    finishedAt: null,
+    lastHeartbeatAt: "2026-03-10T12:03:00.000Z",
+    createdAt: "2026-03-10T12:00:00.000Z",
+    activeLeaseOwnerKey: null,
+    activeLeaseExpiresAt: null,
+    humanIntervention: null,
+  }],
+  taskDispatches: [],
+  connections: [],
+  primaryAssignedWorker: null,
+  overflowAssignedWorkers: [],
+  attentionItems: [],
+  recentEvents: [],
+  updatedAt: "2026-03-10T12:03:00.000Z",
+  ...overrides,
+});
 
 describe("Chat Widget View Models", () => {
   describe("sanitizeInvocationOutputText", () => {
@@ -72,6 +161,151 @@ describe("Chat Widget View Models", () => {
 
       const result = getChatWidgetData(message);
       expect(result).toEqual({ type: "planning", status: "completed", planName: "Execution Plan" });
+    });
+
+    it("keeps the generic planning fallback when live sibling data is missing", () => {
+      const message = {
+        metadata: {
+          type: "planning",
+          status: "queued",
+          planName: "Sprint request",
+          sprintId: "sprint-1",
+        }
+      } as unknown as ChatMessageRecord;
+
+      const result = getChatWidgetData(message);
+      expect(result).toEqual({ type: "planning", status: "queued", planName: "Sprint request" });
+    });
+
+    it("builds live queued sprint progress from metadata and project tasks", () => {
+      const message = {
+        metadata: {
+          widget_metadata: {
+            type: "planning_request",
+            status: "queued",
+            route_path: "Sprint request",
+            sprintId: "sprint-1",
+          },
+        }
+      } as unknown as ChatMessageRecord;
+
+      const projectTasks = Array.from({ length: 7 }, (_, index) => createTask({
+        recordId: `task-${index + 1}`,
+        id: `TASK-${index + 1}`,
+        title: `Task ${index + 1}`,
+      }));
+
+      const result = getChatWidgetData(message, {
+        projectId: "project-1",
+        projectTasks,
+        projectTasksLoading: false,
+        projectTasksLoaded: true,
+        execution: createExecution({ sprintRuns: [createExecution().sprintRuns[0]!, { ...createExecution().sprintRuns[0]!, id: "run-queued", status: "queued" }] }),
+        executionLoading: false,
+        executionLoaded: true,
+        sprintKeyPrefix: "SPR",
+      });
+
+      expect(result.status).toBe("queued");
+      expect(result.liveStatus?.sprintKey).toBe("SPR-7");
+      expect(result.liveStatus?.progressLabel).toBe("0/7 · 0%");
+      expect(result.liveStatus?.queuedTasks).toBe(7);
+      expect(result.liveStatus?.tasks.map((task) => task.statusLabel)).toEqual([
+        "Queued",
+        "Queued",
+        "Queued",
+        "Queued",
+        "Queued",
+        "Queued",
+        "Queued",
+      ]);
+    });
+
+    it("calculates partial completion and running task status from live dispatches", () => {
+      const message = {
+        metadata: {
+          type: "planning",
+          status: "running",
+          sprintId: "sprint-1",
+        },
+      } as unknown as ChatMessageRecord;
+
+      const result = getChatWidgetData(message, {
+        projectId: "project-1",
+        projectTasks: [
+          createTask({ recordId: "task-1", id: "TASK-1", status: "completed", title: "Completed one" }),
+          createTask({ recordId: "task-2", id: "TASK-2", status: "completed", title: "Completed two" }),
+          createTask({ recordId: "task-3", id: "TASK-3", status: "in_progress", title: "Running task" }),
+        ],
+        projectTasksLoading: false,
+        projectTasksLoaded: true,
+        execution: createExecution({
+          taskDispatches: [
+            createDispatch({ id: "dispatch-3", taskId: "task-3", taskKey: "TASK-3", status: "running", taskRunState: "RUNNING" }),
+          ],
+        }),
+        executionLoading: false,
+        executionLoaded: true,
+      });
+
+      expect(result.liveStatus?.progressLabel).toBe("2/3 · 67%");
+      expect(result.liveStatus?.completedTasks).toBe(2);
+      expect(result.liveStatus?.tasks.find((task) => task.id === "TASK-3")?.statusLabel).toBe("Running");
+    });
+
+    it("surfaces failed, blocked, and quota task statuses from dispatch state", () => {
+      const message = {
+        metadata: {
+          type: "planning",
+          status: "running",
+          sprintId: "sprint-1",
+        },
+      } as unknown as ChatMessageRecord;
+
+      const result = getChatWidgetData(message, {
+        projectId: "project-1",
+        projectTasks: [
+          createTask({ recordId: "task-failed", id: "TASK-F", title: "Failed task" }),
+          createTask({ recordId: "task-blocked", id: "TASK-B", title: "Blocked task" }),
+          createTask({ recordId: "task-quota", id: "TASK-Q", title: "Quota task" }),
+        ],
+        projectTasksLoading: false,
+        projectTasksLoaded: true,
+        execution: createExecution({
+          taskDispatches: [
+            createDispatch({ id: "dispatch-failed", taskId: "task-failed", taskKey: "TASK-F", status: "failed", taskRunState: "FAILED", finishedAt: "2026-03-10T12:05:00.000Z" }),
+            createDispatch({ id: "dispatch-blocked", taskId: "task-blocked", taskKey: "TASK-B", status: "blocked", taskRunState: "BLOCKED", finishedAt: "2026-03-10T12:06:00.000Z" }),
+            createDispatch({ id: "dispatch-quota", taskId: "task-quota", taskKey: "TASK-Q", status: "quota", taskRunState: "QUOTA", finishedAt: "2026-03-10T12:07:00.000Z" }),
+          ],
+        }),
+        executionLoading: false,
+        executionLoaded: true,
+      });
+
+      expect(result.liveStatus?.tasks.map((task) => task.statusLabel)).toEqual(["Failed", "Blocked", "Quota wait"]);
+    });
+
+    it("keeps the generic planning fallback while execution and task data are still loading", () => {
+      const message = {
+        metadata: {
+          type: "planning",
+          status: "queued",
+          planName: "Sprint request",
+          sprintId: "sprint-1",
+        }
+      } as unknown as ChatMessageRecord;
+
+      const result = getChatWidgetData(message, {
+        projectId: "project-1",
+        projectTasks: [createTask()],
+        projectTasksLoading: true,
+        projectTasksLoaded: false,
+        execution: createExecution(),
+        executionLoading: false,
+        executionLoaded: true,
+      });
+
+      expect(result).toEqual({ type: "planning", status: "queued", planName: "Sprint request" });
     });
   });
 

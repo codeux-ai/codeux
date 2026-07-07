@@ -1,12 +1,20 @@
 import type { FunctionComponent } from "preact";
 import { useEffect, useMemo, useState } from "preact/hooks";
-import { ArrowLeft, Boxes, BrainCircuit, Plus, Server, Settings2, SlidersHorizontal, Trash2, Wrench } from "lucide-preact";
+import { ArrowLeft, Boxes, BrainCircuit, Check, Copy, Download, Plus, RefreshCcw, Server, Settings2, SlidersHorizontal, Trash2, Wrench } from "lucide-preact";
 import type { SettingsPageState } from "../../../hooks/use-settings-page-state.js";
 import type { CustomMcpServer, CustomMcpTransport, McpToolToggle, ProviderId } from "../../../../types.js";
 import { NoticePanel } from "../SettingsSurface.js";
 import { PillChoiceGroup, Row, TextInput, TextAreaInput, Toggle } from "../SettingsFormFields.js";
 import { SectionCard } from "./SharedPanelComponents.js";
 import { TOOL_DEFINITIONS, type McpToolCategory } from "../../../../../../src/contracts/mcp-tool-definitions.js";
+import {
+  fetchLocalMcpSetup,
+  installLocalMcpProvider,
+  regenerateLocalMcpToken,
+  type LocalMcpCliProvider,
+  type LocalMcpInstallResult,
+  type LocalMcpSetupInfo,
+} from "../../../lib/local-mcp-api.js";
 
 const CATEGORY_META: Record<McpToolCategory, { label: string; description: string; icon: typeof Server }> = {
   orchestration: { label: "Orchestration", description: "Projects, sprints, and tasks", icon: Boxes },
@@ -22,6 +30,8 @@ const MCP_CAPABLE_PROVIDERS: Array<{ id: ProviderId; label: string }> = [
   { id: "gemini", label: "Gemini" },
   { id: "codex", label: "Codex" },
   { id: "qwen-code", label: "Qwen Code" },
+  { id: "opencode", label: "OpenCode" },
+  { id: "antigravity", label: "Antigravity" },
 ];
 
 const NAME_PATTERN = /^[a-zA-Z0-9_-]+$/;
@@ -64,6 +74,147 @@ const ActionChip: FunctionComponent<{
   </button>
 );
 
+const copyToClipboard = async (value: string): Promise<boolean> => {
+  if (!navigator.clipboard) {
+    return false;
+  }
+  await navigator.clipboard.writeText(value);
+  return true;
+};
+
+const LocalHttpSetup: FunctionComponent = () => {
+  const [setup, setSetup] = useState<LocalMcpSetupInfo | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [busyAction, setBusyAction] = useState<string | null>(null);
+  const [copied, setCopied] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = async (): Promise<void> => {
+    setLoading(true);
+    setError(null);
+    try {
+      setSetup(await fetchLocalMcpSetup());
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load local MCP setup.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void load();
+  }, []);
+
+  const copyValue = async (key: string, value: string | null | undefined): Promise<void> => {
+    if (!value) return;
+    setError(null);
+    try {
+      await copyToClipboard(value);
+      setCopied(key);
+      window.setTimeout(() => setCopied((current) => (current === key ? null : current)), 1600);
+    } catch {
+      setError("Clipboard write failed.");
+    }
+  };
+
+  const regenerate = async (): Promise<void> => {
+    setBusyAction("regenerate");
+    setError(null);
+    setMessage(null);
+    try {
+      const next = await regenerateLocalMcpToken();
+      setSetup(next);
+      setMessage("Token regenerated. Reinstall local CLI configs that should keep using this server.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to regenerate token.");
+    } finally {
+      setBusyAction(null);
+    }
+  };
+
+  const install = async (provider: LocalMcpCliProvider): Promise<void> => {
+    setBusyAction(provider);
+    setError(null);
+    setMessage(null);
+    try {
+      const result: LocalMcpInstallResult = await installLocalMcpProvider(provider);
+      setMessage(`Installed ${setup?.providers.find((entry) => entry.id === provider)?.label ?? provider} config at ${result.configPath}.`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to install CLI config.");
+    } finally {
+      setBusyAction(null);
+    }
+  };
+
+  const configSnippet = setup?.url && setup.authToken
+    ? `url: ${setup.url}\nAuthorization: Bearer ${setup.authToken}`
+    : "";
+
+  return (
+    <div className="rounded-[1.35rem] border border-black/[0.08] bg-white/82 p-5 shadow-[0_12px_30px_rgba(15,23,42,0.035)] dark:border-white/[0.08] dark:bg-void-800/78">
+      <div className="flex flex-col gap-4">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <div className="flex flex-wrap items-center gap-2">
+              <h3 className="text-sm font-semibold text-slate-900 dark:text-white">Local CLI HTTP setup</h3>
+              <Pill label={setup?.enabled ? "HTTP active" : "Disabled"} tone={setup?.enabled ? "active" : "muted"} />
+            </div>
+            <p className="mt-1 max-w-3xl text-xs leading-relaxed text-slate-500 dark:text-slate-400">
+              Add this Code UX runtime as an authenticated Streamable HTTP MCP server for local CLI clients. HTTPS needs a trusted certificate or a TLS reverse proxy; localhost HTTP uses the bearer token below.
+            </p>
+          </div>
+          <ActionChip
+            label={busyAction === "regenerate" ? "Regenerating" : "Regenerate token"}
+            icon={RefreshCcw}
+            onClick={() => { void regenerate(); }}
+            disabled={loading || busyAction !== null || !setup?.enabled}
+          />
+        </div>
+
+        <div className="grid gap-3 lg:grid-cols-[1fr_1fr_auto]">
+          <div className="min-w-0 rounded-[1rem] border border-black/[0.06] bg-black/[0.025] p-3 dark:border-white/[0.06] dark:bg-white/[0.035]">
+            <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Server URL</div>
+            <div className="mt-2 break-all font-mono text-xs text-slate-700 dark:text-slate-200">{loading ? "Loading..." : setup?.url ?? "MCP HTTP is disabled"}</div>
+          </div>
+          <div className="min-w-0 rounded-[1rem] border border-black/[0.06] bg-black/[0.025] p-3 dark:border-white/[0.06] dark:bg-white/[0.035]">
+            <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Bearer token</div>
+            <div className="mt-2 break-all font-mono text-xs text-slate-700 dark:text-slate-200">{loading ? "Loading..." : setup?.authToken ?? "Not available"}</div>
+          </div>
+          <div className="flex flex-wrap items-end gap-2">
+            <ActionChip label={copied === "url" ? "Copied" : "Copy URL"} icon={copied === "url" ? Check : Copy} onClick={() => { void copyValue("url", setup?.url); }} disabled={!setup?.url} />
+            <ActionChip label={copied === "token" ? "Copied" : "Copy token"} icon={copied === "token" ? Check : Copy} onClick={() => { void copyValue("token", setup?.authToken); }} disabled={!setup?.authToken} />
+            <ActionChip label={copied === "snippet" ? "Copied" : "Copy config"} icon={copied === "snippet" ? Check : Copy} onClick={() => { void copyValue("snippet", configSnippet); }} disabled={!configSnippet} />
+          </div>
+        </div>
+
+        <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+          {(setup?.providers ?? []).map((provider) => (
+            <div key={provider.id} className="flex min-w-0 items-center justify-between gap-3 rounded-[1rem] border border-black/[0.06] bg-white/70 p-3 dark:border-white/[0.06] dark:bg-white/[0.035]">
+              <div className="min-w-0">
+                <div className="text-xs font-semibold text-slate-800 dark:text-slate-100">{provider.label}</div>
+                <div className="mt-1 truncate font-mono text-[10px] text-slate-400">{provider.configPath}</div>
+              </div>
+              <button
+                type="button"
+                onClick={() => { void install(provider.id); }}
+                disabled={!setup?.enabled || busyAction !== null}
+                className="inline-flex h-8 shrink-0 items-center justify-center gap-2 rounded-[0.8rem] border border-black/[0.08] bg-white/82 px-2.5 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-600 transition-colors hover:border-black/[0.14] hover:text-slate-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 disabled:cursor-not-allowed disabled:opacity-45 dark:border-white/[0.08] dark:bg-white/[0.045] dark:text-slate-300 dark:hover:text-white"
+              >
+                {busyAction === provider.id ? <RefreshCcw className="h-3.5 w-3.5" /> : <Download className="h-3.5 w-3.5" />}
+                Install
+              </button>
+            </div>
+          ))}
+        </div>
+
+        {message ? <div className="text-xs font-medium text-signal-700 dark:text-signal-200">{message}</div> : null}
+        {error ? <div className="text-xs font-medium text-status-red">{error}</div> : null}
+      </div>
+    </div>
+  );
+};
+
 type DetailView = { kind: "list" } | { kind: "internal" } | { kind: "custom"; id: string };
 
 const maskUrl = (url: string): string => {
@@ -85,7 +236,7 @@ const serverSubtitle = (server: CustomMcpServer): string => {
 };
 
 export const SettingsMcpPanel: FunctionComponent<{ state: SettingsPageState }> = ({ state }) => {
-  const { activeScope, systemSettings, projectSettings, selectedProject, updateSystem, updateProject } = state;
+  const { activeScope, systemSettings, projectSettings, updateSystem, updateProject } = state;
 
   const isProject = activeScope === "project";
   const [view, setView] = useState<DetailView>({ kind: "list" });
@@ -161,10 +312,6 @@ export const SettingsMcpPanel: FunctionComponent<{ state: SettingsPageState }> =
     </button>
   );
 
-  const scopeNotice = isProject && selectedProject
-    ? `Editing MCP configuration for ${selectedProject.name}. Project values override system defaults.`
-    : "System-wide MCP configuration injected into every CLI run across all projects.";
-
   // ---- Internal MCP detail view ----
   if (view.kind === "internal") {
     return (
@@ -188,6 +335,7 @@ export const SettingsMcpPanel: FunctionComponent<{ state: SettingsPageState }> =
               title={meta.label}
               icon={<Icon strokeWidth={2.4} />}
               badge={`${toolsInCategory.filter((def) => enabledByName.get(def.name) ?? true).length}/${toolsInCategory.length}`}
+              helpId="mcp-tool-category"
             >
               <Row label={`Enable all ${meta.label.toLowerCase()} tools`} description={meta.description}>
                 <Toggle aria-label="Toggle setting" value={allEnabled} onChange={(value) => setCategoryEnabled(category, value)} />
@@ -241,10 +389,7 @@ export const SettingsMcpPanel: FunctionComponent<{ state: SettingsPageState }> =
   return (
     <>
       <SectionCard title="MCP Servers" watermark="MCP" icon={<Server strokeWidth={2.4} />}>
-        <NoticePanel title={isProject ? "Project scope" : "System scope"}>{scopeNotice}</NoticePanel>
-        <NoticePanel title="MCP connection modes">
-          Code UX exposes its built-in MCP server over stdio by default. To let external MCP clients connect over authenticated Streamable HTTP, start Code UX with MCP_HTTP_* environment variables or --mcp-http* flags, then add remote custom servers below with HTTP / SSE.
-        </NoticePanel>
+        <LocalHttpSetup />
 
         <div className="grid gap-3 md:grid-cols-2">
           {/* Built-in MCP card */}
@@ -430,7 +575,7 @@ const CustomServerDetail: FunctionComponent<{
   };
 
   return (
-    <SectionCard title={server.label || server.name || "MCP server"} watermark="MCP" icon={<Server strokeWidth={2.4} />}>
+    <SectionCard title={server.label || server.name || "MCP server"} watermark="MCP" icon={<Server strokeWidth={2.4} />} helpId="custom-mcp-server">
       <NoticePanel title="HTTP / SSE setup">
         Choose HTTP / SSE for a remote MCP server that already exposes an HTTP or SSE endpoint. Paste the server URL below, add optional auth headers as a JSON object, and Code UX injects the updated config on the next CLI run.
       </NoticePanel>

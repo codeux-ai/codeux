@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { DEFAULT_DASHBOARD_SETTINGS } from "../../../src/repositories/settings-defaults.js";
 import { SprintExecutionStateService } from "../../../src/services/sprint-execution-state-service.js";
 import type { ProjectManagementRepository } from "../../../src/repositories/project-management-repository.js";
@@ -22,6 +22,10 @@ describe("SprintExecutionStateService", () => {
     mockProjectManagementRepository,
     mockExecutionRepository,
   );
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
 
   describe("resolveContext", () => {
     it("should resolve context for a project and sprint", () => {
@@ -60,6 +64,21 @@ describe("SprintExecutionStateService", () => {
 
       const context = service.resolveContext(args, settings);
       expect(context.project).toBe(mockProject);
+    });
+
+    it("ignores a container repo_path override when project_id resolves the host project", () => {
+      const mockProject = { id: "p1", name: "P1", baseDir: "/host/repo" };
+      const mockSprint = { id: "s1", number: 1, projectId: "p1", slug: "1", name: "Sprint 1", createdAt: new Date().toISOString(), tasksCount: 0 };
+
+      vi.mocked(mockProjectManagementRepository.getProject).mockReturnValue(mockProject);
+      vi.mocked(mockProjectManagementRepository.getSprint).mockReturnValue(mockSprint);
+
+      const args = { project_id: "p1", sprint_id: "s1", repo_path: "/workspace" };
+      const settings = { ...DEFAULT_DASHBOARD_SETTINGS, git: { ...DEFAULT_DASHBOARD_SETTINGS.git, defaultBranch: "dev" } } as any;
+
+      const context = service.resolveContext(args, settings);
+
+      expect(context.repoPath).toBe("/host/repo");
     });
 
     it("should resolve project by selected project if others are missing", () => {

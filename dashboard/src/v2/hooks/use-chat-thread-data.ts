@@ -43,6 +43,7 @@ export const areThreadsEqual = (left: ChatThread[], right: ChatThread[]): boolea
     const candidate = right[index];
     return Boolean(candidate)
       && candidate.id === thread.id
+      && candidate.title === thread.title
       && candidate.updatedAt === thread.updatedAt
       && candidate.lastMessageAt === thread.lastMessageAt
       && candidate.lastMessagePreview === thread.lastMessagePreview
@@ -369,6 +370,22 @@ export const useChatThreadData = (options: {
     }
   }, [cache, refreshMessages, selectedProject, selectedThread, setSuccess, setThreadsSnapshot]);
 
+  const handleRenameThread = useCallback(async (title: string): Promise<ChatThread> => {
+    if (!selectedThread || !selectedProject) {
+      throw new Error("Select a thread before renaming it.");
+    }
+
+    const updated = await updateConversationThread(selectedThread.id, { title });
+    const nextThreads = (cache.getThreads(selectedProject.id) || threadsRef.current).map((thread) => (
+      thread.id === updated.id ? updated : thread
+    ));
+    cache.setThreads(selectedProject.id, nextThreads);
+    setThreadsSnapshot(nextThreads);
+    setError(null);
+    setSuccess("Thread renamed.");
+    return updated;
+  }, [cache, selectedProject, selectedThread, setSuccess, setThreadsSnapshot]);
+
   const recordSentMessage = useCallback((message: string): void => {
     sentHistoryRef.current = [...sentHistoryRef.current.filter((entry) => entry !== message), message].slice(-50);
     historyIndexRef.current = -1;
@@ -407,8 +424,10 @@ export const useChatThreadData = (options: {
     return true;
   }, [input]);
 
-  const handleSend = useCallback(async (): Promise<void> => {
-    const bodyMarkdown = input.trim();
+  const handleSend = useCallback(async (overrideText?: string): Promise<void> => {
+    // overrideText lets UI affordances (stage quick actions) send a prompt
+    // directly without round-tripping it through the composer draft state.
+    const bodyMarkdown = (overrideText ?? input).trim();
     if (!bodyMarkdown || !selectedProject) {
       return;
     }
@@ -509,6 +528,7 @@ export const useChatThreadData = (options: {
     handleSend,
     navigateHistory,
     handleDeleteThread,
+    handleRenameThread,
     feedback,
     clearFeedback,
     isConfirmOpen,

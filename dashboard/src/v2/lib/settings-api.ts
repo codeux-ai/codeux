@@ -2,6 +2,7 @@ import type {
   EffectiveSettingsResponse,
   ProjectSettings,
   SystemSettings,
+  TechstackSelectionSettings,
 } from "../../types.js";
 import { fetchJson } from "../../lib/api/fetch-json.js";
 
@@ -99,6 +100,30 @@ export const saveProjectSettings = async (projectId: string, settings: ProjectSe
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(settings),
+  });
+  clearEffectiveSettingsRequests(projectId);
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent("codeux:settings-updated", {
+      detail: { scope: "project", projectId },
+    }));
+  }
+};
+
+export const saveProjectTechstackSettings = async (
+  projectId: string,
+  techstack: TechstackSelectionSettings,
+): Promise<void> => {
+  const currentOverride = await fetchJson<Partial<ProjectSettings>>(
+    `/api/projects/${encodeURIComponent(projectId)}/settings`,
+    { cache: "reload" },
+  );
+  await fetchJson(`/api/projects/${encodeURIComponent(projectId)}/settings`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      ...currentOverride,
+      techstack,
+    }),
   });
   clearEffectiveSettingsRequests(projectId);
   if (typeof window !== "undefined") {

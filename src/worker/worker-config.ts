@@ -95,9 +95,14 @@ export function loadWorkerConfig(argv: string[] = process.argv): WorkerConfig {
     listenPollIntervalMs: parseIntegerFlag(argv, "--listen-poll-interval-ms", DEFAULT_LISTEN_POLL_INTERVAL_MS),
     dispatchPollIntervalMs: parseIntegerFlag(argv, "--dispatch-poll-interval-ms", DEFAULT_DISPATCH_POLL_INTERVAL_MS),
     sessionPollIntervalMs: parseIntegerFlag(argv, "--session-poll-interval-ms", DEFAULT_SESSION_POLL_INTERVAL_MS),
-    controlPlaneUrl: parseStringFlag(argv, "--server-url")?.trim() || undefined,
+    controlPlaneUrl: parseStringFlag(argv, "--server-url")?.trim()
+      || process.env.CODE_UX_WORKER_SERVER_URL?.trim()
+      || process.env.MCP_HTTP_SERVER_URL?.trim()
+      || undefined,
     controlPlaneAuthToken: parseStringFlag(argv, "--auth-token")?.trim()
+      || process.env.CODE_UX_WORKER_AUTH_TOKEN?.trim()
       || process.env.MCP_HTTP_AUTH_TOKEN?.trim()
+      || process.env.MCP_HTTPS_AUTH_TOKEN?.trim()
       || undefined,
     serverCommand: parseStringFlag(argv, "--server-command")?.trim() || defaultServer.command,
     serverArgs: serverArgs.length > 0 ? serverArgs : defaultServer.args,

@@ -174,6 +174,7 @@ function makeBasePayload() {
       executionMode: "DOCKER",
       containerImage: "node:20",
       containerSetupScriptPath: "",
+      containerMemoryLimitMb: 6144,
       containerCacheSetupScriptImage: true,
       containerInstallPlaywrightBrowsers: true,
       containerMountGitConfig: true,

@@ -10,6 +10,8 @@ import type {
   ExternalSettingsHints,
   GitTrackingStatus,
   JulesActivity,
+  OnboardingDependencyInstallerResult,
+  OnboardingDependencyInstallMode,
   OnboardingRuntimeReadiness,
   OverviewTelemetrySnapshot,
   ProjectExecutionStatsSnapshot,
@@ -24,6 +26,8 @@ import type {
   FileBrowserFileContent,
   FileBrowserChangeSet,
   FileBrowserDiff,
+  HeaderTokenThroughputQuery,
+  HeaderTokenThroughputSnapshot,
 } from "../contracts/app-types.js";
 import type { OnboardingStateRecord } from "../domain/user/onboarding-state.js";
 import type {
@@ -112,6 +116,7 @@ import type { EmbeddingModelManager } from "../services/embedding-model-manager.
 import type { EmbeddingService } from "../services/embedding-service.js";
 import type { KnowledgeService } from "../services/knowledge-service.js";
 import type { UpdateStatus } from "../services/update-checker-service.js";
+import type { LocalMcpCliProvider, LocalMcpInstallResult, LocalMcpSetupInfo } from "../services/local-mcp-cli-config-service.js";
 import {
   parsePreviewSessionIdFromHost,
   parseSelectedPreviewPortFromRequest,
@@ -129,6 +134,9 @@ export type DashboardDependencies = Omit<
   | "getUpdateStatus"
 > & {
   getUpdateStatus: () => Promise<UpdateStatus>;
+  getLocalMcpSetup: () => LocalMcpSetupInfo;
+  regenerateLocalMcpAuthToken: () => LocalMcpSetupInfo;
+  installLocalMcpProvider: (provider: LocalMcpCliProvider) => Promise<LocalMcpInstallResult> | LocalMcpInstallResult;
 };
 
 export interface DashboardServerOptions {
@@ -151,6 +159,7 @@ export interface DashboardServerOptions {
   getExecutionSnapshot: () => ExecutionDashboardSnapshot;
   getProjectExecutionSnapshot: (projectId: string) => ExecutionDashboardSnapshot;
   getProjectStatsSnapshot: (projectId: string, query?: ProjectStatsQuery) => ProjectExecutionStatsSnapshot;
+  getHeaderTokenThroughputSnapshot: (query?: HeaderTokenThroughputQuery) => HeaderTokenThroughputSnapshot;
   setPreferredWorker?: (
     projectId: string,
     input?: {
@@ -176,6 +185,9 @@ export interface DashboardServerOptions {
   getLiveActivities: () => Promise<Record<string, JulesActivity[]>>;
   getGitStatus: () => Promise<GitTrackingStatus>;
   getExternalSettingsHints: () => ExternalSettingsHints;
+  getLocalMcpSetup?: () => LocalMcpSetupInfo;
+  regenerateLocalMcpAuthToken?: () => LocalMcpSetupInfo;
+  installLocalMcpProvider?: (provider: LocalMcpCliProvider) => Promise<LocalMcpInstallResult> | LocalMcpInstallResult;
   getSystemSettings: () => SystemSettings;
   getUpdateStatus?: () => Promise<UpdateStatus>;
   saveSystemSettings: (settings: SystemSettings) => SystemSettings;
@@ -234,7 +246,7 @@ export interface DashboardServerOptions {
   writeInstructionFile: (projectId: string, fileId: string, content: string) => Promise<InstructionFileContent> | InstructionFileContent;
   listConversationThreads: (projectId: string) => ConversationThreadRecord[];
   createConversationThread: (projectId: string, input: CreateConversationThreadInput) => ConversationThreadRecord;
-  updateConversationThread: (threadId: string, input: UpdateConversationThreadInput) => ConversationThreadRecord;
+  updateConversationThread: (threadId: string, input: UpdateConversationThreadInput) => Promise<ConversationThreadRecord> | ConversationThreadRecord;
   updateThreadRoute: (threadId: string, input: UpdateConversationThreadRouteInput) => ConversationThreadRecord;
   compactThreadSession: (threadId: string) => Promise<ConversationThreadRecord> | ConversationThreadRecord;
   cancelThreadTurn?: (threadId: string) => Promise<{ cancelled: boolean }> | { cancelled: boolean };
@@ -271,6 +283,7 @@ export interface DashboardServerOptions {
   isHealthy?: () => ReadinessProbeStatus;
   listDockerContainers: () => Promise<DockerContainer[]>;
   getOnboardingRuntimeReadiness?: () => Promise<OnboardingRuntimeReadiness> | OnboardingRuntimeReadiness;
+  installOnboardingDependencies?: (mode: OnboardingDependencyInstallMode) => Promise<OnboardingDependencyInstallerResult> | OnboardingDependencyInstallerResult;
   getOnboardingState?: () => OnboardingStateRecord;
   markOnboardingCompleted?: () => OnboardingStateRecord;
   resetOnboardingState?: () => OnboardingStateRecord;

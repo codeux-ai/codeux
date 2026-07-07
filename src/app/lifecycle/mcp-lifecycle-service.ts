@@ -13,6 +13,7 @@ import { CODE_UX_DISPLAY_NAME, CODE_UX_VERSION } from "../../shared/config/code-
 import type { RuntimeStartupRecoveryService } from "../../services/runtime-startup-recovery-service.js";
 import { runWithMcpAgentContext } from "../../server/mcp-agent-context.js";
 import { createHttpRateLimiter } from "../../shared/http/rate-limit.js";
+import type { ReadinessProbeStatus } from "../../contracts/app-types.js";
 
 export interface BootMcpTransportDeps {
   server: McpServer;
@@ -30,8 +31,15 @@ export interface BootMcpHttpTransportDeps {
   port: number | null;
   path: string;
   authToken: string | null;
+  getAuthToken?: () => string | null;
+  requireAuth?: boolean;
+  getReady?: () => ReadinessProbeStatus;
   maxSessions?: number;
   sessionTimeoutMs?: number;
+  rateLimit?: {
+    windowMs?: number;
+    max?: number;
+  };
   logger: Logger;
   createServer: () => McpServer;
   recoveryService: RuntimeStartupRecoveryService;
@@ -54,6 +62,9 @@ interface McpHttpSessionEntry {
 
 const DEFAULT_MAX_SESSIONS = 100;
 const DEFAULT_SESSION_TIMEOUT_MS = 60 * 60 * 1000;
+const MIN_SERVER_MODE_AUTH_TOKEN_LENGTH = 32;
+const MAX_AUTHORIZATION_HEADER_LENGTH = 4096;
+const BEARER_TOKEN_PATTERN = /^[A-Za-z0-9._~+/-]+={0,2}$/;
 const IDENTIFIER_PATTERN = /^[a-zA-Z0-9-]+$/;
 
 function isLoopbackHost(host: string): boolean {
@@ -116,10 +127,16 @@ function readAuthorizationHeader(req: IncomingMessage): string | null {
   if (!value) {
     return null;
   }
-  if (!/^Bearer [^\s]+$/.test(value)) {
+  if (value.length > MAX_AUTHORIZATION_HEADER_LENGTH || !/^Bearer [^\s]+$/.test(value)) {
     throw new Error("Invalid authorization");
   }
   return value;
+}
+
+function validateServerModeAuthToken(authToken: string): void {
+  if (authToken.length < MIN_SERVER_MODE_AUTH_TOKEN_LENGTH || !BEARER_TOKEN_PATTERN.test(authToken)) {
+    throw new Error("MCP HTTP auth token for server mode must contain at least 32 bearer-safe characters.");
+  }
 }
 
 function isAuthorizedRequest(req: IncomingMessage, authToken: string | null): boolean {
@@ -230,20 +247,42 @@ export async function bootMcpHttpTransport(deps: BootMcpHttpTransportDeps): Prom
     return null;
   }
 
-  if (!isLoopbackHost(deps.host) && !deps.authToken?.trim()) {
-    throw new Error("MCP HTTPS auth token is required when binding the MCP HTTPS server to a non-loopback host.");
+  const readAuthToken = (): string | null => deps.getAuthToken?.() ?? deps.authToken;
+
+  const startupAuthToken = readAuthToken()?.trim() ?? "";
+
+  if ((deps.requireAuth || !isLoopbackHost(deps.host)) && !startupAuthToken) {
+    throw new Error(deps.requireAuth
+      ? "MCP HTTP auth token is required for server mode."
+      : "MCP HTTP auth token is required when binding the MCP HTTP server to a non-loopback host.");
+  }
+  if (deps.requireAuth && startupAuthToken) {
+    validateServerModeAuthToken(startupAuthToken);
   }
 
   const app = express();
   // This gateway is network-exposed (HTTPS worker transport), so rate-limit it
   // in front of the auth check to blunt token brute-forcing and request floods.
   // The cap is well above a busy worker host's normal request rate.
-  app.use(createHttpRateLimiter());
+  app.use(createHttpRateLimiter({
+    ...deps.rateLimit,
+    jsonRpc: true,
+    onLimited: (req) => {
+      deps.logger.warn("Rate limited MCP HTTP request", {
+        path: req.path,
+        method: req.method,
+      });
+    },
+  }));
   app.use(express.json({ limit: "1mb" }));
 
   const sessions = new Map<string, McpHttpSessionEntry>();
-  const maxSessions = deps.maxSessions ?? DEFAULT_MAX_SESSIONS;
-  const sessionTimeoutMs = deps.sessionTimeoutMs ?? DEFAULT_SESSION_TIMEOUT_MS;
+  const maxSessions = Number.isInteger(deps.maxSessions) && (deps.maxSessions ?? 0) > 0
+    ? deps.maxSessions!
+    : DEFAULT_MAX_SESSIONS;
+  const sessionTimeoutMs = Number.isInteger(deps.sessionTimeoutMs) && (deps.sessionTimeoutMs ?? 0) > 0
+    ? deps.sessionTimeoutMs!
+    : DEFAULT_SESSION_TIMEOUT_MS;
 
   const closeSession = async (sessionId: string): Promise<void> => {
     const entry = sessions.get(sessionId);
@@ -259,26 +298,34 @@ export async function bootMcpHttpTransport(deps: BootMcpHttpTransportDeps): Prom
     const staleSessionIds = [...sessions.entries()]
       .filter(([, session]) => now - session.lastAccessed > sessionTimeoutMs)
       .map(([id]) => id);
+    if (staleSessionIds.length > 0) {
+      deps.logger.info("Closing idle MCP HTTP sessions", {
+        staleSessions: staleSessionIds.length,
+        activeSessions: sessions.size,
+        sessionTimeoutMs,
+      });
+    }
     await Promise.all(staleSessionIds.map((sessionId) => closeSession(sessionId)));
   };
 
   app.all(deps.path, async (req, res) => {
     let headers: ValidatedMcpHttpRequestHeaders;
     try {
-      if (!isAuthorizedRequest(req, deps.authToken)) {
-        deps.logger.warn("Unauthorized MCP HTTPS request", {
+      const authToken = readAuthToken();
+      if (!isAuthorizedRequest(req, authToken)) {
+        deps.logger.warn("Unauthorized MCP HTTP request", {
           path: req.path,
           method: req.method,
-          authRequired: !!deps.authToken,
+          authRequired: !!authToken,
         });
         respondUnauthorized(res);
         return;
       }
     } catch {
-      deps.logger.warn("Rejected MCP HTTPS request with invalid security headers", {
+      deps.logger.warn("Rejected MCP HTTP request with invalid security headers", {
         path: req.path,
         method: req.method,
-        authRequired: !!deps.authToken,
+        authRequired: !!readAuthToken(),
       });
       respondUnauthorized(res);
       return;
@@ -289,7 +336,7 @@ export async function bootMcpHttpTransport(deps: BootMcpHttpTransportDeps): Prom
         agentId: readAgentIdHeader(req),
       };
     } catch {
-      deps.logger.warn("Rejected MCP HTTPS request with invalid identifiers", {
+      deps.logger.warn("Rejected MCP HTTP request with invalid identifiers", {
         path: req.path,
         method: req.method,
       });
@@ -301,7 +348,7 @@ export async function bootMcpHttpTransport(deps: BootMcpHttpTransportDeps): Prom
       let entry = headers.sessionId ? sessions.get(headers.sessionId) : undefined;
 
       if (headers.sessionId && !entry) {
-        deps.logger.warn("Rejected MCP HTTPS request with inactive session", { path: req.path, method: req.method });
+        deps.logger.warn("Rejected MCP HTTP request with inactive session", { path: req.path, method: req.method });
         respondBadRequest(res, "Bad Request: Invalid MCP session");
         return;
       }
@@ -315,7 +362,7 @@ export async function bootMcpHttpTransport(deps: BootMcpHttpTransportDeps): Prom
         await cleanupIdleSessions();
 
         if (sessions.size >= maxSessions) {
-          deps.logger.warn("MCP HTTPS session cap reached", {
+          deps.logger.warn("MCP HTTP session cap reached", {
             path: req.path,
             method: req.method,
             maxSessions,
@@ -351,7 +398,7 @@ export async function bootMcpHttpTransport(deps: BootMcpHttpTransportDeps): Prom
         }
       }
     } catch (error) {
-      deps.logger.error("MCP HTTPS request failed", { error, path: req.path, method: req.method });
+      deps.logger.error("MCP HTTP request failed", { error, path: req.path, method: req.method });
       if (!res.headersSent) {
         res.status(500).json({
           jsonrpc: "2.0",
@@ -367,6 +414,15 @@ export async function bootMcpHttpTransport(deps: BootMcpHttpTransportDeps): Prom
 
   app.get("/health", (req, res) => {
     res.json({ status: "UP" });
+  });
+
+  app.get("/ready", (req, res) => {
+    const ready = deps.getReady ? deps.getReady() : { status: "READY" as const };
+    if (ready.status === "READY" || ready.status === "UP") {
+      res.json(ready);
+    } else {
+      res.status(503).json(ready);
+    }
   });
 
   const server = await new Promise<HttpServer>((resolve, reject) => {
@@ -394,11 +450,14 @@ export async function bootMcpHttpTransport(deps: BootMcpHttpTransportDeps): Prom
     }
   }
 
-  deps.logger.info(`${CODE_UX_DISPLAY_NAME} MCP HTTPS server running`, {
+  deps.logger.info(`${CODE_UX_DISPLAY_NAME} MCP HTTP server running`, {
+    mode: deps.requireAuth ? "server" : "standard",
     host: deps.host,
     port: resolvedPort,
     path: deps.path,
-    authRequired: !!deps.authToken,
+    authRequired: !!readAuthToken(),
+    maxSessions,
+    sessionTimeoutMs,
   });
 
   return {

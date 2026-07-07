@@ -9,6 +9,8 @@ Settings are evaluated in cascade: **System → Project → Sprint** (with built
 ```jsonc
 {
   "aiProvider": { /* providers + routing */ },
+  "techstackCatalog": { /* system catalog */ },
+  "techstack": { /* project selection */ },
   "workers":    { /* virtual worker config */ },
   "ciIntelligence": { /* CI gate */ },
   "automationLevel": "FULL" | "SEMI_AUTO" | "ALWAYS_ASK",
@@ -17,6 +19,12 @@ Settings are evaluated in cascade: **System → Project → Sprint** (with built
   "cliWorkflow": { /* CLI workflow behavior */ },
   "sprintPreview": { /* preview container settings */ },
   "git": { /* branches, schemes, GitHub mode */ },
+  "agents": {
+    "selfReflection": {
+      "planning": { /* default-off reflection loop */ },
+      "qualityAssurance": { /* default-off reflection loop */ }
+    }
+  },
   "skills": [ /* internal skill toggles */ ],
   "mcpTools": [ /* per-tool enabled flags */ ],
   "memory": { /* embedding model */ },
@@ -75,6 +83,44 @@ Settings are evaluated in cascade: **System → Project → Sprint** (with built
 | `opencode` | ❌ | `anthropic/claude-sonnet-4-5` | 0 | HIGH | 0 |
 | `antigravity` | ❌ | `default` | 0 | HIGH | 0 |
 
+## `techstackCatalog`
+
+System settings own the techstack catalog:
+
+```jsonc
+{
+  "defaultTechstackId": "code-ux-internal",
+  "entries": [
+    {
+      "id": "code-ux-internal",
+      "label": "Code UX Stack",
+      "items": [
+        { "id": "preact", "label": "Preact" },
+        { "id": "tanstack-router", "label": "TanStack Router" },
+        { "id": "gsap", "label": "GSAP" },
+        { "id": "three-js", "label": "Three.js" },
+        { "id": "lucide-icons", "label": "Lucide Icons" }
+      ]
+    }
+  ]
+}
+```
+
+Saved catalogs are normalized on load. Code UX trims ids and labels, drops malformed or duplicate ids, always preserves the built-in `code-ux-internal` entry, and falls back `defaultTechstackId` to `code-ux-internal` when the saved default is missing or invalid.
+
+## `techstack`
+
+Project and sprint settings own the selected techstack:
+
+```jsonc
+{
+  "selectedTechstackId": null,
+  "applicationKind": null // "web" | "desktop" | null
+}
+```
+
+Default project settings intentionally keep `selectedTechstackId` and `applicationKind` as `null`. Existing and imported projects therefore do not automatically inherit the built-in Code UX Stack; a project creation flow must set an explicit override when it wants to apply the catalog default.
+
 ## `cliWorkflow`
 
 ```jsonc
@@ -82,11 +128,13 @@ Settings are evaluated in cascade: **System → Project → Sprint** (with built
   "gitMode": "remote" | "local",
   "executionMode": "DOCKER",
   "containerImage": "node:24-bookworm",
-  "containerSetupScriptPath": "string?"
+  "containerSetupScriptPath": "string?",
+  "containerMemoryLimitMb": 6144
 }
 ```
 
 Default `gitMode`: `remote`. Default `executionMode`: `DOCKER`.
+`containerMemoryLimitMb` is a MiB ceiling for every Docker-backed CLI provider container. Positive values are passed to Docker as both `--memory` and `--memory-swap`; set it to `0` to omit Docker memory flags.
 
 ## `sprintPreview`
 
@@ -201,6 +249,30 @@ branches — only branches fully contained in the default branch are removed.
 ```
 
 These are internal skills toggleable for advanced workflows. Most users should not touch them.
+
+## `agents.selfReflection`
+
+```jsonc
+{
+  "planning": {
+    "enabled": false,
+    "criteria": [
+      { "id": "correctness", "label": "Correctness", "prompt": "...", "threshold": 0.85 },
+      { "id": "scope_control", "label": "Scope control", "prompt": "...", "threshold": 0.85 }
+    ],
+    "maxImprovementAttempts": 1
+  },
+  "qualityAssurance": {
+    "enabled": false,
+    "criteria": [
+      { "id": "correctness", "label": "Correctness", "prompt": "...", "threshold": 0.85 }
+    ],
+    "maxImprovementAttempts": 1
+  }
+}
+```
+
+Both reflection loops are disabled by default. When enabled, planning and QA structured responses are rated against the configured criteria and can request an improved JSON payload before acceptance; invalid reflection output fails open to the last valid parsed response. Criteria are senior engineering checks such as correctness, completeness, decomposition quality, risk handling, testability, maintainability, security, and scope control. Sanitization dedupes criteria by `id`, clamps thresholds to `0..1`, clamps `maxImprovementAttempts` to `0..10`, and falls back to defaults for malformed legacy payloads.
 
 ## `mcpTools`
 

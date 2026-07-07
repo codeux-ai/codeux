@@ -18,8 +18,12 @@ Database maintenance (`DatabaseMaintenanceService`) runs automatically during no
 3. Open dashboard and verify settings.
 4. Confirm `/api/status` and `/api/git-status` (via `GitStatusService`) are responding.
 5. Confirm `/health` and `/ready` probes:
-   - `/health`: Liveness probe. A success (`{"status": "UP"}`) means the dashboard server process is reachable and can answer basic HTTP requests.
-   - `/ready`: Readiness probe from `src/server/dashboard-server.ts`. A success (`{"status": "READY"}` or `{"status": "UP"}`) means the server considers required startup/runtime dependencies ready enough to serve normal traffic. It does not validate every provider, project, Docker workspace, or external service.
+   - `/health`: Liveness probe. In dashboard mode it is served by the dashboard server; in server mode it is served by the MCP HTTP listener.
+   - `/ready`: Readiness probe from the dashboard server or MCP HTTP listener. A success (`{"status":"READY"}` or `{"status":"UP"}`) means the server considers required startup/runtime dependencies ready enough to serve normal traffic. It does not validate every provider, project, Docker workspace, or external service.
+
+### Headless Server Mode
+
+Use `--server-mode` or `CODE_UX_SERVER_MODE=true` for an MCP-only process intended for authenticated remote clients. Server mode disables the dashboard listener, dashboard websocket, terminal websocket, and static dashboard assets; starts MCP HTTP by default; and requires an explicit non-empty bearer token via `MCP_HTTPS_AUTH_TOKEN`, `MCP_HTTP_AUTH_TOKEN`, `--mcp-https-auth-token`, or `--mcp-http-auth-token`.
 
 If started without key:
 - Configure `JULES_API_KEY` in `.env`, or `julesApiKey` in `.code-ux/settings.json`, or set it in dashboard settings.
@@ -103,7 +107,7 @@ Checks:
 - Sprint session-sync activity polling uses the same bounded behavior: a slow or rejected provider activity API logs `Could not fetch activities for session` with `sessionName`, `pageSize`, `concurrency`, `timeoutMs`, `elapsedMs`, `errorName`, and `errorMessage`, then records an empty activity list for that poll only. A genuine empty provider response is not logged as a failure.
 - Live activity warnings include structured fields such as `sessionName`, `failureCause`, `errorName`, `cacheFallbackState`, `cachedActivityCount`, and `timeoutMs` when applicable. They should not include provider output bodies; inspect provider session logs separately if the cause needs deeper diagnosis.
 - To validate this surface after cache or timeout changes, run `pnpm run test:backend -- tests/backend/server/activity-cache-service.test.ts`, then `pnpm run test:backend:coverage` to confirm `src/server/activity-cache-service.ts` remains above its 80% line threshold.
-- `/api/system/update-status` reports the running Code UX version plus the latest published npm version. It caches the npm lookup briefly, so repeated dashboard refreshes should not hammer the registry, and the dashboard logs a single startup notice when a newer release is available.
+- `/api/system/update-status` reports the running Code UX version plus the latest published npm version. It caches the npm lookup briefly, so repeated dashboard refreshes should not hammer the registry, and the dashboard logs a single startup notice when a newer release is available. The response keeps the legacy `releaseUrl` field and also includes typed `downloadTargets.npm` and `downloadTargets.electron` entries so consumers can route npm installs to `npmjs.com` and desktop updates to the official `github.com/codeux-ai/codeux` release tag. Registry failures return `latestVersion: null`, the repository releases fallback URL, and stable official fallback download targets.
 - The dashboard title bar shows a small "Update available" badge next to the version label whenever `/api/system/update-status` reports a newer published version. If the badge is missing, the check either found no newer release or the lookup failed and was suppressed.
 - If the dashboard still degrades under load, inspect `runtime.debugLogFileLevel`; file logging defaults to `error` and uses async streams, but sustained log volume is still a useful signal that a hot loop is too noisy.
 
@@ -166,7 +170,9 @@ Checks:
   - For Claude auth mounts, ensure host has `~/.claude/.credentials.json`; if auth still stalls, also verify the sibling `~/.claude.json` exists when your local Claude login created it.
   - Runtime now syncs only those Claude auth files before launch, avoiding recursive copy of all `.claude` state.
   - For Gemini auth mounts, ensure host has `~/.gemini/settings.json` plus the expected auth files such as `oauth_creds.json`; runtime now syncs only those stable files and intentionally skips `.gemini/tmp`, `history`, and other mutable runtime trees.
+  - Runtime merges generated Gemini and Claude MCP config into the copied auth settings, and appends the Codex MCP stanza into `~/.codex/config.toml` only when it is not already present, so enabling Docker auth mounts does not wipe host-side provider config.
   - Runtime strips local MCP declarations from copied provider auth/config files before merging generated MCP config. Only Code UX-managed MCP servers enabled on the MCP settings page, including the default Playwright server, are injected into Docker provider homes. For Codex this avoids duplicate `[mcp_servers.playwright]` tables when the host `~/.codex/config.toml` already defines Playwright.
+  - Docker Runtime memory limits apply to every CLI provider container. `containerMemoryLimitMb` defaults to `6144`; positive values are passed as both Docker `--memory` and `--memory-swap`, while `0` omits those flags. If full-suite tests or browser-heavy validation hit the cap, raise this setting for the affected project or sprint instead of increasing provider concurrency.
   - For WORKER-profile routes, a saved worker model is only forwarded when it belongs to the selected provider. If you switch a planning or worker run from Codex to Gemini/Claude, Code UX now falls back to that provider's own model instead of sending an incompatible model id like `gpt-5.3-codex` to Gemini or Claude.
   - Codex websocket `HTTP 5xx` failures are transport/server errors, not auth failures. If you see `responses_websocket` + `HTTP error: 500`, treat that as a transient provider-side failure rather than a stale local login.
   - If auth is expected from host login state, is the relevant Docker auth mount enabled and is its mount path valid? Docker uses dedicated, isolated credential mounts per provider to keep raw tokens and key paths out of the broader workspace and process arguments.
@@ -339,7 +345,7 @@ Failure Modes & Rollback Notes:
   2. Verify the configuration `HOST` or bind settings to ensure it restricts to `127.0.0.1`.
   3. Review the `ExecutionInvocations` logs to identify any unauthorized commands executed.
   4. If exposing Code UX to the network is required, **front it with a reverse proxy** (e.g., Nginx, Traefik, Caddy) that enforces authentication (such as Basic Auth, mTLS, or an OAuth proxy).
-  5. For the MCP HTTP gateway, ensure `--mcp-http-auth-token` is configured when binding beyond loopback.
+  5. For the MCP HTTP gateway, ensure a bearer token is active when binding beyond loopback. Code UX auto-generates one in `~/.code-ux/security.json`; explicit deployments can still use `--mcp-http-auth-token` or the legacy `--mcp-https-auth-token` flag.
 
 ### Subprocess Execution Limits
 

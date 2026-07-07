@@ -12,7 +12,7 @@ import { PlanningRequestWidget } from "./widgets/PlanningRequestWidget.js";
 import { ToolCallWidget } from "./widgets/ToolCallWidget.js";
 import { ReasoningWidget } from "./widgets/ReasoningWidget.js";
 import { ChatAvatar, type AvatarRole } from "./ChatAvatar.js";
-import type { ParsedTurnTokens } from "../../lib/chat-widget-view-models.js";
+import type { ChatWidgetLiveData, ParsedTurnTokens } from "../../lib/chat-widget-view-models.js";
 import type { AgentAvatarConfig } from "../../types.js";
 
 const asString = (value: unknown): string | null => (typeof value === "string" ? value : null);
@@ -38,17 +38,19 @@ export interface InvocationMessageBubbleProps {
   message: ExecutionInvocationMessageRecord;
   agentAvatarConfig?: AgentAvatarConfig | null;
   agentName?: string | null;
+  widgetLiveData?: ChatWidgetLiveData;
 }
 
 export const InvocationMessageBubble: FunctionComponent<InvocationMessageBubbleProps> = ({
   message,
   agentAvatarConfig,
   agentName,
+  widgetLiveData,
 }) => {
   const fromUser = message.role === "user";
   const fromTool = message.role === "tool";
   const fromSystem = message.role === "system";
-  const widgetData = getInvocationWidgetData(message);
+  const widgetData = getInvocationWidgetData(message, widgetLiveData);
   const kind = asString(message.metadata?.kind);
   const reasoningWidgetData = getReasoningWidgetData(message);
 
@@ -175,7 +177,7 @@ export const InvocationMessageBubble: FunctionComponent<InvocationMessageBubbleP
           {/* Widget Slot */}
           {widgetData.type === "planning" && (
             <div className="mt-4 border-t border-white/5 pt-4">
-              <PlanningRequestWidget status={widgetData.status} planName={widgetData.planName} />
+              <PlanningRequestWidget status={widgetData.status} planName={widgetData.planName} liveStatus={widgetData.liveStatus} />
             </div>
           )}
         </div>

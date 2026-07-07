@@ -67,7 +67,7 @@ Each virtual cycle is project-scoped and one-shot:
 
 This is intentionally not an endless watch loop.
 
-The background reconcile loop stays conservative (`3s`) to avoid unnecessary sqlite write contention, while virtual worker session completion polling is tighter (`2s`) because it only checks local session and dispatch state. Scheduling operations use microtask queueing to consolidate rapid sync events while preventing simultaneous cycle overlap for the same project.
+The background reconcile loop stays conservative (`3s`) to avoid unnecessary sqlite write contention, while virtual worker session completion polling is tighter (`2s`) because it only checks local session and dispatch state. Initial scheduling operations use microtask queueing to consolidate rapid sync events while preventing simultaneous cycle overlap for the same project. If a cycle finishes and work still remains, follow-up scheduling is deferred on the reconcile timer cadence instead of recursively queueing more microtasks, so dashboard HTTP probes and shutdown signals stay responsive even when persisted worker state is temporarily unchanged.
 
 ## Planning Boundary
 

@@ -393,7 +393,7 @@ export function queryProjectStatsSnapshot(
   return {
     projectId: projectRow?.id || projectId,
     projectName: projectRow?.name || projectId,
-    window: normalized.range.window,
+    window: normalized.query.window,
     query: normalized.query,
     range: normalized.range,
     generatedAt: nowIso,

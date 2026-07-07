@@ -7,13 +7,16 @@ import {
   apiKeyLoader, 
   dashboardPortLoader, 
   hasHeadlessArg,
+  hasServerModeArg,
   parseApiKeyArg,
   parseRuntimeRoleArg,
 } from "../../../src/config/app-config.js";
 
 const originalEnv = { ...process.env };
 const originalCwd = process.cwd();
+const STRONG_TOKEN = "cux_test_abcdefghijklmnopqrstuvwxyz123456";
 let tempDir: string;
+let tempHome: string;
 
 beforeEach(async () => {
   process.env = { ...originalEnv };
@@ -25,12 +28,21 @@ beforeEach(async () => {
   delete process.env.MCP_HTTP_HOST;
   delete process.env.MCP_HTTP_PATH;
   delete process.env.MCP_HTTP_AUTH_TOKEN;
+  delete process.env.MCP_HTTP_MAX_SESSIONS;
+  delete process.env.MCP_HTTP_SESSION_TIMEOUT_MS;
   delete process.env.MCP_HTTPS_ENABLED;
   delete process.env.MCP_HTTPS_PORT;
   delete process.env.MCP_HTTPS_HOST;
   delete process.env.MCP_HTTPS_PATH;
   delete process.env.MCP_HTTPS_AUTH_TOKEN;
+  delete process.env.MCP_HTTPS_MAX_SESSIONS;
+  delete process.env.MCP_HTTPS_SESSION_TIMEOUT_MS;
+  delete process.env.CODE_UX_SERVER_MODE;
   tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "jules-app-config-"));
+  tempHome = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-home-"));
+  process.env.HOME = tempHome;
+  process.env.USERPROFILE = tempHome;
+  process.env.CODE_UX_HOME = path.join(tempHome, ".code-ux");
   process.chdir(tempDir);
 });
 
@@ -39,6 +51,9 @@ afterEach(async () => {
   process.chdir(originalCwd);
   if (tempDir) {
     await fs.rm(tempDir, { recursive: true, force: true });
+  }
+  if (tempHome) {
+    await fs.rm(tempHome, { recursive: true, force: true });
   }
 });
 
@@ -75,6 +90,11 @@ describe("runtime flags", () => {
     expect(hasHeadlessArg(["node", "index.js", "--headless"])).toBe(true);
     expect(hasHeadlessArg(["node", "index.js", "--no-dashboard"])).toBe(true);
     expect(hasHeadlessArg(["node", "index.js"])).toBe(false);
+  });
+
+  it("detects server mode flag", () => {
+    expect(hasServerModeArg(["node", "index.js", "--server-mode"])).toBe(true);
+    expect(hasServerModeArg(["node", "index.js"])).toBe(false);
   });
 });
 
@@ -146,10 +166,13 @@ describe("loadAppConfig", () => {
     expect(config.apiKeyArg).toBe("cli-key");
     expect(config.dashboardPort).toBe(4444);
     expect(config.runtimeRole).toBe("project_manager");
+    expect(config.serverMode).toBe(false);
     expect(config.dashboardEnabled).toBe(true);
     expect(config.mcpHttpEnabled).toBe(false);
     expect(config.mcpHttpPort).toBeNull();
     expect(config.mcpHttpPath).toBe("/mcp");
+    expect(config.mcpHttpMaxSessions).toBe(100);
+    expect(config.mcpHttpSessionTimeoutMs).toBe(3_600_000);
   });
 
   it("assembles full config from env when CLI arg is missing", () => {
@@ -160,7 +183,38 @@ describe("loadAppConfig", () => {
     expect(config.dashboardPort).toBe(8888);
   });
 
-  it("uses a loopback default MCP bind without auth on non-Docker Desktop platforms", () => {
+  it("auto-generates and persists a user MCP HTTP auth token", async () => {
+    const config = loadAppConfig(["node", "index.js"], tempDir);
+    expect(config.mcpHttpEnabled).toBe(true);
+    expect(config.mcpHttpAuthToken).toMatch(/^cux_mcp_[A-Za-z0-9_-]{43}$/);
+
+    const securityPath = path.join(tempHome, ".code-ux", "security.json");
+    const persisted = JSON.parse(await fs.readFile(securityPath, "utf-8")) as { mcpHttpAuthToken?: string };
+    expect(persisted.mcpHttpAuthToken).toBe(config.mcpHttpAuthToken);
+
+    if (process.platform !== "win32") {
+      const mode = (await fs.stat(securityPath)).mode & 0o777;
+      expect(mode).toBe(0o600);
+    }
+  });
+
+  it("reuses the persisted user MCP HTTP auth token on later startups", async () => {
+    const securityDir = path.join(tempHome, ".code-ux");
+    await fs.mkdir(securityDir, { recursive: true });
+    await fs.writeFile(path.join(securityDir, "security.json"), JSON.stringify({ mcpHttpAuthToken: "stored-token" }));
+
+    const config = loadAppConfig(["node", "index.js"], tempDir);
+    expect(config.mcpHttpAuthToken).toBe("stored-token");
+  });
+
+  it("does not create a user MCP HTTP auth token when the HTTP gateway is disabled", async () => {
+    const config = loadAppConfig(["node", "index.js", "--no-mcp-https"], tempDir);
+    expect(config.mcpHttpEnabled).toBe(false);
+    expect(config.mcpHttpAuthToken).toBeNull();
+    await expect(fs.stat(path.join(tempHome, ".code-ux", "security.json"))).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it("uses a loopback default MCP bind on non-Docker Desktop platforms", () => {
     const needsContainerReachableDefault = process.platform === "win32"
       || process.platform === "darwin"
       || os.release().toLowerCase().includes("microsoft");
@@ -172,10 +226,10 @@ describe("loadAppConfig", () => {
     const config = loadAppConfig(["node", "index.js"], tempDir);
     expect(config.mcpHttpEnabled).toBe(true);
     expect(config.mcpHttpHost).toBe("127.0.0.1");
-    expect(config.mcpHttpAuthToken).toBeNull();
+    expect(config.mcpHttpAuthToken).toMatch(/^cux_mcp_/);
   });
 
-  it("requires explicit auth for a container-reachable default MCP bind on Docker Desktop platforms", () => {
+  it("auto-generates auth for a container-reachable default MCP bind on Docker Desktop platforms", () => {
     const needsContainerReachableDefault = process.platform === "win32"
       || process.platform === "darwin"
       || os.release().toLowerCase().includes("microsoft");
@@ -184,7 +238,10 @@ describe("loadAppConfig", () => {
       return;
     }
 
-    expect(() => loadAppConfig(["node", "index.js"], tempDir)).toThrow("MCP HTTPS auth token is required");
+    const config = loadAppConfig(["node", "index.js"], tempDir);
+    expect(config.mcpHttpEnabled).toBe(true);
+    expect(config.mcpHttpHost).toBe("0.0.0.0");
+    expect(config.mcpHttpAuthToken).toMatch(/^cux_mcp_/);
   });
 
   it("ignores legacy worker-host runtime flags and keeps project-manager defaults", () => {
@@ -197,7 +254,102 @@ describe("loadAppConfig", () => {
   it("supports explicit headless project-manager mode", () => {
     const config = loadAppConfig(["node", "index.js", "--headless", "--no-mcp-https"], tempDir);
     expect(config.runtimeRole).toBe("project_manager");
+    expect(config.serverMode).toBe(false);
     expect(config.dashboardEnabled).toBe(false);
+  });
+
+  it("enables authenticated server mode from CLI and forces MCP HTTP while skipping dashboard", () => {
+    const config = loadAppConfig([
+      "node",
+      "index.js",
+      "--server-mode",
+      "--no-mcp-https",
+      "--mcp-https-auth-token",
+      STRONG_TOKEN,
+    ], tempDir);
+
+    expect(config.serverMode).toBe(true);
+    expect(config.dashboardEnabled).toBe(false);
+    expect(config.mcpHttpEnabled).toBe(true);
+    expect(config.mcpHttpPort).toBe(4445);
+    expect(config.mcpHttpAuthToken).toBe(STRONG_TOKEN);
+  });
+
+  it("enables authenticated server mode from env", () => {
+    process.env.CODE_UX_SERVER_MODE = "true";
+    process.env.MCP_HTTPS_AUTH_TOKEN = STRONG_TOKEN;
+
+    const config = loadAppConfig(["node", "index.js", "--no-dashboard"], tempDir);
+
+    expect(config.serverMode).toBe(true);
+    expect(config.dashboardEnabled).toBe(false);
+    expect(config.mcpHttpEnabled).toBe(true);
+    expect(config.mcpHttpAuthToken).toBe(STRONG_TOKEN);
+  });
+
+  it("rejects server mode without an explicit MCP HTTP bearer token", async () => {
+    expect(() => loadAppConfig(["node", "index.js", "--server-mode"], tempDir))
+      .toThrow("CODE_UX_SERVER_MODE requires a non-empty MCP HTTP auth token");
+    await expect(fs.stat(path.join(tempHome, ".code-ux", "security.json"))).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it("rejects weak server mode MCP HTTP bearer tokens", () => {
+    expect(() => loadAppConfig([
+      "node",
+      "index.js",
+      "--server-mode",
+      "--mcp-https-auth-token",
+      "short-token",
+    ], tempDir)).toThrow("at least 32 bearer-safe characters");
+  });
+
+  it("uses default MCP HTTP active-session protection settings", () => {
+    const config = loadAppConfig(["node", "index.js", "--no-mcp-https"], tempDir);
+    expect(config.mcpHttpMaxSessions).toBe(100);
+    expect(config.mcpHttpSessionTimeoutMs).toBe(3_600_000);
+  });
+
+  it("loads MCP HTTP active-session protection settings from CLI", () => {
+    const config = loadAppConfig([
+      "node",
+      "index.js",
+      "--no-mcp-https",
+      "--mcp-http-max-sessions",
+      "250",
+      "--mcp-http-session-timeout-ms",
+      "120000",
+    ], tempDir);
+    expect(config.mcpHttpMaxSessions).toBe(250);
+    expect(config.mcpHttpSessionTimeoutMs).toBe(120_000);
+  });
+
+  it("loads MCP HTTP active-session protection settings from env", () => {
+    process.env.MCP_HTTPS_MAX_SESSIONS = "300";
+    process.env.MCP_HTTPS_SESSION_TIMEOUT_MS = "180000";
+
+    const config = loadAppConfig(["node", "index.js", "--no-mcp-https"], tempDir);
+    expect(config.mcpHttpMaxSessions).toBe(300);
+    expect(config.mcpHttpSessionTimeoutMs).toBe(180_000);
+  });
+
+  it("loads MCP HTTP active-session protection settings from config.json", async () => {
+    await fs.writeFile(
+      path.join(tempDir, "config.json"),
+      JSON.stringify({ mcpHttp: { maxSessions: 400, sessionTimeoutMs: 240000 } }),
+    );
+
+    const config = loadAppConfig(["node", "index.js", "--no-mcp-https"], tempDir);
+    expect(config.mcpHttpMaxSessions).toBe(400);
+    expect(config.mcpHttpSessionTimeoutMs).toBe(240_000);
+  });
+
+  it("falls back to secure MCP HTTP protection defaults for invalid bounds", () => {
+    process.env.MCP_HTTPS_MAX_SESSIONS = "0";
+    process.env.MCP_HTTPS_SESSION_TIMEOUT_MS = "999";
+
+    const config = loadAppConfig(["node", "index.js", "--no-mcp-https"], tempDir);
+    expect(config.mcpHttpMaxSessions).toBe(100);
+    expect(config.mcpHttpSessionTimeoutMs).toBe(3_600_000);
   });
 
   it("enables MCP HTTP worker gateway from CLI flags", () => {
@@ -237,8 +389,8 @@ describe("loadAppConfig", () => {
     expect(config.mcpHttpAuthToken).toBe("env-token");
   });
 
-  it.each(["0.0.0.0", "::", "192.168.1.10"])("requires MCP HTTP auth token for non-loopback binding %s", (host) => {
-    expect(() => loadAppConfig([
+  it.each(["0.0.0.0", "::", "192.168.1.10"])("auto-generates MCP HTTP auth token for non-loopback binding %s", (host) => {
+    const config = loadAppConfig([
       "node",
       "index.js",
       "--mcp-https",
@@ -246,10 +398,14 @@ describe("loadAppConfig", () => {
       "5555",
       "--mcp-https-host",
       host,
-    ], tempDir)).toThrow("MCP HTTPS auth token is required");
+    ], tempDir);
+
+    expect(config.mcpHttpEnabled).toBe(true);
+    expect(config.mcpHttpHost).toBe(host);
+    expect(config.mcpHttpAuthToken).toMatch(/^cux_mcp_/);
   });
 
-  it.each(["127.0.0.1", "localhost", "::1"])("allows unauthenticated loopback MCP HTTP binding %s", (host) => {
+  it.each(["127.0.0.1", "localhost", "::1"])("uses generated auth for loopback MCP HTTP binding %s", (host) => {
     const config = loadAppConfig([
       "node",
       "index.js",
@@ -261,7 +417,7 @@ describe("loadAppConfig", () => {
 
     expect(config.mcpHttpEnabled).toBe(true);
     expect(config.mcpHttpHost).toBe(host);
-    expect(config.mcpHttpAuthToken).toBeNull();
+    expect(config.mcpHttpAuthToken).toMatch(/^cux_mcp_/);
   });
 
   it("allows non-loopback MCP HTTP binding with an explicit auth token", () => {

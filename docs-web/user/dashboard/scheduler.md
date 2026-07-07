@@ -1,8 +1,9 @@
 # Scheduler
 
 The **Scheduler** page (dock label **Schedule**, `/scheduler`) runs Code UX work on a timetable.
-Schedule a sprint, a quicksprint template, or a project message to fire once or on a recurring
-cadence — useful for nightly maintenance sweeps, periodic audits, or recurring planning prompts.
+Schedule a sprint, a quicksprint template, a project message, or memory remediation to fire once
+or on a recurring cadence — useful for nightly maintenance sweeps, periodic audits, or recurring
+planning prompts.
 
 ## Views
 
@@ -18,23 +19,32 @@ Each scheduler entry has a **target** — the thing that runs when it fires:
 | **Sprint** | Starts an existing sprint in the project. |
 | **Quicksprint** | Spawns and runs a [quicksprint template](../quicksprints.md), substituting its variables. |
 | **Message** | Posts a project message (for example, a recurring planning or status prompt). |
-| **Memory Remediation** | Long-term memory remediation, either deterministic or AI-routed. |
+| **Memory remediation** | Runs the long-term memory cleanup workflow on a schedule. |
 
-## Recurrence and Timing
+The backend scheduler contract also supports agent-created wakeups and scheduled task reruns. Those
+entries are stored in the existing target JSON payload with `origin` and `source` set to
+`agent_scheduler`, plus `createdByAgentId` when the creating agent provides it. Agent wakeups post
+through the chat runtime with scheduler metadata, and task reruns reuse the normal task rerun
+service so workspaces, telemetry, and cancellation behavior stay consistent.
 
-An entry can run once at a specific absolute time, or "after another sprint ends" anchored to a source sprint with an optional non-negative offset in minutes.
+Agent wakeups and task reruns may appear in the Scheduler calendar, day view, stats, and scheduled
+entry list after they are created by the secured MCP scheduler tool. They use their own target
+labels and compact summaries instead of appearing as chat messages. The dashboard create/edit form
+remains limited to Sprint, Quicksprint, Message, and Memory remediation entries; MCP-created
+agent wakeups and task reruns can still be paused, resumed, or deleted from the list.
 
-Entries can also repeat on a **recurrence rule** (for example minutely, daily, or
-weekly, with optional fixed-count or end-date limits). The page previews the next occurrences so you can confirm the cadence before saving.
+## Recurrence
+
+An entry can run once at a specific time or repeat on a **recurrence rule** (for example daily or
+weekly). The page previews the next occurrences so you can confirm the cadence before saving.
 
 ## Managing entries
 
 From the page you can:
 
 - **Create** an entry — pick a target, set the time, and choose a recurrence rule.
-- **Edit** an entry's target, time, or recurrence.
+- **Edit** a dashboard-created entry's target, time, or recurrence.
 - **Pause / resume** an entry without deleting it.
-- **Run now** to trigger an entry immediately.
 - **Delete** an entry.
 
 Scheduler changes broadcast over the dashboard's realtime channel, so the calendar stays in sync

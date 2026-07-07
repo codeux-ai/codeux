@@ -60,7 +60,23 @@ describe("settings search index", () => {
     ["qa", ["models", "sprint"]],
     ["branch", ["sprint", "agents"]],
     ["browser", ["browser"]],
+    ["techstack", ["techstacks"]],
+    ["stack", ["techstacks"]],
+    ["preact", ["techstacks"]],
+    ["tanstack router", ["techstacks"]],
+    ["gsap", ["techstacks"]],
+    ["three.js", ["techstacks"]],
+    ["lucide", ["techstacks"]],
+    ["web app", ["techstacks"]],
+    ["desktop app", ["techstacks"]],
+    ["package scan", ["techstacks"]],
     ["memory", ["memory"]],
+    ["persistent skills", ["agents"]],
+    ["skill storage", ["agents"]],
+    ["self-reflection", ["agents"]],
+    ["criteria", ["agents"]],
+    ["planning rating", ["agents"]],
+    ["qa rating", ["agents"]],
   ] as const)("resolves %s to the expected settings categories", (query, expectedCategoryIds) => {
     const matches = searchSettingsCategories(index, query);
 

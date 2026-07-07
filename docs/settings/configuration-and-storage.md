@@ -19,6 +19,7 @@ Additional startup config:
 - `CODE_UX_GIT_FETCH_TIMEOUT_MS` (optional timeout for mandatory Git remote refreshes; default `120000`, clamped between 10 seconds and 10 minutes)
 - `CODE_UX_RUNTIME_LOCK_WAIT_MS` (optional; defaults to `30000`. Startup waits this long for an existing project-manager runtime lock holder to exit before rejecting the new process.)
 - `CODE_UX_ALLOW_MULTIPLE_RUNTIMES=1` (diagnostic only; bypasses the project-manager PID lock that normally prevents duplicate local runtimes from driving the same Docker/session state)
+- MCP Streamable HTTP config uses the existing `--mcp-https*` flags / `MCP_HTTPS_*` env names for compatibility. When enabled and no explicit auth token is supplied, startup creates or reuses `~/.code-ux/security.json` with `mcpHttpAuthToken`.
 
 External hint env keys used for dashboard import:
 - `JULES_API_KEY` / `JULES_KEY`
@@ -37,6 +38,12 @@ Effective settings API endpoints include a `sources` dictionary mapping each JSO
 Many settings families are handled by specific sanitizers that ensure defaults are applied and invalid shapes are repaired (e.g., `aiProvider`, `ciIntelligence`, `guardrails`, `cliWorkflow`, `git`, `jira`, `sprintLoopSteps`, `memory`, `modelPricing`, `workers`).
 
 Project and sprint scopes can override execution-specific settings, such as `aiProvider` routes (which now include provider instances and `invocationRouting` as first-class citizens instead of legacy top-level keys), `cliWorkflow` settings (like `gitMode`, `executionMode`, `containerImage`, `containerSetupScriptPath`), and preview defaults (like `sprintPreview.startupScriptPath` defaulting to `.code-ux/browser/start-preview.sh`). `git.defaultBranch` fallback is resolved based on scoped overrides too. Jira and GitLab integration configurations are also scoped and can be overridden.
+
+Techstack settings are split across scopes:
+- system settings own `techstackCatalog`, a catalog with `defaultTechstackId` and `entries`
+- project and sprint settings own `techstack`, a selection with `selectedTechstackId` and `applicationKind`
+
+The built-in catalog always includes the Code UX Stack (`code-ux-internal`) with Preact, TanStack Router, GSAP, Three.js, and Lucide Icons. Catalog sanitization trims ids and labels, drops malformed or duplicate ids, preserves the built-in entry, and falls back `defaultTechstackId` to `code-ux-internal` if the saved default is missing or invalid. Project defaults intentionally keep `techstack.selectedTechstackId = null` and `techstack.applicationKind = null`; existing and imported projects therefore do not inherit the built-in stack automatically. New-project flows must apply a catalog default explicitly when they need one.
 
 For `.code-ux/settings.json` (used primarily for credential hints during initial onboarding), search roots include:
 - current working directory
@@ -63,6 +70,7 @@ Storage:
   - includes project planning tables (sprints with `original_prompt` and `goal`) plus sprint-scoped runtime projection in `app_settings`, `task_runs`, and `task_run_events`
   - runtime context rows are keyed by sprint (`runtime_context:<projectId>:<sprintId>`); legacy unscoped project-level runtime rows are deprecated and are no longer used for explicit sprint reads or rerun context
   - also stores sprint preview runtime state in `sprint_preview_sessions`
+  - persistent agent skill storage uses separate `skill_storages`, `skills`, `skill_embeddings`, and `agent_skill_storage_bindings` tables. These are distinct from project workspaces, `memories`, and `knowledge_documents`; agent presets attach to named storage records through normalized bindings rather than by storing workspace paths on the preset row.
 
 Runtime resolution:
 - effective runtime settings always resolve as `system -> project -> sprint`
@@ -141,6 +149,11 @@ Runtime resolution:
   - `gitlabToken`
 - `defaults`
   - full inheritable project settings baseline
+- `techstackCatalog`
+  - `defaultTechstackId` (`code-ux-internal` by default)
+  - `entries`
+    - each entry has `id`, `label`, and `items`
+    - each item has `id` and `label`
 - `mcpTools`
 
 `project_settings` fields:
@@ -153,6 +166,7 @@ Runtime resolution:
   - `sprintLoopSteps`
   - `cliWorkflow`
   - `sprintPreview`
+  - `techstack`
   - `agents`
   - `skills`
 
@@ -162,10 +176,16 @@ Runtime resolution:
 
 System-level integrations are injected into effective dashboard settings at resolution time:
 - provider credentials are system-scoped under `integrations.providers`
-  - each entry is a named provider instance with `{ provider, name, apiKey, mountAuth, authPath, authType }`
+  - each entry is a named provider instance with `{ provider, name, apiKey, mountAuth, authPath, authType, providerConfigMode, providerConfigPath }`
   - default instance ids intentionally match the base provider ids (`jules`, `gemini`, `codex`, `claude-code`) for compatibility with older settings payloads
   - additional instances can coexist under the same CLI type
-  - for CLI providers, `mountAuth`, `authPath`, and `authType` are instance-specific Docker auth-copy/login settings. The `authType` property can be set to `"apiKey"` (uses API key text override), `"localAuth"` (mounts a custom local directory like `~/.gemini`), or `"dashboardAuth"` (launches an interactive terminal inside the container and saves tokens directly to a dedicated `~/.code-ux/credentials/<provider-name>` folder on the host). For dynamically-generated unsaved provider configurations (e.g. during onboarding or settings setup prior to saving), the dashboard is directly able to launch interactive login containers by automatically resolving the underlying provider type via prefix-matching on the transient instance ID (such as `gemini-mptfvpkk-u1fui` prefix-matching to `gemini`). To guarantee a fresh login, launching a `dashboardAuth` terminal session automatically clears the target provider credentials directory on the host first, ensuring that stale tokens or cached sessions do not interfere.
+  - for CLI providers, `mountAuth`, `authPath`, and `authType` are instance-specific Docker auth-copy/login settings. The `authType` property can be set to `"apiKey"` (uses API key text override), `"localAuth"` (mounts a custom local directory like `~/.gemini`), or `"dashboardAuth"` (launches an interactive terminal inside the container and saves tokens directly to a dedicated `~/.code-ux/credentials/<provider-name>` folder on the host). `providerConfigMode` is independent of auth mode and controls only Docker config-file materialization:
+    - `"none"` copies no provider config file and stores `providerConfigPath` as an empty string.
+    - `"copyHost"` copies the provider's standard host config file path and stores that standard path.
+    - `"file"` copies the user-selected file from `providerConfigPath`; an empty path is normalized back to `"copyHost"`.
+  - standard config file paths are Codex `~/.codex/config.toml`, Gemini `~/.gemini/settings.json`, Claude Code `~/.claude.json`, Qwen `~/.qwen/settings.json`, OpenCode `~/.config/opencode/opencode.json`, and Antigravity `~/.gemini/antigravity-cli/mcp_config.json`. Jules and mock providers ignore these fields and normalize to `"none"` with an empty path.
+  - Docker-backed CLI runs mount selected config files separately from credential directories under `/opt/provider-config/host-*`, copy them into the provider's expected runtime-home destination, then strip local MCP declarations and apply Code UX generated MCP fragments from the existing `/opt/provider-config/*` mounts. This preserves managed MCP server injection while allowing provider instances to use no copied config, the normal host config, or a selected config file without changing API-key/local-auth/dashboard-auth mutual exclusion. Activity logs may mention resolved config paths but never print file contents.
+  - For dynamically-generated unsaved provider configurations (e.g. during onboarding or settings setup prior to saving), the dashboard is directly able to launch interactive login containers by automatically resolving the underlying provider type via prefix-matching on the transient instance ID (such as `gemini-mptfvpkk-u1fui` prefix-matching to `gemini`). To guarantee a fresh login, launching a `dashboardAuth` terminal session automatically clears the target provider credentials directory on the host first, ensuring that stale tokens or cached sessions do not interfere.
 
     #### Interactive Login Container Lifecycle Management
     Interactive login containers have strict lifecycle gates:
@@ -175,6 +195,9 @@ System-level integrations are injected into effective dashboard settings at reso
 - `git.githubToken` and `git.gitlabToken` are system-scoped
 - runtime fields like `dashboardPort`, `consoleLogLevel`, `debugLogFileLevel`, and `consoleLogMode` are system-scoped
 - project and sprint scopes still own `cliWorkflow.containerMountGithubAuth`, `cliWorkflow.containerGithubAuthPath`, `cliWorkflow.containerMountGitConfig`, `cliWorkflow.containerGitUserName`, and `cliWorkflow.containerGitUserEmail`
+- `agents.selfReflection` is default-off for both `planning` and `qualityAssurance`. Each loop stores an `enabled` flag, senior engineering criteria with per-criterion thresholds, and `maxImprovementAttempts`; sanitization dedupes criteria by id, clamps thresholds to `0..1`, clamps attempts to `0..10`, and falls back to default criteria for malformed legacy payloads. These settings are contracts only in this phase; no provider reflection calls or dashboard controls are wired yet.
+- `techstackCatalog` is system-owned. It stores the available techstack records and the catalog default id. The built-in `code-ux-internal` entry is restored on every load even when saved settings omit or override it.
+- `techstack` is project/sprint-owned. It stores `{ selectedTechstackId: string|null, applicationKind: "web"|"desktop"|null }`. The default project selection is null by design so imported projects remain unclassified until a later explicit project override selects a stack.
 
 Backend contract:
 - `src/contracts/app-types.ts`
@@ -213,7 +236,7 @@ Dashboard behavior:
 - project settings now render a per-setting override badge only when a control is actually overridden at project scope
 - settings UI path pickers can browse allowed local roots for custom container setup script paths. The local browser APIs are limited to the home directory, current working directory, and `CODE_UX_DIRECTORY_BROWSER_ROOTS`; `/api/local-files` returns navigation metadata plus directory and file names/absolute paths only, never file contents.
 - sprint override dialogs use the same field-level source metadata and show override badges only for sprint-local overrides
-- the v2 settings page includes a quick-find field (keyboard shortcut `/`) that filters categories without changing the scoped settings model. Smart Find uses a centralized typed settings search index spanning category metadata, provider and integration labels, invocation routes, instruction templates, and important field synonyms, so provider searches such as `claude` surface both AI model routing and Integrations matches with visible match context. The search UI announces live result counts, active-category match previews, no-match recovery suggestions, and keyboard-friendly quick category chips.
+- the v2 settings page includes a quick-find field (keyboard shortcut `/`) that filters categories without changing the scoped settings model. Smart Find uses a centralized typed settings search index spanning category metadata, provider and integration labels, invocation routes, instruction templates, and important field synonyms, so provider searches such as `claude` surface both AI model routing and Integrations matches with visible match context. Idle search copy stays quiet while keeping the exact category total available to assistive technology; active searches announce live result counts, matching-category counts, active-category context, match previews, no-match recovery suggestions, and keyboard-friendly quick category chips.
 - settings scope selection is a radiogroup with explicit selected state and disabled project-scope guidance when no project is selected. Save, project reset, dirty, saved, and error states are announced in the active settings panel while visible form values stay mounted during pending operations.
 - Settings category transitions use shared interaction motion tokens and snap directly to the selected category for reduced-motion users, avoiding intermediate fade states.
 - settings field controls expose field-level confidence through error text and ready-to-save cues where validation is available. Single-choice pill controls keep radiogroup/radio semantics and wire helper, valid, pending, and error copy through `aria-describedby`, `aria-errormessage`, and `aria-busy` instead of relying on visual styling alone. Numeric fields derive local min/max validation from their mounted control metadata; Save Changes focuses the first visible invalid field and blocks the patch request until the value is corrected.
@@ -383,6 +406,7 @@ QA merge-gate notes:
     - the dashboard picker is a convenience for selecting local absolute paths from allowed host roots
     - manually entered relative paths remain supported; Docker runtime resolves them later against the sprint repo root and current server working directory
     - if empty, Code UX first seeds missing bundled defaults into `~/.code-ux`, then falls back to `.code-ux/container/setup.sh` in repo root, then home directory, then the bundled Code UX default script
+  - `containerMemoryLimitMb` (default `6144`): memory ceiling in MiB applied to all Docker-backed CLI provider containers. `0` disables Docker memory flags. Positive values are passed as both `--memory` and `--memory-swap`, so the configured value is a hard ceiling rather than silent swap overcommit.
   - `containerCacheSetupScriptImage` (default `true`)
     - when enabled, Docker runtime builds and reuses a derived image keyed by the base image plus setup script contents
     - cache misses fall back to the current per-run setup script path if the image build fails
@@ -497,7 +521,7 @@ Container execution notes:
 - `enabled` (whether tool is visible in MCP `list_tools` and callable)
 - `isInternal` (reserved/internal metadata; currently all built-in tools are internal)
 
-`customMcpServers` contains user-configurable provider MCP servers. New and sanitized settings include a default enabled `playwright` stdio server (`npx @playwright/mcp@latest`) for local CLI providers. Settings resolution treats a user or project server with the same stable id or `playwright` name as the same seeded server, so custom edits replace the default instead of creating duplicates. Docker provider runs do not inherit arbitrary MCP servers from copied local provider config files; runtime strips local `mcpServers` / `mcp_servers.*` entries from mounted auth config and injects only the Code UX-managed MCP servers that are enabled on the MCP settings page.
+`customMcpServers` contains user-configurable provider MCP servers. New and sanitized settings include a default enabled `playwright` stdio server (`npx @playwright/mcp@latest`) for local CLI providers. Settings resolution treats a user or project server with the same stable id or `playwright` name as the same seeded server, so custom edits replace the default instead of creating duplicates. Docker provider runs do not inherit arbitrary MCP servers from copied local provider config files; runtime strips local `mcpServers` / `mcp_servers.*` entries from mounted auth config and injects only the Code UX-managed MCP servers that are enabled on the MCP settings page. The Settings → MCP local setup panel can also write the current Code UX HTTP MCP URL and bearer token into local CLI config files for Claude Code, Gemini, Codex, Qwen Code, OpenCode, and Antigravity.
 
 Repository demo script:
 - `.code-ux/container/setup.sh` is included as a baseline bootstrap script.
@@ -519,6 +543,7 @@ Repository demo script:
     - Codex: `CODEX_MODEL` plus `--model` when applicable
     - Claude Code: `--model` when applicable
   - When `containerCacheSetupScriptImage` is enabled and a setup script is present, runtime first tries to reuse a prebuilt image named like `code-ux-setup-cache-node-24-bookworm:<hash>` instead of rerunning the setup script on every container launch. The hash covers the base image, setup script content, Playwright browser install setting, and setup-cache Dockerfile content. Build contexts and lock directories live under the repo-scoped Docker runtime root, so cache hits survive dashboard restarts and concurrent launches wait for one build instead of triggering duplicate builds.
+  - Docker-backed CLI provider containers honor `containerMemoryLimitMb`. A positive value becomes `--memory=<value>m --memory-swap=<value>m` for every provider runtime launched through `DockerRunner`, including task coding, QA, planning, CI-fix, merge-conflict, remediation, and dashboard-chat paths that use CLI providers. Set it to `0` only when the host should manage provider memory without a Docker hard limit.
   - An empty `containerSetupScriptPath` still participates in caching because runtime resolves the default script chain automatically, including the bundled Code UX setup script.
   - `claude` fallback uses the official installer: `curl -fsSL https://claude.ai/install.sh | bash`
   - Claude runner uses explicit headless prompt mode (`claude -p "<prompt>"`) with `--dangerously-skip-permissions`.

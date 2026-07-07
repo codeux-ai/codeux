@@ -9,6 +9,7 @@ import type {
 import type { SystemSettings } from "../contracts/settings-scope-types.js";
 import { commandRunner } from "../shared/subprocess/command-runner.js";
 import { expandHomePath } from "../shared/config/home-path.js";
+import { planOnboardingDependencyInstallerOptions, type OnboardingInstallerEnvironment } from "./onboarding-dependency-installer-service.js";
 
 const providerLabels: Record<ProviderId, string> = {
   jules: "Jules",
@@ -18,6 +19,7 @@ const providerLabels: Record<ProviderId, string> = {
   "qwen-code": "Qwen Code",
   opencode: "OpenCode",
   antigravity: "Antigravity",
+  "mockup-cli": "Mockup CLI",
 };
 
 const defaultProviderAuthPaths: Record<ProviderId, string> = {
@@ -28,6 +30,7 @@ const defaultProviderAuthPaths: Record<ProviderId, string> = {
   "qwen-code": "~/.qwen",
   opencode: "~/.local/share/opencode",
   antigravity: "~/.antigravity",
+  "mockup-cli": "",
 };
 
 const cliMountFields: Partial<Record<ProviderId, keyof SystemSettings["defaults"]["cliWorkflow"]>> = {
@@ -47,6 +50,7 @@ const relevantProviderFiles: Record<ProviderId, string[]> = {
   "qwen-code": ["settings.json", "auth.json", "oauth_creds.json"],
   opencode: ["auth.json", "config.json", "opencode.json"],
   antigravity: ["settings.json"],
+  "mockup-cli": [],
 };
 
 const runCheck = async (id: string, label: string, command: string, args: string[], required: boolean, resolution: string): Promise<OnboardingDependencyCheck> => {
@@ -133,12 +137,33 @@ const getProviderCredentialStatuses = async (settings: SystemSettings): Promise<
 };
 
 let cachedReadiness: OnboardingRuntimeReadiness | null = null;
+let cachedInstallerEnvironmentKey: string | null = null;
 let lastCheckTime = 0;
 const CACHE_TTL_MS = 6000;
 
-export const getOnboardingRuntimeReadiness = async (settings: SystemSettings): Promise<OnboardingRuntimeReadiness> => {
+const installerEnvironmentCacheKey = (environment: OnboardingInstallerEnvironment | undefined): string => JSON.stringify({
+  platform: environment?.platform ?? null,
+  linuxPackageManager: environment?.linuxPackageManager ?? null,
+  homebrewAvailable: environment?.homebrewAvailable ?? null,
+  wingetAvailable: environment?.wingetAvailable ?? null,
+  systemctlAvailable: environment?.systemctlAvailable ?? null,
+  isRoot: environment?.isRoot ?? null,
+  passwordlessSudoAvailable: environment?.passwordlessSudoAvailable ?? null,
+});
+
+export const invalidateOnboardingRuntimeReadinessCache = (): void => {
+  cachedReadiness = null;
+  cachedInstallerEnvironmentKey = null;
+  lastCheckTime = 0;
+};
+
+export const getOnboardingRuntimeReadiness = async (
+  settings: SystemSettings,
+  installerEnvironment?: OnboardingInstallerEnvironment,
+): Promise<OnboardingRuntimeReadiness> => {
   const now = Date.now();
-  if (cachedReadiness && (now - lastCheckTime < CACHE_TTL_MS)) {
+  const cacheKey = installerEnvironmentCacheKey(installerEnvironment);
+  if (cachedReadiness && cachedInstallerEnvironmentKey === cacheKey && (now - lastCheckTime < CACHE_TTL_MS)) {
     return cachedReadiness;
   }
 
@@ -198,7 +223,9 @@ export const getOnboardingRuntimeReadiness = async (settings: SystemSettings): P
     },
     dependencies,
     providers: providerStatuses,
+    installers: planOnboardingDependencyInstallerOptions(installerEnvironment),
   };
+  cachedInstallerEnvironmentKey = cacheKey;
   lastCheckTime = Date.now();
 
   return cachedReadiness;

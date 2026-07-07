@@ -6,12 +6,15 @@ import type {
   ManageTasksArgs,
   ManageQuicksprintsArgs,
   ManageSchedulerArgs,
+  SchedulerArgs,
   ManageAgentsArgs,
   ManageMemoryArgs,
+  ManageSkillsArgs,
   ManageSettingsArgs,
   ManagePreviewArgs,
   ManageTelemetryArgs,
-  SearchKnowledgeArgs
+  SearchKnowledgeArgs,
+  SearchSkillsArgs
 } from "../contracts/internal-management-types.js";
 import type { KnowledgeService } from "../services/knowledge-service.js";
 import { getCurrentMcpAgentId } from "../server/mcp-agent-context.js";
@@ -26,6 +29,13 @@ import type { AgentPresetSyncService } from "../services/agent-preset-sync-servi
 import type { MemoryService } from "../services/memory-service.js";
 import type { MemoryPromotionService } from "../services/memory-promotion-service.js";
 import type { EmbeddingModelManager } from "../services/embedding-model-manager.js";
+import type {
+  PullWorkerTaskDispatchArgs,
+  RegisterExternalWorkerEndpointArgs,
+  UpdateWorkerTaskDispatchArgs,
+  WorkerTaskDispatchService,
+} from "../services/worker-task-dispatch-service.js";
+import type { SkillService } from "../services/skill-service.js";
 
 import type { PlanningAgentService } from "../services/planning-agent-service.js";
 import type { ProjectSetupService } from "../services/project-setup-service.js";
@@ -43,9 +53,11 @@ import { SprintActions } from "./management/sprint-actions.js";
 import { TaskActions } from "./management/task-actions.js";
 import { QuicksprintActions } from "./management/quicksprint-actions.js";
 import { SchedulerActions } from "./management/scheduler-actions.js";
+import { AgentSchedulerActions } from "./management/agent-scheduler-actions.js";
 import { SettingsActions } from "./management/settings-actions.js";
 import { AgentActions } from "./management/agent-actions.js";
 import { MemoryActions } from "./management/memory-actions.js";
+import { SkillActions } from "./management/skill-actions.js";
 import { buildMcpApprovalFingerprint, formatManagementErrorEnvelope } from "./management/payload-parsers.js";
 import { resolveLateBoundDependency, type LateBoundOrValue } from "../shared/late-bound-dependency.js";
 
@@ -61,12 +73,14 @@ export interface ManagementToolHandlerDeps {
   memoryService: MemoryService;
   memoryPromotionService: MemoryPromotionService;
   embeddingModelManager: EmbeddingModelManager;
+  skillService: SkillService;
   knowledgeService: KnowledgeService;
   planningAgentService: LateBoundOrValue<PlanningAgentService>;
   projectSetupService?: LateBoundOrValue<ProjectSetupService>;
   sprintIssueService: SprintIssueService;
   quicksprintService?: LateBoundOrValue<QuicksprintService>;
   schedulerService?: LateBoundOrValue<SchedulerService>;
+  workerTaskDispatchService?: WorkerTaskDispatchService;
 }
 
 const MANAGEMENT_APPROVAL_TTL_MS = 15 * 60 * 1000;
@@ -74,16 +88,19 @@ const MANAGEMENT_APPROVAL_TTL_MS = 15 * 60 * 1000;
 export class ManagementToolHandler {
   private sprintActions: SprintActions | null = null;
   private taskActions: TaskActions | null = null;
+  private agentSchedulerActions: AgentSchedulerActions | null = null;
   private readonly pendingDestructiveApprovals = new Map<string, number>();
   private readonly settingsActions: SettingsActions;
   private readonly agentActions: AgentActions;
   private readonly memoryActions: MemoryActions;
+  private readonly skillActions: SkillActions;
   private readonly previewActions: PreviewActions;
 
   constructor(private readonly deps: ManagementToolHandlerDeps) {
     this.settingsActions = new SettingsActions(deps.settingsRepository);
     this.agentActions = new AgentActions(deps.agentPresetSyncService);
     this.memoryActions = new MemoryActions(deps.memoryService, deps.memoryPromotionService, deps.embeddingModelManager);
+    this.skillActions = new SkillActions(deps.skillService);
     this.previewActions = new PreviewActions(deps.sprintPreviewService);
   }
 
@@ -121,6 +138,16 @@ export class ManagementToolHandler {
       throw new Error("Scheduler service is not enabled.");
     }
     return new SchedulerActions(resolveLateBoundDependency(this.deps.schedulerService));
+  }
+
+  private getAgentSchedulerActions(): AgentSchedulerActions {
+    if (!this.agentSchedulerActions) {
+      if (!this.deps.schedulerService) {
+        throw new Error("Scheduler service is not enabled.");
+      }
+      this.agentSchedulerActions = new AgentSchedulerActions(resolveLateBoundDependency(this.deps.schedulerService));
+    }
+    return this.agentSchedulerActions;
   }
 
   private resolveGithubToken(): string | undefined {
@@ -249,6 +276,8 @@ export class ManagementToolHandler {
       return this.agentActions.handleAgentAction(args);
     } else if (args.domain === "memory") {
       return this.memoryActions.handleMemoryAction(args);
+    } else if (args.domain === "skills") {
+      return this.skillActions.handleSkillAction(args);
     } else if (args.domain === "preview") {
       const currentHost = null; // serverHost is not available on DashboardSettings, we'll fall back to localhost in preview-origin
       return this.previewActions.handlePreviewAction(args, currentHost);
@@ -352,6 +381,15 @@ export class ManagementToolHandler {
     }
   }
 
+  async handleScheduler(args: SchedulerArgs): Promise<{ content: Array<{ type: string; text: string }> }> {
+    try {
+      const envelope = this.getAgentSchedulerActions().handleSchedulerAction(args, getCurrentMcpAgentId());
+      return { content: [{ type: "text", text: JSON.stringify(envelope, null, 2) }] };
+    } catch (error) {
+      return this.formatError("scheduler", args.action, error);
+    }
+  }
+
   async handleManageAgents(args: ManageAgentsArgs): Promise<{ content: Array<{ type: string; text: string }> }> {
     try {
       const managementArgs = { domain: "agents", action: args.action, payload: args as unknown as Record<string, unknown>, approval: args.approval };
@@ -376,9 +414,26 @@ export class ManagementToolHandler {
     }
   }
 
+  async handleManageSkills(args: ManageSkillsArgs): Promise<{ content: Array<{ type: string; text: string }> }> {
+    try {
+      const managementArgs = { domain: "skills", action: args.action, payload: args as unknown as Record<string, unknown>, approval: args.approval };
+      const dispatch = (approval = args.approval) => this.skillActions.handleSkillAction({ ...managementArgs, approval });
+      const approvalGate = await this.requireStatefulApproval(managementArgs, () => dispatch({ confirmed: false }));
+      const envelope = approvalGate ?? this.recordStatefulApprovalRequirement(managementArgs, await dispatch());
+      return { content: [{ type: "text", text: JSON.stringify(envelope, null, 2) }] };
+    } catch (error) {
+      return this.formatError("skills", args.action, error);
+    }
+  }
+
   async handleManageSettings(args: ManageSettingsArgs): Promise<{ content: Array<{ type: string; text: string }> }> {
     try {
-      const envelope = await this.settingsActions.handleSettingsAction({ domain: "settings", action: args.action, payload: args as unknown as Record<string, unknown>, approval: args.approval });
+      const rawArgs = args as unknown as Record<string, unknown>;
+      const nestedPayload = rawArgs.payload && typeof rawArgs.payload === "object" && !Array.isArray(rawArgs.payload)
+        ? rawArgs.payload as Record<string, unknown>
+        : null;
+      const payload = nestedPayload ? { ...nestedPayload, action: args.action } : rawArgs;
+      const envelope = await this.settingsActions.handleSettingsAction({ domain: "settings", action: args.action, payload, approval: args.approval });
       return { content: [{ type: "text", text: JSON.stringify(envelope, null, 2) }] };
     } catch (error) {
       return this.formatError("settings", args.action, error);
@@ -436,6 +491,51 @@ export class ManagementToolHandler {
       return { content: [{ type: "text", text: `${header}\n\n${formatted}` }] };
     } catch (error) {
       return this.formatError("knowledge", "search", error);
+    }
+  }
+
+  async handleRegisterWorkerEndpoint(args: RegisterExternalWorkerEndpointArgs): Promise<{ content: Array<{ type: string; text: string }> }> {
+    try {
+      if (!this.deps.workerTaskDispatchService) {
+        throw new Error("Worker dispatch service is not enabled.");
+      }
+      const endpoint = this.deps.workerTaskDispatchService.registerExternalWorkerEndpoint(args);
+      return { content: [{ type: "text", text: JSON.stringify({ endpoint }, null, 2) }] };
+    } catch (error) {
+      return this.formatError("workers", "register_worker_endpoint", error);
+    }
+  }
+
+  async handlePullTaskDispatch(args: PullWorkerTaskDispatchArgs): Promise<{ content: Array<{ type: string; text: string }> }> {
+    try {
+      if (!this.deps.workerTaskDispatchService) {
+        throw new Error("Worker dispatch service is not enabled.");
+      }
+      const claim = this.deps.workerTaskDispatchService.pullNextDispatch(args);
+      return { content: [{ type: "text", text: JSON.stringify(claim, null, 2) }] };
+    } catch (error) {
+      return this.formatError("workers", "pull_task_dispatch", error);
+    }
+  }
+
+  async handleUpdateTaskDispatch(args: UpdateWorkerTaskDispatchArgs): Promise<{ content: Array<{ type: string; text: string }> }> {
+    try {
+      if (!this.deps.workerTaskDispatchService) {
+        throw new Error("Worker dispatch service is not enabled.");
+      }
+      const result = this.deps.workerTaskDispatchService.updateDispatch(args);
+      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+    } catch (error) {
+      return this.formatError("workers", "update_task_dispatch", error);
+    }
+  }
+
+  async handleSearchSkills(args: SearchSkillsArgs): Promise<{ content: Array<{ type: string; text: string }> }> {
+    try {
+      const envelope = await this.skillActions.handleSearchSkills(args);
+      return { content: [{ type: "text", text: JSON.stringify(envelope, null, 2) }] };
+    } catch (error) {
+      return this.formatError("skills", "search", error);
     }
   }
 }

@@ -17,8 +17,8 @@ export function registerConversationRoutes(app: Express, options: DashboardDepen
     );
   }));
 
-  app.patch("/api/conversations/threads/:threadId", syncRoute((req, res) => {
-    res.json(options.updateConversationThread(
+  app.patch("/api/conversations/threads/:threadId", asyncRoute(async (req, res) => {
+    res.json(await options.updateConversationThread(
       requireTrimmedString(req.params.threadId, "threadId"),
       parseUpdateConversationThreadInput(req.body)
     ));

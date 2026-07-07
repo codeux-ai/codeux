@@ -182,6 +182,47 @@ describe("DockerRunner", () => {
     }));
   });
 
+  it("supports mockup-cli Docker labels, names, env files, and argv files", async () => {
+    await runner.runProviderInDocker({
+      command: "node",
+      args: ["-e", "console.log('mock')", "mockup-cli:write fixture.txt :: hello"],
+      cwd: "docker-volume://workspace-1",
+      providerEnv: {
+        CODE_UX_MOCKUP_MODEL: "default",
+        CODE_UX_MOCKUP_SESSION_ID: "mock-session-1",
+      },
+      sessionId: "mock-session-1",
+      providerLabel: "mockup-cli",
+      workflowSettings: {
+        executionMode: "DOCKER",
+        containerImage: "node:24",
+        containerSetupScriptPath: "",
+        containerCacheSetupScriptImage: false,
+      } as any,
+      repoPath: "/repo/project",
+      onActivity: vi.fn(),
+    });
+
+    const dockerArgs = vi.mocked(runStreamingCommand).mock.calls[0]?.[1] as string[];
+    expect(dockerArgs).toEqual(expect.arrayContaining([
+      "--name",
+      "code-ux-mockup-cli-mock-session-1",
+      "--label",
+      "code-ux.command=node",
+      "--label",
+      "code-ux.args-count=3",
+    ]));
+    expect(dockerArgs.slice(-2)).toEqual(["provider-runner", "node"]);
+    expect(dockerArgs).toContain("CODE_UX_PROVIDER_ARGV_FILE=/opt/code-ux/provider-argv.sh");
+
+    const envWrite = vi.mocked(fs.writeFile).mock.calls.find(([file]) => String(file).endsWith("provider.env"));
+    expect(envWrite?.[1]).toContain("CODE_UX_MOCKUP_MODEL=default");
+    expect(envWrite?.[1]).toContain("CODE_UX_MOCKUP_SESSION_ID=mock-session-1");
+
+    const argvWrite = vi.mocked(fs.writeFile).mock.calls.find(([file]) => String(file).endsWith("provider-argv.sh"));
+    expect(argvWrite?.[1]).toContain("mockup-cli:write fixture.txt :: hello");
+  });
+
   it("keeps Docker and provider execution behind mocked command runners", async () => {
     expect(vi.isMockFunction(runCommandStrict)).toBe(true);
     expect(vi.isMockFunction(runStreamingCommand)).toBe(true);
@@ -331,6 +372,58 @@ describe("DockerRunner", () => {
     expect(argvWrite?.[1]).toContain(" with ");
     expect(argvWrite?.[1]).toContain("'\"'\"'quotes'\"'\"'");
     expect(argvWrite?.[2]).toEqual(expect.objectContaining({ mode: 0o600 }));
+  });
+
+  it("applies configured memory limits to provider Docker runs", async () => {
+    await runner.runProviderInDocker({
+      command: "qwen",
+      args: ["--prompt", "plan"],
+      cwd: "docker-volume://workspace-1",
+      providerEnv: {},
+      sessionId: "session-1",
+      providerLabel: "qwen-code",
+      workflowSettings: {
+        executionMode: "DOCKER",
+        containerImage: "node:24",
+        containerSetupScriptPath: "",
+        containerMemoryLimitMb: 6144,
+        containerCacheSetupScriptImage: false,
+      } as any,
+      repoPath: "/repo/project",
+      onActivity: vi.fn(),
+    });
+
+    const dockerArgs = vi.mocked(runStreamingCommand).mock.calls[0]?.[1] as string[];
+    expect(dockerArgs).toEqual(expect.arrayContaining([
+      "--memory",
+      "6144m",
+      "--memory-swap",
+      "6144m",
+    ]));
+  });
+
+  it("omits Docker memory flags when the configured limit is disabled", async () => {
+    await runner.runProviderInDocker({
+      command: "codex",
+      args: ["exec", "--yolo"],
+      cwd: "docker-volume://workspace-1",
+      providerEnv: {},
+      sessionId: "session-1",
+      providerLabel: "codex",
+      workflowSettings: {
+        executionMode: "DOCKER",
+        containerImage: "node:24",
+        containerSetupScriptPath: "",
+        containerMemoryLimitMb: 0,
+        containerCacheSetupScriptImage: false,
+      } as any,
+      repoPath: "/repo/project",
+      onActivity: vi.fn(),
+    });
+
+    const dockerArgs = vi.mocked(runStreamingCommand).mock.calls[0]?.[1] as string[];
+    expect(dockerArgs).not.toContain("--memory");
+    expect(dockerArgs).not.toContain("--memory-swap");
   });
 
   it("sanitizes streamed Docker provider output before activity callbacks", async () => {
@@ -502,6 +595,7 @@ describe("DockerRunner custom MCP server injection", () => {
     ]);
     const json = JSON.parse(writtenFor("claude-mcp.json")!);
     expect(json.mcpServers.code_ux).toMatchObject({ type: "http", url: "http://127.0.0.1:3000/mcp" });
+    expect(json.mcpServers.code_ux.headers).toMatchObject({ Authorization: "Bearer secret" });
     expect(json.mcpServers.docs).toEqual({ type: "http", url: "https://docs.example/mcp", headers: { Authorization: "Bearer t" } });
   });
 
@@ -522,6 +616,7 @@ describe("DockerRunner custom MCP server injection", () => {
 
     const json = JSON.parse(writtenFor("claude-mcp.json")!);
     expect(json.mcpServers.code_ux.url).toBe("http://host.docker.internal:3000/mcp");
+    expect(json.mcpServers.code_ux.headers).toMatchObject({ Authorization: "Bearer secret" });
     expect(json.mcpServers.localdocs.url).toBe("http://host.docker.internal:8123/mcp");
   });
 
@@ -529,7 +624,7 @@ describe("DockerRunner custom MCP server injection", () => {
     const originalRewrite = process.env.CODE_UX_DOCKER_REWRITE_LOCALHOST;
     process.env.CODE_UX_DOCKER_REWRITE_LOCALHOST = "1";
     try {
-      await buildDocker("codex", { url: "http://0.0.0.0:3000/mcp", authToken: null }, [
+      await buildDocker("codex", { url: "http://0.0.0.0:3000/mcp", authToken: "secret" }, [
         { id: "1", name: "localdocs", transport: "http", url: "http://localhost:8123/mcp", enabled: true },
       ]);
     } finally {
@@ -542,6 +637,7 @@ describe("DockerRunner custom MCP server injection", () => {
 
     const toml = writtenFor("codex-config.toml")!;
     expect(toml).toContain('url = "http://host.docker.internal:3000/mcp"');
+    expect(toml).toContain('"Authorization" = "Bearer secret"');
     expect(toml).toContain('url = "http://host.docker.internal:8123/mcp"');
   });
 
@@ -619,6 +715,7 @@ describe("DockerRunner custom MCP server injection", () => {
     expect(json.enableOpenAILogging).toBeUndefined(); // It should strip this based on formatting logic
     expect(json.someOtherSetting).toBe("value");
     expect(json.mcpServers.code_ux).toMatchObject({ httpUrl: "http://127.0.0.1:3000/mcp" });
+    expect(json.mcpServers.code_ux.headers).toMatchObject({ Authorization: "Bearer secret" });
     expect(json.mcpServers.docs).toEqual({ httpUrl: "https://docs.example/mcp", headers: { Authorization: "Bearer t" } });
   });
 
@@ -629,6 +726,7 @@ describe("DockerRunner custom MCP server injection", () => {
     ]);
     const json = JSON.parse(writtenFor("antigravity-mcp.json")!);
     expect(json.mcpServers.code_ux).toMatchObject({ serverUrl: "http://127.0.0.1:3000/mcp" });
+    expect(json.mcpServers.code_ux.headers).toMatchObject({ Authorization: "Bearer secret" });
     expect(json.mcpServers.docs).toEqual({ serverUrl: "https://docs.example/mcp", headers: { Authorization: "Bearer t" } });
     expect(json.mcpServers.localtool).toEqual({ command: "python", args: ["script.py"] });
   });

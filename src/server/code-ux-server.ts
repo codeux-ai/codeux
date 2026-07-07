@@ -3,7 +3,7 @@ import axios from "axios";
 import type { AxiosError } from "axios";
 import express from "express";
 import type { Server as HttpServer } from "node:http";
-import type { AppConfig } from "../config/app-config.js";
+import { regenerateUserMcpHttpAuthToken, type AppConfig } from "../config/app-config.js";
 import { JulesApiClient } from "../integrations/jules-api-client.js";
 import type {
   DashboardSettings,
@@ -88,6 +88,8 @@ import {
 } from "../services/runtime-process-lock.js";
 import { workspaceVolumeHelperPool } from "../infrastructure/providers/cli/workspace-volume-helper.js";
 import { disposeCommandSpawner, shutdownGitHelperPool } from "../shared/subprocess/command-runner.js";
+import { LocalMcpCliConfigService } from "../services/local-mcp-cli-config-service.js";
+import type { McpConnectionInfo } from "../contracts/mcp-connection-types.js";
 
 function detectMergeConflictMessage(message: string | null | undefined): boolean {
   const normalized = String(message || "").trim().toLowerCase();
@@ -203,6 +205,7 @@ export class CodeUxServer {
   private isClosing = false;
   private closePromise: Promise<void> | null = null;
   private readonly mcpApprovalTracker = new McpApprovalTracker();
+  private readonly localMcpCliConfigService = new LocalMcpCliConfigService();
   private readonly signalHandler: () => void;
   private runtimeProcessLockRelease: RuntimeProcessLockRelease | null = null;
 
@@ -437,8 +440,18 @@ export class CodeUxServer {
       getDashboardSettings: () => this.runtimeContext.dashboardSettings || DEFAULT_DASHBOARD_SETTINGS,
       getRuntimeRole: () => runtimeRole,
       resolveAgentMcpToolAccess: (agentId) => {
-        const access = this.agentPresetRepository.getAgentPreset(agentId)?.mcpAccess;
-        return access ? toAgentCodeUxToolAccess(access) : null;
+        const agent = this.agentPresetRepository.getAgentPreset(agentId);
+        const access = agent?.mcpAccess;
+        const persistentSkillRetrievalEnabled = Boolean(
+          agent?.persistentSkillStorage?.enabled
+          && agent.persistentSkillStorageIds
+          && agent.persistentSkillStorageIds.length > 0,
+        );
+        return access
+          ? toAgentCodeUxToolAccess(access, persistentSkillRetrievalEnabled)
+          : persistentSkillRetrievalEnabled
+            ? toAgentCodeUxToolAccess({ codeUxEnabled: false, codeUxToolToggles: [] }, true)
+            : null;
       },
       formatError: (error: unknown) => this.formatError(error),
       logger: this.logger.child({ component: "mcp-request-router", runtimeRole }),
@@ -579,14 +592,40 @@ export class CodeUxServer {
       persistTaskMergedFlag: (args) => this.persistTaskMergedFlag(args),
       normalizeName: (type, id) => this.normalizeName(type, id),
       isTrackedCliSession: (sessionId) => this.isTrackedCliSession(sessionId),
-      getMcpConnectionInfo: () => this.mcpHttpHandle
-        ? {
-            url: `http://${this.mcpHttpClientHost()}:${this.mcpHttpHandle.port}${this.mcpHttpHandle.path}`,
-            authToken: this.appConfig.mcpHttpAuthToken,
-          }
-        : null,
+      getMcpConnectionInfo: () => this.getConfiguredMcpConnectionInfo(),
       getMcpApprovalTracker: () => this.mcpApprovalTracker,
     };
+  }
+
+  private getConfiguredMcpConnectionInfo(): McpConnectionInfo | null {
+    if (!this.appConfig.mcpHttpEnabled || !this.appConfig.mcpHttpPort) {
+      return null;
+    }
+    if (this.mcpHttpHandle) {
+      return {
+        url: `http://${this.mcpHttpClientHost()}:${this.mcpHttpHandle.port}${this.mcpHttpHandle.path}`,
+        authToken: this.appConfig.mcpHttpAuthToken,
+      };
+    }
+
+    const defaultMcpHttpPort = this.appConfig.dashboardPort + 1;
+    const port = this.appConfig.mcpHttpPort === defaultMcpHttpPort
+      ? this.getDashboardPort() + 1
+      : this.appConfig.mcpHttpPort;
+    const host = this.appConfig.mcpHttpHost.trim().toLowerCase();
+    const clientHost = host === "0.0.0.0" || host === "::"
+      ? "127.0.0.1"
+      : this.appConfig.mcpHttpHost;
+    return {
+      url: `http://${clientHost}:${port}${this.appConfig.mcpHttpPath}`,
+      authToken: this.appConfig.mcpHttpAuthToken,
+    };
+  }
+
+  private regenerateMcpHttpAuthToken(): string {
+    const token = regenerateUserMcpHttpAuthToken();
+    this.appConfig.mcpHttpAuthToken = token;
+    return token;
   }
 
   private mcpHttpClientHost(): string {
@@ -1338,10 +1377,13 @@ export class CodeUxServer {
         embeddingModelManager: this.embeddingModelManager,
         embeddingService: this.embeddingService,
         memoryRepository: this.memoryRepository,
+        localMcpCliConfigService: this.localMcpCliConfigService,
+        getLocalMcpConnectionInfo: () => this.getConfiguredMcpConnectionInfo(),
+        regenerateMcpHttpAuthToken: () => this.regenerateMcpHttpAuthToken(),
       });
     } else {
-      this.logger.info("Dashboard startup skipped for headless Code UX runtime", {
-        runtimeRole: this.appConfig.runtimeRole,
+      this.logger.info("Dashboard startup skipped for Code UX runtime", {
+        mode: this.appConfig.serverMode ? "server" : "headless",
       });
     }
 
@@ -1360,6 +1402,11 @@ export class CodeUxServer {
       port: mcpHttpPort,
       path: this.appConfig.mcpHttpPath,
       authToken: this.appConfig.mcpHttpAuthToken,
+      getAuthToken: () => this.appConfig.mcpHttpAuthToken,
+      requireAuth: this.appConfig.serverMode,
+      maxSessions: this.appConfig.mcpHttpMaxSessions,
+      sessionTimeoutMs: this.appConfig.mcpHttpSessionTimeoutMs,
+      getReady: () => this.isReady(),
       logger: this.logger.child({ component: "mcp-http-transport" }),
       createServer: () => this.createMcpServerInstance("project_manager"),
       recoveryService: this.runtimeStartupRecoveryService,

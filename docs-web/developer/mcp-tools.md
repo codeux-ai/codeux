@@ -1,9 +1,9 @@
 # MCP tools
 
 Code UX is also an MCP server. When connected, it advertises a set of **management tools** that an
-MCP client (or another agent) can call to drive projects, sprints, tasks, agents, memory, settings,
-previews, and telemetry. This page is the exact contract: the tool list, each tool's `action` enum,
-input shape, approval rules, and the error model.
+MCP client (or another agent) can call to drive projects, sprints, tasks, agents, memory, persistent
+skills, settings, previews, and telemetry. This page is the exact contract: the tool list, each
+tool's `action` enum, input shape, approval rules, and the error model.
 
 > **Server identity:** the server identifies as `code-ux`, with the version matching the installed
 > package. The package on npm is `@codeuxai/codeux`. Capabilities advertised at
@@ -17,16 +17,26 @@ Tools are filtered before being advertised on `ListTools`:
    (default and only functional role: `project_manager`).
 2. **Toggle** — each tool has an entry under `settings.mcpTools`. Disabled tools are not advertised
    and return `MethodNotFound` if called.
+3. **Per-agent Code UX policy** — HTTP worker clients can advertise an agent preset. Unknown,
+   malformed, or unconfigured agent identities fail closed and receive no built-in Code UX tools.
+   Known agents can receive tool-specific overrides; for example, `search_skills` can stay enabled
+   while `manage_skills` is disabled.
+
+Agent-scoped provider runs are also default-deny for built-in Code UX tools. Newly synced Worker,
+Project manager, and generated coding agents may link the default `playwright` custom MCP server,
+but that custom-server link does not imply `code_ux` access. The dashboard chat reply route is the
+only default exception: when the reply agent has no explicit MCP access, Code UX enables only the
+restricted `scheduler` tool and explicitly disables the broad management tools such as
+`manage_scheduler`, `manage_tasks`, `manage_sprints`, `manage_settings`, and `manage_code_ux`.
 
 All inputs are validated against their declared JSON Schema (AJV) before dispatch; validation
 failures return `InvalidParams` with the failing JSON path.
 
 ## The tools
 
-Code UX exposes grouped management tools per domain, plus `search_knowledge`. The deprecated
-`manage_code_ux` tool remains registered for compatibility, but the grouped tools are the primary
-surface. Each `manage_*` tool takes an `action` (from a fixed enum) plus action-specific fields,
-and an optional `approval` object for destructive actions.
+Code UX exposes **one tool per management domain**, plus retrieval tools such as `search_knowledge`
+and `search_skills`. Each `manage_*` tool takes an `action` (from a fixed enum) plus
+action-specific fields, and an optional `approval` object for destructive actions.
 
 | Tool | Category | Purpose |
 | --- | --- | --- |
@@ -35,13 +45,15 @@ and an optional `approval` object for destructive actions.
 | `manage_tasks` | orchestration | Create, edit, start, stop, pause, and inspect tasks. |
 | `manage_quicksprints` | orchestration | Manage quicksprint templates and execute them. |
 | `manage_scheduler` | orchestration | Create and run scheduled sprints, quicksprints, and messages. |
+| `scheduler` | orchestration | Agent-owned wakeups and task reruns with restricted list/schedule/cancel actions. |
 | `manage_agents` | agents & memory | Manage agent presets and sync them to project markdown. |
-| `manage_memory` | agents & memory | Inspect, search, promote, re-embed, and manage durable claims. |
+| `manage_memory` | agents & memory | Inspect, search, promote, and re-embed short/long-term memory. |
+| `manage_skills` | agents & memory | Manage persistent skill storages, skill markdown, and agent storage attachments. |
 | `search_knowledge` | agents & memory | Semantic search over the knowledge base subscribed to the caller. |
+| `search_skills` | agents & memory | Semantic retrieval over persistent project skills, optionally scoped to an agent or storage. |
 | `manage_settings` | platform | Get/resolve/patch/replace/reset system, project, and sprint settings. |
 | `manage_preview` | platform | Manage sprint preview containers (start/stop/rebuild, logs, scripts). |
 | `manage_telemetry` | platform | Read execution snapshots, invocations, sprint runs, and dispatches. |
-| `manage_code_ux` | advanced | (Deprecated) Manage internal Code UX state for compatibility. |
 
 Every tool requires `runtimeRoles: ["project_manager"]` and is enabled by default.
 
@@ -53,15 +65,36 @@ Every tool requires `runtimeRoles: ["project_manager"]` and is enabled by defaul
 | `manage_sprints` | `list`, `get`, `create`, `update`, `delete`, `start`, `pause`, `cancel`, `force_cancel`, `inspect_run`, `import_issues`, `plan` |
 | `manage_tasks` | `list`, `get`, `create`, `update`, `delete`, `start`, `stop`, `force_stop`, `pause`, `inspect_run` |
 | `manage_quicksprints` | `list_templates`, `get_template`, `create_template`, `update_template`, `delete_template`, `execute`, `start` |
-| `manage_scheduler` | `list`, `create`, `schedule_sprint`, `schedule_quicksprint`, `schedule_chat`, `update`, `delete`, `run_due` |
-| `manage_agents` | `list`, `get`, `sync`, `create`, `update`, `delete` |
-| `manage_memory` | `search`, `list`, `get`, `create`, `update`, `delete`, `promote`, `start_reembed`, `get_map`, `count`, `model_status`, `create_claim`, `list_claims`, `get_claim`, `update_claim`, `add_claim_evidence`, `deprecate_claim` |
-| `manage_settings` | `get_system`, `get_project_override`, `resolve_project_effective`, `get_sprint_override`, `resolve_sprint_effective`, `replace_system_settings`, `patch_system_setting`, `replace_project_settings`, `patch_project_setting`, `reset_project_settings`, `replace_sprint_settings`, `patch_sprint_setting`, `reset_sprint_settings` |
-| `manage_preview` | `list_sessions`, `start_session`, `rebuild_session`, `stop_session`, `remove_session`, `get_logs`, `get_url`, `get_script`, `update_script` |
-| `manage_telemetry` | `get_project_execution_snapshot`, `get_project_stats_snapshot`, `list_sprint_runs`, `list_task_dispatches`, `list_execution_invocations`, `list_execution_invocation_messages` |
-| `manage_code_ux` | Domain/action specific (Deprecated) |
+| `manage_scheduler` | `list`, `create`, `update`, `delete`, `run_due`, `schedule_sprint`, `schedule_quicksprint`, `schedule_chat` |
+| `scheduler` | `list`, `schedule_wakeup`, `schedule_task`, `cancel` |
+| `manage_agents` | `list`, `get`, `create`, `update`, `delete`, `sync` |
+| `manage_memory` | `list`, `get`, `count`, `create`, `update`, `delete`, `search`, `promote`, `get_map`, `model_status`, `start_reembed` |
+| `manage_skills` | `authoring_prompt`, `list_storages`, `get_storage`, `create_storage`, `update_storage`, `delete_storage`, `reset_storage`, `list_agent_storages`, `attach_storage`, `detach_storage`, `list_skills`, `get_skill`, `create_skill`, `update_skill`, `delete_skill`, `import_markdown`, `export_markdown` |
+| `manage_settings` | `get_system`, `get_project_override`, `resolve_project_effective`, `get_sprint_override`, `resolve_sprint_effective`, `replace_system_settings`, `patch_system_setting`, `replace_project_settings`, `patch_project_setting`, `reset_project_settings`, `replace_sprint_settings`, `patch_sprint_setting`, `reset_sprint_settings`, `export_settings_bundle`, `apply_settings_bundle` |
+| `manage_preview` | `list_sessions`, `start_session`, `stop_session`, `rebuild_session`, `remove_session`, `get_logs`, `get_url`, `get_script`, `update_script` |
+| `manage_telemetry` | `get_project_stats_snapshot`, `get_project_execution_snapshot`, `list_execution_invocations`, `list_execution_invocation_messages`, `list_sprint_runs`, `list_task_dispatches` |
 
 For the full per-action payloads and return shapes, see [Management actions](./management-actions.md).
+
+## `scheduler`
+
+`scheduler` is the restricted agent scheduler surface. It is separate from `manage_scheduler`, which
+remains the broad project-manager scheduler management tool for sprints, quicksprints, chat entries,
+updates, deletion, and due-entry execution.
+
+Allowed actions:
+
+- `list` — requires `projectId`; returns only `agent_scheduler` wakeup/task entries created by the calling agent.
+- `schedule_wakeup` — requires `projectId`, `bodyMarkdown`, and either `scheduledFor`, `delaySeconds`, or `delayMinutes`; optional `title`, `timezone`, `threadId`, and `connectionId`.
+- `schedule_task` — requires `projectId`, `taskId`, and either `scheduledFor`, `delaySeconds`, or `delayMinutes`; optional `title`, `timezone`, and `provider`.
+- `cancel` — requires `entryId`; changes the entry status to `cancelled` only when the entry was created by the calling agent through `scheduler`.
+
+Security model: Code UX stamps restricted scheduler entries with `origin: "agent_scheduler"`,
+`source: "agent_scheduler"`, and `createdByAgentId` from the current MCP agent context. The server
+enforces this metadata on list and cancel, so an agent cannot cancel dashboard-created entries,
+entries created through `manage_scheduler`, or entries created by another agent. The restricted tool
+does not expose `run_due`, arbitrary updates, recurrence editing, sprint or quicksprint scheduling,
+memory remediation, or global scheduler destructive controls.
 
 ## Approval handshake (destructive actions)
 
@@ -79,6 +112,17 @@ requirement; you then retry the *same* action and payload with `approval: { "con
 Settings mutations are stricter: only the same action and payload may execute once with
 `approval.confirmed: true`, within a 15-minute window.
 
+Secret-bearing settings synchronization also uses that one-use approval handshake:
+
+- `export_settings_bundle` returns a schema-versioned bundle with `exportedAt`, `includedScopes`,
+  a secret-redacted SHA-256 `fingerprint`, and `containsSecrets`. Export redacts provider API keys,
+  git tokens, issue-tracker tokens, and login credential markers unless `includeSecrets: true` is
+  approved for the exact export payload.
+- `apply_settings_bundle` accepts a `bundle` and optional `scopes` for partial import. It persists
+  through the same system, project, and sprint settings repository APIs used by the dashboard, so
+  imported values are normalized before storage. Any bundle marked as containing secrets, or whose
+  payload includes secret-bearing fields, requires approval before it is applied.
+
 ## `search_knowledge`
 
 Semantic search over the knowledge base subscribed to the caller — scoped to the caller's own
@@ -94,6 +138,51 @@ subscriptions, so no project id is needed.
 
 Returns the most relevant passages with their source documents. See the
 [Knowledge](../user/dashboard/knowledge.md) page for managing the underlying documents.
+
+## Persistent skills
+
+`manage_skills` is the storage and authoring surface for durable project skills. It supports:
+
+- Storage CRUD: `list_storages`, `get_storage`, `create_storage`, `update_storage`, `delete_storage`.
+- Skill CRUD: `list_skills`, `get_skill`, `create_skill`, `update_skill`, `delete_skill`.
+- Agent attachment management: `list_agent_storages`, `attach_storage`, `detach_storage`.
+- Markdown import/export: `import_markdown`, `export_markdown`.
+- Authoring guidance: `authoring_prompt`.
+- Destructive cleanup: `delete_storage`, `reset_storage`, and `delete_skill` require the approval handshake.
+
+`update_skill` edits the existing skill in place: the request's `storageId` must match the skill's
+current storage. If `sourceType` or `sourceRef` are omitted, Code UX preserves the skill's existing
+provenance; callers can still explicitly supply those fields to replace provenance.
+
+Skill markdown is saved through MCP payloads, not by writing files into the project workspace:
+
+```md
+---
+title: Review Discipline
+description: Keep review findings concrete.
+tags: ["review", "quality"]
+appliesTo: ["src/services", "tests/backend"]
+version: 1.0.0
+---
+
+Focus on bugs, regressions, missing tests, and rollback risk.
+```
+
+`search_skills` is the retrieval-only surface. It accepts:
+
+```jsonc
+{
+  "projectId": "project-123",      // required
+  "query": "review checklist",      // required
+  "agentPresetId": "agent-123",     // optional, searches attached storages
+  "storageId": "skills-review",     // optional, narrows to one storage
+  "limit": 5,                       // optional, capped by the handler
+  "minSimilarity": 0.3              // optional, 0-1
+}
+```
+
+Search results return concise ranked summaries with skill IDs and metadata. Full content retrieval
+requires `manage_skills` via `export_markdown` or `get_skill` with `includeContent: true`.
 
 ## Error model
 
@@ -125,6 +214,6 @@ Client → CallTool(name, args)
   Server → return the wrapped result
 ```
 
-The tool set is identical across the stdio and HTTP transports. For client setup, see
+The tool set is identical across the stdio and HTTPS transports. For client setup, see
 [MCP clients](../user/mcp-clients.md); for transport internals, see
 [Architecture → MCP server](../architecture/mcp-server.md).

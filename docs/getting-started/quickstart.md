@@ -51,15 +51,7 @@ JULES_API_KEY=YOUR_KEY
 pnpm run dev
 ```
 
-This boots the server and Vite dashboard in watch mode side-by-side using `scripts/dev.mjs`.
-
-To boot just the server from source without the dashboard watcher:
-
-```bash
-pnpm run dev:server-only
-```
-
-`dev:server-only` starts the server directly from TypeScript source using `src/index.ts` through Node's `ts-node` ESM register hook (`scripts/tsnode-register.mjs`). Local development uses the same `.js` import specifiers as the production build without requiring a precompile step.
+This starts the server directly from TypeScript source through Node's `ts-node` ESM register hook, so local development uses the same `.js` import specifiers as the production build without requiring a precompile step.
 
 ## Run Compiled Server
 
@@ -104,7 +96,7 @@ curl http://localhost:4444/api/git-status
 
 ### Advanced Start Options
 
-For headless runs or remote workers, you can pass `--headless`, `--runtime-role`, and MCP HTTPS flags (`--mcp-https`, `--mcp-https-port`, etc.). See the [CLI Commands Reference](../reference/cli-commands.md) for the complete list.
+For local headless runs, you can pass `--headless` or `--no-dashboard`. For authenticated MCP-only server processes, use `--server-mode` or `CODE_UX_SERVER_MODE=true` with an explicit MCP HTTP bearer token. MCP HTTP gateway flags (`--mcp-https`, `--mcp-https-port`, etc.; legacy names) remain supported. See the [Installation CLI Flags](../docs-web/user/installation.md#cli-flags) reference for the complete list.
 - Remote mode has no PR/CI data
   - Verify `gh` is installed and authenticated.
 

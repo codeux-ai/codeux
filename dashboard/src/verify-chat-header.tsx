@@ -36,6 +36,7 @@ const App = () => (
         thread={mockThreadActive}
         onCompact={() => {}}
         onCancelActiveTurn={() => {}}
+        onRename={() => Promise.resolve()}
         isCompacting={false}
         isCancelling={false}
       />
@@ -45,6 +46,7 @@ const App = () => (
         thread={mockThreadReplay}
         onCompact={() => {}}
         onCancelActiveTurn={() => {}}
+        onRename={() => Promise.resolve()}
         isCompacting={false}
         isCancelling={false}
       />
@@ -54,6 +56,7 @@ const App = () => (
         thread={mockThreadNew}
         onCompact={() => {}}
         onCancelActiveTurn={() => {}}
+        onRename={() => Promise.resolve()}
         isCompacting={false}
         isCancelling={false}
       />

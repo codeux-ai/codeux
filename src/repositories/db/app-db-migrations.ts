@@ -196,6 +196,7 @@ export function runMigrations(db: DatabaseAdapter): void {
   ensureColumn(db, "agent_presets", "memory_template_markdown", "TEXT");
   ensureColumn(db, "agent_presets", "mcp_access_json", "TEXT");
   ensureColumn(db, "agent_presets", "memory_config_json", "TEXT");
+  ensureColumn(db, "agent_presets", "persistent_skill_storage_enabled", "INTEGER NOT NULL DEFAULT 0");
 
   ensureColumn(db, "connection_project_bindings", "last_attention_cursor", "TEXT");
   ensureColumn(db, "connection_project_bindings", "last_assignment_cursor", "TEXT");
@@ -232,6 +233,8 @@ export function runMigrations(db: DatabaseAdapter): void {
   ensureColumn(db, "provider_invocations", "token_accounting_version", "INTEGER NOT NULL DEFAULT 1");
   backfillTokenAccountingV2(db);
   ensureIndex(db, "idx_provider_invocations_project_started", "provider_invocations", "project_id, started_at DESC");
+  ensureIndex(db, "idx_provider_invocations_started", "provider_invocations", "started_at DESC");
+  ensureIndex(db, "idx_provider_invocations_updated", "provider_invocations", "updated_at DESC");
   ensureIndex(db, "idx_provider_invocations_project_sprint_started", "provider_invocations", "project_id, sprint_id, started_at DESC");
   ensureIndex(db, "idx_provider_invocations_project_sprint_run_started", "provider_invocations", "project_id, sprint_run_id, started_at DESC");
   ensureIndex(db, "idx_provider_invocations_sprint_started", "provider_invocations", "sprint_id, started_at DESC");
@@ -345,6 +348,81 @@ export function runMigrations(db: DatabaseAdapter): void {
   db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_memory_claims_project_fingerprint_active ON memory_claims (project_id, fingerprint) WHERE status = 'active'");
   ensureIndex(db, "idx_agent_presets_project_updated", "agent_presets", "project_id, updated_at DESC");
   ensureIndex(db, "idx_agent_presets_project_name", "agent_presets", "project_id, name");
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS skill_storages (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      description TEXT NOT NULL DEFAULT '',
+      storage_kind TEXT NOT NULL DEFAULT 'project',
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+      UNIQUE (project_id, name)
+    )
+  `);
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS skills (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL,
+      storage_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      description TEXT NOT NULL DEFAULT '',
+      content_markdown TEXT NOT NULL DEFAULT '',
+      source_type TEXT NOT NULL DEFAULT 'manual',
+      source_ref TEXT,
+      content_hash TEXT NOT NULL,
+      tags_json TEXT NOT NULL DEFAULT '[]',
+      applies_to_json TEXT NOT NULL DEFAULT '[]',
+      version TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+      FOREIGN KEY (storage_id) REFERENCES skill_storages(id) ON DELETE CASCADE,
+      UNIQUE (storage_id, name)
+    )
+  `);
+  ensureColumn(db, "skills", "applies_to_json", "TEXT NOT NULL DEFAULT '[]'");
+  ensureColumn(db, "skills", "version", "TEXT");
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS skill_embeddings (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL,
+      storage_id TEXT NOT NULL,
+      skill_id TEXT NOT NULL,
+      embedding_model TEXT NOT NULL,
+      embedding_dimension INTEGER NOT NULL,
+      chunk_index INTEGER NOT NULL DEFAULT 0,
+      content_hash TEXT NOT NULL,
+      embedding_blob BLOB,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+      FOREIGN KEY (storage_id) REFERENCES skill_storages(id) ON DELETE CASCADE,
+      FOREIGN KEY (skill_id) REFERENCES skills(id) ON DELETE CASCADE,
+      UNIQUE (skill_id, embedding_model, chunk_index)
+    )
+  `);
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS agent_skill_storage_bindings (
+      agent_preset_id TEXT NOT NULL,
+      storage_id TEXT NOT NULL,
+      project_id TEXT NOT NULL,
+      enabled INTEGER NOT NULL DEFAULT 1,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      PRIMARY KEY (agent_preset_id, storage_id),
+      FOREIGN KEY (agent_preset_id) REFERENCES agent_presets(id) ON DELETE CASCADE,
+      FOREIGN KEY (storage_id) REFERENCES skill_storages(id) ON DELETE CASCADE,
+      FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+    )
+  `);
+  ensureIndex(db, "idx_skill_storages_project", "skill_storages", "project_id, updated_at DESC");
+  ensureIndex(db, "idx_skills_project_storage", "skills", "project_id, storage_id, updated_at DESC");
+  ensureIndex(db, "idx_skill_embeddings_skill", "skill_embeddings", "skill_id, embedding_model, chunk_index");
+  ensureIndex(db, "idx_skill_embeddings_storage", "skill_embeddings", "project_id, storage_id, embedding_model");
+  ensureIndex(db, "idx_agent_skill_storage_bindings_agent", "agent_skill_storage_bindings", "agent_preset_id");
+  ensureIndex(db, "idx_agent_skill_storage_bindings_storage", "agent_skill_storage_bindings", "project_id, storage_id");
   ensureUniqueIndex(db, "idx_worker_endpoints_connection", "worker_endpoints", "connection_id");
   ensureIndex(db, "idx_worker_endpoints_type_status", "worker_endpoints", "endpoint_type, status, updated_at DESC");
   ensureIndex(db, "idx_connection_project_bindings_connection_active", "connection_project_bindings", "connection_id, is_active DESC, project_id ASC");

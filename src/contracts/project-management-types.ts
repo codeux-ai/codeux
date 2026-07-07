@@ -7,7 +7,7 @@ export type ProjectSourceType = "local" | "git";
 export type SprintStatus = "running" | "paused" | "completed" | "failed" | "cancelled" | "idle";
 export type TaskStatus = "pending" | "in_progress" | "coding_completed" | "completed" | "QA_REVIEW_FAILED";
 export type TaskPriority = "critical" | "high" | "medium" | "low";
-export type TaskExecutorType = "auto" | "docker_cli" | "jules";
+export type TaskExecutorType = "auto" | "docker_cli" | "jules" | "mcp_worker";
 export type GitProvider = "github" | "gitlab" | "local";
 export type ProjectInitMode = "existing" | "new-local" | "new-remote";
 
@@ -365,6 +365,7 @@ export interface ProjectSetupOptions {
   quicksprints: boolean;
   previewScript: boolean;
   ci: boolean;
+  techstack: boolean;
 }
 
 export interface ProjectSetupRequestInput {
@@ -396,6 +397,13 @@ export interface ProjectSetupCiArtifact {
   content: string;
 }
 
+export interface ProjectSetupTechstackArtifact {
+  name: string;
+  description: string;
+  detectedFrameworks?: string[];
+  detectedLibraries?: string[];
+}
+
 export interface ProjectSetupArtifactPayload {
   summary: string;
   agents?: ProjectSetupAgentArtifact[];
@@ -405,6 +413,7 @@ export interface ProjectSetupArtifactPayload {
     content: string;
   } | null;
   ci?: ProjectSetupCiArtifact[];
+  techstack?: ProjectSetupTechstackArtifact | null;
 }
 
 export interface ProjectSetupResult {

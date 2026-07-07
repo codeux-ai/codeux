@@ -366,4 +366,163 @@ describe("SettingsActions", () => {
       ).rejects.toThrow(/Unknown settings action: frobnicate/);
     });
   });
+
+  describe("settings bundles", () => {
+    beforeEach(() => {
+      vi.mocked((settingsRepository as any).getSystemSettings).mockReturnValue({
+        runtime: { dashboardPort: 4444 },
+        integrations: {
+          providers: {
+            codex: { provider: "codex", name: "Codex", apiKey: "sk-system-secret", authType: "apiKey" },
+          },
+          githubToken: "ghp-system-secret",
+          gitlabToken: "",
+          jira: { apiToken: "" },
+        },
+        defaults: { automationLevel: "FULL" },
+        mcpTools: [],
+        customMcpServers: [],
+        modelPricing: { overrides: {} },
+      });
+      vi.mocked((settingsRepository as any).getProjectSettings).mockReturnValue({
+        automationLevel: "SEMI_AUTO",
+        git: { githubToken: "ghp-project-secret" },
+      });
+      vi.mocked((settingsRepository as any).getSprintSettings).mockReturnValue({
+        automationLevel: "MANUAL",
+        jira: { apiToken: "jira-sprint-secret" },
+      });
+    });
+
+    it("exports a redacted system bundle without approval by default", async () => {
+      const res = await actions.handleSettingsAction({
+        domain: "settings",
+        action: "export_settings_bundle",
+        payload: {},
+      });
+
+      expect(res.approvalRequired).toBeUndefined();
+      const bundle = (res.result as any).bundle;
+      expect(bundle.metadata.schemaVersion).toBe(1);
+      expect(bundle.metadata.includedScopes).toEqual(["system"]);
+      expect(bundle.metadata.fingerprint).toMatch(/^[a-f0-9]{64}$/);
+      expect(bundle.metadata.containsSecrets).toBe(true);
+      expect(bundle.system.integrations.providers.codex.apiKey).toBe("[REDACTED]");
+      expect(bundle.system.integrations.githubToken).toBe("[REDACTED]");
+    });
+
+    it("requires one-use approval before exporting secrets", async () => {
+      const payload = { includeSecrets: true };
+
+      const first = await actions.handleSettingsAction({ domain: "settings", action: "export_settings_bundle", payload });
+      expect(first.approvalRequired).toBe(true);
+
+      const approved = await actions.handleSettingsAction({
+        domain: "settings",
+        action: "export_settings_bundle",
+        payload,
+        approval: { confirmed: true },
+      });
+      expect((approved.result as any).bundle.system.integrations.providers.codex.apiKey).toBe("sk-system-secret");
+
+      const replay = await actions.handleSettingsAction({
+        domain: "settings",
+        action: "export_settings_bundle",
+        payload,
+        approval: { confirmed: true },
+      });
+      expect(replay.approvalRequired).toBe(true);
+    });
+
+    it("applies a complete secret-bearing bundle only after approval", async () => {
+      const bundle = {
+        metadata: {
+          schemaVersion: 1,
+          exportedAt: "2026-07-07T00:00:00.000Z",
+          includedScopes: ["system", "projects", "sprints"],
+          fingerprint: "fp",
+          containsSecrets: true,
+        },
+        system: {
+          integrations: {
+            providers: { codex: { provider: "codex", name: "Codex", apiKey: "sk-imported" } },
+            githubToken: "ghp-imported",
+            jira: { apiToken: "jira-imported" },
+          },
+          defaults: { automationLevel: "FULL" },
+          runtime: {},
+          mcpTools: [],
+          customMcpServers: [],
+          modelPricing: { overrides: {} },
+        },
+        projects: [{ projectId: "proj-1", settings: { automationLevel: "FULL" } }],
+        sprints: [{ projectId: "proj-1", sprintId: "sprint-1", settings: { automationLevel: "SEMI_AUTO" } }],
+      };
+      const payload = { bundle };
+
+      const first = await actions.handleSettingsAction({ domain: "settings", action: "apply_settings_bundle", payload });
+      expect(first.approvalRequired).toBe(true);
+      expect(settingsRepository.saveSystemSettings).not.toHaveBeenCalled();
+
+      const approved = await actions.handleSettingsAction({
+        domain: "settings",
+        action: "apply_settings_bundle",
+        payload,
+        approval: { confirmed: true },
+      });
+
+      expect((approved.result as any).applied).toEqual({ system: 1, projects: 1, sprints: 1 });
+      expect(settingsRepository.saveSystemSettings).toHaveBeenCalledWith(bundle.system);
+      expect(settingsRepository.saveProjectSettings).toHaveBeenCalledWith("proj-1", { automationLevel: "FULL" });
+      expect(settingsRepository.getProjectResolvedSettings).toHaveBeenCalledWith("proj-1");
+      expect(settingsRepository.saveSprintSettings).toHaveBeenCalledWith("sprint-1", {}, { automationLevel: "SEMI_AUTO" });
+    });
+
+    it("applies only requested partial bundle scopes", async () => {
+      const bundle = {
+        metadata: {
+          schemaVersion: 1,
+          exportedAt: "2026-07-07T00:00:00.000Z",
+          includedScopes: ["system", "projects"],
+          fingerprint: "fp",
+          containsSecrets: false,
+        },
+        system: { defaults: { automationLevel: "FULL" } },
+        projects: [{ projectId: "proj-1", settings: { automationLevel: "MANUAL" } }],
+      };
+
+      const res = await actions.handleSettingsAction({
+        domain: "settings",
+        action: "apply_settings_bundle",
+        payload: { bundle, scopes: ["projects"] },
+      });
+
+      expect((res.result as any).applied).toEqual({ system: 0, projects: 1, sprints: 0 });
+      expect(settingsRepository.saveSystemSettings).not.toHaveBeenCalled();
+      expect(settingsRepository.saveProjectSettings).toHaveBeenCalledWith("proj-1", { automationLevel: "MANUAL" });
+    });
+
+    it("rejects malformed bundle payloads before persistence", async () => {
+      await expect(actions.handleSettingsAction({
+        domain: "settings",
+        action: "apply_settings_bundle",
+        payload: { bundle: { metadata: { schemaVersion: 2 } } },
+      })).rejects.toThrow(/schemaVersion must be 1/);
+      expect(settingsRepository.saveSystemSettings).not.toHaveBeenCalled();
+    });
+
+    it("does not include secret values in validation errors", async () => {
+      const secret = "ghp-leaked-secret";
+      await expect(actions.handleSettingsAction({
+        domain: "settings",
+        action: "apply_settings_bundle",
+        payload: {
+          bundle: {
+            metadata: { schemaVersion: 1, includedScopes: ["projects"], fingerprint: "fp", containsSecrets: true },
+            projects: [{ projectId: "proj-1", settings: "bad", githubToken: secret }],
+          },
+        },
+      })).rejects.not.toThrow(secret);
+    });
+  });
 });

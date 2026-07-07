@@ -59,6 +59,8 @@ const FLAG_DISPLAY_NAMES: Record<string, string> = {
   value: "--value",
   settings: "--settings-json",
   settingsJson: "--settings-json",
+  bundle: "--bundle-json",
+  bundleJson: "--bundle-json",
   payloadJson: "--payload-json",
   scope: "--scope",
   content: "--content",
@@ -93,6 +95,7 @@ const FIELD_PROMPTS: Record<string, { label: string; defaultValue?: string }> = 
   path: { label: "Path" },
   value: { label: "Value" },
   settingsJson: { label: "Settings JSON" },
+  bundleJson: { label: "Settings bundle JSON" },
   payloadJson: { label: "Payload JSON" },
   scope: { label: "Scope" },
   content: { label: "Content" },
@@ -215,6 +218,9 @@ function getMissingFlags(payload: Record<string, unknown>, requiredFlags: string
   for (const flag of requiredFlags) {
     const key = payloadKeyFromDisplayFlag(flag);
     const value = payload[key];
+    if (flag === "--bundle-json" && isPlainObject(payload.bundle)) {
+      continue;
+    }
     if (value === undefined || value === null || value === "") {
       missing.push(flag);
     }
@@ -259,6 +265,17 @@ function normalizePayloadJson(invocation: ParsedManagementCommand): {
       const parsedSettings = JSON.parse(settingsJson);
       if (isPlainObject(parsedSettings)) {
         mergedPayload.settings = parsedSettings;
+      }
+    } catch {
+      // Leave the raw string for the handler to reject with a clear error if needed.
+    }
+  }
+  const bundleJson = mergedPayload.bundleJson;
+  if (typeof bundleJson === "string") {
+    try {
+      const parsedBundle = JSON.parse(bundleJson);
+      if (isPlainObject(parsedBundle)) {
+        mergedPayload.bundle = parsedBundle;
       }
     } catch {
       // Leave the raw string for the handler to reject with a clear error if needed.

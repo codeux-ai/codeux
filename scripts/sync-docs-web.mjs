@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const docsRoot = path.join(root, "docs-web");
+const defaultMarketingSrc = docsRoot;
 
 const sectionOrder = ["Getting Started", "User Guide", "Developer Reference", "Architecture"];
 const pinnedOrder = new Map([
@@ -57,7 +58,7 @@ const pinnedOrder = new Map([
 
 function parseArgs(argv) {
   const result = {
-    marketingSrc: process.env.CODEUX_MARKETING_SRC || "/home/pierre/codeuxweb/src",
+    marketingSrc: process.env.CODEUX_MARKETING_SRC || defaultMarketingSrc,
     check: false,
     dryRun: false,
   };
@@ -88,7 +89,7 @@ Generates the marketing site's docs registry, MDX files, and TanStack route file
 from this repo's docs-web/ tree.
 
 Defaults:
-  --marketing-src /home/pierre/codeuxweb/src
+  --marketing-src ${defaultMarketingSrc}
 `);
 }
 

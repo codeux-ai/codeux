@@ -26,9 +26,10 @@ Loaded by `loadAppConfig` (`src/config/app-config.ts`) given `process.argv` and 
 | `mcpHttp.port` | `--mcp-https-port` CLI → `MCP_HTTPS_PORT` env → `config.json` (mcpHttpPort / MCP_HTTPS_PORT / mcpHttp.port) → `dashboardPort + 1` |
 | `mcpHttp.host` | `--mcp-https-host` CLI → `MCP_HTTPS_HOST` env → `127.0.0.1` |
 | `mcpHttp.path` | `--mcp-https-path` CLI → `MCP_HTTPS_PATH` env → `/mcp` |
-| `mcpHttp.authToken` | `--mcp-https-auth-token` CLI → `MCP_HTTPS_AUTH_TOKEN` env → unset |
+| `mcpHttp.authToken` | `--mcp-https-auth-token` CLI → `MCP_HTTPS_AUTH_TOKEN` env → generated/reused from `~/.code-ux/security.json` when the HTTP gateway is enabled |
 | `runtimeRole` | `--runtime-role` CLI → `project_manager` |
 | `headless` | `--headless` or `--no-dashboard` CLI → `false` |
+| `serverMode` | `--server-mode` CLI → `CODE_UX_SERVER_MODE=true` env → `false` |
 
 ### Config search path
 
@@ -46,6 +47,10 @@ The first file found at each path *wins for its specific key*. There is **no mer
 ### `.env` loading
 
 `dotenv` loads `<projectRoot>/.env` very early (before any config resolution). This means any of the above env-driven fields can be set in `.env` and behave identically.
+
+When the MCP HTTP gateway is enabled and no explicit auth token is supplied, bootstrap config creates a user-scoped bearer token in `~/.code-ux/security.json` with restrictive file permissions where the filesystem supports them. The Settings → MCP page can regenerate that token and install the current URL/token into supported local CLI config files.
+
+Server mode is stricter than local headless mode. `--server-mode` or `CODE_UX_SERVER_MODE=true` disables dashboard binding, starts MCP HTTP by default, and requires an explicit non-empty token from the CLI or `MCP_HTTPS_AUTH_TOKEN`/`MCP_HTTP_AUTH_TOKEN`; it does not use the generated user token fallback.
 
 ## Settings tree
 
@@ -71,6 +76,7 @@ System settings act as the base (with built-in defaults folded into them). A fie
 
 - `DEFAULT_PROVIDER_SETTINGS` — per-provider defaults.
 - `DEFAULT_SKILLS`, `DEFAULT_MCP_TOOL_TOGGLES`, etc.
+- `DEFAULT_AGENT_SELF_REFLECTION` — default-off planning and QA self-reflection loop contracts with senior engineering criteria.
 - `DEFAULT_SPRINT_BRANCH_SCHEME`.
 
 System settings on a fresh install are the merge of these defaults plus any external hints applied by the user during onboarding.
@@ -83,6 +89,8 @@ Settings changes via `manage_settings` → `patch_*_setting` (or the correspondi
 - Hot-reload of the relevant subscribers (e.g. the orchestrator picks up new `watchLoopIntervalSeconds` on the next cycle).
 
 There is no need to restart the process for settings changes.
+
+`agents.selfReflection.planning` and `agents.selfReflection.qualityAssurance` are resolved through the same cascade but default to disabled. Each stores criteria with thresholds and a maximum improvement-attempt count; malformed legacy payloads fall back safely during sanitization. When enabled, structured planning and QA requests run the optional rate-and-improve loop through the same provider session and keep the last valid parsed output if reflection fails.
 
 ### Effective resolution endpoints
 

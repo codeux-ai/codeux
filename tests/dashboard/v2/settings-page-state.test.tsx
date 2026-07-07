@@ -42,6 +42,7 @@ let mockResetProject;
 let mockResetDatabase;
 let mockFetchExternal;
 let mockFetchAgentPresets;
+let mockFetchSkillStorages;
 
 const cloneDashboardSettings = () => JSON.parse(JSON.stringify(DEFAULT_DASHBOARD_SETTINGS));
 
@@ -70,6 +71,17 @@ beforeEach(() => {
     { id: "worker-1", name: "Delivery Agent", labels: ["worker"] },
     { id: "qa-2", name: "QA Agent Beta", labels: ["qa"] },
     { id: "qa-1", name: "Risk Reviewer", labels: ["quality-assurance"] },
+  ] as any);
+  mockFetchSkillStorages = vi.spyOn(agentPresetApi, 'fetchSkillStorages').mockResolvedValue([
+    {
+      id: "storage-1",
+      projectId: "proj-1",
+      name: "Implementation Skills",
+      description: "Durable implementation playbooks",
+      storageKind: "project",
+      createdAt: "2023-01-01T00:00:00.000Z",
+      updatedAt: "2023-01-01T00:00:00.000Z",
+    },
   ] as any);
   mockFetchExternal = vi.spyOn(dashboardApi, 'fetchExternalSettingsHints').mockResolvedValue({
     env: { julesApiKey: "", geminiApiKey: "", codexApiKey: "", claudeCodeApiKey: "", githubToken: "" },
@@ -251,7 +263,9 @@ describe("useSettingsPageState", () => {
     fireEvent.input(screen.getByLabelText("Search settings categories"), {
       target: { value: "this_should_not_exist_at_all" },
     });
-    const emptySearchStatus = screen.getByText(/No settings match this_should_not_exist_at_all\./);
+    const emptySearchStatus = screen.getByText(
+      '0 results across 0 matching categories for "this_should_not_exist_at_all". Active category: General. Match previews: none. Clear the search or try routing, provider, auth, CI, agent, or memory.',
+    );
     expect(emptySearchStatus.closest('[role="status"]')).toBeInTheDocument();
 
     fireEvent.input(screen.getByLabelText("Search settings categories"), {
@@ -299,6 +313,30 @@ describe("useSettingsPageState", () => {
       result.current.setSettingsSearch("");
     });
     expect(result.current.filteredCategories.length).toBe(CATEGORIES.length);
+  });
+
+  it("renders self-reflection controls default off and supports criteria add/remove", async () => {
+    render(<SettingsPage />);
+
+    await waitFor(() => {
+      expect(screen.getByRole("region", { name: "Settings category panel" })).not.toHaveAttribute("aria-busy");
+    });
+
+    fireEvent.click(screen.getAllByRole("button", { name: /Agents/ }).at(-1)!);
+
+    await waitFor(() => {
+      expect(screen.getByText("Planning self-reflection")).toBeInTheDocument();
+      expect(screen.getAllByText("Off by default").length).toBeGreaterThan(0);
+    });
+
+    const addButtons = screen.getAllByRole("button", { name: /Add criterion/i });
+    fireEvent.click(addButtons[0]);
+    expect(screen.getByDisplayValue("New criterion")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /Remove New criterion/i }));
+    await waitFor(() => {
+      expect(screen.queryByDisplayValue("New criterion")).not.toBeInTheDocument();
+    });
   });
 
   it("moves category rail focus with arrow keys and commits selection with Enter", () => {

@@ -4,6 +4,11 @@ import * as os from "os";
 import * as path from "path";
 import { DatabaseSync } from "node:sqlite";
 import { SettingsRepository } from "../../../src/repositories/settings-repository.js";
+import {
+  BUILTIN_CODE_UX_TECHSTACK_ID,
+  CODEX_MODELS,
+  DEFAULT_VIRTUAL_WORKER_MODELS,
+} from "../../../src/repositories/settings-defaults.js";
 
 const tempDirs: string[] = [];
 const openRepos: SettingsRepository[] = [];
@@ -47,6 +52,31 @@ describe("SettingsRepository", () => {
     expect(system.defaults.automationLevel).toBe("SEMI_AUTO");
     expect(system.defaults.aiProvider.provider).toBe("jules");
     expect(system.defaults.aiProvider.providers.codex.model).toBe("gpt-5.5");
+    expect(system.techstackCatalog.defaultTechstackId).toBe(BUILTIN_CODE_UX_TECHSTACK_ID);
+    expect(system.techstackCatalog.entries).toEqual([
+      {
+        id: BUILTIN_CODE_UX_TECHSTACK_ID,
+        label: "Code UX Stack",
+        items: [
+          { id: "preact", label: "Preact" },
+          { id: "tanstack-router", label: "TanStack Router" },
+          { id: "gsap", label: "GSAP" },
+          { id: "three-js", label: "Three.js" },
+          { id: "lucide-icons", label: "Lucide Icons" },
+        ],
+      },
+    ]);
+    expect(system.defaults.techstack).toEqual({
+      selectedTechstackId: null,
+      applicationKind: null,
+    });
+    expect(DEFAULT_VIRTUAL_WORKER_MODELS.codex).toBe("gpt-5.5");
+    expect(CODEX_MODELS.slice(0, 4)).toEqual([
+      "gpt-5.5",
+      "gpt-5.6-sol",
+      "gpt-5.6-terra",
+      "gpt-5.6-luna",
+    ]);
     expect(system.defaults.git.defaultBranch).toBe("main");
     expect(system.defaults.cliWorkflow.containerMountGithubAuth).toBe(false);
     expect(system.defaults.cliWorkflow.containerMountGeminiAuth).toBe(false);
@@ -64,6 +94,19 @@ describe("SettingsRepository", () => {
     expect(system.defaults.agents.qualityAssurance.sprintCompletion.agentPresetIds).toEqual([]);
     expect(system.defaults.agents.qualityAssurance.completedTaskWithoutPr.enabled).toBe(true);
     expect(system.defaults.agents.qualityAssurance.completedTaskWithoutPr.agentPresetIds).toEqual([]);
+    expect(system.defaults.agents.selfReflection.planning.enabled).toBe(false);
+    expect(system.defaults.agents.selfReflection.planning.maxImprovementAttempts).toBe(1);
+    expect(system.defaults.agents.selfReflection.planning.criteria.map((criterion) => criterion.id)).toEqual([
+      "correctness",
+      "completeness",
+      "decomposition_quality",
+      "risk_handling",
+      "testability",
+      "maintainability",
+      "security",
+      "scope_control",
+    ]);
+    expect(system.defaults.agents.selfReflection.qualityAssurance.enabled).toBe(false);
     expect(system.defaults.agents.instructionTemplates.planningMissing).toContain("Sprint Planning Missing");
     expect(system.mcpTools.length).toBeGreaterThan(0);
 
@@ -74,6 +117,9 @@ describe("SettingsRepository", () => {
 
     const effectiveProject = repo.resolveProjectDashboardSettings("project-1");
     expect(effectiveProject.settings.aiProvider.providers.codex.apiKey).toBe("");
+    expect(effectiveProject.settings.techstackCatalog.defaultTechstackId).toBe(BUILTIN_CODE_UX_TECHSTACK_ID);
+    expect(effectiveProject.settings.techstack.selectedTechstackId).toBe(null);
+    expect(effectiveProject.settings.techstack.applicationKind).toBe(null);
     expect(effectiveProject.settings.git.githubToken).toBe("");
     expect(effectiveProject.sources["automationLevel"]).toBe("system");
   });
@@ -191,6 +237,7 @@ describe("SettingsRepository", () => {
               agentPresetId: null,
             },
           },
+          selfReflection: repo.getSystemSettings().defaults.agents.selfReflection,
         },
         skills: [
           { name: "worker", enabled: true, isInternal: true },
@@ -313,6 +360,43 @@ describe("SettingsRepository", () => {
               enabled: false,
             },
           },
+          selfReflection: {
+            planning: {
+              enabled: true,
+              maxImprovementAttempts: 99,
+              criteria: [
+                {
+                  id: " correctness ",
+                  label: " Correctness ",
+                  prompt: " Check correctness. ",
+                  threshold: 2,
+                },
+                {
+                  id: "correctness",
+                  label: "Duplicate",
+                  prompt: "Duplicate should be ignored.",
+                  threshold: 0.1,
+                },
+                {
+                  id: "",
+                  label: "Invalid",
+                  prompt: "Missing id.",
+                  threshold: 0.5,
+                },
+                {
+                  id: "scope_control",
+                  label: "Scope control",
+                  prompt: "Stay inside scope.",
+                  threshold: -1,
+                },
+              ],
+            },
+            qualityAssurance: {
+              enabled: "yes",
+              maxImprovementAttempts: "many",
+              criteria: "invalid",
+            },
+          },
         },
       },
     }), now);
@@ -340,6 +424,24 @@ describe("SettingsRepository", () => {
     expect(effectiveProject.settings.git.featureBranchPrefix).toBe("work/");
     expect(effectiveProject.settings.agents.qualityAssurance.taskCompletion.enabled).toBe(false);
     expect(effectiveProject.settings.agents.qualityAssurance.maxTaskReviewRuns).toBe(3);
+    expect(effectiveProject.settings.agents.selfReflection.planning.enabled).toBe(true);
+    expect(effectiveProject.settings.agents.selfReflection.planning.maxImprovementAttempts).toBe(10);
+    expect(effectiveProject.settings.agents.selfReflection.planning.criteria).toEqual([
+      {
+        id: "correctness",
+        label: "Correctness",
+        prompt: "Check correctness.",
+        threshold: 1,
+      },
+      {
+        id: "scope_control",
+        label: "Scope control",
+        prompt: "Stay inside scope.",
+        threshold: 0,
+      },
+    ]);
+    expect(effectiveProject.settings.agents.selfReflection.qualityAssurance.enabled).toBe(false);
+    expect(effectiveProject.settings.agents.selfReflection.qualityAssurance.criteria.length).toBeGreaterThan(1);
     expect(effectiveProject.sources["git.featureBranchPrefix"]).toBe("project");
 
     const effectiveSprint = repo.resolveSprintDashboardSettings("project-partial", "sprint-partial");
@@ -348,6 +450,82 @@ describe("SettingsRepository", () => {
     expect(effectiveSprint.settings.git.defaultBranch).toBe("develop");
     expect(effectiveSprint.settings.git.featureBranchPrefix).toBe("work/");
     expect(effectiveSprint.sources["sprintLoopSteps.watchLoop"]).toBe("sprint");
+  });
+
+  it("sanitizes malformed persisted techstack catalogs while preserving the built-in entry", async () => {
+    const { repo } = await createRepo();
+    const now = new Date().toISOString();
+    const db = repo.getDatabase();
+
+    db.prepare(`
+      INSERT INTO system_settings (id, payload, updated_at)
+      VALUES (1, ?, ?)
+    `).run(JSON.stringify({
+      techstackCatalog: {
+        defaultTechstackId: "missing-default",
+        entries: [
+          {
+            id: " custom-web ",
+            label: " Custom Web ",
+            items: [
+              { id: " react ", label: " React " },
+              { id: "react", label: "Duplicate React" },
+              { id: "", label: "Missing id" },
+              { id: "invalid id", label: "Invalid id" },
+            ],
+          },
+          {
+            id: BUILTIN_CODE_UX_TECHSTACK_ID,
+            label: "Overridden Built-in",
+            items: [{ id: "fake", label: "Fake" }],
+          },
+          {
+            id: "custom-web",
+            label: "Duplicate custom",
+            items: [],
+          },
+          {
+            id: "   ",
+            label: "Missing id",
+            items: [],
+          },
+        ],
+      },
+      defaults: {
+        techstack: {
+          selectedTechstackId: " custom-web ",
+          applicationKind: "web",
+        },
+      },
+    }), now);
+
+    const system = repo.getSystemSettings();
+
+    expect(system.techstackCatalog.defaultTechstackId).toBe(BUILTIN_CODE_UX_TECHSTACK_ID);
+    expect(system.techstackCatalog.entries).toEqual([
+      {
+        id: BUILTIN_CODE_UX_TECHSTACK_ID,
+        label: "Code UX Stack",
+        items: [
+          { id: "preact", label: "Preact" },
+          { id: "tanstack-router", label: "TanStack Router" },
+          { id: "gsap", label: "GSAP" },
+          { id: "three-js", label: "Three.js" },
+          { id: "lucide-icons", label: "Lucide Icons" },
+        ],
+      },
+      {
+        id: "custom-web",
+        label: "Custom Web",
+        items: [
+          { id: "react", label: "React" },
+        ],
+      },
+    ]);
+    expect(system.defaults.techstack).toEqual({
+      selectedTechstackId: "custom-web",
+      applicationKind: "web",
+    });
   });
 
   it("resets all scoped settings back to defaults", async () => {

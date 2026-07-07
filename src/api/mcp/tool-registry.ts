@@ -1,5 +1,6 @@
 import type { ToolName as ContractToolName } from "../../contracts/mcp-tool-definitions.js";
-import type { ManageCodeUxArgs, ManageProjectsArgs, ManageSprintsArgs, ManageTasksArgs, ManageQuicksprintsArgs, ManageSchedulerArgs, ManageAgentsArgs, ManageMemoryArgs, ManageSettingsArgs, ManagePreviewArgs, ManageTelemetryArgs, SearchKnowledgeArgs } from "../../contracts/internal-management-types.js";
+import type { ManageCodeUxArgs, ManageProjectsArgs, ManageSprintsArgs, ManageTasksArgs, ManageQuicksprintsArgs, ManageSchedulerArgs, SchedulerArgs, ManageAgentsArgs, ManageMemoryArgs, ManageSkillsArgs, ManageSettingsArgs, ManagePreviewArgs, ManageTelemetryArgs, SearchKnowledgeArgs, SearchSkillsArgs } from "../../contracts/internal-management-types.js";
+import type { PullWorkerTaskDispatchArgs, RegisterExternalWorkerEndpointArgs, UpdateWorkerTaskDispatchArgs } from "../../services/worker-task-dispatch-service.js";
 
 export interface McpToolArgsByName {
   manage_code_ux: ManageCodeUxArgs;
@@ -8,12 +9,18 @@ export interface McpToolArgsByName {
   manage_tasks: ManageTasksArgs;
   manage_quicksprints: ManageQuicksprintsArgs;
   manage_scheduler: ManageSchedulerArgs;
+  scheduler: SchedulerArgs;
   manage_agents: ManageAgentsArgs;
   manage_memory: ManageMemoryArgs;
+  manage_skills: ManageSkillsArgs;
   manage_settings: ManageSettingsArgs;
   manage_preview: ManagePreviewArgs;
   manage_telemetry: ManageTelemetryArgs;
   search_knowledge: SearchKnowledgeArgs;
+  register_worker_endpoint: RegisterExternalWorkerEndpointArgs;
+  pull_task_dispatch: PullWorkerTaskDispatchArgs;
+  update_task_dispatch: UpdateWorkerTaskDispatchArgs;
+  search_skills: SearchSkillsArgs;
 }
 
 export type McpToolName = keyof McpToolArgsByName;

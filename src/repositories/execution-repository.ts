@@ -61,6 +61,7 @@ import type {
   CreateSprintRunInput,
   CreateTaskDispatchInput,
   ExecutionLeaseRecord,
+  ClaimedTaskDispatchRecord,
   ProviderInvocationUsageRecord,
   SprintRunEventRecord,
   RenewExecutionLeaseInput,
@@ -90,6 +91,8 @@ import type {
   ExecutionSprintRunSummary,
   ExecutionTaskDispatchSummary,
   ExecutionGitMetrics,
+  HeaderTokenThroughputQuery,
+  HeaderTokenThroughputSnapshot,
 } from "../contracts/app-types.js";
 import type { DashboardRealtimeMutationNotifier } from "../services/dashboard-realtime-service.js";
 import type { ProviderId } from "../contracts/app-types.js";
@@ -102,6 +105,7 @@ import { queryExecutionTaskDispatches } from "./execution/execution-task-dispatc
 import { queryExecutionRuntimeEvents } from "./execution/execution-runtime-events-query.js";
 import { normalizeProjectStatsQuery } from "./execution/project-stats-query.js";
 import { queryProjectStatsSnapshot } from "./execution/project-stats-snapshot-query.js";
+import { queryHeaderTokenThroughputSnapshot } from "./execution/header-token-throughput-query.js";
 import { createSnapshotPricingResolver } from "./execution/project-stats-aggregation.js";
 import {
   queryUsageGroupsByTaskId,
@@ -1159,6 +1163,10 @@ export class ExecutionRepository {
     return new OverviewTelemetryQuery(this.db, this.storage).getOverviewTelemetrySnapshot();
   }
 
+  getHeaderTokenThroughputSnapshot(input: HeaderTokenThroughputQuery = { window: "24h" }): HeaderTokenThroughputSnapshot {
+    return queryHeaderTokenThroughputSnapshot(this.db, input);
+  }
+
   countRunningTasksPerProvider(projectId: string): Map<ProviderId, number> {
     requireProject(this.db, projectId);
     const rows = this.db.prepare(`
@@ -1430,27 +1438,43 @@ export class ExecutionRepository {
     projectId: string;
     executorType: TaskDispatchRecord["executorType"];
     connectionId?: string | null;
+    ownerKey?: string;
+    leaseToken?: string;
+    leaseExpiresAt?: string;
     sprintId?: string;
     sprintRunId?: string;
-  }): TaskDispatchRecord | null {
+  }): ClaimedTaskDispatchRecord | null {
     const nowIso = new Date().toISOString();
-    const claimedId = claimNextTaskDispatchTransaction(this.db, {
+    const claim = claimNextTaskDispatchTransaction(this.db, {
       ...args,
+      ownerKey: args.ownerKey || args.connectionId || `task-dispatch:${randomUUID()}`,
+      leaseToken: args.leaseToken || randomUUID(),
+      leaseExpiresAt: args.leaseExpiresAt || new Date(Date.now() + 5 * 60 * 1000).toISOString(),
       nowIso,
     });
 
-    if (!claimedId) {
+    if (!claim) {
       return null;
     }
 
-    const updated = requireTaskDispatch((id) => this.getTaskDispatch(id), claimedId);
+    const updated = requireTaskDispatch((id) => this.getTaskDispatch(id), claim.dispatchId);
     this.notifyRealtime(updated.projectId, true);
-    return updated;
+    return {
+      ...updated,
+      leaseToken: claim.leaseToken,
+    };
   }
 
   listWorkerProjectAffinity(connectionId: string): string[] {
-    void connectionId;
-    return [];
+    const rows = this.db.prepare(`
+      SELECT project_id, COUNT(*) AS active_count, MAX(COALESCE(last_heartbeat_at, started_at, claimed_at, queued_at, updated_at)) AS last_seen_at
+      FROM task_dispatches
+      WHERE connection_id = ?
+      GROUP BY project_id
+      ORDER BY active_count DESC, last_seen_at DESC
+    `).all(connectionId) as unknown as WorkerProjectAffinityRow[];
+
+    return rows.map((row) => row.project_id);
   }
 
   acquireLease(input: AcquireExecutionLeaseInput): ExecutionLeaseRecord {

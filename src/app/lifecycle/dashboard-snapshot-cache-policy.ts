@@ -1,4 +1,4 @@
-import type { ProjectStatsQuery } from "../../contracts/app-types.js";
+import type { HeaderTokenThroughputQuery, ProjectStatsQuery } from "../../contracts/app-types.js";
 import type { ProjectExecutionSnapshotOptions } from "../../repositories/execution/project-execution-snapshot-query.js";
 
 export type ProjectExecutionSelectedSprintCacheScope =
@@ -21,6 +21,7 @@ export type ProjectExecutionSnapshotCacheKey = string & {
 export class DashboardSnapshotCachePolicy {
   static readonly PROJECT_EXECUTION_CACHE_TTL_MS = 2_000;
   static readonly PROJECT_STATS_CACHE_TTL_MS = 2_000;
+  static readonly HEADER_TOKEN_THROUGHPUT_CACHE_TTL_MS = 1_000;
   static readonly OVERVIEW_CACHE_TTL_MS = 500;
   static readonly PROJECTS_CACHE_TTL_MS = 500;
 
@@ -61,5 +62,19 @@ export class DashboardSnapshotCachePolicy {
 
   static isProjectStatsCacheKeyMatch(key: string, projectId: string): boolean {
     return key.startsWith(`${projectId}:`);
+  }
+
+  static getHeaderTokenThroughputCacheKey(query: HeaderTokenThroughputQuery): string {
+    return `${query.projectId ?? "app"}:${query.window}`;
+  }
+
+  static isHeaderTokenThroughputCacheKeyMatch(key: string, projectId: string): boolean {
+    return key === "app:20s"
+      || key === "app:1h"
+      || key === "app:24h"
+      || key === "app:7d"
+      || key === "app:30d"
+      || key === "app:all"
+      || key.startsWith(`${projectId}:`);
   }
 }

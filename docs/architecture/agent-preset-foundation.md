@@ -28,17 +28,54 @@ Foundation fields:
 - `provider_config_id`
 - `model`
 - `memory_config_json` stores `AgentMemoryConfig` as a JSON blob
+- `persistent_skill_storage_enabled` reserves a default-off runtime enablement flag for future persistent skill retrieval
 - `created_at`
 - `updated_at`
 
+Persistent agent skill storage is modeled separately from memories, knowledge documents, project workspaces, and model attachments:
+
+- `skill_storages` stores named, project-owned storage containers for reusable agent skills.
+- `skills` stores individual skill records under a storage container, with content metadata and source identity.
+- `skill_embeddings` stores embedding metadata and optional embedding blobs for skill search.
+- `agent_skill_storage_bindings` attaches agent presets to one or more storage containers through a normalized `(agent_preset_id, storage_id)` binding.
+
+The shared preset contract exposes `persistentSkillStorageIds?: string[]` plus optional `persistentSkillStorage` enablement metadata. The repository round-trips those IDs through `agent_skill_storage_bindings`; it does not use a workspace path field for skill attachment state. Backend persistence, markdown import/export, vector retrieval, runtime prompt instructions, and safe provider storage mounts are implemented through `SkillRepository`, `SkillMarkdownParser`, `SkillService`, `ProviderExecutionService`, and the CLI provider runner. Dashboard controls are intentionally separate from the storage contract.
+
+Skill records are project-bound at every access point. `SkillRepository` validates the owning project for storages, skills, agent attachments, embedding loads, and deletes. Deleting a storage explicitly removes agent bindings, skill embeddings, and skill rows before deleting the container, matching the cascade contract even in tests or adapters where foreign-key behavior is not the only guardrail.
+
+Skill markdown is stored in the database rather than in project worktrees. Frontmatter fields (`title`, `description`, `tags`, `appliesTo`, `version`) become skill metadata, while the markdown body remains the authoritative instruction content. `skill_embeddings` stores model id, dimension, chunk index, content hash, and vector blob so retrieval can skip stale or dimension-mismatched rows after model changes.
+
+Persistent skill storage remains disabled by default. At runtime, Code UX resolves persistent skill storage only when all of these are true:
+
+- the invoked provider call is associated with an agent preset id
+- that agent has `persistentSkillStorage.enabled === true`
+- the agent has at least one enabled `agent_skill_storage_bindings` row
+- the storage belongs to the same project as the invocation
+
+When enabled, the provider prompt receives an additional `PERSISTENT SKILL STORAGE` section after the existing task, memory, and learning-capture content. The section tells the agent to search existing skills first with `search_skills` using the current `projectId` and `agentPresetId`, lists the attached writable storage paths, and explains that newly authored durable skills should be saved through MCP write APIs when available or as markdown under the mounted persistent path when MCP write access is not available.
+
+The mounted filesystem paths are derived by Code UX, not by user settings. Host execution receives paths under `~/.code-ux/persistent-skill-storages/<project-id>/<agent-id>/<storage-id>/`. Docker execution bind-mounts those directories read/write under `/code-ux/persistent-skills/<storage-id>/`. Both roots are outside the project workspace (`/workspace` in Docker and repository worktrees on host), so persistent skills do not become uncommitted project files and workspace cleanup does not delete them.
+
+Provider MCP access is similarly scoped. Skill-enabled agents are eligible for the retrieval-only `search_skills` surface even when their broader Code UX management surface is disabled. This does not automatically grant unrelated management tools such as task, sprint, settings, or full skill-management mutation APIs. The end-to-end regression coverage in `tests/backend/integration/persistent-skills-runtime.test.ts` verifies that shared attached storage is visible to both attached agents through MCP search, stays hidden from unattached agents, and produces provider prompt and mount metadata only for enabled attached agents.
+
 The current markdown-sync and Planning agent extensions are documented in:
 
+- [MCP Tools and Contracts](../mcp/tools-and-contracts.md#search_skills-retrieval-tool)
+- [Agents Design System](../dashboard/design-system-agents.md#persistent-skills)
 - [Agent Sync And Planning Agent](./agent-sync-and-planning-agent.md)
 
 Implementation files:
 
 - `src/contracts/agent-preset-types.ts`
+- `src/contracts/skill-types.ts`
 - `src/repositories/agent-preset-repository.ts`
+- `src/repositories/skill-repository.ts`
+- `src/services/skill-markdown-parser.ts`
+- `src/services/skill-service.ts`
+- `src/services/provider-execution-service.ts`
+- `src/services/agent-mcp-access.ts`
+- `src/infrastructure/providers/cli/provider-runner.ts`
+- `src/infrastructure/providers/cli/workspace-manager.ts`
 - `src/server/dashboard-server.ts`
 
 ## API Surface
@@ -68,13 +105,18 @@ Foundation-supported fields:
 - optional provider instance preference
 - optional model override
 - optional per-agent memory injection configuration
+- optional persistent skill storage attachments (default-off, isolated from project workspaces, and injected only for enabled attached agents at provider runtime)
 
 The memory injection configuration is stored in sqlite as `memory_config_json` and parsed back into `AgentMemoryConfig` on reads, matching the existing JSON-column pattern used by `mcp_access_json`.
-The dashboard editor now initializes that config from the preset, exposes it through a dedicated `AgentMemoryConfigPanel` (Manage Memory popover), and persists the chosen filters alongside the rest of the preset payload.
+The dashboard editor now initializes that config from the preset, exposes it through a dedicated `Manage Memory` popover, and persists the chosen filters alongside the rest of the preset payload.
 
 Agent labels are still stored in the data model for markdown sync and built-in preset conventions, but the dashboard no longer exposes custom label editing. The Agents page displays computed route-assignment tags from effective project settings instead, including tags for built-in fallback selections on Planning agent, Worker, Project manager, and Quality assurance agent.
 
-Built-in Worker and Project manager presets seed `mcp_access_json` with `code_ux` enabled and the default `playwright` custom MCP server linked. Planning and QA presets do not receive that link by default. Existing agents with a user-edited MCP access payload keep their selections; only newly imported/generated defaults or previously unconfigured built-in Worker/Project manager records receive the seeded link. The dashboard exposes this configuration through the `AgentMcpManageModal`. Knowledge subscriptions are additionally configurable via the `AgentKnowledgePanel`, and instruction files are managed with `InstructionFileEditorPanel`.
+Agent MCP access is default-deny for built-in Code UX tools. Absent, malformed, or previously unconfigured agent access resolves with `codeUxEnabled: false`, so provider runs do not inherit management tools from the system-level MCP settings merely because they are agent-scoped.
+
+Built-in Worker and Project manager presets seed `mcp_access_json` with the default `playwright` custom MCP server linked, but `code_ux` remains disabled in that seeded access. Planning and QA presets do not receive that link by default. Existing agents with a user-edited MCP access payload keep their selections; only newly imported/generated defaults or previously unconfigured built-in Worker/Project manager records receive the seeded custom-server-only link.
+
+Dashboard chat replies are the only default exception. When the reply route uses the built-in/default reply agent or a configured reply preset without explicit MCP access, runtime dispatch applies scheduler-only Code UX access for that chat turn: the restricted `scheduler` tool is enabled and all other built-in Code UX tools, including `manage_scheduler`, `manage_tasks`, `manage_sprints`, `manage_settings`, and `manage_code_ux`, are disabled. Planning, coding, CI fix, merge-conflict, clarification, QA, generated setup, and general Project manager agent runs remain denied unless their preset explicitly enables Code UX tools.
 
 ## Dashboard Interaction Contract
 

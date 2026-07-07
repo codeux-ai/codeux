@@ -41,6 +41,7 @@ vi.mock("../../../dashboard/src/v2/hooks/use-notifications.js", () => ({
     useNotifications: vi.fn(() => ({
         notifications: [],
         unreadCount: 0,
+        agentSchedules: [],
         markAllRead: vi.fn(),
         markRead: vi.fn(),
         dismiss: vi.fn(),
@@ -118,6 +119,22 @@ vi.mock("../../../dashboard/src/v2/lib/preview-origin.js", () => ({
     }),
 }));
 
+vi.mock("../../../dashboard/src/v2/lib/settings-api.js", () => ({
+    fetchSystemSettings: vi.fn(() => Promise.resolve({
+        techstackCatalog: {
+            defaultTechstackId: "code-ux-internal",
+            entries: [
+                {
+                    id: "code-ux-internal",
+                    label: "Code UX Stack",
+                    items: [{ id: "preact", label: "Preact" }],
+                },
+            ],
+        },
+    })),
+    saveProjectTechstackSettings: vi.fn(() => Promise.resolve()),
+}));
+
 vi.mock("@tanstack/react-router", () => ({
     Link: ({ children, to, ...props }: any) => (
         <a href={to} data-testid="router-link" {...props}>
@@ -146,6 +163,19 @@ const makeSprint = (id: string, name: string) => ({
     sprintKey: id.toUpperCase(),
     createdAt: "2026-01-01T00:00:00.000Z",
     updatedAt: "2026-01-01T00:00:00.000Z",
+});
+
+const makeAgentSchedule = (id: string, overrides: Record<string, unknown> = {}) => ({
+    id,
+    targetType: "agent_wakeup",
+    label: "Agent wakeup",
+    title: "Morning queue check",
+    status: "scheduled",
+    statusLabel: "scheduled",
+    timingSummary: "Scheduled for Jul 7, 09:00 AM",
+    targetSummary: "Thread thread-123",
+    scheduledAt: "2026-07-07T09:00:00.000Z",
+    ...overrides,
 });
 
 const mockTopNavData = ({
@@ -647,6 +677,83 @@ describe("TopNav shell accessibility", () => {
         });
     });
 
+    it("bounds project and sprint dropdown option panes with fixed responsive scroll caps", async () => {
+        mockTopNavData({
+            projects: Array.from({ length: 24 }, (_, index) => makeProject(`proj-${index + 1}`, `Project ${index + 1}`)),
+            selectedProject: makeProject("proj-1", "Project 1"),
+            sprints: Array.from({ length: 24 }, (_, index) => makeSprint(`sprint-${index + 1}`, `Sprint ${index + 1}`)),
+            selectedSprintId: "sprint-1",
+        });
+
+        render(<TopNav />);
+
+        fireEvent.click(screen.getByRole("button", { name: /Project selector, selected project: Project 1/i }));
+
+        const projectListbox = await screen.findByRole("listbox", { name: "Project list" });
+        const projectScrollPane = projectListbox.querySelector(".dropdown-scrollbar");
+        expect(projectScrollPane).toHaveClass("max-h-64", "sm:max-h-72", "md:max-h-80", "overflow-y-auto");
+        expect(projectScrollPane?.className).not.toContain("100dvh");
+
+        fireEvent.click(screen.getByRole("button", { name: /Sprint selector, selected sprint: Sprint 1/i }));
+
+        const sprintListbox = await screen.findByRole("listbox", { name: "Sprint list" });
+        const sprintScrollPane = sprintListbox.querySelector(".dropdown-scrollbar");
+        expect(sprintScrollPane).toHaveClass("max-h-64", "sm:max-h-72", "md:max-h-80", "overflow-y-auto");
+        expect(sprintScrollPane?.className).not.toContain("100dvh");
+    });
+
+    it("renders only real sprint options and does not treat all as a special filter match", async () => {
+        mockTopNavData({ selectedSprintId: null });
+
+        render(<TopNav />);
+
+        const trigger = screen.getByRole("button", { name: /Sprint selector, selected sprint: All Sprints/i });
+        trigger.focus();
+        fireEvent.keyDown(trigger, { key: "ArrowDown" });
+
+        const listbox = await screen.findByRole("listbox", { name: "Sprint list" });
+        await waitFor(() => {
+            expect(document.activeElement).toHaveAttribute("id", "sprint-option-sprint-1");
+        });
+
+        expect(listbox.querySelector("#sprint-option-none")).not.toBeInTheDocument();
+        expect(listbox).not.toHaveTextContent("All Sprints");
+        expect(screen.getAllByRole("option").map((option) => option.id)).toEqual([
+            "sprint-option-sprint-1",
+            "sprint-option-sprint-2",
+        ]);
+
+        fireEvent.input(screen.getByLabelText("Filter sprints"), { target: { value: "all" } });
+
+        await waitFor(() => {
+            expect(listbox).toHaveTextContent("No sprints found.");
+        });
+        expect(listbox.querySelector("#sprint-option-none")).not.toBeInTheDocument();
+        expect(listbox).not.toHaveTextContent("All Sprints");
+    });
+
+    it("focuses the selected sprint option and restores sprint trigger focus on Escape", async () => {
+        mockTopNavData({ selectedSprintId: "sprint-2" });
+
+        render(<TopNav />);
+
+        const trigger = screen.getByRole("button", { name: /Sprint selector, selected sprint: Fix nav/i });
+        trigger.focus();
+        fireEvent.keyDown(trigger, { key: "ArrowDown" });
+
+        await waitFor(() => {
+            expect(screen.getByRole("listbox", { name: "Sprint list" })).toBeInTheDocument();
+            expect(document.activeElement).toHaveAttribute("id", "sprint-option-sprint-2");
+        });
+
+        fireEvent.keyDown(document.activeElement as Element, { key: "Escape" });
+
+        await waitFor(() => {
+            expect(screen.queryByRole("listbox", { name: "Sprint list" })).not.toBeInTheDocument();
+            expect(document.activeElement).toBe(trigger);
+        });
+    });
+
     it("announces selector empty states without opening a disabled sprint listbox", async () => {
         mockTopNavData({ sprints: [], selectedSprintId: null });
 
@@ -681,6 +788,7 @@ describe("TopNav shell accessibility", () => {
         vi.mocked(useNotifications).mockReturnValue({
             notifications: [],
             unreadCount: 1,
+            agentSchedules: [],
             markAllRead: vi.fn(),
             markRead: vi.fn(),
             dismiss: vi.fn(),
@@ -705,6 +813,90 @@ describe("TopNav shell accessibility", () => {
 
         await waitFor(() => {
             expect(screen.queryByRole("dialog", { name: "Notifications Panel" })).not.toBeInTheDocument();
+            expect(document.activeElement).toBe(trigger);
+        });
+    });
+
+    it("does not render the scheduled-agent indicator when there are no active agent schedules", () => {
+        mockTopNavData();
+        vi.mocked(useNotifications).mockReturnValue({
+            notifications: [],
+            unreadCount: 0,
+            agentSchedules: [],
+            markAllRead: vi.fn(),
+            markRead: vi.fn(),
+            dismiss: vi.fn(),
+            refresh: vi.fn(),
+        } as any);
+
+        render(<TopNav />);
+
+        expect(screen.queryByRole("button", { name: /Scheduled agent work/i })).not.toBeInTheDocument();
+    });
+
+    it("renders scheduled-agent count and reveals details on hover", async () => {
+        mockTopNavData();
+        vi.mocked(useNotifications).mockReturnValue({
+            notifications: [],
+            unreadCount: 0,
+            agentSchedules: [
+                makeAgentSchedule("entry-wakeup"),
+                makeAgentSchedule("entry-task", {
+                    targetType: "task",
+                    label: "Task run",
+                    title: "Retry blocked task",
+                    timingSummary: "After source sprint sprint-1 ends + 5 minutes",
+                    targetSummary: "Task task-42 · codex",
+                    scheduledAt: null,
+                }),
+            ],
+            markAllRead: vi.fn(),
+            markRead: vi.fn(),
+            dismiss: vi.fn(),
+            refresh: vi.fn(),
+        } as any);
+
+        render(<TopNav />);
+
+        const trigger = screen.getByRole("button", { name: /Scheduled agent work: 2 active scheduled agent entries/i });
+        expect(trigger).toHaveTextContent("2");
+        expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
+
+        fireEvent.mouseEnter(trigger.closest("div") as Element);
+
+        await waitFor(() => {
+            expect(screen.getByRole("tooltip")).toHaveTextContent("Morning queue check");
+            expect(screen.getByRole("tooltip")).toHaveTextContent("Retry blocked task");
+            expect(screen.getByRole("tooltip")).toHaveTextContent("Task task-42 · codex · After source sprint sprint-1 ends + 5 minutes");
+        });
+    });
+
+    it("reveals scheduled-agent details from keyboard focus with a stable accessible description", async () => {
+        mockTopNavData();
+        vi.mocked(useNotifications).mockReturnValue({
+            notifications: [],
+            unreadCount: 0,
+            agentSchedules: [makeAgentSchedule("entry-wakeup")],
+            markAllRead: vi.fn(),
+            markRead: vi.fn(),
+            dismiss: vi.fn(),
+            refresh: vi.fn(),
+        } as any);
+
+        render(<TopNav />);
+
+        const trigger = screen.getByRole("button", { name: /Scheduled agent work: 1 active scheduled agent entry/i });
+        trigger.focus();
+
+        await waitFor(() => {
+            expect(trigger).toHaveAttribute("aria-describedby", "scheduled-agent-details");
+            expect(screen.getByRole("tooltip")).toHaveTextContent("Thread thread-123 · Scheduled for Jul 7, 09:00 AM");
+        });
+
+        fireEvent.keyDown(trigger.closest("div") as Element, { key: "Escape" });
+
+        await waitFor(() => {
+            expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
             expect(document.activeElement).toBe(trigger);
         });
     });

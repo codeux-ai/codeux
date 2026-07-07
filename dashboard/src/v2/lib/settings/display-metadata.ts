@@ -9,6 +9,7 @@ import type {
 import {
   DEFAULT_PROVIDER_CONFIG_NAMES,
   DEFAULT_PROVIDER_SETTINGS,
+  PUBLIC_VIRTUAL_WORKER_PROVIDERS,
   VIRTUAL_WORKER_PROVIDERS,
 } from "../../../../../src/repositories/settings-defaults.js";
 import { AI_MODEL_CATALOG, getConfiguredProviderModel } from "./model-options.js";
@@ -94,7 +95,7 @@ export const getVirtualProviderDisplayMetadata = (
   systemSettings: SystemSettings | null,
 ): VirtualProviderDisplayMetadata[] => {
   if (!systemSettings) {
-    return VIRTUAL_WORKER_PROVIDERS.map((provider) => ({
+    return PUBLIC_VIRTUAL_WORKER_PROVIDERS.map((provider) => ({
       providerConfigId: provider,
       provider,
       displayLabel: DEFAULT_PROVIDER_CONFIG_NAMES[provider],
@@ -187,6 +188,15 @@ export const PROVIDER_CARD_TOKENS: Record<ProviderId, {
     watermark: "AGY",
     logoLabel: "AGY",
     badgeLabel: "CLI",
+    badgeClassName: "border-black/[0.08] bg-black/[0.035] text-slate-600 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-300",
+    glowClassName: "bg-[radial-gradient(circle_at_top_right,rgba(15,23,42,0.045),transparent_42%),radial-gradient(circle_at_bottom_left,rgba(15,23,42,0.03),transparent_34%)] dark:bg-[radial-gradient(circle_at_top_right,rgba(255,255,255,0.045),transparent_42%),radial-gradient(circle_at_bottom_left,rgba(255,255,255,0.025),transparent_34%)]",
+    railClassName: "bg-black/[0.12] dark:bg-white/[0.14]",
+    noteClassName: "border-black/[0.08] bg-black/[0.03] text-slate-600 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-300",
+  },
+  "mockup-cli": {
+    watermark: "MCK",
+    logoLabel: "M",
+    badgeLabel: "Internal",
     badgeClassName: "border-black/[0.08] bg-black/[0.035] text-slate-600 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-300",
     glowClassName: "bg-[radial-gradient(circle_at_top_right,rgba(15,23,42,0.045),transparent_42%),radial-gradient(circle_at_bottom_left,rgba(15,23,42,0.03),transparent_34%)] dark:bg-[radial-gradient(circle_at_top_right,rgba(255,255,255,0.045),transparent_42%),radial-gradient(circle_at_bottom_left,rgba(255,255,255,0.025),transparent_34%)]",
     railClassName: "bg-black/[0.12] dark:bg-white/[0.14]",

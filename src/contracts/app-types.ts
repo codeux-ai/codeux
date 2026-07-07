@@ -78,7 +78,7 @@ export interface JulesActivity {
 
 export type SubtaskStatus = "PENDING" | "RUNNING" | "CODING_COMPLETED" | "COMPLETED" | "FAILED" | "BLOCKED" | "QUOTA" | "QA_REVIEW_FAILED";
 export type SubtaskMergeIndicator = "CI" | "AUTOMERGE" | "MERGED" | "MERGE_BLOCKED" | "MERGE_CONFLICT" | "PR_ONLY" | "QA_PENDING";
-export type ProviderId = "jules" | "gemini" | "codex" | "claude-code" | "qwen-code" | "opencode" | "antigravity";
+export type ProviderId = "jules" | "gemini" | "codex" | "claude-code" | "qwen-code" | "opencode" | "antigravity" | "mockup-cli";
 export type ProviderConfigId = string;
 export type ProviderStrategy = "MANUAL" | "WEIGHTED" | "AGENT";
 export type ThinkingMode = "SMALL" | "MEDIUM" | "HIGH";
@@ -93,6 +93,7 @@ export type InvocationRoutingId =
   | "merge_conflict"
   | "remediation";
 export type CliExecutionMode = "DOCKER" | "HOST";
+export type ProviderConfigMode = "none" | "copyHost" | "file";
 export type FeaturePrAutoMergeMode = "OFF" | "CREATE_PR" | "WHEN_GREEN" | "ALWAYS";
 export type WorkerExecutionMode = "VIRTUAL";
 export type VirtualWorkerProvider = Exclude<ProviderId, "jules">;
@@ -475,7 +476,8 @@ export interface ExecutionStatsEntitySummary {
 }
 
 export type ProjectStatsWindow = "1h" | "24h" | "7d" | "30d" | "all" | "custom";
-export type ProjectStatsResolution = "5min" | "hour" | "day" | "week";
+export type ProjectStatsRangeWindow = ProjectStatsWindow | "20s";
+export type ProjectStatsResolution = "5sec" | "5min" | "hour" | "day" | "week";
 
 export interface ProjectStatsQuery {
   window: ProjectStatsWindow;
@@ -485,7 +487,7 @@ export interface ProjectStatsQuery {
 }
 
 export interface ProjectStatsRangeSummary {
-  window: ProjectStatsWindow;
+  window: ProjectStatsRangeWindow;
   label: string;
   resolution: ProjectStatsResolution;
   resolutionLabel: string;
@@ -534,6 +536,37 @@ export interface ProjectExecutionStatsSnapshot {
     count: number;
   }>;
   chartSeries: ProjectExecutionStatsChartSeries[];
+}
+
+export type HeaderTokenThroughputWindow = "20s" | Exclude<ProjectStatsWindow, "custom">;
+
+export interface HeaderTokenThroughputQuery {
+  window: HeaderTokenThroughputWindow;
+  projectId?: string | null;
+}
+
+export interface HeaderTokenThroughputTotals {
+  totalTokens: number;
+  inputTokens: number;
+  cachedInputTokens: number;
+  outputTokens: number;
+  reasoningTokens: number;
+  invocationCount: number;
+  activeTimeMs: number;
+  tokensPerMinute: number;
+}
+
+export interface HeaderTokenThroughputProjectSnapshot extends HeaderTokenThroughputTotals {
+  projectId: string;
+  projectName: string;
+}
+
+export interface HeaderTokenThroughputSnapshot {
+  generatedAt: string;
+  window: HeaderTokenThroughputWindow;
+  range: ProjectStatsRangeSummary;
+  app: HeaderTokenThroughputTotals;
+  project: HeaderTokenThroughputProjectSnapshot | null;
 }
 
 export interface OverviewTelemetryProjectSummary {
@@ -661,6 +694,8 @@ export interface ProviderSettings {
   apiKey: string;
   mountAuth: boolean;
   authPath: string;
+  providerConfigMode?: ProviderConfigMode;
+  providerConfigPath?: string;
   /** Custom API endpoint base URL for providers that support it (claude-code, codex). */
   customBaseUrl?: string;
   /** Custom model identifier sent to the CLI when routing through a custom base URL (claude-code, codex). */
@@ -715,6 +750,29 @@ export interface AiProviderSettings {
   strategy: ProviderStrategy;
   providers: Record<ProviderConfigId, ProviderSettings>;
   invocationRouting: Record<InvocationRoutingId, InvocationRoutingSettings>;
+}
+
+export type ApplicationKind = "web" | "desktop";
+
+export interface TechstackItemSettings {
+  id: string;
+  label: string;
+}
+
+export interface TechstackCatalogEntrySettings {
+  id: string;
+  label: string;
+  items: TechstackItemSettings[];
+}
+
+export interface TechstackCatalogSettings {
+  defaultTechstackId: string;
+  entries: TechstackCatalogEntrySettings[];
+}
+
+export interface TechstackSelectionSettings {
+  selectedTechstackId: string | null;
+  applicationKind: ApplicationKind | null;
 }
 
 /** Toggles for what appears in an automated Task PR description. See src/domain/sprint/composer/pr-description-composer.ts. */
@@ -868,6 +926,8 @@ export interface CliWorkflowSettings {
   executionMode: CliExecutionMode;
   containerImage: string;
   containerSetupScriptPath: string;
+  /** Docker memory limit in MiB for provider CLI containers. 0 disables Docker memory flags. */
+  containerMemoryLimitMb: number;
   containerCacheSetupScriptImage: boolean;
   containerInstallPlaywrightBrowsers: boolean;
   containerMountGitConfig: boolean;
@@ -943,6 +1003,24 @@ export interface QualityAssuranceSettings {
   completedTaskWithoutPr: QualityAssuranceTriggerSettings;
 }
 
+export interface AgentSelfReflectionCriterionSettings {
+  id: string;
+  label: string;
+  prompt: string;
+  threshold: number;
+}
+
+export interface AgentSelfReflectionLoopSettings {
+  enabled: boolean;
+  criteria: AgentSelfReflectionCriterionSettings[];
+  maxImprovementAttempts: number;
+}
+
+export interface AgentSelfReflectionSettings {
+  planning: AgentSelfReflectionLoopSettings;
+  qualityAssurance: AgentSelfReflectionLoopSettings;
+}
+
 export interface CodingAgentRoutingSettings {
   mode: AgentRoutingMode;
   agentPresetId: string | null;
@@ -967,6 +1045,7 @@ export interface AgentSettings {
   routing: AgentRoutingSettings;
   instructionTemplates: Record<InstructionTemplateId, string>;
   qualityAssurance: QualityAssuranceSettings;
+  selfReflection: AgentSelfReflectionSettings;
 }
 
 export type BackgroundPattern = "NONE" | "DIAGONAL_LINES" | "HORIZONTAL_LINES" | "VERTICAL_LINES" | "CROSSHATCH" | "DOTS" | "DIAMONDS" | "HEXAGONS" | "TRIANGLES" | "WAVES" | "NOISE";
@@ -1014,6 +1093,58 @@ export interface CustomMcpServer {
   providers?: ProviderId[];
 }
 
+export type SkillStorageKind = "project" | "shared";
+export type SkillSourceType = "manual" | "imported" | "generated";
+
+export interface SkillStorageRecord {
+  id: string;
+  projectId: string;
+  name: string;
+  description: string;
+  storageKind: SkillStorageKind;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SkillRecord {
+  id: string;
+  projectId: string;
+  storageId: string;
+  name: string;
+  description: string;
+  contentMarkdown: string;
+  sourceType: SkillSourceType;
+  sourceRef: string | null;
+  contentHash: string;
+  tags: string[];
+  appliesTo: string[];
+  version: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SkillEmbeddingMetadata {
+  id: string;
+  projectId: string;
+  storageId: string;
+  skillId: string;
+  embeddingModel: string;
+  embeddingDimension: number;
+  chunkIndex: number;
+  contentHash: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AgentSkillStorageAttachment {
+  agentPresetId: string;
+  storageId: string;
+  projectId: string;
+  enabled: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export type RuntimeLogLevel = "off" | "debug" | "info" | "warn" | "error";
 export type ConsoleLogMode = "standard" | "full";
 export type RestartSprintPolicy = "continue" | "pause" | "cancel";
@@ -1038,6 +1169,8 @@ export interface DashboardSettings {
   automationLevel: AutomationLevel;
   automationInterventions: AutomationInterventionsSettings;
   aiProvider: AiProviderSettings;
+  techstackCatalog: TechstackCatalogSettings;
+  techstack: TechstackSelectionSettings;
   git: GitSettings;
   jira: JiraSettings;
   ciIntelligence: CiIntelligenceSettings;
@@ -1234,6 +1367,11 @@ export interface DockerContainer {
 
 export type OnboardingCheckStatus = "ready" | "warning" | "missing";
 export type OnboardingClusterStatus = "ready" | "not_ready";
+export type OnboardingDependencyInstallMode = "docker-desktop-git" | "docker-engine-git";
+export type OnboardingInstallerPlatform = "darwin" | "win32" | "linux" | "unsupported";
+export type OnboardingInstallerAutomationLevel = "automated" | "partial" | "manual" | "unsupported";
+export type OnboardingInstallerCommandStatus = "pending" | "running" | "success" | "failed" | "skipped";
+export type OnboardingDependencyInstallerStatus = "success" | "partial" | "failed" | "skipped" | "unsupported";
 
 export interface OnboardingDependencyCheck {
   id: string;
@@ -1255,6 +1393,62 @@ export interface OnboardingProviderCredentialStatus {
   description: string;
 }
 
+export interface OnboardingDependencyInstallerOption {
+  mode: OnboardingDependencyInstallMode;
+  label: string;
+  platform: OnboardingInstallerPlatform;
+  recommended: boolean;
+  automation: OnboardingInstallerAutomationLevel;
+  description: string;
+  dependencyIds: string[];
+  requiresPrivilege: boolean;
+  requiresManualDownload: boolean;
+  available: boolean;
+  guidance: string[];
+}
+
+export interface OnboardingDependencyInstallerMetadata {
+  platform: OnboardingInstallerPlatform;
+  recommendedMode: OnboardingDependencyInstallMode | null;
+  options: OnboardingDependencyInstallerOption[];
+}
+
+export interface OnboardingDependencyInstallerCommandResult {
+  id: string;
+  groupId: string;
+  label: string;
+  command: string;
+  args: string[];
+  displayCommand: string;
+  status: OnboardingInstallerCommandStatus;
+  timeoutMs: number;
+  maxStdoutChars: number;
+  maxStderrChars: number;
+  code: number | null;
+  stdoutSummary: string;
+  stderrSummary: string;
+  message?: string;
+}
+
+export interface OnboardingDependencyInstallerSkippedGroup {
+  groupId: string;
+  label: string;
+  dependencyIds: string[];
+  reason: string;
+}
+
+export interface OnboardingDependencyInstallerResult {
+  mode: OnboardingDependencyInstallMode;
+  platform: OnboardingInstallerPlatform;
+  status: OnboardingDependencyInstallerStatus;
+  commands: OnboardingDependencyInstallerCommandResult[];
+  skippedDependencyGroups: OnboardingDependencyInstallerSkippedGroup[];
+  requiresPrivilege: boolean;
+  requiresManualDownload: boolean;
+  postInstallGuidance: string[];
+  message: string;
+}
+
 export interface OnboardingRuntimeReadiness {
   checkedAt: string;
   cluster: {
@@ -1264,6 +1458,7 @@ export interface OnboardingRuntimeReadiness {
   };
   dependencies: OnboardingDependencyCheck[];
   providers: OnboardingProviderCredentialStatus[];
+  installers: OnboardingDependencyInstallerMetadata;
 }
 
 export interface UserOnboardingState {

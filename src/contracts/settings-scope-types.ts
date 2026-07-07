@@ -8,6 +8,7 @@ import type {
   CustomMcpServer,
   GuardrailSettings,
   ProviderConfigId,
+  ProviderConfigMode,
   DashboardSettings,
   InvocationProviderOverrideSettings,
   InvocationRoutingId,
@@ -25,6 +26,8 @@ import type {
   RestartInvocationPolicy,
   RestartSprintPolicy,
   JiraSettings,
+  TechstackCatalogSettings,
+  TechstackSelectionSettings,
 } from "./app-types.js";
 import type { MemorySettings } from "./memory-types.js";
 import type { WorkerRuntimeSettings } from "./worker-types.js";
@@ -75,6 +78,7 @@ export interface ProjectSettings {
   automationLevel: AutomationLevel;
   automationInterventions: AutomationInterventionsSettings;
   aiProvider: ProjectAiProviderSettings;
+  techstack: TechstackSelectionSettings;
   git: ProjectGitSettings;
   jira: JiraSettings;
   ciIntelligence: CiIntelligenceSettings;
@@ -109,6 +113,8 @@ export interface SystemProviderCredentialSettings {
   apiKey: string;
   mountAuth: boolean;
   authPath: string;
+  providerConfigMode: ProviderConfigMode;
+  providerConfigPath: string;
   authType?: "apiKey" | "localAuth" | "dashboardAuth";
   lastLoginAt?: number;
   /** Custom API endpoint base URL for providers that support it (claude-code, codex). */
@@ -154,6 +160,7 @@ export interface QwenModelProviderSettings {
 export interface SystemSettings {
   runtime: SystemRuntimeSettings;
   integrations: SystemIntegrationSettings;
+  techstackCatalog: TechstackCatalogSettings;
   defaults: ProjectSettings;
   mcpTools: McpToolToggle[];
   customMcpServers: CustomMcpServer[];

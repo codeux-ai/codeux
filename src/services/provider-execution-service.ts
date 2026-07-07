@@ -1,8 +1,10 @@
 import type { CustomMcpServer, DashboardSettings } from "../contracts/app-types.js";
-import type { QwenModelProviderSettings } from "../contracts/app-types.js";
+import type { ProviderConfigMode, QwenModelProviderSettings } from "../contracts/app-types.js";
 import type { McpConnectionInfo } from "../contracts/mcp-connection-types.js";
 import type { AgentMcpAccessConfig } from "../contracts/agent-preset-types.js";
 import { resolveAgentMcpRuntime } from "./agent-mcp-access.js";
+import type { AgentPresetRepository } from "../repositories/agent-preset-repository.js";
+import type { SkillService, PersistentSkillStorageRuntime } from "./skill-service.js";
 import type { ProviderInvocationPurpose } from "../contracts/execution-types.js";
 import type { ExecutionRepository } from "../repositories/execution-repository.js";
 import type { SessionTrackingRepository } from "../repositories/session-tracking-repository.js";
@@ -115,6 +117,9 @@ export interface ProviderExecutionServiceDeps {
   providerConcurrencyService?: ProviderConcurrencyService;
   logger?: Logger;
   getGithubToken?: () => string | undefined;
+  getMcpConnectionInfo?: () => McpConnectionInfo | null;
+  agentPresetRepository?: AgentPresetRepository;
+  skillService?: SkillService;
 }
 
 export interface ExecutionProviderRunArgs {
@@ -151,6 +156,8 @@ export interface ExecutionProviderRunArgs {
   openCodePackage?: string;
   providerMountAuth?: boolean;
   providerAuthPath?: string;
+  providerConfigMode?: ProviderConfigMode;
+  providerConfigPath?: string;
   customBaseUrl?: string;
   customModel?: string;
   sessionId: string;
@@ -219,12 +226,15 @@ export class ProviderExecutionService {
   async executeProvider(args: ExecutionProviderRunArgs): Promise<ProviderRunResult> {
     let execInvocationId: string | null = args.invocationId || null;
     const effectiveModel = resolveEffectiveModel(args);
+    const persistentSkillRuntime = await this.resolvePersistentSkillRuntime(args);
+    const baseMcpConnection = args.mcpConnection ?? (persistentSkillRuntime ? this.deps.getMcpConnectionInfo?.() ?? null : null);
 
     const resolvedMcp = resolveAgentMcpRuntime({
       access: args.agentMcpAccess,
       agentId: args.mcpAgentId,
       customMcpServers: args.customMcpServers ?? [],
-      mcpConnection: args.mcpConnection ?? null,
+      mcpConnection: baseMcpConnection,
+      persistentSkillRetrievalEnabled: Boolean(persistentSkillRuntime),
     });
 
     const runProviderInner = async (p: string, retrySystemMessage?: string, continueSessionId?: string | null, openCodeBaselineRawUsageJson?: Record<string, unknown> | null): Promise<ProviderRunResult> => {
@@ -358,6 +368,8 @@ export class ProviderExecutionService {
         openCodePackage: args.openCodePackage,
         providerMountAuth: args.providerMountAuth,
         providerAuthPath: args.providerAuthPath,
+        providerConfigMode: args.providerConfigMode,
+        providerConfigPath: args.providerConfigPath,
         customBaseUrl: args.customBaseUrl,
         customModel: args.customModel,
         sessionId: args.sessionId,
@@ -375,6 +387,7 @@ export class ProviderExecutionService {
         purpose: args.purpose,
         mcpConnection: resolvedMcp.mcpConnection,
         customMcpServers: resolvedMcp.customMcpServers,
+        persistentSkillStorageMounts: persistentSkillRuntime?.mounts,
         onActivity: (desc: string, originator?: string) => {
           if (args.onActivity) {
             args.onActivity(desc, originator);
@@ -546,7 +559,10 @@ export class ProviderExecutionService {
       return result;
     };
 
-    let currentPrompt = args.prompt;
+    const initialPrompt = persistentSkillRuntime
+      ? `${args.prompt}\n\n${persistentSkillRuntime.instructionMarkdown}`
+      : args.prompt;
+    let currentPrompt = initialPrompt;
     let providerResult: ProviderRunResult;
     let usedReadFileRetry = false;
     let continueSessionId: string | null = args.continueSessionId || null;
@@ -576,7 +592,7 @@ export class ProviderExecutionService {
             description: "Retrying with file-discovery guidance.",
           });
         }
-        currentPrompt = buildReadFileRetryPrompt(args.prompt);
+        currentPrompt = buildReadFileRetryPrompt(initialPrompt);
         usedReadFileRetry = true;
         continue;
       }
@@ -735,6 +751,30 @@ export class ProviderExecutionService {
         }
       }
       return providerResult;
+    }
+  }
+
+  private async resolvePersistentSkillRuntime(args: ExecutionProviderRunArgs): Promise<PersistentSkillStorageRuntime | null> {
+    if (!args.projectId || !args.mcpAgentId || !this.deps.skillService || !this.deps.agentPresetRepository) {
+      return null;
+    }
+    const agent = this.deps.agentPresetRepository.getAgentPreset(args.mcpAgentId);
+    if (!agent || agent.projectId !== args.projectId || !agent.persistentSkillStorage?.enabled) {
+      return null;
+    }
+    try {
+      return await this.deps.skillService.resolvePersistentSkillStorageRuntime({
+        projectId: args.projectId,
+        agentPresetId: agent.id,
+        enabled: true,
+      });
+    } catch (error) {
+      this.deps.logger?.warn("Failed to resolve persistent skill storage runtime", {
+        projectId: args.projectId,
+        agentPresetId: args.mcpAgentId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return null;
     }
   }
 

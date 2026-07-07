@@ -95,6 +95,12 @@ Actions per model:
 
 Switching the active model leaves existing memories embedded with the previous model — search results across mixed dimensions are nonsensical. Click **Re-embed all** to re-vectorize the project's memories with the new model. Progress is shown live; you can leave the page and check back.
 
+## Persistent skills
+
+Persistent skills are reusable agent instructions, not sprint learnings. They are stored in project-owned skill storages, attached to agent presets, and kept out of the project workspace and `.code-ux/` sprint files.
+
+Skill markdown has frontmatter for `title`, `description`, `tags`, `appliesTo`, and `version`; the markdown body is the stored instruction content. When embeddings are available, skills are vectorized into `skill_embeddings` with model and dimension metadata. Search only compares vectors from the requested project/storage or agent-attached storages, skips dimension mismatches, caps candidate loading, ranks by cosine similarity, and uses skill id as a deterministic tie-breaker.
+
 ## Stats
 
 The footer shows aggregate memory statistics: total counts per scope/category, average strength, and the active model.

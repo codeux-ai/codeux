@@ -1,6 +1,8 @@
 import type {
   AgentPreset,
   CreateAgentPresetInput,
+  SkillStorageKind,
+  SkillStorageRecord,
   UpdateAgentPresetInput,
 } from "../types.js";
 import { fetchJson } from "../../lib/api/fetch-json.js";
@@ -24,6 +26,8 @@ export const createAgentPreset = async (
     memoryTemplateOverrideEnabled: input.memoryTemplateOverrideEnabled,
     memoryTemplateMarkdown: input.memoryTemplateMarkdown,
     memoryConfig: input.memoryConfig,
+    persistentSkillStorageIds: input.persistentSkillStorageIds,
+    persistentSkillStorage: input.persistentSkillStorage,
   };
   return fetchJson<AgentPreset>(`/api/projects/${encodeURIComponent(projectId)}/agent-presets`, {
     method: "POST",
@@ -48,6 +52,8 @@ export const updateAgentPreset = async (
     memoryTemplateMarkdown: input.memoryTemplateMarkdown,
     mcpAccess: input.mcpAccess,
     memoryConfig: input.memoryConfig,
+    persistentSkillStorageIds: input.persistentSkillStorageIds,
+    persistentSkillStorage: input.persistentSkillStorage,
   };
   return fetchJson<AgentPreset>(`/api/agent-presets/${encodeURIComponent(agentPresetId)}`, {
     method: "PATCH",
@@ -88,5 +94,27 @@ export const pushAgentPresetsToRepository = async (
         branchName: options.branchName,
       }),
     },
+  );
+};
+
+export const fetchSkillStorages = async (projectId: string): Promise<SkillStorageRecord[]> => {
+  return fetchJson<SkillStorageRecord[]>(`/api/projects/${encodeURIComponent(projectId)}/skill-storages`);
+};
+
+export const createSkillStorage = async (
+  projectId: string,
+  input: { name: string; description?: string; storageKind?: SkillStorageKind },
+): Promise<SkillStorageRecord> => {
+  return fetchJson<SkillStorageRecord>(`/api/projects/${encodeURIComponent(projectId)}/skill-storages`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+};
+
+export const deleteSkillStorage = async (projectId: string, storageId: string): Promise<void> => {
+  await fetchJson<{ ok: boolean }>(
+    `/api/projects/${encodeURIComponent(projectId)}/skill-storages/${encodeURIComponent(storageId)}`,
+    { method: "DELETE" },
   );
 };

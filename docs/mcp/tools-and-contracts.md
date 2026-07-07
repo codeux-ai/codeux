@@ -14,15 +14,20 @@ These cover:
 - `manage_tasks`
 - `manage_quicksprints`
 - `manage_scheduler`
+- `scheduler`
 - `manage_agents`
 - `manage_memory`
+- `manage_skills`
 - `search_knowledge`
+- `search_skills`
 - `manage_settings`
 - `manage_preview`
 - `manage_telemetry`
-- `manage_code_ux` (Deprecated compatibility surface)
+- `register_worker_endpoint`
+- `pull_task_dispatch`
+- `update_task_dispatch`
 
-The grouped management domains are the primary surface. `manage_code_ux` remains registered for compatibility, but it is deprecated. The same management domains are also exposed through the direct `codeux` CLI management surface. See [CLI Commands Reference](../reference/cli-commands.md) for the command syntax, aliases, interactive prompting behavior, and approval handling.
+The same management domains are also exposed through the direct `codeux` CLI management surface. See [CLI Commands Reference](../reference/cli-commands.md) for the command syntax, aliases, interactive prompting behavior, and approval handling.
 
 ### Core tools
 Implemented in:
@@ -45,13 +50,22 @@ These cover:
 - `manage_tasks`
 - `manage_quicksprints`
 - `manage_scheduler`
+- `scheduler`
 - `manage_agents`
 - `manage_memory`
+- `manage_skills`
 - `search_knowledge`
+- `search_skills`
 - `manage_settings`
 - `manage_preview`
 - `manage_telemetry`
-- `manage_code_ux` (Deprecated)
+
+### Worker control plane
+- `register_worker_endpoint`
+- `pull_task_dispatch`
+- `update_task_dispatch`
+
+These tools are exposed by the main `project_manager` MCP runtime, including server mode. `register_worker_endpoint` records the full eligible `projectIds` set and stores `activeProjectIds` only as the current focus subset. `pull_task_dispatch` returns a dispatch only with a lease token; workers must not start local execution without that token. `update_task_dispatch` renews running leases, records terminal state, and may return `controlAction: "cancel"` when the dashboard has requested cancellation.
 
 ## Registered Tools
 
@@ -59,6 +73,7 @@ Defined in `src/contracts/mcp-tool-definitions.ts`.
 
 Typed tool argument contracts and registry dispatch are defined in `src/api/mcp/tool-registry.ts`.
 
+- `get_session`
 ### Listen mode
 - `listen`
 - `start_listen`
@@ -133,6 +148,19 @@ Approval responses are not errors. Calls that need human confirmation still retu
 
 Tool arguments are validated against `src/contracts/mcp-tool-definitions.ts` before dispatch. Invalid tool payload shapes, missing required schema fields, invalid enum values, and malformed approval envelopes fail as MCP `InvalidParams` errors before management action handlers run. Management action parser failures still use the standardized management error envelope described above, with sanitized validation messages and a `field` when the helper can identify one.
 
+## Scheduler Tools
+
+Code UX exposes two scheduler MCP surfaces:
+
+- `manage_scheduler` is the project-manager management surface. It can list, create, schedule sprints, schedule quicksprints, schedule chat messages, update entries, delete entries with approval, and run due entries. It remains unchanged for project-manager clients.
+- `scheduler` is the restricted agent-owned surface. It supports only `list`, `schedule_wakeup`, `schedule_task`, and `cancel`.
+
+The restricted `scheduler` tool accepts either an absolute `scheduledFor` ISO timestamp or one positive relative delay field, `delaySeconds` or `delayMinutes`. `schedule_wakeup` requires `projectId` and `bodyMarkdown`, and may include `title`, `timezone`, `threadId`, and `connectionId`. `schedule_task` requires `projectId` and `taskId`, and may include `title`, `timezone`, and a provider override.
+
+Every `scheduler` entry is persisted as an `agent_scheduler` target. The runtime stamps `origin: "agent_scheduler"`, `source: "agent_scheduler"`, and `createdByAgentId` from the current MCP agent context. `list` returns only entries created by the calling agent. `cancel` changes the matching entry status to `cancelled` only when the entry is an agent-scheduler wakeup or task entry created by that same agent. Dashboard-created entries, `manage_scheduler` entries, entries without agent-scheduler metadata, and entries created by another agent are rejected with the standard management validation envelope.
+
+The restricted tool intentionally does not expose due-entry execution, arbitrary update, recurrence editing, sprint scheduling, quicksprint scheduling, memory remediation scheduling, or global scheduler destructive controls.
+
 ### Destructive Action Approvals
 
 Destructive actions (e.g., actions starting with `delete_`, `reset_`, `replace_`) follow an explicit approval flow to prevent accidental data loss:
@@ -154,13 +182,35 @@ All mutating settings actions require a stateful human-confirmation step. This i
 - `replace_sprint_settings`
 - `patch_sprint_setting`
 - `reset_sprint_settings`
+- `apply_settings_bundle` when the bundle contains provider credentials, git tokens, issue-tracker tokens, or login credentials
+- `export_settings_bundle` when `includeSecrets: true` would export provider credentials, git tokens, issue-tracker tokens, or login credentials
 
 Runtime behavior:
-1. Mutating settings actions first return an approval-required response; only the exact same action and payload may execute once with `approval.confirmed: true` within 15 minutes.
-2. Allowed actions: get/resolve actions (`get_system`, `get_project_override`, `resolve_project_effective`, `get_sprint_override`, `resolve_sprint_effective`) are read-only and execute immediately.
-3. Replace, patch, and reset actions (`replace_system_settings`, `patch_system_setting`, `replace_project_settings`, `patch_project_setting`, `reset_project_settings`, `replace_sprint_settings`, `patch_sprint_setting`, `reset_sprint_settings`) require confirmation.
-4. The first mutating call returns `approvalRequired: true` with instructions to ask the user for confirmation, even if it includes `approval.confirmed: true`.
-5. A different settings payload, even for the same setting path, creates a separate pending approval and does not execute. Fingerprints preserve explicit `null`, explicit `undefined`, and array order, while object key order is normalized.
+1. The first mutating settings call never changes settings, even if it includes `approval.confirmed: true`.
+2. The server records a pending approval for the exact settings action, scope, setting path, and normalized payload for 15 minutes.
+3. The response returns `approvalRequired: true` with instructions to ask the user for confirmation.
+4. The client must not call the same endpoint again with `approval.confirmed: true` unless the user explicitly confirms the exact change.
+5. After user confirmation, the same action and same payload can be called once with `approval.confirmed: true` within 15 minutes; the pending approval is consumed and cannot be reused.
+6. A different settings payload, even for the same setting path, creates a separate pending approval and does not execute. Fingerprints preserve explicit `null`, explicit `undefined`, and array order, while object key order is normalized.
+
+### Settings Synchronization Bundles
+
+`manage_settings` supports settings synchronization through:
+- `export_settings_bundle`
+- `apply_settings_bundle`
+
+Bundles use the existing `SettingsRepository` system, project, and sprint APIs. Applies are normalized through the same sanitizer and resolution helpers used by dashboard-saved settings, so imports do not persist raw unsanitized payloads.
+
+Bundle metadata includes:
+- `schemaVersion: 1`
+- `exportedAt`
+- `includedScopes`, containing `system`, `projects`, and/or `sprints`
+- `fingerprint`, a SHA-256 fingerprint computed from a secret-redacted bundle representation
+- `containsSecrets`
+
+Export defaults to the `system` scope and redacts secret-bearing fields. `includeSecrets: true` may return provider API keys, git tokens, issue-tracker tokens, and login credential markers only after the one-use approval flow succeeds for the exact export payload. Bearer tokens are not generated by export; they appear only if they already exist in an explicitly approved settings payload.
+
+Apply accepts a `bundle` object and optional `scopes` for partial import. Project entries must include `projectId`; sprint entries must include both `projectId` and `sprintId` so sprint overrides can be normalized against the resolved project base. Any bundle marked as containing secrets, or any bundle whose payload includes secret-bearing fields, requires the same one-use approval before persistence.
 
 ### Project Setup Action
 
@@ -205,17 +255,139 @@ For payload normalization in management tools, Code UX centralizes parsing behav
 - **Validation Errors**: Parser failures throw `ManagementValidationError`, which the management tool handler serializes as the standardized `result.status: "error"` envelope with `errorType: "validation"` and `isError: true`.
 
 
-The dedicated management tools (`manage_projects`, `manage_sprints`, `manage_tasks`, `manage_quicksprints`, `manage_scheduler`, `manage_agents`, `manage_memory`, `search_knowledge`, `manage_settings`, `manage_preview`, and `manage_telemetry`) share the same action handlers. `manage_code_ux` remains as a deprecated compatibility entry point.
+The dedicated management tools (`manage_sprints`, `manage_tasks`, `manage_quicksprints`, `manage_scheduler`, `manage_settings`) share the same action handlers.
 
-### `manage_telemetry` actions
+### `manage_skills` persistent skill actions
 
-`manage_telemetry` lists execution invocations and messages. Available telemetry actions:
-- `get_project_execution_snapshot`: requires `projectId`.
-- `get_project_stats_snapshot`: requires `projectId`.
-- `list_sprint_runs`: requires `projectId` and `sprintId`.
-- `list_task_dispatches`: requires `projectId`, `sprintId`, and `taskId`.
-- `list_execution_invocations`: requires `projectId`; optional `sprintId`, `taskId`, and `type`.
-- `list_execution_invocation_messages`: requires `invocationId`.
+`manage_skills` is the management surface for persistent project skill storage. It is available in the `agents_memory` category for project-manager clients and for agents with explicit Code UX tool access. It is separate from workspace files: callers save skill markdown through the MCP payload, and Code UX writes the durable skill rows and embeddings through `SkillService`.
+
+Available actions:
+- `authoring_prompt`: returns the comprehensive skill-authoring prompt, including markdown/frontmatter format and the workflow for saving skills through `manage_skills` instead of writing into the workspace.
+- `list_storages`: requires `projectId`; returns project-owned skill storages.
+- `get_storage`: requires `projectId` and `storageId`; returns one project-owned skill storage.
+- `create_storage`: requires `projectId` and `name`; accepts `description` and `storageKind` (`project` or `shared`).
+- `update_storage`: requires `projectId` and `storageId`; accepts `name`, `description`, and `storageKind`.
+- `delete_storage`: requires `projectId` and `storageId`; approval-gated. Deletes the storage, contained skills, embeddings, and agent attachments.
+- `reset_storage`: requires `projectId` and `storageId`; approval-gated. Deletes skills and embeddings in the storage while keeping the storage and attachments.
+- `list_agent_storages`: requires `projectId` and `agentPresetId`; returns the agent's enabled storage attachments and attached storages.
+- `attach_storage`: requires `projectId`, `agentPresetId`, and `storageId`; attaches a project-owned storage to a project-owned agent preset.
+- `detach_storage`: requires `projectId`, `agentPresetId`, and `storageId`; removes the attachment.
+- `list_skills`: requires `projectId` and `storageId`; accepts `limit`; returns concise skill summaries, not full markdown bodies.
+- `get_skill`: requires `projectId` and `skillId`; accepts `includeContent`. By default the response is concise; set `includeContent: true` only when the caller needs the full stored body.
+- `create_skill` and `import_markdown`: require `projectId`, `storageId`, and `markdown`; accept `sourceType` (`manual`, `imported`, or `generated`) and nullable `sourceRef`.
+- `update_skill`: requires `projectId`, `storageId`, `skillId`, and `markdown`; accepts `sourceType` and nullable `sourceRef`. The supplied `storageId` must match the skill's current storage because updates edit skills in place; moving a skill between storages requires a future explicit move operation. When `sourceType` or `sourceRef` are omitted, the existing skill provenance is preserved.
+- `delete_skill`: requires `projectId` and `skillId`; approval-gated. Deletes the stored markdown and embeddings.
+- `export_markdown`: requires `projectId` and `skillId`; returns the full reconstructed markdown with frontmatter.
+
+Skill markdown uses YAML-like frontmatter followed by the instruction body:
+
+```md
+---
+title: Review Discipline
+description: Keep review findings concrete.
+tags: ["review", "quality"]
+appliesTo: ["src/services", "tests/backend"]
+version: 1.0.0
+---
+
+Focus on bugs, regressions, missing tests, and rollback risk.
+```
+
+The parser supports scalar frontmatter fields and simple list forms for `tags` and `appliesTo`. The body is the authoritative instruction content. Metadata is stored in dedicated columns so `export_markdown` can reconstruct the markdown.
+
+Updating a skill replaces its markdown-derived metadata and instruction body while keeping the skill in its current storage. The update path preserves existing provenance (`sourceType` and `sourceRef`) unless the caller explicitly supplies replacement source fields.
+
+Create or import example:
+
+```json
+{
+  "action": "import_markdown",
+  "projectId": "project-123",
+  "storageId": "skills-review",
+  "markdown": "---\ntitle: Review Discipline\ndescription: Keep review findings concrete.\ntags: [\"review\"]\n---\n\nFocus on bugs, regressions, and missing tests."
+}
+```
+
+Approval example for destructive skill deletion:
+
+```json
+{
+  "action": "delete_skill",
+  "projectId": "project-123",
+  "skillId": "skill-123"
+}
+```
+
+The first call returns `approvalRequired: true`. After human approval, repeat the same request with:
+
+```json
+{
+  "action": "delete_skill",
+  "projectId": "project-123",
+  "skillId": "skill-123",
+  "approval": { "confirmed": true }
+}
+```
+
+Project isolation is enforced below the MCP handler by `SkillService` and `SkillRepository`. Storage, skill, embedding, and agent-attachment operations verify the supplied `projectId`; IDs from another project are rejected instead of being read or mutated.
+
+### `search_skills` retrieval tool
+
+`search_skills` is the retrieval-focused skill surface. It can be exposed to agents independently from `manage_skills` through per-agent MCP tool filtering. This lets an agent retrieve durable skill guidance without granting it storage creation, mutation, attachment management, export, delete, or reset capabilities.
+
+Persistent skill runtime behavior is documented with agent preset storage ownership in [Agent Preset Foundation](../architecture/agent-preset-foundation.md#data-model) and the Settings/Agents UI contract in [Agents Design System](../dashboard/design-system-agents.md#persistent-skills). The integration regression in `tests/backend/integration/persistent-skills-runtime.test.ts` covers the MCP retrieval contract together with repository attachments and provider runtime injection.
+
+Schema:
+
+```json
+{
+  "projectId": "project-123",
+  "query": "review pull request risk checklist",
+  "agentPresetId": "agent-123",
+  "storageId": "skills-review",
+  "limit": 5,
+  "minSimilarity": 0.3
+}
+```
+
+Fields:
+- `projectId` and non-blank `query` are required.
+- `agentPresetId` is optional. When supplied without `storageId`, only storages attached to that project-owned agent are searched.
+- `storageId` is optional. When supplied, search is limited to that project-owned storage.
+- `limit` defaults to 10 and is capped by the handler.
+- `minSimilarity` is optional and must be between 0 and 1 when supplied.
+
+Response shape:
+
+```json
+{
+  "result": {
+    "results": [
+      {
+        "similarity": 0.91,
+        "skill": {
+          "id": "skill-123",
+          "projectId": "project-123",
+          "storageId": "skills-review",
+          "name": "Review Discipline",
+          "description": "Keep review findings concrete.",
+          "sourceType": "manual",
+          "sourceRef": null,
+          "tags": ["review"],
+          "appliesTo": ["src/services"],
+          "version": "1.0.0",
+          "contentHash": "sha256...",
+          "createdAt": "2026-07-07T00:00:00.000Z",
+          "updatedAt": "2026-07-07T00:00:00.000Z",
+          "summary": "Focus on bugs, regressions, missing tests, and rollback risk."
+        }
+      }
+    ]
+  }
+}
+```
+
+Search responses intentionally return concise summaries. To retrieve a complete stored skill, call `manage_skills` with `export_markdown`, or call `get_skill` with `includeContent: true` when the caller has management access.
 
 ### `manage_memory` claim actions
 
@@ -428,25 +600,20 @@ Persistence and prompt behavior:
 For task create/update calls:
 - `title` is canonical; `name` is accepted as an alias.
 - `projectId` is required for list/create, and `sprintId` is required for create. List can omit `sprintId` to return all project tasks.
-- Supported edit fields include `promptMarkdown`, `description`, `status`, `priority`, `executorType`, `agentPresetId` (`model` is accepted as an alias), `sortOrder`, `dependsOnTaskIds`, `isIndependent`, and `isMerged`.
+- Supported edit fields include `promptMarkdown`, `description`, `status`, `priority`, `executorType`, `agentPresetId`, `model`, `sortOrder`, `dependsOnTaskIds`, `isIndependent`, and `isMerged`.
 
 For quicksprint calls:
 - `manage_quicksprints` supports `list_templates`, `get_template`, `create_template`, `update_template`, `delete_template`, `execute`, and `start`.
-- `create_template` requires `name`, `description`, `icon`, `category`, and `agentInstructionMarkdown`. Optional fields include `categoryColor`, and `defaultTaskCount`.
-- `update_template` supports partial updates to the same fields as `create_template`.
 - `start` is an MCP-friendly alias for execution with `submitMode: "plan_and_start"`.
-- `execute` defaults to `submitMode: "plan_only"` when no submit mode is supplied. Both `execute` and `start` accept optional execution modifiers: `routeOverride`, and `modelOverride`.
+- `execute` defaults to `submitMode: "plan_only"` when no submit mode is supplied.
 - `taskCount` is the canonical task-number field for execution. MCP accepts it as a number or numeric string.
 - `noTaskLimit: true` lets the planner choose the number of subtasks and disables the fixed-count prompt.
-- Flattened target fields (like `promptMarkdown`, `modelOverride`, etc.) are also accepted when scheduling or executing templates.
 - `delete_template` requires approval confirmation. Custom templates are removed from the project template directory; built-in/default templates are hidden for the project by writing a local tombstone marker instead of deleting shared bundled assets.
 
 For scheduler calls:
 - `manage_scheduler` supports `list`, `create`, `schedule_sprint`, `schedule_quicksprint`, `schedule_chat`, `update`, `delete`, and `run_due`.
-- `run_due` accepts an optional `now` ISO date override.
-- Generic `create` requires `targetType: "sprint" | "quicksprint" | "chat" | "memory_remediation"`. Memory remediation targets are also managed via their dedicated `/api/projects/:projectId/scheduler/memory-remediation` routes.
-- The `schedule_*` aliases infer the target type and accept flattened target fields. `create` accepts nested targets (`sprintTarget`, `quicksprintTarget`, `chatTarget`).
-- Scheduling supports an absolute date/time (`scheduledFor`) or an `after_sprint_end` anchor using `scheduleMode: "after_sprint_end"` or `anchorMode: "after_sprint_end"` with `sourceSprintId` / `anchorSourceSprintId` and an optional `offsetMinutes` / `anchorOffsetMinutes`.
+- Generic `create` requires `targetType: "sprint" | "quicksprint" | "chat"`.
+- The `schedule_*` aliases infer the target type and accept flattened target fields.
 - Recurrence `frequency` accepts `minutely`, `hourly`, `daily`, `weekly`, and `monthly`; the dashboard renders `minutely` as `Minutes` and the matching recurrence summaries use labels such as `Every minute` and `Every 15 minutes`.
 - Minute recurrence uses the same UTC scheduler math as longer intervals, so the normalized rule advances `nextRunAt` and expands occurrences exactly like other frequencies once the minute literal has been parsed.
 - Scheduled quicksprints use the same `taskCount` number or numeric-string normalization as direct quicksprints.
@@ -456,7 +623,7 @@ For scheduler calls:
 
 For preview calls:
 - `manage_preview` supports `list_sessions`, `start_session`, `rebuild_session`, `stop_session`, `remove_session`, `get_logs`, `get_url`, `get_script`, and `update_script`.
-- `remove_session` requires approval confirmation. These actions apply per project and sprint, and `start_session`/`rebuild_session` can handle multiple container port mappings mapped to loopback host ports.
+- `remove_session` requires approval confirmation.
 
 For settings patch calls, `value` may be any JSON value, including strings, booleans, numbers, `null`, arrays, or objects.
 Settings patch and replacement calls still require the stateful human-confirmation gate described above.

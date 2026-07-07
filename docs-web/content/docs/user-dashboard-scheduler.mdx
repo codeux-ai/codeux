@@ -1,0 +1,52 @@
+# Scheduler
+
+The **Scheduler** page (dock label **Schedule**, `/scheduler`) runs Code UX work on a timetable.
+Schedule a sprint, a quicksprint template, a project message, or memory remediation to fire once
+or on a recurring cadence — useful for nightly maintenance sweeps, periodic audits, or recurring
+planning prompts.
+
+## Views
+
+- **Calendar** — a month view of upcoming occurrences.
+- **Day** — a focused list of what runs on a given day.
+
+## Schedule targets
+
+Each scheduler entry has a **target** — the thing that runs when it fires:
+
+| Target | What it does |
+| --- | --- |
+| **Sprint** | Starts an existing sprint in the project. |
+| **Quicksprint** | Spawns and runs a [quicksprint template](/docs/user-quicksprints), substituting its variables. |
+| **Message** | Posts a project message (for example, a recurring planning or status prompt). |
+| **Memory remediation** | Runs the long-term memory cleanup workflow on a schedule. |
+
+The backend scheduler contract also supports agent-created wakeups and scheduled task reruns. Those
+entries are stored in the existing target JSON payload with `origin` and `source` set to
+`agent_scheduler`, plus `createdByAgentId` when the creating agent provides it. Agent wakeups post
+through the chat runtime with scheduler metadata, and task reruns reuse the normal task rerun
+service so workspaces, telemetry, and cancellation behavior stay consistent.
+
+Active agent-created wakeups and task runs also appear outside the Scheduler page: the top bar shows
+a scheduled-agent count for the selected project, and focusing or hovering it reveals the target
+type, title, scheduled time or anchor, target summary, and status. The same entries are projected
+into Notifications with stable scheduler-entry IDs, so read and dismissed state survives refreshes.
+
+## Recurrence
+
+An entry can run once at a specific time or repeat on a **recurrence rule** (for example daily or
+weekly). The page previews the next occurrences so you can confirm the cadence before saving.
+
+## Managing entries
+
+From the page you can:
+
+- **Create** an entry — pick a target, set the time, and choose a recurrence rule.
+- **Edit** an entry's target, time, or recurrence.
+- **Pause / resume** an entry without deleting it.
+- **Run now** to trigger an entry immediately.
+- **Delete** an entry.
+
+Scheduler changes broadcast over the dashboard's realtime channel, so the calendar stays in sync
+across open clients. Scheduled runs appear in the [Live Session](/docs/user-dashboard-live-session) and
+[Stats](/docs/user-dashboard-stats) views just like manually started work.

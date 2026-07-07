@@ -266,6 +266,49 @@ describe("local-merge helpers", () => {
     expect(await currentBranch()).toBe("operator/topic");
     expect((await git(repo, "status", "--porcelain")).stdout).toContain("?? local-note.txt");
   });
+
+  it("creates a missing temporary-worktree target from a fallback branch before merging", async () => {
+    await git(repo, "checkout", "feature");
+    await commitFile(repo, "feature.txt", "feature\n", "feat: sprint work");
+    await git(repo, "checkout", "-b", "operator/topic", "main");
+    await writeFile(path.join(repo, "local-note.txt"), "operator draft\n", "utf8");
+
+    const result = await mergeBranchLocallyInTemporaryWorktree({
+      repoPath: repo,
+      targetBranch: "dev",
+      sourceBranch: "feature",
+      commitMessage: "Merge branch 'feature' into dev",
+      fallbackTargetBranches: ["main"],
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.conflict).toBe(false);
+    expect(await currentBranch()).toBe("operator/topic");
+    expect((await git(repo, "status", "--porcelain")).stdout).toContain("?? local-note.txt");
+    expect((await git(repo, "rev-parse", "--verify", "dev")).stdout.trim()).toBeTruthy();
+    const files = (await git(repo, "ls-tree", "--name-only", "dev")).stdout;
+    expect(files).toContain("base.txt");
+    expect(files).toContain("feature.txt");
+  });
+
+  it("creates a missing configured target branch from a fallback branch before merging", async () => {
+    await git(repo, "checkout", "feature");
+    await commitFile(repo, "work.txt", "work\n", "feat: work");
+    await git(repo, "checkout", "main");
+
+    const result = await mergeBranchLocally({
+      repoPath: repo,
+      targetBranch: "dev",
+      sourceBranch: "feature",
+      commitMessage: "Merge branch 'feature' into dev",
+      fallbackTargetBranches: ["main"],
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.conflict).toBe(false);
+    expect((await git(repo, "rev-parse", "--verify", "dev")).stdout.trim()).toBeTruthy();
+    expect((await git(repo, "ls-tree", "--name-only", "dev")).stdout).toContain("work.txt");
+  });
 });
 
 describe("findRecoverableWorkerBranch", () => {

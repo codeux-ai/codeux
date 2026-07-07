@@ -1,9 +1,10 @@
 import * as fs from "fs";
 import * as path from "path";
 import os from "os";
+import { randomBytes } from "crypto";
 import { buildCandidatePaths } from "../shared/config/search-paths.js";
-import { readPort, readString } from "../shared/config/value-readers.js";
-import { getRelativeCodeUxPath } from "../shared/config/code-ux-paths.js";
+import { readInteger, readPort, readString } from "../shared/config/value-readers.js";
+import { getHomeCodeUxPath, getRelativeCodeUxPath } from "../shared/config/code-ux-paths.js";
 
 export interface AppConfig {
   apiKey: string | null;
@@ -11,12 +12,15 @@ export interface AppConfig {
   dashboardPort: number;
   apiKeyArg: string | null;
   runtimeRole: "project_manager";
+  serverMode: boolean;
   dashboardEnabled: boolean;
   mcpHttpEnabled: boolean;
   mcpHttpHost: string;
   mcpHttpPort: number | null;
   mcpHttpPath: string;
   mcpHttpAuthToken: string | null;
+  mcpHttpMaxSessions: number;
+  mcpHttpSessionTimeoutMs: number;
 }
 
 /**
@@ -98,6 +102,96 @@ const defaultMcpHttpHost = (): string => (
   shouldDefaultMcpHttpHostForDockerDesktop() ? "0.0.0.0" : "127.0.0.1"
 );
 
+const generateMcpHttpAuthToken = (): string => `cux_mcp_${randomBytes(32).toString("base64url")}`;
+
+const DEFAULT_MCP_HTTP_MAX_SESSIONS = 100;
+const DEFAULT_MCP_HTTP_SESSION_TIMEOUT_MS = 60 * 60 * 1000;
+const MIN_MCP_HTTP_AUTH_TOKEN_LENGTH = 32;
+const MAX_MCP_HTTP_MAX_SESSIONS = 100_000;
+const MAX_MCP_HTTP_SESSION_TIMEOUT_MS = 24 * 60 * 60 * 1000;
+const MCP_HTTP_BEARER_TOKEN_PATTERN = /^[A-Za-z0-9._~+/-]+={0,2}$/;
+
+const validateServerModeMcpHttpAuthToken = (token: string): void => {
+  if (token.length < MIN_MCP_HTTP_AUTH_TOKEN_LENGTH || !MCP_HTTP_BEARER_TOKEN_PATTERN.test(token)) {
+    throw new Error("CODE_UX_SERVER_MODE requires an MCP HTTP auth token with at least 32 bearer-safe characters.");
+  }
+};
+
+const readBoundedInteger = (value: unknown, fallback: number, min: number, max: number): number => {
+  const parsed = readInteger(value, fallback);
+  if (parsed < min || parsed > max) {
+    return fallback;
+  }
+  return parsed;
+};
+
+const getUserSecurityConfigPath = (): string => {
+  const overrideDir = process.env.CODE_UX_HOME?.trim();
+  return overrideDir
+    ? path.join(overrideDir, "security.json")
+    : getHomeCodeUxPath("security.json");
+};
+
+const readStoredMcpHttpAuthToken = (): string | null => {
+  const securityConfigPath = getUserSecurityConfigPath();
+  try {
+    if (!fs.existsSync(securityConfigPath)) {
+      return null;
+    }
+    const parsed = JSON.parse(fs.readFileSync(securityConfigPath, "utf-8")) as Record<string, unknown>;
+    const token = readString(parsed.mcpHttpAuthToken ?? parsed.mcpHttpsAuthToken, "");
+    return token.trim().length > 0 ? token.trim() : null;
+  } catch {
+    return null;
+  }
+};
+
+const writeStoredMcpHttpAuthToken = (token: string): void => {
+  const securityConfigPath = getUserSecurityConfigPath();
+  const directory = path.dirname(securityConfigPath);
+  fs.mkdirSync(directory, { recursive: true, mode: 0o700 });
+
+  let existing: Record<string, unknown> = {};
+  try {
+    if (fs.existsSync(securityConfigPath)) {
+      const parsed = JSON.parse(fs.readFileSync(securityConfigPath, "utf-8")) as unknown;
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        existing = parsed as Record<string, unknown>;
+      }
+    }
+  } catch {
+    existing = {};
+  }
+
+  const next = {
+    ...existing,
+    mcpHttpAuthToken: token,
+  };
+  fs.writeFileSync(securityConfigPath, `${JSON.stringify(next, null, 2)}\n`, { mode: 0o600 });
+  try {
+    fs.chmodSync(securityConfigPath, 0o600);
+  } catch {
+    // Some filesystems do not support chmod; the restrictive write mode is still applied where possible.
+  }
+};
+
+export const loadOrCreateUserMcpHttpAuthToken = (): string => {
+  const existing = readStoredMcpHttpAuthToken();
+  if (existing) {
+    return existing;
+  }
+
+  const token = generateMcpHttpAuthToken();
+  writeStoredMcpHttpAuthToken(token);
+  return token;
+};
+
+export const regenerateUserMcpHttpAuthToken = (): string => {
+  const token = generateMcpHttpAuthToken();
+  writeStoredMcpHttpAuthToken(token);
+  return token;
+};
+
 export const parseRuntimeRoleArg = (argv: string[]): AppConfig["runtimeRole"] => {
   void argv;
   return "project_manager";
@@ -107,6 +201,15 @@ export const hasHeadlessArg = (argv: string[]): boolean => {
   const args = argv.slice(2);
   return args.includes("--headless") || args.includes("--no-dashboard");
 };
+
+export const hasServerModeArg = (argv: string[]): boolean => {
+  const args = argv.slice(2);
+  return args.includes("--server-mode");
+};
+
+const isServerModeEnabled = (argv: string[]): boolean => (
+  hasServerModeArg(argv) || parseBooleanEnv(process.env.CODE_UX_SERVER_MODE) === true
+);
 
 /**
  * Resolves the API key from environment variables or settings files.
@@ -223,6 +326,89 @@ const mcpHttpPortLoader = (argv: string[], projectRoot: string, dashboardPort: n
   return explicitDisable ? null : dashboardPort + 1;
 };
 
+const readProjectConfig = (projectRoot: string): Record<string, unknown> | null => {
+  const searchPaths = buildCandidatePaths("config.json", projectRoot).filter(
+    (p) => !p.startsWith(path.resolve(os.homedir()))
+  );
+
+  for (const configPath of searchPaths) {
+    try {
+      if (!fs.existsSync(configPath)) continue;
+      const raw = fs.readFileSync(configPath, "utf-8");
+      const parsed = JSON.parse(raw) as unknown;
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        return parsed as Record<string, unknown>;
+      }
+    } catch {
+      // Ignore invalid config file while loading startup config.
+    }
+  }
+
+  return null;
+};
+
+const mcpHttpMaxSessionsLoader = (argv: string[], projectRoot: string): number => {
+  const cliValue = parseStringFlag(argv, "--mcp-https-max-sessions")
+    ?? parseStringFlag(argv, "--mcp-http-max-sessions");
+  if (cliValue !== null) {
+    return readBoundedInteger(cliValue, DEFAULT_MCP_HTTP_MAX_SESSIONS, 1, MAX_MCP_HTTP_MAX_SESSIONS);
+  }
+
+  const envValue = process.env.MCP_HTTPS_MAX_SESSIONS ?? process.env.MCP_HTTP_MAX_SESSIONS;
+  if (typeof envValue === "string") {
+    return readBoundedInteger(envValue, DEFAULT_MCP_HTTP_MAX_SESSIONS, 1, MAX_MCP_HTTP_MAX_SESSIONS);
+  }
+
+  const parsed = readProjectConfig(projectRoot);
+  const candidates: unknown[] = [
+    parsed?.mcpHttpsMaxSessions,
+    parsed?.MCP_HTTPS_MAX_SESSIONS,
+    (parsed?.mcpHttps as Record<string, unknown> | undefined)?.maxSessions,
+    parsed?.mcpHttpMaxSessions,
+    parsed?.MCP_HTTP_MAX_SESSIONS,
+    (parsed?.mcpHttp as Record<string, unknown> | undefined)?.maxSessions,
+  ];
+  for (const candidate of candidates) {
+    const value = readBoundedInteger(candidate, -1, 1, MAX_MCP_HTTP_MAX_SESSIONS);
+    if (value !== -1) {
+      return value;
+    }
+  }
+
+  return DEFAULT_MCP_HTTP_MAX_SESSIONS;
+};
+
+const mcpHttpSessionTimeoutMsLoader = (argv: string[], projectRoot: string): number => {
+  const cliValue = parseStringFlag(argv, "--mcp-https-session-timeout-ms")
+    ?? parseStringFlag(argv, "--mcp-http-session-timeout-ms");
+  if (cliValue !== null) {
+    return readBoundedInteger(cliValue, DEFAULT_MCP_HTTP_SESSION_TIMEOUT_MS, 1_000, MAX_MCP_HTTP_SESSION_TIMEOUT_MS);
+  }
+
+  const envValue = process.env.MCP_HTTPS_SESSION_TIMEOUT_MS ?? process.env.MCP_HTTP_SESSION_TIMEOUT_MS;
+  if (typeof envValue === "string") {
+    return readBoundedInteger(envValue, DEFAULT_MCP_HTTP_SESSION_TIMEOUT_MS, 1_000, MAX_MCP_HTTP_SESSION_TIMEOUT_MS);
+  }
+
+  const parsed = readProjectConfig(projectRoot);
+  const candidates: unknown[] = [
+    parsed?.mcpHttpsSessionTimeoutMs,
+    parsed?.MCP_HTTPS_SESSION_TIMEOUT_MS,
+    (parsed?.mcpHttps as Record<string, unknown> | undefined)?.sessionTimeoutMs,
+    parsed?.mcpHttpSessionTimeoutMs,
+    parsed?.MCP_HTTP_SESSION_TIMEOUT_MS,
+    (parsed?.mcpHttp as Record<string, unknown> | undefined)?.sessionTimeoutMs,
+  ];
+  for (const candidate of candidates) {
+    const value = readBoundedInteger(candidate, -1, 1_000, MAX_MCP_HTTP_SESSION_TIMEOUT_MS);
+    if (value !== -1) {
+      return value;
+    }
+  }
+
+  return DEFAULT_MCP_HTTP_SESSION_TIMEOUT_MS;
+};
+
 /**
  * Loads the complete application configuration.
  */
@@ -232,14 +418,16 @@ export const loadAppConfig = (argv: string[], projectRoot: string): AppConfig =>
   const baseUrl = process.env.JULES_API_BASE_URL || "https://jules.googleapis.com/v1alpha";
   const dashboardPort = dashboardPortLoader(projectRoot);
   const runtimeRole = parseRuntimeRoleArg(argv);
-  const dashboardEnabled = !hasHeadlessArg(argv);
+  const serverMode = isServerModeEnabled(argv);
+  const dashboardEnabled = serverMode ? false : !hasHeadlessArg(argv);
   const explicitMcpHttpHost = parseStringFlag(argv, "--mcp-https-host")?.trim()
     || parseStringFlag(argv, "--mcp-http-host")?.trim()
     || process.env.MCP_HTTPS_HOST?.trim()
     || process.env.MCP_HTTP_HOST?.trim()
     || "";
   const mcpHttpHost = explicitMcpHttpHost || defaultMcpHttpHost();
-  const mcpHttpPort = mcpHttpPortLoader(argv, projectRoot, dashboardPort);
+  const loadedMcpHttpPort = mcpHttpPortLoader(argv, projectRoot, dashboardPort);
+  const mcpHttpPort = serverMode && loadedMcpHttpPort === null ? dashboardPort + 1 : loadedMcpHttpPort;
   const mcpHttpEnabled = mcpHttpPort !== null && mcpHttpPort > 0;
   const mcpHttpPath = normalizePathValue(
     parseStringFlag(argv, "--mcp-https-path")?.trim()
@@ -253,10 +441,19 @@ export const loadAppConfig = (argv: string[], projectRoot: string): AppConfig =>
     || process.env.MCP_HTTPS_AUTH_TOKEN?.trim()
     || process.env.MCP_HTTP_AUTH_TOKEN?.trim()
     || null;
-  const mcpHttpAuthToken = explicitMcpHttpAuthToken;
+  if (serverMode && !explicitMcpHttpAuthToken) {
+    throw new Error("CODE_UX_SERVER_MODE requires a non-empty MCP HTTP auth token via MCP_HTTPS_AUTH_TOKEN, MCP_HTTP_AUTH_TOKEN, --mcp-https-auth-token, or --mcp-http-auth-token.");
+  }
+  if (serverMode && explicitMcpHttpAuthToken) {
+    validateServerModeMcpHttpAuthToken(explicitMcpHttpAuthToken);
+  }
+
+  const mcpHttpAuthToken = explicitMcpHttpAuthToken || (mcpHttpEnabled ? loadOrCreateUserMcpHttpAuthToken() : null);
+  const mcpHttpMaxSessions = mcpHttpMaxSessionsLoader(argv, projectRoot);
+  const mcpHttpSessionTimeoutMs = mcpHttpSessionTimeoutMsLoader(argv, projectRoot);
 
   if (mcpHttpEnabled && !isLoopbackHost(mcpHttpHost) && !mcpHttpAuthToken) {
-    throw new Error("MCP HTTPS auth token is required when binding the MCP HTTPS server to a non-loopback host.");
+    throw new Error("MCP HTTP auth token is required when binding the MCP HTTP server to a non-loopback host.");
   }
 
   return {
@@ -265,11 +462,14 @@ export const loadAppConfig = (argv: string[], projectRoot: string): AppConfig =>
     dashboardPort,
     apiKeyArg,
     runtimeRole,
+    serverMode,
     dashboardEnabled,
     mcpHttpEnabled,
     mcpHttpHost,
     mcpHttpPort,
     mcpHttpPath,
     mcpHttpAuthToken,
+    mcpHttpMaxSessions,
+    mcpHttpSessionTimeoutMs,
   };
 };

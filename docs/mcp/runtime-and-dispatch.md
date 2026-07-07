@@ -11,7 +11,7 @@ Startup sequence:
 3. `src/server/code-ux-server.ts` constructs repositories/services/handlers/orchestrator.
 4. `src/server/code-ux-server.ts` registers MCP request handlers.
 5. `src/server/code-ux-server.ts` loads settings and prunes disconnected MCP connection rows.
-6. `src/server/code-ux-server.ts` starts dashboard server.
+6. `src/server/code-ux-server.ts` starts the dashboard server unless headless or server mode disables it.
    - Dashboard API routes (such as project, sprint, task, conversation, and planning endpoints) are broken out into modular route files for maintainability.
    - Route wrappers and body request parsers are maintained as separate server-layer boundaries.
 7. `src/server/code-ux-server.ts` connects MCP stdio transport only when stdin is an MCP pipe/socket or `CODE_UX_ENABLE_MCP_STDIO=1` is set. TTY stdin and daemon-style character-device stdin such as `/dev/null` leave stdio disabled so the dashboard/backend stays alive without an attached client.
@@ -34,7 +34,29 @@ Code UX exposes these MCP runtime roles:
 - `project_manager`: The default human-facing and remote-client surface.
 - `worker-host`: A headless execution role used by the local worker client.
 
-The legacy `worker_gateway` and `code-ux-worker` roles have been removed.
+The legacy `worker_gateway` runtime role has been removed. `codeux-worker` is a shipped worker process entrypoint, not a separate MCP runtime role advertised by the main server.
+
+## Worker Enrollment And Dispatch
+
+External worker hosts enroll as database-backed worker endpoints instead of using a separate cluster schema. Each endpoint is keyed by a stable MCP connection key (`mcp:<connectionKey>`) and records display name, transport, heartbeat-derived status, and execution/supervision capabilities in `worker_endpoints`.
+
+Project eligibility is represented by `project_worker_assignments`. A project can have one primary worker plus any number of overflow workers; this assignment model does not cap the number of registered endpoints. Live MCP connections and enrolled external endpoints both use the same assignment records, and stale or offline endpoints are excluded from new task claims.
+
+Worker task pickup is lease-backed:
+
+- queued `task_dispatches` are claimed in priority order, filtered by project, sprint, sprint run, and executor type
+- the claim transaction marks the dispatch `claimed`, binds its connection when available, and creates a `task_dispatch` row in `execution_leases`
+- active leases prevent duplicate claims; expired leases can be replaced by a new worker claim
+- worker heartbeats renew the task-dispatch lease while running
+- cancellation and pause requests remain visible through the dispatch status and are returned to workers on update
+
+Startup mode is separate from runtime role:
+
+- Dashboard mode is the default. It binds the dashboard plus the MCP HTTP gateway.
+- Headless mode (`--headless` or `--no-dashboard`) skips the dashboard while preserving the existing local-development MCP behavior, including unauthenticated loopback when the gateway is explicitly started without a token.
+- Server mode (`--server-mode` or `CODE_UX_SERVER_MODE=true`) is the explicit remote MCP startup contract. It skips dashboard, dashboard realtime, terminal websocket, and static route registration; starts MCP HTTP by default; and requires a non-empty explicit bearer token from `MCP_HTTPS_AUTH_TOKEN`, `MCP_HTTP_AUTH_TOKEN`, `--mcp-https-auth-token`, or `--mcp-http-auth-token`, even on loopback. The MCP HTTP listener serves `/health` and `/ready` without the dashboard server.
+
+For operator startup commands, client connection checks, settings synchronization, cluster worker enrollment, and troubleshooting, see [Secure Headless Server Mode](../operations/server-mode.md).
 
 ## MCP Request Handlers
 
@@ -45,9 +67,13 @@ Registered schemas:
 ### Tool list handler
 Returns enabled tool definitions from `src/contracts/mcp-tool-definitions.ts`, filtered by dashboard `mcpTools` settings.
 
+When a worker MCP client advertises an agent preset, Code UX resolves that agent's explicit MCP access policy before listing tools. Unknown or malformed agent identities fail closed: `list_tools` returns no built-in Code UX tools, and `call_tool` returns MCP `MethodNotFound`.
+
 ### Tool call handler
 - Resolves tool name.
 - Verifies tool is enabled in `mcpTools`.
+- Applies the same per-agent Code UX access policy used by `list_tools`.
+- Validates tool arguments against the registered JSON schema before dispatch.
 - Dispatches through typed `ToolRegistry` registration in `src/api/mcp/tool-registry.ts`.
 - Wraps unknown tool as MCP `MethodNotFound`.
 - Normalizes runtime/API errors into `isError` response.
@@ -68,10 +94,26 @@ This allows all log lines emitted during a tool call to share a single `correlat
 - Typed registry layer: `src/api/mcp/tool-registry.ts`
   - Defines strict argument interfaces for every MCP tool.
   - Provides `register` and `dispatch` APIs with compile-time tool/argument matching.
+- Management dispatch target: `ManagementToolHandler`
+  - Routes dedicated management tools such as `manage_projects`, `manage_memory`, and `manage_skills` to domain action classes.
+  - Routes retrieval tools such as `search_knowledge` and `search_skills` separately, so agents can receive retrieval without broader management authority.
+  - Applies stateful approval fingerprints to destructive management actions before mutation.
 - Core dispatch target: `CoreToolHandler`
 - Agent dispatch target: `AgentToolHandler`
 
 This split keeps tool contracts stable while allowing orchestration internals to evolve independently.
+
+## Persistent Skill Tools
+
+Persistent skills use `SkillService` as the backend boundary. The MCP layer does not write markdown files into project workspaces and does not duplicate persistence logic; it validates payloads, formats concise responses, and calls the service.
+
+Runtime behavior:
+
+- `manage_skills` is a Code UX management tool in the `agents_memory` category. It supports storage CRUD, skill markdown import/export, agent storage attachment management, and the skill-authoring prompt.
+- `delete_storage`, `reset_storage`, and `delete_skill` return approval-required envelopes on first call and only mutate on the matching confirmed call.
+- `search_skills` is registered as a distinct retrieval tool in the same category. Per-agent MCP policy can disable `manage_skills` while leaving `search_skills` enabled.
+- Search scoping is project-owned. `storageId` limits retrieval to one storage; otherwise `agentPresetId` limits retrieval to the agent's attached storages; otherwise all project storages are eligible.
+- Search results return ranked summaries with IDs and metadata. Full markdown retrieval remains behind `manage_skills` (`export_markdown` or `get_skill` with `includeContent: true`).
 
 ## Custom MCP Defaults
 
@@ -86,7 +128,21 @@ Code UX seeds Playwright MCP as a default custom MCP server:
 
 The built-in `code_ux` MCP tool surface is controlled separately from custom MCP servers. Agent presets store MCP access in `mcp_access_json`: `codeUxEnabled` controls the built-in Code UX tools, while `linkedServerIds` selects custom MCP servers such as `playwright`.
 
-By default, the built-in `Worker` and `Project manager` agents link the `playwright` server and keep `code_ux` enabled. Generated task-coding roster agents created by Project Setup use the same default link when they are first created. Existing agents keep user-edited MCP access selections, so setup and sync do not overwrite custom server choices after creation.
+Agent-scoped provider runs are default-deny for built-in Code UX tools. Missing, malformed, or unconfigured agent MCP access resolves with `codeUxEnabled: false`, no linked custom servers, and no inherited `code_ux` connection. Explicitly saved `mcp_access_json` records are preserved and continue to control the agent. Non-agent project-manager MCP clients are still governed by system-level `mcpTools` settings rather than agent defaults.
+
+The built-in `Worker` and `Project manager` agents still seed the `playwright` custom MCP server where that link is intended, but this custom-server default no longer implies built-in Code UX tool access. Generated task-coding roster agents created by Project Setup use the same custom-server-only default when they are first created. Planning, QA, setup, clarification, CI-fix, merge-conflict, and other non-chat agents do not receive scheduler or management Code UX tools unless their preset explicitly enables them.
+
+The dashboard chat reply route has one narrow exception. When it resolves to the built-in/default reply agent, or to a configured reply preset without explicit MCP access, Code UX injects scheduler-only access: `codeUxEnabled` is true, the restricted `scheduler` tool is enabled, and `manage_scheduler`, `manage_tasks`, `manage_sprints`, `manage_settings`, `manage_code_ux`, and every other built-in Code UX tool are explicitly disabled. This exception is route-local; it does not change the Project manager agent's general MCP defaults or the system-level project-manager MCP surface.
+
+## Internal Test Provider
+
+`mockup-cli` is an internal test-only CLI provider. Settings sanitization, provider defaults, and invocation routing preserve it when an explicit system or project settings payload includes it, so tests can route task coding, CI fixes, and merge-conflict repair through a deterministic mock provider. It has no credential or auth-mount requirement, uses the `default` model, and is disabled by default.
+
+The mock runtime executes in both host and Docker workspaces through a self-contained Node command, so it does not install packages or call a provider API. Prompts can include deterministic directives such as `mockup-cli:write <path> :: <content>`, `mockup-cli:append <path> :: <content>`, `mockup-cli:replace <path> :: <old> => <new>`, `mockup-cli:run <command>`, and `mockup-cli:fail`. Validation commands are parsed into explicit argv values and executed without shell interpretation. File paths are resolved inside the prepared provider workspace; attempts to write outside that workspace fail. Merge-conflict test prompts can use `mockup-cli:conflict <path> :: <content>` or mention a merge-conflict task to produce deterministic conflict markers.
+
+Mock usage telemetry is reported as zero-token, `unsupported` mock telemetry with a stable native session id and a sanitized assistant transcript.
+
+Normal dashboard onboarding and provider selection surfaces use public provider lists and do not advertise `mockup-cli`. The default Playwright MCP server also remains linked only to public local CLI providers unless a settings payload explicitly opts into a different provider list.
 
 ## Transport Model
 
@@ -105,16 +161,19 @@ The main Code UX server can also expose an authenticated MCP HTTP endpoint.
 
 That endpoint:
 
-- is configured through `MCP_HTTP_*` env vars or `--mcp-http*` flags
+- is configured through `MCP_HTTP_*` / `MCP_HTTPS_*` env vars or `--mcp-http*` / `--mcp-https*` flags
 - exposes the same project-manager tool surface as stdio
-- no longer exposes a separate worker-control-plane runtime
+- uses the project-manager tool surface for worker control-plane calls instead of a separate worker-control-plane runtime role
+- uses a generated user bearer token from `~/.code-ux/security.json` when no explicit token is supplied
+- requires an explicit bearer token in server mode and rejects the generated user token fallback
+- is HTTP at the Node listener; deploy TLS with a trusted reverse proxy/certificate when remote HTTPS is required
 
 ## Dashboard Settings Path
 
 The Settings > MCP panel explains both runtime connection modes in place:
 
-- Code UX exposes the built-in MCP server over stdio by default.
-- Authenticated Streamable HTTP for external MCP clients is enabled at startup with `MCP_HTTP_*` environment variables or `--mcp-http*` flags.
+- Code UX exposes the built-in MCP server over stdio and authenticated Streamable HTTP.
+- The Local CLI HTTP setup section shows the active URL and bearer token, lets the user regenerate the token, and can install the Code UX MCP entry into local Claude Code, Gemini, Codex, Qwen Code, OpenCode, and Antigravity config files.
 - Custom remote MCP servers are added from system scope by choosing `HTTP / SSE`, pasting the server URL, and optionally entering auth headers as a JSON object of header names to string values.
 - HTTP custom server previews use `{ type: "http", url, headers }`; stdio custom server previews use command, args, and env.
 - Custom server changes are injected into MCP-capable CLI containers on the next CLI run. Project scope can enable, disable, or override inherited system servers, but new custom servers are created at system scope.

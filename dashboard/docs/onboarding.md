@@ -15,3 +15,7 @@ Key functions:
 
 ## UI Flow
 The UI uses GSAP and a reduced motion hook for transitions. Deep Ocean background applies for aesthetic appeal. State is preserved across multiple settings tabs until the user finishes onboarding.
+
+## Installation Step
+
+`OnboardingInstallationStep.tsx` is the reusable presentational view for Docker/Git readiness setup. It receives readiness installer metadata and callback props from its parent; it does not call installer APIs directly. When required dependencies are missing and the recommended installer option is available, the step shows `Auto Install dependencies` and explains that Code UX will run the detected OS package manager only after that explicit click. Advanced choices expose `Docker Desktop + Git` and `Docker Engine + Git` with availability, recommended/degraded state, privilege and manual-download guidance, live progress, latest command results, retry/recheck actions, and preserved manual Docker/Git links.

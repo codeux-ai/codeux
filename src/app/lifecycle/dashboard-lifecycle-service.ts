@@ -14,6 +14,8 @@ import type {
   ExternalSettingsHints,
   GitTrackingStatus,
   JulesActivity,
+  OnboardingDependencyInstallerResult,
+  OnboardingDependencyInstallMode,
   OnboardingRuntimeReadiness,
   ProjectLiveDashboardSnapshot,
   ProjectStatsQuery,
@@ -65,8 +67,22 @@ import { getRepoDebugLogPath, CODE_UX_SERVICE_NAME } from "../../shared/config/c
 import { getProjectLiveSnapshot } from "../live/project-live-snapshot.js";
 import { DashboardSnapshotCache, mapAssignedWorkers } from "./dashboard-snapshot-cache.js";
 import { prepareGitProjectCreateInput } from "../../services/project-git-clone-service.js";
-import { getOnboardingRuntimeReadiness } from "../../services/onboarding-readiness-service.js";
+import {
+  detectOnboardingInstallerEnvironment,
+  executeOnboardingDependencyInstall,
+} from "../../services/onboarding-dependency-installer-service.js";
+import {
+  getOnboardingRuntimeReadiness,
+  invalidateOnboardingRuntimeReadinessCache,
+} from "../../services/onboarding-readiness-service.js";
 import type { SprintImportedTaskInput } from "../../contracts/project-management-types.js";
+import type { McpConnectionInfo } from "../../contracts/mcp-connection-types.js";
+import type {
+  LocalMcpCliConfigService,
+  LocalMcpCliProvider,
+  LocalMcpInstallResult,
+  LocalMcpSetupInfo,
+} from "../../services/local-mcp-cli-config-service.js";
 
 const updateCheckerService = new UpdateCheckerService();
 
@@ -108,6 +124,7 @@ export interface BootDashboardDeps {
   isHealthy: () => ReadinessProbeStatus;
   listDockerContainers: () => Promise<DockerContainer[]>;
   getOnboardingRuntimeReadiness?: () => Promise<OnboardingRuntimeReadiness>;
+  installOnboardingDependencies?: (mode: OnboardingDependencyInstallMode) => Promise<OnboardingDependencyInstallerResult>;
   listSprintPreviewSessions: (projectId: string) => Promise<SprintPreviewSession[]>;
   getSprintPreviewSession: (sessionId: string) => Promise<SprintPreviewSession | null>;
   getSprintPreviewSessionForProjectSprint: (projectId: string, sprintId: string, sessionId: string) => Promise<SprintPreviewSession>;
@@ -156,6 +173,9 @@ export interface BootDashboardDeps {
   embeddingService: EmbeddingService;
   memoryRepository: MemoryRepository;
   knowledgeService: KnowledgeService;
+  localMcpCliConfigService: LocalMcpCliConfigService;
+  getLocalMcpConnectionInfo: () => McpConnectionInfo | null;
+  regenerateMcpHttpAuthToken: () => string;
 }
 
 export function reinitializeLogger(deps: { projectRoot: string, runtimeContext: RuntimeContext }): Logger {
@@ -388,6 +408,12 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<DashboardS
     logger: deps.logger.child({ component: "instruction-file-service" }),
   });
 
+  const getDefaultOnboardingRuntimeReadiness = deps.getOnboardingRuntimeReadiness
+    ?? (async () => getOnboardingRuntimeReadiness(
+      deps.settingsRepository.getSystemSettings(),
+      await detectOnboardingInstallerEnvironment(),
+    ));
+
   const handle = await setupDashboardServer({
     app: deps.app,
     dashboardDir,
@@ -432,6 +458,7 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<DashboardS
     // `/api/projects/:id/execution` (sprints/overview/chat) — feed-less.
     getProjectExecutionSnapshot: cache.getProjectExecutionSnapshotLean,
     getProjectStatsSnapshot: cache.getProjectStatsSnapshot,
+    getHeaderTokenThroughputSnapshot: cache.getHeaderTokenThroughputSnapshot,
     setPreferredWorker: (projectId, input) => {
       requireProject(deps, projectId);
       const assignments = deps.projectWorkerAssignmentService.setProjectPreferredWorker(projectId, input);
@@ -469,6 +496,13 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<DashboardS
     getLiveActivities: deps.getLiveActivitiesForActiveTasks,
     getGitStatus: deps.getGitStatus,
     getExternalSettingsHints: () => deps.externalSettingsHints,
+    getLocalMcpSetup: (): LocalMcpSetupInfo => deps.localMcpCliConfigService.getSetupInfo(deps.getLocalMcpConnectionInfo()),
+    regenerateLocalMcpAuthToken: (): LocalMcpSetupInfo => {
+      deps.regenerateMcpHttpAuthToken();
+      return deps.localMcpCliConfigService.getSetupInfo(deps.getLocalMcpConnectionInfo());
+    },
+    installLocalMcpProvider: (provider: LocalMcpCliProvider): Promise<LocalMcpInstallResult> =>
+      deps.localMcpCliConfigService.installProvider(provider, deps.getLocalMcpConnectionInfo()),
     getSystemSettings: () => deps.settingsRepository.getSystemSettings(),
     getUpdateStatus: () => updateCheckerService.checkForUpdate(),
     saveSystemSettings: (settings) => {
@@ -657,7 +691,7 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<DashboardS
     writeInstructionFile: (projectId, fileId, content) => instructionFileService.writeInstructionFile(projectId, fileId, content),
     listConversationThreads: (projectId) => deps.connectionChatRepository.listThreads(projectId),
     createConversationThread: (projectId, input) => deps.connectionChatRepository.createThread(projectId, input),
-    updateConversationThread: (threadId, input) => deps.connectionChatRepository.updateThread(threadId, input),
+    updateConversationThread: (threadId, input) => deps.chatThreadRuntimeService.updateConversationThread(threadId, input),
     updateThreadRoute: (threadId, input) => deps.chatThreadRuntimeService.updateThreadRoute(threadId, input),
     compactThreadSession: (threadId) => deps.chatThreadRuntimeService.compactThreadSession(threadId),
     cancelThreadTurn: (threadId) => deps.chatThreadRuntimeService.cancelInFlightTurn(threadId),
@@ -733,8 +767,20 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<DashboardS
     isReady: deps.isReady,
     isHealthy: deps.isHealthy,
     listDockerContainers: deps.listDockerContainers,
-    getOnboardingRuntimeReadiness: deps.getOnboardingRuntimeReadiness
-      ?? (() => getOnboardingRuntimeReadiness(deps.settingsRepository.getSystemSettings())),
+    getOnboardingRuntimeReadiness: getDefaultOnboardingRuntimeReadiness,
+    installOnboardingDependencies: deps.installOnboardingDependencies
+      ?? (async (mode) => {
+        const environment = await detectOnboardingInstallerEnvironment();
+        const readiness = deps.getOnboardingRuntimeReadiness
+          ? await getDefaultOnboardingRuntimeReadiness()
+          : await getOnboardingRuntimeReadiness(deps.settingsRepository.getSystemSettings(), environment);
+        return executeOnboardingDependencyInstall({
+          mode,
+          dependencies: readiness.dependencies,
+          environment,
+          invalidateReadinessCache: invalidateOnboardingRuntimeReadinessCache,
+        });
+      }),
     getOnboardingState: () => deps.settingsRepository.getOnboardingState(),
     markOnboardingCompleted: () => deps.settingsRepository.markOnboardingCompleted(),
     resetOnboardingState: () => deps.settingsRepository.resetOnboardingState(),

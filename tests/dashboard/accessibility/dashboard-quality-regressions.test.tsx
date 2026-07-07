@@ -692,10 +692,15 @@ describe("dashboard accessibility quality regressions", () => {
     const quicksprintPanel = readSource("dashboard/src/v2/components/quicksprint/QuicksprintPanel.tsx");
     expect(quicksprintPanel).toMatch(/role="status"/);
 
-    const settings = readSource("dashboard/src/v2/components/settings/SettingsContentPanels.tsx");
-    expect(settings).toMatch(/aria-busy=\{activeSaving \|\| loading \|\| resettingProject \? "true" : undefined\}/);
-    expect(settings).toMatch(/role=\{error \? "alert" : "status"\}/);
-    expect(settings).toMatch(/Current values remain visible/);
+    const settingsContentPanels = readSource("dashboard/src/v2/components/settings/SettingsContentPanels.tsx");
+    expect(settingsContentPanels).toMatch(/aria-busy=\{activeSaving \|\| loading \|\| resettingProject \? "true" : undefined\}/);
+    expect(settingsContentPanels).toMatch(/<SettingsActivePanelStatus state=\{state\} stickyTop=\{stickyTop\} \/>/);
+    expect(settingsContentPanels).toMatch(/Current values remain visible/);
+
+    const settingsActivePanelStatus = readSource("dashboard/src/v2/components/settings/SettingsActivePanelStatus.tsx");
+    expect(settingsActivePanelStatus).toMatch(/role=\{error \? "alert" : "status"\}/);
+    expect(settingsActivePanelStatus).toMatch(/aria-live=\{error \? "assertive" : "polite"\}/);
+    expect(settingsActivePanelStatus).toMatch(/data-settings-sticky=\{sticky \? "active-panel" : undefined\}/);
 
     const liveSessionViewModel = readSource("dashboard/src/v2/lib/live-session-view-model.ts");
     expect(liveSessionViewModel).toMatch(/Stale Data/);

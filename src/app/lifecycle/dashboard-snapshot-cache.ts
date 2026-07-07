@@ -1,5 +1,6 @@
 import type { BootDashboardDeps } from "./dashboard-lifecycle-service.js";
 import type {
+  HeaderTokenThroughputQuery,
   ProjectStatsQuery,
   ExecutionConnectionSummary,
   ExecutionAssignedWorkerSummary,
@@ -116,6 +117,8 @@ export class DashboardSnapshotCache {
   private leanExecutionSnapshotKeysByProject = new Map<string, Set<ProjectExecutionSnapshotCacheKey>>();
   private projectStatsSnapshotCache = new Map<string, { snapshot: ReturnType<DashboardSnapshotCacheDeps["executionRepository"]["getProjectStatsSnapshot"]>; expiresAt: number }>();
   private projectStatsSnapshotKeysByProject = new Map<string, Set<string>>();
+  private headerTokenThroughputSnapshotCache = new Map<string, { snapshot: ReturnType<DashboardSnapshotCacheDeps["executionRepository"]["getHeaderTokenThroughputSnapshot"]>; expiresAt: number }>();
+  private headerTokenThroughputSnapshotKeysByProject = new Map<string, Set<string>>();
   private overviewTelemetryCache: { snapshot: ReturnType<DashboardSnapshotCacheDeps["executionRepository"]["getOverviewTelemetrySnapshot"]>; expiresAt: number } | null = null;
   private projectsSnapshotCache: { snapshot: ReturnType<DashboardSnapshotCacheDeps["projectManagementRepository"]["listProjects"]>; expiresAt: number } | null = null;
 
@@ -263,6 +266,24 @@ export class DashboardSnapshotCache {
     return snapshot;
   };
 
+  getHeaderTokenThroughputSnapshot = (query: HeaderTokenThroughputQuery = { window: "24h" }) => {
+    const now = Date.now();
+    const cacheKey = DashboardSnapshotCachePolicy.getHeaderTokenThroughputCacheKey(query);
+    const cached = this.headerTokenThroughputSnapshotCache.get(cacheKey);
+    if (cached && cached.expiresAt > now) {
+      return cached.snapshot;
+    }
+    const snapshot = this.deps.executionRepository.getHeaderTokenThroughputSnapshot(query);
+    this.headerTokenThroughputSnapshotCache.set(cacheKey, {
+      snapshot,
+      expiresAt: now + DashboardSnapshotCachePolicy.HEADER_TOKEN_THROUGHPUT_CACHE_TTL_MS,
+    });
+    if (query.projectId) {
+      this.registerProjectCacheKey(this.headerTokenThroughputSnapshotKeysByProject, query.projectId, cacheKey);
+    }
+    return snapshot;
+  };
+
   invalidateProjectExecution(projectId: string): void {
     const executionKeys = this.projectExecutionSnapshotKeysByProject.get(projectId);
     if (executionKeys) {
@@ -283,13 +304,19 @@ export class DashboardSnapshotCache {
 
   invalidateProjectStats(projectId: string): void {
     const statsKeys = this.projectStatsSnapshotKeysByProject.get(projectId);
-    if (!statsKeys) {
-      return;
+    if (statsKeys) {
+      for (const key of statsKeys) {
+        this.projectStatsSnapshotCache.delete(key);
+      }
+      this.projectStatsSnapshotKeysByProject.delete(projectId);
     }
-    for (const key of statsKeys) {
-      this.projectStatsSnapshotCache.delete(key);
+
+    for (const key of this.headerTokenThroughputSnapshotCache.keys()) {
+      if (DashboardSnapshotCachePolicy.isHeaderTokenThroughputCacheKeyMatch(key, projectId)) {
+        this.headerTokenThroughputSnapshotCache.delete(key);
+      }
     }
-    this.projectStatsSnapshotKeysByProject.delete(projectId);
+    this.headerTokenThroughputSnapshotKeysByProject.delete(projectId);
   }
 
   invalidateOverview(): void {
@@ -307,6 +334,8 @@ export class DashboardSnapshotCache {
     this.leanExecutionSnapshotKeysByProject.clear();
     this.projectStatsSnapshotCache.clear();
     this.projectStatsSnapshotKeysByProject.clear();
+    this.headerTokenThroughputSnapshotCache.clear();
+    this.headerTokenThroughputSnapshotKeysByProject.clear();
     this.overviewTelemetryCache = null;
     this.projectsSnapshotCache = null;
   }

@@ -2,7 +2,7 @@ import type { FunctionComponent } from "preact";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "preact/hooks";
 import gsap from "gsap";
 import { Bot, Plus, Info, ShieldCheck, AlertTriangle, Database, FileText, CheckCircle2, GitBranch, Loader2, ExternalLink } from "lucide-preact";
-import type { AgentPreset } from "./types.js";
+import type { AgentPreset, SkillStorageRecord } from "./types.js";
 import type { InstructionFileSummary, InstructionFileContent } from "./lib/instruction-file-api.js";
 import { fetchInstructionFiles } from "./lib/instruction-file-api.js";
 import { useProjectData } from "./context/project-data.js";
@@ -10,6 +10,7 @@ import {
   createAgentPreset,
   deleteAgentPreset,
   fetchAgentPresets,
+  fetchSkillStorages,
   importAgentPresetFromMarkdown,
   pushAgentPresetsToRepository,
   syncAllAgentPresetsFromMarkdown,
@@ -114,6 +115,7 @@ export const AgentsPage: FunctionComponent = () => {
   const [selectedAgentUsageLoading, setSelectedAgentUsageLoading] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [instructionFiles, setInstructionFiles] = useState<InstructionFileSummary[]>([]);
+  const [skillStorages, setSkillStorages] = useState<SkillStorageRecord[]>([]);
   const [selectedFileId, setSelectedFileId] = useState<string | null>(null);
   const {
     data: effectiveSettings,
@@ -171,10 +173,23 @@ export const AgentsPage: FunctionComponent = () => {
     }
   };
 
+  const refreshSkillStorages = async (): Promise<void> => {
+    if (!selectedProject) {
+      setSkillStorages([]);
+      return;
+    }
+    try {
+      setSkillStorages(await fetchSkillStorages(selectedProject.id));
+    } catch {
+      setSkillStorages([]);
+    }
+  };
+
   useEffect(() => {
     setSelectedFileId(null);
     void refreshPresets();
     void refreshInstructionFiles();
+    void refreshSkillStorages();
   }, [selectedProject?.id]);
 
   const handleInstructionFileSaved = (updated: InstructionFileContent): void => {
@@ -475,6 +490,8 @@ export const AgentsPage: FunctionComponent = () => {
 
   const selectedPreset = presets.find((p) => p.id === selectedPresetId);
   const selectedFile = instructionFiles.find((f) => f.id === selectedFileId);
+  const selectedPresetRouteTags = selectedPreset ? routeTagsByPresetId.get(selectedPreset.id) ?? [] : [];
+  const selectedPresetIsDashboardReplyAgent = selectedPresetRouteTags.includes("Dashboard Reply");
 
   useEffect(() => {
     if (!selectedProject || !selectedPreset || selectedFileId) {
@@ -858,15 +875,18 @@ export const AgentsPage: FunctionComponent = () => {
                   defaultMemoryInstruction={effectiveSettings?.settings.memory.workerLearningsInstruction || ""}
                   providerOptions={providerOptions}
                   availableMcpServers={availableMcpServers}
+                  availableSkillStorages={skillStorages}
+                  isDashboardReplyAgent={selectedPresetIsDashboardReplyAgent}
                   onSave={handleSave}
                   onCancel={() => setIsEditing(false)}
                 />
               ) : (
                 <AgentPresetDetailPanel
                   preset={selectedPreset}
-                  routeTags={routeTagsByPresetId.get(selectedPreset.id) ?? []}
+                  routeTags={selectedPresetRouteTags}
                   providerOptions={providerOptions}
                   availableMcpServers={availableMcpServers}
+                  availableSkillStorages={skillStorages}
                   usageSummary={selectedAgentUsage}
                   usageLoading={selectedAgentUsageLoading}
                   onEdit={() => setIsEditing(true)}

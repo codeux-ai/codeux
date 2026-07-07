@@ -1,6 +1,7 @@
 import type { Express } from "express";
 import type { DashboardDependencies, DashboardServerOptions } from "./dashboard-server.js";
 import { CODE_UX_VERSION } from "../shared/config/code-ux-paths.js";
+import { buildUpdateDownloadTargets } from "../services/update-checker-service.js";
 
 import { registerProjectRoutes } from "./project-routes.js";
 import { registerSprintRoutes } from "./sprint-routes.js";
@@ -51,8 +52,24 @@ export const createDashboardRouteDependencies = (options: DashboardServerOptions
       latestVersion: null,
       updateAvailable: false,
       releaseUrl: "https://github.com/codeux-ai/codeux/releases",
+      downloadTargets: buildUpdateDownloadTargets(null),
       checkedAt: new Date().toISOString(),
     })),
+    getLocalMcpSetup: routeDependencies.getLocalMcpSetup ?? (() => ({
+      enabled: false,
+      url: null,
+      authToken: null,
+      providers: [],
+    })),
+    regenerateLocalMcpAuthToken: routeDependencies.regenerateLocalMcpAuthToken ?? (() => ({
+      enabled: false,
+      url: null,
+      authToken: null,
+      providers: [],
+    })),
+    installLocalMcpProvider: routeDependencies.installLocalMcpProvider ?? (async () => {
+      throw new Error("Local MCP CLI installation is not available.");
+    }),
   };
 };
 
