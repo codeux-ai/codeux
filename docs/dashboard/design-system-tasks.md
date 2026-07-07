@@ -39,6 +39,8 @@ The Tasks page and Kanban board should feel like a 'Refined Production Board'. I
 
 ## 4. Compose & Edit Affordances (Modals/Composers)
 *   **Surface:** Use glassmorphism (`backdrop-blur-2xl bg-white/78 dark:bg-void-800/72`) for the main composer surface.
+*   **Task Editor Layout:** The Tasks page task composer is a full-height editor surface with a persistent command bar, a large title field, expanded description and markdown prompt editors, dependency management in the main column, and a compact execution/settings rail for priority, executor, and worker-agent selection.
+*   **Worker Agent Selection:** Task creation and editing expose a card-style worker-agent selector with a built-in worker option plus configured agent presets. The built-in option is stored as `null`, while preset selections persist their `agentPresetId`.
 *   **Fields:** Form fields should have clear hit areas, distinct borders that highlight on focus (`focus-visible:ring-signal-500`), and consistent typography.
 *   **Validation:** Error states must be visually distinct but non-disruptive, using red accents (`text-red-500`) and clear iconography (AlertCircle) below or beside the field. Ensure text does not cause layout jumping.
 
