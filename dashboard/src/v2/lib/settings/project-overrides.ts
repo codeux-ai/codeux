@@ -18,6 +18,9 @@ const cloneMemorySettings = (memory: ProjectSettings["memory"]): ProjectSettings
 });
 
 const cloneJiraSettings = (jira: SystemSettings["integrations"]["jira"]): SystemSettings["integrations"]["jira"] => ({ ...jira });
+const cloneImporterSettings = (
+  settings: SystemSettings["integrations"]["notion"],
+): SystemSettings["integrations"]["notion"] => ({ ...settings });
 
 const cloneQualityAssuranceTrigger = (
   trigger: ProjectSettings["agents"]["qualityAssurance"]["taskCompletion"],
@@ -139,6 +142,22 @@ const defaultJiraSettings = (): SystemSettings["integrations"]["jira"] => ({
   closeTransitionName: "Done",
 });
 
+const defaultImporterSettings = (): SystemSettings["integrations"]["notion"] => ({
+  enabled: false,
+  apiToken: "",
+  apiSecret: "",
+  baseUrl: "",
+  workspaceId: "",
+  teamId: "",
+  teamKey: "",
+  projectId: "",
+  databaseId: "",
+  boardId: "",
+  documentId: "",
+  fileKey: "",
+  defaultSearchLimit: 25,
+});
+
 export const dashboardSettingsToProjectSettings = (settings: DashboardSettings): ProjectSettings => ({
   appearance: { ...settings.appearance },
   automationLevel: settings.automationLevel,
@@ -160,6 +179,13 @@ export const dashboardSettingsToProjectSettings = (settings: DashboardSettings):
     prDescription: settings.git.prDescription,
   },
   jira: cloneJiraSettings(settings.jira),
+  notion: cloneImporterSettings(settings.notion),
+  asana: cloneImporterSettings(settings.asana),
+  linear: cloneImporterSettings(settings.linear),
+  miro: cloneImporterSettings(settings.miro),
+  lucid: cloneImporterSettings(settings.lucid),
+  figma: cloneImporterSettings(settings.figma),
+  mural: cloneImporterSettings(settings.mural),
   ciIntelligence: {
     ...settings.ciIntelligence,
   },
@@ -200,6 +226,13 @@ export const cloneProjectSettings = (settings: ProjectSettings): ProjectSettings
     ...settings.git,
   },
   jira: cloneJiraSettings(settings.jira),
+  notion: cloneImporterSettings(settings.notion),
+  asana: cloneImporterSettings(settings.asana),
+  linear: cloneImporterSettings(settings.linear),
+  miro: cloneImporterSettings(settings.miro),
+  lucid: cloneImporterSettings(settings.lucid),
+  figma: cloneImporterSettings(settings.figma),
+  mural: cloneImporterSettings(settings.mural),
   ciIntelligence: {
     ...settings.ciIntelligence,
   },
@@ -236,6 +269,13 @@ export const cloneSystemSettings = (settings: SystemSettings): SystemSettings =>
   integrations: {
     ...settings.integrations,
     jira: settings.integrations.jira ? cloneJiraSettings(settings.integrations.jira) : defaultJiraSettings(),
+    notion: settings.integrations.notion ? cloneImporterSettings(settings.integrations.notion) : defaultImporterSettings(),
+    asana: settings.integrations.asana ? cloneImporterSettings(settings.integrations.asana) : defaultImporterSettings(),
+    linear: settings.integrations.linear ? cloneImporterSettings(settings.integrations.linear) : defaultImporterSettings(),
+    miro: settings.integrations.miro ? cloneImporterSettings(settings.integrations.miro) : defaultImporterSettings(),
+    lucid: settings.integrations.lucid ? cloneImporterSettings(settings.integrations.lucid) : defaultImporterSettings(),
+    figma: settings.integrations.figma ? cloneImporterSettings(settings.integrations.figma) : defaultImporterSettings(),
+    mural: settings.integrations.mural ? cloneImporterSettings(settings.integrations.mural) : defaultImporterSettings(),
     providers: cloneIntegrationProviders(settings.integrations.providers),
   },
   defaults: cloneProjectSettings(settings.defaults),
@@ -271,6 +311,7 @@ export const applyExternalHintsToSystemSettings = (
   return {
     ...cloneSystemSettings(settings),
     integrations: {
+      ...cloneSystemSettings(settings).integrations,
       providers: nextProviders,
       githubToken: settings.integrations.githubToken || hints.resolved.githubToken || "",
       gitlabToken: settings.integrations.gitlabToken || hints.resolved.gitlabToken || "",

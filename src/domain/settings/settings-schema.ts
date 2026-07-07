@@ -15,6 +15,7 @@ import type {
   InvocationRoutingProfile,
   ConsoleLogMode,
   RuntimeLogLevel,
+  ExternalImporterProvider,
 } from "../../contracts/app-types.js";
 import { EMBEDDING_MODEL_IDS } from "../../contracts/memory-types.js";
 import type { EmbeddingModelId } from "../../contracts/memory-types.js";
@@ -30,6 +31,7 @@ import {
   INVOCATION_ROUTING_PROFILES,
   CONSOLE_LOG_MODES,
   RUNTIME_LOG_LEVELS,
+  EXTERNAL_IMPORTER_PROVIDERS,
   GUARDRAIL_JOB_TYPES,
   GUARDRAIL_ON_LIMIT_ACTIONS,
   QA_EXHAUSTION_POLICIES,
@@ -353,6 +355,42 @@ const validateJiraSettings = (
   }
   if (typeof value.closeTransitionName !== "string") {
     issues.push({ path: `${path}.closeTransitionName`, message: "Expected a string" });
+  }
+};
+
+const EXTERNAL_IMPORTER_STRING_FIELDS = [
+  "apiToken",
+  "apiSecret",
+  "baseUrl",
+  "workspaceId",
+  "teamId",
+  "teamKey",
+  "projectId",
+  "databaseId",
+  "boardId",
+  "documentId",
+  "fileKey",
+] as const;
+
+const validateExternalImporterSettings = (
+  value: unknown,
+  path: string,
+  issues: ValidationIssue[],
+) => {
+  if (!isRecord(value)) {
+    issues.push({ path, message: "Expected an object" });
+    return;
+  }
+  if (typeof value.enabled !== "boolean") {
+    issues.push({ path: `${path}.enabled`, message: "Expected a boolean" });
+  }
+  for (const field of EXTERNAL_IMPORTER_STRING_FIELDS) {
+    if (typeof value[field] !== "string") {
+      issues.push({ path: `${path}.${field}`, message: "Expected a string" });
+    }
+  }
+  if (typeof value.defaultSearchLimit !== "number" || !Number.isFinite(value.defaultSearchLimit) || value.defaultSearchLimit < 1 || value.defaultSearchLimit > 250) {
+    issues.push({ path: `${path}.defaultSearchLimit`, message: "Expected a finite number between 1 and 250" });
   }
 };
 
@@ -842,6 +880,9 @@ export const validateSettingsPayload = (payload: unknown): ValidationResult<Dash
   validateAiProvider(payload.aiProvider, "aiProvider", issues);
   validateGitSettings(payload.git, "git", issues);
   validateJiraSettings(payload.jira, "jira", issues);
+  for (const provider of EXTERNAL_IMPORTER_PROVIDERS as ExternalImporterProvider[]) {
+    validateExternalImporterSettings(payload[provider], provider, issues);
+  }
   validateCiIntelligence(payload.ciIntelligence, "ciIntelligence", issues);
   validateGuardrails(payload.guardrails, "guardrails", issues);
   validateSprintLoopSteps(payload.sprintLoopSteps, "sprintLoopSteps", issues);

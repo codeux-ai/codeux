@@ -1140,6 +1140,9 @@ export function normalizeIssuePromptContextInputs(issues: IssuePromptContextInpu
   for (const issue of issues) {
     const hostDomain = issue.hostDomain.trim().toLowerCase();
     const repository = issue.repository.trim().replace(/^\/+|\/+$/g, "");
+    if (typeof issue.issueNumber !== "number") {
+      continue;
+    }
     const issueNumber = Math.trunc(issue.issueNumber);
     const title = issue.title.trim();
     const url = issue.url.trim();
