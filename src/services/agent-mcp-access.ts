@@ -9,7 +9,7 @@ import type { AgentCodeUxToolAccess } from "../mcp/mcp-tool-availability.js";
 const VALID_TOOL_NAMES = new Set<string>(TOOL_DEFINITIONS.map((tool) => tool.name));
 
 export const defaultAgentMcpAccess = (): AgentMcpAccessConfig => ({
-  codeUxEnabled: true,
+  codeUxEnabled: false,
   codeUxToolToggles: [],
   linkedServerIds: [],
 });
@@ -22,6 +22,26 @@ export const defaultCodingAgentMcpAccess = (): AgentMcpAccessConfig => ({
   ...defaultAgentMcpAccess(),
   linkedServerIds: defaultCodingAgentLinkedServerIds(),
 });
+
+export const schedulerOnlyAgentMcpAccess = (linkedServerIds: readonly string[] = []): AgentMcpAccessConfig => ({
+  codeUxEnabled: true,
+  codeUxToolToggles: TOOL_DEFINITIONS.map((tool) => ({
+    name: tool.name,
+    enabled: tool.name === "scheduler",
+    isInternal: true,
+  })),
+  linkedServerIds: Array.from(
+    new Set(linkedServerIds.filter((id) => typeof id === "string" && id.trim().length > 0).map((id) => id.trim())),
+  ),
+});
+
+export const isSchedulerOnlyAgentMcpAccess = (
+  access: Pick<AgentMcpAccessConfig, "codeUxEnabled" | "codeUxToolToggles">,
+): boolean => {
+  if (!access.codeUxEnabled) return false;
+  const enabledByName = new Map(access.codeUxToolToggles.map((toggle) => [toggle.name, toggle.enabled]));
+  return TOOL_DEFINITIONS.every((tool) => enabledByName.get(tool.name) === (tool.name === "scheduler"));
+};
 
 const sanitizeToolToggles = (value: unknown): McpToolToggle[] => {
   if (!Array.isArray(value)) return [];
@@ -50,7 +70,7 @@ export const sanitizeAgentMcpAccess = (value: unknown): AgentMcpAccessConfig => 
       )
     : [];
   return {
-    codeUxEnabled: candidate.codeUxEnabled !== false,
+    codeUxEnabled: candidate.codeUxEnabled === true,
     codeUxToolToggles: sanitizeToolToggles(candidate.codeUxToolToggles),
     linkedServerIds,
   };
@@ -88,7 +108,9 @@ const withSkillRetrievalEnabled = (access: AgentMcpAccessConfig): AgentMcpAccess
 
 /**
  * Apply per-agent MCP access to a base set of custom servers + code_ux connection.
- * When `access` is missing, the run inherits provider-wide MCP servers unchanged.
+ * When `access` is missing for an agent-scoped run, the run falls back to
+ * default-deny agent access. Non-agent runs still inherit provider-wide MCP
+ * inputs unchanged.
  * When agent-scoped and code_ux is enabled, the agent id is attached to the connection so
  * the gateway can enforce per-agent code_ux tool toggles.
  */
@@ -99,7 +121,10 @@ export const resolveAgentMcpRuntime = (args: {
   mcpConnection: McpConnectionInfo | null;
   persistentSkillRetrievalEnabled?: boolean;
 }): ResolvedAgentMcpRuntime => {
-  if (args.access == null) {
+  const agentScoped = typeof args.agentId === "string" && args.agentId.trim().length > 0;
+  const resolvedAccess = args.access ?? (agentScoped ? defaultAgentMcpAccess() : null);
+
+  if (resolvedAccess == null) {
     const mcpConnection = args.mcpConnection && args.agentId
       ? { ...args.mcpConnection, agentId: args.agentId }
       : args.mcpConnection;
@@ -110,8 +135,8 @@ export const resolveAgentMcpRuntime = (args: {
   }
 
   const access = args.persistentSkillRetrievalEnabled
-    ? withSkillRetrievalEnabled(args.access)
-    : args.access;
+    ? withSkillRetrievalEnabled(resolvedAccess)
+    : resolvedAccess;
   const linked = new Set(access.linkedServerIds);
   const customMcpServers = sanitizeCustomMcpServers(args.customMcpServers).filter((server) => linked.has(server.id));
   const baseConnection = access.codeUxEnabled ? args.mcpConnection : null;

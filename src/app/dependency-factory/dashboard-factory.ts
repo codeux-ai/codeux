@@ -442,6 +442,7 @@ export function createDashboardDependencies(
     quicksprintService,
     chatThreadRuntimeService,
     executionControlService,
+    taskRerunService,
     memoryRemediationService,
     logger: logger.child({ component: "scheduler-service" }),
   });

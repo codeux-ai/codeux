@@ -15,6 +15,7 @@ import type { QuicksprintService } from "./quicksprint-service.js";
 import type { ChatThreadRuntimeService } from "./chat-thread-runtime-service.js";
 import type { ExecutionControlService } from "./execution-control-service.js";
 import type { MemoryRemediationService } from "./memory-remediation-service.js";
+import type { TaskRerunService } from "./task-rerun-service.js";
 import { buildSchedulerOccurrences, computeNextRunAfterOccurrence } from "../domain/scheduler/schedule-time.js";
 import type { CreateDashboardConversationMessageInput } from "../contracts/connection-chat-types.js";
 
@@ -27,6 +28,7 @@ export interface SchedulerServiceDeps {
   quicksprintService: QuicksprintService;
   chatThreadRuntimeService: ChatThreadRuntimeService;
   executionControlService: ExecutionControlService;
+  taskRerunService?: TaskRerunService;
   memoryRemediationService?: MemoryRemediationService;
   logger: Logger;
   tickIntervalMs?: number;
@@ -83,6 +85,10 @@ export class SchedulerService {
     this.validateInputTarget(projectId, input);
     this.validateScheduleAnchor(projectId, input);
     return this.deps.schedulerRepository.createEntry(projectId, input);
+  }
+
+  getEntry(entryId: string): SchedulerEntryRecord | null {
+    return this.deps.schedulerRepository.getEntry(entryId);
   }
 
   getMemoryRemediationSchedule(projectId: string): MemoryRemediationScheduleResponse {
@@ -153,6 +159,8 @@ export class SchedulerService {
       sprintTarget: input.sprintTarget ?? current.sprintTarget,
       quicksprintTarget: input.quicksprintTarget ?? current.quicksprintTarget,
       chatTarget: input.chatTarget ?? current.chatTarget,
+      agentWakeupTarget: input.agentWakeupTarget ?? current.agentWakeupTarget,
+      taskTarget: input.taskTarget ?? current.taskTarget,
       memoryRemediationTarget: input.memoryRemediationTarget ?? current.memoryRemediationTarget,
     });
     this.validateScheduleAnchor(current.projectId, {
@@ -162,6 +170,8 @@ export class SchedulerService {
       sprintTarget: input.sprintTarget ?? current.sprintTarget,
       quicksprintTarget: input.quicksprintTarget ?? current.quicksprintTarget,
       chatTarget: input.chatTarget ?? current.chatTarget,
+      agentWakeupTarget: input.agentWakeupTarget ?? current.agentWakeupTarget,
+      taskTarget: input.taskTarget ?? current.taskTarget,
       memoryRemediationTarget: input.memoryRemediationTarget ?? current.memoryRemediationTarget,
       recurrence: input.recurrence ? { ...current.recurrence, ...input.recurrence } : current.recurrence,
     });
@@ -249,6 +259,46 @@ export class SchedulerService {
       return;
     }
 
+    if (entry.targetType === "task") {
+      const target = entry.taskTarget;
+      if (!target) {
+        throw new Error("Scheduled task target is missing.");
+      }
+      if (!this.deps.taskRerunService) {
+        throw new Error("Task rerun service is not enabled.");
+      }
+      await this.deps.taskRerunService.rerunTask(
+        target.taskId,
+        target.provider ? { provider: target.provider } : undefined,
+      );
+      return;
+    }
+
+    if (entry.targetType === "agent_wakeup") {
+      const target = entry.agentWakeupTarget;
+      if (!target) {
+        throw new Error("Scheduled agent wakeup target is missing.");
+      }
+      const metadata: Record<string, unknown> = {
+        source: "agent_scheduler",
+        origin: "agent_scheduler",
+        schedulerEntryId: entry.id,
+        scheduledFor: entry.nextRunAt ?? entry.scheduledFor,
+      };
+      if (target.createdByAgentId) {
+        metadata.createdByAgentId = target.createdByAgentId;
+      }
+      const input: CreateDashboardConversationMessageInput = {
+        threadId: target.threadId || undefined,
+        title: target.title || entry.title,
+        connectionId: target.connectionId || undefined,
+        bodyMarkdown: target.bodyMarkdown,
+        metadata,
+      };
+      await this.deps.chatThreadRuntimeService.postMessage(entry.projectId, input);
+      return;
+    }
+
     const target = entry.chatTarget;
     if (!target) {
       throw new Error("Scheduled chat target is missing.");
@@ -268,9 +318,30 @@ export class SchedulerService {
   }
 
   private validateInputTarget(projectId: string, input: CreateSchedulerEntryInput | UpdateSchedulerEntryInput): void {
+    if (input.targetType === "agent_wakeup") {
+      const bodyMarkdown = input.agentWakeupTarget?.bodyMarkdown?.trim();
+      if (!bodyMarkdown) {
+        throw new Error("agentWakeupTarget.bodyMarkdown is required.");
+      }
+      return;
+    }
+
+    if (input.targetType === "task") {
+      const taskId = input.taskTarget?.taskId?.trim();
+      if (!taskId) {
+        throw new Error("taskTarget.taskId is required.");
+      }
+      const task = this.deps.projectManagementRepository.getTask(taskId);
+      if (!task || task.projectId !== projectId) {
+        throw new Error("Only tasks in the selected project can be scheduled.");
+      }
+      return;
+    }
+
     if (input.targetType !== "sprint") {
       return;
     }
+
     const sprintId = input.sprintTarget?.sprintId;
     if (!sprintId) {
       return;

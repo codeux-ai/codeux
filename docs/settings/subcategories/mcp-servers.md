@@ -8,11 +8,11 @@ The list configures built-in tool access, custom server enablement, transport, p
 
 ## Recommended Defaults
 
-Keep built-in tools enabled and restrict custom servers to the CLIs that need them.
+Keep global built-in tools available for trusted project-manager clients, leave per-agent Code UX access default-deny unless a preset has a specific need, and restrict custom servers to the CLIs and agents that need them.
 
 ## Risks And Gotchas
 
-Broad custom MCP access can expose external tools to more providers than intended.
+Broad custom MCP access can expose external tools to more providers than intended. Custom server links are separate from agent Code UX access; linking Playwright or another custom server does not imply built-in Code UX tools are enabled for that agent.
 
 ## Dashboard Link
 

@@ -10,6 +10,7 @@ const tempDirs: string[] = [];
 
 async function createRepositories(): Promise<{
   dir: string;
+  storage: AppDbStorage;
   projectRepository: ProjectManagementRepository;
   schedulerRepository: SchedulerRepository;
 }> {
@@ -18,6 +19,7 @@ async function createRepositories(): Promise<{
   const storage = new AppDbStorage(path.join(dir, "app.db"));
   return {
     dir,
+    storage,
     projectRepository: new ProjectManagementRepository(storage),
     schedulerRepository: new SchedulerRepository(storage),
   };
@@ -83,6 +85,132 @@ describe("SchedulerRepository", () => {
     const stored = schedulerRepository.getEntry(entry.id);
     expect(stored?.recurrence).toEqual(entry.recurrence);
     expect(schedulerRepository.listEntries(project.id)[0]?.recurrence).toEqual(entry.recurrence);
+    expect(schedulerRepository.listEntries(project.id)[0]?.chatTarget).toEqual({
+      bodyMarkdown: "Check in",
+      threadId: null,
+      title: "Scheduled message",
+      connectionId: null,
+    });
+  });
+
+  it("persists and hydrates agent wakeup targets with agent scheduler metadata", async () => {
+    const { dir, storage, projectRepository, schedulerRepository } = await createRepositories();
+    const project = projectRepository.createProject({
+      name: "Scheduler Project",
+      sourceType: "local",
+      sourceRef: dir,
+    });
+
+    const entry = schedulerRepository.createEntry(project.id, {
+      targetType: "agent_wakeup",
+      scheduledFor: "2026-05-18T09:00:00.000Z",
+      agentWakeupTarget: {
+        bodyMarkdown: "  Wake up and review the thread.  ",
+        threadId: " thread-1 ",
+        connectionId: " connection-1 ",
+        title: "  Review wakeup  ",
+        origin: "agent_scheduler",
+        source: "agent_scheduler",
+        createdByAgentId: " agent-1 ",
+      },
+    });
+
+    expect(entry.agentWakeupTarget).toEqual({
+      bodyMarkdown: "Wake up and review the thread.",
+      threadId: "thread-1",
+      connectionId: "connection-1",
+      title: "Review wakeup",
+      origin: "agent_scheduler",
+      source: "agent_scheduler",
+      createdByAgentId: "agent-1",
+    });
+    expect(entry.title).toBe("Review wakeup");
+
+    const stored = schedulerRepository.getEntry(entry.id);
+    expect(stored?.agentWakeupTarget).toEqual(entry.agentWakeupTarget);
+
+    const row = storage.getDatabase().prepare(`
+      SELECT target_json
+      FROM scheduler_entries
+      WHERE id = ?
+    `).get(entry.id) as { target_json: string };
+    expect(JSON.parse(row.target_json)).toEqual({
+      agentWakeupTarget: entry.agentWakeupTarget,
+    });
+
+    const updated = schedulerRepository.updateEntry(entry.id, {
+      agentWakeupTarget: {
+        ...entry.agentWakeupTarget!,
+        bodyMarkdown: "Updated wakeup",
+        createdByAgentId: "agent-2",
+      },
+    });
+
+    expect(updated.agentWakeupTarget).toEqual({
+      ...entry.agentWakeupTarget,
+      bodyMarkdown: "Updated wakeup",
+      createdByAgentId: "agent-2",
+    });
+    expect(schedulerRepository.getEntry(entry.id)?.agentWakeupTarget).toEqual(updated.agentWakeupTarget);
+  });
+
+  it("persists and hydrates task targets with provider and agent scheduler metadata", async () => {
+    const { dir, storage, projectRepository, schedulerRepository } = await createRepositories();
+    const project = projectRepository.createProject({
+      name: "Scheduler Project",
+      sourceType: "local",
+      sourceRef: dir,
+    });
+    const sprint = projectRepository.createSprint(project.id, {
+      name: "Retry sprint",
+      goal: "Retry a task.",
+    });
+    const task = projectRepository.createTask(project.id, {
+      sprintId: sprint.id,
+      title: "Retry task",
+    });
+
+    const entry = schedulerRepository.createEntry(project.id, {
+      targetType: "task",
+      scheduledFor: "2026-05-18T09:00:00.000Z",
+      taskTarget: {
+        taskId: ` ${task.id} `,
+        provider: "codex",
+        origin: "agent_scheduler",
+        source: "agent_scheduler",
+        createdByAgentId: "agent-1",
+      },
+    });
+
+    expect(entry.taskTarget).toEqual({
+      taskId: task.id,
+      provider: "codex",
+      origin: "agent_scheduler",
+      source: "agent_scheduler",
+      createdByAgentId: "agent-1",
+    });
+    expect(entry.title).toBe("Scheduled task rerun");
+
+    const updated = schedulerRepository.updateEntry(entry.id, {
+      taskTarget: {
+        ...entry.taskTarget!,
+        provider: "claude-code",
+      },
+    });
+    expect(updated.taskTarget).toEqual({
+      ...entry.taskTarget,
+      provider: "claude-code",
+    });
+    expect(schedulerRepository.getEntry(entry.id)?.taskTarget).toEqual(updated.taskTarget);
+
+    const row = storage.getDatabase().prepare(`
+      SELECT target_json
+      FROM scheduler_entries
+      WHERE id = ?
+    `).get(entry.id) as { target_json: string };
+    expect(JSON.parse(row.target_json)).toEqual({
+      taskTarget: updated.taskTarget,
+    });
   });
 
   it("persists after-sprint-end anchors in the target payload without a schema migration", async () => {

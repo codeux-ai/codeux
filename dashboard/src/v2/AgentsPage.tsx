@@ -490,6 +490,8 @@ export const AgentsPage: FunctionComponent = () => {
 
   const selectedPreset = presets.find((p) => p.id === selectedPresetId);
   const selectedFile = instructionFiles.find((f) => f.id === selectedFileId);
+  const selectedPresetRouteTags = selectedPreset ? routeTagsByPresetId.get(selectedPreset.id) ?? [] : [];
+  const selectedPresetIsDashboardReplyAgent = selectedPresetRouteTags.includes("Dashboard Reply");
 
   useEffect(() => {
     if (!selectedProject || !selectedPreset || selectedFileId) {
@@ -874,13 +876,14 @@ export const AgentsPage: FunctionComponent = () => {
                   providerOptions={providerOptions}
                   availableMcpServers={availableMcpServers}
                   availableSkillStorages={skillStorages}
+                  isDashboardReplyAgent={selectedPresetIsDashboardReplyAgent}
                   onSave={handleSave}
                   onCancel={() => setIsEditing(false)}
                 />
               ) : (
                 <AgentPresetDetailPanel
                   preset={selectedPreset}
-                  routeTags={routeTagsByPresetId.get(selectedPreset.id) ?? []}
+                  routeTags={selectedPresetRouteTags}
                   providerOptions={providerOptions}
                   availableMcpServers={availableMcpServers}
                   availableSkillStorages={skillStorages}

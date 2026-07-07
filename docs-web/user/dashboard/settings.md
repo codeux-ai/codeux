@@ -718,9 +718,9 @@ Lists built-in and custom MCP servers injected into provider CLI runtimes.
 
 **What it controls:** The list configures built-in tool access, custom server enablement, transport, provider restrictions, and server creation.
 
-**Recommended defaults:** Keep built-in tools enabled and restrict custom servers to the CLIs that need them.
+**Recommended defaults:** Keep global built-in tools available for trusted project-manager clients, but leave per-agent Code UX access default-deny unless a preset has a specific need. Restrict custom servers to the CLIs and agents that need them.
 
-**Risks and gotchas:** Broad custom MCP access can expose external tools to more providers than intended.
+**Risks and gotchas:** Broad custom MCP access can expose external tools to more providers than intended. Custom server links are separate from agent Code UX access; linking Playwright or another custom server does not imply built-in Code UX tools are enabled for that agent.
 
 Related docs:
 
@@ -733,11 +733,11 @@ Related docs:
 
 Controls which built-in Code UX MCP tool categories are available to containerized CLIs.
 
-**What it controls:** Tool-category and individual-tool toggles decide what providers may call on their next run.
+**What it controls:** Tool-category and individual-tool toggles decide what trusted provider and project-manager clients may call on their next run. Agent presets add their own access layer in the Agents editor.
 
-**Recommended defaults:** Disable only categories you know a provider should not access.
+**Recommended defaults:** Keep the global surface aligned with project-manager workflows. For individual agents, start with Code UX disabled. When an agent needs scheduling, enable scheduler-only access from the agent MCP manager before considering broader tools.
 
-**Risks and gotchas:** Disabling required tools can make provider workflows fail; enabling broad tools increases capability exposure.
+**Risks and gotchas:** Disabling required tools can make provider workflows fail; enabling broad tools increases capability exposure. The restricted `scheduler` tool lets an agent create its own wakeups or task reruns, while `manage_scheduler` and other management tools expose broader runtime control. Non-chat agents should not receive scheduler or management tools unless that capability is intentional.
 
 Related docs:
 

@@ -96,6 +96,80 @@ describe("SchedulerService", () => {
     expect(schedulerRepository.markRunSucceeded).toHaveBeenCalledWith("entry-1", "2026-05-18T09:00:00.000Z", null);
   });
 
+  it("posts due agent wakeups through the chat runtime with agent scheduler metadata", async () => {
+    const entry = createEntry({
+      targetType: "agent_wakeup",
+      sprintTarget: undefined,
+      agentWakeupTarget: {
+        bodyMarkdown: "Wake up and continue the review.",
+        threadId: "thread-1",
+        title: "Review wakeup",
+        connectionId: "connection-1",
+        origin: "agent_scheduler",
+        source: "agent_scheduler",
+        createdByAgentId: "agent-1",
+      },
+      recurrence: normalizeRecurrenceRule(),
+    });
+    const schedulerRepository = {
+      listDueEntries: vi.fn(() => [entry]),
+      getEntry: vi.fn(() => entry),
+      markRunSucceeded: vi.fn(),
+      markRunFailed: vi.fn(),
+    };
+    const chatThreadRuntimeService = {
+      postMessage: vi.fn().mockResolvedValue({ id: "message-1" }),
+    };
+    const service = buildService(schedulerRepository, { chatThreadRuntimeService });
+
+    await service.runDueEntries(new Date("2026-05-18T09:00:01.000Z"));
+
+    expect(chatThreadRuntimeService.postMessage).toHaveBeenCalledWith("project-1", {
+      threadId: "thread-1",
+      title: "Review wakeup",
+      connectionId: "connection-1",
+      bodyMarkdown: "Wake up and continue the review.",
+      metadata: {
+        source: "agent_scheduler",
+        origin: "agent_scheduler",
+        schedulerEntryId: "entry-1",
+        scheduledFor: "2026-05-18T09:00:00.000Z",
+        createdByAgentId: "agent-1",
+      },
+    });
+    expect(schedulerRepository.markRunSucceeded).toHaveBeenCalledWith("entry-1", "2026-05-18T09:00:00.000Z", null);
+  });
+
+  it("reruns due task targets through the task rerun service", async () => {
+    const entry = createEntry({
+      targetType: "task",
+      sprintTarget: undefined,
+      taskTarget: {
+        taskId: "task-1",
+        provider: "codex",
+        origin: "agent_scheduler",
+        source: "agent_scheduler",
+        createdByAgentId: "agent-1",
+      },
+      recurrence: normalizeRecurrenceRule(),
+    });
+    const schedulerRepository = {
+      listDueEntries: vi.fn(() => [entry]),
+      getEntry: vi.fn(() => entry),
+      markRunSucceeded: vi.fn(),
+      markRunFailed: vi.fn(),
+    };
+    const taskRerunService = {
+      rerunTask: vi.fn().mockResolvedValue({ id: "task-1" }),
+    };
+    const service = buildService(schedulerRepository, { taskRerunService });
+
+    await service.runDueEntries(new Date("2026-05-18T09:00:01.000Z"));
+
+    expect(taskRerunService.rerunTask).toHaveBeenCalledWith("task-1", { provider: "codex" });
+    expect(schedulerRepository.markRunSucceeded).toHaveBeenCalledWith("entry-1", "2026-05-18T09:00:00.000Z", null);
+  });
+
   it("runs anchored entries only after the source sprint terminal time plus offset", async () => {
     const entry = createEntry({
       targetType: "chat",
@@ -195,6 +269,7 @@ describe("SchedulerService", () => {
       quicksprintService: (extra.quicksprintService ?? {}) as any,
       chatThreadRuntimeService: (extra.chatThreadRuntimeService ?? {}) as any,
       executionControlService: (extra.executionControlService ?? {}) as any,
+      taskRerunService: extra.taskRerunService as any,
       logger: createLogger() as any,
       tickIntervalMs: (extra.tickIntervalMs as number) ?? 30_000,
     });
@@ -450,6 +525,39 @@ describe("SchedulerService", () => {
     expect(() =>
       service.createEntry("project-1", { targetType: "sprint", sprintTarget: { sprintId: "sprint-1" } } as any),
     ).toThrow(/Only sprints in the selected project/);
+    expect(repo.createEntry).not.toHaveBeenCalled();
+  });
+
+  it("validates task targets on create against the owning project", () => {
+    const projectManagementRepository = {
+      getTask: vi.fn(() => ({ id: "task-1", projectId: "other-project", sprintId: "sprint-1" })),
+    };
+    const repo = { createEntry: vi.fn() };
+    const service = buildService(repo, { projectManagementRepository });
+
+    expect(() => service.createEntry("project-1", {
+      targetType: "task",
+      taskTarget: {
+        taskId: "task-1",
+        origin: "agent_scheduler",
+        source: "agent_scheduler",
+      },
+    })).toThrow(/Only tasks in the selected project/);
+    expect(repo.createEntry).not.toHaveBeenCalled();
+  });
+
+  it("rejects agent wakeups without body markdown before persistence", () => {
+    const repo = { createEntry: vi.fn() };
+    const service = buildService(repo);
+
+    expect(() => service.createEntry("project-1", {
+      targetType: "agent_wakeup",
+      agentWakeupTarget: {
+        bodyMarkdown: "   ",
+        origin: "agent_scheduler",
+        source: "agent_scheduler",
+      },
+    })).toThrow(/agentWakeupTarget.bodyMarkdown is required/);
     expect(repo.createEntry).not.toHaveBeenCalled();
   });
 

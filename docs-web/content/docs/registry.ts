@@ -189,7 +189,7 @@ export const docsRegistry: Record<DocsSlug, DocsRegistryEntry> = {
     path: '/docs/user-dashboard-scheduler',
     section: 'User Guide',
     title: "Scheduler",
-    description: "The Scheduler page (dock label Schedule, /scheduler) runs Code UX work on a timetable. Schedule a sprint, a quicksprint template, or a project message to fire once or on a recurring cadence — useful for nightly mainte...",
+    description: "The Scheduler page (dock label Schedule, /scheduler) runs Code UX work on a timetable. Schedule a sprint, a quicksprint template, a project message, or memory remediation to fire once or on a recurring cadence — usefu...",
   },
   'user-dashboard-memory': {
     id: 'user-dashboard-memory',

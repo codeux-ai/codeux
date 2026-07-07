@@ -1,9 +1,10 @@
 import type { FunctionComponent } from "preact";
 import { useMemo, useState } from "preact/hooks";
-import { Server, Boxes, BrainCircuit, SlidersHorizontal, Wrench, Plug, X, Check } from "lucide-preact";
+import { Server, Boxes, BrainCircuit, SlidersHorizontal, Wrench, Plug, X, Check, AlertTriangle } from "lucide-preact";
 import type { AgentMcpAccessConfig, CustomMcpServer, McpToolToggle } from "../../types.js";
 import { Toggle } from "../ui/Toggle.js";
 import { TOOL_DEFINITIONS, type McpToolCategory } from "../../../../../src/contracts/mcp-tool-definitions.js";
+import { isSchedulerOnlyAgentMcpAccess, schedulerOnlyAgentMcpAccess } from "../../lib/agent-mcp-display.js";
 
 const CATEGORY_META: Record<McpToolCategory, { label: string; description: string; icon: typeof Server }> = {
   orchestration: { label: "Orchestration", description: "Projects, sprints, and tasks", icon: Boxes },
@@ -26,8 +27,9 @@ export const AgentMcpManagePanel: FunctionComponent<{
   value: AgentMcpAccessConfig;
   onChange: (next: AgentMcpAccessConfig) => void;
   availableServers: CustomMcpServer[];
+  isDashboardReplyAgent?: boolean;
   disabled?: boolean;
-}> = ({ onClose, value, onChange, availableServers, disabled }) => {
+}> = ({ onClose, value, onChange, availableServers, isDashboardReplyAgent = false, disabled }) => {
   const [statusMessage, setStatusMessage] = useState(
     "MCP access changes are pending until the agent is saved."
   );
@@ -40,23 +42,38 @@ export const AgentMcpManagePanel: FunctionComponent<{
   }, [value.codeUxToolToggles]);
 
   const isToolEnabled = (name: string): boolean => toolEnabledByName.get(name) ?? true;
+  const schedulerOnly = isSchedulerOnlyAgentMcpAccess(value);
 
   const setCodeUxEnabled = (enabled: boolean): void => {
     if (disabled) return;
-    setStatusMessage(`Code UX tools ${enabled ? "enabled" : "disabled"}. Save Agent to persist this access change.`);
-    onChange({ ...value, codeUxEnabled: enabled });
+    if (enabled) {
+      setStatusMessage(isDashboardReplyAgent
+        ? "Scheduler-only Code UX access enabled. Save Agent to persist this access change."
+        : "Risk-gated scheduler-only Code UX access enabled. Save Agent only if this non-chat agent needs scheduler access."
+      );
+      onChange(schedulerOnlyAgentMcpAccess(value.linkedServerIds));
+      return;
+    }
+    setStatusMessage("Code UX tools disabled. Save Agent to persist this access change.");
+    onChange({ ...value, codeUxEnabled: false, codeUxToolToggles: [] });
   };
 
   const setTool = (name: string, enabled: boolean): void => {
     if (disabled) return;
-    setStatusMessage(`${name} ${enabled ? "enabled" : "disabled"}. Save Agent to persist tool access.`);
+    setStatusMessage(!isDashboardReplyAgent && enabled
+      ? `Risk-gated ${name} access enabled for a non-chat agent. Save Agent only after reviewing this capability.`
+      : `${name} ${enabled ? "enabled" : "disabled"}. Save Agent to persist tool access.`
+    );
     onChange({ ...value, codeUxToolToggles: buildToolToggles((candidate) => (candidate === name ? enabled : isToolEnabled(candidate))) });
   };
 
   const setCategory = (category: McpToolCategory, enabled: boolean): void => {
     if (disabled) return;
     const names = new Set(TOOL_DEFINITIONS.filter((def) => def.category === category).map((def) => def.name));
-    setStatusMessage(`${CATEGORY_META[category].label} tools ${enabled ? "enabled" : "disabled"}. Save Agent to persist tool access.`);
+    setStatusMessage(!isDashboardReplyAgent && enabled
+      ? `Risk-gated ${CATEGORY_META[category].label} tools enabled for a non-chat agent. Save Agent only after reviewing these capabilities.`
+      : `${CATEGORY_META[category].label} tools ${enabled ? "enabled" : "disabled"}. Save Agent to persist tool access.`
+    );
     onChange({ ...value, codeUxToolToggles: buildToolToggles((candidate) => (names.has(candidate as never) ? enabled : isToolEnabled(candidate))) });
   };
 
@@ -135,7 +152,42 @@ export const AgentMcpManagePanel: FunctionComponent<{
                 </p>
               </div>
             </div>
-            <Toggle value={value.codeUxEnabled} onChange={setCodeUxEnabled} aria-label="Enable Code UX for this agent" disabled={disabled} />
+            <Toggle
+              value={value.codeUxEnabled}
+              onChange={setCodeUxEnabled}
+              aria-label="Enable Code UX for this agent"
+              aria-describedby="agent-codeux-risk-note"
+              danger={!isDashboardReplyAgent && !value.codeUxEnabled}
+              disabled={disabled}
+            />
+          </div>
+
+          <div
+            id="agent-codeux-risk-note"
+            role={!value.codeUxEnabled || !isDashboardReplyAgent ? "alert" : "status"}
+            aria-live="polite"
+            className={`mt-4 flex items-start gap-2.5 rounded-2xl border px-4 py-3 text-[12px] leading-relaxed ${
+              !value.codeUxEnabled
+                ? "border-amber-400/25 bg-amber-400/[0.08] text-amber-700 dark:text-amber-300"
+                : !isDashboardReplyAgent
+                  ? "border-status-red/25 bg-status-red/[0.08] text-status-red"
+                  : "border-signal-500/20 bg-signal-500/[0.08] text-signal-700 dark:text-signal-300"
+            }`}
+          >
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" strokeWidth={2.3} />
+            <span>
+              {!value.codeUxEnabled
+                ? isDashboardReplyAgent
+                  ? "Code UX built-in tools are disabled. Dashboard reply agents may use scheduler-only access when chat replies need to create wakeups or task reruns."
+                  : "Code UX built-in tools are disabled by default for this agent. Enabling them is risk-gated because non-chat agents can affect runtime state."
+                : schedulerOnly
+                  ? isDashboardReplyAgent
+                    ? "Scheduler-only is the recommended safe default for the dashboard reply agent. It does not enable broader management tools."
+                    : "Scheduler-only is active for a non-chat agent. Keep this only when the agent must create its own wakeups or task reruns."
+                  : isDashboardReplyAgent
+                    ? "Additional Code UX tools are enabled beyond scheduler-only. Review each category before saving."
+                    : "This non-chat agent has Code UX tools enabled beyond the scheduler gate. Review every enabled tool before saving."}
+            </span>
           </div>
 
           {value.codeUxEnabled && (
