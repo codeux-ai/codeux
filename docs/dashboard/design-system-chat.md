@@ -53,6 +53,7 @@ Agent replies are ordinary markdown; embedding a fenced block renders a designed
 ## Interaction
 - Seamless mode switching between the cinematic "3D Chat" stage, standard "Threads" (user-facing chat), and "Invocations" (runtime debugging transcript).
 - Consistent padding and gap spacing to prevent layout jitter during these transitions.
+- Threads mode keeps **Create Desktop App** and **Create Web App** quickactions next to the composer, including the empty-thread state. These controls are plain keyboard-reachable buttons, disable while a send is in flight or no project is selected, and post short visible messages with `create_app` metadata instead of opening confirmation dialogs or switching to Invocations.
 - The invocation rail renders the first 40 newest invocations by default, then lazy-loads additional pages as the user scrolls near the bottom of the rail. The rail header and mode tab use the backend `totalCount`, not the number of loaded rows, so long-running projects show the real invocation total while keeping initial load lightweight.
 - New project-scoped threads derive an 8-word-or-less title from the first visible user message. The title is stored with the thread and mirrored to `.code-ux/conversations/<thread-id>/session-title.md`; hidden/internal messages do not drive user-facing titles.
 - Prompt preparation includes a title-refresh instruction every 20 provider invocations so long-running conversations can refresh their title without interrupting the visible transcript.

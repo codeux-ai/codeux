@@ -81,7 +81,7 @@ export interface DashboardCreateAppQuickactionStackSummary {
   testFramework?: string | null;
 }
 
-export interface DashboardCreateAppQuickactionMetadata {
+export interface DashboardCreateAppQuickactionMetadata extends Record<string, unknown> {
   quickaction: {
     type: "create_app";
     kind: DashboardCreateAppQuickactionKind;
@@ -239,7 +239,7 @@ export interface CreateDashboardConversationMessageInput {
   title?: string;
   connectionId?: string | null;
   bodyMarkdown: string;
-  metadata?: Record<string, unknown> | null;
+  metadata?: Record<string, unknown> | DashboardCreateAppQuickactionMetadata | null;
 }
 
 export interface UpdateConversationThreadInput {
