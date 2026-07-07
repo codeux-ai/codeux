@@ -19,7 +19,9 @@ install and start Code UX with **no configuration**; providers are set up later 
 First-run readiness checks report Docker CLI, Docker daemon, and Git CLI status. The backend also
 advertises safe installer options for Docker/Git setup. These options are structured metadata only
 until an installer action is invoked, and installer execution is limited to hardcoded command and
-argument arrays with bounded output capture.
+argument arrays with bounded output capture. Onboarding invokes installation through
+`POST /api/onboarding/dependencies/install` only after sending the selected `mode` with
+`confirmInstall: true`; unsupported modes and unconfirmed requests are rejected.
 
 | Platform | Recommended mode | Automated behavior | Manual or degraded behavior |
 | --- | --- | --- | --- |
