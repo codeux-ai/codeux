@@ -232,7 +232,8 @@ Disabling a step is for debugging; in production, leave them all enabled.
 }
 ```
 
-`taskPrTitleScheme` controls automated task PR titles. Supported tokens are
+`taskPrTitleScheme` controls automated task PR titles for initial task PR creation
+and QA follow-up PR resolution. Supported tokens are
 `{sprint_tag}`, `{sprint_key}`, `{sprint_number}`, `{sprint_title}`, `{task_key}`,
 `{task_title}`, and `{provider}`. `{sprint_tag}` resolves to the first linked issue key
 when present, then `<sprintKeyPrefix>-<sprint number>`, then a stable sprint slug/id.
