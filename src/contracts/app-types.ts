@@ -93,6 +93,7 @@ export type InvocationRoutingId =
   | "merge_conflict"
   | "remediation";
 export type CliExecutionMode = "DOCKER" | "HOST";
+export type ProviderConfigMode = "none" | "copyHost" | "file";
 export type FeaturePrAutoMergeMode = "OFF" | "CREATE_PR" | "WHEN_GREEN" | "ALWAYS";
 export type WorkerExecutionMode = "VIRTUAL";
 export type VirtualWorkerProvider = Exclude<ProviderId, "jules">;
@@ -661,6 +662,8 @@ export interface ProviderSettings {
   apiKey: string;
   mountAuth: boolean;
   authPath: string;
+  providerConfigMode?: ProviderConfigMode;
+  providerConfigPath?: string;
   /** Custom API endpoint base URL for providers that support it (claude-code, codex). */
   customBaseUrl?: string;
   /** Custom model identifier sent to the CLI when routing through a custom base URL (claude-code, codex). */

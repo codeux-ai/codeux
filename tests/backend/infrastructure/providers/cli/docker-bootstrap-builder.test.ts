@@ -15,6 +15,9 @@ import {
   GEMINI_MCP_SETTINGS_MOUNT,
   CODEX_MCP_CONFIG_MOUNT,
   ANTIGRAVITY_MCP_CONFIG_MOUNT,
+  CODEX_HOST_CONFIG_MOUNT,
+  GEMINI_HOST_CONFIG_MOUNT,
+  OPENCODE_HOST_CONFIG_MOUNT,
 } from "../../../../../src/infrastructure/providers/cli/docker-bootstrap-builder.js";
 import { CONTAINER_SETUP_SCRIPT } from "../../../../../src/services/cli-workflow-utils.js";
 import { DockerCredentialMountBuilder } from "../../../../../src/infrastructure/providers/cli/docker-credential-mount-builder.js";
@@ -92,6 +95,23 @@ describe("DockerBootstrapBuilder", () => {
     expect(script).toContain(`merge_json_file "${ANTIGRAVITY_MCP_CONFIG_MOUNT}" "$HOME/.gemini/antigravity-cli/mcp_config.json"`);
   });
 
+  it("copies selected provider config files before generated MCP config is applied", () => {
+    const script = builder.build({
+      runtimeNpmPrefix: "/runtime/npm-global",
+      runtimeNpmCache: "/runtime/npm-cache",
+    });
+
+    const codexConfigIndex = script.indexOf(`copy_if_present "${CODEX_HOST_CONFIG_MOUNT}" "$HOME/.codex/config.toml"`);
+    const codexMcpIndex = script.indexOf(`append_if_missing_literal "${CODEX_MCP_CONFIG_MOUNT}" "$HOME/.codex/config.toml"`);
+    const geminiConfigIndex = script.indexOf(`copy_if_present "${GEMINI_HOST_CONFIG_MOUNT}" "$HOME/.gemini/settings.json"`);
+    const geminiMcpIndex = script.indexOf(`merge_json_file "${GEMINI_MCP_SETTINGS_MOUNT}" "$HOME/.gemini/settings.json"`);
+
+    expect(codexConfigIndex).toBeGreaterThanOrEqual(0);
+    expect(codexMcpIndex).toBeGreaterThan(codexConfigIndex);
+    expect(geminiConfigIndex).toBeGreaterThanOrEqual(0);
+    expect(geminiMcpIndex).toBeGreaterThan(geminiConfigIndex);
+  });
+
   it("writes generated OpenCode config content to the runtime config path", () => {
     const script = builder.build({
       runtimeNpmPrefix: "/runtime/npm-global",
@@ -99,7 +119,8 @@ describe("DockerBootstrapBuilder", () => {
     });
 
     expect(script).toContain("materialize_opencode_config()");
-    expect(script).toContain("printf '%s\\n' \"$OPENCODE_CONFIG_CONTENT\" > \"$destination\"");
+    expect(script).toContain(`copy_if_present "${OPENCODE_HOST_CONFIG_MOUNT}" "$HOME/.config/opencode/opencode.json"`);
+    expect(script).toContain("merge_json_content \"$OPENCODE_CONFIG_CONTENT\" \"$destination\" \"opencode runtime config\"");
     expect(script).toContain("export OPENCODE_CONFIG=\"$destination\"");
     expect(script).toContain("  materialize_opencode_config");
   });
@@ -228,5 +249,45 @@ describe("DockerCredentialMountBuilder", () => {
 
     expect(mounts).toHaveLength(0);
     expect(onActivity).toHaveBeenCalledWith("Credential mount for GitHub is enabled but source path is empty.");
+  });
+
+  it("reports missing custom provider config files without mounting them", async () => {
+    const builder = new DockerCredentialMountBuilder();
+    const onActivity = vi.fn();
+
+    vi.mocked(fs.access).mockRejectedValue(new Error("ENOENT"));
+    vi.mocked(fs.stat).mockRejectedValue(new Error("ENOENT"));
+
+    const mounts = await builder.build(mockSettings, mockRepoPath, onActivity, undefined, {
+      provider: "codex",
+      mode: "file",
+      path: "/missing/codex.toml",
+    });
+
+    expect(mounts).toEqual([]);
+    expect(onActivity).toHaveBeenCalledWith("Provider config mount for Codex config is enabled but source path does not exist: /missing/codex.toml");
+  });
+
+  it("mounts a selected provider config file separately from auth directories", async () => {
+    const builder = new DockerCredentialMountBuilder();
+    const onActivity = vi.fn();
+
+    vi.mocked(fs.access).mockRejectedValue(new Error("ENOENT"));
+    vi.mocked(fs.stat).mockResolvedValue({ isFile: () => true } as any);
+
+    const mounts = await builder.build(mockSettings, mockRepoPath, onActivity, undefined, {
+      provider: "codex",
+      mode: "file",
+      path: "/custom/codex.toml",
+    });
+
+    expect(mounts).toEqual([
+      {
+        source: "/custom/codex.toml",
+        destination: CODEX_HOST_CONFIG_MOUNT,
+        readonly: true,
+      },
+    ]);
+    expect(onActivity).toHaveBeenCalledWith(expect.stringContaining("Resolved provider config mount for Codex config"));
   });
 });

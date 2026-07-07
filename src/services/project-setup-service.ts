@@ -277,6 +277,8 @@ export class ProjectSetupService {
         openCodePackage: providerConfig.openCodePackage,
         providerMountAuth: providerConfig.providerMountAuth,
         providerAuthPath: providerConfig.providerAuthPath,
+        providerConfigMode: providerConfig.providerConfigMode,
+        providerConfigPath: providerConfig.providerConfigPath,
         customBaseUrl: providerConfig.customBaseUrl,
         customModel: providerConfig.customModel,
         sessionId,
@@ -396,6 +398,8 @@ export class ProjectSetupService {
     openCodePackage?: string;
     providerMountAuth?: boolean;
     providerAuthPath?: string;
+    providerConfigMode?: DashboardSettings["aiProvider"]["providers"][string]["providerConfigMode"];
+    providerConfigPath?: string;
     customBaseUrl?: string;
     customModel?: string;
   } {
@@ -439,6 +443,8 @@ export class ProjectSetupService {
       openCodePackage: providerSettings.openCodePackage,
       providerMountAuth: providerSettings.mountAuth,
       providerAuthPath: providerSettings.authPath,
+      providerConfigMode: providerSettings.providerConfigMode,
+      providerConfigPath: providerSettings.providerConfigPath,
       customBaseUrl: providerSettings.customBaseUrl,
       customModel: providerSettings.customModel,
     };
