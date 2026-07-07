@@ -8,9 +8,9 @@ export interface AgentMcpTag {
 
 export const CODE_UX_TAG_ID = "code_ux";
 
-/** A fresh, fully-default per-agent MCP access config (code_ux on, no custom links). */
+/** A fresh, fully-default per-agent MCP access config (code_ux off, no custom links). */
 export const defaultAgentMcpAccess = (): AgentMcpAccessConfig => ({
-  codeUxEnabled: true,
+  codeUxEnabled: false,
   codeUxToolToggles: [],
   linkedServerIds: [],
 });
@@ -21,14 +21,14 @@ export const defaultAgentMcpAccess = (): AgentMcpAccessConfig => ({
  * tracking ignore no-op toggling.
  */
 export const normalizeAgentMcpAccess = (access: AgentMcpAccessConfig): AgentMcpAccessConfig => ({
-  codeUxEnabled: access.codeUxEnabled !== false,
+  codeUxEnabled: access.codeUxEnabled === true,
   codeUxToolToggles: access.codeUxToolToggles.filter((toggle) => toggle.enabled === false),
   linkedServerIds: Array.from(new Set(access.linkedServerIds)),
 });
 
 /**
  * Resolve the MCP servers linked to an agent into display tags.
- * code_ux is shown first (on by default), followed by each linked custom server
+ * code_ux is shown first when explicitly enabled, followed by each linked custom server
  * that still exists in the available list.
  */
 export const resolveAgentMcpTags = (
@@ -36,7 +36,7 @@ export const resolveAgentMcpTags = (
   availableServers: CustomMcpServer[],
 ): AgentMcpTag[] => {
   const tags: AgentMcpTag[] = [];
-  if (access?.codeUxEnabled !== false) {
+  if (access?.codeUxEnabled === true) {
     tags.push({ id: CODE_UX_TAG_ID, label: "Code UX", kind: "code_ux" });
   }
   for (const id of access?.linkedServerIds ?? []) {

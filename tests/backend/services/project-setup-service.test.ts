@@ -221,6 +221,7 @@ describe("ProjectSetupService", () => {
     });
     expect(generatedAgent?.avatarConfig).toBeTruthy();
     expect(generatedAgent?.mcpAccess?.linkedServerIds).toEqual([DEFAULT_PLAYWRIGHT_MCP_SERVER_ID]);
+    expect(generatedAgent?.mcpAccess?.codeUxEnabled).toBe(false);
     expect(setupAgent?.mcpAccess).toBeUndefined();
     await expect(fs.readFile(path.join(repoDir, ".code-ux", "agents", "frontend_runtime_agent.md"), "utf8"))
       .resolves.toContain("\"avatarConfig\"");
@@ -305,6 +306,7 @@ describe("ProjectSetupService", () => {
     expect(effective.agents.routing.taskCoding.mode).toBe("ORCHESTRATOR");
     expect(effective.agents.routing.taskCoding.orchestratorAgentPresetIds).toContain(generatedWorker?.id);
     expect(generatedWorker?.mcpAccess?.linkedServerIds).toEqual([DEFAULT_PLAYWRIGHT_MCP_SERVER_ID]);
+    expect(generatedWorker?.mcpAccess?.codeUxEnabled).toBe(false);
   });
 
   it("passes a Docker snapshot checkout for the effective default branch", async () => {

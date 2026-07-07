@@ -22,6 +22,13 @@ Tools are filtered before being advertised on `ListTools`:
    Known agents can receive tool-specific overrides; for example, `search_skills` can stay enabled
    while `manage_skills` is disabled.
 
+Agent-scoped provider runs are also default-deny for built-in Code UX tools. Newly synced Worker,
+Project manager, and generated coding agents may link the default `playwright` custom MCP server,
+but that custom-server link does not imply `code_ux` access. The dashboard chat reply route is the
+only default exception: when the reply agent has no explicit MCP access, Code UX enables only the
+restricted `scheduler` tool and explicitly disables the broad management tools such as
+`manage_scheduler`, `manage_tasks`, `manage_sprints`, `manage_settings`, and `manage_code_ux`.
+
 All inputs are validated against their declared JSON Schema (AJV) before dispatch; validation
 failures return `InvalidParams` with the failing JSON path.
 

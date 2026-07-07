@@ -114,6 +114,16 @@ function buildMcpNativeOutputInstructions(): string {
   ].join("\n");
 }
 
+function buildSchedulerOnlyOutputInstructions(): string {
+  return [
+    "You have the `scheduler` MCP tool available for agent-owned follow-ups only.",
+    "",
+    "Use it only when you need to schedule your own future wakeup or task rerun. It supports `list`, `schedule_wakeup`, `schedule_task`, and `cancel`.",
+    "You do not have broad Code UX management tools in this route. Do not call `manage_code_ux`, `manage_scheduler`, `manage_tasks`, `manage_sprints`, or `manage_settings`.",
+    "Respond with plain markdown text. Do NOT wrap your response in JSON.",
+  ].join("\n");
+}
+
 /**
  * The dashboard's cinematic chat stage renders `codeux:*` fenced blocks as
  * designed UI widgets. This section teaches the model the vocabulary; keep it
@@ -153,6 +163,7 @@ export function buildChatReplayPrompt(args: {
   workerInstructions: string;
   isDashboardReply?: boolean;
   mcpAvailable?: boolean;
+  mcpAccessMode?: "management" | "scheduler_only";
   knowledgeManifest?: string | null;
 }): string {
   const compactionSummary = getCompactionSummary(args.thread.runtimeState);
@@ -184,9 +195,11 @@ export function buildChatReplayPrompt(args: {
 
   const fallbackBody = args.bodyMarkdown ? args.bodyMarkdown.trim() : "_No new messages since the compaction summary was generated._";
 
-  const outputInstructions = args.mcpAvailable
-    ? buildMcpNativeOutputInstructions()
-    : buildJsonOutputInstructions();
+  const outputInstructions = args.mcpAvailable && args.mcpAccessMode === "scheduler_only"
+    ? buildSchedulerOnlyOutputInstructions()
+    : args.mcpAvailable
+      ? buildMcpNativeOutputInstructions()
+      : buildJsonOutputInstructions();
 
   const pendingActionContext = pendingAction ? [
     "## PENDING ACTION CONTEXT",
