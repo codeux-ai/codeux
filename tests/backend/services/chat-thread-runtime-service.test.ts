@@ -15,7 +15,7 @@ describe("ChatThreadRuntimeService", () => {
         postDashboardMessage: vi.fn(),
         getThread: vi.fn(),
         updateThread: vi.fn(),
-        listMessages: vi.fn(),
+        listMessages: vi.fn().mockReturnValue([]),
         markDashboardMessagesProcessed: vi.fn(),
         markDashboardMessagesFailed: vi.fn(),
         postSystemMessage: vi.fn(),
@@ -45,6 +45,9 @@ describe("ChatThreadRuntimeService", () => {
       chatManagementActionService: {
         processManagementAction: vi.fn(),
         executeApprovedAction: vi.fn(),
+      },
+      chatProviderOutboundService: {
+        deliverReply: vi.fn().mockResolvedValue(null),
       },
     };
     service = new ChatThreadRuntimeService(deps);
@@ -139,6 +142,68 @@ describe("ChatThreadRuntimeService", () => {
     }));
     expect(deps.connectionChatRepository.markDashboardMessagesProcessed).toHaveBeenCalledWith("t1", {
       upToMessageId: "msg-2",
+    });
+  });
+
+  it("suppresses rich widget prompt instructions and delivers persisted replies for chat-provider messages", async () => {
+    const inboundMessage = {
+      id: "msg-provider",
+      threadId: "t-provider",
+      bodyMarkdown: "status please",
+      metadata: {
+        source: "chat_provider",
+        inboundDeliveryId: "delivery-in",
+        suppressRichWidgets: true,
+      },
+    };
+    const thread = {
+      id: "t-provider",
+      projectId: "p1",
+      title: "External support",
+      connectionId: null,
+      runtimeState: {},
+    };
+    const replyMessage = {
+      id: "reply-provider",
+      threadId: "t-provider",
+      bodyMarkdown: "Plain reply",
+      metadata: null,
+    };
+    deps.connectionChatRepository.postDashboardMessage.mockReturnValue(inboundMessage);
+    deps.connectionChatRepository.getThread.mockReturnValue(thread);
+    deps.projectManagementRepository.getProject.mockReturnValue({ id: "p1", name: "proj", baseDir: "/tmp" });
+    deps.taskService.resolveInvocationProvider.mockReturnValue({
+      provider: "codex",
+      providers: { codex: { model: "gpt-5.3-codex", apiKey: "codex-key" } },
+    });
+    deps.connectionChatRepository.listMessages.mockReturnValue([inboundMessage]);
+    deps.connectionChatRepository.postSystemMessage.mockReturnValue(replyMessage);
+    deps.chatManagementActionService.processManagementAction.mockResolvedValue({
+      replyMarkdown: "Plain reply",
+      action: null,
+      approvalRequired: false,
+    });
+
+    await service.postMessage("p1", {
+      bodyMarkdown: "status please",
+      metadata: inboundMessage.metadata,
+    });
+
+    expect(deps.chatManagementActionService.processManagementAction).toHaveBeenCalledWith(
+      expect.objectContaining({
+        prompt: expect.not.stringContaining("## RICH WIDGETS"),
+      }),
+    );
+    expect(deps.chatManagementActionService.processManagementAction).toHaveBeenCalledWith(
+      expect.objectContaining({
+        prompt: expect.not.stringContaining("codeux:status"),
+      }),
+    );
+    expect(deps.chatProviderOutboundService.deliverReply).toHaveBeenCalledWith({
+      projectId: "p1",
+      thread,
+      triggeringMessage: inboundMessage,
+      replyMessage,
     });
   });
 
@@ -460,7 +525,7 @@ describe("ChatThreadRuntimeService", () => {
     expect(deps.chatManagementActionService.processManagementAction).not.toHaveBeenCalled();
   });
 
-  it("compacts a virtual thread into a stored summary and clears the active session", async () => {
+  it("compacts a virtual thread natively and preserves the active session", async () => {
     deps.connectionChatRepository.getThread.mockReturnValue({
       id: "t1",
       projectId: "p1",
@@ -483,7 +548,7 @@ describe("ChatThreadRuntimeService", () => {
     });
     deps.agentPresetSyncService.getWorkerAgent.mockResolvedValue({ instructionMarkdown: "" });
     deps.executionRepository.createExecutionInvocation.mockReturnValue({ id: "exec-compact" });
-    deps.providerRunner.runProviderForText.mockResolvedValue({ text: "## Current Objective\nKeep context", nativeSessionId: "ignored" });
+    deps.providerRunner.runProviderForText.mockResolvedValue({ text: "## Current Objective\nKeep context", nativeSessionId: "session-1" });
     deps.connectionChatRepository.updateThread.mockImplementation((threadId: string, input: any) => ({
       id: threadId,
       projectId: "p1",
@@ -501,22 +566,134 @@ describe("ChatThreadRuntimeService", () => {
     }));
     expect(deps.providerRunner.runProviderForText).toHaveBeenCalledWith(expect.objectContaining({
       provider: "claude-code",
-      continueSessionId: null,
-      sessionId: "t1:compaction",
+      continueSessionId: "session-1",
+      nativeSessionOperation: "compact",
+      sessionId: "t1",
+      workspaceSessionId: "t1",
       providerMountAuth: true,
       providerAuthPath: "~/.claude",
     }));
+    expect(JSON.stringify(deps.providerRunner.runProviderForText.mock.calls)).not.toContain("t1:compaction");
     expect(updated.runtimeState).toMatchObject({
-      replayRequired: true,
-      sessionIds: [],
+      routeKind: "virtual",
+      virtualProvider: "claude-code",
+      modelLabel: "claude-3",
+      replayRequired: false,
+      sessionIds: ["session-1"],
       compactionSummary: {
         markdown: "## Current Objective\nKeep context",
         provider: "claude-code",
         model: "claude-3",
         sourceMessageId: "m2",
         sourceMessageCount: 2,
+        nativeSessionId: "session-1",
       },
     });
+  });
+
+  it("uses the thread logical session for native compaction when no native session is stored and preserves the resolved session", async () => {
+    deps.connectionChatRepository.getThread.mockReturnValue({
+      id: "t1",
+      projectId: "p1",
+      title: "Thread",
+      connectionId: null,
+      runtimeState: {
+        routeKind: "virtual",
+        virtualProvider: "qwen-code",
+        sessionIds: [],
+        replayRequired: true,
+      },
+    });
+    deps.connectionChatRepository.listMessages.mockReturnValue([
+      { id: "m1", authorType: "dashboard_user", bodyMarkdown: "hello" },
+    ]);
+    deps.projectManagementRepository.getProject.mockReturnValue({ id: "p1", name: "proj", baseDir: "/tmp" });
+    deps.taskService.resolveInvocationProvider.mockReturnValue({
+      provider: "qwen-code",
+      providers: {
+        "qwen-code": {
+          model: "qwen3-coder",
+          apiKey: "key",
+          qwenAuthMode: "MODEL_PROVIDER",
+          qwenRegion: "international",
+          qwenBaseUrl: "https://qwen.example.test",
+          qwenEnvKey: "QWEN_KEY",
+          qwenModelId: "qwen3-coder",
+          qwenProtocol: "openai",
+        },
+      },
+    });
+    deps.executionRepository.createExecutionInvocation.mockReturnValue({ id: "exec-compact-fallback" });
+    deps.providerRunner.runProviderForText.mockResolvedValue({
+      text: "## Compact Summary\nContinue from here",
+      nativeSessionId: "qwen-native-1",
+    });
+    deps.connectionChatRepository.updateThread.mockImplementation((threadId: string, input: any) => ({
+      id: threadId,
+      projectId: "p1",
+      title: "Thread",
+      runtimeState: input.runtimeState,
+    }));
+
+    const updated = await service.compactThreadSession("t1");
+
+    expect(deps.providerRunner.runProviderForText).toHaveBeenCalledWith(expect.objectContaining({
+      provider: "qwen-code",
+      sessionId: "t1",
+      workspaceSessionId: "t1",
+      continueSessionId: "t1",
+      nativeSessionOperation: "compact",
+      qwenAuthMode: "MODEL_PROVIDER",
+      qwenRegion: "international",
+      qwenBaseUrl: "https://qwen.example.test",
+      qwenEnvKey: "QWEN_KEY",
+      qwenModelId: "qwen3-coder",
+      qwenProtocol: "openai",
+    }));
+    expect(JSON.stringify(deps.providerRunner.runProviderForText.mock.calls)).not.toContain("t1:compaction");
+    expect(updated.runtimeState).toMatchObject({
+      routeKind: "virtual",
+      virtualProvider: "qwen-code",
+      modelLabel: "qwen3-coder",
+      replayRequired: false,
+      sessionIds: ["qwen-native-1"],
+      compactionSummary: {
+        markdown: "## Compact Summary\nContinue from here",
+        provider: "qwen-code",
+        model: "qwen3-coder",
+        sourceMessageId: "m1",
+        sourceMessageCount: 1,
+        nativeSessionId: "qwen-native-1",
+      },
+    });
+  });
+
+  it("returns an actionable error instead of native compaction when a provider has no logical continuation fallback", async () => {
+    deps.connectionChatRepository.getThread.mockReturnValue({
+      id: "t1",
+      projectId: "p1",
+      title: "Thread",
+      connectionId: null,
+      runtimeState: {
+        routeKind: "virtual",
+        virtualProvider: "claude-code",
+        sessionIds: [],
+      },
+    });
+    deps.connectionChatRepository.listMessages.mockReturnValue([
+      { id: "m1", authorType: "dashboard_user", bodyMarkdown: "hello" },
+    ]);
+    deps.projectManagementRepository.getProject.mockReturnValue({ id: "p1", name: "proj", baseDir: "/tmp" });
+    deps.taskService.resolveInvocationProvider.mockReturnValue({
+      provider: "claude-code",
+      providers: { "claude-code": { model: "claude-3", apiKey: "key" } },
+    });
+
+    await expect(service.compactThreadSession("t1")).rejects.toThrow(
+      "Native chat compaction for claude-code requires an active provider session. Send a message in this thread before compacting it.",
+    );
+    expect(deps.providerRunner.runProviderForText).not.toHaveBeenCalled();
+    expect(deps.executionRepository.createExecutionInvocation).not.toHaveBeenCalled();
   });
 
   it("replays from the stored compaction summary on the next fresh virtual turn using chatManagementActionService", async () => {

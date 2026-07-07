@@ -61,6 +61,10 @@ export interface SettingsSmartFindSearchProps {
   activeCategoryConfig: Category;
   onSwitchCategory: (categoryId: CategoryId) => void;
   interactionStyle: JSX.CSSProperties;
+  activeScope?: "system" | "project";
+  activeDirty?: boolean;
+  activeSaving?: boolean;
+  saveMessage?: string | null;
 }
 
 export const SettingsSmartFindSearch: FunctionComponent<SettingsSmartFindSearchProps> = ({
@@ -73,6 +77,10 @@ export const SettingsSmartFindSearch: FunctionComponent<SettingsSmartFindSearchP
   activeCategoryConfig,
   onSwitchCategory,
   interactionStyle,
+  activeScope = "system",
+  activeDirty = false,
+  activeSaving = false,
+  saveMessage = null,
 }) => {
   const normalizedSearch = settingsSearch.trim();
   const isSearchActive = normalizedSearch.length > 0;
@@ -103,12 +111,40 @@ export const SettingsSmartFindSearch: FunctionComponent<SettingsSmartFindSearchP
       smartFindPreview,
     })
     : null;
+  const saveStateLabel = activeSaving
+    ? "Saving"
+    : activeDirty
+      ? "Unsaved edits"
+      : saveMessage
+        ? "Saved"
+        : "No edits";
 
   return (
     <>
-      <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">
-        <Compass className="h-3.5 w-3.5" strokeWidth={2.2} />
-        Smart Find
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">
+          <Compass className="h-3.5 w-3.5" strokeWidth={2.2} />
+          Smart Find
+        </div>
+        <div className="flex min-w-0 flex-wrap items-center justify-end gap-1.5" aria-label="Settings context">
+          <span className="max-w-full break-words rounded-full border border-black/[0.06] bg-white/80 px-2.5 py-1 text-[9px] font-bold uppercase tracking-[0.14em] text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.04] dark:text-slate-300">
+            {activeScope === "project" ? "Project scope" : "System scope"}
+          </span>
+          <span className="max-w-full break-words rounded-full border border-black/[0.06] bg-white/80 px-2.5 py-1 text-[9px] font-bold uppercase tracking-[0.14em] text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.04] dark:text-slate-300">
+            {activeCategoryConfig.label}
+          </span>
+          <span className={`max-w-full break-words rounded-full border px-2.5 py-1 text-[9px] font-bold uppercase tracking-[0.14em] ${
+            activeSaving
+              ? "border-sky-500/25 bg-sky-500/[0.08] text-sky-700 dark:border-sky-400/25 dark:bg-sky-400/[0.1] dark:text-sky-200"
+              : activeDirty
+                ? "border-amber-500/25 bg-amber-500/[0.1] text-amber-700 dark:border-amber-300/25 dark:bg-amber-300/[0.1] dark:text-amber-200"
+                : saveMessage
+                  ? "border-signal-500/25 bg-signal-500/[0.08] text-signal-700 dark:border-signal-400/25 dark:bg-signal-400/[0.1] dark:text-signal-200"
+                  : "border-black/[0.06] bg-white/80 text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.04] dark:text-slate-300"
+          }`}>
+            {saveStateLabel}
+          </span>
+        </div>
       </div>
       <label htmlFor="settings-search" className="sr-only">
         Search settings categories
@@ -172,24 +208,29 @@ export const SettingsSmartFindSearch: FunctionComponent<SettingsSmartFindSearchP
         </div>
       ) : null}
       {quickCategories.length > 0 ? (
-        <div className="mt-3 flex flex-wrap gap-2">
-          {quickCategories.map((category) => (
-            <button
-              key={`quick-${category.id}`}
-              type="button"
-              onClick={() => onSwitchCategory(category.id)}
-              aria-pressed={activeCategory === category.id}
-              aria-controls="settings-active-category-panel"
-              style={interactionStyle}
-              className={`rounded-full border px-3 py-1.5 text-[11px] font-semibold transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring-signal)] focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-void-900 ${
-                activeCategory === category.id
-                  ? "border-signal-500/25 bg-signal-500/[0.12] text-signal-700 dark:border-signal-400/25 dark:bg-signal-400/[0.12] dark:text-signal-200"
-                  : "border-black/[0.06] bg-white/80 text-slate-500 hover:text-slate-800 dark:border-white/[0.06] dark:bg-white/[0.04] dark:text-slate-400 dark:hover:text-slate-200"
-              }`}
-            >
-              {category.label}
-            </button>
-          ))}
+        <div className="mt-3">
+          <div className="mb-2 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">
+            Quick actions
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {quickCategories.map((category) => (
+              <button
+                key={`quick-${category.id}`}
+                type="button"
+                onClick={() => onSwitchCategory(category.id)}
+                aria-pressed={activeCategory === category.id}
+                aria-controls="settings-active-category-panel"
+                style={interactionStyle}
+                className={`rounded-full border px-3 py-1.5 text-[11px] font-semibold transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring-signal)] focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-void-900 ${
+                  activeCategory === category.id
+                    ? "border-signal-500/25 bg-signal-500/[0.12] text-signal-700 dark:border-signal-400/25 dark:bg-signal-400/[0.12] dark:text-signal-200"
+                    : "border-black/[0.06] bg-white/80 text-slate-500 hover:text-slate-800 dark:border-white/[0.06] dark:bg-white/[0.04] dark:text-slate-400 dark:hover:text-slate-200"
+                }`}
+              >
+                {category.label}
+              </button>
+            ))}
+          </div>
         </div>
       ) : null}
     </>
@@ -474,6 +515,10 @@ export const SettingsPage: FunctionComponent = () => {
             activeCategoryConfig={activeCategoryConfig}
             onSwitchCategory={switchCategory}
             interactionStyle={scopeControlStyle}
+            activeScope={activeScope}
+            activeDirty={activeDirty}
+            activeSaving={activeSaving}
+            saveMessage={saveMessage}
           />
           <div className="mt-4 flex flex-wrap items-center gap-3">
             {activeScope === "project" ? (

@@ -27,6 +27,7 @@ import { SettingsRepository } from "../repositories/settings-repository.js";
 import { ProjectManagementRepository } from "../repositories/project-management-repository.js";
 import { ProjectRuntimeRepository } from "../repositories/project-runtime-repository.js";
 import { ConnectionChatRepository } from "../repositories/connection-chat-repository.js";
+import { ChatProviderRepository } from "../repositories/chat-provider-repository.js";
 import { ExecutionRepository } from "../repositories/execution-repository.js";
 import { QaReviewRepository } from "../repositories/qa-review-repository.js";
 import { AgentPresetRepository } from "../repositories/agent-preset-repository.js";
@@ -90,6 +91,7 @@ import { workspaceVolumeHelperPool } from "../infrastructure/providers/cli/works
 import { disposeCommandSpawner, shutdownGitHelperPool } from "../shared/subprocess/command-runner.js";
 import { LocalMcpCliConfigService } from "../services/local-mcp-cli-config-service.js";
 import type { McpConnectionInfo } from "../contracts/mcp-connection-types.js";
+import type { ChatProviderIngressService } from "../services/chat-provider-ingress-service.js";
 
 function detectMergeConflictMessage(message: string | null | undefined): boolean {
   const normalized = String(message || "").trim().toLowerCase();
@@ -153,6 +155,7 @@ export class CodeUxServer {
   private projectManagementRepository: ProjectManagementRepository;
   private projectRuntimeRepository: ProjectRuntimeRepository;
   private connectionChatRepository: ConnectionChatRepository;
+  private chatProviderRepository: ChatProviderRepository;
   private projectWorkerAssignmentRepository: ProjectWorkerAssignmentRepository;
   private projectWorkerAssignmentService: ProjectWorkerAssignmentService;
   private projectAttentionRepository: ProjectAttentionRepository;
@@ -185,6 +188,7 @@ export class CodeUxServer {
   private projectSetupService: import("../services/project-setup-service.js").ProjectSetupService;
   private schedulerService: import("../services/scheduler-service.js").SchedulerService;
   private chatThreadRuntimeService: import("../services/chat-thread-runtime-service.js").ChatThreadRuntimeService;
+  private chatProviderIngressService: ChatProviderIngressService;
   private runtimeCleanupService: RuntimeCleanupService;
   private runtimeStartupRecoveryService: RuntimeStartupRecoveryService;
   private dashboardRealtimeService: DashboardRealtimeService;
@@ -228,6 +232,7 @@ export class CodeUxServer {
     this.projectManagementRepository = deps.projectManagementRepository;
     this.projectRuntimeRepository = deps.projectRuntimeRepository;
     this.connectionChatRepository = deps.connectionChatRepository;
+    this.chatProviderRepository = deps.chatProviderRepository;
     this.projectWorkerAssignmentRepository = deps.projectWorkerAssignmentRepository;
     this.projectWorkerAssignmentService = deps.projectWorkerAssignmentService;
     this.projectAttentionRepository = deps.projectAttentionRepository;
@@ -263,6 +268,7 @@ export class CodeUxServer {
     this.projectSetupService = deps.projectSetupService;
     this.schedulerService = deps.schedulerService;
     this.chatThreadRuntimeService = deps.chatThreadRuntimeService;
+    this.chatProviderIngressService = deps.chatProviderIngressService;
     this.runtimeCleanupService = deps.runtimeCleanupService;
     this.runtimeStartupRecoveryService = new RuntimeStartupRecoveryService({
       sessionTracking: this.sessionTracking,
@@ -1317,6 +1323,7 @@ export class CodeUxServer {
         projectRuntimeRepository: this.projectRuntimeRepository,
         executionRepository: this.executionRepository,
         connectionChatRepository: this.connectionChatRepository,
+        chatProviderRepository: this.chatProviderRepository,
         projectWorkerAssignmentRepository: this.projectWorkerAssignmentRepository,
         projectWorkerAssignmentService: this.projectWorkerAssignmentService,
         projectAttentionRepository: this.projectAttentionRepository,
@@ -1336,6 +1343,7 @@ export class CodeUxServer {
         projectSetupService: this.projectSetupService,
         schedulerService: this.schedulerService,
         chatThreadRuntimeService: this.chatThreadRuntimeService,
+        chatProviderIngressService: this.chatProviderIngressService,
         dashboardRealtimeService: this.dashboardRealtimeService,
         logger: this.logger,
         getLiveActivitiesForActiveTasks: () => this.getLiveActivitiesForActiveTasks(),

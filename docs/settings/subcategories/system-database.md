@@ -16,7 +16,7 @@ This deletes all local runtime state and cannot be undone from the dashboard.
 
 ## Dashboard Link
 
-Open this subcategory from the dashboard docs route at `/docs/settings-subcategories-system-database`. The Settings card header links directly to this published subpage.
+Open this subcategory from the dashboard docs route at `/docs/user/dashboard/settings#system-database`. The Settings card header links to the matching published docs anchor.
 
 ## Related Docs
 

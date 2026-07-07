@@ -16,7 +16,7 @@ Very high caps can burn provider quota; very low caps can stop recoverable work 
 
 ## Dashboard Link
 
-Open this subcategory from the dashboard docs route at `/docs/settings-subcategories-guardrails`. The Settings card header links directly to this published subpage.
+Open this subcategory from the dashboard docs route at `/docs/user/dashboard/settings#guardrails`. The Settings card header links to the matching published docs anchor.
 
 ## Related Docs
 

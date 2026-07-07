@@ -120,6 +120,27 @@ import type {
 import type {
   TokenUsageSource,
 } from "../../../src/contracts/execution-types.js";
+import type {
+  ChatProviderBridgeMode,
+  ChatProviderBridgeSetupSchema,
+  ChatProviderChannelBindingRecord,
+  ChatProviderConnectionRecord,
+  ChatProviderConnectionStatus,
+  ChatProviderDeliveryDirection,
+  ChatProviderDeliveryStatus,
+  ChatProviderKind,
+  ChatProviderMessageDeliveryRecord,
+  ChatProviderSecretConfig,
+  ChatProviderSecretFieldSchema,
+  ChatProviderSetupConfig,
+  ChatProviderSetupFieldSchema,
+  ChatProviderSetupSchema,
+  CreateChatProviderChannelBindingInput,
+  CreateChatProviderConnectionInput,
+  RedactedCredentialField,
+  UpdateChatProviderChannelBindingInput,
+  UpdateChatProviderConnectionInput,
+} from "../../../src/contracts/chat-provider-types.js";
 
 export interface SegmentDefinition {
   label: string;
@@ -321,6 +342,25 @@ export type {
   ScheduleStatus,
   ScheduleTargetType,
   UpdateSchedulerEntryInput,
+  ChatProviderBridgeMode,
+  ChatProviderBridgeSetupSchema,
+  ChatProviderChannelBindingRecord,
+  ChatProviderConnectionRecord,
+  ChatProviderConnectionStatus,
+  ChatProviderDeliveryDirection,
+  ChatProviderDeliveryStatus,
+  ChatProviderKind,
+  ChatProviderMessageDeliveryRecord,
+  ChatProviderSecretConfig,
+  ChatProviderSecretFieldSchema,
+  ChatProviderSetupConfig,
+  ChatProviderSetupFieldSchema,
+  ChatProviderSetupSchema,
+  CreateChatProviderChannelBindingInput,
+  CreateChatProviderConnectionInput,
+  RedactedCredentialField,
+  UpdateChatProviderChannelBindingInput,
+  UpdateChatProviderConnectionInput,
 };
 
 export type { SprintReviewSummary };

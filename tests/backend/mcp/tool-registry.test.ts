@@ -12,6 +12,7 @@ const createRouterHarness = (resolveAgentMcpToolAccess?: (agentId: string) => Ag
   const handlers = {} as RouterHandlers;
   const managementToolHandler = {
     handleManageProjects: vi.fn(async () => ({ content: [{ type: "text", text: "ok" }] })),
+    handleManageChatProviders: vi.fn(async () => ({ content: [{ type: "text", text: "chat-providers" }] })),
     handleScheduler: vi.fn(async () => ({ content: [{ type: "text", text: "scheduled" }] })),
   };
 
@@ -54,6 +55,14 @@ const callScheduler = async (handlers: RouterHandlers): Promise<unknown> =>
     params: {
       name: "scheduler",
       arguments: { action: "list", projectId: "project-1" },
+    },
+  });
+
+const callManageChatProviders = async (handlers: RouterHandlers): Promise<unknown> =>
+  handlers.callTool({
+    params: {
+      name: "manage_chat_providers",
+      arguments: { action: "list_provider_definitions" },
     },
   });
 
@@ -143,6 +152,23 @@ describe("ToolRegistry", () => {
       bodyMarkdown: "Resume the review.",
     });
   });
+
+  it("can register and dispatch manage_chat_providers", async () => {
+    const registry = new ToolRegistry<McpToolArgsByName, string>();
+    const handler = vi.fn(async (args: McpToolArgsByName["manage_chat_providers"]) => `manage_chat_providers:${args.action}`);
+
+    registry.register("manage_chat_providers", handler);
+
+    const result = await registry.dispatch("manage_chat_providers", {
+      action: "list_provider_definitions",
+      providerKind: "slack",
+    });
+    expect(result).toBe("manage_chat_providers:list_provider_definitions");
+    expect(handler).toHaveBeenCalledWith({
+      action: "list_provider_definitions",
+      providerKind: "slack",
+    });
+  });
 });
 
 describe("MCP router per-agent Code UX access", () => {
@@ -191,6 +217,17 @@ describe("MCP router per-agent Code UX access", () => {
     });
 
     expect(managementToolHandler.handleScheduler).toHaveBeenCalledTimes(1);
+  });
+
+  it("lists and dispatches manage_chat_providers when enabled by tool availability", async () => {
+    const { handlers, managementToolHandler } = createRouterHarness(() => null);
+
+    await runWithMcpAgentContext(null, async () => {
+      await expect(listToolNames(handlers)).resolves.toContain("manage_chat_providers");
+      await expect(callManageChatProviders(handlers)).resolves.toEqual({ content: [{ type: "text", text: "chat-providers" }] });
+    });
+
+    expect(managementToolHandler.handleManageChatProviders).toHaveBeenCalledTimes(1);
   });
 
   it("rejects scheduler calls when the tool is disabled", async () => {
@@ -257,6 +294,9 @@ const compileTimeTypeChecks = (): void => {
 
   // @ts-expect-error manage_tasks action must be a string enum, not a number
   registry.dispatch("manage_tasks", { action: 123 });
+
+  // @ts-expect-error manage_chat_providers requires a valid action value
+  registry.dispatch("manage_chat_providers", { action: "route_inbound_message" });
 };
 
 void compileTimeTypeChecks;

@@ -16,7 +16,7 @@ Unconfigured anchors leave inherited routes without a usable provider.
 
 ## Dashboard Link
 
-Open this subcategory from the dashboard docs route at `/docs/settings-subcategories-default-routing-anchors`. The Settings card header links directly to this published subpage.
+Open this subcategory from the dashboard docs route at `/docs/user/dashboard/settings#default-routing-anchors`. The Settings card header links to the matching published docs anchor.
 
 ## Related Docs
 

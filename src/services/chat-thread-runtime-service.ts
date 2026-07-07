@@ -14,13 +14,13 @@ import { buildProviderPrompt } from "./cli-workflow-utils.js";
 import { resolveEffectiveModel } from "./provider-execution-service.js";
 import { getRepoCodeUxDir, getRepoCodeUxPath } from "../shared/config/code-ux-paths.js";
 import {
-  buildChatCompactionPrompt,
   buildChatContinuationPrompt,
   buildChatReplayPrompt,
   normalizeProviderReply,
 } from "./chat-reply-prompt.js";
 import type { ChatManagementActionService } from "./chat-management-action-service.js";
 import type { KnowledgeService } from "./knowledge-service.js";
+import type { ChatProviderOutboundService } from "./chat-provider-outbound-service.js";
 import type { McpConnectionInfo } from "../contracts/mcp-connection-types.js";
 import type { McpApprovalTracker } from "./mcp-approval-tracker.js";
 import { getCorrelationId } from "../shared/logging/correlation-id.js";
@@ -41,6 +41,7 @@ interface ChatThreadRuntimeServiceDependencies {
   projectManagementRepository: ProjectManagementRepository;
   providerRunner: IProviderRunner;
   chatManagementActionService: ChatManagementActionService;
+  chatProviderOutboundService?: ChatProviderOutboundService;
   knowledgeService: KnowledgeService;
   getMcpConnectionInfo?: () => McpConnectionInfo | null;
   getMcpApprovalTracker?: () => McpApprovalTracker;
@@ -88,6 +89,16 @@ const resolveEffectiveDefaultBranch = (
   || "main"
 );
 
+const resolveLogicalCompactionContinuationId = (
+  provider: Exclude<ProviderId, "jules">,
+  threadId: string,
+): string | null => {
+  if (provider === "codex" || provider === "gemini" || provider === "qwen-code" || provider === "opencode") {
+    return threadId;
+  }
+  return null;
+};
+
 function getThreadSessionTitlePath(repoPath: string, threadId: string): string {
   const safeThreadId = threadId.replace(/[^A-Za-z0-9_.-]/g, "-");
   const codeUxDir = path.resolve(getRepoCodeUxDir(repoPath));
@@ -99,6 +110,22 @@ function getThreadSessionTitlePath(repoPath: string, threadId: string): string {
   }
 
   return titlePath;
+}
+
+function isChatProviderSourcedMessage(message: Pick<ConversationMessageRecord, "metadata"> | null | undefined): boolean {
+  return message?.metadata?.source === "chat_provider" || message?.metadata?.suppressRichWidgets === true;
+}
+
+function isChatProviderSourcedThread(
+  thread: ConversationThreadRecord,
+  messages: ConversationMessageRecord[],
+  latestMessage: ConversationMessageRecord,
+): boolean {
+  const runtimeState = thread.runtimeState as (ConversationRuntimeState & { source?: unknown; suppressRichWidgets?: unknown }) | null | undefined;
+  return runtimeState?.source === "chat_provider"
+    || runtimeState?.suppressRichWidgets === true
+    || isChatProviderSourcedMessage(latestMessage)
+    || messages.some((message) => isChatProviderSourcedMessage(message));
 }
 
 async function writeThreadSessionTitleFile(repoPath: string, threadId: string, title: string): Promise<void> {
@@ -246,6 +273,7 @@ export class ChatThreadRuntimeService {
       throw new Error(`Project not found: ${thread.projectId}`);
     }
     const messages = this.deps.connectionChatRepository.listMessages(thread.id);
+    const activeSessionId = thread.runtimeState?.sessionIds?.[0]?.trim() || null;
     if (messages.length === 0) {
       return this.deps.connectionChatRepository.updateThread(thread.id, {
         runtimeState: {
@@ -262,14 +290,29 @@ export class ChatThreadRuntimeService {
     if (!route.providerId || !route.model || typeof route.apiKey !== "string") {
       throw new Error("Failed to resolve a chat worker for thread compaction.");
     }
+    const continueSessionId = activeSessionId || resolveLogicalCompactionContinuationId(route.providerId, thread.id);
+    if (!continueSessionId) {
+      throw new Error(`Native chat compaction for ${route.providerId} requires an active provider session. Send a message in this thread before compacting it.`);
+    }
 
-    const compacted = await this.generateThreadCompaction(project.id, project.baseDir, project.name, thread, messages, route);
+    const compacted = await this.generateThreadCompaction(
+      project.id,
+      project.baseDir,
+      thread,
+      messages,
+      route,
+      continueSessionId,
+    );
+    const compactedSessionId = compacted.nativeSessionId || compacted.summary.nativeSessionId || compacted.continueSessionId || null;
 
     const newRuntimeState: ConversationRuntimeState = {
       ...thread.runtimeState,
-      replayRequired: true,
-      sessionIds: [],
-      compactionSummary: compacted,
+      routeKind: "virtual",
+      virtualProvider: route.providerId,
+      modelLabel: compacted.summary.model,
+      replayRequired: compactedSessionId ? false : true,
+      sessionIds: compactedSessionId ? [compactedSessionId] : [],
+      compactionSummary: compacted.summary,
     };
 
     return this.deps.connectionChatRepository.updateThread(thread.id, {
@@ -356,10 +399,11 @@ export class ChatThreadRuntimeService {
       this.deps.connectionChatRepository.markDashboardMessagesFailed(thread.id, {
         upToMessageId: turnHandle.latestMessage.id,
       });
-      this.deps.connectionChatRepository.postSystemMessage(projectId, {
+      const failureReply = this.deps.connectionChatRepository.postSystemMessage(projectId, {
         threadId: thread.id,
         bodyMarkdown: `Worker execution failed: ${message}`,
       });
+      await this.deliverChatProviderReplyIfNeeded(projectId, thread, turnHandle.latestMessage, failureReply);
       return {
         ...userMessage,
         deliveryStatus: "failed",
@@ -419,10 +463,11 @@ export class ChatThreadRuntimeService {
         });
 
         if (isRejection) {
-          this.deps.connectionChatRepository.postSystemMessage(projectId, {
+          const replyMessage = this.deps.connectionChatRepository.postSystemMessage(projectId, {
             threadId: thread.id,
             bodyMarkdown: "_Management action canceled by user._",
           });
+          await this.deliverChatProviderReplyIfNeeded(projectId, thread, latestMessage, replyMessage);
           const newRuntimeState: ConversationRuntimeState = { ...runtimeState };
           delete newRuntimeState.pendingManagementAction;
           this.deps.connectionChatRepository.updateThread(thread.id, { runtimeState: newRuntimeState });
@@ -443,10 +488,11 @@ export class ChatThreadRuntimeService {
             systemReply += `\n\n_Action completed successfully._\n\`\`\`json\n${stringifiedResult}\n\`\`\``;
           }
 
-          this.deps.connectionChatRepository.postSystemMessage(projectId, {
+          const replyMessage = this.deps.connectionChatRepository.postSystemMessage(projectId, {
             threadId: thread.id,
             bodyMarkdown: systemReply.trim(),
           });
+          await this.deliverChatProviderReplyIfNeeded(projectId, thread, latestMessage, replyMessage);
 
           const newRuntimeState: ConversationRuntimeState = { ...runtimeState };
           delete newRuntimeState.pendingManagementAction;
@@ -454,10 +500,11 @@ export class ChatThreadRuntimeService {
           return;
 
         } catch (err: any) {
-          this.deps.connectionChatRepository.postSystemMessage(projectId, {
+          const replyMessage = this.deps.connectionChatRepository.postSystemMessage(projectId, {
             threadId: thread.id,
             bodyMarkdown: `Execution failed: ${err.message}`,
           });
+          await this.deliverChatProviderReplyIfNeeded(projectId, thread, latestMessage, replyMessage);
           const newRuntimeState: ConversationRuntimeState = { ...runtimeState };
           delete newRuntimeState.pendingManagementAction;
           this.deps.connectionChatRepository.updateThread(thread.id, { runtimeState: newRuntimeState });
@@ -473,7 +520,8 @@ export class ChatThreadRuntimeService {
     let continueSessionId: string | null = null;
     const mcpConnection = this.deps.getMcpConnectionInfo?.() ?? null;
 
-    const allMessages = this.deps.connectionChatRepository.listMessages(thread.id);
+    const allMessages = this.deps.connectionChatRepository.listMessages(thread.id) ?? [];
+    const suppressRichWidgets = isChatProviderSourcedThread(thread, allMessages, latestMessage);
 
     const respondingAgent = typeof this.deps.agentPresetSyncService.resolveDashboardReplyAgent === "function"
       ? await this.deps.agentPresetSyncService.resolveDashboardReplyAgent(
@@ -502,9 +550,10 @@ export class ChatThreadRuntimeService {
         mcpAvailable,
         mcpAccessMode: mcpAvailable && isSchedulerOnlyAgentMcpAccess(agentMcpAccess) ? "scheduler_only" : undefined,
         knowledgeManifest,
+        suppressRichWidgets,
       });
     } else {
-      promptContent = buildChatContinuationPrompt(latestMessage, pendingAction, mcpAvailable, thread.title);
+      promptContent = buildChatContinuationPrompt(latestMessage, pendingAction, mcpAvailable, thread.title, suppressRichWidgets);
       continueSessionId = runtimeState.sessionIds![0];
     }
 
@@ -591,10 +640,11 @@ export class ChatThreadRuntimeService {
       }
     }
 
-    this.deps.connectionChatRepository.postSystemMessage(projectId, {
+    const replyMessage = this.deps.connectionChatRepository.postSystemMessage(projectId, {
       threadId: thread.id,
       bodyMarkdown: systemReply.trim(),
     });
+    await this.deliverChatProviderReplyIfNeeded(projectId, thread, latestMessage, replyMessage);
 
     const newRuntimeState: ConversationRuntimeState = {
       ...runtimeState,
@@ -627,14 +677,42 @@ export class ChatThreadRuntimeService {
     return schedulerOnlyAgentMcpAccess(access?.linkedServerIds ?? []);
   }
 
+  private async deliverChatProviderReplyIfNeeded(
+    projectId: string,
+    thread: ConversationThreadRecord,
+    triggeringMessage: ConversationMessageRecord,
+    replyMessage: ConversationMessageRecord,
+  ): Promise<void> {
+    if (!this.deps.chatProviderOutboundService || !isChatProviderSourcedMessage(triggeringMessage)) {
+      return;
+    }
+    try {
+      await this.deps.chatProviderOutboundService.deliverReply({
+        projectId,
+        thread,
+        triggeringMessage,
+        replyMessage,
+      });
+    } catch (error) {
+      this.deps.logger?.error("Failed to enqueue chat provider outbound reply", {
+        logPurpose: "integration",
+        projectId,
+        threadId: thread.id,
+        triggeringMessageId: triggeringMessage.id,
+        replyMessageId: replyMessage.id,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
   private async generateThreadCompaction(
     projectId: string,
     repoPath: string,
-    projectName: string,
     thread: ConversationThreadRecord,
     messages: ConversationMessageRecord[],
     route: ThreadRouteResolution,
-  ): Promise<ConversationCompactionSummary> {
+    continueSessionId: string,
+  ): Promise<{ summary: ConversationCompactionSummary & { nativeSessionId?: string | null }; nativeSessionId: string | null; continueSessionId: string }> {
     const provider = route.providerId!;
     // Fold customModel into the model so a local-redirect instance (customModel/customBaseUrl)
     // compacts against its configured endpoint rather than the real subscription. The runner
@@ -651,21 +729,14 @@ export class ChatThreadRuntimeService {
       openCodeModelId: route.openCodeModelId,
     });
     const apiKey = route.apiKey!;
-    const thinkingMode = route.thinkingMode;
     const dashboardSettings = this.deps.getDashboardSettings({ projectId });
     const workflowSettings = dashboardSettings.cliWorkflow;
     const project = this.deps.projectManagementRepository.getProject(projectId);
     const defaultBranch = resolveEffectiveDefaultBranch(project ?? {}, dashboardSettings);
     const githubToken = this.deps.getGithubToken();
-    const workerAgent = typeof this.deps.agentPresetSyncService.resolveTargetedCodingAgent === "function"
-      ? await this.deps.agentPresetSyncService.resolveTargetedCodingAgent(
-        projectId,
-        dashboardSettings.agents?.routing?.dashboardReply?.agentPresetId ?? null,
-      )
-      : await this.deps.agentPresetSyncService.getWorkerAgent(projectId);
-    const workerInstructions = workerAgent.instructionMarkdown.trim();
-    const promptContent = buildChatCompactionPrompt({ projectId, repoPath, projectName, thread, messages, workerInstructions });
-    const finalPrompt = buildProviderPrompt(promptContent, thinkingMode as any);
+    if (!continueSessionId) {
+      throw new Error("Native chat compaction requires an active provider session to continue.");
+    }
     const execInvocation = this.deps.executionRepository.createExecutionInvocation({
       projectId,
       skipValidation: true,
@@ -684,23 +755,23 @@ export class ChatThreadRuntimeService {
 
     this.deps.executionRepository.appendExecutionInvocationMessage(execInvocation.id, {
       role: "user",
-      contentMarkdown: finalPrompt,
+      contentMarkdown: "Native CLI session operation: compact",
     });
 
     try {
       const result = await this.deps.providerRunner.runProviderForText({
         provider,
-        prompt: finalPrompt,
+        prompt: "Native CLI session operation: compact",
         cwd: repoPath,
         model,
         apiKey,
-      qwenAuthMode: route.qwenAuthMode,
-      qwenRegion: route.qwenRegion,
-      qwenBaseUrl: route.qwenBaseUrl,
-      qwenEnvKey: route.qwenEnvKey,
-      qwenModelId: route.qwenModelId,
-      qwenProtocol: route.qwenProtocol,
-      qwenAdditionalModelProviders: route.qwenAdditionalModelProviders,
+        qwenAuthMode: route.qwenAuthMode,
+        qwenRegion: route.qwenRegion,
+        qwenBaseUrl: route.qwenBaseUrl,
+        qwenEnvKey: route.qwenEnvKey,
+        qwenModelId: route.qwenModelId,
+        qwenProtocol: route.qwenProtocol,
+        qwenAdditionalModelProviders: route.qwenAdditionalModelProviders,
         openCodeAuthMode: route.openCodeAuthMode,
         openCodeProviderId: route.openCodeProviderId,
         openCodeModelId: route.openCodeModelId,
@@ -713,14 +784,16 @@ export class ChatThreadRuntimeService {
         providerConfigPath: route.providerConfigPath,
         customBaseUrl: route.customBaseUrl,
         customModel: route.customModel,
-        sessionId: `${thread.id}:compaction`,
+        sessionId: thread.id,
+        workspaceSessionId: thread.id,
         workflowSettings,
         repoPath,
         snapshotCheckout: workflowSettings.executionMode === "DOCKER"
           ? { branch: defaultBranch }
           : undefined,
         githubToken,
-        continueSessionId: null,
+        continueSessionId,
+        nativeSessionOperation: "compact",
         onActivity: (desc, originator) => {
           this.deps.executionRepository.appendExecutionInvocationMessage(execInvocation.id, {
             role: originator === "user" ? "user" : "assistant",
@@ -743,13 +816,19 @@ export class ChatThreadRuntimeService {
         finishedAt: new Date().toISOString(),
       });
 
+      const nativeSessionId = result.nativeSessionId || continueSessionId;
       return {
-        markdown,
-        generatedAt: new Date().toISOString(),
-        provider,
-        model,
-        sourceMessageId: messages[messages.length - 1]?.id || null,
-        sourceMessageCount: messages.length,
+        summary: {
+          markdown,
+          generatedAt: new Date().toISOString(),
+          provider,
+          model,
+          sourceMessageId: messages[messages.length - 1]?.id || null,
+          sourceMessageCount: messages.length,
+          nativeSessionId,
+        },
+        nativeSessionId,
+        continueSessionId,
       };
     } catch (err: any) {
       this.deps.executionRepository.updateExecutionInvocation(execInvocation.id, {

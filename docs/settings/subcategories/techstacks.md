@@ -16,7 +16,7 @@ The built-in `code-ux-internal` stack cannot be removed. Removing a custom stack
 
 ## Dashboard Link
 
-Open this subcategory from the dashboard docs route at `/docs/settings-subcategories-techstacks`. The Settings card header links directly to this published subpage.
+Open this subcategory from the dashboard docs route at `/docs/user/dashboard/settings#techstacks`. The Settings card header links to the matching published docs anchor.
 
 ## Related Docs
 

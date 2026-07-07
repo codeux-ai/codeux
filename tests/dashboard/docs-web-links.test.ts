@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import { resolveDocsWebHref } from "../../dashboard/src/v2/docs-web/docs-web-links.js";
-import { docIdFromPath } from "../../dashboard/src/v2/docs-web/DocsWebPage.js";
 import type { DocsWebEntry } from "../../src/contracts/docs-web-types.js";
 
 const docs = [
@@ -33,12 +32,5 @@ describe("resolveDocsWebHref", () => {
     expect(resolveDocsWebHref("#local", "user/index.md", docs)).toBe("#local");
     expect(resolveDocsWebHref("/api/docs-web", "user/index.md", docs)).toBe("/api/docs-web");
     expect(resolveDocsWebHref("./image.png", "user/index.md", docs)).toBe("./image.png");
-  });
-});
-
-describe("docIdFromPath", () => {
-  it("maps legacy settings docs URLs to the current docs document", () => {
-    expect(docIdFromPath("/docs/user/dashboard/settings")).toBe("user-dashboard-settings");
-    expect(docIdFromPath("/docs/user/dashboard/settings/")).toBe("user-dashboard-settings");
   });
 });

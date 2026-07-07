@@ -16,7 +16,7 @@ Relaxed merge gates can land incomplete work; Local mode disables remote PR gate
 
 ## Dashboard Link
 
-Open this subcategory from the dashboard docs route at `/docs/settings-subcategories-merge-gates-autofix`. The Settings card header links directly to this published subpage.
+Open this subcategory from the dashboard docs route at `/docs/user/dashboard/settings#merge-gates-autofix`. The Settings card header links to the matching published docs anchor.
 
 ## Related Docs
 

@@ -16,7 +16,7 @@ Low limits can evict useful knowledge; high graph density can make maps harder t
 
 ## Dashboard Link
 
-Open this subcategory from the dashboard docs route at `/docs/settings-subcategories-limits`. The Settings card header links directly to this published subpage.
+Open this subcategory from the dashboard docs route at `/docs/user/dashboard/settings#limits`. The Settings card header links to the matching published docs anchor.
 
 ## Related Docs
 

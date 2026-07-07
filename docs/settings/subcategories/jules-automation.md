@@ -16,7 +16,7 @@ Automatic clarification replies can answer with stale assumptions if the templat
 
 ## Dashboard Link
 
-Open this subcategory from the dashboard docs route at `/docs/settings-subcategories-jules-automation`. The Settings card header links directly to this published subpage.
+Open this subcategory from the dashboard docs route at `/docs/user/dashboard/settings#jules-automation`. The Settings card header links to the matching published docs anchor.
 
 ## Related Docs
 

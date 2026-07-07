@@ -57,6 +57,16 @@ export function normalizeProviderReply(output: string): string {
   return trimmed;
 }
 
+export function stripDashboardOnlyWidgets(markdown: string): string {
+  const stripped = markdown.replace(
+    /^```codeux:([A-Za-z0-9_-]+)[^\n]*\n([\s\S]*?)^```[ \t]*$/gm,
+    (_match, widgetType: string, rawJson: string) => downgradeWidgetFence(widgetType, rawJson),
+  );
+  return stripped
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
 export function getCompactionSummary(runtimeState: ConversationRuntimeState | null | undefined): ConversationCompactionSummary | null {
   const summary = runtimeState?.compactionSummary;
   if (!summary || typeof summary.markdown !== "string" || !summary.markdown.trim()) {
@@ -165,6 +175,7 @@ export function buildChatReplayPrompt(args: {
   mcpAvailable?: boolean;
   mcpAccessMode?: "management" | "scheduler_only";
   knowledgeManifest?: string | null;
+  suppressRichWidgets?: boolean;
 }): string {
   const compactionSummary = getCompactionSummary(args.thread.runtimeState);
   const pendingAction = args.thread.runtimeState?.pendingManagementAction;
@@ -190,7 +201,10 @@ export function buildChatReplayPrompt(args: {
 
   const history = replayMessages.map((message) => {
     const role = message.authorType === "dashboard_user" ? "User" : "Worker";
-    return `### ${role}\n${message.bodyMarkdown.trim()}`;
+    const bodyMarkdown = args.suppressRichWidgets
+      ? stripDashboardOnlyWidgets(message.bodyMarkdown)
+      : message.bodyMarkdown.trim();
+    return `### ${role}\n${bodyMarkdown}`;
   }).join("\n\n");
 
   const fallbackBody = args.bodyMarkdown ? args.bodyMarkdown.trim() : "_No new messages since the compaction summary was generated._";
@@ -215,6 +229,11 @@ export function buildChatReplayPrompt(args: {
     ? `## KNOWLEDGE BASE\n\n${args.knowledgeManifest.trim()}`
     : "";
   const currentThreadTitle = args.threadTitle || args.thread.title;
+  const compactedHistoryMarkdown = compactionSummary
+    ? args.suppressRichWidgets
+      ? stripDashboardOnlyWidgets(compactionSummary.markdown)
+      : compactionSummary.markdown
+    : "";
 
   return [
     args.workerInstructions ? `## WORKER INSTRUCTIONS\n\n${args.workerInstructions}` : "",
@@ -234,7 +253,7 @@ export function buildChatReplayPrompt(args: {
     "",
     ...(compactionSummary ? [
       "## COMPACTED HISTORY",
-      compactionSummary.markdown,
+      compactedHistoryMarkdown,
       "",
       "## MESSAGES SINCE COMPACTION",
     ] : [
@@ -242,9 +261,11 @@ export function buildChatReplayPrompt(args: {
     ]),
     history || fallbackBody,
     "",
-    "## RICH WIDGETS",
-    buildStageWidgetInstructions(),
-    "",
+    ...(args.suppressRichWidgets ? [] : [
+      "## RICH WIDGETS",
+      buildStageWidgetInstructions(),
+      "",
+    ]),
     "## REQUIRED OUTPUT",
     outputInstructions,
   ].filter((part) => part.trim().length > 0).join("\n");
@@ -255,6 +276,7 @@ export function buildChatContinuationPrompt(
   pendingAction?: ConversationRuntimeState["pendingManagementAction"],
   mcpAvailable?: boolean,
   threadTitle?: string,
+  suppressRichWidgets?: boolean,
 ): string {
   const pendingActionContext = pendingAction ? [
     "## PENDING ACTION CONTEXT",
@@ -272,11 +294,120 @@ export function buildChatContinuationPrompt(
     buildSessionTitleInstructions(threadTitle),
     "The dashboard user's latest message is below.",
     "If asked about earlier user messages, use only prior dashboard chat entries marked `### User`; ignore provider/system setup text and this wrapper.",
-    "Remember: the dashboard renders ```codeux:status / codeux:tasks / codeux:sprint / codeux:metrics / codeux:actions fenced JSON blocks in your reply as rich UI widgets — use them for status, summaries, and next steps.",
+    suppressRichWidgets
+      ? "Respond with readable markdown prose only. Do not include dashboard-only `codeux:*` fenced widget blocks."
+      : "Remember: the dashboard renders ```codeux:status / codeux:tasks / codeux:sprint / codeux:metrics / codeux:actions fenced JSON blocks in your reply as rich UI widgets — use them for status, summaries, and next steps.",
     "",
     "### User",
     message.bodyMarkdown.trim(),
   ].filter((part) => part.trim().length > 0).join("\n");
+}
+
+function downgradeWidgetFence(widgetType: string, rawJson: string): string {
+  const data = parseWidgetJson(rawJson);
+  if (!data) {
+    return "";
+  }
+  switch (widgetType) {
+    case "status":
+      return downgradeStatusWidget(data);
+    case "tasks":
+      return downgradeTasksWidget(data);
+    case "sprint":
+      return downgradeSprintWidget(data);
+    case "metrics":
+      return downgradeMetricsWidget(data);
+    case "actions":
+      return downgradeActionsWidget(data);
+    default:
+      return "";
+  }
+}
+
+function parseWidgetJson(rawJson: string): Record<string, unknown> | null {
+  try {
+    const parsed = JSON.parse(rawJson) as unknown;
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+      ? parsed as Record<string, unknown>
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+function downgradeStatusWidget(data: Record<string, unknown>): string {
+  const lines = [stringValue(data.title)];
+  const items = Array.isArray(data.items) ? data.items : [];
+  for (const item of items) {
+    if (!item || typeof item !== "object" || Array.isArray(item)) continue;
+    const record = item as Record<string, unknown>;
+    const label = stringValue(record.label);
+    if (!label) continue;
+    const state = stringValue(record.state);
+    const value = stringValue(record.value);
+    lines.push(`- ${[label, state, value].filter(Boolean).join(": ")}`);
+  }
+  const note = stringValue(data.note);
+  if (note) lines.push(note);
+  return lines.filter(Boolean).join("\n");
+}
+
+function downgradeTasksWidget(data: Record<string, unknown>): string {
+  const lines = [stringValue(data.title)];
+  const items = Array.isArray(data.items) ? data.items : [];
+  for (const item of items) {
+    if (!item || typeof item !== "object" || Array.isArray(item)) continue;
+    const record = item as Record<string, unknown>;
+    const title = stringValue(record.title);
+    if (!title) continue;
+    const status = stringValue(record.status);
+    const meta = stringValue(record.meta);
+    lines.push(`- ${[title, status, meta].filter(Boolean).join(" - ")}`);
+  }
+  return lines.filter(Boolean).join("\n");
+}
+
+function downgradeSprintWidget(data: Record<string, unknown>): string {
+  const name = stringValue(data.name) || stringValue(data.key);
+  const status = stringValue(data.status);
+  const done = numberValue(data.done);
+  const total = numberValue(data.total);
+  const progress = done !== null && total !== null ? `${done}/${total}` : "";
+  return [name, status, progress].filter(Boolean).join(" - ");
+}
+
+function downgradeMetricsWidget(data: Record<string, unknown>): string {
+  const lines = [stringValue(data.title)];
+  const items = Array.isArray(data.items) ? data.items : [];
+  for (const item of items) {
+    if (!item || typeof item !== "object" || Array.isArray(item)) continue;
+    const record = item as Record<string, unknown>;
+    const label = stringValue(record.label);
+    const value = stringValue(record.value);
+    const delta = stringValue(record.delta);
+    if (label || value) lines.push(`- ${[label, value, delta].filter(Boolean).join(": ")}`);
+  }
+  return lines.filter(Boolean).join("\n");
+}
+
+function downgradeActionsWidget(data: Record<string, unknown>): string {
+  const items = Array.isArray(data.items) ? data.items : [];
+  const lines = items.flatMap((item) => {
+    if (!item || typeof item !== "object" || Array.isArray(item)) return [];
+    const record = item as Record<string, unknown>;
+    const label = stringValue(record.label);
+    const prompt = stringValue(record.prompt);
+    return label ? [`- ${prompt ? `${label}: ${prompt}` : label}`] : [];
+  });
+  return lines.length > 0 ? ["Suggested next steps:", ...lines].join("\n") : "";
+}
+
+function stringValue(value: unknown): string {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function numberValue(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
 export function buildChatCompactionPrompt(args: {

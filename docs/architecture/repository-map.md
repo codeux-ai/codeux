@@ -37,6 +37,8 @@ backup files appear there.
 - `contracts/`
   - `app-types.ts`, `mcp-tool-definitions.ts`
   - Shared backend contracts and MCP tool definitions.
+  - `chat-provider-types.ts`
+  - External chat provider setup schemas, redacted credential contracts, channel binding records, and message delivery state types.
 - `integrations/`
   - `jules-api-client.ts`
   - Jules API HTTP client.
@@ -61,6 +63,8 @@ backup files appear there.
   - Dedicated module for stats query types to decouple queries from the main execution repository.
   - `project-runtime/run-event-writes.ts`
   - Focused write module for legacy runtime status-sync task runs and task-run events, including candidate run matching, status-sync event signatures, denormalized `task_run_events.project_id`, and source event key deduplication.
+  - `chat-provider-repository.ts`
+  - External chat provider connections, channel bindings, inbound message idempotency, and outbound delivery state.
   - `settings-repository.ts`
   - `settings-defaults.ts`
   - `settings-sanitizer.ts`

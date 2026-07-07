@@ -9,6 +9,7 @@ import { AppDbStorage } from "../../repositories/app-db-storage.js";
 import { ProjectManagementRepository } from "../../repositories/project-management-repository.js";
 import { ProjectRuntimeRepository } from "../../repositories/project-runtime-repository.js";
 import { ConnectionChatRepository } from "../../repositories/connection-chat-repository.js";
+import { ChatProviderRepository } from "../../repositories/chat-provider-repository.js";
 import { ExecutionRepository } from "../../repositories/execution-repository.js";
 import { GuardrailRepository } from "../../repositories/guardrail-repository.js";
 import { GuardrailService } from "../../services/guardrail-service.js";
@@ -77,6 +78,7 @@ export interface CoreDependencies {
   projectManagementRepository: ProjectManagementRepository;
   projectRuntimeRepository: ProjectRuntimeRepository;
   connectionChatRepository: ConnectionChatRepository;
+  chatProviderRepository: ChatProviderRepository;
   workerEndpointRepository: WorkerEndpointRepository;
   projectWorkerAssignmentRepository: ProjectWorkerAssignmentRepository;
   qaReviewRepository: QaReviewRepository;
@@ -193,6 +195,7 @@ export function createCoreDependencies(
     dashboardRealtimeService,
     workerEndpointRepository,
   );
+  const chatProviderRepository = new ChatProviderRepository(appDbStorage);
   const workerAttentionOutcomeService = new WorkerAttentionOutcomeService(
     projectAttentionService,
     connectionChatRepository,
@@ -323,6 +326,7 @@ export function createCoreDependencies(
     projectManagementRepository,
     projectRuntimeRepository,
     connectionChatRepository,
+    chatProviderRepository,
     workerEndpointRepository,
     projectWorkerAssignmentRepository,
     qaReviewRepository,

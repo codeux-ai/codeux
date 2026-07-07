@@ -16,7 +16,7 @@ Very short intervals can add noise; disabling the loop means progress depends on
 
 ## Dashboard Link
 
-Open this subcategory from the dashboard docs route at `/docs/settings-subcategories-watch-loop`. The Settings card header links directly to this published subpage.
+Open this subcategory from the dashboard docs route at `/docs/user/dashboard/settings#watch-loop`. The Settings card header links to the matching published docs anchor.
 
 ## Related Docs
 

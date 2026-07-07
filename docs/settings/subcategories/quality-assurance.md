@@ -16,7 +16,7 @@ Disabling QA removes an important last check before merge automation continues.
 
 ## Dashboard Link
 
-Open this subcategory from the dashboard docs route at `/docs/settings-subcategories-quality-assurance`. The Settings card header links directly to this published subpage.
+Open this subcategory from the dashboard docs route at `/docs/user/dashboard/settings#quality-assurance`. The Settings card header links to the matching published docs anchor.
 
 ## Related Docs
 
