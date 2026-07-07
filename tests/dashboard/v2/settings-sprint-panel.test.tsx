@@ -111,25 +111,25 @@ describe("SettingsSprintPanel", () => {
     expect(Boolean(mergeGatesHeading.compareDocumentPosition(qaHeading) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
     expect(Boolean(qaHeading.compareDocumentPosition(guardrailsHeading) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
 
-    const taskCompletionRow = screen.getByText("Review every completed task").closest(".group");
-    expect(taskCompletionRow).not.toBeNull();
-    const taskCompletionControls = within(taskCompletionRow as HTMLElement);
-    expect(taskCompletionControls.getByText("Built-in QA agent fallback is active.")).toBeInTheDocument();
+    expect(screen.getByRole("switch", { name: "Review every completed task" })).toBeInTheDocument();
+    let taskCompletionGroup = screen.getByRole("group", { name: "Task completion QA agent presets" });
+    const taskCompletionControls = within(taskCompletionGroup);
+    expect(taskCompletionGroup).toHaveAccessibleDescription("Built-in QA fallback active. Leave empty to use the built-in QA fallback for this trigger.");
 
     fireEvent.click(taskCompletionControls.getByRole("checkbox", { name: "QA Agent Beta" }));
     expect(setActiveScope).toHaveBeenCalledWith("project");
     expect(updateProject).toHaveBeenCalled();
 
     await waitFor(() => {
-      expect(taskCompletionControls.getByRole("checkbox", { name: "QA Agent Beta" })).toBeChecked();
+      expect(taskCompletionControls.getByRole("checkbox", { name: "QA Agent Beta" })).toHaveAttribute("aria-checked", "true");
     });
 
     fireEvent.click(taskCompletionControls.getByRole("checkbox", { name: "Risk Reviewer" }));
 
     await waitFor(() => {
-      expect(taskCompletionControls.getByText("2 custom QA agents selected.")).toBeInTheDocument();
-      expect(taskCompletionControls.getByRole("checkbox", { name: "QA Agent Beta" })).toBeChecked();
-      expect(taskCompletionControls.getByRole("checkbox", { name: "Risk Reviewer" })).toBeChecked();
+      expect(screen.getByText("2 custom QA agents selected.")).toBeInTheDocument();
+      expect(taskCompletionControls.getByRole("checkbox", { name: "QA Agent Beta" })).toHaveAttribute("aria-checked", "true");
+      expect(taskCompletionControls.getByRole("checkbox", { name: "Risk Reviewer" })).toHaveAttribute("aria-checked", "true");
     });
 
     const selectTwoRecipe = updateProject.mock.calls[1][0];
@@ -152,9 +152,9 @@ describe("SettingsSprintPanel", () => {
     fireEvent.click(taskCompletionControls.getByRole("checkbox", { name: "QA Agent Beta" }));
 
     await waitFor(() => {
-      expect(taskCompletionControls.getByText("1 custom QA agent selected.")).toBeInTheDocument();
-      expect(taskCompletionControls.getByRole("checkbox", { name: "QA Agent Beta" })).not.toBeChecked();
-      expect(taskCompletionControls.getByRole("checkbox", { name: "Risk Reviewer" })).toBeChecked();
+      expect(screen.getByText("1 custom QA agent selected.")).toBeInTheDocument();
+      expect(taskCompletionControls.getByRole("checkbox", { name: "QA Agent Beta" })).toHaveAttribute("aria-checked", "false");
+      expect(taskCompletionControls.getByRole("checkbox", { name: "Risk Reviewer" })).toHaveAttribute("aria-checked", "true");
     });
 
     const removeOneRecipe = updateProject.mock.calls[2][0];
@@ -177,8 +177,8 @@ describe("SettingsSprintPanel", () => {
     fireEvent.click(taskCompletionControls.getByRole("checkbox", { name: "Risk Reviewer" }));
 
     await waitFor(() => {
-      expect(taskCompletionControls.getByText("Built-in QA agent fallback is active.")).toBeInTheDocument();
-      expect(taskCompletionControls.getByRole("checkbox", { name: "Risk Reviewer" })).not.toBeChecked();
+      expect(screen.getByRole("group", { name: "Task completion QA agent presets" })).toHaveAccessibleDescription("Built-in QA fallback active. Leave empty to use the built-in QA fallback for this trigger.");
+      expect(taskCompletionControls.getByRole("checkbox", { name: "Risk Reviewer" })).toHaveAttribute("aria-checked", "false");
     });
 
     const fallbackRecipe = updateProject.mock.calls[3][0];
