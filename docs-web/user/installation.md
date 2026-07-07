@@ -68,6 +68,38 @@ release is available, the title bar shows an **Update available** download notic
 opens the official GitHub release download page in your default browser; the app does not navigate
 away from the dashboard.
 
+### Speech input on desktop
+
+The microphone control in project chat uses the local dashboard origin served by the desktop app.
+The app grants microphone access only to that trusted dashboard window; camera, geolocation,
+notifications, sprint preview pages, and unrelated sites are denied.
+
+Local speech transcription does not require an external API key, but it does require the selected
+ONNX speech model files in your Code UX home cache:
+
+```text
+~/.code-ux/models/speech/<sanitized-model-id>/model.onnx
+~/.code-ux/models/speech/<sanitized-model-id>/labels.json  # optional
+```
+
+For the default model, the directory is:
+
+```text
+~/.code-ux/models/speech/onnx-community--whisper-base.en/
+```
+
+In `auto` mode, Code UX uses the local model when present. If the model is missing, Code UX can
+fall back to an OpenAI-compatible transcription endpoint only when you configure a base URL, API key,
+and model in speech settings. Without a local model or complete external fallback settings, the
+dashboard shows a setup error instead of sending audio elsewhere.
+
+Platform notes:
+
+- **macOS**: allow microphone access in the system prompt, or later in System Settings > Privacy & Security > Microphone.
+- **Windows**: allow microphone access in Windows privacy settings and confirm desktop apps can use the microphone.
+- **Linux**: microphone availability depends on the host PulseAudio/PipeWire and desktop permission setup for your package format.
+- **Browser/npm dashboard**: `http://localhost:<port>` and `http://127.0.0.1:<port>` are treated by modern browsers as secure contexts for microphone capture. If you bind the dashboard to a non-loopback host, use HTTPS and grant browser permission.
+
 ## Option 2 — From source
 
 Use a source build to develop Code UX itself or inspect the runtime. Requires Node.js 22+ and

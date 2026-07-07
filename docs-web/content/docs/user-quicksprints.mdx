@@ -57,8 +57,6 @@ From the **⋯** menu on a template card:
 | DELETE | `/api/projects/:projectId/quicksprints/templates/:templateId` | Delete |
 | POST | `/api/projects/:projectId/quicksprints/execute` | Execute (returns the new sprint) |
 
-The REST execution route keeps awaited semantics: it returns the sprint only after planning completes or fails. Chat quickactions can use the internal detached quicksprint launch primitive when they need the created sprint immediately and want planning to continue in the background with a `clientRequestId` and planning promise for tracking. Create-app chat follow-ups use that completion signal to update the app progress widget and append queued direction to the sprint goal without frontend polling.
-
 ## Examples
 
 ### "Add CRUD endpoint" template

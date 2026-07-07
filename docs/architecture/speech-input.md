@@ -14,6 +14,8 @@ Actual microphone audio must not enter runtime memory automatically. Recorder UI
 
 Audio bytes should remain request-scoped. They should not be written to settings storage, project markdown, sprint artifacts, logs, telemetry, or memory records unless a future task explicitly introduces a user-visible retention feature with separate consent and deletion controls.
 
+The npm-served dashboard relies on browser secure-context treatment for loopback HTTP origins such as `http://localhost:<port>` and `http://127.0.0.1:<port>`. Packaged Electron grants microphone access only to the resolved dashboard origin and its loopback alias. Sprint preview origins, unrelated origins, camera/video capture, geolocation, notifications, and arbitrary Electron permissions are denied.
+
 ## Upload Guardrails
 
 `POST /api/speech/transcriptions` is excluded from the dashboard JSON parser so route-specific `multer` handling can process multipart uploads. The route stores the uploaded file in memory, accepts only supported audio MIME types, limits the upload to 25MB, and rejects audio that exceeds the supplied route-level `maxAudioSeconds` metadata. The transcription service also enforces the resolved speech setting's `maxAudioSeconds` limit before invoking any provider.
@@ -38,9 +40,11 @@ The shared contracts distinguish configured provider mode from the provider that
 
 The external transcription default uses an OpenAI-compatible `/v1/audio/transcriptions` URL with an empty API key. Runtime code must treat a missing key, missing model, unsupported audio format, client permission error, and provider failure as structured error outcomes rather than generic exceptions.
 
-In `auto` mode, Code UX checks the selected local model first. Local speech models use deterministic cache directories under `~/.code-ux/models/speech/<model-id>`, where slashes in model ids are normalized for filesystem safety. If the local model is missing and external transcription is explicitly configured with a base URL, API key, and model, the service sends the request to the external endpoint and returns fallback metadata describing the skipped local provider. If neither provider is usable, the service returns a structured 400-compatible `client_error` explaining that a local model or external credentials are required.
+In `auto` mode, Code UX checks the selected local model first. Local speech models use deterministic cache directories under `~/.code-ux/models/speech/<sanitized-model-id>`, where slashes in model ids are normalized for filesystem safety; the default `onnx-community/whisper-base.en` resolves to `~/.code-ux/models/speech/onnx-community--whisper-base.en/`. Each model directory must contain `model.onnx` and may include `labels.json`. If the local model is missing and external transcription is explicitly configured with a base URL, API key, and model, the service sends the request to the external endpoint and returns fallback metadata describing the skipped local provider. If neither provider is usable, the service returns a structured 400-compatible `client_error` explaining that a local model or external credentials are required.
 
 External requests use OpenAI-style multipart fields: `file`, `model`, and optional `language`, with bearer token authentication and a request timeout. Provider error text is sanitized before it is returned so API keys and bearer tokens are never echoed to the dashboard.
+
+Electron packages include the `onnxruntime-node` runtime dependency and unpack its native bindings from ASAR, but model weights remain user-cache data under `~/.code-ux/models/speech/` to avoid bloating installers and to let users replace or add models independently.
 
 ## Current Status
 
@@ -53,8 +57,5 @@ Implemented now:
 - Speech transcription service with local ONNX inference, external API transcription, `auto` fallback behavior, and structured errors.
 - Deterministic local speech model catalog/cache paths.
 - Shared dashboard recorder, transcription API client, and speech input button primitives.
-
-Not implemented yet:
-
-- Electron microphone permission handling.
+- Electron microphone permission handling for the trusted dashboard origin.
 - Composer-level speech input wiring.

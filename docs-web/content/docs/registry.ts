@@ -51,6 +51,7 @@ export type DocsSlug =
   | 'architecture-security'
   | 'settings-subcategories-display-settings'
   | 'settings-subcategories-onboarding'
+  | 'architecture-speech-input'
 
 export interface DocsRegistryEntry extends Partial<Omit<PageMeta, 'title' | 'description'>> {
   id: DocsSlug
@@ -397,6 +398,13 @@ export const docsRegistry: Record<DocsSlug, DocsRegistryEntry> = {
     title: "Onboarding",
     description: "Reopens the guided setup flow without changing saved settings by itself.",
   },
+  'architecture-speech-input': {
+    id: 'architecture-speech-input',
+    path: '/docs/architecture-speech-input',
+    section: 'Architecture',
+    title: "Speech Input Architecture",
+    description: "Speech input turns dashboard microphone or uploaded audio into prompt text through POST /api/speech/transcriptions. The current implementation includes persisted settings, the backend transcription route and service,...",
+  },
 }
 
 export const orderedDocs: DocsRegistryEntry[] = [
@@ -448,6 +456,7 @@ export const orderedDocs: DocsRegistryEntry[] = [
   docsRegistry['architecture-security'],
   docsRegistry['settings-subcategories-display-settings'],
   docsRegistry['settings-subcategories-onboarding'],
+  docsRegistry['architecture-speech-input'],
 ]
 
 export const groupedDocs = orderedDocs.reduce<Record<DocsSection, DocsRegistryEntry[]>>(
