@@ -341,6 +341,138 @@ describe("Dashboard Chat API", () => {
 
   });
 
+  it("preserves create-app quickaction metadata on chat message posts", async () => {
+    const app = express();
+    const quickactionMetadata = {
+      quickaction: {
+        type: "create_app",
+        kind: "desktop_app",
+        requestId: "quickaction-desktop-1",
+        templateId: "qs-create-desktop-app",
+        stackSummary: {
+          techstackId: "electron-preact",
+          techstackName: "Electron + Preact",
+          packageManager: "pnpm",
+        },
+        suggestionTags: ["offline", "tray"],
+      },
+    };
+    const createdMessage = {
+      id: "msg-created",
+      threadId: "thread-1",
+      direction: "dashboard_to_connection",
+      authorType: "dashboard_user",
+      authorConnectionId: null,
+      bodyMarkdown: "Create a desktop app",
+      deliveryStatus: "processed",
+      metadata: quickactionMetadata,
+      createdAt: "2026-07-07T00:00:00.000Z",
+    };
+    const postConversationMessage = vi.fn().mockResolvedValue(createdMessage);
+    const handle = await setupDashboardServer({
+      app,
+      dashboardDir: "dashboard",
+      port: 0,
+      liveActivityCacheMs: 1000,
+      getStatus: () => ({}),
+      getExecutionSnapshot: () => ({}),
+      getProjectExecutionSnapshot: () => ({}),
+      getProjectStatsSnapshot: () => ({}),
+      getHeaderTokenThroughputSnapshot: () => ({}),
+      getOverviewTelemetrySnapshot: () => ({}),
+      getLiveActivities: async () => ({}),
+      getGitStatus: async () => ({}),
+      getExternalSettingsHints: () => ({}),
+      getSystemSettings: () => ({}),
+      saveSystemSettings: () => ({}),
+      resetDatabase: () => {},
+      getProjectSettings: () => ({}),
+      saveProjectSettings: () => ({}),
+      resetProjectSettings: () => {},
+      getProjectEffectiveSettings: () => ({}),
+      getSprintSettings: () => ({}),
+      saveSprintSettings: () => ({}),
+      resetSprintSettings: () => {},
+      getSprintEffectiveSettings: () => ({}),
+      listProjects: () => ({ projects: [], selectedProjectId: null }),
+      createProject: () => ({}),
+      getProject: () => ({}),
+      updateProject: () => ({}),
+      deleteProject: () => {},
+      selectProject: () => null,
+      selectSprint: () => null,
+      listSprints: () => ({ sprints: [], selectedSprintId: null }),
+      createSprint: () => ({}),
+      updateSprint: () => ({}),
+      deleteSprint: () => {},
+      importSprintFromMarkdown: () => ({}),
+      exportSprintToMarkdown: () => ({}),
+      listTasks: () => [],
+      getTask: () => null,
+      createTask: () => ({}),
+      updateTask: () => ({}),
+      deleteTask: () => {},
+      searchJiraIssues: async () => [],
+      searchJiraProjectStatuses: async () => [],
+      listSprintLinkedIssues: () => [],
+      replaceSprintLinkedIssues: () => [],
+      listConnections: () => [],
+      updateConnection: () => ({}),
+      listAgentPresets: () => [],
+      createAgentPreset: () => ({}),
+      updateAgentPreset: () => ({}),
+      deleteAgentPreset: () => {},
+      listInstructionFiles: () => [],
+      readInstructionFile: () => ({}),
+      writeInstructionFile: () => ({}),
+      listConversationThreads: () => [],
+      createConversationThread: () => ({}),
+      updateConversationThread: () => ({}),
+      updateThreadRoute: () => ({}),
+      compactThreadSession: () => ({}),
+      deleteConversationThread: () => {},
+      listConversationMessages: () => [],
+      postConversationMessage,
+      listProjectInvocations: () => [],
+      listInvocationMessages: () => [],
+      rerunTask: async () => ({}),
+      orchestrateSprint: async () => ({}),
+      pauseSprintRun: async () => ({}),
+      cancelSprintRun: async () => ({}),
+      forceCancelSprintRun: async () => ({}),
+      cancelTaskDispatch: async () => ({}),
+      forceCancelTaskDispatch: async () => ({}),
+      forceCompleteTask: async () => {},
+      retryTaskDispatch: async () => ({}),
+      listDockerContainers: async () => [],
+    } as any);
+    serversToClose.push(handle.server);
+    const baseUrl = `http://127.0.0.1:${handle.port}`;
+
+    const response = await fetch(`${baseUrl}/api/projects/project-1/conversations/messages`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        threadId: "thread-1",
+        bodyMarkdown: "Create a desktop app",
+        metadata: quickactionMetadata,
+      }),
+    });
+
+    expect(response.status).toBe(201);
+    await expect(response.json()).resolves.toMatchObject({
+      id: "msg-created",
+      metadata: quickactionMetadata,
+    });
+    expect(postConversationMessage).toHaveBeenCalledWith("project-1", {
+      threadId: "thread-1",
+      bodyMarkdown: "Create a desktop app",
+      title: undefined,
+      connectionId: undefined,
+      metadata: quickactionMetadata,
+    });
+  });
+
   it("returns 400 on invalid route mapping inputs", async () => {
     const app = express();
     const handle = await setupDashboardServer({
