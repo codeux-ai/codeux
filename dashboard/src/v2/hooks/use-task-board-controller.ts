@@ -57,6 +57,7 @@ export interface TaskBoardController {
   boardViewModel: TaskBoardViewModel;
   draggedTaskId: string | null;
   dropTargetContext: TaskBoardDropTargetContext | null;
+  agentPresets: AgentPreset[];
   agentPresetsMap: Map<string, AgentPreset>;
   resolvedTaskId: string | null;
   clearResolvedTaskId: () => void;
@@ -102,6 +103,7 @@ function buildOptimisticTask(args: {
     promptMarkdown: args.draft.promptMarkdown,
     description: args.draft.description,
     dependsOnTaskIds: args.draft.dependsOnTaskIds,
+    agentPresetId: args.draft.agentPresetId,
     isIndependent: false,
     isMerged: false,
     mergeIndicator: null,
@@ -166,18 +168,21 @@ export function useTaskBoardController(): TaskBoardController {
     ? gitSettings.githubMode !== "LOCAL" && gitSettings.autoCreatePr === true
     : true;
 
-  const [agentPresetsMap, setAgentPresetsMap] = useState<Map<string, AgentPreset>>(new Map());
+  const [agentPresets, setAgentPresets] = useState<AgentPreset[]>([]);
   useEffect(() => {
     if (!projectId) {
-      setAgentPresetsMap(new Map());
+      setAgentPresets([]);
       return;
     }
     let cancelled = false;
     fetchAgentPresets(projectId).then((presets) => {
-      if (!cancelled) setAgentPresetsMap(new Map(presets.map((preset) => [preset.id, preset])));
+      if (!cancelled) setAgentPresets(presets);
     }).catch(() => {});
     return () => { cancelled = true; };
   }, [projectId]);
+  const agentPresetsMap = useMemo(() => (
+    new Map(agentPresets.map((preset) => [preset.id, preset]))
+  ), [agentPresets]);
 
   const [statusFilter, setStatusFilter] = useState<TaskBoardStatusFilter>("all");
   const [priorityFilter, setPriorityFilter] = useState<TaskBoardPriorityFilter>("all");
@@ -496,6 +501,7 @@ export function useTaskBoardController(): TaskBoardController {
     boardViewModel: displayBoardViewModel,
     draggedTaskId,
     dropTargetContext,
+    agentPresets,
     agentPresetsMap,
     resolvedTaskId,
     clearResolvedTaskId,
