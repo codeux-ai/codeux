@@ -45,6 +45,9 @@ describe("onboarding-provider-settings", () => {
           "p1": { provider: "jules", name: "Jules", apiKey: "key", mountAuth: false, authPath: "" }
         }
       },
+      cluster: {
+        connections: [],
+      },
       defaults: {
         appearance: { theme: "system" },
         automationLevel: "FULL",
