@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useRef } from "preact/hooks";
-import type { Sprint, SprintCollectionResponse } from "../v2/types.js";
-import { fetchSprints, selectSprint as apiSelectSprint } from "../v2/lib/project-api.js";
+import type { CreateSprintInput, Sprint, SprintCollectionResponse } from "../v2/types.js";
+import { createSprint as apiCreateSprint, fetchSprints, selectSprint as apiSelectSprint } from "../v2/lib/project-api.js";
 import { toSprintViewModel } from "../v2/lib/view-models.js";
 import { areSprintCollectionsEqual, resolveSelectedSprint } from "../v2/lib/sprint-scope.js";
 import { useRealtimeResource } from "./use-realtime-resource.js";
@@ -11,6 +11,7 @@ interface UseSprintsResult {
   selectedSprintId: string | null;
   selectedSprint: Sprint | null;
   selectSprint: (sprintId: string | null) => Promise<void>;
+  createSprint: (input: CreateSprintInput) => Promise<Sprint | null>;
   loading: boolean;
   error: string | null;
   refetch: () => Promise<void>;
@@ -133,6 +134,29 @@ export function useSprints(projectId: string | null): UseSprintsResult {
     }
   }, [projectId, updateDataLocally]);
 
+  const createSprint = useCallback(async (input: CreateSprintInput): Promise<Sprint | null> => {
+    if (!projectId) return null;
+    try {
+      const created = await apiCreateSprint(projectId, input);
+      invalidateLivePayloadCache(projectId);
+      updateDataLocally((current) => {
+        if (!current) return current;
+        const nextCollection = {
+          ...current,
+          sprints: current.sprints.some((sprint) => sprint.id === created.id)
+            ? current.sprints.map((sprint) => sprint.id === created.id ? created : sprint)
+            : [...current.sprints, created],
+        };
+        sprintResourceState.cache.set(projectId, nextCollection);
+        return nextCollection;
+      });
+      return toSprintViewModel(created);
+    } catch (err) {
+      console.error("Failed to create sprint", err);
+      throw err;
+    }
+  }, [projectId, updateDataLocally]);
+
   const data = useMemo(
     () => collection ? collection.sprints.map(toSprintViewModel) : [],
     [collection],
@@ -143,5 +167,5 @@ export function useSprints(projectId: string | null): UseSprintsResult {
     [data, selectedSprintId],
   );
 
-  return { data, selectedSprintId, selectedSprint, selectSprint, loading, error, refetch: () => refetch({ silent: true }) };
+  return { data, selectedSprintId, selectedSprint, selectSprint, createSprint, loading, error, refetch: () => refetch({ silent: true }) };
 }
