@@ -232,11 +232,11 @@ Disabling a step is for debugging; in production, leave them all enabled.
 }
 ```
 
-`taskPrTitleScheme` controls automated task PR titles for initial task PR creation
-and QA follow-up PR resolution. Supported tokens are
+`git.taskPrTitleScheme` controls automated task PR titles for initial task PR creation
+and QA follow-up PR resolution. Its default is `({sprint_tag}) {task_title}`. Supported tokens are
 `{sprint_tag}`, `{sprint_key}`, `{sprint_number}`, `{sprint_title}`, `{task_key}`,
-`{task_title}`, and `{provider}`. `{sprint_tag}` resolves to the first linked issue key
-when present, then `<sprintKeyPrefix>-<sprint number>`, then a stable sprint slug/id.
+`{task_title}`, and `{provider}`. `{sprint_tag}` resolves in this order: first linked issue key
+when present, then `<sprintKeyPrefix>-<sprint number>`, then a stable sprint slug/id fallback.
 Provider text is included only when the template contains `{provider}`.
 
 `deleteMergedBranches` (default `true`) deletes a branch once its work has merged: worker
