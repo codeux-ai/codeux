@@ -22,6 +22,18 @@ describe("UpdateCheckerService", () => {
     expect(status.latestVersion).toBe("99.0.0");
     expect(status.updateAvailable).toBe(true);
     expect(status.releaseUrl).toBe("https://github.com/codeux-ai/codeux/releases/tag/v99.0.0");
+    expect(status.downloadTargets).toEqual({
+      npm: {
+        kind: "npm",
+        label: "npm package @codeuxai/codeux 99.0.0",
+        url: "https://www.npmjs.com/package/@codeuxai/codeux/v/99.0.0",
+      },
+      electron: {
+        kind: "electron",
+        label: "Code UX desktop release 99.0.0",
+        url: "https://github.com/codeux-ai/codeux/releases/tag/v99.0.0",
+      },
+    });
     expect(status.error).toBeUndefined();
     expect(Number.isNaN(Date.parse(status.checkedAt))).toBe(false);
     expect(fetchMock).toHaveBeenCalledTimes(1);
@@ -47,6 +59,10 @@ describe("UpdateCheckerService", () => {
     expect(first.latestVersion).toBe("0.8.10");
     expect(second.latestVersion).toBe("0.8.10");
     expect(forced.latestVersion).toBe("0.9.0");
+    expect(first.downloadTargets.npm.url).toBe("https://www.npmjs.com/package/@codeuxai/codeux/v/0.8.10");
+    expect(second.downloadTargets.electron.url).toBe("https://github.com/codeux-ai/codeux/releases/tag/v0.8.10");
+    expect(forced.downloadTargets.npm.url).toBe("https://www.npmjs.com/package/@codeuxai/codeux/v/0.9.0");
+    expect(forced.downloadTargets.electron.url).toBe("https://github.com/codeux-ai/codeux/releases/tag/v0.9.0");
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
@@ -66,6 +82,18 @@ describe("UpdateCheckerService", () => {
     expect(status.latestVersion).toBeNull();
     expect(status.updateAvailable).toBe(false);
     expect(status.releaseUrl).toBe("https://github.com/codeux-ai/codeux/releases");
+    expect(status.downloadTargets).toEqual({
+      npm: {
+        kind: "npm",
+        label: "npm package @codeuxai/codeux",
+        url: "https://www.npmjs.com/package/@codeuxai/codeux",
+      },
+      electron: {
+        kind: "electron",
+        label: "Code UX desktop releases",
+        url: "https://github.com/codeux-ai/codeux/releases",
+      },
+    });
     expect(status.error).toContain("HTTP 503");
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
