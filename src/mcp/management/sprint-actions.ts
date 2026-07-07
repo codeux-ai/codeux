@@ -146,7 +146,7 @@ function buildImportIssueSearchInput(payload: Record<string, unknown>): IssueSea
     issueNumbers: readNumberArray(payload, "issueNumbers"),
     issueRefs: readStringArray(payload, "issueRefs"),
     externalIds: readStringArray(payload, "externalIds"),
-    includeConversation: payload.includeConversation === false ? false : undefined,
+    includeConversation: typeof payload.includeConversation === "boolean" ? payload.includeConversation : undefined,
     createdAfter: readString(payload, "createdAfter"),
     createdBefore: readString(payload, "createdBefore"),
     updatedAfter: readString(payload, "updatedAfter"),

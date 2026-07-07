@@ -412,7 +412,7 @@ describe("SprintActions", () => {
       labels: ["integration"],
       teamKey: "lin",
       providerProjectId: "project-1",
-      includeConversation: undefined,
+      includeConversation: true,
       limit: 5,
     }));
     expect(projectRepo.replaceSprintLinkedIssues).not.toHaveBeenCalled();
@@ -420,6 +420,63 @@ describe("SprintActions", () => {
       mode: "search",
       provider: "linear",
       searchedIssues: mockIssues,
+      linkedIssues: [],
+      planning: null,
+    });
+  });
+
+  it("searches Asana tasks with conversation context requested", async () => {
+    const mockTasks = [{
+      provider: "asana",
+      sourceProvider: "asana",
+      sourceKind: "task",
+      externalId: "task-1",
+      hostDomain: "app.asana.com",
+      repository: "workspace-1",
+      issueNumber: null,
+      issueKey: "task:task-1",
+      title: "Asana Task",
+      url: "https://app.asana.com/0/project-1/task-1",
+      state: "open",
+      labels: ["triage"],
+      assignees: ["alice"],
+      bodyPreview: "preview",
+      createdAt: null,
+      updatedAt: null,
+      issueAuthor: null,
+      issueReporter: null,
+      issueMilestone: null,
+      issueType: "Task",
+      issuePriority: null,
+      issueCommentCount: 2,
+    }];
+    vi.mocked(sprintIssueService.searchIssues).mockResolvedValue(mockTasks as any);
+
+    const result = await sprintActions.handleSprintAction(makeArgs("import_issues", {
+      projectId: "p1",
+      provider: "asana",
+      workspaceId: " workspace-1 ",
+      asanaProjectId: " project-1 ",
+      search: " inbox ",
+      status: "open",
+      includeConversation: true,
+      limit: 3,
+    }));
+
+    expect(sprintIssueService.searchIssues).toHaveBeenCalledWith("p1", expect.objectContaining({
+      provider: "asana",
+      workspaceId: "workspace-1",
+      providerProjectId: "project-1",
+      search: "inbox",
+      status: "open",
+      includeConversation: true,
+      limit: 3,
+    }));
+    expect(projectRepo.replaceSprintLinkedIssues).not.toHaveBeenCalled();
+    expect(result.result).toMatchObject({
+      mode: "search",
+      provider: "asana",
+      searchedIssues: mockTasks,
       linkedIssues: [],
       planning: null,
     });
