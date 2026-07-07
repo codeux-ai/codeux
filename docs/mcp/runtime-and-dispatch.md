@@ -173,7 +173,9 @@ That endpoint:
 The Settings > MCP panel explains both runtime connection modes in place:
 
 - Code UX exposes the built-in MCP server over stdio and authenticated Streamable HTTP.
-- The Local CLI HTTP setup section shows the active URL and bearer token, lets the user regenerate the token, and can install the Code UX MCP entry into local Claude Code, Gemini, Codex, Qwen Code, OpenCode, and Antigravity config files.
+- The Local CLI HTTP setup section shows the active URL and bearer token after the Streamable HTTP gateway has bound, lets the user regenerate the token, and can install the Code UX MCP entry into local Claude Code, Gemini, Codex, Qwen Code, OpenCode, and Antigravity config files.
+- Local CLI HTTP installs write a remote MCP entry for the currently running gateway. Clients such as Codex require Code UX to stay running; if Codex fails to initialize `http://127.0.0.1:4445/mcp`, verify `curl --fail http://127.0.0.1:4445/health` and reinstall after URL or token changes.
+- Reinstalling the local Codex config treats `[mcp_servers.code-ux]` as a managed block and replaces it with the current gateway URL and bearer token while preserving unrelated TOML settings and custom MCP server tables.
 - Custom remote MCP servers are added from system scope by choosing `HTTP / SSE`, pasting the server URL, and optionally entering auth headers as a JSON object of header names to string values.
 - HTTP custom server previews use `{ type: "http", url, headers }`; stdio custom server previews use command, args, and env.
 - Custom server changes are injected into MCP-capable CLI containers on the next CLI run. Project scope can enable, disable, or override inherited system servers, but new custom servers are created at system scope.

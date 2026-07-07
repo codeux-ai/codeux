@@ -604,26 +604,11 @@ export class CodeUxServer {
   }
 
   private getConfiguredMcpConnectionInfo(): McpConnectionInfo | null {
-    if (!this.appConfig.mcpHttpEnabled || !this.appConfig.mcpHttpPort) {
+    if (!this.appConfig.mcpHttpEnabled || !this.appConfig.mcpHttpPort || !this.mcpHttpHandle) {
       return null;
     }
-    if (this.mcpHttpHandle) {
-      return {
-        url: `http://${this.mcpHttpClientHost()}:${this.mcpHttpHandle.port}${this.mcpHttpHandle.path}`,
-        authToken: this.appConfig.mcpHttpAuthToken,
-      };
-    }
-
-    const defaultMcpHttpPort = this.appConfig.dashboardPort + 1;
-    const port = this.appConfig.mcpHttpPort === defaultMcpHttpPort
-      ? this.getDashboardPort() + 1
-      : this.appConfig.mcpHttpPort;
-    const host = this.appConfig.mcpHttpHost.trim().toLowerCase();
-    const clientHost = host === "0.0.0.0" || host === "::"
-      ? "127.0.0.1"
-      : this.appConfig.mcpHttpHost;
     return {
-      url: `http://${clientHost}:${port}${this.appConfig.mcpHttpPath}`,
+      url: `http://${this.mcpHttpClientHost()}:${this.mcpHttpHandle.port}${this.mcpHttpHandle.path}`,
       authToken: this.appConfig.mcpHttpAuthToken,
     };
   }
