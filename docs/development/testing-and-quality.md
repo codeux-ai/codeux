@@ -88,39 +88,58 @@ pnpm run test:backend:coverage
 ```bash
 pnpm run test:e2e
 ```
-`pnpm run test:e2e` is a wrapper around `pnpm exec playwright test` so the repo keeps one documented entrypoint while Playwright still runs directly.
 Build first when running E2E from a clean checkout:
 ```bash
 pnpm run build
 pnpm run test:e2e
 ```
-`pnpm run test:e2e` is a wrapper around `pnpm exec playwright test`; it chooses an isolated dashboard/MCP port pair and exports `CODEUX_E2E_DASHBOARD_PORT` before Playwright starts `node dist/index.js`. The Playwright config starts the compiled server on the E2E dashboard port (`4464` by default, override with `CODEUX_E2E_DASHBOARD_PORT`), waits on the local `/health` liveness probe, and runs against a temporary HOME/USERPROFILE/XDG home so the suite does not depend on a developer's browser cache, onboarding state, selected project, or real Code UX database. The compiled server receives `DASHBOARD_PORT`, `MCP_HTTP_PORT`, `CODE_UX_CONTAINERIZED_GIT=0`, `CODE_UX_GIT_CONTAINER_MODE=host`, and `CODEUX_E2E_PROVIDER_CLI_SHIM` pointing at `scripts/e2e/mock-provider-cli.mjs`; provider command specs and the HOST CLI-workflow test override only honor that shim when the variable is explicitly set, so normal runtime continues to use the real provider CLIs and Docker execution. The E2E suite is local-only: tests must navigate through `baseURL` routes or local API probes, not external websites. Failure artifacts are retained under `test-results/`, and the HTML report is written to `playwright-report/`; CI uploads both paths after every run so traces, videos, screenshots, and reports are available when failures occur.
 
-Focused examples:
+`pnpm run test:e2e` runs `scripts/e2e/run-playwright.mjs`, which selects an unused dashboard/MCP port pair and then delegates to `pnpm exec playwright test`. `playwright.config.ts` starts `node dist/index.js`, waits on the local `/health` liveness probe, and gives the child process an isolated `HOME`, `USERPROFILE`, `XDG_CONFIG_HOME`, and `XDG_DATA_HOME`. That temporary home keeps browser tests away from the developer's real `~/.code-ux/app.db`, selected project, onboarding state, provider auth, and runtime cache. The suite runs against the compiled server so it validates the packaged runtime path used by `pnpm start`, Electron, and release checks; run `pnpm run build` first whenever `dist/index.js` may be absent or stale.
+
+The compiled E2E server receives `DASHBOARD_PORT`, `MCP_HTTP_PORT`, `CODE_UX_CONTAINERIZED_GIT=0`, `CODE_UX_GIT_CONTAINER_MODE=host`, `CODE_UX_DIRECTORY_BROWSER_ROOTS=<os temp dir>`, and `CODEUX_E2E_PROVIDER_CLI_SHIM=scripts/e2e/mock-provider-cli.mjs`. The specs are deterministic fake-CLI orchestration coverage, not coverage of real provider CLIs. Normal provider execution must remain unaffected: `src/infrastructure/providers/cli/provider-command-specs.ts` only swaps provider commands when `CODEUX_E2E_PROVIDER_CLI_SHIM` is explicitly set, and `src/domain/settings/settings-sanitizers/cli-workflow-sanitizer.ts` only preserves `HOST` execution for that guarded E2E lane. Without the shim env var, provider settings sanitize back toward Docker execution and real provider command specs.
+
+Focused E2E commands:
 ```bash
 pnpm run test:e2e -- tests/e2e/product-smoke.spec.ts
 pnpm run test:e2e -- tests/e2e/dashboard-workflows.spec.ts
-pnpm run test:e2e -- tests/e2e/sprint-task-lifecycle.spec.ts
-pnpm run test:e2e -- tests/e2e/app-release-smoke.spec.ts
-pnpm run test:e2e -- tests/e2e/project-setup-release.spec.ts
-pnpm run test:e2e -- tests/e2e/app-release-smoke.spec.ts -g "normal app shell"
+pnpm run test:e2e -- tests/e2e/filesystem-persistence.spec.ts
+pnpm run test:e2e -- tests/e2e/invocation-runtime.spec.ts
+pnpm run test:e2e -- tests/e2e/full-sprint-orchestration.spec.ts
+pnpm run test:e2e -- tests/e2e/sprint-controls-stress.spec.ts
 ```
 
-### Playwright Release E2E
+### Playwright E2E Suite
 
-The release-style E2E suite lives under `tests/e2e` and exercises the production-style dashboard served by the compiled server. It is not a provider orchestration test suite: specs must avoid provider credentials, Docker provider startup, project setup automation, worker dispatch, and sprint execution endpoints. The current coverage includes:
+The Playwright suite lives under `tests/e2e` and exercises the production-style dashboard served by the compiled server. Coverage is intentionally split between dashboard smoke paths and deterministic fake-provider orchestration paths:
 
+- `tests/e2e/product-smoke.spec.ts`, which verifies the local dashboard shell and sprint ledger navigation.
 - `tests/e2e/app-release-smoke.spec.ts`, which verifies the normal app shell, core dashboard routes, responsive task-board behavior, route landmarks, and unexpected browser errors.
 - `tests/e2e/project-setup-release.spec.ts`, which verifies first-run onboarding completion, visible Add Project modal behavior for a credential-free local directory under the OS temp path, dashboard project selection, `/projects` landmarks, `/tasks` navigation, loading/error checks, and desktop/mobile overflow checks without provider secrets or orchestration endpoints.
 - `tests/e2e/dashboard-workflows.spec.ts`, which verifies isolated local-git project selection, draft sprint creation, dependent task creation, collection API visibility, core route landmarks, and unhandled browser error capture without starting planning or provider execution.
 - `tests/e2e/sprint-task-lifecycle.spec.ts`, which verifies draft sprint and implementation task create/edit/delete behavior through the visible dashboard flows and collection API assertions.
-- `tests/e2e/sprint-controls-stress.spec.ts`, which uses isolated local-git projects and the fake provider shim to stress dashboard orchestration controls through pause, resume, cancellation, retry, force-complete, and stale-active-work assertions.
 - `tests/e2e/filesystem-persistence.spec.ts`, which verifies project instruction-file writes for root and nested catalog paths, host local-directory browsing and sanitized traversal rejection, and Settings Appearance background-image uploads persisting as data URLs after reload. The Playwright server exposes the OS temp directory through `CODE_UX_DIRECTORY_BROWSER_ROOTS` so temporary git fixtures can be browsed without Docker-backed file-browser sessions.
+- `tests/e2e/invocation-runtime.spec.ts`, which uses the deterministic runtime path to assert persisted invocation metadata, prompt/transcript counts, linked sprint/task/run ids, and sanitized runtime API snapshots.
+- `tests/e2e/full-sprint-orchestration.spec.ts`, which runs a local multi-task sprint to completion through the fake CLI, including dependency ordering, workspace writes, merge cleanup, and runtime telemetry.
+- `tests/e2e/sprint-controls-stress.spec.ts`, which uses isolated local-git projects and the fake provider shim to stress pause, resume, cancellation, retry, force-complete, and stale-active-work assertions.
 - `tests/e2e/helpers/prepare-app.ts`, which prepares deterministic app state through dashboard HTTP APIs for onboarding, local project selection, draft sprint setup, task setup, updates, deletes, and cleanup.
 - `tests/e2e/helpers/e2e-fixtures.ts`, which adds reusable helpers for temporary git repositories, selected Code UX project seeding, project settings overrides for local-git HOST execution, QA-disabled deterministic sprint/task fixtures, API polling, and dashboard onboarding/tour suppression.
-- `scripts/e2e/mock-provider-cli.mjs`, which is the cross-platform fake provider used by the Playwright shim. Prompt markers such as `[mock-provider:sleep=250]`, `[mock-provider:fail]`, `[mock-provider:exit=2]`, `[mock-provider:no-op]`, and `[mock-provider:write=relative/path.txt]` let tests force deterministic delay, failure, no-op, and file-output behavior without Docker, provider auth, or network calls.
+- `scripts/e2e/mock-provider-cli.mjs`, which is the cross-platform fake provider used by the Playwright shim.
 
 `playwright.config.ts` uses Chromium, the `CODEUX_E2E_DASHBOARD_PORT` base URL selected by the wrapper, `fullyParallel: false`, CI retries, and the GitHub plus HTML reporters in CI. It checks `/health` because a clean run may not have project live-status activity, while liveness is enough to know the compiled web app accepted the browser session. The default desktop Chromium project runs the full E2E suite, and the mobile Chromium project is scoped to the responsive sprint ledger spec so mobile viewport coverage stays explicit without requiring every release-path test to support a narrow layout.
+
+### Fake Provider Shim
+
+The fake provider shim is `scripts/e2e/mock-provider-cli.mjs`. It is only active when the server process receives `CODEUX_E2E_PROVIDER_CLI_SHIM`; do not set that variable in normal development, manual QA against real providers, or production runtime. The shim accepts the provider, model, and prompt from the provider command boundary, writes deterministic workspace artifacts by default, emits provider-shaped JSON events, and exits without provider credentials, Docker, remote Git, or network calls.
+
+Supported prompt markers:
+
+- Success: omit failure markers. The shim writes `mock-provider-output.txt`, `.codeux-mock-provider/provider-run.json`, and the Codex output file when `--codex-output-path` is provided.
+- Sleep: `[mock-provider:sleep=250]` delays for the requested milliseconds, clamped to 10 seconds, so controls can exercise pause/cancel/retry timing.
+- Failure: `[mock-provider:fail]` exits non-zero, and `[mock-provider:exit=2]` selects a specific exit code from 1 through 125.
+- No change: `[mock-provider:no-op]` skips deterministic file writes while still emitting a successful provider response unless combined with a failure marker.
+- File output: `[mock-provider:write=relative/path.txt]` writes the deterministic output to a safe repository-relative path.
+
+The shim sanitizes write paths, supports Codex session output arguments, and is excluded from `mockup-cli`, which has its own built-in deterministic provider path.
 
 ### E2E Authoring Rules
 
@@ -128,7 +147,9 @@ Root E2E specs should prepare normal app state through `tests/e2e/helpers/prepar
 
 - Use `completeOnboarding`, `ensureSelectedProject`, `createDraftSprint`, and `createTaskInSprint` for setup instead of hand-writing setup requests in each spec.
 - Use unique fixture keys and generated names from the helper utilities so parallel workers and retries do not collide.
-- Use `e2e-fixtures.ts` when a browser test needs a real temporary git repository, local HOST execution settings, mock provider dispatch, or API polling. These helpers create isolated OS-temp repositories, seed projects through public HTTP APIs, and clean up both project records and repository directories.
+- Use `tests/e2e/helpers/e2e-fixtures.ts` when a browser test needs a real temporary git repository, local HOST execution settings, fake provider dispatch, or API polling. `createTemporaryGitRepository` initializes an OS-temp Git repo on `main`, configures a local test identity, commits fixture files, and exposes safe relative file writes plus cleanup. `seedSelectedCodeUxProject` and `prepareSelectedLocalGitProject` complete onboarding, create a local project through public APIs, configure project settings for local-git `HOST` execution, select that project, and delete both the project record and temp repository during cleanup.
+- Use `configureProjectForLocalHostExecution` only for fake-provider E2E projects. It disables remote Git/CI/QA/preview automation, routes worker profiles to the Codex shim, sets local Git mode, and relies on `CODEUX_E2E_PROVIDER_CLI_SHIM` for the settings sanitizer to keep `HOST` execution.
+- Clean runtime state with the fixture cleanup functions in `afterEach`: delete tasks/sprints/projects through public APIs, remove temporary repositories, and let the isolated HOME expire with the Playwright server process.
 - Prefer role-based locators, accessible names, landmarks, and stable `data-testid` roots over CSS shape or timing assertions.
 - For live-updating menus or dropdowns, keep helper clicks idempotent: reopen the menu and retry if a located item detaches between visibility and click, while still asserting the accessible action is visible before each attempt.
 - Build paths with Node `os`, `path`, and `fs` APIs so fixtures remain portable on Windows, macOS, and Linux.
@@ -151,9 +172,23 @@ Root E2E specs should prepare normal app state through `tests/e2e/helpers/prepar
 
 The Playwright workflow is `.github/workflows/playwright.yml`. It runs on pushes and pull requests targeting `main`, keeping the heavyweight OS-matrix E2E lane on the release path while `dev` remains gated by core CI.
 
-The workflow matrix covers `ubuntu-latest`, `macos-latest`, and `windows-latest`. It installs dependencies with pnpm 10.33.0 on Node 22 using `pnpm install --frozen-lockfile --ignore-scripts`, builds the server and dashboard before Playwright starts `node dist/index.js`, caches browser binaries under `.cache/ms-playwright`, restores that cache before installing Chromium, installs Linux Chromium system dependencies only on Linux runners, and runs the same `pnpm run test:e2e` script used locally. Linux and macOS restore a `node_modules` cache for speed; Windows intentionally skips that cache and performs a clean pnpm install so pnpm's nested package links are regenerated instead of reusing a stale symlink tree. It uploads `test-results/` and `playwright-report/` as `playwright-artifacts-${{ matrix.os }}` workflow artifacts with `if: always()` for seven days, with empty uploads ignored so successful runs do not fail if no failure artifacts were produced.
+The workflow matrix covers `ubuntu-latest`, `macos-latest`, and `windows-latest`. It installs dependencies with pnpm 10.33.0 on Node 22 using `pnpm install --frozen-lockfile --ignore-scripts`, builds the server and dashboard before Playwright starts `node dist/index.js`, caches browser binaries under `.cache/ms-playwright`, restores that cache before installing Chromium, installs Linux Chromium system dependencies only on Linux runners with `pnpm exec playwright install-deps chromium`, and runs the same `pnpm run test:e2e` script used locally. Linux and macOS restore a `node_modules` cache for speed; Windows intentionally skips that cache and performs a clean pnpm install so pnpm's nested package links are regenerated instead of reusing a stale symlink tree. It uploads `test-results/` and `playwright-report/` as `playwright-artifacts-${{ matrix.os }}` workflow artifacts with `if: always()` for seven days, with empty uploads ignored so successful runs do not fail if no failure artifacts were produced.
 
-This lane is credential-free. It validates the compiled dashboard and server, including project setup coverage through `tests/e2e/project-setup-release.spec.ts`, without provider keys, Docker provider startup, project setup automation, sprint orchestration, or real project state.
+This lane is credential-free. It validates the compiled dashboard and server, including deterministic fake-CLI orchestration coverage, without provider keys, real provider CLIs, Docker provider startup, remote Git infrastructure, or real project state.
+
+OS-specific caveats:
+
+- Build paths with `path.join`, `path.resolve`, and URL encoding instead of hard-coded `/` separators; fixture helpers accept both POSIX and Windows separators when validating safe relative paths.
+- Browser file inputs need real temporary files created with Node `fs` APIs; do not depend on shell-specific paths, quoting, or glob expansion.
+- Spawn shell commands with explicit command/argument arrays and use `.cmd` wrappers on Windows when invoking package-manager binaries, as `scripts/e2e/run-playwright.mjs` does for pnpm.
+- Linux CI installs Chromium system packages separately. Local Linux failures that mention missing shared libraries usually need `pnpm exec playwright install-deps chromium`; macOS and Windows normally only need `pnpm exec playwright install chromium`.
+
+### E2E Troubleshooting
+
+- Stale sprint runs: use a fresh `pnpm run test:e2e` invocation so Playwright creates a new temporary HOME and app database. Within specs, delete created tasks, sprints, and projects through fixture cleanup helpers instead of reusing state from a previous run.
+- Stuck fake CLI processes: inspect the spec for long `[mock-provider:sleep=...]` markers, canceled dispatches, or a crashed Playwright server. Stop orphaned `node dist/index.js` and `mock-provider-cli.mjs` processes, then rerun the focused spec.
+- Missing build artifacts: if Playwright reports that `dist/index.js` cannot be found, run `pnpm run build` before `pnpm run test:e2e`. CI intentionally does not cache server `.tsbuildinfo` for the E2E job because stale incremental state can hide a missing `dist/` emit.
+- Accidental real-provider execution: verify `CODEUX_E2E_PROVIDER_CLI_SHIM` is present in the Playwright server environment and that the project was configured through `configureProjectForLocalHostExecution`. If that env var is absent, the sanitizer returns to Docker execution and provider command specs use real CLI binaries.
 
 - Run the local release install verifier
 ```bash
