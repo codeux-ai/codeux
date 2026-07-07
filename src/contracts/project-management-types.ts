@@ -68,9 +68,15 @@ export interface RepositoryIssueSearchInput {
   hostDomain?: string;
   workspaceId?: string;
   projectId?: string;
+  providerProjectId?: string;
   teamId?: string;
   teamKey?: string;
   databaseId?: string;
+  boardId?: string;
+  documentId?: string;
+  fileKey?: string;
+  muralId?: string;
+  itemTypes?: string[];
   projectKey?: string;
   search?: string;
   state?: RepositoryIssueSearchState;

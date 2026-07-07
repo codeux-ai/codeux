@@ -108,6 +108,33 @@ describe("sprint issue search routes", () => {
     }));
   });
 
+  it("parses canvas provider issue search filters", async () => {
+    const searchIssues = vi.fn(async () => []);
+    const app = createApp({
+      sprintIssueService: {
+        searchIssues,
+      },
+    } as unknown as DashboardDependencies);
+
+    const response = await request(app).get(
+      "/api/projects/project-1/issues?provider=miro&boardId=board-1&documentId=doc-1&fileKey=file-1&workspaceId=workspace-1&muralId=mural-1&itemTypes=sticky_note,text&externalIds=item-1,item-2&includeConversation=true&limit=10"
+    );
+
+    expect(response.status).toBe(200);
+    expect(searchIssues).toHaveBeenCalledWith("project-1", expect.objectContaining({
+      provider: "miro",
+      boardId: "board-1",
+      documentId: "doc-1",
+      fileKey: "file-1",
+      workspaceId: "workspace-1",
+      muralId: "mural-1",
+      itemTypes: ["sticky_note", "text"],
+      externalIds: ["item-1", "item-2"],
+      includeConversation: true,
+      limit: 10,
+    }));
+  });
+
   it("rejects invalid issue search enums and dates", async () => {
     const app = createApp({
       sprintIssueService: { searchIssues: vi.fn(async () => []) },

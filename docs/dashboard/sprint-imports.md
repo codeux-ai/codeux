@@ -1,8 +1,8 @@
 # Sprint Imports
 
-Sprint imports support production paths from the Sprints page and MCP: structured markdown bundles, GitHub/GitLab issue imports, Jira issue imports, and read-only linked-scope imports from Notion, Asana, and Linear.
+Sprint imports support production paths from the Sprints page and MCP: structured markdown bundles, GitHub/GitLab issue imports, Jira issue imports, read-only linked-scope imports from Notion, Asana, and Linear, and read-only collaborative canvas imports from Miro, Lucid, Figma/FigJam, and Mural.
 
-Internal MCP clients use the same importer services through `manage_sprints` action `import_issues`. For payload examples covering search-only imports, assigned-work searches, explicit Jira keys, explicit GitHub/GitLab issue numbers, explicit Notion/Asana/Linear external IDs, sprint attachment, and plan-after-import flows, see [MCP Tools and Contracts: `manage_sprints import_issues`](../mcp/tools-and-contracts.md#manage_sprints-import_issues).
+Internal MCP clients use the same importer services through `manage_sprints` action `import_issues`. For payload examples covering search-only imports, assigned-work searches, explicit Jira keys, explicit GitHub/GitLab issue numbers, explicit external IDs, canvas identifiers, sprint attachment, and plan-after-import flows, see [MCP Tools and Contracts: `manage_sprints import_issues`](../mcp/tools-and-contracts.md#manage_sprints-import_issues).
 
 ## Markdown Import
 
@@ -74,15 +74,23 @@ Issue import uses the saved integration tokens:
 - Notion: system/project effective `notion.apiToken`; `databaseId` can narrow search or explicitly import a database.
 - Asana: system/project effective `asana.apiToken`; workspace search uses `workspaceId`, while project fallback uses `projectId`.
 - Linear: system/project effective `linear.apiToken`; `teamId`, `teamKey`, and `projectId` can narrow issue search.
+- Miro: system/project effective `miro.apiToken`; `boardId` identifies the board used for readable board items, and `itemTypes` can narrow returned board item types.
+- Lucid: system/project effective `lucid.apiToken`; `documentId` identifies a Lucidchart or Lucidspark document for readable contents, while `search` can discover documents.
+- Figma/FigJam: system/project effective `figma.apiToken`; `fileKey` is required because the Figma API does not expose a general file search endpoint for this importer.
+- Mural: system/project effective `mural.apiToken`; `workspaceId` lists workspace murals, while `muralId` or the shared `mural.boardId` setting fetches a specific mural.
 
 When the GitHub token is empty, GitHub issue search, issue context loading, and auto-close fail with a token-required error. Code UX does not fall back to local `gh` or `glab` CLI authentication for dashboard or MCP importer workflows; Docker auth-copy mount settings help worker containers, but issue search, explicit import, linked sprint attachment, planning imports, and close operations need saved GitHub/GitLab tokens.
 
-Notion, Asana, and Linear importer workflows use direct provider APIs through `fetch` and require saved tokens before any network request is made. They are read/attach only: Code UX searches, fetches readable context, persists local linked-source records, enriches sprint prompts, and can plan from that imported scope, but it does not archive Notion pages, complete Asana tasks, transition Linear issues, or close those external items.
+External importer workflows use direct provider APIs through `fetch` and require saved tokens before any network request is made. They are read/attach only: Code UX searches, fetches readable context, persists local linked-source records, enriches sprint prompts, and can plan from that imported scope, but it does not archive Notion pages, complete Asana tasks, transition Linear issues, mutate canvas boards/files/documents/murals, write comments, or close those external items.
 
 Provider-specific search behavior:
 - Notion uses `POST https://api.notion.com/v1/search` with `Authorization: Bearer` and `Notion-Version`, maps pages and databases, and reads page/database block children into prompt markdown when blocks are readable.
 - Asana uses `GET https://app.asana.com/api/1.0/workspaces/{workspace_gid}/tasks/search` for workspace task search and falls back to project tasks when a project id is supplied. When conversation context is requested, task stories/comments are appended to prompt markdown.
 - Linear uses `POST https://api.linear.app/graphql` for issue search/filter queries and explicit issue fetches. Results include description, labels, state, team/project, assignee, URL, and comments when conversation context is requested.
+- Miro uses `GET https://api.miro.com/v2/boards` for board discovery and `GET https://api.miro.com/v2/boards/{boardId}/items` for readable board items. Results map board/item ids, titles, item types, URLs, modified timestamps, and readable text/data fields into prompt markdown.
+- Lucid uses `POST https://api.lucid.co/documents/search` for document search and `GET https://api.lucid.co/v1/documents/{id}/contents` for readable Lucidchart/Lucidspark contents. Requests use `Authorization: Bearer` and `Lucid-Api-Version: 1`.
+- Figma/FigJam uses `GET https://api.figma.com/v1/files/{fileKey}` and, when `includeConversation` is true, `GET https://api.figma.com/v1/files/{fileKey}/comments` with `X-Figma-Token`. Results include file name, last modified timestamp, top-level pages/nodes, and comments.
+- Mural uses `https://app.mural.co/api/public/v1`, `GET /workspaces/{workspaceId}/murals` for listing, and `GET /murals/{muralId}` for mural metadata/content available to the token. Mural public API support is beta/limited, so imported prompt context may contain only metadata and readable content the token can access.
 
 ## Notion, Asana, And Linear Scope Import
 
@@ -102,7 +110,7 @@ Result cards support multi-select, `Select all visible`, `Clear selection`, per-
 
 ## Project-Management And Canvas Integration Settings
 
-Code UX carries shared typed settings for additional importer providers: Notion, Asana, Linear, Miro, Lucid, Figma, and Mural. Notion, Asana, and Linear have API-backed sprint importers today. Miro, Lucid, Figma, and Mural currently have settings and linked-source persistence contracts but no API-backed sprint importer in this flow yet. Jira continues to use the existing `jira` settings block, and GitHub/GitLab continue to use `git.githubToken` and `git.gitlabToken`.
+Code UX carries shared typed settings for additional importer providers: Notion, Asana, Linear, Miro, Lucid, Figma, and Mural. These providers have API-backed read-only sprint importers. Jira continues to use the existing `jira` settings block, and GitHub/GitLab continue to use `git.githubToken` and `git.gitlabToken`.
 
 Each new provider settings block stores only strings and a bounded numeric search limit:
 
@@ -121,6 +129,15 @@ Each new provider settings block stores only strings and a bounded numeric searc
 - `defaultSearchLimit`
 
 The fields are intentionally generic across project-management and collaborative-canvas systems. Provider-specific importer UI can use only the identifiers it needs, while reset, save, sanitize, and effective-settings preview paths preserve the complete block.
+
+Accepted canvas identifiers:
+- `boardId`: Miro board id. For Mural, the existing shared `boardId` setting is also accepted as the default mural id until a dedicated settings field exists.
+- `documentId`: Lucidchart or Lucidspark document id.
+- `fileKey`: Figma or FigJam file key from the file URL.
+- `workspaceId`: Mural workspace id for listing murals; also used by Asana for task search.
+- `muralId`: explicit Mural id in route/MCP payloads.
+- `externalIds`: explicit provider object ids. For canvas imports this can hold Miro item ids, Lucid document ids, Figma file keys, or Mural ids.
+- `itemTypes`: optional Miro item type filters such as `sticky_note` or `text`.
 
 ## Linked Source Persistence
 
