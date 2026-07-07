@@ -45,6 +45,88 @@ describe("SettingsIntegrationsPanel", () => {
     cleanup();
   });
 
+  const createImporterSettings = (overrides: Record<string, unknown> = {}) => ({
+    enabled: false,
+    apiToken: "",
+    apiSecret: "",
+    baseUrl: "",
+    workspaceId: "",
+    teamId: "",
+    teamKey: "",
+    projectId: "",
+    databaseId: "",
+    boardId: "",
+    documentId: "",
+    fileKey: "",
+    defaultSearchLimit: 25,
+    ...overrides,
+  });
+
+  const importerIntegrations = [
+    { id: "notion", label: "Notion", description: "Read-only import from Notion workspace pages and databases" },
+    { id: "asana", label: "Asana", description: "Read-only import from Asana workspaces, teams, and projects" },
+    { id: "linear", label: "Linear", description: "Read-only import from Linear teams, projects, and issues" },
+    { id: "miro", label: "Miro", description: "Read-only import from Miro teams and boards" },
+    { id: "lucid", label: "Lucid", description: "Read-only import from Lucid or Lucidspark documents" },
+    { id: "figma", label: "Figma / FigJam", description: "Read-only import from Figma files and FigJam boards" },
+    { id: "mural", label: "Mural", description: "Read-only import from Mural workspaces and murals" },
+  ];
+
+  const createImporterState = (overrides: Record<string, unknown> = {}) => ({
+    activeScope: "system",
+    selectedProject: null,
+    editableSettings: {
+      cliWorkflow: {
+        executionMode: "DOCKER",
+        containerMountGithubAuth: false,
+        containerGithubAuthPath: "~/.config/gh",
+        containerMountGitConfig: true,
+      },
+      git: {
+        githubMode: "REMOTE",
+        defaultBranch: "main",
+        featureBranchPrefix: "feature/",
+        sprintBranchScheme: "feature/sprint{sprint}",
+        autoCreatePr: true,
+      },
+    },
+    systemSettings: {
+      integrations: {
+        providers: {},
+        githubToken: "",
+        gitlabToken: "",
+        jira: {
+          host: "",
+          email: "",
+          apiToken: "",
+          autoTransitionLinkedIssuesOnImport: true,
+          importTransitionName: "In Work",
+          autoCloseLinkedIssues: false,
+          defaultProject: "",
+          closeTransitionName: "Done",
+        },
+        notion: createImporterSettings(),
+        asana: createImporterSettings(),
+        linear: createImporterSettings(),
+        miro: createImporterSettings(),
+        lucid: createImporterSettings(),
+        figma: createImporterSettings(),
+        mural: createImporterSettings(),
+      },
+    },
+    projectSources: {},
+    selectedIntegration: null,
+    setSelectedIntegration: vi.fn(),
+    integrations: importerIntegrations,
+    importingHints: false,
+    externalHints: { resolved: {} },
+    handleImportHints: vi.fn(),
+    updateEditableSettings: vi.fn(),
+    updateSystem: vi.fn(),
+    updateProject: vi.fn(),
+    ...overrides,
+  });
+
   it("keeps the selected integration detail in flow so long forms are not clipped", async () => {
     const state = {
       activeScope: "system",
@@ -180,6 +262,52 @@ describe("SettingsIntegrationsPanel", () => {
     expect(container.textContent).toContain("Import host hints");
     expect(container.textContent).not.toContain("Integration catalog");
     expect(container.textContent).not.toContain("Provider credentials and source-control auth in one place");
+  });
+
+  it("groups importer providers into PM and canvas catalog sections with status pills", async () => {
+    const state = createImporterState({
+      systemSettings: {
+        integrations: {
+          providers: {},
+          githubToken: "",
+          gitlabToken: "",
+          jira: {
+            host: "",
+            email: "",
+            apiToken: "",
+            autoTransitionLinkedIssuesOnImport: true,
+            importTransitionName: "In Work",
+            autoCloseLinkedIssues: false,
+            defaultProject: "",
+            closeTransitionName: "Done",
+          },
+          notion: createImporterSettings({ enabled: true, apiToken: "token", databaseId: "database-id" }),
+          asana: createImporterSettings(),
+          linear: createImporterSettings(),
+          miro: createImporterSettings(),
+          lucid: createImporterSettings(),
+          figma: createImporterSettings({ enabled: true, apiToken: "token" }),
+          mural: createImporterSettings(),
+        },
+      },
+      integrations: [
+        { id: "jira", label: "Jira", description: "Issue tracker" },
+        ...importerIntegrations,
+      ],
+    });
+
+    const { container } = render(<SettingsIntegrationsPanel state={state as any} />);
+
+    await waitFor(() => {
+      expect(container.textContent).toContain("PM");
+    });
+    expect(container.textContent).toContain("CANVAS");
+    expect(container.textContent).toContain("Notion");
+    expect(container.textContent).toContain("Figma / FigJam");
+    expect(container.textContent).toContain("Read-only import");
+    expect(container.textContent).toContain("Active");
+    expect(container.textContent).toContain("Configured");
+    expect(container.textContent).toContain("Not configured");
   });
 
   it("renders system-owned Jira configuration controls", async () => {
@@ -435,6 +563,96 @@ describe("SettingsIntegrationsPanel", () => {
       expect(container.textContent).not.toContain("Git user name");
     });
     expect(container.textContent).not.toContain("Git email");
+  });
+
+  describe("External importer configuration", () => {
+    const providerCases = [
+      { id: "notion", label: "Notion", fieldLabel: "Database ID", fieldKey: "databaseId" },
+      { id: "asana", label: "Asana", fieldLabel: "Workspace GID", fieldKey: "workspaceId" },
+      { id: "linear", label: "Linear", fieldLabel: "Team key", fieldKey: "teamKey" },
+      { id: "miro", label: "Miro", fieldLabel: "Board ID", fieldKey: "boardId" },
+      { id: "lucid", label: "Lucid", fieldLabel: "Document ID", fieldKey: "documentId" },
+      { id: "figma", label: "Figma / FigJam", fieldLabel: "File key", fieldKey: "fileKey" },
+      { id: "mural", label: "Mural", fieldLabel: "Mural ID", fieldKey: "boardId" },
+    ] as const;
+
+    it.each(providerCases)("edits %s importer credentials and defaults", async ({ id, label, fieldLabel, fieldKey }) => {
+      let updatedSystem: any = null;
+      const state = createImporterState({
+        selectedIntegration: id,
+        integrations: [{ id, label, description: "Read-only importer" }],
+      });
+      state.updateSystem = vi.fn((recipe) => {
+        updatedSystem = recipe(state.systemSettings);
+      });
+
+      const { container } = render(<SettingsIntegrationsPanel state={state as any} />);
+
+      await waitFor(() => {
+        expect(container.textContent).toContain(`${label} Configuration`);
+      });
+      expect(container.textContent).toContain("Read-only importer support");
+
+      fireEvent.click(screen.getByLabelText(`Enable ${label} importer`));
+      expect(updatedSystem.integrations[id].enabled).toBe(true);
+
+      fireEvent.input(screen.getByLabelText(`${label} API token`), { target: { value: "token-value" } });
+      expect(updatedSystem.integrations[id].apiToken).toBe("token-value");
+
+      fireEvent.input(screen.getByPlaceholderText("https://api.example.com"), { target: { value: "https://api.example.test" } });
+      expect(updatedSystem.integrations[id].baseUrl).toBe("https://api.example.test");
+
+      fireEvent.input(screen.getByLabelText(`${label} ${fieldLabel}`), { target: { value: "default-id" } });
+      expect(updatedSystem.integrations[id][fieldKey]).toBe("default-id");
+
+      fireEvent.input(screen.getByLabelText(`${label} search limit`), { target: { value: "50" } });
+      expect(updatedSystem.integrations[id].defaultSearchLimit).toBe(50);
+    });
+
+    it("shows project override badges and writes importer project overrides", async () => {
+      const editableSettings = {
+        cliWorkflow: {
+          executionMode: "DOCKER",
+          containerMountGithubAuth: false,
+          containerGithubAuthPath: "~/.config/gh",
+          containerMountGitConfig: true,
+        },
+        git: {
+          githubMode: "REMOTE",
+          defaultBranch: "main",
+          featureBranchPrefix: "feature/",
+          sprintBranchScheme: "feature/sprint{sprint}",
+          autoCreatePr: true,
+        },
+        asana: createImporterSettings({ enabled: true, apiToken: "project-token", workspaceId: "workspace" }),
+      };
+      let updatedProject: any = null;
+      const state = createImporterState({
+        activeScope: "project",
+        selectedProject: { id: "project-1", name: "Project" },
+        editableSettings,
+        selectedIntegration: "asana",
+        integrations: [{ id: "asana", label: "Asana", description: "Read-only importer" }],
+        projectSources: {
+          "asana.enabled": "project",
+          "asana.apiToken": "project",
+          "asana.workspaceId": "project",
+        },
+      });
+      state.updateEditableSettings = vi.fn((recipe) => {
+        updatedProject = recipe(editableSettings);
+      });
+
+      const { container } = render(<SettingsIntegrationsPanel state={state as any} />);
+
+      await waitFor(() => {
+        expect(container.textContent).toContain("Project-scope importer override");
+      });
+      expect(container.textContent).toContain("Project override");
+
+      fireEvent.input(screen.getByLabelText("Asana API token"), { target: { value: "override-token" } });
+      expect(updatedProject.asana.apiToken).toBe("override-token");
+    });
   });
 
   describe("Provider authentication mode switching", () => {
