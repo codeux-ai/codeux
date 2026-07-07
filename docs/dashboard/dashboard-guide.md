@@ -497,6 +497,7 @@ Legacy runtime:
 - Active chat titles wrap or truncate inside the bounded header area, while thread rail titles clamp to two stable lines with long-word wrapping so manual renames remain readable without causing rail layout churn.
 - Chat page now provides a `Threads / Invocations` toggle to switch between human conversation threads and read-only execution invocations.
 - Chat page UI is redesigned with animated identities, structured widgets for rich messages, and automatic worker pickup derived from active project routing.
+- Agent replies can append optional prompt suggestion tags from `metadata.promptSuggestions` below the normal markdown message. Each tag can show one supported generic icon (`sparkles`, `search`, `edit`, `code`, `terminal`, `bug`, `check`, `play`, `refresh`, `settings`, `file`, `folder`, `git-branch`, `git-pull-request`, `database`, `shield`, `book-open`, `message-circle`, `list-checks`, `rocket`, `zap`, `lightbulb`, `clipboard`, `download`, `upload`, `eye`, `package`, `server`, `clock`, or `help-circle`) and fills the composer with the next-step prompt when clicked, without auto-sending or changing read-only invocation transcripts.
 - Chat page logs invocation activity explicitly in the background, providing observable execution artifacts directly in the chat view.
 - Chat page filters the "Threads" mode to show user-facing conversation threads (`scope === "project"`).
 - Chat page "Invocations" mode provides a read-only list with metadata for active/completed execution invocations without cluttering the main thread rail.
