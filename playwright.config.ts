@@ -5,6 +5,36 @@ import path from 'path';
 
 const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'codeux-e2e-home-'));
 const mockProviderCliPath = path.resolve(process.cwd(), 'scripts/e2e/mock-provider-cli.mjs');
+const dashboardPort = Number.parseInt(
+  process.env.CODEUX_E2E_DASHBOARD_PORT || process.env.DASHBOARD_PORT || '4464',
+  10,
+);
+const resolvedDashboardPort = Number.isFinite(dashboardPort) ? dashboardPort : 4464;
+const dashboardBaseUrl = `http://127.0.0.1:${resolvedDashboardPort}`;
+const chromiumExecutablePath = (() => {
+  if (process.platform !== 'linux' || !fs.existsSync('/ms-playwright')) {
+    return undefined;
+  }
+
+  for (const browserDirectory of fs
+    .readdirSync('/ms-playwright', { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => entry.name)
+    .filter((name) => name.startsWith('chromium_headless_shell-') || name.startsWith('chromium-'))
+    .sort()) {
+    const headlessShellPath = path.join('/ms-playwright', browserDirectory, 'chrome-headless-shell-linux64', 'chrome-headless-shell');
+    if (fs.existsSync(headlessShellPath)) {
+      return headlessShellPath;
+    }
+
+    const chromePath = path.join('/ms-playwright', browserDirectory, 'chrome-linux64', 'chrome');
+    if (fs.existsSync(chromePath)) {
+      return chromePath;
+    }
+  }
+
+  return undefined;
+})();
 
 /**
  * Read environment variables from file.
@@ -36,7 +66,8 @@ export default defineConfig({
   /* Shared settings for all the projects below. See https://playwright.dev/docs/api/class-testoptions. */
   use: {
     /* Base URL to use in actions like `await page.goto('')`. */
-    baseURL: 'http://127.0.0.1:4444',
+    baseURL: dashboardBaseUrl,
+    launchOptions: chromiumExecutablePath ? { executablePath: chromiumExecutablePath } : undefined,
 
     /* Preserve failure artifacts without producing heavy output for passing runs. */
     trace: 'retain-on-failure',
@@ -63,8 +94,8 @@ export default defineConfig({
     // Poll the liveness probe (/health) rather than the readiness probe (/ready).
     // /ready only returns 200 once a project has a live-status timestamp, which
     // never happens in a clean CI checkout, so it would hang until timeout.
-    url: 'http://127.0.0.1:4444/health',
-    reuseExistingServer: process.env.CODEUX_E2E_REUSE_EXISTING_SERVER === '1',
+    url: `${dashboardBaseUrl}/health`,
+    reuseExistingServer: false,
     timeout: 60000,
     stdout: 'pipe',
     stderr: 'pipe',
@@ -75,6 +106,10 @@ export default defineConfig({
       XDG_DATA_HOME: path.join(tempHome, '.local', 'share'),
       CODE_UX_DIRECTORY_BROWSER_ROOTS: os.tmpdir(),
       CODEUX_E2E_PROVIDER_CLI_SHIM: mockProviderCliPath,
+      DASHBOARD_PORT: String(resolvedDashboardPort),
+      MCP_HTTP_PORT: String(resolvedDashboardPort + 1),
+      CODE_UX_CONTAINERIZED_GIT: '0',
+      CODE_UX_GIT_CONTAINER_MODE: 'host',
     },
   },
 });
