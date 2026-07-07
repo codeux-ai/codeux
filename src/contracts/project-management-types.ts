@@ -81,6 +81,7 @@ export interface RepositoryIssueSearchInput {
   search?: string;
   state?: RepositoryIssueSearchState;
   status?: JiraIssueSearchStatus;
+  statusNames?: string[];
   labels?: string[];
   assignee?: string;
   assigneeText?: string;
@@ -204,6 +205,7 @@ export interface JiraIssueSearchInput {
   search?: string;
   issueKey?: string;
   status?: JiraIssueSearchStatus;
+  statusNames?: string[];
   assignee?: JiraIssueSearchAssignee;
   assigneeText?: string;
   reporterText?: string;

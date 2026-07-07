@@ -1,13 +1,29 @@
 # Chat
 
-The **Chat** page (`/chat`) is a thread-based conversation surface that lets you talk to agents — both for free-form Q&A and to inspect execution invocation transcripts.
+The **Chat** page (`/chat`) is a thread-based conversation surface that lets you talk to agents for project-backed Q&A, inspect execution invocation transcripts and MCP tool invocations, and get local onboarding help before any project exists.
 
 ## Layout
 
-- **Left rail** — Two tabs:
+- **No-project assistant** — When no project is selected, `/chat` shows a local onboarding assistant instead of a project-required empty state. It presents the Code UX assistant avatar, five quick bubbles, local replies, and explicit buttons for Add Project, Projects, Settings, onboarding, and docs. It does not create conversation threads, persist messages, or call project-scoped chat APIs.
+- **Floating assistant widget** — Every dashboard subpage except `/chat` has a compact assistant entry point in the corner. Submitting text opens `/chat` with that text as a draft. If a project is selected, the draft appears in the normal composer; if no project is selected, it becomes a local no-project assistant turn. Nothing is sent automatically.
+- **Left rail** — In project chat, two tabs:
   - **Threads** — Conversation threads scoped to the active project.
   - **Invocations** — A historical log of server-created execution invocations, including provider-backed agent runs and MCP `CallTool` activity.
 - **Main panel** — The active thread (or invocation), rendered as a chat transcript with user, assistant, and tool messages. Markdown is rendered with `marked`, including code blocks.
+
+The floating widget uses the configured Dashboard Reply agent avatar when a selected project has one. If no Dashboard Reply preset or project is available, it falls back to the generated Code UX avatar.
+
+## No-project assistant
+
+The no-project assistant is local onboarding guidance for the browser page. Its five quick bubbles are:
+
+- Add my first project.
+- Build a desktop app.
+- Build a web app.
+- Explain Code UX.
+- Change settings.
+
+Quick bubbles only add local user/assistant turns. Actions such as creating a project, opening settings, restarting onboarding, or reading docs remain explicit buttons and continue through the existing dashboard flows. Provider-backed chat is project-scoped; it starts only after a project exists and a persistent thread can be created or selected.
 
 ## Threads
 
@@ -35,9 +51,11 @@ Planning messages can include a rich sprint status card. When Code UX can match 
 
 Long threads accumulate context cost. Click **Compact** to:
 
-1. Summarise the thread transcript via the assigned provider.
-2. Replace the prior session memory with the compacted summary.
-3. Continue the conversation from a smaller starting point.
+1. Ask the assigned non-Jules CLI provider to run its native compact command inside the current provider session.
+2. Store the provider's compaction output on the thread for audit and recovery.
+3. Continue the conversation in the same compacted provider session with a smaller context, preserving that native session id on the thread when the provider returns one.
+
+Code UX does not create a separate `:compaction` chat session for CLI providers. If a thread has no saved active session, providers with a logical continue/resume fallback can still compact through that same thread session; providers that require a concrete native session ask you to send a message in the thread before compacting.
 
 ## Invocations
 

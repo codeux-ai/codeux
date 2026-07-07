@@ -4,7 +4,11 @@ import { Server, Boxes, BrainCircuit, SlidersHorizontal, Wrench, Plug, X, Check,
 import type { AgentMcpAccessConfig, CustomMcpServer, McpToolToggle } from "../../types.js";
 import { Toggle } from "../ui/Toggle.js";
 import { TOOL_DEFINITIONS, type McpToolCategory } from "../../../../../src/contracts/mcp-tool-definitions.js";
-import { isSchedulerOnlyAgentMcpAccess, schedulerOnlyAgentMcpAccess } from "../../lib/agent-mcp-display.js";
+import {
+  codeUxAgentMcpAccess,
+  codeUxAgentMcpAccessWithoutScheduler,
+  isSchedulerOnlyAgentMcpAccess,
+} from "../../lib/agent-mcp-display.js";
 
 const CATEGORY_META: Record<McpToolCategory, { label: string; description: string; icon: typeof Server }> = {
   orchestration: { label: "Orchestration", description: "Projects, sprints, and tasks", icon: Boxes },
@@ -48,10 +52,13 @@ export const AgentMcpManagePanel: FunctionComponent<{
     if (disabled) return;
     if (enabled) {
       setStatusMessage(isDashboardReplyAgent
-        ? "Scheduler-only Code UX access enabled. Save Agent to persist this access change."
-        : "Risk-gated scheduler-only Code UX access enabled. Save Agent only if this non-chat agent needs scheduler access."
+        ? "Code UX MCP and scheduler enabled for dashboard chat. Save Agent to persist this access change."
+        : "Risk-gated Code UX access enabled with scheduler off. Save Agent only after reviewing this capability."
       );
-      onChange(schedulerOnlyAgentMcpAccess(value.linkedServerIds));
+      onChange(isDashboardReplyAgent
+        ? codeUxAgentMcpAccess(value.linkedServerIds)
+        : codeUxAgentMcpAccessWithoutScheduler(value.linkedServerIds)
+      );
       return;
     }
     setStatusMessage("Code UX tools disabled. Save Agent to persist this access change.");
@@ -178,15 +185,15 @@ export const AgentMcpManagePanel: FunctionComponent<{
             <span>
               {!value.codeUxEnabled
                 ? isDashboardReplyAgent
-                  ? "Code UX built-in tools are disabled. Dashboard reply agents may use scheduler-only access when chat replies need to create wakeups or task reruns."
+                  ? "Code UX built-in tools are disabled in this saved preset, but dashboard chat turns receive the Code UX MCP surface plus scheduler at runtime."
                   : "Code UX built-in tools are disabled by default for this agent. Enabling them is risk-gated because non-chat agents can affect runtime state."
                 : schedulerOnly
                   ? isDashboardReplyAgent
-                    ? "Scheduler-only is the recommended safe default for the dashboard reply agent. It does not enable broader management tools."
-                    : "Scheduler-only is active for a non-chat agent. Keep this only when the agent must create its own wakeups or task reruns."
+                    ? "This saved preset is scheduler-only, but dashboard chat runtime will still attach the full Code UX MCP surface plus scheduler."
+                    : "Scheduler-only is active for a non-chat agent. Scheduler is off by default for non-dashboard agents; keep this only when the agent must create its own wakeups or task reruns."
                   : isDashboardReplyAgent
-                    ? "Additional Code UX tools are enabled beyond scheduler-only. Review each category before saving."
-                    : "This non-chat agent has Code UX tools enabled beyond the scheduler gate. Review every enabled tool before saving."}
+                    ? "Dashboard chat receives Code UX MCP plus scheduler. Review each category before saving preset changes."
+                    : "This non-chat agent has Code UX tools enabled. Scheduler stays off by default unless explicitly enabled below."}
             </span>
           </div>
 

@@ -44,7 +44,6 @@ export class ChatProviderIngressSecurity {
     const timestamp = this.requireFreshTimestamp(request.headers, nowMs);
     const signature = firstHeader(request.headers, [
       "x-code-ux-signature",
-      "x-openclaw-signature",
       "x-hub-signature-256",
       "x-slack-signature",
       "x-signature",
@@ -71,7 +70,7 @@ export class ChatProviderIngressSecurity {
 
     const expectedBearer = firstConfiguredSecret(
       connection.secrets,
-      connection.bridgeMode === "native_bridge" ? ["bridgeToken"] : ["openclawApiKey"],
+      connection.bridgeMode === "native_bridge" ? ["bridgeToken"] : ["bridgeApiKey"],
     );
     if (!expectedBearer) {
       throw new ChatProviderIngressSecurityError("missing_bridge_secret", "Chat provider bridge secret is not configured.", 403);
@@ -82,7 +81,7 @@ export class ChatProviderIngressSecurity {
       throw new ChatProviderIngressSecurityError("invalid_bearer_token", "Invalid chat provider bridge token.", 401);
     }
 
-    const nonce = firstHeader(request.headers, ["x-code-ux-nonce", "x-openclaw-nonce", "x-request-id"]);
+    const nonce = firstHeader(request.headers, ["x-code-ux-nonce", "x-request-id"]);
     if (nonce) {
       this.preventReplay({
         connectionId: connection.id,
@@ -96,7 +95,6 @@ export class ChatProviderIngressSecurity {
   private requireFreshTimestamp(headers: Record<string, string | string[] | undefined>, nowMs: number): { raw: string; value: number } {
     const rawTimestamp = firstHeader(headers, [
       "x-code-ux-timestamp",
-      "x-openclaw-timestamp",
       "x-provider-timestamp",
       "x-slack-request-timestamp",
     ]);
@@ -176,7 +174,7 @@ export class ChatProviderIngressSecurity {
 function parseBearerToken(headers: Record<string, string | string[] | undefined>): string | null {
   const authorization = firstHeader(headers, ["authorization"]);
   const match = authorization?.match(/^Bearer\s+(.+)$/i);
-  return match?.[1]?.trim() || firstHeader(headers, ["x-code-ux-bridge-token", "x-openclaw-token"]) || null;
+  return match?.[1]?.trim() || firstHeader(headers, ["x-code-ux-bridge-token"]) || null;
 }
 
 function firstConfiguredSecret(secrets: ChatProviderSecretConfig | null, keys: string[]): string | null {

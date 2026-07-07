@@ -143,6 +143,11 @@ export const fetchSprints = async (projectId: string, signal?: AbortSignal): Pro
 export type RemoteIssueSummary = RepositoryIssueSearchResult;
 export type JiraIssueSearchInput = SharedJiraIssueSearchInput;
 export type JiraIssueSearchResult = SharedJiraIssueSearchResult;
+export interface JiraProjectStatus {
+  id: string;
+  name: string;
+  issueTypes: string[];
+}
 export type RepositoryIssueSearchInput = Omit<SharedRepositoryIssueSearchInput, "state" | "status"> & {
   state?: SharedRepositoryIssueSearchInput["state"] | string;
   status?: SharedJiraIssueSearchInput["status"] | string;
@@ -160,6 +165,9 @@ export const searchJiraIssues = async (
   if (input.search?.trim()) url.searchParams.set("search", input.search.trim());
   if (input.issueKey?.trim()) url.searchParams.set("issueKey", input.issueKey.trim());
   if (input.status) url.searchParams.set("status", input.status);
+  for (const statusName of input.statusNames ?? []) {
+    if (statusName.trim()) url.searchParams.append("statusNames", statusName.trim());
+  }
   if (input.assignee) url.searchParams.set("assignee", input.assignee);
   if (input.assigneeText?.trim()) url.searchParams.set("assigneeText", input.assigneeText.trim());
   if (input.reporterText?.trim()) url.searchParams.set("reporterText", input.reporterText.trim());
@@ -177,6 +185,16 @@ export const searchJiraIssues = async (
     `${url.pathname}${url.search}`,
     { signal }
   );
+};
+
+export const fetchJiraProjectStatuses = async (
+  projectId: string,
+  projectKey: string,
+  signal?: AbortSignal,
+): Promise<JiraProjectStatus[]> => {
+  const url = new URL(`/api/projects/${encodeURIComponent(projectId)}/jira/statuses`, window.location.origin);
+  if (projectKey.trim()) url.searchParams.set("projectKey", projectKey.trim());
+  return fetchJson<JiraProjectStatus[]>(`${url.pathname}${url.search}`, { signal });
 };
 
 export const listSprintLinkedIssues = async (

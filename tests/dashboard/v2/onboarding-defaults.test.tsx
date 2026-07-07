@@ -147,4 +147,8 @@ describe("Onboarding automation defaults", () => {
   it("defaults navigation to the sidebar", () => {
     expect(DEFAULT_DASHBOARD_SETTINGS.appearance.navigationMode).toBe("SIDEBAR");
   });
+
+  it("defaults first-run onboarding to Expert mode", () => {
+    expect(DEFAULT_DASHBOARD_SETTINGS.appearance.experienceMode).toBe("EXPERT");
+  });
 });

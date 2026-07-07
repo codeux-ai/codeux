@@ -195,12 +195,13 @@ describe("Dashboard Chat API", () => {
     expect(compactResponse.status).toBe(200);
     const compactedThread = await compactResponse.json() as any;
     expect(compactedThread.runtimeState).toMatchObject({
-      replayRequired: true,
-      sessionIds: [],
+      replayRequired: false,
+      sessionIds: [thread.id],
       compactionSummary: {
         markdown: "## Current Objective\nCompact thread",
         provider: "codex",
         model: "gpt-4",
+        nativeSessionId: thread.id,
       },
     });
     expect(compactedThread.title).toBe("Manual Session Title");

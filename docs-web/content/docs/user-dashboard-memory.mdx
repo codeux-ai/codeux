@@ -26,24 +26,22 @@ Each memory has a **category**:
 
 Categories drive default rendering and can be used as filters in search.
 
-## Filters and tabs
+## Header summary, filters, and actions
 
-The page splits into:
+The Memory header is the main place to choose what the graph, sidebar, and inspector are showing. It is grouped into separate rows so the current state stays readable on desktop and wraps cleanly on narrow screens:
 
-- **Short-term** tab — memories scoped to a specific sprint.
-- **Long-term** tab — project-wide memories.
-- **Search** — vector similarity search across both tiers (cosine similarity, configurable `minSimilarity`).
+- **Tier summary tabs** — **Short Term** and **Long Term** show their memory counts directly in the tab cards.
+- **Current scope line** — shows copy such as `Short Term: showing 7 memories of 17 memories · Sprint 2 · All Agents` or `Long Term: showing 1 memory of 1 memory · Project-wide · All Agents`.
+- **Scope filters** — Short-term memory shows the sprint selector and both tiers show the agent preset selector. Disabled selectors remain visible with reason copy when there are no matching sprints or agent presets.
+- **Actions** — **Add Memory**, **Model Catalog**, and **Danger Delete** are separated from the selectors. Model Catalog shows whether it is shown or hidden plus active-model status. Danger Delete always shows Off/Armed state plus persistent explanatory copy.
 
-Filter bar:
+The sidebar search field filters the current visible tier, sprint, and agent slice by memory text/category. Programmatic semantic search still uses vector similarity across requested scopes (cosine similarity, configurable `minSimilarity`).
 
-- **Category** (multi-select).
-- **Sprint** (short-term only).
-- **Agent preset** (only memories scoped to that preset).
-- **Strength range** — filter by promotion strength score (0.0 – 1.0+).
+Danger Delete semantics are unchanged: graph and inspector single-memory deletes are immediate only while Danger Delete is armed, while sidebar card deletion uses its separate arm/cancel guard.
 
 ## Creating a memory
 
-Click **+ New memory**. Provide:
+Click **Add Memory**. Provide:
 
 - **Content** — the memory body (markdown supported).
 - **Category** (default `context`).
@@ -55,7 +53,7 @@ The memory is embedded immediately using the active embedding model.
 
 ## Editing & deleting
 
-Each memory card has **Edit** (content, category, strength) and **Delete**. Deletion requires confirmation.
+Sidebar memory cards use their own guarded delete flow. Graph and inspector single-memory deletion is immediate only while Danger Delete is armed.
 
 ## Promotion (short-term → long-term)
 
@@ -107,4 +105,4 @@ The footer shows aggregate memory statistics: total counts per scope/category, a
 
 ## Programmatic access
 
-The Memory MCP tool (`manage_memory`) exposes search, list, get, create, update, delete, promote, start_reembed, get_map, count, and model_status actions, as well as durable claim actions. Destructive actions require approval confirmation. (Note: The legacy unified `manage_code_ux` tool is deprecated). See [Management actions → memory](/docs/developer-management-actions#memory).
+The Memory MCP tool (`manage_memory`) exposes search, list, get, create, update, delete, promote, start_reembed, get_map, count, and model_status actions, as well as durable claim actions. Destructive actions require approval confirmation. See [Management actions → memory](/docs/developer-management-actions#memory).

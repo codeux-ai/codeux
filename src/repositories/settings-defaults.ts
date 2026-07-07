@@ -1,6 +1,7 @@
 import type {
   CliExecutionMode,
   DashboardSettings,
+  DashboardExperienceMode,
   FeaturePrAutoMergeMode,
   GuardrailJobType,
   GuardrailOnLimitAction,
@@ -120,6 +121,8 @@ export const PUBLIC_VIRTUAL_WORKER_PROVIDERS: VirtualWorkerProvider[] = ["gemini
 export const RUNTIME_LOG_LEVELS = ["off", "debug", "info", "warn", "error"] as const;
 export const CONSOLE_LOG_MODES = ["standard", "full"] as const;
 export const EXTERNAL_IMPORTER_PROVIDERS: ExternalImporterProvider[] = ["notion", "asana", "linear", "miro", "lucid", "figma", "mural"];
+export const DASHBOARD_EXPERIENCE_MODES: DashboardExperienceMode[] = ["EASY", "STANDARD", "EXPERT"];
+export const DEFAULT_DASHBOARD_EXPERIENCE_MODE: DashboardExperienceMode = "EXPERT";
 export const DEFAULT_IMPORTER_SEARCH_LIMIT = 25;
 export const DEFAULT_PROVIDER_CONFIG_IDS: Record<ProviderId, ProviderConfigId> = {
   jules: "jules",
@@ -606,6 +609,7 @@ export const DEFAULT_DASHBOARD_SETTINGS: DashboardSettings = {
   restartInvocationPolicy: "continue",
   appearance: {
     navigationMode: "SIDEBAR",
+    experienceMode: DEFAULT_DASHBOARD_EXPERIENCE_MODE,
     theme: "SYSTEM",
     reducedMotion: "AUTO",
     backgroundMode: "ANIMATED",

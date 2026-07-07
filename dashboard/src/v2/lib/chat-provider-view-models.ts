@@ -22,23 +22,23 @@ export const CHAT_PROVIDER_KINDS: ChatProviderKind[] = [
 
 const SETUP_NOTES: Record<ChatProviderKind, string[]> = {
   whatsapp: [
-    "Use the OpenClaw WhatsApp plugin for a managed bridge, or paste the generated ingress URL into a Meta webhook gateway.",
+    "Use a managed WhatsApp bridge, or paste the generated ingress URL into a Meta webhook gateway.",
     "Bind each WhatsApp group or business conversation by its external channel id before enabling inbound routing.",
   ],
   imessage: [
-    "Use OpenClaw iMessage on a trusted Apple device, or run the macOS native bridge command from a locked-down local account.",
+    "Use a managed iMessage bridge on a trusted Apple device, or run the macOS native bridge command from a locked-down local account.",
     "Native bridge mode accepts an optional bridge token; keep it in the secret field and rotate it if the host changes.",
   ],
   telegram: [
-    "Connect an OpenClaw Telegram core bridge or configure a Telegram bot webhook with the generated ingress URL.",
+    "Connect a managed Telegram bridge or configure a Telegram bot webhook with the generated ingress URL.",
     "Use bot usernames and channel labels only for operator clarity; routing is based on the external channel id and binding hints.",
   ],
   slack: [
-    "Configure Slack Events API or the OpenClaw Slack plugin to send message events to the connection ingress URL.",
+    "Configure Slack Events API or a managed Slack bridge to send message events to the connection ingress URL.",
     "Store Slack signing secrets or bot tokens only in the credential fields; saved values are returned as redacted metadata.",
   ],
   "microsoft-teams": [
-    "Use the OpenClaw Teams plugin or a Teams bot endpoint that posts normalized activity payloads to the ingress URL.",
+    "Use a managed Teams bridge or a Teams bot endpoint that posts normalized activity payloads to the ingress URL.",
     "Tenant and bot identifiers belong in setup fields; bot passwords and signing material belong in secret fields.",
   ],
   discord: [
@@ -101,13 +101,13 @@ export const getChatProviderDescription = (providerKind: ChatProviderKind): stri
     case "whatsapp":
       return "WhatsApp bridge, webhook setup, and project/channel routing.";
     case "imessage":
-      return "iMessage OpenClaw or native macOS bridge with command controls.";
+      return "iMessage managed or native macOS bridge with command controls.";
     case "telegram":
-      return "Telegram bot and OpenClaw channel ingress for project chat.";
+      return "Telegram bot and managed channel ingress for project chat.";
     case "slack":
-      return "Slack Events or OpenClaw bridge with signed inbound routing.";
+      return "Slack Events or managed bridge with signed inbound routing.";
     case "microsoft-teams":
-      return "Teams bot and OpenClaw bridge bindings for project channels.";
+      return "Teams bot and managed bridge bindings for project channels.";
     case "discord":
       return "Discord bot or gateway connection with explicit channel bindings.";
   }
@@ -115,8 +115,8 @@ export const getChatProviderDescription = (providerKind: ChatProviderKind): stri
 
 export const getBridgeModeLabel = (bridgeMode: ChatProviderBridgeMode): string => {
   switch (bridgeMode) {
-    case "openclaw":
-      return "OpenClaw";
+    case "managed_bridge":
+      return "Managed bridge";
     case "webhook":
       return "Webhook";
     case "native_bridge":

@@ -320,9 +320,9 @@ Disable a tool to hide it from `ListTools` and reject `CallTool` invocations.
 
 ```jsonc
 {
-  "theme": "system" | "light" | "dark",
-  "navigationMode": "auto" | "dock" | "sidebar",
-  "density": "comfortable" | "compact"
+  "experienceMode": "EASY" | "STANDARD" | "EXPERT",
+  "theme": "SYSTEM" | "LIGHT" | "DARK",
+  "navigationMode": "DOCK" | "SIDEBAR"
 }
 ```
 

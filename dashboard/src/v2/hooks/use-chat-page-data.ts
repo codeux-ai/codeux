@@ -15,6 +15,7 @@ import { useChatPageResources } from "./use-chat-page-resources.js";
 import type { AgentPresetRecord, ExecutionInvocationRecord } from "../types.js";
 import { useSprints } from "../../hooks/useSprints.js";
 import { useProjectTasks } from "./use-project-tasks.js";
+import { clearChatDraftFromUrl, readChatDraftFromLocation } from "../lib/no-project-chat-assistant.js";
 
 /** "stage" is the cinematic 3D chat view; threads/invocations are the classic panes. */
 export type ChatMode = "stage" | "threads" | "invocations";
@@ -117,6 +118,26 @@ export const useChatPageData = (options?: { composerRef?: RefObject<HTMLTextArea
       void invocationData.activateInvocation(invocationId, { foreground: true });
     });
   }, [invocationData, refreshThreads]);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !selectedProject) {
+      return;
+    }
+    const draft = readChatDraftFromLocation(window.location);
+    if (!draft) {
+      return;
+    }
+    threadData.setInput(draft);
+    clearChatDraftFromUrl(window);
+    requestAnimationFrame(() => {
+      const composer = options?.composerRef?.current;
+      if (!composer) return;
+      composer.focus();
+      composer.style.height = "auto";
+      composer.style.height = `${composer.scrollHeight}px`;
+      composer.setSelectionRange(draft.length, draft.length);
+    });
+  }, [options?.composerRef, selectedProject, threadData]);
 
   const connectionIndex = useMemo(() => buildConnectionIndex(connections), [connections]);
 

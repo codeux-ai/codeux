@@ -30,6 +30,9 @@ function makeBasePayload() {
     dbAutoVacuumOnStartup: true,
     dbPruningEnabled: true,
     dbRetentionDays: 14,
+    appearance: {
+      experienceMode: "EXPERT",
+    },
     automationLevel: "SEMI_AUTO",
     automationInterventions: {
       autoApprovePlan: true,

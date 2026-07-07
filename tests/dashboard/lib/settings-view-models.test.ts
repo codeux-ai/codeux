@@ -32,6 +32,13 @@ import {
   normalizeModelPricingOverrides,
   TASK_PR_TITLE_TOKEN_LABELS,
   getTaskPrTitleSchemeOptions,
+  dashboardExperienceModeOptions,
+  getDashboardExperienceModeDescription,
+  getDashboardExperienceModeLabel,
+  isEasyExperienceMode,
+  isExpertExperienceMode,
+  isStandardExperienceMode,
+  normalizeDashboardExperienceMode,
 } from "../../../dashboard/src/v2/lib/settings-view-models.js";
 import type { SystemSettings, ProjectSettings, ExternalSettingsHints, DashboardSettings } from "../../../dashboard/src/types.js";
 import { DEFAULT_DASHBOARD_SETTINGS } from "../../../src/repositories/settings-defaults.js";
@@ -67,6 +74,17 @@ describe("sortProviderConfigEntries", () => {
 });
 
 describe("settings view model source helpers", () => {
+  it("exposes dashboard experience mode labels, descriptions, and helpers", () => {
+    expect(dashboardExperienceModeOptions.map((option) => option.label)).toEqual(["Easy", "Standard", "Expert"]);
+    expect(normalizeDashboardExperienceMode("STANDARD")).toBe("STANDARD");
+    expect(normalizeDashboardExperienceMode("standart")).toBe("EXPERT");
+    expect(getDashboardExperienceModeLabel("STANDARD")).toBe("Standard");
+    expect(getDashboardExperienceModeDescription("EASY")).toContain("Simplified");
+    expect(isEasyExperienceMode("EASY")).toBe(true);
+    expect(isStandardExperienceMode("STANDARD")).toBe(true);
+    expect(isExpertExperienceMode("EXPERT")).toBe(true);
+  });
+
   it("returns the direct field source when a leaf path is present", () => {
     expect(getFieldSource({
       "git.defaultBranch": "project",
@@ -859,7 +877,7 @@ describe("settings cloning helpers", () => {
   });
 
   const createMockProjectSettings = (): ProjectSettings => ({
-    appearance: { theme: "system" },
+    appearance: { experienceMode: "STANDARD", theme: "system" },
     automationLevel: "FULL",
     automationInterventions: {},
     aiProvider: {
@@ -933,6 +951,7 @@ describe("settings cloning helpers", () => {
     expect(clone).not.toBe(original);
 
     // Mutate clone
+    clone.appearance.experienceMode = "EASY";
     clone.memory.enabled = false;
     clone.memory.autoCaptureSprint = false;
     clone.jira.host = "new-host";
@@ -950,6 +969,7 @@ describe("settings cloning helpers", () => {
     clone.skills[0].enabled = false;
 
     // Verify original is untouched
+    expect(original.appearance.experienceMode).toBe("STANDARD");
     expect(original.memory.enabled).toBe(true);
     expect(original.memory.autoCaptureSprint).toBe(true);
     expect(original.jira.host).toBe("h");
@@ -974,6 +994,7 @@ describe("settings cloning helpers", () => {
     expect(clone).not.toBe(original);
 
     // Mutate clone
+    clone.appearance.experienceMode = "EASY";
     clone.memory.enabled = false;
     clone.jira.host = "new-host";
     clone.asana.workspaceId = "mutated-workspace";
@@ -986,6 +1007,7 @@ describe("settings cloning helpers", () => {
     clone.customMcpServers![0].headers!["X-New"] = "123";
 
     // Verify original is untouched
+    expect(original.appearance.experienceMode).toBe("STANDARD");
     expect(original.memory.enabled).toBe(true);
     expect(original.jira.host).toBe("h");
     expect(original.asana.workspaceId).toBe("");

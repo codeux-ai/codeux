@@ -47,6 +47,7 @@ export interface IssueSearchInput {
   search?: string;
   state?: RepositoryIssueSearchInput["state"] | string;
   status?: JiraIssueSearchInput["status"] | string;
+  statusNames?: string[];
   labels?: string[];
   assignee?: string;
   assigneeText?: string;
@@ -124,6 +125,27 @@ export class SprintIssueService {
       ? input
       : normalizeJiraIssueSearchInput({ ...input, projectKey: input.projectKey || defaultProjectKey });
     return this.deps.jiraApiClient.searchIssues(host, email, apiToken, searchInput);
+  }
+
+  async searchJiraProjectStatuses(projectId: string, projectKey: string | undefined): Promise<jiraApiClient.JiraProjectStatus[]> {
+    this.requireProject(projectId);
+    if (!this.deps.jiraApiClient) {
+      throw new Error("Jira API client is not injected.");
+    }
+    const settings = this.deps.getDashboardSettings({ projectId });
+    if (!settings.jira.host.trim() || !settings.jira.apiToken.trim()) {
+      throw new Error("Jira site URL and API token must be configured in Settings -> Integrations.");
+    }
+    const effectiveProjectKey = projectKey?.trim() || settings.jira.defaultProject.trim();
+    if (!effectiveProjectKey) {
+      throw new Error("Jira project key is required.");
+    }
+    return this.deps.jiraApiClient.listProjectStatuses(
+      settings.jira.host,
+      settings.jira.email,
+      settings.jira.apiToken,
+      effectiveProjectKey,
+    );
   }
 
   replaceLinkedIssues(sprintId: string, projectId: string, issues: SprintLinkedIssueInput[]): SprintLinkedIssueRecord[] {
@@ -541,6 +563,7 @@ export class SprintIssueService {
       projectKey: input.projectKey || settings.jira.defaultProject,
       search: input.search,
       status: normalizeJiraIssueStatusValue(input.status),
+      statusNames: input.statusNames || [],
       assignee: normalizeJiraAssignee(input.assignee),
       assigneeText: input.assigneeText || input.assignee,
       labels: input.labels || [],
@@ -1723,6 +1746,7 @@ function normalizeIssueSearchInput(input: IssueSearchInput): IssueSearchInput {
     search: normalizeOptionalString(input.search),
     state: normalizeIssueStateValue(input.state),
     status: normalizeIssueStatusValue(input.status),
+    statusNames: normalizeStringList(input.statusNames),
     labels: normalizeStringList(input.labels).slice(0, 12),
     assignee: normalizeOptionalString(input.assignee),
     assigneeText: normalizeOptionalString(input.assigneeText),
@@ -1752,6 +1776,7 @@ function normalizeJiraIssueSearchInput(input: JiraIssueSearchInput): JiraIssueSe
     search: normalizeOptionalString(input.search),
     issueKey: normalizeOptionalString(input.issueKey),
     status: normalizeJiraIssueStatusValue(input.status),
+    statusNames: normalizeStringList(input.statusNames),
     assignee: normalizeJiraAssigneeValue(input.assignee),
     assigneeText: normalizeOptionalString(input.assigneeText),
     reporterText: normalizeOptionalString(input.reporterText),
