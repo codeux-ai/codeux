@@ -24,6 +24,64 @@ const buildService = (): any => {
   }) as any;
 };
 
+const runWorkflowForAgentRootMode = async (input: {
+  globalContainerRunAsRoot: boolean;
+  agentContainerRunAsRoot?: boolean | null;
+}): Promise<void> => {
+  const deps = {
+    sessionTracking: {
+      findLatestFailedCliSessionForTask: vi.fn().mockReturnValue(null),
+      createSession: vi.fn().mockImplementation((sessionInput) => ({ ...sessionInput, name: `sessions/${sessionInput.id}`, outputs: [] })),
+      appendActivity: vi.fn(),
+      updateSession: vi.fn(),
+    },
+    getDashboardSettings: vi.fn().mockReturnValue({
+      cliWorkflow: {
+        containerImage: "node:24-bookworm",
+        executionMode: "DOCKER",
+        containerRunAsRoot: input.globalContainerRunAsRoot,
+      },
+      agents: {
+        routing: {
+          taskCoding: {
+            mode: "DEFAULT",
+            agentPresetId: null,
+          },
+        },
+      },
+    }),
+    agentPresetSyncService: {
+      resolveTargetedCodingAgent: vi.fn().mockResolvedValue({
+        id: "agent-worker",
+        instructionMarkdown: "guide",
+        containerRunAsRoot: input.agentContainerRunAsRoot,
+      }),
+      getOptionalWorkerAgentForRepoPath: vi.fn().mockResolvedValue(null),
+    },
+    getGithubToken: vi.fn().mockReturnValue("token"),
+    logger: { error: vi.fn(), warn: vi.fn() },
+  };
+  const service = new CliWorkflowService(deps as any);
+
+  vi.mocked(executePrepareStage).mockResolvedValue({ providerPrompt: "mock prompt" });
+  vi.mocked(executeProviderStage).mockResolvedValue(undefined);
+  vi.mocked(executeGitFinalizeStage).mockResolvedValue({ hasChanges: false, committedChanges: false });
+  vi.mocked(executeCleanupStage).mockResolvedValue({ cleanedUp: true });
+
+  await (service as any).runTaskWorkflow({
+    provider: "gemini",
+    task: { id: "T1", prompt: "prompt", title: "title" },
+    repoPath: "/repo",
+    featureBranch: "main",
+    sprintNumber: 1,
+    settingsScope: { projectId: "project-1" },
+    agentPresetId: "agent-worker",
+    sessionId: "sess-1",
+    workerBranch: "worker-1",
+    title: "Title",
+  });
+};
+
 describe("CliWorkflowService unpushed commit detection", () => {
   beforeEach(() => { vi.clearAllMocks(); });
 
@@ -372,6 +430,44 @@ describe("CliWorkflowService unpushed commit detection", () => {
     expect(executionRepository.updateTaskDispatch).toHaveBeenCalledWith(
       "dispatch-1",
       expect.objectContaining({ status: "completed" }),
+    );
+  });
+
+  it.each([
+    {
+      name: "inherits a true global Docker root setting when the worker preset has no override",
+      globalContainerRunAsRoot: true,
+      agentContainerRunAsRoot: null,
+      expectedContainerRunAsRoot: true,
+    },
+    {
+      name: "inherits a false global Docker root setting for legacy worker presets",
+      globalContainerRunAsRoot: false,
+      agentContainerRunAsRoot: undefined,
+      expectedContainerRunAsRoot: false,
+    },
+    {
+      name: "forces Docker root mode when the resolved worker preset opts in",
+      globalContainerRunAsRoot: false,
+      agentContainerRunAsRoot: true,
+      expectedContainerRunAsRoot: true,
+    },
+    {
+      name: "forces non-root Docker mode when the resolved worker preset opts out",
+      globalContainerRunAsRoot: true,
+      agentContainerRunAsRoot: false,
+      expectedContainerRunAsRoot: false,
+    },
+  ])("$name", async ({ globalContainerRunAsRoot, agentContainerRunAsRoot, expectedContainerRunAsRoot }) => {
+    await runWorkflowForAgentRootMode({ globalContainerRunAsRoot, agentContainerRunAsRoot });
+
+    expect(executeProviderStage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        workflowSettings: expect.objectContaining({
+          containerRunAsRoot: expectedContainerRunAsRoot,
+        }),
+      }),
+      "mock prompt",
     );
   });
 
