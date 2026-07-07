@@ -14,7 +14,7 @@ Actual microphone audio must not enter runtime memory automatically. Recorder UI
 
 Audio bytes should remain request-scoped. They should not be written to settings storage, project markdown, sprint artifacts, logs, telemetry, or memory records unless a future task explicitly introduces a user-visible retention feature with separate consent and deletion controls.
 
-The npm-served dashboard relies on browser secure-context treatment for loopback HTTP origins such as `http://localhost:<port>` and `http://127.0.0.1:<port>`. Packaged Electron grants microphone access only to the resolved dashboard origin and its loopback alias. Sprint preview origins, unrelated origins, camera/video capture, geolocation, notifications, and arbitrary Electron permissions are denied.
+The npm-served dashboard relies on browser secure-context treatment for loopback HTTP origins such as `http://localhost:<port>` and `http://127.0.0.1:<port>`. Packaged Electron grants microphone access only to the resolved dashboard origin and its loopback alias. Electron `media` permission requests and checks are allowed only when their details identify audio-only capture. Sprint preview origins, unrelated origins, camera/video capture, geolocation, notifications, and arbitrary Electron permissions are denied.
 
 ## Upload Guardrails
 
