@@ -163,6 +163,26 @@ export function useDropdownKeyboard(
     return { toggleRef, onToggleKeyDown, onContainerKeyDown, activeDescendantId };
 }
 
+const getRenderedOptionActiveDescendantId = (
+    optionIds: string[],
+    selectedOptionId: string,
+    activeDescendantId?: string,
+): string | undefined => {
+    if (optionIds.length === 0) {
+        return undefined;
+    }
+
+    if (activeDescendantId && optionIds.includes(activeDescendantId)) {
+        return activeDescendantId;
+    }
+
+    if (optionIds.includes(selectedOptionId)) {
+        return selectedOptionId;
+    }
+
+    return optionIds[0];
+};
+
 interface TopNavProps {
     onMenuToggle?: () => void;
     isMobile?: boolean;
@@ -407,6 +427,24 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
     );
     const techstackSelectedId = getDesignGuidanceSelectedId(designGuidance, "techStack");
     const styleguideSelectedId = getDesignGuidanceSelectedId(designGuidance, "styleguide");
+    const techstackOptionIds = useMemo(
+        () => techstackOptions.map((option) => `techstack-option-${option.id}`),
+        [techstackOptions],
+    );
+    const styleguideOptionIds = useMemo(
+        () => styleguideOptions.map((option) => `styleguide-option-${option.id}`),
+        [styleguideOptions],
+    );
+    const techstackActiveDescendantId = getRenderedOptionActiveDescendantId(
+        techstackOptionIds,
+        `techstack-option-${techstackSelectedId}`,
+        techstackKb.activeDescendantId,
+    );
+    const styleguideActiveDescendantId = getRenderedOptionActiveDescendantId(
+        styleguideOptionIds,
+        `styleguide-option-${styleguideSelectedId}`,
+        styleguideKb.activeDescendantId,
+    );
     const techstackActiveLabel = getDesignGuidanceActiveLabel(designGuidance, "techStack");
     const styleguideActiveLabel = getDesignGuidanceActiveLabel(designGuidance, "styleguide");
     const guidanceSelectorLoading = !!selectedProject && effectiveSettingsLoading;
@@ -636,7 +674,7 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
                         id="techstack-selector-button"
                         aria-label={`Tech stack guidance selector, active tech stack: ${!selectedProject ? "No project selected" : guidanceSelectorLoading ? "Loading settings" : techstackActiveLabel}`}
                         aria-controls={techstackDropdownOpen ? "techstack-listbox" : undefined}
-                        aria-activedescendant={techstackDropdownOpen ? (techstackKb.activeDescendantId || `techstack-option-${techstackSelectedId}`) : undefined}
+                        aria-activedescendant={techstackDropdownOpen ? techstackActiveDescendantId : undefined}
                         aria-busy={guidanceSwitchBusy === "techStack" || guidanceSelectorLoading ? "true" : "false"}
                         aria-disabled={techstackSelectorDisabled}
                         disabled={techstackSelectorDisabled}
@@ -736,7 +774,7 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
                         id="styleguide-selector-button"
                         aria-label={`Styleguide selector, active styleguide: ${!selectedProject ? "No project selected" : guidanceSelectorLoading ? "Loading settings" : styleguideActiveLabel}`}
                         aria-controls={styleguideDropdownOpen ? "styleguide-listbox" : undefined}
-                        aria-activedescendant={styleguideDropdownOpen ? (styleguideKb.activeDescendantId || `styleguide-option-${styleguideSelectedId}`) : undefined}
+                        aria-activedescendant={styleguideDropdownOpen ? styleguideActiveDescendantId : undefined}
                         aria-busy={guidanceSwitchBusy === "styleguide" || guidanceSelectorLoading ? "true" : "false"}
                         aria-disabled={styleguideSelectorDisabled}
                         disabled={styleguideSelectorDisabled}
