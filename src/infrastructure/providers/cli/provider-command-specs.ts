@@ -1,12 +1,13 @@
-import type { CustomMcpServer, ProviderId } from "../../../contracts/app-types.js";
+import type { CustomMcpServer, ProviderId, ThinkingMode } from "../../../contracts/app-types.js";
 import { isUsableCustomMcpServer } from "../../../mcp/mcp-tool-availability.js";
+import { normalizeProviderThinkingMode } from "../../../repositories/settings-defaults.js";
 import { MOCKUP_CLI_NODE_SCRIPT } from "./mockup-cli-provider.js";
 
 export type CliProviderId = Extract<ProviderId, "gemini" | "codex" | "claude-code" | "qwen-code" | "opencode" | "antigravity" | "mockup-cli">;
 export type NativeSessionOperation = "compact";
 export type NativeSessionOperationProvider = Exclude<CliProviderId, "mockup-cli">;
 
-export type ProviderCommandSpec = (model: string, prompt: string) => { command: string; args: string[] };
+export type ProviderCommandSpec = (model: string, prompt: string, thinkingMode?: ThinkingMode) => { command: string; args: string[] };
 
 export const E2E_PROVIDER_CLI_SHIM_ENV = "CODEUX_E2E_PROVIDER_CLI_SHIM";
 
@@ -15,14 +16,16 @@ const realProviderSpecs: Record<CliProviderId, ProviderCommandSpec> = {
     command: "gemini",
     args: ["--yolo", "--output-format", "json", "--p", prompt]
   }),
-  "claude-code": (model: string, prompt: string) => {
+  "claude-code": (model: string, prompt: string, thinkingMode?: ThinkingMode) => {
     const args = ["--dangerously-skip-permissions"];
+    if (thinkingMode) args.push("--effort", normalizeProviderThinkingMode("claude-code", thinkingMode));
     if (model && model !== "default") args.push("--model", model);
     args.push("-p", prompt);
     return { command: "claude", args };
   },
-  "codex": (model: string, prompt: string) => {
+  "codex": (model: string, prompt: string, thinkingMode?: ThinkingMode) => {
     const args = ["exec", "--yolo", "--json", "--output-last-message", "codex-last-message.txt"];
+    if (thinkingMode) args.push("-c", `model_reasoning_effort="${normalizeProviderThinkingMode("codex", thinkingMode)}"`);
     if (model && model !== "default") args.push("--model", model);
     args.push(prompt);
     return { command: "codex", args };
@@ -33,9 +36,10 @@ const realProviderSpecs: Record<CliProviderId, ProviderCommandSpec> = {
     args.push("-p", prompt);
     return { command: "qwen", args };
   },
-  opencode: (model: string, prompt: string) => {
+  opencode: (model: string, prompt: string, thinkingMode?: ThinkingMode) => {
     const args = ["run", "--format", "json"];
     if (model && model !== "default") args.push("--model", model);
+    if (thinkingMode) args.push("--variant", normalizeProviderThinkingMode("opencode", thinkingMode));
     args.push(prompt);
     return { command: "opencode", args };
   },
@@ -64,10 +68,10 @@ function withE2eProviderCliShim(provider: CliProviderId, spec: ProviderCommandSp
     return spec;
   }
 
-  return (model: string, prompt: string) => {
+  return (model: string, prompt: string, thinkingMode?: ThinkingMode) => {
     const shimPath = resolveE2eProviderCliShim();
     if (!shimPath) {
-      return spec(model, prompt);
+      return spec(model, prompt, thinkingMode);
     }
 
     return {
@@ -77,6 +81,7 @@ function withE2eProviderCliShim(provider: CliProviderId, spec: ProviderCommandSp
         "--provider", provider,
         "--model", model || "default",
         "--prompt", prompt,
+        ...(thinkingMode ? ["--thinking-mode", thinkingMode] : []),
       ],
     };
   };

@@ -82,7 +82,25 @@ export type SubtaskMergeIndicator = "CI" | "AUTOMERGE" | "MERGED" | "MERGE_BLOCK
 export type ProviderId = "jules" | "gemini" | "codex" | "claude-code" | "qwen-code" | "opencode" | "antigravity" | "mockup-cli";
 export type ProviderConfigId = string;
 export type ProviderStrategy = "MANUAL" | "WEIGHTED" | "AGENT";
-export type ThinkingMode = "SMALL" | "MEDIUM" | "HIGH";
+export type LegacyThinkingMode = "SMALL" | "MEDIUM" | "HIGH";
+export type GeminiThinkingMode = "minimal" | "low" | "medium" | "high";
+export type CodexThinkingMode = "low" | "medium" | "high" | "xhigh";
+export type ClaudeCodeThinkingMode = "low" | "medium" | "high" | "xhigh" | "max";
+export type QwenCodeThinkingMode = "low" | "medium" | "high" | "xhigh" | "max";
+export type OpenCodeThinkingMode = "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
+export type AntigravityThinkingMode = "low" | "high";
+export type ThinkingMode =
+  | LegacyThinkingMode
+  | GeminiThinkingMode
+  | CodexThinkingMode
+  | ClaudeCodeThinkingMode
+  | QwenCodeThinkingMode
+  | OpenCodeThinkingMode
+  | AntigravityThinkingMode;
+export interface ThinkingModeOption {
+  value: ThinkingMode;
+  label: string;
+}
 export type InvocationRoutingProfile = "GLOBAL" | "WORKER";
 export type InvocationRoutingId =
   | "task_coding"

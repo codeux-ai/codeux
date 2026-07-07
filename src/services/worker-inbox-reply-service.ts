@@ -145,7 +145,7 @@ export class WorkerInboxReplyService {
     const route = this.resolveProviderRoute("dashboard_reply", input.bodyMarkdown, agentProvider);
     const providerConfigId = route.providerConfigId || route.provider;
     const providerSettings = route.providers[providerConfigId];
-    const prompt = buildProviderPrompt(rawPrompt, providerSettings.thinkingMode);
+    const prompt = buildProviderPrompt(rawPrompt, providerSettings.thinkingMode, route.provider);
     const startedAt = new Date().toISOString();
     const sessionId = `dashboard-reply-${randomUUID().slice(0, 8)}`;
 
@@ -192,6 +192,7 @@ export class WorkerInboxReplyService {
         prompt,
         repoPath: project.baseDir,
         model: providerSettings.model,
+        thinkingMode: providerSettings.thinkingMode,
         apiKey: providerSettings.apiKey,
         qwenAuthMode: providerSettings.qwenAuthMode,
         qwenRegion: providerSettings.qwenRegion,
@@ -333,7 +334,7 @@ export class WorkerInboxReplyService {
 
     const providerConfigId = route.providerConfigId || route.provider;
     const providerSettings = route.providers[providerConfigId];
-    const prompt = buildProviderPrompt(fullContextPrompt, providerSettings.thinkingMode);
+    const prompt = buildProviderPrompt(fullContextPrompt, providerSettings.thinkingMode, route.provider);
 
     const startedAt = new Date().toISOString();
 
@@ -385,6 +386,7 @@ export class WorkerInboxReplyService {
         prompt,
         repoPath: project.baseDir,
         model: providerSettings.model,
+        thinkingMode: providerSettings.thinkingMode,
         apiKey: providerSettings.apiKey,
         qwenAuthMode: providerSettings.qwenAuthMode,
         qwenRegion: providerSettings.qwenRegion,
@@ -591,6 +593,7 @@ export class WorkerInboxReplyService {
     prompt: string;
     repoPath: string;
     model: string;
+    thinkingMode?: import("../contracts/app-types.js").ThinkingMode;
     apiKey: string;
     qwenAuthMode?: "LOCAL_AUTH" | "ALIBABA_CODING_PLAN" | "MODEL_PROVIDER";
     qwenRegion?: "china" | "international";
@@ -650,6 +653,7 @@ export class WorkerInboxReplyService {
       prompt,
       cwd: input.repoPath,
       model: effectiveModel,
+      thinkingMode: input.thinkingMode,
       apiKey: input.apiKey,
       qwenAuthMode: input.qwenAuthMode,
       qwenRegion: input.qwenRegion,

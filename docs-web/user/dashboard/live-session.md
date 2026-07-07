@@ -4,6 +4,8 @@ The **Live Session** page (`/live`) is the real-time control room for an active 
 
 You'll automatically be redirected here when you click **Orchestrate** on a sprint. You can also reach it any time from the dock to view the most recent sprint run for the active project.
 
+Sprint links can open Live directly with `/live?projectId=<projectId>&sprintId=<sprintId>`. Live applies the route project before selecting the route sprint, keeping the top-nav sprint selector and runtime filters aligned with the sprint you opened.
+
 ## Layout
 
 The page is composed of stacked panels:

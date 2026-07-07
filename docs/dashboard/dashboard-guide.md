@@ -20,6 +20,15 @@ All live fields rendered in the dashboard originate from the SQLite database, ar
 
 The v2 Live Session route keeps runtime data wiring in `LiveSessionPage.tsx`, pure projection/filter derivation in `dashboard/src/v2/lib/live-session-view-model.ts`, and repeated panel markup under `dashboard/src/v2/components/live-session/`. Keep sprint-scoped arrays such as dispatches, events, invocations, and projected task card items memoized from stabilized runtime snapshots so reconnects, stale banners, filters, and pending runtime actions do not force avoidable recomputation or change accessibility semantics.
 
+## Sprint Navigation Scope
+
+Sprint ledger rows and showcase sprint cards expose separate **Tasks** and **Live** actions. Both actions include the owning `projectId` and target `sprintId` in the route query:
+
+- `/tasks?projectId=<projectId>&sprintId=<sprintId>`
+- `/live?projectId=<projectId>&sprintId=<sprintId>`
+
+Destination pages must switch the selected project first, then apply the sprint scope through the selected project's sprint API. The Tasks page still accepts legacy same-project links such as `/tasks?sprint=<sprintId>` and `/tasks?sprintId=<sprintId>`, but project-aware links are required when navigation originates from sprint rows or cards so a sprint is never applied to the previously selected project.
+
 ## API Endpoints
 
 Implemented in `src/server/dashboard-server.ts`.
@@ -743,22 +752,29 @@ Project management requests are centralized in:
 *(Note: `available` means detected credentials/auth presence, whereas `enabled` means user-approved routing participation.)*
 
 AI Provider settings now support:
-- Named provider instances grouped under `jules`, `gemini`, `codex`, and `claude-code`
+- Named provider instances grouped under `jules`, `gemini`, `codex`, `claude-code`, `qwen-code`, `opencode`, and `antigravity`
 - Routing strategy:
   - `MANUAL` (single default provider instance)
   - `WEIGHTED` (weight-based distribution across enabled instances)
   - `AGENT` (uses the selected agent preset's optional provider/model preference, then inherits route defaults)
 - Provider-instance toggles (`enabled`)
 - Model selection
-  - Gemini: curated model list in UI
-  - Codex/Jules: text model field
-- Thinking mode (`SMALL`, `MEDIUM`, `HIGH`)
+  - CLI providers expose curated model lists or configured custom endpoint models where supported
+  - Jules remains hosted/managed and does not expose local CLI model controls
+- Provider-specific thinking/reasoning selection
+  - Gemini: `minimal`, `low`, `medium`, `high`
+  - Codex: `low`, `medium`, `high`, `xhigh`
+  - Claude Code and Qwen Code: `low`, `medium`, `high`, `xhigh`, `max`
+  - OpenCode: `none`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max`
+  - Antigravity: `low`, `high`
+  - Jules does not render a thinking control
 - Invocation routing at the provider-instance level, including instance pools and sparse per-instance overrides
 
 Behavior:
 - Empty provider key fields are valid.
 - Runtime falls back to system auth/environment where supported.
 - Multiple instances of the same CLI type are routed independently, so operators can weight several Codex or Gemini credentials differently inside one route pool.
+- Legacy saved thinking values `SMALL`, `MEDIUM`, and `HIGH` continue to load and are normalized to the selected provider's supported value set before execution.
 
 ## CI Intelligence Settings
 

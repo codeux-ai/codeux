@@ -919,7 +919,7 @@ export class QualityAssuranceService {
         ...args,
         memoryContext,
       });
-      const providerPrompt = buildProviderPrompt(prompt, providerSettings.thinkingMode);
+      const providerPrompt = buildProviderPrompt(prompt, providerSettings.thinkingMode, provider);
       const settings = this.deps.getDashboardSettings(args.scope);
       const workflowSettings = {
         ...DEFAULT_CLI_WORKFLOW_SETTINGS,
@@ -1591,7 +1591,7 @@ export class QualityAssuranceService {
       openCodeModelId: followUpProviderSettings.openCodeModelId,
     });
 
-    const providerPrompt = buildProviderPrompt(`${promptBody}\n\n${workspaceGuidance}`, followUpProviderSettings.thinkingMode);
+    const providerPrompt = buildProviderPrompt(`${promptBody}\n\n${workspaceGuidance}`, followUpProviderSettings.thinkingMode, args.provider);
     const previousInvocation = this.deps.executionRepository.getLatestProviderInvocationUsageBySession(args.sessionId, "task_coding");
     const initialHead = (await this.runWorkspaceCommand(worktreePath, "git", ["rev-parse", "HEAD"])).stdout.trim();
     this.deps.sessionTracking.updateSession(args.sessionId, { state: "RUNNING" });

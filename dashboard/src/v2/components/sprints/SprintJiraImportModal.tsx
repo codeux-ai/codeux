@@ -63,7 +63,7 @@ type JiraStatusLoadState = "idle" | "loading" | "loaded" | "fallback";
 
 const STATUS_OPTIONS: Array<{ value: JiraStatusFilter; label: string }> = [
   { value: "open", label: "Open" },
-  { value: "in_progress", label: "In Progress" },
+  { value: "in_progress", label: "In Work" },
   { value: "done", label: "Done" },
   { value: "all", label: "All statuses" },
 ];

@@ -1,5 +1,6 @@
-import type { CustomMcpServer, QwenModelProviderSettings } from "../../../contracts/app-types.js";
+import type { CustomMcpServer, QwenModelProviderSettings, ThinkingMode } from "../../../contracts/app-types.js";
 import type { McpConnectionInfo } from "../../../contracts/mcp-connection-types.js";
+import { normalizeProviderThinkingMode } from "../../../repositories/settings-defaults.js";
 import { enabledCustomServersFor } from "./provider-command-specs.js";
 
 export interface OpenCodeRuntimeSettings {
@@ -20,6 +21,7 @@ export interface QwenRuntimeSettings {
   qwenModelId?: string;
   qwenProtocol?: "openai" | "anthropic" | "gemini";
   qwenAdditionalModelProviders?: QwenModelProviderSettings[];
+  thinkingMode?: ThinkingMode;
 }
 
 export function buildQwenRuntimeConfig(
@@ -62,6 +64,9 @@ export function buildQwenRuntimeConfig(
     name: selectedModel,
     enableOpenAILogging: true,
   };
+  if (config?.thinkingMode) {
+    modelConfig.reasoningEffort = normalizeProviderThinkingMode("qwen-code", config.thinkingMode);
+  }
   const runtimeConfig: Record<string, unknown> = {
     security: {
       auth: {

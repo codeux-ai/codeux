@@ -687,6 +687,7 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<DashboardS
         settings.settings.jira.apiToken,
         input,
         settings.settings.jira.defaultProject,
+        settings.settings.jira.importTransitionName?.trim() || "In Work",
       );
     },
     searchJiraProjectStatuses: (projectId, projectKey) => deps.sprintIssueService.searchJiraProjectStatuses(projectId, projectKey),

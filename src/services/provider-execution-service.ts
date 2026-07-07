@@ -1,4 +1,4 @@
-import type { CustomMcpServer, DashboardSettings } from "../contracts/app-types.js";
+import type { CustomMcpServer, DashboardSettings, ThinkingMode } from "../contracts/app-types.js";
 import type { ProviderConfigMode, QwenModelProviderSettings } from "../contracts/app-types.js";
 import type { McpConnectionInfo } from "../contracts/mcp-connection-types.js";
 import type { AgentMcpAccessConfig } from "../contracts/agent-preset-types.js";
@@ -140,6 +140,7 @@ export interface ExecutionProviderRunArgs {
   prompt: string;
   cwd?: string;
   model: string;
+  thinkingMode?: ThinkingMode;
   apiKey: string;
   qwenAuthMode?: "LOCAL_AUTH" | "ALIBABA_CODING_PLAN" | "MODEL_PROVIDER";
   qwenRegion?: "china" | "international";
@@ -361,6 +362,7 @@ export class ProviderExecutionService {
         prompt: p,
         cwd: args.cwd || args.repoPath,
         model: effectiveModel,
+        thinkingMode: args.thinkingMode,
         apiKey: args.apiKey,
         qwenAuthMode: args.qwenAuthMode,
         qwenRegion: args.qwenRegion,

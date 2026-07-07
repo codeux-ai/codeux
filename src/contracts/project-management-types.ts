@@ -206,6 +206,7 @@ export interface JiraIssueSearchInput {
   search?: string;
   issueKey?: string;
   status?: JiraIssueSearchStatus;
+  inProgressStatusName?: string;
   statusNames?: string[];
   assignee?: JiraIssueSearchAssignee;
   assigneeText?: string;

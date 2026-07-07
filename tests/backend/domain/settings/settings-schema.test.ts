@@ -58,11 +58,11 @@ describe("validateSettingsPayload", () => {
   });
 
   it("accepts CREATE_PR for featurePrAutoMergeMode", () => {
-    const payload = cloneDefaults({
+    const payload = structuredClone(cloneDefaults({
       env: {},
       settingsJson: {},
       resolved: {},
-    });
+    }));
 
     // Default clone includes `ciIntelligence` initialized by cloneDefaults, modify it
     payload.ciIntelligence.featurePrAutoMergeMode = "CREATE_PR";
@@ -72,6 +72,59 @@ describe("validateSettingsPayload", () => {
     expect(result.success).toBe(true);
     expect(result.issues).toEqual([]);
     expect(result.data.ciIntelligence.featurePrAutoMergeMode).toBe("CREATE_PR");
+  });
+
+  it("accepts provider-specific thinking modes and legacy aliases", () => {
+    const payload = structuredClone(cloneDefaults({
+      env: {},
+      settingsJson: {},
+      resolved: {},
+    }));
+    payload.aiProvider.providers.gemini.thinkingMode = "minimal";
+    payload.aiProvider.providers.codex.thinkingMode = "xhigh";
+    payload.aiProvider.providers["claude-code"].thinkingMode = "max";
+    payload.aiProvider.providers["qwen-code"].thinkingMode = "xhigh";
+    payload.aiProvider.providers.opencode.thinkingMode = "none";
+    payload.aiProvider.providers.antigravity.thinkingMode = "MEDIUM";
+    payload.aiProvider.invocationRouting.task_coding.providers.codex = {
+      thinkingMode: "HIGH",
+    };
+
+    const result = validateSettingsPayload(payload);
+
+    expect(result.success).toBe(true);
+    expect(result.issues).toEqual([]);
+  });
+
+  it("rejects thinking modes unsupported by a provider or route override", () => {
+    const payload = structuredClone(cloneDefaults({
+      env: {},
+      settingsJson: {},
+      resolved: {},
+    }));
+    payload.aiProvider.providers.codex.thinkingMode = "max" as any;
+    payload.aiProvider.providers.antigravity.thinkingMode = "medium" as any;
+    payload.aiProvider.invocationRouting.task_coding.providers.codex = {
+      thinkingMode: "minimal" as any,
+    };
+
+    const result = validateSettingsPayload(payload);
+
+    expect(result.success).toBe(false);
+    expect(result.issues).toEqual(expect.arrayContaining([
+      {
+        path: "aiProvider.providers.codex.thinkingMode",
+        message: "Expected one of for codex: low, medium, high, xhigh",
+      },
+      {
+        path: "aiProvider.providers.antigravity.thinkingMode",
+        message: "Expected one of for antigravity: low, high",
+      },
+      {
+        path: "aiProvider.invocationRouting.task_coding.providers.codex.thinkingMode",
+        message: "Expected one of for codex: low, medium, high, xhigh",
+      },
+    ]));
   });
 
   it("accepts taskPrTitleScheme in git settings", () => {
