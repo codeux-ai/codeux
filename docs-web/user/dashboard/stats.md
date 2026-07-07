@@ -6,13 +6,14 @@ The **Stats** page (`/stats`) is the analytics surface for the active project. I
 
 A selector at the top lets you pick the analysis window:
 
+- **Last 1 hour**
 - **Last 24 hours**
 - **Last 7 days**
 - **Last 30 days**
 - **All time**
 - **Custom range** — drag-to-zoom directly on the Usage Graph or pick start and end dates explicitly.
 
-All charts, ledgers, and metrics respect the selected timeframe.
+All charts, ledgers, and metrics respect the selected timeframe. Recent windows include the freshest available bucket: the 1-hour view includes the current 5-minute bucket, and the 24-hour view includes the current partial hour.
 
 ## Analysis Modes
 
