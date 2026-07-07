@@ -74,7 +74,7 @@ Useful flags:
 - `--server-arg`
 - `--server-cwd`
 
-Use `--server-url` to connect the worker control plane to the main Code UX Streamable HTTP gateway. `--auth-token` is required for authenticated server-mode gateways. Repeating `--project-id` binds one worker process to multiple projects, and repeating `--active-project-id` limits the current poll loop to the active subset without starting another worker process.
+Use `--server-url` to connect the worker control plane to the main Code UX Streamable HTTP gateway. `--auth-token` is required for authenticated server-mode gateways. Repeating `--project-id` binds one worker process to multiple projects, and repeating `--active-project-id` limits the current poll loop to the active subset without starting another worker process. Enrollment persists the full `projectIds` set on the main server; `activeProjectIds` only marks the current focus subset used for polling and connection bindings.
 
 Environment fallbacks:
 
@@ -101,6 +101,18 @@ For each claimed dispatch:
 7. the worker writes `RUNNING`, `COMPLETED`, `FAILED`, or `BLOCKED` back to the remote control plane through `update_task_dispatch`
 
 This means connected workers are now another executor lane on top of the same runtime records, not a side system.
+
+The remote control-plane MCP surface exposed by the main server is:
+
+- `register_worker_endpoint`
+- `pull_task_dispatch`
+- `update_task_dispatch`
+
+Local execution remains on the worker machine's stdio worker-host surface:
+
+- `execute_worker_dispatch`
+- `get_session`
+- `cancel_local_dispatch`
 
 ## Inbox Reply Path
 

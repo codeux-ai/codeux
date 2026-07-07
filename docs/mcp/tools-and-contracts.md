@@ -20,6 +20,9 @@ These cover:
 - `manage_settings`
 - `manage_preview`
 - `manage_telemetry`
+- `register_worker_endpoint`
+- `pull_task_dispatch`
+- `update_task_dispatch`
 
 The same management domains are also exposed through the direct `codeux` CLI management surface. See [CLI Commands Reference](../reference/cli-commands.md) for the command syntax, aliases, interactive prompting behavior, and approval handling.
 
@@ -50,6 +53,13 @@ These cover:
 - `manage_settings`
 - `manage_preview`
 - `manage_telemetry`
+
+### Worker control plane
+- `register_worker_endpoint`
+- `pull_task_dispatch`
+- `update_task_dispatch`
+
+These tools are exposed by the main `project_manager` MCP runtime, including server mode. `register_worker_endpoint` records the full eligible `projectIds` set and stores `activeProjectIds` only as the current focus subset. `pull_task_dispatch` returns a dispatch only with a lease token; workers must not start local execution without that token. `update_task_dispatch` renews running leases, records terminal state, and may return `controlAction: "cancel"` when the dashboard has requested cancellation.
 
 ## Registered Tools
 

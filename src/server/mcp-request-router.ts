@@ -40,7 +40,10 @@ export const registerMcpRequestHandlers = (args: McpRequestRouterArgs): void => 
     .register("manage_settings", async (input) => (await args.managementToolHandler.handleManageSettings(input)) as McpToolResponse)
     .register("manage_preview", async (input) => (await args.managementToolHandler.handleManagePreview(input)) as McpToolResponse)
     .register("manage_telemetry", async (input) => (await args.managementToolHandler.handleManageTelemetry(input)) as McpToolResponse)
-    .register("search_knowledge", async (input) => (await args.managementToolHandler.handleSearchKnowledge(input)) as McpToolResponse);
+    .register("search_knowledge", async (input) => (await args.managementToolHandler.handleSearchKnowledge(input)) as McpToolResponse)
+    .register("register_worker_endpoint", async (input) => (await args.managementToolHandler.handleRegisterWorkerEndpoint(input)) as McpToolResponse)
+    .register("pull_task_dispatch", async (input) => (await args.managementToolHandler.handlePullTaskDispatch(input)) as McpToolResponse)
+    .register("update_task_dispatch", async (input) => (await args.managementToolHandler.handleUpdateTaskDispatch(input)) as McpToolResponse);
 
   const denyAllCodeUxTools: AgentCodeUxToolAccess = {
     codeUxEnabled: false,

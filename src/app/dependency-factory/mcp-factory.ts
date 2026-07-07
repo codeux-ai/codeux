@@ -49,6 +49,7 @@ export function createMcpDependencies(
     sprintIssueService: coreDeps.sprintIssueService,
     quicksprintService: dashboardDeps.quicksprintService,
     schedulerService: dashboardDeps.schedulerService,
+    workerTaskDispatchService: sprintDeps.workerTaskDispatchService,
   });
 
   return {

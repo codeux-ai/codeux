@@ -100,6 +100,11 @@ describe("ManagementToolHandler", () => {
       schedulerService: {
         listProjectSchedule: vi.fn(),
       },
+      workerTaskDispatchService: {
+        registerExternalWorkerEndpoint: vi.fn(),
+        pullNextDispatch: vi.fn(),
+        updateDispatch: vi.fn(),
+      },
     };
     handler = new ManagementToolHandler(deps);
   });
@@ -267,6 +272,74 @@ describe("ManagementToolHandler", () => {
 
     expect(parsed.approvalRequired).toBe(true);
     expect(deps.settingsRepository.saveSystemSettings).not.toHaveBeenCalled();
+  });
+
+  it("registers worker endpoints through the MCP worker control-plane tool", async () => {
+    deps.workerTaskDispatchService.registerExternalWorkerEndpoint.mockReturnValue({
+      id: "endpoint-1",
+      endpointKey: "mcp:worker-1",
+      connectionId: "conn-1",
+    });
+
+    const response = await handler.handleRegisterWorkerEndpoint({
+      connectionKey: "worker-1",
+      displayName: "Worker 1",
+      transport: "streamable-http",
+      projectIds: ["project-A", "project-B"],
+      activeProjectIds: ["project-B"],
+      capabilities: { canExecuteTasks: true, canSuperviseProjects: true },
+    });
+    const parsed = JSON.parse(response.content[0].text);
+
+    expect(parsed.endpoint.id).toBe("endpoint-1");
+    expect(deps.workerTaskDispatchService.registerExternalWorkerEndpoint).toHaveBeenCalledWith(expect.objectContaining({
+      connectionKey: "worker-1",
+      projectIds: ["project-A", "project-B"],
+      activeProjectIds: ["project-B"],
+    }));
+  });
+
+  it("claims and updates worker dispatches through the MCP worker control-plane tools", async () => {
+    deps.workerTaskDispatchService.pullNextDispatch.mockReturnValue({
+      dispatch: { id: "dispatch-1" },
+      leaseToken: "lease-1",
+    });
+    deps.workerTaskDispatchService.updateDispatch.mockReturnValue({
+      dispatch: { id: "dispatch-1", status: "running" },
+      controlAction: "cancel",
+    });
+
+    const claimResponse = await handler.handlePullTaskDispatch({
+      connectionKey: "worker-1",
+      projectId: "project-B",
+    });
+    const updateResponse = await handler.handleUpdateTaskDispatch({
+      connectionKey: "worker-1",
+      dispatchId: "dispatch-1",
+      leaseToken: "lease-1",
+      state: "RUNNING",
+      sessionId: "session-1",
+    });
+
+    expect(JSON.parse(claimResponse.content[0].text)).toMatchObject({
+      dispatch: { id: "dispatch-1" },
+      leaseToken: "lease-1",
+    });
+    expect(JSON.parse(updateResponse.content[0].text)).toMatchObject({
+      dispatch: { id: "dispatch-1" },
+      controlAction: "cancel",
+    });
+    expect(deps.workerTaskDispatchService.pullNextDispatch).toHaveBeenCalledWith(expect.objectContaining({
+      connectionKey: "worker-1",
+      projectId: "project-B",
+    }));
+    expect(deps.workerTaskDispatchService.updateDispatch).toHaveBeenCalledWith(expect.objectContaining({
+      connectionKey: "worker-1",
+      dispatchId: "dispatch-1",
+      leaseToken: "lease-1",
+      state: "RUNNING",
+      sessionId: "session-1",
+    }));
   });
 
   it("should return approvalRequired for destructive actions without approval in handleManageCodeUx", async () => {

@@ -120,4 +120,5 @@ export interface UpsertExternalWorkerEndpointInput {
   projectIds?: string[];
   activeProjectIds?: string[];
   capabilities?: Partial<WorkerEndpointCapabilities>;
+  metadata?: Record<string, unknown>;
 }

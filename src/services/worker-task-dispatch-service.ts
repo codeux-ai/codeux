@@ -86,14 +86,33 @@ export class WorkerTaskDispatchService {
   }
 
   registerExternalWorkerEndpoint(args: RegisterExternalWorkerEndpointArgs): WorkerEndpointRecord {
-    const endpoint = this.workerEndpointRepository.upsertExternalWorkerEndpoint(args);
+    const projectIds = args.projectIds || [];
     const activeProjectIds = args.activeProjectIds && args.activeProjectIds.length > 0
       ? args.activeProjectIds
-      : args.projectIds || [];
-    for (const projectId of activeProjectIds) {
-      this.projectWorkerAssignmentService.ensureWorkerAssignment(projectId, endpoint.id);
+      : projectIds;
+    this.workerEndpointRepository.upsertExternalWorkerEndpoint(args);
+    const connection = this.connectionChatRepository.upsertConnection({
+      connectionKey: args.connectionKey,
+      displayName: args.displayName,
+      role: "worker",
+      transport: args.transport,
+      status: "listening",
+      projectIds,
+      activeProjectIds,
+      capabilities: {
+        workerCanExecuteTasks: args.capabilities?.canExecuteTasks,
+        workerCanSuperviseProjects: args.capabilities?.canSuperviseProjects,
+        ...(args.metadata && typeof args.metadata === "object" ? args.metadata : {}),
+      },
+    });
+    const persistedEndpoint = this.workerEndpointRepository.getWorkerEndpointByConnectionId(connection.id);
+    if (!persistedEndpoint) {
+      throw new Error(`Worker endpoint not found after registering connection ${args.connectionKey}.`);
     }
-    return endpoint;
+    for (const projectId of projectIds) {
+      this.projectWorkerAssignmentService.ensureWorkerAssignment(projectId, persistedEndpoint.id);
+    }
+    return persistedEndpoint;
   }
 
   claimNextDispatchForWorker(args: {
