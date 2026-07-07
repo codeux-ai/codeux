@@ -29,6 +29,8 @@ In 3D Chat, idle quick actions send project-scoped prompts directly through the 
 
 Planning messages can include a rich sprint status card. When Code UX can match the message to loaded live project data, the card is backed by the current task records and execution snapshot, so it updates as tasks move from queued to running, completed, failed, blocked, or quota-waiting. It shows the sprint key/name, request/task/run materialization, overall progress such as `0/7 · 0%`, queued task count, and a compact task list. If either task records or the execution snapshot are still loading, the chat keeps the generic planning status card until both live records are available for the active project.
 
+Messages can also render external work references as rich cards without changing the stored transcript. The dashboard recognizes Jira issues, GitHub issues and pull requests, and GitLab issues and merge requests from explicit message metadata first, then from JSON-looking message bodies with the same fields. Recognized cards show the provider, key or number, title, status, safe external link, repository or project path, labels, assignee or author, and a short preview. Malformed JSON or unsupported providers remain ordinary markdown instead of being dropped.
+
 ## Compacting a thread
 
 Long threads accumulate context cost. Click **Compact** to:
@@ -49,6 +51,8 @@ The **Invocations** tab is a structured log of every `CallTool` MCP invocation r
 Use this for debugging your MCP client integrations — for example to see exactly what arguments your LLM is passing to tools like `manage_memory` or `manage_settings` (Note: The legacy unified `manage_code_ux` tool is deprecated).
 
 Invocation transcripts use the same live sprint status card as thread messages when planning metadata links them to a sprint. This means a planning invocation and its related chat message should show consistent task progress without a separate refresh control.
+
+Invocation transcripts use the same external-reference cards as thread messages for recognized Jira, GitHub, and GitLab payloads. This keeps linked work readable while preserving the original backend metadata and message content.
 
 ## Posting messages
 
