@@ -96,6 +96,7 @@ Project management:
   - Sends a created sprint to the Planning agent through the configured virtual worker provider, creates subtasks from the reply, and can auto-start the sprint
   - Auto-start orchestration now prepares the local sprint feature branch automatically and attempts to push it to `origin` when that remote exists
   - Planning overrides may explicitly target a specific `planningAgentPresetId`, task coding routing mode, manual worker preset, and virtual CLI provider/model for that one request.
+  - Completed planning invocations persist the generated execution plan on that invocation's transcript message as `metadata.executionPlan`, scoped to the linked sprint for the request. Replaying the invocation transcript reads that persisted message metadata rather than the currently selected sprint or a later planning run.
 - `GET /api/projects/:projectId/conversations/threads`
   - Lists project conversation threads
 - `POST /api/projects/:projectId/conversations/threads`
@@ -512,6 +513,7 @@ Legacy runtime:
 - Chat page logs invocation activity explicitly in the background, providing observable execution artifacts directly in the chat view.
 - Chat page filters the "Threads" mode to show user-facing conversation threads (`scope === "project"`).
 - Chat page "Invocations" mode provides a read-only list with metadata for active/completed execution invocations without cluttering the main thread rail.
+- Sprint-planning invocation transcripts include the execution plan generated for that invocation's linked sprint. The plan card is replayed from persisted invocation message metadata (`metadata.widget_metadata.type = "planning_request"` plus `metadata.executionPlan`), so historical transcripts do not change when the operator selects another sprint or replans the same project later.
 - Invocation cards and detail headers now show the resolved provider model when available, so planning runs expose the same model visibility as worker cards.
 - Invocation cards and the invocation message stream now surface classified provider errors such as `Rate limit` and `Quota reset`, including retry wait information when Code UX is backing off automatically. If Code UX restarts while an invocation is sleeping until a retry time, startup recovery closes the stale running invocation with a recovery message and moves task-backed work back to a retryable state so the recovered sprint loop can start a fresh continuation.
 - Chat page now receives websocket updates for thread assignment changes and incoming thread messages in the active thread
