@@ -45,6 +45,8 @@ Techstack settings are split across scopes:
 
 The built-in catalog always includes the Code UX Stack (`code-ux-internal`) with Preact, TanStack Router, GSAP, Three.js, and Lucide Icons. Catalog sanitization trims ids and labels, drops malformed or duplicate ids, preserves the built-in entry, and falls back `defaultTechstackId` to `code-ux-internal` if the saved default is missing or invalid. Project defaults intentionally keep `techstack.selectedTechstackId = null` and `techstack.applicationKind = null`; existing and imported projects therefore do not inherit the built-in stack automatically. New-project flows must apply a catalog default explicitly when they need one.
 
+Design guidance is project/sprint-scoped under `designGuidance`. It stores selected tech-stack guidance, selected styleguide guidance, `hideDefaultStyleguides`, and custom tech stack/styleguide entries with stable `id`, `name`, `summary`, and `instructionMarkdown` fields. System defaults resolve both selections to `none`, so existing and imported projects receive no design styleguide by inheritance. New local and new remote project initialization writes an explicit project override selecting the generic Code UX award-winning styleguide; imported local or Git projects remain at `none` until an operator or setup flow changes them.
+
 For `.code-ux/settings.json` (used primarily for credential hints during initial onboarding), search roots include:
 - current working directory
 - project root
@@ -154,6 +156,12 @@ Runtime resolution:
   - `entries`
     - each entry has `id`, `label`, and `items`
     - each item has `id` and `label`
+- `designGuidance`
+  - `selectedTechStackId` (`none` by default)
+  - `selectedStyleguideId` (`none` by default)
+  - `hideDefaultStyleguides` (`false` by default)
+  - `customTechStacks`
+  - `customStyleguides`
 - `mcpTools`
 
 `project_settings` fields:
@@ -167,6 +175,7 @@ Runtime resolution:
   - `cliWorkflow`
   - `sprintPreview`
   - `techstack`
+  - `designGuidance`
   - `agents`
   - `skills`
 
@@ -198,6 +207,7 @@ System-level integrations are injected into effective dashboard settings at reso
 - `agents.selfReflection` is default-off for both `planning` and `qualityAssurance`. Each loop stores an `enabled` flag, senior engineering criteria with per-criterion thresholds, and `maxImprovementAttempts`; sanitization dedupes criteria by id, clamps thresholds to `0..1`, clamps attempts to `0..10`, and falls back to default criteria for malformed legacy payloads. When enabled, structured planning and QA requests run the optional rate-and-improve loop through the same provider session while keeping the last valid parsed output if reflection fails. Planning reflection also gates `autoStart`: a non-passing final decision saves the plan without starting orchestration automatically.
 - `techstackCatalog` is system-owned. It stores the available techstack records and the catalog default id. The built-in `code-ux-internal` entry is restored on every load even when saved settings omit or override it.
 - `techstack` is project/sprint-owned. It stores `{ selectedTechstackId: string|null, applicationKind: "web"|"desktop"|null }`. The default project selection is null by design so imported projects remain unclassified until a later explicit project override selects a stack.
+- `designGuidance` is project/sprint-owned. It stores `{ selectedTechStackId, selectedStyleguideId, hideDefaultStyleguides, customTechStacks, customStyleguides }`; invalid selected ids fall back to `none`, custom entries are preserved when valid, and hiding default styleguides affects presentation only, not the backend default catalog.
 
 Backend contract:
 - `src/contracts/app-types.ts`

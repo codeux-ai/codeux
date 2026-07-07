@@ -775,6 +775,21 @@ export interface TechstackSelectionSettings {
   applicationKind: ApplicationKind | null;
 }
 
+export interface DesignGuidanceEntrySettings {
+  id: string;
+  name: string;
+  summary: string;
+  instructionMarkdown: string;
+}
+
+export interface DesignGuidanceSettings {
+  selectedTechStackId: string;
+  selectedStyleguideId: string;
+  hideDefaultStyleguides: boolean;
+  customTechStacks: DesignGuidanceEntrySettings[];
+  customStyleguides: DesignGuidanceEntrySettings[];
+}
+
 /** Toggles for what appears in an automated Task PR description. See src/domain/sprint/composer/pr-description-composer.ts. */
 export interface TaskPrTemplateSections {
   summary: boolean;
@@ -1219,6 +1234,7 @@ export interface DashboardSettings {
   aiProvider: AiProviderSettings;
   techstackCatalog: TechstackCatalogSettings;
   techstack: TechstackSelectionSettings;
+  designGuidance: DesignGuidanceSettings;
   git: GitSettings;
   jira: JiraSettings;
   notion: ExternalImporterSettings;

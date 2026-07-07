@@ -121,6 +121,29 @@ Project and sprint settings own the selected techstack:
 
 Default project settings intentionally keep `selectedTechstackId` and `applicationKind` as `null`. Existing and imported projects therefore do not automatically inherit the built-in Code UX Stack; a project creation flow must set an explicit override when it wants to apply the catalog default.
 
+## `designGuidance`
+
+Project and sprint settings own design guidance:
+
+```jsonc
+{
+  "selectedTechStackId": "none",
+  "selectedStyleguideId": "none",
+  "hideDefaultStyleguides": false,
+  "customTechStacks": [
+    {
+      "id": "custom-stack",
+      "name": "Custom Stack",
+      "summary": "Concise summary",
+      "instructionMarkdown": "Project-specific stack guidance."
+    }
+  ],
+  "customStyleguides": []
+}
+```
+
+The backend catalog always includes `none`, the generic Code UX award-winning styleguide, additional default styleguides, and a small tech-stack guidance catalog. Saved selections resolve to a known default or custom id; invalid ids fall back to `none`. `hideDefaultStyleguides` only affects presentation and does not remove backend defaults. Existing and imported projects inherit `none`; new local and new remote project initialization writes an explicit project override for the Code UX styleguide.
+
 ## `cliWorkflow`
 
 ```jsonc

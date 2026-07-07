@@ -1,5 +1,6 @@
 import { beforeEach, describe, it, expect, vi } from "vitest";
 import { initializeProject } from "../../../../src/domain/projects/project-initializer.js";
+import { CODE_UX_AWARD_WINNING_STYLEGUIDE_ID } from "../../../../src/domain/settings/design-guidance-catalog.js";
 
 vi.mock("../../../../src/infrastructure/git/local-repo-initializer.js", () => ({
   initLocalRepo: vi.fn(),
@@ -40,6 +41,22 @@ describe("initializeProject validation", () => {
       sourceType: "local",
       sourceRef: path.join(os.homedir(), "valid-local-repo"),
       initMode: undefined,
+    }));
+  });
+
+  it("seeds new local projects with the Code UX styleguide override", async () => {
+    const createProject = vi.fn().mockResolvedValue({});
+    await initializeProject(
+      { initMode: "new-local", sourceRef: "valid-local-repo", name: "valid", sourceType: "local" },
+      { createProject, getGithubToken: vi.fn() }
+    );
+
+    expect(createProject).toHaveBeenCalledWith(expect.objectContaining({
+      settingsOverrides: expect.objectContaining({
+        designGuidance: expect.objectContaining({
+          selectedStyleguideId: CODE_UX_AWARD_WINNING_STYLEGUIDE_ID,
+        }),
+      }),
     }));
   });
 
@@ -104,6 +121,11 @@ describe("initializeProject validation", () => {
       sourceRef: "https://github.com/a/b",
       cloneDir: expectedCloneRoot,
       initMode: undefined,
+      settingsOverrides: expect.objectContaining({
+        designGuidance: expect.objectContaining({
+          selectedStyleguideId: CODE_UX_AWARD_WINNING_STYLEGUIDE_ID,
+        }),
+      }),
     }));
   });
 
