@@ -299,7 +299,25 @@ const createSystemSettings = (projectSettings: ProjectSettings): SystemSettings 
     expect(screen.queryByText("11 settings categories available. Press slash to search.")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Clear settings search" })).not.toBeInTheDocument();
     expect(screen.getByText("/")).toBeInTheDocument();
+    expect(screen.getByLabelText("Settings context")).toHaveTextContent("System scope");
+    expect(screen.getByLabelText("Settings context")).toHaveTextContent("General");
+    expect(screen.getByLabelText("Settings context")).toHaveTextContent("No edits");
+    expect(screen.getByText("Quick actions")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Appearance" })).toBeInTheDocument();
+  });
+
+  it("SettingsSmartFindSearch surfaces project scope and dirty feedback in the command card", () => {
+    renderSettingsSmartFindSearch({
+      activeScope: "project",
+      activeDirty: true,
+      activeCategory: "agents",
+      activeCategoryConfig: CATEGORIES.find((category) => category.id === "agents")!,
+    });
+
+    const context = screen.getByLabelText("Settings context");
+    expect(context).toHaveTextContent("Project scope");
+    expect(context).toHaveTextContent("Agents");
+    expect(context).toHaveTextContent("Unsaved edits");
   });
 
   it("SettingsSmartFindSearch announces active matches with counts, active category, and previews", () => {
