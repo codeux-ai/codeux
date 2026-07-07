@@ -1,6 +1,7 @@
 import type {
   BackgroundPattern,
   DashboardSettings,
+  DashboardExperienceMode,
   ExternalSettingsHints,
   McpToolToggle,
   RuntimeLogLevel,
@@ -34,10 +35,12 @@ import {
   BUILTIN_CODE_UX_TECHSTACK,
   BUILTIN_CODE_UX_TECHSTACK_ID,
   DEFAULT_DASHBOARD_SETTINGS,
+  DEFAULT_DASHBOARD_EXPERIENCE_MODE,
   DEFAULT_AGENT_SELF_REFLECTION,
   DEFAULT_IMPORTER_SEARCH_LIMIT,
   DEFAULT_PROJECT_TECHSTACK,
   DEFAULT_SKILLS,
+  DASHBOARD_EXPERIENCE_MODES,
   INTERNAL_SKILL_NAMES,
   INTERNAL_SKILL_SET,
   QA_EXHAUSTION_POLICIES,
@@ -249,6 +252,13 @@ const BACKGROUND_PATTERNS = new Set<BackgroundPattern>([
   "WAVES",
   "NOISE",
 ]);
+const DASHBOARD_EXPERIENCE_MODE_SET = new Set<DashboardExperienceMode>(DASHBOARD_EXPERIENCE_MODES);
+
+const sanitizeDashboardExperienceMode = (value: unknown): DashboardExperienceMode => (
+  typeof value === "string" && DASHBOARD_EXPERIENCE_MODE_SET.has(value as DashboardExperienceMode)
+    ? value as DashboardExperienceMode
+    : DEFAULT_DASHBOARD_EXPERIENCE_MODE
+);
 
 const sanitizeBackgroundImage = (value: unknown): string | null => {
   if (typeof value !== "string") {
@@ -574,6 +584,7 @@ export const sanitizeSettings = (value: unknown, externalHints?: ExternalSetting
     : DEFAULT_DASHBOARD_SETTINGS.appearance.zoomLevel;
   const appearance = {
     navigationMode: appearanceInput.navigationMode === "DOCK" ? "DOCK" : "SIDEBAR" as "DOCK" | "SIDEBAR",
+    experienceMode: sanitizeDashboardExperienceMode(appearanceInput.experienceMode),
     theme: appearanceInput.theme === "LIGHT" || appearanceInput.theme === "DARK" ? appearanceInput.theme : "SYSTEM" as "LIGHT" | "DARK" | "SYSTEM",
     reducedMotion: appearanceInput.reducedMotion === "REDUCE" || appearanceInput.reducedMotion === "NONE" ? appearanceInput.reducedMotion : "AUTO" as "AUTO" | "REDUCE" | "NONE",
     backgroundMode: appearanceInput.backgroundMode === "STATIC" ? "STATIC" : "ANIMATED" as "ANIMATED" | "STATIC",
