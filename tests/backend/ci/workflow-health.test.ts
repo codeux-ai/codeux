@@ -225,7 +225,8 @@ describe("GitHub workflow health", () => {
     const config = await readRepoFile(PLAYWRIGHT_CONFIG);
 
     expect(config).toContain("command: 'node dist/index.js'");
-    expect(config).toContain("url: 'http://127.0.0.1:4444/health'");
+    expect(config).toContain("const dashboardPort = Number.parseInt(process.env.CODEUX_E2E_DASHBOARD_PORT || '4464', 10);");
+    expect(config).toContain("url: `${baseURL}/health`");
     expect(config).toContain("reuseExistingServer: false");
     expect(config).toContain("workers: 1");
     expect(config).toContain("trace: 'retain-on-failure'");
