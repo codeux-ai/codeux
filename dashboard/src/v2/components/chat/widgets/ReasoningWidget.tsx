@@ -5,6 +5,7 @@ import { Brain, ChevronRight } from "lucide-preact";
 import { useReducedMotion } from "../../../hooks/use-reduced-motion.js";
 import { INTERACTION_TOKENS } from "../../../lib/motion/tokens.js";
 import { formatTokenCount, type ParsedTurnTokens } from "../../../lib/chat-widget-view-models.js";
+import { selectAgentHumorMessage } from "../../../lib/agent-humor-messages.js";
 
 export interface ReasoningWidgetProps {
   text: string;
@@ -16,6 +17,7 @@ export interface ReasoningWidgetProps {
 }
 
 const PREVIEW_CHARS = 220;
+const HUMOR_MESSAGE_NOW_MS = 0;
 
 const getTokenCount = (tokens?: ParsedTurnTokens | null): number | null => {
   if (!tokens) {
@@ -36,6 +38,15 @@ const getTokenCount = (tokens?: ParsedTurnTokens | null): number | null => {
 
 const chipClassName = "inline-flex max-w-[150px] items-center gap-1 truncate rounded-full bg-black/[0.04] px-1.5 py-0.5 text-[10px] font-medium text-slate-500 dark:bg-white/[0.05] dark:text-slate-400";
 
+const stableTextHash = (value: string): string => {
+  let hash = 2_166_136_261;
+  for (let i = 0; i < value.length; i += 1) {
+    hash ^= value.charCodeAt(i);
+    hash = Math.imul(hash, 16_777_619) >>> 0;
+  }
+  return hash.toString(36);
+};
+
 export const ReasoningWidget: FunctionComponent<ReasoningWidgetProps> = ({
   text,
   providerLabel,
@@ -53,6 +64,11 @@ export const ReasoningWidget: FunctionComponent<ReasoningWidgetProps> = ({
   const isLong = trimmed.length > PREVIEW_CHARS;
   const preview = isLong ? `${trimmed.slice(0, PREVIEW_CHARS).trimEnd()}…` : trimmed;
   const tokenCount = getTokenCount(tokens);
+  const humorMessage = selectAgentHumorMessage({
+    category: "thinking",
+    seed: `reasoning|${stableTextHash(trimmed)}|${providerLabel ?? ""}|${modelLabel ?? ""}`,
+    nowMs: HUMOR_MESSAGE_NOW_MS,
+  });
 
   useLayoutEffect(() => {
     if (!contentRef.current) {
@@ -113,6 +129,9 @@ export const ReasoningWidget: FunctionComponent<ReasoningWidgetProps> = ({
           </span>
           <span class="mt-1 block text-[12.5px] leading-6 text-slate-600 dark:text-slate-300">
             {isLong ? (expanded ? "Hide reasoning" : "Show reasoning") : "Reasoning"}
+          </span>
+          <span class="mt-0.5 block text-[11px] italic leading-4 text-slate-500 dark:text-slate-400">
+            {humorMessage}
           </span>
         </span>
 

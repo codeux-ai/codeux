@@ -279,6 +279,51 @@ describe("SchedulerActions", () => {
     });
   });
 
+  it("schedules node flows from flattened MCP fields", async () => {
+    vi.mocked(schedulerService.createEntry).mockReturnValue({ id: "entry-1" } as any);
+
+    await actions.handleSchedulerAction(makeArgs("schedule_node_flow", {
+      projectId: "p1",
+      scheduledFor: "2026-06-09T12:00:00.000Z",
+      flowId: "flow-1",
+      input: { prompt: "Ship", retries: 1 },
+      flowVersion: "2",
+    }));
+
+    expect(schedulerService.createEntry).toHaveBeenCalledWith("p1", {
+      targetType: "node_flow",
+      scheduledFor: "2026-06-09T12:00:00.000Z",
+      nodeFlowTarget: {
+        flowId: "flow-1",
+        input: { prompt: "Ship", retries: 1 },
+        flowVersion: 2,
+      },
+    });
+  });
+
+  it("schedules node flows from generic create with nested target", async () => {
+    vi.mocked(schedulerService.createEntry).mockReturnValue({ id: "entry-1" } as any);
+
+    await actions.handleSchedulerAction(makeArgs("create", {
+      projectId: "p1",
+      targetType: "node_flow",
+      scheduledFor: "2026-06-09T12:00:00.000Z",
+      nodeFlowTarget: {
+        flowId: "flow-1",
+        input: { prompt: "Nested" },
+      },
+    }));
+
+    expect(schedulerService.createEntry).toHaveBeenCalledWith("p1", {
+      targetType: "node_flow",
+      scheduledFor: "2026-06-09T12:00:00.000Z",
+      nodeFlowTarget: {
+        flowId: "flow-1",
+        input: { prompt: "Nested" },
+      },
+    });
+  });
+
   it("updates chat target fields", async () => {
     vi.mocked(schedulerService.updateEntry).mockReturnValue({ id: "entry-1", chatTarget: { bodyMarkdown: "new" } } as any);
 
@@ -295,6 +340,23 @@ describe("SchedulerActions", () => {
       },
     });
     expect(result.result).toEqual({ entry: { id: "entry-1", chatTarget: { bodyMarkdown: "new" } } });
+  });
+
+  it("updates node flow target fields", async () => {
+    vi.mocked(schedulerService.updateEntry).mockReturnValue({ id: "entry-1", nodeFlowTarget: { flowId: "flow-2" } } as any);
+
+    await actions.handleSchedulerAction(makeArgs("update", {
+      entryId: "entry-1",
+      flowId: "flow-2",
+      input: { mode: "refresh" },
+    }));
+
+    expect(schedulerService.updateEntry).toHaveBeenCalledWith("entry-1", {
+      nodeFlowTarget: {
+        flowId: "flow-2",
+        input: { mode: "refresh" },
+      },
+    });
   });
 
   it("normalizes minute-based recurrence on update", async () => {

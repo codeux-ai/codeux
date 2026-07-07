@@ -16,6 +16,7 @@ import {
   Repeat,
   Send,
   Trash2,
+  Workflow,
   Zap,
 } from "lucide-preact";
 import { PageContainer } from "./components/layout/PageContainer.js";
@@ -25,6 +26,7 @@ import { Button } from "./components/ui/Button.js";
 import { useProjectData } from "./context/project-data.js";
 import { subscribeToDashboardRealtime } from "../lib/realtime/dashboard-realtime-client.js";
 import { fetchSprints } from "./lib/project-api.js";
+import { fetchNodeFlows } from "./lib/node-flow-api.js";
 import { fetchQuicksprintTemplates } from "./lib/quicksprint-api.js";
 import {
   createSchedulerEntry,
@@ -42,12 +44,15 @@ import type {
   ScheduleTargetType,
   SprintRecord,
   UpdateSchedulerEntryInput,
+  NodeFlowJsonObject,
+  NodeFlowJsonValue,
+  NodeFlowRecord,
 } from "./types.js";
 import type { QuicksprintTemplateRecord } from "../../../src/contracts/quicksprint-types.js";
 
 type SchedulerView = "calendar" | "day";
 type ScheduleTimingMode = "absolute" | "after_sprint_end";
-type OperatorScheduleTargetType = Extract<ScheduleTargetType, "sprint" | "quicksprint" | "chat" | "memory_remediation">;
+type OperatorScheduleTargetType = Extract<ScheduleTargetType, "sprint" | "quicksprint" | "chat" | "memory_remediation" | "node_flow">;
 type SchedulerFormInput = Omit<UpdateSchedulerEntryInput, "targetType"> & Pick<CreateSchedulerEntryInput, "targetType">;
 type FeedbackState = { tone: "idle" | "success" | "error"; message: string | null };
 
@@ -95,6 +100,14 @@ const TARGET_OPTIONS: Array<{
     chipClassName: "bg-signal-500/12 text-signal-600 dark:text-signal-400",
   },
   {
+    value: "node_flow",
+    label: "Node flow",
+    icon: Workflow,
+    tone: "text-rose-500",
+    activeClassName: "border-rose-500/35 bg-rose-500/10 shadow-[0_12px_34px_rgba(244,63,94,0.13)]",
+    chipClassName: "bg-rose-500/12 text-rose-600 dark:text-rose-400",
+  },
+  {
     value: "agent_wakeup",
     label: "Agent wakeup",
     icon: BellRing,
@@ -120,7 +133,7 @@ const TARGET_OPTIONS: Array<{
   },
 ];
 
-const OPERATOR_TARGET_TYPES: OperatorScheduleTargetType[] = ["sprint", "quicksprint", "chat", "memory_remediation"];
+const OPERATOR_TARGET_TYPES: OperatorScheduleTargetType[] = ["sprint", "quicksprint", "chat", "memory_remediation", "node_flow"];
 const FORM_TARGET_OPTIONS = TARGET_OPTIONS.filter((option) => isOperatorTargetType(option.value));
 const targetOptionByType = new Map(TARGET_OPTIONS.map((option) => [option.value, option]));
 
@@ -218,6 +231,45 @@ const sprintDisplayName = (sprints: SprintRecord[], sprintId: string): string =>
   sprints.find((sprint) => sprint.id === sprintId)?.name || sprintId
 );
 
+const nodeFlowDisplayName = (nodeFlows: NodeFlowRecord[], flowId: string): string => (
+  nodeFlows.find((flow) => flow.id === flowId)?.title || flowId
+);
+
+const isNodeFlowJsonValue = (value: unknown): value is NodeFlowJsonValue => {
+  if (value === null || ["string", "number", "boolean"].includes(typeof value)) {
+    return true;
+  }
+  if (Array.isArray(value)) {
+    return value.every(isNodeFlowJsonValue);
+  }
+  if (typeof value === "object") {
+    return Object.values(value as Record<string, unknown>).every(isNodeFlowJsonValue);
+  }
+  return false;
+};
+
+const isNodeFlowJsonObject = (value: unknown): value is NodeFlowJsonObject => (
+  typeof value === "object"
+  && value !== null
+  && !Array.isArray(value)
+  && Object.values(value as Record<string, unknown>).every(isNodeFlowJsonValue)
+);
+
+const parseNodeFlowInputJson = (rawInput: string): { input?: NodeFlowJsonObject; error?: string } => {
+  if (!rawInput.trim()) {
+    return {};
+  }
+  try {
+    const parsed: unknown = JSON.parse(rawInput);
+    if (!isNodeFlowJsonObject(parsed)) {
+      return { error: "Node flow input must be a JSON object." };
+    }
+    return { input: parsed };
+  } catch {
+    return { error: "Node flow input must be valid JSON." };
+  }
+};
+
 const scheduleTimingSummary = (entry: SchedulerEntryRecord, sprints: SprintRecord[]): string => {
   if (entry.scheduleAnchor?.mode === "after_sprint_end") {
     return `After ${sprintDisplayName(sprints, entry.scheduleAnchor.sourceSprintId)} ends${scheduleAnchorOffsetLabel(entry.scheduleAnchor.offsetMinutes)}`;
@@ -229,6 +281,7 @@ const scheduleTargetSummary = (
   entry: SchedulerEntryRecord,
   sprints: SprintRecord[],
   templates: QuicksprintTemplateRecord[],
+  nodeFlows: NodeFlowRecord[],
 ): string => {
   if (entry.targetType === "sprint") {
     return entry.sprintTarget ? `Sprint: ${sprintDisplayName(sprints, entry.sprintTarget.sprintId)}` : "Sprint";
@@ -243,6 +296,10 @@ const scheduleTargetSummary = (
   }
   if (entry.targetType === "memory_remediation") {
     return `Memory remediation: ${entry.memoryRemediationTarget?.mode === "ai" ? "AI review" : "deterministic cleanup"}`;
+  }
+  if (entry.targetType === "node_flow") {
+    const flowId = entry.nodeFlowTarget?.flowId;
+    return flowId ? `Node flow: ${nodeFlowDisplayName(nodeFlows, flowId)}` : "Node flow";
   }
   if (entry.targetType === "agent_wakeup") {
     return entry.agentWakeupTarget?.threadId ? `Agent wakeup: ${entry.agentWakeupTarget.threadId}` : "Agent wakeup message";
@@ -261,7 +318,7 @@ const ProjectPlaceholder: FunctionComponent = () => (
     </div>
     <h1 className="mt-5 font-display text-2xl md:text-3xl font-black tracking-tight text-slate-900 dark:text-white">Select a project to schedule work.</h1>
     <p className="mt-3 max-w-xl text-sm font-medium leading-relaxed text-slate-500 dark:text-slate-400">
-      Scheduler entries are project-scoped so sprints, quicksprints, and chat messages run against the right workspace.
+      Scheduler entries are project-scoped so sprints, quicksprints, node flows, and chat messages run against the right workspace.
     </p>
   </div>
 );
@@ -273,6 +330,7 @@ export const SchedulerPage: FunctionComponent = () => {
   const [schedule, setSchedule] = useState<SchedulerCollectionResponse | null>(null);
   const [sprints, setSprints] = useState<SprintRecord[]>([]);
   const [templates, setTemplates] = useState<QuicksprintTemplateRecord[]>([]);
+  const [nodeFlows, setNodeFlows] = useState<NodeFlowRecord[]>([]);
 
   const [selectedDayIndex, setSelectedDayIndex] = useState<number>(() => {
     const today = new Date().getDay();
@@ -318,6 +376,8 @@ export const SchedulerPage: FunctionComponent = () => {
   const [taskCount, setTaskCount] = useState(5);
   const [chatMessage, setChatMessage] = useState("");
   const [memoryRemediationMode, setMemoryRemediationMode] = useState<"deterministic" | "ai">("deterministic");
+  const [selectedNodeFlowId, setSelectedNodeFlowId] = useState("");
+  const [nodeFlowInputJson, setNodeFlowInputJson] = useState("");
   const [repeatEnabled, setRepeatEnabled] = useState(false);
   const [frequency, setFrequency] = useState<ScheduleRecurrenceRule["frequency"]>("daily");
   const [interval, setIntervalValue] = useState(1);
@@ -338,17 +398,24 @@ export const SchedulerPage: FunctionComponent = () => {
     }
     setLoading(true);
     try {
-      const [nextSchedule, sprintResponse, quicksprintTemplates] = await Promise.all([
+      const [nextSchedule, sprintResponse, quicksprintTemplates, nodeFlowResponse] = await Promise.all([
         fetchProjectSchedule(selectedProject.id, range.from.toISOString(), range.to.toISOString(), signal),
         fetchSprints(selectedProject.id, signal),
         fetchQuicksprintTemplates(selectedProject.id),
+        fetchNodeFlows(selectedProject.id, signal),
       ]);
       setSchedule(nextSchedule);
       setSprints(sprintResponse.sprints);
       setTemplates(quicksprintTemplates);
+      setNodeFlows(nodeFlowResponse.flows);
       setSelectedSprintId((current) => current || sprintResponse.sprints.find((sprint) => sprint.status !== "completed")?.id || "");
       setAnchorSourceSprintId((current) => current || sprintResponse.sprints[0]?.id || "");
       setSelectedTemplateId((current) => current || quicksprintTemplates[0]?.id || "");
+      setSelectedNodeFlowId((current) => (
+        nodeFlowResponse.flows.some((flow) => flow.id === current)
+          ? current
+          : nodeFlowResponse.flows[0]?.id || ""
+      ));
     } catch (error) {
       if (!signal?.aborted) {
         setFeedback({ tone: "error", message: error instanceof Error ? error.message : "Failed to load scheduler." });
@@ -485,6 +552,9 @@ export const SchedulerPage: FunctionComponent = () => {
       setChatMessage(entry.chatTarget.bodyMarkdown);
     } else if (entry.targetType === "memory_remediation" && entry.memoryRemediationTarget) {
       setMemoryRemediationMode(entry.memoryRemediationTarget.mode);
+    } else if (entry.targetType === "node_flow" && entry.nodeFlowTarget) {
+      setSelectedNodeFlowId(entry.nodeFlowTarget.flowId);
+      setNodeFlowInputJson(entry.nodeFlowTarget.input ? JSON.stringify(entry.nodeFlowTarget.input, null, 2) : "");
     }
 
     if (entry.recurrence && entry.recurrence.frequency !== "none") {
@@ -517,6 +587,8 @@ export const SchedulerPage: FunctionComponent = () => {
     setTaskCount(5);
     setChatMessage("");
     setMemoryRemediationMode("deterministic");
+    setSelectedNodeFlowId(nodeFlows[0]?.id || "");
+    setNodeFlowInputJson("");
     setRepeatEnabled(false);
     setFrequency("daily");
     setIntervalValue(1);
@@ -564,6 +636,9 @@ export const SchedulerPage: FunctionComponent = () => {
         return template ? `Run ${template.name}` : "Scheduled quicksprint";
       } else if (targetType === "memory_remediation") {
         return "Long-term memory remediation";
+      } else if (targetType === "node_flow") {
+        const nodeFlow = nodeFlows.find((item) => item.id === selectedNodeFlowId);
+        return nodeFlow ? `Run ${nodeFlow.title}` : "Scheduled node flow";
       } else {
         return "Scheduled chat message";
       }
@@ -591,6 +666,17 @@ export const SchedulerPage: FunctionComponent = () => {
         setFeedback({ tone: "error", message: "Write the chat message to schedule." });
         return;
       }
+    } else if (targetType === "node_flow") {
+      if (!selectedNodeFlowId) {
+        setFeedback({ tone: "error", message: "Choose a node flow." });
+        return;
+      }
+    }
+
+    const parsedNodeFlowInput = targetType === "node_flow" ? parseNodeFlowInputJson(nodeFlowInputJson) : {};
+    if (parsedNodeFlowInput.error) {
+      setFeedback({ tone: "error", message: parsedNodeFlowInput.error });
+      return;
     }
 
     let scheduleAnchor: ScheduleAnchor | undefined;
@@ -641,6 +727,11 @@ export const SchedulerPage: FunctionComponent = () => {
     } else if (targetType === "memory_remediation") {
       input.memoryRemediationTarget = {
         mode: memoryRemediationMode,
+      };
+    } else if (targetType === "node_flow") {
+      input.nodeFlowTarget = {
+        flowId: selectedNodeFlowId,
+        ...(parsedNodeFlowInput.input ? { input: parsedNodeFlowInput.input } : {}),
       };
     } else {
       input.chatTarget = {
@@ -703,7 +794,7 @@ export const SchedulerPage: FunctionComponent = () => {
         icon={CalendarDays}
         eyebrow="Runtime Scheduler"
         title="Schedule Events"
-        subtitle="Calendar control for future sprint starts, quicksprint launches, and timed messages into the project chat agent."
+        subtitle="Calendar control for future sprint starts, quicksprint launches, node-flow runs, and timed messages into the project chat agent."
         actions={
         <div className="flex max-w-full flex-wrap items-center gap-2 shrink-0">
           <Button
@@ -911,6 +1002,38 @@ export const SchedulerPage: FunctionComponent = () => {
                   Runs project-scoped long-term memory cleanup for CI-failure memories and exact duplicates. AI mode reviews candidates through the Remediation route.
                 </p>
               </label>
+            )}
+
+            {targetType === "node_flow" && (
+              <div className="grid gap-3">
+                <label className="block">
+                  <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Node flow</span>
+                  <AvantgardeSelect
+                    value={selectedNodeFlowId}
+                    onChange={setSelectedNodeFlowId}
+                    searchable={true}
+                    options={[
+                      { value: "", label: nodeFlows.length > 0 ? "Choose node flow" : "No saved node flows" },
+                      ...nodeFlows.map((flow) => ({ value: flow.id, label: flow.title })),
+                    ]}
+                    className="mt-2"
+                  />
+                </label>
+                <label className="block">
+                  <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">JSON input</span>
+                  <textarea
+                    value={nodeFlowInputJson}
+                    onInput={(event) => setNodeFlowInputJson(event.currentTarget.value)}
+                    rows={5}
+                    spellcheck={false}
+                    className={`mt-2 w-full resize-y py-3 font-mono text-xs ${SCHEDULER_FIELD_CLASS}`}
+                    placeholder='Optional, for example: {"branch":"dev"}'
+                  />
+                  <p className="mt-2 text-xs leading-relaxed text-slate-400">
+                    Leave blank to run with no input. When provided, the input must be a JSON object.
+                  </p>
+                </label>
+              </div>
             )}
 
             <div className="rounded-2xl border border-black/[0.06] bg-black/[0.015] p-4 dark:border-white/[0.06] dark:bg-white/[0.02]">
@@ -1322,7 +1445,7 @@ export const SchedulerPage: FunctionComponent = () => {
             <div className="space-y-3">
               {(schedule?.entries || []).length === 0 && (
                 <div className="rounded-2xl border border-dashed border-black/[0.10] p-6 text-sm font-semibold text-slate-500 dark:border-white/[0.10] dark:text-slate-400">
-                  No scheduled entries yet.
+                  No scheduled entries yet. Add a sprint, quicksprint, node flow, chat message, or memory remediation schedule.
                 </div>
               )}
 
@@ -1349,7 +1472,7 @@ export const SchedulerPage: FunctionComponent = () => {
                       </div>
                       <h4 className="mt-2 truncate text-sm font-semibold text-slate-900 dark:text-white">{entry.title}</h4>
                       <p className="mt-1 text-xs font-medium text-slate-500 dark:text-slate-400">
-                        {scheduleTargetSummary(entry, sprints, templates)} · {" "}
+                        {scheduleTargetSummary(entry, sprints, templates, nodeFlows)} · {" "}
                         {scheduleTimingSummary(entry, sprints)}
                         {entry.lastRunAt && ` · Last fired: ${new Date(entry.lastRunAt).toLocaleString()}`}
                       </p>

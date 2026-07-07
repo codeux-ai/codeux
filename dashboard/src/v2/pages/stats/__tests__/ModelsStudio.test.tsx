@@ -94,6 +94,14 @@ describe("ModelsStudio", () => {
     expect(container.textContent).toContain("$55.41");
     expect(container.textContent).toContain("$4,262.25");
     expect(container.textContent).toContain("$4.62/call");
+
+    const modelCard = screen.getByLabelText("claude-opus-4-8 model leaderboard rank 1");
+    expect(modelCard.className).toContain("stats-surface-panel");
+    expect(modelCard.className).not.toMatch(/shadow|backdrop|hover:-?translate|hover:scale|rounded-\[2\.2rem\]/);
+
+    const highlightTile = screen.getByText("Volume Leader").closest(".stats-surface-subpanel");
+    expect(highlightTile).toBeTruthy();
+    expect(highlightTile?.className).not.toMatch(/shadow|backdrop|hover:-?translate|hover:scale|rounded-\[2\.2rem\]/);
   });
 
   it("orders the leaderboard by token volume and labels rank chips clearly", () => {

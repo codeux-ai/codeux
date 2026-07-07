@@ -1,4 +1,5 @@
 import type { ProviderId } from "./app-types.js";
+import type { AgentMcpAccessConfig } from "./agent-preset-types.js";
 import type {
   ChatProviderBridgeMode,
   ChatProviderConnectionStatus,
@@ -9,6 +10,7 @@ import type {
   ChatProviderRoutingHints,
   ExternalChannelMetadata,
 } from "./chat-provider-types.js";
+import type { NodeFlowGraph, NodeFlowJsonObject, NodeWidgetSchema } from "./node-flow-types.js";
 import type { CreateProjectInput } from "./project-management-types.js";
 
 export interface ManagementApproval {
@@ -113,13 +115,13 @@ export interface ManageQuicksprintsArgs {
 }
 
 export interface ManageSchedulerArgs {
-  action: "list" | "create" | "schedule_sprint" | "schedule_quicksprint" | "schedule_chat" | "schedule_wakeup" | "update" | "delete" | "run_due";
+  action: "list" | "create" | "schedule_sprint" | "schedule_quicksprint" | "schedule_chat" | "schedule_wakeup" | "schedule_node_flow" | "update" | "delete" | "run_due";
   projectId?: string;
   entryId?: string;
   from?: string;
   to?: string;
   title?: string;
-  targetType?: "sprint" | "quicksprint" | "chat" | "wakeup";
+  targetType?: "sprint" | "quicksprint" | "chat" | "wakeup" | "node_flow";
   status?: "scheduled" | "paused" | "completed" | "failed" | "cancelled";
   scheduledFor?: string;
   delaySeconds?: number | string;
@@ -129,6 +131,7 @@ export interface ManageSchedulerArgs {
   quicksprintTarget?: Record<string, unknown>;
   chatTarget?: Record<string, unknown>;
   wakeupTarget?: Record<string, unknown>;
+  nodeFlowTarget?: Record<string, unknown>;
   sprintId?: string;
   templateId?: string;
   taskCount?: number | string;
@@ -141,6 +144,9 @@ export interface ManageSchedulerArgs {
   connectionId?: string | null;
   sourceInvocationId?: string | null;
   resumeAfterInvocationCompletion?: boolean;
+  flowId?: string;
+  input?: Record<string, unknown>;
+  flowVersion?: number | string;
   now?: string;
   approval?: ManagementApproval;
 }
@@ -168,11 +174,31 @@ export interface ManageAgentsArgs {
   projectId?: string;
   presetId?: string;
   name?: string;
+  description?: string;
   instructionMarkdown?: string;
   labels?: string[];
   avatarConfig?: Record<string, unknown>;
+  providerConfigId?: string | null;
+  model?: string | null;
+  memoryConfig?: Record<string, unknown>;
+  mcpAccess?: AgentMcpAccessConfig;
   memoryTemplateOverrideEnabled?: boolean;
   memoryTemplateMarkdown?: string;
+  approval?: ManagementApproval;
+}
+
+export interface ManageNodeFlowsArgs {
+  action: "list" | "get" | "create" | "update" | "delete" | "validate" | "run" | "list_runs" | "get_run" | "attach_to_agent" | "detach_from_agent";
+  projectId?: string;
+  flowId?: string;
+  runId?: string;
+  name?: string;
+  description?: string;
+  graph?: NodeFlowGraph;
+  widgets?: NodeWidgetSchema | Record<string, NodeWidgetSchema>;
+  input?: NodeFlowJsonObject;
+  agentPresetId?: string;
+  skillAlias?: string;
   approval?: ManagementApproval;
 }
 

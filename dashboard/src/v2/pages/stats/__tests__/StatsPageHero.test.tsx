@@ -162,6 +162,8 @@ describe('StatsPageHero', () => {
     expect(screen.getByLabelText('Stats active lens')).toHaveTextContent('Models');
     expect(screen.getByLabelText('Stats project context')).toHaveTextContent('Project');
     expect(screen.getByLabelText('Stats project context')).toHaveTextContent('Project 1');
+    expect(screen.getByLabelText('Stats project context')).toHaveTextContent('Generated');
+    expect(screen.getByLabelText('Stats project context')).toHaveTextContent('No snapshot');
     expect(screen.getByRole('group', { name: 'Time window presets' })).toBeTruthy();
     expect(screen.getByRole('button', { name: '24h' })).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByRole('button', { name: 'Custom' })).toHaveAttribute('aria-pressed', 'false');
@@ -264,6 +266,7 @@ describe('StatsPageHero', () => {
     );
 
     expect(screen.getByText('#4')).toBeTruthy();
+    expect(screen.getByLabelText('Stats project context')).toHaveTextContent('Generated');
     expect(screen.queryByText('Daily · 7 buckets')).toBeNull();
     expect(screen.queryByText('Mixed')).toBeNull();
     expect(screen.queryByText('1 / 1 providers')).toBeNull();

@@ -95,6 +95,7 @@ router
   .register("manage_scheduler",   h.handleManageScheduler)
   .register("scheduler_code_ux",          h.handleScheduler)
   .register("manage_agents",      h.handleManageAgents)
+  .register("manage_node_flows",  h.handleManageNodeFlows)
   .register("manage_memory",      h.handleManageMemory)
   .register("manage_skills",      h.handleManageSkills)
   .register("manage_settings",    h.handleManageSettings)
@@ -163,6 +164,7 @@ Each tool has an entry in `settings.mcpTools` (`McpToolToggle[]`). Defaults:
   { "name": "manage_scheduler",    "enabled": true, "isInternal": true },
   { "name": "scheduler_code_ux",           "enabled": true, "isInternal": true },
   { "name": "manage_agents",       "enabled": true, "isInternal": true },
+  { "name": "manage_node_flows",   "enabled": true, "isInternal": true },
   { "name": "manage_memory",       "enabled": true, "isInternal": true },
   { "name": "manage_skills",       "enabled": true, "isInternal": true },
   { "name": "search_knowledge",    "enabled": true, "isInternal": true },
@@ -202,6 +204,13 @@ Persistent skills use `SkillService` as the backend boundary. `manage_skills` ro
 skill markdown import/export, agent storage attachment management, and the authoring prompt through
 `SkillActions`. `search_skills` is registered separately as a retrieval tool and returns concise
 ranked summaries with IDs and metadata. Full markdown retrieval stays behind `manage_skills`.
+
+## Node flow dispatch
+
+`manage_node_flows` routes through `NodeFlowActions` and delegates to `NodeFlowService` for graph
+validation, CRUD persistence, runtime execution, run inspection, and flow-backed agent skill
+attachments. The MCP layer applies optional widget schemas into submitted graph specs and masks
+secret-shaped graph/run fields in responses.
 
 ## Connection registry
 

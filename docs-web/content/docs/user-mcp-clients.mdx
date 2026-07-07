@@ -125,6 +125,7 @@ domain**, plus `search_knowledge`:
 | `manage_quicksprints` | Manage quicksprint templates and execute them. |
 | `manage_scheduler` | Create and run scheduled sprints, quicksprints, messages, and wakeups. |
 | `manage_agents` | Manage agent presets and sync them to project markdown. |
+| `manage_node_flows` | Manage reusable node workflows, run them, and attach them as agent skills. |
 | `manage_memory` | Inspect, search, promote, and re-embed memory. |
 | `search_knowledge` | Semantic search over the caller's subscribed knowledge base. |
 | `manage_settings` | Get/resolve/patch/replace/reset system, project, and sprint settings. |

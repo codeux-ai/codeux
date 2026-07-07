@@ -16,6 +16,7 @@ These cover:
 - `manage_scheduler`
 - `scheduler_code_ux`
 - `manage_agents`
+- `manage_node_flows`
 - `manage_memory`
 - `manage_skills`
 - `search_knowledge`
@@ -53,6 +54,7 @@ These cover:
 - `manage_scheduler`
 - `scheduler_code_ux`
 - `manage_agents`
+- `manage_node_flows`
 - `manage_memory`
 - `manage_skills`
 - `search_knowledge`
@@ -290,7 +292,166 @@ For payload normalization in management tools, Code UX centralizes parsing behav
 - **Validation Errors**: Parser failures throw `ManagementValidationError`, which the management tool handler serializes as the standardized `result.status: "error"` envelope with `errorType: "validation"` and `isError: true`.
 
 
-The dedicated management tools (`manage_sprints`, `manage_tasks`, `manage_quicksprints`, `manage_scheduler`, `manage_settings`) share the same action handlers.
+The dedicated management tools (`manage_sprints`, `manage_tasks`, `manage_quicksprints`, `manage_scheduler`, `manage_node_flows`, `manage_settings`) share the same action handlers.
+
+## Node Flow Tools
+
+`manage_node_flows` exposes project node workflows through the project-manager MCP surface. It supports `list`, `get`, `create`, `update`, `delete`, `validate`, `run`, `list_runs`, `get_run`, `attach_to_agent`, and `detach_from_agent`.
+
+Node-flow management always delegates graph validation and persistence to `NodeFlowService`; `run` delegates execution through the configured node-flow runtime service. Create and update calls reject malformed graph specs before repository writes. `delete` uses the standard stateful approval handshake.
+
+The graph payload is the shared `NodeFlowGraph` contract:
+
+- `nodes`: `{ id, type, title, description?, position?, widgetSchema?, data? }`
+- `edges`: `{ id?, fromNodeId, toNodeId, fromHandle?, toHandle? }`
+- `inputSchema`: optional graph-level widget schema for run input
+- `metadata`: optional JSON object
+
+Validation checks graph shape, unique node ids, edge endpoints, acyclicity, JSON-safe node data, widget schema fields, select options, finite numeric constraints, and default values that match field types. Runtime support is narrower than graph storage: executable node types are currently `input`, `set_fields`, `template`, `provider_prompt`, `http_request`, and `output`.
+
+Agents should build Code UX-adapted flows from structured graph specs instead of cloning n8n workflows one-to-one. A good flow exposes the values an operator or agent should edit, keeps runtime behavior repeatable, names nodes by Code UX behavior, and validates every required field before saving. MCP callers can provide `widgets` as a graph-level `{ fields: [...] }` schema or as node-id keys mapped to each node's `widgetSchema`.
+
+Secret-safe widget guidance:
+
+- use `secretRef` for credential references, not raw secret values
+- do not put API keys, bearer tokens, cookies, passwords, or private headers in `graph.metadata`, `node.data`, widget defaults, run `input`, or examples
+- use placeholder references such as `settings.provider.default` or `secret://service/token`
+- treat MCP responses as redacted summaries; flow and run responses mask secret-shaped graph data, inputs, trigger payloads, node payloads, and outputs before returning them through MCP
+
+Attach a flow as an agent skill:
+
+```json
+{
+  "action": "attach_to_agent",
+  "flowId": "flow-123",
+  "agentPresetId": "agent-123",
+  "skillAlias": "Review automation",
+  "description": "Runs the reusable review node flow."
+}
+```
+
+Run a flow:
+
+```json
+{
+  "action": "run",
+  "projectId": "project-123",
+  "flowId": "flow-123",
+  "input": {
+    "prompt": "Review the current diff"
+  }
+}
+```
+
+Create a small executable flow with graph-level run widgets:
+
+```json
+{
+  "action": "create",
+  "projectId": "project-123",
+  "name": "Daily API Check",
+  "description": "Fetches a status endpoint and returns a compact result.",
+  "graph": {
+    "nodes": [
+      { "id": "input", "type": "input", "title": "Run input" },
+      {
+        "id": "request",
+        "type": "http_request",
+        "title": "Fetch status",
+        "data": {
+          "method": "GET",
+          "url": "{{ input.statusUrl }}",
+          "headers": { "authorization": "Bearer {{ input.apiTokenRef }}" },
+          "responsePath": "status"
+        }
+      },
+      {
+        "id": "output",
+        "type": "output",
+        "title": "Return status",
+        "data": { "fields": { "status": "{{ nodes.request.extracted }}" } }
+      }
+    ],
+    "edges": [
+      { "fromNodeId": "input", "toNodeId": "request" },
+      { "fromNodeId": "request", "toNodeId": "output" }
+    ]
+  },
+  "widgets": {
+    "fields": [
+      { "id": "statusUrl", "type": "text", "label": "Status URL", "required": true },
+      { "id": "apiTokenRef", "type": "secretRef", "label": "API token reference", "required": true }
+    ]
+  }
+}
+```
+
+Use node-id keyed widgets when node configuration should stay editable in the dashboard inspector:
+
+```json
+{
+  "action": "update",
+  "flowId": "flow-123",
+  "graph": {
+    "nodes": [
+      { "id": "request", "type": "http_request", "title": "Fetch status" }
+    ],
+    "edges": []
+  },
+  "widgets": {
+    "request": {
+      "fields": [
+        {
+          "id": "method",
+          "type": "select",
+          "label": "HTTP method",
+          "defaultValue": "GET",
+          "options": [
+            { "label": "GET", "value": "GET" },
+            { "label": "POST", "value": "POST" }
+          ]
+        },
+        { "id": "url", "type": "text", "label": "URL", "required": true }
+      ]
+    }
+  }
+}
+```
+
+Validate a draft graph without saving:
+
+```json
+{
+  "action": "validate",
+  "projectId": "project-123",
+  "graph": {
+    "nodes": [
+      { "id": "input", "type": "input", "title": "Run input" }
+    ],
+    "edges": []
+  }
+}
+```
+
+Inspect runs:
+
+```json
+{ "action": "list_runs", "flowId": "flow-123" }
+```
+
+```json
+{ "action": "get_run", "runId": "run-123" }
+```
+
+Detach a flow from an agent:
+
+```json
+{
+  "action": "detach_from_agent",
+  "flowId": "flow-123",
+  "agentPresetId": "agent-123"
+}
+```
 
 ### `manage_skills` persistent skill actions
 
@@ -773,16 +934,37 @@ For quicksprint calls:
 - `delete_template` requires approval confirmation. Custom templates are removed from the project template directory; built-in/default templates are hidden for the project by writing a local tombstone marker instead of deleting shared bundled assets.
 
 For scheduler calls:
-- `manage_scheduler` supports `list`, `create`, `schedule_sprint`, `schedule_quicksprint`, `schedule_chat`, `schedule_wakeup`, `update`, `delete`, and `run_due`.
-- Generic `create` requires `targetType: "sprint" | "quicksprint" | "chat" | "wakeup"`.
+- `manage_scheduler` supports `list`, `create`, `schedule_sprint`, `schedule_quicksprint`, `schedule_chat`, `schedule_wakeup`, `schedule_node_flow`, `update`, `delete`, and `run_due`.
+- Generic `create` requires `targetType: "sprint" | "quicksprint" | "chat" | "wakeup" | "node_flow"`.
 - The `schedule_*` aliases infer the target type and accept flattened target fields.
 - Recurrence `frequency` accepts `minutely`, `hourly`, `daily`, `weekly`, and `monthly`; the dashboard renders `minutely` as `Minutes` and the matching recurrence summaries use labels such as `Every minute` and `Every 15 minutes`.
 - Minute recurrence uses the same UTC scheduler math as longer intervals, so the normalized rule advances `nextRunAt` and expands occurrences exactly like other frequencies once the minute literal has been parsed.
 - Scheduled quicksprints use the same `taskCount` number or numeric-string normalization as direct quicksprints.
 - Scheduled chat messages use `bodyMarkdown`, optional `threadId`, optional `connectionId`, and optional `title`. When due, the scheduler posts through the same chat runtime used by dashboard conversations.
 - Scheduled wakeups use `bodyMarkdown`, either `delaySeconds` or `scheduledFor`, optional `threadId`, optional `connectionId`, optional `title`, optional `sourceInvocationId`, and optional `resumeAfterInvocationCompletion`. They are one-time follow-ups by default; recurrence is available only through the generic scheduler contract and is not required for delayed project-manager check-backs.
+- Scheduled node flows use `flowId`, optional JSON object `input`, and optional `flowVersion`, either flattened or nested under `nodeFlowTarget`. When due, the scheduler calls the node-flow runtime with scheduler trigger metadata and only advances the entry after the runtime returns.
 - `update` supports pausing and resuming entries via the `status` field. Resuming a `paused` entry to `scheduled` recomputes the next run time to the next future occurrence, preventing immediate execution of missed runs. Pause/resume acts as automation gating and does not manually trigger the target.
 - `delete` requires approval confirmation.
+
+Wakeup examples:
+
+```json
+{
+  "action": "schedule_wakeup",
+  "projectId": "proj-1",
+  "delaySeconds": 30,
+  "bodyMarkdown": "Check back in 30 seconds."
+}
+```
+
+```json
+{
+  "action": "schedule_wakeup",
+  "projectId": "proj-1",
+  "scheduledFor": "2026-06-09T12:00:00.000Z",
+  "bodyMarkdown": "Check back at noon."
+}
+```
 
 For preview calls:
 - `manage_preview` supports `list_sessions`, `start_session`, `rebuild_session`, `stop_session`, `remove_session`, `get_logs`, `get_url`, `get_script`, and `update_script`.

@@ -333,6 +333,60 @@ describe("SchedulerRepository", () => {
     expect(updated.nextRunAt).toBeNull();
   });
 
+  it("marks failed attempted occurrences with last run accounting", async () => {
+    const { dir, projectRepository, schedulerRepository } = await createRepositories();
+    const project = projectRepository.createProject({
+      name: "Scheduler Project",
+      sourceType: "local",
+      sourceRef: dir,
+    });
+
+    const entry = schedulerRepository.createEntry(project.id, {
+      targetType: "node_flow",
+      scheduledFor: "2026-05-18T09:00:00.000Z",
+      nodeFlowTarget: { flowId: "flow-1" },
+    });
+
+    const updated = schedulerRepository.markRunFailed(entry.id, "node execution failed", entry.scheduledFor);
+
+    expect(updated.status).toBe("failed");
+    expect(updated.lastError).toBe("node execution failed");
+    expect(updated.lastRunAt).toBe("2026-05-18T09:00:00.000Z");
+    expect(updated.runCount).toBe(1);
+  });
+
+  it("claims due occurrences without incrementing run accounting", async () => {
+    const { dir, projectRepository, schedulerRepository } = await createRepositories();
+    const project = projectRepository.createProject({
+      name: "Scheduler Project",
+      sourceType: "local",
+      sourceRef: dir,
+    });
+
+    const entry = schedulerRepository.createEntry(project.id, {
+      targetType: "node_flow",
+      scheduledFor: "2026-05-18T09:00:00.000Z",
+      recurrence: { frequency: "daily", interval: 1, endMode: "after_count", count: 2 },
+      nodeFlowTarget: { flowId: "flow-1" },
+    });
+
+    const claimed = schedulerRepository.claimDueOccurrence(
+      entry.id,
+      "2026-05-18T09:00:00.000Z",
+      "2026-05-19T09:00:00.000Z",
+    );
+    const duplicateClaim = schedulerRepository.claimDueOccurrence(
+      entry.id,
+      "2026-05-18T09:00:00.000Z",
+      "2026-05-19T09:00:00.000Z",
+    );
+
+    expect(claimed?.nextRunAt).toBe("2026-05-19T09:00:00.000Z");
+    expect(claimed?.lastRunAt).toBeNull();
+    expect(claimed?.runCount).toBe(0);
+    expect(duplicateClaim).toBeNull();
+  });
+
   it("persists settings-managed memory remediation targets", async () => {
     const { dir, projectRepository, schedulerRepository } = await createRepositories();
     const project = projectRepository.createProject({
@@ -354,6 +408,105 @@ describe("SchedulerRepository", () => {
     expect(schedulerRepository.listEntries(project.id)[0]!.memoryRemediationTarget).toEqual({
       mode: "ai",
       source: "memory_settings",
+    });
+  });
+
+  it("persists and hydrates node flow targets inside target_json", async () => {
+    const { dir, storage, projectRepository, schedulerRepository } = await createRepositories();
+    const project = projectRepository.createProject({
+      name: "Scheduler Project",
+      sourceType: "local",
+      sourceRef: dir,
+    });
+
+    const entry = schedulerRepository.createEntry(project.id, {
+      targetType: "node_flow",
+      scheduledFor: "2026-05-18T09:00:00.000Z",
+      nodeFlowTarget: {
+        flowId: " flow-1 ",
+        input: { prompt: "Ship it", count: 2, nested: { ok: true } },
+        flowVersion: 3,
+      },
+    });
+
+    expect(entry.targetType).toBe("node_flow");
+    expect(entry.title).toBe("Scheduled node flow");
+    expect(entry.nodeFlowTarget).toEqual({
+      flowId: "flow-1",
+      input: { prompt: "Ship it", count: 2, nested: { ok: true } },
+      flowVersion: 3,
+    });
+    expect(schedulerRepository.getEntry(entry.id)?.nodeFlowTarget).toEqual(entry.nodeFlowTarget);
+
+    const row = storage.getDatabase().prepare(`
+      SELECT target_json
+      FROM scheduler_entries
+      WHERE id = ?
+    `).get(entry.id) as { target_json: string };
+    expect(JSON.parse(row.target_json)).toEqual({
+      nodeFlowTarget: entry.nodeFlowTarget,
+    });
+
+    const updated = schedulerRepository.updateEntry(entry.id, {
+      nodeFlowTarget: {
+        flowId: "flow-2",
+        input: { next: true },
+      },
+    });
+    expect(updated.nodeFlowTarget).toEqual({
+      flowId: "flow-2",
+      input: { next: true },
+    });
+  });
+
+  it("round-trips existing scheduler target payloads after node flow support", async () => {
+    const { dir, projectRepository, schedulerRepository } = await createRepositories();
+    const project = projectRepository.createProject({
+      name: "Scheduler Project",
+      sourceType: "local",
+      sourceRef: dir,
+    });
+    const sprint = projectRepository.createSprint(project.id, {
+      name: "Round trip sprint",
+      goal: "Keep existing targets stable.",
+    });
+
+    const sprintEntry = schedulerRepository.createEntry(project.id, {
+      targetType: "sprint",
+      scheduledFor: "2026-05-18T09:00:00.000Z",
+      sprintTarget: { sprintId: sprint.id },
+    });
+    const quicksprintEntry = schedulerRepository.createEntry(project.id, {
+      targetType: "quicksprint",
+      scheduledFor: "2026-05-18T10:00:00.000Z",
+      quicksprintTarget: { templateId: "template-1", taskCount: 4, submitMode: "plan_only" },
+    });
+    const chatEntry = schedulerRepository.createEntry(project.id, {
+      targetType: "chat",
+      scheduledFor: "2026-05-18T11:00:00.000Z",
+      chatTarget: { bodyMarkdown: "Status" },
+    });
+    const memoryEntry = schedulerRepository.createEntry(project.id, {
+      targetType: "memory_remediation",
+      scheduledFor: "2026-05-18T12:00:00.000Z",
+      memoryRemediationTarget: { mode: "ai", source: "scheduler" },
+    });
+
+    expect(schedulerRepository.getEntry(sprintEntry.id)?.sprintTarget).toEqual({ sprintId: sprint.id });
+    expect(schedulerRepository.getEntry(quicksprintEntry.id)?.quicksprintTarget).toEqual({
+      templateId: "template-1",
+      taskCount: 4,
+      submitMode: "plan_only",
+    });
+    expect(schedulerRepository.getEntry(chatEntry.id)?.chatTarget).toEqual({
+      bodyMarkdown: "Status",
+      threadId: null,
+      title: "Scheduled message",
+      connectionId: null,
+    });
+    expect(schedulerRepository.getEntry(memoryEntry.id)?.memoryRemediationTarget).toEqual({
+      mode: "ai",
+      source: "scheduler",
     });
   });
 

@@ -77,6 +77,7 @@ export function createSprintDependencies(
     projectManagementRepository,
     activeDispatchRegistry,
     memoryService: coreDeps.memoryService,
+    taskSelfReflectionRatingRepository: coreDeps.taskSelfReflectionRatingRepository,
     providerConcurrencyService: coreDeps.providerConcurrencyService,
     sprintRunLifecycleService: coreDeps.sprintRunLifecycleService,
     getDashboardSettings: resolveDashboardSettings,

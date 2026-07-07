@@ -104,7 +104,7 @@ This allows all log lines emitted during a tool call to share a single `correlat
   - Defines strict argument interfaces for every MCP tool.
   - Provides `register` and `dispatch` APIs with compile-time tool/argument matching.
 - Management dispatch target: `ManagementToolHandler`
-  - Routes dedicated management tools such as `manage_projects`, `manage_memory`, and `manage_skills` to domain action classes.
+  - Routes dedicated management tools such as `manage_projects`, `manage_memory`, `manage_node_flows`, and `manage_skills` to domain action classes.
   - Routes retrieval tools such as `search_knowledge` and `search_skills` separately, so agents can receive retrieval without broader management authority.
   - Applies stateful approval fingerprints to destructive management actions before mutation.
 - Core dispatch target: `CoreToolHandler`
@@ -123,6 +123,17 @@ Runtime behavior:
 - `search_skills` is registered as a distinct retrieval tool in the same category. Per-agent MCP policy can disable `manage_skills` while leaving `search_skills` enabled.
 - Search scoping is project-owned. `storageId` limits retrieval to one storage; otherwise `agentPresetId` limits retrieval to the agent's attached storages; otherwise all project storages are eligible.
 - Search results return ranked summaries with IDs and metadata. Full markdown retrieval remains behind `manage_skills` (`export_markdown` or `get_skill` with `includeContent: true`).
+
+## Node Flow Tools
+
+`manage_node_flows` uses `NodeFlowService` as the MCP backend boundary. The action layer parses MCP payloads, applies optional widget schemas into the graph, masks secret-shaped response fields, and delegates graph validation, persistence, run inspection, runtime execution, and agent skill attachments to the service.
+
+Runtime behavior:
+
+- `create` and `update` validate graph specs before repository writes.
+- `run` calls the configured node-flow runtime through `NodeFlowService.runFlow`.
+- `delete` uses the same stateful approval handshake as other destructive management actions.
+- `attach_to_agent` and `detach_from_agent` manage flow-backed skill attachments for agent presets; the agent still needs explicit MCP access if it should call `manage_node_flows` itself.
 
 ## Custom MCP Defaults
 

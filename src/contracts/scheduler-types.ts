@@ -1,7 +1,8 @@
 import type { QuicksprintExecutionInput } from "./quicksprint-types.js";
 import type { ProviderId } from "./app-types.js";
+import type { NodeFlowJsonObject } from "./node-flow-types.js";
 
-export type ScheduleTargetType = "sprint" | "quicksprint" | "chat" | "wakeup" | "memory_remediation" | "agent_wakeup" | "task";
+export type ScheduleTargetType = "sprint" | "quicksprint" | "chat" | "wakeup" | "memory_remediation" | "agent_wakeup" | "task" | "node_flow";
 export type ScheduleStatus = "scheduled" | "paused" | "completed" | "failed" | "cancelled";
 export type ScheduleRecurrenceFrequency = "none" | "minutely" | "hourly" | "daily" | "weekly" | "monthly";
 export type ScheduleRecurrenceEndMode = "never" | "after_count" | "on_date";
@@ -77,6 +78,12 @@ export interface ScheduleMemoryRemediationTarget {
   source?: "scheduler" | "memory_settings";
 }
 
+export interface ScheduleNodeFlowTarget {
+  flowId: string;
+  input?: NodeFlowJsonObject;
+  flowVersion?: number;
+}
+
 export interface SchedulerEntryRecord {
   id: string;
   projectId: string;
@@ -98,6 +105,7 @@ export interface SchedulerEntryRecord {
   agentWakeupTarget?: ScheduleAgentWakeupTarget;
   taskTarget?: ScheduleTaskTarget;
   memoryRemediationTarget?: ScheduleMemoryRemediationTarget;
+  nodeFlowTarget?: ScheduleNodeFlowTarget;
   createdAt: string;
   updatedAt: string;
 }
@@ -136,6 +144,7 @@ export interface CreateSchedulerEntryInput {
   agentWakeupTarget?: ScheduleAgentWakeupTarget;
   taskTarget?: ScheduleTaskTarget;
   memoryRemediationTarget?: ScheduleMemoryRemediationTarget;
+  nodeFlowTarget?: ScheduleNodeFlowTarget;
 }
 
 export interface UpdateSchedulerEntryInput {
@@ -153,6 +162,7 @@ export interface UpdateSchedulerEntryInput {
   agentWakeupTarget?: ScheduleAgentWakeupTarget;
   taskTarget?: ScheduleTaskTarget;
   memoryRemediationTarget?: ScheduleMemoryRemediationTarget;
+  nodeFlowTarget?: ScheduleNodeFlowTarget;
 }
 
 export type MemoryRemediationScheduleCadence = "off" | "daily" | "weekly";

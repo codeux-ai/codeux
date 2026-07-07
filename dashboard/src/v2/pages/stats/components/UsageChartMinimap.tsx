@@ -1,7 +1,7 @@
 import type { FunctionComponent, JSX } from "preact";
 import { useMemo, useRef, useState } from "preact/hooks";
 import type { ExecutionUsageBucketSummary } from "../../../types.js";
-import type { ChartZoomRange } from "./stats-ui-primitives.js";
+import { CONTROL_FOCUS_CLASS, SUBPANEL_CLASS, type ChartZoomRange } from "./stats-ui-primitives.js";
 import { buildSmoothAreaPath, buildSmoothPath, buildPoints } from "./stats-geometry.js";
 
 const MINIMAP_WIDTH = 1000;
@@ -175,7 +175,7 @@ export const UsageChartMinimap: FunctionComponent<{
         aria-describedby="usage-chart-minimap-help"
         aria-disabled={!hasZoomableRange ? "true" : undefined}
         tabIndex={0}
-        className={`relative h-16 w-full select-none overflow-hidden rounded-[1rem] border border-[var(--stats-card-border)] bg-[var(--stats-card-bg)]/72 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--accent-focus-ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--stats-card-bg)] ${hasZoomableRange ? 'cursor-crosshair touch-none' : 'cursor-default opacity-75'}`}
+        className={`${SUBPANEL_CLASS} relative h-16 w-full select-none overflow-hidden p-0 ${CONTROL_FOCUS_CLASS} ${hasZoomableRange ? 'cursor-crosshair touch-none' : 'cursor-default opacity-75'}`}
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}

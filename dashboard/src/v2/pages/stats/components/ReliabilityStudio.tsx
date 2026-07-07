@@ -106,13 +106,6 @@ const SOURCE_META: Record<ReliabilitySource, {
   },
 };
 
-const SOURCE_TONE_CLASS: Record<SourceTone, string> = {
-  strong: STATUS_TONE_CLASS.positive,
-  fallback: STATUS_TONE_CLASS.warning,
-  critical: STATUS_TONE_CLASS.negative,
-  neutral: STATUS_TONE_CLASS.neutral,
-};
-
 const SOURCE_TEXT_CLASS: Record<SourceTone, string> = {
   strong: "text-[color:var(--stats-positive-text)]",
   fallback: "text-[color:var(--stats-warning-text)]",
@@ -127,11 +120,9 @@ const SUCCESS_TONE_CLASS: Record<ReturnType<typeof getSuccessTone>, string> = {
   neutral: STATUS_TONE_CLASS.neutral,
 };
 
-const RISK_TONE_CLASS = {
-  low: STATUS_TONE_CLASS.positive,
-  medium: STATUS_TONE_CLASS.warning,
-  high: STATUS_TONE_CLASS.negative,
-};
+const FLAT_BADGE_CLASS = `inline-flex items-center gap-2 rounded-[var(--stats-chip-radius)] px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--stats-detail-color)] ${CHIP_CLASS}`;
+const SECTION_TITLE_CLASS = "text-[10px] font-bold uppercase tracking-[0.2em] text-[color:var(--stats-label-color)]";
+const SECTION_COPY_CLASS = "mt-2 text-sm leading-relaxed text-[color:var(--stats-detail-color)]";
 
 const formatPricingValue = (value: number | null): string => (
   value === null || value <= 0 ? "—" : formatCost(value)
@@ -394,29 +385,29 @@ const ProviderReliabilityCard: FunctionComponent<{
             <div className="break-words text-base font-semibold text-[color:var(--stats-value-color)]" title={provider.label}>{provider.label}</div>
             <div className="mt-1 break-words text-sm text-[color:var(--stats-detail-color)]">{provider.secondaryLabel ?? "No secondary label"}</div>
             <div className="mt-2 flex flex-wrap gap-2">
-              <div className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] ${SOURCE_TONE_CLASS[row.sourceTone]}`}>
+              <div className={FLAT_BADGE_CLASS}>
                 {row.sourceSummaryLabel}
               </div>
-              <div className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] ${RISK_TONE_CLASS[riskLevel]}`}>
+              <div className={FLAT_BADGE_CLASS}>
                 {riskLevel} risk
               </div>
             </div>
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <div className={`inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.18em] ${CHIP_CLASS}`}>
+          <div className={FLAT_BADGE_CLASS}>
             <span className="text-base font-semibold normal-case tracking-tight text-[color:var(--stats-value-color)]">
               {provider.usage.totalTokens > 0 ? formatTokens(provider.usage.totalTokens) : "—"}
             </span>
             <span className="text-[color:var(--stats-label-color)]">tokens</span>
           </div>
-          <div className={`inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.18em] ${CHIP_CLASS}`}>
+          <div className={FLAT_BADGE_CLASS}>
             <span className="text-base font-semibold normal-case tracking-tight text-[color:var(--stats-value-color)]">
               {provider.usage.invocationCount.toLocaleString()}
             </span>
             <span className="text-[color:var(--stats-label-color)]">calls</span>
           </div>
-          <div className={`inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.18em] ${CHIP_CLASS}`}>
+          <div className={FLAT_BADGE_CLASS}>
             <DollarSign className="h-3.5 w-3.5 text-[color:var(--stats-positive-text)]" strokeWidth={2.2} aria-hidden="true" />
             <span className="text-base font-semibold normal-case tracking-tight text-[color:var(--stats-value-color)]">
               {formatPricingValue(hasCost ? provider.usage.totalCostUsd : null)}
@@ -440,7 +431,7 @@ const ProviderReliabilityCard: FunctionComponent<{
             <ShieldCheck className="h-3.5 w-3.5 text-[color:var(--stats-label-color)]" strokeWidth={2.2} aria-hidden="true" />
           </div>
           <div className="mt-2">
-            <span className={`inline-flex rounded-full border px-3 py-1.5 text-base font-semibold ${SUCCESS_TONE_CLASS[successTone]}`}>
+            <span className={`inline-flex rounded-[var(--stats-chip-radius)] border px-3 py-1.5 text-base font-semibold ${SUCCESS_TONE_CLASS[successTone]}`}>
               {formatSuccessRate(row.successRate)}
             </span>
           </div>
@@ -491,9 +482,9 @@ const ProviderReliabilityCard: FunctionComponent<{
 
       <div className="mt-5 grid grid-cols-2 gap-2 lg:grid-cols-5">
         {row.sourceRows.map((sourceRow) => (
-          <div key={sourceRow.source} className={`rounded-[var(--stats-chip-radius)] border px-3 py-2 ${SOURCE_TONE_CLASS[sourceRow.tone]}`}>
+          <div key={sourceRow.source} className={`${CHIP_CLASS} rounded-[var(--stats-chip-radius)] px-3 py-2 text-[color:var(--stats-detail-color)]`}>
             <div className="text-[9px] font-bold uppercase tracking-[0.14em]">{sourceRow.label}</div>
-            <div className="mt-1 text-sm font-semibold">{sourceRow.count.toLocaleString()}</div>
+            <div className="mt-1 text-sm font-semibold text-[color:var(--stats-value-color)]">{sourceRow.count.toLocaleString()}</div>
           </div>
         ))}
       </div>
@@ -538,10 +529,10 @@ export const ReliabilityStudio: FunctionComponent<{
 
   return (
     <section className="space-y-6">
-      <div className={`${PANEL_CLASS} rounded-[2.2rem] p-6 md:p-7`}>
+      <div className={`${PANEL_CLASS} p-6`}>
         <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-center">
           <div className="flex max-w-4xl items-start gap-4">
-            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-[color:var(--stats-border-hairline)] bg-[color:var(--stats-surface-chip)] text-status-green">
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[var(--stats-control-radius)] border border-[color:var(--stats-border-hairline)] bg-[color:var(--stats-surface-chip)] text-[color:var(--stats-detail-color)]">
               <ShieldCheck className="h-5 w-5" strokeWidth={2.2} aria-hidden="true" />
             </div>
             <div className="min-w-0">
@@ -553,10 +544,10 @@ export const ReliabilityStudio: FunctionComponent<{
             </div>
           </div>
           <div className="flex flex-wrap gap-2">
-            <div className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] ${SOURCE_TONE_CLASS[sourceAudit.tone]}`}>
+            <div className={FLAT_BADGE_CLASS}>
               {sourceSummary.label} confidence
             </div>
-            <div className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] ${SUCCESS_TONE_CLASS[successTone]}`}>
+            <div className={FLAT_BADGE_CLASS}>
               {formatSuccessRate(successRate)} success
             </div>
           </div>
@@ -654,21 +645,32 @@ export const ReliabilityStudio: FunctionComponent<{
       <div className={`${PANEL_CLASS} p-6`}>
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-[color:var(--stats-label-color)]">Source Count Board</div>
-            <div className="mt-2 text-sm leading-relaxed text-[color:var(--stats-detail-color)]">
+            <div className={SECTION_TITLE_CLASS}>Confidence Board</div>
+            <div className={SECTION_COPY_CLASS}>
               Invocation-source counts are separated so estimated and unknown data are clear without treating fallback estimates as failures.
             </div>
           </div>
-          <div className={`px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--stats-detail-color)] ${CHIP_CLASS}`}>
+          <div className={FLAT_BADGE_CLASS}>
             {sourceAudit.total.toLocaleString()} counted
           </div>
         </div>
-        <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
+        <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5" data-testid="reliability-confidence-board">
           {sourceRows.map((row) => <SourceCountCard key={row.source} row={row} />)}
         </div>
       </div>
 
       <div className="space-y-4">
+        <div className="flex flex-wrap items-end justify-between gap-4">
+          <div>
+            <div className={SECTION_TITLE_CLASS}>Provider Breakdown</div>
+            <div className={SECTION_COPY_CLASS}>
+              Provider rows rank failure risk, source confidence, token volume, latency, and pricing signals for triage.
+            </div>
+          </div>
+          <div className={FLAT_BADGE_CLASS}>
+            {providerRows.length.toLocaleString()} providers
+          </div>
+        </div>
         {providerRows.length === 0 ? (
           <EmptyTelemetryPanel
             title="No provider telemetry for this window."
@@ -683,8 +685,8 @@ export const ReliabilityStudio: FunctionComponent<{
 
       <div className={`${PANEL_CLASS} p-6`}>
         <div className="flex items-center gap-3">
-          <AlertTriangle className="h-4 w-4 text-[color:var(--stats-warning-text)]" strokeWidth={2} aria-hidden="true" />
-          <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-[color:var(--stats-label-color)]">Fallback & Error Audit</div>
+          <AlertTriangle className="h-4 w-4 text-[color:var(--stats-detail-color)]" strokeWidth={2} aria-hidden="true" />
+          <div className={SECTION_TITLE_CLASS}>Audit Notes</div>
         </div>
         <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-3">
           <div className={SUBPANEL_CLASS}>

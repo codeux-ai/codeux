@@ -15,6 +15,7 @@ const componentImporters: Record<string, ModuleImporter> = {
   "/chat": () => import("../ChatPage.js"),
   "/tasks": () => import("../TasksPage.js"),
   "/agents": () => import("../AgentsPage.js"),
+  "/nodes": () => import("../NodesPage.js"),
   "/stats": () => import("../StatsPage.js"),
   "/scheduler": () => import("../SchedulerPage.js"),
   "/config": () => import("../SettingsPage.js"),

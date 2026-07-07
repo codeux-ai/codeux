@@ -14,8 +14,11 @@ import { ExternalReferenceWidget } from "./widgets/ExternalReferenceWidget.js";
 import { ToolCallWidget } from "./widgets/ToolCallWidget.js";
 import { ReasoningWidget } from "./widgets/ReasoningWidget.js";
 import { SelfReflectionWidget } from "./widgets/SelfReflectionWidget.js";
+import { LiveEntityStatusWidget } from "./widgets/LiveEntityStatusWidget.js";
+import { AgentMoodAside, buildAgentMoodAsideSeed, resolveAgentMoodAsideText } from "./widgets/AgentMoodAside.js";
 import { ChatAvatar, type AvatarRole } from "./ChatAvatar.js";
 import type { ChatWidgetLiveData, ParsedTurnTokens } from "../../lib/chat-widget-view-models.js";
+import type { ChatLiveEntityWidget } from "../../lib/chat-live-entities.js";
 import type { AgentAvatarConfig } from "../../types.js";
 
 const asString = (value: unknown): string | null => (typeof value === "string" ? value : null);
@@ -42,6 +45,7 @@ export interface InvocationMessageBubbleProps {
   agentAvatarConfig?: AgentAvatarConfig | null;
   agentName?: string | null;
   widgetLiveData?: ChatWidgetLiveData;
+  liveEntities?: readonly ChatLiveEntityWidget[];
 }
 
 export const InvocationMessageBubble: FunctionComponent<InvocationMessageBubbleProps> = ({
@@ -49,6 +53,7 @@ export const InvocationMessageBubble: FunctionComponent<InvocationMessageBubbleP
   agentAvatarConfig,
   agentName,
   widgetLiveData,
+  liveEntities = [],
 }) => {
   const fromUser = message.role === "user";
   const fromTool = message.role === "tool";
@@ -120,12 +125,21 @@ export const InvocationMessageBubble: FunctionComponent<InvocationMessageBubbleP
   const errorLabel = formatErrorCategory(message.metadata?.errorCategory);
   const createdAtLabel = formatChatTime(message.createdAt);
   const isExternalApi = Boolean(message.metadata?.isExternalApi);
+  const hasPrimaryWidget = widgetData.type === "planning"
+    || (widgetData.type === "external_reference" && Boolean(widgetData.externalReference));
+  const hasLiveEntities = !fromTool && liveEntities.length > 0;
+  const liveEntitySlotClass = hasPrimaryWidget
+    ? "mt-3"
+    : widgetData.suppressBodyMarkdown ? "mt-0" : "mt-4 border-t border-white/5 pt-4";
+  const moodAsideText = message.role === "assistant"
+    ? resolveAgentMoodAsideText({
+        metadata: message.metadata,
+        seed: buildAgentMoodAsideSeed([message.id, message.contentMarkdown, senderName]),
+      })
+    : null;
 
   return (
     <div className={`flex ${fromUser || fromTool ? "justify-end" : "justify-start"}`}>
-      <span className="sr-only">
-        From {senderName} at {createdAtLabel}. {displayStatus ? `Status: ${displayStatus}.` : ""} {errorLabel ? `Error: ${errorLabel}.` : ""}
-      </span>
       <span className="sr-only">
         From {senderName} at {createdAtLabel}. {displayStatus ? `Status: ${displayStatus}.` : ""} {errorLabel ? `Error: ${errorLabel}.` : ""}
       </span>
@@ -182,6 +196,8 @@ export const InvocationMessageBubble: FunctionComponent<InvocationMessageBubbleP
             />
           )}
 
+          <AgentMoodAside text={moodAsideText} />
+
           {message.toolCallsJson && !kind && (
             <div className="mt-4 rounded border border-slate-200 bg-slate-200/30 p-3 text-xs dark:border-white/10 dark:bg-black/20">
               <pre className="overflow-x-auto whitespace-pre-wrap font-mono text-slate-600 dark:text-slate-400">
@@ -204,6 +220,11 @@ export const InvocationMessageBubble: FunctionComponent<InvocationMessageBubbleP
           {widgetData.type === "external_reference" && widgetData.externalReference && (
             <div className={widgetData.suppressBodyMarkdown ? "mt-0" : "mt-4 border-t border-white/5 pt-4"}>
               <ExternalReferenceWidget status={widgetData.status} reference={widgetData.externalReference} />
+            </div>
+          )}
+          {hasLiveEntities && (
+            <div className={liveEntitySlotClass}>
+              <LiveEntityStatusWidget entities={liveEntities} />
             </div>
           )}
         </div>

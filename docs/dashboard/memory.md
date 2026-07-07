@@ -62,6 +62,8 @@ The memory map uses a pointer-centered camera so users can inspect dense graphs 
 
 Memory records encapsulate the base `content` string alongside its vectorized byte representation (`embeddingBlob`). The byte buffer must correctly decode based on its stored `embeddingDimension`. The system expects IEEE 754 32-bit floats.
 
+Worker task runs can also write an optional `## Self Reflection Rating` section in `.task-learnings.md`. The memory capture stage stores those ratings in `task_self_reflection_ratings`, not in `memories`: one row is upserted per task run with an overall 0-5 rating, normalized per-section ratings, the source task run ID, and capture timestamps. Malformed or missing rating sections are ignored so task finalization and category memory capture continue normally.
+
 **Note:** Knowledge subscriptions validate requested document IDs in batched chunk-safe queries (validating project ownership efficiently) before applying the replace-all transaction.
 
 Knowledge document object access is project-scoped. Document read, delete, re-embed, and project-import operations must prove the document belongs to the route or request project before returning content or mutating rows. Legacy unscoped document endpoints require an explicit `projectId` value and treat missing documents and cross-project mismatches as the same not-found response.

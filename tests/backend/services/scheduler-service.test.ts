@@ -1,7 +1,19 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import * as fs from "fs/promises";
+import * as os from "os";
+import * as path from "path";
 import { SchedulerService } from "../../../src/services/scheduler-service.js";
 import { normalizeRecurrenceRule } from "../../../src/domain/scheduler/schedule-time.js";
 import type { SchedulerEntryRecord } from "../../../src/contracts/scheduler-types.js";
+import { AppDbStorage } from "../../../src/repositories/app-db-storage.js";
+import { ProjectManagementRepository } from "../../../src/repositories/project-management-repository.js";
+import { SchedulerRepository } from "../../../src/repositories/scheduler-repository.js";
+
+const tempDirs: string[] = [];
+
+afterEach(async () => {
+  await Promise.all(tempDirs.splice(0).map((dir) => fs.rm(dir, { recursive: true, force: true })));
+});
 
 const createLogger = () => ({
   error: vi.fn(),
@@ -428,6 +440,8 @@ describe("SchedulerService", () => {
       chatThreadRuntimeService: (extra.chatThreadRuntimeService ?? {}) as any,
       executionControlService: (extra.executionControlService ?? {}) as any,
       taskRerunService: extra.taskRerunService as any,
+      nodeFlowRuntimeService: extra.nodeFlowRuntimeService as any,
+      nodeFlowRepository: extra.nodeFlowRepository as any,
       logger: createLogger() as any,
       tickIntervalMs: (extra.tickIntervalMs as number) ?? 30_000,
     });
@@ -451,6 +465,237 @@ describe("SchedulerService", () => {
 
     await service.runDueEntries(new Date("2026-05-18T09:00:01.000Z"));
     expect(quicksprintService.executeQuicksprint).toHaveBeenCalledWith("project-1", { prompt: "do it" });
+  });
+
+  it("runs due node flow targets through the node flow runtime with scheduler metadata", async () => {
+    const entry = createEntry({
+      targetType: "node_flow",
+      sprintTarget: undefined,
+      nodeFlowTarget: {
+        flowId: "flow-1",
+        input: { prompt: "Ship" },
+        flowVersion: 2,
+      },
+      recurrence: normalizeRecurrenceRule(),
+    });
+    const repo = {
+      listDueEntries: vi.fn(() => [entry]),
+      getEntry: vi.fn(() => entry),
+      markRunSucceeded: vi.fn(),
+      markRunFailed: vi.fn(),
+    };
+    const nodeFlowRuntimeService = {
+      runFlow: vi.fn().mockResolvedValue({ run: { status: "succeeded" }, nodeRuns: [], output: {} }),
+    };
+    const nodeFlowRepository = {
+      getFlow: vi.fn(() => ({ id: "flow-1", projectId: "project-1" })),
+    };
+    const service = buildService(repo, { nodeFlowRuntimeService, nodeFlowRepository });
+
+    await service.runDueEntries(new Date("2026-05-18T09:00:01.000Z"));
+    await flush();
+
+    expect(nodeFlowRuntimeService.runFlow).toHaveBeenCalledWith("project-1", "flow-1", { prompt: "Ship" }, {
+      triggerType: "scheduler",
+      triggerPayload: {
+        schedulerEntryId: "entry-1",
+        scheduledFor: "2026-05-18T09:00:00.000Z",
+        targetType: "node_flow",
+        flowVersion: 2,
+      },
+    });
+    expect(repo.markRunSucceeded).toHaveBeenCalledWith("entry-1", "2026-05-18T09:00:00.000Z", null);
+  });
+
+  it("durably claims a due node flow occurrence before a long-running runtime resolves", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "scheduler-service-"));
+    tempDirs.push(dir);
+    const storage = new AppDbStorage(path.join(dir, "app.db"));
+    const projectManagementRepository = new ProjectManagementRepository(storage);
+    const schedulerRepository = new SchedulerRepository(storage);
+    const project = projectManagementRepository.createProject({
+      name: "Scheduler Project",
+      sourceType: "local",
+      sourceRef: dir,
+    });
+    const entry = schedulerRepository.createEntry(project.id, {
+      targetType: "node_flow",
+      scheduledFor: "2026-05-18T09:00:00.000Z",
+      nodeFlowTarget: { flowId: "flow-1" },
+    });
+    let resolveRun: (value: { run: { status: "succeeded" }; nodeRuns: []; output: Record<string, never> }) => void = () => {};
+    const nodeFlowRuntimeService = {
+      runFlow: vi.fn(() => new Promise((resolve) => {
+        resolveRun = resolve;
+      })),
+    };
+    const nodeFlowRepository = {
+      getFlow: vi.fn(() => ({ id: "flow-1", projectId: project.id })),
+    };
+    const firstScheduler = buildService(schedulerRepository, {
+      projectManagementRepository,
+      nodeFlowRuntimeService,
+      nodeFlowRepository,
+    });
+    const restartedScheduler = buildService(schedulerRepository, {
+      projectManagementRepository,
+      nodeFlowRuntimeService,
+      nodeFlowRepository,
+    });
+    const now = new Date("2026-05-18T09:00:01.000Z");
+
+    await firstScheduler.runDueEntries(now);
+
+    expect(nodeFlowRuntimeService.runFlow).toHaveBeenCalledTimes(1);
+    expect(schedulerRepository.listDueEntries(now.toISOString()).find((due) => due.id === entry.id)).toBeUndefined();
+
+    await restartedScheduler.runDueEntries(now);
+
+    expect(nodeFlowRuntimeService.runFlow).toHaveBeenCalledTimes(1);
+
+    resolveRun({ run: { status: "succeeded" }, nodeRuns: [], output: {} });
+    await flush();
+
+    const finalized = schedulerRepository.getEntry(entry.id);
+    expect(finalized?.status).toBe("completed");
+    expect(finalized?.lastRunAt).toBe("2026-05-18T09:00:00.000Z");
+    expect(finalized?.runCount).toBe(1);
+  });
+
+  it("marks node flow schedules failed when the runtime resolves a failed run", async () => {
+    const entry = createEntry({
+      targetType: "node_flow",
+      sprintTarget: undefined,
+      nodeFlowTarget: { flowId: "flow-1" },
+      recurrence: normalizeRecurrenceRule(),
+    });
+    const repo = {
+      listDueEntries: vi.fn(() => [entry]),
+      getEntry: vi.fn(() => entry),
+      markRunSucceeded: vi.fn(),
+      markRunFailed: vi.fn(),
+    };
+    const service = buildService(repo, {
+      nodeFlowRuntimeService: {
+        runFlow: vi.fn().mockResolvedValue({
+          run: { status: "failed", errorMessage: "node execution failed" },
+          nodeRuns: [],
+          output: {},
+        }),
+      },
+      nodeFlowRepository: { getFlow: vi.fn(() => ({ id: "flow-1", projectId: "project-1" })) },
+    });
+
+    await service.runDueEntries(new Date("2026-05-18T09:00:01.000Z"));
+    await flush();
+
+    expect(repo.markRunSucceeded).not.toHaveBeenCalled();
+    expect(repo.markRunFailed).toHaveBeenCalledWith(
+      "entry-1",
+      "node execution failed",
+      "2026-05-18T09:00:00.000Z",
+    );
+  });
+
+  it("does not execute node flow targets before nextRunAt is due", async () => {
+    const entry = createEntry({
+      targetType: "node_flow",
+      sprintTarget: undefined,
+      nextRunAt: "2026-05-18T09:05:00.000Z",
+      nodeFlowTarget: { flowId: "flow-1" },
+      recurrence: normalizeRecurrenceRule(),
+    });
+    const repo = {
+      listDueEntries: vi.fn(() => [entry]),
+      getEntry: vi.fn(() => entry),
+      markRunSucceeded: vi.fn(),
+      markRunFailed: vi.fn(),
+    };
+    const nodeFlowRuntimeService = { runFlow: vi.fn() };
+    const service = buildService(repo, {
+      nodeFlowRuntimeService,
+      nodeFlowRepository: { getFlow: vi.fn(() => ({ id: "flow-1", projectId: "project-1" })) },
+    });
+
+    await service.runDueEntries(new Date("2026-05-18T09:00:01.000Z"));
+
+    expect(nodeFlowRuntimeService.runFlow).not.toHaveBeenCalled();
+    expect(repo.markRunSucceeded).not.toHaveBeenCalled();
+    expect(repo.markRunFailed).not.toHaveBeenCalled();
+  });
+
+  it("marks node flow schedules failed without marking success when runtime startup rejects", async () => {
+    const entry = createEntry({
+      targetType: "node_flow",
+      sprintTarget: undefined,
+      nodeFlowTarget: { flowId: "flow-1" },
+      recurrence: normalizeRecurrenceRule(),
+    });
+    const repo = {
+      listDueEntries: vi.fn(() => [entry]),
+      getEntry: vi.fn(() => entry),
+      markRunSucceeded: vi.fn(),
+      markRunFailed: vi.fn(),
+    };
+    const service = buildService(repo, {
+      nodeFlowRuntimeService: { runFlow: vi.fn().mockRejectedValue(new Error("flow unavailable")) },
+      nodeFlowRepository: { getFlow: vi.fn(() => ({ id: "flow-1", projectId: "project-1" })) },
+    });
+
+    await service.runDueEntries(new Date("2026-05-18T09:00:01.000Z"));
+    await flush();
+
+    expect(repo.markRunSucceeded).not.toHaveBeenCalled();
+    expect(repo.markRunFailed).toHaveBeenCalledWith("entry-1", "flow unavailable");
+  });
+
+  it("validates node flow targets on create and update against the owning project", () => {
+    const current = createEntry({
+      targetType: "node_flow",
+      sprintTarget: undefined,
+      nodeFlowTarget: { flowId: "flow-1" },
+    });
+    const repo = {
+      createEntry: vi.fn(),
+      getEntry: vi.fn(() => current),
+      updateEntry: vi.fn(),
+    };
+    const nodeFlowRepository = {
+      getFlow: vi.fn((flowId: string) => ({ id: flowId, projectId: "other-project" })),
+    };
+    const service = buildService(repo, { nodeFlowRepository });
+
+    expect(() => service.createEntry("project-1", {
+      targetType: "node_flow",
+      nodeFlowTarget: { flowId: "flow-1" },
+    } as any)).toThrow(/Only node flows in the selected project/);
+    expect(() => service.updateEntry("entry-1", {
+      nodeFlowTarget: { flowId: "flow-2" },
+    })).toThrow(/Only node flows in the selected project/);
+    expect(repo.createEntry).not.toHaveBeenCalled();
+    expect(repo.updateEntry).not.toHaveBeenCalled();
+  });
+
+  it("lists node flow schedule entries with computed occurrences", () => {
+    const entry = createEntry({
+      targetType: "node_flow",
+      sprintTarget: undefined,
+      nodeFlowTarget: { flowId: "flow-1" },
+      recurrence: normalizeRecurrenceRule(),
+    });
+    const repo = { listEntries: vi.fn(() => [entry]) };
+    const service = buildService(repo);
+
+    const result = service.listProjectSchedule("project-1", "2026-05-18T00:00:00Z", "2026-05-19T00:00:00Z");
+
+    expect(result.entries).toEqual([entry]);
+    expect(result.occurrences).toEqual([
+      expect.objectContaining({
+        entryId: "entry-1",
+        targetType: "node_flow",
+        startsAt: "2026-05-18T09:00:00.000Z",
+      }),
+    ]);
   });
 
   it("creates a settings-managed memory remediation schedule", () => {

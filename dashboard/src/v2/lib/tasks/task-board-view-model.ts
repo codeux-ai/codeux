@@ -80,6 +80,22 @@ function buildTaskSignature(task: Task): string {
   for (const finding of task.latestReview?.findings ?? []) {
     appendField(parts, finding);
   }
+  appendField(parts, task.selfReflectionRating?.id);
+  appendField(parts, task.selfReflectionRating?.projectId);
+  appendField(parts, task.selfReflectionRating?.sprintId);
+  appendField(parts, task.selfReflectionRating?.taskId);
+  appendField(parts, task.selfReflectionRating?.sourceTaskRunId);
+  appendField(parts, task.selfReflectionRating?.overallRating);
+  appendField(parts, task.selfReflectionRating?.capturedAt);
+  appendField(parts, task.selfReflectionRating?.createdAt);
+  appendField(parts, task.selfReflectionRating?.updatedAt);
+  appendField(parts, task.selfReflectionRating?.sections.length ?? 0);
+  for (const section of task.selfReflectionRating?.sections ?? []) {
+    appendField(parts, section.label);
+    appendField(parts, section.normalizedLabel);
+    appendField(parts, section.rating);
+    appendField(parts, section.note);
+  }
   appendField(parts, task.dependsOnTaskIds?.length ?? 0);
   for (const depId of task.dependsOnTaskIds ?? []) {
     appendField(parts, depId);

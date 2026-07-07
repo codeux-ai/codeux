@@ -51,6 +51,10 @@ Click **Add Memory**. Provide:
 
 The memory is embedded immediately using the active embedding model.
 
+## Worker capture
+
+Worker `.task-learnings.md` files still create short-term memories from `## Category:` bullets. They may also include an optional `## Self Reflection Rating` section with `Overall: N/5` and per-section bullets such as `- Implementation: 4/5 - note`. Ratings are stored as task-run self-reflection records, separate from semantic memories, and malformed rating sections are ignored.
+
 ## Editing & deleting
 
 Sidebar memory cards use their own guarded delete flow. Graph and inspector single-memory deletion is immediate only while Danger Delete is armed.

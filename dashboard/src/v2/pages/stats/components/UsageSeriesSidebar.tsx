@@ -1,5 +1,6 @@
 import type { FunctionComponent } from "preact";
 import type { NormalizedChartSeries } from "../chart-view-models.js";
+import { DASHED_EMPTY_CLASS, SUBPANEL_CLASS } from "./stats-ui-primitives.js";
 
 export const UsageSeriesSidebar: FunctionComponent<{
   series: NormalizedChartSeries[];
@@ -18,10 +19,10 @@ export const UsageSeriesSidebar: FunctionComponent<{
             key={s.id}
             role="listitem"
             aria-label={`${s.label}: ${s.formatter(currentValue)}, ${s.signalLabel || 'Metric'}`}
-            className="rounded-[1.05rem] border border-[var(--stats-card-border)] bg-[var(--stats-card-bg)]/68 px-3 py-3 transition-colors hover:bg-[var(--stats-card-bg)] motion-reduce:transition-none"
+            className={`${SUBPANEL_CLASS} px-3 py-3 hover:border-[color:var(--stats-border-strong)] hover:bg-[color:var(--stats-surface-subpanel-hover)]`}
           >
             <div className="flex items-start gap-3">
-              <span className="mt-0.5 h-2.5 w-2.5 shrink-0 rounded-full ring-2 ring-[var(--stats-card-bg)]" style={{ backgroundColor: s.accentHex }} />
+              <span className="mt-0.5 h-2.5 w-2.5 shrink-0 rounded-full ring-2 ring-[color:var(--stats-surface-subpanel)]" style={{ backgroundColor: s.accentHex }} />
               <span className="min-w-0 break-words text-[10px] font-bold uppercase leading-snug tracking-[0.14em] text-[var(--stats-label-color)]">{s.label}</span>
             </div>
             <div className="mt-3 grid grid-cols-[minmax(0,1fr)_auto] items-end gap-3">
@@ -33,7 +34,7 @@ export const UsageSeriesSidebar: FunctionComponent<{
       })}
     </div>
   ) : (
-    <div className="rounded-[1.05rem] border border-dashed border-[var(--stats-card-border)] bg-[var(--stats-card-bg)]/50 px-4 py-6 text-sm leading-relaxed text-[var(--stats-detail-color)]">
+    <div className={`${DASHED_EMPTY_CLASS} text-sm leading-relaxed text-[var(--stats-detail-color)]`}>
       Keep at least one series enabled to inspect live bucket values.
     </div>
   );

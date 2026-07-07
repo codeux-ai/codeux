@@ -24,6 +24,7 @@ import { Button } from "./ui/Button.js";
 import { useReducedMotion } from "../hooks/use-reduced-motion.js";
 import { AgentSelectAvatarIcon } from "./agents/AgentSelectAvatarIcon.js";
 import { SprintReviewBadge } from "./sprints/SprintReviewBadge.js";
+import { SelfReflectionRatingBadge } from "./tasks/SelfReflectionRatingBadge.js";
 import { getSafeUrl } from "../lib/safe-url.js";
 import { LiveTaskInvocationRow } from "./live-session/LiveTaskInvocationRow.js";
 import { QuotaCountdown, TaskDuration } from "./live-session/LiveTaskTiming.js";
@@ -281,7 +282,7 @@ const LiveTaskCard: FunctionComponent<LiveTaskCardProps> = memo(({
                         </div>
 
                         <div className="min-w-0 flex-1">
-                            <div className="flex items-center gap-2 mb-1.5">
+                            <div className="flex flex-wrap items-center gap-2 mb-1.5">
                                 <span className="font-mono text-[10px] font-bold px-2.5 py-0.5 rounded-lg bg-black/[0.04] dark:bg-white/[0.04] text-slate-400">
                                     #{task.id}
                                 </span>
@@ -298,6 +299,7 @@ const LiveTaskCard: FunctionComponent<LiveTaskCardProps> = memo(({
                                 {task.latestReview && taskPhase !== "RUNNING" && taskPhase !== "PENDING" && (
                                     <SprintReviewBadge summary={task.latestReview} compact showCompactLabel align="right" />
                                 )}
+                                <SelfReflectionRatingBadge rating={task.selfReflectionRating} align="start" />
                             </div>
                             <h3 className="text-lg font-bold tracking-tight text-slate-900 dark:text-white leading-snug">
                                 {task.title}

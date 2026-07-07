@@ -20,12 +20,15 @@ import { ExecutionInvocationControlService } from "../../services/execution-invo
 import { createLateBoundDependency } from "../../shared/late-bound-dependency.js";
 import { ChatProviderIngressService } from "../../services/chat-provider-ingress-service.js";
 import { ChatProviderOutboundService } from "../../services/chat-provider-outbound-service.js";
+import { NodeFlowRuntimeService } from "../../services/node-flow-runtime-service.js";
+import { NodeFlowService } from "../../services/node-flow-service.js";
 
 export interface DashboardDependencies {
   chatThreadRuntimeService: ChatThreadRuntimeService;
   chatProviderRepository: CoreDependencies["chatProviderRepository"];
   chatProviderIngressService: ChatProviderIngressService;
   chatProviderOutboundService: ChatProviderOutboundService;
+  nodeFlowService: CoreDependencies["nodeFlowService"];
   activityCacheService: ActivityCacheService;
   taskRerunService: TaskRerunService;
   executionControlService: ExecutionControlService;
@@ -102,6 +105,7 @@ export function createDashboardDependencies(
     memoryPromotionService: coreDeps.memoryPromotionService,
     embeddingModelManager: coreDeps.embeddingModelManager,
     skillService: coreDeps.skillService,
+    nodeFlowService: coreDeps.nodeFlowService,
     knowledgeService: coreDeps.knowledgeService,
     planningAgentService: planningAgentServiceRef,
     projectSetupService: projectSetupServiceRef,
@@ -162,6 +166,15 @@ export function createDashboardDependencies(
     chatThreadRuntimeService,
     logger: logger.child({ component: "chat-provider-ingress-service" }),
   });
+  const nodeFlowRuntimeService = new NodeFlowRuntimeService({
+    nodeFlowRepository: coreDeps.nodeFlowRepository,
+    executionRepository,
+    projectManagementRepository,
+    settingsRepository,
+    providerExecutionService,
+    getDashboardSettings: (projectId) => settingsRepository.resolveProjectDashboardSettings(projectId).settings,
+  });
+  const nodeFlowService = new NodeFlowService(coreDeps.nodeFlowRepository, nodeFlowRuntimeService);
 
   const activityCacheService = new ActivityCacheService(
     {
@@ -465,6 +478,8 @@ export function createDashboardDependencies(
     executionControlService,
     taskRerunService,
     memoryRemediationService,
+    nodeFlowRuntimeService,
+    nodeFlowRepository: coreDeps.nodeFlowRepository,
     logger: logger.child({ component: "scheduler-service" }),
   });
   schedulerServiceRef.set(schedulerService);
@@ -474,6 +489,7 @@ export function createDashboardDependencies(
     chatThreadRuntimeService,
     chatProviderIngressService,
     chatProviderOutboundService,
+    nodeFlowService,
     activityCacheService,
     taskRerunService,
     executionControlService,

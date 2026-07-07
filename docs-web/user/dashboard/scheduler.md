@@ -1,7 +1,7 @@
 # Scheduler
 
 The **Scheduler** page (dock label **Schedule**, `/scheduler`) runs Code UX work on a timetable.
-Schedule a sprint, a quicksprint template, a project message, or memory remediation to fire once
+Schedule a sprint, a quicksprint template, a node flow, a project message, or memory remediation to fire once
 or on a recurring cadence — useful for nightly maintenance sweeps, periodic audits, or recurring
 planning prompts.
 
@@ -18,11 +18,17 @@ Each scheduler entry has a **target** — the thing that runs when it fires:
 | --- | --- |
 | **Sprint** | Starts an existing sprint in the project. |
 | **Quicksprint** | Spawns and runs a [quicksprint template](../quicksprints.md), substituting its variables. |
+| **Node flow** | Runs a saved project [node flow](./node-flows.md) with optional JSON object input. |
 | **Message** | Posts a project message (for example, a recurring planning or status prompt). |
 | **Memory remediation** | Runs the long-term memory cleanup workflow on a schedule. |
 
-The backend scheduler contract also supports agent-created wakeups and scheduled task reruns. Those
-entries are stored in the existing target JSON payload with `origin` and `source` set to
+Node-flow entries store `nodeFlowTarget = { flowId, input?, flowVersion? }` inside the existing
+target JSON payload, validate that the flow belongs to the selected project, and run through the
+node-flow runtime with scheduler trigger metadata when due. Blank dashboard input is omitted, and
+supplied input must be a JSON object.
+
+The backend scheduler contract also supports agent-created wakeups and scheduled task reruns.
+Agent wakeups and task reruns are stored in the same target JSON payload with `origin` and `source` set to
 `agent_scheduler`, plus `createdByAgentId` when the creating agent provides it. Agent wakeups post
 through the chat runtime with scheduler metadata, and task reruns reuse the normal task rerun
 service so workspaces, telemetry, and cancellation behavior stay consistent.
@@ -35,13 +41,21 @@ invocations fail the wakeup instead of sending stale follow-up text.
 Agent wakeups and task reruns may appear in the Scheduler calendar, day view, stats, and scheduled
 entry list after they are created by the secured MCP scheduler tool. They use their own target
 labels and compact summaries instead of appearing as chat messages. The dashboard create/edit form
-remains limited to Sprint, Quicksprint, Message, and Memory remediation entries; MCP-created
-agent wakeups and task reruns can still be paused, resumed, or deleted from the list.
+supports Sprint, Quicksprint, Node flow, Message, and Memory remediation entries; MCP-created agent
+wakeups and task reruns can still be paused, resumed, or deleted from the list.
 
 ## Recurrence
 
 An entry can run once at a specific time or repeat on a **recurrence rule** (for example daily or
 weekly). The page previews the next occurrences so you can confirm the cadence before saving.
+
+For node-flow schedules, recurrence uses the same model as other targets. Due runs call the node-flow
+runtime with `triggerType = "scheduler"` and trigger metadata containing the scheduler entry id,
+scheduled occurrence time, target type, and stored flow version when present. The due occurrence is
+claimed in SQLite before the runtime is awaited so a restart does not dispatch the same occurrence
+again. Node-flow schedules are then finalized from the returned run status: `succeeded` advances or
+completes the schedule, while returned `failed` or `cancelled` runs move the entry to `failed`,
+record the attempted occurrence, and show the run error in the list.
 
 ## Managing entries
 
