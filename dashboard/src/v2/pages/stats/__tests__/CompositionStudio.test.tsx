@@ -141,6 +141,7 @@ describe("CompositionStudio", () => {
     expect(screen.getByText("Cached Input")).toBeInTheDocument();
     expect(screen.getByText("Output Ratio")).toBeInTheDocument();
     expect(screen.getByText("Reasoning Share")).toBeInTheDocument();
+    expect(screen.getByText("Cache Efficiency")).toBeInTheDocument();
     expect(screen.getByText("Total Cost")).toBeInTheDocument();
     expect(screen.getAllByText("$12.35").length).toBeGreaterThan(0);
     expect(screen.getByText("2 calls / 1m 0s active")).toBeInTheDocument();
@@ -149,11 +150,9 @@ describe("CompositionStudio", () => {
     expect(screen.getByText("9m 0s")).toBeInTheDocument();
     expect(screen.getByText("0s")).toBeInTheDocument();
 
-    const providerLedger = screen.getByText("Provider Activity").closest("div.space-y-4");
-    expect(providerLedger).not.toBeNull();
-
-    const geminiLabel = within(providerLedger as HTMLElement).getByText("Gemini CLI");
-    const claudeLabel = within(providerLedger as HTMLElement).getByText("Claude Code");
+    const providerLedger = screen.getByTestId("composition-provider-activity");
+    const geminiLabel = within(providerLedger).getByText("Gemini CLI");
+    const claudeLabel = within(providerLedger).getByText("Claude Code");
 
     expect(geminiLabel.compareDocumentPosition(claudeLabel) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(container.textContent).not.toContain("No provider data for this window.");

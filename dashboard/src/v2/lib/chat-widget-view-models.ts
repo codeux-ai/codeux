@@ -7,7 +7,7 @@ import type { ExecutionStatus } from "../components/chat/widgets/ChatWidgetFrame
 import { formatChatTime } from "./chat-time.js";
 import { buildLiveSessionTasks } from "./live-session-task-structure.js";
 
-export type ChatWidgetType = "planning" | "external_reference" | "none";
+export type ChatWidgetType = "planning" | "app_creation_progress" | "external_reference" | "none";
 
 /** Per-turn token usage carried on tool-call invocation messages (mirrors the
  *  backend ParsedConversationTurn.tokens shape). */
@@ -25,8 +25,49 @@ export interface ChatWidgetState {
   planName: string;
   targetWorker?: string;
   liveStatus?: LivePlanningWidgetState;
+  appCreationProgress?: AppCreationProgressWidgetState;
+  executionPlan?: PlanningExecutionPlanWidgetState;
   externalReference?: ExternalReferenceWidgetState;
   suppressBodyMarkdown?: boolean;
+}
+
+export type AppCreationKind = "web_app" | "desktop_app" | "unknown";
+
+export type AppCreationProgressStageStatus = "pending" | "running" | "completed" | "failed";
+
+export interface AppCreationStackSummaryFieldState {
+  key: string;
+  label: string;
+  value: string;
+}
+
+export interface AppCreationStackSummaryState {
+  fields: AppCreationStackSummaryFieldState[];
+  emptyLabel: string;
+}
+
+export interface AppCreationProgressStageState {
+  id: string;
+  label: string;
+  status: AppCreationProgressStageStatus;
+  statusLabel: string;
+  isActive: boolean;
+  isCompleted: boolean;
+  isFailed: boolean;
+}
+
+export interface AppCreationProgressWidgetState {
+  status: ExecutionStatus;
+  statusLabel: string;
+  appKind: AppCreationKind;
+  appKindLabel: string;
+  sprintId: string | null;
+  sprintLabel: string;
+  stackSummary: AppCreationStackSummaryState;
+  stages: AppCreationProgressStageState[];
+  suggestionTags: string[];
+  quickactionRequestId: string | null;
+  clientRequestId: string | null;
 }
 
 export type ExternalReferenceProvider = "jira" | "github" | "gitlab";
@@ -89,6 +130,25 @@ export interface LivePlanningWidgetState {
   progressLabel: string;
   materialization: LivePlanningMaterializationState;
   tasks: LivePlanningTaskState[];
+}
+
+export interface PlanningExecutionPlanTaskSummaryState {
+  id: string;
+  title: string;
+  summary: string | null;
+}
+
+export interface PlanningExecutionPlanWidgetState {
+  sprintId: string | null;
+  sprintNumber: number | null;
+  sprintKey: string | null;
+  sprintName: string;
+  goal: string | null;
+  taskCount: number;
+  createdTaskIds: string[];
+  tasks: PlanningExecutionPlanTaskSummaryState[];
+  taskSummaryLabel: string;
+  ariaLabel: string;
 }
 
 export interface ChatWidgetLiveData {
@@ -185,6 +245,31 @@ const readRecord = (value: unknown): Record<string, unknown> | null => (
 
 const readArray = (value: unknown): unknown[] => (
   Array.isArray(value) ? value : []
+);
+
+const readStringList = (value: unknown, limit = 8): string[] => {
+  const seen = new Set<string>();
+  const values = readArray(value)
+    .map(readString)
+    .filter((entry): entry is string => Boolean(entry));
+  const result: string[] = [];
+  for (const entry of values) {
+    const key = entry.toLowerCase();
+    if (!seen.has(key)) {
+      seen.add(key);
+      result.push(entry);
+    }
+    if (result.length >= limit) {
+      break;
+    }
+  }
+  return result;
+};
+
+const readStringArray = (value: unknown): string[] => (
+  readArray(value)
+    .map((entry) => readString(entry))
+    .filter((entry): entry is string => Boolean(entry))
 );
 
 const readFirstString = (...values: unknown[]): string | null => {
@@ -361,6 +446,366 @@ const formatStatusLabel = (value: string | null | undefined): string => {
     .replace(/\b\w/g, (letter) => letter.toUpperCase());
 };
 
+const normalizeWidgetExecutionStatus = (value: unknown, fallback: ExecutionStatus): ExecutionStatus => {
+  const normalized = readString(value)?.toLowerCase().replace(/[\s-]+/g, "_") ?? "";
+  switch (normalized) {
+    case "queued":
+    case "pending":
+      return "queued";
+    case "running":
+    case "active":
+    case "in_progress":
+    case "working":
+      return "running";
+    case "completed":
+    case "complete":
+    case "done":
+    case "success":
+      return "completed";
+    case "failed":
+    case "failure":
+    case "error":
+    case "cancelled":
+    case "canceled":
+      return "failed";
+    default:
+      return fallback;
+  }
+};
+
+const normalizeAppCreationKind = (value: unknown): AppCreationKind => {
+  const normalized = readString(value)?.toLowerCase().replace(/[\s-]+/g, "_") ?? "";
+  if (normalized === "web_app" || normalized === "web") {
+    return "web_app";
+  }
+  if (normalized === "desktop_app" || normalized === "desktop") {
+    return "desktop_app";
+  }
+  return "unknown";
+};
+
+const formatAppCreationKindLabel = (kind: AppCreationKind): string => {
+  switch (kind) {
+    case "web_app":
+      return "Web app";
+    case "desktop_app":
+      return "Desktop app";
+    case "unknown":
+    default:
+      return "App";
+  }
+};
+
+const formatAppCreationStatusLabel = (status: ExecutionStatus, appKindLabel: string): string => {
+  switch (status) {
+    case "queued":
+      return `${appKindLabel} sprint is queued.`;
+    case "completed":
+      return `${appKindLabel} sprint is ready.`;
+    case "failed":
+      return `${appKindLabel} sprint setup needs attention.`;
+    case "running":
+    default:
+      return `${appKindLabel} sprint is being planned.`;
+  }
+};
+
+const normalizeAppCreationStageStatus = (
+  value: unknown,
+  fallback: AppCreationProgressStageStatus,
+): AppCreationProgressStageStatus => {
+  const normalized = readString(value)?.toLowerCase().replace(/[\s-]+/g, "_") ?? "";
+  switch (normalized) {
+    case "queued":
+    case "pending":
+    case "todo":
+    case "waiting":
+      return "pending";
+    case "running":
+    case "active":
+    case "in_progress":
+    case "working":
+      return "running";
+    case "completed":
+    case "complete":
+    case "done":
+    case "success":
+      return "completed";
+    case "failed":
+    case "failure":
+    case "error":
+    case "cancelled":
+    case "canceled":
+      return "failed";
+    default:
+      return fallback;
+  }
+};
+
+const canonicalAppCreationStageId = (value: string): string => {
+  const normalized = value.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+  if (normalized === "planning" || normalized === "prepare" || normalized === "preparing") {
+    return "planning";
+  }
+  if (normalized === "plan" || normalized === "planning_result" || normalized === "draft_plan") {
+    return "plan";
+  }
+  if (
+    normalized === "showing_tasks"
+    || normalized === "showing_each_task"
+    || normalized === "show_tasks"
+    || normalized === "tasks"
+    || normalized === "task_list"
+  ) {
+    return "showing_tasks";
+  }
+  if (normalized === "start" || normalized === "starting" || normalized === "start_sprint") {
+    return "start";
+  }
+  if (normalized === "finish" || normalized === "finished" || normalized === "complete") {
+    return "finish";
+  }
+  return normalized || "stage";
+};
+
+const DEFAULT_APP_CREATION_STAGE_DEFS: Array<Pick<AppCreationProgressStageState, "id" | "label">> = [
+  { id: "planning", label: "Planning" },
+  { id: "plan", label: "Plan" },
+  { id: "showing_tasks", label: "Showing each Task" },
+  { id: "start", label: "Start" },
+  { id: "finish", label: "Finish" },
+];
+
+const defaultAppCreationStageStatus = (
+  stageId: string,
+  widgetStatus: ExecutionStatus,
+): AppCreationProgressStageStatus => {
+  if (widgetStatus === "completed") {
+    return "completed";
+  }
+  if (widgetStatus === "failed") {
+    return stageId === "planning" ? "failed" : "pending";
+  }
+  if (widgetStatus === "queued") {
+    return "pending";
+  }
+  return stageId === "planning" ? "running" : "pending";
+};
+
+const buildAppCreationStageState = (
+  id: string,
+  label: string,
+  status: AppCreationProgressStageStatus,
+): AppCreationProgressStageState => ({
+  id,
+  label,
+  status,
+  statusLabel: formatStatusLabel(status),
+  isActive: status === "running",
+  isCompleted: status === "completed",
+  isFailed: status === "failed",
+});
+
+const normalizeAppCreationStages = (
+  widgetMetadata: Record<string, unknown>,
+  widgetStatus: ExecutionStatus,
+): AppCreationProgressStageState[] => {
+  const suppliedStages = readArray(widgetMetadata.planningStages ?? widgetMetadata.stages ?? widgetMetadata.stageList)
+    .map(readRecord)
+    .filter((stage): stage is Record<string, unknown> => Boolean(stage))
+    .map((stage) => {
+      const rawId = readString(stage.id) || readString(stage.key) || readString(stage.label) || "stage";
+      const id = canonicalAppCreationStageId(rawId);
+      const label = readString(stage.label) || formatStatusLabel(id);
+      const status = normalizeAppCreationStageStatus(stage.status ?? stage.state, defaultAppCreationStageStatus(id, widgetStatus));
+      return buildAppCreationStageState(id, label, status);
+    });
+
+  const suppliedById = new Map(suppliedStages.map((stage) => [stage.id, stage]));
+  const defaultStages = DEFAULT_APP_CREATION_STAGE_DEFS.map((stage) => (
+    suppliedById.get(stage.id)
+    ?? buildAppCreationStageState(stage.id, stage.label, defaultAppCreationStageStatus(stage.id, widgetStatus))
+  ));
+  const defaultIds = new Set(defaultStages.map((stage) => stage.id));
+  const customStages = suppliedStages.filter((stage) => !defaultIds.has(stage.id));
+  const finishIndex = defaultStages.findIndex((stage) => stage.id === "finish");
+
+  if (customStages.length === 0 || finishIndex < 0) {
+    return defaultStages;
+  }
+
+  return [
+    ...defaultStages.slice(0, finishIndex),
+    ...customStages,
+    ...defaultStages.slice(finishIndex),
+  ];
+};
+
+const readStackFieldValue = (stackSummary: Record<string, unknown> | null, keys: string[]): string | null => {
+  for (const key of keys) {
+    const value = readString(stackSummary?.[key]);
+    if (value) {
+      return value;
+    }
+  }
+  return null;
+};
+
+const escapeRegExp = (value: string): string => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+const formatExecutionPlanName = (executionPlan: PlanningExecutionPlanWidgetState): string => {
+  if (!executionPlan.sprintKey) {
+    return executionPlan.sprintName;
+  }
+  const prefixPattern = new RegExp(`^${escapeRegExp(executionPlan.sprintKey)}\\s*[:\\-]?\\s*`, "i");
+  const normalizedName = executionPlan.sprintName.replace(prefixPattern, "").trim();
+  if (!normalizedName || normalizedName === executionPlan.sprintKey) {
+    return executionPlan.sprintKey;
+  }
+  return `${executionPlan.sprintKey}: ${normalizedName}`;
+};
+
+const readExecutionPlanTaskSummaries = (
+  executionPlan: Record<string, unknown>,
+  createdTaskIds: string[],
+): PlanningExecutionPlanTaskSummaryState[] => {
+  const candidates = [
+    executionPlan.taskSummaries,
+    executionPlan.task_summaries,
+    executionPlan.tasks,
+    executionPlan.createdTasks,
+    executionPlan.created_tasks,
+  ];
+  const rawTasks = candidates.find((candidate) => readArray(candidate).length > 0);
+  return readArray(rawTasks)
+    .map((entry, index): PlanningExecutionPlanTaskSummaryState | null => {
+      const record = readRecord(entry);
+      if (!record) {
+        const title = readString(entry);
+        return title ? { id: createdTaskIds[index] ?? `task-${index + 1}`, title, summary: null } : null;
+      }
+
+      const id = readFirstString(
+        record.id,
+        record.taskId,
+        record.task_id,
+        record.key,
+        record.taskKey,
+        record.task_key,
+        createdTaskIds[index],
+      ) ?? `task-${index + 1}`;
+      const title = readFirstString(record.title, record.name, record.summary, record.description, id);
+      if (!title) {
+        return null;
+      }
+
+      const summary = readFirstString(
+        record.summary,
+        record.description,
+        record.promptSummary,
+        record.prompt_summary,
+      );
+      return {
+        id,
+        title,
+        summary: summary && summary !== title ? summary : null,
+      };
+    })
+    .filter((entry): entry is PlanningExecutionPlanTaskSummaryState => Boolean(entry));
+};
+
+const formatExecutionPlanTaskSummaryLabel = (
+  taskCount: number,
+  createdTaskIds: string[],
+  tasks: PlanningExecutionPlanTaskSummaryState[],
+): string => {
+  const effectiveTaskCount = taskCount || tasks.length || createdTaskIds.length;
+  const plannedLabel = `${effectiveTaskCount} planned task${effectiveTaskCount === 1 ? "" : "s"}`;
+  if (createdTaskIds.length > 0 && createdTaskIds.length !== effectiveTaskCount) {
+    return `${plannedLabel}, ${createdTaskIds.length} created`;
+  }
+  return plannedLabel;
+};
+
+const readExecutionPlanState = (
+  metadata: Record<string, unknown> | null | undefined,
+  widgetMetadata: Record<string, unknown> | null,
+): PlanningExecutionPlanWidgetState | null => {
+  const executionPlan = readRecord(metadata?.executionPlan)
+    ?? readRecord(metadata?.execution_plan)
+    ?? readRecord(widgetMetadata?.executionPlan)
+    ?? readRecord(widgetMetadata?.execution_plan);
+  if (!executionPlan) {
+    return null;
+  }
+
+  const sprintId = readFirstString(executionPlan.sprintId, executionPlan.sprint_id);
+  const sprintNumber = readFirstNumber(executionPlan.sprintNumber, executionPlan.sprint_number);
+  const sprintKey = readFirstString(executionPlan.sprintKey, executionPlan.sprint_key)
+    ?? (sprintNumber !== null ? `SPR-${sprintNumber}` : sprintId);
+  const goal = readFirstString(executionPlan.goal);
+  const createdTaskIds = [
+    ...new Set([
+      ...readStringArray(executionPlan.createdTaskIds),
+      ...readStringArray(executionPlan.created_task_ids),
+    ]),
+  ];
+  const tasks = readExecutionPlanTaskSummaries(executionPlan, createdTaskIds);
+  const rawTaskCount = readFirstNumber(executionPlan.taskCount, executionPlan.task_count);
+  const taskCount = rawTaskCount !== null && rawTaskCount >= 0
+    ? Math.trunc(rawTaskCount)
+    : tasks.length || createdTaskIds.length;
+  const sprintName = readFirstString(executionPlan.sprintName, executionPlan.sprint_name)
+    ?? sprintKey
+    ?? "Execution Plan";
+
+  const hasPlanDetails = Boolean(
+    sprintId
+    || sprintNumber !== null
+    || sprintKey
+    || goal
+    || taskCount > 0
+    || createdTaskIds.length > 0
+    || tasks.length > 0
+    || readString(executionPlan.sprintName)
+    || readString(executionPlan.sprint_name),
+  );
+  if (!hasPlanDetails) {
+    return null;
+  }
+
+  const taskSummaryLabel = formatExecutionPlanTaskSummaryLabel(taskCount, createdTaskIds, tasks);
+  const ariaParts = ["Planning execution plan", formatExecutionPlanName({
+    sprintId,
+    sprintNumber,
+    sprintKey,
+    sprintName,
+    goal,
+    taskCount,
+    createdTaskIds,
+    tasks,
+    taskSummaryLabel,
+    ariaLabel: "",
+  })];
+  if (goal) {
+    ariaParts.push(`Goal ${goal}`);
+  }
+  ariaParts.push(taskSummaryLabel);
+
+  return {
+    sprintId,
+    sprintNumber,
+    sprintKey,
+    sprintName,
+    goal,
+    taskCount,
+    createdTaskIds,
+    tasks,
+    taskSummaryLabel,
+    ariaLabel: ariaParts.join(". "),
+  };
+};
+
 const normalizeExternalProviderValue = (value: unknown): ExternalReferenceProvider | null => {
   const normalized = readString(value)?.toLowerCase().replace(/[\s_-]+/g, "") ?? "";
   if (normalized.includes("jira") || normalized.includes("atlassian")) {
@@ -494,6 +939,61 @@ const readFirstDisplayName = (...values: unknown[]): string | null => {
     }
   }
   return null;
+};
+
+const normalizeAppCreationStackSummary = (value: unknown): AppCreationStackSummaryState => {
+  const stackSummary = readRecord(value);
+  const fieldDefs: Array<{ key: string; label: string; keys: string[] }> = [
+    { key: "techstackName", label: "Stack", keys: ["techstackName", "techstack_name", "stackName", "stack_name"] },
+    { key: "framework", label: "Framework", keys: ["framework"] },
+    { key: "language", label: "Language", keys: ["language"] },
+    { key: "runtime", label: "Runtime", keys: ["runtime"] },
+    { key: "packageManager", label: "Package", keys: ["packageManager", "package_manager"] },
+    { key: "styling", label: "Styling", keys: ["styling"] },
+    { key: "testFramework", label: "Tests", keys: ["testFramework", "test_framework"] },
+    { key: "techstackId", label: "Stack ID", keys: ["techstackId", "techstack_id"] },
+  ];
+
+  const fields = fieldDefs.flatMap((field): AppCreationStackSummaryFieldState[] => {
+    const fieldValue = readStackFieldValue(stackSummary, field.keys);
+    return fieldValue ? [{ key: field.key, label: field.label, value: fieldValue }] : [];
+  });
+
+  return {
+    fields,
+    emptyLabel: "Project stack defaults",
+  };
+};
+
+const buildAppCreationProgressWidgetState = (
+  metadata: Record<string, unknown> | null | undefined,
+  widgetMetadata: Record<string, unknown>,
+): ChatWidgetState => {
+  const status = normalizeWidgetExecutionStatus(widgetMetadata.status ?? metadata?.status, "running");
+  const appKind = normalizeAppCreationKind(widgetMetadata.appKind ?? widgetMetadata.app_kind ?? widgetMetadata.kind ?? metadata?.appKind);
+  const appKindLabel = formatAppCreationKindLabel(appKind);
+  const sprintLabel = readMetadataString(metadata, widgetMetadata, ["sprintName", "sprint_name", "sprintLabel", "sprint_label", "title"])
+    || "App creation sprint";
+  const progress: AppCreationProgressWidgetState = {
+    status,
+    statusLabel: formatAppCreationStatusLabel(status, appKindLabel),
+    appKind,
+    appKindLabel,
+    sprintId: readMetadataString(metadata, widgetMetadata, ["sprintId", "sprint_id"]),
+    sprintLabel,
+    stackSummary: normalizeAppCreationStackSummary(widgetMetadata.stackSummary ?? widgetMetadata.stack_summary ?? metadata?.stackSummary),
+    stages: normalizeAppCreationStages(widgetMetadata, status),
+    suggestionTags: readStringList(widgetMetadata.suggestionTags ?? widgetMetadata.suggestion_tags ?? metadata?.suggestionTags, 6),
+    quickactionRequestId: readMetadataString(metadata, widgetMetadata, ["quickactionRequestId", "quickaction_request_id", "requestId", "request_id"]),
+    clientRequestId: readMetadataString(metadata, widgetMetadata, ["clientRequestId", "client_request_id"]),
+  };
+
+  return {
+    type: "app_creation_progress",
+    status,
+    planName: sprintLabel,
+    appCreationProgress: progress,
+  };
 };
 
 const readLabels = (...values: unknown[]): string[] => {
@@ -952,17 +1452,25 @@ const extractWidgetStateFromMetadata = (
   liveData?: ChatWidgetLiveData,
 ): ChatWidgetState => {
   const widgetMetadata = getWidgetMetadata(metadata);
+  const executionPlan = readExecutionPlanState(metadata, widgetMetadata);
+
+  if (widgetMetadata && readString(widgetMetadata.type) === "app_progress") {
+    return buildAppCreationProgressWidgetState(metadata, widgetMetadata);
+  }
 
   if (widgetMetadata && widgetMetadata.type === "planning_request") {
     const status = (widgetMetadata.status as ExecutionStatus) || (metadata?.status as ExecutionStatus) || "completed";
-    const planName = (widgetMetadata.route_path as string) || (metadata?.planName as string) || (metadata?.title as string) || "Execution Plan";
+    const planName = executionPlan
+      ? formatExecutionPlanName(executionPlan)
+      : (widgetMetadata.route_path as string) || (metadata?.planName as string) || (metadata?.title as string) || "Execution Plan";
     const targetWorker = widgetMetadata.target_worker as string | undefined;
-    const liveStatus = buildLivePlanningWidgetState(metadata, status, planName, liveData);
+    const liveStatus = executionPlan ? null : buildLivePlanningWidgetState(metadata, status, planName, liveData);
     return {
       type: "planning",
       status: liveStatus ? mapSprintRunStatusToExecutionStatus(liveStatus.runStatus, status) : status,
       planName,
       targetWorker,
+      ...(executionPlan ? { executionPlan } : {}),
       ...(liveStatus ? { liveStatus } : {}),
     };
   }
@@ -988,12 +1496,15 @@ const extractWidgetStateFromMetadata = (
 
   if (isPlanning || metadata.routeKind === "virtual" || metadata.routeKind === "worker") {
     const status = (metadata.status as ExecutionStatus) || "completed";
-    const planName = (metadata.planName as string) || (metadata.title as string) || "Execution Plan";
-    const liveStatus = buildLivePlanningWidgetState(metadata, status, planName, liveData);
+    const planName = executionPlan
+      ? formatExecutionPlanName(executionPlan)
+      : (metadata.planName as string) || (metadata.title as string) || "Execution Plan";
+    const liveStatus = executionPlan ? null : buildLivePlanningWidgetState(metadata, status, planName, liveData);
     return {
       type: "planning",
       status: liveStatus ? mapSprintRunStatusToExecutionStatus(liveStatus.runStatus, status) : status,
       planName,
+      ...(executionPlan ? { executionPlan } : {}),
       ...(liveStatus ? { liveStatus } : {}),
     };
   }

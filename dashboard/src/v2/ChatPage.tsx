@@ -17,6 +17,7 @@ import { NoProjectAssistantPanel } from "./components/chat/NoProjectAssistantPan
 import { EmptyState } from "./components/ui/EmptyState.js";
 import { MessageCircle } from "lucide-preact";
 import { ChatMessageBubble } from "./components/chat/ChatMessageBubble.js";
+import { ChatCreateAppQuickActions } from "./components/chat/ChatCreateAppQuickActions.js";
 import { useChatPageData } from "./hooks/use-chat-page-data.js";
 import { formatInvocationPurpose, formatInvocationDuration, InvocationContextChips } from "./components/chat/invocation-display.js";
 import { InvocationMessageBubble } from "./components/chat/InvocationMessageBubble.js";
@@ -40,6 +41,7 @@ import {
 } from "./lib/chat-widget-view-models.js";
 import { clearChatDraftFromUrl, readChatDraftFromLocation } from "./lib/no-project-chat-assistant.js";
 import { resolveChatLiveEntities, type ChatLiveEntityWidget } from "./lib/chat-live-entities.js";
+import { STATUS_MESSAGE_MIN_INTERVAL_MS } from "./lib/agent-humor-messages.js";
 
 
 const EMPTY_LIVE_ENTITIES: readonly ChatLiveEntityWidget[] = [];
@@ -121,6 +123,7 @@ export const ChatPage: FunctionComponent = () => {
     handleCancelActiveTurn,
     isCancelling,
     handleSend,
+    handleCreateAppQuickaction,
     navigateHistory,
     handleDeleteThread,
     handleRenameThread,
@@ -372,7 +375,7 @@ export const ChatPage: FunctionComponent = () => {
       setWorkingTimerPhase("starting");
       const timer = setTimeout(() => {
         setWorkingTimerPhase("working");
-      }, 4000);
+      }, STATUS_MESSAGE_MIN_INTERVAL_MS);
       return () => clearTimeout(timer);
     } else {
       setWorkingTimerPhase(null);
@@ -553,7 +556,8 @@ export const ChatPage: FunctionComponent = () => {
                 {hasWorkingReply && workingTimerPhase === "starting" ? (
                   <InvocationContainerWidget
                     containerPhase="starting"
-                    providerName={selectedThread?.runtimeState?.virtualProvider ?? null}
+                    providerName={selectedThread?.runtimeState?.providerLabel ?? selectedThread?.runtimeState?.virtualProvider ?? null}
+                    modelName={selectedThread?.runtimeState?.modelLabel ?? null}
                     agentName={activeConnection?.displayName || null}
                   />
                 ) : hasWorkingReply && workingTimerPhase === "working" ? (
@@ -565,6 +569,13 @@ export const ChatPage: FunctionComponent = () => {
           </div>
 
           <div className="shrink-0 border-t border-black/[0.05] p-5 dark:border-white/[0.05]">
+            <div className="mb-3">
+              <ChatCreateAppQuickActions
+                hasProject={Boolean(selectedProject)}
+                sending={sending}
+                onSelect={(kind) => void handleCreateAppQuickaction(kind)}
+              />
+            </div>
             <div className={`rounded-2xl border bg-black/[0.03] p-3 focus-within:border-signal-500/30 dark:bg-white/[0.03] ${error ? 'border-status-red/50 dark:border-status-red/50' : 'border-black/[0.06] dark:border-white/[0.06]'}`}>
               <label htmlFor="message-composer" className="sr-only">Message</label>
               <textarea
@@ -882,6 +893,7 @@ export const ChatPage: FunctionComponent = () => {
               />
               <InvocationContainerWidget
                 providerName={selectedInvocation.provider}
+                modelName={selectedInvocation.model}
                 agentName={selectedAgentPreset?.name ?? null}
                 containerPhase={
                   selectedInvocation.status === "running" && selectedInvocation.messageCount === 0

@@ -15,12 +15,14 @@ import type { Logger } from "../../../shared/logging/logger.js";
 import type { CommandResult } from "../../cli-process-runner.js";
 import type { AgentPresetRepository } from "../../../repositories/agent-preset-repository.js";
 import type { McpConnectionInfo } from "../../../contracts/mcp-connection-types.js";
+import type { TaskSelfReflectionRatingRepository } from "../../../repositories/task-self-reflection-rating-repository.js";
 
 export interface PipelineContextDeps {
   sessionTracking: SessionTrackingRepository;
   executionRepository?: ExecutionRepository;
   projectManagementRepository?: ProjectManagementRepository;
   memoryService?: MemoryService;
+  taskSelfReflectionRatingRepository?: TaskSelfReflectionRatingRepository;
   skillService?: SkillService;
   agentPresetRepository?: AgentPresetRepository;
   providerConcurrencyService?: ProviderConcurrencyService;

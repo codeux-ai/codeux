@@ -17,6 +17,8 @@ import type {
   ConversationMessageRecord,
   ConversationThreadRecord,
   ConversationRuntimeState,
+  DashboardCreateAppQuickactionKind,
+  DashboardCreateAppQuickactionMetadata,
   CreateConversationThreadInput,
   CreateDashboardConversationMessageInput,
   McpConnectionCapabilities,
@@ -141,6 +143,36 @@ import type {
   UpdateChatProviderChannelBindingInput,
   UpdateChatProviderConnectionInput,
 } from "../../../src/contracts/chat-provider-types.js";
+import type { TaskSelfReflectionRating } from "../../../src/contracts/task-self-reflection-types.js";
+import type {
+  AttachNodeFlowSkillInput,
+  CreateNodeFlowInput,
+  NodeFlowEdge,
+  NodeFlowGraph,
+  NodeFlowJsonObject,
+  NodeFlowJsonPrimitive,
+  NodeFlowJsonValue,
+  NodeFlowListResponse,
+  NodeFlowNode,
+  NodeFlowNodePosition,
+  NodeFlowNodeRunListResponse,
+  NodeFlowNodeRunRecord,
+  NodeFlowNodeRunStatus,
+  NodeFlowRecord,
+  NodeFlowRunListResponse,
+  NodeFlowRunRecord,
+  NodeFlowRunSummaryResponse,
+  NodeFlowRunStatus,
+  NodeFlowSkillAttachment,
+  NodeFlowValidationIssue,
+  NodeFlowValidationResponse,
+  NodeFlowVersionRecord,
+  NodeWidgetField,
+  NodeWidgetFieldType,
+  NodeWidgetSchema,
+  NodeWidgetSelectOption,
+  UpdateNodeFlowInput,
+} from "../../../src/contracts/node-flow-types.js";
 
 export interface SegmentDefinition {
   label: string;
@@ -232,6 +264,7 @@ export interface Task {
   isIndependent: boolean;
   isMerged: boolean;
   latestReview?: SprintReviewSummary;
+  selfReflectionRating?: TaskSelfReflectionRating;
   mergeIndicator: string | null;
   isOptimistic?: boolean;
 }
@@ -265,6 +298,8 @@ export type {
   ConversationMessageRecord,
   ConversationThreadRecord,
   ConversationRuntimeState,
+  DashboardCreateAppQuickactionKind,
+  DashboardCreateAppQuickactionMetadata,
   McpConnectionCapabilities,
   McpConnectionRecord,
   McpConnectionRole,
@@ -361,6 +396,33 @@ export type {
   RedactedCredentialField,
   UpdateChatProviderChannelBindingInput,
   UpdateChatProviderConnectionInput,
+  AttachNodeFlowSkillInput,
+  CreateNodeFlowInput,
+  NodeFlowEdge,
+  NodeFlowGraph,
+  NodeFlowJsonObject,
+  NodeFlowJsonPrimitive,
+  NodeFlowJsonValue,
+  NodeFlowListResponse,
+  NodeFlowNode,
+  NodeFlowNodePosition,
+  NodeFlowNodeRunListResponse,
+  NodeFlowNodeRunRecord,
+  NodeFlowNodeRunStatus,
+  NodeFlowRecord,
+  NodeFlowRunListResponse,
+  NodeFlowRunRecord,
+  NodeFlowRunSummaryResponse,
+  NodeFlowRunStatus,
+  NodeFlowSkillAttachment,
+  NodeFlowValidationIssue,
+  NodeFlowValidationResponse,
+  NodeFlowVersionRecord,
+  NodeWidgetField,
+  NodeWidgetFieldType,
+  NodeWidgetSchema,
+  NodeWidgetSelectOption,
+  UpdateNodeFlowInput,
 };
 
 export type { SprintReviewSummary };

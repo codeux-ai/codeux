@@ -68,11 +68,9 @@ export const StatsCard: FunctionComponent<StatsCardProps> = ({
   return (
     <article
       aria-label={accessibleLabel}
-      className={`${styles.card} ${accentClass} ${densityClass} ${toneClass} ${isActive ? styles.active : ""} ${className} group`}
+      data-accent={accent}
+      className={`group stats-card-flat ${styles.card} ${accentClass} ${densityClass} ${toneClass} ${isActive ? styles.active : ""} ${className}`}
     >
-      {/* Background Tint */}
-      <div className={styles.tint} aria-hidden="true" />
-      
       {/* Header: Title and Trend */}
       <div className={styles.header}>
         <div className={styles.titleGroup}>

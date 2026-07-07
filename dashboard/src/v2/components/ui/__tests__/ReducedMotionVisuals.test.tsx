@@ -5,10 +5,12 @@ import { Sparkline } from "../Sparkline.js";
 import { WaveFluid } from "../WaveFluid.js";
 import { BorderTrace } from "../BorderTrace.js";
 import { ContainerShip } from "../PlanningShip.js";
+import { PlanningProgressOverlay } from "../PlanningProgressOverlay.js";
 import { LiveDurationBadge } from "../LiveDurationBadge.js";
 import { CanvasBackground } from "../../CanvasBackground.js";
 import { RuntimeEventFeed } from "../../RuntimeEventFeed.js";
 import { SkeletonLoader, SkeletonPanel } from "../../layout/SkeletonLoader.js";
+import { getPlanningFeedback } from "../../../lib/sprint-planning-feedback.js";
 import type { ExecutionRuntimeEventSummary } from "../../../../types.js";
 import gsap from "gsap";
 import * as matchers from '@testing-library/jest-dom/matchers';
@@ -101,6 +103,27 @@ describe("Reduced Motion Visuals", () => {
         const { container } = render(<ContainerShip accentColor="#000" isMoving={true} isDark={false} />);
         const animate = container.querySelector("animate");
         expect(animate).toBeNull();
+    });
+
+    it("PlanningProgressOverlay renders a static legible ship course when reduced motion is enabled", () => {
+        const feedback = { ...getPlanningFeedback("plan_only", 10_000), text: "Static planning state" };
+        const { container, getByTestId, getByRole } = render(
+            <PlanningProgressOverlay
+                isBusy
+                feedback={feedback}
+                planningEta={60_000}
+                elapsedMs={10_000}
+                isDark={false}
+                actionType="plan_only"
+                onDismiss={() => {}}
+            />
+        );
+
+        expect(getByRole("progressbar", { name: "Static planning state" })).toBeInTheDocument();
+        expect(getByTestId("planning-ship-course")).toHaveAttribute("data-reduced-motion", "true");
+        expect(getByTestId("planning-ship-traveler")).toHaveAttribute("data-ship-phase", "crossing");
+        expect(getByTestId("planning-ship-traveler")).toHaveStyle({ visibility: "visible" });
+        expect(container.querySelector("animate")).toBeNull();
     });
 
     it("CanvasBackground skips GSAP loops and resolves ambient transitions through motion tokens", () => {

@@ -7,8 +7,10 @@ import { renderMarkdown } from "../../../lib/markdown.js";
 import { getChatWidgetData } from "../../lib/chat-widget-view-models.js";
 import { formatChatTime } from "../../lib/chat-time.js";
 import { PlanningRequestWidget } from "./widgets/PlanningRequestWidget.js";
+import { AppCreationProgressWidget } from "./widgets/AppCreationProgressWidget.js";
 import { ExternalReferenceWidget } from "./widgets/ExternalReferenceWidget.js";
 import { LiveEntityStatusWidget } from "./widgets/LiveEntityStatusWidget.js";
+import { AgentMoodAside, buildAgentMoodAsideSeed, resolveAgentMoodAsideText } from "./widgets/AgentMoodAside.js";
 import { ChatAvatar, type AvatarRole } from "./ChatAvatar.js";
 import { PromptSuggestionTags } from "./PromptSuggestionTags.js";
 import { resolveDisplayDeliveryStatus } from "../../hooks/use-chat-thread-data.js";
@@ -81,6 +83,12 @@ export const ChatMessageBubble: FunctionComponent<ChatMessageBubbleProps> = ({
     : agentName || (message.metadata?.agentName as string) || "Assistant";
   const providerLabel = message.metadata?.provider as string | undefined;
   const createdAtLabel = formatChatTime(message.createdAt);
+  const moodAsideText = (!fromDashboard && message.authorType === "connection")
+    ? resolveAgentMoodAsideText({
+        metadata: message.metadata,
+        seed: buildAgentMoodAsideSeed([message.id, message.bodyMarkdown, senderName]),
+      })
+    : null;
 
   const displayDeliveryStatus = resolveDisplayDeliveryStatus(message, allMessages);
 
@@ -126,6 +134,8 @@ export const ChatMessageBubble: FunctionComponent<ChatMessageBubbleProps> = ({
             />
           )}
 
+          <AgentMoodAside text={moodAsideText} />
+
           {promptSuggestions.length > 0 && (
             <PromptSuggestionTags
               suggestions={promptSuggestions}
@@ -148,6 +158,12 @@ export const ChatMessageBubble: FunctionComponent<ChatMessageBubbleProps> = ({
                   <LiveEntityStatusWidget entities={liveEntities} />
                 </div>
               )}
+            </div>
+          )}
+
+          {widgetData.type === "app_creation_progress" && widgetData.appCreationProgress && (
+            <div className="mt-4 border-t border-white/5 pt-4">
+              <AppCreationProgressWidget progress={widgetData.appCreationProgress} />
             </div>
           )}
 

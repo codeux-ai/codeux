@@ -27,7 +27,6 @@
   border-radius: var(--stats-panel-radius);
   padding: clamp(0.75rem, 1.35vw, 1rem);
   background: var(--stats-surface-panel);
-  box-shadow: var(--stats-panel-shadow);
 }
 
 .heroGrid {
@@ -87,9 +86,10 @@
   height: 1.5rem;
   align-items: center;
   justify-content: center;
-  border-radius: 999px;
-  background: var(--stats-accent-signal-fill);
-  color: var(--stats-accent-signal);
+  border: 1px solid var(--stats-border-hairline);
+  border-radius: var(--stats-control-radius);
+  background: var(--stats-surface-panel);
+  color: var(--stats-value-color);
 }
 
 .heroKickerIcon svg {
@@ -135,8 +135,7 @@
   width: 0.4375rem;
   height: 0.4375rem;
   border-radius: 999px;
-  background: var(--stats-positive-text);
-  box-shadow: 0 0 0 0.1875rem var(--stats-accent-emerald-fill);
+  background: var(--stats-value-color);
 }
 
 .heroSubtitle {
@@ -184,7 +183,7 @@
 .heroSignalIcon {
   width: 1rem;
   height: 1rem;
-  color: var(--stats-accent-signal);
+  color: var(--stats-value-color);
 }
 
 .heroControls {
@@ -283,14 +282,14 @@
   width: 1rem;
   height: 1rem;
   flex: 0 0 auto;
-  color: var(--stats-accent-amber);
+  color: var(--stats-detail-color);
 }
 
 .heroModeIcon {
   width: 1rem;
   height: 1rem;
   flex: 0 0 auto;
-  color: var(--color-signal-600, var(--stats-accent-signal));
+  color: var(--stats-detail-color);
 }
 
 .heroContextGrid {
@@ -359,7 +358,7 @@
   text-transform: uppercase;
   letter-spacing: 0.1em;
   overflow-wrap: anywhere;
-  transition: background-color 160ms ease, border-color 160ms ease, box-shadow 160ms ease, color 160ms ease, transform 160ms ease;
+  transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease;
 }
 
 .heroPresetButton:hover {
@@ -375,9 +374,8 @@
 
 .heroPresetButtonActive {
   border-color: var(--stats-control-border-active);
-  background: var(--stats-surface-control-active);
-  color: var(--stats-control-text-active);
-  box-shadow: var(--stats-control-shadow-active);
+  background: var(--stats-surface-control-active-strong);
+  color: var(--stats-control-text-active-strong);
 }
 
 .customRangeControls {
@@ -404,7 +402,7 @@
   justify-content: center;
   border: 1px solid var(--stats-border-strong);
   border-radius: var(--stats-control-radius);
-  background: var(--stats-surface-control-active);
+  background: var(--stats-surface-control-active-strong);
   padding: 0 1rem;
   color: var(--stats-control-text-active);
   font-size: 0.6875rem;
@@ -413,18 +411,12 @@
   text-transform: uppercase;
   letter-spacing: 0.16em;
   overflow-wrap: anywhere;
-  box-shadow: var(--stats-control-shadow-active);
-  transition: opacity 160ms ease, transform 160ms ease, box-shadow 160ms ease;
-}
-
-.customRangeApply:hover:not(:disabled) {
-  transform: translateY(-1px);
+  transition: opacity 160ms ease, background-color 160ms ease, border-color 160ms ease, color 160ms ease;
 }
 
 .customRangeApply:disabled {
   cursor: not-allowed;
   opacity: 0.5;
-  transform: none;
 }
 
 .customRangeApply[aria-disabled="true"] {
@@ -471,10 +463,6 @@
   padding-left: 0.4375rem;
 }
 
-.heroViewToggle > button[aria-pressed="true"] {
-  transform: translateY(-1px);
-}
-
 .contextStrip {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
@@ -499,8 +487,8 @@
   justify-content: center;
   border: 1px solid var(--stats-border-hairline);
   border-radius: var(--stats-subpanel-radius);
-  color: var(--stats-accent-amber);
-  background: var(--stats-accent-amber-fill);
+  color: var(--stats-detail-color);
+  background: var(--stats-surface-chip);
 }
 
 .contextEyebrow,
@@ -557,7 +545,6 @@
   line-height: 1.2;
   text-transform: uppercase;
   letter-spacing: 0.14em;
-  box-shadow: var(--stats-subpanel-shadow);
 }
 
 .contextFact svg {
@@ -614,7 +601,6 @@
   line-height: 1.2;
   text-transform: uppercase;
   letter-spacing: 0.14em;
-  box-shadow: var(--stats-subpanel-shadow);
   overflow-wrap: anywhere;
 }
 
@@ -652,10 +638,9 @@
   align-items: center;
   justify-content: center;
   margin-bottom: 1.5rem;
-  border: 1px solid var(--border-hairline);
-  border-radius: 1rem;
-  background: var(--surface-glass);
-  box-shadow: var(--elevation-base);
+  border: 1px solid var(--stats-border-hairline);
+  border-radius: var(--stats-subpanel-radius);
+  background: var(--stats-surface-chip);
 }
 
 .stateMessageTitle {
@@ -671,7 +656,7 @@
 .stateMessageDescription {
   max-width: 24rem;
   margin: 0;
-  color: var(--text-metadata);
+  color: var(--stats-detail-color);
   font-size: 0.875rem;
   line-height: 1.6;
 }
@@ -846,9 +831,5 @@
   .customRangeApply,
   .heroViewToggle > button {
     transition: none;
-  }
-
-  .customRangeApply:hover:not(:disabled) {
-    transform: none;
   }
 }

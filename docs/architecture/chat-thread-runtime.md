@@ -17,6 +17,7 @@ The `ConversationRuntimeState` captures:
 - `workerEndpointId`: The identifier for the targeted live MCP worker when operating in connected mode.
 - `sessionIds`: An array of provider-native session IDs that track active context windows for the current worker.
 - `replayRequired`: A boolean indicating whether the active worker needs the entire thread history replayed on its next turn.
+- `createAppQuickaction`: Durable thread-scoped state for active chat app-creation quickactions, including the sprint id, app kind, planning status, progress widget message id, request ids, and queued follow-up messages.
 
 ### Connected vs Virtual Chat Routing
 
@@ -56,6 +57,37 @@ Virtual chat failures are terminal for that dashboard turn:
 
 Structured dashboard replies parse provider output defensively. Some CLI providers emit bootstrap logs around a JSON envelope and place the requested strict JSON inside an envelope field such as `response`. The chat runtime extracts fenced JSON, bare JSON, and nested provider-envelope `response` payloads before deciding a parse retry is required. While structured parsing is still pending, provider execution does not mark the parent execution invocation completed; the chat management layer finalizes it only after the structured reply is accepted or the retry flow has failed.
 
+### Create-App Quickaction Runtime
+
+Create-app dashboard quickactions are the narrow exception to normal routed provider replies. The dashboard posts a short visible user message first, then attaches structured metadata:
+
+- `metadata.quickaction.type = "create_app"`
+- canonical `kind` of `web_app` or `desktop_app`
+- stable `requestId`
+- quicksprint `templateId`
+- optional task count, stack summary, and suggestion tags
+
+The dashboard builds the stack summary and suggestion tags from the selected project's effective settings before posting the message. It uses the assigned techstack catalog entry when present, falls back to the catalog default when the project is unassigned, and forwards the stack item labels as suggestion tags so detached planning and the `app_progress` widget start from the same context the dashboard displays.
+
+`ChatThreadRuntimeService.postMessage` detects this metadata after the message is stored and before the normal in-flight provider turn is created. Valid create-app quickactions do not ask for confirmation, do not route through the dashboard reply provider, and do not create a `dashboard_reply` invocation. Instead, the runtime launches `QuicksprintService.launchDetachedQuicksprint` with `submitMode: "plan_and_start"` and passes the quickaction `requestId` as the planning `clientRequestId`.
+
+The detached launch creates the sprint synchronously and returns the planning request plus a completion promise while the planner continues in the background. The chat runtime then marks the quickaction message processed, posts an `app_progress` system message, and stores this slice on the thread:
+
+- `activeSprintId`
+- `appKind`
+- `planningStatus`
+- `quickactionRequestId`
+- `clientRequestId`
+- `activePlanningRequestId`
+- `progressMessageId`
+- `queuedFollowUps`
+- optional completion, failure, and error fields
+
+That state lives under `runtimeState.createAppQuickaction` and remains durable until it is superseded by another app-creation quickaction. The progress widget metadata carries the app kind, sprint identity, stack summary, planning stage statuses, suggestion tags, and request ids. Planning completion updates the widget status to `completed` or `failed` and clears only the matching active planning request marker.
+
+Plain chat messages posted in the same thread while create-app planning is running are treated as follow-up direction for the sprint. If the sprint has no tasks yet, the runtime stores those messages in `runtimeState.createAppQuickaction.queuedFollowUps`, marks them processed, and posts a system acknowledgement. When detached planning completes successfully, queued follow-ups are appended to the sprint-level goal under `## Additional direction from chat`; generated task prompts and already-created subtasks are not rewritten. If tasks already exist when a follow-up arrives, the same sprint-goal append happens immediately and the thread receives a confirmation. Failed planning keeps queued follow-up text in runtime state for recovery instead of discarding it.
+
+Because `ConnectionChatRepository.updateThread` replaces the whole `runtimeState` payload, create-app state updates re-read the latest thread before writing nested quickaction fields. Follow-up queue writes and planning-completion writes merge concurrent `queuedFollowUps`, `planningStatus`, and `activePlanningRequestId` changes rather than overwriting them with stale snapshots. After a follow-up is queued, the runtime re-checks sprint task count so direction posted as tasks materialize is flushed to the sprint immediately.
 JSON-mode dashboard replies may also include prompt suggestions for quick next steps. The accepted reply envelope remains backward compatible with `{ replyMarkdown, action }` and optionally accepts either `suggestions` or `promptSuggestions`, where each suggestion has `label`, `prompt`, and optional stable string `icon`/`id` fields. The management parser trims string fields, drops entries without non-empty labels and prompts, caps the stored list to six, and persists valid suggestions on the visible assistant/system message as `metadata.promptSuggestions`. Plain markdown MCP-native replies are not parsed for suggestions.
 
 ### First-Message Replay & Worker Switching

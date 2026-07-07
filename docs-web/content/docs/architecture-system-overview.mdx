@@ -51,7 +51,7 @@ The primary CLI/management entrypoint is `src/index.ts`, which loads configurati
 6. **Boot dashboard** — bind Express on `DASHBOARD_PORT`.
 7. **Boot MCP stdio transport** — connect to stdin/stdout if not a TTY.
 8. **Boot MCP HTTP transport** *(optional)* — bind the JSON-RPC HTTP listener.
-9. **Mark MCP service bound** — `/ready` flips to ready.
+9. **Mark MCP service bound and finish startup recovery** — `/ready` flips to ready after listener binding and runtime recovery complete.
 10. **Start background loops** — runtime cleanup (15 s), sprint preview reconciliation (15 s), live snapshot refresh (30 s).
 11. **Start virtual worker service** — begin reconcile cycle (3 s).
 

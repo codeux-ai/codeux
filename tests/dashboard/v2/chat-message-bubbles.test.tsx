@@ -330,6 +330,149 @@ describe("Chat Message Bubbles", () => {
       expect(getByText("Navigating solutions...")).toBeInTheDocument();
     });
 
+    it("renders planning_request widget metadata through the existing planning widget", () => {
+      const message: ChatMessageRecord = {
+        id: "msg_planning_request",
+        threadId: "thread_1",
+        direction: "connection_to_dashboard",
+        authorType: "system",
+        authorConnectionId: null,
+        bodyMarkdown: "Planning started",
+        deliveryStatus: "delivered",
+        createdAt: new Date().toISOString(),
+        metadata: {
+          widget_metadata: {
+            type: "planning_request",
+            status: "running",
+            route_path: "Existing Plan",
+          },
+        },
+      };
+
+      const { container } = render(<ChatMessageBubble message={message} />);
+      const view = within(container);
+
+      expect(view.getByText("Existing Plan")).toBeInTheDocument();
+      expect(view.getByText("Navigating solutions...")).toBeInTheDocument();
+      expect(view.queryByText("Showing each Task")).not.toBeInTheDocument();
+    });
+
+    it("renders a running app creation progress widget with stack and suggestion tags", () => {
+      const message: ChatMessageRecord = {
+        id: "msg_app_progress_running",
+        threadId: "thread_1",
+        direction: "connection_to_dashboard",
+        authorType: "system",
+        authorConnectionId: null,
+        bodyMarkdown: "Started a web app sprint.",
+        deliveryStatus: "delivered",
+        createdAt: new Date().toISOString(),
+        metadata: {
+          widget_metadata: {
+            type: "app_progress",
+            status: "running",
+            appKind: "web_app",
+            sprintName: "Create Web App",
+            stackSummary: {
+              techstackName: "Preact Fullstack",
+              framework: "Preact",
+              packageManager: "pnpm",
+            },
+            planningStages: [
+              { id: "planning", label: "Planning", status: "completed" },
+              { id: "plan", label: "Plan", status: "running" },
+              { id: "finish", label: "Finish", status: "pending" },
+            ],
+            suggestionTags: ["auth", "dashboard"],
+          },
+        },
+      };
+
+      const { container } = render(<ChatMessageBubble message={message} />);
+      const view = within(container);
+
+      expect(view.getByText("Web app sprint is being planned.")).toBeInTheDocument();
+      expect(view.getByText("Create Web App")).toBeInTheDocument();
+      expect(view.getByText("Preact Fullstack")).toBeInTheDocument();
+      expect(view.getByText("Preact")).toBeInTheDocument();
+      expect(view.getByText("pnpm")).toBeInTheDocument();
+      expect(view.getByText("Showing each Task")).toBeInTheDocument();
+      expect(view.getByText("auth")).toBeInTheDocument();
+      expect(view.getByText("dashboard")).toBeInTheDocument();
+      expect(container.textContent).not.toContain("appKind");
+      expect(container.textContent).not.toContain("stackSummary");
+    });
+
+    it("renders completed app creation progress without inventing raw metadata", () => {
+      const message: ChatMessageRecord = {
+        id: "msg_app_progress_completed",
+        threadId: "thread_1",
+        direction: "connection_to_dashboard",
+        authorType: "system",
+        authorConnectionId: null,
+        bodyMarkdown: "Completed desktop app sprint.",
+        deliveryStatus: "delivered",
+        createdAt: new Date().toISOString(),
+        metadata: {
+          widget_metadata: {
+            type: "app_progress",
+            status: "completed",
+            appKind: "desktop_app",
+            sprintName: "Create Desktop App",
+            planningStages: [
+              { id: "planning", label: "Planning", status: "completed" },
+              { id: "plan", label: "Plan", status: "completed" },
+              { id: "showing_tasks", label: "Showing each Task", status: "completed" },
+              { id: "start", label: "Start", status: "completed" },
+              { id: "finish", label: "Finish", status: "completed" },
+            ],
+            suggestionTags: [],
+          },
+        },
+      };
+
+      const { container } = render(<ChatMessageBubble message={message} />);
+      const view = within(container);
+
+      expect(view.getByText("Desktop app sprint is ready.")).toBeInTheDocument();
+      expect(view.getAllByText("Completed").length).toBeGreaterThanOrEqual(5);
+      expect(view.queryByLabelText("Suggested follow-up directions")).not.toBeInTheDocument();
+      expect(container.textContent).not.toContain("planningStages");
+    });
+
+    it("renders failed app creation progress with the failed backend-provided stage", () => {
+      const message: ChatMessageRecord = {
+        id: "msg_app_progress_failed",
+        threadId: "thread_1",
+        direction: "connection_to_dashboard",
+        authorType: "system",
+        authorConnectionId: null,
+        bodyMarkdown: "Create app quickaction failed.",
+        deliveryStatus: "delivered",
+        createdAt: new Date().toISOString(),
+        metadata: {
+          widget_metadata: {
+            type: "app_progress",
+            status: "failed",
+            appKind: "web_app",
+            sprintName: "Create Web App",
+            planningStages: [
+              { id: "planning", label: "Planning", status: "completed" },
+              { id: "plan", label: "Plan", status: "failed" },
+            ],
+            suggestionTags: ["retry-plan"],
+          },
+        },
+      };
+
+      const { container } = render(<ChatMessageBubble message={message} />);
+      const view = within(container);
+
+      expect(view.getByText("Web app sprint setup needs attention.")).toBeInTheDocument();
+      expect(view.getAllByText("Failed").length).toBeGreaterThan(0);
+      expect(view.getByText("retry-plan")).toBeInTheDocument();
+    });
+
     it("renders prompt suggestions alongside the planning widget for agent replies", () => {
       const message: ChatMessageRecord = {
         id: "msg_planning_suggestions",
@@ -774,6 +917,91 @@ describe("Chat Message Bubbles", () => {
       };
 
       const { container } = render(<InvocationMessageBubble message={message} />);
+      expect(container.textContent).toContain("Execution Plan");
+      expect(container.textContent).toContain("Preparing to plan...");
+    });
+
+    it("renders distinct persisted execution plans for different invocation planning messages", () => {
+      const firstMessage = createInvocationMessage({
+        id: "msg_plan_alpha",
+        contentMarkdown: "Planning transcript for alpha sprint",
+        metadata: {
+          routeKind: "virtual",
+          status: "completed",
+          executionPlan: {
+            sprintId: "sprint-alpha",
+            sprintNumber: 31,
+            sprintName: "Runtime Planning",
+            goal: "Make invocation planning cards sprint-specific.",
+            taskCount: 2,
+            createdTaskIds: ["task-alpha-1", "task-alpha-2"],
+            taskSummaries: [
+              { key: "T01", title: "Parse metadata execution plan", summary: "Use the selected invocation message metadata." },
+              { key: "T02", title: "Render alpha task summary", summary: "Expose alpha-specific task context." },
+            ],
+          },
+        },
+      });
+      const secondMessage = createInvocationMessage({
+        id: "msg_plan_beta",
+        contentMarkdown: "Planning transcript for beta sprint",
+        metadata: {
+          routeKind: "virtual",
+          status: "completed",
+          executionPlan: {
+            sprintId: "sprint-beta",
+            sprintNumber: 32,
+            sprintName: "Provider Recovery",
+            goal: "Make adjacent planning cards visually distinguishable.",
+            taskCount: 3,
+            createdTaskIds: ["task-beta-1", "task-beta-2", "task-beta-3"],
+            taskSummaries: [
+              { key: "T01", title: "Render beta task summary", summary: "Expose beta-specific task context." },
+              { key: "T02", title: "Keep markdown visible", summary: "Do not suppress invocation message content." },
+              { key: "T03", title: "Preserve fallback behavior", summary: "Legacy virtual routes still render safely." },
+            ],
+          },
+        },
+      });
+
+      const { container } = render(
+        <div>
+          <InvocationMessageBubble message={firstMessage} />
+          <InvocationMessageBubble message={secondMessage} />
+        </div>
+      );
+      const view = within(container);
+
+      expect(view.getByText("SPR-31")).toBeInTheDocument();
+      expect(view.getByText("Runtime Planning")).toBeInTheDocument();
+      expect(view.getByText("2 planned tasks")).toBeInTheDocument();
+      expect(view.getByText("Render alpha task summary")).toBeInTheDocument();
+      expect(view.getByText("Expose alpha-specific task context.")).toBeInTheDocument();
+
+      expect(view.getByText("SPR-32")).toBeInTheDocument();
+      expect(view.getByText("Provider Recovery")).toBeInTheDocument();
+      expect(view.getByText("3 planned tasks")).toBeInTheDocument();
+      expect(view.getByText("Render beta task summary")).toBeInTheDocument();
+      expect(view.getByText("Expose beta-specific task context.")).toBeInTheDocument();
+
+      expect(container.textContent).toContain("Planning transcript for alpha sprint");
+      expect(container.textContent).toContain("Planning transcript for beta sprint");
+    });
+
+    it("keeps legacy virtual route invocation planning fallback safe without execution plan metadata", () => {
+      const message = createInvocationMessage({
+        id: "msg_legacy_virtual",
+        contentMarkdown: "Legacy virtual route transcript",
+        metadata: {
+          routeKind: "virtual",
+          status: "queued",
+          executionPlan: "not-an-object",
+        },
+      });
+
+      const { container } = render(<InvocationMessageBubble message={message} />);
+
+      expect(container.textContent).toContain("Legacy virtual route transcript");
       expect(container.textContent).toContain("Execution Plan");
       expect(container.textContent).toContain("Preparing to plan...");
     });
@@ -1303,8 +1531,9 @@ describe("Chat Message Bubbles", () => {
 
   describe("WorkingBubble", () => {
     it("renders the starting phase label when phase is starting", () => {
-      const { getByText, container } = render(<WorkingBubble displayName="TestWorker" runtimeState={null} phase="starting" />);
-      expect(container.textContent).toContain("TestWorker is preparing a reply"); // fallback assert
+      const { container } = render(<WorkingBubble displayName="TestWorker" runtimeState={null} phase="starting" />);
+      expect(container.textContent).toContain("Starting");
+      expect(container.textContent).not.toContain("TestWorker is preparing a reply");
       // Ensure starting phase doesn't pulse the dots
       const dots = container.querySelectorAll('.h-1\\.5.w-4');
       dots.forEach(dot => {
@@ -1340,8 +1569,9 @@ describe("Chat Message Bubbles", () => {
     });
 
     it("renders the default listener pulsing message when not planning", () => {
-      const { getByText } = render(<WorkingBubble displayName="TestWorker" runtimeState={null} />);
-      expect(container.textContent).toContain("TestWorker is preparing a reply");
+      const { container } = render(<WorkingBubble displayName="TestWorker" runtimeState={null} />);
+      expect(container.textContent).toContain("Working");
+      expect(container.textContent).not.toContain("TestWorker is preparing a reply");
     });
 
     it("renders the starting phase label when phase is starting", () => {

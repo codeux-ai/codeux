@@ -19,6 +19,7 @@ import { AgentSelectAvatarIcon } from "../agents/AgentSelectAvatarIcon.js";
 import type { AgentAvatarConfig } from "../../types.js";
 import './kanban-task-card.css';
 import { getSafeUrl } from "../../lib/safe-url.js";
+import { SelfReflectionRatingBadge } from "./SelfReflectionRatingBadge.js";
 
 function getQaReviewBadge(task: Task, fallbackLabel: string): { label: string; ariaLabel: string; className: string } {
   if (!task.latestReview) {
@@ -68,7 +69,7 @@ export const KanbanTaskCard: FunctionComponent<{
   onDragStart?: (e: DragEvent) => void;
   onDragEnd?: (e: DragEvent) => void;
 }> = memo(({ viewModel, index = 0, onEdit, onDelete, agentPresetName, agentPresetAvatarConfig, isDragging = false, onDragStart, onDragEnd }) => {
-  const { task, humanizedCreatedAt, dependencyIndicators, sessionId, sessionState, prUrl, liveRunningTime, liveStartedAt } = viewModel;
+  const { task, humanizedCreatedAt, dependencyIndicators, selfReflectionRating, sessionId, sessionState, prUrl, liveRunningTime, liveStartedAt } = viewModel;
   const cardRef = useRef<HTMLDivElement>(null);
   const pri = PRIORITY_CFG[task.priority];
   const statusLabel = STATUS_CFG[task.status].label;
@@ -194,8 +195,8 @@ export const KanbanTaskCard: FunctionComponent<{
       <WaveFluid accentHex={STATUS_CFG[task.status].hex} />
       <BorderTrace accentHex={STATUS_CFG[task.status].hex} />
 
-      <div className="flex items-center justify-between mb-3 relative z-10">
-        <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-start justify-between gap-2 mb-3 relative z-10">
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
           <span className="font-mono text-[10px] font-bold text-slate-300 dark:text-slate-600 uppercase tracking-[0.1em]">
             {task.id.toUpperCase()}
           </span>
@@ -206,8 +207,15 @@ export const KanbanTaskCard: FunctionComponent<{
               {statusLabel}
             </span>
           </div>
+          {selfReflectionRating && (
+            <SelfReflectionRatingBadge
+              rating={selfReflectionRating}
+              position="bottom"
+              align="start"
+            />
+          )}
         </div>
-        <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[9px] font-bold uppercase tracking-[0.14em] ${pri.bg} ${pri.color}`}>
+        <div className={`flex shrink-0 items-center gap-1.5 px-2.5 py-1 rounded-full border text-[9px] font-bold uppercase tracking-[0.14em] ${pri.bg} ${pri.color}`}>
           <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${pri.dot}`} aria-hidden="true" />
           <span className="sr-only">Priority: </span>{pri.label}
         </div>

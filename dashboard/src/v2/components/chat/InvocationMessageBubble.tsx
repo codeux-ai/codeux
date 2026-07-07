@@ -15,6 +15,7 @@ import { ToolCallWidget } from "./widgets/ToolCallWidget.js";
 import { ReasoningWidget } from "./widgets/ReasoningWidget.js";
 import { SelfReflectionWidget } from "./widgets/SelfReflectionWidget.js";
 import { LiveEntityStatusWidget } from "./widgets/LiveEntityStatusWidget.js";
+import { AgentMoodAside, buildAgentMoodAsideSeed, resolveAgentMoodAsideText } from "./widgets/AgentMoodAside.js";
 import { ChatAvatar, type AvatarRole } from "./ChatAvatar.js";
 import type { ChatWidgetLiveData, ParsedTurnTokens } from "../../lib/chat-widget-view-models.js";
 import type { ChatLiveEntityWidget } from "../../lib/chat-live-entities.js";
@@ -130,12 +131,15 @@ export const InvocationMessageBubble: FunctionComponent<InvocationMessageBubbleP
   const liveEntitySlotClass = hasPrimaryWidget
     ? "mt-3"
     : widgetData.suppressBodyMarkdown ? "mt-0" : "mt-4 border-t border-white/5 pt-4";
+  const moodAsideText = message.role === "assistant"
+    ? resolveAgentMoodAsideText({
+        metadata: message.metadata,
+        seed: buildAgentMoodAsideSeed([message.id, message.contentMarkdown, senderName]),
+      })
+    : null;
 
   return (
     <div className={`flex ${fromUser || fromTool ? "justify-end" : "justify-start"}`}>
-      <span className="sr-only">
-        From {senderName} at {createdAtLabel}. {displayStatus ? `Status: ${displayStatus}.` : ""} {errorLabel ? `Error: ${errorLabel}.` : ""}
-      </span>
       <span className="sr-only">
         From {senderName} at {createdAtLabel}. {displayStatus ? `Status: ${displayStatus}.` : ""} {errorLabel ? `Error: ${errorLabel}.` : ""}
       </span>
@@ -192,6 +196,8 @@ export const InvocationMessageBubble: FunctionComponent<InvocationMessageBubbleP
             />
           )}
 
+          <AgentMoodAside text={moodAsideText} />
+
           {message.toolCallsJson && !kind && (
             <div className="mt-4 rounded border border-slate-200 bg-slate-200/30 p-3 text-xs dark:border-white/10 dark:bg-black/20">
               <pre className="overflow-x-auto whitespace-pre-wrap font-mono text-slate-600 dark:text-slate-400">
@@ -203,7 +209,12 @@ export const InvocationMessageBubble: FunctionComponent<InvocationMessageBubbleP
           {/* Widget Slot */}
           {widgetData.type === "planning" && (
             <div className="mt-4 border-t border-white/5 pt-4">
-              <PlanningRequestWidget status={widgetData.status} planName={widgetData.planName} liveStatus={widgetData.liveStatus} />
+              <PlanningRequestWidget
+                status={widgetData.status}
+                planName={widgetData.planName}
+                liveStatus={widgetData.liveStatus}
+                executionPlan={widgetData.executionPlan}
+              />
             </div>
           )}
           {widgetData.type === "external_reference" && widgetData.externalReference && (
