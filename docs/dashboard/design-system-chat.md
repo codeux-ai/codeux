@@ -28,8 +28,10 @@ The chat and invocation design system for the Code UX dashboard defines the layo
 - Seamless mode switching between standard "Threads" (user-facing chat) and "Invocations" (runtime debugging transcript).
 - Consistent padding and gap spacing to prevent layout jitter during these transitions.
 - The invocation rail renders the first 40 newest invocations by default, then lazy-loads additional pages as the user scrolls near the bottom of the rail. The rail header and mode tab use the backend `totalCount`, not the number of loaded rows, so long-running projects show the real invocation total while keeping initial load lightweight.
+- New project-scoped threads derive an 8-word-or-less title from the first visible user message. The title is stored with the thread and mirrored to `.code-ux/conversations/<thread-id>/session-title.md`; hidden/internal messages do not drive user-facing titles.
+- Prompt preparation includes a title-refresh instruction every 20 provider invocations so long-running conversations can refresh their title without interrupting the visible transcript.
 - The active thread header includes an inline title editor with explicit save and cancel controls. Enter saves, Escape cancels, empty titles are rejected locally, and pending/error states stay inside the header so the conversation transcript remains stable while the backend returns the updated thread record.
-- Thread rail title rows clamp to two stable lines and wrap long words so renamed threads stay readable without resizing the rail unpredictably.
+- Thread title text must remain readable without layout churn: active header titles wrap or truncate within their bounded header area, and thread rail title rows clamp to two stable lines with long-word wrapping so renamed threads do not resize the rail unpredictably.
 
 ## Accessibility
 - **Tab Navigation**: The mode switcher is a `role="tablist"` with unique `id`s for `role="tab"` elements, matching `aria-controls` to the underlying `role="tabpanel"` and `aria-labelledby` back to the tab. Roving `tabIndex` and arrow-key navigation are supported.
