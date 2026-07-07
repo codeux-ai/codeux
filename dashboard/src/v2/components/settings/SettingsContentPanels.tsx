@@ -17,7 +17,8 @@ import { SettingsActivePanelStatus } from "./SettingsActivePanelStatus.js";
 export const SettingsContentPanels: FunctionComponent<{
   state: SettingsPageState;
   stickyTop?: string;
-}> = ({ state, stickyTop = "9.5rem" }) => {
+  showActivePanelStatus?: boolean;
+}> = ({ state, stickyTop = "9.5rem", showActivePanelStatus = true }) => {
   const { activeCategory, activeDirty, activeSaving, error, saveMessage, loading, resettingProject } = state;
   const tokens = useInteractionTokens();
 
@@ -50,7 +51,7 @@ export const SettingsContentPanels: FunctionComponent<{
 
   return (
     <div aria-busy={activeSaving || loading || resettingProject ? "true" : undefined} data-reset-busy={resettingProject ? "true" : undefined} data-settings-state={error ? "error" : resettingProject ? "resetting" : activeSaving ? "saving" : activeDirty ? "dirty" : "saved"}>
-      <SettingsActivePanelStatus state={state} stickyTop={stickyTop} />
+      {showActivePanelStatus ? <SettingsActivePanelStatus state={state} stickyTop={stickyTop} /> : null}
       <ActionFeedbackRegion
         status={error ? "error" : loading || activeSaving || resettingProject ? "pending" : saveMessage ? "success" : activeDirty ? "warning" : "idle"}
         message={error || (loading ? "Loading settings without clearing current values..." : resettingProject ? "Resetting project overrides. Current values remain visible." : activeSaving ? "Saving settings. Current values remain visible." : saveMessage || (activeDirty ? "You have unsaved changes in this settings scope." : null))}
