@@ -18,6 +18,10 @@ import {
 } from "lucide-preact";
 import { formatTokenCount, shortenIdentifier } from "../../../lib/chat-widget-view-models.js";
 import type { ParsedTurnTokens } from "../../../lib/chat-widget-view-models.js";
+import {
+  classifyToolHumorCategory,
+  selectAgentHumorMessage,
+} from "../../../lib/agent-humor-messages.js";
 
 export interface ToolCallWidgetProps {
   toolName?: string | null;
@@ -30,6 +34,7 @@ export interface ToolCallWidgetProps {
 
 const OUTPUT_LINE_LIMIT = 16;
 const OUTPUT_CHAR_LIMIT = 1600;
+const HUMOR_MESSAGE_NOW_MS = 0;
 
 type ToolKind = "exec" | "edit" | "read" | "search" | "web" | "generic";
 
@@ -143,6 +148,12 @@ export const ToolCallWidget: FunctionComponent<ToolCallWidgetProps> = ({
   const name = toolName || "tool";
   const kind = classifyTool(name);
   const Icon = ICONS[kind];
+  const humorCategory = classifyToolHumorCategory(name);
+  const humorMessage = selectAgentHumorMessage({
+    category: humorCategory,
+    seed: `${name}|${callId ?? ""}|${status ?? ""}`,
+    nowMs: HUMOR_MESSAGE_NOW_MS,
+  });
   const summary = summarize(name, args);
   const totalTokens = tokens?.total ?? ((tokens?.input ?? 0) + (tokens?.output ?? 0));
   const hasDetails = Boolean((args && args.trim()) || (output && output.trim()));
@@ -164,6 +175,9 @@ export const ToolCallWidget: FunctionComponent<ToolCallWidgetProps> = ({
           <span class="flex items-center gap-2">
             <span class="font-mono text-[12px] font-semibold text-slate-700 dark:text-slate-200">{name}</span>
             <StatusBadge status={status} />
+          </span>
+          <span class="mt-0.5 line-clamp-2 text-[11px] leading-4 text-slate-500 dark:text-slate-400">
+            {humorMessage}
           </span>
           {summary && (
             <span class="truncate font-mono text-[11px] text-slate-500 dark:text-slate-400">{summary}</span>

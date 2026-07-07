@@ -43,6 +43,8 @@ Each post is a runtime operation that honors the explicit route chosen (worker r
 
 After you send a message, the thread transcript updates from the server's returned chat message. The **Invocations** rail updates separately from persisted server invocation records and realtime refreshes, so it shows only backend-confirmed invocation rows. The dashboard no longer inserts a frontend-only optimistic invocation placeholder while the backend is still creating the real row.
 
+While a reply or invocation container is active, the visible status line uses light deterministic humor instead of static `Initializing` or `Working` copy. These messages are keyed by the active agent, provider/model, and phase, and they remain stable for at least five seconds so live regions do not churn during rapid refreshes.
+
 In 3D Chat, idle quick actions send project-scoped prompts directly through the active thread. **Web App** and **Desktop App** set up the currently selected project using its current techstack setting; an unassigned existing project stays `None`. They do not create or import a new Code UX project.
 
 Planning messages can include a rich sprint status card. When Code UX can match the message to loaded live project data, the card is backed by the current task records and execution snapshot, so it updates as tasks move from queued to running, completed, failed, blocked, or quota-waiting. It shows the sprint key/name, request/task/run materialization, overall progress such as `0/7 · 0%`, queued task count, and a compact task list. If either task records or the execution snapshot are still loading, the chat keeps the generic planning status card until both live records are available for the active project.
@@ -92,6 +94,8 @@ The **Invocations** tab is a structured log of server-created execution invocati
 Use this for debugging provider runs and MCP client integrations, for example to inspect agent transcripts or see exactly what arguments your LLM is passing to tools like `manage_memory` or `manage_settings`.
 
 Invocation transcripts use the same live sprint status card as thread messages when planning metadata links them to a sprint. This means a planning invocation and its related chat message should show consistent task progress without a separate refresh control. Parsed provider conversation turns stream into running invocation transcripts for provider-backed planning, QA review, dashboard/chat replies, CI repair, merge-conflict repair, memory remediation, setup, and task coding; text-only provider output is appended when the run completes.
+
+Tool-call and reasoning transcript cards can include compact workplace-safe contextual lines, such as search or terminal quips for tool calls and a short thinking line for reasoning turns. These lines are adjunct UI only: the raw tool name, status, call id, token count, arguments, output, and expandable reasoning text remain available in the transcript.
 
 Invocation transcripts use the same external-reference cards as thread messages for recognized Jira, GitHub, and GitLab payloads, including JSON payloads that would otherwise appear as raw punctuation-heavy output. This keeps linked work readable while preserving the original backend metadata and message content.
 
