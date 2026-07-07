@@ -34,10 +34,20 @@ The category rail on the left includes:
 | **Skills** | Internal skill toggles (`git_manager_remote`, `git_manager_local`, etc.). |
 | **MCP tools** | Per-tool enable / disable. |
 | **Memory** | Active embedding model selection. |
+| **Agents** | Agent routing, markdown mirroring, persistent skill storage, storage attachments, and self-reflection criteria. |
 | **Appearance** | Theme, navigation mode override, dashboard density. |
 | **Limits** | `maxFailures` emergency stop threshold and other safety caps. |
 
 Each category opens one or more **content panels** with grouped fields. Inputs are typed (text, number with min/max, toggle, multi-select) and validate inline.
+
+## Agents settings
+
+The **Agents** category includes project markdown mirroring, agent routing, persistent skill storage, and self-reflection controls.
+
+- Persistent skill storage is project-scoped and separate from memory. Creating a storage does not enable runtime retrieval. Attach one or more storages to an agent, then enable persistent skills for that agent.
+- Storage deletion is destructive and requires confirmation because it removes stored skills, embeddings, and agent attachments.
+- Planning and QA self-reflection are disabled by default. Each loop has an enable toggle, editable criteria rows, per-criterion thresholds, and a max improvement attempts setting.
+- QA self-reflection also appears in the existing Quality Assurance settings area so review criteria can be edited alongside QA routing and review budgets.
 
 ## Saving & resetting
 

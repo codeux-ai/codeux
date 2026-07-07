@@ -80,6 +80,8 @@ When `memoryTemplateOverrideEnabled` is set, the preset's `memoryTemplateMarkdow
 
 ## Persistent skill storage
 
-The underlying agent preset contract can now attach an agent to one or more named persistent skill storage records. These records live in dedicated skill tables and are separate from project workspaces, memories, knowledge documents, and provider model attachments.
+The dashboard can attach an agent to one or more named persistent skill storage records. These records live in dedicated skill tables and are separate from project workspaces, memories, knowledge documents, and provider model attachments.
 
-This is storage groundwork only: the dashboard does not yet expose controls for editing these attachments, and runtime provider calls do not yet retrieve or mount skills from the stores.
+Create and delete project skill storages in **Settings → Agents**, then attach them from either the settings attachment matrix or the agent editor. Persistent skill retrieval stays **off by default**: an agent must have at least one storage attached and the explicit persistent skills toggle enabled before runtime retrieval can use it.
+
+The agent detail panel shows attached storage names and whether persistent skills are enabled. Empty storage state means no persistent skills are available for that agent; it does not affect ordinary memory or knowledge subscriptions.
