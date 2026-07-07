@@ -6,6 +6,8 @@ Defines the prompt appended to worker tasks so useful lessons are captured for m
 
 The text area controls exactly what workers are asked to observe and write into the temporary learnings file.
 
+The default template asks workers to keep reusable lessons under `## Category:` sections and optionally add a `## Self Reflection Rating` section. Rating sections use `Overall: N/5` plus bullets such as `- Implementation: 4/5 - note`; they are stored separately from memory entries.
+
 ## Recommended Defaults
 
 Keep instructions specific to reusable engineering lessons and avoid asking workers to record secrets.

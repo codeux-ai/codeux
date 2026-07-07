@@ -283,6 +283,23 @@ CREATE TABLE IF NOT EXISTS task_runs (
         FOREIGN KEY (connection_id) REFERENCES mcp_connections(id) ON DELETE SET NULL
       );
 
+CREATE TABLE IF NOT EXISTS task_self_reflection_ratings (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL,
+        sprint_id TEXT NOT NULL,
+        task_id TEXT NOT NULL,
+        source_task_run_id TEXT NOT NULL UNIQUE,
+        overall_rating REAL NOT NULL CHECK (overall_rating >= 0 AND overall_rating <= 5),
+        sections_json TEXT NOT NULL DEFAULT '[]',
+        captured_at TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+        FOREIGN KEY (sprint_id) REFERENCES sprints(id) ON DELETE CASCADE,
+        FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE,
+        FOREIGN KEY (source_task_run_id) REFERENCES task_runs(id) ON DELETE CASCADE
+      );
+
 CREATE TABLE IF NOT EXISTS task_run_events (
         id TEXT PRIMARY KEY,
         task_run_id TEXT NOT NULL,
@@ -824,6 +841,9 @@ CREATE INDEX IF NOT EXISTS idx_task_runs_dispatch ON task_runs (dispatch_id);
 CREATE INDEX IF NOT EXISTS idx_task_runs_task_sprint_session ON task_runs (task_id, sprint_run_id, session_id);
 CREATE INDEX IF NOT EXISTS idx_task_runs_project_sprint_lookup ON task_runs (project_id, sprint_id, sprint_run_id, id);
 CREATE INDEX IF NOT EXISTS idx_task_runs_project_sprint_run_lookup ON task_runs (project_id, sprint_run_id, id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_task_self_reflection_ratings_task_run ON task_self_reflection_ratings (source_task_run_id);
+CREATE INDEX IF NOT EXISTS idx_task_self_reflection_ratings_task_latest ON task_self_reflection_ratings (task_id, captured_at DESC, updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_task_self_reflection_ratings_project_task_latest ON task_self_reflection_ratings (project_id, task_id, captured_at DESC);
 CREATE INDEX IF NOT EXISTS idx_task_run_events_project_created ON task_run_events (project_id, created_at DESC, id DESC);
 CREATE INDEX IF NOT EXISTS idx_task_run_events_task_run_created_id ON task_run_events (task_run_id, created_at DESC, id DESC);
 CREATE INDEX IF NOT EXISTS idx_task_run_events_provider_activity_run_created ON task_run_events (task_run_id, created_at DESC, id DESC) WHERE event_type = 'provider_activity';

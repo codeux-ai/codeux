@@ -34,6 +34,7 @@ import { SprintRunLifecycleService } from "../../services/sprint-run-lifecycle-s
 import { DockerRuntimePruneService } from "../../services/docker-runtime-prune-service.js";
 import { DashboardRealtimeService } from "../../services/dashboard-realtime-service.js";
 import { MemoryRepository } from "../../repositories/memory-repository.js";
+import { TaskSelfReflectionRatingRepository } from "../../repositories/task-self-reflection-rating-repository.js";
 import { SchedulerRepository } from "../../repositories/scheduler-repository.js";
 import { SkillRepository } from "../../repositories/skill-repository.js";
 import { EmbeddingService } from "../../services/embedding-service.js";
@@ -101,6 +102,7 @@ export interface CoreDependencies {
   externalSettingsHints: ExternalSettingsHints;
   dashboardSettings: DashboardSettings;
   memoryRepository: MemoryRepository;
+  taskSelfReflectionRatingRepository: TaskSelfReflectionRatingRepository;
   schedulerRepository: SchedulerRepository;
   skillRepository: SkillRepository;
   embeddingService: EmbeddingService;
@@ -264,6 +266,7 @@ export function createCoreDependencies(
   );
   const activitySummary = new ActivitySummaryService();
   const memoryRepository = new MemoryRepository(appDbStorage);
+  const taskSelfReflectionRatingRepository = new TaskSelfReflectionRatingRepository(appDbStorage);
   const schedulerRepository = new SchedulerRepository(appDbStorage, dashboardRealtimeService);
   const skillRepository = new SkillRepository(appDbStorage);
   const embeddingService = new EmbeddingService();
@@ -349,6 +352,7 @@ export function createCoreDependencies(
     externalSettingsHints,
     dashboardSettings,
     memoryRepository,
+    taskSelfReflectionRatingRepository,
     schedulerRepository,
     skillRepository,
     embeddingService,
