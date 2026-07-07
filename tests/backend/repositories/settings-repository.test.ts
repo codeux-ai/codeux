@@ -4,7 +4,11 @@ import * as os from "os";
 import * as path from "path";
 import { DatabaseSync } from "node:sqlite";
 import { SettingsRepository } from "../../../src/repositories/settings-repository.js";
-import { CODEX_MODELS, DEFAULT_VIRTUAL_WORKER_MODELS } from "../../../src/repositories/settings-defaults.js";
+import {
+  BUILTIN_CODE_UX_TECHSTACK_ID,
+  CODEX_MODELS,
+  DEFAULT_VIRTUAL_WORKER_MODELS,
+} from "../../../src/repositories/settings-defaults.js";
 
 const tempDirs: string[] = [];
 const openRepos: SettingsRepository[] = [];
@@ -48,6 +52,24 @@ describe("SettingsRepository", () => {
     expect(system.defaults.automationLevel).toBe("SEMI_AUTO");
     expect(system.defaults.aiProvider.provider).toBe("jules");
     expect(system.defaults.aiProvider.providers.codex.model).toBe("gpt-5.5");
+    expect(system.techstackCatalog.defaultTechstackId).toBe(BUILTIN_CODE_UX_TECHSTACK_ID);
+    expect(system.techstackCatalog.entries).toEqual([
+      {
+        id: BUILTIN_CODE_UX_TECHSTACK_ID,
+        label: "Code UX Internal",
+        items: [
+          { id: "preact", label: "Preact" },
+          { id: "tanstack-router", label: "TanStack Router" },
+          { id: "gsap", label: "GSAP" },
+          { id: "three-js", label: "Three.js" },
+          { id: "lucide-icons", label: "Lucide Icons" },
+        ],
+      },
+    ]);
+    expect(system.defaults.techstack).toEqual({
+      selectedTechstackId: null,
+      applicationKind: null,
+    });
     expect(DEFAULT_VIRTUAL_WORKER_MODELS.codex).toBe("gpt-5.5");
     expect(CODEX_MODELS.slice(0, 4)).toEqual([
       "gpt-5.5",
@@ -95,6 +117,9 @@ describe("SettingsRepository", () => {
 
     const effectiveProject = repo.resolveProjectDashboardSettings("project-1");
     expect(effectiveProject.settings.aiProvider.providers.codex.apiKey).toBe("");
+    expect(effectiveProject.settings.techstackCatalog.defaultTechstackId).toBe(BUILTIN_CODE_UX_TECHSTACK_ID);
+    expect(effectiveProject.settings.techstack.selectedTechstackId).toBe(null);
+    expect(effectiveProject.settings.techstack.applicationKind).toBe(null);
     expect(effectiveProject.settings.git.githubToken).toBe("");
     expect(effectiveProject.sources["automationLevel"]).toBe("system");
   });
@@ -425,6 +450,82 @@ describe("SettingsRepository", () => {
     expect(effectiveSprint.settings.git.defaultBranch).toBe("develop");
     expect(effectiveSprint.settings.git.featureBranchPrefix).toBe("work/");
     expect(effectiveSprint.sources["sprintLoopSteps.watchLoop"]).toBe("sprint");
+  });
+
+  it("sanitizes malformed persisted techstack catalogs while preserving the built-in entry", async () => {
+    const { repo } = await createRepo();
+    const now = new Date().toISOString();
+    const db = repo.getDatabase();
+
+    db.prepare(`
+      INSERT INTO system_settings (id, payload, updated_at)
+      VALUES (1, ?, ?)
+    `).run(JSON.stringify({
+      techstackCatalog: {
+        defaultTechstackId: "missing-default",
+        entries: [
+          {
+            id: " custom-web ",
+            label: " Custom Web ",
+            items: [
+              { id: " react ", label: " React " },
+              { id: "react", label: "Duplicate React" },
+              { id: "", label: "Missing id" },
+              { id: "invalid id", label: "Invalid id" },
+            ],
+          },
+          {
+            id: BUILTIN_CODE_UX_TECHSTACK_ID,
+            label: "Overridden Built-in",
+            items: [{ id: "fake", label: "Fake" }],
+          },
+          {
+            id: "custom-web",
+            label: "Duplicate custom",
+            items: [],
+          },
+          {
+            id: "   ",
+            label: "Missing id",
+            items: [],
+          },
+        ],
+      },
+      defaults: {
+        techstack: {
+          selectedTechstackId: " custom-web ",
+          applicationKind: "web",
+        },
+      },
+    }), now);
+
+    const system = repo.getSystemSettings();
+
+    expect(system.techstackCatalog.defaultTechstackId).toBe(BUILTIN_CODE_UX_TECHSTACK_ID);
+    expect(system.techstackCatalog.entries).toEqual([
+      {
+        id: BUILTIN_CODE_UX_TECHSTACK_ID,
+        label: "Code UX Internal",
+        items: [
+          { id: "preact", label: "Preact" },
+          { id: "tanstack-router", label: "TanStack Router" },
+          { id: "gsap", label: "GSAP" },
+          { id: "three-js", label: "Three.js" },
+          { id: "lucide-icons", label: "Lucide Icons" },
+        ],
+      },
+      {
+        id: "custom-web",
+        label: "Custom Web",
+        items: [
+          { id: "react", label: "React" },
+        ],
+      },
+    ]);
+    expect(system.defaults.techstack).toEqual({
+      selectedTechstackId: "custom-web",
+      applicationKind: "web",
+    });
   });
 
   it("resets all scoped settings back to defaults", async () => {

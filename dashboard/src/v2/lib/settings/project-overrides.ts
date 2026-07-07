@@ -9,7 +9,7 @@ import type {
   SkillToggle,
   SystemSettings,
 } from "../../../types.js";
-import { cloneGuardrails, DEFAULT_DASHBOARD_SETTINGS } from "../../../lib/settings.js";
+import { cloneGuardrails, cloneTechstackCatalog, DEFAULT_DASHBOARD_SETTINGS } from "../../../lib/settings.js";
 import { getHintApiKey } from "./provider-instances.js";
 
 const cloneMemorySettings = (memory: ProjectSettings["memory"]): ProjectSettings["memory"] => ({
@@ -71,6 +71,10 @@ const cloneCustomMcpServers = (servers: CustomMcpServer[] = []): CustomMcpServer
   env: server.env ? { ...server.env } : undefined,
   providers: server.providers ? [...server.providers] : undefined,
 }));
+
+const cloneTechstackSelection = (techstack: ProjectSettings["techstack"]): ProjectSettings["techstack"] => ({
+  ...techstack,
+});
 
 export const cloneProjectProviders = (
   providers: ProjectSettings["aiProvider"]["providers"],
@@ -146,6 +150,7 @@ export const dashboardSettingsToProjectSettings = (settings: DashboardSettings):
     ...settings.automationInterventions,
   },
   aiProvider: cloneProjectAiProviderSettings(settings.aiProvider),
+  techstack: cloneTechstackSelection(settings.techstack),
   git: {
     githubMode: settings.git.githubMode,
     githubToken: settings.git.githubToken,
@@ -196,6 +201,7 @@ export const cloneProjectSettings = (settings: ProjectSettings): ProjectSettings
     ...settings.automationInterventions,
   },
   aiProvider: cloneProjectAiProviderSettings(settings.aiProvider),
+  techstack: cloneTechstackSelection(settings.techstack),
   git: {
     ...settings.git,
   },
@@ -238,6 +244,7 @@ export const cloneSystemSettings = (settings: SystemSettings): SystemSettings =>
     jira: settings.integrations.jira ? cloneJiraSettings(settings.integrations.jira) : defaultJiraSettings(),
     providers: cloneIntegrationProviders(settings.integrations.providers),
   },
+  techstackCatalog: cloneTechstackCatalog(settings.techstackCatalog),
   defaults: cloneProjectSettings(settings.defaults),
   mcpTools: cloneMcpTools(settings.mcpTools),
   customMcpServers: cloneCustomMcpServers(settings.customMcpServers),

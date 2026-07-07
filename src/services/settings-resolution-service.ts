@@ -9,6 +9,10 @@ import type {
   RestartSprintPolicy,
   RuntimeLogLevel,
   SkillToggle,
+  TechstackCatalogEntrySettings,
+  TechstackCatalogSettings,
+  TechstackItemSettings,
+  TechstackSelectionSettings,
 } from "../contracts/app-types.js";
 import type { SettingsRepository } from "../repositories/settings-repository.js";
 import type {
@@ -36,7 +40,16 @@ import {
 } from "../domain/settings/provider-config-utils.js";
 import { sanitizeCustomMcpServersWithDefaults, sanitizeMcpToolToggles } from "../mcp/mcp-tool-availability.js";
 import { DEFAULT_INSTRUCTION_TEMPLATES, INSTRUCTION_TEMPLATE_IDS, type InstructionTemplateId } from "../instructions/instruction-template-catalog.js";
-import { DEFAULT_AGENT_SELF_REFLECTION, DEFAULT_DASHBOARD_SETTINGS, DEFAULT_SKILLS, INTERNAL_SKILL_NAMES, INTERNAL_SKILL_SET } from "../repositories/settings-defaults.js";
+import {
+  BUILTIN_CODE_UX_TECHSTACK,
+  BUILTIN_CODE_UX_TECHSTACK_ID,
+  DEFAULT_AGENT_SELF_REFLECTION,
+  DEFAULT_DASHBOARD_SETTINGS,
+  DEFAULT_PROJECT_TECHSTACK,
+  DEFAULT_SKILLS,
+  INTERNAL_SKILL_NAMES,
+  INTERNAL_SKILL_SET,
+} from "../repositories/settings-defaults.js";
 
 function cloneSkills(skills: SkillToggle[]): SkillToggle[] {
   return skills.map((skill) => ({ ...skill }));
@@ -103,6 +116,40 @@ const sanitizeBackgroundPattern = (value: unknown): BackgroundPattern => {
 
 function cloneMcpTools(tools: McpToolToggle[]): McpToolToggle[] {
   return tools.map((tool) => ({ ...tool }));
+}
+
+function cloneUnknown(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map((entry) => cloneUnknown(entry));
+  }
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>).map(([key, nested]) => [key, cloneUnknown(nested)]),
+    );
+  }
+  return value;
+}
+
+function cloneTechstackItems(items: TechstackItemSettings[]): TechstackItemSettings[] {
+  return items.map((item) => ({ ...item }));
+}
+
+function cloneTechstackEntry(entry: TechstackCatalogEntrySettings): TechstackCatalogEntrySettings {
+  return {
+    ...entry,
+    items: cloneTechstackItems(entry.items),
+  };
+}
+
+function cloneTechstackCatalog(catalog: TechstackCatalogSettings): TechstackCatalogSettings {
+  return {
+    defaultTechstackId: catalog.defaultTechstackId,
+    entries: catalog.entries.map((entry) => cloneTechstackEntry(entry)),
+  };
+}
+
+function cloneTechstackSelection(selection: TechstackSelectionSettings): TechstackSelectionSettings {
+  return { ...selection };
 }
 
 function resolveEffectiveMcpTools(
@@ -234,9 +281,7 @@ function deepMerge<T>(base: T, patch: unknown): T {
   for (const [key, value] of Object.entries(patchRecord)) {
     const current = result[key];
     if (Array.isArray(value)) {
-      result[key] = value.map((entry) => (
-        entry && typeof entry === "object" ? JSON.parse(JSON.stringify(entry)) : entry
-      ));
+      result[key] = cloneUnknown(value);
       continue;
     }
     if (value && typeof value === "object") {
@@ -345,6 +390,85 @@ function sanitizeSkills(value: unknown, githubMode: DashboardSettings["git"]["gi
     .sort((left, right) => left.name.localeCompare(right.name));
 
   return [...internalSkills, ...customSkills];
+}
+
+const TECHSTACK_ID_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,79}$/;
+
+function isValidTechstackId(id: string): boolean {
+  return TECHSTACK_ID_PATTERN.test(id);
+}
+
+function sanitizeTechstackItem(value: unknown): TechstackItemSettings | null {
+  const input = toRecord(value);
+  const id = typeof input.id === "string" ? input.id.trim() : "";
+  const label = typeof input.label === "string" ? input.label.trim() : "";
+  if (!id || !label || !isValidTechstackId(id)) {
+    return null;
+  }
+  return { id, label };
+}
+
+function sanitizeTechstackEntry(value: unknown): TechstackCatalogEntrySettings | null {
+  const input = toRecord(value);
+  const id = typeof input.id === "string" ? input.id.trim() : "";
+  const label = typeof input.label === "string" ? input.label.trim() : "";
+  if (!id || !label || !isValidTechstackId(id)) {
+    return null;
+  }
+
+  const items: TechstackItemSettings[] = [];
+  const seenItems = new Set<string>();
+  if (Array.isArray(input.items)) {
+    for (const itemInput of input.items) {
+      const item = sanitizeTechstackItem(itemInput);
+      if (!item || seenItems.has(item.id)) {
+        continue;
+      }
+      items.push(item);
+      seenItems.add(item.id);
+    }
+  }
+
+  return { id, label, items };
+}
+
+function sanitizeTechstackCatalog(value: unknown): TechstackCatalogSettings {
+  const input = toRecord(value);
+  const entries: TechstackCatalogEntrySettings[] = [cloneTechstackEntry(BUILTIN_CODE_UX_TECHSTACK)];
+  const seenEntries = new Set<string>([BUILTIN_CODE_UX_TECHSTACK_ID]);
+
+  if (Array.isArray(input.entries)) {
+    for (const entryInput of input.entries) {
+      const entry = sanitizeTechstackEntry(entryInput);
+      if (!entry || seenEntries.has(entry.id)) {
+        continue;
+      }
+      entries.push(entry);
+      seenEntries.add(entry.id);
+    }
+  }
+
+  const defaultTechstackId = typeof input.defaultTechstackId === "string"
+    ? input.defaultTechstackId.trim()
+    : "";
+
+  return {
+    defaultTechstackId: seenEntries.has(defaultTechstackId) ? defaultTechstackId : BUILTIN_CODE_UX_TECHSTACK_ID,
+    entries,
+  };
+}
+
+function sanitizeTechstackSelection(value: unknown): TechstackSelectionSettings {
+  const input = toRecord(value);
+  const selectedTechstackId = typeof input.selectedTechstackId === "string"
+    ? input.selectedTechstackId.trim()
+    : "";
+  return {
+    selectedTechstackId: selectedTechstackId && isValidTechstackId(selectedTechstackId) ? selectedTechstackId : null,
+    applicationKind: input.applicationKind === "web" || input.applicationKind === "desktop"
+      ? input.applicationKind
+      : DEFAULT_PROJECT_TECHSTACK.applicationKind,
+  };
 }
 
 function sanitizeInstructionTemplates(value: unknown): Record<InstructionTemplateId, string> {
@@ -598,6 +722,7 @@ export function buildDefaultProjectSettings(externalHints?: ExternalSettingsHint
       ),
       invocationRouting: cloneInvocationRouting(aiProvider.invocationRouting),
     },
+    techstack: cloneTechstackSelection(DEFAULT_PROJECT_TECHSTACK),
     git: {
       githubMode: git.githubMode,
       githubToken: git.githubToken,
@@ -659,6 +784,7 @@ export function buildDefaultSystemSettings(externalHints?: ExternalSettingsHints
         apiToken: externalHints?.resolved.jiraToken || "",
       },
     },
+    techstackCatalog: cloneTechstackCatalog(DEFAULT_DASHBOARD_SETTINGS.techstackCatalog),
     defaults: buildDefaultProjectSettings(externalHints),
     mcpTools: cloneMcpTools(DEFAULT_DASHBOARD_SETTINGS.mcpTools),
     customMcpServers: sanitizeCustomMcpServersWithDefaults(
@@ -741,6 +867,7 @@ export function sanitizeProjectSettings(value: unknown, externalHints?: External
       ),
       invocationRouting: cloneInvocationRouting(aiProvider.invocationRouting),
     },
+    techstack: sanitizeTechstackSelection(input.techstack),
     git: {
       githubMode: git.githubMode,
       githubToken: git.githubToken,
@@ -801,6 +928,7 @@ export function sanitizeSystemSettings(value: unknown, externalHints?: ExternalS
   const runtime = toRecord(input.runtime);
   const integrations = normalizeSystemIntegrationProviders(input.integrations, externalHints);
   const integrationInput = toRecord(input.integrations);
+  const techstackCatalog = sanitizeTechstackCatalog(input.techstackCatalog ?? defaults.techstackCatalog);
   const jiraSettings = sanitizeJira(integrationInput.jira, {
     ...DEFAULT_DASHBOARD_SETTINGS.jira,
     apiToken: externalHints?.resolved.jiraToken || DEFAULT_DASHBOARD_SETTINGS.jira.apiToken,
@@ -879,6 +1007,7 @@ export function sanitizeSystemSettings(value: unknown, externalHints?: ExternalS
       gitlabToken: systemGitlabToken,
       jira: jiraSettings,
     },
+    techstackCatalog,
     defaults: defaultsInput,
     mcpTools: sanitizeMcpToolToggles(input.mcpTools ?? defaults.mcpTools).map((tool) => ({ ...tool })),
     customMcpServers: sanitizeCustomMcpServersWithDefaults(
@@ -1111,6 +1240,8 @@ export function resolveDashboardSettings(args: {
     automationLevel: sprintSettings.automationLevel,
     automationInterventions: { ...sprintSettings.automationInterventions },
     aiProvider: resolvedAiProvider,
+    techstackCatalog: cloneTechstackCatalog(args.systemSettings.techstackCatalog),
+    techstack: cloneTechstackSelection(sprintSettings.techstack),
     // GitHub/GitLab/Jira resolve through the scoped project/sprint settings, which
     // inherit the system integration values unless a project or sprint overrides
     // them. A blank scoped value falls back to the system integration value.
