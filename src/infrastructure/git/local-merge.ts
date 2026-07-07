@@ -136,6 +136,32 @@ async function gitRefExists(
   }
 }
 
+async function resolveTargetBranchStartPoint(
+  repoPath: string,
+  branch: string,
+  fallbackBranches: string[],
+  runner: LocalMergeRunner,
+): Promise<string | null> {
+  const candidateBranches = Array.from(new Set([
+    branch,
+    ...fallbackBranches,
+  ].map((candidate) => candidate.trim()).filter(Boolean)));
+
+  for (const candidate of candidateBranches) {
+    const candidateRefs = [
+      `refs/remotes/origin/${candidate}`,
+      `refs/heads/${candidate}`,
+    ];
+    for (const ref of candidateRefs) {
+      if (ref === `refs/heads/${branch}` || !(await gitRefExists(repoPath, ref, runner))) {
+        continue;
+      }
+      return ref;
+    }
+  }
+  return null;
+}
+
 async function gitCommitExists(
   repoPath: string,
   ref: string,
@@ -284,6 +310,7 @@ export async function mergeBranchLocally(args: {
   targetBranch: string;
   sourceBranch: string;
   commitMessage: string;
+  fallbackTargetBranches?: string[];
   runner?: LocalMergeRunner;
 }): Promise<LocalMergeResult> {
   const runner = args.runner ?? defaultRunner;
@@ -306,8 +333,19 @@ export async function mergeBranchLocally(args: {
     if (await gitRefExists(args.repoPath, `refs/heads/${targetBranch}`, runner)) {
       await runner("git", ["checkout", targetBranch], args.repoPath);
     } else {
-      await runner("git", ["checkout", "-B", targetBranch, sourceBranch], args.repoPath);
-      return { ok: true, conflict: false };
+      const startPoint = await resolveTargetBranchStartPoint(
+        args.repoPath,
+        targetBranch,
+        args.fallbackTargetBranches ?? [],
+        runner,
+      );
+      if (startPoint) {
+        await runner("git", ["branch", targetBranch, startPoint], args.repoPath);
+        await runner("git", ["checkout", targetBranch], args.repoPath);
+      } else {
+        await runner("git", ["checkout", "-B", targetBranch, sourceBranch], args.repoPath);
+        return { ok: true, conflict: false };
+      }
     }
   } catch (err) {
     return { ok: false, conflict: false, error: formatGitError(err) };
@@ -340,6 +378,7 @@ export async function mergeBranchLocallyInTemporaryWorktree(args: {
   targetBranch: string;
   sourceBranch: string;
   commitMessage: string;
+  fallbackTargetBranches?: string[];
   runner?: LocalMergeRunner;
 }): Promise<LocalMergeResult> {
   const runner = args.runner ?? defaultHostGitRunner;
@@ -362,8 +401,16 @@ export async function mergeBranchLocallyInTemporaryWorktree(args: {
   const targetExists = await gitRefExists(args.repoPath, `refs/heads/${targetBranch}`, runner);
   if (!targetExists) {
     try {
-      await runner("git", ["branch", targetBranch, sourceBranch], args.repoPath);
-      return { ok: true, conflict: false };
+      const startPoint = await resolveTargetBranchStartPoint(
+        args.repoPath,
+        targetBranch,
+        args.fallbackTargetBranches ?? [],
+        runner,
+      );
+      await runner("git", ["branch", targetBranch, startPoint ?? sourceBranch], args.repoPath);
+      if (!startPoint) {
+        return { ok: true, conflict: false };
+      }
     } catch (err) {
       return { ok: false, conflict: false, error: formatGitError(err) };
     }

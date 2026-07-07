@@ -82,11 +82,13 @@ Settings are evaluated in cascade: **Defaults → System → Project → Sprint*
   "gitMode": "remote" | "local",
   "executionMode": "DOCKER",
   "containerImage": "node:24-bookworm",
-  "containerSetupScriptPath": "string?"
+  "containerSetupScriptPath": "string?",
+  "containerMemoryLimitMb": 6144
 }
 ```
 
 Default `gitMode`: `remote`. Default `executionMode`: `DOCKER`.
+`containerMemoryLimitMb` is a MiB ceiling for every Docker-backed CLI provider container. Positive values are passed to Docker as both `--memory` and `--memory-swap`; set it to `0` to omit Docker memory flags.
 
 ## `sprintPreview`
 

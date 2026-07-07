@@ -567,6 +567,7 @@ export const DEFAULT_DASHBOARD_SETTINGS: DashboardSettings = {
     executionMode: "DOCKER",
     containerImage: "node:24-bookworm",
     containerSetupScriptPath: "",
+    containerMemoryLimitMb: 6144,
     containerCacheSetupScriptImage: true,
     containerInstallPlaywrightBrowsers: true,
     containerMountGitConfig: false,

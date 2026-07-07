@@ -223,6 +223,23 @@ const DockerRuntimeCard: FunctionComponent<{
         placeholder=".code-ux/container/setup.sh"
       />
     </Row>
+    <Row label="Container memory limit" description="Memory ceiling in MiB for all Docker-backed CLI provider containers. Use 0 to disable the cap." badge={getFieldBadge("cliWorkflow.containerMemoryLimitMb")}>
+      <NumberInput
+        value={settings.cliWorkflow.containerMemoryLimitMb}
+        min={0}
+        max={262144}
+        step={256}
+        aria-label="Container memory limit"
+        aria-description="Memory ceiling in MiB for all Docker-backed CLI provider containers. Use 0 to disable the cap."
+        onChange={(value) => update((current) => ({
+          ...current,
+          cliWorkflow: {
+            ...current.cliWorkflow,
+            containerMemoryLimitMb: value,
+          },
+        }))}
+      />
+    </Row>
     <Row label="Cache setup as image" description="Build and reuse a derived Docker image from the base image plus setup script contents." badge={getFieldBadge("cliWorkflow.containerCacheSetupScriptImage")}>
       <Toggle aria-label="Toggle setting" value={settings.cliWorkflow.containerCacheSetupScriptImage} onChange={() => update((current) => ({
         ...current,

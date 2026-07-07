@@ -450,6 +450,14 @@ const validateCliWorkflow = (
   }
   if (typeof value.containerImage !== "string") issues.push({ path: `${path}.containerImage`, message: "Expected a string" });
   if (typeof value.containerSetupScriptPath !== "string") issues.push({ path: `${path}.containerSetupScriptPath`, message: "Expected a string" });
+  if (
+    typeof value.containerMemoryLimitMb !== "number"
+    || !Number.isInteger(value.containerMemoryLimitMb)
+    || value.containerMemoryLimitMb < 0
+    || value.containerMemoryLimitMb > 262144
+  ) {
+    issues.push({ path: `${path}.containerMemoryLimitMb`, message: "Expected an integer between 0 and 262144" });
+  }
   if (typeof value.containerCacheSetupScriptImage !== "boolean") issues.push({ path: `${path}.containerCacheSetupScriptImage`, message: "Expected a boolean" });
   if (typeof value.containerInstallPlaywrightBrowsers !== "boolean") issues.push({ path: `${path}.containerInstallPlaywrightBrowsers`, message: "Expected a boolean" });
   if (typeof value.containerMountGitConfig !== "boolean") issues.push({ path: `${path}.containerMountGitConfig`, message: "Expected a boolean" });
