@@ -54,10 +54,9 @@ The new CLI is run via:
 Default behavior:
 
 - spawns `node dist/index.js --runtime-role worker-host`
-- enters the blocking `listen` loop for dashboard messages and queued dispatches
+- registers with the remote worker endpoint contract when `--server-url` is provided
+- polls `pull_task_dispatch` for queued worker dispatches across the configured project scope
 - polls the claimed session for progress and terminal state
-- generates dashboard replies through `generate_dashboard_reply`
-- posts replies through `post_listen_reply`
 - calls `cancel_local_dispatch` when `update_task_dispatch` returns `controlAction = "cancel"`
 
 Useful flags:
@@ -65,6 +64,7 @@ Useful flags:
 - `--connection-key`
 - `--display-name`
 - `--project-id`
+- `--active-project-id`
 - `--sprint-id`
 - `--server-url`
 - `--auth-token`
@@ -74,7 +74,17 @@ Useful flags:
 - `--server-arg`
 - `--server-cwd`
 
-Use `--server-url` to connect the worker control plane to the main Code UX Streamable HTTP gateway. Without it, the worker falls back to local-only control-plane behavior.
+Use `--server-url` to connect the worker control plane to the main Code UX Streamable HTTP gateway. `--auth-token` is required for authenticated server-mode gateways. Repeating `--project-id` binds one worker process to multiple projects, and repeating `--active-project-id` limits the current poll loop to the active subset without starting another worker process.
+
+Environment fallbacks:
+
+- `CODE_UX_WORKER_SERVER_URL`
+- `CODE_UX_WORKER_AUTH_TOKEN`
+- `MCP_HTTP_SERVER_URL`
+- `MCP_HTTP_AUTH_TOKEN`
+- `MCP_HTTPS_AUTH_TOKEN`
+
+The worker never logs bearer token values and does not send local provider credentials to the control plane.
 
 ## Execution Path
 
@@ -82,7 +92,7 @@ The worker does not reconstruct tasks from markdown.
 
 For each claimed dispatch:
 
-1. the main Code UX control plane returns a `task_dispatch` event through `listen`
+1. the main Code UX control plane returns a leased dispatch through `pull_task_dispatch`
 2. the worker executes the dispatch locally through `execute_worker_dispatch` on its worker-host runtime
 3. Code UX starts the existing provider flow through `TaskService.startSprintTask(...)`
 4. CLI providers keep using the existing Docker/worktree/CI path

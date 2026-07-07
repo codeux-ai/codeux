@@ -1,5 +1,17 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { loadWorkerConfig } from "../../../src/worker/worker-config.js";
+
+beforeEach(() => {
+  vi.stubEnv("CODE_UX_WORKER_SERVER_URL", undefined);
+  vi.stubEnv("CODE_UX_WORKER_AUTH_TOKEN", undefined);
+  vi.stubEnv("MCP_HTTP_SERVER_URL", undefined);
+  vi.stubEnv("MCP_HTTP_AUTH_TOKEN", undefined);
+  vi.stubEnv("MCP_HTTPS_AUTH_TOKEN", undefined);
+});
+
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
 
 describe("loadWorkerConfig", () => {
   it("builds worker-host server defaults", () => {
@@ -70,6 +82,25 @@ describe("loadWorkerConfig", () => {
     expect(config.serverCommand).toBe(process.execPath);
     expect(config.serverArgs).toContain("--runtime-role");
     expect(config.serverArgs).toContain("worker-host");
+  });
+
+  it("sources remote control-plane settings from worker environment variables", () => {
+    vi.stubEnv("CODE_UX_WORKER_SERVER_URL", "http://127.0.0.1:4445/mcp");
+    vi.stubEnv("CODE_UX_WORKER_AUTH_TOKEN", "worker-env-token");
+
+    const config = loadWorkerConfig(["node", "worker.js"]);
+
+    expect(config.controlPlaneUrl).toBe("http://127.0.0.1:4445/mcp");
+    expect(config.controlPlaneAuthToken).toBe("worker-env-token");
+  });
+
+  it("keeps explicit auth token flags ahead of environment fallbacks", () => {
+    vi.stubEnv("CODE_UX_WORKER_AUTH_TOKEN", "worker-env-token");
+    vi.stubEnv("MCP_HTTP_AUTH_TOKEN", "mcp-env-token");
+
+    const config = loadWorkerConfig(["node", "worker.js", "--auth-token", "flag-token"]);
+
+    expect(config.controlPlaneAuthToken).toBe("flag-token");
   });
 
   it("parses multi-project worker flags", () => {

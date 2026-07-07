@@ -4,6 +4,22 @@ A **virtual worker** is an ephemeral, on-demand agent process that handles work 
 
 This page describes the virtual worker lifecycle, provisioning model, execution modes, and attention-item handling.
 
+## External worker client
+
+Code UX also ships a headless external worker process at `dist/worker/index.js` and exposes it through the `codeux-worker` package bin. This worker is separate from the dashboard server: it connects to an authenticated Streamable HTTP MCP endpoint with `--server-url` and `--auth-token`, registers a stable worker endpoint, polls `pull_task_dispatch`, executes leased dispatches through a local worker-host command, and reports `RUNNING` plus terminal status through `update_task_dispatch`.
+
+External workers can cover multiple projects in one process by repeating `--project-id`. Repeating `--active-project-id` narrows the current poll loop to an active subset. The worker refuses to execute a dispatch unless the control plane returns a lease token, retries transient network failures with bounded backoff, and calls `cancel_local_dispatch` when the control plane returns a cancel action.
+
+Environment fallbacks are available for headless deployment:
+
+- `CODE_UX_WORKER_SERVER_URL`
+- `CODE_UX_WORKER_AUTH_TOKEN`
+- `MCP_HTTP_SERVER_URL`
+- `MCP_HTTP_AUTH_TOKEN`
+- `MCP_HTTPS_AUTH_TOKEN`
+
+Bearer tokens and local provider credentials remain local and are not logged by the worker client.
+
 ## Source
 
 `src/services/virtual-worker-service.ts` (~1000 LOC).
