@@ -17,6 +17,7 @@ import { OverrideBadge } from "../panels/SharedPanelComponents";
 import { SlidersHorizontal } from "lucide-preact";
 import type { SettingsSearchMatches } from "../../../lib/settings-search-index";
 import userEvent from "@testing-library/user-event";
+import { SettingsActivePanelStatus } from "../SettingsActivePanelStatus";
 import { SettingsContentPanels } from "../SettingsContentPanels";
 import { UnsavedChangesModal } from "../../ui/UnsavedChangesModal";
 import { ProviderInstanceCard } from "../ProviderInstanceCard";
@@ -513,6 +514,58 @@ describe("SettingsControls Accessibility", () => {
     expect(discardButton).toHaveAttribute("aria-busy", "true");
   });
 
+  it("SettingsActivePanelStatus renders the sticky active panel save state contract", () => {
+    render(
+      <SettingsActivePanelStatus
+        stickyTop="112px"
+        state={{
+          activeCategory: "models",
+          activeCategoryConfig: { label: "AI Models" },
+          activeDirty: true,
+          activeSaving: false,
+          error: null,
+          saveMessage: null,
+          loading: false,
+          resettingProject: false,
+        } as any}
+      />
+    );
+
+    expect(screen.getByRole("status")).toHaveAttribute("aria-live", "polite");
+    expect(screen.getByRole("status")).toHaveTextContent("AI Models settings have local unsaved changes.");
+    expect(screen.getByText("AI Models")).toBeInTheDocument();
+    expect(screen.getByText("Unsaved changes")).toBeInTheDocument();
+    const activePanelStrip = screen.getByText("Active panel").parentElement;
+    expect(activePanelStrip).toHaveAttribute("data-settings-sticky", "active-panel");
+    expect(activePanelStrip).toHaveClass("sticky", "top-[var(--settings-active-panel-top)]", "flex-wrap", "overflow-visible");
+    expect(activePanelStrip).toHaveStyle("--settings-active-panel-top: 112px");
+  });
+
+  it("SettingsActivePanelStatus can render inline without duplicating status logic", () => {
+    render(
+      <SettingsActivePanelStatus
+        sticky={false}
+        state={{
+          activeCategory: "general",
+          activeDirty: false,
+          activeSaving: false,
+          error: "Save failed",
+          saveMessage: null,
+          loading: false,
+          resettingProject: false,
+        } as any}
+      />
+    );
+
+    expect(screen.getByRole("alert")).toHaveAttribute("aria-live", "assertive");
+    expect(screen.getByRole("alert")).toHaveTextContent("General settings blocked: Save failed");
+    expect(screen.getByText("Blocked")).toBeInTheDocument();
+    const activePanelStrip = screen.getByText("Active panel").parentElement;
+    expect(activePanelStrip).not.toHaveAttribute("data-settings-sticky");
+    expect(activePanelStrip).not.toHaveClass("sticky", "top-[var(--settings-active-panel-top)]");
+    expect(activePanelStrip).not.toHaveStyle("--settings-active-panel-top: 9.5rem");
+  });
+
   it("SettingsContentPanels renders dirty-to-saving-to-saved feedback while keeping values mounted", async () => {
     const { rerender } = render(
       <SettingsContentPanels
@@ -535,6 +588,9 @@ describe("SettingsControls Accessibility", () => {
     expect(activePanelStrip).toHaveAttribute("data-settings-sticky", "active-panel");
     expect(activePanelStrip).toHaveClass("sticky", "top-[var(--settings-active-panel-top)]", "flex-wrap", "overflow-visible");
     expect(activePanelStrip).toHaveStyle("--settings-active-panel-top: 9.5rem");
+    const panelStatus = screen.getByText("General settings have local unsaved changes.");
+    expect(panelStatus).toHaveAttribute("role", "status");
+    expect(panelStatus).toHaveAttribute("aria-live", "polite");
     expect(screen.getByText("General panel values stay mounted").parentElement).toHaveAttribute("data-motion-contract", "enterExit");
     expect(screen.getByText("General panel values stay mounted").parentElement).toHaveClass("motion-reduce:animate-none");
 
