@@ -2,6 +2,7 @@ import { expect, test } from "vitest";
 import { buildTaskBoardSprintScopeState, buildTaskBoardViewModel } from "../../../dashboard/src/v2/lib/tasks/task-board-view-model.js";
 import type { Sprint, Task } from "../../../dashboard/src/v2/types.js";
 import type { ExecutionRuntimeEventSummary, ExecutionTaskDispatchSummary, Subtask } from "../../../dashboard/src/types.js";
+import type { TaskSelfReflectionRating } from "../../../src/contracts/task-self-reflection-types.js";
 
 function createMockTask(id: string, overrides: Partial<Task> = {}): Task {
   return {
@@ -23,6 +24,35 @@ function createMockTask(id: string, overrides: Partial<Task> = {}): Task {
     isIndependent: true,
     isMerged: false,
     mergeIndicator: null,
+    ...overrides,
+  };
+}
+
+function createRating(overrides: Partial<TaskSelfReflectionRating> = {}): TaskSelfReflectionRating {
+  return {
+    id: "rating-1",
+    projectId: "project-1",
+    sprintId: "sprint-1",
+    taskId: "task-1",
+    sourceTaskRunId: "run-1",
+    overallRating: 4.5,
+    sections: [
+      {
+        label: "Implementation",
+        normalizedLabel: "implementation",
+        rating: 4.5,
+        note: "Covered edge cases.",
+      },
+      {
+        label: "Scope control",
+        normalizedLabel: "scope_control",
+        rating: 4,
+        note: "Stayed focused.",
+      },
+    ],
+    capturedAt: "2026-07-07T00:00:00.000Z",
+    createdAt: "2026-07-07T00:00:00.000Z",
+    updatedAt: "2026-07-07T00:00:00.000Z",
     ...overrides,
   };
 }
@@ -263,6 +293,43 @@ test("buildTaskBoardViewModel reuses unchanged card view models across unrelated
 
   expect(next.taskViewModels.get("task-1")).toBe(initial.taskViewModels.get("task-1"));
   expect(next.taskViewModels.get("dep-1")).toBe(initial.taskViewModels.get("dep-1"));
+});
+
+test("buildTaskBoardViewModel refreshes card view models when self-reflection rating content changes", () => {
+  const task = createMockTask("task-1");
+  const initial = buildTaskBoardViewModel({
+    tasks: [task],
+    optimisticTasks: [],
+    statusFilter: "all",
+    priorityFilter: "all",
+    listWindow: 50,
+    taskScopeSprintId: "sprint-1",
+    taskDispatches: [],
+    recentEvents: [],
+    subtasks: [],
+  });
+  const ratedTask = createMockTask("task-1", {
+    selfReflectionRating: createRating({
+      overallRating: 4.5,
+    }),
+  });
+
+  const next = buildTaskBoardViewModel({
+    tasks: [ratedTask],
+    optimisticTasks: [],
+    statusFilter: "all",
+    priorityFilter: "all",
+    listWindow: 50,
+    taskScopeSprintId: "sprint-1",
+    taskDispatches: [],
+    recentEvents: [],
+    subtasks: [],
+    previousTaskViewModels: initial.taskViewModels,
+  });
+
+  expect(next.taskViewModels.get("task-1")).not.toBe(initial.taskViewModels.get("task-1"));
+  expect(next.taskViewModels.get("task-1")?.selfReflectionRating?.overallRating).toBe(4.5);
+  expect(next.taskViewModels.get("task-1")?.selfReflectionRating?.sections).toHaveLength(2);
 });
 
 test("buildTaskBoardViewModel handles empty states", () => {

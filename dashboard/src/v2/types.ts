@@ -141,6 +141,7 @@ import type {
   UpdateChatProviderChannelBindingInput,
   UpdateChatProviderConnectionInput,
 } from "../../../src/contracts/chat-provider-types.js";
+import type { TaskSelfReflectionRating } from "../../../src/contracts/task-self-reflection-types.js";
 
 export interface SegmentDefinition {
   label: string;
@@ -232,6 +233,7 @@ export interface Task {
   isIndependent: boolean;
   isMerged: boolean;
   latestReview?: SprintReviewSummary;
+  selfReflectionRating?: TaskSelfReflectionRating;
   mergeIndicator: string | null;
   isOptimistic?: boolean;
 }
