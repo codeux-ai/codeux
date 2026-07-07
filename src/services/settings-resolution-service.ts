@@ -29,6 +29,7 @@ import { sanitizeSprintLoopSteps } from "../domain/settings/settings-sanitizers/
 import { sanitizeMemory } from "../domain/settings/settings-sanitizers/memory-sanitizer.js";
 import { sanitizeModelPricing } from "../domain/settings/settings-sanitizers/model-pricing-sanitizer.js";
 import { sanitizeWorkers } from "../domain/settings/settings-sanitizers/worker-sanitizer.js";
+import { sanitizeExternalImporterSettings } from "../repositories/settings-sanitizer.js";
 import {
   buildDashboardProviderSettings,
   buildDefaultIntegrationProviders,
@@ -615,6 +616,13 @@ export function buildDefaultProjectSettings(externalHints?: ExternalSettingsHint
       ...DEFAULT_DASHBOARD_SETTINGS.jira,
       apiToken: externalHints?.resolved.jiraToken || DEFAULT_DASHBOARD_SETTINGS.jira.apiToken,
     }),
+    notion: { ...DEFAULT_DASHBOARD_SETTINGS.notion },
+    asana: { ...DEFAULT_DASHBOARD_SETTINGS.asana },
+    linear: { ...DEFAULT_DASHBOARD_SETTINGS.linear },
+    miro: { ...DEFAULT_DASHBOARD_SETTINGS.miro },
+    lucid: { ...DEFAULT_DASHBOARD_SETTINGS.lucid },
+    figma: { ...DEFAULT_DASHBOARD_SETTINGS.figma },
+    mural: { ...DEFAULT_DASHBOARD_SETTINGS.mural },
     ciIntelligence: sanitizeCiIntelligence(DEFAULT_DASHBOARD_SETTINGS, git.githubMode),
     guardrails: sanitizeGuardrails(DEFAULT_DASHBOARD_SETTINGS),
     sprintLoopSteps: sanitizeSprintLoopSteps(DEFAULT_DASHBOARD_SETTINGS),
@@ -658,6 +666,13 @@ export function buildDefaultSystemSettings(externalHints?: ExternalSettingsHints
         ...DEFAULT_DASHBOARD_SETTINGS.jira,
         apiToken: externalHints?.resolved.jiraToken || "",
       },
+      notion: { ...DEFAULT_DASHBOARD_SETTINGS.notion },
+      asana: { ...DEFAULT_DASHBOARD_SETTINGS.asana },
+      linear: { ...DEFAULT_DASHBOARD_SETTINGS.linear },
+      miro: { ...DEFAULT_DASHBOARD_SETTINGS.miro },
+      lucid: { ...DEFAULT_DASHBOARD_SETTINGS.lucid },
+      figma: { ...DEFAULT_DASHBOARD_SETTINGS.figma },
+      mural: { ...DEFAULT_DASHBOARD_SETTINGS.mural },
     },
     defaults: buildDefaultProjectSettings(externalHints),
     mcpTools: cloneMcpTools(DEFAULT_DASHBOARD_SETTINGS.mcpTools),
@@ -691,6 +706,13 @@ export function sanitizeProjectSettings(value: unknown, externalHints?: External
     ...DEFAULT_DASHBOARD_SETTINGS.jira,
     apiToken: externalHints?.resolved.jiraToken || DEFAULT_DASHBOARD_SETTINGS.jira.apiToken,
   });
+  const notion = sanitizeExternalImporterSettings(input.notion ?? integrationsInput.notion, DEFAULT_DASHBOARD_SETTINGS.notion);
+  const asana = sanitizeExternalImporterSettings(input.asana ?? integrationsInput.asana, DEFAULT_DASHBOARD_SETTINGS.asana);
+  const linear = sanitizeExternalImporterSettings(input.linear ?? integrationsInput.linear, DEFAULT_DASHBOARD_SETTINGS.linear);
+  const miro = sanitizeExternalImporterSettings(input.miro ?? integrationsInput.miro, DEFAULT_DASHBOARD_SETTINGS.miro);
+  const lucid = sanitizeExternalImporterSettings(input.lucid ?? integrationsInput.lucid, DEFAULT_DASHBOARD_SETTINGS.lucid);
+  const figma = sanitizeExternalImporterSettings(input.figma ?? integrationsInput.figma, DEFAULT_DASHBOARD_SETTINGS.figma);
+  const mural = sanitizeExternalImporterSettings(input.mural ?? integrationsInput.mural, DEFAULT_DASHBOARD_SETTINGS.mural);
   const aiProvider = sanitizeAiProvider(aiInput, {
     externalHints,
     integrationProviders,
@@ -755,6 +777,13 @@ export function sanitizeProjectSettings(value: unknown, externalHints?: External
       prDescription: git.prDescription,
     },
     jira,
+    notion,
+    asana,
+    linear,
+    miro,
+    lucid,
+    figma,
+    mural,
     ciIntelligence: sanitizeCiIntelligence({
       ...DEFAULT_DASHBOARD_SETTINGS,
       ciIntelligence: deepMerge(DEFAULT_DASHBOARD_SETTINGS.ciIntelligence, input.ciIntelligence),
@@ -805,6 +834,13 @@ export function sanitizeSystemSettings(value: unknown, externalHints?: ExternalS
     ...DEFAULT_DASHBOARD_SETTINGS.jira,
     apiToken: externalHints?.resolved.jiraToken || DEFAULT_DASHBOARD_SETTINGS.jira.apiToken,
   });
+  const notionSettings = sanitizeExternalImporterSettings(integrationInput.notion, DEFAULT_DASHBOARD_SETTINGS.notion);
+  const asanaSettings = sanitizeExternalImporterSettings(integrationInput.asana, DEFAULT_DASHBOARD_SETTINGS.asana);
+  const linearSettings = sanitizeExternalImporterSettings(integrationInput.linear, DEFAULT_DASHBOARD_SETTINGS.linear);
+  const miroSettings = sanitizeExternalImporterSettings(integrationInput.miro, DEFAULT_DASHBOARD_SETTINGS.miro);
+  const lucidSettings = sanitizeExternalImporterSettings(integrationInput.lucid, DEFAULT_DASHBOARD_SETTINGS.lucid);
+  const figmaSettings = sanitizeExternalImporterSettings(integrationInput.figma, DEFAULT_DASHBOARD_SETTINGS.figma);
+  const muralSettings = sanitizeExternalImporterSettings(integrationInput.mural, DEFAULT_DASHBOARD_SETTINGS.mural);
 
   const dashboardPort = typeof runtime.dashboardPort === "number" ? runtime.dashboardPort : defaults.runtime.dashboardPort;
   const legacyConsoleLogMode = runtime.consoleLogLevel === "full" || runtime.consoleLogLevel === "standard"
@@ -857,6 +893,13 @@ export function sanitizeSystemSettings(value: unknown, externalHints?: ExternalS
       githubToken: systemGithubToken,
       gitlabToken: systemGitlabToken,
       jira: jiraSettings,
+      notion: notionSettings,
+      asana: asanaSettings,
+      linear: linearSettings,
+      miro: miroSettings,
+      lucid: lucidSettings,
+      figma: figmaSettings,
+      mural: muralSettings,
     },
   }, externalHints);
 
@@ -878,6 +921,13 @@ export function sanitizeSystemSettings(value: unknown, externalHints?: ExternalS
       githubToken: systemGithubToken,
       gitlabToken: systemGitlabToken,
       jira: jiraSettings,
+      notion: notionSettings,
+      asana: asanaSettings,
+      linear: linearSettings,
+      miro: miroSettings,
+      lucid: lucidSettings,
+      figma: figmaSettings,
+      mural: muralSettings,
     },
     defaults: defaultsInput,
     mcpTools: sanitizeMcpToolToggles(input.mcpTools ?? defaults.mcpTools).map((tool) => ({ ...tool })),
@@ -1129,6 +1179,13 @@ export function resolveDashboardSettings(args: {
       closeTransitionName: sprintSettings.jira.closeTransitionName || systemJira.closeTransitionName,
       autoCloseLinkedIssues: sprintSettings.jira.autoCloseLinkedIssues,
     },
+    notion: { ...sprintSettings.notion },
+    asana: { ...sprintSettings.asana },
+    linear: { ...sprintSettings.linear },
+    miro: { ...sprintSettings.miro },
+    lucid: { ...sprintSettings.lucid },
+    figma: { ...sprintSettings.figma },
+    mural: { ...sprintSettings.mural },
     ciIntelligence: { ...sprintSettings.ciIntelligence },
     guardrails: {
       ...sprintSettings.guardrails,

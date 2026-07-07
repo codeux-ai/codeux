@@ -1,4 +1,5 @@
 import type { TaskPrTemplateSections, SprintPrTemplateSections, TaskPrSectionKey, SprintPrSectionKey } from "../../../contracts/app-types.js";
+import type { LinkedIssueProvider } from "../../../contracts/project-management-types.js";
 import { formatCostUsd, formatDurationMs, formatIsoTimestamp, formatTokenCount, providerDisplayName } from "./pr-description-format-utils.js";
 
 export type { TaskPrTemplateSections, SprintPrTemplateSections, TaskPrSectionKey, SprintPrSectionKey };
@@ -88,7 +89,7 @@ export interface SprintPrSubtaskSummary {
 }
 
 export interface SprintPrLinkedIssueSummary {
-  provider: "github" | "gitlab" | "jira";
+  provider: LinkedIssueProvider;
   issueKey?: string | null;
   issueNumber?: number | null;
   title: string;
@@ -239,7 +240,8 @@ function sprintProviderStatsLine(subtasks: SprintPrSubtaskSummary[]): string {
 function linkedIssueProviderLabel(provider: SprintPrLinkedIssueSummary["provider"]): string {
   if (provider === "github") return "GitHub";
   if (provider === "gitlab") return "GitLab";
-  return "Jira";
+  if (provider === "jira") return "Jira";
+  return provider.charAt(0).toUpperCase() + provider.slice(1);
 }
 
 function linkedIssueReference(issue: SprintPrLinkedIssueSummary): string {

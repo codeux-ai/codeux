@@ -74,6 +74,42 @@ Issue import uses the saved integration tokens:
 
 When the GitHub token is empty, GitHub issue search, issue context loading, and auto-close fail with a token-required error. Code UX does not fall back to local `gh` or `glab` CLI authentication for dashboard or MCP importer workflows; Docker auth-copy mount settings help worker containers, but issue search, explicit import, linked sprint attachment, planning imports, and close operations need saved GitHub/GitLab tokens.
 
+## Project-Management And Canvas Integration Settings
+
+Code UX now carries shared typed settings for additional importer providers: Notion, Asana, Linear, Miro, Lucid, Figma, and Mural. These settings are available at system scope, project scope, sprint effective-settings resolution, and the dashboard type contracts. Jira continues to use the existing `jira` settings block, and GitHub/GitLab continue to use `git.githubToken` and `git.gitlabToken`.
+
+Each new provider settings block stores only strings and a bounded numeric search limit:
+
+- `enabled`
+- `apiToken`
+- `apiSecret`
+- `baseUrl`
+- `workspaceId`
+- `teamId`
+- `teamKey`
+- `projectId`
+- `databaseId`
+- `boardId`
+- `documentId`
+- `fileKey`
+- `defaultSearchLimit`
+
+The fields are intentionally generic across project-management and collaborative-canvas systems. Provider-specific importer UI can use only the identifiers it needs, while reset, save, sanitize, and effective-settings preview paths preserve the complete block.
+
+## Linked Source Persistence
+
+Persisted sprint scope can represent both numeric repository issues and non-numeric external objects.
+
+GitHub, GitLab, and Jira imports keep the existing numeric behavior: linked rows store `provider`, `hostDomain`, `repository`, `issueNumber`, `issueKey`, title, URL, state, labels, assignees, close state, and timestamps. The numeric uniqueness key remains scoped by sprint/provider/host/repository/issue number, so existing prompt context, auto-close, and PR description summaries continue to work.
+
+New linked-source providers can omit `issueNumber` and instead store:
+
+- `externalId`: the provider object id, such as a Notion page id, Linear issue id, Figma file key, or Miro board id.
+- `sourceKind`: the object category, such as `issue`, `task`, `page`, `database`, `board`, `document`, `file`, or `canvas`.
+- `sourceProvider`: the provider name surfaced through backend and dashboard contracts.
+
+The database has nullable `external_id` and `source_kind` columns plus a unique external-source index for sprint/provider/host/repository/external id. Existing rows migrate without changing their numeric issue identity.
+
 ## Jira Issue Import
 
 Use `Import -> Jira Issues` to search Jira with guided filters, multi-select issues, and attach them to the sprint composer. The Jira modal opens on the common search path first: project key, exact issue key lookup, free-text search, status, sort field, sort direction, a bounded result limit, and a `Hide in Work` visibility checkbox. The default view calls out the normal open-issues, recently-updated-first behavior, active filter summary, visible result count, selected linked count, selected special-task count, and selected issue cards with their current mode.

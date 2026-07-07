@@ -26,6 +26,7 @@ import type {
   RestartInvocationPolicy,
   RestartSprintPolicy,
   JiraSettings,
+  ExternalImporterSettings,
 } from "./app-types.js";
 import type { MemorySettings } from "./memory-types.js";
 import type { WorkerRuntimeSettings } from "./worker-types.js";
@@ -78,6 +79,13 @@ export interface ProjectSettings {
   aiProvider: ProjectAiProviderSettings;
   git: ProjectGitSettings;
   jira: JiraSettings;
+  notion: ExternalImporterSettings;
+  asana: ExternalImporterSettings;
+  linear: ExternalImporterSettings;
+  miro: ExternalImporterSettings;
+  lucid: ExternalImporterSettings;
+  figma: ExternalImporterSettings;
+  mural: ExternalImporterSettings;
   ciIntelligence: CiIntelligenceSettings;
   guardrails: GuardrailSettings;
   sprintLoopSteps: DashboardSettings["sprintLoopSteps"];
@@ -142,6 +150,13 @@ export interface SystemIntegrationSettings {
   githubToken: string;
   gitlabToken?: string;
   jira: JiraSettings;
+  notion: ExternalImporterSettings;
+  asana: ExternalImporterSettings;
+  linear: ExternalImporterSettings;
+  miro: ExternalImporterSettings;
+  lucid: ExternalImporterSettings;
+  figma: ExternalImporterSettings;
+  mural: ExternalImporterSettings;
 }
 
 export interface QwenModelProviderSettings {

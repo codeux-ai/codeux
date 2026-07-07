@@ -819,6 +819,24 @@ export interface JiraSettings {
   closeTransitionName: string; // transition name for closing, default "Done"
 }
 
+export type ExternalImporterProvider = "notion" | "asana" | "linear" | "miro" | "lucid" | "figma" | "mural";
+
+export interface ExternalImporterSettings {
+  enabled: boolean;
+  apiToken: string;
+  apiSecret: string;
+  baseUrl: string;
+  workspaceId: string;
+  teamId: string;
+  teamKey: string;
+  projectId: string;
+  databaseId: string;
+  boardId: string;
+  documentId: string;
+  fileKey: string;
+  defaultSearchLimit: number;
+}
+
 export interface CiIntelligenceSettings {
   enabled: boolean;
   enableLivePrMonitoring: boolean;
@@ -1147,6 +1165,13 @@ export interface DashboardSettings {
   aiProvider: AiProviderSettings;
   git: GitSettings;
   jira: JiraSettings;
+  notion: ExternalImporterSettings;
+  asana: ExternalImporterSettings;
+  linear: ExternalImporterSettings;
+  miro: ExternalImporterSettings;
+  lucid: ExternalImporterSettings;
+  figma: ExternalImporterSettings;
+  mural: ExternalImporterSettings;
   ciIntelligence: CiIntelligenceSettings;
   guardrails: GuardrailSettings;
   sprintLoopSteps: SprintLoopStepSettings;

@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { cloneDefaults, sanitizeSettings } from "../../../src/repositories/settings-sanitizer.js";
+import { cloneSystemSettings } from "../../../dashboard/src/v2/lib/settings/project-overrides.js";
+import { buildDefaultSystemSettings } from "../../../src/services/settings-resolution-service.js";
 
 describe("settings-sanitizer", () => {
   it("clones defaults using resolved external hints", () => {
@@ -38,6 +40,21 @@ describe("settings-sanitizer", () => {
     expect(settings.aiProvider.providers.codex.apiKey).toBe("resolved-codex");
     expect(settings.aiProvider.providers["claude-code"].apiKey).toBe("resolved-claude");
     expect(settings.git.githubToken).toBe("resolved-github");
+    expect(settings.notion).toEqual({
+      enabled: false,
+      apiToken: "",
+      apiSecret: "",
+      baseUrl: "",
+      workspaceId: "",
+      teamId: "",
+      teamKey: "",
+      projectId: "",
+      databaseId: "",
+      boardId: "",
+      documentId: "",
+      fileKey: "",
+      defaultSearchLimit: 25,
+    });
     expect(settings.agents.saveToProjectDirectory).toBe(true);
     expect(settings.agents.instructionTemplates.planningMissing).toContain("Sprint Planning Missing");
   });
@@ -153,6 +170,71 @@ describe("settings-sanitizer", () => {
     expect(settings.skills.find((skill) => skill.name === "custom-skill")?.isInternal).toBe(false);
     expect(settings.mcpTools.find((tool) => tool.name === "manage_tasks")?.enabled).toBe(false);
     expect(settings.memory.enabled).toBe(true);
+    expect(settings.notion).toMatchObject({
+      enabled: false,
+      apiToken: "",
+      defaultSearchLimit: 25,
+    });
+  });
+
+  it("sanitizes malformed external importer settings", () => {
+    const settings = sanitizeSettings({
+      notion: {
+        enabled: "definitely",
+        apiToken: 42,
+        apiSecret: ["bad"],
+        baseUrl: "https://api.notion.test/",
+        workspaceId: 17,
+        defaultSearchLimit: 1000,
+      },
+      figma: {
+        enabled: true,
+        apiToken: " figma-token ",
+        fileKey: " file-key ",
+        defaultSearchLimit: 0,
+      },
+    });
+
+    expect(settings.notion).toMatchObject({
+      enabled: false,
+      apiToken: "",
+      apiSecret: "",
+      baseUrl: "https://api.notion.test",
+      workspaceId: "",
+      defaultSearchLimit: 250,
+    });
+    expect(settings.figma).toMatchObject({
+      enabled: true,
+      apiToken: "figma-token",
+      fileKey: "file-key",
+      defaultSearchLimit: 25,
+    });
+  });
+
+  it("deep-clones external importer settings in project override helpers", () => {
+    const systemSettings = buildDefaultSystemSettings({
+      env: {},
+      settingsJson: {},
+      resolved: {},
+    });
+    systemSettings.integrations.notion = {
+      ...systemSettings.integrations.notion,
+      enabled: true,
+      apiToken: "notion-token",
+      databaseId: "database-1",
+    };
+    systemSettings.defaults.figma = {
+      ...systemSettings.defaults.figma,
+      enabled: true,
+      fileKey: "figma-file",
+    };
+
+    const cloned = cloneSystemSettings(systemSettings);
+    cloned.integrations.notion.apiToken = "changed";
+    cloned.defaults.figma.fileKey = "changed";
+
+    expect(systemSettings.integrations.notion.apiToken).toBe("notion-token");
+    expect(systemSettings.defaults.figma.fileKey).toBe("figma-file");
   });
 
   it("normalizes QA trigger agent preset ids from legacy and multi-agent settings", () => {
