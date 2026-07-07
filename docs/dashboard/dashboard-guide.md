@@ -248,6 +248,7 @@ Legacy runtime:
 
 ### Navigation
 - Sidebar and dock navigation expose the primary routes in guided-tour order: Chat, Overview, Sprints, Tasks, Agents, Stats, Schedule (`/scheduler`), Memory, Knowledge (`/knowledge`), Browser, Files (`/files`, providing project and sprint File Browser capabilities), Live, and Settings/Config.
+- The primary navigation honors the persisted Settings -> Appearance experience mode. Easy shows Chat, Browser, Stats, Settings/Config, and external Docs; Standard keeps the common workspace pages while hiding Schedule, Memory, Knowledge, Files, and Live; Expert shows the full set. This only changes primary navigation visibility: routes remain registered, and the Browser item still follows the project sprint-preview visibility settings.
 - The top-nav workspace search trigger uses a more opaque glass surface in light and dark mode so it stays readable against page content while preserving the existing blur treatment.
 - The notification panel announces refresh, mark-read, dismiss, and action outcomes through polite live regions. Refresh and mark-all-read controls expose pending state with `aria-busy`, disabled controls include visible reasons, and every repeated row action includes the notification title in its accessible name.
 - Notification rows include textual read/unread state in addition to the severity accent rail. Initial rows use the `listReveal` motion contract, read/dismiss compaction uses `listReorder`, and reduced-motion users receive immediate static state changes without transitional movement.

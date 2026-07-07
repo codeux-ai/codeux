@@ -195,7 +195,7 @@ const AppLayout = () => {
       </a>
       {isElectron && <TitleBar />}
       <div className="flex flex-1 min-h-0 overflow-hidden">
-      {showSidebar && <Sidebar isMobile={isMobile} isOpen={isMobileSidebarOpen} onClose={() => setIsMobileSidebarOpen(false)} />}
+      {showSidebar && <Sidebar isMobile={isMobile} isOpen={isMobileSidebarOpen} onClose={() => setIsMobileSidebarOpen(false)} experienceMode={appearanceSettings?.experienceMode} />}
 
       <div className="flex flex-col flex-1 min-h-0 h-full overflow-hidden relative">
         {/*
@@ -250,7 +250,7 @@ const AppLayout = () => {
           </main>
         </div>
 
-        {!showSidebar && <KineticDock />}
+        {!showSidebar && <KineticDock experienceMode={appearanceSettings?.experienceMode} />}
         <OnboardingExperience />
         <GuidedDashboardTour />
         <footer className="sr-only">Dashboard Footer</footer>
