@@ -3,10 +3,10 @@
 import { h } from "preact";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/preact";
 import * as matchers from "@testing-library/jest-dom/matchers";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SprintJiraImportModal } from "../../../../../dashboard/src/v2/components/sprints/SprintJiraImportModal";
 import { fetchProjectEffectiveSettings } from "../../../../../dashboard/src/v2/lib/settings-api";
-import { fetchProjectIssuePromptContexts, searchJiraIssues } from "../../../../../dashboard/src/v2/lib/project-api";
+import { fetchJiraProjectStatuses, fetchProjectIssuePromptContexts, searchJiraIssues } from "../../../../../dashboard/src/v2/lib/project-api";
 
 expect.extend(matchers);
 
@@ -16,8 +16,16 @@ vi.mock("../../../../../dashboard/src/v2/lib/settings-api", () => ({
 
 vi.mock("../../../../../dashboard/src/v2/lib/project-api", () => ({
   searchJiraIssues: vi.fn(),
+  fetchJiraProjectStatuses: vi.fn(),
   fetchProjectIssuePromptContexts: vi.fn(),
 }));
+
+beforeEach(() => {
+  vi.mocked(fetchJiraProjectStatuses).mockResolvedValue([
+    { id: "10000", name: "Zu erledigen", issueTypes: ["Story"] },
+    { id: "10001", name: "In Arbeit", issueTypes: ["Story", "Bug"] },
+  ]);
+});
 
 afterEach(() => {
   cleanup();
@@ -53,7 +61,7 @@ const inWorkIssue = {
 };
 
 describe("SprintJiraImportModal", () => {
-  it("loads the default project key and uses guided Jira filters", async () => {
+  it("loads the default project key, Jira workflow statuses, and uses guided Jira filters", async () => {
     vi.mocked(fetchProjectEffectiveSettings).mockResolvedValue({
       settings: { jira: { defaultProject: "ops" } },
     } as never);
@@ -67,41 +75,104 @@ describe("SprintJiraImportModal", () => {
     expect(screen.getByRole("button", { name: /close jira import/i })).toBeEnabled();
 
     await waitFor(() => {
-      expect(searchJiraIssues).toHaveBeenCalledWith(
-        "project-1",
-        expect.objectContaining({
-          projectKey: "OPS",
-          issueKey: "",
-          search: "",
-          status: "open",
-          assigneeText: "",
-          reporterText: "",
-          issueType: "",
-          priority: "",
-          labels: [],
-          updatedAfter: "",
-          updatedBefore: "",
-          sortField: "updated",
-          sortDirection: "desc",
-          limit: 40,
-          jql: "",
-        }),
-        expect.any(AbortSignal),
-      );
+      expect(fetchJiraProjectStatuses).toHaveBeenCalledWith("project-1", "OPS", expect.any(AbortSignal));
+      expect(searchJiraIssues).toHaveBeenCalled();
     });
 
+    const searchInput = vi.mocked(searchJiraIssues).mock.calls.at(-1)?.[1];
+    expect(searchInput).toEqual(expect.objectContaining({
+      projectKey: "OPS",
+      issueKey: "",
+      search: "",
+      assigneeText: "",
+      reporterText: "",
+      issueType: "",
+      priority: "",
+      labels: [],
+      updatedAfter: "",
+      updatedBefore: "",
+      sortField: "updated",
+      sortDirection: "desc",
+      limit: 40,
+      jql: "",
+    }));
+    expect(searchInput).not.toHaveProperty("status");
+    expect(searchInput).not.toHaveProperty("statusNames");
+
     expect(screen.getByDisplayValue("OPS")).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "Jira status" })).toHaveDisplayValue("All statuses");
+    expect(screen.getByRole("option", { name: "Zu erledigen" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /^search$/i })).toBeEnabled();
     expect(screen.getByRole("button", { name: /import issues disabled until jira issues are selected/i })).toBeDisabled();
     expect(screen.getByRole("button", { name: /advanced jira filters/i })).toHaveAttribute("aria-expanded", "false");
     expect(screen.getByRole("checkbox", { name: /hide in work/i })).toBeChecked();
     expect(document.getElementById("jira-import-advanced-filters")).toHaveClass("hidden");
-    expect(screen.getAllByText(/Default: open Jira issues, recently updated first/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Showing all Jira statuses sorted by updated, newest first/i).length).toBeGreaterThan(0);
     expect(screen.getByLabelText("Active Jira filters")).toHaveTextContent(/Visibility\s*Hide in Work/i);
     expect([...document.querySelectorAll("[aria-live='polite']")].some((node) => (
       node.textContent?.replace(/\s+/g, " ").includes("0 linked, 0 special")
     ))).toBe(true);
     expect(screen.getByRole("button", { name: /import jira backlog/i })).toHaveAttribute("aria-pressed", "false");
+  });
+
+  it("searches with a selected Jira workflow status label", async () => {
+    vi.mocked(fetchProjectEffectiveSettings).mockResolvedValue({
+      settings: { jira: { defaultProject: "ops" } },
+    } as never);
+    vi.mocked(searchJiraIssues).mockResolvedValue([baseIssue]);
+
+    render(<SprintJiraImportModal projectId="project-1" onClose={vi.fn()} onImport={vi.fn()} />);
+
+    await waitFor(() => {
+      expect(screen.getByRole("option", { name: "Zu erledigen" })).toBeInTheDocument();
+    });
+
+    const statusSelect = screen.getByRole("combobox", { name: "Jira status" }) as HTMLSelectElement;
+    statusSelect.value = "jira-status:Zu%20erledigen";
+    fireEvent.input(statusSelect);
+    fireEvent.change(statusSelect);
+
+    await waitFor(() => {
+      expect(statusSelect).toHaveDisplayValue("Zu erledigen");
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /^search$/i }));
+
+    await waitFor(() => {
+      expect(searchJiraIssues).toHaveBeenCalledTimes(2);
+    });
+
+    const searchInput = vi.mocked(searchJiraIssues).mock.calls.at(-1)?.[1];
+    expect(searchInput).toEqual(expect.objectContaining({
+      projectKey: "OPS",
+      statusNames: ["Zu erledigen"],
+    }));
+    expect(searchInput).not.toHaveProperty("status");
+  });
+
+  it("falls back to Jira status categories when workflow statuses fail to load", async () => {
+    vi.mocked(fetchProjectEffectiveSettings).mockResolvedValue({
+      settings: { jira: { defaultProject: "OPS" } },
+    } as never);
+    vi.mocked(fetchJiraProjectStatuses).mockRejectedValue(new Error("Jira status endpoint unavailable"));
+    vi.mocked(searchJiraIssues).mockResolvedValue([baseIssue]);
+
+    render(<SprintJiraImportModal projectId="project-1" onClose={vi.fn()} onImport={vi.fn()} />);
+
+    await waitFor(() => {
+      expect(searchJiraIssues).toHaveBeenCalled();
+    });
+
+    expect(screen.getByText(/Jira status endpoint unavailable/i)).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "Jira status" })).toHaveDisplayValue("Open");
+    expect(screen.getByRole("option", { name: "In Progress" })).toBeInTheDocument();
+
+    const searchInput = vi.mocked(searchJiraIssues).mock.calls.at(-1)?.[1];
+    expect(searchInput).toEqual(expect.objectContaining({
+      projectKey: "OPS",
+      status: "open",
+    }));
+    expect(searchInput).not.toHaveProperty("statusNames");
   });
 
   it("hides Jira issues already in work by default", async () => {

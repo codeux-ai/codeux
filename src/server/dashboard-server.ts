@@ -46,6 +46,7 @@ import type {
 import type { QuicksprintService } from "../services/quicksprint-service.js";
 import type { SchedulerService } from "../services/scheduler-service.js";
 import type { SprintIssueService } from "../services/sprint-issue-service.js";
+import type { JiraProjectStatus } from "../services/jira-api-client.js";
 import type {
   InstructionFileContent,
   InstructionFileSummary,
@@ -227,6 +228,7 @@ export interface DashboardServerOptions {
   updateTask: (taskId: string, input: UpdateTaskInput) => TaskRecord;
   deleteTask: (taskId: string) => void;
   searchJiraIssues: (projectId: string, input: JiraIssueSearchInput) => Promise<JiraIssueSearchResult[]>;
+  searchJiraProjectStatuses: (projectId: string, projectKey?: string) => Promise<JiraProjectStatus[]>;
   listSprintLinkedIssues: (sprintId: string) => SprintLinkedIssueRecord[];
   replaceSprintLinkedIssues: (sprintId: string, projectId: string, issues: SprintLinkedIssueInput[]) => SprintLinkedIssueRecord[];
   listConnections: (projectId: string) => McpConnectionRecord[];

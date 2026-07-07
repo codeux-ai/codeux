@@ -210,7 +210,14 @@ export const OverrideBadge: FunctionComponent<{ label: string; contextLabel?: st
   </span>
 );
 
-import { Row as SharedRow } from "../SettingsFormFields.js";
+import {
+  OptionCardChoiceGroup as SharedOptionCardChoiceGroup,
+  Row as SharedRow,
+  ToggleLinkedControlRow as SharedToggleLinkedControlRow,
+} from "../SettingsFormFields.js";
+
+export const OptionCardChoiceGroup = SharedOptionCardChoiceGroup;
+export const ToggleLinkedControlRow = SharedToggleLinkedControlRow;
 
 export const Row: FunctionComponent<{
   label: string;

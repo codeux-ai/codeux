@@ -1,8 +1,8 @@
 import type { FunctionComponent } from "preact";
 import { useEffect, useMemo, useRef, useState } from "preact/hooks";
 import type { SettingsPageState } from "../../../hooks/use-settings-page-state.js";
-import { Row, Toggle, SelectInput, PillChoiceGroup } from "../SettingsFormFields.js";
-import { SectionCard, getBadge as getBadgeHelper, getFieldBadge as getFieldBadgeHelper } from "./SharedPanelComponents.js";
+import { Row, Toggle, SelectInput } from "../SettingsFormFields.js";
+import { OptionCardChoiceGroup, SectionCard, getBadge as getBadgeHelper, getFieldBadge as getFieldBadgeHelper } from "./SharedPanelComponents.js";
 import { Database, FileText, Plus, Route, Sparkles, Trash2 } from "lucide-preact";
 import type { ProjectSettings, SkillStorageRecord } from "../../../../types.js";
 import { AgentSelectAvatarIcon } from "../../agents/AgentSelectAvatarIcon.js";
@@ -100,21 +100,6 @@ export const SettingsAgentsPanel: FunctionComponent<{ state: SettingsPageState }
         routing: recipe(normalizeAgentRoutingSettings(current.agents.routing)),
       },
     }));
-  };
-
-  const toggleOrchestratorAgent = (agentPresetId: string): void => {
-    updateAgentRoutingSettings((current) => {
-      const selected = current.taskCoding.orchestratorAgentPresetIds;
-      return {
-        ...current,
-        taskCoding: {
-          ...current.taskCoding,
-          orchestratorAgentPresetIds: selected.includes(agentPresetId)
-            ? selected.filter((id) => id !== agentPresetId)
-            : [...selected, agentPresetId],
-        },
-      };
-    });
   };
 
   useEffect(() => {
@@ -240,6 +225,14 @@ export const SettingsAgentsPanel: FunctionComponent<{ state: SettingsPageState }
   const qaSelfReflectionSettings = projectSettings?.agents.selfReflection?.qualityAssurance
     ?? editableSettings.agents.selfReflection?.qualityAssurance
     ?? DEFAULT_DASHBOARD_SETTINGS.agents.selfReflection.qualityAssurance;
+  const customProjectAgentDisabledReason = "Select a project to choose custom project agents. Built-in routing remains available.";
+  const orchestratorSelectedCount = agentRoutingSettings.taskCoding.orchestratorAgentPresetIds.length;
+  const orchestratorOptionCards = projectAgentSelectOptions.map((option) => ({
+    ...option,
+    description: "Available for Planning-agent task assignment.",
+    disabled: agentPresetSelectorsDisabled,
+    disabledReason: agentPresetSelectorsDisabled ? customProjectAgentDisabledReason : undefined,
+  }));
   const updateSelfReflection = (
     key: keyof ProjectSettings["agents"]["selfReflection"],
     next: ProjectSettings["agents"]["selfReflection"]["planning"],
@@ -276,6 +269,14 @@ export const SettingsAgentsPanel: FunctionComponent<{ state: SettingsPageState }
   return (
     <div className="flex flex-col gap-5">
       <SectionCard title="Project Markdown Mirror" watermark="AGT" badge={getBadge("agents")} icon={<FileText strokeWidth={2.4} />}>
+        <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(180px,0.45fr)]">
+          <div className="rounded-[1.2rem] border border-black/[0.06] bg-black/[0.02] px-4 py-3 text-xs font-medium leading-relaxed text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.025] dark:text-slate-400">
+            Mirror project-authored agents into `.code-ux/agents` when instructions should move through normal repository review. The dashboard keeps built-in and home agents separate from this project mirror.
+          </div>
+          <div className="rounded-[1.2rem] border border-signal-500/18 bg-signal-500/[0.07] px-4 py-3 text-xs font-semibold leading-relaxed text-signal-700 dark:border-signal-400/18 dark:bg-signal-400/[0.08] dark:text-signal-200">
+            {editableSettings.agents.saveToProjectDirectory ? "Mirror enabled for dashboard-authored project agents." : "Mirror disabled; project agents stay database-backed only."}
+          </div>
+        </div>
         <Row
           label="Save agent markdown to project directory"
           description="When enabled, dashboard edits write a companion markdown file under `.code-ux/agents` for the selected project. Default and home agent files are never modified."
@@ -314,8 +315,10 @@ export const SettingsAgentsPanel: FunctionComponent<{ state: SettingsPageState }
 
           <div className="rounded-[1.35rem] border border-black/[0.06] bg-white/78 p-5 dark:border-white/[0.06] dark:bg-void-900/52 md:p-6">
             <Row label="Coding task routing" description="Choose whether coding tasks use one fixed agent or a Planning-agent-selected specialist.">
-              <PillChoiceGroup
+              <OptionCardChoiceGroup
                 value={agentRoutingSettings.taskCoding.mode}
+                aria-label="Coding task routing mode"
+                selectedSummaryLabel={`Routing mode: ${agentRoutingSettings.taskCoding.mode === "ORCHESTRATOR" ? "Orchestrator" : "Manual"}`}
                 onChange={(value) => updateAgentRoutingSettings((current) => ({
                   ...current,
                   taskCoding: {
@@ -324,45 +327,34 @@ export const SettingsAgentsPanel: FunctionComponent<{ state: SettingsPageState }
                   },
                 }))}
                 options={[
-                  { value: "MANUAL", label: "Manual", hint: "Pin one coding agent." },
-                  { value: "ORCHESTRATOR", label: "Orchestrator", hint: "Planner selects per task." },
+                  { value: "MANUAL", label: "Manual", description: "Pin coding work to one selected preset or the built-in Worker fallback." },
+                  { value: "ORCHESTRATOR", label: "Orchestrator", description: "Give Planning a roster and let it choose the best specialist per task." },
                 ]}
               />
             </Row>
 
             {agentRoutingSettings.taskCoding.mode === "ORCHESTRATOR" ? (
               <div className="py-5">
-                <div className="mb-2 flex items-center justify-between gap-3">
-                  <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Available to orchestrator</div>
-                  <div className="text-[11px] text-slate-500 dark:text-slate-400">
-                    {agentRoutingSettings.taskCoding.orchestratorAgentPresetIds.length} selected
-                  </div>
-                </div>
-                <div className="rounded-2xl border border-black/[0.05] bg-black/[0.015] p-3 dark:border-white/[0.06] dark:bg-white/[0.025]">
-                  <div className="flex flex-wrap gap-2">
-                    {projectAgentPresetOptions.map((option) => {
-                      const active = agentRoutingSettings.taskCoding.orchestratorAgentPresetIds.includes(option.value);
-                      return (
-                        <button
-                          key={option.value}
-                          type="button"
-                          disabled={agentPresetSelectorsDisabled}
-                          onClick={() => toggleOrchestratorAgent(option.value)}
-                          className={`rounded-full border px-3 py-2 text-[11px] font-semibold tracking-wide transition-colors disabled:opacity-50 ${
-                            active
-                              ? "border-signal-500/35 bg-signal-500/12 text-signal-700 dark:border-signal-400/35 dark:bg-signal-400/12 dark:text-signal-200"
-                              : "border-black/[0.08] bg-white/78 text-slate-500 dark:border-white/[0.08] dark:bg-void-900/60 dark:text-slate-400"
-                          }`}
-                        >
-                          {option.label}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
+                <OptionCardChoiceGroup
+                  selectionMode="multiple"
+                  value={agentRoutingSettings.taskCoding.orchestratorAgentPresetIds}
+                  onChange={(orchestratorAgentPresetIds) => updateAgentRoutingSettings((current) => ({
+                    ...current,
+                    taskCoding: {
+                      ...current.taskCoding,
+                      orchestratorAgentPresetIds,
+                    },
+                  }))}
+                  options={orchestratorOptionCards}
+                  aria-label="Orchestrator coding agent roster"
+                  selectedSummaryLabel={orchestratorSelectedCount === 0
+                    ? "No orchestrator agents selected"
+                    : `${orchestratorSelectedCount} orchestrator ${orchestratorSelectedCount === 1 ? "agent" : "agents"} selected`}
+                  helperText="Selected project agents are the only specialists Planning may assign to coding tasks."
+                />
                 {projectAgentPresetOptions.length === 0 ? (
                   <div className="mt-3 rounded-[1.15rem] border border-dashed border-black/[0.06] bg-black/[0.02] px-4 py-3 text-xs leading-relaxed text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.02] dark:text-slate-400">
-                    Create project agents first, then return here to expose coding specialists to the orchestrator.
+                    No project agents are available. Create project agents first, then return here to expose coding specialists to the orchestrator.
                   </div>
                 ) : null}
               </div>
@@ -397,6 +389,8 @@ export const SettingsAgentsPanel: FunctionComponent<{ state: SettingsPageState }
                     }))}
                     options={[{ value: "", label: builtInLabel, icon: () => <AgentSelectAvatarIcon seed={`built-in:${key}:${builtInLabel}`} /> }, ...projectAgentSelectOptions]}
                     disabled={agentPresetSelectorsDisabled}
+                    disabledReason={agentPresetSelectorsDisabled ? customProjectAgentDisabledReason : undefined}
+                    aria-label={`${label} preset`}
                   />
                 </div>
               ))}

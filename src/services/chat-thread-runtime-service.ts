@@ -14,7 +14,6 @@ import { buildProviderPrompt } from "./cli-workflow-utils.js";
 import { resolveEffectiveModel } from "./provider-execution-service.js";
 import { getRepoCodeUxDir, getRepoCodeUxPath } from "../shared/config/code-ux-paths.js";
 import {
-  buildChatCompactionPrompt,
   buildChatContinuationPrompt,
   buildChatReplayPrompt,
   normalizeProviderReply,
@@ -89,6 +88,16 @@ const resolveEffectiveDefaultBranch = (
   || settings.git?.defaultBranch?.trim()
   || "main"
 );
+
+const resolveLogicalCompactionContinuationId = (
+  provider: Exclude<ProviderId, "jules">,
+  threadId: string,
+): string | null => {
+  if (provider === "codex" || provider === "gemini" || provider === "qwen-code" || provider === "opencode") {
+    return threadId;
+  }
+  return null;
+};
 
 function getThreadSessionTitlePath(repoPath: string, threadId: string): string {
   const safeThreadId = threadId.replace(/[^A-Za-z0-9_.-]/g, "-");
@@ -264,6 +273,7 @@ export class ChatThreadRuntimeService {
       throw new Error(`Project not found: ${thread.projectId}`);
     }
     const messages = this.deps.connectionChatRepository.listMessages(thread.id);
+    const activeSessionId = thread.runtimeState?.sessionIds?.[0]?.trim() || null;
     if (messages.length === 0) {
       return this.deps.connectionChatRepository.updateThread(thread.id, {
         runtimeState: {
@@ -280,14 +290,29 @@ export class ChatThreadRuntimeService {
     if (!route.providerId || !route.model || typeof route.apiKey !== "string") {
       throw new Error("Failed to resolve a chat worker for thread compaction.");
     }
+    const continueSessionId = activeSessionId || resolveLogicalCompactionContinuationId(route.providerId, thread.id);
+    if (!continueSessionId) {
+      throw new Error(`Native chat compaction for ${route.providerId} requires an active provider session. Send a message in this thread before compacting it.`);
+    }
 
-    const compacted = await this.generateThreadCompaction(project.id, project.baseDir, project.name, thread, messages, route);
+    const compacted = await this.generateThreadCompaction(
+      project.id,
+      project.baseDir,
+      thread,
+      messages,
+      route,
+      continueSessionId,
+    );
+    const compactedSessionId = compacted.nativeSessionId || compacted.summary.nativeSessionId || compacted.continueSessionId || null;
 
     const newRuntimeState: ConversationRuntimeState = {
       ...thread.runtimeState,
-      replayRequired: true,
-      sessionIds: [],
-      compactionSummary: compacted,
+      routeKind: "virtual",
+      virtualProvider: route.providerId,
+      modelLabel: compacted.summary.model,
+      replayRequired: compactedSessionId ? false : true,
+      sessionIds: compactedSessionId ? [compactedSessionId] : [],
+      compactionSummary: compacted.summary,
     };
 
     return this.deps.connectionChatRepository.updateThread(thread.id, {
@@ -683,11 +708,11 @@ export class ChatThreadRuntimeService {
   private async generateThreadCompaction(
     projectId: string,
     repoPath: string,
-    projectName: string,
     thread: ConversationThreadRecord,
     messages: ConversationMessageRecord[],
     route: ThreadRouteResolution,
-  ): Promise<ConversationCompactionSummary> {
+    continueSessionId: string,
+  ): Promise<{ summary: ConversationCompactionSummary & { nativeSessionId?: string | null }; nativeSessionId: string | null; continueSessionId: string }> {
     const provider = route.providerId!;
     // Fold customModel into the model so a local-redirect instance (customModel/customBaseUrl)
     // compacts against its configured endpoint rather than the real subscription. The runner
@@ -704,21 +729,14 @@ export class ChatThreadRuntimeService {
       openCodeModelId: route.openCodeModelId,
     });
     const apiKey = route.apiKey!;
-    const thinkingMode = route.thinkingMode;
     const dashboardSettings = this.deps.getDashboardSettings({ projectId });
     const workflowSettings = dashboardSettings.cliWorkflow;
     const project = this.deps.projectManagementRepository.getProject(projectId);
     const defaultBranch = resolveEffectiveDefaultBranch(project ?? {}, dashboardSettings);
     const githubToken = this.deps.getGithubToken();
-    const workerAgent = typeof this.deps.agentPresetSyncService.resolveTargetedCodingAgent === "function"
-      ? await this.deps.agentPresetSyncService.resolveTargetedCodingAgent(
-        projectId,
-        dashboardSettings.agents?.routing?.dashboardReply?.agentPresetId ?? null,
-      )
-      : await this.deps.agentPresetSyncService.getWorkerAgent(projectId);
-    const workerInstructions = workerAgent.instructionMarkdown.trim();
-    const promptContent = buildChatCompactionPrompt({ projectId, repoPath, projectName, thread, messages, workerInstructions });
-    const finalPrompt = buildProviderPrompt(promptContent, thinkingMode as any);
+    if (!continueSessionId) {
+      throw new Error("Native chat compaction requires an active provider session to continue.");
+    }
     const execInvocation = this.deps.executionRepository.createExecutionInvocation({
       projectId,
       skipValidation: true,
@@ -737,23 +755,23 @@ export class ChatThreadRuntimeService {
 
     this.deps.executionRepository.appendExecutionInvocationMessage(execInvocation.id, {
       role: "user",
-      contentMarkdown: finalPrompt,
+      contentMarkdown: "Native CLI session operation: compact",
     });
 
     try {
       const result = await this.deps.providerRunner.runProviderForText({
         provider,
-        prompt: finalPrompt,
+        prompt: "Native CLI session operation: compact",
         cwd: repoPath,
         model,
         apiKey,
-      qwenAuthMode: route.qwenAuthMode,
-      qwenRegion: route.qwenRegion,
-      qwenBaseUrl: route.qwenBaseUrl,
-      qwenEnvKey: route.qwenEnvKey,
-      qwenModelId: route.qwenModelId,
-      qwenProtocol: route.qwenProtocol,
-      qwenAdditionalModelProviders: route.qwenAdditionalModelProviders,
+        qwenAuthMode: route.qwenAuthMode,
+        qwenRegion: route.qwenRegion,
+        qwenBaseUrl: route.qwenBaseUrl,
+        qwenEnvKey: route.qwenEnvKey,
+        qwenModelId: route.qwenModelId,
+        qwenProtocol: route.qwenProtocol,
+        qwenAdditionalModelProviders: route.qwenAdditionalModelProviders,
         openCodeAuthMode: route.openCodeAuthMode,
         openCodeProviderId: route.openCodeProviderId,
         openCodeModelId: route.openCodeModelId,
@@ -766,14 +784,16 @@ export class ChatThreadRuntimeService {
         providerConfigPath: route.providerConfigPath,
         customBaseUrl: route.customBaseUrl,
         customModel: route.customModel,
-        sessionId: `${thread.id}:compaction`,
+        sessionId: thread.id,
+        workspaceSessionId: thread.id,
         workflowSettings,
         repoPath,
         snapshotCheckout: workflowSettings.executionMode === "DOCKER"
           ? { branch: defaultBranch }
           : undefined,
         githubToken,
-        continueSessionId: null,
+        continueSessionId,
+        nativeSessionOperation: "compact",
         onActivity: (desc, originator) => {
           this.deps.executionRepository.appendExecutionInvocationMessage(execInvocation.id, {
             role: originator === "user" ? "user" : "assistant",
@@ -796,13 +816,19 @@ export class ChatThreadRuntimeService {
         finishedAt: new Date().toISOString(),
       });
 
+      const nativeSessionId = result.nativeSessionId || continueSessionId;
       return {
-        markdown,
-        generatedAt: new Date().toISOString(),
-        provider,
-        model,
-        sourceMessageId: messages[messages.length - 1]?.id || null,
-        sourceMessageCount: messages.length,
+        summary: {
+          markdown,
+          generatedAt: new Date().toISOString(),
+          provider,
+          model,
+          sourceMessageId: messages[messages.length - 1]?.id || null,
+          sourceMessageCount: messages.length,
+          nativeSessionId,
+        },
+        nativeSessionId,
+        continueSessionId,
       };
     } catch (err: any) {
       this.deps.executionRepository.updateExecutionInvocation(execInvocation.id, {

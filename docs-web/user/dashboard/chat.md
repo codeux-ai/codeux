@@ -33,9 +33,11 @@ Planning messages can include a rich sprint status card. When Code UX can match 
 
 Long threads accumulate context cost. Click **Compact** to:
 
-1. Summarise the thread transcript via the assigned provider.
-2. Replace the prior session memory with the compacted summary.
-3. Continue the conversation from a smaller starting point.
+1. Ask the assigned non-Jules CLI provider to run its native compact command inside the current provider session.
+2. Store the provider's compaction output on the thread for audit and recovery.
+3. Continue the conversation in the same compacted provider session with a smaller context, preserving that native session id on the thread when the provider returns one.
+
+Code UX does not create a separate `:compaction` chat session for CLI providers. If a thread has no saved active session, providers with a logical continue/resume fallback can still compact through that same thread session; providers that require a concrete native session ask you to send a message in the thread before compacting.
 
 ## Invocations
 

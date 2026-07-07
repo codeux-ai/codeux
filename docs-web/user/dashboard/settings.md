@@ -18,7 +18,7 @@ Switch scope with the selector at the top:
 - **Project** — applies to the active project.
 - **Sprint** — applies to the selected sprint within the active project.
 
-The sticky command/status bar keeps the System/Project selector, project availability or inheritance context, active panel, and save state visible together while you scroll. It shows the visible-category count only while Smart Find is active; when search is inactive, the visible status stays to a quiet search prompt while the exact category total remains available to assistive technology. The bar uses compact controls and chips instead of one long background card, so focus rings, contrast, wrapping, and saved/dirty cues stay clear on narrow screens.
+The sticky command/status bar keeps the System/Project selector, project availability or inheritance context, active panel, and save state visible together while you scroll. Smart Find also shows compact context chips for the current scope, active category, and save state (`No edits`, `Unsaved edits`, `Saving`, or `Saved`) above the search input. It shows the visible-category count only while Smart Find is active; when search is inactive, the visible status stays to a quiet search prompt while the exact category total remains available to assistive technology. The bar uses compact controls and chips instead of one long background card, so focus rings, contrast, wrapping, and saved/dirty cues stay clear on narrow screens.
 
 ## Categories
 
@@ -47,6 +47,9 @@ Each category opens one or more **content panels** with grouped fields. Inputs a
 
 The **Agents** category includes project markdown mirroring, agent routing, persistent skill storage, and self-reflection controls.
 
+- Project Markdown Mirror starts with a compact status summary, then the mirror toggle and `.code-ux/agents` target directory. The status summary makes it clear whether dashboard-authored project agents are mirrored to repository-visible markdown or kept database-backed only.
+- Agent Routing is split into a routing-mode choice, an orchestrator roster, and role-specific preset selectors. Manual mode pins coding to one preset or the built-in Worker fallback. Orchestrator mode gives the Planning agent a multi-select roster of project specialists; the selected-count summary stays visible, long agent names wrap, and an empty roster explains that project agents must be created first.
+- Role selectors for planning, coding, CI fix, merge conflict, dashboard reply, and clarification reply always keep the built-in fallback available. When custom project agents are unavailable, disabled selectors explain that you must select a project before choosing project presets.
 - Persistent skill storage is project-scoped and separate from memory. Creating a storage does not enable runtime retrieval. Attach one or more storages to an agent, then enable persistent skills for that agent.
 - Storage deletion is destructive and requires confirmation because it removes stored skills, embeddings, and agent attachments.
 - Planning and QA self-reflection are disabled by default. Each loop has an enable toggle, editable criteria rows, per-criterion thresholds, and a max improvement attempts setting.
@@ -375,11 +378,11 @@ Related docs:
 
 Controls completion-time QA review, QA routing, and trigger-specific agent assignment.
 
-**What it controls:** QA toggles, route choices, and trigger selectors decide when and how final reviews run.
+**What it controls:** QA toggles, max-run budgets, exhaustion policy, and trigger selectors decide when and how final reviews run. Each trigger uses one row with an enable switch and custom QA agent multi-select; leaving the selector empty uses the built-in QA fallback.
 
 **Recommended defaults:** Keep QA enabled for multi-task sprints and route it to a provider with strong review behavior.
 
-**Risks and gotchas:** Disabling QA removes an important last check before merge automation continues.
+**Risks and gotchas:** Disabling QA removes an important last check before merge automation continues. Project-specific QA agent selectors stay disabled until a project is selected, but the built-in QA fallback remains active.
 
 Related docs:
 
@@ -528,7 +531,7 @@ Related docs:
 
 Assigns built-in or project agent presets to planning, coding, CI, merge, dashboard, and clarification work.
 
-**What it controls:** Coding can be manual or orchestrator-selected; each route can use a project preset or built-in fallback.
+**What it controls:** Coding can be manual or orchestrator-selected; each route can use a project preset or built-in fallback. The orchestrator roster uses shared multi-select option cards with selected-count feedback, keyboard focus, disabled guidance, and wrapping labels.
 
 **Recommended defaults:** Use built-ins first, then assign specialists where project-specific instructions materially improve outcomes.
 
