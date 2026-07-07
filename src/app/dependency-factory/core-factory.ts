@@ -35,6 +35,7 @@ import { DockerRuntimePruneService } from "../../services/docker-runtime-prune-s
 import { DashboardRealtimeService } from "../../services/dashboard-realtime-service.js";
 import { MemoryRepository } from "../../repositories/memory-repository.js";
 import { SchedulerRepository } from "../../repositories/scheduler-repository.js";
+import { NodeWorkflowRepository } from "../../repositories/node-workflow-repository.js";
 import { SkillRepository } from "../../repositories/skill-repository.js";
 import { EmbeddingService } from "../../services/embedding-service.js";
 import { EmbeddingModelManager } from "../../services/embedding-model-manager.js";
@@ -102,6 +103,7 @@ export interface CoreDependencies {
   dashboardSettings: DashboardSettings;
   memoryRepository: MemoryRepository;
   schedulerRepository: SchedulerRepository;
+  nodeWorkflowRepository: NodeWorkflowRepository;
   skillRepository: SkillRepository;
   embeddingService: EmbeddingService;
   embeddingModelManager: EmbeddingModelManager;
@@ -265,6 +267,7 @@ export function createCoreDependencies(
   const activitySummary = new ActivitySummaryService();
   const memoryRepository = new MemoryRepository(appDbStorage);
   const schedulerRepository = new SchedulerRepository(appDbStorage, dashboardRealtimeService);
+  const nodeWorkflowRepository = new NodeWorkflowRepository(appDbStorage);
   const skillRepository = new SkillRepository(appDbStorage);
   const embeddingService = new EmbeddingService();
   const embeddingModelManager = new EmbeddingModelManager(
@@ -350,6 +353,7 @@ export function createCoreDependencies(
     dashboardSettings,
     memoryRepository,
     schedulerRepository,
+    nodeWorkflowRepository,
     skillRepository,
     embeddingService,
     embeddingModelManager,

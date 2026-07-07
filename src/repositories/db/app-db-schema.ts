@@ -432,6 +432,82 @@ CREATE TABLE IF NOT EXISTS agent_presets (
         FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
       );
 
+CREATE TABLE IF NOT EXISTS node_workflows (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL,
+        name TEXT NOT NULL,
+        description TEXT NOT NULL DEFAULT '',
+        status TEXT NOT NULL DEFAULT 'draft',
+        version INTEGER NOT NULL DEFAULT 1,
+        widget_definitions_json TEXT NOT NULL DEFAULT '[]',
+        widget_values_json TEXT NOT NULL DEFAULT '{}',
+        nodes_json TEXT NOT NULL DEFAULT '[]',
+        edges_json TEXT NOT NULL DEFAULT '[]',
+        metadata_json TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+      );
+
+CREATE TABLE IF NOT EXISTS node_workflow_agent_attachments (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL,
+        workflow_id TEXT NOT NULL,
+        node_id TEXT,
+        agent_preset_id TEXT,
+        provider TEXT,
+        role TEXT NOT NULL DEFAULT 'specialist',
+        label TEXT NOT NULL DEFAULT '',
+        config_json TEXT NOT NULL DEFAULT '{}',
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+        FOREIGN KEY (workflow_id) REFERENCES node_workflows(id) ON DELETE CASCADE,
+        FOREIGN KEY (agent_preset_id) REFERENCES agent_presets(id) ON DELETE SET NULL
+      );
+
+CREATE TABLE IF NOT EXISTS node_workflow_runs (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL,
+        workflow_id TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'queued',
+        trigger_type TEXT NOT NULL DEFAULT 'manual',
+        input_json TEXT NOT NULL DEFAULT '{}',
+        output_json TEXT,
+        error_message TEXT,
+        started_at TEXT,
+        finished_at TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+        FOREIGN KEY (workflow_id) REFERENCES node_workflows(id) ON DELETE CASCADE
+      );
+
+CREATE TABLE IF NOT EXISTS node_workflow_run_steps (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL,
+        workflow_id TEXT NOT NULL,
+        workflow_run_id TEXT NOT NULL,
+        node_id TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'queued',
+        attempt INTEGER NOT NULL DEFAULT 1,
+        agent_attachment_id TEXT,
+        agent_preset_id TEXT,
+        provider TEXT,
+        input_json TEXT NOT NULL DEFAULT '{}',
+        output_json TEXT,
+        error_message TEXT,
+        started_at TEXT,
+        finished_at TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+        FOREIGN KEY (workflow_id) REFERENCES node_workflows(id) ON DELETE CASCADE,
+        FOREIGN KEY (workflow_run_id) REFERENCES node_workflow_runs(id) ON DELETE CASCADE,
+        FOREIGN KEY (agent_attachment_id) REFERENCES node_workflow_agent_attachments(id) ON DELETE SET NULL,
+        FOREIGN KEY (agent_preset_id) REFERENCES agent_presets(id) ON DELETE SET NULL
+      );
+
 CREATE TABLE IF NOT EXISTS skill_storages (
         id TEXT PRIMARY KEY,
         project_id TEXT NOT NULL,
@@ -839,6 +915,15 @@ CREATE INDEX IF NOT EXISTS idx_execution_invocations_project_sprint_started ON e
 CREATE INDEX IF NOT EXISTS idx_execution_invocations_project_sprint_run_started ON execution_invocations (project_id, sprint_run_id, started_at DESC);
 CREATE INDEX IF NOT EXISTS idx_execution_invocations_status_started ON execution_invocations (status, started_at DESC);
 CREATE INDEX IF NOT EXISTS idx_execution_invocations_provider_invocation ON execution_invocations (provider_invocation_id);
+CREATE INDEX IF NOT EXISTS idx_node_workflows_project_updated ON node_workflows (project_id, updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_node_workflows_project_status ON node_workflows (project_id, status, updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_node_workflow_agent_attachments_workflow ON node_workflow_agent_attachments (workflow_id, node_id);
+CREATE INDEX IF NOT EXISTS idx_node_workflow_agent_attachments_agent ON node_workflow_agent_attachments (agent_preset_id);
+CREATE INDEX IF NOT EXISTS idx_node_workflow_runs_project_recent ON node_workflow_runs (project_id, started_at DESC, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_node_workflow_runs_workflow_recent ON node_workflow_runs (workflow_id, started_at DESC, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_node_workflow_runs_status_recent ON node_workflow_runs (status, started_at DESC);
+CREATE INDEX IF NOT EXISTS idx_node_workflow_run_steps_run_node ON node_workflow_run_steps (workflow_run_id, node_id);
+CREATE INDEX IF NOT EXISTS idx_node_workflow_run_steps_status_started ON node_workflow_run_steps (status, started_at DESC);
 CREATE INDEX IF NOT EXISTS idx_skill_storages_project ON skill_storages (project_id, updated_at DESC);
 CREATE INDEX IF NOT EXISTS idx_skills_project_storage ON skills (project_id, storage_id, updated_at DESC);
 CREATE INDEX IF NOT EXISTS idx_skill_embeddings_skill ON skill_embeddings (skill_id, embedding_model, chunk_index);
