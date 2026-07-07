@@ -28,6 +28,27 @@ export interface GitCommitIdentity {
 
 const shellQuote = (value: string): string => `'${value.replace(/'/g, `'\\''`)}'`;
 
+const parseGitNumstat = (diffOutput: string): NonNullable<AppliedWorkspacePatchResult["stats"]> => {
+  let filesChanged = 0;
+  let insertions = 0;
+  let deletions = 0;
+
+  for (const line of diffOutput.trim().split("\n")) {
+    if (!line) continue;
+    const parts = line.split("\t");
+    if (parts.length < 2) continue;
+    filesChanged++;
+    if (parts[0] !== "-" && parts[1] !== "-") {
+      const ins = Number.parseInt(parts[0], 10);
+      const del = Number.parseInt(parts[1], 10);
+      if (Number.isFinite(ins)) insertions += ins;
+      if (Number.isFinite(del)) deletions += del;
+    }
+  }
+
+  return { filesChanged, insertions, deletions };
+};
+
 const buildCommitIdentityEnv = (
   identity: GitCommitIdentity | undefined,
 ): NodeJS.ProcessEnv => {
@@ -146,75 +167,108 @@ export class WorkspaceArtifactService {
         GIT_INDEX_FILE: indexPath,
       };
 
-      await runCommandStrict("git", ["read-tree", materializationBaseRef], args.repoPath, indexEnv);
-      if (hasPatch) {
-        await runCommandStrict("git", ["apply", "--cached", "--binary", patchPath], args.repoPath, indexEnv);
-      }
+      const materialized = await this.materializePatchCommit({
+        repoPath: args.repoPath,
+        baseRef: materializationBaseRef,
+        workerBranch: args.workerBranch,
+        patchPath,
+        commitMessage: args.commitMessage,
+        parentRefs,
+        indexEnv,
+        gitIdentity: args.gitIdentity,
+        hasPatch,
+        forceCommitForMergeParent: mergeParentsNeedRecording,
+      });
 
-      const treeSha = (await runCommandStrict("git", ["write-tree"], args.repoPath, indexEnv)).stdout.trim();
-      const baseTree = (await runCommandStrict("git", ["rev-parse", `${materializationBaseRef}^{tree}`], args.repoPath)).stdout.trim();
-
-      if ((!treeSha || treeSha === baseTree) && !mergeParentsNeedRecording) {
+      if (!materialized.commitSha) {
         return { hasChanges: false };
       }
 
-      const parentArgs = [
-        "-p",
-        materializationBaseRef,
-        ...(args.parentRefs || []).flatMap((parentRef) => ["-p", parentRef]),
-      ];
-      const commitSha = (await runCommandStrict(
-        "git",
-        ["commit-tree", treeSha, ...parentArgs, "-m", args.commitMessage],
-        args.repoPath,
-        buildCommitIdentityEnv(args.gitIdentity),
-      )).stdout.trim();
-
-      const shouldSyncCheckedOutWorkerBranch = await this.shouldSyncCheckedOutWorkerBranch(args.repoPath, args.workerBranch);
-      await runCommandStrict("git", ["update-ref", `refs/heads/${args.workerBranch}`, commitSha], args.repoPath);
-      if (shouldSyncCheckedOutWorkerBranch) {
-        await runCommandStrict("git", ["reset", "--hard", commitSha], args.repoPath);
-      }
       if (args.githubMode !== "LOCAL") {
         const pushEnv = await buildGitHttpAuthEnvForRepoWithFallbacks(args.repoPath, args.gitAuth ?? {});
         await this.pushWorkerBranchWithRetry(args.repoPath, args.workerBranch, pushEnv ?? process.env);
       }
 
-      const diffOutput = (await runCommandStrict(
-        "git",
-        ["diff", "--numstat", materializationBaseRef, commitSha],
-        args.repoPath,
-      )).stdout;
-
-      let filesChanged = 0;
-      let insertions = 0;
-      let deletions = 0;
-
-      for (const line of diffOutput.trim().split("\n")) {
-        if (!line) continue;
-        const parts = line.split("\t");
-        if (parts.length < 2) continue;
-        filesChanged++;
-        if (parts[0] !== "-" && parts[1] !== "-") {
-          const ins = Number.parseInt(parts[0], 10);
-          const del = Number.parseInt(parts[1], 10);
-          if (Number.isFinite(ins)) insertions += ins;
-          if (Number.isFinite(del)) deletions += del;
-        }
-      }
-
       return {
         hasChanges: true,
-        commitSha,
-        stats: {
-          filesChanged,
-          insertions,
-          deletions,
-        },
+        commitSha: materialized.commitSha,
+        stats: materialized.stats,
       };
     } finally {
       await fs.rm(tempDir, { recursive: true, force: true }).catch(() => undefined);
     }
+  }
+
+  private async materializePatchCommit(args: {
+    repoPath: string;
+    baseRef: string;
+    workerBranch: string;
+    patchPath: string;
+    commitMessage: string;
+    parentRefs: string[];
+    indexEnv: NodeJS.ProcessEnv;
+    gitIdentity?: GitCommitIdentity;
+    hasPatch: boolean;
+    forceCommitForMergeParent: boolean;
+  }): Promise<{ commitSha?: string; stats?: AppliedWorkspacePatchResult["stats"] }> {
+    const parentArgs = [
+      "-p",
+      args.baseRef,
+      ...args.parentRefs.flatMap((parentRef) => ["-p", parentRef]),
+    ].map(shellQuote).join(" ");
+    const script = [
+      "set -e",
+      "cleanup() { rm -f \"$GIT_INDEX_FILE\"; }",
+      "trap cleanup EXIT",
+      `git read-tree ${shellQuote(args.baseRef)}`,
+      args.hasPatch ? `git apply --cached --binary ${shellQuote(args.patchPath)}` : null,
+      "tree=$(git write-tree)",
+      `base_tree=$(git rev-parse ${shellQuote(`${args.baseRef}^{tree}`)})`,
+      [
+        "if [ -z \"$tree\" ] ||",
+        `{ [ "$tree" = "$base_tree" ] && [ ${shellQuote(args.forceCommitForMergeParent ? "1" : "0")} != "1" ]; }; then`,
+        "  printf 'CODEUX_RESULT\\tNO_CHANGES\\n'",
+        "  exit 0",
+        "fi",
+      ].join("\n"),
+      `commit=$(git commit-tree "$tree" ${parentArgs} -m ${shellQuote(args.commitMessage)})`,
+      "sync_checked_out=0",
+      "current_branch=$(env -u GIT_INDEX_FILE git rev-parse --abbrev-ref HEAD 2>/dev/null || true)",
+      [
+        `if [ "$current_branch" = ${shellQuote(args.workerBranch)} ] && [ -z "$(env -u GIT_INDEX_FILE git status --porcelain --untracked-files=no)" ]; then`,
+        "  sync_checked_out=1",
+        "fi",
+      ].join("\n"),
+      `git update-ref ${shellQuote(`refs/heads/${args.workerBranch}`)} "$commit"`,
+      "if [ \"$sync_checked_out\" = \"1\" ]; then env -u GIT_INDEX_FILE git reset --hard \"$commit\" >/dev/null; fi",
+      `env -u GIT_INDEX_FILE git diff --numstat ${shellQuote(args.baseRef)} "$commit"`,
+      "printf 'CODEUX_COMMIT\\t%s\\n' \"$commit\"",
+    ].filter((step): step is string => Boolean(step)).join("\n");
+
+    const result = await runCommandStrict(
+      "sh",
+      ["-lc", script],
+      args.repoPath,
+      {
+        ...buildCommitIdentityEnv(args.gitIdentity),
+        GIT_INDEX_FILE: args.indexEnv.GIT_INDEX_FILE,
+      },
+      { trimOutput: false },
+    );
+
+    const commitLine = result.stdout.split("\n").find((line) => line.startsWith("CODEUX_COMMIT\t"));
+    if (!commitLine) {
+      return {};
+    }
+    const numstatOutput = result.stdout
+      .split("\n")
+      .filter((line) => line && !line.startsWith("CODEUX_"))
+      .join("\n");
+
+    return {
+      commitSha: commitLine.slice("CODEUX_COMMIT\t".length).trim(),
+      stats: parseGitNumstat(numstatOutput),
+    };
   }
 
   private async resolveMaterializationBaseRef(args: {
@@ -254,37 +308,6 @@ export class WorkspaceArtifactService {
       return true;
     } catch {
       return false;
-    }
-  }
-
-  private async shouldSyncCheckedOutWorkerBranch(
-    repoPath: string,
-    workerBranch: string,
-  ): Promise<boolean> {
-    const currentBranch = await this.resolveCurrentBranch(repoPath);
-    if (currentBranch !== workerBranch) {
-      return false;
-    }
-
-    const trackedStatus = (await runCommandStrict(
-      "git",
-      ["status", "--porcelain", "--untracked-files=no"],
-      repoPath,
-    )).stdout.trim();
-    if (trackedStatus.length > 0) {
-      return false;
-    }
-
-    return true;
-  }
-
-  private async resolveCurrentBranch(repoPath: string): Promise<string | null> {
-    try {
-      const result = await runCommandStrict("git", ["rev-parse", "--abbrev-ref", "HEAD"], repoPath);
-      const branch = result.stdout.trim();
-      return branch && branch !== "HEAD" ? branch : null;
-    } catch {
-      return null;
     }
   }
 

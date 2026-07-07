@@ -24,6 +24,7 @@ const WORKSPACE_HELPER_IMAGE = "alpine/git";
 const WORKSPACE_VOLUME_LABEL = "code-ux.workspace=true";
 const RUNTIME_VOLUME_LABEL = "code-ux.workspace-runtime=true";
 const WORKSPACE_SESSION_LABEL_PREFIX = "code-ux.workspace-session=";
+const GIT_BUNDLE_REUSE_GRACE_MS = 2_000;
 export const CONTAINER_PERSISTENT_SKILL_STORAGE_ROOT = "/code-ux/persistent-skills";
 
 export interface WorkspaceCommandOptions {
@@ -100,6 +101,12 @@ export const buildPersistentSkillStorageContainerPath = (storageId: string): str
 
 type RefLookup = (ref: string) => Promise<boolean>;
 
+interface GitBundleLease {
+  promise: Promise<{ bundlePath: string; tempDir: string }>;
+  leases: number;
+  cleanupTimer?: NodeJS.Timeout;
+}
+
 const parseWorkspaceHandle = (value: string): { volumeName: string } => {
   if (!isWorkspaceHandle(value)) {
     throw new Error(`Unsupported workspace reference: ${value}`);
@@ -175,6 +182,7 @@ export class WorkspaceManager implements IWorkspaceManager {
   private readonly workspaceLocks = new Map<string, Promise<void>>();
   private readonly remoteFetches = new Map<string, Promise<void>>();
   private readonly runtimeVolumesWithInitializedOwnership = new Set<string>();
+  private readonly gitBundleLeases = new Map<string, GitBundleLease>();
 
   buildWorktreePath(repoPath: string, sessionId: string, executionMode: CliWorkflowSettings["executionMode"]): string {
     return this.buildWorkspaceRef(repoPath, sessionId, executionMode);
@@ -910,15 +918,12 @@ export class WorkspaceManager implements IWorkspaceManager {
   ): Promise<void> {
     const { volumeName } = parseWorkspaceHandle(worktreePath);
     const runtimeVolumeName = buildRuntimeVolumeName(volumeName);
-    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-bundle-"));
-    const bundlePath = path.join(tempDir, "repo.bundle");
     const originUrl = await this.resolveOriginUrl(repoPath);
     const ownerSpec = getWorkspaceOwnerSpec();
 
-    try {
-      await this.ensurePublicHelperImage(WORKSPACE_HELPER_IMAGE, repoPath, process.env);
-      const bundleRefArgs = seedRefs && seedRefs.length > 0 ? seedRefs : ["--all"];
-      await runCommandStrict("git", ["bundle", "create", bundlePath, ...bundleRefArgs], repoPath);
+    await this.ensurePublicHelperImage(WORKSPACE_HELPER_IMAGE, repoPath, process.env);
+    const bundleRefArgs = seedRefs && seedRefs.length > 0 ? seedRefs : ["--all"];
+    await this.withGitBundle(repoPath, bundleRefArgs, async (bundlePath) => {
       const initScript = [
         "set -e",
         "tmp=$(mktemp)",
@@ -962,8 +967,86 @@ export class WorkspaceManager implements IWorkspaceManager {
         { stdinFile: bundlePath },
       );
       this.runtimeVolumesWithInitializedOwnership.add(runtimeVolumeName);
+    });
+  }
+
+  private async withGitBundle<T>(
+    repoPath: string,
+    bundleRefArgs: string[],
+    useBundle: (bundlePath: string) => Promise<T>,
+  ): Promise<T> {
+    const cacheKey = await this.resolveGitBundleCacheKey(repoPath, bundleRefArgs);
+    const reuseGraceMs = this.resolveGitBundleReuseGraceMs(bundleRefArgs);
+    let lease = this.gitBundleLeases.get(cacheKey);
+    if (!lease) {
+      lease = {
+        promise: this.createGitBundle(repoPath, bundleRefArgs),
+        leases: 0,
+      };
+      this.gitBundleLeases.set(cacheKey, lease);
+    } else if (lease.cleanupTimer) {
+      clearTimeout(lease.cleanupTimer);
+      lease.cleanupTimer = undefined;
+    }
+
+    lease.leases += 1;
+    try {
+      const { bundlePath } = await lease.promise;
+      return await useBundle(bundlePath);
     } finally {
+      lease.leases -= 1;
+      if (lease.leases === 0) {
+        if (reuseGraceMs === 0) {
+          this.gitBundleLeases.delete(cacheKey);
+          await lease.promise
+            .then(({ tempDir }) => fs.rm(tempDir, { recursive: true, force: true }))
+            .catch(() => undefined);
+        } else {
+          lease.cleanupTimer = setTimeout(() => {
+          if (lease.leases !== 0 || this.gitBundleLeases.get(cacheKey) !== lease) {
+            return;
+          }
+          this.gitBundleLeases.delete(cacheKey);
+          void lease.promise
+            .then(({ tempDir }) => fs.rm(tempDir, { recursive: true, force: true }))
+            .catch(() => undefined);
+          }, reuseGraceMs);
+          lease.cleanupTimer.unref?.();
+        }
+      }
+    }
+  }
+
+  private resolveGitBundleReuseGraceMs(bundleRefArgs: string[]): number {
+    return bundleRefArgs.length === 1 && bundleRefArgs[0] === "--all"
+      ? 0
+      : GIT_BUNDLE_REUSE_GRACE_MS;
+  }
+
+  private async resolveGitBundleCacheKey(repoPath: string, bundleRefArgs: string[]): Promise<string> {
+    if (bundleRefArgs.length === 1 && bundleRefArgs[0] === "--all") {
+      return `${path.resolve(repoPath)}\0--all`;
+    }
+    const refTips = await Promise.all(bundleRefArgs.map(async (ref) => {
+      try {
+        const result = await runCommandStrict("git", ["rev-parse", "--verify", ref], repoPath);
+        return `${ref}:${result.stdout.trim()}`;
+      } catch {
+        return `${ref}:missing`;
+      }
+    }));
+    return `${path.resolve(repoPath)}\0${refTips.join("\0")}`;
+  }
+
+  private async createGitBundle(repoPath: string, bundleRefArgs: string[]): Promise<{ bundlePath: string; tempDir: string }> {
+    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-bundle-"));
+    const bundlePath = path.join(tempDir, "repo.bundle");
+    try {
+      await runCommandStrict("git", ["bundle", "create", bundlePath, ...bundleRefArgs], repoPath);
+      return { bundlePath, tempDir };
+    } catch (error) {
       await fs.rm(tempDir, { recursive: true, force: true }).catch(() => undefined);
+      throw error;
     }
   }
 

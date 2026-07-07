@@ -525,6 +525,74 @@ describe("WorkspaceManager", () => {
     await Promise.all([firstPrepare, secondPrepare]);
   });
 
+  it("dedupes concurrent Docker seed bundles for identical feature-branch snapshots", async () => {
+    let bundleStarted!: () => void;
+    const bundleStartedPromise = new Promise<void>((resolve) => { bundleStarted = resolve; });
+    let releaseBundle!: () => void;
+    const releaseBundlePromise = new Promise<void>((resolve) => { releaseBundle = resolve; });
+    let bundleCreates = 0;
+
+    vi.mocked(runCommandStrict).mockImplementation(async (command, args) => {
+      if (command === "git" && args[0] === "rev-parse" && args[1] === "--show-toplevel") {
+        return { ok: true, stdout: "/repo/project\n", stderr: "" } as any;
+      }
+      if (command === "git" && args[0] === "remote" && args[1] === "get-url") {
+        return { ok: true, stdout: "https://github.com/example/project.git\n", stderr: "" } as any;
+      }
+      if (command === "git" && args[0] === "fetch") {
+        return { ok: true, stdout: "", stderr: "" } as any;
+      }
+      if (command === "git" && args[0] === "show-ref") {
+        if (args.includes("refs/remotes/origin/feature/sprint-1")) {
+          return { ok: true, stdout: "", stderr: "" } as any;
+        }
+        throw new Error("missing ref");
+      }
+      if (command === "git" && args[0] === "bundle" && args[1] === "create") {
+        bundleCreates += 1;
+        bundleStarted();
+        await releaseBundlePromise;
+        return { ok: true, stdout: "", stderr: "", code: 0, signal: null } as any;
+      }
+      if (command === "docker" && args[0] === "volume" && args[1] === "inspect") {
+        throw new Error("missing");
+      }
+      return { ok: true, stdout: "", stderr: "", code: 0, signal: null } as any;
+    });
+
+    const firstPrepare = manager.prepareWorktree(
+      "/repo/project",
+      "docker-volume://code-ux-project-abcd1234ef56-session-1",
+      "feature/task-1",
+      "feature/sprint-1",
+    );
+    await bundleStartedPromise;
+
+    const secondPrepare = manager.prepareWorktree(
+      "/repo/project",
+      "docker-volume://code-ux-project-abcd1234ef56-session-2",
+      "feature/task-2",
+      "feature/sprint-1",
+    );
+
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(bundleCreates).toBe(1);
+
+    releaseBundle();
+    await Promise.all([firstPrepare, secondPrepare]);
+
+    const bundleCreateCalls = vi.mocked(runCommandStrict).mock.calls.filter((call) =>
+      call[0] === "git" && call[1][0] === "bundle" && call[1][1] === "create"
+    );
+    expect(bundleCreateCalls).toHaveLength(1);
+    expect(bundleCreateCalls[0][1]).toEqual([
+      "bundle",
+      "create",
+      path.join("/tmp/code-ux-bundle-123", "repo.bundle"),
+      "refs/remotes/origin/feature/sprint-1",
+    ]);
+  });
+
   it("creates local branch aliases in Docker prepare worktrees for requested remote-only refs", async () => {
     vi.mocked(runCommandStrict).mockImplementation(async (command, args) => {
       if (command === "git" && args[0] === "rev-parse" && args[1] === "--show-toplevel") {
