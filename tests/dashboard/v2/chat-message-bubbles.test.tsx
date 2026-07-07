@@ -72,6 +72,30 @@ const createWidgetExecution = (overrides: Partial<ExecutionDashboardSnapshot> = 
   ...overrides,
 });
 
+const createChatMessage = (overrides: Partial<ChatMessageRecord> = {}): ChatMessageRecord => ({
+  id: "msg_external",
+  threadId: "thread_1",
+  direction: "connection_to_dashboard",
+  authorType: "connection",
+  authorConnectionId: "conn_1",
+  bodyMarkdown: "Hello world",
+  deliveryStatus: "delivered",
+  createdAt: "2026-03-10T12:00:00.000Z",
+  metadata: null,
+  ...overrides,
+});
+
+const createInvocationMessage = (overrides: Partial<ExecutionInvocationMessageRecord> = {}): ExecutionInvocationMessageRecord => ({
+  id: "msg_inv_external",
+  invocationId: "inv_1",
+  role: "assistant",
+  contentMarkdown: "Hello world",
+  toolCallsJson: null,
+  createdAt: "2026-03-10T12:00:00.000Z",
+  metadata: null,
+  ...overrides,
+});
+
 describe("Chat Message Bubbles", () => {
   describe("ChatMessageBubble", () => {
     it("renders plain markdown when no planning metadata is present", () => {
@@ -89,6 +113,95 @@ describe("Chat Message Bubbles", () => {
 
       const { container } = render(<ChatMessageBubble message={message} />);
       expect(container.innerHTML).toContain("Hello world");
+    });
+
+    it.each([
+      {
+        provider: "jira",
+        payload: {
+          provider: "jira",
+          kind: "issue",
+          key: "CUX-42",
+          title: "Fix import state handling",
+          status: "In Progress",
+          url: "https://example.atlassian.net/browse/CUX-42",
+          labels: ["runtime"],
+          assignee: { displayName: "Avery Stone" },
+        },
+        expected: ["Jira", "Issue", "CUX-42", "Fix import state handling", "In Progress", "runtime", "Avery Stone"],
+      },
+      {
+        provider: "github",
+        payload: {
+          provider: "github",
+          kind: "pull_request",
+          number: 77,
+          title: "Add project sync guardrails",
+          state: "open",
+          url: "https://github.com/codeux-ai/codeux/pull/77",
+          repositoryPath: "codeux-ai/codeux",
+          author: { login: "dev-user" },
+        },
+        expected: ["GitHub", "Pull request", "#77", "Add project sync guardrails", "codeux-ai/codeux", "dev-user"],
+      },
+      {
+        provider: "gitlab",
+        payload: {
+          provider: "gitlab",
+          kind: "merge_request",
+          iid: 12,
+          title: "Stabilize runner lease cleanup",
+          state: "merged",
+          web_url: "https://gitlab.com/codeux/runtime/-/merge_requests/12",
+          projectPath: "codeux/runtime",
+          labels: [{ name: "ops" }],
+        },
+        expected: ["GitLab", "Merge request", "#12", "Stabilize runner lease cleanup", "Merged", "codeux/runtime", "ops"],
+      },
+    ])("renders a rich $provider card for JSON thread messages and suppresses the raw payload", ({ payload, expected }) => {
+      const rawPayload = JSON.stringify(payload);
+      const message = createChatMessage({ bodyMarkdown: rawPayload });
+
+      const { container } = render(<ChatMessageBubble message={message} />);
+      const view = within(container);
+
+      expect(view.getByRole("region", { name: /Widget:/ })).toBeInTheDocument();
+      for (const text of expected) {
+        expect(view.getByText(text)).toBeInTheDocument();
+      }
+      expect(container.textContent).not.toContain(rawPayload);
+      expect(container.textContent).not.toContain('{"provider"');
+    });
+
+    it("keeps ordinary JSON thread messages visible as markdown", () => {
+      const rawPayload = JSON.stringify({ provider: "jira", note: "missing required issue title" });
+      const message = createChatMessage({ bodyMarkdown: rawPayload });
+
+      const { container } = render(<ChatMessageBubble message={message} />);
+
+      expect(container.textContent).toContain(rawPayload);
+      expect(within(container).queryByRole("region", { name: /Widget:/ })).not.toBeInTheDocument();
+    });
+
+    it("keeps ordinary JSON visible when metadata separately drives an external widget", () => {
+      const rawPayload = JSON.stringify({ diagnostic: "kept", count: 2 });
+      const message = createChatMessage({
+        bodyMarkdown: rawPayload,
+        metadata: {
+          externalReference: {
+            provider: "jira",
+            key: "CUX-51",
+            title: "Metadata-backed issue",
+            url: "https://example.atlassian.net/browse/CUX-51",
+          },
+        },
+      });
+
+      const { container } = render(<ChatMessageBubble message={message} />);
+      const view = within(container);
+
+      expect(view.getByText("Metadata-backed issue")).toBeInTheDocument();
+      expect(container.textContent).toContain(rawPayload);
     });
 
     it("does not render Invalid Date when the timestamp is missing or malformed", () => {
@@ -436,6 +549,44 @@ describe("Chat Message Bubbles", () => {
       const { container } = render(<InvocationMessageBubble message={message} />);
       expect(container.innerHTML).toContain("Using tool");
       expect(container.innerHTML).toContain('"tool": "test"');
+    });
+
+    it("renders a rich external reference card for JSON invocation messages and suppresses the raw payload", () => {
+      const payload = {
+        provider: "github",
+        kind: "issue",
+        number: 108,
+        title: "Track dashboard widget polish",
+        state: "open",
+        url: "https://github.com/codeux-ai/codeux/issues/108",
+        repositoryPath: "codeux-ai/codeux",
+        labels: ["dashboard"],
+      };
+      const rawPayload = JSON.stringify(payload);
+      const message = createInvocationMessage({ contentMarkdown: rawPayload });
+
+      const { container } = render(<InvocationMessageBubble message={message} />);
+      const view = within(container);
+
+      expect(view.getByRole("region", { name: /Widget:/ })).toBeInTheDocument();
+      expect(view.getByText("GitHub")).toBeInTheDocument();
+      expect(view.getByText("Issue")).toBeInTheDocument();
+      expect(view.getByText("#108")).toBeInTheDocument();
+      expect(view.getByText("Track dashboard widget polish")).toBeInTheDocument();
+      expect(view.getByText("codeux-ai/codeux")).toBeInTheDocument();
+      expect(view.getByText("dashboard")).toBeInTheDocument();
+      expect(container.textContent).not.toContain(rawPayload);
+      expect(container.textContent).not.toContain('{"provider"');
+    });
+
+    it("keeps ordinary JSON invocation messages visible as markdown", () => {
+      const rawPayload = JSON.stringify({ provider: "gitlab", state: "missing title and identifier" });
+      const message = createInvocationMessage({ contentMarkdown: rawPayload });
+
+      const { container } = render(<InvocationMessageBubble message={message} />);
+
+      expect(container.textContent).toContain(rawPayload);
+      expect(within(container).queryByRole("region", { name: /Widget:/ })).not.toBeInTheDocument();
     });
 
     it("renders reasoning turns in the dedicated widget and expands long text", () => {
