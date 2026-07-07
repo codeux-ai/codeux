@@ -422,8 +422,10 @@ For task create/update calls:
 
 For quicksprint calls:
 - `manage_quicksprints` supports `list_templates`, `get_template`, `create_template`, `update_template`, `delete_template`, `execute`, and `start`.
+- `create_template` requires `name`, `description`, `icon`, `category`, and `agentInstructionMarkdown`. Optional fields include `categoryColor`, and `defaultTaskCount`.
+- `update_template` supports partial updates to the same fields as `create_template`.
 - `start` is an MCP-friendly alias for execution with `submitMode: "plan_and_start"`.
-- `execute` defaults to `submitMode: "plan_only"` when no submit mode is supplied.
+- `execute` defaults to `submitMode: "plan_only"` when no submit mode is supplied. Both `execute` and `start` accept optional execution modifiers: `routeOverride`, and `modelOverride`.
 - `taskCount` is the canonical task-number field for execution. MCP accepts it as a number or numeric string.
 - `noTaskLimit: true` lets the planner choose the number of subtasks and disables the fixed-count prompt.
 - `delete_template` requires approval confirmation. Custom templates are removed from the project template directory; built-in/default templates are hidden for the project by writing a local tombstone marker instead of deleting shared bundled assets.
