@@ -10,6 +10,7 @@ import {
 } from "../../lib/chat-widget-view-models.js";
 import { formatChatTime } from "../../lib/chat-time.js";
 import { PlanningRequestWidget } from "./widgets/PlanningRequestWidget.js";
+import { ExternalReferenceWidget } from "./widgets/ExternalReferenceWidget.js";
 import { ToolCallWidget } from "./widgets/ToolCallWidget.js";
 import { ReasoningWidget } from "./widgets/ReasoningWidget.js";
 import { SelfReflectionWidget } from "./widgets/SelfReflectionWidget.js";
@@ -173,11 +174,13 @@ export const InvocationMessageBubble: FunctionComponent<InvocationMessageBubbleP
           </div>
 
           {/* Message Body */}
-          <div className="prose prose-sm max-w-none text-[14px] leading-7 text-slate-800 dark:text-slate-200 prose-headings:text-inherit prose-p:text-inherit prose-strong:text-inherit prose-code:text-inherit prose-pre:overflow-x-auto prose-code:overflow-x-auto break-words overflow-wrap-anywhere min-w-0"
-            dangerouslySetInnerHTML={{
-              __html: renderMarkdown(sanitizeInvocationOutputText(message.contentMarkdown || "*(No message content)*")),
-            }}
-          />
+          {!widgetData.suppressBodyMarkdown && (
+            <div className="prose prose-sm max-w-none text-[14px] leading-7 text-slate-800 dark:text-slate-200 prose-headings:text-inherit prose-p:text-inherit prose-strong:text-inherit prose-code:text-inherit prose-pre:overflow-x-auto prose-code:overflow-x-auto break-words overflow-wrap-anywhere min-w-0"
+              dangerouslySetInnerHTML={{
+                __html: renderMarkdown(sanitizeInvocationOutputText(message.contentMarkdown || "*(No message content)*")),
+              }}
+            />
+          )}
 
           {message.toolCallsJson && !kind && (
             <div className="mt-4 rounded border border-slate-200 bg-slate-200/30 p-3 text-xs dark:border-white/10 dark:bg-black/20">
@@ -191,6 +194,11 @@ export const InvocationMessageBubble: FunctionComponent<InvocationMessageBubbleP
           {widgetData.type === "planning" && (
             <div className="mt-4 border-t border-white/5 pt-4">
               <PlanningRequestWidget status={widgetData.status} planName={widgetData.planName} liveStatus={widgetData.liveStatus} />
+            </div>
+          )}
+          {widgetData.type === "external_reference" && widgetData.externalReference && (
+            <div className={widgetData.suppressBodyMarkdown ? "mt-0" : "mt-4 border-t border-white/5 pt-4"}>
+              <ExternalReferenceWidget status={widgetData.status} reference={widgetData.externalReference} />
             </div>
           )}
         </div>
