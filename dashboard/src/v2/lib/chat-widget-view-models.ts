@@ -25,6 +25,7 @@ export interface ChatWidgetState {
   planName: string;
   targetWorker?: string;
   liveStatus?: LivePlanningWidgetState;
+  executionPlan?: PlanningExecutionPlanWidgetState;
   externalReference?: ExternalReferenceWidgetState;
   suppressBodyMarkdown?: boolean;
 }
@@ -89,6 +90,25 @@ export interface LivePlanningWidgetState {
   progressLabel: string;
   materialization: LivePlanningMaterializationState;
   tasks: LivePlanningTaskState[];
+}
+
+export interface PlanningExecutionPlanTaskSummaryState {
+  id: string;
+  title: string;
+  summary: string | null;
+}
+
+export interface PlanningExecutionPlanWidgetState {
+  sprintId: string | null;
+  sprintNumber: number | null;
+  sprintKey: string | null;
+  sprintName: string;
+  goal: string | null;
+  taskCount: number;
+  createdTaskIds: string[];
+  tasks: PlanningExecutionPlanTaskSummaryState[];
+  taskSummaryLabel: string;
+  ariaLabel: string;
 }
 
 export interface ChatWidgetLiveData {
@@ -185,6 +205,12 @@ const readRecord = (value: unknown): Record<string, unknown> | null => (
 
 const readArray = (value: unknown): unknown[] => (
   Array.isArray(value) ? value : []
+);
+
+const readStringArray = (value: unknown): string[] => (
+  readArray(value)
+    .map((entry) => readString(entry))
+    .filter((entry): entry is string => Boolean(entry))
 );
 
 const readFirstString = (...values: unknown[]): string | null => {
@@ -359,6 +385,161 @@ const formatStatusLabel = (value: string | null | undefined): string => {
     .replace(/_/g, " ")
     .toLowerCase()
     .replace(/\b\w/g, (letter) => letter.toUpperCase());
+};
+
+const escapeRegExp = (value: string): string => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+const formatExecutionPlanName = (executionPlan: PlanningExecutionPlanWidgetState): string => {
+  if (!executionPlan.sprintKey) {
+    return executionPlan.sprintName;
+  }
+  const prefixPattern = new RegExp(`^${escapeRegExp(executionPlan.sprintKey)}\\s*[:\\-]?\\s*`, "i");
+  const normalizedName = executionPlan.sprintName.replace(prefixPattern, "").trim();
+  if (!normalizedName || normalizedName === executionPlan.sprintKey) {
+    return executionPlan.sprintKey;
+  }
+  return `${executionPlan.sprintKey}: ${normalizedName}`;
+};
+
+const readExecutionPlanTaskSummaries = (
+  executionPlan: Record<string, unknown>,
+  createdTaskIds: string[],
+): PlanningExecutionPlanTaskSummaryState[] => {
+  const candidates = [
+    executionPlan.taskSummaries,
+    executionPlan.task_summaries,
+    executionPlan.tasks,
+    executionPlan.createdTasks,
+    executionPlan.created_tasks,
+  ];
+  const rawTasks = candidates.find((candidate) => readArray(candidate).length > 0);
+  return readArray(rawTasks)
+    .map((entry, index): PlanningExecutionPlanTaskSummaryState | null => {
+      const record = readRecord(entry);
+      if (!record) {
+        const title = readString(entry);
+        return title ? { id: createdTaskIds[index] ?? `task-${index + 1}`, title, summary: null } : null;
+      }
+
+      const id = readFirstString(
+        record.id,
+        record.taskId,
+        record.task_id,
+        record.key,
+        record.taskKey,
+        record.task_key,
+        createdTaskIds[index],
+      ) ?? `task-${index + 1}`;
+      const title = readFirstString(record.title, record.name, record.summary, record.description, id);
+      if (!title) {
+        return null;
+      }
+
+      const summary = readFirstString(
+        record.summary,
+        record.description,
+        record.promptSummary,
+        record.prompt_summary,
+      );
+      return {
+        id,
+        title,
+        summary: summary && summary !== title ? summary : null,
+      };
+    })
+    .filter((entry): entry is PlanningExecutionPlanTaskSummaryState => Boolean(entry));
+};
+
+const formatExecutionPlanTaskSummaryLabel = (
+  taskCount: number,
+  createdTaskIds: string[],
+  tasks: PlanningExecutionPlanTaskSummaryState[],
+): string => {
+  const effectiveTaskCount = taskCount || tasks.length || createdTaskIds.length;
+  const plannedLabel = `${effectiveTaskCount} planned task${effectiveTaskCount === 1 ? "" : "s"}`;
+  if (createdTaskIds.length > 0 && createdTaskIds.length !== effectiveTaskCount) {
+    return `${plannedLabel}, ${createdTaskIds.length} created`;
+  }
+  return plannedLabel;
+};
+
+const readExecutionPlanState = (
+  metadata: Record<string, unknown> | null | undefined,
+  widgetMetadata: Record<string, unknown> | null,
+): PlanningExecutionPlanWidgetState | null => {
+  const executionPlan = readRecord(metadata?.executionPlan)
+    ?? readRecord(metadata?.execution_plan)
+    ?? readRecord(widgetMetadata?.executionPlan)
+    ?? readRecord(widgetMetadata?.execution_plan);
+  if (!executionPlan) {
+    return null;
+  }
+
+  const sprintId = readFirstString(executionPlan.sprintId, executionPlan.sprint_id);
+  const sprintNumber = readFirstNumber(executionPlan.sprintNumber, executionPlan.sprint_number);
+  const sprintKey = readFirstString(executionPlan.sprintKey, executionPlan.sprint_key)
+    ?? (sprintNumber !== null ? `SPR-${sprintNumber}` : sprintId);
+  const goal = readFirstString(executionPlan.goal);
+  const createdTaskIds = [
+    ...new Set([
+      ...readStringArray(executionPlan.createdTaskIds),
+      ...readStringArray(executionPlan.created_task_ids),
+    ]),
+  ];
+  const tasks = readExecutionPlanTaskSummaries(executionPlan, createdTaskIds);
+  const rawTaskCount = readFirstNumber(executionPlan.taskCount, executionPlan.task_count);
+  const taskCount = rawTaskCount !== null && rawTaskCount >= 0
+    ? Math.trunc(rawTaskCount)
+    : tasks.length || createdTaskIds.length;
+  const sprintName = readFirstString(executionPlan.sprintName, executionPlan.sprint_name)
+    ?? sprintKey
+    ?? "Execution Plan";
+
+  const hasPlanDetails = Boolean(
+    sprintId
+    || sprintNumber !== null
+    || sprintKey
+    || goal
+    || taskCount > 0
+    || createdTaskIds.length > 0
+    || tasks.length > 0
+    || readString(executionPlan.sprintName)
+    || readString(executionPlan.sprint_name),
+  );
+  if (!hasPlanDetails) {
+    return null;
+  }
+
+  const taskSummaryLabel = formatExecutionPlanTaskSummaryLabel(taskCount, createdTaskIds, tasks);
+  const ariaParts = ["Planning execution plan", formatExecutionPlanName({
+    sprintId,
+    sprintNumber,
+    sprintKey,
+    sprintName,
+    goal,
+    taskCount,
+    createdTaskIds,
+    tasks,
+    taskSummaryLabel,
+    ariaLabel: "",
+  })];
+  if (goal) {
+    ariaParts.push(`Goal ${goal}`);
+  }
+  ariaParts.push(taskSummaryLabel);
+
+  return {
+    sprintId,
+    sprintNumber,
+    sprintKey,
+    sprintName,
+    goal,
+    taskCount,
+    createdTaskIds,
+    tasks,
+    taskSummaryLabel,
+    ariaLabel: ariaParts.join(". "),
+  };
 };
 
 const normalizeExternalProviderValue = (value: unknown): ExternalReferenceProvider | null => {
@@ -952,17 +1133,21 @@ const extractWidgetStateFromMetadata = (
   liveData?: ChatWidgetLiveData,
 ): ChatWidgetState => {
   const widgetMetadata = getWidgetMetadata(metadata);
+  const executionPlan = readExecutionPlanState(metadata, widgetMetadata);
 
   if (widgetMetadata && widgetMetadata.type === "planning_request") {
     const status = (widgetMetadata.status as ExecutionStatus) || (metadata?.status as ExecutionStatus) || "completed";
-    const planName = (widgetMetadata.route_path as string) || (metadata?.planName as string) || (metadata?.title as string) || "Execution Plan";
+    const planName = executionPlan
+      ? formatExecutionPlanName(executionPlan)
+      : (widgetMetadata.route_path as string) || (metadata?.planName as string) || (metadata?.title as string) || "Execution Plan";
     const targetWorker = widgetMetadata.target_worker as string | undefined;
-    const liveStatus = buildLivePlanningWidgetState(metadata, status, planName, liveData);
+    const liveStatus = executionPlan ? null : buildLivePlanningWidgetState(metadata, status, planName, liveData);
     return {
       type: "planning",
       status: liveStatus ? mapSprintRunStatusToExecutionStatus(liveStatus.runStatus, status) : status,
       planName,
       targetWorker,
+      ...(executionPlan ? { executionPlan } : {}),
       ...(liveStatus ? { liveStatus } : {}),
     };
   }
@@ -988,12 +1173,15 @@ const extractWidgetStateFromMetadata = (
 
   if (isPlanning || metadata.routeKind === "virtual" || metadata.routeKind === "worker") {
     const status = (metadata.status as ExecutionStatus) || "completed";
-    const planName = (metadata.planName as string) || (metadata.title as string) || "Execution Plan";
-    const liveStatus = buildLivePlanningWidgetState(metadata, status, planName, liveData);
+    const planName = executionPlan
+      ? formatExecutionPlanName(executionPlan)
+      : (metadata.planName as string) || (metadata.title as string) || "Execution Plan";
+    const liveStatus = executionPlan ? null : buildLivePlanningWidgetState(metadata, status, planName, liveData);
     return {
       type: "planning",
       status: liveStatus ? mapSprintRunStatusToExecutionStatus(liveStatus.runStatus, status) : status,
       planName,
+      ...(executionPlan ? { executionPlan } : {}),
       ...(liveStatus ? { liveStatus } : {}),
     };
   }
