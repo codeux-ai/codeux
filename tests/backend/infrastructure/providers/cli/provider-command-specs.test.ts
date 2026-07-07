@@ -91,6 +91,15 @@ describe("Provider Command Specs", () => {
         args: ["--dangerously-skip-permissions", "-p", "hello"]
       }); // Antigravity does not append --model according to spec
     });
+
+    it("generates a self-contained Node command for mockup-cli", () => {
+      const spec = providerSpecs["mockup-cli"]("default", "mockup-cli:write fixture.txt :: hello");
+      expect(spec.command).toBe("node");
+      expect(spec.args[0]).toBe("-e");
+      expect(spec.args[1]).toContain("provider: \"mockup-cli\"");
+      expect(spec.args[1]).toContain("resolveWorkspacePath");
+      expect(spec.args[2]).toBe("mockup-cli:write fixture.txt :: hello");
+    });
   });
 
   describe("enabledCustomServersFor", () => {
