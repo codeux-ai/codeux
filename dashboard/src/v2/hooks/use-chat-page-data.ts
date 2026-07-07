@@ -13,6 +13,8 @@ import { useChatThreadData, isWorkingMessage } from "./use-chat-thread-data.js";
 import { useInvocationPaneData } from "./use-invocation-pane-data.js";
 import { useChatPageResources } from "./use-chat-page-resources.js";
 import type { AgentPresetRecord } from "../types.js";
+import { useSprints } from "../../hooks/useSprints.js";
+import { useProjectTasks } from "./use-project-tasks.js";
 
 /** "stage" is the cinematic 3D chat view; threads/invocations are the classic panes. */
 export type ChatMode = "stage" | "threads" | "invocations";
@@ -38,6 +40,14 @@ export const useChatPageData = (options?: { composerRef?: RefObject<HTMLTextArea
 
   const { data: execution, loading: executionLoading } = useExecutions(selectedProject?.id || null);
   const { data: effectiveSettings, loading: effectiveSettingsLoading } = useProjectEffectiveSettings(selectedProject?.id || null);
+  const { data: sprints } = useSprints(selectedProject?.id || null);
+  const { tasks: projectTasks, loading: projectTasksLoading, loaded: projectTasksLoaded } = useProjectTasks(
+    selectedProject?.id || null,
+    selectedProject ? [selectedProject] : [],
+    sprints,
+    null,
+    { enabled: Boolean(selectedProject) },
+  );
 
   const [chatMode, setChatModeState] = useState<ChatMode>(readStoredChatMode);
   const setChatMode = (mode: ChatMode): void => {
@@ -262,6 +272,13 @@ export const useChatPageData = (options?: { composerRef?: RefObject<HTMLTextArea
     threadIndex: threadData.threadIndex,
     invocationIndex: invocationData.invocationIndex,
     selectedProject,
+    execution,
+    executionLoading,
+    executionLoaded: Boolean(selectedProject && !executionLoading && execution.projectId === selectedProject.id),
+    projectTasks,
+    projectTasksLoading,
+    projectTasksLoaded: Boolean(selectedProject && projectTasksLoaded),
+    sprintKeyPrefix: effectiveSettings?.settings?.git?.sprintKeyPrefix || "SPR",
     feedback: threadData.feedback,
     clearFeedback: threadData.clearFeedback,
     isConfirmOpen: threadData.isConfirmOpen,

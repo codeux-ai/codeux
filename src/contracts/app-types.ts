@@ -537,6 +537,37 @@ export interface ProjectExecutionStatsSnapshot {
   chartSeries: ProjectExecutionStatsChartSeries[];
 }
 
+export type HeaderTokenThroughputWindow = Exclude<ProjectStatsWindow, "custom">;
+
+export interface HeaderTokenThroughputQuery {
+  window: HeaderTokenThroughputWindow;
+  projectId?: string | null;
+}
+
+export interface HeaderTokenThroughputTotals {
+  totalTokens: number;
+  inputTokens: number;
+  cachedInputTokens: number;
+  outputTokens: number;
+  reasoningTokens: number;
+  invocationCount: number;
+  activeTimeMs: number;
+  tokensPerMinute: number;
+}
+
+export interface HeaderTokenThroughputProjectSnapshot extends HeaderTokenThroughputTotals {
+  projectId: string;
+  projectName: string;
+}
+
+export interface HeaderTokenThroughputSnapshot {
+  generatedAt: string;
+  window: HeaderTokenThroughputWindow;
+  range: ProjectStatsRangeSummary;
+  app: HeaderTokenThroughputTotals;
+  project: HeaderTokenThroughputProjectSnapshot | null;
+}
+
 export interface OverviewTelemetryProjectSummary {
   projectId: string;
   projectName: string;

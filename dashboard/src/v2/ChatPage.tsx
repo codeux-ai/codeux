@@ -17,7 +17,6 @@ import { EmptyState } from "./components/ui/EmptyState.js";
 import { MessageCircle } from "lucide-preact";
 import { ChatMessageBubble } from "./components/chat/ChatMessageBubble.js";
 import { useChatPageData } from "./hooks/use-chat-page-data.js";
-import { useProjectEffectiveSettings } from "./hooks/use-project-effective-settings.js";
 import { formatInvocationPurpose, formatInvocationDuration, InvocationContextChips } from "./components/chat/invocation-display.js";
 import { InvocationMessageBubble } from "./components/chat/InvocationMessageBubble.js";
 import { InvocationRoutingWidget } from "./components/chat/widgets/InvocationRoutingWidget.js";
@@ -126,16 +125,40 @@ export const ChatPage: FunctionComponent = () => {
     confirmOptions,
     handleConfirm,
     handleCancel,
+    execution,
+    executionLoading,
+    executionLoaded,
+    projectTasks,
+    projectTasksLoading,
+    projectTasksLoaded,
+    sprintKeyPrefix,
   } = useChatPageData({ composerRef, messagesRef });
 
-  const effectiveSettings = useProjectEffectiveSettings(selectedProject?.id ?? null);
-  const sprintKeyPrefix = effectiveSettings.data?.settings?.git?.sprintKeyPrefix || "SPR";
   const projectThreads = useMemo(() => threads.filter((thread) => thread.scope === "project"), [threads]);
   const displayedInvocationTotal = invocationTotalCount ?? invocations.length;
   const runningInvocationCount = useMemo(
     () => invocations.filter((invocation) => invocation.status === "running" || invocation.id.startsWith("optimistic:")).length,
     [invocations],
   );
+  const widgetLiveData = useMemo(() => ({
+    projectId: selectedProject?.id ?? null,
+    projectTasks,
+    projectTasksLoading,
+    projectTasksLoaded,
+    execution,
+    executionLoading,
+    executionLoaded,
+    sprintKeyPrefix,
+  }), [
+    execution,
+    executionLoaded,
+    executionLoading,
+    projectTasks,
+    projectTasksLoaded,
+    projectTasksLoading,
+    selectedProject?.id,
+    sprintKeyPrefix,
+  ]);
 
   const handleRestartInvocation = useCallback(async (mode: InvocationRestartMode = "retry_full_prompt") => {
     if (!selectedInvocation || selectedInvocation.status !== "failed" || restartingInvocation || cancellingInvocationId || resettingUsageLimitInvocationId) {
@@ -445,6 +468,7 @@ export const ChatPage: FunctionComponent = () => {
                       allMessages={messages}
                       agentAvatarConfig={preset?.avatarConfig}
                       agentName={preset?.name}
+                      widgetLiveData={widgetLiveData}
                     />
                   );
                 })}
@@ -806,6 +830,7 @@ export const ChatPage: FunctionComponent = () => {
                       message={message}
                       agentAvatarConfig={message.role === "assistant" ? (selectedAgentPreset?.avatarConfig ?? null) : null}
                       agentName={message.role === "assistant" ? (selectedAgentPreset?.name ?? null) : null}
+                      widgetLiveData={widgetLiveData}
                     />
                   );
                 })

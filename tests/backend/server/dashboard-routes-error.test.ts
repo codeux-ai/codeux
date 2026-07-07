@@ -228,6 +228,7 @@ describe("dashboard route handlers", () => {
       getExecutionSnapshot: () => ({ projectId: null }),
       getLiveSnapshot: async () => ({ projectId: null }),
       getOverviewTelemetrySnapshot: () => ({ updatedAt: null }),
+      getHeaderTokenThroughputSnapshot: (query: { window: string; projectId?: string | null }) => query,
       getProjectExecutionSnapshot: () => ({ projectId: "project-1" }),
       getProjectStatsSnapshot: (_projectId: string, query: { window: string; from?: string; to?: string }) => query,
       setPreferredWorker: (_projectId: string, payload: unknown) => payload,
@@ -246,6 +247,11 @@ describe("dashboard route handlers", () => {
     expect((await request(app).get("/api/execution")).status).toBe(200);
     expect((await request(app).get("/api/live")).status).toBe(200);
     expect((await request(app).get("/api/telemetry/overview")).status).toBe(200);
+    const headerThroughput = await request(app).get("/api/stats/header-throughput?projectId=project-1&window=1h");
+    expect(headerThroughput.status).toBe(200);
+    expect(headerThroughput.body).toEqual({ window: "1h", projectId: "project-1" });
+    expect((await request(app).get("/api/stats/header-throughput?window=bogus")).status).toBe(400);
+    expect((await request(app).get("/api/stats/header-throughput?projectId=%20%20")).status).toBe(400);
     expect((await request(app).get("/api/projects/project-1/execution")).status).toBe(200);
     expect((await request(app).get("/api/projects/project-1/stats?window=24h")).status).toBe(200);
     expect((await request(app).get("/api/projects/project-1/stats?window=custom")).status).toBe(400);

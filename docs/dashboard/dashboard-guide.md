@@ -131,6 +131,8 @@ Legacy runtime:
   - Selected-project execution control-plane snapshot (`sprintRuns`, `taskDispatches`, `recentEvents`, lease ownership)
 - `GET /api/telemetry/overview`
   - Cross-project overview telemetry snapshot for all currently active project runs
+- `GET /api/stats/header-throughput?projectId=<projectId>&window=1h|24h|7d|30d|all`
+  - Compact app-wide and selected-project token throughput for the top dashboard header. The header uses it as a live summary near the runtime controls; detailed charts, ledgers, and model/provider analysis remain on the Stats page.
 - `GET /api/live`
   - Unified Live runtime snapshot for the selected project
 - `PUT /api/projects/:projectId/preferred-worker`
@@ -209,6 +211,7 @@ Legacy runtime:
   - External key hints from env/json
 - `GET /api/onboarding/readiness`
   - First-run onboarding readiness payload with Docker/Git dependency checks and local provider auth detection
+  - Also drives the header Docker status control: `cluster.status === "not_ready"` renders the red `Runtime not ready` alert badge, updates the icon-only trigger's accessible name, and exposes Docker/Git dependency resolution details in the popover.
 - `GET /api/local-directories?path=/absolute/path`
   - Lists child directories for the local Add Project directory picker, including current, parent, root, and home paths for browser-style navigation
 - `GET /api/git-status`
@@ -632,7 +635,7 @@ Runtime scoping:
 - Project scope General settings expose the selected project's display name as an immediate metadata edit. Saving calls `PATCH /api/projects/:projectId` with the trimmed `name`, refreshes the project collection, and leaves the project id, settings overrides, tasks, and runtime history unchanged.
 - The `/config` page keeps the existing v2 settings shell and categories, but now binds them to real scoped settings instead of draft-only values
 - System scope only edits system-owned controls, while project scope only edits project-owned overrides for the selected project
-- The Settings scope/status row stays sticky below the app shell while scrolling, keeping the System/Project selector, selected-scope context, project availability or inheritance summary, visible-category count, and save badges visible. The active panel/save-state strip is also sticky and uses a measured top offset from the wrapped scope row so long project names and narrow layouts do not create overlapping pinned controls.
+- The Settings command/status bar stays sticky below the app shell while scrolling, keeping the System/Project selector, selected-scope context, project availability or inheritance summary, active panel, and save state visible in one wrapping row. The visible-category count is search-only metadata and appears there only while Smart Find is active; otherwise the visible search status stays to a quiet prompt and keeps the exact category total for screen readers. The bar avoids a long background card behind the scope controls; each control or chip carries its own tokenized contrast, focus ring, and reduced-motion-safe status cue.
 - The integrations view now owns provider API keys plus GitHub and GitLab tokens and GitHub workflow settings, rather than splitting those across separate categories
 - The integrations view uses a registry-style list with per-integration `Add` and `Manage` actions so additional integrations can be added without turning the page into one long form
 - Provider integrations are now instance-based:
@@ -890,6 +893,7 @@ This dashboard enforces accessibility best practices to ensure an inclusive expe
 - **Accessible Names**: Icon-only controls, preview controls, task actions, command actions, settings toggles, provider-instance actions, telemetry rows, compact mobile controls, and Stats mode buttons must have explicit names that include the target when repeated. Decorative icons stay `aria-hidden`.
 - **Live Regions**: Non-visual state changes (like toast notifications or saving states) are announced using `aria-live="polite"` or `aria-live="assertive"`. Loading spinners use `aria-hidden="true"` with a visually hidden fallback, while their containers use `aria-busy="true"`.
 - **Async State Communication**: Loading, empty, low-data, success, pending, reconnecting, stale-data, and background-refresh states use polite `role="status"` or live regions. Blocking errors, failed saves, disconnected runtime transport, and unavailable preview containers use `role="alert"` or assertive live behavior. Controls that initiate async work expose `aria-busy` or disabled/`aria-disabled`.
+- **Header Runtime Readiness**: The Docker status control consumes `GET /api/onboarding/readiness`. When required Docker or Git checks make `cluster.status` `not_ready`, the header renders a red `Runtime not ready` alert badge with a static exclamation marker plus motion-safe animation, and the trigger accessible name includes that the runtime is not ready. The popover remains the keyboard-accessible dependency detail surface and does not add another assertive live region during hover refreshes.
 - **Tables & Ledgers**: Complex data displays like the Sprint Ledger, Stats ledgers, system invocation tables, and shared `Table` displays use semantic HTML (`<table>`, `<th>`, `<td>`) or explicit ARIA grid roles to support screen reader cell navigation. They preserve captions or labels, `aria-sort` on active sortable columns, and mobile labels when rows collapse into cards.
 - **Charts**: Data visualizations are wrapped in a region with `role="region"` and an `aria-label`, providing an accessible name for the visual content.
 - **Stats & Analytics**: Analytics controls (like visual mode tabs and time windows) use semantic `role="group"` with `aria-pressed` states. Charts and sparklines include `sr-only` descriptive summaries of their data, allowing non-visual users to understand distributions and trends.

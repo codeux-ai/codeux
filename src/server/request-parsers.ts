@@ -1,4 +1,6 @@
 import type {
+  HeaderTokenThroughputQuery,
+  HeaderTokenThroughputWindow,
   ProjectStatsQuery,
   ProjectStatsWindow,
 } from "../contracts/app-types.js";
@@ -729,4 +731,37 @@ export function parseProjectStatsQuery(query: Record<string, unknown>): ProjectS
   }
 
   return { window, from, to, limit };
+}
+
+export function parseHeaderTokenThroughputQuery(query: Record<string, unknown>): HeaderTokenThroughputQuery {
+  const requestedWindow = typeof query.window === "string" ? query.window.trim() : "";
+  const window: HeaderTokenThroughputWindow = requestedWindow.length === 0
+    ? "24h"
+    : parseHeaderTokenThroughputWindow(requestedWindow);
+
+  if (!Object.prototype.hasOwnProperty.call(query, "projectId")) {
+    return { window, projectId: null };
+  }
+
+  if (typeof query.projectId !== "string") {
+    throw new Error("Invalid projectId query parameter.");
+  }
+  const projectId = query.projectId.trim();
+  if (!projectId) {
+    throw new Error("Missing required projectId when projectId is provided.");
+  }
+  return { window, projectId };
+}
+
+function parseHeaderTokenThroughputWindow(window: string): HeaderTokenThroughputWindow {
+  if (
+    window === "1h"
+    || window === "24h"
+    || window === "7d"
+    || window === "30d"
+    || window === "all"
+  ) {
+    return window;
+  }
+  throw new Error("Invalid header throughput window. Expected one of: 1h, 24h, 7d, 30d, all.");
 }

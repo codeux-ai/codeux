@@ -27,6 +27,7 @@ describe("Dashboard Execution Invocation API", () => {
       getExecutionSnapshot: vi.fn(),
       getProjectExecutionSnapshot: vi.fn(),
       getProjectStatsSnapshot: vi.fn(),
+      getHeaderTokenThroughputSnapshot: vi.fn(),
       getOverviewTelemetrySnapshot: vi.fn(),
       getLiveActivities: vi.fn(),
       getGitStatus: vi.fn(),

@@ -2,7 +2,7 @@
  * @vitest-environment jsdom
  */
 import { h } from "preact";
-import { useState } from "preact/hooks";
+import { useRef, useState } from "preact/hooks";
 import { readFileSync } from "node:fs";
 import { describe, it, expect, afterEach, vi } from "vitest";
 import { render, screen, cleanup, fireEvent, waitFor } from "@testing-library/preact";
@@ -12,21 +12,64 @@ import { SprintKeyEditor } from "../SprintKeyEditor";
 import { TextInput, SecretInput, NumberInput, TextAreaInput, PillChoiceGroup, SelectInput } from "../SettingsFormFields";
 
 
-import { CATEGORIES, SettingsCategoryRail } from "../SettingsCategoryRail";
+import { SettingsCategoryRail, CATEGORIES } from "../SettingsCategoryRail";
+import { SettingsScopeControls } from "../SettingsScopeControls";
 import { ActionButton, NoticePanel } from "../SettingsSurface";
 import { OverrideBadge } from "../panels/SharedPanelComponents";
 import { SettingsTechstacksPanel } from "../panels/SettingsTechstacksPanel";
 import { SlidersHorizontal } from "lucide-preact";
 import type { SettingsSearchMatches } from "../../../lib/settings-search-index";
+import type { Source } from "../../../types";
 import userEvent from "@testing-library/user-event";
+import { SettingsActivePanelStatus } from "../SettingsActivePanelStatus";
 import { SettingsContentPanels } from "../SettingsContentPanels";
 import { UnsavedChangesModal } from "../../ui/UnsavedChangesModal";
 import { ProviderInstanceCard } from "../ProviderInstanceCard";
 import { DEFAULT_DASHBOARD_SETTINGS } from "../../../../lib/settings";
 import { dashboardSettingsToProjectSettings } from "../../../lib/settings-view-models";
 import type { ProjectSettings, SystemSettings, TechstackCatalogEntrySettings } from "../../../../types";
+import { SettingsSmartFindSearch } from "../../../SettingsPage";
 
 const defaultInnerHeight = window.innerHeight;
+const interactionStyle = { transitionDuration: "200ms", transitionTimingFunction: "ease" };
+const genericProject = {
+  id: "project-1",
+  name: "Test Project",
+} as Source;
+
+const renderSettingsScopeControls = (overrides: Partial<Parameters<typeof SettingsScopeControls>[0]> = {}) => render(
+  <SettingsScopeControls
+    activeScope="system"
+    setActiveScope={() => {}}
+    selectedProject={genericProject}
+    scopeStatusText="System scope selected. Editing live system defaults."
+    projectSourceSummary={null}
+    filteredCategoryCount={10}
+    isSearchActive={false}
+    activeDirty={false}
+    activeSaving={false}
+    saveMessage={null}
+    error={null}
+    interactionStyle={interactionStyle}
+    {...overrides}
+  />,
+);
+
+const renderSettingsSmartFindSearch = (overrides: Partial<Parameters<typeof SettingsSmartFindSearch>[0]> = {}) => {
+  const defaultProps: Parameters<typeof SettingsSmartFindSearch>[0] = {
+    settingsSearch: "",
+    setSettingsSearch: () => {},
+    searchInputRef: { current: null },
+    filteredCategories: CATEGORIES,
+    settingsSearchMatches: {},
+    activeCategory: "general",
+    activeCategoryConfig: CATEGORIES[0],
+    onSwitchCategory: () => {},
+    interactionStyle,
+  };
+
+  return render(<SettingsSmartFindSearch {...defaultProps} {...overrides} />);
+};
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -248,6 +291,112 @@ const createSystemSettings = (projectSettings: ProjectSettings): SystemSettings 
     expect(screen.getByText(/Keep the search field focused/)).toBeInTheDocument();
   });
 
+  it("SettingsSmartFindSearch keeps idle status quiet while preserving the category count for assistive technology", () => {
+    renderSettingsSmartFindSearch();
+
+    expect(screen.getByText("Press slash to search settings.")).toBeInTheDocument();
+    expect(screen.getByText("10 settings categories available.")).toHaveClass("sr-only");
+    expect(screen.queryByText("10 settings categories available. Press slash to search.")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Clear settings search" })).not.toBeInTheDocument();
+    expect(screen.getByText("/")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Appearance" })).toBeInTheDocument();
+  });
+
+  it("SettingsSmartFindSearch announces active matches with counts, active category, and previews", () => {
+    const modelsCategory = CATEGORIES.find((category) => category.id === "models")!;
+    const integrationsCategory = CATEGORIES.find((category) => category.id === "integrations")!;
+    const settingsSearchMatches: SettingsSearchMatches = {
+      models: {
+        categoryId: "models",
+        matchedLabels: ["Claude Code"],
+        matchedDescriptions: [],
+        matchedTerms: ["routing"],
+      },
+      integrations: {
+        categoryId: "integrations",
+        matchedLabels: [],
+        matchedDescriptions: ["API keys"],
+        matchedTerms: [],
+      },
+    };
+
+    renderSettingsSmartFindSearch({
+      settingsSearch: "claude",
+      filteredCategories: [modelsCategory, integrationsCategory],
+      settingsSearchMatches,
+      activeCategory: "models",
+      activeCategoryConfig: modelsCategory,
+    });
+
+    expect(screen.getByRole("status")).toHaveTextContent(
+      '3 results across 2 matching categories for "claude". Active category: AI Models. Active matches: Claude Code, routing. Match previews: Claude Code, routing, API keys.',
+    );
+    expect(screen.getByLabelText("Smart Find match previews")).toHaveTextContent("Claude Code");
+    expect(screen.getByRole("button", { name: "Integrations" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Appearance" })).not.toBeInTheDocument();
+  });
+
+  it("SettingsSmartFindSearch announces active no-match searches without hiding recovery context", () => {
+    renderSettingsSmartFindSearch({
+      settingsSearch: "zzzz",
+      filteredCategories: [],
+      settingsSearchMatches: {},
+    });
+
+    expect(screen.getByRole("status")).toHaveTextContent(
+      '0 results across 0 matching categories for "zzzz". Active category: General. Match previews: none. Clear the search or try routing, provider, auth, CI, agent, or memory.',
+    );
+    expect(screen.queryByLabelText("Smart Find match previews")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Appearance" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Clear settings search" })).toBeInTheDocument();
+  });
+
+  it("SettingsSmartFindSearch clear button restores focus and removes search-only chips", async () => {
+    const user = userEvent.setup();
+    const integrationsCategory = CATEGORIES.find((category) => category.id === "integrations")!;
+    const settingsSearchMatches: SettingsSearchMatches = {
+      integrations: {
+        categoryId: "integrations",
+        matchedLabels: ["Claude Code"],
+        matchedDescriptions: [],
+        matchedTerms: [],
+      },
+    };
+
+    const SmartFindHarness = () => {
+      const [settingsSearch, setSettingsSearch] = useState("claude");
+      const searchInputRef = useRef<HTMLInputElement>(null);
+      const searchActive = settingsSearch.trim().length > 0;
+
+      return (
+        <SettingsSmartFindSearch
+          settingsSearch={settingsSearch}
+          setSettingsSearch={setSettingsSearch}
+          searchInputRef={searchInputRef}
+          filteredCategories={searchActive ? [integrationsCategory] : CATEGORIES}
+          settingsSearchMatches={searchActive ? settingsSearchMatches : {}}
+          activeCategory="general"
+          activeCategoryConfig={CATEGORIES[0]}
+          onSwitchCategory={() => {}}
+          interactionStyle={interactionStyle}
+        />
+      );
+    };
+
+    render(<SmartFindHarness />);
+
+    const searchInput = screen.getByRole("textbox", { name: "Search settings categories" });
+    await user.click(screen.getByRole("button", { name: "Clear settings search" }));
+
+    expect(searchInput).toHaveFocus();
+    expect(searchInput).toHaveValue("");
+    expect(screen.queryByRole("button", { name: "Clear settings search" })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Smart Find match previews")).not.toBeInTheDocument();
+    expect(screen.queryByText("Claude Code")).not.toBeInTheDocument();
+    expect(screen.getByText("Press slash to search settings.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Appearance" })).toBeInTheDocument();
+  });
+
   it("SettingsCategoryRail exposes pending and disabled category states without selected or pending badges", () => {
     cleanup();
     const mockCategories = [
@@ -312,6 +461,89 @@ const createSystemSettings = (projectSettings: ProjectSettings): SystemSettings 
     expect(screen.getByRole("radiogroup", { name: "Scope choice" })).toBeInTheDocument();
     expect(screen.getByRole("radio", { name: "System" })).toHaveAttribute("aria-checked", "true");
     expect(screen.getByRole("radio", { name: "Project" })).toHaveAttribute("aria-checked", "false");
+  });
+
+  it("SettingsScopeControls renders system scope without duplicated visible system context", () => {
+    renderSettingsScopeControls();
+
+    const group = screen.getByRole("radiogroup", { name: "Settings scope" });
+    expect(group).toHaveAccessibleDescription(
+      "Editing live system defaults. Project scope is available for the selected project. System scope selected. Editing live system defaults.",
+    );
+    expect(screen.getByRole("radio", { name: "System" })).toHaveAttribute("aria-checked", "true");
+    expect(screen.getByRole("radio", { name: "Project" })).toHaveAttribute("aria-checked", "false");
+    expect(screen.queryByText("System (selected)")).not.toBeInTheDocument();
+    expect(screen.getByText("Editing live system defaults.")).toHaveClass("sr-only");
+    expect(screen.queryByText(/visible categor/)).not.toBeInTheDocument();
+  });
+
+  it("SettingsScopeControls keeps project unavailable guidance wired to the disabled radio", () => {
+    const setActiveScope = vi.fn();
+    renderSettingsScopeControls({
+      selectedProject: null,
+      setActiveScope,
+      scopeStatusText: "Project scope is unavailable until a project is selected.",
+    });
+
+    const projectRadio = screen.getByRole("radio", { name: "Project" });
+    expect(projectRadio).toBeDisabled();
+    expect(projectRadio).toHaveAccessibleDescription("Project scope unlocks after selecting a project.");
+    expect(screen.getByText("Project scope unlocks after selecting a project.")).toHaveAttribute("id", "settings-project-scope-disabled");
+
+    fireEvent.click(projectRadio);
+    expect(setActiveScope).not.toHaveBeenCalled();
+  });
+
+  it("SettingsScopeControls renders project inheritance and saved state chips", () => {
+    renderSettingsScopeControls({
+      activeScope: "project",
+      scopeStatusText: "Project scope selected. Editing overrides for Test Project.",
+      projectSourceSummary: "2 overridden settings and 8 inherited settings in this project scope.",
+      saveMessage: "Settings saved.",
+    });
+
+    expect(screen.getByRole("radio", { name: "Project" })).toHaveAttribute("aria-checked", "true");
+    expect(screen.getByText("Editing overrides for Test Project")).toBeInTheDocument();
+    expect(screen.getByText("2 overridden settings and 8 inherited settings in this project scope.")).toBeInTheDocument();
+    expect(screen.getByText("Saved")).toBeInTheDocument();
+  });
+
+  it("SettingsScopeControls renders unsaved edits without the saved badge", () => {
+    renderSettingsScopeControls({
+      activeDirty: true,
+      saveMessage: "Settings saved.",
+    });
+
+    expect(screen.getByText("Unsaved edits")).toBeInTheDocument();
+    expect(screen.queryByText("Saved")).not.toBeInTheDocument();
+  });
+
+  it("SettingsScopeControls shows visible category count only while Smart Find is active", () => {
+    const { rerender } = renderSettingsScopeControls({
+      filteredCategoryCount: 4,
+      isSearchActive: false,
+    });
+
+    expect(screen.queryByText("4 visible categories")).not.toBeInTheDocument();
+
+    rerender(
+      <SettingsScopeControls
+        activeScope="system"
+        setActiveScope={() => {}}
+        selectedProject={genericProject}
+        scopeStatusText="System scope selected. Editing live system defaults."
+        projectSourceSummary={null}
+        filteredCategoryCount={1}
+        isSearchActive
+        activeDirty={false}
+        activeSaving={false}
+        saveMessage={null}
+        error={null}
+        interactionStyle={interactionStyle}
+      />,
+    );
+
+    expect(screen.getByText("1 visible category")).toBeInTheDocument();
   });
 
   it("SelectInput keeps disabled reason visible and described by the control", () => {
@@ -576,7 +808,59 @@ describe("SettingsControls Accessibility", () => {
     expect(discardButton).toHaveAttribute("aria-busy", "true");
   });
 
-  it("SettingsContentPanels renders dirty-to-saving-to-saved feedback while keeping values mounted", async () => {
+  it("SettingsActivePanelStatus renders the sticky active panel save state contract", () => {
+    render(
+      <SettingsActivePanelStatus
+        stickyTop="112px"
+        state={{
+          activeCategory: "models",
+          activeCategoryConfig: { label: "AI Models" },
+          activeDirty: true,
+          activeSaving: false,
+          error: null,
+          saveMessage: null,
+          loading: false,
+          resettingProject: false,
+        } as any}
+      />
+    );
+
+    expect(screen.getByRole("status")).toHaveAttribute("aria-live", "polite");
+    expect(screen.getByRole("status")).toHaveTextContent("AI Models settings have local unsaved changes.");
+    expect(screen.getByText("AI Models")).toBeInTheDocument();
+    expect(screen.getByText("Unsaved changes")).toBeInTheDocument();
+    const activePanelStrip = screen.getByText("Active panel").parentElement;
+    expect(activePanelStrip).toHaveAttribute("data-settings-sticky", "active-panel");
+    expect(activePanelStrip).toHaveClass("sticky", "top-[var(--settings-active-panel-top)]", "flex-wrap", "overflow-visible");
+    expect(activePanelStrip).toHaveStyle("--settings-active-panel-top: 112px");
+  });
+
+  it("SettingsActivePanelStatus can render inline without duplicating status logic", () => {
+    render(
+      <SettingsActivePanelStatus
+        sticky={false}
+        state={{
+          activeCategory: "general",
+          activeDirty: false,
+          activeSaving: false,
+          error: "Save failed",
+          saveMessage: null,
+          loading: false,
+          resettingProject: false,
+        } as any}
+      />
+    );
+
+    expect(screen.getByRole("alert")).toHaveAttribute("aria-live", "assertive");
+    expect(screen.getByRole("alert")).toHaveTextContent("General settings blocked: Save failed");
+    expect(screen.getByText("Blocked")).toBeInTheDocument();
+    const activePanelStrip = screen.getByText("Active panel").parentElement;
+    expect(activePanelStrip).not.toHaveAttribute("data-settings-sticky");
+    expect(activePanelStrip).not.toHaveClass("sticky", "top-[var(--settings-active-panel-top)]");
+    expect(activePanelStrip).not.toHaveStyle("--settings-active-panel-top: 9.5rem");
+  });
+
+  it("SettingsContentPanels renders its standalone sticky active-panel strip while keeping values mounted", async () => {
     const { rerender } = render(
       <SettingsContentPanels
         state={{
@@ -598,6 +882,9 @@ describe("SettingsControls Accessibility", () => {
     expect(activePanelStrip).toHaveAttribute("data-settings-sticky", "active-panel");
     expect(activePanelStrip).toHaveClass("sticky", "top-[var(--settings-active-panel-top)]", "flex-wrap", "overflow-visible");
     expect(activePanelStrip).toHaveStyle("--settings-active-panel-top: 9.5rem");
+    const panelStatus = screen.getByText("General settings have local unsaved changes.");
+    expect(panelStatus).toHaveAttribute("role", "status");
+    expect(panelStatus).toHaveAttribute("aria-live", "polite");
     expect(screen.getByText("General panel values stay mounted").parentElement).toHaveAttribute("data-motion-contract", "enterExit");
     expect(screen.getByText("General panel values stay mounted").parentElement).toHaveClass("motion-reduce:animate-none");
 
@@ -636,10 +923,10 @@ describe("SettingsControls Accessibility", () => {
     expect(screen.getByText("General panel values stay mounted")).toBeInTheDocument();
   });
 
-  it("SettingsContentPanels accepts the measured sticky offset from the settings scope strip", () => {
+  it("SettingsContentPanels can suppress the active panel strip for a shared command/status bar", () => {
     render(
       <SettingsContentPanels
-        stickyTop="148px"
+        showActivePanelStatus={false}
         state={{
           activeCategory: "general",
           activeDirty: false,
@@ -652,7 +939,8 @@ describe("SettingsControls Accessibility", () => {
       />
     );
 
-    expect(screen.getByText("Active panel").parentElement).toHaveStyle("--settings-active-panel-top: 148px");
+    expect(screen.queryByText("Active panel")).not.toBeInTheDocument();
+    expect(screen.getByText("General panel values stay mounted")).toBeInTheDocument();
   });
 
   it("SettingsContentPanels routes the Techstacks category to the catalog panel", () => {
@@ -768,14 +1056,26 @@ describe("SettingsControls Accessibility", () => {
     });
   });
 
-  it("SettingsPage keeps the scope controls in a sticky wrapping strip and passes its measured offset to the panel strip", () => {
+  it("SettingsPage keeps scope controls and active panel status in one unified sticky wrapping bar", () => {
     const source = readFileSync("dashboard/src/v2/SettingsPage.tsx", "utf8");
+    const commandStatusBarSource = source.match(
+      /<div\s+data-settings-sticky="settings-command-status"[\s\S]*?<SettingsCategoryRail/,
+    )?.[0] ?? "";
 
-    expect(source).toContain('data-settings-sticky="scope"');
-    expect(source).toContain("sticky top-16 z-30");
-    expect(source).toContain("flex min-w-0 flex-wrap");
-    expect(source).toContain("scopeSticky.getBoundingClientRect().height + appShellOffset + stickyGap");
-    expect(source).toContain("<SettingsContentPanels state={state} stickyTop={panelStickyTop} />");
+    expect(source).toContain('import { SettingsScopeControls } from "./components/settings/SettingsScopeControls.js";');
+    expect(source).toContain('import { SettingsActivePanelStatus } from "./components/settings/SettingsActivePanelStatus.js";');
+    expect(source).toContain('data-settings-sticky="settings-command-status"');
+    expect(commandStatusBarSource).toContain("sticky top-16 z-30");
+    expect(commandStatusBarSource).toContain("flex min-w-0 max-w-full flex-wrap");
+    expect(commandStatusBarSource).toContain("<SettingsScopeControls");
+    expect(commandStatusBarSource).toContain("<SettingsActivePanelStatus");
+    expect(commandStatusBarSource).toContain("sticky={false}");
+    expect(commandStatusBarSource).not.toContain("rounded-[");
+    expect(commandStatusBarSource).not.toContain("bg-[var(--surface-glass)]");
+    expect(source.match(/<SettingsContentPanels/g) ?? []).toHaveLength(1);
+    expect(source).toMatch(/<SettingsContentPanels\s+state=\{state\}\s+showActivePanelStatus=\{false\}\s+\/>/);
+    expect(source).not.toContain("scopeSticky.getBoundingClientRect()");
+    expect(source).not.toContain("panelStickyTop");
   });
 
   it("SettingsContentPanels renders reset pending feedback while keeping values mounted", () => {
