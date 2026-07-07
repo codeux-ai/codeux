@@ -104,6 +104,150 @@ describe("ChatThreadRuntimeService", () => {
     }
   });
 
+  it("launches create-app quickactions as detached quicksprints and posts an app progress widget", async () => {
+    const quickactionMetadata = {
+      quickaction: {
+        type: "create_app",
+        kind: "web_app",
+        requestId: "quickaction-web-1",
+        templateId: "qs-create-web-app",
+        taskCount: 6,
+        stackSummary: {
+          techstackId: "preact-fullstack",
+          techstackName: "Preact Fullstack",
+          language: "TypeScript",
+          framework: "Preact",
+          runtime: "Node.js",
+          packageManager: "pnpm",
+          styling: "Tailwind",
+          testFramework: "Vitest",
+        },
+        suggestionTags: ["auth", "dashboard"],
+      },
+    };
+    const quicksprintLauncher = {
+      launchDetachedQuicksprint: vi.fn().mockResolvedValue({
+        sprint: {
+          id: "sprint-web-1",
+          name: "QS: Create Web App",
+        },
+        planningRequest: {
+          projectId: "p1",
+          sprintId: "sprint-web-1",
+          templateId: "qs-create-web-app",
+          submitMode: "plan_and_start",
+          clientRequestId: "quickaction-web-1",
+          planOptions: {
+            autoStart: true,
+            replan: false,
+            clientRequestId: "quickaction-web-1",
+          },
+        },
+      }),
+    };
+    service.setQuicksprintLauncher(quicksprintLauncher);
+    deps.connectionChatRepository.postDashboardMessage.mockReturnValue({
+      id: "msg-app",
+      threadId: "t-app",
+      bodyMarkdown: "Create a web app for the selected project.",
+      metadata: quickactionMetadata,
+    });
+    deps.connectionChatRepository.getThread.mockReturnValue({
+      id: "t-app",
+      projectId: "p1",
+      connectionId: null,
+      title: "Create a web app",
+      runtimeState: {},
+    });
+
+    await service.postMessage("p1", {
+      bodyMarkdown: "Create a web app for the selected project.",
+      metadata: quickactionMetadata,
+    });
+
+    expect(quicksprintLauncher.launchDetachedQuicksprint).toHaveBeenCalledTimes(1);
+    expect(quicksprintLauncher.launchDetachedQuicksprint).toHaveBeenCalledWith("p1", expect.objectContaining({
+      templateId: "qs-create-web-app",
+      taskCount: 6,
+      submitMode: "plan_and_start",
+      clientRequestId: "quickaction-web-1",
+      additionalPrompt: expect.stringContaining("Create an app sprint for a web application."),
+    }));
+    const launchInput = quicksprintLauncher.launchDetachedQuicksprint.mock.calls[0][1];
+    expect(launchInput.additionalPrompt).toContain("answer quickly");
+    expect(launchInput.additionalPrompt).toContain("Invite directional follow-up");
+    expect(launchInput.additionalPrompt).toContain("prepare for follow-up details to be appended after planning finishes");
+    expect(launchInput.additionalPrompt).toContain("- Techstack: Preact Fullstack");
+    expect(launchInput.additionalPrompt).toContain("Suggestion tags from the dashboard: auth, dashboard.");
+    expect(deps.connectionChatRepository.markDashboardMessagesProcessed).toHaveBeenCalledWith("t-app", {
+      upToMessageId: "msg-app",
+    });
+    expect(deps.connectionChatRepository.postSystemMessage).toHaveBeenCalledWith("p1", {
+      threadId: "t-app",
+      bodyMarkdown: expect.stringContaining("Started a web app sprint"),
+      metadata: {
+        widget_metadata: {
+          type: "app_progress",
+          status: "running",
+          appKind: "web_app",
+          sprintId: "sprint-web-1",
+          sprintName: "QS: Create Web App",
+          stackSummary: expect.objectContaining({
+            techstackId: "preact-fullstack",
+            techstackName: "Preact Fullstack",
+            applicationKind: "web_app",
+          }),
+          planningStages: [
+            { id: "planning", label: "Planning", status: "running" },
+            { id: "plan", label: "Plan", status: "pending" },
+            { id: "start", label: "Start", status: "pending" },
+            { id: "finish", label: "Finish", status: "pending" },
+          ],
+          suggestionTags: ["auth", "dashboard"],
+          quickactionRequestId: "quickaction-web-1",
+          clientRequestId: "quickaction-web-1",
+        },
+      },
+    });
+    expect(deps.chatManagementActionService.processManagementAction).not.toHaveBeenCalled();
+  });
+
+  it("keeps non-create-app quickaction metadata on the normal chat path", async () => {
+    const quicksprintLauncher = {
+      launchDetachedQuicksprint: vi.fn(),
+    };
+    service.setQuicksprintLauncher(quicksprintLauncher);
+    deps.connectionChatRepository.postDashboardMessage.mockReturnValue({
+      id: "msg-normal",
+      threadId: "t1",
+      bodyMarkdown: "Show project status",
+      metadata: { quickaction: { type: "status_report", requestId: "quickaction-status-1" } },
+    });
+    deps.connectionChatRepository.getThread.mockReturnValue({
+      id: "t1",
+      projectId: "p1",
+      connectionId: null,
+      runtimeState: {},
+    });
+    deps.projectManagementRepository.getProject.mockReturnValue({ id: "p1", name: "proj", baseDir: "/tmp" });
+    deps.taskService.resolveInvocationProvider.mockReturnValue({
+      provider: "codex",
+      providers: { codex: { model: "gpt-5.3-codex", apiKey: "codex-key" } },
+    });
+    deps.connectionChatRepository.listMessages.mockReturnValue([
+      { id: "msg-normal", authorType: "dashboard_user", bodyMarkdown: "Show project status" },
+    ]);
+    deps.chatManagementActionService.processManagementAction.mockResolvedValue({ replyMarkdown: "status", action: null, approvalRequired: false });
+
+    await service.postMessage("p1", {
+      bodyMarkdown: "Show project status",
+      metadata: { quickaction: { type: "status_report", requestId: "quickaction-status-1" } },
+    });
+
+    expect(quicksprintLauncher.launchDetachedQuicksprint).not.toHaveBeenCalled();
+    expect(deps.chatManagementActionService.processManagementAction).toHaveBeenCalledTimes(1);
+  });
+
   it("runs virtual provider and replays history on provider switch using chatManagementActionService", async () => {
     deps.connectionChatRepository.postDashboardMessage.mockReturnValue({ id: "msg-2", threadId: "t1", bodyMarkdown: "hello" });
     deps.connectionChatRepository.getThread.mockReturnValue({

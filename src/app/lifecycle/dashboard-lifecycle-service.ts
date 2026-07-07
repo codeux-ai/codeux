@@ -402,6 +402,7 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<DashboardS
   });
 
   deps.projectSetupService.setRealtimeNotifier(deps.dashboardRealtimeService);
+  deps.chatThreadRuntimeService?.setQuicksprintLauncher?.(deps.quicksprintService);
 
   // Auto-restore previously active embedding model (fire-and-forget)
   deps.embeddingModelManager.restorePreviousModel().catch((error) => {

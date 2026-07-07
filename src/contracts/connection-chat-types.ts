@@ -63,6 +63,54 @@ export interface ConversationRuntimeState {
   } | null;
 }
 
+export const DASHBOARD_CREATE_APP_QUICKACTION_KINDS = ["web_app", "desktop_app"] as const;
+export type DashboardCreateAppQuickactionKind = typeof DASHBOARD_CREATE_APP_QUICKACTION_KINDS[number];
+
+export const DASHBOARD_APP_PROGRESS_WIDGET_TYPE = "app_progress" as const;
+
+export interface DashboardCreateAppQuickactionStackSummary {
+  techstackId?: string | null;
+  techstackName?: string | null;
+  applicationKind?: DashboardCreateAppQuickactionKind | null;
+  language?: string | null;
+  framework?: string | null;
+  runtime?: string | null;
+  packageManager?: string | null;
+  styling?: string | null;
+  testFramework?: string | null;
+}
+
+export interface DashboardCreateAppQuickactionMetadata {
+  quickaction: {
+    type: "create_app";
+    kind: DashboardCreateAppQuickactionKind;
+    requestId: string;
+    templateId: string;
+    taskCount?: number;
+    stackSummary?: DashboardCreateAppQuickactionStackSummary | null;
+    suggestionTags?: string[];
+  };
+}
+
+export interface DashboardAppProgressPlanningStage {
+  id: "planning" | "plan" | "start" | "finish";
+  label: "Planning" | "Plan" | "Start" | "Finish";
+  status: "running" | "pending" | "completed" | "failed";
+}
+
+export interface DashboardAppProgressWidgetMetadata {
+  type: typeof DASHBOARD_APP_PROGRESS_WIDGET_TYPE;
+  status: "running" | "completed" | "failed";
+  appKind: DashboardCreateAppQuickactionKind;
+  sprintId: string;
+  sprintName: string;
+  stackSummary?: DashboardCreateAppQuickactionStackSummary | null;
+  planningStages: DashboardAppProgressPlanningStage[];
+  suggestionTags: string[];
+  quickactionRequestId: string;
+  clientRequestId: string;
+}
+
 export interface ConversationCompactionSummary {
   markdown: string;
   generatedAt: string;
