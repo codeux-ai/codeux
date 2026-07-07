@@ -108,6 +108,23 @@ Missing tokens, missing Asana workspace/project targeting, provider API failures
 
 Result cards support multi-select, `Select all visible`, `Clear selection`, per-card `Append Conversation`, and a bulk append-conversation toggle for the selected set. Notion pages and databases attach readable block markdown when available. Asana and Linear attach descriptions by default and include stories/comments only when conversation is enabled for the selected result.
 
+## Collaborative Canvas Scope Import
+
+Use `Import -> Miro`, `Import -> Lucid`, `Import -> Figma / FigJam`, or `Import -> Mural` from the Sprints page import menu to attach canvas, whiteboard, diagram, or design scope to the sprint composer. The menu groups these entries under canvas/whiteboard imports so they are distinct from issue and work-item imports.
+
+Canvas importers are read-only linked-scope importers. They do not render live canvas previews, mutate provider content, write comments, close external work, or synchronize provider state. Selected results are compact metadata cards; importing selected cards loads prompt context through `/api/projects/:projectId/issues/context`, preserves `externalId`, `sourceKind`, and `sourceProvider`, and adds linked-source cards below the sprint prompt just like PM imports.
+
+Provider targets:
+
+- Miro: paste a `boardId` to import a board-level source plus readable board items, or use `search` to discover boards. Optional `itemTypes` narrows readable item imports.
+- Lucid: paste a `documentId` for an exact Lucidchart/Lucidspark import, use `search` to discover documents, or provide exact document IDs as external IDs.
+- Figma/FigJam: paste a `fileKey` from the file URL or provide exact file keys as external IDs. General Figma file search is not available for this importer.
+- Mural: paste a `workspaceId` to list workspace murals or a `muralId` for an exact import. The saved `mural.boardId` setting is treated as the default mural ID. Mural public API support is limited, so imports may contain only metadata and readable content available to the token.
+
+The canvas modal loads saved project-effective settings before search and validates required identifiers in the browser before calling the backend. Missing tokens and provider API failures still surface through the backend error panel with the provider's actionable message intact.
+
+Miro, Lucid, and Mural currently import readable body/metadata only. Figma/FigJam also supports comment context: enable `Append comments` before search to request file comments, then use the per-card or bulk comment toggles to decide whether comments are included in the imported prompt context.
+
 ## Project-Management And Canvas Integration Settings
 
 Code UX carries shared typed settings for additional importer providers: Notion, Asana, Linear, Miro, Lucid, Figma, and Mural. These providers have API-backed read-only sprint importers. Jira continues to use the existing `jira` settings block, and GitHub/GitLab continue to use `git.githubToken` and `git.gitlabToken`.

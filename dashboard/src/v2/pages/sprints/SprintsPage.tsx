@@ -37,6 +37,7 @@ import { SprintImportMenu } from "../../components/sprints/SprintImportMenu.js";
 import { SprintIssueImportModal } from "../../components/sprints/SprintIssueImportModal.js";
 import { SprintJiraImportModal } from "../../components/sprints/SprintJiraImportModal.js";
 import { SprintProjectManagementImportModal } from "../../components/sprints/SprintProjectManagementImportModal.js";
+import { SprintCanvasImportModal } from "../../components/sprints/SprintCanvasImportModal.js";
 import { ConfirmDialog } from "../../components/ui/ConfirmDialog.js";
 import { useConfirmDialog } from "../../hooks/use-confirm-dialog.js";
 import { ActionFeedbackRegion } from "../../components/ui/ActionFeedbackRegion.js";
@@ -232,6 +233,7 @@ export const SprintsPage: FunctionComponent = () => {
     defaultWorkerAgentPresetId,
     showQuicksprint, setShowQuicksprint,
     projectManagementImportProvider = null, setProjectManagementImportProvider = () => undefined,
+    canvasImportProvider = null, setCanvasImportProvider = () => undefined,
     quicksprintTemplates,
     quicksprintLoading,
     agentPresets,
@@ -625,6 +627,10 @@ export const SprintsPage: FunctionComponent = () => {
                     onImportNotion={() => setProjectManagementImportProvider("notion")}
                     onImportAsana={() => setProjectManagementImportProvider("asana")}
                     onImportLinear={() => setProjectManagementImportProvider("linear")}
+                    onImportMiro={() => setCanvasImportProvider("miro")}
+                    onImportLucid={() => setCanvasImportProvider("lucid")}
+                    onImportFigma={() => setCanvasImportProvider("figma")}
+                    onImportMural={() => setCanvasImportProvider("mural")}
                   />
                   <button
                     type="button"
@@ -994,6 +1000,22 @@ export const SprintsPage: FunctionComponent = () => {
           onImport={(issues) => {
             mergeLinkedIssues(issues);
             setProjectManagementImportProvider(null);
+            setShowQuicksprint(false);
+            if (!editingSprint) {
+              setShowCreateComposer(true);
+            }
+          }}
+        />
+      )}
+
+      {canvasImportProvider && selectedProject && (
+        <SprintCanvasImportModal
+          projectId={selectedProject.id}
+          provider={canvasImportProvider}
+          onClose={() => setCanvasImportProvider(null)}
+          onImport={(issues) => {
+            mergeLinkedIssues(issues);
+            setCanvasImportProvider(null);
             setShowQuicksprint(false);
             if (!editingSprint) {
               setShowCreateComposer(true);

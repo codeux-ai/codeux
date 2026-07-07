@@ -19,6 +19,10 @@ describe("SprintImportMenu", () => {
       onImportNotion={vi.fn()}
       onImportAsana={vi.fn()}
       onImportLinear={vi.fn()}
+      onImportMiro={vi.fn()}
+      onImportLucid={vi.fn()}
+      onImportFigma={vi.fn()}
+      onImportMural={vi.fn()}
       {...overrides}
     />,
   );
@@ -55,6 +59,12 @@ describe("SprintImportMenu", () => {
     expect(screen.getByText("Import page or database scope")).toBeInTheDocument();
     expect(screen.getByText("Import task scope from Asana")).toBeInTheDocument();
     expect(screen.getByText("Import issue scope from Linear")).toBeInTheDocument();
+    expect(screen.getByText("Issue and work-item imports")).toBeInTheDocument();
+    expect(screen.getByText("Canvas and whiteboard imports")).toBeInTheDocument();
+    expect(screen.getByText("Import board and canvas items")).toBeInTheDocument();
+    expect(screen.getByText("Import Lucidchart or Lucidspark scope")).toBeInTheDocument();
+    expect(screen.getByText("Import files and optional comments")).toBeInTheDocument();
+    expect(screen.getByText("Import limited mural metadata")).toBeInTheDocument();
 
     const markdownBtn = screen.getByRole("menuitem", { name: /markdown/i });
     fireEvent.click(markdownBtn);
@@ -142,6 +152,10 @@ describe("SprintImportMenu", () => {
       onImportNotion: vi.fn(),
       onImportAsana: vi.fn(),
       onImportLinear: vi.fn(),
+      onImportMiro: vi.fn(),
+      onImportLucid: vi.fn(),
+      onImportFigma: vi.fn(),
+      onImportMural: vi.fn(),
     };
     render(<SprintImportMenu disabled={false} {...handlers} />);
 
@@ -149,6 +163,34 @@ describe("SprintImportMenu", () => {
     fireEvent.click(trigger);
 
     fireEvent.click(screen.getByRole("menuitem", { name: new RegExp(label, "i") }));
+    expect(handlers[handlerName]).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    ["Miro", "onImportMiro"],
+    ["Lucid", "onImportLucid"],
+    ["Figma / FigJam", "onImportFigma"],
+    ["Mural", "onImportMural"],
+  ] as const)("clicks %s canvas import", (label, handlerName) => {
+    const handlers = {
+      onImportMarkdown: vi.fn(),
+      onImportGitHubIssues: vi.fn(),
+      onImportGitLabIssues: vi.fn(),
+      onImportJira: vi.fn(),
+      onImportNotion: vi.fn(),
+      onImportAsana: vi.fn(),
+      onImportLinear: vi.fn(),
+      onImportMiro: vi.fn(),
+      onImportLucid: vi.fn(),
+      onImportFigma: vi.fn(),
+      onImportMural: vi.fn(),
+    };
+    render(<SprintImportMenu disabled={false} {...handlers} />);
+
+    const trigger = screen.getAllByRole("button").find(btn => btn.textContent?.includes("Import") && !btn.textContent?.includes("Markdown"));
+    fireEvent.click(trigger);
+
+    fireEvent.click(screen.getByRole("menuitem", { name: new RegExp(label.replace("/", "\\/"), "i") }));
     expect(handlers[handlerName]).toHaveBeenCalledTimes(1);
   });
 });
