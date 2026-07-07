@@ -1,8 +1,9 @@
 # Scheduler
 
 The **Scheduler** page (dock label **Schedule**, `/scheduler`) runs Code UX work on a timetable.
-Schedule a sprint, a quicksprint template, or a project message to fire once or on a recurring
-cadence — useful for nightly maintenance sweeps, periodic audits, or recurring planning prompts.
+Schedule a sprint, a quicksprint template, a project message, or memory remediation to fire once
+or on a recurring cadence — useful for nightly maintenance sweeps, periodic audits, or recurring
+planning prompts.
 
 ## Views
 
@@ -18,6 +19,13 @@ Each scheduler entry has a **target** — the thing that runs when it fires:
 | **Sprint** | Starts an existing sprint in the project. |
 | **Quicksprint** | Spawns and runs a [quicksprint template](../quicksprints.md), substituting its variables. |
 | **Message** | Posts a project message (for example, a recurring planning or status prompt). |
+| **Memory remediation** | Runs the long-term memory cleanup workflow on a schedule. |
+
+The backend scheduler contract also supports agent-created wakeups and scheduled task reruns. Those
+entries are stored in the existing target JSON payload with `origin` and `source` set to
+`agent_scheduler`, plus `createdByAgentId` when the creating agent provides it. Agent wakeups post
+through the chat runtime with scheduler metadata, and task reruns reuse the normal task rerun
+service so workspaces, telemetry, and cancellation behavior stay consistent.
 
 ## Recurrence
 

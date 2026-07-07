@@ -4,6 +4,8 @@ import { DatabaseAdapter } from "./db/database-adapter.js";
 import { EntityNotFoundError, requireRecord, toNumber, ValidationError } from "./repository-utils.js";
 import type {
   CreateSchedulerEntryInput,
+  ScheduleAgentSchedulerMetadata,
+  ScheduleAgentWakeupTarget,
   ScheduleAnchor,
   ScheduleChatTarget,
   ScheduleMemoryRemediationTarget,
@@ -12,11 +14,24 @@ import type {
   SchedulerEntryRecord,
   ScheduleSprintTarget,
   ScheduleStatus,
+  ScheduleTaskTarget,
   ScheduleTargetType,
   UpdateSchedulerEntryInput,
 } from "../contracts/scheduler-types.js";
+import type { ProviderId } from "../contracts/app-types.js";
 import { computeFirstOccurrenceAtOrAfter, normalizeRecurrenceRule } from "../domain/scheduler/schedule-time.js";
 import type { DashboardRealtimeMutationNotifier } from "../services/dashboard-realtime-service.js";
+
+const SCHEDULER_TASK_PROVIDER_IDS = new Set<ProviderId>([
+  "jules",
+  "gemini",
+  "codex",
+  "claude-code",
+  "qwen-code",
+  "opencode",
+  "antigravity",
+  "mockup-cli",
+]);
 
 interface SchedulerEntryRow {
   id: string;
@@ -43,6 +58,8 @@ interface PersistedTargetPayload {
   sprintTarget?: ScheduleSprintTarget;
   quicksprintTarget?: ScheduleQuicksprintTarget;
   chatTarget?: ScheduleChatTarget;
+  agentWakeupTarget?: ScheduleAgentWakeupTarget;
+  taskTarget?: ScheduleTaskTarget;
   memoryRemediationTarget?: ScheduleMemoryRemediationTarget;
 }
 
@@ -158,6 +175,8 @@ export class SchedulerRepository {
       sprintTarget: isTargetTypeChanged ? input.sprintTarget : (input.sprintTarget ?? current.sprintTarget),
       quicksprintTarget: isTargetTypeChanged ? input.quicksprintTarget : (input.quicksprintTarget ?? current.quicksprintTarget),
       chatTarget: isTargetTypeChanged ? input.chatTarget : (input.chatTarget ?? current.chatTarget),
+      agentWakeupTarget: isTargetTypeChanged ? input.agentWakeupTarget : (input.agentWakeupTarget ?? current.agentWakeupTarget),
+      taskTarget: isTargetTypeChanged ? input.taskTarget : (input.taskTarget ?? current.taskTarget),
       memoryRemediationTarget: isTargetTypeChanged ? input.memoryRemediationTarget : (input.memoryRemediationTarget ?? current.memoryRemediationTarget),
       scheduledFor: input.scheduledFor ?? current.scheduledFor,
     });
@@ -293,6 +312,36 @@ export class SchedulerRepository {
       };
     }
 
+    if (targetType === "agent_wakeup") {
+      const bodyMarkdown = input.agentWakeupTarget?.bodyMarkdown?.trim();
+      if (!bodyMarkdown) {
+        throw new ValidationError("agentWakeupTarget.bodyMarkdown is required.");
+      }
+      return {
+        agentWakeupTarget: {
+          bodyMarkdown,
+          threadId: input.agentWakeupTarget?.threadId?.trim() || null,
+          title: input.agentWakeupTarget?.title?.trim() || "Scheduled agent wakeup",
+          connectionId: input.agentWakeupTarget?.connectionId?.trim() || null,
+          ...this.normalizeAgentSchedulerMetadata(input.agentWakeupTarget),
+        },
+      };
+    }
+
+    if (targetType === "task") {
+      const taskId = input.taskTarget?.taskId?.trim();
+      if (!taskId) {
+        throw new ValidationError("taskTarget.taskId is required.");
+      }
+      return {
+        taskTarget: {
+          taskId,
+          ...this.normalizeTaskProvider(input.taskTarget?.provider),
+          ...this.normalizeAgentSchedulerMetadata(input.taskTarget),
+        },
+      };
+    }
+
     const bodyMarkdown = input.chatTarget?.bodyMarkdown?.trim();
     if (!bodyMarkdown) {
       throw new ValidationError("chatTarget.bodyMarkdown is required.");
@@ -321,7 +370,33 @@ export class SchedulerRepository {
     if (targetType === "memory_remediation") {
       return "Scheduled memory remediation";
     }
+    if (targetType === "agent_wakeup") {
+      return target.agentWakeupTarget?.title || "Scheduled agent wakeup";
+    }
+    if (targetType === "task") {
+      return "Scheduled task rerun";
+    }
     return target.chatTarget?.title || "Scheduled chat message";
+  }
+
+  private normalizeAgentSchedulerMetadata(
+    value: Partial<ScheduleAgentSchedulerMetadata> | undefined,
+  ): ScheduleAgentSchedulerMetadata {
+    return {
+      origin: "agent_scheduler",
+      source: "agent_scheduler",
+      createdByAgentId: value?.createdByAgentId?.trim() || undefined,
+    };
+  }
+
+  private normalizeTaskProvider(provider: ProviderId | undefined): Pick<ScheduleTaskTarget, "provider"> {
+    if (!provider) {
+      return {};
+    }
+    if (!SCHEDULER_TASK_PROVIDER_IDS.has(provider)) {
+      throw new ValidationError("taskTarget.provider must be a supported provider.");
+    }
+    return { provider };
   }
 
   private normalizeDate(value: string, fieldName: string): string {
@@ -388,6 +463,8 @@ export class SchedulerRepository {
       sprintTarget: target.sprintTarget,
       quicksprintTarget: target.quicksprintTarget,
       chatTarget: target.chatTarget,
+      agentWakeupTarget: target.agentWakeupTarget,
+      taskTarget: target.taskTarget,
       memoryRemediationTarget: target.memoryRemediationTarget,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
