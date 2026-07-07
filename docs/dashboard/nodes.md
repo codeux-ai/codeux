@@ -46,9 +46,12 @@ agent-skill binding; it does not delete the flow.
 
 ## Runs
 
-The run panel accepts project-safe JSON input from the flow `inputSchema` and calls the manual run API.
-Persisted flow runs and per-node run rows are read from the node-flow run routes. Output JSON is
-redacted for secret-shaped keys such as `token`, `password`, `secret`, and `apiKey` before rendering.
+The run panel accepts project-safe JSON input from the flow `inputSchema` and calls the manual run API
+with the active `projectId`. The response is a run summary containing the parent run, per-node run rows,
+and the final output object, so the dashboard can update history and node status immediately after a
+run completes.
 
-The current backend foundation exposes persisted run reads. If manual execution is not enabled in a
-runtime build yet, the run panel surfaces the backend error without changing graph state.
+Persisted flow runs and per-node run rows remain readable from the node-flow run routes. The panel shows
+the parent run id separately from linked execution invocation ids, and per-node rows display
+`executionInvocationId` when a provider or HTTP node created an observable invocation. Output JSON is
+redacted for secret-shaped keys such as `token`, `password`, `secret`, and `apiKey` before rendering.

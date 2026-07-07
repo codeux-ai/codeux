@@ -43,8 +43,8 @@ export const createDefaultNodeFlowGraph = (): NodeFlowGraph => ({
   nodes: [
     {
       id: "trigger",
-      type: "manual",
-      title: "Manual Trigger",
+      type: "input",
+      title: "Run Input",
       description: "Receives dashboard input.",
       position: { x: 56, y: 96 },
       widgetSchema: {

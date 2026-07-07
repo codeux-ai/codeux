@@ -31,6 +31,7 @@ describe("node-flow view models", () => {
 
     expect(defaultGraph.nodes).toHaveLength(1);
     expect(defaultGraph.nodes[0]?.id).toBe("trigger");
+    expect(defaultGraph.nodes[0]?.type).toBe("input");
     expect(defaultGraph.inputSchema?.fields[0]?.type).toBe("json");
   });
 

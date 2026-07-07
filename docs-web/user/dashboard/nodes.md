@@ -9,8 +9,8 @@ Use it to:
 - configure nodes through their dynamic widget fields
 - attach flows to project agents
 - validate a graph before saving
-- run a flow manually when the runtime exposes execution
-- inspect persisted run and per-node status records
+- run a flow manually through the node-flow runtime
+- inspect the run summary, persisted history, per-node status records, and linked invocation ids
 
 Node widget fields support text, textarea, numbers, booleans, selects, JSON, secret references, and
 key-value entries. Secret fields store references rather than secret values, and rendered run output

@@ -145,7 +145,7 @@ export const NodeFlowRunPanel: FunctionComponent<NodeFlowRunPanelProps> = ({
                   {nodeRuns.map((nodeRun) => (
                     <div key={nodeRun.id} className="rounded-xl border border-black/[0.06] bg-white/55 px-3 py-2 dark:border-white/[0.06] dark:bg-white/[0.03]">
                       <p className="truncate text-xs font-bold uppercase tracking-[0.13em] text-slate-500 dark:text-slate-400">{nodeRun.nodeId} · {nodeRun.status}</p>
-                      {nodeRun.id ? <p className="mt-1 truncate font-mono text-[11px] text-slate-400">Invocation {nodeRun.id}</p> : null}
+                      {nodeRun.executionInvocationId ? <p className="mt-1 truncate font-mono text-[11px] text-slate-400">Invocation {nodeRun.executionInvocationId}</p> : null}
                     </div>
                   ))}
                 </div>
