@@ -66,7 +66,25 @@ describe("onboarding-provider-settings", () => {
         mural: createImporterSettings(),
         providers: {
           "p1": { provider: "jules", name: "Jules", apiKey: "key", mountAuth: false, authPath: "" }
-        }
+        },
+        githubToken: "",
+        gitlabToken: "",
+      },
+      techstackCatalog: {
+        defaultTechstackId: "code-ux-internal",
+        entries: [
+          {
+            id: "code-ux-internal",
+            label: "Code UX Stack",
+            items: [
+              { id: "preact", label: "Preact" },
+              { id: "tanstack-router", label: "TanStack Router" },
+              { id: "gsap", label: "GSAP" },
+              { id: "three-js", label: "Three.js" },
+              { id: "lucide-icons", label: "Lucide Icons" },
+            ],
+          },
+        ],
       },
       defaults: {
         appearance: { theme: "system" },
@@ -78,6 +96,7 @@ describe("onboarding-provider-settings", () => {
         sprintLoopSteps: { apply: { type: "apply" }, pr: { type: "pr" }, runTests: { type: "test" } },
         cliWorkflow: { executionMode: "HOST" },
         sprintPreview: { enabled: false },
+        techstack: { applicationKind: null, selectedTechstackId: null },
         aiProvider: {
           provider: "jules",
           strategy: "MANUAL",
