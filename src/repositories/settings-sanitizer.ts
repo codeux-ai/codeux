@@ -27,6 +27,7 @@ import {
 } from "../domain/settings/provider-config-utils.js";
 import {
   DEFAULT_DASHBOARD_SETTINGS,
+  DEFAULT_AGENT_SELF_REFLECTION,
   DEFAULT_SKILLS,
   INTERNAL_SKILL_NAMES,
   INTERNAL_SKILL_SET,
@@ -221,6 +222,73 @@ const sanitizeQualityAssurance = (
   };
 };
 
+const SELF_REFLECTION_MAX_ATTEMPTS_CEILING = 10;
+
+const sanitizeSelfReflectionCriteria = (
+  value: unknown,
+  defaults: DashboardSettings["agents"]["selfReflection"]["planning"]["criteria"],
+): DashboardSettings["agents"]["selfReflection"]["planning"]["criteria"] => {
+  if (!Array.isArray(value)) {
+    return defaults.map((criterion) => ({ ...criterion }));
+  }
+
+  const criteria: DashboardSettings["agents"]["selfReflection"]["planning"]["criteria"] = [];
+  const seen = new Set<string>();
+  for (const entry of value) {
+    if (!entry || typeof entry !== "object") {
+      continue;
+    }
+    const input = entry as Record<string, unknown>;
+    const id = readString(input.id, "").trim();
+    const label = readString(input.label, "").trim();
+    const prompt = readString(input.prompt, "").trim();
+    if (!id || !label || !prompt || seen.has(id)) {
+      continue;
+    }
+    const rawThreshold = typeof input.threshold === "number" && Number.isFinite(input.threshold)
+      ? input.threshold
+      : defaults.find((criterion) => criterion.id === id)?.threshold ?? 0.8;
+    criteria.push({
+      id,
+      label,
+      prompt,
+      threshold: Math.max(0, Math.min(1, rawThreshold)),
+    });
+    seen.add(id);
+  }
+
+  return criteria.length > 0 ? criteria : defaults.map((criterion) => ({ ...criterion }));
+};
+
+const sanitizeSelfReflectionLoop = (
+  value: unknown,
+  defaults: DashboardSettings["agents"]["selfReflection"]["planning"],
+): DashboardSettings["agents"]["selfReflection"]["planning"] => {
+  const input = value && typeof value === "object" ? value as Record<string, unknown> : {};
+  const maxImprovementAttempts = typeof input.maxImprovementAttempts === "number" && Number.isFinite(input.maxImprovementAttempts)
+    ? Math.max(0, Math.min(SELF_REFLECTION_MAX_ATTEMPTS_CEILING, Math.round(input.maxImprovementAttempts)))
+    : defaults.maxImprovementAttempts;
+
+  return {
+    enabled: readBoolean(input.enabled, defaults.enabled),
+    criteria: sanitizeSelfReflectionCriteria(input.criteria, defaults.criteria),
+    maxImprovementAttempts,
+  };
+};
+
+const sanitizeSelfReflection = (
+  value: unknown,
+): DashboardSettings["agents"]["selfReflection"] => {
+  const input = value && typeof value === "object" ? value as Record<string, unknown> : {};
+  return {
+    planning: sanitizeSelfReflectionLoop(input.planning, DEFAULT_AGENT_SELF_REFLECTION.planning),
+    qualityAssurance: sanitizeSelfReflectionLoop(
+      input.qualityAssurance,
+      DEFAULT_AGENT_SELF_REFLECTION.qualityAssurance,
+    ),
+  };
+};
+
 const cloneAgentRouting = (): DashboardSettings["agents"]["routing"] => ({
   planning: { ...DEFAULT_DASHBOARD_SETTINGS.agents.routing.planning },
   taskCoding: {
@@ -340,6 +408,7 @@ export const cloneDefaults = (externalHints?: ExternalSettingsHints): DashboardS
         agentPresetIds: [...DEFAULT_DASHBOARD_SETTINGS.agents.qualityAssurance.completedTaskWithoutPr.agentPresetIds],
       },
     },
+    selfReflection: sanitizeSelfReflection(DEFAULT_DASHBOARD_SETTINGS.agents.selfReflection),
   },
   skills: DEFAULT_DASHBOARD_SETTINGS.skills.map((skill) => ({ ...skill })),
   mcpTools: DEFAULT_DASHBOARD_SETTINGS.mcpTools.map((tool) => ({ ...tool })),
@@ -518,6 +587,7 @@ export const sanitizeSettings = (value: unknown, externalHints?: ExternalSetting
     qualityAssurance: sanitizeQualityAssurance(
       agentsInput.qualityAssurance as Partial<DashboardSettings["agents"]["qualityAssurance"]> | undefined,
     ),
+    selfReflection: sanitizeSelfReflection(agentsInput.selfReflection),
   };
 
   const normalizedSkills = enforceGitManagerSkillset(sanitizeSkills(input.skills), git.githubMode);

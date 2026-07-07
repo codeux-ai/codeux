@@ -25,6 +25,26 @@ describe("AgentPresetRepository", () => {
       sourceType: "local",
       sourceRef: "/workspace/preset-project",
     });
+    const now = new Date().toISOString();
+    storage.getDatabase().prepare(`
+      INSERT INTO skill_storages (id, project_id, name, description, storage_kind, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?), (?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      "skills-core",
+      project.id,
+      "Core skills",
+      "Shared project skills.",
+      "project",
+      now,
+      now,
+      "skills-review",
+      project.id,
+      "Review skills",
+      "Review-specific skills.",
+      "project",
+      now,
+      now,
+    );
 
     const created = agentPresetRepository.createAgentPreset(project.id, {
       name: "Project Manager",
@@ -44,6 +64,8 @@ describe("AgentPresetRepository", () => {
         maxShortTerm: 3,
         maxLongTerm: 5,
       },
+      persistentSkillStorageIds: ["skills-core", "skills-core", "skills-review", ""],
+      persistentSkillStorage: { enabled: true },
     });
 
     expect(created).toMatchObject({
@@ -65,6 +87,8 @@ describe("AgentPresetRepository", () => {
         maxShortTerm: 3,
         maxLongTerm: 5,
       },
+      persistentSkillStorageIds: ["skills-core", "skills-review"],
+      persistentSkillStorage: { enabled: true },
     });
 
     const updated = agentPresetRepository.updateAgentPreset(created.id, {
@@ -76,6 +100,8 @@ describe("AgentPresetRepository", () => {
       providerConfigId: null,
       model: "gpt-5.4",
       memoryTemplateOverrideEnabled: false,
+      persistentSkillStorageIds: ["skills-review"],
+      persistentSkillStorage: { enabled: false },
     });
     expect(updated).toMatchObject({
       name: "Worker",
@@ -95,6 +121,8 @@ describe("AgentPresetRepository", () => {
         maxShortTerm: 3,
         maxLongTerm: 5,
       },
+      persistentSkillStorageIds: ["skills-review"],
+      persistentSkillStorage: { enabled: false },
     });
 
     const listed = agentPresetRepository.listAgentPresets(project.id);

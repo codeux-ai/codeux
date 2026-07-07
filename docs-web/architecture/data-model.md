@@ -17,6 +17,10 @@ Project
 │   │   └── ExecutionInvocation
 │   └── PreviewSession
 ├── AgentPreset
+│   └── SkillStorageBinding
+├── SkillStorage
+│   ├── Skill
+│   └── SkillEmbedding
 ├── Memory
 │   ├── short-term (sprint-scoped)
 │   └── long-term (project-scoped)
@@ -142,7 +146,22 @@ A granular event in a sprint run (cycle start, task transition, gate decision, M
 | `avatarConfig` | json | Procedural avatar seed. |
 | `memoryTemplateOverrideEnabled` | bool | – |
 | `memoryTemplateMarkdown` | text | If override is on. |
+| `persistentSkillStorageIds` | string[] | Storage IDs attached through `agent_skill_storage_bindings`. |
+| `persistentSkillStorage.enabled` | bool | Default-off metadata reserved for future skill retrieval. |
 | `createdAt`, `updatedAt` | datetime | – |
+
+## Persistent Skill Storage
+
+Persistent skills are stored separately from project workspaces, memories, knowledge documents, and model attachments.
+
+| Table | Purpose |
+| --- | --- |
+| `skill_storages` | Named, project-owned storage containers that multiple agents can attach to. |
+| `skills` | Individual reusable skill records under a storage container. |
+| `skill_embeddings` | Embedding metadata and optional vectors for skill search. |
+| `agent_skill_storage_bindings` | Normalized agent-to-storage attachments keyed by `(agent_preset_id, storage_id)`. |
+
+The current slice defines contracts and persistence only. Runtime provider mounts, prompt injection, MCP tools, and dashboard controls are not wired yet.
 
 ## Memory
 

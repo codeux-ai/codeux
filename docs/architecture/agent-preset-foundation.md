@@ -28,8 +28,18 @@ Foundation fields:
 - `provider_config_id`
 - `model`
 - `memory_config_json` stores `AgentMemoryConfig` as a JSON blob
+- `persistent_skill_storage_enabled` reserves a default-off runtime enablement flag for future persistent skill retrieval
 - `created_at`
 - `updated_at`
+
+Persistent agent skill storage is modeled separately from memories, knowledge documents, project workspaces, and model attachments:
+
+- `skill_storages` stores named, project-owned storage containers for reusable agent skills.
+- `skills` stores individual skill records under a storage container, with content metadata and source identity.
+- `skill_embeddings` stores embedding metadata and optional embedding blobs for skill search.
+- `agent_skill_storage_bindings` attaches agent presets to one or more storage containers through a normalized `(agent_preset_id, storage_id)` binding.
+
+The shared preset contract exposes `persistentSkillStorageIds?: string[]` plus optional `persistentSkillStorage` enablement metadata. The repository round-trips those IDs through `agent_skill_storage_bindings`; it does not use a workspace path field for skill attachment state. Runtime mounting, provider prompt injection, MCP tools, and dashboard controls are intentionally not implemented in this foundation slice.
 
 The current markdown-sync and Planning agent extensions are documented in:
 
@@ -68,6 +78,7 @@ Foundation-supported fields:
 - optional provider instance preference
 - optional model override
 - optional per-agent memory injection configuration
+- optional persistent skill storage attachments (contract and storage only; no dashboard controls or runtime retrieval yet)
 
 The memory injection configuration is stored in sqlite as `memory_config_json` and parsed back into `AgentMemoryConfig` on reads, matching the existing JSON-column pattern used by `mcp_access_json`.
 The dashboard editor now initializes that config from the preset, exposes it through a dedicated `Manage Memory` popover, and persists the chosen filters alongside the rest of the preset payload.

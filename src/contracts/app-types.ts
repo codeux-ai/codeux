@@ -943,6 +943,24 @@ export interface QualityAssuranceSettings {
   completedTaskWithoutPr: QualityAssuranceTriggerSettings;
 }
 
+export interface AgentSelfReflectionCriterionSettings {
+  id: string;
+  label: string;
+  prompt: string;
+  threshold: number;
+}
+
+export interface AgentSelfReflectionLoopSettings {
+  enabled: boolean;
+  criteria: AgentSelfReflectionCriterionSettings[];
+  maxImprovementAttempts: number;
+}
+
+export interface AgentSelfReflectionSettings {
+  planning: AgentSelfReflectionLoopSettings;
+  qualityAssurance: AgentSelfReflectionLoopSettings;
+}
+
 export interface CodingAgentRoutingSettings {
   mode: AgentRoutingMode;
   agentPresetId: string | null;
@@ -967,6 +985,7 @@ export interface AgentSettings {
   routing: AgentRoutingSettings;
   instructionTemplates: Record<InstructionTemplateId, string>;
   qualityAssurance: QualityAssuranceSettings;
+  selfReflection: AgentSelfReflectionSettings;
 }
 
 export type BackgroundPattern = "NONE" | "DIAGONAL_LINES" | "HORIZONTAL_LINES" | "VERTICAL_LINES" | "CROSSHATCH" | "DOTS" | "DIAMONDS" | "HEXAGONS" | "TRIANGLES" | "WAVES" | "NOISE";
@@ -1012,6 +1031,56 @@ export interface CustomMcpServer {
   args?: string[];
   env?: Record<string, string>;
   providers?: ProviderId[];
+}
+
+export type SkillStorageKind = "project" | "shared";
+export type SkillSourceType = "manual" | "imported" | "generated";
+
+export interface SkillStorageRecord {
+  id: string;
+  projectId: string;
+  name: string;
+  description: string;
+  storageKind: SkillStorageKind;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SkillRecord {
+  id: string;
+  projectId: string;
+  storageId: string;
+  name: string;
+  description: string;
+  contentMarkdown: string;
+  sourceType: SkillSourceType;
+  sourceRef: string | null;
+  contentHash: string;
+  tags: string[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SkillEmbeddingMetadata {
+  id: string;
+  projectId: string;
+  storageId: string;
+  skillId: string;
+  embeddingModel: string;
+  embeddingDimension: number;
+  chunkIndex: number;
+  contentHash: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AgentSkillStorageAttachment {
+  agentPresetId: string;
+  storageId: string;
+  projectId: string;
+  enabled: boolean;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export type RuntimeLogLevel = "off" | "debug" | "info" | "warn" | "error";
