@@ -368,6 +368,222 @@ describe("SchedulerPage", () => {
     expect(deleteSchedulerEntry).toHaveBeenCalledWith("entry-1");
   });
 
+  it("renders agent wakeup and task schedules without exposing unsupported creation controls", async () => {
+    const occurrenceTime = new Date();
+    occurrenceTime.setHours(10, 0, 0, 0);
+    const mockSchedule = {
+      entries: [
+        {
+          id: "entry-agent",
+          projectId: "proj-1",
+          title: "Agent Standup Wakeup",
+          targetType: "agent_wakeup",
+          status: "scheduled",
+          scheduledFor: occurrenceTime.toISOString(),
+          timezone: "UTC",
+          agentWakeupTarget: {
+            bodyMarkdown: "Wake up and check the morning queue.",
+            threadId: "thread-123",
+            title: "Morning wakeup",
+            origin: "agent_scheduler",
+            source: "agent_scheduler",
+            createdByAgentId: "agent-1",
+          },
+          runCount: 0,
+          nextRunAt: occurrenceTime.toISOString(),
+          recurrence: { frequency: "none", interval: 1, endMode: "never" },
+        },
+        {
+          id: "entry-task",
+          projectId: "proj-1",
+          title: "Retry blocked task",
+          targetType: "task",
+          status: "paused",
+          scheduledFor: occurrenceTime.toISOString(),
+          timezone: "UTC",
+          taskTarget: {
+            taskId: "task-42",
+            provider: "codex",
+            origin: "agent_scheduler",
+            source: "agent_scheduler",
+            createdByAgentId: "agent-1",
+          },
+          runCount: 2,
+          nextRunAt: null,
+          recurrence: { frequency: "hourly", interval: 2, endMode: "never" },
+        },
+      ],
+      occurrences: [
+        {
+          id: "occurrence-agent",
+          entryId: "entry-agent",
+          projectId: "proj-1",
+          title: "Agent Standup Wakeup",
+          targetType: "agent_wakeup",
+          status: "scheduled",
+          startsAt: occurrenceTime.toISOString(),
+          occurrenceIndex: 0,
+          isNextRun: true,
+          isCompletedRun: false,
+        },
+      ],
+    };
+
+    vi.mocked(fetchProjectSchedule).mockResolvedValue(mockSchedule as any);
+
+    renderSchedulerPage();
+
+    await waitFor(() => {
+      expect(screen.getAllByText("Agent Standup Wakeup").length).toBeGreaterThan(0);
+    });
+
+    const formPanel = screen.getByTestId("scheduler-form-panel");
+    expect(within(formPanel).queryByRole("button", { name: /agent wakeup/i })).not.toBeInTheDocument();
+    expect(within(formPanel).queryByRole("button", { name: /^task$/i })).not.toBeInTheDocument();
+
+    const agentRow = screen.getByTestId("scheduler-entry-entry-agent");
+    expect(within(agentRow).getByText("Agent wakeup")).toBeInTheDocument();
+    expect(within(agentRow).getByText(/Agent wakeup: thread-123/)).toBeInTheDocument();
+    expect(within(agentRow).getByRole("button", { name: /cannot be edited in the dashboard form/i })).toHaveAttribute("aria-disabled", "true");
+    expect(within(agentRow).getByRole("button", { name: /pause schedule entry/i })).toBeInTheDocument();
+    expect(within(agentRow).getByRole("button", { name: /delete schedule entry/i })).toBeInTheDocument();
+
+    const taskRow = screen.getByTestId("scheduler-entry-entry-task");
+    expect(within(taskRow).getByText("Task")).toBeInTheDocument();
+    expect(within(taskRow).getByText(/Task rerun: task-42/)).toBeInTheDocument();
+    expect(within(taskRow).getByText(/codex/)).toBeInTheDocument();
+    expect(within(taskRow).getByRole("button", { name: /resume schedule entry/i })).toBeInTheDocument();
+
+    expect(screen.getByTestId("scheduler-stat-active").textContent).toContain("1");
+    expect(screen.getAllByText("scheduled").length).toBeGreaterThan(0);
+    expect(screen.queryByText("Chat", { selector: "span" })).not.toBeInTheDocument();
+  });
+
+  it("keeps pause, resume, and delete available for agent-created schedules while edit is blocked", async () => {
+    const mockSchedule = {
+      entries: [
+        {
+          id: "entry-agent",
+          projectId: "proj-1",
+          title: "Agent Wakeup",
+          targetType: "agent_wakeup",
+          status: "scheduled",
+          scheduledFor: "2026-06-01T12:00:00.000Z",
+          timezone: "UTC",
+          agentWakeupTarget: {
+            bodyMarkdown: "Check in.",
+            origin: "agent_scheduler",
+            source: "agent_scheduler",
+          },
+          runCount: 0,
+          nextRunAt: "2026-06-01T12:00:00.000Z",
+          recurrence: { frequency: "none", interval: 1, endMode: "never" },
+        },
+      ],
+      occurrences: [],
+    };
+
+    vi.mocked(fetchProjectSchedule).mockResolvedValue(mockSchedule as any);
+
+    renderSchedulerPage();
+
+    await waitFor(() => {
+      expect(screen.getByText("Agent Wakeup")).toBeInTheDocument();
+    });
+
+    const row = screen.getByTestId("scheduler-entry-entry-agent");
+    fireEvent.click(within(row).getByRole("button", { name: /cannot be edited in the dashboard form/i }));
+    expect(screen.getByText(/Agent wakeup schedules are created by the secured MCP scheduler tool/i)).toBeInTheDocument();
+    expect(updateSchedulerEntry).not.toHaveBeenCalled();
+
+    fireEvent.click(within(row).getByRole("button", { name: /pause schedule entry/i }));
+    expect(updateSchedulerEntry).toHaveBeenCalledWith("entry-agent", { status: "paused" });
+
+    fireEvent.click(within(row).getByRole("button", { name: /delete schedule entry/i }));
+    expect(deleteSchedulerEntry).toHaveBeenCalledWith("entry-agent");
+  });
+
+  it("continues to render supported scheduler target summaries", async () => {
+    const mockSprints = [
+      { id: "sprint-1", name: "Sprint 1", status: "active" },
+    ];
+    const mockTemplates = [
+      { id: "template-1", name: "Template 1" },
+    ];
+    const mockSchedule = {
+      entries: [
+        {
+          id: "entry-sprint",
+          projectId: "proj-1",
+          title: "Run Sprint",
+          targetType: "sprint",
+          status: "scheduled",
+          scheduledFor: "2026-06-01T12:00:00.000Z",
+          timezone: "UTC",
+          sprintTarget: { sprintId: "sprint-1" },
+          runCount: 0,
+          nextRunAt: "2026-06-01T12:00:00.000Z",
+          recurrence: { frequency: "none", interval: 1, endMode: "never" },
+        },
+        {
+          id: "entry-quicksprint",
+          projectId: "proj-1",
+          title: "Run Template",
+          targetType: "quicksprint",
+          status: "scheduled",
+          scheduledFor: "2026-06-01T13:00:00.000Z",
+          timezone: "UTC",
+          quicksprintTarget: { templateId: "template-1", taskCount: 3, submitMode: "plan_and_start" },
+          runCount: 0,
+          nextRunAt: "2026-06-01T13:00:00.000Z",
+          recurrence: { frequency: "none", interval: 1, endMode: "never" },
+        },
+        {
+          id: "entry-chat",
+          projectId: "proj-1",
+          title: "Send Chat",
+          targetType: "chat",
+          status: "scheduled",
+          scheduledFor: "2026-06-01T14:00:00.000Z",
+          timezone: "UTC",
+          chatTarget: { bodyMarkdown: "Ping", threadId: "thread-1" },
+          runCount: 0,
+          nextRunAt: "2026-06-01T14:00:00.000Z",
+          recurrence: { frequency: "none", interval: 1, endMode: "never" },
+        },
+        {
+          id: "entry-memory",
+          projectId: "proj-1",
+          title: "Clean Memory",
+          targetType: "memory_remediation",
+          status: "scheduled",
+          scheduledFor: "2026-06-01T15:00:00.000Z",
+          timezone: "UTC",
+          memoryRemediationTarget: { mode: "ai" },
+          runCount: 0,
+          nextRunAt: "2026-06-01T15:00:00.000Z",
+          recurrence: { frequency: "none", interval: 1, endMode: "never" },
+        },
+      ],
+      occurrences: [],
+    };
+
+    vi.mocked(fetchSprints).mockResolvedValue({ sprints: mockSprints } as any);
+    vi.mocked(fetchQuicksprintTemplates).mockResolvedValue(mockTemplates as any);
+    vi.mocked(fetchProjectSchedule).mockResolvedValue(mockSchedule as any);
+
+    renderSchedulerPage();
+
+    await waitFor(() => {
+      expect(screen.getByText("Run Sprint")).toBeInTheDocument();
+    });
+
+    expect(screen.getByText(/Sprint: Sprint 1/)).toBeInTheDocument();
+    expect(screen.getByText(/Quicksprint: Template 1/)).toBeInTheDocument();
+    expect(screen.getByText(/Chat thread: thread-1/)).toBeInTheDocument();
+    expect(screen.getByText(/Memory remediation: AI review/)).toBeInTheDocument();
+  });
+
   it("opens edit mode, updates title and scheduled time, and saves the entry using PATCH", async () => {
     const mockSprints = [
       { id: "sprint-1", name: "Sprint 1", status: "active" },
@@ -479,7 +695,7 @@ describe("SchedulerPage", () => {
       expect(screen.getByText("Anchored Sprint Title")).toBeInTheDocument();
     });
 
-    expect(screen.getByText("After Source Sprint ends + 10 minutes")).toBeInTheDocument();
+    expect(screen.getByText(/After Source Sprint ends \+ 10 minutes/)).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /^edit schedule entry$/i }));
 
