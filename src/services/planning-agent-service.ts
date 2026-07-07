@@ -27,6 +27,7 @@ import { parsePlannedSprintReply, PlanningParseError } from "./planning-json-ext
 import { extractJsonFromText } from "../domain/llm/json-extraction.js";
 import type { PlannedSprintPayload, PlannedTaskDraft } from "../contracts/project-management-types.js";
 import { persistPlannedTasks } from "./planning-task-persistence.js";
+import { buildPlanningExecutionPlanMessage } from "./planning-execution-plan-message.js";
 import { ProviderExecutionService, resolveEffectiveModel } from "./provider-execution-service.js";
 import { StructuredAgentRequestService, type StructuredAgentRequestResult } from "./structured-agent-request-service.js";
 import { ProviderInvocationCancelledError, StructuredProviderResponseService } from "./structured-provider-response-service.js";
@@ -457,6 +458,8 @@ export class PlanningAgentService {
     if (Object.keys(sprintUpdate).length > 0) {
       this.deps.projectManagementRepository.updateSprint(sprint.id, sprintUpdate);
     }
+    const finalSprintName = sprintUpdate.name || sprint.name;
+    const finalSprintGoal = sprintUpdate.goal || sprint.goal;
 
     const { createdTaskIds } = persistPlannedTasks(
       projectId,
@@ -465,6 +468,22 @@ export class PlanningAgentService {
       this.deps.projectManagementRepository,
       { defaultAgentPresetId: manualCodingAgent?.id || null },
     );
+
+    if (invocation && isExecutionInvocationActiveForFinalize(this.deps.executionRepository, invocation.id)) {
+      this.deps.executionRepository?.appendExecutionInvocationMessage(
+        invocation.id,
+        buildPlanningExecutionPlanMessage({
+          invocationId: invocation.id,
+          projectId,
+          sprintId,
+          sprintNumber: sprint.number,
+          sprintName: finalSprintName,
+          goal: finalSprintGoal,
+          tasks: payload.tasks,
+          createdTaskIds,
+        }),
+      );
+    }
 
     const titles: string[] = [];
     for (const t of payload.tasks) {
