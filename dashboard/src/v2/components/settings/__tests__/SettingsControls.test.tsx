@@ -12,16 +12,41 @@ import { TextInput, SecretInput, NumberInput, TextAreaInput, PillChoiceGroup, Se
 
 
 import { SettingsCategoryRail } from "../SettingsCategoryRail";
+import { SettingsScopeControls } from "../SettingsScopeControls";
 import { ActionButton, NoticePanel } from "../SettingsSurface";
 import { OverrideBadge } from "../panels/SharedPanelComponents";
 import { SlidersHorizontal } from "lucide-preact";
 import type { SettingsSearchMatches } from "../../../lib/settings-search-index";
+import type { Source } from "../../../types";
 import userEvent from "@testing-library/user-event";
 import { SettingsContentPanels } from "../SettingsContentPanels";
 import { UnsavedChangesModal } from "../../ui/UnsavedChangesModal";
 import { ProviderInstanceCard } from "../ProviderInstanceCard";
 
 const defaultInnerHeight = window.innerHeight;
+const interactionStyle = { transitionDuration: "200ms", transitionTimingFunction: "ease" };
+const genericProject = {
+  id: "project-1",
+  name: "Test Project",
+} as Source;
+
+const renderSettingsScopeControls = (overrides: Partial<Parameters<typeof SettingsScopeControls>[0]> = {}) => render(
+  <SettingsScopeControls
+    activeScope="system"
+    setActiveScope={() => {}}
+    selectedProject={genericProject}
+    scopeStatusText="System scope selected. Editing live system defaults."
+    projectSourceSummary={null}
+    filteredCategoryCount={10}
+    isSearchActive={false}
+    activeDirty={false}
+    activeSaving={false}
+    saveMessage={null}
+    error={null}
+    interactionStyle={interactionStyle}
+    {...overrides}
+  />,
+);
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -249,6 +274,89 @@ vi.mock("../panels/SettingsGeneralPanel", () => ({
     expect(screen.getByRole("radiogroup", { name: "Scope choice" })).toBeInTheDocument();
     expect(screen.getByRole("radio", { name: "System" })).toHaveAttribute("aria-checked", "true");
     expect(screen.getByRole("radio", { name: "Project" })).toHaveAttribute("aria-checked", "false");
+  });
+
+  it("SettingsScopeControls renders system scope without duplicated visible system context", () => {
+    renderSettingsScopeControls();
+
+    const group = screen.getByRole("radiogroup", { name: "Settings scope" });
+    expect(group).toHaveAccessibleDescription(
+      "Editing live system defaults. Project scope is available for the selected project. System scope selected. Editing live system defaults.",
+    );
+    expect(screen.getByRole("radio", { name: "System" })).toHaveAttribute("aria-checked", "true");
+    expect(screen.getByRole("radio", { name: "Project" })).toHaveAttribute("aria-checked", "false");
+    expect(screen.queryByText("System (selected)")).not.toBeInTheDocument();
+    expect(screen.getByText("Editing live system defaults.")).toHaveClass("sr-only");
+    expect(screen.queryByText(/visible categor/)).not.toBeInTheDocument();
+  });
+
+  it("SettingsScopeControls keeps project unavailable guidance wired to the disabled radio", () => {
+    const setActiveScope = vi.fn();
+    renderSettingsScopeControls({
+      selectedProject: null,
+      setActiveScope,
+      scopeStatusText: "Project scope is unavailable until a project is selected.",
+    });
+
+    const projectRadio = screen.getByRole("radio", { name: "Project" });
+    expect(projectRadio).toBeDisabled();
+    expect(projectRadio).toHaveAccessibleDescription("Project scope unlocks after selecting a project.");
+    expect(screen.getByText("Project scope unlocks after selecting a project.")).toHaveAttribute("id", "settings-project-scope-disabled");
+
+    fireEvent.click(projectRadio);
+    expect(setActiveScope).not.toHaveBeenCalled();
+  });
+
+  it("SettingsScopeControls renders project inheritance and saved state chips", () => {
+    renderSettingsScopeControls({
+      activeScope: "project",
+      scopeStatusText: "Project scope selected. Editing overrides for Test Project.",
+      projectSourceSummary: "2 overridden settings and 8 inherited settings in this project scope.",
+      saveMessage: "Settings saved.",
+    });
+
+    expect(screen.getByRole("radio", { name: "Project" })).toHaveAttribute("aria-checked", "true");
+    expect(screen.getByText("Editing overrides for Test Project")).toBeInTheDocument();
+    expect(screen.getByText("2 overridden settings and 8 inherited settings in this project scope.")).toBeInTheDocument();
+    expect(screen.getByText("Saved")).toBeInTheDocument();
+  });
+
+  it("SettingsScopeControls renders unsaved edits without the saved badge", () => {
+    renderSettingsScopeControls({
+      activeDirty: true,
+      saveMessage: "Settings saved.",
+    });
+
+    expect(screen.getByText("Unsaved edits")).toBeInTheDocument();
+    expect(screen.queryByText("Saved")).not.toBeInTheDocument();
+  });
+
+  it("SettingsScopeControls shows visible category count only while Smart Find is active", () => {
+    const { rerender } = renderSettingsScopeControls({
+      filteredCategoryCount: 4,
+      isSearchActive: false,
+    });
+
+    expect(screen.queryByText("4 visible categories")).not.toBeInTheDocument();
+
+    rerender(
+      <SettingsScopeControls
+        activeScope="system"
+        setActiveScope={() => {}}
+        selectedProject={genericProject}
+        scopeStatusText="System scope selected. Editing live system defaults."
+        projectSourceSummary={null}
+        filteredCategoryCount={1}
+        isSearchActive
+        activeDirty={false}
+        activeSaving={false}
+        saveMessage={null}
+        error={null}
+        interactionStyle={interactionStyle}
+      />,
+    );
+
+    expect(screen.getByText("1 visible category")).toBeInTheDocument();
   });
 
   it("SelectInput keeps disabled reason visible and described by the control", () => {
