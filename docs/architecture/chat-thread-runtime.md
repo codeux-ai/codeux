@@ -74,7 +74,7 @@ When triggered on a connected MCP chat route, the dashboard now sends a hidden c
 
 The compact action then:
 - stores the provider's compaction output in `runtimeState.compactionSummary`
-- preserves the resolved native provider `sessionIds` for virtual CLI routes after native compaction, including session ids returned from a provider's logical continuation fallback
+- preserves the resolved native provider `sessionIds` for virtual CLI routes after native compaction, including the active native session id when one exists and the logical continuation fallback session id when the provider resumes through the thread id
 - refreshes virtual route metadata (`routeKind`, `virtualProvider`, and `modelLabel`) to match the provider that performed compaction
 - leaves `sessionIds` empty and keeps `replayRequired` enabled only when no compacted provider session can be continued
 - sets `replayRequired` only when a route needs to restart from a stored handoff
