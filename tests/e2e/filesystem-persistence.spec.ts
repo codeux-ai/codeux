@@ -136,7 +136,11 @@ test.describe('filesystem persistence', () => {
     const alias = await writeInstructionFile(request, projectId, 'gemini', aliasContent);
     expect(alias).toMatchObject({ id: 'gemini', relativePath: 'gemini.md', content: aliasContent });
     await expect.poll(async () => fs.readFile(path.join(repoRoot, 'gemini.md'), 'utf8')).toBe(aliasContent);
-    await expect(fs.stat(path.join(repoRoot, 'GEMINI.md'))).rejects.toThrow();
+    const aliasReadBack = await readInstructionFile(request, projectId, 'gemini');
+    expect(aliasReadBack).toMatchObject({ id: 'gemini', relativePath: 'gemini.md', content: aliasContent });
+    const geminiInstructionEntries = (await fs.readdir(repoRoot))
+      .filter((entry) => entry.toLowerCase() === 'gemini.md');
+    expect(geminiInstructionEntries).toEqual(['gemini.md']);
 
     const oversizedResponse = await request.put(
       `/api/projects/${encodeURIComponent(projectId)}/instruction-files/agents`,
