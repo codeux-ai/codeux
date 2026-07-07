@@ -144,6 +144,7 @@ A granular event in a sprint run (cycle start, task transition, gate decision, M
 | `instructionMarkdown` | text | The persona prompt. |
 | `labels` | string[] | – |
 | `avatarConfig` | json | Procedural avatar seed. |
+| `containerRunAsRoot` | bool \| null | Optional local Docker root-mode override for resolved worker-agent CLI runs; `null` inherits `cliWorkflow.containerRunAsRoot`. |
 | `memoryTemplateOverrideEnabled` | bool | – |
 | `memoryTemplateMarkdown` | text | If override is on. |
 | `persistentSkillStorageIds` | string[] | Storage IDs attached through `agent_skill_storage_bindings`. |

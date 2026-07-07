@@ -9,6 +9,7 @@ An *agent preset* is a reusable persona consisting of:
 - An optional **memory template** — controls how project / sprint memory is injected into prompts.
 - Optional persistent skill storage attachments, stored as shared project skill storage IDs for future retrieval.
 - Optional MCP access, including default-off Code UX built-in tools and custom MCP server links.
+- Optional runtime metadata such as provider/model preferences and a nullable Docker root-mode override for local CLI task runs.
 - A set of **labels** for tagging and filtering.
 
 Agent presets show up wherever a chat thread or planning request needs to choose an agent.
@@ -84,6 +85,10 @@ A common pattern: have a "Planner" agent (Claude Opus, sober and structured) for
 ## Memory templates
 
 When `memoryTemplateOverrideEnabled` is set, the preset's `memoryTemplateMarkdown` controls how project / sprint memories are formatted into prompts. The template uses simple `{{ }}` placeholders for memory blocks. See [Memory](./memory.md) for available placeholders.
+
+## Docker root-mode override
+
+Agent presets may store `containerRunAsRoot` as `true`, `false`, or `null`. The editor shows these as **Force root**, **Force non-root**, and **Inherit**. For local CLI task execution, the resolved worker preset's explicit boolean overrides the scoped Settings value `cliWorkflow.containerRunAsRoot`; `null` or an omitted field inherits that scoped setting. Root stays off by default, and the detail panel shows inherited posture as an inherited setting rather than implying root is enabled. Hosted Jules sessions ignore this preset field because they do not run in local Docker provider containers.
 
 ## Persistent skill storage
 

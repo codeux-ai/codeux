@@ -40,6 +40,17 @@ const mockLoginImageState = vi.hoisted(() => ({
   buildExitCode: 0,
 }));
 
+function getDockerRunArgsForProvider(providerId: string): string[] {
+  const runCall = (spawn as unknown as ReturnType<typeof vi.fn>).mock.calls.find(
+    ([cmd, args]) => cmd === "docker"
+      && Array.isArray(args)
+      && args.includes("run")
+      && args.includes(`code-ux.provider-id=${providerId}`),
+  );
+  expect(runCall).toBeDefined();
+  return runCall![1] as string[];
+}
+
 vi.mock("child_process", () => {
   return {
     spawn: vi.fn().mockImplementation((_cmd: string, args?: string[]) => {
@@ -286,6 +297,40 @@ describe("Terminal Routes", () => {
     // installers resolve instead of failing with "ensure_curl: command not found".
     const containerCmd = runArgs[runArgs.length - 1];
     expect(containerCmd).toContain("ensure_curl()");
+  });
+
+  it.each([
+    ["codex", "codex"],
+    ["claude-code", "claude"],
+  ])("publishes %s login callback ports on host loopback only", async (providerId, providerConfigId) => {
+    const response = await request(app)
+      .post("/api/terminal/start")
+      .send({ providerConfigId });
+
+    expect(response.status).toBe(200);
+
+    const runArgs = getDockerRunArgsForProvider(providerId);
+    expect(runArgs).not.toContain("--network");
+    expect(runArgs).not.toContain("host");
+
+    const publishArgs = runArgs
+      .map((arg, index) => (runArgs[index - 1] === "-p" ? arg : null))
+      .filter((arg): arg is string => typeof arg === "string");
+    expect(publishArgs).toHaveLength(1);
+    expect(publishArgs[0]).toMatch(/^127\.0\.0\.1:(\d+):\1$/);
+  });
+
+  it("does not use host networking or public port publishing for login containers by default", async () => {
+    const response = await request(app)
+      .post("/api/terminal/start")
+      .send({ providerConfigId: "gemini" });
+
+    expect(response.status).toBe(200);
+
+    const runArgs = getDockerRunArgsForProvider("gemini");
+    expect(runArgs).not.toContain("--network");
+    expect(runArgs).not.toContain("host");
+    expect(runArgs).not.toContain("-p");
   });
 
   it("should bake only the apt prerequisites into the login image, not the providers", () => {

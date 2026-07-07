@@ -49,6 +49,7 @@ describe("sanitizeCliWorkflow", () => {
     expect(defaults.containerMountGitConfig).toBe(false);
     expect(defaults.containerMemoryLimitMb).toBe(6144);
     expect(defaults.containerInstallPlaywrightBrowsers).toBe(true);
+    expect(defaults.containerRunAsRoot).toBe(false);
     expect(defaults.containerGitUserName).toBe("Code UX");
     expect(defaults.containerGitUserEmail).toBe("agents@codeux.ai");
     expect(defaults.containerMountGithubAuth).toBe(false);
@@ -105,15 +106,37 @@ describe("sanitizeCliWorkflow", () => {
     expect(invalid.containerInstallPlaywrightBrowsers).toBe(true);
   });
 
+  it("defaults Docker root execution off and falls back to false for invalid values", () => {
+    const defaults = sanitizeCliWorkflow(undefined);
+    expect(defaults.containerRunAsRoot).toBe(false);
+    expect(DEFAULT_DASHBOARD_SETTINGS.cliWorkflow.containerRunAsRoot).toBe(false);
+
+    const enabled = sanitizeCliWorkflow({
+      cliWorkflow: {
+        containerRunAsRoot: true,
+      },
+    });
+    expect(enabled.containerRunAsRoot).toBe(true);
+
+    const invalid = sanitizeCliWorkflow({
+      cliWorkflow: {
+        containerRunAsRoot: "bad" as any,
+      },
+    });
+    expect(invalid.containerRunAsRoot).toBe(false);
+  });
+
   it("keeps default container setup behavior enabled for dashboard settings", () => {
     expect(DEFAULT_DASHBOARD_SETTINGS.cliWorkflow.containerSetupScriptPath).toBe("");
     expect(DEFAULT_DASHBOARD_SETTINGS.cliWorkflow.containerCacheSetupScriptImage).toBe(true);
     expect(DEFAULT_DASHBOARD_SETTINGS.cliWorkflow.containerInstallPlaywrightBrowsers).toBe(true);
+    expect(DEFAULT_DASHBOARD_SETTINGS.cliWorkflow.containerRunAsRoot).toBe(false);
 
     const defaults = sanitizeCliWorkflow(undefined);
     expect(defaults.containerSetupScriptPath).toBe("");
     expect(defaults.containerCacheSetupScriptImage).toBe(true);
     expect(defaults.containerInstallPlaywrightBrowsers).toBe(true);
+    expect(defaults.containerRunAsRoot).toBe(false);
   });
 
   it("trims custom container setup script paths without requiring the file to exist", () => {

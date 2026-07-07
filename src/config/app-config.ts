@@ -2,6 +2,7 @@ import * as fs from "fs";
 import * as path from "path";
 import os from "os";
 import { randomBytes } from "crypto";
+import { isIP } from "net";
 import { buildCandidatePaths } from "../shared/config/search-paths.js";
 import { readInteger, readPort, readString } from "../shared/config/value-readers.js";
 import { getHomeCodeUxPath, getRelativeCodeUxPath } from "../shared/config/code-ux-paths.js";
@@ -85,11 +86,35 @@ const normalizePathValue = (value: string | null | undefined, fallback: string):
   return trimmed.startsWith("/") ? trimmed : `/${trimmed}`;
 };
 
-const isLoopbackHost = (host: string): boolean => {
-  const normalized = host.trim().toLowerCase();
+export const DEFAULT_DASHBOARD_HOST = "127.0.0.1";
+export const ALLOW_PUBLIC_DASHBOARD_ENV = "CODE_UX_ALLOW_PUBLIC_DASHBOARD";
+
+export const isLoopbackHost = (host: string): boolean => {
+  const normalized = host.trim().toLowerCase().replace(/^\[(.*)]$/, "$1");
+  const ipVersion = isIP(normalized);
+  if (ipVersion === 4) {
+    return normalized.startsWith("127.");
+  }
+  if (ipVersion === 6) {
+    return normalized === "::1" || normalized === "0:0:0:0:0:0:0:1";
+  }
   return normalized === "127.0.0.1"
     || normalized === "localhost"
     || normalized === "::1";
+};
+
+export const resolveDashboardBindHost = (
+  hostValue: string | undefined = process.env.DASHBOARD_HOST,
+  allowPublicValue: string | undefined = process.env[ALLOW_PUBLIC_DASHBOARD_ENV],
+): string => {
+  const host = hostValue?.trim() || DEFAULT_DASHBOARD_HOST;
+  if (!isLoopbackHost(host) && allowPublicValue !== "1") {
+    throw new Error(
+      `DASHBOARD_HOST=${host} would bind the unauthenticated dashboard outside loopback. `
+      + `Set ${ALLOW_PUBLIC_DASHBOARD_ENV}=1 to allow public dashboard binding explicitly.`,
+    );
+  }
+  return host;
 };
 
 const shouldDefaultMcpHttpHostForDockerDesktop = (): boolean => (

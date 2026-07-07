@@ -949,6 +949,8 @@ export interface CliWorkflowSettings {
   containerMemoryLimitMb: number;
   containerCacheSetupScriptImage: boolean;
   containerInstallPlaywrightBrowsers: boolean;
+  /** Opt-in escape hatch for Docker provider containers that must run as root. Defaults to false. */
+  containerRunAsRoot: boolean;
   containerMountGitConfig: boolean;
   containerGitUserName: string;
   containerGitUserEmail: string;

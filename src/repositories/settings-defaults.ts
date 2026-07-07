@@ -737,6 +737,7 @@ export const DEFAULT_DASHBOARD_SETTINGS: DashboardSettings = {
     containerMemoryLimitMb: 6144,
     containerCacheSetupScriptImage: true,
     containerInstallPlaywrightBrowsers: true,
+    containerRunAsRoot: false,
     containerMountGitConfig: false,
     containerGitUserName: "Code UX",
     containerGitUserEmail: "agents@codeux.ai",

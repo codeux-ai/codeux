@@ -119,6 +119,7 @@ import type { EmbeddingService } from "../services/embedding-service.js";
 import type { KnowledgeService } from "../services/knowledge-service.js";
 import type { UpdateStatus } from "../services/update-checker-service.js";
 import type { LocalMcpCliProvider, LocalMcpInstallResult, LocalMcpSetupInfo } from "../services/local-mcp-cli-config-service.js";
+import { resolveDashboardBindHost } from "../config/app-config.js";
 import type { ChatProviderIngressService } from "../services/chat-provider-ingress-service.js";
 import {
   parsePreviewSessionIdFromHost,
@@ -436,7 +437,7 @@ const bindDashboardServer = async (
   startPort: number,
   logger: Logger
 ): Promise<DashboardServerHandle> => {
-  const host = (process.env.DASHBOARD_HOST || "127.0.0.1").trim() || "127.0.0.1";
+  const host = resolveDashboardBindHost();
   const roundedPort = Math.round(startPort);
   const initialPort = Number.isFinite(roundedPort)
     ? Math.max(0, Math.min(65535, roundedPort))

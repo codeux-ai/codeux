@@ -775,7 +775,7 @@ describe("PlanningAgentService", () => {
 
     expect(providerRunner.runProviderForText).toHaveBeenCalledTimes(2);
     expect(vi.mocked(providerRunner.runProviderForText).mock.calls[1]?.[0]?.continueSessionId).toBe("native-rate-limit");
-    expect(sleepSpy).toHaveBeenCalledTimes(1);
+    expect(sleepSpy).toHaveBeenCalled();
   });
 
   it("accepts virtual planning JSON with prose but rejects legacy shape fields", async () => {

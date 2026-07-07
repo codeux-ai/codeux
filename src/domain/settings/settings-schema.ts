@@ -533,6 +533,7 @@ const validateCliWorkflow = (
   }
   if (typeof value.containerCacheSetupScriptImage !== "boolean") issues.push({ path: `${path}.containerCacheSetupScriptImage`, message: "Expected a boolean" });
   if (typeof value.containerInstallPlaywrightBrowsers !== "boolean") issues.push({ path: `${path}.containerInstallPlaywrightBrowsers`, message: "Expected a boolean" });
+  if (typeof value.containerRunAsRoot !== "boolean") issues.push({ path: `${path}.containerRunAsRoot`, message: "Expected a boolean" });
   if (typeof value.containerMountGitConfig !== "boolean") issues.push({ path: `${path}.containerMountGitConfig`, message: "Expected a boolean" });
   if (typeof value.containerGitUserName !== "string") issues.push({ path: `${path}.containerGitUserName`, message: "Expected a string" });
   if (typeof value.containerGitUserEmail !== "string") issues.push({ path: `${path}.containerGitUserEmail`, message: "Expected a string" });

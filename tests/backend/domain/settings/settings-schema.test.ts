@@ -297,6 +297,7 @@ describe("validateSettingsPayload", () => {
         containerMemoryLimitMb: "bad",
         containerCacheSetupScriptImage: "bad",
         containerInstallPlaywrightBrowsers: "bad",
+        containerRunAsRoot: "bad",
         containerMountGitConfig: "bad",
         containerGitUserName: 7,
         containerGitUserEmail: 8,
@@ -366,6 +367,7 @@ describe("validateSettingsPayload", () => {
     expect(paths).toContain("cliWorkflow.containerSetupScriptPath");
     expect(paths).toContain("cliWorkflow.containerCacheSetupScriptImage");
     expect(paths).toContain("cliWorkflow.containerInstallPlaywrightBrowsers");
+    expect(paths).toContain("cliWorkflow.containerRunAsRoot");
     expect(paths).toContain("cliWorkflow.containerClaudeCodeAuthPath");
     expect(paths).toContain("workers.executionMode");
     expect(paths).toContain("workers.virtualWorkerProvider");
@@ -426,6 +428,20 @@ describe("validateSettingsPayload", () => {
     expect(result.success).toBe(false);
     expect(result.issues).toEqual(expect.arrayContaining([
       { path: "cliWorkflow.containerSetupScriptPath", message: "Expected a string" },
+    ]));
+  });
+
+  it("requires Docker root execution to be boolean in full settings payloads", () => {
+    const payload = cloneDefaults({ env: {}, settingsJson: {}, resolved: {} });
+    expect(payload.cliWorkflow.containerRunAsRoot).toBe(false);
+
+    payload.cliWorkflow.containerRunAsRoot = "yes" as any;
+
+    const result = validateSettingsPayload(payload);
+
+    expect(result.success).toBe(false);
+    expect(result.issues).toEqual(expect.arrayContaining([
+      { path: "cliWorkflow.containerRunAsRoot", message: "Expected a boolean" },
     ]));
   });
 });

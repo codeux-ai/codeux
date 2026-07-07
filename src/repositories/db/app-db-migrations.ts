@@ -374,6 +374,7 @@ export function runMigrations(db: DatabaseAdapter): void {
   ensureColumn(db, "agent_presets", "avatar_config_json", "TEXT");
   ensureColumn(db, "agent_presets", "provider_config_id", "TEXT");
   ensureColumn(db, "agent_presets", "model", "TEXT");
+  ensureColumn(db, "agent_presets", "container_run_as_root", "INTEGER");
   ensureColumn(db, "agent_presets", "memory_template_override_enabled", "INTEGER NOT NULL DEFAULT 0");
   ensureColumn(db, "agent_presets", "memory_template_markdown", "TEXT");
   ensureColumn(db, "agent_presets", "mcp_access_json", "TEXT");

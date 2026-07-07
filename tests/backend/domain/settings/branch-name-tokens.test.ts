@@ -204,6 +204,7 @@ function makeBasePayload() {
       containerMemoryLimitMb: 6144,
       containerCacheSetupScriptImage: true,
       containerInstallPlaywrightBrowsers: true,
+      containerRunAsRoot: false,
       containerMountGitConfig: true,
       containerGitUserName: "Jules",
       containerGitUserEmail: "jules@example.com",
@@ -221,6 +222,8 @@ function makeBasePayload() {
       containerQwenCodeAuthPath: "",
       containerOpenCodeAuthPath: "",
       containerAntigravityAuthPath: "",
+      maxPlanningJsonRetries: 3,
+      maxQuotaRetriesWithoutTimer: 3,
     },
     sprintPreview: {
       enabled: false,

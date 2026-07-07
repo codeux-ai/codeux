@@ -63,6 +63,30 @@ describe("Dashboard Security Helper", () => {
       expect(isTrustedDashboardHost("localhost:4444", "evil.com")).toBe(false);
       expect(isTrustedDashboardHost("localhost:4444", "preview-test.localhost:4444")).toBe(false);
     });
+
+    it("should only trust configured forwarded hosts from a loopback backend host", () => {
+      const originalHost = process.env.DASHBOARD_HOST;
+      try {
+        process.env.DASHBOARD_HOST = "dashboard.example.com";
+
+        expect(isTrustedDashboardHost("127.0.0.1:4444", "dashboard.example.com")).toBe(true);
+        expect(isTrustedDashboardHost("dashboard.example.com", "127.0.0.1:4444")).toBe(false);
+        expect(isTrustedDashboardHost("127.0.0.1:4444", "other.example.com")).toBe(false);
+      } finally {
+        if (originalHost === undefined) {
+          delete process.env.DASHBOARD_HOST;
+        } else {
+          process.env.DASHBOARD_HOST = originalHost;
+        }
+      }
+    });
+
+    it("should reject forwarded preview hosts that switch preview sessions", () => {
+      expect(isTrustedDashboardHost(
+        "preview-test.localhost:4444",
+        "preview-other.localhost:4444",
+      )).toBe(false);
+    });
   });
 
   describe("isHostileBrowserOrigin", () => {
@@ -166,6 +190,48 @@ describe("Dashboard Security Helper", () => {
         },
       });
       expect(isHostileBrowserOrigin(req)).toBe(false);
+    });
+
+    it("should allow a configured forwarded dashboard origin only behind loopback", () => {
+      const originalHost = process.env.DASHBOARD_HOST;
+      try {
+        process.env.DASHBOARD_HOST = "dashboard.example.com";
+        const req = createReq({
+          headers: {
+            host: "127.0.0.1:4444",
+            "x-forwarded-host": "dashboard.example.com",
+            origin: "https://dashboard.example.com",
+          },
+        });
+        expect(isHostileBrowserOrigin(req)).toBe(false);
+      } finally {
+        if (originalHost === undefined) {
+          delete process.env.DASHBOARD_HOST;
+        } else {
+          process.env.DASHBOARD_HOST = originalHost;
+        }
+      }
+    });
+
+    it("should reject forwarded dashboard origins when the actual host is not loopback", () => {
+      const originalHost = process.env.DASHBOARD_HOST;
+      try {
+        process.env.DASHBOARD_HOST = "dashboard.example.com";
+        const req = createReq({
+          headers: {
+            host: "dashboard.example.com",
+            "x-forwarded-host": "127.0.0.1:4444",
+            origin: "http://127.0.0.1:4444",
+          },
+        });
+        expect(isHostileBrowserOrigin(req)).toBe(true);
+      } finally {
+        if (originalHost === undefined) {
+          delete process.env.DASHBOARD_HOST;
+        } else {
+          process.env.DASHBOARD_HOST = originalHost;
+        }
+      }
     });
 
     it("should allow CLI/API requests missing all browser origin headers", () => {
