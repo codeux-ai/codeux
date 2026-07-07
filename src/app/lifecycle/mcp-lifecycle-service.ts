@@ -36,6 +36,10 @@ export interface BootMcpHttpTransportDeps {
   getReady?: () => ReadinessProbeStatus;
   maxSessions?: number;
   sessionTimeoutMs?: number;
+  rateLimit?: {
+    windowMs?: number;
+    max?: number;
+  };
   logger: Logger;
   createServer: () => McpServer;
   recoveryService: RuntimeStartupRecoveryService;
@@ -58,6 +62,9 @@ interface McpHttpSessionEntry {
 
 const DEFAULT_MAX_SESSIONS = 100;
 const DEFAULT_SESSION_TIMEOUT_MS = 60 * 60 * 1000;
+const MIN_SERVER_MODE_AUTH_TOKEN_LENGTH = 32;
+const MAX_AUTHORIZATION_HEADER_LENGTH = 4096;
+const BEARER_TOKEN_PATTERN = /^[A-Za-z0-9._~+/-]+={0,2}$/;
 const IDENTIFIER_PATTERN = /^[a-zA-Z0-9-]+$/;
 
 function isLoopbackHost(host: string): boolean {
@@ -120,10 +127,16 @@ function readAuthorizationHeader(req: IncomingMessage): string | null {
   if (!value) {
     return null;
   }
-  if (!/^Bearer [^\s]+$/.test(value)) {
+  if (value.length > MAX_AUTHORIZATION_HEADER_LENGTH || !/^Bearer [^\s]+$/.test(value)) {
     throw new Error("Invalid authorization");
   }
   return value;
+}
+
+function validateServerModeAuthToken(authToken: string): void {
+  if (authToken.length < MIN_SERVER_MODE_AUTH_TOKEN_LENGTH || !BEARER_TOKEN_PATTERN.test(authToken)) {
+    throw new Error("MCP HTTP auth token for server mode must contain at least 32 bearer-safe characters.");
+  }
 }
 
 function isAuthorizedRequest(req: IncomingMessage, authToken: string | null): boolean {
@@ -236,22 +249,40 @@ export async function bootMcpHttpTransport(deps: BootMcpHttpTransportDeps): Prom
 
   const readAuthToken = (): string | null => deps.getAuthToken?.() ?? deps.authToken;
 
-  if ((deps.requireAuth || !isLoopbackHost(deps.host)) && !readAuthToken()?.trim()) {
+  const startupAuthToken = readAuthToken()?.trim() ?? "";
+
+  if ((deps.requireAuth || !isLoopbackHost(deps.host)) && !startupAuthToken) {
     throw new Error(deps.requireAuth
       ? "MCP HTTP auth token is required for server mode."
       : "MCP HTTP auth token is required when binding the MCP HTTP server to a non-loopback host.");
+  }
+  if (deps.requireAuth && startupAuthToken) {
+    validateServerModeAuthToken(startupAuthToken);
   }
 
   const app = express();
   // This gateway is network-exposed (HTTPS worker transport), so rate-limit it
   // in front of the auth check to blunt token brute-forcing and request floods.
   // The cap is well above a busy worker host's normal request rate.
-  app.use(createHttpRateLimiter());
+  app.use(createHttpRateLimiter({
+    ...deps.rateLimit,
+    jsonRpc: true,
+    onLimited: (req) => {
+      deps.logger.warn("Rate limited MCP HTTP request", {
+        path: req.path,
+        method: req.method,
+      });
+    },
+  }));
   app.use(express.json({ limit: "1mb" }));
 
   const sessions = new Map<string, McpHttpSessionEntry>();
-  const maxSessions = deps.maxSessions ?? DEFAULT_MAX_SESSIONS;
-  const sessionTimeoutMs = deps.sessionTimeoutMs ?? DEFAULT_SESSION_TIMEOUT_MS;
+  const maxSessions = Number.isInteger(deps.maxSessions) && (deps.maxSessions ?? 0) > 0
+    ? deps.maxSessions!
+    : DEFAULT_MAX_SESSIONS;
+  const sessionTimeoutMs = Number.isInteger(deps.sessionTimeoutMs) && (deps.sessionTimeoutMs ?? 0) > 0
+    ? deps.sessionTimeoutMs!
+    : DEFAULT_SESSION_TIMEOUT_MS;
 
   const closeSession = async (sessionId: string): Promise<void> => {
     const entry = sessions.get(sessionId);
@@ -267,6 +298,13 @@ export async function bootMcpHttpTransport(deps: BootMcpHttpTransportDeps): Prom
     const staleSessionIds = [...sessions.entries()]
       .filter(([, session]) => now - session.lastAccessed > sessionTimeoutMs)
       .map(([id]) => id);
+    if (staleSessionIds.length > 0) {
+      deps.logger.info("Closing idle MCP HTTP sessions", {
+        staleSessions: staleSessionIds.length,
+        activeSessions: sessions.size,
+        sessionTimeoutMs,
+      });
+    }
     await Promise.all(staleSessionIds.map((sessionId) => closeSession(sessionId)));
   };
 
@@ -418,6 +456,8 @@ export async function bootMcpHttpTransport(deps: BootMcpHttpTransportDeps): Prom
     port: resolvedPort,
     path: deps.path,
     authRequired: !!readAuthToken(),
+    maxSessions,
+    sessionTimeoutMs,
   });
 
   return {

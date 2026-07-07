@@ -53,6 +53,10 @@ const STARTUP_FLAGS_WITH_VALUES = new Set([
   "--mcp-http-path",
   "--mcp-https-auth-token",
   "--mcp-http-auth-token",
+  "--mcp-https-max-sessions",
+  "--mcp-http-max-sessions",
+  "--mcp-https-session-timeout-ms",
+  "--mcp-http-session-timeout-ms",
 ]);
 
 const FLAG_KEY_ALIASES: Record<string, string> = {
@@ -599,6 +603,10 @@ export function buildHelpText(appConfig: AppConfig): string {
     "  --mcp-https-path P Path for the MCP Streamable HTTP gateway (default: /mcp)",
     "  --mcp-https-auth-token VALUE",
     "                    Bearer token for MCP HTTP requests",
+    "  --mcp-https-max-sessions N",
+    "                    Maximum active MCP HTTP sessions (default: 100)",
+    "  --mcp-https-session-timeout-ms N",
+    "                    Idle MCP HTTP session timeout in milliseconds (default: 3600000)",
     "  --help, -h        Show this help message",
     "",
     "Environment Variables:",
@@ -612,6 +620,10 @@ export function buildHelpText(appConfig: AppConfig): string {
     "  MCP_HTTPS_PATH     Path for the MCP HTTP gateway",
     "  MCP_HTTPS_AUTH_TOKEN",
     "                     Bearer token for MCP HTTP requests",
+    "  MCP_HTTPS_MAX_SESSIONS",
+    "                     Maximum active MCP HTTP sessions (default: 100)",
+    "  MCP_HTTPS_SESSION_TIMEOUT_MS",
+    "                     Idle MCP HTTP session timeout in milliseconds (default: 3600000)",
   ];
 
   return lines.join("\n");
