@@ -6,6 +6,8 @@ The **Nodes** page (`/nodes`) is where dashboard users create and operate saved 
 
 The flow library lists project-owned flows. Selecting one opens an editable graph canvas with nodes, directed edges, positions, and node JSON data. The canvas is built into Code UX and is not a generic n8n importer; runtime execution supports Code UX node types rather than arbitrary external workflow nodes.
 
+New editable canvas surfaces use a pure dashboard state module for typed nodes, ports, edges, config fields, selection, deterministic layout, validation issues, JSON serialization, and malformed-draft recovery. Its starter graph lays out trigger, agent, task, condition, and output nodes so workflows begin from a useful Code UX shape.
+
 ## Dynamic Widgets
 
 The inspector renders widget schemas attached to the selected node. Supported field types are text, textarea, number, boolean, select, JSON, secret reference, and key-value entries. Graph-level input widgets describe manual or scheduled run input.
