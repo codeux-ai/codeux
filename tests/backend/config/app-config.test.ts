@@ -10,6 +10,7 @@ import {
   hasServerModeArg,
   parseApiKeyArg,
   parseRuntimeRoleArg,
+  resolveDashboardBindHost,
 } from "../../../src/config/app-config.js";
 
 const originalEnv = { ...process.env };
@@ -21,8 +22,10 @@ let tempHome: string;
 beforeEach(async () => {
   process.env = { ...originalEnv };
   delete process.env.DASHBOARD_PORT;
+  delete process.env.DASHBOARD_HOST;
   delete process.env.JULES_API_KEY;
   delete process.env.JULES_KEY;
+  delete process.env.CODE_UX_ALLOW_PUBLIC_DASHBOARD;
   delete process.env.MCP_HTTP_ENABLED;
   delete process.env.MCP_HTTP_PORT;
   delete process.env.MCP_HTTP_HOST;
@@ -155,6 +158,35 @@ describe("dashboardPortLoader", () => {
 
   it("falls back to 4444", () => {
     expect(dashboardPortLoader(tempDir)).toBe(4444);
+  });
+});
+
+describe("resolveDashboardBindHost", () => {
+  it("defaults the dashboard bind host to loopback", () => {
+    expect(resolveDashboardBindHost()).toBe("127.0.0.1");
+  });
+
+  it.each(["127.0.0.1", "127.0.0.2", "localhost", "::1", "[::1]"])("allows loopback dashboard bind host %s", (host) => {
+    process.env.DASHBOARD_HOST = host;
+    expect(resolveDashboardBindHost()).toBe(host);
+  });
+
+  it.each(["0.0.0.0", "::", "192.168.1.10", "dashboard.example.com"])(
+    "rejects non-loopback dashboard bind host %s without explicit opt-in",
+    (host) => {
+      process.env.DASHBOARD_HOST = host;
+
+      expect(() => resolveDashboardBindHost()).toThrow("CODE_UX_ALLOW_PUBLIC_DASHBOARD=1");
+    },
+  );
+
+  it("allows public dashboard binding only with the exact explicit opt-in value", () => {
+    process.env.DASHBOARD_HOST = "0.0.0.0";
+    process.env.CODE_UX_ALLOW_PUBLIC_DASHBOARD = "true";
+    expect(() => resolveDashboardBindHost()).toThrow("CODE_UX_ALLOW_PUBLIC_DASHBOARD=1");
+
+    process.env.CODE_UX_ALLOW_PUBLIC_DASHBOARD = "1";
+    expect(resolveDashboardBindHost()).toBe("0.0.0.0");
   });
 });
 

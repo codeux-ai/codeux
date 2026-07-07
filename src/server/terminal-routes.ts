@@ -713,11 +713,11 @@ export function registerTerminalRoutes(app: Express, options: DashboardDependenc
       ].filter(Boolean).join("\n");
 
       const userSpec = getDockerUserSpec();
-      let networkArgs = ["--network", "host"];
+      let networkArgs: string[] = [];
       if (providerId === "codex") {
-        networkArgs = ["-p", `${targetPort}:${targetPort}`];
+        networkArgs = ["-p", `127.0.0.1:${targetPort}:${targetPort}`];
       } else if (providerId === "claude-code") {
-        networkArgs = ["-p", `${targetPort}:${targetPort}`];
+        networkArgs = ["-p", `127.0.0.1:${targetPort}:${targetPort}`];
       }
 
       const dockerArgs = [
