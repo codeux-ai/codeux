@@ -254,6 +254,38 @@ export class SchedulerRepository {
     return updated;
   }
 
+  claimDueOccurrence(entryId: string, occurrenceIso: string, nextRunAt: string | null): SchedulerEntryRecord | null {
+    const current = this.getEntry(entryId);
+    if (!current || current.status !== "scheduled") {
+      return null;
+    }
+
+    const now = new Date().toISOString();
+    const result = current.scheduleAnchor
+      ? this.db.prepare(`
+        UPDATE scheduler_entries
+        SET next_run_at = ?, last_run_at = ?, last_error = NULL, updated_at = ?
+        WHERE id = ?
+          AND status = 'scheduled'
+          AND (last_run_at IS NULL OR last_run_at != ?)
+      `).run(nextRunAt, occurrenceIso, now, entryId, occurrenceIso)
+      : this.db.prepare(`
+        UPDATE scheduler_entries
+        SET next_run_at = ?, last_error = NULL, updated_at = ?
+        WHERE id = ?
+          AND status = 'scheduled'
+          AND next_run_at = ?
+      `).run(nextRunAt, now, entryId, occurrenceIso);
+
+    if (result.changes === 0) {
+      return null;
+    }
+
+    const updated = this.requireEntry(entryId);
+    this.publishProjectStructureRefresh(updated.projectId);
+    return updated;
+  }
+
   markRunFailed(entryId: string, error: string, occurrenceIso?: string): SchedulerEntryRecord {
     const current = this.requireEntry(entryId);
     const now = new Date().toISOString();

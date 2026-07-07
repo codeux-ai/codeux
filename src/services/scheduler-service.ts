@@ -214,18 +214,24 @@ export class SchedulerService {
         : computeNextRunAfterOccurrence(occurrenceIso, freshEntry.recurrence, freshEntry.runCount + 1);
 
       if (freshEntry.targetType === "node_flow") {
-        this.executeNodeFlowEntry(freshEntry, occurrenceIso).then((result) => {
+        const claimedEntry = this.claimDueOccurrence(freshEntry, occurrenceIso, nextRunAt);
+        if (!claimedEntry) {
+          this.inFlightEntryIds.delete(entry.id);
+          continue;
+        }
+
+        this.executeNodeFlowEntry(claimedEntry, occurrenceIso).then((result) => {
           if (result.run.status === "succeeded") {
-            this.deps.schedulerRepository.markRunSucceeded(freshEntry.id, occurrenceIso, nextRunAt);
+            this.deps.schedulerRepository.markRunSucceeded(claimedEntry.id, occurrenceIso, nextRunAt);
             return;
           }
           this.deps.schedulerRepository.markRunFailed(
-            freshEntry.id,
+            claimedEntry.id,
             result.run.errorMessage ?? `Node flow run ${result.run.status}.`,
             occurrenceIso,
           );
         }).catch((error) => {
-          this.handleExecutionFailure(freshEntry, error);
+          this.handleExecutionFailure(claimedEntry, error);
         }).finally(() => {
           this.inFlightEntryIds.delete(entry.id);
         });
@@ -252,6 +258,18 @@ export class SchedulerService {
       error: message,
     });
     this.deps.schedulerRepository.markRunFailed(entry.id, message);
+  }
+
+  private claimDueOccurrence(
+    entry: SchedulerEntryRecord,
+    occurrenceIso: string,
+    nextRunAt: string | null,
+  ): SchedulerEntryRecord | null {
+    const claimDueOccurrence = this.deps.schedulerRepository.claimDueOccurrence;
+    if (typeof claimDueOccurrence !== "function") {
+      return entry;
+    }
+    return claimDueOccurrence.call(this.deps.schedulerRepository, entry.id, occurrenceIso, nextRunAt);
   }
 
   private async executeEntry(entry: SchedulerEntryRecord, occurrenceIso: string): Promise<void> {
@@ -495,7 +513,11 @@ export class SchedulerService {
       return null;
     }
     const dueAt = new Date(anchorTime.getTime() + ((entry.scheduleAnchor.offsetMinutes ?? 0) * 60_000));
-    return dueAt.getTime() <= now.getTime() ? dueAt.toISOString() : null;
+    const dueIso = dueAt.toISOString();
+    if (entry.lastRunAt === dueIso) {
+      return null;
+    }
+    return dueAt.getTime() <= now.getTime() ? dueIso : null;
   }
 
   private resolveAnchorOccurrenceStart(entry: SchedulerEntryRecord): string | null {
