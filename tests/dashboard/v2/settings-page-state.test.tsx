@@ -263,7 +263,9 @@ describe("useSettingsPageState", () => {
     fireEvent.input(screen.getByLabelText("Search settings categories"), {
       target: { value: "this_should_not_exist_at_all" },
     });
-    const emptySearchStatus = screen.getByText(/No settings match this_should_not_exist_at_all\./);
+    const emptySearchStatus = screen.getByText(
+      '0 results across 0 matching categories for "this_should_not_exist_at_all". Active category: General. Match previews: none. Clear the search or try routing, provider, auth, CI, agent, or memory.',
+    );
     expect(emptySearchStatus.closest('[role="status"]')).toBeInTheDocument();
 
     fireEvent.input(screen.getByLabelText("Search settings categories"), {
