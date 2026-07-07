@@ -54,6 +54,7 @@ import type {
   UpdateAgentPresetInput,
 } from "../contracts/agent-preset-types.js";
 import type { AgentPresetRepository } from "../repositories/agent-preset-repository.js";
+import type { ChatProviderRepository } from "../repositories/chat-provider-repository.js";
 import type {
   ExecutionInvocationRecord,
   ExecutionInvocationMessageRecord,
@@ -150,6 +151,7 @@ export interface DashboardServerOptions {
   settingsRepository?: SettingsRepository;
   knowledgeService?: KnowledgeService;
   agentPresetRepository?: AgentPresetRepository;
+  chatProviderRepository?: ChatProviderRepository;
   projectManagementRepository?: ProjectManagementRepository;
   executionRepository?: ExecutionRepository;
   getStatus: () => unknown;

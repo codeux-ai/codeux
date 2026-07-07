@@ -28,6 +28,7 @@ import { registerUpdateStatusRoutes } from "./update-status-routes.js";
 import { registerMemoryRoutes } from "./memory-routes.js";
 import { registerKnowledgeRoutes } from "./knowledge-routes.js";
 import { registerDocsWebRoutes } from "./docs-web-routes.js";
+import { registerChatProviderRoutes } from "./chat-provider-routes.js";
 
 export interface DashboardRouteRegistrationOptions {
   app: Express;
@@ -99,6 +100,7 @@ const registerPreviewRouteGroup = (app: Express, deps: DashboardDependencies): v
 
 const registerSettingsRouteGroup = (app: Express, deps: DashboardDependencies, liveActivityCacheMs: number): void => {
   registerSettingsRoutes(app, deps, liveActivityCacheMs);
+  registerChatProviderRoutes(app, deps);
 };
 
 const registerProjectConfigurationRouteGroup = (app: Express, deps: DashboardDependencies): void => {

@@ -21,6 +21,7 @@ import { createLateBoundDependency } from "../../shared/late-bound-dependency.js
 
 export interface DashboardDependencies {
   chatThreadRuntimeService: ChatThreadRuntimeService;
+  chatProviderRepository: CoreDependencies["chatProviderRepository"];
   activityCacheService: ActivityCacheService;
   taskRerunService: TaskRerunService;
   executionControlService: ExecutionControlService;
@@ -46,6 +47,7 @@ export function createDashboardDependencies(
     projectRuntimeRepository,
     projectManagementRepository,
     connectionChatRepository,
+    chatProviderRepository,
     projectWorkerAssignmentRepository,
     projectAttentionService,
     agentPresetSyncService,
@@ -449,6 +451,7 @@ export function createDashboardDependencies(
   schedulerServiceRef.set(schedulerService);
 
   return {
+    chatProviderRepository,
     chatThreadRuntimeService,
     activityCacheService,
     taskRerunService,
