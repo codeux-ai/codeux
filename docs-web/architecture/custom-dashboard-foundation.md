@@ -66,6 +66,10 @@ Dashboard HTTP routes live in `src/server/custom-dashboard-routes.ts` and are re
 
 The MCP management surface is `manage_custom_dashboards` in `src/mcp/management/custom-dashboard-actions.ts`. It supports `list`, `get`, `create`, `update`, `create_revision`, `validate_revision`, `validation_status`, `validation_logs`, `publish_revision`, `archive`, and `data_catalog`. `archive` follows the same approval fingerprint flow as other destructive management actions.
 
+Project Manager and dashboard chat prompts steer user-created dashboard requests through this management surface. Agents should gather missing purpose, data-source, styleguide, layout, and publication intent details, then create or update drafts and revisions with complete manifests, file bundles, source node graphs, styleguide tokens, runtime metadata, accessibility notes, and validation expectations. Generated bundles are dependency-free Preact/Tailwind-compatible validation-harness code and must not be written directly into `dashboard/src`.
+
+After a revision is created, agents should start validation and wait for a passed validation status before publishing. Failed validation is repaired by creating a new revision from the validation report/logs rather than overriding the active published dashboard.
+
 Validation proxy requests reuse the preview proxy boundary: request bodies are capped at 5 MB, dashboard credentials and hop-by-hop/proxy/control headers are stripped before upstream forwarding, `Origin`/`Referer`/`Sec-Fetch-Site` are normalized to the loopback upstream, and upstream `Set-Cookie`, CSP, CSP report-only, and `X-Frame-Options` response headers are removed before returning to the dashboard origin.
 
 ## Docker and Logs

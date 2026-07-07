@@ -95,7 +95,7 @@ function buildJsonOutputInstructions(): string {
     "1. `replyMarkdown`: A string containing your concise markdown reply to the user.",
     "2. `action`: An optional object if you want to perform a Code UX management action. Otherwise, set this to `null`.",
     "   - Format: `{ \"domain\": \"...\", \"action\": \"...\", \"payload\": { ... } }`",
-    "   - Domains: `projects`, `sprints`, `tasks`, `settings`, `agents`, `memory`, `preview`, `telemetry`.",
+    "   - Domains: `projects`, `sprints`, `tasks`, `settings`, `agents`, `memory`, `preview`, `custom_dashboards`, `telemetry`.",
     "   - Note: Destructive actions (starting with `delete_`, `reset_`, `replace_`) and all settings mutations MUST pause for explicit user approval.",
     "     If you propose an approval-gated action, it will not execute immediately; the user will see a confirmation prompt.",
     "     DO NOT call an approval-gated action again with `approval.confirmed: true` unless the user explicitly confirms it.",
@@ -104,12 +104,15 @@ function buildJsonOutputInstructions(): string {
     "   - `prompt` is the literal message the user would send next.",
     "   - Use only stable string icon identifiers such as `play`, `settings`, or `search`; do not use UI component names.",
     "   - Omit `suggestions` when there are no useful next steps.",
+    "",
+    buildCustomDashboardManagementInstructions("json"),
   ].join("\n");
 }
 
 function buildMcpNativeOutputInstructions(): string {
   return [
     "You have the `manage_code_ux` MCP tool available. Use it directly to perform management actions.",
+    "You also have dedicated Code UX management tools when listed by MCP, including `manage_custom_dashboards` for custom dashboard management.",
     "You also have the `scheduler_code_ux` MCP tool available for agent-owned follow-ups, wakeups, and task reruns.",
     "",
     "The tool accepts: `{ domain, action, payload }` where:",
@@ -120,6 +123,7 @@ function buildMcpNativeOutputInstructions(): string {
     "- **agents**: `list` (projectId), `get` (projectId, agentId), `sync` (projectId), `create` (projectId, ...), `update` (projectId, agentId, ...), `delete` (projectId, agentId)",
     "- **memory**: `search` (query), `list`, `get` (memoryId), `create` (...), `update` (memoryId, ...), `delete` (memoryId), `promote` (memoryId), `start_reembed`, `get_map`, `count`, `model_status`",
     "- **preview**: `list_sessions`, `start_session` (projectId, sprintId, taskId), `rebuild_session` (sessionId), `stop_session` (sessionId), `remove_session` (sessionId), `get_script` (sessionId), `get_logs` (sessionId), `get_url` (sessionId)",
+    "- **custom_dashboards**: `list` (projectId), `get` (dashboardId), `create` (projectId, title, manifest, fileBundle), `update` (dashboardId, ...), `create_revision` (dashboardId, optional bundle overrides), `validate_revision` (projectId, dashboardId, revisionId), `validation_status` (sessionId), `validation_logs` (sessionId), `publish_revision` (dashboardId, revisionId, optional validationSessionId), `archive` (dashboardId), `data_catalog` (projectId). Prefer the dedicated `manage_custom_dashboards` MCP tool for these actions when available.",
     "- **telemetry**: `get_project_execution_snapshot` (projectId), `get_project_stats_snapshot` (projectId), `list_sprint_runs` (projectId, sprintId), `list_task_dispatches` (projectId, sprintId, taskId), `list_execution_invocations` (projectId), `list_execution_invocation_messages` (invocationId)",
     "",
     "**Important rules:**",
@@ -127,6 +131,25 @@ function buildMcpNativeOutputInstructions(): string {
     "- If the tool returns `approvalRequired: true`, inform the user what action needs approval and ask them to confirm. DO NOT re-call the tool with `approval.confirmed: true` unless the user explicitly confirms.",
     "- Settings mutations are one-use approval gated: the first call always queues the exact action/payload for up to 15 minutes, and only the same action/payload can execute after user confirmation.",
     "- Respond with plain markdown text. Do NOT wrap your response in JSON.",
+    "",
+    buildCustomDashboardManagementInstructions("mcp"),
+  ].join("\n");
+}
+
+function buildCustomDashboardManagementInstructions(mode: "json" | "mcp"): string {
+  const actionSurface = mode === "json"
+    ? "Use the `custom_dashboards` action domain; this maps to the `manage_custom_dashboards` MCP surface."
+    : "Prefer `manage_custom_dashboards`; if you must use `manage_code_ux`, use domain `custom_dashboards`.";
+  return [
+    "**Custom dashboard management:**",
+    `- ${actionSurface}`,
+    "- For dashboard create/revision requests, gather only missing essentials before acting: purpose, data sources, styleguide constraints, layout expectations, and publication intent.",
+    "- Do not instruct agents to write user-created dashboards into `dashboard/src` or other product source directories.",
+    "- Create or update a draft with a complete bundle, then create a revision through the management surface.",
+    "- Bundles must include manifest metadata (`schemaVersion`, title, entry file, file paths, description/metadata), fileBundle entry files, source node graph definitions, styleguide tokens, runtime metadata, accessibility notes, and validation expectations.",
+    "- Generated code must be dependency-free Preact/Tailwind-compatible code for the custom dashboard validation harness; do not add package dependencies or assume app-private imports.",
+    "- After creating a revision, start `validate_revision` and report the validation session id/status.",
+    "- Never call `publish_revision` until validation status is `passed`. If validation fails, create a repair revision from the report/logs and validate that revision instead of overriding the published dashboard.",
   ].join("\n");
 }
 
