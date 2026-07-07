@@ -231,7 +231,7 @@ Related docs:
 
 Reopens the guided setup flow without changing saved settings by itself.
 
-**What it controls:** The action button launches onboarding so you can revisit Easy, Standard, or Expert setup, provider configuration, GitHub workflow choices, and setup prompts.
+**What it controls:** The action button launches onboarding so you can revisit Easy, Standard, or Expert setup, provider configuration, GitHub workflow choices, and Appearance prompts. Appearance choices preview immediately while onboarding is open, including Theme, Navigation Mode, Reduced Motion, Background Mode, Static Color, and supported Zoom Level.
 
 **Recommended defaults:** Use Easy for the shortest one-provider path, Standard for guided regular setup, and Expert when you need every runtime and routing control. Expert remains the default.
 
@@ -248,7 +248,7 @@ Related docs:
 
 Controls the dashboard shell layout, experience mode, theme, motion preference, and desktop zoom when available.
 
-**What it controls:** Experience mode stores one persisted Easy, Standard, or Expert dashboard preference and filters primary dock/sidebar navigation. Easy shows Chat, Browser, Stats, Settings/Config, and external Docs; Standard hides the specialized Schedule, Memory, Knowledge, Files, and Live pages; Expert shows the full primary navigation. Navigation mode switches dock/sidebar, theme sets color mode, reduced motion limits animation, and zoom scales Electron windows.
+**What it controls:** Experience mode stores one persisted Easy, Standard, or Expert dashboard preference and filters primary dock/sidebar navigation. Easy shows Chat, Browser, Stats, Settings/Config, and external Docs; Standard hides the specialized Schedule, Memory, Knowledge, Files, and Live pages; Expert shows the full primary navigation. Navigation Mode switches dock/sidebar, Theme sets Light, Dark, or System color mode, Reduced Motion limits animation, and Zoom Level scales Electron windows.
 
 **Recommended defaults:** New installs default to Expert experience mode. Use System theme and Auto reduced motion unless you need a fixed accessibility preference.
 
@@ -265,7 +265,7 @@ Related docs:
 
 Customizes the dashboard background image, animation mode, static color, and pattern overlay.
 
-**What it controls:** Image upload, animated/static mode, animation style, color picker, and overlay pattern shape the visual layer behind panels.
+**What it controls:** Background Image, Background Mode, Animation Style, Static Color, and Pattern Overlay shape the visual layer behind panels. Onboarding previews Theme, Navigation Mode, Reduced Motion, Background Mode, Static Color, and supported Zoom Level while it is open, while Animation Style, Pattern Overlay, and custom background image remain available here after onboarding.
 
 **Recommended defaults:** Prefer lightweight images and readable contrast; use static mode if motion is distracting.
 
