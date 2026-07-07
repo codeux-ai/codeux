@@ -94,8 +94,6 @@ Typed tool argument contracts and registry dispatch are defined in `src/api/mcp/
 
 Worker MCP clients can advertise their agent preset with the `X-Code-Ux-Agent` header on the Code UX MCP connection. When the header is absent, Code UX treats the request as a project-manager or stdio-style client and applies the system MCP tool toggles for the current runtime role.
 
-Native provider MCP calls can also advertise `X-Code-Ux-Invocation` with the execution invocation id that originated the call. Code UX validates it with the same single-header, length, and identifier-character rules as `X-Code-Ux-Agent`, then stores it as request-scoped context for management handlers that need to associate actions with the originating provider invocation. The invocation id is not added to public MCP response payloads.
-
 When the header is present, Code UX must resolve it to an explicit agent MCP access policy before exposing built-in Code UX management tools. Malformed HTTP header values are rejected before MCP routing; if an advertised agent identity reaches the router but is unknown or resolves to an agent without an explicit MCP access policy, `list_tools` returns no Code UX tools and `call_tool` rejects every Code UX management tool with MCP `MethodNotFound`. This fail-closed behavior prevents an unrecognized agent from inheriting broad system-level management access.
 
 For a resolved agent policy:
@@ -158,41 +156,10 @@ Tool arguments are validated against `src/contracts/mcp-tool-definitions.ts` bef
 
 Code UX exposes two scheduler MCP surfaces:
 
-- `manage_scheduler` is the project-manager management surface. It can list, create, schedule sprints, schedule quicksprints, schedule chat messages, schedule wakeup follow-ups, update entries, delete entries with approval, and run due entries.
+- `manage_scheduler` is the project-manager management surface. It can list, create, schedule sprints, schedule quicksprints, schedule chat messages, update entries, delete entries with approval, and run due entries. It remains unchanged for project-manager clients.
 - `scheduler_code_ux` is the restricted agent-owned surface. It supports only `list`, `schedule_wakeup`, `schedule_task`, and `cancel`. The Code UX suffix intentionally avoids collisions with scheduler tools exposed by provider CLIs or other MCP servers.
 
 The restricted `scheduler_code_ux` tool accepts either an absolute `scheduledFor` ISO timestamp or one positive relative delay field, `delaySeconds` or `delayMinutes`. `schedule_wakeup` requires `projectId` and `bodyMarkdown`, and may include `title`, `timezone`, `threadId`, and `connectionId`. `schedule_task` requires `projectId` and `taskId`, and may include `title`, `timezone`, and a provider override.
-
-The broad `manage_scheduler` tool also supports `schedule_wakeup`. It requires `projectId`, `bodyMarkdown`, and either an absolute `scheduledFor` ISO timestamp or positive `delaySeconds`; it creates a one-time `targetType: "wakeup"` entry by default. Wakeups may include optional `threadId`, `connectionId`, and `title` fields, either flattened or inside `wakeupTarget`. They may also include `sourceInvocationId` and `resumeAfterInvocationCompletion`. When an MCP caller has request-scoped invocation context and `resumeAfterInvocationCompletion` is not `false`, Code UX stamps that invocation id onto the stored `wakeupTarget` so the follow-up waits for the originating provider invocation to reach `completed` before posting. Passing `resumeAfterInvocationCompletion: false` prevents automatic invocation stamping; passing an explicit `sourceInvocationId` uses that invocation id instead of the request context.
-
-Schedule an explicit wakeup after a relative delay:
-
-```json
-{
-  "action": "schedule_wakeup",
-  "projectId": "project-123",
-  "bodyMarkdown": "Check whether the migration finished and summarize any blocker.",
-  "delaySeconds": 300,
-  "threadId": "thread-456",
-  "title": "Migration follow-up"
-}
-```
-
-Schedule a wakeup for a specific ISO timestamp:
-
-```json
-{
-  "action": "schedule_wakeup",
-  "projectId": "project-123",
-  "scheduledFor": "2026-07-07T18:30:00.000Z",
-  "wakeupTarget": {
-    "bodyMarkdown": "Post the release readiness reminder.",
-    "connectionId": "connection-789",
-    "sourceInvocationId": "invocation-abc",
-    "resumeAfterInvocationCompletion": true
-  }
-}
-```
 
 Every `scheduler_code_ux` entry is persisted as an `agent_scheduler` target. The runtime stamps `origin: "agent_scheduler"`, `source: "agent_scheduler"`, and `createdByAgentId` from the current MCP agent context. `list` returns only entries created by the calling agent. `cancel` changes the matching entry status to `cancelled` only when the entry is an agent-scheduler wakeup or task entry created by that same agent. Dashboard-created entries, `manage_scheduler` entries, entries without agent-scheduler metadata, and entries created by another agent are rejected with the standard management validation envelope.
 
@@ -934,37 +901,16 @@ For quicksprint calls:
 - `delete_template` requires approval confirmation. Custom templates are removed from the project template directory; built-in/default templates are hidden for the project by writing a local tombstone marker instead of deleting shared bundled assets.
 
 For scheduler calls:
-- `manage_scheduler` supports `list`, `create`, `schedule_sprint`, `schedule_quicksprint`, `schedule_chat`, `schedule_wakeup`, `schedule_node_flow`, `update`, `delete`, and `run_due`.
-- Generic `create` requires `targetType: "sprint" | "quicksprint" | "chat" | "wakeup" | "node_flow"`.
+- `manage_scheduler` supports `list`, `create`, `schedule_sprint`, `schedule_quicksprint`, `schedule_chat`, `schedule_node_flow`, `update`, `delete`, and `run_due`.
+- Generic `create` requires `targetType: "sprint" | "quicksprint" | "chat" | "node_flow"`.
 - The `schedule_*` aliases infer the target type and accept flattened target fields.
 - Recurrence `frequency` accepts `minutely`, `hourly`, `daily`, `weekly`, and `monthly`; the dashboard renders `minutely` as `Minutes` and the matching recurrence summaries use labels such as `Every minute` and `Every 15 minutes`.
 - Minute recurrence uses the same UTC scheduler math as longer intervals, so the normalized rule advances `nextRunAt` and expands occurrences exactly like other frequencies once the minute literal has been parsed.
 - Scheduled quicksprints use the same `taskCount` number or numeric-string normalization as direct quicksprints.
 - Scheduled chat messages use `bodyMarkdown`, optional `threadId`, optional `connectionId`, and optional `title`. When due, the scheduler posts through the same chat runtime used by dashboard conversations.
-- Scheduled wakeups use `bodyMarkdown`, either `delaySeconds` or `scheduledFor`, optional `threadId`, optional `connectionId`, optional `title`, optional `sourceInvocationId`, and optional `resumeAfterInvocationCompletion`. They are one-time follow-ups by default; recurrence is available only through the generic scheduler contract and is not required for delayed project-manager check-backs.
 - Scheduled node flows use `flowId`, optional JSON object `input`, and optional `flowVersion`, either flattened or nested under `nodeFlowTarget`. When due, the scheduler calls the node-flow runtime with scheduler trigger metadata and only advances the entry after the runtime returns.
 - `update` supports pausing and resuming entries via the `status` field. Resuming a `paused` entry to `scheduled` recomputes the next run time to the next future occurrence, preventing immediate execution of missed runs. Pause/resume acts as automation gating and does not manually trigger the target.
 - `delete` requires approval confirmation.
-
-Wakeup examples:
-
-```json
-{
-  "action": "schedule_wakeup",
-  "projectId": "proj-1",
-  "delaySeconds": 30,
-  "bodyMarkdown": "Check back in 30 seconds."
-}
-```
-
-```json
-{
-  "action": "schedule_wakeup",
-  "projectId": "proj-1",
-  "scheduledFor": "2026-06-09T12:00:00.000Z",
-  "bodyMarkdown": "Check back at noon."
-}
-```
 
 For preview calls:
 - `manage_preview` supports `list_sessions`, `start_session`, `rebuild_session`, `stop_session`, `remove_session`, `get_logs`, `get_url`, `get_script`, and `update_script`.

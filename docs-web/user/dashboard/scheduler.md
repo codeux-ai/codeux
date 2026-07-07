@@ -33,11 +33,6 @@ Agent wakeups and task reruns are stored in the same target JSON payload with `o
 through the chat runtime with scheduler metadata, and task reruns reuse the normal task rerun
 service so workspaces, telemetry, and cancellation behavior stay consistent.
 
-Project-manager MCP wakeups can also carry a source invocation id. By default, those wakeups wait
-until the source invocation completes before posting to chat; running or missing source invocations
-leave the wakeup scheduled for the same due time, while failed, cancelled, or paused source
-invocations fail the wakeup instead of sending stale follow-up text.
-
 Agent wakeups and task reruns may appear in the Scheduler calendar, day view, stats, and scheduled
 entry list after they are created by the secured MCP scheduler tool. They use their own target
 labels and compact summaries instead of appearing as chat messages. The dashboard create/edit form

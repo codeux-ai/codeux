@@ -218,7 +218,7 @@ describe("ProviderExecutionService", () => {
 
     expect(providerRunner.runProvider).toHaveBeenCalledWith(expect.objectContaining({
       prompt: expect.stringContaining("Use search_skills before creating duplicates."),
-      mcpConnection: { url: "http://127.0.0.1:4444/mcp", authToken: "token", agentId: "agent-1", invocationId: "exec-inv-1" },
+      mcpConnection: { url: "http://127.0.0.1:4444/mcp", authToken: "token", agentId: "agent-1" },
       persistentSkillStorageMounts: skillRuntime.mounts,
     }));
     expect(providerRunner.runProvider.mock.calls[0]![0].prompt).toContain("test prompt");
@@ -242,45 +242,7 @@ describe("ProviderExecutionService", () => {
     });
 
     expect(providerRunner.runProvider).toHaveBeenCalledWith(expect.objectContaining({
-      mcpConnection: { url: "http://127.0.0.1:4444/mcp", authToken: "token", agentId: "agent-1", invocationId: "exec-inv-1" },
-    }));
-  });
-
-  it("attaches a newly-created execution invocation id to the provider MCP connection", async () => {
-    providerRunner.runProvider.mockResolvedValue(mockResult);
-
-    await service.executeProvider({
-      ...defaultArgs,
-      mcpConnection: { url: "http://127.0.0.1:4444/mcp", authToken: "token" },
-    });
-
-    expect(providerRunner.runProvider).toHaveBeenCalledWith(expect.objectContaining({
-      invocationId: "exec-inv-1",
-      mcpConnection: {
-        url: "http://127.0.0.1:4444/mcp",
-        authToken: "token",
-        invocationId: "exec-inv-1",
-      },
-    }));
-  });
-
-  it("passes an existing execution invocation id to the provider MCP connection", async () => {
-    providerRunner.runProvider.mockResolvedValue(mockResult);
-
-    await service.executeProvider({
-      ...defaultArgs,
-      invocationId: "existing-invocation-1",
-      mcpConnection: { url: "http://127.0.0.1:4444/mcp", authToken: "token" },
-    });
-
-    expect(executionRepository.createExecutionInvocation).not.toHaveBeenCalled();
-    expect(providerRunner.runProvider).toHaveBeenCalledWith(expect.objectContaining({
-      invocationId: "existing-invocation-1",
-      mcpConnection: {
-        url: "http://127.0.0.1:4444/mcp",
-        authToken: "token",
-        invocationId: "existing-invocation-1",
-      },
+      mcpConnection: { url: "http://127.0.0.1:4444/mcp", authToken: "token", agentId: "agent-1" },
     }));
   });
 

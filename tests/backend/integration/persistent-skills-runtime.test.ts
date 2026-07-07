@@ -225,7 +225,6 @@ Review pull requests for regressions, missing tests, and rollback risk.
       url: "http://127.0.0.1:4444/mcp",
       authToken: "test-token",
       agentId: enabledAgent.id,
-      invocationId: "exec-runtime-1",
     });
     expect(enabledRun.persistentSkillStorageMounts).toEqual([
       expect.objectContaining({

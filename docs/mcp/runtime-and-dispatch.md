@@ -78,15 +78,6 @@ When a worker MCP client advertises an agent preset, Code UX resolves that agent
 - Wraps unknown tool as MCP `MethodNotFound`.
 - Normalizes runtime/API errors into `isError` response.
 
-## Request Context Headers
-
-Native provider MCP calls can advertise request-scoped execution context on the Code UX MCP HTTP connection:
-
-- `X-Code-Ux-Agent` carries the agent preset id used for per-agent Code UX tool filtering.
-- `X-Code-Ux-Invocation` carries the execution invocation id for the provider run that originated the MCP call.
-
-Both headers use the same strict identifier validation as MCP session ids: a single non-empty value, at most 100 characters, containing only ASCII letters, digits, and hyphens. Invalid values are rejected before MCP routing. The context is stored in `AsyncLocalStorage` for the duration of the request; it is available to in-process handlers without being exposed in public response payloads.
-
 ## Correlation Context
 
 MCP tool calls are wrapped in a correlation scope before dispatch.

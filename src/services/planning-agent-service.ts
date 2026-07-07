@@ -192,6 +192,7 @@ export class PlanningAgentService {
       planningAgent,
       sprintName: input.name,
       goal: input.goal,
+      designGuidance: runtime.settings.designGuidance,
       memoryContext,
       learningsInstruction,
     });
@@ -368,6 +369,7 @@ export class PlanningAgentService {
       sprintName: sprint.name,
       canSetSprintTitle: sprint.isGeneratedName,
       goal: sprint.goal,
+      designGuidance: runtime.settings.designGuidance,
       memoryContext,
       learningsInstruction,
     });

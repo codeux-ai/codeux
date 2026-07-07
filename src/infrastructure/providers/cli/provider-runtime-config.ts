@@ -56,9 +56,6 @@ export function buildQwenRuntimeConfig(
   if (conn?.agentId) {
     headers["X-Code-Ux-Agent"] = conn.agentId;
   }
-  if (conn?.invocationId) {
-    headers["X-Code-Ux-Invocation"] = conn.invocationId;
-  }
 
   const modelConfig: Record<string, unknown> = {
     name: selectedModel,
@@ -173,9 +170,6 @@ export function buildOpenCodeRuntimeConfig(
     }
     if (conn.agentId) {
       headers["X-Code-Ux-Agent"] = conn.agentId;
-    }
-    if (conn.invocationId) {
-      headers["X-Code-Ux-Invocation"] = conn.invocationId;
     }
     mcpServers.code_ux = {
       type: "remote",

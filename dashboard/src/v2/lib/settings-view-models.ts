@@ -1,5 +1,6 @@
 export * from "./settings/branch-naming.js";
 export * from "./settings/display-metadata.js";
+export * from "./settings/design-guidance.js";
 export * from "./settings/model-options.js";
 export * from "./settings/model-pricing.js";
 export * from "./settings/project-overrides.js";

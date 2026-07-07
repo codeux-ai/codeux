@@ -138,6 +138,8 @@ When memory is enabled, planning prompts also include:
 - the current sprint's short-term learnings for that same planning agent when a sprint scope exists
 - the effective learnings-capture instruction, using the agent-specific memory template override when configured
 
+Planning prompts also resolve `designGuidance` from the effective project settings. Selected non-`none` tech-stack and styleguide entries are injected as a compact `Project Guidance` section before the task/output instructions; `none` selections are omitted so the planner receives active guidance without copying inactive defaults into every generated task prompt.
+
 In Docker execution mode, planning runs against a snapshot workspace and captures `.task-learnings.md` back out of that snapshot volume so memory capture still works even though the provider never writes directly into the host repo path.
 
 ## Project Setup Agent Flow
@@ -151,11 +153,12 @@ Behavior:
 3. The setup prompt includes those base templates as normative source material only for agent generation, requiring generated repository-specific agents to adapt their scope discipline, workspace protocol, verification standards, DAG planning model, and QA review boundaries instead of inventing a generic role prompt from scratch.
 4. When quicksprint generation is selected, Code UX injects the built-in quicksprint templates as the reusable-template quality baseline so generated project templates preserve the audit/improvement structure while adapting to repository evidence.
 5. When preview-script generation is selected, Code UX injects the exact bundled `.code-ux/container/setup.sh` bootstrap script so the generated `.code-ux/browser/start-preview.sh` complements the container bootstrap instead of duplicating provider CLI or OS setup work.
-6. The setup prompt requires repository discovery across assistant instruction markdown, documentation, dependency manifests, package scripts, source layout, preview/runtime configuration, and existing CI files.
-7. The provider returns strict JSON containing selected artifacts.
-8. Code UX writes agents through `AgentPresetSyncService`, quicksprints through `QuicksprintService`, preview startup to `.code-ux/browser/start-preview.sh`, and CI files to the returned GitHub/GitLab paths.
-9. Agent routing preserves the existing Planning agent default and updates generated worker specialists into the task-coding orchestrator roster.
-10. Newly generated coding specialists that are added to the orchestrator roster are created with `code_ux` MCP enabled and the default Playwright MCP custom server (`playwright`) linked. This gives setup-generated task-coding agents the same browser automation MCP default as the built-in Worker and Project manager agents.
+6. The setup prompt includes the same selected project guidance before artifact instructions. If the styleguide remains `none`, the prompt tells the setup agent to inspect existing styling, brand assets, design tokens, components, layouts, and interaction patterns before proposing a repository-specific styleguide, even when tech-stack guidance is also `none`.
+7. The setup prompt requires repository discovery across assistant instruction markdown, documentation, dependency manifests, package scripts, source layout, preview/runtime configuration, and existing CI files.
+8. The provider returns strict JSON containing selected artifacts.
+9. Code UX writes agents through `AgentPresetSyncService`, quicksprints through `QuicksprintService`, preview startup to `.code-ux/browser/start-preview.sh`, and CI files to the returned GitHub/GitLab paths.
+10. Agent routing preserves the existing Planning agent default and updates generated worker specialists into the task-coding orchestrator roster.
+11. Newly generated coding specialists that are added to the orchestrator roster are created with `code_ux` MCP enabled and the default Playwright MCP custom server (`playwright`) linked. This gives setup-generated task-coding agents the same browser automation MCP default as the built-in Worker and Project manager agents.
 11. Updating an existing generated specialist preserves its current MCP access selection, including any user-edited `linkedServerIds`, instead of reapplying the default Playwright MCP link.
 
 Generated agents keep persisted avatar metadata. Existing generated agents that predate avatar persistence receive a stable avatar the next time Project Setup Agent updates them.

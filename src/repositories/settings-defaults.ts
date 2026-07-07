@@ -2,6 +2,7 @@ import type {
   CliExecutionMode,
   DashboardSettings,
   DashboardExperienceMode,
+  DesignGuidanceSettings,
   FeaturePrAutoMergeMode,
   GuardrailJobType,
   GuardrailOnLimitAction,
@@ -31,6 +32,10 @@ import { DEFAULT_TASK_PR_TITLE_SCHEME } from "../domain/git/task-pr-title-templa
 import { DEFAULT_TASK_SECTION_ORDER, DEFAULT_SPRINT_SECTION_ORDER } from "../domain/sprint/composer/pr-description-composer.js";
 import { DEFAULT_INSTRUCTION_TEMPLATES } from "../instructions/instruction-template-catalog.js";
 import { DEFAULT_MCP_TOOL_TOGGLES } from "../mcp/mcp-tool-availability.js";
+import {
+  DEFAULT_DESIGN_GUIDANCE_SETTINGS,
+  cloneDesignGuidanceSettings,
+} from "../domain/settings/design-guidance-catalog.js";
 
 export const INTERNAL_SKILL_NAMES = [
   "git_manager",
@@ -74,6 +79,10 @@ export const DEFAULT_PROJECT_TECHSTACK: TechstackSelectionSettings = {
   selectedTechstackId: null,
   applicationKind: null,
 };
+
+export const DEFAULT_PROJECT_DESIGN_GUIDANCE: DesignGuidanceSettings = cloneDesignGuidanceSettings(
+  DEFAULT_DESIGN_GUIDANCE_SETTINGS,
+);
 
 export const DEFAULT_PR_DESCRIPTION_SETTINGS: PrDescriptionSettings = {
   task: {
@@ -766,6 +775,7 @@ export const DEFAULT_DASHBOARD_SETTINGS: DashboardSettings = {
     })),
   },
   techstack: { ...DEFAULT_PROJECT_TECHSTACK },
+  designGuidance: cloneDesignGuidanceSettings(DEFAULT_PROJECT_DESIGN_GUIDANCE),
   git: {
     githubMode: "REMOTE",
     githubToken: "",

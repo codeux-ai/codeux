@@ -42,9 +42,18 @@ import {
   isExpertExperienceMode,
   isStandardExperienceMode,
   normalizeDashboardExperienceMode,
+  createDesignGuidanceCustomEntry,
+  getDesignGuidanceActiveLabel,
+  getVisibleDesignGuidanceEntries,
+  isSelectedDefaultStyleguideHidden,
+  validateDesignGuidanceCustomEntry,
 } from "../../../dashboard/src/v2/lib/settings-view-models.js";
 import type { SystemSettings, ProjectSettings, ExternalSettingsHints, DashboardSettings } from "../../../dashboard/src/types.js";
 import { DEFAULT_DASHBOARD_SETTINGS } from "../../../src/repositories/settings-defaults.js";
+import {
+  CODE_UX_AWARD_WINNING_STYLEGUIDE_ID,
+  DESIGN_GUIDANCE_NONE_ID,
+} from "../../../src/domain/settings/design-guidance-catalog.js";
 
 describe("sortProviderConfigEntries", () => {
   it("keeps the primary first and orders added instances by creation, not by name", () => {
@@ -879,6 +888,100 @@ describe("provider display metadata helpers", () => {
   });
 });
 
+describe("settings guidance view models", () => {
+  it("hides default styleguides from visible choices while preserving None and custom entries", () => {
+    const settings = {
+      ...DEFAULT_DASHBOARD_SETTINGS.designGuidance,
+      selectedStyleguideId: CODE_UX_AWARD_WINNING_STYLEGUIDE_ID,
+      hideDefaultStyleguides: true,
+      customStyleguides: [
+        {
+          id: "custom-style",
+          name: "Custom Style",
+          summary: "Custom visual direction.",
+          instructionMarkdown: "Use custom guidance.",
+        },
+      ],
+    };
+
+    const visibleIds = getVisibleDesignGuidanceEntries(settings, "styleguide").map((entry) => entry.id);
+
+    expect(visibleIds).toEqual([DESIGN_GUIDANCE_NONE_ID, "custom-style"]);
+    expect(getDesignGuidanceActiveLabel(settings, "styleguide")).toBe("Code UX Award-Winning Product UI");
+    expect(isSelectedDefaultStyleguideHidden(settings)).toBe(true);
+  });
+
+  it("keeps tech stack defaults visible and resolves active custom labels", () => {
+    const settings = {
+      ...DEFAULT_DASHBOARD_SETTINGS.designGuidance,
+      selectedTechStackId: "custom-stack",
+      customTechStacks: [
+        {
+          id: "custom-stack",
+          name: "Custom Stack",
+          summary: "Custom stack direction.",
+          instructionMarkdown: "Use custom stack guidance.",
+        },
+      ],
+    };
+
+    const visibleIds = getVisibleDesignGuidanceEntries(settings, "techStack").map((entry) => entry.id);
+
+    expect(visibleIds[0]).toBe(DESIGN_GUIDANCE_NONE_ID);
+    expect(visibleIds).toContain("custom-stack");
+    expect(visibleIds).toContain("code-ux-product-stack");
+    expect(getDesignGuidanceActiveLabel(settings, "techStack")).toBe("Custom Stack");
+  });
+
+  it("validates duplicate custom ids and names against defaults and peer entries", () => {
+    const entries = [
+      {
+        id: "developer-tools",
+        name: "Custom Style",
+        summary: "Summary",
+        instructionMarkdown: "Instruction",
+      },
+      {
+        id: "custom-style",
+        name: "custom style",
+        summary: "",
+        instructionMarkdown: "",
+      },
+    ];
+
+    expect(validateDesignGuidanceCustomEntry(entries[0], entries, "styleguide", 0)).toMatchObject({
+      id: "Use a custom id that does not match a built-in styleguide.",
+      name: "styleguide name must be unique.",
+      hasError: true,
+    });
+    expect(validateDesignGuidanceCustomEntry(entries[1], entries, "styleguide", 1)).toMatchObject({
+      name: "styleguide name must be unique.",
+      summary: "Summary is required.",
+      instructionMarkdown: "Instruction markdown is required.",
+      hasError: true,
+    });
+  });
+
+  it("creates a unique custom guidance id for the requested kind", () => {
+    const settings = {
+      ...DEFAULT_DASHBOARD_SETTINGS.designGuidance,
+      customTechStacks: [
+        {
+          id: "custom-tech-stack",
+          name: "Custom Tech Stack",
+          summary: "Existing",
+          instructionMarkdown: "Existing",
+        },
+      ],
+    };
+
+    expect(createDesignGuidanceCustomEntry(settings, "techStack")).toMatchObject({
+      id: "custom-tech-stack-2",
+      name: "Custom Tech Stack",
+    });
+  });
+});
+
 
 describe("settings cloning helpers", () => {
   const createMockQualityAssurance = () => ({
@@ -918,6 +1021,7 @@ describe("settings cloning helpers", () => {
       invocationRouting: {},
     },
     techstack: { applicationKind: null, selectedTechstackId: null },
+    designGuidance: { ...DEFAULT_DASHBOARD_SETTINGS.designGuidance },
     git: { githubMode: "app", githubToken: "", defaultBranch: "main", autoCreatePr: false, autoCloseLinkedIssues: false, deleteMergedBranches: false, featureBranchPrefix: "", sprintBranchScheme: "FLAT", sprintKeyPrefix: "", taskPrTitleScheme: "({sprint_tag}) {task_title}" },
     jira: { host: "h", email: "e", apiToken: "t", autoTransitionLinkedIssuesOnImport: true, importTransitionName: "In Work", autoCloseLinkedIssues: false, defaultProject: "P", closeTransitionName: "Done" },
     notion: createMockImporterSettings(),

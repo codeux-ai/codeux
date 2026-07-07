@@ -176,7 +176,6 @@ export function buildProviderMcpConfigArtifact(
   const headers: Record<string, string> = {};
   if (processedConn?.authToken) headers["Authorization"] = `Bearer ${processedConn.authToken}`;
   if (processedConn?.agentId) headers["X-Code-Ux-Agent"] = processedConn.agentId;
-  if (processedConn?.invocationId) headers["X-Code-Ux-Invocation"] = processedConn.invocationId;
 
   if (provider === "claude-code") {
     const mcpServers: Record<string, unknown> = {};
@@ -259,16 +258,9 @@ export function buildProviderMcpConfigArtifact(
       const existingMcpServers = (settings.mcpServers as Record<string, unknown>) || {};
       const mcpServers: Record<string, unknown> = { ...existingMcpServers };
       if (processedConn) {
-        const existingCodeUx = existingMcpServers.code_ux && typeof existingMcpServers.code_ux === "object" && !Array.isArray(existingMcpServers.code_ux)
-          ? existingMcpServers.code_ux as Record<string, unknown>
-          : {};
-        const existingHeaders = existingCodeUx.headers && typeof existingCodeUx.headers === "object" && !Array.isArray(existingCodeUx.headers)
-          ? existingCodeUx.headers as Record<string, string>
-          : {};
-        mcpServers.code_ux = {
-          ...existingCodeUx,
+        mcpServers.code_ux = existingMcpServers.code_ux || {
           httpUrl: processedConn.url,
-          ...(Object.keys({ ...existingHeaders, ...headers }).length > 0 ? { headers: { ...existingHeaders, ...headers } } : {}),
+          ...(Object.keys(headers).length > 0 ? { headers } : {}),
         };
       }
       for (const server of processedServers) {
@@ -330,9 +322,6 @@ export function buildProviderMcpConfigArtifact(
       }
       if (processedConn.agentId) {
         codexHeaderParts.push(`"X-Code-Ux-Agent" = "${escapeTomlString(processedConn.agentId)}"`);
-      }
-      if (processedConn.invocationId) {
-        codexHeaderParts.push(`"X-Code-Ux-Invocation" = "${escapeTomlString(processedConn.invocationId)}"`);
       }
       if (codexHeaderParts.length > 0) {
         lines.push(`http_headers = { ${codexHeaderParts.join(", ")} }`);

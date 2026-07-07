@@ -6,9 +6,4 @@ export interface McpConnectionInfo {
    * so per-agent code_ux tool toggles can be enforced for this run.
    */
   agentId?: string;
-  /**
-   * Execution invocation id advertised to the code_ux gateway (via the X-Code-Ux-Invocation header)
-   * so request-scoped management actions can identify the provider invocation that made the call.
-   */
-  invocationId?: string;
 }

@@ -7,6 +7,7 @@ import {
   syncProjectProvidersToIntegrationCatalog
 } from "../../../dashboard/src/v2/lib/onboarding-provider-settings.js";
 import type { OnboardingProviderCredentialStatus, SystemSettings, ProjectSettings } from "../../../dashboard/src/types.js";
+import { DEFAULT_DASHBOARD_SETTINGS } from "../../../src/repositories/settings-defaults.js";
 
 const createImporterSettings = () => ({
   enabled: false,
@@ -90,6 +91,7 @@ describe("onboarding-provider-settings", () => {
         appearance: { theme: "system" },
         automationLevel: "FULL",
         automationInterventions: {},
+        designGuidance: { ...DEFAULT_DASHBOARD_SETTINGS.designGuidance },
         git: { githubMode: "app", githubToken: "", defaultBranch: "main", autoCreatePr: false, autoCloseLinkedIssues: false, deleteMergedBranches: false, featureBranchPrefix: "", sprintBranchScheme: "FLAT", sprintKeyPrefix: "", taskPrTitleScheme: "" },
         jira: { host: "h", email: "e", apiToken: "t", autoTransitionLinkedIssuesOnImport: true, importTransitionName: "In Work", autoCloseLinkedIssues: false, defaultProject: "P", closeTransitionName: "Done" },
         ciIntelligence: {},

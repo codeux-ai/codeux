@@ -66,6 +66,7 @@
 - [Stats & Analytics Design System](./dashboard/design-system-stats.md) - Warm Void analytics surfaces and System administration
 - [Dashboard Onboarding](./dashboard/onboarding.md)
 - [Project Initialization](./dashboard/project-initialization.md)
+- [Styleguides and Tech Stacks](./dashboard/styleguides-and-tech-stacks.md)
 - [Sprint Imports](./dashboard/sprint-imports.md)
 - [Quicksprint Templates](./dashboard/quicksprint-templates.md)
 - [Nodes](./dashboard/nodes.md)
@@ -78,6 +79,7 @@
 - [Provider Routing](./settings/provider-routing.md)
 - [Chat Provider Integrations](./settings/chat-provider-integrations.md)
 - [Settings Subcategory Reference](./settings/subcategories/index.md)
+  - [Guidance](./settings/subcategories/guidance.md)
 - [Qwen Code Integration](./settings/qwen-code-integration.md)
 - [OpenCode Integration](./settings/opencode-integration.md)
 - Development and validation

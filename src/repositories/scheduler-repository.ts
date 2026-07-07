@@ -17,7 +17,6 @@ import type {
   ScheduleStatus,
   ScheduleTaskTarget,
   ScheduleTargetType,
-  ScheduleWakeupTarget,
   UpdateSchedulerEntryInput,
 } from "../contracts/scheduler-types.js";
 import type { ProviderId } from "../contracts/app-types.js";
@@ -60,7 +59,6 @@ interface PersistedTargetPayload {
   sprintTarget?: ScheduleSprintTarget;
   quicksprintTarget?: ScheduleQuicksprintTarget;
   chatTarget?: ScheduleChatTarget;
-  wakeupTarget?: ScheduleWakeupTarget;
   agentWakeupTarget?: ScheduleAgentWakeupTarget;
   taskTarget?: ScheduleTaskTarget;
   memoryRemediationTarget?: ScheduleMemoryRemediationTarget;
@@ -179,7 +177,6 @@ export class SchedulerRepository {
       sprintTarget: isTargetTypeChanged ? input.sprintTarget : (input.sprintTarget ?? current.sprintTarget),
       quicksprintTarget: isTargetTypeChanged ? input.quicksprintTarget : (input.quicksprintTarget ?? current.quicksprintTarget),
       chatTarget: isTargetTypeChanged ? input.chatTarget : (input.chatTarget ?? current.chatTarget),
-      wakeupTarget: isTargetTypeChanged ? input.wakeupTarget : (input.wakeupTarget ?? current.wakeupTarget),
       agentWakeupTarget: isTargetTypeChanged ? input.agentWakeupTarget : (input.agentWakeupTarget ?? current.agentWakeupTarget),
       taskTarget: isTargetTypeChanged ? input.taskTarget : (input.taskTarget ?? current.taskTarget),
       memoryRemediationTarget: isTargetTypeChanged ? input.memoryRemediationTarget : (input.memoryRemediationTarget ?? current.memoryRemediationTarget),
@@ -389,25 +386,6 @@ export class SchedulerRepository {
       };
     }
 
-    if (targetType === "wakeup") {
-      const bodyMarkdown = input.wakeupTarget?.bodyMarkdown?.trim();
-      if (!bodyMarkdown) {
-        throw new ValidationError("wakeupTarget.bodyMarkdown is required.");
-      }
-      return {
-        wakeupTarget: {
-          bodyMarkdown,
-          threadId: input.wakeupTarget?.threadId?.trim() || null,
-          title: input.wakeupTarget?.title?.trim() || "Scheduled wakeup",
-          connectionId: input.wakeupTarget?.connectionId?.trim() || null,
-          sourceInvocationId: input.wakeupTarget?.sourceInvocationId?.trim() || null,
-          ...(typeof input.wakeupTarget?.resumeAfterInvocationCompletion === "boolean"
-            ? { resumeAfterInvocationCompletion: input.wakeupTarget.resumeAfterInvocationCompletion }
-            : {}),
-        },
-      };
-    }
-
     if (targetType === "task") {
       const taskId = input.taskTarget?.taskId?.trim();
       if (!taskId) {
@@ -452,9 +430,6 @@ export class SchedulerRepository {
     }
     if (targetType === "agent_wakeup") {
       return target.agentWakeupTarget?.title || "Scheduled agent wakeup";
-    }
-    if (targetType === "wakeup") {
-      return target.wakeupTarget?.title || "Scheduled wakeup";
     }
     if (targetType === "task") {
       return "Scheduled task rerun";
@@ -589,7 +564,6 @@ export class SchedulerRepository {
       sprintTarget: target.sprintTarget,
       quicksprintTarget: target.quicksprintTarget,
       chatTarget: target.chatTarget,
-      wakeupTarget: target.wakeupTarget,
       agentWakeupTarget: target.agentWakeupTarget,
       taskTarget: target.taskTarget,
       memoryRemediationTarget: target.memoryRemediationTarget,

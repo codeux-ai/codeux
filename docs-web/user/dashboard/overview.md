@@ -10,7 +10,7 @@ The dashboard uses a **dock-based navigation** by default:
 
 - **Dock** *(desktop)* — A floating dock at the screen edge with one icon per page plus a settings button.
 - **Sidebar** *(mobile or user preference)* — A collapsible left sidebar.
-- **Top bar** — Project selector, techstack selector, theme toggle, mobile menu.
+- **Top bar** — Project selector, global search, tech-stack guidance selector, styleguide selector, sprint selector, theme toggle, mobile menu.
 
 A choice of theme (Light / Dark / System) is in the top bar; navigation mode override is in **Settings → Appearance**. During onboarding, Appearance choices preview immediately and the setup shell follows the selected Light, Dark, or System theme instead of forcing dark mode. Background Mode, Static Color, and supported Zoom Level also preview before save, while advanced background controls such as Animation Style, Pattern Overlay, and custom background image remain in **Settings → Appearance**.
 
@@ -22,7 +22,7 @@ Primary navigation also follows the persisted experience mode in **Settings → 
 
 Hidden pages remain registered routes, Docs opens the external project docs, and Browser still follows the project sprint-preview visibility settings.
 
-When a project is active, the top bar also shows its techstack. Projects imported before classification can remain unassigned; in that state the selector displays **None**. Choosing a stack from the dropdown saves only the project techstack selection.
+When a project is active, the top bar shows tech-stack guidance and styleguide selectors beside global search. Imported and existing projects can remain at **None** until guidance is explicitly selected. Choosing an entry saves the project guidance override immediately; use [Styleguides and Tech Stacks](./styleguides-and-tech-stacks.md) for the full workflow.
 
 The background is an animated Three.js scene ("Deep Ocean") that lazy-loads after the main UI is interactive, so it never blocks first paint. Onboarding can preview Theme, Navigation Mode, Reduced Motion, Background Mode, Static Color, and supported Zoom Level; advanced background controls such as Animation Style, Pattern Overlay, and custom background image remain in **Settings → Appearance**.
 
@@ -45,6 +45,7 @@ The background is an animated Three.js scene ("Deep Ocean") that lazy-loads afte
 | `/browser` | [Sprint Preview Browser](./browser-preview.md) | Docker-backed live previews per sprint |
 | `/stats` | [Stats](./stats.md) | Execution analytics, time-window filtering, trends |
 | `/config` | [Settings](./settings.md) | System / project / sprint settings hierarchy |
+| `/config?category=guidance#guidance` | [Styleguides and Tech Stacks](./styleguides-and-tech-stacks.md) | Tech-stack guidance, styleguide catalogs, and custom worker instructions |
 
 ## Overview telemetry
 

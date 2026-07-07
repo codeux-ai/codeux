@@ -1,6 +1,7 @@
 import type {
   DashboardSettings,
   DashboardExperienceMode,
+  DesignGuidanceEntrySettings,
   AutomationLevel,
   ProviderId,
   ThinkingMode,
@@ -615,6 +616,58 @@ const validateSprintPreview = (
   }
 };
 
+const validateDesignGuidanceEntry = (
+  value: unknown,
+  path: string,
+  issues: ValidationIssue[],
+) => {
+  if (!isRecord(value)) {
+    issues.push({ path, message: "Expected an object" });
+    return;
+  }
+  for (const field of ["id", "name", "summary", "instructionMarkdown"] satisfies Array<keyof DesignGuidanceEntrySettings>) {
+    if (typeof value[field] !== "string" || value[field].trim().length === 0) {
+      issues.push({ path: `${path}.${field}`, message: "Expected a non-empty string" });
+    }
+  }
+};
+
+const validateDesignGuidanceEntries = (
+  value: unknown,
+  path: string,
+  issues: ValidationIssue[],
+) => {
+  if (!Array.isArray(value)) {
+    issues.push({ path, message: "Expected an array" });
+    return;
+  }
+  value.forEach((entry, index) => {
+    validateDesignGuidanceEntry(entry, `${path}[${index}]`, issues);
+  });
+};
+
+const validateDesignGuidance = (
+  value: unknown,
+  path: string,
+  issues: ValidationIssue[],
+) => {
+  if (!isRecord(value)) {
+    issues.push({ path, message: "Expected an object" });
+    return;
+  }
+  if (typeof value.selectedTechStackId !== "string") {
+    issues.push({ path: `${path}.selectedTechStackId`, message: "Expected a string" });
+  }
+  if (typeof value.selectedStyleguideId !== "string") {
+    issues.push({ path: `${path}.selectedStyleguideId`, message: "Expected a string" });
+  }
+  if (typeof value.hideDefaultStyleguides !== "boolean") {
+    issues.push({ path: `${path}.hideDefaultStyleguides`, message: "Expected a boolean" });
+  }
+  validateDesignGuidanceEntries(value.customTechStacks, `${path}.customTechStacks`, issues);
+  validateDesignGuidanceEntries(value.customStyleguides, `${path}.customStyleguides`, issues);
+};
+
 const validateWorkers = (
   value: unknown,
   path: string,
@@ -928,6 +981,9 @@ export const validateSettingsPayload = (payload: unknown): ValidationResult<Dash
   validateAutomationInterventions(payload.automationInterventions, "automationInterventions", issues);
   validateAppearanceSettings(payload.appearance, "appearance", issues);
   validateAiProvider(payload.aiProvider, "aiProvider", issues);
+  if (payload.designGuidance !== undefined) {
+    validateDesignGuidance(payload.designGuidance, "designGuidance", issues);
+  }
   validateGitSettings(payload.git, "git", issues);
   validateJiraSettings(payload.jira, "jira", issues);
   for (const provider of EXTERNAL_IMPORTER_PROVIDERS as ExternalImporterProvider[]) {

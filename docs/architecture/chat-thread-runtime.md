@@ -57,10 +57,6 @@ Virtual chat failures are terminal for that dashboard turn:
 
 Structured dashboard replies parse provider output defensively. Some CLI providers emit bootstrap logs around a JSON envelope and place the requested strict JSON inside an envelope field such as `response`. The chat runtime extracts fenced JSON, bare JSON, and nested provider-envelope `response` payloads before deciding a parse retry is required. While structured parsing is still pending, provider execution does not mark the parent execution invocation completed; the chat management layer finalizes it only after the structured reply is accepted or the retry flow has failed.
 
-Native MCP chat replies carry the current execution invocation into Code UX MCP calls through the request-scoped invocation context. When that reply calls `manage_scheduler` with `action: "schedule_wakeup"`, Code UX stores the current invocation as `wakeupTarget.sourceInvocationId` unless the payload sets `resumeAfterInvocationCompletion: false` or supplies a different `sourceInvocationId`.
-
-This keeps delayed project-manager follow-ups from racing the reply that created them. If the wakeup becomes due before the source invocation has finished, the scheduler leaves it `scheduled` with the same due time and retries on a later tick. The wakeup message posts only after the source invocation reaches `completed`; if the source invocation ends as `failed`, `cancelled`, or `paused`, the wakeup is failed instead of posting stale follow-up text.
-
 ### Create-App Quickaction Runtime
 
 Create-app dashboard quickactions are the narrow exception to normal routed provider replies. The dashboard posts a short visible user message first, then attaches structured metadata:

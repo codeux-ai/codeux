@@ -2,7 +2,7 @@ import type { QuicksprintExecutionInput } from "./quicksprint-types.js";
 import type { ProviderId } from "./app-types.js";
 import type { NodeFlowJsonObject } from "./node-flow-types.js";
 
-export type ScheduleTargetType = "sprint" | "quicksprint" | "chat" | "wakeup" | "memory_remediation" | "agent_wakeup" | "task" | "node_flow";
+export type ScheduleTargetType = "sprint" | "quicksprint" | "chat" | "memory_remediation" | "agent_wakeup" | "task" | "node_flow";
 export type ScheduleStatus = "scheduled" | "paused" | "completed" | "failed" | "cancelled";
 export type ScheduleRecurrenceFrequency = "none" | "minutely" | "hourly" | "daily" | "weekly" | "monthly";
 export type ScheduleRecurrenceEndMode = "never" | "after_count" | "on_date";
@@ -44,15 +44,6 @@ export interface ScheduleChatTarget {
   threadId?: string | null;
   title?: string;
   connectionId?: string | null;
-}
-
-export interface ScheduleWakeupTarget {
-  bodyMarkdown: string;
-  threadId?: string | null;
-  title?: string;
-  connectionId?: string | null;
-  sourceInvocationId?: string | null;
-  resumeAfterInvocationCompletion?: boolean;
 }
 
 export interface ScheduleAgentSchedulerMetadata {
@@ -101,7 +92,6 @@ export interface SchedulerEntryRecord {
   sprintTarget?: ScheduleSprintTarget;
   quicksprintTarget?: ScheduleQuicksprintTarget;
   chatTarget?: ScheduleChatTarget;
-  wakeupTarget?: ScheduleWakeupTarget;
   agentWakeupTarget?: ScheduleAgentWakeupTarget;
   taskTarget?: ScheduleTaskTarget;
   memoryRemediationTarget?: ScheduleMemoryRemediationTarget;
@@ -140,7 +130,6 @@ export interface CreateSchedulerEntryInput {
   sprintTarget?: ScheduleSprintTarget;
   quicksprintTarget?: ScheduleQuicksprintTarget;
   chatTarget?: ScheduleChatTarget;
-  wakeupTarget?: ScheduleWakeupTarget;
   agentWakeupTarget?: ScheduleAgentWakeupTarget;
   taskTarget?: ScheduleTaskTarget;
   memoryRemediationTarget?: ScheduleMemoryRemediationTarget;
@@ -158,7 +147,6 @@ export interface UpdateSchedulerEntryInput {
   sprintTarget?: ScheduleSprintTarget;
   quicksprintTarget?: ScheduleQuicksprintTarget;
   chatTarget?: ScheduleChatTarget;
-  wakeupTarget?: ScheduleWakeupTarget;
   agentWakeupTarget?: ScheduleAgentWakeupTarget;
   taskTarget?: ScheduleTaskTarget;
   memoryRemediationTarget?: ScheduleMemoryRemediationTarget;

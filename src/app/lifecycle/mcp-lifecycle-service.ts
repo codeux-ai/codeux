@@ -122,10 +122,6 @@ function readAgentIdHeader(req: IncomingMessage): string | null {
   return readIdentifierHeader(req, "x-code-ux-agent");
 }
 
-function readInvocationIdHeader(req: IncomingMessage): string | null {
-  return readIdentifierHeader(req, "x-code-ux-invocation");
-}
-
 function readAuthorizationHeader(req: IncomingMessage): string | null {
   const value = readSingleHeader(req, "authorization");
   if (!value) {
@@ -164,7 +160,6 @@ function isAuthorizedRequest(req: IncomingMessage, authToken: string | null): bo
 interface ValidatedMcpHttpRequestHeaders {
   sessionId: string | null;
   agentId: string | null;
-  invocationId: string | null;
 }
 
 function respondUnauthorized(res: ServerResponse): void {
@@ -339,7 +334,6 @@ export async function bootMcpHttpTransport(deps: BootMcpHttpTransportDeps): Prom
       headers = {
         sessionId: readSessionIdHeader(req),
         agentId: readAgentIdHeader(req),
-        invocationId: readInvocationIdHeader(req),
       };
     } catch {
       deps.logger.warn("Rejected MCP HTTP request with invalid identifiers", {
@@ -396,11 +390,7 @@ export async function bootMcpHttpTransport(deps: BootMcpHttpTransportDeps): Prom
       }
 
       entry.lastAccessed = Date.now();
-      await runWithMcpAgentContext(
-        headers.agentId,
-        () => entry!.transport.handleRequest(req, res, req.body),
-        headers.invocationId,
-      );
+      await runWithMcpAgentContext(headers.agentId, () => entry!.transport.handleRequest(req, res, req.body));
 
       if (req.method === "DELETE") {
         if (headers.sessionId) {
