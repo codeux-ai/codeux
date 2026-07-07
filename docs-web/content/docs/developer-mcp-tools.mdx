@@ -22,6 +22,11 @@ Tools are filtered before being advertised on `ListTools`:
    Known agents can receive tool-specific overrides; for example, `search_skills` can stay enabled
    while `manage_skills` is disabled.
 
+Native provider MCP calls can also advertise `X-Code-Ux-Invocation` with the execution invocation id
+that originated the tool call. Code UX validates it with the same single-header, length, and
+identifier-character rules as `X-Code-Ux-Agent`, stores it as request-scoped context, and does not
+include it in public MCP response payloads.
+
 Agent-scoped provider runs are also default-deny for built-in Code UX tools. Newly synced Worker,
 Project manager, and generated coding agents may link the default `playwright` custom MCP server,
 but that custom-server link does not imply `code_ux` access. The dashboard chat reply route is the
