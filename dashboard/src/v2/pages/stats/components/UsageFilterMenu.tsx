@@ -37,6 +37,14 @@ export const UsageFilterMenu: FunctionComponent<UsageFilterMenuProps> = ({
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   const restoreFocusRef = useRef<HTMLElement | null>(null);
 
+  const defaultEnabledCount = seriesGroups.reduce((count, group) => count + group.defaultEnabledCount, 0);
+  const totalSeriesCount = seriesGroups.reduce((count, group) => count + group.totalCount, 0);
+  const resetActiveCount = defaultEnabledCount > 0
+    ? defaultEnabledCount
+    : totalSeriesCount > 0
+      ? 1
+      : 0;
+
   const closeAndRestoreFocus = () => {
     onClose();
     restoreFocusRef.current?.focus();
@@ -76,7 +84,8 @@ export const UsageFilterMenu: FunctionComponent<UsageFilterMenuProps> = ({
       restoreFocusRef.current = document.activeElement instanceof HTMLElement
         ? document.activeElement
         : null;
-      const firstSeriesSwitch = menuRef.current?.querySelector<HTMLButtonElement>('button[role="switch"]:not(:disabled)');
+      const firstSeriesSwitch = menuRef.current?.querySelector<HTMLButtonElement>('button[role="switch"]:not([aria-disabled="true"])')
+        ?? menuRef.current?.querySelector<HTMLButtonElement>('button[role="switch"]');
       const resetButton = menuRef.current?.querySelector<HTMLButtonElement>('[data-usage-filter-reset]');
       (firstSeriesSwitch ?? resetButton ?? closeButtonRef.current)?.focus();
     }
@@ -98,13 +107,31 @@ export const UsageFilterMenu: FunctionComponent<UsageFilterMenuProps> = ({
 
   const handleResetFilters = () => {
     resetEnabledSeries();
-    const defaultEnabledCount = seriesGroups.reduce((count, group) => count + group.defaultEnabledCount, 0);
-    const enabledCount = defaultEnabledCount > 0
-      ? defaultEnabledCount
-      : seriesGroups.some((group) => group.totalCount > 0)
-        ? 1
-        : 0;
-    onStatusChange?.(`Graph filters reset. ${enabledCount} series active.`);
+    onStatusChange?.(`Graph filters reset. ${resetActiveCount} series active.`);
+  };
+
+  const handleEnableDefaultSeries = () => {
+    setEnabledSeries((curr) => {
+      const next = { ...curr };
+      let changedCount = 0;
+      for (const group of seriesGroups) {
+        for (const series of group.series) {
+          if (series.defaultEnabled && !next[series.id]) {
+            next[series.id] = true;
+            changedCount++;
+          }
+        }
+      }
+      if (changedCount === 0 && activeSeriesCount === 0 && seriesGroups[0]?.series[0]) {
+        next[seriesGroups[0].series[0].id] = true;
+        changedCount = 1;
+      }
+      return next;
+    });
+    const nextActiveCount = activeSeriesCount + seriesGroups.reduce((count, group) => (
+      count + group.series.filter((series) => series.defaultEnabled && !enabledSeries[series.id]).length
+    ), 0);
+    onStatusChange?.(`Default series enabled. ${Math.max(nextActiveCount, resetActiveCount)} series active.`);
   };
 
   return (
@@ -117,23 +144,33 @@ export const UsageFilterMenu: FunctionComponent<UsageFilterMenuProps> = ({
       style={{ display: isOpen || (menuRef.current && gsap.getProperty(menuRef.current, 'opacity') as number > 0) ? 'block' : 'none' }}
     >
       <div className={styles.content}>
-        <div className={`${styles.header} flex items-center justify-between`}>
+        <div className={`${styles.header} flex items-start justify-between gap-3`}>
           <div id="usage-graph-filter-menu-count" aria-live="polite" className="sr-only">Showing {activeSeriesCount} filter{activeSeriesCount !== 1 ? 's' : ''}</div>
           <div id="usage-graph-filter-menu-help" className="sr-only">At least one chart series must remain enabled.</div>
-          <div className="flex items-center gap-3">
+          <div className="min-w-0">
             <span id="usage-graph-filter-menu-title" className="text-[11px] font-bold uppercase tracking-[0.2em] text-[color:var(--stats-value-color)]">
               Graph Filters
             </span>
-            {activeSeriesCount > 0 && (
+            <div className="mt-2 flex min-w-0 flex-wrap items-center gap-2">
               <button
                 type="button"
                 data-usage-filter-reset
+                aria-label="Reset filters"
                 onClick={handleResetFilters}
-                className="rounded text-xs text-[var(--stats-detail-color)] transition-colors hover:text-[var(--stats-value-color)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--accent-focus-ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--stats-card-bg)] motion-reduce:transition-none"
+                className="rounded-full border border-[var(--stats-card-border)] bg-[color:var(--fill-muted)] px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.1em] text-[var(--stats-detail-color)] transition-colors hover:text-[var(--stats-value-color)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--accent-focus-ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--stats-card-bg)] motion-reduce:transition-none"
               >
-                Reset filters
+                Reset defaults
               </button>
-            )}
+              {defaultEnabledCount > 0 ? (
+                <button
+                  type="button"
+                  onClick={handleEnableDefaultSeries}
+                  className="rounded-full border border-[var(--stats-card-border)] bg-[color:var(--fill-muted)] px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.1em] text-[var(--stats-detail-color)] transition-colors hover:text-[var(--stats-value-color)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--accent-focus-ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--stats-card-bg)] motion-reduce:transition-none"
+                >
+                  Enable defaults
+                </button>
+              ) : null}
+            </div>
           </div>
           <button
             ref={closeButtonRef}
@@ -148,8 +185,13 @@ export const UsageFilterMenu: FunctionComponent<UsageFilterMenuProps> = ({
 
         {stats && (
           <div className={styles.section}>
-            <div className={styles.label}>Metric Series</div>
-            <div className="flex max-h-[320px] flex-col gap-4 overflow-y-auto pr-1">
+            <div className={styles.sectionHeader}>
+              <div>
+                <div className={styles.label}>Metric Series</div>
+                <div className={styles.sectionCopy}>{activeSeriesCount} of {totalSeriesCount} series active</div>
+              </div>
+            </div>
+            <div className={styles.scrollArea}>
               <UsageGraphLegend
                 seriesGroups={seriesGroups}
                 enabledSeries={enabledSeries}

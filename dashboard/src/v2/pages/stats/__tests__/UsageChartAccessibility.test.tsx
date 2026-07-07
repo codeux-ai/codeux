@@ -9,6 +9,7 @@ import * as matchers from "@testing-library/jest-dom/matchers";
 import { InteractiveUsageChart } from "../components/InteractiveUsageChart.js";
 import { useUsageChartState } from "../use-usage-chart-state.js";
 import { UsageGraphEmpty, UsageGraphLoading, UsageGraphError } from "../components/UsageGraphStates.js";
+import { groupChartSeries } from "../chart-view-models.js";
 import gsap from "gsap";
 
 expect.extend(matchers);
@@ -277,6 +278,9 @@ describe("UsageChartAccessibility", () => {
       setDragCurrentIndex: vi.fn(),
       enabledSeries: { tokens: true },
       setEnabledSeries: vi.fn(),
+      resetEnabledSeries: vi.fn(),
+      activeSeriesCount: 1,
+      seriesGroups: groupChartSeries(mockStats.chartSeries as any, { tokens: true }),
       metrics: null,
     });
     const { rerender } = render(<InteractiveUsageChart stats={mockStats as any} loading={false} error={null} refresh={async () => {}} chartState={createChartState() as any} />);

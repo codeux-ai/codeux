@@ -165,6 +165,19 @@ export const InteractiveUsageChart: FunctionComponent<{
     ),
     [activeSeriesLabels, visibleMetrics, zoomLabel]
   );
+  const defaultSeriesCount = useMemo(
+    () => seriesGroups.reduce((count, group) => count + group.defaultEnabledCount, 0),
+    [seriesGroups]
+  );
+  const totalSeriesCount = useMemo(
+    () => seriesGroups.reduce((count, group) => count + group.totalCount, 0),
+    [seriesGroups]
+  );
+  const resetSeriesCount = defaultSeriesCount > 0
+    ? defaultSeriesCount
+    : totalSeriesCount > 0
+      ? 1
+      : 0;
 
   const describeZoomRange = (start: number, end: number): string => {
     const startLabel = buckets[start]?.label ?? `bucket ${start + 1}`;
@@ -264,6 +277,29 @@ export const InteractiveUsageChart: FunctionComponent<{
     const nextEnabled = !enabledSeries[id];
     setEnabledSeries((curr: Record<string, boolean>) => ({ ...curr, [id]: !curr[id] }));
     setChartStatus(`${seriesLabel} series ${nextEnabled ? "enabled" : "disabled"}. ${activeSeriesCount + (nextEnabled ? 1 : -1)} series active.`);
+  };
+
+  const onResetSeriesDefaults = () => {
+    resetEnabledSeries();
+    setChartStatus(`Graph filters reset. ${resetSeriesCount} series active.`);
+  };
+
+  const onEnableDefaultSeries = () => {
+    setEnabledSeries((curr: Record<string, boolean>) => {
+      const next = { ...curr };
+      for (const group of seriesGroups) {
+        for (const series of group.series) {
+          if (series.defaultEnabled) {
+            next[series.id] = true;
+          }
+        }
+      }
+      return next;
+    });
+    const newlyEnabledDefaults = seriesGroups.reduce((count, group) => (
+      count + group.series.filter((series) => series.defaultEnabled && !enabledSeries[series.id]).length
+    ), 0);
+    setChartStatus(`Default series enabled. ${Math.max(activeSeriesCount + newlyEnabledDefaults, resetSeriesCount)} series active.`);
   };
 
   return (
@@ -598,8 +634,27 @@ export const InteractiveUsageChart: FunctionComponent<{
                 Toggle chart lines by category without leaving the usage graph.
               </div>
             </div>
-            <div className="rounded-full border border-[var(--stats-card-border)] bg-[var(--stats-card-bg)] px-3 py-1 text-[9px] font-bold uppercase tracking-[0.14em] text-[var(--stats-detail-color)]">
-              {activeSeriesCount} active
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                aria-label="Reset series defaults"
+                onClick={onResetSeriesDefaults}
+                className="rounded-full border border-[var(--stats-card-border)] bg-[var(--stats-card-bg)] px-3 py-1.5 text-[9px] font-bold uppercase tracking-[0.14em] text-[var(--stats-detail-color)] transition-colors hover:text-[var(--stats-value-color)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--accent-focus-ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--stats-card-bg)] motion-reduce:transition-none"
+              >
+                Reset defaults
+              </button>
+              {defaultSeriesCount > 0 ? (
+                <button
+                  type="button"
+                  onClick={onEnableDefaultSeries}
+                  className="rounded-full border border-[var(--stats-card-border)] bg-[var(--stats-card-bg)] px-3 py-1.5 text-[9px] font-bold uppercase tracking-[0.14em] text-[var(--stats-detail-color)] transition-colors hover:text-[var(--stats-value-color)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--accent-focus-ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--stats-card-bg)] motion-reduce:transition-none"
+                >
+                  Enable defaults
+                </button>
+              ) : null}
+              <div className="rounded-full border border-[var(--stats-card-border)] bg-[var(--stats-card-bg)] px-3 py-1.5 text-[9px] font-bold uppercase tracking-[0.14em] text-[var(--stats-detail-color)]">
+                {activeSeriesCount}/{totalSeriesCount} active
+              </div>
             </div>
           </div>
           <UsageGraphLegend
