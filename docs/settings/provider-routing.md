@@ -149,9 +149,8 @@ Provider-cap queueing is not a task creation failure. It must not increment the 
   - CI fix and merge-conflict worker-owned repair flows
 - `src/services/memory-remediation-service.ts`
   - post-sprint memory curation and scheduled long-term memory cleanup
-- `src/services/cli-workflow/pipeline/prepare-stage.ts`
-- `src/services/cli-workflow/pipeline/execute-provider-stage.ts`
-  - consume explicit per-run provider settings instead of implicitly borrowing worker model overrides
+- `src/services/cli-workflow/pipeline/*.ts`
+  - stages including `prepare`, `execute-provider`, `memory-capture`, `git-finalize`, `pr-finalize`, and `cleanup` consume explicit per-run provider settings instead of implicitly borrowing worker model overrides
 
 ## Dashboard Surface
 

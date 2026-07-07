@@ -174,9 +174,12 @@ Disabling a step is for debugging; in production, leave them all enabled.
 {
   "defaultBranch": "main",
   "featureBranchPrefix": "feature/codeux/",
-  "branchScheme": { /* DEFAULT_SPRINT_BRANCH_SCHEME */ },
+  "sprintBranchScheme": "feature/sprint{sprint_id}-implementation",
+  "sprintKeyPrefix": "SPR",
   "githubMode": "REMOTE" | "LOCAL",
-  "deleteMergedBranches": true
+  "deleteMergedBranches": true,
+  "autoCreatePr": true,
+  "prDescription": { /* task and sprint PR template toggles */ }
 }
 ```
 

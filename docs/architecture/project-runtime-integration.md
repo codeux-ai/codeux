@@ -21,7 +21,7 @@ Key behavior:
 - orchestrator status updates are now mirrored into sqlite
 - selected-project live dashboard data is read back from sqlite
 - rerun actions can target DB task ids while still resetting markdown task state by task key
-- git/CI tracking now resolves repo path and active branch from the selected project's stored runtime context
+- git/CI tracking now resolves repo path and active branch from the selected project's stored runtime context, replacing tokens such as `{sprint_key_prefix}`, `{sprint_id}`, `{worker_provider}`, and `{worker_model}`
 
 ## Runtime Source Of Truth
 
