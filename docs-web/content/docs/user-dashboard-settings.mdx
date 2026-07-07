@@ -152,13 +152,13 @@ Related docs:
 
 Defines the default container environment used by Docker-backed provider CLIs.
 
-**What it controls:** Image, setup script, memory limit, setup image caching, and Playwright browser preinstall shape each worker container.
+**What it controls:** Image, setup script, memory limit, setup image caching, root execution posture, and Playwright browser preinstall shape each worker container.
 
-**Recommended defaults:** Keep the default image unless your repo needs a custom toolchain; enable Playwright preinstall for browser-heavy QA.
+**Recommended defaults:** Keep the default image unless your repo needs a custom toolchain; keep root mode off unless a tool requires package-manager or OS-level writes; enable Playwright preinstall for browser-heavy QA.
 
 With setup-image caching enabled, Playwright preinstall is baked into the derived image at `/ms-playwright` and reused by later non-root provider runs without rerunning the browser download.
 
-**Risks and gotchas:** Broken setup scripts or overly tight memory limits can fail every provider invocation in the scope.
+**Risks and gotchas:** Broken setup scripts or overly tight memory limits can fail every provider invocation in the scope. Root mode changes the Docker user posture for provider containers in that scope, though an agent preset can still force non-root or force root for a specific local CLI worker.
 
 Related docs:
 

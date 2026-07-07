@@ -5,6 +5,7 @@ import {
   Edit2, FileUp, Trash2, RefreshCw, AlertTriangle,
   ChevronDown, ChevronUp, Cpu, Route, Plug, Server, FileText,
   BrainCircuit, FolderGit2, Library, DollarSign, BarChart3, CheckCircle2,
+  ShieldCheck,
 } from "lucide-preact";
 import {
   fetchAgentKnowledgeSubscriptions,
@@ -92,6 +93,12 @@ const syncStatusDisplay = (preset: AgentPreset) => {
     default:
       return { cls: "border-black/[0.06] bg-black/[0.03] text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-400", label: "Database Only" };
   }
+};
+
+const formatContainerRootMode = (value: boolean | null | undefined): string => {
+  if (value === true) return "Force root";
+  if (value === false) return "Force non-root";
+  return "Inherits setting";
 };
 
 /* ── Quick-fact stat tile ── */
@@ -220,6 +227,7 @@ export const AgentPresetDetailPanel: FunctionComponent<{
     .map((storageId) => availableSkillStorages.find((storage) => storage.id === storageId) ?? null)
     .filter((storage): storage is SkillStorageRecord => Boolean(storage));
   const persistentSkillsActive = Boolean(preset.persistentSkillStorage?.enabled && attachedSkillStorages.length > 0);
+  const containerRootModeLabel = formatContainerRootMode(preset.containerRunAsRoot);
 
   useLayoutEffect(() => {
     if (!panelRef.current) return;
@@ -341,6 +349,12 @@ export const AgentPresetDetailPanel: FunctionComponent<{
                 value={mcpTags.length === 0 ? "None" : `${mcpTags.length} server${mcpTags.length !== 1 ? "s" : ""}`}
                 iconNode={<Server className="h-4 w-4" strokeWidth={2.2} />}
                 accent={mcpTags.length > 0}
+              />
+              <StatTile
+                label="Docker Root"
+                value={containerRootModeLabel}
+                iconNode={<ShieldCheck className="h-4 w-4" strokeWidth={2.2} />}
+                accent={preset.containerRunAsRoot === true}
               />
               <StatTile
                 label="System Prompt"

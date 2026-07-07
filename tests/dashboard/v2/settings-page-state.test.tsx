@@ -113,12 +113,14 @@ describe("useSettingsPageState", () => {
     expect(result.current.systemSettings?.defaults.ciIntelligence.resolveMainMergeConflicts).toBe(true);
     expect(result.current.systemSettings?.defaults.memory.enabled).toBe(true);
     expect(result.current.systemSettings?.defaults.agents.qualityAssurance.enabled).toBe(true);
+    expect(result.current.systemSettings?.defaults.cliWorkflow.containerRunAsRoot).toBe(false);
     expect(result.current.editableSettings?.ciIntelligence.featurePrAutoMergeMode).toBe("ALWAYS");
     expect(result.current.editableSettings?.ciIntelligence.mainBranchAutoMergeMode).toBe("ALWAYS");
     expect(result.current.editableSettings?.ciIntelligence.resolveMergeConflicts).toBe(true);
     expect(result.current.editableSettings?.ciIntelligence.resolveMainMergeConflicts).toBe(true);
     expect(result.current.editableSettings?.memory.enabled).toBe(true);
     expect(result.current.editableSettings?.agents.qualityAssurance.enabled).toBe(true);
+    expect(result.current.editableSettings?.cliWorkflow.containerRunAsRoot).toBe(false);
   });
 
   it("maps fresh effective settings defaults into project settings view-model", () => {
@@ -135,6 +137,7 @@ describe("useSettingsPageState", () => {
     expect(mapped.settings.ciIntelligence.resolveMainMergeConflicts).toBe(true);
     expect(mapped.settings.memory.enabled).toBe(true);
     expect(mapped.settings.agents.qualityAssurance.enabled).toBe(true);
+    expect(mapped.settings.cliWorkflow.containerRunAsRoot).toBe(false);
   });
 
   it("updates editable settings for project scope", async () => {

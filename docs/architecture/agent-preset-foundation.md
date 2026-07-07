@@ -142,7 +142,7 @@ The 3D scene owns WebGL lifecycle cleanup. On unmount, fallback transition, WebG
 
 Provider and model preferences are intentionally nullable. They only take effect when a provider invocation route uses the `AGENT` strategy; otherwise the agent inherits the configured route, worker, or global defaults.
 
-The Docker root-mode preference is also nullable. For local CLI task execution, the resolved worker preset may set `containerRunAsRoot` to `true` or `false` to override the scoped `cliWorkflow.containerRunAsRoot` value for that run. `null` or an omitted value keeps inheritance. Hosted Jules sessions do not use this field because they do not run in local Docker provider containers.
+The Docker root-mode preference is also nullable. For local CLI task execution, the resolved worker preset may set `containerRunAsRoot` to `true` or `false` to override the scoped `cliWorkflow.containerRunAsRoot` value for that run. The dashboard agent editor presents this as Inherit (`null`), Force non-root (`false`), and Force root (`true`), and the detail panel reports the configured posture without treating inheritance as enabled root. Hosted Jules sessions do not use this field because they do not run in local Docker provider containers.
 
 At runtime, the CLI workflow now reads `AgentMemoryConfig` from the resolved worker agent and post-filters injected memories by configured tier, categories, strength thresholds, and max counts before composing the prompt. When the config is absent, the workflow keeps the default unrestricted memory injection path.
 
