@@ -27,6 +27,20 @@ import type {
   UpdateQuicksprintTemplateInput,
   QuicksprintExecutionInput,
 } from "../contracts/quicksprint-types.js";
+import type {
+  ChatProviderBridgeMode,
+  ChatProviderConnectionStatus,
+  ChatProviderKind,
+  ChatProviderRoutingHints,
+  ChatProviderSecretConfig,
+  ChatProviderSetupConfig,
+  CreateChatProviderChannelBindingInput,
+  CreateChatProviderConnectionInput,
+  ExternalChannelMetadata,
+  UpdateChatProviderChannelBindingInput,
+  UpdateChatProviderConnectionInput,
+} from "../contracts/chat-provider-types.js";
+import { CHAT_PROVIDER_SETUP_SCHEMAS, getChatProviderSetupSchema } from "../contracts/chat-provider-types.js";
 import { mergePromptWithLinkedIssues } from "../services/linked-issue-prompt-markdown.js";
 
 export const DASHBOARD_DEFAULT_JSON_BODY_LIMIT = "1mb";
@@ -80,6 +94,30 @@ export function isSupportedDashboardJsonContentType(contentType: string | undefi
 
 // Validation Helpers
 
+export interface DashboardValidationIssue {
+  field: string;
+  code: string;
+  message: string;
+}
+
+export class DashboardValidationError extends Error {
+  readonly details: DashboardValidationIssue[];
+
+  constructor(message: string, details: DashboardValidationIssue[]) {
+    super(message);
+    this.name = "ValidationError";
+    this.details = details;
+  }
+}
+
+function validationIssue(field: string, code: string, message: string): DashboardValidationIssue {
+  return { field, code, message };
+}
+
+function throwValidation(issue: DashboardValidationIssue): never {
+  throw new DashboardValidationError(issue.message, [issue]);
+}
+
 function parseEnum<T extends string>(value: unknown, allowedValues: T[], fieldName: string): T | undefined {
   if (value === undefined || value === null) return undefined;
   if (typeof value !== "string" || !allowedValues.includes(value as T)) {
@@ -119,6 +157,269 @@ export function parseOptionalBoolean(value: unknown, fieldName: string = "field"
   if (value === 1 || value === "1" || value === "true") return true;
   if (value === 0 || value === "0" || value === "false") return false;
   throw new Error(`Invalid boolean value for ${fieldName}.`);
+}
+
+function requireObjectBody(body: unknown): Record<string, unknown> {
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    throw new Error("Invalid input: body must be an object");
+  }
+  return body as Record<string, unknown>;
+}
+
+function parseStrictBoolean(value: unknown, fieldName: string): boolean | undefined {
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+  if (typeof value !== "boolean") {
+    throwValidation(validationIssue(fieldName, "invalid_boolean", `${fieldName} must be a boolean.`));
+  }
+  return value;
+}
+
+function parseRequiredChatProviderString(value: unknown, fieldName: string): string {
+  if (typeof value !== "string" || value.trim().length === 0) {
+    throwValidation(validationIssue(fieldName, "required", `Missing or empty required field: ${fieldName}`));
+  }
+  return value.trim();
+}
+
+function parseOptionalNullableChatProviderString(value: unknown, fieldName: string): string | null | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (value === null) {
+    return null;
+  }
+  if (typeof value !== "string") {
+    throwValidation(validationIssue(fieldName, "invalid_string", `${fieldName} must be a string or null.`));
+  }
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+function parseOptionalChatProviderString(value: unknown, fieldName: string): string | undefined {
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+  if (typeof value !== "string") {
+    throwValidation(validationIssue(fieldName, "invalid_string", `${fieldName} must be a string.`));
+  }
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
+}
+
+function parseJsonRecordField<T extends Record<string, unknown>>(
+  value: unknown,
+  fieldName: string,
+  options: { nullable: true },
+): T | null | undefined;
+function parseJsonRecordField<T extends Record<string, unknown>>(
+  value: unknown,
+  fieldName: string,
+  options?: { nullable?: false },
+): T | undefined;
+function parseJsonRecordField<T extends Record<string, unknown>>(
+  value: unknown,
+  fieldName: string,
+  options: { nullable?: boolean } = {},
+): T | null | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (value === null) {
+    if (options.nullable) {
+      return null;
+    }
+    throwValidation(validationIssue(fieldName, "invalid_object", `${fieldName} must be an object.`));
+  }
+  if (typeof value !== "object" || Array.isArray(value)) {
+    throwValidation(validationIssue(fieldName, "invalid_object", `${fieldName} must be an object.`));
+  }
+  return value as T;
+}
+
+const CHAT_PROVIDER_KINDS = CHAT_PROVIDER_SETUP_SCHEMAS.map((schema) => schema.kind);
+const CHAT_PROVIDER_CONNECTION_STATUSES: ChatProviderConnectionStatus[] = ["draft", "active", "disabled", "error"];
+
+export function parseChatProviderKind(value: unknown, fieldName = "providerKind"): ChatProviderKind | undefined {
+  if (value === undefined || value === null || value === "") {
+    return undefined;
+  }
+  if (typeof value !== "string" || !CHAT_PROVIDER_KINDS.includes(value as ChatProviderKind)) {
+    throwValidation(validationIssue(fieldName, "unsupported_provider_kind", `Unsupported chat provider kind: ${String(value)}`));
+  }
+  return value as ChatProviderKind;
+}
+
+function requireChatProviderKind(value: unknown, fieldName = "providerKind"): ChatProviderKind {
+  const providerKind = parseChatProviderKind(value, fieldName);
+  if (!providerKind) {
+    throwValidation(validationIssue(fieldName, "required", `Missing or empty required field: ${fieldName}`));
+  }
+  return providerKind;
+}
+
+function parseChatProviderStatus(value: unknown): ChatProviderConnectionStatus | undefined {
+  if (value === undefined || value === null || value === "") {
+    return undefined;
+  }
+  if (typeof value !== "string" || !CHAT_PROVIDER_CONNECTION_STATUSES.includes(value as ChatProviderConnectionStatus)) {
+    throwValidation(validationIssue("status", "unsupported_status", `Unsupported chat provider connection status: ${String(value)}`));
+  }
+  return value as ChatProviderConnectionStatus;
+}
+
+function parseChatProviderBridgeMode(providerKind: ChatProviderKind, value: unknown): ChatProviderBridgeMode | undefined {
+  if (value === undefined || value === null || value === "") {
+    return undefined;
+  }
+  const schema = getChatProviderSetupSchema(providerKind);
+  if (typeof value !== "string" || !schema.bridgeModes.some((bridge) => bridge.mode === value)) {
+    throwValidation(validationIssue("bridgeMode", "unsupported_bridge_mode", `Unsupported bridge mode for ${providerKind}: ${String(value)}`));
+  }
+  return value as ChatProviderBridgeMode;
+}
+
+function resolveChatProviderBridgeMode(providerKind: ChatProviderKind, value: unknown): ChatProviderBridgeMode {
+  return parseChatProviderBridgeMode(providerKind, value) ?? getChatProviderSetupSchema(providerKind).defaultBridgeMode;
+}
+
+function validateSetupValue(value: unknown, fieldName: string, type: string, options?: string[]): void {
+  if (value === null || value === undefined) {
+    return;
+  }
+  if (type === "boolean") {
+    if (typeof value !== "boolean") {
+      throwValidation(validationIssue(fieldName, "invalid_setup_field", `${fieldName} must be a boolean.`));
+    }
+    return;
+  }
+  if (typeof value !== "string") {
+    throwValidation(validationIssue(fieldName, "invalid_setup_field", `${fieldName} must be a string.`));
+  }
+  if (type === "select" && options && !options.includes(value)) {
+    throwValidation(validationIssue(fieldName, "invalid_setup_field", `${fieldName} must be one of: ${options.join(", ")}.`));
+  }
+}
+
+function parseChatProviderSetup(
+  providerKind: ChatProviderKind,
+  bridgeMode: ChatProviderBridgeMode,
+  value: unknown,
+): ChatProviderSetupConfig | undefined {
+  const rawSetup = parseJsonRecordField<ChatProviderSetupConfig>(value, "setup");
+  if (rawSetup === undefined) {
+    return undefined;
+  }
+  const bridgeSchema = getChatProviderSetupSchema(providerKind).bridgeModes.find((bridge) => bridge.mode === bridgeMode);
+  const allowedFields = new Map((bridgeSchema?.setupFields ?? []).map((field) => [field.key, field]));
+  const secretFields = new Set((bridgeSchema?.secretFields ?? []).map((field) => field.key));
+  const setup: ChatProviderSetupConfig = {};
+  for (const field of bridgeSchema?.setupFields ?? []) {
+    if (field.defaultValue !== undefined && rawSetup[field.key] === undefined) {
+      setup[field.key] = field.defaultValue;
+    }
+  }
+  for (const [key, setupValue] of Object.entries(rawSetup)) {
+    const field = allowedFields.get(key);
+    if (!field || secretFields.has(key)) {
+      throwValidation(validationIssue(`setup.${key}`, "unsupported_setup_field", `Unsupported setup field for ${providerKind}/${bridgeMode}: ${key}`));
+    }
+    validateSetupValue(setupValue, `setup.${key}`, field.type, field.options);
+    setup[key] = setupValue;
+  }
+  return setup;
+}
+
+function parseChatProviderSecrets(
+  providerKind: ChatProviderKind,
+  bridgeMode: ChatProviderBridgeMode,
+  value: unknown,
+): ChatProviderSecretConfig | null | undefined {
+  const rawSecrets = parseJsonRecordField<ChatProviderSecretConfig>(value, "secrets", { nullable: true });
+  if (rawSecrets === undefined || rawSecrets === null) {
+    return rawSecrets;
+  }
+  const bridgeSchema = getChatProviderSetupSchema(providerKind).bridgeModes.find((bridge) => bridge.mode === bridgeMode);
+  const allowedSecretFields = new Set((bridgeSchema?.secretFields ?? []).map((field) => field.key));
+  const secrets: ChatProviderSecretConfig = {};
+  for (const [key, secretValue] of Object.entries(rawSecrets)) {
+    if (!allowedSecretFields.has(key)) {
+      throwValidation(validationIssue(`secrets.${key}`, "unsupported_secret_field", `Unsupported secret field for ${providerKind}/${bridgeMode}: ${key}`));
+    }
+    if (typeof secretValue !== "string") {
+      throwValidation(validationIssue(`secrets.${key}`, "invalid_secret", `secrets.${key} must be a string.`));
+    }
+    secrets[key] = secretValue;
+  }
+  return secrets;
+}
+
+export function parseCreateChatProviderConnectionInput(body: unknown): CreateChatProviderConnectionInput {
+  const input = requireObjectBody(body);
+  const providerKind = requireChatProviderKind(input.providerKind);
+  const bridgeMode = resolveChatProviderBridgeMode(providerKind, input.bridgeMode);
+  const displayName = parseRequiredChatProviderString(input.displayName, "displayName");
+  return {
+    providerKind,
+    displayName,
+    bridgeMode,
+    status: parseChatProviderStatus(input.status),
+    enabled: parseStrictBoolean(input.enabled, "enabled"),
+    setup: parseChatProviderSetup(providerKind, bridgeMode, input.setup),
+    secrets: parseChatProviderSecrets(providerKind, bridgeMode, input.secrets),
+  };
+}
+
+export function parseUpdateChatProviderConnectionInput(
+  body: unknown,
+  existing: { providerKind: ChatProviderKind; bridgeMode: ChatProviderBridgeMode },
+): UpdateChatProviderConnectionInput {
+  const input = requireObjectBody(body);
+  const bridgeMode = parseChatProviderBridgeMode(existing.providerKind, input.bridgeMode) ?? existing.bridgeMode;
+  const displayName = input.displayName === undefined
+    ? undefined
+    : parseRequiredChatProviderString(input.displayName, "displayName");
+  return {
+    displayName,
+    bridgeMode: input.bridgeMode === undefined ? undefined : bridgeMode,
+    status: parseChatProviderStatus(input.status),
+    enabled: parseStrictBoolean(input.enabled, "enabled"),
+    setup: parseChatProviderSetup(existing.providerKind, bridgeMode, input.setup),
+    secrets: parseChatProviderSecrets(existing.providerKind, bridgeMode, input.secrets),
+  };
+}
+
+export function parseCreateChatProviderChannelBindingInput(body: unknown): CreateChatProviderChannelBindingInput {
+  const input = requireObjectBody(body);
+  return {
+    providerConnectionId: parseRequiredChatProviderString(input.providerConnectionId, "providerConnectionId"),
+    externalChannelId: parseRequiredChatProviderString(input.externalChannelId, "externalChannelId"),
+    externalChannelName: parseRequiredChatProviderString(input.externalChannelName, "externalChannelName"),
+    externalChannelMetadata: parseJsonRecordField<ExternalChannelMetadata>(input.externalChannelMetadata, "externalChannelMetadata", { nullable: true }),
+    projectId: parseRequiredChatProviderString(input.projectId, "projectId"),
+    agentPresetId: parseOptionalNullableChatProviderString(input.agentPresetId, "agentPresetId"),
+    routingHints: parseJsonRecordField<ChatProviderRoutingHints>(input.routingHints, "routingHints", { nullable: true }),
+    enabled: parseStrictBoolean(input.enabled, "enabled"),
+    inboundEnabled: parseStrictBoolean(input.inboundEnabled, "inboundEnabled"),
+    outboundEnabled: parseStrictBoolean(input.outboundEnabled, "outboundEnabled"),
+    suppressRichWidgets: parseStrictBoolean(input.suppressRichWidgets, "suppressRichWidgets"),
+  };
+}
+
+export function parseUpdateChatProviderChannelBindingInput(body: unknown): UpdateChatProviderChannelBindingInput {
+  const input = requireObjectBody(body);
+  return {
+    externalChannelName: parseOptionalChatProviderString(input.externalChannelName, "externalChannelName"),
+    externalChannelMetadata: parseJsonRecordField<ExternalChannelMetadata>(input.externalChannelMetadata, "externalChannelMetadata", { nullable: true }),
+    projectId: parseOptionalChatProviderString(input.projectId, "projectId"),
+    agentPresetId: parseOptionalNullableChatProviderString(input.agentPresetId, "agentPresetId"),
+    routingHints: parseJsonRecordField<ChatProviderRoutingHints>(input.routingHints, "routingHints", { nullable: true }),
+    enabled: parseStrictBoolean(input.enabled, "enabled"),
+    inboundEnabled: parseStrictBoolean(input.inboundEnabled, "inboundEnabled"),
+    outboundEnabled: parseStrictBoolean(input.outboundEnabled, "outboundEnabled"),
+    suppressRichWidgets: parseStrictBoolean(input.suppressRichWidgets, "suppressRichWidgets"),
+  };
 }
 
 // Project Parsers

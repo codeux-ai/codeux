@@ -1,12 +1,21 @@
 import { toHttpRouteError } from "./http-errors.js";
 import type { Request, Response, RequestHandler } from "express";
 
-export function toErrorResponse(error: unknown, prefix?: string): { error: string } {
+export function toErrorResponse(error: unknown, prefix?: string): { error: string; details?: unknown[] } {
   const message = error instanceof Error ? error.message : String(error);
-  if (prefix) {
-    return { error: `${prefix}: ${message}` };
+  const details = error && typeof error === "object" && "details" in error
+    ? (error as { details?: unknown }).details
+    : undefined;
+  const response = prefix
+    ? { error: `${prefix}: ${message}` }
+    : { error: message };
+  if (Array.isArray(details)) {
+    return { ...response, details };
   }
-  return { error: message };
+  if (prefix) {
+    return response;
+  }
+  return response;
 }
 
 export function syncRoute(handler: (req: Request, res: Response) => void): RequestHandler {

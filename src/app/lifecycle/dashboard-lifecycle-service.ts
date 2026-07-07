@@ -32,6 +32,7 @@ import type { SettingsRepository } from "../../repositories/settings-repository.
 import type { ProjectManagementRepository } from "../../repositories/project-management-repository.js";
 import type { ProjectRuntimeRepository } from "../../repositories/project-runtime-repository.js";
 import type { ConnectionChatRepository } from "../../repositories/connection-chat-repository.js";
+import type { ChatProviderRepository } from "../../repositories/chat-provider-repository.js";
 import type { ProjectWorkerAssignmentRepository } from "../../repositories/project-worker-assignment-repository.js";
 import type { ProjectWorkerAssignmentService } from "../../domain/workers/project-worker-assignment-service.js";
 import type { ProjectAttentionRepository } from "../../repositories/project-attention-repository.js";
@@ -89,6 +90,7 @@ export interface BootDashboardDeps {
   projectRuntimeRepository: ProjectRuntimeRepository;
   executionRepository: ExecutionRepository;
   connectionChatRepository: ConnectionChatRepository;
+  chatProviderRepository: ChatProviderRepository;
   projectWorkerAssignmentRepository: ProjectWorkerAssignmentRepository;
   projectWorkerAssignmentService: ProjectWorkerAssignmentService;
   projectAttentionRepository: ProjectAttentionRepository;
@@ -412,6 +414,7 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<DashboardS
     settingsRepository: deps.settingsRepository,
     knowledgeService: deps.knowledgeService,
     agentPresetRepository: deps.agentPresetRepository,
+    chatProviderRepository: deps.chatProviderRepository,
     projectManagementRepository: deps.projectManagementRepository,
     executionRepository: deps.executionRepository,
     getLiveSnapshot: (projectIdHint) => getProjectLiveSnapshot({
