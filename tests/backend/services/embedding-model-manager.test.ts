@@ -1,7 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import * as fs from "fs";
 import { EmbeddingModelManager } from "../../../src/services/embedding-model-manager.js";
-import { EMBEDDING_MODEL_CATALOG } from "../../../src/services/embedding-model-catalog.js";
+import {
+  EMBEDDING_MODEL_CATALOG,
+  createCustomEmbeddingModelDefinition,
+} from "../../../src/services/embedding-model-catalog.js";
+import type { CustomEmbeddingModelDefinition } from "../../../src/contracts/memory-types.js";
 
 vi.mock("fs", async (importOriginal) => {
   const actual = await importOriginal<typeof import("fs")>();
@@ -40,13 +44,48 @@ const mockLogger = {
 
 describe("EmbeddingModelManager", () => {
   let manager: EmbeddingModelManager;
+  let customModel: CustomEmbeddingModelDefinition;
+  let systemSettings: any;
+  let mockSettingsRepository: any;
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockEmbeddingService.getModelPath.mockReturnValue("/mock/models/bge-small-en-v1.5");
+    mockEmbeddingService.isModelDownloaded.mockReturnValue(false);
+    mockEmbeddingService.loadModel.mockResolvedValue(undefined);
+    mockEmbeddingService.unloadModel.mockResolvedValue(undefined);
+    mockEmbeddingService.getLoadedModelId.mockReturnValue(null);
+    mockRepository.listModelStatuses.mockReturnValue([]);
+    mockRepository.getModelStatus.mockReturnValue(null);
+    customModel = createCustomEmbeddingModelDefinition({
+      displayName: "Custom BGE",
+      repoOrUrl: "owner/custom-bge",
+      onnxModelFile: "onnx/model_quantized.onnx",
+      tokenizerFiles: ["assets/tokenizer.json", "assets/tokenizer_config.json"],
+      dimension: 384,
+      approximateSizeBytes: 100,
+      language: "English",
+    });
+    systemSettings = {
+      defaults: {
+        memory: {
+          embeddingModel: null,
+          customEmbeddingModels: [customModel],
+        },
+      },
+    };
+    mockSettingsRepository = {
+      getSystemSettings: vi.fn(() => systemSettings),
+      saveSystemSettings: vi.fn((next: any) => {
+        systemSettings = next;
+        return next;
+      }),
+    };
     manager = new EmbeddingModelManager(
       mockEmbeddingService as any,
       mockRepository as any,
       mockLogger as any,
+      mockSettingsRepository as any,
     );
   });
 
@@ -66,7 +105,34 @@ describe("EmbeddingModelManager", () => {
     it("loads the model when downloaded", async () => {
       mockEmbeddingService.isModelDownloaded.mockReturnValue(true);
       await manager.selectModel("bge-small-en-v1.5");
-      expect(mockEmbeddingService.loadModel).toHaveBeenCalledWith("bge-small-en-v1.5");
+      expect(mockEmbeddingService.loadModel).toHaveBeenCalledWith("bge-small-en-v1.5", expect.objectContaining({
+        id: "bge-small-en-v1.5",
+        source: "built_in",
+      }));
+    });
+
+    it("rejects selecting a custom model before every required file is downloaded", async () => {
+      vi.spyOn(fs, "existsSync").mockImplementation((filePath) => String(filePath).endsWith("tokenizer.json"));
+      mockEmbeddingService.isModelDownloaded.mockReturnValue(true);
+
+      await expect(manager.selectModel(customModel.id)).rejects.toThrow("not downloaded");
+
+      vi.mocked(fs.existsSync).mockRestore();
+    });
+
+    it("loads a custom model when all required files are downloaded", async () => {
+      vi.spyOn(fs, "existsSync").mockReturnValue(true);
+      mockEmbeddingService.isModelDownloaded.mockReturnValue(true);
+
+      await manager.selectModel(customModel.id);
+
+      expect(mockEmbeddingService.loadModel).toHaveBeenCalledWith(customModel.id, expect.objectContaining({
+        id: customModel.id,
+        source: "custom",
+        dimension: 384,
+      }));
+
+      vi.mocked(fs.existsSync).mockRestore();
     });
   });
 
@@ -88,6 +154,19 @@ describe("EmbeddingModelManager", () => {
       expect(mockEmbeddingService.unloadModel).not.toHaveBeenCalled();
       expect(mockEmbeddingService.deleteModelFiles).toHaveBeenCalledWith("bge-small-en-v1.5");
     });
+
+    it("removes custom model definitions when deleting a custom model", async () => {
+      await manager.deleteModel(customModel.id);
+
+      expect(mockEmbeddingService.deleteModelFiles).toHaveBeenCalledWith(customModel.id);
+      expect(mockSettingsRepository.saveSystemSettings).toHaveBeenCalledWith(expect.objectContaining({
+        defaults: expect.objectContaining({
+          memory: expect.objectContaining({
+            customEmbeddingModels: [],
+          }),
+        }),
+      }));
+    });
   });
 
   describe("getStatuses", () => {
@@ -96,7 +175,7 @@ describe("EmbeddingModelManager", () => {
       mockEmbeddingService.isModelDownloaded.mockReturnValue(false);
 
       const statuses = manager.getStatuses();
-      expect(statuses).toHaveLength(Object.keys(EMBEDDING_MODEL_CATALOG).length);
+      expect(statuses).toHaveLength(Object.keys(EMBEDDING_MODEL_CATALOG).length + 1);
       expect(statuses.every((s) => !s.downloaded)).toBe(true);
     });
 
@@ -118,6 +197,25 @@ describe("EmbeddingModelManager", () => {
       const qwen = statuses.find((s) => s.id === "multilingual-e5-large");
       expect(bge!.downloaded).toBe(true);
       expect(qwen!.downloaded).toBe(false);
+    });
+
+    it("includes custom model statuses alongside built-ins", () => {
+      mockRepository.listModelStatuses.mockReturnValue([
+        {
+          id: customModel.id,
+          downloaded: true,
+          downloading: false,
+          downloadProgress: 1,
+          localPath: "/models/custom",
+          error: null,
+        },
+      ]);
+
+      const statuses = manager.getStatuses();
+      expect(statuses.find((s) => s.id === customModel.id)).toEqual(expect.objectContaining({
+        downloaded: true,
+        localPath: "/models/custom",
+      }));
     });
   });
 
@@ -167,6 +265,20 @@ describe("EmbeddingModelManager", () => {
         downloading: false,
         error: expect.stringContaining("404"),
       }));
+
+      vi.unstubAllGlobals();
+    });
+
+    it("constructs custom Hugging Face download URLs", async () => {
+      const mockFetch = vi.fn().mockResolvedValue({ ok: true, body: null });
+      vi.stubGlobal("fetch", mockFetch);
+
+      await expect(manager.downloadModel(customModel.id)).rejects.toThrow("No response body");
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        "https://huggingface.co/owner/custom-bge/resolve/main/onnx/model_quantized.onnx",
+        expect.objectContaining({ redirect: "follow" }),
+      );
 
       vi.unstubAllGlobals();
     });

@@ -776,6 +776,10 @@ export function buildDefaultProjectSettings(externalHints?: ExternalSettingsHint
     skills: cloneSkills(DEFAULT_SKILLS),
     memory: {
       ...DEFAULT_DASHBOARD_SETTINGS.memory,
+      customEmbeddingModels: DEFAULT_DASHBOARD_SETTINGS.memory.customEmbeddingModels.map((model) => ({
+        ...model,
+        tokenizerFiles: [...model.tokenizerFiles],
+      })),
       externalEmbedding: { ...DEFAULT_DASHBOARD_SETTINGS.memory.externalEmbedding },
     },
     speech: {
@@ -1363,7 +1367,14 @@ export function resolveDashboardSettings(args: {
     skills: cloneSkills(sprintSettings.skills),
     mcpTools: resolveEffectiveMcpTools(args.systemSettings.mcpTools, sprintSettings.mcpTools),
     customMcpServers: resolveEffectiveCustomMcpServers(args.systemSettings.customMcpServers, sprintSettings.customMcpServers),
-    memory: { ...sprintSettings.memory, externalEmbedding: { ...sprintSettings.memory.externalEmbedding } },
+    memory: {
+      ...sprintSettings.memory,
+      customEmbeddingModels: sprintSettings.memory.customEmbeddingModels.map((model) => ({
+        ...model,
+        tokenizerFiles: [...model.tokenizerFiles],
+      })),
+      externalEmbedding: { ...sprintSettings.memory.externalEmbedding },
+    },
     speech: { ...sprintSettings.speech, externalTranscription: { ...sprintSettings.speech.externalTranscription } },
     modelPricing: { overrides: { ...args.systemSettings.modelPricing?.overrides } },
   };

@@ -549,6 +549,10 @@ export const cloneDefaults = (externalHints?: ExternalSettingsHints): DashboardS
   customMcpServers: DEFAULT_DASHBOARD_SETTINGS.customMcpServers.map((server) => ({ ...server })),
   memory: {
     ...DEFAULT_DASHBOARD_SETTINGS.memory,
+    customEmbeddingModels: DEFAULT_DASHBOARD_SETTINGS.memory.customEmbeddingModels.map((model) => ({
+      ...model,
+      tokenizerFiles: [...model.tokenizerFiles],
+    })),
     externalEmbedding: { ...DEFAULT_DASHBOARD_SETTINGS.memory.externalEmbedding },
   },
   speech: {

@@ -82,12 +82,16 @@ The right sidebar lists available embedding models. Each card shows:
 
 The local embedding runtime supports both BGE-style WordPiece tokenizers and XLM-R/SentencePiece Unigram tokenizers such as `multilingual-e5-large`.
 
+Custom in-app models can be added from Hugging Face model links. The backend accepts either `owner/repo` identifiers or `https://huggingface.co/...` model/file URLs, rejects other hosts, and stores the normalized repo, ONNX model file path, tokenizer files, dimension, approximate size, language, and validation status. Custom entries are durable settings, so they appear beside built-in models after restart.
+
 Actions per model:
 
 - **Download** — Pulls model weights to local cache.
 - **Cancel download** — Aborts an in-flight download.
 - **Select** — Activates the model. Subsequent embed operations use it.
 - **Delete** — Removes the local cache.
+
+Custom models use the same download, select, delete, and status actions as built-ins. A custom model cannot be selected until its ONNX file and required tokenizer files are downloaded.
 
 ### Re-embedding
 
