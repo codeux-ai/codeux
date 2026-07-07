@@ -158,6 +158,8 @@ http://<host>:4445/mcp
 
 A `GET /health` endpoint returns `{ "status": "UP" }` and is the recommended liveness check. A `GET /ready` endpoint reports runtime readiness from the same listener, so `--server-mode` processes can be probed without a dashboard server.
 
+External workers are enrolled as normal worker endpoints in the Code UX database. Reconnecting with the same connection key updates the existing endpoint rather than creating a new registered worker. Eligible live workers claim queued dispatches through the same `worker_endpoints`, `project_worker_assignments`, `task_dispatches`, and `execution_leases` tables used by local virtual workers, so active leases prevent duplicate task pickup and stale heartbeats prevent new claims.
+
 > **Security:** Normal Code UX startup always has a bearer token for the MCP HTTP gateway, either explicit or generated in `~/.code-ux/security.json`. Server mode (`--server-mode` or `CODE_UX_SERVER_MODE=true`) requires an explicit non-empty token and does not use the generated fallback. Always use HTTPS in production via a reverse proxy or another trusted TLS termination layer.
 
 For the wire protocol, see [Architecture → MCP server](../architecture/mcp-server.md).

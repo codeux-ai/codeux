@@ -51,6 +51,7 @@ const EXECUTOR_LABEL: Record<TaskExecutorType, string> = {
   auto: "Auto",
   docker_cli: "CLI",
   jules: "Jules",
+  mcp_worker: "Worker",
 };
 
 export function formatTimeAgo(iso: string, now: number = Date.now()): string {

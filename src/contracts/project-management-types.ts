@@ -7,7 +7,7 @@ export type ProjectSourceType = "local" | "git";
 export type SprintStatus = "running" | "paused" | "completed" | "failed" | "cancelled" | "idle";
 export type TaskStatus = "pending" | "in_progress" | "coding_completed" | "completed" | "QA_REVIEW_FAILED";
 export type TaskPriority = "critical" | "high" | "medium" | "low";
-export type TaskExecutorType = "auto" | "docker_cli" | "jules";
+export type TaskExecutorType = "auto" | "docker_cli" | "jules" | "mcp_worker";
 export type GitProvider = "github" | "gitlab" | "local";
 export type ProjectInitMode = "existing" | "new-local" | "new-remote";
 

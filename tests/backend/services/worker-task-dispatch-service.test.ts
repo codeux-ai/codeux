@@ -36,29 +36,79 @@ describe("WorkerTaskDispatchService", () => {
         appendTaskRunEvent: vi.fn(),
         renewLease: vi.fn(),
         releaseLease: vi.fn(),
+        claimNextTaskDispatch: vi.fn(),
         finalizeSprintRunCancellationIfIdle: vi.fn(),
       },
       projectManagementRepository: {
         updateTask: vi.fn(),
-        getTask: vi.fn(() => ({ id: "task-1", taskKey: "T01" })),
+        getProject: vi.fn(() => ({
+          id: "project-1",
+          name: "Project 1",
+          baseDir: "/workspace/project-1",
+          sourceType: "local",
+          sourceRef: "/workspace/project-1",
+          defaultBranch: "main",
+          featureBranchPrefix: "feature/",
+        })),
+        getSprint: vi.fn(() => ({
+          id: "sprint-1",
+          name: "Sprint 1",
+          number: 7,
+          slug: "sprint-1",
+          goal: "Ship it",
+          featureBranch: "feature/sprint-7",
+        })),
+        getTask: vi.fn(() => ({
+          id: "task-1",
+          taskKey: "T01",
+          title: "Task 1",
+          promptMarkdown: "Do it",
+          description: "Task description",
+          priority: "high",
+          dependsOnTaskIds: [],
+          executorType: "mcp_worker",
+        })),
       },
       connectionChatRepository: {
-        getConnectionByKey: vi.fn(() => ({ id: "conn-1", connectionKey: "worker-1", role: "worker" })),
+        getConnectionByKey: vi.fn(() => ({
+          id: "conn-1",
+          connectionKey: "worker-1",
+          role: "worker",
+          projectIds: ["project-1"],
+          activeProjectIds: ["project-1"],
+        })),
         touchConnectionHeartbeat: vi.fn(),
       },
       workerEndpointRepository: {
         getWorkerEndpointByConnectionId: vi.fn(() => ({
           id: "worker-endpoint-1",
           endpointKey: "worker-1",
+          endpointType: "mcp_connection",
+          status: "connected",
+          connectionId: "conn-1",
           capabilities: { canExecuteTasks: true },
         })),
         getWorkerEndpoint: vi.fn(() => ({
           id: "worker-endpoint-1",
           endpointKey: "worker-1",
+          endpointType: "mcp_connection",
+          status: "connected",
+          connectionId: "conn-1",
+          capabilities: { canExecuteTasks: true },
         })),
+        touchWorkerEndpointHeartbeat: vi.fn(),
+        upsertExternalWorkerEndpoint: vi.fn(),
       },
       projectWorkerAssignmentService: {
         noteWorkerActivity: vi.fn(),
+        ensureWorkerAssignment: vi.fn(() => ({
+          workerStatus: "connected",
+          capabilities: { canExecuteTasks: true },
+        })),
+        getActiveWorkerAssignment: vi.fn(() => ({
+          workerStatus: "connected",
+          capabilities: { canExecuteTasks: true },
+        })),
       },
       projectAttentionService: {
         resolveItemsForDispatch: vi.fn(),
@@ -75,7 +125,11 @@ describe("WorkerTaskDispatchService", () => {
       deps.workerEndpointRepository,
       deps.projectWorkerAssignmentService,
       deps.projectAttentionService,
-      (() => ({})) as any,
+      (() => ({
+        git: { defaultBranch: "main", sprintBranchScheme: "numbered", sprintKeyPrefix: "sprint" },
+        agents: { routing: { planning: {}, taskCoding: { mode: "MANUAL" } } },
+        workers: { virtualWorkerProvider: "codex", model: "gpt-5" },
+      })) as any,
       undefined,
       undefined,
       undefined,
@@ -84,11 +138,45 @@ describe("WorkerTaskDispatchService", () => {
     );
   });
 
-  it("does not return queued dispatches to connected workers anymore", () => {
+  it("pulls the next eligible worker dispatch and refreshes heartbeats", () => {
+    deps.executionRepository.claimNextTaskDispatch.mockReturnValue({
+      id: "dispatch-1",
+      projectId: "project-1",
+      sprintId: "sprint-1",
+      taskId: "task-1",
+      sprintRunId: "run-1",
+      connectionId: "conn-1",
+      executorType: "mcp_worker",
+      status: "claimed",
+      priority: 10,
+      queuedAt: "2026-01-01T00:00:00.000Z",
+      claimedAt: "2026-01-01T00:00:01.000Z",
+      startedAt: null,
+      finishedAt: null,
+      lastHeartbeatAt: "2026-01-01T00:00:01.000Z",
+      errorMessage: null,
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:01.000Z",
+      leaseToken: "lease-claim-1",
+    });
+
     const result = service.pullNextDispatch({ connectionKey: "worker-1", projectId: "project-1" });
 
-    expect(result).toBeNull();
+    expect(result).toMatchObject({
+      leaseToken: "lease-claim-1",
+      dispatch: { id: "dispatch-1", status: "claimed", connectionId: "conn-1" },
+      project: { id: "project-1", baseDir: "/workspace/project-1" },
+      task: { id: "task-1", taskKey: "T01" },
+      executionContext: { repoPath: "/workspace/project-1", featureBranch: "feature/sprint-7" },
+    });
+    expect(deps.executionRepository.claimNextTaskDispatch).toHaveBeenCalledWith(expect.objectContaining({
+      projectId: "project-1",
+      executorType: "mcp_worker",
+      connectionId: "conn-1",
+      ownerKey: "worker:worker-1",
+    }));
     expect(deps.connectionChatRepository.touchConnectionHeartbeat).toHaveBeenCalledWith("conn-1", "listening");
+    expect(deps.workerEndpointRepository.touchWorkerEndpointHeartbeat).toHaveBeenCalledWith("worker-endpoint-1", "connected");
   });
 
   it("updates dispatch state and resolves dispatch attention on completion", () => {
@@ -253,11 +341,90 @@ describe("WorkerTaskDispatchService", () => {
     });
   });
 
-  it("claimNextDispatchForWorker is a no-op that returns null", () => {
+  it("claimNextDispatchForWorker returns null when the worker heartbeat is stale", () => {
+    deps.workerEndpointRepository.getWorkerEndpoint.mockReturnValue({
+      id: "worker-endpoint-1",
+      endpointKey: "worker-1",
+      endpointType: "mcp_connection",
+      status: "stale",
+      connectionId: "conn-1",
+      capabilities: { canExecuteTasks: true },
+    });
     const result = service.claimNextDispatchForWorker({
       projectId: "p", workerEndpointId: "w", executionMode: "VIRTUAL",
     });
     expect(result).toBeNull();
+    expect(deps.executionRepository.claimNextTaskDispatch).not.toHaveBeenCalled();
+  });
+
+  it("claimNextDispatchForWorker claims docker CLI dispatches for virtual workers", () => {
+    deps.workerEndpointRepository.getWorkerEndpoint.mockReturnValue({
+      id: "worker-endpoint-1",
+      endpointKey: "virtual:project-1",
+      endpointType: "virtual_cli",
+      status: "connected",
+      connectionId: null,
+      capabilities: { canExecuteTasks: true },
+    });
+    deps.executionRepository.claimNextTaskDispatch.mockReturnValue({
+      id: "dispatch-1",
+      projectId: "project-1",
+      sprintId: "sprint-1",
+      taskId: "task-1",
+      sprintRunId: "run-1",
+      connectionId: null,
+      executorType: "docker_cli",
+      status: "claimed",
+      priority: 0,
+      queuedAt: "2026-01-01T00:00:00.000Z",
+      claimedAt: "2026-01-01T00:00:01.000Z",
+      startedAt: null,
+      finishedAt: null,
+      lastHeartbeatAt: "2026-01-01T00:00:01.000Z",
+      errorMessage: null,
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:01.000Z",
+      leaseToken: "lease-virtual-1",
+    });
+
+    const result = service.claimNextDispatchForWorker({
+      projectId: "project-1",
+      workerEndpointId: "worker-endpoint-1",
+      executionMode: "VIRTUAL",
+    });
+
+    expect(result?.leaseToken).toBe("lease-virtual-1");
+    expect(deps.executionRepository.claimNextTaskDispatch).toHaveBeenCalledWith(expect.objectContaining({
+      projectId: "project-1",
+      executorType: "docker_cli",
+      ownerKey: "virtual:project-1",
+    }));
+  });
+
+  it("registers external worker endpoints and ensures active project assignments", () => {
+    deps.workerEndpointRepository.upsertExternalWorkerEndpoint.mockReturnValue({
+      id: "external-worker-1",
+      endpointKey: "mcp:cluster-worker",
+      status: "connected",
+      capabilities: { canExecuteTasks: true, canSuperviseProjects: true },
+    });
+
+    const endpoint = service.registerExternalWorkerEndpoint({
+      connectionKey: "cluster-worker",
+      displayName: "Cluster Worker",
+      transport: "streamable-http",
+      projectIds: ["project-1", "project-2"],
+      activeProjectIds: ["project-2"],
+      capabilities: { canExecuteTasks: true },
+    });
+
+    expect(endpoint.id).toBe("external-worker-1");
+    expect(deps.workerEndpointRepository.upsertExternalWorkerEndpoint).toHaveBeenCalledWith(expect.objectContaining({
+      connectionKey: "cluster-worker",
+      displayName: "Cluster Worker",
+      transport: "streamable-http",
+    }));
+    expect(deps.projectWorkerAssignmentService.ensureWorkerAssignment).toHaveBeenCalledWith("project-2", "external-worker-1");
   });
 
   it("captures a sprint memory on completion when auto-capture is enabled", async () => {

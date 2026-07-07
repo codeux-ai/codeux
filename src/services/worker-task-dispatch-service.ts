@@ -1,8 +1,9 @@
 import { randomUUID } from "crypto";
 import type { DashboardSettings, DashboardSettingsScope } from "../contracts/app-types.js";
-import type { WorkerTaskDispatchClaim, TaskRunState } from "../contracts/execution-types.js";
+import type { TaskDispatchExecutorType, WorkerTaskDispatchClaim, TaskRunState } from "../contracts/execution-types.js";
 import type { McpConnectionRecord } from "../contracts/connection-chat-types.js";
 import type { WorkerExecutionMode } from "../contracts/app-types.js";
+import type { UpsertExternalWorkerEndpointInput, WorkerEndpointRecord } from "../contracts/worker-types.js";
 import { ExecutionRepository } from "../repositories/execution-repository.js";
 import { ProjectManagementRepository } from "../repositories/project-management-repository.js";
 import { ConnectionChatRepository } from "../repositories/connection-chat-repository.js";
@@ -12,12 +13,16 @@ import { ProjectAttentionService } from "../domain/workers/project-attention-ser
 import type { MemoryService } from "./memory-service.js";
 import type { Logger } from "../shared/logging/logger.js";
 import type { SprintRunLifecycleService } from "./sprint-run-lifecycle-service.js";
+import { isAssignableWorkerStatus } from "../domain/workers/worker-status-utils.js";
+import { formatSprintBranch } from "../domain/sprint/branch-name-generator.js";
 
 export interface PullWorkerTaskDispatchArgs {
   connectionKey: string;
   projectId?: string;
   sprintId?: string;
 }
+
+export interface RegisterExternalWorkerEndpointArgs extends UpsertExternalWorkerEndpointInput {}
 
 export interface UpdateWorkerTaskDispatchArgs {
   connectionKey: string;
@@ -55,11 +60,40 @@ export class WorkerTaskDispatchService {
   ) {}
 
   pullNextDispatch(args: PullWorkerTaskDispatchArgs): WorkerTaskDispatchClaim | null {
-    const { connection } = this.requireWorkerConnection(args.connectionKey);
-    void args.projectId;
-    void args.sprintId;
+    const { connection, workerEndpoint } = this.requireWorkerConnection(args.connectionKey);
+    const projectIds = this.resolveProjectIds(connection, args.projectId);
     this.connectionChatRepository.touchConnectionHeartbeat(connection.id, "listening");
+    const refreshedEndpoint = this.workerEndpointRepository.getWorkerEndpointByConnectionId(connection.id);
+    if (refreshedEndpoint) {
+      this.workerEndpointRepository.touchWorkerEndpointHeartbeat(refreshedEndpoint.id, "connected");
+    }
+    for (const projectId of projectIds) {
+      const claim = this.claimNextDispatchForWorker({
+        projectId,
+        workerEndpointId: refreshedEndpoint?.id || workerEndpoint.id,
+        executionMode: this.resolveWorkerExecutionMode(projectId, args.sprintId),
+        ownerKey: `worker:${args.connectionKey}`,
+        connectionId: connection.id,
+        connectionKey: connection.connectionKey,
+        sprintId: args.sprintId,
+        executorType: "mcp_worker",
+      });
+      if (claim) {
+        return claim;
+      }
+    }
     return null;
+  }
+
+  registerExternalWorkerEndpoint(args: RegisterExternalWorkerEndpointArgs): WorkerEndpointRecord {
+    const endpoint = this.workerEndpointRepository.upsertExternalWorkerEndpoint(args);
+    const activeProjectIds = args.activeProjectIds && args.activeProjectIds.length > 0
+      ? args.activeProjectIds
+      : args.projectIds || [];
+    for (const projectId of activeProjectIds) {
+      this.projectWorkerAssignmentService.ensureWorkerAssignment(projectId, endpoint.id);
+    }
+    return endpoint;
   }
 
   claimNextDispatchForWorker(args: {
@@ -70,15 +104,39 @@ export class WorkerTaskDispatchService {
     connectionId?: string | null;
     connectionKey?: string | null;
     sprintId?: string;
+    executorType?: TaskDispatchExecutorType;
   }): WorkerTaskDispatchClaim | null {
-    void args.projectId;
-    void args.workerEndpointId;
-    void args.executionMode;
-    void args.ownerKey;
-    void args.connectionId;
-    void args.connectionKey;
-    void args.sprintId;
-    return null;
+    const workerEndpoint = this.requireWorkerEndpoint(args.workerEndpointId);
+    if (!workerEndpoint.capabilities.canExecuteTasks || !isAssignableWorkerStatus(workerEndpoint.status)) {
+      return null;
+    }
+    const assignment = workerEndpoint.endpointType === "virtual_cli"
+      ? this.projectWorkerAssignmentService.ensureWorkerAssignment(args.projectId, workerEndpoint.id)
+      : this.projectWorkerAssignmentService.getActiveWorkerAssignment(args.projectId, workerEndpoint.id);
+    if (!assignment) {
+      return null;
+    }
+    if (!assignment.capabilities.canExecuteTasks || !isAssignableWorkerStatus(assignment.workerStatus)) {
+      return null;
+    }
+
+    const executorType = args.executorType || this.resolveDispatchExecutorType(args.executionMode);
+    const claimed = this.executionRepository.claimNextTaskDispatch({
+      projectId: args.projectId,
+      sprintId: args.sprintId,
+      executorType,
+      connectionId: args.connectionId ?? workerEndpoint.connectionId,
+      ownerKey: args.ownerKey || workerEndpoint.endpointKey,
+      leaseToken: randomUUID(),
+      leaseExpiresAt: this.createLeaseExpiry(),
+    });
+    if (!claimed) {
+      return null;
+    }
+
+    this.projectWorkerAssignmentService.noteWorkerActivity(claimed.projectId, workerEndpoint.id);
+    this.workerEndpointRepository.touchWorkerEndpointHeartbeat(workerEndpoint.id, "connected");
+    return this.buildDispatchClaim(claimed, claimed.leaseToken);
   }
 
   updateDispatch(args: UpdateWorkerTaskDispatchArgs): UpdateWorkerTaskDispatchResult {
@@ -361,6 +419,77 @@ export class WorkerTaskDispatchService {
       throw new Error(`Task run not found for dispatch ${dispatchId}`);
     }
     return taskRun;
+  }
+
+  private resolveDispatchExecutorType(executionMode: WorkerExecutionMode): TaskDispatchExecutorType {
+    switch (executionMode) {
+      case "VIRTUAL":
+      default:
+        return "docker_cli";
+    }
+  }
+
+  private buildDispatchClaim(
+    dispatch: WorkerTaskDispatchClaim["dispatch"],
+    leaseToken: string,
+  ): WorkerTaskDispatchClaim {
+    const project = this.requireProject(dispatch.projectId);
+    const sprint = this.requireSprint(dispatch.sprintId);
+    const task = this.requireTask(dispatch.taskId);
+    const settings = this.getDashboardSettings({
+      projectId: dispatch.projectId,
+      sprintId: dispatch.sprintId,
+    });
+    const sprintNumber = sprint.number ?? 0;
+    const defaultBranch = project.defaultBranch || settings.git?.defaultBranch || "main";
+    const featureBranch = sprint.featureBranch?.trim()
+      || formatSprintBranch(settings.git.sprintBranchScheme, {
+        sprint_key_prefix: settings.git.sprintKeyPrefix,
+        sprint_number: sprintNumber,
+        sprint_name: sprint.name || "",
+        sprint_id: sprint.slug || "",
+        planning_agent: settings.agents.routing.planning.agentPresetId || "default",
+        agent_routing: settings.agents.routing.taskCoding.mode,
+        worker_agent: settings.agents.routing.taskCoding.agentPresetId || "default",
+        worker_provider: settings.workers.virtualWorkerProvider,
+        worker_model: settings.workers.model,
+      });
+
+    return {
+      dispatch,
+      leaseToken,
+      project: {
+        id: project.id,
+        name: project.name,
+        baseDir: project.baseDir,
+        sourceType: project.sourceType,
+        sourceRef: project.sourceRef,
+        defaultBranch: project.defaultBranch,
+        featureBranchPrefix: project.featureBranchPrefix,
+      },
+      sprint: {
+        id: sprint.id,
+        name: sprint.name,
+        number: sprint.number,
+        goal: sprint.goal,
+        featureBranch: sprint.featureBranch,
+      },
+      task: {
+        id: task.id,
+        taskKey: task.taskKey,
+        title: task.title,
+        promptMarkdown: task.promptMarkdown,
+        description: task.description,
+        priority: task.priority,
+        dependsOnTaskIds: [...task.dependsOnTaskIds],
+        executorType: task.executorType,
+      },
+      executionContext: {
+        repoPath: project.baseDir,
+        defaultBranch,
+        featureBranch,
+      },
+    };
   }
 
   private mapTaskRunStateToDispatchStatus(
