@@ -1,0 +1,20 @@
+Implemented the thread create-app quickactions.
+
+Changed:
+- Added `ChatCreateAppQuickActions` with accessible `Create Desktop App` and `Create Web App` buttons.
+- Wired thread-mode quickactions near the composer in `ChatPage`.
+- Added `handleCreateAppQuickaction` in `use-chat-thread-data` to create a thread if needed and post typed `create_app` metadata with the correct template id.
+- Kept normal composer send/history/optimistic invocation behavior separate.
+- Updated chat/project docs and added `.task-learnings.md`.
+
+Verification passed:
+- `pnpm run test:dashboard -- tests/dashboard/v2/use-chat-page-data.test.tsx`
+- `pnpm run test:dashboard -- tests/dashboard/v2/chat-page-shell.test.tsx`
+- `pnpm run lint`
+- `pnpm run build`
+- `curl -I http://localhost:4444` returned `200 OK`
+
+Notes:
+- I ran `pnpm install` first because `node_modules` was missing and `vitest` was unavailable.
+- A direct `pnpm exec vitest run tests/dashboard/v2/use-chat-page-data.test.tsx` attempt failed due direct-run test setup differences, but the requested repository dashboard test command passed.
+- Dev server is running at `http://localhost:4444`.

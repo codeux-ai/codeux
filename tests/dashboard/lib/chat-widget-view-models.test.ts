@@ -377,6 +377,120 @@ describe("Chat Widget View Models", () => {
       expect(result).toEqual({ type: "planning", status: "queued", planName: "Sprint request" });
     });
 
+    it("normalizes app progress widget metadata", () => {
+      const message = {
+        metadata: {
+          widget_metadata: {
+            type: "app_progress",
+            status: "running",
+            appKind: "web",
+            sprintId: "sprint-web-1",
+            sprintName: "Create Web App",
+            stackSummary: {
+              techstackName: "Preact Fullstack",
+              language: "TypeScript",
+              framework: "Preact",
+              runtime: "Node 22",
+              packageManager: "pnpm",
+              styling: "Tailwind",
+              testFramework: "Vitest",
+            },
+            planningStages: [
+              { id: "planning", label: "Planning", status: "completed" },
+              { id: "plan", label: "Plan", status: "running" },
+              { id: "finish", label: "Finish", status: "pending" },
+            ],
+            suggestionTags: ["auth", "dashboard", "auth", "", 12],
+            quickactionRequestId: "quickaction-web-1",
+            clientRequestId: "client-web-1",
+          },
+        },
+      } as unknown as ChatMessageRecord;
+
+      const result = getChatWidgetData(message);
+
+      expect(result.type).toBe("app_creation_progress");
+      expect(result.status).toBe("running");
+      expect(result.planName).toBe("Create Web App");
+      expect(result.appCreationProgress).toEqual(expect.objectContaining({
+        status: "running",
+        statusLabel: "Web app sprint is being planned.",
+        appKind: "web_app",
+        appKindLabel: "Web app",
+        sprintId: "sprint-web-1",
+        sprintLabel: "Create Web App",
+        suggestionTags: ["auth", "dashboard"],
+        quickactionRequestId: "quickaction-web-1",
+        clientRequestId: "client-web-1",
+      }));
+      expect(result.appCreationProgress?.stackSummary.fields.map((field) => [field.label, field.value])).toEqual([
+        ["Stack", "Preact Fullstack"],
+        ["Framework", "Preact"],
+        ["Language", "TypeScript"],
+        ["Runtime", "Node 22"],
+        ["Package", "pnpm"],
+        ["Styling", "Tailwind"],
+        ["Tests", "Vitest"],
+      ]);
+      expect(result.appCreationProgress?.stages.map((stage) => [stage.id, stage.label, stage.status])).toEqual([
+        ["planning", "Planning", "completed"],
+        ["plan", "Plan", "running"],
+        ["showing_tasks", "Showing each Task", "pending"],
+        ["start", "Start", "pending"],
+        ["finish", "Finish", "pending"],
+      ]);
+    });
+
+    it("falls back safely for malformed app progress metadata", () => {
+      const message = {
+        metadata: {
+          widget_metadata: {
+            type: "app_progress",
+            status: "not-a-status",
+            appKind: "mobile",
+            sprintName: "",
+            stackSummary: "invalid",
+            planningStages: ["invalid"],
+            suggestionTags: "invalid",
+          },
+        },
+      } as unknown as ChatMessageRecord;
+
+      const result = getChatWidgetData(message);
+
+      expect(result.type).toBe("app_creation_progress");
+      expect(result.status).toBe("running");
+      expect(result.planName).toBe("App creation sprint");
+      expect(result.appCreationProgress?.appKind).toBe("unknown");
+      expect(result.appCreationProgress?.appKindLabel).toBe("App");
+      expect(result.appCreationProgress?.statusLabel).toBe("App sprint is being planned.");
+      expect(result.appCreationProgress?.stackSummary.fields).toEqual([]);
+      expect(result.appCreationProgress?.stackSummary.emptyLabel).toBe("Project stack defaults");
+      expect(result.appCreationProgress?.suggestionTags).toEqual([]);
+      expect(result.appCreationProgress?.stages.map((stage) => [stage.id, stage.status])).toEqual([
+        ["planning", "running"],
+        ["plan", "pending"],
+        ["showing_tasks", "pending"],
+        ["start", "pending"],
+        ["finish", "pending"],
+      ]);
+    });
+
+    it("keeps planning_request widgets on the existing planning path", () => {
+      const message = {
+        metadata: {
+          widget_metadata: {
+            type: "planning_request",
+            status: "running",
+            route_path: "Existing Plan",
+          },
+        },
+      } as unknown as ChatMessageRecord;
+
+      const result = getChatWidgetData(message);
+      expect(result).toEqual({ type: "planning", status: "running", planName: "Existing Plan", targetWorker: undefined });
+    });
+
     it("builds live queued sprint progress from metadata and project tasks", () => {
       const message = {
         metadata: {
@@ -516,6 +630,79 @@ describe("Chat Widget View Models", () => {
           routeKind: "virtual",
           status: "queued"
         }
+      } as unknown as ExecutionInvocationMessageRecord;
+
+      const result = getInvocationWidgetData(message);
+      expect(result).toEqual({ type: "planning", status: "queued", planName: "Execution Plan" });
+    });
+
+    it("uses execution plan metadata for sprint-specific invocation planning widgets", () => {
+      const message = {
+        metadata: {
+          routeKind: "virtual",
+          status: "completed",
+          executionPlan: {
+            sprintId: "sprint-14",
+            sprintNumber: 14,
+            sprintName: "Stabilize chat transcripts",
+            goal: "Render persisted execution plans in invocation transcripts.",
+            taskCount: 2,
+            createdTaskIds: ["task-1", "task-2"],
+            taskSummaries: [
+              { key: "T01", title: "Parse execution plan metadata", summary: "Build a safe view model from the selected message." },
+              { key: "T02", title: "Render compact task summaries", summary: "Show enough task context to distinguish sprint plans." },
+            ],
+          },
+        },
+      } as unknown as ExecutionInvocationMessageRecord;
+
+      const result = getInvocationWidgetData(message, {
+        projectId: "project-1",
+        projectTasks: [createTask({ sprintId: "sprint-live", sprint: "Live Sprint", title: "Live task" })],
+        projectTasksLoading: false,
+        projectTasksLoaded: true,
+        execution: createExecution({
+          sprintRuns: [{ ...createExecution().sprintRuns[0]!, sprintId: "sprint-live", sprintName: "Live Sprint", sprintNumber: 99 }],
+        }),
+        executionLoading: false,
+        executionLoaded: true,
+      });
+
+      expect(result.type).toBe("planning");
+      expect(result.status).toBe("completed");
+      expect(result.planName).toBe("SPR-14: Stabilize chat transcripts");
+      expect(result.executionPlan).toEqual(expect.objectContaining({
+        sprintId: "sprint-14",
+        sprintNumber: 14,
+        sprintKey: "SPR-14",
+        sprintName: "Stabilize chat transcripts",
+        goal: "Render persisted execution plans in invocation transcripts.",
+        taskCount: 2,
+        createdTaskIds: ["task-1", "task-2"],
+        taskSummaryLabel: "2 planned tasks",
+      }));
+      expect(result.executionPlan?.tasks).toEqual([
+        {
+          id: "T01",
+          title: "Parse execution plan metadata",
+          summary: "Build a safe view model from the selected message.",
+        },
+        {
+          id: "T02",
+          title: "Render compact task summaries",
+          summary: "Show enough task context to distinguish sprint plans.",
+        },
+      ]);
+      expect(result.liveStatus).toBeUndefined();
+    });
+
+    it("keeps legacy virtual route fallback when execution plan metadata is absent or malformed", () => {
+      const message = {
+        metadata: {
+          routeKind: "virtual",
+          status: "queued",
+          executionPlan: "legacy-route-without-plan-details",
+        },
       } as unknown as ExecutionInvocationMessageRecord;
 
       const result = getInvocationWidgetData(message);

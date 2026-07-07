@@ -1407,6 +1407,7 @@ export interface ReadinessProbeStatus {
     settingsDb: "UP" | "DOWN";
     dashboardBind: "UP" | "DOWN";
     mcpService: "UP" | "DOWN";
+    startupRecovery?: "UP" | "DOWN";
   };
 }
 

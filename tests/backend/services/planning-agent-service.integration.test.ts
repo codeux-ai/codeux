@@ -156,6 +156,16 @@ describe("PlanningAgentService Integration", () => {
     };
   }
 
+  function findCompletedExecutionPlanMessage(
+    executionRepository: ExecutionRepository,
+    invocationId: string,
+  ) {
+    return executionRepository.listExecutionInvocationMessages(invocationId).find((message) => {
+      const widgetMetadata = message.metadata?.widget_metadata as Record<string, unknown> | undefined;
+      return widgetMetadata?.type === "planning_request" && widgetMetadata.status === "completed";
+    });
+  }
+
   function reflectionResult(score: number): string {
     return JSON.stringify({
       criteria: [
@@ -299,6 +309,90 @@ describe("PlanningAgentService Integration", () => {
     expect(messages.length).toBeGreaterThan(0);
     expect(messages[0].role).toBe("user");
     expect(messages[0].contentMarkdown).toContain("Turn sprint goals into concrete executable tasks.");
+  });
+
+  it("persists sprint-specific execution plan metadata for separate planning invocations", async () => {
+    const {
+      projectRepository,
+      connectionRepository,
+      executionRepository,
+      settingsRepository,
+      syncService,
+      executionControlService,
+      project,
+      sprint: firstSprint,
+    } = await setupTestHarness({
+      name: "First Planning Sprint",
+      goal: "Plan the first sprint.",
+    });
+    const secondSprint = projectRepository.createSprint(project.id, {
+      name: "Second Planning Sprint",
+      goal: "Plan the second sprint.",
+    });
+
+    const service = new PlanningAgentService({
+      projectManagementRepository: projectRepository,
+      connectionChatRepository: connectionRepository,
+      executionRepository,
+      settingsRepository,
+      agentPresetSyncService: syncService,
+      executionControlService: executionControlService as any,
+      providerRunner: createPlanningTextProviderRunner([
+        JSON.stringify(planningProviderPayload("First sprint task")),
+        JSON.stringify(planningProviderPayload("Second sprint task")),
+      ]),
+    });
+
+    const firstResult = await service.planSprint(project.id, firstSprint.id, {});
+    const secondResult = await service.planSprint(project.id, secondSprint.id, {});
+
+    const firstInvocation = executionRepository
+      .listExecutionInvocations({ projectId: project.id, sprintId: firstSprint.id })
+      .find((record) => record.sprintId === firstSprint.id);
+    const secondInvocation = executionRepository
+      .listExecutionInvocations({ projectId: project.id, sprintId: secondSprint.id })
+      .find((record) => record.sprintId === secondSprint.id);
+    expect(firstInvocation).toBeDefined();
+    expect(secondInvocation).toBeDefined();
+
+    const firstMessage = findCompletedExecutionPlanMessage(executionRepository, firstInvocation!.id);
+    const secondMessage = findCompletedExecutionPlanMessage(executionRepository, secondInvocation!.id);
+    const firstPlan = firstMessage?.metadata?.executionPlan as {
+      projectId: string;
+      sprintId: string;
+      sprintName: string;
+      taskCount: number;
+      createdTaskIds: string[];
+      tasks: Array<{ title: string }>;
+    } | undefined;
+    const secondPlan = secondMessage?.metadata?.executionPlan as {
+      projectId: string;
+      sprintId: string;
+      sprintName: string;
+      taskCount: number;
+      createdTaskIds: string[];
+      tasks: Array<{ title: string }>;
+    } | undefined;
+
+    expect(firstPlan).toMatchObject({
+      projectId: project.id,
+      sprintId: firstSprint.id,
+      sprintName: "First Planning Sprint",
+      taskCount: 1,
+      createdTaskIds: firstResult.createdTaskIds,
+      tasks: [{ title: "First sprint task" }],
+    });
+    expect(secondPlan).toMatchObject({
+      projectId: project.id,
+      sprintId: secondSprint.id,
+      sprintName: "Second Planning Sprint",
+      taskCount: 1,
+      createdTaskIds: secondResult.createdTaskIds,
+      tasks: [{ title: "Second sprint task" }],
+    });
+    expect(firstPlan?.sprintId).not.toBe(secondPlan?.sprintId);
+    expect(firstMessage?.contentMarkdown).toContain("- `T01` - First sprint task");
+    expect(secondMessage?.contentMarkdown).toContain("- `T01` - Second sprint task");
   });
 
   it("auto-starts after planning when self-reflection is disabled", async () => {

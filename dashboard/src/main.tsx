@@ -320,6 +320,7 @@ const ProjectsPage  = lazy(() => import("./v2/ProjectsPage.js").then(m => ({ def
 const ChatPage      = lazy(() => import("./v2/ChatPage.js").then(m => ({ default: m.ChatPage })));
 const TasksPage     = lazy(() => import("./v2/TasksPage.js").then(m => ({ default: m.TasksPage })));
 const AgentsPage    = lazy(() => import("./v2/AgentsPage.js").then(m => ({ default: m.AgentsPage })));
+const NodesPage     = lazy(() => import("./v2/NodesPage.js").then(m => ({ default: m.NodesPage })));
 const StatsPage     = lazy(() => import("./v2/StatsPage.js").then(m => ({ default: m.StatsPage })));
 const SchedulerPage = lazy(() => import("./v2/SchedulerPage.js").then(m => ({ default: m.SchedulerPage })));
 const SettingsPage  = lazy(() => import("./v2/SettingsPage.js").then(m => ({ default: m.SettingsPage })));
@@ -379,6 +380,12 @@ const agentsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/agents",
   component: AgentsPage,
+});
+
+const nodesRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/nodes",
+  component: NodesPage,
 });
 
 const statsRoute = createRoute({
@@ -448,7 +455,7 @@ const notFoundRoute = createRoute({
   component: ErrorPage,
 });
 
-const routeTree = rootRoute.addChildren([indexRoute, sprintsRoute, tasksRoute, projectsRoute, chatRoute, agentsRoute, statsRoute, schedulerRoute, configRoute, memoryRoute, knowledgeRoute, browserRoute, fileBrowserRoute, docsRoute, docsDocumentRoute, liveRoute, notFoundRoute]);
+const routeTree = rootRoute.addChildren([indexRoute, sprintsRoute, tasksRoute, projectsRoute, chatRoute, agentsRoute, nodesRoute, statsRoute, schedulerRoute, configRoute, memoryRoute, knowledgeRoute, browserRoute, fileBrowserRoute, docsRoute, docsDocumentRoute, liveRoute, notFoundRoute]);
 // `defaultPreload: "intent"` warms route matching on hover/focus; the page chunks themselves are
 // prefetched explicitly by the nav components via prefetchRoute() since they are Preact-lazy.
 const router = createRouter({ routeTree, defaultPreload: "intent", defaultPreloadDelay: 50 });

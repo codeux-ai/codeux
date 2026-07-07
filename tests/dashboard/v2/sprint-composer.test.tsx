@@ -590,7 +590,7 @@ describe("SprintComposer", () => {
     const mockOnCancelPlanningRequest = vi.fn();
     const mockOnSubmit = vi.fn(async () => new Promise(() => undefined));
 
-    const { getByText, getByPlaceholderText, queryByText, getAllByText } = render(
+    const { getByText, getByPlaceholderText, queryByText, getAllByText, getByRole } = render(
       <SprintComposer {...defaultProps} onSubmit={mockOnSubmit} onCancelPlanningRequest={mockOnCancelPlanningRequest} />
     );
 
@@ -610,6 +610,9 @@ describe("SprintComposer", () => {
     });
 
     expect(mockOnSubmit).toHaveBeenCalled();
+
+    fireEvent.click(getByRole("button", { name: /turn planning vessel into a coffee break reminder/i }));
+    expect(getByText("Coffee break unlocked. Grab a fresh cup while planning keeps moving.")).toBeInTheDocument();
 
     // Click Cancel Active Request through the overlay specifically.
     const cancelBtns = getAllByText("Cancel Active Request");
@@ -644,7 +647,7 @@ describe("SprintComposer", () => {
     const mockOnStartNewSprint = vi.fn();
     const mockOnClose = vi.fn();
 
-    const { getByText, getByPlaceholderText, getAllByText } = render(
+    const { getByText, getByPlaceholderText, getAllByText, getByRole } = render(
       <SprintComposer
         {...defaultProps}
         onClose={mockOnClose}
@@ -672,6 +675,9 @@ describe("SprintComposer", () => {
     expect(mockOnSubmit).toHaveBeenCalled();
     const firstSignal = mockOnSubmit.mock.calls[0]?.[0]?.signal as AbortSignal;
     expect(firstSignal).toBeInstanceOf(AbortSignal);
+
+    fireEvent.click(getByRole("button", { name: /turn planning vessel into a coffee break reminder/i }));
+    expect(getByText("Coffee break unlocked. Grab a fresh cup while planning keeps moving.")).toBeInTheDocument();
 
     // Click New Sprint
     const newSprintBtn = getByText("New Sprint");

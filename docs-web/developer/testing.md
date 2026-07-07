@@ -7,7 +7,8 @@ Code UX uses **Vitest** as its single test runner across server and dashboard. C
 ```
 tests/
 ├── backend/         # server / orchestrator / mcp tests
-└── dashboard/       # Preact component tests
+├── dashboard/       # Preact component tests
+└── e2e/             # Playwright browser tests against dist/index.js
 
 src/**/*.test.ts     # co-located unit tests
 ```
@@ -21,10 +22,24 @@ pnpm run test                   # full suite, single run
 pnpm run test:watch             # watch mode
 pnpm run test:backend           # backend only
 pnpm run test:dashboard         # dashboard only
+pnpm run test:e2e               # Playwright E2E against the compiled app
 pnpm run test:coverage          # full coverage with thresholds
 pnpm run test:backend:coverage  # backend coverage with thresholds
 npx vitest run tests/backend/smoke.test.ts # single file
 ```
+
+Build before Playwright from a clean checkout:
+
+```bash
+pnpm run build
+pnpm run test:e2e -- tests/e2e/product-smoke.spec.ts
+```
+
+`pnpm run test:e2e` is a wrapper around `pnpm exec playwright test`; it chooses an isolated dashboard/MCP port pair and exports `CODEUX_E2E_DASHBOARD_PORT` before Playwright starts `node dist/index.js`. The Playwright config starts the compiled server, waits on the local `/health` liveness probe, and runs against a temporary HOME/USERPROFILE/XDG home so the suite does not depend on a developer's browser cache, onboarding state, selected project, or real Code UX database. The compiled server receives the resolved value as `DASHBOARD_PORT` and `MCP_HTTP_PORT`, plus `CODEUX_E2E_PROVIDER_CLI_SHIM`, which points at `scripts/e2e/mock-provider-cli.mjs`; provider command specs only use that fake provider when the explicit env var is present. The E2E suite is local-only: tests must navigate through `baseURL` routes or local API probes, not external websites. Failure artifacts are retained under `test-results/`, and the HTML report is written to `playwright-report/`; CI uploads both paths after every run so traces, videos, screenshots, and reports are available when failures occur.
+
+Use `tests/e2e/helpers/e2e-fixtures.ts` for deterministic browser tests that need temporary git repositories, selected Code UX projects, public-API sprint/task seeding, local-git HOST execution, QA-disabled project settings, API polling, or onboarding/tour suppression. The fake provider supports prompt markers such as `[mock-provider:sleep=250]`, `[mock-provider:fail]`, `[mock-provider:exit=2]`, `[mock-provider:no-op]`, and `[mock-provider:write=relative/path.txt]`.
+
+`tests/e2e/filesystem-persistence.spec.ts` covers host filesystem persistence for instruction-file saves, local-directory browsing, sanitized traversal rejection, and Settings Appearance background-image uploads. The Playwright server exposes the OS temp directory through `CODE_UX_DIRECTORY_BROWSER_ROOTS` so temporary git fixtures can be browsed without Docker-backed file-browser sessions. `tests/e2e/dashboard-workflows.spec.ts` covers the pre-orchestration product path: isolated local-git project selection, UI draft sprint creation, UI task creation with dependencies, core route landmarks, collection API visibility, and unhandled browser error capture without starting planning or provider execution.
 
 ## Coverage thresholds
 

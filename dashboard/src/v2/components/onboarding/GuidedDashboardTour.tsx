@@ -88,6 +88,14 @@ const TOUR_STEPS: TourStep[] = [
     accent: "signal",
   },
   {
+    id: "nodes",
+    targetId: "nav-nodes",
+    eyebrow: "Workflow graph",
+    title: "Nodes",
+    body: "Nodes lets you compose project workflow graphs, configure node widgets, attach flows to agents, and inspect persisted runs.",
+    accent: "signal",
+  },
+  {
     id: "stats",
     targetId: "nav-stats",
     eyebrow: "Telemetry",

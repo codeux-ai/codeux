@@ -6,7 +6,7 @@ import { useChatThreadData } from "../../../dashboard/src/v2/hooks/use-chat-thre
 import { useChatPageResources } from "../../../dashboard/src/v2/hooks/use-chat-page-resources.js";
 import { useInvocationPaneData, areInvocationMessagesEqual } from "../../../dashboard/src/v2/hooks/use-invocation-pane-data.js";
 import { renderHook, act, waitFor } from "@testing-library/preact";
-import { cancelThreadTurn } from "../../../dashboard/src/v2/lib/connection-api.js";
+import { cancelThreadTurn, createConversationThread, postConversationMessage } from "../../../dashboard/src/v2/lib/connection-api.js";
 import { fetchInvocationMessages, fetchProjectInvocations } from "../../../dashboard/src/v2/lib/invocation-api.js";
 
 // Mock connection-api calls to prevent external requests
@@ -14,7 +14,15 @@ vi.mock("../../../dashboard/src/v2/lib/connection-api.js", () => ({
   fetchConversationMessages: vi.fn(() => Promise.resolve([])),
   fetchConversationThreads: vi.fn(() => Promise.resolve([])),
   postConversationMessage: vi.fn((projectId, data) => Promise.resolve({
-    id: "msg-new", threadId: data.threadId, bodyMarkdown: data.bodyMarkdown, deliveryStatus: "delivered", createdAt: "2026-03-10T12:00:00.000Z"
+    id: "msg-new",
+    threadId: data.threadId,
+    direction: "dashboard_to_connection",
+    authorType: "dashboard_user",
+    authorConnectionId: null,
+    bodyMarkdown: data.bodyMarkdown,
+    deliveryStatus: "delivered",
+    metadata: data.metadata ?? null,
+    createdAt: "2026-03-10T12:00:00.000Z"
   })),
   fetchProjectConnections: vi.fn(() => Promise.resolve([])),
   deleteConversationThread: vi.fn(() => Promise.resolve()),
@@ -536,6 +544,86 @@ describe("useChatPageResources integration", () => {
     expect(result.current.threadData.input).toBe("");
     expect(result.current.threadData.messages.length).toBe(1);
     expect(result.current.threadData.messages[0].id).toBe("msg-new");
+  });
+
+  it("posts create-app quickactions with metadata without composer content or sent history", async () => {
+    const onMessageSending = vi.fn(() => "optimistic-1");
+    const dashboardSettings = {
+      techstackCatalog: {
+        defaultTechstackId: "react-saas",
+        entries: [
+          {
+            id: "react-saas",
+            label: "React SaaS",
+            items: [
+              { id: "typescript", label: "TypeScript" },
+              { id: "react", label: "React" },
+              { id: "node", label: "Node.js" },
+              { id: "pnpm", label: "pnpm" },
+              { id: "tailwind", label: "Tailwind" },
+              { id: "vitest", label: "Vitest" },
+            ],
+          },
+        ],
+      },
+      techstack: {
+        selectedTechstackId: null,
+        applicationKind: null,
+      },
+    };
+
+    const { result } = renderHook(() => {
+      const cache = useMessageCache();
+      const threadData = useChatThreadData({
+        selectedProject: { id: "proj-1" },
+        cache,
+        execution: null,
+        dashboardSettings: dashboardSettings as any,
+        onMessageSending,
+      });
+
+      return { cache, threadData };
+    });
+
+    await act(async () => {
+      await result.current.threadData.handleCreateAppQuickaction("web_app");
+    });
+
+    expect(createConversationThread).toHaveBeenCalledWith("proj-1", expect.objectContaining({
+      title: expect.stringContaining("Project Chat"),
+    }));
+    expect(postConversationMessage).toHaveBeenCalledWith("proj-1", expect.objectContaining({
+      threadId: "thread-new",
+      bodyMarkdown: "Create a web app",
+      metadata: {
+        quickaction: expect.objectContaining({
+          type: "create_app",
+          kind: "web_app",
+          requestId: expect.stringMatching(/^dashboard-create-app-web_app-/),
+          templateId: "qs-create-web-app",
+          stackSummary: {
+            techstackId: "react-saas",
+            techstackName: "React SaaS",
+            applicationKind: "web_app",
+            language: "TypeScript",
+            framework: "React",
+            runtime: "Node.js",
+            packageManager: "pnpm",
+            styling: "Tailwind",
+            testFramework: "Vitest",
+          },
+          suggestionTags: ["TypeScript", "React", "Node.js", "pnpm", "Tailwind", "Vitest"],
+        }),
+      },
+    }));
+    const postedMetadata = vi.mocked(postConversationMessage).mock.calls[0]?.[1].metadata;
+    expect(onMessageSending).not.toHaveBeenCalled();
+    expect(result.current.threadData.input).toBe("");
+    expect(result.current.threadData.messages[0]?.metadata).toEqual(postedMetadata);
+
+    await act(async () => {
+      expect(result.current.threadData.navigateHistory("up")).toBe(false);
+    });
   });
 
   it("cancels the active turn and clears the pending badge locally", async () => {

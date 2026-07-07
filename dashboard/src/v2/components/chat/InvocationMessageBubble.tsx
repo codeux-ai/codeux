@@ -202,7 +202,12 @@ export const InvocationMessageBubble: FunctionComponent<InvocationMessageBubbleP
           {/* Widget Slot */}
           {widgetData.type === "planning" && (
             <div className="mt-4 border-t border-white/5 pt-4">
-              <PlanningRequestWidget status={widgetData.status} planName={widgetData.planName} liveStatus={widgetData.liveStatus} />
+              <PlanningRequestWidget
+                status={widgetData.status}
+                planName={widgetData.planName}
+                liveStatus={widgetData.liveStatus}
+                executionPlan={widgetData.executionPlan}
+              />
             </div>
           )}
           {widgetData.type === "external_reference" && widgetData.externalReference && (

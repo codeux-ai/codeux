@@ -60,6 +60,7 @@ const APPROVAL_SCOPE_KEYS = [
   "templateId",
   "sessionId",
   "entryId",
+  "flowId",
   "sprintRunId",
   "taskRunId",
 ];
