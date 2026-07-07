@@ -176,6 +176,39 @@ describe("sanitizeAiProvider", () => {
     expect(result.invocationRouting.dashboard_reply.provider).toBe("codex");
   });
 
+  it("preserves selectable Codex catalog models in provider and route settings", () => {
+    const result = sanitizeAiProvider({
+      aiProvider: {
+        provider: "codex",
+        providers: {
+          codex: {
+            provider: "codex",
+            enabled: true,
+            model: "gpt-5.6-sol",
+            weight: 20,
+            thinkingMode: "HIGH",
+          },
+        },
+        invocationRouting: {
+          task_coding: {
+            profile: "GLOBAL",
+            strategy: "MANUAL",
+            provider: "codex",
+            allowedProviders: ["codex"],
+            providers: {
+              codex: {
+                model: "gpt-5.6-terra",
+              },
+            },
+          },
+        },
+      },
+    } as any);
+
+    expect(result.providers.codex.model).toBe("gpt-5.6-sol");
+    expect(result.invocationRouting.task_coding.providers.codex?.model).toBe("gpt-5.6-terra");
+  });
+
   describe("normalizeSystemIntegrationProviders", () => {
     it("should preserve explicitly defined mountAuth boolean values", () => {
       const input = {

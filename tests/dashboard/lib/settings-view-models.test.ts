@@ -138,6 +138,17 @@ describe("settings view model source helpers", () => {
     ]));
   });
 
+  it("includes new Codex models while keeping gpt-5.5 as the first option", () => {
+    const options = getProviderModelOptions("codex");
+
+    expect(options[0]).toEqual({ value: "gpt-5.5", label: "gpt-5.5" });
+    expect(options).toEqual(expect.arrayContaining([
+      { value: "gpt-5.6-sol", label: "gpt-5.6-sol" },
+      { value: "gpt-5.6-terra", label: "gpt-5.6-terra" },
+      { value: "gpt-5.6-luna", label: "gpt-5.6-luna" },
+    ]));
+  });
+
   it("adds configured OpenCode custom endpoint models to instance model options", () => {
     const systemSettings = {
       integrations: {
