@@ -397,11 +397,12 @@ export class QuicksprintService {
       },
     };
 
-    void this.planSprint(
+    const planningPromise = this.planSprint(
       projectId,
       prepared.sprint.id,
       prepared.planningRequest.planOptions,
-    ).catch((error: unknown) => {
+    );
+    void planningPromise.catch((error: unknown) => {
       this.options.logger?.warn("Detached quicksprint planning failed", {
         error,
         projectId,
@@ -414,6 +415,7 @@ export class QuicksprintService {
     return {
       sprint: prepared.sprint,
       planningRequest: prepared.planningRequest,
+      planningPromise,
     };
   }
 }
