@@ -86,6 +86,10 @@ The page manages mutable draft text for:
 
 Draft edits remain persisted bundle text sent back through API calls; generated dashboard code is not imported from `dashboard/src` at runtime. Revisions are created as immutable snapshots, then validated through a detached session. The validation panel shows build/start/health stage state, renders refreshed logs, links to the validation proxy preview, and disables publication until the selected revision has a passed validation report or a matching passed validation session.
 
+Published dashboards open through `CustomDashboardViewer`, which resolves the active `publishedRevisionId` from the loaded dashboard detail and renders only when the dashboard status is `published`, the published revision exists, and that revision still has a valid passed validation report. Draft, rejected, archived, unvalidated, and missing-publication states render a local blocked panel with the last validation report and a return-to-editor action rather than executing the bundle.
+
+The viewer uses a sandboxed iframe `srcdoc` document so generated dashboard code never runs inside the main Preact bundle. The frame receives a frozen `codeUxDataBridge` / `CodeUXCustomDashboard` object and can request only declared source nodes by `id` through `postMessage`. The parent page handles those requests with explicit same-origin API calls for project execution data, project stats, and overview telemetry; integration metadata is limited to non-secret source-node metadata; external API nodes are placeholders and return clear unavailable-source errors. Frame `error` and `unhandledrejection` events are reported back to the viewer and displayed as dashboard-specific failures without breaking the surrounding app shell.
+
 Navigation is centralized through `dashboard/src/v2/lib/navigation-items.ts`, so both the kinetic dock and sidebar expose the Dashboards destination with stable labels, tour markers, and route prefetching.
 
 ## Docker and Logs
