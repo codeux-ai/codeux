@@ -254,14 +254,20 @@ export class SchedulerRepository {
     return updated;
   }
 
-  markRunFailed(entryId: string, error: string): SchedulerEntryRecord {
+  markRunFailed(entryId: string, error: string, occurrenceIso?: string): SchedulerEntryRecord {
     const current = this.requireEntry(entryId);
     const now = new Date().toISOString();
+    const failureRunFields = occurrenceIso === undefined
+      ? ""
+      : ", last_run_at = ?, run_count = ?";
+    const params = occurrenceIso === undefined
+      ? [error, now, entryId]
+      : [error, occurrenceIso, current.runCount + 1, now, entryId];
     this.db.prepare(`
       UPDATE scheduler_entries
-      SET status = 'failed', last_error = ?, updated_at = ?
+      SET status = 'failed', last_error = ?${failureRunFields}, updated_at = ?
       WHERE id = ?
-    `).run(error, now, entryId);
+    `).run(...params);
     const updated = this.requireEntry(entryId);
     this.publishProjectStructureRefresh(current.projectId);
     return updated;

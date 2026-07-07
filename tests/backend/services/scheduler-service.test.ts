@@ -337,6 +337,41 @@ describe("SchedulerService", () => {
     expect(repo.markRunSucceeded).toHaveBeenCalledWith("entry-1", "2026-05-18T09:00:00.000Z", null);
   });
 
+  it("marks node flow schedules failed when the runtime resolves a failed run", async () => {
+    const entry = createEntry({
+      targetType: "node_flow",
+      sprintTarget: undefined,
+      nodeFlowTarget: { flowId: "flow-1" },
+      recurrence: normalizeRecurrenceRule(),
+    });
+    const repo = {
+      listDueEntries: vi.fn(() => [entry]),
+      getEntry: vi.fn(() => entry),
+      markRunSucceeded: vi.fn(),
+      markRunFailed: vi.fn(),
+    };
+    const service = buildService(repo, {
+      nodeFlowRuntimeService: {
+        runFlow: vi.fn().mockResolvedValue({
+          run: { status: "failed", errorMessage: "node execution failed" },
+          nodeRuns: [],
+          output: {},
+        }),
+      },
+      nodeFlowRepository: { getFlow: vi.fn(() => ({ id: "flow-1", projectId: "project-1" })) },
+    });
+
+    await service.runDueEntries(new Date("2026-05-18T09:00:01.000Z"));
+    await flush();
+
+    expect(repo.markRunSucceeded).not.toHaveBeenCalled();
+    expect(repo.markRunFailed).toHaveBeenCalledWith(
+      "entry-1",
+      "node execution failed",
+      "2026-05-18T09:00:00.000Z",
+    );
+  });
+
   it("does not execute node flow targets before nextRunAt is due", async () => {
     const entry = createEntry({
       targetType: "node_flow",

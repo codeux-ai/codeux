@@ -18,6 +18,7 @@ import type { MemoryRemediationService } from "./memory-remediation-service.js";
 import type { TaskRerunService } from "./task-rerun-service.js";
 import type { NodeFlowRuntimeService } from "./node-flow-runtime-service.js";
 import type { NodeFlowRepository } from "../repositories/node-flow-repository.js";
+import type { NodeFlowRunSummaryResponse } from "../contracts/node-flow-types.js";
 import { buildSchedulerOccurrences, computeNextRunAfterOccurrence } from "../domain/scheduler/schedule-time.js";
 import type { ConversationMessageMetadata, CreateDashboardConversationMessageInput } from "../contracts/connection-chat-types.js";
 
@@ -213,8 +214,16 @@ export class SchedulerService {
         : computeNextRunAfterOccurrence(occurrenceIso, freshEntry.recurrence, freshEntry.runCount + 1);
 
       if (freshEntry.targetType === "node_flow") {
-        this.executeEntry(freshEntry, occurrenceIso).then(() => {
-          this.deps.schedulerRepository.markRunSucceeded(freshEntry.id, occurrenceIso, nextRunAt);
+        this.executeNodeFlowEntry(freshEntry, occurrenceIso).then((result) => {
+          if (result.run.status === "succeeded") {
+            this.deps.schedulerRepository.markRunSucceeded(freshEntry.id, occurrenceIso, nextRunAt);
+            return;
+          }
+          this.deps.schedulerRepository.markRunFailed(
+            freshEntry.id,
+            result.run.errorMessage ?? `Node flow run ${result.run.status}.`,
+            occurrenceIso,
+          );
         }).catch((error) => {
           this.handleExecutionFailure(freshEntry, error);
         }).finally(() => {
@@ -296,28 +305,7 @@ export class SchedulerService {
     }
 
     if (entry.targetType === "node_flow") {
-      const target = entry.nodeFlowTarget;
-      if (!target) {
-        throw new Error("Scheduled node flow target is missing.");
-      }
-      if (!this.deps.nodeFlowRuntimeService) {
-        throw new Error("Node flow runtime service is not enabled.");
-      }
-      this.validateNodeFlowTargetOwnership(entry.projectId, target.flowId);
-      await this.deps.nodeFlowRuntimeService.runFlow(
-        entry.projectId,
-        target.flowId,
-        target.input ?? {},
-        {
-          triggerType: "scheduler",
-          triggerPayload: {
-            schedulerEntryId: entry.id,
-            scheduledFor: occurrenceIso,
-            targetType: entry.targetType,
-            ...(target.flowVersion !== undefined ? { flowVersion: target.flowVersion } : {}),
-          },
-        },
-      );
+      await this.executeNodeFlowEntry(entry, occurrenceIso);
       return;
     }
 
@@ -368,6 +356,34 @@ export class SchedulerService {
 
     const exhaustive: never = entry.targetType;
     throw new Error(`Unsupported scheduler target type: ${exhaustive}`);
+  }
+
+  private async executeNodeFlowEntry(entry: SchedulerEntryRecord, occurrenceIso: string): Promise<NodeFlowRunSummaryResponse> {
+    if (entry.targetType !== "node_flow") {
+      throw new Error(`Unsupported node flow scheduler target type: ${entry.targetType}`);
+    }
+    const target = entry.nodeFlowTarget;
+    if (!target) {
+      throw new Error("Scheduled node flow target is missing.");
+    }
+    if (!this.deps.nodeFlowRuntimeService) {
+      throw new Error("Node flow runtime service is not enabled.");
+    }
+    this.validateNodeFlowTargetOwnership(entry.projectId, target.flowId);
+    return await this.deps.nodeFlowRuntimeService.runFlow(
+      entry.projectId,
+      target.flowId,
+      target.input ?? {},
+      {
+        triggerType: "scheduler",
+        triggerPayload: {
+          schedulerEntryId: entry.id,
+          scheduledFor: occurrenceIso,
+          targetType: entry.targetType,
+          ...(target.flowVersion !== undefined ? { flowVersion: target.flowVersion } : {}),
+        },
+      },
+    );
   }
 
   private validateInputTarget(projectId: string, input: CreateSchedulerEntryInput | UpdateSchedulerEntryInput): void {

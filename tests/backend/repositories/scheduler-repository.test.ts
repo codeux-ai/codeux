@@ -288,6 +288,28 @@ describe("SchedulerRepository", () => {
     expect(updated.nextRunAt).toBeNull();
   });
 
+  it("marks failed attempted occurrences with last run accounting", async () => {
+    const { dir, projectRepository, schedulerRepository } = await createRepositories();
+    const project = projectRepository.createProject({
+      name: "Scheduler Project",
+      sourceType: "local",
+      sourceRef: dir,
+    });
+
+    const entry = schedulerRepository.createEntry(project.id, {
+      targetType: "node_flow",
+      scheduledFor: "2026-05-18T09:00:00.000Z",
+      nodeFlowTarget: { flowId: "flow-1" },
+    });
+
+    const updated = schedulerRepository.markRunFailed(entry.id, "node execution failed", entry.scheduledFor);
+
+    expect(updated.status).toBe("failed");
+    expect(updated.lastError).toBe("node execution failed");
+    expect(updated.lastRunAt).toBe("2026-05-18T09:00:00.000Z");
+    expect(updated.runCount).toBe(1);
+  });
+
   it("persists settings-managed memory remediation targets", async () => {
     const { dir, projectRepository, schedulerRepository } = await createRepositories();
     const project = projectRepository.createProject({
