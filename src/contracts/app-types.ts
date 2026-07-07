@@ -751,6 +751,29 @@ export interface AiProviderSettings {
   invocationRouting: Record<InvocationRoutingId, InvocationRoutingSettings>;
 }
 
+export type ApplicationKind = "web" | "desktop";
+
+export interface TechstackItemSettings {
+  id: string;
+  label: string;
+}
+
+export interface TechstackCatalogEntrySettings {
+  id: string;
+  label: string;
+  items: TechstackItemSettings[];
+}
+
+export interface TechstackCatalogSettings {
+  defaultTechstackId: string;
+  entries: TechstackCatalogEntrySettings[];
+}
+
+export interface TechstackSelectionSettings {
+  selectedTechstackId: string | null;
+  applicationKind: ApplicationKind | null;
+}
+
 /** Toggles for what appears in an automated Task PR description. See src/domain/sprint/composer/pr-description-composer.ts. */
 export interface TaskPrTemplateSections {
   summary: boolean;
@@ -1163,6 +1186,8 @@ export interface DashboardSettings {
   automationLevel: AutomationLevel;
   automationInterventions: AutomationInterventionsSettings;
   aiProvider: AiProviderSettings;
+  techstackCatalog: TechstackCatalogSettings;
+  techstack: TechstackSelectionSettings;
   git: GitSettings;
   jira: JiraSettings;
   notion: ExternalImporterSettings;
@@ -1366,6 +1391,11 @@ export interface DockerContainer {
 
 export type OnboardingCheckStatus = "ready" | "warning" | "missing";
 export type OnboardingClusterStatus = "ready" | "not_ready";
+export type OnboardingDependencyInstallMode = "docker-desktop-git" | "docker-engine-git";
+export type OnboardingInstallerPlatform = "darwin" | "win32" | "linux" | "unsupported";
+export type OnboardingInstallerAutomationLevel = "automated" | "partial" | "manual" | "unsupported";
+export type OnboardingInstallerCommandStatus = "pending" | "running" | "success" | "failed" | "skipped";
+export type OnboardingDependencyInstallerStatus = "success" | "partial" | "failed" | "skipped" | "unsupported";
 
 export interface OnboardingDependencyCheck {
   id: string;
@@ -1387,6 +1417,62 @@ export interface OnboardingProviderCredentialStatus {
   description: string;
 }
 
+export interface OnboardingDependencyInstallerOption {
+  mode: OnboardingDependencyInstallMode;
+  label: string;
+  platform: OnboardingInstallerPlatform;
+  recommended: boolean;
+  automation: OnboardingInstallerAutomationLevel;
+  description: string;
+  dependencyIds: string[];
+  requiresPrivilege: boolean;
+  requiresManualDownload: boolean;
+  available: boolean;
+  guidance: string[];
+}
+
+export interface OnboardingDependencyInstallerMetadata {
+  platform: OnboardingInstallerPlatform;
+  recommendedMode: OnboardingDependencyInstallMode | null;
+  options: OnboardingDependencyInstallerOption[];
+}
+
+export interface OnboardingDependencyInstallerCommandResult {
+  id: string;
+  groupId: string;
+  label: string;
+  command: string;
+  args: string[];
+  displayCommand: string;
+  status: OnboardingInstallerCommandStatus;
+  timeoutMs: number;
+  maxStdoutChars: number;
+  maxStderrChars: number;
+  code: number | null;
+  stdoutSummary: string;
+  stderrSummary: string;
+  message?: string;
+}
+
+export interface OnboardingDependencyInstallerSkippedGroup {
+  groupId: string;
+  label: string;
+  dependencyIds: string[];
+  reason: string;
+}
+
+export interface OnboardingDependencyInstallerResult {
+  mode: OnboardingDependencyInstallMode;
+  platform: OnboardingInstallerPlatform;
+  status: OnboardingDependencyInstallerStatus;
+  commands: OnboardingDependencyInstallerCommandResult[];
+  skippedDependencyGroups: OnboardingDependencyInstallerSkippedGroup[];
+  requiresPrivilege: boolean;
+  requiresManualDownload: boolean;
+  postInstallGuidance: string[];
+  message: string;
+}
+
 export interface OnboardingRuntimeReadiness {
   checkedAt: string;
   cluster: {
@@ -1396,6 +1482,7 @@ export interface OnboardingRuntimeReadiness {
   };
   dependencies: OnboardingDependencyCheck[];
   providers: OnboardingProviderCredentialStatus[];
+  installers: OnboardingDependencyInstallerMetadata;
 }
 
 export interface UserOnboardingState {

@@ -28,7 +28,11 @@ import type { SkillService, PersistentSkillStorageRuntime } from "./skill-servic
 import type { AgentPresetRepository } from "../repositories/agent-preset-repository.js";
 import type { McpConnectionInfo } from "../contracts/mcp-connection-types.js";
 import type { AgentMcpAccessConfig } from "../contracts/agent-preset-types.js";
-import { resolveAgentMcpRuntime } from "./agent-mcp-access.js";
+import {
+  isSchedulerOnlyAgentMcpAccess,
+  resolveAgentMcpRuntime,
+  schedulerOnlyAgentMcpAccess,
+} from "./agent-mcp-access.js";
 
 export interface GenerateDashboardReplyInput {
   projectId: string;
@@ -117,10 +121,14 @@ export class WorkerInboxReplyService {
         providerConfigId: dashboardReplyAgent.providerConfigId,
         model: dashboardReplyAgent.model,
       };
-      agentMcpAccess = dashboardReplyAgent.mcpAccess ?? null;
+      agentMcpAccess = this.resolveDashboardReplyMcpAccess(
+        dashboardReplyAgent.mcpAccess,
+        dashboardReplyAgentPresetId,
+      );
       mcpAgentId = dashboardReplyAgent.id;
       const workerInstructions = dashboardReplyAgent.instructionMarkdown.trim();
       const knowledgeManifest = this.deps.knowledgeService?.buildManifestMarkdownForAgent(dashboardReplyAgent.id) ?? null;
+      const mcpAvailable = Boolean(agentMcpAccess.codeUxEnabled && this.deps.getMcpConnectionInfo?.());
       rawPrompt = buildChatReplayPrompt({
         projectId: input.projectId,
         repoPath: project.baseDir,
@@ -131,6 +139,8 @@ export class WorkerInboxReplyService {
         bodyMarkdown: input.bodyMarkdown,
         workerInstructions,
         isDashboardReply: true,
+        mcpAvailable,
+        mcpAccessMode: mcpAvailable && isSchedulerOnlyAgentMcpAccess(agentMcpAccess) ? "scheduler_only" : undefined,
         knowledgeManifest,
       });
     }
@@ -613,11 +623,14 @@ export class WorkerInboxReplyService {
     const prompt = persistentSkillRuntime
       ? `${input.prompt}\n\n${persistentSkillRuntime.instructionMarkdown}`
       : input.prompt;
+    const mcpConnection = persistentSkillRuntime || input.agentMcpAccess?.codeUxEnabled
+      ? this.deps.getMcpConnectionInfo?.() ?? null
+      : null;
     const resolvedMcp = resolveAgentMcpRuntime({
       access: input.agentMcpAccess,
       agentId: input.mcpAgentId,
       customMcpServers: [],
-      mcpConnection: persistentSkillRuntime ? this.deps.getMcpConnectionInfo?.() ?? null : null,
+      mcpConnection,
       persistentSkillRetrievalEnabled: Boolean(persistentSkillRuntime),
     });
 
@@ -667,6 +680,16 @@ export class WorkerInboxReplyService {
       persistentSkillStorageMounts: persistentSkillRuntime?.mounts,
       onActivity: () => {},
     });
+  }
+
+  private resolveDashboardReplyMcpAccess(
+    access: AgentMcpAccessConfig | undefined,
+    dashboardReplyAgentPresetId: string | null,
+  ): AgentMcpAccessConfig {
+    if (dashboardReplyAgentPresetId && access) {
+      return access;
+    }
+    return schedulerOnlyAgentMcpAccess(access?.linkedServerIds ?? []);
   }
 
   private async resolvePersistentSkillRuntime(

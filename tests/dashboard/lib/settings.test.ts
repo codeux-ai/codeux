@@ -24,6 +24,11 @@ describe("dashboard settings helpers", () => {
     first.figma.fileKey = "figma-file";
     first.mural.boardId = "mural-id";
     first.mcpTools[0].enabled = false;
+    first.techstackCatalog.defaultTechstackId = "custom-stack";
+    first.techstackCatalog.entries[0]!.label = "Mutated Stack";
+    first.techstackCatalog.entries[0]!.items[0]!.label = "Mutated Item";
+    first.techstack.selectedTechstackId = "custom-stack";
+    first.techstack.applicationKind = "web";
     expect(second.git.defaultBranch).toBe("main");
     expect(second.dashboardPort).toBe(4444);
     expect(second.aiProvider.providers.gemini.model).toBe("default");
@@ -43,6 +48,11 @@ describe("dashboard settings helpers", () => {
     expect(second.figma.fileKey).toBe("");
     expect(second.mural.boardId).toBe("");
     expect(second.mcpTools[0].enabled).toBe(true);
+    expect(second.techstackCatalog.defaultTechstackId).toBe("code-ux-internal");
+    expect(second.techstackCatalog.entries[0]!.label).toBe("Code UX Internal");
+    expect(second.techstackCatalog.entries[0]!.items[0]!.label).toBe("Preact");
+    expect(second.techstack.selectedTechstackId).toBe(null);
+    expect(second.techstack.applicationKind).toBe(null);
   });
 
   it("imports only missing external secrets", () => {

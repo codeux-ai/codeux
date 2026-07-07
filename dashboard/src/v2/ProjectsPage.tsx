@@ -20,7 +20,8 @@ import {
 } from "lucide-preact";
 import type { Source, SourceStatus } from "./types.js";
 import { AddProjectModal, type AddProjectModalSubmission, type SourceType as AddProjectModalSourceType } from "./components/ui/AddProjectModal.js";
-import { buildGitHubModeProjectSettingsOverride } from "../lib/settings-updaters.js";
+import { buildProjectCreationSettingsOverride } from "../lib/settings-updaters.js";
+import { DEFAULT_DASHBOARD_SETTINGS } from "../lib/settings.js";
 import { StatusDot } from "./components/ui/StatusDot.js";
 import { WaveFluid } from "./components/ui/WaveFluid.js";
 import { BorderTrace } from "./components/ui/BorderTrace.js";
@@ -457,6 +458,7 @@ export const ProjectsPage: FunctionComponent = () => {
         quicksprints: true,
         previewScript: true,
         ci: true,
+        techstack: true,
     });
     const [activeFilter, setActiveFilter] = useState<Filter>('All');
     const {
@@ -545,6 +547,7 @@ export const ProjectsPage: FunctionComponent = () => {
             quicksprints: boolean;
             previewScript: boolean;
             ci: boolean;
+            techstack: boolean;
         },
     ) => {
         setRunningSetupProjectIds(prev => new Set(prev).add(projectId));
@@ -615,7 +618,11 @@ export const ProjectsPage: FunctionComponent = () => {
                 initMode: project.initMode,
                 remoteProvider: project.remoteProvider,
                 isPrivate: project.isPrivate,
-                ...(isLocalProject ? { settingsOverrides: buildGitHubModeProjectSettingsOverride("LOCAL") } : {}),
+                settingsOverrides: buildProjectCreationSettingsOverride({
+                    ...(isLocalProject ? { githubMode: "LOCAL" as const } : {}),
+                    selectedTechstackId: project.selectedTechstackId ?? DEFAULT_DASHBOARD_SETTINGS.techstackCatalog.defaultTechstackId,
+                    applicationKind: project.applicationKind ?? null,
+                }),
             });
             return;
         }
@@ -625,7 +632,7 @@ export const ProjectsPage: FunctionComponent = () => {
             sourceType: project.type,
             sourceRef: project.path,
             cloneDir: project.cloneDir,
-            ...(project.type === "local" ? { settingsOverrides: buildGitHubModeProjectSettingsOverride("LOCAL") } : {}),
+            ...(project.type === "local" ? { settingsOverrides: buildProjectCreationSettingsOverride({ githubMode: "LOCAL" }) } : {}),
         });
         if (project.setup?.enabled) {
             launchProjectSetup(createdProject.id, createdProject.name, project.setup.options);
@@ -803,7 +810,7 @@ export const ProjectsPage: FunctionComponent = () => {
                                         onDelete={() => { void deleteProject(source.id); }}
                                         onSetup={() => {
                                             setSetupProjectId(source.id);
-                                            setSetupOptions({ agents: true, quicksprints: true, previewScript: true, ci: true });
+                                            setSetupOptions({ agents: true, quicksprints: true, previewScript: true, ci: true, techstack: true });
                                             setSetupError(null);
                                         }}
                                         onOpenInvocation={() => {
@@ -864,6 +871,7 @@ export const ProjectsPage: FunctionComponent = () => {
                                     { key: "quicksprints", label: "Quicksprints", description: "Sprint templates." },
                                     { key: "previewScript", label: "Preview Script", description: "Container startup." },
                                     { key: "ci", label: "CI", description: "Basic checks." },
+                                    { key: "techstack", label: "Techstack", description: "Detect and assign from manifests." },
                                 ] as const).map((option) => (
                                     <button
                                         key={option.key}

@@ -128,7 +128,11 @@ Code UX seeds Playwright MCP as a default custom MCP server:
 
 The built-in `code_ux` MCP tool surface is controlled separately from custom MCP servers. Agent presets store MCP access in `mcp_access_json`: `codeUxEnabled` controls the built-in Code UX tools, while `linkedServerIds` selects custom MCP servers such as `playwright`.
 
-By default, the built-in `Worker` and `Project manager` agents link the `playwright` server and keep `code_ux` enabled. Generated task-coding roster agents created by Project Setup use the same default link when they are first created. Existing agents keep user-edited MCP access selections, so setup and sync do not overwrite custom server choices after creation.
+Agent-scoped provider runs are default-deny for built-in Code UX tools. Missing, malformed, or unconfigured agent MCP access resolves with `codeUxEnabled: false`, no linked custom servers, and no inherited `code_ux` connection. Explicitly saved `mcp_access_json` records are preserved and continue to control the agent. Non-agent project-manager MCP clients are still governed by system-level `mcpTools` settings rather than agent defaults.
+
+The built-in `Worker` and `Project manager` agents still seed the `playwright` custom MCP server where that link is intended, but this custom-server default no longer implies built-in Code UX tool access. Generated task-coding roster agents created by Project Setup use the same custom-server-only default when they are first created. Planning, QA, setup, clarification, CI-fix, merge-conflict, and other non-chat agents do not receive scheduler or management Code UX tools unless their preset explicitly enables them.
+
+The dashboard chat reply route has one narrow exception. When it resolves to the built-in/default reply agent, or to a configured reply preset without explicit MCP access, Code UX injects scheduler-only access: `codeUxEnabled` is true, the restricted `scheduler` tool is enabled, and `manage_scheduler`, `manage_tasks`, `manage_sprints`, `manage_settings`, `manage_code_ux`, and every other built-in Code UX tool are explicitly disabled. This exception is route-local; it does not change the Project manager agent's general MCP defaults or the system-level project-manager MCP surface.
 
 ## Internal Test Provider
 

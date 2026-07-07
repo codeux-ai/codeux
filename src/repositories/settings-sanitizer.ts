@@ -9,6 +9,10 @@ import type {
   RestartInvocationPolicy,
   RestartSprintPolicy,
   SkillToggle,
+  TechstackCatalogEntrySettings,
+  TechstackCatalogSettings,
+  TechstackItemSettings,
+  TechstackSelectionSettings,
 } from "../contracts/app-types.js";
 import { readBoolean, readPort, readString } from "../shared/config/value-readers.js";
 import { sanitizeCustomMcpServersWithDefaults, sanitizeMcpToolToggles } from "../mcp/mcp-tool-availability.js";
@@ -27,9 +31,12 @@ import {
   buildDefaultIntegrationProviders,
 } from "../domain/settings/provider-config-utils.js";
 import {
+  BUILTIN_CODE_UX_TECHSTACK,
+  BUILTIN_CODE_UX_TECHSTACK_ID,
   DEFAULT_DASHBOARD_SETTINGS,
   DEFAULT_AGENT_SELF_REFLECTION,
   DEFAULT_IMPORTER_SEARCH_LIMIT,
+  DEFAULT_PROJECT_TECHSTACK,
   DEFAULT_SKILLS,
   INTERNAL_SKILL_NAMES,
   INTERNAL_SKILL_SET,
@@ -147,6 +154,85 @@ export const sanitizeExternalImporterSettings = (
     documentId: readString(input.documentId, defaults.documentId).trim(),
     fileKey: readString(input.fileKey, defaults.fileKey).trim(),
     defaultSearchLimit: Math.max(1, Math.min(250, rawLimit || DEFAULT_IMPORTER_SEARCH_LIMIT)),
+  };
+};
+
+const cloneTechstackEntry = (entry: TechstackCatalogEntrySettings): TechstackCatalogEntrySettings => ({
+  ...entry,
+  items: entry.items.map((item) => ({ ...item })),
+});
+
+const cloneTechstackCatalog = (catalog: TechstackCatalogSettings): TechstackCatalogSettings => ({
+  defaultTechstackId: catalog.defaultTechstackId,
+  entries: catalog.entries.map((entry) => cloneTechstackEntry(entry)),
+});
+
+const TECHSTACK_ID_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,79}$/;
+
+const isValidTechstackId = (id: string): boolean => TECHSTACK_ID_PATTERN.test(id);
+
+const sanitizeTechstackItem = (value: unknown): TechstackItemSettings | null => {
+  const input = value && typeof value === "object" ? value as Record<string, unknown> : {};
+  const id = readString(input.id, "").trim();
+  const label = readString(input.label, "").trim();
+  return id && label && isValidTechstackId(id) ? { id, label } : null;
+};
+
+const sanitizeTechstackEntry = (value: unknown): TechstackCatalogEntrySettings | null => {
+  const input = value && typeof value === "object" ? value as Record<string, unknown> : {};
+  const id = readString(input.id, "").trim();
+  const label = readString(input.label, "").trim();
+  if (!id || !label || !isValidTechstackId(id)) {
+    return null;
+  }
+
+  const items: TechstackItemSettings[] = [];
+  const seenItems = new Set<string>();
+  if (Array.isArray(input.items)) {
+    for (const itemInput of input.items) {
+      const item = sanitizeTechstackItem(itemInput);
+      if (!item || seenItems.has(item.id)) {
+        continue;
+      }
+      items.push(item);
+      seenItems.add(item.id);
+    }
+  }
+
+  return { id, label, items };
+};
+
+const sanitizeTechstackCatalog = (value: unknown): TechstackCatalogSettings => {
+  const input = value && typeof value === "object" ? value as Record<string, unknown> : {};
+  const entries: TechstackCatalogEntrySettings[] = [cloneTechstackEntry(BUILTIN_CODE_UX_TECHSTACK)];
+  const seenEntries = new Set<string>([BUILTIN_CODE_UX_TECHSTACK_ID]);
+
+  if (Array.isArray(input.entries)) {
+    for (const entryInput of input.entries) {
+      const entry = sanitizeTechstackEntry(entryInput);
+      if (!entry || seenEntries.has(entry.id)) {
+        continue;
+      }
+      entries.push(entry);
+      seenEntries.add(entry.id);
+    }
+  }
+
+  const defaultTechstackId = readString(input.defaultTechstackId, "").trim();
+  return {
+    defaultTechstackId: seenEntries.has(defaultTechstackId) ? defaultTechstackId : BUILTIN_CODE_UX_TECHSTACK_ID,
+    entries,
+  };
+};
+
+const sanitizeTechstackSelection = (value: unknown): TechstackSelectionSettings => {
+  const input = value && typeof value === "object" ? value as Record<string, unknown> : {};
+  const selectedTechstackId = readString(input.selectedTechstackId, "").trim();
+  return {
+    selectedTechstackId: selectedTechstackId && isValidTechstackId(selectedTechstackId) ? selectedTechstackId : null,
+    applicationKind: input.applicationKind === "web" || input.applicationKind === "desktop"
+      ? input.applicationKind
+      : DEFAULT_PROJECT_TECHSTACK.applicationKind,
   };
 };
 
@@ -379,6 +465,8 @@ export const cloneDefaults = (externalHints?: ExternalSettingsHints): DashboardS
       buildDefaultIntegrationProviders(externalHints),
     ),
   },
+  techstackCatalog: cloneTechstackCatalog(DEFAULT_DASHBOARD_SETTINGS.techstackCatalog),
+  techstack: { ...DEFAULT_DASHBOARD_SETTINGS.techstack },
   git: {
     ...DEFAULT_DASHBOARD_SETTINGS.git,
     githubToken: externalHints?.resolved.githubToken || DEFAULT_DASHBOARD_SETTINGS.git.githubToken,
@@ -529,6 +617,8 @@ export const sanitizeSettings = (value: unknown, externalHints?: ExternalSetting
   };
 
   const aiProvider = sanitizeAiProvider(input, { externalHints });
+  const techstackCatalog = sanitizeTechstackCatalog(input.techstackCatalog ?? DEFAULT_DASHBOARD_SETTINGS.techstackCatalog);
+  const techstack = sanitizeTechstackSelection(input.techstack);
   const git = sanitizeGit(input, externalHints);
   const jira = sanitizeJira(input.jira, DEFAULT_DASHBOARD_SETTINGS.jira);
   if (externalHints?.resolved?.jiraToken) {
@@ -663,6 +753,8 @@ export const sanitizeSettings = (value: unknown, externalHints?: ExternalSetting
       ),
       invocationRouting: aiProvider.invocationRouting,
     },
+    techstackCatalog,
+    techstack,
     git,
     jira,
     notion,

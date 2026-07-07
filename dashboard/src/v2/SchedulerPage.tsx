@@ -2,9 +2,11 @@ import type { FunctionComponent, JSX } from "preact";
 import { useCallback, useEffect, useMemo, useState } from "preact/hooks";
 import {
   CalendarDays,
+  BellRing,
   Brain,
   Check,
   Clock3,
+  ListTodo,
   MessageCircle,
   Pause,
   Pencil,
@@ -45,6 +47,7 @@ import type { QuicksprintTemplateRecord } from "../../../src/contracts/quickspri
 
 type SchedulerView = "calendar" | "day";
 type ScheduleTimingMode = "absolute" | "after_sprint_end";
+type OperatorScheduleTargetType = Extract<ScheduleTargetType, "sprint" | "quicksprint" | "chat" | "memory_remediation">;
 type SchedulerFormInput = Omit<UpdateSchedulerEntryInput, "targetType"> & Pick<CreateSchedulerEntryInput, "targetType">;
 type FeedbackState = { tone: "idle" | "success" | "error"; message: string | null };
 
@@ -91,8 +94,26 @@ const TARGET_OPTIONS: Array<{
     activeClassName: "border-signal-500/35 bg-signal-500/10 shadow-[0_12px_34px_rgba(0,224,160,0.13)]",
     chipClassName: "bg-signal-500/12 text-signal-600 dark:text-signal-400",
   },
+  {
+    value: "agent_wakeup",
+    label: "Agent wakeup",
+    icon: BellRing,
+    tone: "text-fuchsia-500",
+    activeClassName: "border-fuchsia-500/35 bg-fuchsia-500/10 shadow-[0_12px_34px_rgba(217,70,239,0.13)]",
+    chipClassName: "bg-fuchsia-500/12 text-fuchsia-600 dark:text-fuchsia-400",
+  },
+  {
+    value: "task",
+    label: "Task",
+    icon: ListTodo,
+    tone: "text-cyan-500",
+    activeClassName: "border-cyan-500/35 bg-cyan-500/10 shadow-[0_12px_34px_rgba(6,182,212,0.13)]",
+    chipClassName: "bg-cyan-500/12 text-cyan-600 dark:text-cyan-400",
+  },
 ];
 
+const OPERATOR_TARGET_TYPES: OperatorScheduleTargetType[] = ["sprint", "quicksprint", "chat", "memory_remediation"];
+const FORM_TARGET_OPTIONS = TARGET_OPTIONS.filter((option) => isOperatorTargetType(option.value));
 const targetOptionByType = new Map(TARGET_OPTIONS.map((option) => [option.value, option]));
 
 const pad = (value: number): string => String(value).padStart(2, "0");
@@ -127,8 +148,25 @@ const formatTimeLabel = (iso: string): string => (
   new Date(iso).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })
 );
 
-const targetLabel = (targetType: ScheduleTargetType): string => (
-  targetType === "sprint" ? "Sprint" : targetType === "quicksprint" ? "Quicksprint" : targetType === "memory_remediation" ? "Memory" : "Chat"
+const targetLabel = (targetType: ScheduleTargetType): string => {
+  const option = targetOptionByType.get(targetType);
+  return option?.label || "Schedule";
+};
+
+function isOperatorTargetType(targetType: ScheduleTargetType): targetType is OperatorScheduleTargetType {
+  return OPERATOR_TARGET_TYPES.includes(targetType as OperatorScheduleTargetType);
+}
+
+const isOperatorEditableTarget = (targetType: ScheduleTargetType): targetType is OperatorScheduleTargetType => (
+  isOperatorTargetType(targetType)
+);
+
+const unsupportedEditReason = (targetType: ScheduleTargetType): string => (
+  `${targetLabel(targetType)} schedules are created by the secured MCP scheduler tool and cannot be edited in the dashboard form. Pause, resume, or delete remains available.`
+);
+
+const scheduleStatusLabel = (status: SchedulerEntryRecord["status"] | SchedulerOccurrence["status"] | undefined): string => (
+  status ? status.replaceAll("_", " ") : "scheduled"
 );
 
 const schedulerViewLabel = (view: SchedulerView): string => view === "calendar" ? "Calendar" : "24 Hours";
@@ -177,6 +215,32 @@ const scheduleTimingSummary = (entry: SchedulerEntryRecord, sprints: SprintRecor
     return `After ${sprintDisplayName(sprints, entry.scheduleAnchor.sourceSprintId)} ends${scheduleAnchorOffsetLabel(entry.scheduleAnchor.offsetMinutes)}`;
   }
   return `Next run: ${entry.nextRunAt ? new Date(entry.nextRunAt).toLocaleString() : "none"}`;
+};
+
+const scheduleTargetSummary = (
+  entry: SchedulerEntryRecord,
+  sprints: SprintRecord[],
+  templates: QuicksprintTemplateRecord[],
+): string => {
+  if (entry.targetType === "sprint") {
+    return entry.sprintTarget ? `Sprint: ${sprintDisplayName(sprints, entry.sprintTarget.sprintId)}` : "Sprint";
+  }
+  if (entry.targetType === "quicksprint") {
+    const templateId = entry.quicksprintTarget?.templateId;
+    const templateName = templateId ? templates.find((template) => template.id === templateId)?.name || templateId : "template";
+    return `Quicksprint: ${templateName}`;
+  }
+  if (entry.targetType === "chat") {
+    return entry.chatTarget?.threadId ? `Chat thread: ${entry.chatTarget.threadId}` : "Project chat message";
+  }
+  if (entry.targetType === "memory_remediation") {
+    return `Memory remediation: ${entry.memoryRemediationTarget?.mode === "ai" ? "AI review" : "deterministic cleanup"}`;
+  }
+  if (entry.targetType === "agent_wakeup") {
+    return entry.agentWakeupTarget?.threadId ? `Agent wakeup: ${entry.agentWakeupTarget.threadId}` : "Agent wakeup message";
+  }
+  const provider = entry.taskTarget?.provider ? ` · ${entry.taskTarget.provider}` : "";
+  return entry.taskTarget?.taskId ? `Task rerun: ${entry.taskTarget.taskId}${provider}` : "Task rerun";
 };
 
 const ProjectPlaceholder: FunctionComponent = () => (
@@ -383,6 +447,10 @@ export const SchedulerPage: FunctionComponent = () => {
   };
 
   const startEdit = (entry: SchedulerEntryRecord) => {
+    if (!isOperatorEditableTarget(entry.targetType)) {
+      setFeedback({ tone: "error", message: unsupportedEditReason(entry.targetType) });
+      return;
+    }
     setEditingEntry(entry);
     setEntryTitle(entry.title);
     setTargetType(entry.targetType);
@@ -461,6 +529,10 @@ export const SchedulerPage: FunctionComponent = () => {
       return;
     }
     setFeedback({ tone: "idle", message: null });
+    if (!isOperatorEditableTarget(targetType)) {
+      setFeedback({ tone: "error", message: unsupportedEditReason(targetType) });
+      return;
+    }
     const recurrence: Partial<ScheduleRecurrenceRule> = repeatEnabled && !isAnchoredTiming
       ? {
         frequency,
@@ -674,9 +746,10 @@ export const SchedulerPage: FunctionComponent = () => {
 
       <section className="grid gap-3 md:grid-cols-3">
         {[
-          { label: "Active entries", value: schedulerStats.activeCount, detail: "ready to fire", icon: Play, tone: "text-signal-500" },
-          { label: "Repeating", value: schedulerStats.repeatingCount, detail: "recurrence rules", icon: Repeat, tone: "text-signal-500" },
+          { id: "active", label: "Active entries", value: schedulerStats.activeCount, detail: "ready to fire", icon: Play, tone: "text-signal-500" },
+          { id: "repeating", label: "Repeating", value: schedulerStats.repeatingCount, detail: "recurrence rules", icon: Repeat, tone: "text-signal-500" },
           {
+            id: "next-run",
             label: "Next run",
             value: schedulerStats.nextOccurrence ? formatTimeLabel(schedulerStats.nextOccurrence.startsAt) : "None",
             detail: schedulerStats.nextOccurrence ? schedulerStats.nextOccurrence.title : "no upcoming work",
@@ -684,7 +757,7 @@ export const SchedulerPage: FunctionComponent = () => {
             tone: "text-ember-500",
           },
         ].map((item) => (
-          <div key={item.label} className="relative overflow-hidden rounded-2xl border border-black/[0.06] bg-white/70 p-4 shadow-[0_2px_12px_rgba(0,0,0,0.02)] backdrop-blur-2xl dark:border-white/[0.06] dark:bg-void-800/60 dark:shadow-[0_4px_16px_rgba(0,0,0,0.1)]">
+          <div key={item.label} data-testid={`scheduler-stat-${item.id}`} className="relative overflow-hidden rounded-2xl border border-black/[0.06] bg-white/70 p-4 shadow-[0_2px_12px_rgba(0,0,0,0.02)] backdrop-blur-2xl dark:border-white/[0.06] dark:bg-void-800/60 dark:shadow-[0_4px_16px_rgba(0,0,0,0.1)]">
             <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/80 to-transparent dark:via-white/10" />
             <div className="flex items-center justify-between gap-4">
               <div className="min-w-0">
@@ -720,7 +793,7 @@ export const SchedulerPage: FunctionComponent = () => {
             <span className="sr-only" aria-live="polite" aria-atomic="true">
               Selected schedule target: {targetLabel(targetType)}.
             </span>
-            {TARGET_OPTIONS.map((option) => (
+            {FORM_TARGET_OPTIONS.map((option) => (
               <button
                 key={option.value}
                 type="button"
@@ -1118,20 +1191,33 @@ export const SchedulerPage: FunctionComponent = () => {
                       <div className="mt-3 space-y-2">
                         {dayItems.slice(0, 5).map((occurrence) => {
                           const option = targetOptionByType.get(occurrence.targetType);
+                          const canEditOccurrence = isOperatorEditableTarget(occurrence.targetType);
+                          const editReason = canEditOccurrence ? "Edit schedule entry from occurrence" : unsupportedEditReason(occurrence.targetType);
                           return (
                             <div key={occurrence.id} className="rounded-xl border border-black/[0.04] bg-white/80 p-2 text-xs shadow-sm dark:border-white/[0.05] dark:bg-white/[0.04]">
                               <div className="flex items-center justify-between gap-2">
                                 <span className="font-bold text-slate-800 dark:text-white">{formatTimeLabel(occurrence.startsAt)}</span>
                                 <div className="flex items-center gap-1">
                                   <span className={`rounded-full px-1.5 py-0.5 text-[8px] font-black uppercase tracking-[0.12em] ${option?.chipClassName || "bg-slate-500/10 text-slate-500"}`}>{targetLabel(occurrence.targetType)}</span>
+                                  <span className="rounded-full bg-black/[0.04] px-1.5 py-0.5 text-[8px] font-black uppercase tracking-[0.12em] text-slate-500 dark:bg-white/[0.06] dark:text-slate-400">{scheduleStatusLabel(occurrence.status)}</span>
                                   <button
                                     type="button"
                                     onClick={(e) => {
                                       e.stopPropagation();
-                                      editOccurrence(occurrence);
+                                      if (canEditOccurrence) {
+                                        editOccurrence(occurrence);
+                                      } else {
+                                        setFeedback({ tone: "error", message: editReason });
+                                      }
                                     }}
-                                    className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-black/[0.06] bg-white/70 text-slate-600 transition-all duration-150 hover:bg-white hover:text-slate-950 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-300 dark:hover:bg-white/[0.05] dark:hover:text-white"
-                                    aria-label="Edit schedule entry from occurrence"
+                                    aria-disabled={!canEditOccurrence}
+                                    title={editReason}
+                                    className={`inline-flex h-5 w-5 items-center justify-center rounded-full border border-black/[0.06] bg-white/70 text-slate-600 transition-all duration-150 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-300 ${
+                                      canEditOccurrence
+                                        ? "hover:bg-white hover:text-slate-950 dark:hover:bg-white/[0.05] dark:hover:text-white"
+                                        : "cursor-not-allowed opacity-45"
+                                    }`}
+                                    aria-label={editReason}
                                   >
                                     <Pencil className="h-2.5 w-2.5" />
                                   </button>
@@ -1163,6 +1249,8 @@ export const SchedulerPage: FunctionComponent = () => {
                         )}
                         {hourItems.map((occurrence) => {
                           const option = targetOptionByType.get(occurrence.targetType);
+                          const canEditOccurrence = isOperatorEditableTarget(occurrence.targetType);
+                          const editReason = canEditOccurrence ? "Edit schedule entry from occurrence" : unsupportedEditReason(occurrence.targetType);
                           return (
                             <div key={occurrence.id} className="rounded-xl border border-black/[0.04] bg-white/80 p-3 shadow-sm dark:border-white/[0.05] dark:bg-white/[0.04]">
                               <div className="flex flex-wrap items-center justify-between gap-2">
@@ -1174,11 +1262,26 @@ export const SchedulerPage: FunctionComponent = () => {
                                   <span className={`rounded-full px-2 py-0.5 text-[9px] font-black uppercase tracking-[0.12em] ${option?.chipClassName || "bg-slate-500/10 text-slate-500"}`}>
                                     {targetLabel(occurrence.targetType)}
                                   </span>
+                                  <span className="rounded-full bg-black/[0.04] px-2 py-0.5 text-[9px] font-black uppercase tracking-[0.12em] text-slate-500 dark:bg-white/[0.06] dark:text-slate-400">
+                                    {scheduleStatusLabel(occurrence.status)}
+                                  </span>
                                   <button
                                     type="button"
-                                    onClick={() => editOccurrence(occurrence)}
-                                    className="inline-flex h-6 w-6 items-center justify-center rounded-full border border-black/[0.06] bg-white/70 text-slate-600 transition-all duration-150 hover:bg-white hover:text-slate-950 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-300 dark:hover:bg-white/[0.05] dark:hover:text-white"
-                                    aria-label="Edit schedule entry from occurrence"
+                                    onClick={() => {
+                                      if (canEditOccurrence) {
+                                        editOccurrence(occurrence);
+                                      } else {
+                                        setFeedback({ tone: "error", message: editReason });
+                                      }
+                                    }}
+                                    aria-disabled={!canEditOccurrence}
+                                    title={editReason}
+                                    className={`inline-flex h-6 w-6 items-center justify-center rounded-full border border-black/[0.06] bg-white/70 text-slate-600 transition-all duration-150 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-300 ${
+                                      canEditOccurrence
+                                        ? "hover:bg-white hover:text-slate-950 dark:hover:bg-white/[0.05] dark:hover:text-white"
+                                        : "cursor-not-allowed opacity-45"
+                                    }`}
+                                    aria-label={editReason}
                                   >
                                     <Pencil className="h-3 w-3" />
                                   </button>
@@ -1214,15 +1317,17 @@ export const SchedulerPage: FunctionComponent = () => {
 
               {(schedule?.entries || []).map((entry) => {
                 const option = targetOptionByType.get(entry.targetType);
+                const canEditEntry = isOperatorEditableTarget(entry.targetType);
+                const editReason = canEditEntry ? "Edit schedule entry" : unsupportedEditReason(entry.targetType);
                 return (
-                  <div key={entry.id} className="grid gap-3 rounded-2xl border border-black/[0.05] bg-white/60 p-4 shadow-sm transition-all duration-150 hover:-translate-y-0.5 hover:shadow-[0_4px_16px_rgba(0,0,0,0.04)] dark:border-white/[0.05] dark:bg-white/[0.03] md:grid-cols-[minmax(0,1fr)_auto] md:items-center">
+                  <div key={entry.id} data-testid={`scheduler-entry-${entry.id}`} className="grid gap-3 rounded-2xl border border-black/[0.05] bg-white/60 p-4 shadow-sm transition-all duration-150 hover:-translate-y-0.5 hover:shadow-[0_4px_16px_rgba(0,0,0,0.04)] dark:border-white/[0.05] dark:bg-white/[0.03] md:grid-cols-[minmax(0,1fr)_auto] md:items-center">
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
                         <span className={`rounded-full px-2 py-0.5 text-[9px] font-black uppercase tracking-[0.12em] ${option?.chipClassName || "bg-slate-500/10 text-slate-500"}`}>
                           {targetLabel(entry.targetType)}
                         </span>
                         <span className="rounded-full bg-black/[0.04] px-2 py-0.5 text-[9px] font-black uppercase tracking-[0.12em] text-slate-500 dark:bg-white/[0.06] dark:text-slate-400">
-                          {entry.status}
+                          {scheduleStatusLabel(entry.status)}
                         </span>
                         {entry.runCount > 0 && (
                           <span className="rounded-full border border-signal-500/20 bg-signal-500/10 px-2 py-0.5 text-[9px] font-black uppercase tracking-[0.12em] text-signal-600 dark:text-signal-400">
@@ -1233,6 +1338,7 @@ export const SchedulerPage: FunctionComponent = () => {
                       </div>
                       <h4 className="mt-2 truncate text-sm font-semibold text-slate-900 dark:text-white">{entry.title}</h4>
                       <p className="mt-1 text-xs font-medium text-slate-500 dark:text-slate-400">
+                        {scheduleTargetSummary(entry, sprints, templates)} · {" "}
                         {scheduleTimingSummary(entry, sprints)}
                         {entry.lastRunAt && ` · Last fired: ${new Date(entry.lastRunAt).toLocaleString()}`}
                       </p>
@@ -1244,8 +1350,14 @@ export const SchedulerPage: FunctionComponent = () => {
                       <button
                         type="button"
                         onClick={() => startEdit(entry)}
-                        className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-black/[0.06] bg-white/70 text-slate-600 transition-all duration-150 hover:bg-white hover:text-slate-950 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-300 dark:hover:bg-white/[0.05] dark:hover:text-white"
-                        aria-label="Edit schedule entry"
+                        aria-disabled={!canEditEntry}
+                        title={editReason}
+                        className={`inline-flex h-9 w-9 items-center justify-center rounded-full border border-black/[0.06] bg-white/70 text-slate-600 transition-all duration-150 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-300 ${
+                          canEditEntry
+                            ? "hover:bg-white hover:text-slate-950 dark:hover:bg-white/[0.05] dark:hover:text-white"
+                            : "cursor-not-allowed opacity-45"
+                        }`}
+                        aria-label={editReason}
                       >
                         <Pencil className="h-3.5 w-3.5" />
                       </button>

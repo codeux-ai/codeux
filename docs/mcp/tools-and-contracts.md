@@ -14,6 +14,7 @@ These cover:
 - `manage_tasks`
 - `manage_quicksprints`
 - `manage_scheduler`
+- `scheduler`
 - `manage_agents`
 - `manage_memory`
 - `manage_skills`
@@ -49,6 +50,7 @@ These cover:
 - `manage_tasks`
 - `manage_quicksprints`
 - `manage_scheduler`
+- `scheduler`
 - `manage_agents`
 - `manage_memory`
 - `manage_skills`
@@ -145,6 +147,19 @@ The parsed management envelope has:
 Approval responses are not errors. Calls that need human confirmation still return `approvalRequired: true` and do not set `isError`.
 
 Tool arguments are validated against `src/contracts/mcp-tool-definitions.ts` before dispatch. Invalid tool payload shapes, missing required schema fields, invalid enum values, and malformed approval envelopes fail as MCP `InvalidParams` errors before management action handlers run. Management action parser failures still use the standardized management error envelope described above, with sanitized validation messages and a `field` when the helper can identify one.
+
+## Scheduler Tools
+
+Code UX exposes two scheduler MCP surfaces:
+
+- `manage_scheduler` is the project-manager management surface. It can list, create, schedule sprints, schedule quicksprints, schedule chat messages, update entries, delete entries with approval, and run due entries. It remains unchanged for project-manager clients.
+- `scheduler` is the restricted agent-owned surface. It supports only `list`, `schedule_wakeup`, `schedule_task`, and `cancel`.
+
+The restricted `scheduler` tool accepts either an absolute `scheduledFor` ISO timestamp or one positive relative delay field, `delaySeconds` or `delayMinutes`. `schedule_wakeup` requires `projectId` and `bodyMarkdown`, and may include `title`, `timezone`, `threadId`, and `connectionId`. `schedule_task` requires `projectId` and `taskId`, and may include `title`, `timezone`, and a provider override.
+
+Every `scheduler` entry is persisted as an `agent_scheduler` target. The runtime stamps `origin: "agent_scheduler"`, `source: "agent_scheduler"`, and `createdByAgentId` from the current MCP agent context. `list` returns only entries created by the calling agent. `cancel` changes the matching entry status to `cancelled` only when the entry is an agent-scheduler wakeup or task entry created by that same agent. Dashboard-created entries, `manage_scheduler` entries, entries without agent-scheduler metadata, and entries created by another agent are rejected with the standard management validation envelope.
+
+The restricted tool intentionally does not expose due-entry execution, arbitrary update, recurrence editing, sprint scheduling, quicksprint scheduling, memory remediation scheduling, or global scheduler destructive controls.
 
 ### Destructive Action Approvals
 

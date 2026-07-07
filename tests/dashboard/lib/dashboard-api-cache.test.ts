@@ -1,7 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import {
   fetchLivePayload,
+  fetchOnboardingReadiness,
   getCachedLivePayload,
+  installOnboardingDependencies,
   clearLivePayloadCacheForTests,
   invalidateLivePayloadCache,
 } from "../../../dashboard/src/lib/api/dashboard-api.js";
@@ -144,5 +146,55 @@ describe("Dashboard API Cache", () => {
     await fetchLivePayload("p1");
     clearLivePayloadCacheForTests();
     expect(getCachedLivePayload("p1")).toBeNull();
+  });
+
+  it("posts explicit onboarding install confirmation and bypasses stale readiness inflight state", async () => {
+    const fetchJsonMock = vi.mocked(fetchJsonModule.fetchJson);
+    let resolveStaleReadiness: (value: unknown) => void = () => undefined;
+    const staleReadiness = new Promise((resolve) => {
+      resolveStaleReadiness = resolve;
+    });
+    const freshReadiness = {
+      checkedAt: "2026-07-07T00:00:00.000Z",
+      cluster: { status: "ready", label: "Cluster ready", detail: "Ready." },
+      dependencies: [],
+      providers: [],
+      installers: { platform: "linux", recommendedMode: "docker-engine-git", options: [] },
+    };
+    const installResult = {
+      mode: "docker-engine-git",
+      platform: "linux",
+      status: "success",
+      commands: [],
+      skippedDependencyGroups: [],
+      requiresPrivilege: false,
+      requiresManualDownload: false,
+      postInstallGuidance: [],
+      message: "Installed.",
+    };
+
+    fetchJsonMock
+      .mockReturnValueOnce(staleReadiness as Promise<any>)
+      .mockResolvedValueOnce(installResult as any)
+      .mockResolvedValueOnce(freshReadiness as any);
+
+    void fetchOnboardingReadiness();
+
+    await expect(installOnboardingDependencies("docker-engine-git")).resolves.toEqual(installResult);
+    expect(fetchJsonMock).toHaveBeenNthCalledWith(2, "/api/onboarding/dependencies/install", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ mode: "docker-engine-git", confirmInstall: true }),
+    });
+
+    await expect(fetchOnboardingReadiness()).resolves.toEqual(freshReadiness);
+    expect(fetchJsonMock).toHaveBeenCalledTimes(3);
+    resolveStaleReadiness({
+      checkedAt: "stale",
+      cluster: { status: "not_ready", label: "Cluster not ready", detail: "Stale." },
+      dependencies: [],
+      providers: [],
+      installers: { platform: "linux", recommendedMode: "docker-engine-git", options: [] },
+    });
   });
 });

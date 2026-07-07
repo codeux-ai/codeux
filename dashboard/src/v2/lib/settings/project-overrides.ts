@@ -9,7 +9,7 @@ import type {
   SkillToggle,
   SystemSettings,
 } from "../../../types.js";
-import { cloneGuardrails, DEFAULT_DASHBOARD_SETTINGS } from "../../../lib/settings.js";
+import { cloneGuardrails, cloneTechstackCatalog, DEFAULT_DASHBOARD_SETTINGS } from "../../../lib/settings.js";
 import { getHintApiKey } from "./provider-instances.js";
 
 const cloneMemorySettings = (memory: ProjectSettings["memory"]): ProjectSettings["memory"] => ({
@@ -74,6 +74,12 @@ const cloneCustomMcpServers = (servers: CustomMcpServer[] = []): CustomMcpServer
   env: server.env ? { ...server.env } : undefined,
   providers: server.providers ? [...server.providers] : undefined,
 }));
+
+const cloneTechstackSelection = (
+  techstack: ProjectSettings["techstack"] | undefined,
+): ProjectSettings["techstack"] | undefined => (
+  techstack ? { ...techstack } : undefined
+);
 
 export const cloneProjectProviders = (
   providers: ProjectSettings["aiProvider"]["providers"],
@@ -142,22 +148,6 @@ const defaultJiraSettings = (): SystemSettings["integrations"]["jira"] => ({
   closeTransitionName: "Done",
 });
 
-const defaultImporterSettings = (): SystemSettings["integrations"]["notion"] => ({
-  enabled: false,
-  apiToken: "",
-  apiSecret: "",
-  baseUrl: "",
-  workspaceId: "",
-  teamId: "",
-  teamKey: "",
-  projectId: "",
-  databaseId: "",
-  boardId: "",
-  documentId: "",
-  fileKey: "",
-  defaultSearchLimit: 25,
-});
-
 export const dashboardSettingsToProjectSettings = (settings: DashboardSettings): ProjectSettings => ({
   appearance: { ...settings.appearance },
   automationLevel: settings.automationLevel,
@@ -165,6 +155,7 @@ export const dashboardSettingsToProjectSettings = (settings: DashboardSettings):
     ...settings.automationInterventions,
   },
   aiProvider: cloneProjectAiProviderSettings(settings.aiProvider),
+  techstack: cloneTechstackSelection(settings.techstack) ?? { ...DEFAULT_DASHBOARD_SETTINGS.techstack },
   git: {
     githubMode: settings.git.githubMode,
     githubToken: settings.git.githubToken,
@@ -222,6 +213,7 @@ export const cloneProjectSettings = (settings: ProjectSettings): ProjectSettings
     ...settings.automationInterventions,
   },
   aiProvider: cloneProjectAiProviderSettings(settings.aiProvider),
+  techstack: cloneTechstackSelection(settings.techstack) ?? { ...DEFAULT_DASHBOARD_SETTINGS.techstack },
   git: {
     ...settings.git,
   },
@@ -269,15 +261,16 @@ export const cloneSystemSettings = (settings: SystemSettings): SystemSettings =>
   integrations: {
     ...settings.integrations,
     jira: settings.integrations.jira ? cloneJiraSettings(settings.integrations.jira) : defaultJiraSettings(),
-    notion: settings.integrations.notion ? cloneImporterSettings(settings.integrations.notion) : defaultImporterSettings(),
-    asana: settings.integrations.asana ? cloneImporterSettings(settings.integrations.asana) : defaultImporterSettings(),
-    linear: settings.integrations.linear ? cloneImporterSettings(settings.integrations.linear) : defaultImporterSettings(),
-    miro: settings.integrations.miro ? cloneImporterSettings(settings.integrations.miro) : defaultImporterSettings(),
-    lucid: settings.integrations.lucid ? cloneImporterSettings(settings.integrations.lucid) : defaultImporterSettings(),
-    figma: settings.integrations.figma ? cloneImporterSettings(settings.integrations.figma) : defaultImporterSettings(),
-    mural: settings.integrations.mural ? cloneImporterSettings(settings.integrations.mural) : defaultImporterSettings(),
+    notion: cloneImporterSettings(settings.integrations.notion),
+    asana: cloneImporterSettings(settings.integrations.asana),
+    linear: cloneImporterSettings(settings.integrations.linear),
+    miro: cloneImporterSettings(settings.integrations.miro),
+    lucid: cloneImporterSettings(settings.integrations.lucid),
+    figma: cloneImporterSettings(settings.integrations.figma),
+    mural: cloneImporterSettings(settings.integrations.mural),
     providers: cloneIntegrationProviders(settings.integrations.providers),
   },
+  techstackCatalog: cloneTechstackCatalog(settings.techstackCatalog ?? DEFAULT_DASHBOARD_SETTINGS.techstackCatalog),
   defaults: cloneProjectSettings(settings.defaults),
   mcpTools: cloneMcpTools(settings.mcpTools),
   customMcpServers: cloneCustomMcpServers(settings.customMcpServers),
@@ -307,11 +300,12 @@ export const applyExternalHintsToSystemSettings = (
   }
 
   const currentJira = settings.integrations.jira || defaultJiraSettings();
+  const clonedSettings = cloneSystemSettings(settings);
 
   return {
-    ...cloneSystemSettings(settings),
+    ...clonedSettings,
     integrations: {
-      ...cloneSystemSettings(settings).integrations,
+      ...clonedSettings.integrations,
       providers: nextProviders,
       githubToken: settings.integrations.githubToken || hints.resolved.githubToken || "",
       gitlabToken: settings.integrations.gitlabToken || hints.resolved.gitlabToken || "",

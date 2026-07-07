@@ -37,6 +37,7 @@ The category rail on the left includes:
 | **MCP tools** | Per-tool enable / disable. |
 | **Memory** | Active embedding model selection. |
 | **Agents** | Agent routing, markdown mirroring, persistent skill storage, storage attachments, and self-reflection criteria. |
+| **Techstacks** | System catalog management, protected built-in stack, project stack assignment, and web/desktop application kind. |
 | **Appearance** | Theme, navigation mode override, dashboard density. |
 | **Limits** | `maxFailures` emergency stop threshold and other safety caps. |
 
@@ -487,6 +488,23 @@ Related docs:
 - [Browser Preview](./browser.md)
 - [Security Hardening](../troubleshooting.md)
 
+### Techstacks
+
+<a id="techstacks"></a>
+
+Manages the system techstack catalog and per-project techstack/application-kind assignment.
+
+**What it controls:** System scope owns stack ids, stack names, technology items, and the catalog default. Project scope stores only the selected stack id and application kind, with explicit `Unassigned` support.
+
+**Recommended defaults:** Keep imported projects unassigned until setup detection or an operator chooses a stack. Use the built-in Code UX internal stack only for Code UX-style Preact dashboards; create custom stacks for other project families.
+
+**Risks and gotchas:** The built-in `code-ux-internal` stack cannot be removed. Removing a custom stack also clears system-default references to it; project assignments should be reviewed before deleting stacks that are in active use.
+
+Related docs:
+
+- [Configuration and Storage](../../developer/settings-reference.md)
+- [Settings Reference](../../developer/settings-reference.md)
+
 ### Project Markdown Mirror
 
 <a id="project-markdown-mirror"></a>
@@ -718,9 +736,9 @@ Lists built-in and custom MCP servers injected into provider CLI runtimes.
 
 **What it controls:** The list configures built-in tool access, custom server enablement, transport, provider restrictions, and server creation.
 
-**Recommended defaults:** Keep built-in tools enabled and restrict custom servers to the CLIs that need them.
+**Recommended defaults:** Keep global built-in tools available for trusted project-manager clients, but leave per-agent Code UX access default-deny unless a preset has a specific need. Restrict custom servers to the CLIs and agents that need them.
 
-**Risks and gotchas:** Broad custom MCP access can expose external tools to more providers than intended.
+**Risks and gotchas:** Broad custom MCP access can expose external tools to more providers than intended. Custom server links are separate from agent Code UX access; linking Playwright or another custom server does not imply built-in Code UX tools are enabled for that agent.
 
 Related docs:
 
@@ -733,11 +751,11 @@ Related docs:
 
 Controls which built-in Code UX MCP tool categories are available to containerized CLIs.
 
-**What it controls:** Tool-category and individual-tool toggles decide what providers may call on their next run.
+**What it controls:** Tool-category and individual-tool toggles decide what trusted provider and project-manager clients may call on their next run. Agent presets add their own access layer in the Agents editor.
 
-**Recommended defaults:** Disable only categories you know a provider should not access.
+**Recommended defaults:** Keep the global surface aligned with project-manager workflows. For individual agents, start with Code UX disabled. When an agent needs scheduling, enable scheduler-only access from the agent MCP manager before considering broader tools.
 
-**Risks and gotchas:** Disabling required tools can make provider workflows fail; enabling broad tools increases capability exposure.
+**Risks and gotchas:** Disabling required tools can make provider workflows fail; enabling broad tools increases capability exposure. The restricted `scheduler` tool lets an agent create its own wakeups or task reruns, while `manage_scheduler` and other management tools expose broader runtime control. Non-chat agents should not receive scheduler or management tools unless that capability is intentional.
 
 Related docs:
 

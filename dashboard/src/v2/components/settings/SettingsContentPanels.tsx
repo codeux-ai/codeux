@@ -5,6 +5,7 @@ import { SettingsAppearancePanel } from "./panels/SettingsAppearancePanel.js";
 import { SettingsModelsPanel } from "./panels/SettingsModelsPanel.js";
 import { SettingsSprintPanel } from "./panels/SettingsSprintPanel.js";
 import { SettingsBrowserPanel } from "./panels/SettingsBrowserPanel.js";
+import { SettingsTechstacksPanel } from "./panels/SettingsTechstacksPanel.js";
 import { SettingsAgentsPanel } from "./panels/SettingsAgentsPanel.js";
 import { SettingsMemoryPanel } from "./panels/SettingsMemoryPanel.js";
 import { SettingsIntegrationsPanel } from "./panels/SettingsIntegrationsPanel.js";
@@ -34,6 +35,8 @@ export const SettingsContentPanels: FunctionComponent<{
         return <SettingsSprintPanel state={state} />;
       case "browser":
         return <SettingsBrowserPanel state={state} />;
+      case "techstacks":
+        return <SettingsTechstacksPanel state={state} />;
       case "agents":
         return <SettingsAgentsPanel state={state} />;
       case "memory":
