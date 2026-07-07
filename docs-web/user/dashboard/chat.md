@@ -17,6 +17,10 @@ A *thread* is a persistent conversation with an agent. Each thread has:
 - A **routing config** — which agent preset and provider answers when you post a message.
 - A **session** — the underlying provider session. Sessions can be **compacted** (summarised) to fit within context limits.
 
+New dashboard chat threads derive an 8-word-or-less title from the first visible user message. Code UX stores the title in sqlite and mirrors it to `.code-ux/conversations/<thread-id>/session-title.md` inside the project checkout; manual title edits update both places. Prompt preparation also includes a title-refresh instruction every 20 provider invocations so long-running conversations can update their title from current context.
+
+To rename a thread, use the edit control beside the active thread title. The inline editor supports pointer and keyboard workflows: Enter saves, Escape cancels, explicit save/cancel buttons are available, and empty titles are rejected before the request is sent. Successful renames update the active header and left rail from the returned backend thread record without reloading the transcript. Long titles wrap or truncate inside the header, while rail titles clamp to two readable lines.
+
 To start a new thread, click **+ New thread**. To change the responding agent, open the thread header dropdown and pick from the list of agent presets defined for this project.
 
 Each post triggers a routed invocation: the dashboard records the request, dispatches it to the chosen provider via the worker assignment service (routed through the `dashboard_reply` invocation type), and streams the reply back into the thread.

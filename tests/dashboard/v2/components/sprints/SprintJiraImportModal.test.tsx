@@ -44,6 +44,14 @@ const baseIssue = {
   sourceProvider: "jira" as const,
 };
 
+const inWorkIssue = {
+  ...baseIssue,
+  key: "OPS-77",
+  title: "Already being handled",
+  url: "https://acme.atlassian.net/browse/OPS-77",
+  state: "In Work",
+};
+
 describe("SprintJiraImportModal", () => {
   it("loads the default project key and uses guided Jira filters", async () => {
     vi.mocked(fetchProjectEffectiveSettings).mockResolvedValue({
@@ -86,12 +94,81 @@ describe("SprintJiraImportModal", () => {
     expect(screen.getByRole("button", { name: /^search$/i })).toBeEnabled();
     expect(screen.getByRole("button", { name: /import issues disabled until jira issues are selected/i })).toBeDisabled();
     expect(screen.getByRole("button", { name: /advanced jira filters/i })).toHaveAttribute("aria-expanded", "false");
+    expect(screen.getByRole("checkbox", { name: /hide in work/i })).toBeChecked();
     expect(document.getElementById("jira-import-advanced-filters")).toHaveClass("hidden");
     expect(screen.getAllByText(/Default: open Jira issues, recently updated first/i).length).toBeGreaterThan(0);
+    expect(screen.getByLabelText("Active Jira filters")).toHaveTextContent(/Visibility\s*Hide in Work/i);
     expect([...document.querySelectorAll("[aria-live='polite']")].some((node) => (
       node.textContent?.replace(/\s+/g, " ").includes("0 linked, 0 special")
     ))).toBe(true);
     expect(screen.getByRole("button", { name: /import jira backlog/i })).toHaveAttribute("aria-pressed", "false");
+  });
+
+  it("hides Jira issues already in work by default", async () => {
+    vi.mocked(fetchProjectEffectiveSettings).mockResolvedValue({
+      settings: { jira: { defaultProject: "OPS" } },
+    } as never);
+    vi.mocked(searchJiraIssues).mockResolvedValue([baseIssue, inWorkIssue]);
+
+    render(<SprintJiraImportModal projectId="project-1" onClose={vi.fn()} onImport={vi.fn()} />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Import Jira backlog")).toBeInTheDocument();
+    });
+
+    expect(screen.queryByText("Already being handled")).not.toBeInTheDocument();
+    expect(screen.getByText(/1 visible result/i)).toBeInTheDocument();
+  });
+
+  it("shows in-work Jira issues when Hide in Work is unchecked", async () => {
+    vi.mocked(fetchProjectEffectiveSettings).mockResolvedValue({
+      settings: { jira: { defaultProject: "OPS" } },
+    } as never);
+    vi.mocked(searchJiraIssues).mockResolvedValue([baseIssue, inWorkIssue]);
+
+    render(<SprintJiraImportModal projectId="project-1" onClose={vi.fn()} onImport={vi.fn()} />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Import Jira backlog")).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole("checkbox", { name: /hide in work/i }));
+
+    expect(screen.getByText("Already being handled")).toBeInTheDocument();
+    expect(screen.getByText(/2 visible results/i)).toBeInTheDocument();
+  });
+
+  it("prunes selected in-work Jira issues when Hide in Work is re-enabled", async () => {
+    vi.mocked(fetchProjectEffectiveSettings).mockResolvedValue({
+      settings: { jira: { defaultProject: "OPS" } },
+    } as never);
+    vi.mocked(searchJiraIssues).mockResolvedValue([baseIssue, inWorkIssue]);
+
+    render(
+      <SprintJiraImportModal
+        projectId="project-1"
+        onClose={vi.fn()}
+        onImport={vi.fn()}
+        onImportSpecialTasks={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("Import Jira backlog")).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole("checkbox", { name: /hide in work/i }));
+    fireEvent.click(screen.getByText("Already being handled"));
+    expect(screen.getByText(/1 selected issue will be imported\. 1 linked, 0 special tasks\./i)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /quality task/i }));
+    expect(screen.getByText(/1 selected issue will be imported\. 0 linked, 1 special task\./i)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("checkbox", { name: /hide in work/i }));
+
+    expect(screen.queryByText("Already being handled")).not.toBeInTheDocument();
+    expect(screen.getByText("No issues selected.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /import issues disabled until jira issues are selected/i })).toBeDisabled();
   });
 
   it("supports exact keys, user filters, labels, date windows, sort controls, and JQL override", async () => {

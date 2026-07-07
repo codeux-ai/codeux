@@ -130,7 +130,7 @@ describe("Dashboard Chat API", () => {
       deleteAgentPreset: () => {},
       listConversationThreads: () => [],
       createConversationThread: () => ({} as any),
-      updateConversationThread: () => ({} as any),
+      updateConversationThread: (threadId, input) => chatThreadRuntimeService.updateConversationThread(threadId, input),
       deleteConversationThread: () => {},
       listConversationMessages: () => [],
       postConversationMessage: () => ({} as any),
@@ -151,6 +151,24 @@ describe("Dashboard Chat API", () => {
     });
     serversToClose.push(handle.server);
     const baseUrl = `http://127.0.0.1:${handle.port}`;
+
+    const titleResponse = await fetch(`${baseUrl}/api/conversations/threads/${thread.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        title: "Manual Session Title",
+        runtimeState: { routeKind: "virtual", replayRequired: false },
+      }),
+    });
+    expect(titleResponse.status).toBe(200);
+    const titledThread = await titleResponse.json() as any;
+    expect(titledThread.title).toBe("Manual Session Title");
+    expect(titledThread.runtimeState).toMatchObject({
+      routeKind: "virtual",
+      replayRequired: false,
+    });
+    await expect(fs.readFile(path.join(project.baseDir, ".code-ux", "conversations", thread.id, "session-title.md"), "utf8"))
+      .resolves.toBe("Manual Session Title\n");
 
     const routeResponse = await fetch(`${baseUrl}/api/conversations/threads/${thread.id}/route`, {
       method: "PUT",
@@ -184,6 +202,7 @@ describe("Dashboard Chat API", () => {
         model: "gpt-4",
       },
     });
+    expect(compactedThread.title).toBe("Manual Session Title");
   });
 
   it("validates worker availability and virtual provider configuration", async () => {

@@ -172,6 +172,7 @@ export interface CreateDashboardConversationMessageInput {
 }
 
 export interface UpdateConversationThreadInput {
+  title?: string;
   connectionId?: string | null;
   runtimeState?: ConversationRuntimeState | null;
 }

@@ -241,7 +241,7 @@ export interface DashboardServerOptions {
   writeInstructionFile: (projectId: string, fileId: string, content: string) => Promise<InstructionFileContent> | InstructionFileContent;
   listConversationThreads: (projectId: string) => ConversationThreadRecord[];
   createConversationThread: (projectId: string, input: CreateConversationThreadInput) => ConversationThreadRecord;
-  updateConversationThread: (threadId: string, input: UpdateConversationThreadInput) => ConversationThreadRecord;
+  updateConversationThread: (threadId: string, input: UpdateConversationThreadInput) => Promise<ConversationThreadRecord> | ConversationThreadRecord;
   updateThreadRoute: (threadId: string, input: UpdateConversationThreadRouteInput) => ConversationThreadRecord;
   compactThreadSession: (threadId: string) => Promise<ConversationThreadRecord> | ConversationThreadRecord;
   cancelThreadTurn?: (threadId: string) => Promise<{ cancelled: boolean }> | { cancelled: boolean };
