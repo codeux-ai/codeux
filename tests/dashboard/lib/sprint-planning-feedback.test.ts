@@ -3,6 +3,7 @@ import {
   getPlanningCancelledMessage,
   getPlanningFeedback,
   getPlanningPendingMessage,
+  SHIP_LOOP_MS,
 } from "../../../dashboard/src/v2/lib/sprint-planning-feedback.js";
 
 describe("getPlanningFeedback", () => {
@@ -67,13 +68,57 @@ describe("getPlanningFeedback", () => {
     expect(oneAndHalf.shipProgress).toBeCloseTo(0.5, 1);
   });
 
+  it("should expose offscreen ship visual travel states", () => {
+    const start = getPlanningFeedback("plan_only", 0);
+    expect(start.shipVisual).toEqual({
+      trackXPercent: -20,
+      opacity: 1,
+      visible: true,
+      phase: "entering",
+    });
+
+    const midTrack = getPlanningFeedback("plan_only", SHIP_LOOP_MS * 0.45);
+    expect(midTrack.shipProgress).toBeCloseTo(0.45);
+    expect(midTrack.shipVisual.trackXPercent).toBeCloseTo(50);
+    expect(midTrack.shipVisual.opacity).toBe(1);
+    expect(midTrack.shipVisual.visible).toBe(true);
+    expect(midTrack.shipVisual.phase).toBe("crossing");
+
+    const rightExit = getPlanningFeedback("plan_only", SHIP_LOOP_MS * 0.82);
+    expect(rightExit.shipVisual.trackXPercent).toBeGreaterThan(100);
+    expect(rightExit.shipVisual.opacity).toBe(1);
+    expect(rightExit.shipVisual.visible).toBe(true);
+    expect(rightExit.shipVisual.phase).toBe("exiting");
+
+    const wrap = getPlanningFeedback("plan_only", SHIP_LOOP_MS * 0.95);
+    expect(wrap.shipVisual).toEqual({
+      trackXPercent: -20,
+      opacity: 0,
+      visible: false,
+      phase: "hidden",
+    });
+
+    const leftSpawn = getPlanningFeedback("plan_only", SHIP_LOOP_MS);
+    expect(leftSpawn.shipProgress).toBe(0);
+    expect(leftSpawn.shipVisual).toEqual({
+      trackXPercent: -20,
+      opacity: 1,
+      visible: true,
+      phase: "entering",
+    });
+  });
+
   it("should advance stage text independently from ship loop", () => {
     // At 100s, text should be at last stage but ship still loops
     const late = getPlanningFeedback("plan_only", 100000);
+    const sameLoopPosition = getPlanningFeedback("plan_only", 4000);
     expect(late.text).toBe("Finalizing sprint structure...");
     expect(late.progress).toBeGreaterThan(0.95);
     // shipProgress loops: 100000 % 12000 = 4000, 4000/12000 ≈ 0.333
     expect(late.shipProgress).toBeCloseTo(4000 / 12000, 1);
+    expect(late.shipVisual.trackXPercent).toBeCloseTo(sameLoopPosition.shipVisual.trackXPercent);
+    expect(late.shipVisual.phase).toBe(sameLoopPosition.shipVisual.phase);
+    expect(sameLoopPosition.text).not.toBe(late.text);
   });
 
   it("returns state-specific pending and cancellation copy", () => {
