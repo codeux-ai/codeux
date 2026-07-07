@@ -21,7 +21,7 @@ pnpm run lint
 
 - Run tests
 ```bash
-pnpm test
+pnpm run test
 ```
 
 - Run backend tests only
