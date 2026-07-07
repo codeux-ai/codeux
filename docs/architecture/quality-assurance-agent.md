@@ -146,7 +146,7 @@ Task-level prompt scope:
 - QA must not tell the current coding session to implement, restore, or modify another task's scope
 - when task-level QA requests changes, `fixInstructions` must target the current task's coding session and `targetTaskKey` must identify that current task
 
-If task QA is still pending, running, or has failed without exhausting `maxTaskReviewRuns`, Code UX marks the task merge state as `QA_PENDING` and keeps the sprint active instead of auto-merging.
+If task QA is still pending, running, or has failed without exhausting `maxTaskReviewRuns`, Code UX marks the task merge state as `QA_PENDING` and keeps the sprint active instead of auto-merging. If QA is exhausted and configured to `ESCALATE_TO_HUMAN`, the task is held in `QA_REVIEW_FAILED` and will not be merged or marked complete until a human resolves it.
 
 Recovery guarantees:
 
