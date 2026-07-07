@@ -67,7 +67,10 @@ import { getRepoDebugLogPath, CODE_UX_SERVICE_NAME } from "../../shared/config/c
 import { getProjectLiveSnapshot } from "../live/project-live-snapshot.js";
 import { DashboardSnapshotCache, mapAssignedWorkers } from "./dashboard-snapshot-cache.js";
 import { prepareGitProjectCreateInput } from "../../services/project-git-clone-service.js";
-import { executeOnboardingDependencyInstall } from "../../services/onboarding-dependency-installer-service.js";
+import {
+  detectOnboardingInstallerEnvironment,
+  executeOnboardingDependencyInstall,
+} from "../../services/onboarding-dependency-installer-service.js";
 import {
   getOnboardingRuntimeReadiness,
   invalidateOnboardingRuntimeReadinessCache,
@@ -406,7 +409,10 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<DashboardS
   });
 
   const getDefaultOnboardingRuntimeReadiness = deps.getOnboardingRuntimeReadiness
-    ?? (() => getOnboardingRuntimeReadiness(deps.settingsRepository.getSystemSettings()));
+    ?? (async () => getOnboardingRuntimeReadiness(
+      deps.settingsRepository.getSystemSettings(),
+      await detectOnboardingInstallerEnvironment(),
+    ));
 
   const handle = await setupDashboardServer({
     app: deps.app,
@@ -763,10 +769,14 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<DashboardS
     getOnboardingRuntimeReadiness: getDefaultOnboardingRuntimeReadiness,
     installOnboardingDependencies: deps.installOnboardingDependencies
       ?? (async (mode) => {
-        const readiness = await getDefaultOnboardingRuntimeReadiness();
+        const environment = await detectOnboardingInstallerEnvironment();
+        const readiness = deps.getOnboardingRuntimeReadiness
+          ? await getDefaultOnboardingRuntimeReadiness()
+          : await getOnboardingRuntimeReadiness(deps.settingsRepository.getSystemSettings(), environment);
         return executeOnboardingDependencyInstall({
           mode,
           dependencies: readiness.dependencies,
+          environment,
           invalidateReadinessCache: invalidateOnboardingRuntimeReadinessCache,
         });
       }),

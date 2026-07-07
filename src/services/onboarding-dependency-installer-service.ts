@@ -71,8 +71,10 @@ interface CommandPlan {
 const INSTALL_TIMEOUT_MS = 120_000;
 const PACKAGE_INDEX_TIMEOUT_MS = 120_000;
 const SERVICE_TIMEOUT_MS = 20_000;
+const DETECTION_TIMEOUT_MS = 2_000;
 const MAX_COMMAND_STDOUT_CHARS = 4_000;
 const MAX_COMMAND_STDERR_CHARS = 4_000;
+const MAX_DETECTION_OUTPUT_CHARS = 200;
 const OUTPUT_SUMMARY_CHARS = 1_200;
 
 const VALID_MODES: ReadonlySet<OnboardingDependencyInstallMode> = new Set([
@@ -88,6 +90,18 @@ const LINUX_PACKAGE_MANAGERS: ReadonlySet<OnboardingLinuxPackageManager> = new S
   "pacman",
 ]);
 
+const LINUX_PACKAGE_MANAGER_PROBES: ReadonlyArray<{
+  packageManager: OnboardingLinuxPackageManager;
+  command: string;
+  args: string[];
+}> = [
+  { packageManager: "apt", command: "apt-get", args: ["--version"] },
+  { packageManager: "dnf", command: "dnf", args: ["--version"] },
+  { packageManager: "yum", command: "yum", args: ["--version"] },
+  { packageManager: "zypper", command: "zypper", args: ["--version"] },
+  { packageManager: "pacman", command: "pacman", args: ["--version"] },
+];
+
 const normalizePlatform = (platform: NodeJS.Platform | OnboardingInstallerPlatform | undefined): OnboardingInstallerPlatform => {
   const value = platform ?? process.platform;
   if (value === "darwin" || value === "win32" || value === "linux") {
@@ -99,6 +113,59 @@ const normalizePlatform = (platform: NodeJS.Platform | OnboardingInstallerPlatfo
 const normalizePackageManager = (packageManager: OnboardingLinuxPackageManager | null | undefined): OnboardingLinuxPackageManager | null => (
   packageManager && LINUX_PACKAGE_MANAGERS.has(packageManager) ? packageManager : null
 );
+
+const detectCommandAvailable = async (command: string, args: string[]): Promise<boolean> => {
+  try {
+    const result = await commandRunner.run(command, args, {
+      cwd: process.cwd(),
+      timeout: DETECTION_TIMEOUT_MS,
+      maxStdoutChars: MAX_DETECTION_OUTPUT_CHARS,
+      maxStderrChars: MAX_DETECTION_OUTPUT_CHARS,
+    });
+    return result.ok;
+  } catch {
+    return false;
+  }
+};
+
+const detectLinuxPackageManager = async (): Promise<OnboardingLinuxPackageManager | null> => {
+  for (const probe of LINUX_PACKAGE_MANAGER_PROBES) {
+    if (await detectCommandAvailable(probe.command, probe.args)) {
+      return probe.packageManager;
+    }
+  }
+  return null;
+};
+
+export const detectOnboardingInstallerEnvironment = async (
+  platformInput: NodeJS.Platform | OnboardingInstallerPlatform = process.platform,
+): Promise<OnboardingInstallerEnvironment> => {
+  const platform = normalizePlatform(platformInput);
+  const environment: OnboardingInstallerEnvironment = { platform };
+
+  if (platform === "linux") {
+    const getUid = (process as NodeJS.Process & { getuid?: () => number }).getuid;
+    const isRoot = typeof getUid === "function" ? getUid() === 0 : false;
+    environment.linuxPackageManager = await detectLinuxPackageManager();
+    environment.systemctlAvailable = await detectCommandAvailable("systemctl", ["--version"]);
+    environment.isRoot = isRoot;
+    environment.passwordlessSudoAvailable = isRoot
+      ? true
+      : await detectCommandAvailable("sudo", ["-n", "true"]);
+    return environment;
+  }
+
+  if (platform === "darwin") {
+    environment.homebrewAvailable = await detectCommandAvailable("brew", ["--version"]);
+    return environment;
+  }
+
+  if (platform === "win32") {
+    environment.wingetAvailable = await detectCommandAvailable("winget", ["--version"]);
+  }
+
+  return environment;
+};
 
 const isDependencyReady = (dependencies: OnboardingDependencyCheck[], id: string): boolean => (
   dependencies.find((dependency) => dependency.id === id)?.status === "ready"
@@ -160,7 +227,7 @@ const commandResultFromExecution = (
   code: result.code,
   stdoutSummary: boundText(result.stdout),
   stderrSummary: boundText(result.stderr),
-  message: result.ok ? undefined : result.stderr || result.stdout || `Command exited with code ${result.code ?? "unknown"}.`,
+  message: result.ok ? undefined : `Command failed with exit code ${result.code ?? "unknown"}. Review bounded command summaries for details.`,
 });
 
 const commandResultFromThrownError = (
@@ -180,7 +247,7 @@ const commandResultFromThrownError = (
   code: null,
   stdoutSummary: "",
   stderrSummary: boundText(error instanceof Error ? error.message : String(error)),
-  message: error instanceof Error ? error.message : String(error),
+  message: "Command could not be started. Review bounded error summary for details.",
 });
 
 const platformLabel = (platform: OnboardingInstallerPlatform): string => {

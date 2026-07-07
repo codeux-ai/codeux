@@ -228,6 +228,33 @@ describe("OnboardingInstallationStep", () => {
     expect(screen.getAllByRole("button", { name: "Recheck readiness" }).length).toBeGreaterThan(0);
   });
 
+  it("bounds failed command messages before rendering installer output", () => {
+    const longMessage = `raw-start-${"x".repeat(700)}-raw-end`;
+
+    render(
+      <OnboardingInstallationStep
+        clusterReady={false}
+        readiness={readiness()}
+        osInfo={osInfo}
+        lastInstallResult={installResult({
+          commands: [
+            {
+              ...installResult().commands[0],
+              message: longMessage,
+            },
+          ],
+        })}
+      />,
+    );
+
+    expect(screen.queryByText(longMessage)).not.toBeInTheDocument();
+    expect(screen.getByText((content) => (
+      content.startsWith("...")
+      && content.endsWith("-raw-end")
+      && content.length <= 503
+    ))).toBeInTheDocument();
+  });
+
   it("announces install progress in a polite live region", () => {
     render(
       <OnboardingInstallationStep
