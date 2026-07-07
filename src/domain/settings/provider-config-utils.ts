@@ -19,7 +19,8 @@ import {
   DEFAULT_PROVIDER_CONFIG_NAMES,
   DEFAULT_PROVIDER_SETTINGS,
   PROVIDER_IDS,
-  THINKING_MODES,
+  isProviderThinkingModeSupported,
+  normalizeProviderThinkingMode,
   VIRTUAL_WORKER_PROVIDERS,
 } from "../../repositories/settings-defaults.js";
 
@@ -383,10 +384,8 @@ const normalizeWeight = (value: unknown, fallback: number): number => {
   return Math.max(0, Math.round(value));
 };
 
-const normalizeThinkingMode = (value: unknown, fallback: ThinkingMode): ThinkingMode => (
-  typeof value === "string" && THINKING_MODES.includes(value as ThinkingMode)
-    ? value as ThinkingMode
-    : fallback
+const normalizeThinkingMode = (providerId: ProviderId, value: unknown, fallback: ThinkingMode): ThinkingMode => (
+  normalizeProviderThinkingMode(providerId, value, fallback)
 );
 
 const normalizeMaxConcurrentTasks = (value: unknown, fallback: number): number => (
@@ -423,7 +422,7 @@ export const buildProjectProviderSettings = (
         ? directSource.model.trim()
         : defaults.model,
       weight: normalizeWeight(directSource.weight, defaults.weight),
-      thinkingMode: normalizeThinkingMode(directSource.thinkingMode, defaults.thinkingMode),
+      thinkingMode: normalizeThinkingMode(integration.provider, directSource.thinkingMode, defaults.thinkingMode),
       maxConcurrentTasks: normalizeMaxConcurrentTasks(directSource.maxConcurrentTasks, defaults.maxConcurrentTasks),
     };
   }
@@ -449,7 +448,7 @@ export const buildDashboardProviderSettings = (
             ? projectProvider.model
             : defaults.model,
           weight: normalizeWeight(projectProvider.weight, defaults.weight),
-          thinkingMode: normalizeThinkingMode(projectProvider.thinkingMode, defaults.thinkingMode),
+          thinkingMode: normalizeThinkingMode(providerId, projectProvider.thinkingMode, defaults.thinkingMode),
           maxConcurrentTasks: normalizeMaxConcurrentTasks(projectProvider.maxConcurrentTasks, defaults.maxConcurrentTasks),
           apiKey: integrationProviders[providerConfigId]?.apiKey || "",
           mountAuth: integrationProviders[providerConfigId]?.mountAuth
@@ -556,8 +555,8 @@ export const resolveInvocationProviderOverrides = (
     if (typeof rawValue.weight === "number" && Number.isFinite(rawValue.weight)) {
       override.weight = Math.max(0, Math.round(rawValue.weight));
     }
-    if (typeof rawValue.thinkingMode === "string" && THINKING_MODES.includes(rawValue.thinkingMode as ThinkingMode)) {
-      override.thinkingMode = rawValue.thinkingMode as ThinkingMode;
+    if (typeof rawValue.thinkingMode === "string" && isProviderThinkingModeSupported(providers[providerConfigId].provider, rawValue.thinkingMode)) {
+      override.thinkingMode = normalizeProviderThinkingMode(providers[providerConfigId].provider, rawValue.thinkingMode);
     }
 
     if (Object.keys(override).length > 0) {

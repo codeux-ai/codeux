@@ -23,6 +23,8 @@ import type {
   VirtualWorkerProvider,
   WorkerExecutionMode,
   ThinkingMode,
+  ThinkingModeOption,
+  LegacyThinkingMode,
 } from "../contracts/app-types.js";
 import { DEFAULT_SPRINT_BRANCH_SCHEME } from "../domain/sprint/branch-name-generator.js";
 import { DEFAULT_TASK_PR_TITLE_SCHEME } from "../domain/git/task-pr-title-template.js";
@@ -100,7 +102,121 @@ export const DEFAULT_PR_DESCRIPTION_SETTINGS: PrDescriptionSettings = {
 
 export const PROVIDER_IDS: ProviderId[] = ["jules", "gemini", "codex", "claude-code", "qwen-code", "opencode", "antigravity", "mockup-cli"];
 export const PUBLIC_PROVIDER_IDS: ProviderId[] = ["jules", "gemini", "codex", "claude-code", "qwen-code", "opencode", "antigravity"];
-export const THINKING_MODES: ThinkingMode[] = ["SMALL", "MEDIUM", "HIGH"];
+export const LEGACY_THINKING_MODES: LegacyThinkingMode[] = ["SMALL", "MEDIUM", "HIGH"];
+export const PROVIDER_THINKING_MODE_CATALOG = {
+  gemini: [
+    { value: "minimal", label: "Minimal" },
+    { value: "low", label: "Low" },
+    { value: "medium", label: "Medium" },
+    { value: "high", label: "High" },
+  ],
+  codex: [
+    { value: "low", label: "Low" },
+    { value: "medium", label: "Medium" },
+    { value: "high", label: "High" },
+    { value: "xhigh", label: "Extra High" },
+  ],
+  "claude-code": [
+    { value: "low", label: "Low" },
+    { value: "medium", label: "Medium" },
+    { value: "high", label: "High" },
+    { value: "xhigh", label: "Extra High" },
+    { value: "max", label: "Max" },
+  ],
+  "qwen-code": [
+    { value: "low", label: "Low" },
+    { value: "medium", label: "Medium" },
+    { value: "high", label: "High" },
+    { value: "xhigh", label: "Extra High" },
+    { value: "max", label: "Max" },
+  ],
+  opencode: [
+    { value: "none", label: "None" },
+    { value: "minimal", label: "Minimal" },
+    { value: "low", label: "Low" },
+    { value: "medium", label: "Medium" },
+    { value: "high", label: "High" },
+    { value: "xhigh", label: "Extra High" },
+    { value: "max", label: "Max" },
+  ],
+  antigravity: [
+    { value: "low", label: "Low" },
+    { value: "high", label: "High" },
+  ],
+} as const satisfies Partial<Record<ProviderId, readonly ThinkingModeOption[]>>;
+export const THINKING_MODES: ThinkingMode[] = [
+  ...new Set<ThinkingMode>([
+    ...LEGACY_THINKING_MODES,
+    ...Object.values(PROVIDER_THINKING_MODE_CATALOG).flat().map((option) => option.value),
+  ]),
+];
+export const DEFAULT_PROVIDER_THINKING_MODES: Record<ProviderId, ThinkingMode> = {
+  jules: "MEDIUM",
+  gemini: "medium",
+  codex: "high",
+  "claude-code": "high",
+  "qwen-code": "high",
+  opencode: "high",
+  antigravity: "high",
+  "mockup-cli": "MEDIUM",
+};
+const LEGACY_THINKING_MODE_ALIASES_BY_PROVIDER: Partial<Record<ProviderId, Record<LegacyThinkingMode, ThinkingMode>>> = {
+  gemini: { SMALL: "low", MEDIUM: "medium", HIGH: "high" },
+  codex: { SMALL: "low", MEDIUM: "medium", HIGH: "high" },
+  "claude-code": { SMALL: "low", MEDIUM: "medium", HIGH: "high" },
+  "qwen-code": { SMALL: "low", MEDIUM: "medium", HIGH: "high" },
+  opencode: { SMALL: "low", MEDIUM: "medium", HIGH: "high" },
+  antigravity: { SMALL: "low", MEDIUM: "high", HIGH: "high" },
+};
+export const getProviderThinkingModeOptions = (providerId: ProviderId): readonly ThinkingModeOption[] => (
+  (PROVIDER_THINKING_MODE_CATALOG as Partial<Record<ProviderId, readonly ThinkingModeOption[]>>)[providerId] ?? []
+);
+export const providerSupportsThinkingModeSelection = (providerId: ProviderId): boolean => (
+  getProviderThinkingModeOptions(providerId).length > 0
+);
+export const getDefaultThinkingModeForProvider = (providerId: ProviderId): ThinkingMode => (
+  DEFAULT_PROVIDER_THINKING_MODES[providerId]
+);
+export const isProviderThinkingModeSupported = (
+  providerId: ProviderId,
+  value: unknown,
+): value is ThinkingMode => {
+  if (typeof value !== "string") {
+    return false;
+  }
+  if (getProviderThinkingModeOptions(providerId).some((option) => option.value === value)) {
+    return true;
+  }
+  if (LEGACY_THINKING_MODES.includes(value as LegacyThinkingMode)) {
+    return providerSupportsThinkingModeSelection(providerId)
+      ? Boolean(LEGACY_THINKING_MODE_ALIASES_BY_PROVIDER[providerId]?.[value as LegacyThinkingMode])
+      : value === DEFAULT_PROVIDER_THINKING_MODES[providerId];
+  }
+  return false;
+};
+export const normalizeProviderThinkingMode = (
+  providerId: ProviderId,
+  value: unknown,
+  fallback: ThinkingMode = getDefaultThinkingModeForProvider(providerId),
+): ThinkingMode => {
+  if (typeof value === "string") {
+    const options = getProviderThinkingModeOptions(providerId);
+    if (options.some((option) => option.value === value)) {
+      return value as ThinkingMode;
+    }
+    const legacyAlias = LEGACY_THINKING_MODE_ALIASES_BY_PROVIDER[providerId]?.[value as LegacyThinkingMode];
+    if (legacyAlias) {
+      return legacyAlias;
+    }
+    if (!providerSupportsThinkingModeSelection(providerId) && LEGACY_THINKING_MODES.includes(value as LegacyThinkingMode)) {
+      return fallback;
+    }
+  }
+  if (isProviderThinkingModeSupported(providerId, fallback)) {
+    return fallback;
+  }
+  return getDefaultThinkingModeForProvider(providerId);
+};
 export const PROVIDER_STRATEGIES: ProviderStrategy[] = ["MANUAL", "WEIGHTED", "AGENT"];
 export const INVOCATION_ROUTING_PROFILES: InvocationRoutingProfile[] = ["GLOBAL", "WORKER"];
 export const INVOCATION_ROUTING_IDS: InvocationRoutingId[] = [
@@ -410,7 +526,7 @@ export const DEFAULT_PROVIDER_SETTINGS: Record<ProviderId, ProviderSettings> = {
     enabled: true,
     model: "default",
     weight: DEFAULT_PROVIDER_WEIGHT,
-    thinkingMode: "MEDIUM",
+    thinkingMode: DEFAULT_PROVIDER_THINKING_MODES.jules,
     apiKey: "",
     mountAuth: false,
     authPath: DEFAULT_PROVIDER_AUTH_PATHS.jules,
@@ -424,7 +540,7 @@ export const DEFAULT_PROVIDER_SETTINGS: Record<ProviderId, ProviderSettings> = {
     enabled: true,
     model: "default",
     weight: DEFAULT_PROVIDER_WEIGHT,
-    thinkingMode: "MEDIUM",
+    thinkingMode: DEFAULT_PROVIDER_THINKING_MODES.gemini,
     apiKey: "",
     mountAuth: false,
     authPath: DEFAULT_PROVIDER_AUTH_PATHS.gemini,
@@ -438,7 +554,7 @@ export const DEFAULT_PROVIDER_SETTINGS: Record<ProviderId, ProviderSettings> = {
     enabled: true,
     model: "gpt-5.5",
     weight: DEFAULT_PROVIDER_WEIGHT,
-    thinkingMode: "HIGH",
+    thinkingMode: DEFAULT_PROVIDER_THINKING_MODES.codex,
     apiKey: "",
     mountAuth: false,
     authPath: DEFAULT_PROVIDER_AUTH_PATHS.codex,
@@ -452,7 +568,7 @@ export const DEFAULT_PROVIDER_SETTINGS: Record<ProviderId, ProviderSettings> = {
     enabled: false,
     model: "default",
     weight: DEFAULT_PROVIDER_WEIGHT,
-    thinkingMode: "HIGH",
+    thinkingMode: DEFAULT_PROVIDER_THINKING_MODES["claude-code"],
     apiKey: "",
     mountAuth: false,
     authPath: DEFAULT_PROVIDER_AUTH_PATHS["claude-code"],
@@ -466,7 +582,7 @@ export const DEFAULT_PROVIDER_SETTINGS: Record<ProviderId, ProviderSettings> = {
     enabled: false,
     model: "qwen3-coder-plus",
     weight: DEFAULT_PROVIDER_WEIGHT,
-    thinkingMode: "HIGH",
+    thinkingMode: DEFAULT_PROVIDER_THINKING_MODES["qwen-code"],
     apiKey: "",
     mountAuth: false,
     authPath: DEFAULT_PROVIDER_AUTH_PATHS["qwen-code"],
@@ -480,7 +596,7 @@ export const DEFAULT_PROVIDER_SETTINGS: Record<ProviderId, ProviderSettings> = {
     enabled: false,
     model: "anthropic/claude-sonnet-4-5",
     weight: DEFAULT_PROVIDER_WEIGHT,
-    thinkingMode: "HIGH",
+    thinkingMode: DEFAULT_PROVIDER_THINKING_MODES.opencode,
     apiKey: "",
     mountAuth: false,
     authPath: DEFAULT_PROVIDER_AUTH_PATHS.opencode,
@@ -494,7 +610,7 @@ export const DEFAULT_PROVIDER_SETTINGS: Record<ProviderId, ProviderSettings> = {
     enabled: false,
     model: "default",
     weight: DEFAULT_PROVIDER_WEIGHT,
-    thinkingMode: "HIGH",
+    thinkingMode: DEFAULT_PROVIDER_THINKING_MODES.antigravity,
     apiKey: "",
     mountAuth: false,
     authPath: DEFAULT_PROVIDER_AUTH_PATHS.antigravity,
@@ -508,7 +624,7 @@ export const DEFAULT_PROVIDER_SETTINGS: Record<ProviderId, ProviderSettings> = {
     enabled: false,
     model: "default",
     weight: 0,
-    thinkingMode: "MEDIUM",
+    thinkingMode: DEFAULT_PROVIDER_THINKING_MODES["mockup-cli"],
     apiKey: "",
     mountAuth: false,
     authPath: DEFAULT_PROVIDER_AUTH_PATHS["mockup-cli"],

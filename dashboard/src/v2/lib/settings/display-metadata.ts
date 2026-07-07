@@ -9,6 +9,8 @@ import type {
 import {
   DEFAULT_PROVIDER_CONFIG_NAMES,
   DEFAULT_PROVIDER_SETTINGS,
+  getProviderThinkingModeOptions as getProviderThinkingModeOptionsFromDefaults,
+  normalizeProviderThinkingMode,
   PUBLIC_VIRTUAL_WORKER_PROVIDERS,
   VIRTUAL_WORKER_PROVIDERS,
 } from "../../../../../src/repositories/settings-defaults.js";
@@ -19,10 +21,32 @@ import {
 } from "./provider-instances.js";
 
 export const thinkingModeOptions: Array<{ value: ThinkingMode; label: string }> = [
-  { value: "SMALL", label: "Small" },
-  { value: "MEDIUM", label: "Medium" },
-  { value: "HIGH", label: "High" },
+  ...new Map(
+    ([
+      "gemini",
+      "codex",
+      "claude-code",
+      "qwen-code",
+      "opencode",
+      "antigravity",
+    ] as ProviderId[])
+      .flatMap((providerId) => getProviderThinkingModeOptionsFromDefaults(providerId))
+      .map((option) => [option.value, option] as const),
+  ).values(),
 ];
+
+export const getProviderThinkingModeOptions = (providerId: ProviderId): Array<{ value: ThinkingMode; label: string }> => (
+  [...getProviderThinkingModeOptionsFromDefaults(providerId)]
+);
+
+export const getProviderThinkingModeValue = (providerId: ProviderId, value: ThinkingMode): ThinkingMode => (
+  normalizeProviderThinkingMode(providerId, value)
+);
+
+export const getProviderThinkingModeLabel = (providerId: ProviderId, value: ThinkingMode): string => {
+  const normalized = normalizeProviderThinkingMode(providerId, value);
+  return getProviderThinkingModeOptions(providerId).find((option) => option.value === normalized)?.label || normalized;
+};
 
 export interface ProviderDisplayMetadata {
   providerConfigId: ProviderConfigId;

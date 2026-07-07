@@ -670,7 +670,7 @@ export class PlanningAgentService {
       ...DEFAULT_CLI_WORKFLOW_SETTINGS,
       ...args.settings.cliWorkflow,
     };
-    const providerPrompt = buildProviderPrompt(args.rawPrompt, providerSettings.thinkingMode);
+    const providerPrompt = buildProviderPrompt(args.rawPrompt, providerSettings.thinkingMode, provider);
     const systemRoutingMessage = `Planning request routed through virtual ${this.getProviderLabel(provider)} worker (model: ${effectiveModel}).`;
 
     // Reflect the resolved route on the invocation record *before* the snapshot

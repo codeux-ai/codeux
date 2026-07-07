@@ -742,22 +742,29 @@ Project management requests are centralized in:
 *(Note: `available` means detected credentials/auth presence, whereas `enabled` means user-approved routing participation.)*
 
 AI Provider settings now support:
-- Named provider instances grouped under `jules`, `gemini`, `codex`, and `claude-code`
+- Named provider instances grouped under `jules`, `gemini`, `codex`, `claude-code`, `qwen-code`, `opencode`, and `antigravity`
 - Routing strategy:
   - `MANUAL` (single default provider instance)
   - `WEIGHTED` (weight-based distribution across enabled instances)
   - `AGENT` (uses the selected agent preset's optional provider/model preference, then inherits route defaults)
 - Provider-instance toggles (`enabled`)
 - Model selection
-  - Gemini: curated model list in UI
-  - Codex/Jules: text model field
-- Thinking mode (`SMALL`, `MEDIUM`, `HIGH`)
+  - CLI providers expose curated model lists or configured custom endpoint models where supported
+  - Jules remains hosted/managed and does not expose local CLI model controls
+- Provider-specific thinking/reasoning selection
+  - Gemini: `minimal`, `low`, `medium`, `high`
+  - Codex: `low`, `medium`, `high`, `xhigh`
+  - Claude Code and Qwen Code: `low`, `medium`, `high`, `xhigh`, `max`
+  - OpenCode: `none`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max`
+  - Antigravity: `low`, `high`
+  - Jules does not render a thinking control
 - Invocation routing at the provider-instance level, including instance pools and sparse per-instance overrides
 
 Behavior:
 - Empty provider key fields are valid.
 - Runtime falls back to system auth/environment where supported.
 - Multiple instances of the same CLI type are routed independently, so operators can weight several Codex or Gemini credentials differently inside one route pool.
+- Legacy saved thinking values `SMALL`, `MEDIUM`, and `HIGH` continue to load and are normalized to the selected provider's supported value set before execution.
 
 ## CI Intelligence Settings
 

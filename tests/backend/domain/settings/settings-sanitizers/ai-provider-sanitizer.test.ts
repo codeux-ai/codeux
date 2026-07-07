@@ -209,6 +209,95 @@ describe("sanitizeAiProvider", () => {
     expect(result.invocationRouting.task_coding.providers.codex?.model).toBe("gpt-5.6-terra");
   });
 
+  it("normalizes legacy thinking modes to provider-specific persisted values", () => {
+    const result = sanitizeAiProvider({
+      aiProvider: {
+        provider: "codex",
+        providers: {
+          codex: {
+            provider: "codex",
+            enabled: true,
+            model: "gpt-5.6-sol",
+            weight: 20,
+            thinkingMode: "HIGH",
+          },
+          antigravity: {
+            provider: "antigravity",
+            enabled: true,
+            model: "default",
+            weight: 20,
+            thinkingMode: "MEDIUM",
+          },
+        },
+        invocationRouting: {
+          task_coding: {
+            profile: "GLOBAL",
+            strategy: "MANUAL",
+            provider: "codex",
+            allowedProviders: ["codex"],
+            providers: {
+              codex: {
+                thinkingMode: "SMALL",
+              },
+              antigravity: {
+                thinkingMode: "HIGH",
+              },
+            },
+          },
+        },
+      },
+    } as any);
+
+    expect(result.providers.codex.thinkingMode).toBe("high");
+    expect(result.providers.antigravity.thinkingMode).toBe("high");
+    expect(result.invocationRouting.task_coding.providers.codex?.thinkingMode).toBe("low");
+    expect(result.invocationRouting.task_coding.providers.antigravity?.thinkingMode).toBe("high");
+  });
+
+  it("falls back or drops invalid provider thinking modes during sanitization", () => {
+    const result = sanitizeAiProvider({
+      aiProvider: {
+        provider: "codex",
+        providers: {
+          codex: {
+            provider: "codex",
+            enabled: true,
+            model: "gpt-5.6-sol",
+            weight: 20,
+            thinkingMode: "max",
+          },
+          antigravity: {
+            provider: "antigravity",
+            enabled: true,
+            model: "default",
+            weight: 20,
+            thinkingMode: "medium",
+          },
+        },
+        invocationRouting: {
+          task_coding: {
+            profile: "GLOBAL",
+            strategy: "MANUAL",
+            provider: "codex",
+            allowedProviders: ["codex"],
+            providers: {
+              codex: {
+                model: "gpt-5.6-terra",
+                thinkingMode: "minimal",
+              },
+            },
+          },
+        },
+      },
+    } as any);
+
+    expect(result.providers.codex.thinkingMode).toBe("high");
+    expect(result.providers.antigravity.thinkingMode).toBe("high");
+    expect(result.invocationRouting.task_coding.providers.codex).toEqual({
+      model: "gpt-5.6-terra",
+    });
+  });
+
   describe("normalizeSystemIntegrationProviders", () => {
     it("should preserve explicitly defined mountAuth boolean values", () => {
       const input = {

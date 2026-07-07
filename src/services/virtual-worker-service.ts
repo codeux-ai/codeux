@@ -1,6 +1,6 @@
 import { buildProviderSettingsOverride } from "./provider-settings-override.js";
 import { randomUUID } from "crypto";
-import type { CliWorkflowSettings, DashboardSettings, GitCiRunStatus, JulesSession, ProviderId, QwenModelProviderSettings, WorkerExecutionMode, Subtask } from "../contracts/app-types.js";
+import type { CliWorkflowSettings, DashboardSettings, GitCiRunStatus, JulesSession, ProviderId, QwenModelProviderSettings, ThinkingMode, WorkerExecutionMode, Subtask } from "../contracts/app-types.js";
 import type { WorkerTaskDispatchClaim } from "../contracts/execution-types.js";
 import type { ProjectAttentionItemRecord } from "../contracts/project-attention-types.js";
 import type { SettingsRepository } from "../repositories/settings-repository.js";
@@ -803,6 +803,7 @@ export class VirtualWorkerService {
             memoryInstructions,
           ),
           providerSettings.thinkingMode,
+          provider,
         );
         await this.runProviderWithRetry({
           provider,
@@ -814,6 +815,7 @@ export class VirtualWorkerService {
           attentionItem: item,
           purpose: "merge_conflict",
           model: providerSettings.model,
+          thinkingMode: providerSettings.thinkingMode,
           apiKey: providerSettings.apiKey,
           maxConcurrentTasks: providerSettings.maxConcurrentTasks,
           qwenAuthMode: providerSettings.qwenAuthMode,
@@ -1178,6 +1180,7 @@ export class VirtualWorkerService {
           memoryInstructions,
         ),
         providerSettings.thinkingMode,
+        provider,
       );
       await this.runProviderWithRetry({
         provider,
@@ -1189,6 +1192,7 @@ export class VirtualWorkerService {
         attentionItem: item,
         purpose: "ci_fix",
         model: providerSettings.model,
+        thinkingMode: providerSettings.thinkingMode,
         apiKey: providerSettings.apiKey,
         maxConcurrentTasks: providerSettings.maxConcurrentTasks,
         qwenAuthMode: providerSettings.qwenAuthMode,
@@ -1452,6 +1456,7 @@ export class VirtualWorkerService {
     attentionItem: ProjectAttentionItemRecord;
     purpose: "ci_fix" | "merge_conflict";
     model: string;
+    thinkingMode?: ThinkingMode;
     apiKey: string;
     maxConcurrentTasks?: number;
     qwenAuthMode?: "LOCAL_AUTH" | "ALIBABA_CODING_PLAN" | "MODEL_PROVIDER";
@@ -1502,6 +1507,7 @@ export class VirtualWorkerService {
       prompt: args.providerPrompt,
       cwd: args.worktreePath,
       model: effectiveModel,
+      thinkingMode: args.thinkingMode,
       apiKey: args.apiKey,
       maxConcurrentTasks: args.maxConcurrentTasks,
       qwenAuthMode: args.qwenAuthMode,

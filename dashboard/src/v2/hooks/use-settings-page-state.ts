@@ -31,6 +31,7 @@ import {
   cloneProjectSettings,
   cloneSystemSettings,
   dashboardSettingsToProjectSettings,
+  thinkingModeOptions,
 } from "../lib/settings-view-models.js";
 import { DEFAULT_DASHBOARD_SETTINGS } from "../../lib/settings.js";
 import {
@@ -56,7 +57,6 @@ import type {
   ProjectSettings,
   SettingsValueSource,
   SystemSettings,
-  ThinkingMode,
   UpdateChatProviderChannelBindingInput,
   UpdateChatProviderConnectionInput,
 } from "../../types.js";
@@ -84,12 +84,6 @@ const normalizeSystemSettingsPayload = (settings: SystemSettings): SystemSetting
   ...settings,
   techstackCatalog: settings.techstackCatalog ?? DEFAULT_DASHBOARD_SETTINGS.techstackCatalog,
 });
-
-const thinkingModeOptions: Array<{ value: ThinkingMode; label: string }> = [
-  { value: "SMALL", label: "Small" },
-  { value: "MEDIUM", label: "Medium" },
-  { value: "HIGH", label: "High" },
-];
 
 const invocationRouteDefinitions: Array<{
   id: InvocationRoutingId;

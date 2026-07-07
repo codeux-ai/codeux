@@ -23,6 +23,8 @@ import type { EmbeddingModelId } from "../../contracts/memory-types.js";
 import {
   PROVIDER_IDS,
   THINKING_MODES,
+  getProviderThinkingModeOptions,
+  isProviderThinkingModeSupported,
   PROVIDER_STRATEGIES,
   CLI_EXECUTION_MODES,
   FEATURE_PR_AUTOMERGE_MODES,
@@ -98,7 +100,10 @@ const validateProviderSettings = (
     issues.push({ path, message: "Expected an object" });
     return;
   }
-  if (typeof value.provider !== "string" || !PROVIDER_IDS.includes(value.provider as ProviderId)) {
+  const providerId = typeof value.provider === "string" && PROVIDER_IDS.includes(value.provider as ProviderId)
+    ? value.provider as ProviderId
+    : null;
+  if (!providerId) {
     issues.push({ path: `${path}.provider`, message: `Expected one of: ${PROVIDER_IDS.join(", ")}` });
   }
   if (typeof value.name !== "string") {
@@ -113,7 +118,13 @@ const validateProviderSettings = (
   if (typeof value.weight !== "number") {
     issues.push({ path: `${path}.weight`, message: "Expected a number" });
   }
-  if (typeof value.thinkingMode !== "string" || !THINKING_MODES.includes(value.thinkingMode as ThinkingMode)) {
+  if (typeof value.thinkingMode !== "string") {
+    issues.push({ path: `${path}.thinkingMode`, message: "Expected a string" });
+  } else if (providerId && !isProviderThinkingModeSupported(providerId, value.thinkingMode)) {
+    const options = getProviderThinkingModeOptions(providerId).map((option) => option.value);
+    const expected = options.length > 0 ? options.join(", ") : "no configurable thinking modes";
+    issues.push({ path: `${path}.thinkingMode`, message: `Expected one of for ${providerId}: ${expected}` });
+  } else if (!providerId && !THINKING_MODES.includes(value.thinkingMode as ThinkingMode)) {
     issues.push({ path: `${path}.thinkingMode`, message: `Expected one of: ${THINKING_MODES.join(", ")}` });
   }
   if (typeof value.apiKey !== "string") {
@@ -161,7 +172,8 @@ const validateAiProvider = (
   }
 
   const providers = value.providers;
-  const providerConfigIds = isRecord(providers) ? new Set(Object.keys(providers)) : new Set<string>();
+  const providersRecord = isRecord(providers) ? providers : {};
+  const providerConfigIds = new Set(Object.keys(providersRecord));
   if (value.provider !== null && typeof value.provider === "string" && providerConfigIds.size > 0 && !providerConfigIds.has(value.provider)) {
     issues.push({ path: `${path}.provider`, message: "Expected an existing provider config id" });
   }
@@ -227,8 +239,20 @@ const validateAiProvider = (
         if ("weight" in override && typeof override.weight !== "number") {
           issues.push({ path: `${routePath}.providers.${providerId}.weight`, message: "Expected a number" });
         }
-        if ("thinkingMode" in override && (typeof override.thinkingMode !== "string" || !THINKING_MODES.includes(override.thinkingMode as ThinkingMode))) {
-          issues.push({ path: `${routePath}.providers.${providerId}.thinkingMode`, message: `Expected one of: ${THINKING_MODES.join(", ")}` });
+        if ("thinkingMode" in override) {
+          const baseProviderSettings = providersRecord[providerId];
+          const baseProvider = isRecord(baseProviderSettings) && typeof baseProviderSettings.provider === "string" && PROVIDER_IDS.includes(baseProviderSettings.provider as ProviderId)
+            ? baseProviderSettings.provider as ProviderId
+            : null;
+          if (typeof override.thinkingMode !== "string") {
+            issues.push({ path: `${routePath}.providers.${providerId}.thinkingMode`, message: "Expected a string" });
+          } else if (baseProvider && !isProviderThinkingModeSupported(baseProvider, override.thinkingMode)) {
+            const options = getProviderThinkingModeOptions(baseProvider).map((option) => option.value);
+            const expected = options.length > 0 ? options.join(", ") : "no configurable thinking modes";
+            issues.push({ path: `${routePath}.providers.${providerId}.thinkingMode`, message: `Expected one of for ${baseProvider}: ${expected}` });
+          } else if (!baseProvider && !THINKING_MODES.includes(override.thinkingMode as ThinkingMode)) {
+            issues.push({ path: `${routePath}.providers.${providerId}.thinkingMode`, message: `Expected one of: ${THINKING_MODES.join(", ")}` });
+          }
         }
       }
     }
