@@ -289,6 +289,8 @@ start planning sprint work without rebuilding the same agent setup for every CLI
 
 ## Documentation
 
+Canonical repository documentation lives in the `docs/` directory, while `docs-web/` serves as the sole publication and reference mirror. The use of a `docs-release/` directory is explicitly forbidden.
+
 - [User quickstart](./docs-web/user/quickstart.md)
 - [Installation](./docs-web/user/installation.md)
 - [Providers and models](./docs-web/user/providers-and-models.md)

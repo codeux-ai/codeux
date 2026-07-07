@@ -82,12 +82,7 @@ pnpm run ci
 
 This runs (in order):
 
-1. `pnpm run quality:guardrails`
-2. `pnpm run audit`
-3. `pnpm run lint` — typecheck.
-4. `pnpm run test:backend:coverage` — backend tests + coverage threshold.
-5. `pnpm run test:dashboard` — dashboard tests.
-6. `pnpm run build` — server + dashboard build.
+`lint -> test:backend:coverage -> test:dashboard -> build`
 
 If `pnpm run ci` is green, GitHub CI will be too (modulo platform-specific differences).
 

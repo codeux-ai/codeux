@@ -118,11 +118,7 @@ All UI work must meet the quality gate in `STYLEGUIDE.md`:
   `vi.spyOn()` for verification.
 
 ### Validation Workflow (`pnpm run ci`)
-Before a task is complete, all of these MUST pass (`ci` = lint → backend coverage → dashboard → build):
-1. `pnpm run lint` (alias of `typecheck`: strict `tsc --noEmit`).
-2. `pnpm run test:backend:coverage`.
-3. `pnpm run test:dashboard`.
-4. `pnpm run build` (server `tsc` + dashboard typecheck + `vite build`).
+Before a task is complete, all of these MUST pass (`ci` = lint -> test:backend:coverage -> test:dashboard -> build).
 
 - Do not validate changes visually with Browser automation Tools unless explicitly told to
 ---

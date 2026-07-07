@@ -36,7 +36,7 @@ When behavior changes:
 3. Update `docs/SUMMARY.md` table of contents.
 4. Add migration notes when behavior is not backward compatible.
 
-**Publication Workflow:** Update canonical `docs/` first, then align the matching `docs-web/` page when the content is public-facing.
+**Publication Workflow:** Update canonical `docs/` first, then align the matching `docs-web/` page when the content is public-facing. The `docs-web/` directory serves as the sole publication and reference mirror. The use of a `docs-release/` directory is explicitly forbidden.
 
 ## Source of Truth Hierarchy
 
