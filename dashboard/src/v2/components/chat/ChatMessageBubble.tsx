@@ -7,6 +7,7 @@ import { renderMarkdown } from "../../../lib/markdown.js";
 import { getChatWidgetData } from "../../lib/chat-widget-view-models.js";
 import { formatChatTime } from "../../lib/chat-time.js";
 import { PlanningRequestWidget } from "./widgets/PlanningRequestWidget.js";
+import { AppCreationProgressWidget } from "./widgets/AppCreationProgressWidget.js";
 import { ChatAvatar, type AvatarRole } from "./ChatAvatar.js";
 import { resolveDisplayDeliveryStatus } from "../../hooks/use-chat-thread-data.js";
 import { useGsapDurations } from "../../lib/motion/constants.js";
@@ -108,6 +109,12 @@ export const ChatMessageBubble: FunctionComponent<ChatMessageBubbleProps> = ({
           {widgetData.type === "planning" && (
             <div className="mt-4 border-t border-white/5 pt-4">
               <PlanningRequestWidget status={widgetData.status} planName={widgetData.planName} liveStatus={widgetData.liveStatus} />
+            </div>
+          )}
+
+          {widgetData.type === "app_creation_progress" && widgetData.appCreationProgress && (
+            <div className="mt-4 border-t border-white/5 pt-4">
+              <AppCreationProgressWidget progress={widgetData.appCreationProgress} />
             </div>
           )}
 
