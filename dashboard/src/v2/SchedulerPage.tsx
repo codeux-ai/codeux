@@ -116,6 +116,14 @@ const TARGET_OPTIONS: Array<{
     chipClassName: "bg-fuchsia-500/12 text-fuchsia-600 dark:text-fuchsia-400",
   },
   {
+    value: "wakeup",
+    label: "Wakeup",
+    icon: BellRing,
+    tone: "text-teal-500",
+    activeClassName: "border-teal-500/35 bg-teal-500/10 shadow-[0_12px_34px_rgba(20,184,166,0.13)]",
+    chipClassName: "bg-teal-500/12 text-teal-600 dark:text-teal-400",
+  },
+  {
     value: "task",
     label: "Task",
     icon: ListTodo,
@@ -295,6 +303,9 @@ const scheduleTargetSummary = (
   }
   if (entry.targetType === "agent_wakeup") {
     return entry.agentWakeupTarget?.threadId ? `Agent wakeup: ${entry.agentWakeupTarget.threadId}` : "Agent wakeup message";
+  }
+  if (entry.targetType === "wakeup") {
+    return entry.wakeupTarget?.threadId ? `Wakeup: ${entry.wakeupTarget.threadId}` : "Wakeup message";
   }
   const provider = entry.taskTarget?.provider ? ` · ${entry.taskTarget.provider}` : "";
   return entry.taskTarget?.taskId ? `Task rerun: ${entry.taskTarget.taskId}${provider}` : "Task rerun";

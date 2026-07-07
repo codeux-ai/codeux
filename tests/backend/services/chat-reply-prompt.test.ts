@@ -165,6 +165,7 @@ describe("chat-reply-prompt", () => {
       });
       expect(prompt).toContain("You must return STRICT JSON format");
       expect(prompt).toContain("optional `suggestions`");
+      expect(prompt).toContain("`projects`, `sprints`, `tasks`, `scheduler`, `settings`");
       expect(prompt).not.toContain("manage_code_ux");
     });
 
@@ -179,8 +180,26 @@ describe("chat-reply-prompt", () => {
         mcpAvailable: true,
       });
       expect(prompt).toContain("manage_code_ux");
+      expect(prompt).toContain("manage_scheduler");
       expect(prompt).toContain("Do NOT wrap your response in JSON");
       expect(prompt).not.toContain("You must return STRICT JSON format");
+    });
+
+    it("advertises native scheduler wakeups for delayed follow-ups", () => {
+      const prompt = buildChatReplayPrompt({
+        projectId: "p1",
+        repoPath: "/repo",
+        projectName: "Proj",
+        thread,
+        messages: [{ authorType: "dashboard_user", bodyMarkdown: "Wake up after 30 seconds and check back" } as any],
+        workerInstructions: "",
+        mcpAvailable: true,
+      });
+      expect(prompt).toContain("`schedule_wakeup` (projectId, bodyMarkdown, delaySeconds or scheduledFor)");
+      expect(prompt).toContain("call `manage_scheduler` with `action: \"schedule_wakeup\"`");
+      expect(prompt).toContain("either `delaySeconds` or `scheduledFor`");
+      expect(prompt).toContain("automatically associated with the current invocation");
+      expect(prompt).toContain("will not fire until the originating invocation has completed");
     });
 
     it("uses scheduler-only MCP instructions without advertising management tools", () => {

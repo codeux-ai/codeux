@@ -22,6 +22,11 @@ Tools are filtered before being advertised on `ListTools`:
    Known agents can receive tool-specific overrides; for example, `search_skills` can stay enabled
    while `manage_skills` is disabled.
 
+Native provider MCP calls can also advertise `X-Code-Ux-Invocation` with the execution invocation id
+that originated the tool call. Code UX validates it with the same single-header, length, and
+identifier-character rules as `X-Code-Ux-Agent`, stores it as request-scoped context, and does not
+include it in public MCP response payloads.
+
 Agent-scoped provider runs are also default-deny for built-in Code UX tools. Newly synced Worker,
 Project manager, and generated coding agents may link the default `playwright` custom MCP server,
 but that custom-server link does not imply `code_ux` access. The dashboard chat reply route is the
@@ -44,7 +49,7 @@ action-specific fields, and an optional `approval` object for destructive action
 | `manage_sprints` | orchestration | Plan, start, pause, cancel, inspect, import issues into, and edit sprints. |
 | `manage_tasks` | orchestration | Create, edit, start, stop, pause, and inspect tasks. |
 | `manage_quicksprints` | orchestration | Manage quicksprint templates and execute them. |
-| `manage_scheduler` | orchestration | Create and run scheduled sprints, quicksprints, messages, and node flows. |
+| `manage_scheduler` | orchestration | Create and run scheduled sprints, quicksprints, messages, wakeups, and node flows. |
 | `scheduler_code_ux` | orchestration | Agent-owned wakeups and task reruns with restricted list/schedule/cancel actions. |
 | `manage_agents` | agents & memory | Manage agent presets and sync them to project markdown. |
 | `manage_node_flows` | agents & memory | Manage reusable node workflows, run them, and attach them as agent skills. |
@@ -67,7 +72,7 @@ Every tool requires `runtimeRoles: ["project_manager"]` and is enabled by defaul
 | `manage_sprints` | `list`, `get`, `create`, `update`, `delete`, `start`, `pause`, `cancel`, `force_cancel`, `inspect_run`, `import_issues`, `plan` |
 | `manage_tasks` | `list`, `get`, `create`, `update`, `delete`, `start`, `stop`, `force_stop`, `pause`, `inspect_run` |
 | `manage_quicksprints` | `list_templates`, `get_template`, `create_template`, `update_template`, `delete_template`, `execute`, `start` |
-| `manage_scheduler` | `list`, `create`, `update`, `delete`, `run_due`, `schedule_sprint`, `schedule_quicksprint`, `schedule_chat`, `schedule_node_flow` |
+| `manage_scheduler` | `list`, `create`, `update`, `delete`, `run_due`, `schedule_sprint`, `schedule_quicksprint`, `schedule_chat`, `schedule_wakeup`, `schedule_node_flow` |
 | `scheduler_code_ux` | `list`, `schedule_wakeup`, `schedule_task`, `cancel` |
 | `manage_agents` | `list`, `get`, `create`, `update`, `delete`, `sync` |
 | `manage_node_flows` | `list`, `get`, `create`, `update`, `delete`, `validate`, `run`, `list_runs`, `get_run`, `attach_to_agent`, `detach_from_agent` |

@@ -129,6 +129,12 @@ Dashboard chat replies are the only route-local default exception: unconfigured 
 the restricted `scheduler_code_ux` tool only, with broad tools such as `manage_scheduler`, `manage_tasks`,
 `manage_sprints`, `manage_settings`, and `manage_code_ux` disabled.
 
+Provider MCP calls can advertise request context with `X-Code-Ux-Agent` and `X-Code-Ux-Invocation`.
+The agent header drives the per-agent Code UX policy above. The invocation header carries the
+execution invocation id for the provider run that originated the tool call, so in-process management
+handlers can associate actions with that run. Both headers are validated as single non-empty
+identifier values of at most 100 ASCII letters, digits, or hyphens before request routing.
+
 ### `CallTool`
 
 ```

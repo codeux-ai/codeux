@@ -21,8 +21,6 @@ export type DocsSlug =
   | 'user-dashboard-live-session'
   | 'user-dashboard-chat'
   | 'user-dashboard-agents'
-  | 'user-dashboard-nodes'
-  | 'user-dashboard-node-flows'
   | 'user-dashboard-scheduler'
   | 'user-dashboard-memory'
   | 'user-dashboard-knowledge'
@@ -53,6 +51,8 @@ export type DocsSlug =
   | 'architecture-security'
   | 'settings-subcategories-display-settings'
   | 'settings-subcategories-onboarding'
+  | 'user-dashboard-node-flows'
+  | 'user-dashboard-nodes'
 
 export interface DocsRegistryEntry extends Partial<Omit<PageMeta, 'title' | 'description'>> {
   id: DocsSlug
@@ -189,26 +189,12 @@ export const docsRegistry: Record<DocsSlug, DocsRegistryEntry> = {
     title: "Agents",
     description: "The Agents page (/agents) manages the agent presets available to the active project.",
   },
-  'user-dashboard-nodes': {
-    id: 'user-dashboard-nodes',
-    path: '/docs/user-dashboard-nodes',
-    section: 'User Guide',
-    title: "Nodes",
-    description: "The Nodes page (/nodes) manages project-scoped workflow graphs for editing, widget configuration, agent attachments, validation, and persisted run inspection.",
-  },
-  'user-dashboard-node-flows': {
-    id: 'user-dashboard-node-flows',
-    path: '/docs/user-dashboard-node-flows',
-    section: 'User Guide',
-    title: "Node Flows",
-    description: "Create and operate saved node-flow workflows for the active project, including dynamic widgets, validation, manual runs, scheduling, run inspection, and agent skill attachments.",
-  },
   'user-dashboard-scheduler': {
     id: 'user-dashboard-scheduler',
     path: '/docs/user-dashboard-scheduler',
     section: 'User Guide',
     title: "Scheduler",
-    description: "The Scheduler page (dock label Schedule, /scheduler) runs Code UX work on a timetable. Schedule a sprint, a quicksprint template, a project message, or memory remediation to fire once or on a recurring cadence — usefu...",
+    description: "The Scheduler page (dock label Schedule, /scheduler) runs Code UX work on a timetable. Schedule a sprint, a quicksprint template, a node flow, a project message, or memory remediation to fire once or on a recurring ca...",
   },
   'user-dashboard-memory': {
     id: 'user-dashboard-memory',
@@ -243,7 +229,7 @@ export const docsRegistry: Record<DocsSlug, DocsRegistryEntry> = {
     path: '/docs/user-dashboard-stats',
     section: 'User Guide',
     title: "Stats",
-    description: "The Stats page (/stats) is the analytics surface for the active project. It shows project execution, usage, cost, Git, and invocation telemetry in one workspace with visual-mode navigation, responsive layouts, and lig...",
+    description: "The Stats page (/stats) is the analytics surface for the active project. It shows project execution, usage, cost, Git, provider/model, ledger, and invocation telemetry in one flat Analysis Studio with responsive layou...",
   },
   'user-dashboard-settings': {
     id: 'user-dashboard-settings',
@@ -264,14 +250,14 @@ export const docsRegistry: Record<DocsSlug, DocsRegistryEntry> = {
     path: '/docs/developer-mcp-tools',
     section: 'Developer Reference',
     title: "MCP tools",
-    description: "Code UX is also an MCP server. When connected, it advertises a set of management tools that an MCP client (or another agent) can call to drive projects, sprints, tasks, agents, node flows, memory, persistent skills...",
+    description: "Code UX is also an MCP server. When connected, it advertises a set of management tools that an MCP client (or another agent) can call to drive projects, sprints, tasks, agents, memory, persistent skills, node flows, s...",
   },
   'developer-management-actions': {
     id: 'developer-management-actions',
     path: '/docs/developer-management-actions',
     section: 'Developer Reference',
     title: "Management actions",
-    description: "Code UX exposes one MCP tool per management domain — manage_projects, manage_sprints, manage_tasks, manage_quicksprints, manage_scheduler, manage_agents, manage_node_flows, manage_memory, manage_settings, manage_preview...",
+    description: "Code UX exposes one MCP tool per management domain — manage_projects, manage_sprints, manage_tasks, manage_quicksprints, manage_scheduler, manage_agents, manage_node_flows, manage_memory, manage_settings, manage_previ...",
   },
   'developer-http-api': {
     id: 'developer-http-api',
@@ -413,6 +399,20 @@ export const docsRegistry: Record<DocsSlug, DocsRegistryEntry> = {
     title: "Onboarding",
     description: "Reopens the guided setup flow without changing saved settings by itself.",
   },
+  'user-dashboard-node-flows': {
+    id: 'user-dashboard-node-flows',
+    path: '/docs/user-dashboard-node-flows',
+    section: 'User Guide',
+    title: "Node Flows",
+    description: "The Nodes page (/nodes) is where dashboard users create and operate saved node-flow workflows for the active project. A node flow is a repeatable graph that can be validated, run manually, scheduled, inspected through...",
+  },
+  'user-dashboard-nodes': {
+    id: 'user-dashboard-nodes',
+    path: '/docs/user-dashboard-nodes',
+    section: 'User Guide',
+    title: "Nodes",
+    description: "The Nodes page (/nodes) manages project-scoped workflow graphs.",
+  },
 }
 
 export const orderedDocs: DocsRegistryEntry[] = [
@@ -434,8 +434,6 @@ export const orderedDocs: DocsRegistryEntry[] = [
   docsRegistry['user-dashboard-live-session'],
   docsRegistry['user-dashboard-chat'],
   docsRegistry['user-dashboard-agents'],
-  docsRegistry['user-dashboard-nodes'],
-  docsRegistry['user-dashboard-node-flows'],
   docsRegistry['user-dashboard-scheduler'],
   docsRegistry['user-dashboard-memory'],
   docsRegistry['user-dashboard-knowledge'],
@@ -466,6 +464,8 @@ export const orderedDocs: DocsRegistryEntry[] = [
   docsRegistry['architecture-security'],
   docsRegistry['settings-subcategories-display-settings'],
   docsRegistry['settings-subcategories-onboarding'],
+  docsRegistry['user-dashboard-node-flows'],
+  docsRegistry['user-dashboard-nodes'],
 ]
 
 export const groupedDocs = orderedDocs.reduce<Record<DocsSection, DocsRegistryEntry[]>>(

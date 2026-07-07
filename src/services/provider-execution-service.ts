@@ -230,12 +230,15 @@ export class ProviderExecutionService {
     const codeUxMcpEnabled = args.agentMcpAccess?.codeUxEnabled === true;
     const baseMcpConnection = args.mcpConnection
       ?? (persistentSkillRuntime || codeUxMcpEnabled ? this.deps.getMcpConnectionInfo?.() ?? null : null);
+    const invocationScopedMcpConnection = baseMcpConnection && execInvocationId
+      ? { ...baseMcpConnection, invocationId: execInvocationId }
+      : baseMcpConnection;
 
     const resolvedMcp = resolveAgentMcpRuntime({
       access: args.agentMcpAccess,
       agentId: args.mcpAgentId,
       customMcpServers: args.customMcpServers ?? [],
-      mcpConnection: baseMcpConnection,
+      mcpConnection: invocationScopedMcpConnection,
       persistentSkillRetrievalEnabled: Boolean(persistentSkillRuntime),
     });
 
@@ -277,6 +280,10 @@ export class ProviderExecutionService {
           invocationSource: args.invocationSource,
         })?.id || null;
       }
+
+      const runnerMcpConnection = resolvedMcp.mcpConnection && execInvocationId
+        ? { ...resolvedMcp.mcpConnection, invocationId: execInvocationId }
+        : resolvedMcp.mcpConnection;
 
       if (execInvocationId && retrySystemMessage) {
         this.deps.executionRepository?.appendExecutionInvocationMessage(execInvocationId, {
@@ -387,7 +394,7 @@ export class ProviderExecutionService {
         invocationId: execInvocationId,
         providerInvocationId: invocation?.id,
         purpose: args.purpose,
-        mcpConnection: resolvedMcp.mcpConnection,
+        mcpConnection: runnerMcpConnection,
         customMcpServers: resolvedMcp.customMcpServers,
         persistentSkillStorageMounts: persistentSkillRuntime?.mounts,
         onActivity: (desc: string, originator?: string) => {

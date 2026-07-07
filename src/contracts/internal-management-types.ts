@@ -115,20 +115,22 @@ export interface ManageQuicksprintsArgs {
 }
 
 export interface ManageSchedulerArgs {
-  action: "list" | "create" | "schedule_sprint" | "schedule_quicksprint" | "schedule_chat" | "schedule_node_flow" | "update" | "delete" | "run_due";
+  action: "list" | "create" | "schedule_sprint" | "schedule_quicksprint" | "schedule_chat" | "schedule_wakeup" | "schedule_node_flow" | "update" | "delete" | "run_due";
   projectId?: string;
   entryId?: string;
   from?: string;
   to?: string;
   title?: string;
-  targetType?: "sprint" | "quicksprint" | "chat" | "node_flow";
+  targetType?: "sprint" | "quicksprint" | "chat" | "wakeup" | "node_flow";
   status?: "scheduled" | "paused" | "completed" | "failed" | "cancelled";
   scheduledFor?: string;
+  delaySeconds?: number | string;
   timezone?: string;
   recurrence?: Record<string, unknown>;
   sprintTarget?: Record<string, unknown>;
   quicksprintTarget?: Record<string, unknown>;
   chatTarget?: Record<string, unknown>;
+  wakeupTarget?: Record<string, unknown>;
   nodeFlowTarget?: Record<string, unknown>;
   sprintId?: string;
   templateId?: string;
@@ -140,6 +142,8 @@ export interface ManageSchedulerArgs {
   bodyMarkdown?: string;
   threadId?: string | null;
   connectionId?: string | null;
+  sourceInvocationId?: string | null;
+  resumeAfterInvocationCompletion?: boolean;
   flowId?: string;
   input?: Record<string, unknown>;
   flowVersion?: number | string;

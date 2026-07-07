@@ -154,6 +154,51 @@ describe("SchedulerRepository", () => {
     expect(schedulerRepository.getEntry(entry.id)?.agentWakeupTarget).toEqual(updated.agentWakeupTarget);
   });
 
+  it("persists and hydrates wakeup targets with source invocation ids", async () => {
+    const { dir, storage, projectRepository, schedulerRepository } = await createRepositories();
+    const project = projectRepository.createProject({
+      name: "Scheduler Project",
+      sourceType: "local",
+      sourceRef: dir,
+    });
+
+    const entry = schedulerRepository.createEntry(project.id, {
+      targetType: "wakeup",
+      scheduledFor: "2026-05-18T09:00:00.000Z",
+      wakeupTarget: {
+        bodyMarkdown: "  Continue from the previous invocation.  ",
+        threadId: " thread-1 ",
+        connectionId: " connection-1 ",
+        title: "  Resume follow-up  ",
+        sourceInvocationId: " invocation-1 ",
+        resumeAfterInvocationCompletion: true,
+      },
+    });
+
+    expect(entry.targetType).toBe("wakeup");
+    expect(entry.wakeupTarget).toEqual({
+      bodyMarkdown: "Continue from the previous invocation.",
+      threadId: "thread-1",
+      connectionId: "connection-1",
+      title: "Resume follow-up",
+      sourceInvocationId: "invocation-1",
+      resumeAfterInvocationCompletion: true,
+    });
+    expect(entry.title).toBe("Resume follow-up");
+
+    const stored = schedulerRepository.getEntry(entry.id);
+    expect(stored?.wakeupTarget).toEqual(entry.wakeupTarget);
+
+    const row = storage.getDatabase().prepare(`
+      SELECT target_json
+      FROM scheduler_entries
+      WHERE id = ?
+    `).get(entry.id) as { target_json: string };
+    expect(JSON.parse(row.target_json)).toEqual({
+      wakeupTarget: entry.wakeupTarget,
+    });
+  });
+
   it("persists and hydrates task targets with provider and agent scheduler metadata", async () => {
     const { dir, storage, projectRepository, schedulerRepository } = await createRepositories();
     const project = projectRepository.createProject({

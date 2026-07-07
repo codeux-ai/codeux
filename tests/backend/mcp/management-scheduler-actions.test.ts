@@ -1,4 +1,4 @@
-import { describe, expect, it, vi, beforeEach } from "vitest";
+import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import { SchedulerActions } from "../../../src/mcp/management/scheduler-actions.js";
 import { AgentSchedulerActions } from "../../../src/mcp/management/agent-scheduler-actions.js";
 import { ManagementToolHandler } from "../../../src/mcp/management-tool-handler.js";
@@ -28,6 +28,10 @@ describe("SchedulerActions", () => {
       runDueEntries: vi.fn(),
     } as unknown as SchedulerService;
     actions = new SchedulerActions(schedulerService);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it("lists scheduler entries with explicit range", async () => {
@@ -71,6 +75,97 @@ describe("SchedulerActions", () => {
       },
     });
     expect(result.result).toEqual({ entry: { id: "entry-1" } });
+  });
+
+  it("schedules wakeups from flattened MCP fields with delay seconds and invocation context", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-09T12:00:00.000Z"));
+    vi.mocked(schedulerService.createEntry).mockReturnValue({ id: "entry-1" } as any);
+
+    const result = await runWithMcpAgentContext("agent-1", () =>
+      actions.handleSchedulerAction(makeArgs("schedule_wakeup", {
+        projectId: "p1",
+        delaySeconds: 90,
+        timezone: "Europe/Berlin",
+        title: "Review wakeup",
+        bodyMarkdown: "Please resume the review.",
+        threadId: "thread-1",
+        connectionId: "conn-1",
+      })),
+    "invocation-1");
+
+    expect(schedulerService.createEntry).toHaveBeenCalledWith("p1", {
+      targetType: "wakeup",
+      scheduledFor: "2026-06-09T12:01:30.000Z",
+      timezone: "Europe/Berlin",
+      title: "Review wakeup",
+      wakeupTarget: {
+        bodyMarkdown: "Please resume the review.",
+        title: "Review wakeup",
+        threadId: "thread-1",
+        connectionId: "conn-1",
+        sourceInvocationId: "invocation-1",
+      },
+    });
+    expect(result.result).toEqual({ entry: { id: "entry-1" } });
+  });
+
+  it("schedules wakeups from nested target fields and preserves explicit source invocation ids", async () => {
+    vi.mocked(schedulerService.createEntry).mockReturnValue({ id: "entry-1" } as any);
+
+    await actions.handleSchedulerAction(makeArgs("schedule_wakeup", {
+      projectId: "p1",
+      scheduledFor: "2026-06-09T12:00:00.000Z",
+      wakeupTarget: {
+        bodyMarkdown: "Resume after current work.",
+        title: "Nested wakeup",
+        threadId: "thread-2",
+        connectionId: null,
+        sourceInvocationId: "explicit-invocation",
+        resumeAfterInvocationCompletion: false,
+      },
+    }));
+
+    expect(schedulerService.createEntry).toHaveBeenCalledWith("p1", {
+      targetType: "wakeup",
+      scheduledFor: "2026-06-09T12:00:00.000Z",
+      wakeupTarget: {
+        bodyMarkdown: "Resume after current work.",
+        title: "Nested wakeup",
+        threadId: "thread-2",
+        connectionId: null,
+        sourceInvocationId: "explicit-invocation",
+        resumeAfterInvocationCompletion: false,
+      },
+    });
+  });
+
+  it("accepts positive numeric-string delay seconds for wakeups", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-09T12:00:00.000Z"));
+    vi.mocked(schedulerService.createEntry).mockReturnValue({ id: "entry-1" } as any);
+
+    await actions.handleSchedulerAction(makeArgs("schedule_wakeup", {
+      projectId: "p1",
+      delaySeconds: "45",
+      bodyMarkdown: "Wake up soon.",
+    }));
+
+    expect(schedulerService.createEntry).toHaveBeenCalledWith("p1", {
+      targetType: "wakeup",
+      scheduledFor: "2026-06-09T12:00:45.000Z",
+      wakeupTarget: {
+        bodyMarkdown: "Wake up soon.",
+      },
+    });
+  });
+
+  it("requires a body when scheduling wakeups", async () => {
+    await expect(actions.handleSchedulerAction(makeArgs("schedule_wakeup", {
+      projectId: "p1",
+      scheduledFor: "2026-06-09T12:00:00.000Z",
+    }))).rejects.toThrow("bodyMarkdown or wakeupTarget.bodyMarkdown is required");
+    expect(schedulerService.createEntry).not.toHaveBeenCalled();
   });
 
   it("schedules sprint entries with minute-based recurrence", async () => {

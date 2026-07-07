@@ -16,6 +16,7 @@ import type { ChatThreadRuntimeService } from "./chat-thread-runtime-service.js"
 import type { ExecutionControlService } from "./execution-control-service.js";
 import type { MemoryRemediationService } from "./memory-remediation-service.js";
 import type { TaskRerunService } from "./task-rerun-service.js";
+import type { ExecutionRepository } from "../repositories/execution-repository.js";
 import type { NodeFlowRuntimeService } from "./node-flow-runtime-service.js";
 import type { NodeFlowRepository } from "../repositories/node-flow-repository.js";
 import type { NodeFlowRunSummaryResponse } from "../contracts/node-flow-types.js";
@@ -25,9 +26,7 @@ import type { ConversationMessageMetadata, CreateDashboardConversationMessageInp
 export interface SchedulerServiceDeps {
   schedulerRepository: SchedulerRepository;
   projectManagementRepository: ProjectManagementRepository;
-  executionRepository?: {
-    listSprintRuns(projectId: string, sprintId?: string): SprintRunRecord[];
-  };
+  executionRepository?: ExecutionRepository;
   quicksprintService: QuicksprintService;
   chatThreadRuntimeService: ChatThreadRuntimeService;
   executionControlService: ExecutionControlService;
@@ -164,6 +163,7 @@ export class SchedulerService {
       sprintTarget: input.sprintTarget ?? current.sprintTarget,
       quicksprintTarget: input.quicksprintTarget ?? current.quicksprintTarget,
       chatTarget: input.chatTarget ?? current.chatTarget,
+      wakeupTarget: input.wakeupTarget ?? current.wakeupTarget,
       agentWakeupTarget: input.agentWakeupTarget ?? current.agentWakeupTarget,
       taskTarget: input.taskTarget ?? current.taskTarget,
       memoryRemediationTarget: input.memoryRemediationTarget ?? current.memoryRemediationTarget,
@@ -176,6 +176,7 @@ export class SchedulerService {
       sprintTarget: input.sprintTarget ?? current.sprintTarget,
       quicksprintTarget: input.quicksprintTarget ?? current.quicksprintTarget,
       chatTarget: input.chatTarget ?? current.chatTarget,
+      wakeupTarget: input.wakeupTarget ?? current.wakeupTarget,
       agentWakeupTarget: input.agentWakeupTarget ?? current.agentWakeupTarget,
       taskTarget: input.taskTarget ?? current.taskTarget,
       memoryRemediationTarget: input.memoryRemediationTarget ?? current.memoryRemediationTarget,
@@ -207,12 +208,20 @@ export class SchedulerService {
         continue;
       }
 
+      const wakeupGate = this.resolveWakeupInvocationGate(freshEntry);
+      if (wakeupGate.action === "defer") {
+        continue;
+      }
+      if (wakeupGate.action === "fail") {
+        this.deps.schedulerRepository.markRunFailed(freshEntry.id, wakeupGate.error);
+        continue;
+      }
+
       this.inFlightEntryIds.add(entry.id);
-      
+
       const nextRunAt = freshEntry.scheduleAnchor
         ? null
         : computeNextRunAfterOccurrence(occurrenceIso, freshEntry.recurrence, freshEntry.runCount + 1);
-
       if (freshEntry.targetType === "node_flow") {
         const claimedEntry = this.claimDueOccurrence(freshEntry, occurrenceIso, nextRunAt);
         if (!claimedEntry) {
@@ -238,10 +247,17 @@ export class SchedulerService {
         continue;
       }
 
-      // Existing scheduler targets are advanced before dispatch so an app restart does not double-fire them.
-      this.deps.schedulerRepository.markRunSucceeded(freshEntry.id, occurrenceIso, nextRunAt);
+      const markSucceededAfterExecution = freshEntry.targetType === "wakeup" && wakeupGate.action === "ready_after_execution";
+      if (!markSucceededAfterExecution) {
+        // Immediately mark as succeeded to prevent double firing if app restarts during execution.
+        this.deps.schedulerRepository.markRunSucceeded(freshEntry.id, occurrenceIso, nextRunAt);
+      }
 
-      this.executeEntry(freshEntry, occurrenceIso).catch((error) => {
+      this.executeEntry(freshEntry, occurrenceIso).then(() => {
+        if (markSucceededAfterExecution) {
+          this.deps.schedulerRepository.markRunSucceeded(freshEntry.id, occurrenceIso, nextRunAt);
+        }
+      }).catch((error) => {
         this.handleExecutionFailure(freshEntry, error);
       }).finally(() => {
         this.inFlightEntryIds.delete(entry.id);
@@ -352,6 +368,34 @@ export class SchedulerService {
       return;
     }
 
+    if (entry.targetType === "wakeup") {
+      const target = entry.wakeupTarget;
+      if (!target) {
+        throw new Error("Scheduled wakeup target is missing.");
+      }
+      const metadata: ConversationMessageMetadata = {
+        source: "scheduler",
+        targetType: "wakeup",
+        schedulerEntryId: entry.id,
+        scheduledFor: entry.nextRunAt ?? entry.scheduledFor,
+      };
+      if (target.sourceInvocationId) {
+        metadata.sourceInvocationId = target.sourceInvocationId;
+      }
+      if (typeof target.resumeAfterInvocationCompletion === "boolean") {
+        metadata.resumeAfterInvocationCompletion = target.resumeAfterInvocationCompletion;
+      }
+      const input: CreateDashboardConversationMessageInput = {
+        threadId: target.threadId || undefined,
+        title: target.title || entry.title,
+        connectionId: target.connectionId || undefined,
+        bodyMarkdown: target.bodyMarkdown,
+        metadata,
+      };
+      await this.deps.chatThreadRuntimeService.postMessage(entry.projectId, input);
+      return;
+    }
+
     if (entry.targetType === "chat") {
       const target = entry.chatTarget;
       if (!target) {
@@ -405,6 +449,14 @@ export class SchedulerService {
   }
 
   private validateInputTarget(projectId: string, input: CreateSchedulerEntryInput | UpdateSchedulerEntryInput): void {
+    if (input.targetType === "wakeup") {
+      const bodyMarkdown = input.wakeupTarget?.bodyMarkdown?.trim();
+      if (!bodyMarkdown) {
+        throw new Error("wakeupTarget.bodyMarkdown is required.");
+      }
+      return;
+    }
+
     if (input.targetType === "agent_wakeup") {
       const bodyMarkdown = input.agentWakeupTarget?.bodyMarkdown?.trim();
       if (!bodyMarkdown) {
@@ -559,7 +611,38 @@ export class SchedulerService {
       && entry.status !== "cancelled"
     )) ?? null;
   }
+
+  private resolveWakeupInvocationGate(entry: SchedulerEntryRecord): WakeupInvocationGateResult {
+    if (entry.targetType !== "wakeup") {
+      return { action: "ready" };
+    }
+    const sourceInvocationId = entry.wakeupTarget?.sourceInvocationId?.trim();
+    if (!sourceInvocationId || entry.wakeupTarget?.resumeAfterInvocationCompletion === false) {
+      return { action: "ready" };
+    }
+
+    const invocation = this.deps.executionRepository?.getExecutionInvocation(sourceInvocationId) ?? null;
+    if (!invocation) {
+      return { action: "defer" };
+    }
+    if (invocation.status === "completed") {
+      return { action: "ready_after_execution" };
+    }
+    if (isTerminalExecutionInvocationStatus(invocation.status)) {
+      return {
+        action: "fail",
+        error: `Scheduled wakeup source invocation ${sourceInvocationId} ended with status ${invocation.status}.`,
+      };
+    }
+    return { action: "defer" };
+  }
 }
+
+type WakeupInvocationGateResult =
+  | { action: "ready" }
+  | { action: "ready_after_execution" }
+  | { action: "defer" }
+  | { action: "fail"; error: string };
 
 function isTerminalSprintStatus(status: string): boolean {
   return status === "completed" || status === "failed" || status === "cancelled";
@@ -580,6 +663,10 @@ function latestTerminalRunFinishedAt(runs: SprintRunRecord[]): Date | null {
     }
   }
   return latest;
+}
+
+function isTerminalExecutionInvocationStatus(status: string): boolean {
+  return status === "failed" || status === "cancelled" || status === "paused";
 }
 
 function normalizeScheduleStart(value?: string): string {
