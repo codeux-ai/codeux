@@ -1,6 +1,6 @@
 # Speech Input Architecture
 
-Speech input is a planned dashboard capability for turning microphone audio into prompt text. This page documents the persisted settings and shared request/response contracts that exist before the recorder UI, upload route, ONNX inference, Electron permission flow, or provider calls are wired.
+Speech input is a dashboard capability for turning microphone audio into prompt text. This page documents the persisted settings, shared request/response contracts, and reusable dashboard primitives that support recorder UI integration.
 
 ## Settings Boundary
 
@@ -10,9 +10,19 @@ The default provider mode is `auto`. In auto mode, runtime implementation should
 
 ## Privacy Boundary
 
-Actual microphone audio must not enter runtime memory automatically. A future recorder UI or Electron shell integration must require an explicit user gesture and permission grant before capturing audio. Persisted settings store only configuration values such as provider mode, model ids, endpoint URL, and optional language; defaults and fixtures must not contain real API keys.
+Actual microphone audio must not enter runtime memory automatically. Recorder UI and Electron shell integration must require an explicit user gesture and permission grant before capturing audio. Persisted settings store only configuration values such as provider mode, model ids, endpoint URL, and optional language; defaults and fixtures must not contain real API keys.
 
-Audio bytes should remain request-scoped when the runtime implementation is added. They should not be written to settings storage, project markdown, sprint artifacts, logs, telemetry, or memory records unless a future task explicitly introduces a user-visible retention feature with separate consent and deletion controls.
+Audio bytes should remain request-scoped. They should not be written to settings storage, project markdown, sprint artifacts, logs, telemetry, or memory records unless a future task explicitly introduces a user-visible retention feature with separate consent and deletion controls.
+
+## Dashboard Primitives
+
+The dashboard exposes reusable v2 speech primitives instead of wiring microphone capture directly into individual composers:
+
+- `dashboard/src/v2/lib/speech-recorder.ts` requests microphone access, records mono audio, encodes WAV/PCM through Web Audio when available, falls back to `MediaRecorder` when necessary, and stops tracks/audio nodes on stop, abort, error, and unmount paths.
+- `dashboard/src/v2/lib/speech-api.ts` posts multipart audio to `POST /api/speech/transcriptions` with dashboard metadata and returns the shared typed transcription result.
+- `dashboard/src/v2/components/speech/SpeechInputButton.tsx` owns permission, recording, transcribing, success, unsupported, and error states. It delegates transcript insertion to parent composers through `onTranscript` and reports structured recorder/transcription errors through `onError`.
+
+Composer integration remains intentionally separate so each composer can decide whether to append or replace text and how to handle focus restoration.
 
 ## Provider Fallback Behavior
 
@@ -31,10 +41,10 @@ Implemented now:
 - Shared speech settings and transcription result/error TypeScript contracts.
 - System defaults for project-level speech settings.
 - Settings validation and sanitization for provider mode, strings, duration bounds, and optional language normalization.
+- Shared dashboard recorder, transcription API client, and speech input button primitives.
 
 Not implemented yet:
 
-- Audio upload route.
 - Local ONNX inference.
-- Dashboard recorder UI.
 - Electron microphone permission handling.
+- Composer-level speech input wiring.

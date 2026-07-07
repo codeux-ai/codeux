@@ -1,6 +1,6 @@
 # Speech Input Architecture
 
-Speech input is a planned dashboard capability for turning microphone audio into prompt text. The current implementation only includes persisted settings and shared TypeScript contracts; it does not include recorder UI, upload routes, ONNX inference, Electron permission handling, or provider calls.
+Speech input is a dashboard capability for turning microphone audio into prompt text. The current implementation includes persisted settings, shared TypeScript contracts, and reusable dashboard primitives for recorder-driven transcription.
 
 ## Settings Boundary
 
@@ -10,9 +10,19 @@ The default provider mode is `auto`, which is intended to prefer local ONNX tran
 
 ## Privacy Boundary
 
-Microphone audio must not enter runtime memory automatically. Future capture flows must require an explicit user gesture and permission grant. Settings may store provider configuration, model ids, endpoint URL, and optional language, but defaults and examples must not include real API keys.
+Microphone audio must not enter runtime memory automatically. Capture flows must require an explicit user gesture and permission grant. Settings may store provider configuration, model ids, endpoint URL, and optional language, but defaults and examples must not include real API keys.
 
-Audio bytes should remain request-scoped when runtime support is added. They should not be written to settings, project artifacts, logs, telemetry, or memory records unless a separate retention feature is designed with user-visible consent and deletion controls.
+Audio bytes should remain request-scoped. They should not be written to settings, project artifacts, logs, telemetry, or memory records unless a separate retention feature is designed with user-visible consent and deletion controls.
+
+## Dashboard Primitives
+
+Reusable v2 primitives keep microphone capture out of individual composers:
+
+- `speech-recorder.ts` requests microphone access, records mono audio, emits WAV/PCM with Web Audio when available, falls back to `MediaRecorder`, and cleans up tracks/audio nodes on stop, abort, error, and unmount paths.
+- `speech-api.ts` posts multipart audio to `POST /api/speech/transcriptions` and returns the shared typed transcription result.
+- `SpeechInputButton.tsx` presents permission, recording, transcribing, success, unsupported, and error states while delegating transcript insertion to parent composers.
+
+Composer integration remains separate so each composer can choose append/replace behavior and focus handling.
 
 ## Provider Fallback Behavior
 
