@@ -8,6 +8,7 @@ import type {
   ManageSchedulerArgs,
   SchedulerArgs,
   ManageAgentsArgs,
+  ManageNodeFlowsArgs,
   ManageMemoryArgs,
   ManageSkillsArgs,
   ManageSettingsArgs,
@@ -38,6 +39,7 @@ import type {
   WorkerTaskDispatchService,
 } from "../services/worker-task-dispatch-service.js";
 import type { SkillService } from "../services/skill-service.js";
+import type { NodeFlowService } from "../services/node-flow-service.js";
 
 import type { PlanningAgentService } from "../services/planning-agent-service.js";
 import type { ProjectSetupService } from "../services/project-setup-service.js";
@@ -58,6 +60,7 @@ import { SchedulerActions } from "./management/scheduler-actions.js";
 import { AgentSchedulerActions } from "./management/agent-scheduler-actions.js";
 import { SettingsActions } from "./management/settings-actions.js";
 import { AgentActions } from "./management/agent-actions.js";
+import { NodeFlowActions } from "./management/node-flow-actions.js";
 import { MemoryActions } from "./management/memory-actions.js";
 import { SkillActions } from "./management/skill-actions.js";
 import { ChatProviderActions } from "./management/chat-provider-actions.js";
@@ -78,6 +81,7 @@ export interface ManagementToolHandlerDeps {
   memoryPromotionService: MemoryPromotionService;
   embeddingModelManager: EmbeddingModelManager;
   skillService: SkillService;
+  nodeFlowService: NodeFlowService;
   knowledgeService: KnowledgeService;
   planningAgentService: LateBoundOrValue<PlanningAgentService>;
   projectSetupService?: LateBoundOrValue<ProjectSetupService>;
@@ -96,6 +100,7 @@ export class ManagementToolHandler {
   private readonly pendingDestructiveApprovals = new Map<string, number>();
   private readonly settingsActions: SettingsActions;
   private readonly agentActions: AgentActions;
+  private readonly nodeFlowActions: NodeFlowActions;
   private readonly memoryActions: MemoryActions;
   private readonly skillActions: SkillActions;
   private readonly previewActions: PreviewActions;
@@ -104,6 +109,7 @@ export class ManagementToolHandler {
   constructor(private readonly deps: ManagementToolHandlerDeps) {
     this.settingsActions = new SettingsActions(deps.settingsRepository);
     this.agentActions = new AgentActions(deps.agentPresetSyncService);
+    this.nodeFlowActions = new NodeFlowActions(deps.nodeFlowService);
     this.memoryActions = new MemoryActions(deps.memoryService, deps.memoryPromotionService, deps.embeddingModelManager);
     this.skillActions = new SkillActions(deps.skillService);
     this.previewActions = new PreviewActions(deps.sprintPreviewService);
@@ -280,6 +286,8 @@ export class ManagementToolHandler {
       return this.settingsActions.handleSettingsAction(args);
     } else if (args.domain === "agents") {
       return this.agentActions.handleAgentAction(args);
+    } else if (args.domain === "node_flows") {
+      return this.nodeFlowActions.handleNodeFlowAction(args);
     } else if (args.domain === "memory") {
       return this.memoryActions.handleMemoryAction(args);
     } else if (args.domain === "skills") {
@@ -407,6 +415,18 @@ export class ManagementToolHandler {
       return { content: [{ type: "text", text: JSON.stringify(envelope, null, 2) }] };
     } catch (error) {
       return this.formatError("agents", args.action, error);
+    }
+  }
+
+  async handleManageNodeFlows(args: ManageNodeFlowsArgs): Promise<{ content: Array<{ type: string; text: string }> }> {
+    try {
+      const managementArgs = { domain: "node_flows", action: args.action, payload: args as unknown as Record<string, unknown>, approval: args.approval };
+      const dispatch = (approval = args.approval) => this.nodeFlowActions.handleNodeFlowAction({ ...managementArgs, approval });
+      const approvalGate = await this.requireStatefulApproval(managementArgs, () => dispatch({ confirmed: false }));
+      const envelope = approvalGate ?? this.recordStatefulApprovalRequirement(managementArgs, await dispatch());
+      return { content: [{ type: "text", text: JSON.stringify(envelope, null, 2) }] };
+    } catch (error) {
+      return this.formatError("node_flows", args.action, error);
     }
   }
 
