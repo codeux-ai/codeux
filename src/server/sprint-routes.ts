@@ -272,6 +272,11 @@ function parseRepositoryIssueSearchQuery(query: Record<string, unknown>): IssueS
     teamId: parseTrimmedQueryString(query.teamId, "teamId"),
     teamKey: parseTrimmedQueryString(query.teamKey, "teamKey"),
     databaseId: parseTrimmedQueryString(query.databaseId, "databaseId"),
+    boardId: parseTrimmedQueryString(query.boardId, "boardId"),
+    documentId: parseTrimmedQueryString(query.documentId, "documentId"),
+    fileKey: parseTrimmedQueryString(query.fileKey, "fileKey"),
+    muralId: parseTrimmedQueryString(query.muralId, "muralId"),
+    itemTypes: parseIssueLabels(query.itemTypes),
     projectKey: parseTrimmedQueryString(query.projectKey, "projectKey"),
     search: parseTrimmedQueryString(query.search, "search"),
     state: parseRepositoryIssueState(query.state, provider),
@@ -344,8 +349,8 @@ function parseRepositoryProvider(value: unknown): RepositoryIssueSearchInput["pr
   if (!trimmed) {
     return undefined;
   }
-  if (trimmed !== "github" && trimmed !== "gitlab" && trimmed !== "jira" && trimmed !== "notion" && trimmed !== "asana" && trimmed !== "linear") {
-    throw new Error("Invalid value for provider. Must be one of: github, gitlab, jira, notion, asana, linear");
+  if (trimmed !== "github" && trimmed !== "gitlab" && trimmed !== "jira" && trimmed !== "notion" && trimmed !== "asana" && trimmed !== "linear" && trimmed !== "miro" && trimmed !== "lucid" && trimmed !== "figma" && trimmed !== "mural") {
+    throw new Error("Invalid value for provider. Must be one of: github, gitlab, jira, notion, asana, linear, miro, lucid, figma, mural");
   }
   return trimmed;
 }
@@ -355,7 +360,7 @@ function parseRepositoryIssueState(value: unknown, provider?: RepositoryIssueSea
   if (!trimmed) {
     return undefined;
   }
-  if (provider === "notion" || provider === "asana" || provider === "linear") {
+  if (provider === "notion" || provider === "asana" || provider === "linear" || provider === "miro" || provider === "lucid" || provider === "figma" || provider === "mural") {
     return trimmed;
   }
   if (trimmed !== "open" && trimmed !== "closed" && trimmed !== "all") {
@@ -369,7 +374,7 @@ function parseImportStatus(value: unknown, provider?: RepositoryIssueSearchInput
   if (!trimmed) {
     return undefined;
   }
-  if (provider === "notion" || provider === "asana" || provider === "linear") {
+  if (provider === "notion" || provider === "asana" || provider === "linear" || provider === "miro" || provider === "lucid" || provider === "figma" || provider === "mural") {
     return trimmed;
   }
   if (trimmed !== "open" && trimmed !== "in_progress" && trimmed !== "done" && trimmed !== "all") {

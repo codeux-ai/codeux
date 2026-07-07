@@ -98,6 +98,11 @@ function hasSearchFilters(input: IssueSearchInput): boolean {
       || input.teamId
       || input.teamKey
       || input.databaseId
+      || input.boardId
+      || input.documentId
+      || input.fileKey
+      || input.muralId
+      || input.itemTypes?.length
       || input.projectKey
       || input.state
       || input.status
@@ -118,13 +123,23 @@ function hasSearchFilters(input: IssueSearchInput): boolean {
 }
 
 function hasExplicitIssueReferences(input: IssueSearchInput): boolean {
-  return Boolean(input.issueKeys?.length || input.issueNumbers?.length || input.issueRefs?.length || input.externalIds?.length);
+  return Boolean(
+    input.issueKeys?.length
+      || input.issueNumbers?.length
+      || input.issueRefs?.length
+      || input.externalIds?.length
+      || input.boardId
+      || input.documentId
+      || input.fileKey
+      || input.muralId
+      || input.databaseId
+  );
 }
 
 function buildImportIssueSearchInput(payload: Record<string, unknown>): IssueSearchInput {
   const input: IssueSearchInput = {
     search: readString(payload, "search"),
-    provider: parseOptionalEnumStrict(payload, "provider", ["github", "gitlab", "jira", "notion", "asana", "linear"] as const),
+    provider: parseOptionalEnumStrict(payload, "provider", ["github", "gitlab", "jira", "notion", "asana", "linear", "miro", "lucid", "figma", "mural"] as const),
     repository: readString(payload, "repository"),
     hostDomain: readString(payload, "hostDomain"),
     workspaceId: readString(payload, "workspaceId"),
@@ -132,6 +147,11 @@ function buildImportIssueSearchInput(payload: Record<string, unknown>): IssueSea
     teamId: readString(payload, "teamId"),
     teamKey: readString(payload, "teamKey"),
     databaseId: readString(payload, "databaseId"),
+    boardId: readString(payload, "boardId"),
+    documentId: readString(payload, "documentId"),
+    fileKey: readString(payload, "fileKey"),
+    muralId: readString(payload, "muralId"),
+    itemTypes: readStringArray(payload, "itemTypes"),
     projectKey: readString(payload, "projectKey"),
     state: parseImportState(payload),
     status: parseImportStatus(payload),
@@ -146,7 +166,7 @@ function buildImportIssueSearchInput(payload: Record<string, unknown>): IssueSea
     issueNumbers: readNumberArray(payload, "issueNumbers"),
     issueRefs: readStringArray(payload, "issueRefs"),
     externalIds: readStringArray(payload, "externalIds"),
-    includeConversation: payload.includeConversation === false ? false : undefined,
+    includeConversation: payload.includeConversation === true ? true : payload.includeConversation === false ? false : undefined,
     createdAfter: readString(payload, "createdAfter"),
     createdBefore: readString(payload, "createdBefore"),
     updatedAfter: readString(payload, "updatedAfter"),
@@ -160,7 +180,7 @@ function buildImportIssueSearchInput(payload: Record<string, unknown>): IssueSea
 
 function parseImportState(payload: Record<string, unknown>): IssueSearchInput["state"] {
   const provider = typeof payload.provider === "string" ? payload.provider.trim().toLowerCase() : "";
-  if (provider === "linear" || provider === "asana" || provider === "notion") {
+  if (provider === "linear" || provider === "asana" || provider === "notion" || provider === "miro" || provider === "lucid" || provider === "figma" || provider === "mural") {
     return readString(payload, "state");
   }
   return parseOptionalEnumStrict(payload, "state", ["open", "closed", "all"] as const);
@@ -168,7 +188,7 @@ function parseImportState(payload: Record<string, unknown>): IssueSearchInput["s
 
 function parseImportStatus(payload: Record<string, unknown>): IssueSearchInput["status"] {
   const provider = typeof payload.provider === "string" ? payload.provider.trim().toLowerCase() : "";
-  if (provider === "linear" || provider === "asana" || provider === "notion") {
+  if (provider === "linear" || provider === "asana" || provider === "notion" || provider === "miro" || provider === "lucid" || provider === "figma" || provider === "mural") {
     return readString(payload, "status");
   }
   return parseOptionalEnumStrict(payload, "status", ["open", "in_progress", "done", "all"] as const);

@@ -277,7 +277,7 @@ describe("SprintActions", () => {
       projectId: "p1",
       provider: "bitbucket",
       search: "bug",
-    }))).rejects.toThrow("Invalid value for provider. Must be one of: github, gitlab, jira, notion, asana, linear");
+    }))).rejects.toThrow("Invalid value for provider. Must be one of: github, gitlab, jira, notion, asana, linear, miro, lucid, figma, mural");
     expect(sprintIssueService.searchIssues).not.toHaveBeenCalled();
   });
 
@@ -412,7 +412,7 @@ describe("SprintActions", () => {
       labels: ["integration"],
       teamKey: "lin",
       providerProjectId: "project-1",
-      includeConversation: undefined,
+      includeConversation: true,
       limit: 5,
     }));
     expect(projectRepo.replaceSprintLinkedIssues).not.toHaveBeenCalled();
@@ -530,6 +530,74 @@ describe("SprintActions", () => {
     expect(result.result).toMatchObject({
       mode: "explicit",
       provider: "notion",
+      importedContexts: contexts,
+      linkedIssues: linkedRecords,
+    });
+  });
+
+  it("parses canvas import fields and imports explicit Figma file context", async () => {
+    const contexts = [{
+      provider: "figma",
+      sourceProvider: "figma",
+      sourceKind: "file",
+      externalId: "file-1",
+      hostDomain: "figma.com",
+      repository: "files",
+      issueNumber: null,
+      issueKey: "file:file-1",
+      title: "Design spec",
+      url: "https://www.figma.com/file/file-1",
+      state: "open",
+      labels: ["file"],
+      assignees: [],
+      issueBodyMarkdown: "## Page 1",
+      issueConversationMarkdown: "##### Comment 1 - @Alice\n\nPlease preserve this layout",
+      includeConversation: true,
+      issueAuthor: null,
+      issueCreatedAt: null,
+      issueUpdatedAt: "2026-05-02T00:00:00.000Z",
+    }];
+    const linkedRecords = [{ id: "link-1", externalId: "file-1" }];
+    vi.mocked(sprintIssueService.getIssuePromptContextsForReferences).mockResolvedValue(contexts as any);
+    vi.mocked(projectRepo.getSprint).mockReturnValue({ id: "s1", projectId: "p1", goal: "Existing goal" } as any);
+    vi.mocked(projectRepo.replaceSprintLinkedIssues).mockReturnValue(linkedRecords as any);
+    vi.mocked(projectRepo.updateSprint).mockReturnValue({ id: "s1", projectId: "p1", goal: "updated" } as any);
+
+    const result = await sprintActions.handleSprintAction(makeArgs("import_issues", {
+      projectId: "p1",
+      sprintId: "s1",
+      provider: "figma",
+      fileKey: " file-1 ",
+      boardId: " board-1 ",
+      documentId: " doc-1 ",
+      workspaceId: " workspace-1 ",
+      muralId: " mural-1 ",
+      itemTypes: [" sticky_note ", "text"],
+      includeConversation: true,
+    }));
+
+    expect(sprintIssueService.getIssuePromptContextsForReferences).toHaveBeenCalledWith("p1", expect.objectContaining({
+      provider: "figma",
+      fileKey: "file-1",
+      boardId: "board-1",
+      documentId: "doc-1",
+      workspaceId: "workspace-1",
+      muralId: "mural-1",
+      itemTypes: ["sticky_note", "text"],
+      includeConversation: true,
+    }));
+    expect(sprintIssueService.importLinkedIssues).toHaveBeenCalledWith("s1", "p1", [expect.objectContaining({
+      provider: "figma",
+      sourceKind: "file",
+      externalId: "file-1",
+      issueNumber: null,
+    })]);
+    expect(projectRepo.updateSprint).toHaveBeenCalledWith("s1", {
+      goal: expect.stringContaining("Please preserve this layout"),
+    });
+    expect(result.result).toMatchObject({
+      mode: "explicit",
+      provider: "figma",
       importedContexts: contexts,
       linkedIssues: linkedRecords,
     });
@@ -801,6 +869,11 @@ describe("SprintActions", () => {
       teamId: "team-1",
       teamKey: "LIN",
       databaseId: "database-1",
+      boardId: "board-1",
+      documentId: "document-1",
+      fileKey: "file-1",
+      muralId: "mural-1",
+      itemTypes: ["sticky_note", "text"],
       includeConversation: true,
       attachToSprint: true,
       planAfterImport: true,
