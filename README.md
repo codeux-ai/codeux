@@ -331,6 +331,7 @@ Codex, Claude Code, Qwen Code, OpenCode, and Antigravity CLI.
 
 ```bash
 pnpm run dev
+pnpm run dev:server-only
 ```
 
 Then open `http://localhost:4444`.

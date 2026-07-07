@@ -97,7 +97,7 @@ flowchart TD
 
 ## High-Level Data Flow
 
-1. MCP client sends tool call over stdio.
+1. MCP client sends tool call (e.g., grouped tools like `manage_sprints:start`, rather than the deprecated `manage_code_ux`) over stdio.
 2. Server dispatches tool to core or agent handler.
 3. Handler invokes the DB-backed dispatch engine, inbox system, and provider execution layer.
 4. Orchestrator runs atomic steps and updates `lastStatus`.
