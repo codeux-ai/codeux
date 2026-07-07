@@ -12,6 +12,7 @@ Stats presentation must stay within the implemented snapshot and invocation cont
 
 - `GET /api/projects/:projectId/stats?window=1h|24h|7d|30d|all|custom&from=YYYY-MM-DD&to=YYYY-MM-DD` returns the project snapshot.
 - The snapshot includes project identity, active sprint metadata, query and normalized range metadata, generated time, usage totals, status counts, adaptive buckets, chart series, task/sprint/provider/purpose/model summaries, Git totals and buckets, and optional merge-conflict count.
+- Recent snapshot windows are bucket aligned and half-open: `1h` keeps twelve 5-minute buckets through the current 5-minute bucket end, `24h` keeps twenty-four hourly buckets through the current partial hour, and daily/custom windows include their selected end day or bucket.
 - Usage totals include invocation count, active and wall time, input/cached/output/reasoning/total tokens, cost fields, optional tool-call count, and usage-source counters for `reported`, `estimated`, `unavailable`, and `unsupported`.
 - System mode uses `useSystemViewData(projectId)` and invocation APIs for records, server-projected filters, sort state, pagination, summaries, and transcript expansion.
 

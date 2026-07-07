@@ -17,6 +17,19 @@ describe("stats-buckets", () => {
     }, 24 * 60 * 60 * 1000);
     expect(dayBuckets[0].label).toBe("01-01");
 
+    // 5min resolution
+    const fiveMinuteBuckets = createUsageBuckets({
+      window: "1h",
+      label: "1h",
+      resolution: "5min",
+      resolutionLabel: "5min",
+      from: "2023-01-01T14:15:00Z",
+      to: "2023-01-01T14:20:00Z",
+      bucketCount: 1,
+      isCustom: false
+    }, 5 * 60 * 1000);
+    expect(fiveMinuteBuckets[0].label).toBe("14:15");
+
     // hour resolution
     const hourBuckets = createUsageBuckets({
       window: "24h",

@@ -244,7 +244,7 @@ Usage data now appears in two read models:
 
 - `GET /api/projects/:projectId/execution`
   - task and sprint execution summaries now include usage rollups
-- `GET /api/projects/:projectId/stats?window=24h|7d|30d|all|custom&from=YYYY-MM-DD&to=YYYY-MM-DD`
+- `GET /api/projects/:projectId/stats?window=1h|24h|7d|30d|all|custom&from=YYYY-MM-DD&to=YYYY-MM-DD`
   - project-scoped statistics snapshot for the Stats page. Custom ranges must be parseable dates, where `from <= to`, and invalid or incomplete ranges fail with validation errors.
 
 Historical Docker-backed CLI invocations that were persisted as `unavailable` before container telemetry fallback support are backfilled at startup when they have prompt or transcript character counts. The backfill marks them as `estimated` using the same conservative character heuristic, preserving rows that already have provider-reported or provider-specific estimated usage.
@@ -262,6 +262,7 @@ The stats snapshot includes:
 - active sprint metadata
 - the original query (`window`, optional `from`, optional `to`)
 - normalized range metadata (`label`, `resolution`, `resolutionLabel`, `from`, `to`, `bucketCount`, `isCustom`)
+- preset ranges are half-open and bucket aligned: `1h` returns exactly twelve 5-minute buckets through the current 5-minute bucket, `24h` returns exactly twenty-four hourly buckets through the current partial hour, and daily presets include the current UTC day
 - adaptive hourly, daily, or weekly buckets depending on the selected range
 - `chartSeries` array configuring the graph-series data for the interactive usage chart, expanding the snapshot-contract to align with the shipped response shape (`color`, `signalLabel`, `formatter`)
 - task rankings
