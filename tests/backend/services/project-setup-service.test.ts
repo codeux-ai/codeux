@@ -194,6 +194,29 @@ describe("ProjectSetupService", () => {
       sourceType: "local",
       sourceRef: repoDir,
     });
+    settingsRepository.saveProjectSettings(project.id, {
+      designGuidance: {
+        selectedTechStackId: "setup-service-stack",
+        selectedStyleguideId: "setup-service-style",
+        hideDefaultStyleguides: false,
+        customTechStacks: [
+          {
+            id: "setup-service-stack",
+            name: "Setup Service Stack",
+            summary: "Generate setup artifacts for the service's Preact Vite stack.",
+            instructionMarkdown: "Use the repository package manager, strict TypeScript, and Vitest commands.",
+          },
+        ],
+        customStyleguides: [
+          {
+            id: "setup-service-style",
+            name: "Setup Service Style",
+            summary: "Generate setup artifacts with compact product UI guidance.",
+            instructionMarkdown: "Preserve local visual tokens, responsive states, and accessible interactions.",
+          },
+        ],
+      },
+    });
 
     const providerPayload = {
       summary: "Detected a Vite app with lint, test, and build scripts.",
@@ -250,6 +273,11 @@ describe("ProjectSetupService", () => {
     expect(fullSetupPrompt).toContain("Code Quality & Performance Audit");
     expect(fullSetupPrompt).toContain("## Container Setup Script Template");
     expect(fullSetupPrompt).toContain("Force rebuild version");
+    expect(fullSetupPrompt).toContain("## Project Guidance");
+    expect(fullSetupPrompt).toContain("Name: Setup Service Stack");
+    expect(fullSetupPrompt).toContain("Use the repository package manager, strict TypeScript, and Vitest commands.");
+    expect(fullSetupPrompt).toContain("Name: Setup Service Style");
+    expect(fullSetupPrompt).toContain("Preserve local visual tokens, responsive states, and accessible interactions.");
     expect(result.createdAgentIds.length).toBeGreaterThanOrEqual(1);
     expect(result.createdQuicksprintTemplateIds).toHaveLength(1);
     const writtenFiles = result.writtenFiles.map(normalizeSeparators);

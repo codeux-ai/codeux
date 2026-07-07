@@ -320,6 +320,27 @@ describe("PlanningAgentService", () => {
         executionMode: "VIRTUAL",
         virtualWorkerProvider: "codex",
       },
+      designGuidance: {
+        selectedTechStackId: "planning-stack",
+        selectedStyleguideId: "planning-style",
+        hideDefaultStyleguides: false,
+        customTechStacks: [
+          {
+            id: "planning-stack",
+            name: "Planning Service Stack",
+            summary: "Plan tasks for the service's typed backend runtime.",
+            instructionMarkdown: "Prefer typed service boundaries and Vitest verification.",
+          },
+        ],
+        customStyleguides: [
+          {
+            id: "planning-style",
+            name: "Planning Product Style",
+            summary: "Plan UI tasks around compact accessible product workflows.",
+            instructionMarkdown: "Preserve existing tokens, focus states, and responsive layouts.",
+          },
+        ],
+      },
     });
 
     const improved = await service.improveSprintPrompt(project.id, {
@@ -340,6 +361,11 @@ describe("PlanningAgentService", () => {
     expect(planPrompt).toContain("## Example Output A");
     expect(planPrompt).toContain("## Example Output B");
     expect(planPrompt).toContain("## Objective\\n...\\n\\n## Scope");
+    expect(planPrompt).toContain("## Project Guidance");
+    expect(planPrompt).toContain("Name: Planning Service Stack");
+    expect(planPrompt).toContain("Prefer typed service boundaries and Vitest verification.");
+    expect(planPrompt).toContain("Name: Planning Product Style");
+    expect(planPrompt).toContain("Preserve existing tokens, focus states, and responsive layouts.");
     const createdTasks = projectRepository.listTasks(project.id, sprint.id);
     expect(createdTasks).toHaveLength(1);
     expect(createdTasks[0]?.title).toBe("Plan via virtual worker");

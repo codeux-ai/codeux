@@ -514,7 +514,7 @@ Manages the system techstack catalog and per-project techstack/application-kind 
 
 **Risks and gotchas:** The built-in `code-ux-internal` stack cannot be removed. Removing a custom stack also clears system-default references to it; project assignments should be reviewed before deleting stacks that are in active use.
 
-Design guidance now complements techstack assignment with project-scoped tech-stack guidance, styleguide guidance, and custom instruction entries. Existing and imported projects default both selections to `None`; new local and new remote project creation explicitly selects the generic Code UX styleguide. Hiding default styleguides only changes what the UI presents and does not delete backend defaults.
+Design guidance now complements techstack assignment with project-scoped tech-stack guidance, styleguide guidance, and custom instruction entries. Existing and imported projects default both selections to `None`; new local and new remote project creation explicitly selects the generic Code UX styleguide. Hiding default styleguides only changes what the UI presents and does not delete backend defaults. Selected non-`None` guidance is included in Planning and Project Setup prompts so generated sprint tasks and setup artifacts can follow the active project direction without copying inactive guidance.
 
 Related docs:
 
