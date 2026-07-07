@@ -1,12 +1,14 @@
 import type { FunctionComponent } from "preact";
 import { useRef, useState, useMemo } from "preact/hooks";
 import gsap from "gsap";
-import { AlertCircle, Bot, Check, ChevronUp, Cloud, FolderOpen, GitBranch, FolderInput, Globe, Home, Info, Link2, Loader2, Lock, PlaySquare, Plus, RefreshCw, ShieldCheck, Sparkles, Workflow, X } from "lucide-preact";
+import { AlertCircle, Bot, Check, ChevronUp, Cloud, FolderOpen, GitBranch, FolderInput, Globe, Home, Info, Layers3, Link2, Loader2, Lock, PlaySquare, Plus, RefreshCw, ShieldCheck, Sparkles, Workflow, X } from "lucide-preact";
 import { FormError } from "../forms/FormError.js";
 import { Modal } from "./Modal.js";
 import { ActionFeedbackRegion } from "./ActionFeedbackRegion.js";
 import { fetchLocalDirectories } from "../../lib/project-api.js";
 import type { LocalDirectoryBrowserResponse } from "../../types.js";
+import type { ApplicationKind } from "../../../types.js";
+import { DEFAULT_DASHBOARD_SETTINGS } from "../../../lib/settings.js";
 
 export type SourceType = 'local' | 'git' | 'new_project';
 
@@ -15,6 +17,7 @@ type ProjectSetupOptions = {
     quicksprints: boolean;
     previewScript: boolean;
     ci: boolean;
+    techstack: boolean;
 };
 
 type ExistingProjectSubmission = {
@@ -33,6 +36,8 @@ type NewProjectSubmission = {
     type: 'new_project';
     path: string;
     initMode: 'new-local' | 'new-remote';
+    applicationKind?: ApplicationKind | null;
+    selectedTechstackId?: string | null;
     remoteProvider?: 'github' | 'gitlab';
     isPrivate?: boolean;
     repoSlug?: string;
@@ -51,6 +56,10 @@ interface AddProjectModalProps {
     onClose: () => void;
     onAdd: (project: AddProjectModalSubmission) => void | Promise<void>;
     initialSourceType?: SourceType;
+    quickActionDefaults?: {
+        applicationKind: ApplicationKind;
+        selectedTechstackId: string;
+    };
 }
 
 type DirectoryPickerTarget = 'localPath' | 'cloneDir';
@@ -78,7 +87,7 @@ function focusFirstInvalidField(formId: string, scrollContainerId: string): void
     container.scrollTo({ top: Math.min(Math.max(targetTop, 0), maxTop), behavior: 'smooth' });
 }
 
-export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClose, onAdd, initialSourceType }) => {
+export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClose, onAdd, initialSourceType, quickActionDefaults }) => {
     const fieldsRef   = useRef<HTMLFormElement>(null);
 
     const [name, setName]           = useState('');
@@ -98,6 +107,7 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
         quicksprints: true,
         previewScript: false,
         ci: true,
+        techstack: true,
     });
     const [submitError, setSubmitError] = useState<string | null>(null);
     const [activeDirectoryPickerTarget, setActiveDirectoryPickerTarget] = useState<DirectoryPickerTarget | null>(null);
@@ -108,6 +118,14 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
     const [isSubmitting, setIsSubmitting] = useState(false);
     const nameInputRef = useRef<HTMLInputElement>(null);
     const [touched, setTouched] = useState({ name: false, path: false, slug: false });
+    const newProjectTechstackId = quickActionDefaults?.selectedTechstackId
+        ?? DEFAULT_DASHBOARD_SETTINGS.techstackCatalog.defaultTechstackId;
+    const newProjectApplicationKind = quickActionDefaults?.applicationKind ?? null;
+    const quickActionContextLabel = quickActionDefaults?.applicationKind === 'web'
+        ? 'Web App'
+        : quickActionDefaults?.applicationKind === 'desktop'
+            ? 'Desktop App'
+            : null;
 
     const validationErrors = useMemo(() => {
         const errors: Record<string, string> = {};
@@ -141,6 +159,8 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                     type: 'new_project',
                     path: newInitMode === 'new-local' ? localPath.trim() : '',
                     initMode: newInitMode,
+                    selectedTechstackId: newProjectTechstackId,
+                    applicationKind: newProjectApplicationKind,
                     ...(newInitMode === 'new-remote' && gitUrlSlug.trim()
                         ? { repoSlug: gitUrlSlug.trim() }
                         : {}),
@@ -358,6 +378,7 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
         { key: "quicksprints", label: "Quicksprints", description: "Repository-specific sprint templates.", icon: Workflow },
         { key: "previewScript", label: "Preview Script", description: "Container startup script for browser previews.", icon: PlaySquare },
         { key: "ci", label: "CI", description: "Basic GitHub/GitLab error-checking pipelines.", icon: ShieldCheck },
+        { key: "techstack", label: "Techstack", description: "Detect and assign a project stack from manifests.", icon: Layers3 },
     ] as const;
 
     return (
@@ -390,6 +411,7 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                         <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-white/25 font-mono mb-1.5">Source</div>
                         <div className="text-base font-semibold text-white font-mono tracking-tight leading-snug">
                             {sourceType === 'new_project' ? 'New Project' : sourceType === 'git' ? 'Git Repo' : 'Local Project'}
+                            {quickActionContextLabel ? `: ${quickActionContextLabel}` : ''}
                         </div>
                         <div className="mt-3 w-8 h-[2px] bg-ember-500/50" />
                     </div>
@@ -401,14 +423,17 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                     <div className="flex items-start justify-between shrink-0 p-5 sm:p-7 lg:px-8 lg:pt-8 lg:pb-6 border-b border-black/[0.04] dark:border-white/[0.04]">
                         <div>
                             <h2 id="add-project-modal-title" className="text-2xl font-semibold text-slate-900 dark:text-white tracking-tight font-display leading-none">
-                                Add Project.
+                                {quickActionContextLabel ? `Create ${quickActionContextLabel}.` : 'Add Project.'}
                             </h2>
                             <p className="text-xs font-medium text-slate-400 mt-2 tracking-wide">
-                                Connect a local directory or remote repository
+                                {quickActionContextLabel
+                                    ? `Initialize a new ${quickActionContextLabel.toLowerCase()} repository with explicit project techstack settings`
+                                    : 'Connect a local directory or remote repository'}
                             </p>
                         </div>
                         <div className="sr-only" aria-live="polite" role="status">
                             {sourceType === 'new_project' ? 'New Project selected' : sourceType === 'git' ? 'Git Repo selected' : 'Local Project selected'}
+                            {quickActionContextLabel ? `. ${quickActionContextLabel} context selected.` : ''}
                             {showSetupOptions ? '. Setup Options step.' : ''}
                         </div>
                         <button
@@ -615,7 +640,7 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                                                     Initialize with Project Setup Agent
                                                 </span>
                                                 <span className="mt-1 block text-xs font-medium leading-relaxed text-slate-500 dark:text-slate-400">
-                                                    Research the codebase after creation and generate project-specific agents, routing, quicksprints, preview startup, and basic CI.
+                                                    Research the codebase after creation and generate project-specific agents, routing, quicksprints, preview startup, basic CI, and a detected techstack.
                                                 </span>
                                             </span>
                                         </label>
@@ -634,7 +659,7 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                                                 </div>
                                                 <button
                                                     type="button"
-                                                    onClick={() => setSetupOptions({ agents: true, quicksprints: true, previewScript: true, ci: true })}
+                                                    onClick={() => setSetupOptions({ agents: true, quicksprints: true, previewScript: true, ci: true, techstack: true })}
                                                     className="rounded-xl bg-white px-3 py-2 text-[10px] font-black uppercase tracking-[0.14em] text-slate-600 shadow-sm transition-colors hover:text-slate-900 dark:bg-white/[0.08] dark:text-slate-300 dark:hover:text-white"
                                                 >
                                                     All

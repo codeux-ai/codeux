@@ -751,6 +751,29 @@ export interface AiProviderSettings {
   invocationRouting: Record<InvocationRoutingId, InvocationRoutingSettings>;
 }
 
+export type ApplicationKind = "web" | "desktop";
+
+export interface TechstackItemSettings {
+  id: string;
+  label: string;
+}
+
+export interface TechstackCatalogEntrySettings {
+  id: string;
+  label: string;
+  items: TechstackItemSettings[];
+}
+
+export interface TechstackCatalogSettings {
+  defaultTechstackId: string;
+  entries: TechstackCatalogEntrySettings[];
+}
+
+export interface TechstackSelectionSettings {
+  selectedTechstackId: string | null;
+  applicationKind: ApplicationKind | null;
+}
+
 /** Toggles for what appears in an automated Task PR description. See src/domain/sprint/composer/pr-description-composer.ts. */
 export interface TaskPrTemplateSections {
   summary: boolean;
@@ -1145,6 +1168,8 @@ export interface DashboardSettings {
   automationLevel: AutomationLevel;
   automationInterventions: AutomationInterventionsSettings;
   aiProvider: AiProviderSettings;
+  techstackCatalog: TechstackCatalogSettings;
+  techstack: TechstackSelectionSettings;
   git: GitSettings;
   jira: JiraSettings;
   ciIntelligence: CiIntelligenceSettings;

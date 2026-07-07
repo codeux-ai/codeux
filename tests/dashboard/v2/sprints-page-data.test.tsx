@@ -537,7 +537,14 @@ describe("useSprintsPageData sprint-number reservations", () => {
       initMode: "new-remote",
       remoteProvider: "github",
       isPrivate: true,
+      settingsOverrides: {
+        techstack: {
+          selectedTechstackId: "code-ux-internal",
+          applicationKind: null,
+        },
+      },
     });
+    expect(createProject.mock.calls[0]?.[0].settingsOverrides.git).toBeUndefined();
   });
 
   it("reserves distinct sprint numbers for multiple unresolved sprint creations", async () => {

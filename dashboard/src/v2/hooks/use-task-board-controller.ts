@@ -4,7 +4,8 @@ import type { RefObject } from "preact";
 import { useDashboardRuntimeData } from "../../hooks/use-dashboard-runtime-data.js";
 import { useSprints } from "../../hooks/useSprints.js";
 import type { AddProjectModalSubmission } from "../components/ui/AddProjectModal.js";
-import { buildGitHubModeProjectSettingsOverride } from "../../lib/settings-updaters.js";
+import { DEFAULT_DASHBOARD_SETTINGS } from "../../lib/settings.js";
+import { buildProjectCreationSettingsOverride } from "../../lib/settings-updaters.js";
 import type {
   TaskBoardPriorityFilter,
   TaskBoardStatusFilter,
@@ -482,7 +483,11 @@ export function useTaskBoardController(): TaskBoardController {
         initMode: project.initMode,
         remoteProvider: project.remoteProvider,
         isPrivate: project.isPrivate,
-        ...(isLocalProject ? { settingsOverrides: buildGitHubModeProjectSettingsOverride("LOCAL") } : {}),
+        settingsOverrides: buildProjectCreationSettingsOverride({
+          ...(isLocalProject ? { githubMode: "LOCAL" as const } : {}),
+          selectedTechstackId: project.selectedTechstackId ?? DEFAULT_DASHBOARD_SETTINGS.techstackCatalog.defaultTechstackId,
+          applicationKind: project.applicationKind ?? null,
+        }),
       });
       return;
     }
@@ -492,7 +497,7 @@ export function useTaskBoardController(): TaskBoardController {
       sourceType: project.type,
       sourceRef: project.path,
       cloneDir: project.cloneDir,
-      ...(project.type === "local" ? { settingsOverrides: buildGitHubModeProjectSettingsOverride("LOCAL") } : {}),
+      ...(project.type === "local" ? { settingsOverrides: buildProjectCreationSettingsOverride({ githubMode: "LOCAL" }) } : {}),
     });
   }, [createProject]);
 

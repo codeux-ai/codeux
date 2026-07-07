@@ -1,20 +1,24 @@
 import type { FunctionComponent, RefObject } from "preact";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "preact/hooks";
 import gsap from "gsap";
-import { Bell, CalendarClock, Moon, Sun, ChevronDown, FolderOpen, ArrowRight } from "lucide-preact";
+import { Bell, CalendarClock, Moon, Sun, ChevronDown, FolderOpen, ArrowRight, Layers, Globe, Monitor } from "lucide-preact";
 import { Link, useRouterState } from "@tanstack/react-router";
 import { StatusDot } from "./ui/StatusDot.js";
+import type { ApplicationKind, TechstackCatalogSettings } from "../../types.js";
 
 import { BrandSection } from "./top-nav/BrandSection.js";
 import { GlobalSearch } from "./top-nav/GlobalSearch.js";
 import { TelemetryStats } from "./top-nav/TelemetryStats.js";
 
 import { AddProjectModal, type AddProjectModalSubmission } from "./ui/AddProjectModal.js";
-import { buildGitHubModeProjectSettingsOverride } from "../../lib/settings-updaters.js";
+import { buildProjectCreationSettingsOverride } from "../../lib/settings-updaters.js";
+import { DEFAULT_DASHBOARD_SETTINGS } from "../../lib/settings.js";
 import { useProjectData } from "../context/project-data.js";
 import { useSprints } from "../../hooks/useSprints.js";
 import { formatSprintDisplay } from "../lib/format-sprint.js";
-import { useProjectEffectiveSettings } from "../hooks/use-project-effective-settings.js";
+import { clearProjectEffectiveSettingsCache, useProjectEffectiveSettings } from "../hooks/use-project-effective-settings.js";
+import { fetchSystemSettings, saveProjectTechstackSettings } from "../lib/settings-api.js";
+import { buildTechstackSelectorViewModel } from "../lib/settings/techstack-view-models.js";
 import { DockerStatusMenu } from "./DockerStatusMenu.js";
 import { BrowserSessionsMenu } from "./browser/BrowserSessionsMenu.js";
 import { NotificationPanel } from "./NotificationPanel.js";
@@ -159,6 +163,11 @@ interface TopNavProps {
     isMobileMenuOpen?: boolean;
 }
 
+type AddProjectQuickActionDefaults = {
+    applicationKind: ApplicationKind;
+    selectedTechstackId: string;
+};
+
 const ScheduledAgentIndicator: FunctionComponent<{ entries: AgentSchedulerSummaryEntry[] }> = ({ entries }) => {
     const [detailsVisible, setDetailsVisible] = useState(false);
     const containerRef = useRef<HTMLDivElement>(null);
@@ -248,6 +257,7 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
 
     const [dropdownOpen, setDropdownOpen] = useState(false);
     const [showAddProject, setShowAddProject] = useState(false);
+    const [addProjectQuickActionDefaults, setAddProjectQuickActionDefaults] = useState<AddProjectQuickActionDefaults | undefined>(undefined);
     const isDark = useIsDark();
     const { setTheme } = useThemeSetting();
 
@@ -345,6 +355,11 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
     const [sprintDropdownOpen, setSprintDropdownOpen] = useState(false);
     const sprintDropdownRef = useRef<HTMLDivElement>(null);
     const [sprintDropdownWidth, setSprintDropdownWidth] = useState<number>(0);
+    const [techstackDropdownOpen, setTechstackDropdownOpen] = useState(false);
+    const [techstackSwitchBusy, setTechstackSwitchBusy] = useState(false);
+    const [systemTechstackCatalog, setSystemTechstackCatalog] = useState<TechstackCatalogSettings | null>(null);
+    const [systemSettingsLoading, setSystemSettingsLoading] = useState(true);
+    const techstackDropdownRef = useRef<HTMLDivElement>(null);
 
     const {
         projects,
@@ -354,8 +369,8 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
         loading,
     } = useProjectData();
     const projectId = selectedProject?.id || null;
+    const { data: effectiveSettings, loading: effectiveSettingsLoading, refresh: refreshEffectiveSettings } = useProjectEffectiveSettings(projectId);
     const notifications = useNotifications(projectId);
-    const { data: effectiveSettings } = useProjectEffectiveSettings(projectId);
     const sprintKeyPrefix = effectiveSettings?.settings?.git?.sprintKeyPrefix || "SPR";
 
     const { data: sprints, selectedSprintId, selectedSprint, selectSprint, loading: sprintsLoading } = useSprints(selectedProject?.id || null);
@@ -366,9 +381,28 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
 
     const projectKb = useDropdownKeyboard(dropdownOpen, setDropdownOpen, dropdownRef, setProjectFilter);
     const sprintKb = useDropdownKeyboard(sprintDropdownOpen, setSprintDropdownOpen, sprintDropdownRef, setSprintFilter);
+    const techstackKb = useDropdownKeyboard(techstackDropdownOpen, setTechstackDropdownOpen, techstackDropdownRef);
 
     const filteredProjects = useMemo(() => projects.filter(p => p.name.toLowerCase().includes(projectFilter.toLowerCase())), [projects, projectFilter]);
     const filteredSprints = useMemo(() => sprints.filter(s => s.name.toLowerCase().includes(sprintFilter.toLowerCase())), [sprints, sprintFilter]);
+    const techstackCatalog = effectiveSettings?.settings.techstackCatalog
+        ?? systemTechstackCatalog
+        ?? DEFAULT_DASHBOARD_SETTINGS.techstackCatalog;
+    const techstackViewModel = useMemo(
+        () => buildTechstackSelectorViewModel(effectiveSettings?.settings.techstack, techstackCatalog),
+        [effectiveSettings?.settings.techstack, techstackCatalog],
+    );
+    const techstackSelectorLoading = !!selectedProject && (effectiveSettingsLoading || systemSettingsLoading);
+    const techstackSelectorDisabled = !selectedProject || techstackSelectorLoading || techstackSwitchBusy;
+    const quickActionTechstackId = effectiveSettings?.settings.techstack?.selectedTechstackId
+        ?? techstackCatalog.defaultTechstackId;
+    const techstackHelper = !selectedProject
+        ? "Select a project first"
+        : techstackSelectorLoading
+            ? "Loading settings"
+            : techstackViewModel.isUnassigned
+                ? `Unassigned; using ${techstackViewModel.defaultLabel}`
+                : "Assigned";
 
     useEffect(() => {
         if (previousPathRef.current !== currentPath) {
@@ -406,6 +440,31 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
         }
     }, [filteredSprints.length, sprintDropdownOpen, sprintFilter, sprintsLoading]);
 
+    useEffect(() => {
+        let cancelled = false;
+        setSystemSettingsLoading(true);
+        fetchSystemSettings()
+            .then((settings) => {
+                if (!cancelled) {
+                    setSystemTechstackCatalog(settings.techstackCatalog);
+                }
+            })
+            .catch((error: unknown) => {
+                if (!cancelled) {
+                    const message = error instanceof Error ? error.message : "Unknown error";
+                    setNavAnnouncement(`Could not load techstack catalog. ${message}`);
+                }
+            })
+            .finally(() => {
+                if (!cancelled) {
+                    setSystemSettingsLoading(false);
+                }
+            });
+        return () => {
+            cancelled = true;
+        };
+    }, []);
+
     useLayoutEffect(() => {
         if (sprintDropdownOpen && sprintDropdownRef.current) {
             setSprintDropdownWidth(sprintDropdownRef.current.offsetWidth);
@@ -426,10 +485,52 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
             if (sprintDropdownRef.current && !sprintDropdownRef.current.contains(e.target as Node)) {
                 setSprintDropdownOpen(false);
             }
+            if (techstackDropdownRef.current && !techstackDropdownRef.current.contains(e.target as Node)) {
+                setTechstackDropdownOpen(false);
+            }
         };
         document.addEventListener("mousedown", handler);
         return () => document.removeEventListener("mousedown", handler);
     }, []);
+
+    const handleTechstackSelection = async (nextTechstackId: string | null, label: string) => {
+        if (!projectId || techstackSwitchBusy || nextTechstackId === techstackViewModel.selectedTechstackId) {
+            setTechstackDropdownOpen(false);
+            return;
+        }
+
+        setTechstackSwitchBusy(true);
+        setNavAnnouncement(`Saving techstack ${label}...`);
+        try {
+            await saveProjectTechstackSettings(projectId, {
+                selectedTechstackId: nextTechstackId,
+                applicationKind: effectiveSettings?.settings.techstack.applicationKind ?? null,
+            });
+            clearProjectEffectiveSettingsCache(projectId);
+            await refreshEffectiveSettings();
+            setNavAnnouncement(nextTechstackId === null
+                ? `Techstack cleared. ${techstackViewModel.defaultLabel} remains the display fallback.`
+                : `Techstack switched to ${label.replace(" (default)", "")}`);
+            setTechstackDropdownOpen(false);
+        } catch (error) {
+            const message = error instanceof Error ? error.message : "Unknown error";
+            setNavAnnouncement(`Could not save techstack. ${message}`);
+        } finally {
+            setTechstackSwitchBusy(false);
+        }
+    };
+
+    const openAddProjectModal = (defaults?: AddProjectQuickActionDefaults) => {
+        setAddProjectQuickActionDefaults(defaults);
+        setShowAddProject(true);
+    };
+
+    const openAppQuickAction = (applicationKind: ApplicationKind) => {
+        openAddProjectModal({
+            applicationKind,
+            selectedTechstackId: quickActionTechstackId,
+        });
+    };
 
     const handleCreateProject = async (project: AddProjectModalSubmission) => {
         if (project.type === 'new_project') {
@@ -445,7 +546,11 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
                 initMode: project.initMode,
                 remoteProvider: project.remoteProvider,
                 isPrivate: project.isPrivate,
-                ...(isLocalProject ? { settingsOverrides: buildGitHubModeProjectSettingsOverride("LOCAL") } : {}),
+                settingsOverrides: buildProjectCreationSettingsOverride({
+                    ...(isLocalProject ? { githubMode: "LOCAL" as const } : {}),
+                    selectedTechstackId: project.selectedTechstackId ?? DEFAULT_DASHBOARD_SETTINGS.techstackCatalog.defaultTechstackId,
+                    applicationKind: project.applicationKind ?? null,
+                }),
             });
             return;
         }
@@ -455,7 +560,7 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
             sourceType: project.type,
             sourceRef: project.path,
             cloneDir: project.cloneDir,
-            ...(project.type === "local" ? { settingsOverrides: buildGitHubModeProjectSettingsOverride("LOCAL") } : {}),
+            ...(project.type === "local" ? { settingsOverrides: buildProjectCreationSettingsOverride({ githubMode: "LOCAL" }) } : {}),
         });
     };
 
@@ -560,7 +665,7 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
                             )}
                             <div className="p-2 border-t border-black/[0.04] dark:border-white/[0.04] mt-1 flex flex-col gap-1">
                                 <button
-                                    onClick={() => { setDropdownOpen(false); setShowAddProject(true); }}
+                                    onClick={() => { setDropdownOpen(false); openAddProjectModal(); }}
                                     className="focus-visible:ring-2 focus-visible:ring-signal-500/50 w-full flex items-center gap-2 px-3 py-2 text-xs font-semibold text-ember-600 dark:text-ember-400 hover:bg-ember-500/[0.06] rounded-xl transition-colors"
                                 >
                                     <FolderOpen aria-hidden="true" className="w-3.5 h-3.5" strokeWidth={2} />
@@ -574,6 +679,116 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
                                     <span>Manage Projects</span>
                                     <ArrowRight aria-hidden="true" className="w-3 h-3" strokeWidth={2} />
                                 </Link>
+                            </div>
+                        </div>
+                    )}
+                </div>
+
+                <div className="flex items-center gap-1">
+                    <Tooltip content="Create Web App">
+                        <button
+                            type="button"
+                            onClick={() => openAppQuickAction("web")}
+                            aria-label="Create Web App"
+                            className="flex h-9 min-w-0 items-center justify-center gap-2 rounded-xl border border-ember-500/20 bg-ember-500/[0.1] px-3 text-xs font-bold text-ember-700 transition-colors hover:border-ember-500/35 hover:bg-ember-500/[0.16] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 dark:text-ember-200"
+                        >
+                            <Globe aria-hidden="true" className="h-3.5 w-3.5 shrink-0" strokeWidth={1.8} />
+                            <span className="hidden xl:inline">Web App</span>
+                        </button>
+                    </Tooltip>
+                    <Tooltip content="Create Desktop App">
+                        <button
+                            type="button"
+                            onClick={() => openAppQuickAction("desktop")}
+                            aria-label="Create Desktop App"
+                            className="flex h-9 min-w-0 items-center justify-center gap-2 rounded-xl border border-signal-500/20 bg-signal-500/[0.1] px-3 text-xs font-bold text-signal-700 transition-colors hover:border-signal-500/35 hover:bg-signal-500/[0.16] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 dark:text-signal-200"
+                        >
+                            <Monitor aria-hidden="true" className="h-3.5 w-3.5 shrink-0" strokeWidth={1.8} />
+                            <span className="hidden xl:inline">Desktop App</span>
+                        </button>
+                    </Tooltip>
+                </div>
+
+                {/* Techstack Selector */}
+                <div className="relative min-w-0" ref={techstackDropdownRef} onKeyDown={techstackKb.onContainerKeyDown}>
+                    <button
+                        ref={techstackKb.toggleRef}
+                        onKeyDown={(e) => {
+                            if (techstackSelectorDisabled) {
+                                if (e.key === "Enter" || e.key === " " || e.key === "ArrowDown" || e.key === "ArrowUp" || e.key === "Home" || e.key === "End") {
+                                    e.preventDefault();
+                                    setNavAnnouncement(techstackHelper);
+                                }
+                                return;
+                            }
+                            techstackKb.onToggleKeyDown(e);
+                        }}
+                        onClick={(e) => {
+                            if (techstackSelectorDisabled) {
+                                e.preventDefault();
+                                setNavAnnouncement(techstackHelper);
+                                return;
+                            }
+                            setTechstackDropdownOpen(!techstackDropdownOpen);
+                        }}
+                        aria-haspopup="listbox"
+                        aria-expanded={techstackDropdownOpen}
+                        id="techstack-selector-button"
+                        aria-label={`Techstack selector, active techstack: ${techstackSelectorLoading ? "Loading settings" : techstackViewModel.activeLabel}${techstackViewModel.isUnassigned ? " (unassigned, using default)" : ""}`}
+                        aria-controls={techstackDropdownOpen ? "techstack-listbox" : undefined}
+                        aria-activedescendant={techstackDropdownOpen ? (techstackKb.activeDescendantId || (techstackViewModel.selectedTechstackId ? `techstack-option-${techstackViewModel.selectedTechstackId}` : "techstack-option-unassigned")) : undefined}
+                        aria-busy={techstackSwitchBusy || techstackSelectorLoading ? "true" : "false"}
+                        aria-disabled={techstackSelectorDisabled}
+                        disabled={techstackSelectorDisabled}
+                        className={`focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 flex h-9 min-w-0 max-w-[13rem] items-center gap-2 rounded-xl border border-transparent bg-black/[0.04] px-3 py-0 transition-all group dark:bg-white/[0.04] ${
+                            techstackSelectorDisabled
+                                ? "opacity-60 cursor-not-allowed"
+                                : "hover:border-black/[0.08] dark:hover:border-white/[0.08] cursor-pointer"
+                        }`}
+                    >
+                        <Layers aria-hidden="true" className="h-3.5 w-3.5 shrink-0 text-slate-400" strokeWidth={1.7} />
+                        <span className="flex min-w-0 flex-col items-start leading-none">
+                            <span className="max-w-[8rem] truncate text-sm font-semibold font-mono text-slate-700 dark:text-slate-200">
+                                {techstackSwitchBusy ? "Saving..." : techstackSelectorLoading ? "Loading..." : techstackViewModel.activeLabel}
+                            </span>
+                            <span className="max-w-[8rem] truncate text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-400">
+                                {techstackHelper}
+                            </span>
+                        </span>
+                        {!techstackSelectorDisabled && (
+                            <ChevronDown aria-hidden="true" className={`h-3.5 w-3.5 shrink-0 text-slate-400 transition-transform duration-300 ${techstackDropdownOpen ? "rotate-180" : ""}`} />
+                        )}
+                    </button>
+
+                    {techstackDropdownOpen && !techstackSelectorDisabled && (
+                        <div id="techstack-listbox" role="listbox" aria-label="Techstack list" className="absolute top-full right-0 mt-2 min-w-[14rem] w-64 max-w-[calc(100vw-2rem)] bg-white/95 dark:bg-void-800/95 backdrop-blur-2xl border border-black/[0.08] dark:border-white/[0.08] rounded-2xl shadow-2xl overflow-hidden z-50">
+                            <div className="px-3 pt-3 pb-1.5">
+                                <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Techstack</span>
+                            </div>
+                            <div className="max-h-64 sm:max-h-72 md:max-h-80 overflow-y-auto dropdown-scrollbar">
+                                {techstackViewModel.options.map((option) => {
+                                    const selected = option.techstackId === techstackViewModel.selectedTechstackId;
+                                    return (
+                                        <button
+                                            key={option.id}
+                                            id={option.kind === "unassigned" ? "techstack-option-unassigned" : `techstack-option-${option.id}`}
+                                            role="option"
+                                            aria-selected={selected}
+                                            onClick={() => void handleTechstackSelection(option.techstackId, option.label)}
+                                            className={`focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 w-full flex items-center gap-2.5 px-3 py-3 min-h-[44px] text-left hover:bg-signal-500/5 transition-colors group ${selected ? "bg-signal-500/8" : ""}`}
+                                        >
+                                            <span className={`text-sm font-medium font-mono truncate transition-colors ${selected ? "text-signal-600 dark:text-signal-400 font-semibold" : "text-slate-700 dark:text-slate-300"}`}>
+                                                {option.label}
+                                            </span>
+                                            {option.kind === "unassigned" && (
+                                                <span className="ml-auto text-[10px] font-bold uppercase tracking-[0.08em] text-slate-400">Fallback</span>
+                                            )}
+                                            {selected && option.kind !== "unassigned" && (
+                                                <span className="ml-auto h-1.5 w-1.5 rounded-full bg-signal-500" />
+                                            )}
+                                        </button>
+                                    );
+                                })}
                             </div>
                         </div>
                     )}
@@ -759,8 +974,13 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
 
             {showAddProject && (
                 <AddProjectModal
-                    onClose={() => setShowAddProject(false)}
+                    onClose={() => {
+                        setShowAddProject(false);
+                        setAddProjectQuickActionDefaults(undefined);
+                    }}
                     onAdd={(project) => { void handleCreateProject(project); }}
+                    initialSourceType={addProjectQuickActionDefaults ? "new_project" : undefined}
+                    quickActionDefaults={addProjectQuickActionDefaults}
                 />
             )}
         </>

@@ -9,6 +9,8 @@ Settings are evaluated in cascade: **Defaults → System → Project → Sprint*
 ```jsonc
 {
   "aiProvider": { /* providers + routing */ },
+  "techstackCatalog": { /* system catalog */ },
+  "techstack": { /* project selection */ },
   "workers":    { /* virtual worker config */ },
   "ciIntelligence": { /* CI gate */ },
   "automationLevel": "FULL" | "SEMI_AUTO" | "ALWAYS_ASK",
@@ -80,6 +82,44 @@ Settings are evaluated in cascade: **Defaults → System → Project → Sprint*
 | `qwen-code` | ❌ | `qwen3-coder-plus` | 0 | HIGH | 0 |
 | `opencode` | ❌ | `anthropic/claude-sonnet-4-5` | 0 | HIGH | 0 |
 | `antigravity` | ❌ | `default` | 0 | HIGH | 0 |
+
+## `techstackCatalog`
+
+System settings own the techstack catalog:
+
+```jsonc
+{
+  "defaultTechstackId": "code-ux-internal",
+  "entries": [
+    {
+      "id": "code-ux-internal",
+      "label": "Code UX Internal",
+      "items": [
+        { "id": "preact", "label": "Preact" },
+        { "id": "tanstack-router", "label": "TanStack Router" },
+        { "id": "gsap", "label": "GSAP" },
+        { "id": "three-js", "label": "Three.js" },
+        { "id": "lucide-icons", "label": "Lucide Icons" }
+      ]
+    }
+  ]
+}
+```
+
+Saved catalogs are normalized on load. Code UX trims ids and labels, drops malformed or duplicate ids, always preserves the built-in `code-ux-internal` entry, and falls back `defaultTechstackId` to `code-ux-internal` when the saved default is missing or invalid.
+
+## `techstack`
+
+Project and sprint settings own the selected techstack:
+
+```jsonc
+{
+  "selectedTechstackId": null,
+  "applicationKind": null // "web" | "desktop" | null
+}
+```
+
+Default project settings intentionally keep `selectedTechstackId` and `applicationKind` as `null`. Existing and imported projects therefore do not automatically inherit the built-in Code UX internal stack; a project creation flow must set an explicit override when it wants to apply the catalog default.
 
 ## `cliWorkflow`
 

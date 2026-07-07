@@ -90,7 +90,12 @@ import type {
   BackgroundPattern,
   TaskPrTemplateSections,
   SprintPrTemplateSections,
-  PrDescriptionSettings
+  PrDescriptionSettings,
+  ApplicationKind,
+  TechstackItemSettings,
+  TechstackCatalogEntrySettings,
+  TechstackCatalogSettings,
+  TechstackSelectionSettings
 } from "../../src/contracts/app-types.js";
 import type {
   EffectiveSettingsResponse,
@@ -200,6 +205,11 @@ export type {
   TaskPrTemplateSections,
   SprintPrTemplateSections,
   PrDescriptionSettings,
+  ApplicationKind,
+  TechstackItemSettings,
+  TechstackCatalogEntrySettings,
+  TechstackCatalogSettings,
+  TechstackSelectionSettings,
   EffectiveSettingsResponse,
   ProjectProviderSettings,
   ProjectSettings,
