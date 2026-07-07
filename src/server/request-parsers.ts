@@ -68,6 +68,10 @@ export function isDashboardKnowledgeUploadPath(pathname: string): boolean {
   return /^\/api\/projects\/[^/]+\/knowledge\/documents\/upload$/.test(pathname);
 }
 
+export function isDashboardSpeechTranscriptionUploadPath(pathname: string): boolean {
+  return pathname === "/api/speech/transcriptions";
+}
+
 export function isDashboardLargeSettingsJsonPath(method: string | undefined, pathname: string): boolean {
   if ((method || "").toUpperCase() !== "PUT") {
     return false;
@@ -81,7 +85,8 @@ export function getDashboardJsonBodyLimit(method: string | undefined, pathname: 
   if (!isDashboardRuntimeDataPath(pathname)
     || !isDashboardJsonMutationMethod(method)
     || isDashboardPreviewProxyPath(pathname)
-    || isDashboardKnowledgeUploadPath(pathname)) {
+    || isDashboardKnowledgeUploadPath(pathname)
+    || isDashboardSpeechTranscriptionUploadPath(pathname)) {
     return null;
   }
   return isDashboardLargeSettingsJsonPath(method, pathname) ? "large" : "default";
