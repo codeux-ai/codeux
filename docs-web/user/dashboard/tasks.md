@@ -4,6 +4,12 @@ The **Tasks** page (`/tasks`) is a flat, filterable view of every task in the ac
 
 Use it when you want to find a task by name, see what is running right now, or batch-act on a set of tasks.
 
+## Project and sprint scope
+
+The global project selector in the navbar owns the active project. Changing projects while you are on `/tasks` keeps the newly selected project active and resets any stale sprint filter that belonged to the previous project.
+
+The sprint selector inside the Tasks page only scopes the board for the current project. Choosing a sprint updates the URL to `/tasks?sprintId=<id>` and stores that sprint selection for the active project. Links from the Sprints page still use the same deep link, but the Tasks page applies it only when the sprint belongs to the currently selected project.
+
 ## Columns
 
 | Column | Description |
