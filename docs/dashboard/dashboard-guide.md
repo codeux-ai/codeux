@@ -140,7 +140,7 @@ Legacy runtime:
 - `GET /api/stats/header-throughput?projectId=<projectId>&window=20s|1h|24h|7d|30d|all`
   - Compact app-wide token throughput for the top dashboard header. The header polls the `20s` live activity window once per second and shows the active-duration token rate for invocations updated in that window; detailed charts, ledgers, and model/provider analysis remain on the Stats page.
 - `GET /api/live`
-  - Unified Live runtime snapshot for the selected project
+  - Unified Live runtime snapshot for the selected project, scoped to the selected sprint when the top-nav sprint selector has a persisted sprint
 - `PUT /api/projects/:projectId/preferred-worker`
   - Sets the preferred worker host for the selected project
 - `GET /api/realtime`
@@ -251,6 +251,8 @@ Legacy runtime:
 
 ### Overview
 - Overview metric cards use the restored `StatsCard` visual system from the operational command surface: four responsive cards with ambient bottom sparklines, stable card height, and compact detail rows for cost, invocations, active sprint, queue health, and active time.
+- Overview telemetry keeps the cross-project `Human Intervention Needed`, active sprint, and runtime timeline sections, and now adds a compact selected-sprint attention queue when the selected project live snapshot includes active attention items.
+- The Overview attention queue uses the same row labels, severity/status tones, markdown summary rendering, empty-state language, and bounded scrollbar treatment as the Live sidebar queue, but renders read-only so action handling stays centralized on the Live page.
 
 ### Navigation
 - Sidebar and dock navigation expose the primary routes in guided-tour order: Chat, Overview, Sprints, Tasks, Agents, Stats, Schedule (`/scheduler`), Memory, Knowledge (`/knowledge`), Browser, Files (`/files`, providing project and sprint File Browser capabilities), Live, and Settings/Config.
@@ -299,6 +301,7 @@ Legacy runtime:
 - The Agents page now includes a Push Agents header action with an inline destination picker, so users explicitly choose between a local commit, branch push, or pull request before dispatching the backend push request.
 - The Live Sprint Clock card in the Sprint Stats deck now shows a six-tile grid with Finished, Avg Finish, Accumulated, Input, Output, and Cached values, and the token tiles reuse the shared compact formatter from the Stats page.
 - Live runtime pages now use the persisted top-nav sprint selection as the page scope, so the Live view follows the selected sprint from the header menu
+- Overview telemetry reads the same selected-project live snapshot for its compact attention queue, so Overview and Live show the same selected-sprint queue items without client-side reconstruction from project-wide blockers.
 - That selection is view-only for the dashboard surface; it does not change which sprint run is actually executing in the backend
 - Live attention resolve/dismiss dialogs are portaled to a viewport-fixed overlay, preserve viewport position after confirmation, use action-specific tones, and return focus without scrolling the page when the originating queue row disappears.
 - The Live attention queue, Invocation Feed, and Execution Runtime panels share a compact sidebar feed language with smaller type, subtle row backgrounds, bounded scroll regions, explicit empty states, and narrow colored left rails for status/severity distinction.

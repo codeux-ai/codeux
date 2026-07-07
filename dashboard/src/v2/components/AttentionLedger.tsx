@@ -1,6 +1,7 @@
 import type { FunctionComponent } from "preact";
 import { memo } from "preact/compat";
 import { useMemo, useLayoutEffect, useRef, useId, useState } from "preact/hooks";
+import type { ExecutionAttentionItemSummary, ExecutionDashboardSnapshot } from "../../types.js";
 import { getLiveActionDisplayProps, getPendingActionState } from "../lib/live-session-runtime.js";
 import gsap from "gsap";
 import { useReducedMotion, useResolvedMotionDuration } from "../hooks/use-reduced-motion.js";
@@ -19,145 +20,252 @@ type AttentionLedgerProps = {
     defaultOpen?: boolean;
 };
 
+type AttentionQueueSnapshot = Pick<
+    ExecutionDashboardSnapshot,
+    "projectId" | "primaryAssignedWorker" | "overflowAssignedWorkers"
+>;
 
+export const AttentionQueueItemsList: FunctionComponent<{
+    attentionItems: ExecutionAttentionItemSummary[];
+    snapshot: AttentionQueueSnapshot | null;
+    onClaimAttentionItem?: (projectId: string, attentionItemId: string) => void;
+    onResolveAttentionItem?: (projectId: string, attentionItemId: string) => void;
+    onDismissAttentionItem?: (projectId: string, attentionItemId: string) => void;
+    pendingActionIds?: Set<string>;
+    showActions?: boolean;
+    maxItems?: number;
+    emptyTitle?: string;
+    emptyDescription?: string;
+    listLabel?: string;
+    listClassName?: string;
+}> = memo(({
+    attentionItems,
+    snapshot,
+    onClaimAttentionItem,
+    onResolveAttentionItem,
+    onDismissAttentionItem,
+    pendingActionIds = new Set<string>(),
+    showActions = true,
+    maxItems = 8,
+    emptyTitle = "Queue clear",
+    emptyDescription = "No active blockers are waiting in the project attention queue.",
+    listLabel = "Active attention items",
+    listClassName = "max-h-[50dvh] sm:max-h-96 space-y-2 overflow-y-auto pr-1 dashboard-scrollbar",
+}) => {
+    const listRef = useRef<HTMLDivElement>(null);
+    const prevCountRef = useRef<number>(0);
+    const reducedMotion = useReducedMotion();
+    const duration = useResolvedMotionDuration(parseFloat(INTERACTION_TOKENS.enterExit.duration) / 1000);
 
-const AttentionLedgerRow = memo(({ item, snapshot, onClaimAttentionItem, onResolveAttentionItem, onDismissAttentionItem, pendingActionIds }: { item: any; snapshot: any; onClaimAttentionItem: any; onResolveAttentionItem: any; onDismissAttentionItem: any; pendingActionIds: any }) => {
-    const rowRef = useRef<HTMLDivElement>(null);
-    const isReducedMotion = useReducedMotion();
-    const highlightDuration = useResolvedMotionDuration(parseFloat(INTERACTION_TOKENS.controlFeedback.duration) / 1000);
-    const prevStatusRef = useRef(item.status);
+    const workersByEndpointId = useMemo(() => {
+        if (!snapshot) return new Map<string, string>();
+        const overflow = snapshot.overflowAssignedWorkers || [];
+        const pairs = [
+            snapshot.primaryAssignedWorker,
+            ...overflow,
+        ].filter(Boolean).map((worker) => [worker!.workerEndpointId || "", worker!.workerDisplayName] as const);
+        return new Map(pairs);
+    }, [snapshot?.overflowAssignedWorkers, snapshot?.primaryAssignedWorker, snapshot]);
+
+    const visibleAttentionItems = useMemo(() => {
+        return attentionItems.slice(0, maxItems);
+    }, [attentionItems, attentionItems.length, maxItems]);
 
     useLayoutEffect(() => {
-        if (!rowRef.current) return;
-        if (prevStatusRef.current !== item.status) {
-            if (isReducedMotion) {
-                const el = rowRef.current;
-                el.classList.add("bg-status-amber/10", "border-status-amber/20");
-                setTimeout(() => {
-                    if (el) el.classList.remove("bg-status-amber/10", "border-status-amber/20");
-                }, 500);
-            } else {
-                gsap.killTweensOf(rowRef.current);
-                gsap.fromTo(rowRef.current,
-                    { backgroundColor: "rgba(245, 158, 11, 0.15)", borderColor: "rgba(245, 158, 11, 0.3)" },
-                    { backgroundColor: "rgba(0, 0, 0, 0.015)", borderColor: "rgba(0, 0, 0, 0.04)", duration: highlightDuration * 2, ease: "power2.out", overwrite: "auto", clearProps: "backgroundColor,borderColor" }
-                );
+        if (!listRef.current || reducedMotion) {
+            prevCountRef.current = attentionItems.length;
+            return;
+        }
+
+        const currentCount = attentionItems.length;
+        let ctx: { revert: () => void } | undefined;
+        if (currentCount > prevCountRef.current) {
+            const newElements = Array.from(listRef.current.children).filter(el => !el.hasAttribute("data-entered"));
+
+            if (newElements.length > 0) {
+                ctx = gsap.context(() => {
+                    gsap.fromTo(newElements, { opacity: 0, x: -10 }, { opacity: 1, x: 0, duration: duration, stagger: 0.04, ease: INTERACTION_TOKENS.enterExit.ease, overwrite: "auto" });
+                });
+                newElements.forEach(el => el.setAttribute("data-entered", "true"));
             }
         }
-        prevStatusRef.current = item.status;
-    }, [item.status, isReducedMotion, highlightDuration]);
+        prevCountRef.current = currentCount;
+        return () => {
+            if (ctx) ctx.revert();
+        };
+    }, [attentionItems, attentionItems.length, duration, reducedMotion]);
 
-    const canClaim = item.status === "open" && (!item.assignedWorkerEndpointId || item.assignedWorkerEndpointId === snapshot.primaryAssignedWorker);
-    const assignedWorkerLabel = item.assignedWorkerEndpointId
-        ? item.assignedWorkerEndpointId === snapshot.primaryAssignedWorker
-            ? "Primary Worker"
-            : snapshot.overflowAssignedWorkers.includes(item.assignedWorkerEndpointId)
-                ? "Overflow Worker"
-                : item.assignedWorkerEndpointId
-        : "Unassigned";
-
-    const claimActionId = `attention-claim:${item.id}`;
-    const resolveActionId = `attention-resolve:${item.id}`;
-    const dismissActionId = `attention-dismiss:${item.id}`;
+    if (attentionItems.length === 0) {
+        return (
+            <div role="status" aria-live="polite" className="rounded-xl border border-black/[0.04] bg-black/[0.015] p-3 dark:border-white/[0.04] dark:bg-white/[0.015]">
+                <div className="flex items-start gap-3">
+                    <span className="mt-0.5 h-2 w-2 rounded-full bg-status-green shadow-[0_0_0_4px_rgba(0,171,132,0.10)]" aria-hidden="true" />
+                    <div>
+                        <p className="text-xs font-semibold text-slate-700 dark:text-slate-300">{emptyTitle}</p>
+                        <p className="mt-1 text-[11px] font-mono leading-relaxed text-slate-400 dark:text-slate-500">
+                            {emptyDescription}
+                        </p>
+                    </div>
+                </div>
+            </div>
+        );
+    }
 
     return (
-        <div
-            ref={rowRef}
-            className={`rounded-r-xl rounded-l-sm border border-l-2 border-black/[0.04] bg-black/[0.015] p-3 pl-3 dark:border-white/[0.04] dark:bg-white/[0.015] ${
-                item.status === "open" ? "border-l-status-amber bg-status-amber/[0.02]" :
-                item.status === "claimed" ? "border-l-signal-500 bg-signal-500/[0.02]" :
-                item.status === "resolved" ? "border-l-status-green bg-status-green/[0.02]" :
-                "border-l-slate-400"
-            }`}
-        >
-            <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0 pl-1.5">
-                    <div className="flex flex-wrap items-center gap-2">
-                        <span className="min-w-0 max-w-full break-words text-xs font-semibold text-slate-700 dark:text-slate-300">
-                            {item.title}
-                        </span>
-                        <span className={`rounded-md border px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.14em] ${
-                            ATTENTION_SEVERITY_TONE[item.severity] || ATTENTION_SEVERITY_TONE.medium
-                        }`}>
-                            {item.severity}
-                        </span>
-                        <span className="rounded-md border border-black/[0.05] px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.14em] text-slate-500 dark:border-white/[0.06] dark:text-slate-400">
-                            {ATTENTION_TYPE_LABELS[item.attentionType] || item.attentionType.replace(/_/g, " ")}
-                        </span>
-                    </div>
-                    <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] font-mono text-slate-400">
-                        <span className={ATTENTION_STATUS_TONE[item.status] || "text-slate-400"}>
-                            {item.status}
-                        </span>
-                        <span className="text-slate-300 dark:text-slate-700">/</span>
-                        <span>{ATTENTION_OWNER_LABELS[item.ownerType] || item.ownerType}</span>
-                        <span className="text-slate-300 dark:text-slate-700">/</span>
-                        <span className="break-all">{assignedWorkerLabel}</span>
-                        {shortenRuntimeId(item.taskId) && (
-                            <>
-                                <span className="text-slate-300 dark:text-slate-700">/</span>
-                                <span>task {shortenRuntimeId(item.taskId)}</span>
-                            </>
-                        )}
-                        {shortenRuntimeId(item.dispatchId) && (
-                            <>
-                                <span className="text-slate-300 dark:text-slate-700">/</span>
-                                <span>dispatch {shortenRuntimeId(item.dispatchId)}</span>
-                            </>
-                        )}
-                    </div>
-                </div>
-                <div className="shrink-0 text-right text-[10px] font-mono text-slate-400">
-                    {formatTime(item.updatedAt)}
-                </div>
-            </div>
+        <div ref={listRef} className={listClassName} role="list" aria-live="polite" aria-label={listLabel}>
+            {visibleAttentionItems.map((item) => {
+                const assignedWorkerLabel = item.assignedWorkerEndpointId
+                    ? workersByEndpointId.get(item.assignedWorkerEndpointId) || item.assignedWorkerEndpointId
+                    : item.ownerType === "worker"
+                        ? "Unassigned"
+                        : ATTENTION_OWNER_LABELS[item.ownerType] || item.ownerType;
+                const canClaim = (
+                    showActions
+                    && Boolean(snapshot?.projectId)
+                    && item.ownerType === "worker"
+                    && item.status === "open"
+                    && (Boolean(item.assignedWorkerEndpointId) || Boolean(snapshot?.primaryAssignedWorker) || Boolean(snapshot?.overflowAssignedWorkers?.length))
+                );
+                const claimActionId = `attention-claim:${item.id}`;
+                const resolveActionId = `attention-resolve:${item.id}`;
+                const dismissActionId = `attention-dismiss:${item.id}`;
+                const claimActionState = getPendingActionState(pendingActionIds, claimActionId);
+                const resolveActionState = getPendingActionState(pendingActionIds, resolveActionId);
+                const dismissActionState = getPendingActionState(pendingActionIds, dismissActionId);
+                const claimPendingReason = `Claiming attention item ${item.title} is already in progress.`;
+                const resolvePendingReason = `Resolving attention item ${item.title} is already in progress.`;
+                const dismissPendingReason = `Dismissing attention item ${item.title} is already in progress.`;
 
-            <div
-                className={`mt-2 line-clamp-2 text-[11px] leading-relaxed text-slate-500 prose-p:my-0 dark:text-slate-400 ${MARKDOWN_PROSE_CLASS}`}
-                dangerouslySetInnerHTML={{ __html: renderMarkdown(item.summaryMarkdown || "No summary provided.") }}
-            />
+                return (
+                    <div
+                        key={item.id}
+                        role="listitem"
+                        className="group/row relative overflow-hidden rounded-xl border border-black/[0.04] bg-black/[0.015] p-3 transition-colors hover:border-status-amber/25 hover:bg-status-amber/[0.035] dark:border-white/[0.04] dark:bg-white/[0.015]"
+                    >
+                        <div className={`absolute inset-y-0 left-0 w-0.5 ${
+                            item.severity === "critical" || item.severity === "high"
+                                ? "bg-status-red"
+                                : item.severity === "medium"
+                                    ? "bg-status-amber"
+                                    : "bg-signal-500"
+                        }`} />
+                        <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0 pl-1.5">
+                                <div className="flex flex-wrap items-center gap-2">
+                                    <span className="min-w-0 max-w-full break-words text-xs font-semibold text-slate-700 dark:text-slate-300">
+                                        {item.title}
+                                    </span>
+                                    <span className={`rounded-md border px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.14em] ${
+                                        ATTENTION_SEVERITY_TONE[item.severity] || ATTENTION_SEVERITY_TONE.medium
+                                    }`}>
+                                        {item.severity}
+                                    </span>
+                                    <span className="rounded-md border border-black/[0.05] px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.14em] text-slate-500 dark:border-white/[0.06] dark:text-slate-400">
+                                        {ATTENTION_TYPE_LABELS[item.attentionType] || item.attentionType.replace(/_/g, " ")}
+                                    </span>
+                                </div>
+                                <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] font-mono text-slate-400">
+                                    <span className={ATTENTION_STATUS_TONE[item.status] || "text-slate-400"}>
+                                        {item.status}
+                                    </span>
+                                    <span className="text-slate-300 dark:text-slate-700">/</span>
+                                    <span>{ATTENTION_OWNER_LABELS[item.ownerType] || item.ownerType}</span>
+                                    <span className="text-slate-300 dark:text-slate-700">/</span>
+                                    <span className="break-all">{assignedWorkerLabel}</span>
+                                    {shortenRuntimeId(item.taskId) && (
+                                        <>
+                                            <span className="text-slate-300 dark:text-slate-700">/</span>
+                                            <span>task {shortenRuntimeId(item.taskId)}</span>
+                                        </>
+                                    )}
+                                    {shortenRuntimeId(item.dispatchId) && (
+                                        <>
+                                            <span className="text-slate-300 dark:text-slate-700">/</span>
+                                            <span>dispatch {shortenRuntimeId(item.dispatchId)}</span>
+                                        </>
+                                    )}
+                                </div>
+                            </div>
+                            <div className="shrink-0 text-right text-[10px] font-mono text-slate-400">
+                                {formatTime(item.updatedAt)}
+                            </div>
+                        </div>
 
-            <div className="mt-3 flex flex-wrap gap-2 border-t border-black/[0.04] pt-2 dark:border-white/[0.04]">
-                {canClaim && snapshot.projectId && (
-                    <button
-                        type="button"
-                        onClick={() => getPendingActionState(pendingActionIds, claimActionId) === "idle" && onClaimAttentionItem(snapshot.projectId, item.id)}
-                        {...getLiveActionDisplayProps(getPendingActionState(pendingActionIds, claimActionId) === "pending", false)}
-                        className="inline-flex items-center gap-1.5 rounded-md border border-signal-500/20 bg-signal-500/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.12em] text-signal-600 transition-colors hover:bg-signal-500/15 aria-disabled:opacity-50 dark:text-signal-400"
-                        aria-label={"Claim attention item: " + item.title}
-                    >
-                        <Bot className={`h-3 w-3 ${getPendingActionState(pendingActionIds, claimActionId) === "pending" ? "motion-safe:animate-pulse" : ""}`} strokeWidth={2} aria-hidden="true" />
-                        {getPendingActionState(pendingActionIds, claimActionId) === "pending" ? "Claiming" : "Claim"}
-                        {getPendingActionState(pendingActionIds, claimActionId) === "pending" && <span className="sr-only">Claiming...</span>}
-                    </button>
-                )}
-                {snapshot.projectId && (
-                    <button
-                        type="button"
-                        onClick={() => getPendingActionState(pendingActionIds, resolveActionId) === "idle" && onResolveAttentionItem(snapshot.projectId, item.id)}
-                        {...getLiveActionDisplayProps(getPendingActionState(pendingActionIds, resolveActionId) === "pending", false)}
-                        className="inline-flex items-center gap-1.5 rounded-md border border-status-green/20 bg-status-green/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.12em] text-status-green transition-colors hover:bg-status-green/15 aria-disabled:opacity-50"
-                        aria-label={"Resolve attention item: " + item.title}
-                    >
-                        <CheckCircle2 className={`h-3 w-3 ${getPendingActionState(pendingActionIds, resolveActionId) === "pending" ? "motion-safe:animate-spin" : ""}`} strokeWidth={2} aria-hidden="true" />
-                        {getPendingActionState(pendingActionIds, resolveActionId) === "pending" ? "Resolving" : "Resolve"}
-                        {getPendingActionState(pendingActionIds, resolveActionId) === "pending" && <span className="sr-only">Resolving...</span>}
-                    </button>
-                )}
-                {snapshot.projectId && (
-                    <button
-                        type="button"
-                        onClick={() => getPendingActionState(pendingActionIds, dismissActionId) === "idle" && onDismissAttentionItem(snapshot.projectId, item.id)}
-                        {...getLiveActionDisplayProps(getPendingActionState(pendingActionIds, dismissActionId) === "pending", false)}
-                        className="inline-flex items-center gap-1.5 rounded-md border border-black/[0.05] px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.12em] text-slate-500 transition-colors hover:bg-black/[0.035] aria-disabled:opacity-50 dark:border-white/[0.06] dark:text-slate-400 dark:hover:bg-white/[0.04]"
-                        aria-label={"Dismiss attention item: " + item.title}
-                    >
-                        <XCircle className={`h-3 w-3 ${getPendingActionState(pendingActionIds, dismissActionId) === "pending" ? "motion-safe:animate-spin" : ""}`} strokeWidth={2} aria-hidden="true" />
-                        {getPendingActionState(pendingActionIds, dismissActionId) === "pending" ? "Dismissing" : "Dismiss"}
-                        {getPendingActionState(pendingActionIds, dismissActionId) === "pending" && <span className="sr-only">Dismissing...</span>}
-                    </button>
-                )}
-            </div>
+                        <div
+                            className={`mt-2 line-clamp-2 text-[11px] leading-relaxed text-slate-500 prose-p:my-0 dark:text-slate-400 ${MARKDOWN_PROSE_CLASS}`}
+                            dangerouslySetInnerHTML={{ __html: renderMarkdown(item.summaryMarkdown || "No summary provided.") }}
+                        />
+
+                        {showActions && snapshot?.projectId && (
+                            <div className="mt-3 flex flex-wrap gap-2 border-t border-black/[0.04] pt-2 dark:border-white/[0.04]">
+                                {canClaim && onClaimAttentionItem && (
+                                    <button
+                                        type="button"
+                                        onClick={(event) => {
+                                            if (claimActionState === "pending") {
+                                                event.preventDefault();
+                                                event.stopPropagation();
+                                                return;
+                                            }
+                                            onClaimAttentionItem(snapshot.projectId!, item.id);
+                                        }}
+                                        {...getLiveActionDisplayProps(claimActionState === "pending", false, claimActionState === "pending" ? claimPendingReason : null)}
+                                        className="inline-flex items-center gap-1.5 rounded-md border border-signal-500/20 bg-signal-500/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.12em] text-signal-600 transition-colors hover:bg-signal-500/15 aria-disabled:opacity-50 dark:text-signal-400"
+                                        aria-label={claimActionState === "pending" ? `Claim attention item: ${item.title}. ${claimPendingReason}` : `Claim attention item: ${item.title}`}
+                                        title={claimActionState === "pending" ? claimPendingReason : `Claim attention item: ${item.title}`}
+                                    >
+                                        <Bot className={`h-3 w-3 ${claimActionState === "pending" ? "motion-safe:animate-pulse" : ""}`} strokeWidth={2} aria-hidden="true" />
+                                        {claimActionState === "pending" ? "Claiming" : "Claim"}
+                                        {claimActionState === "pending" && <span className="sr-only">Claiming attention item in progress.</span>}
+                                    </button>
+                                )}
+                                {onResolveAttentionItem && (
+                                    <button
+                                        type="button"
+                                        onClick={(event) => {
+                                            if (resolveActionState === "pending") {
+                                                event.preventDefault();
+                                                event.stopPropagation();
+                                                return;
+                                            }
+                                            onResolveAttentionItem(snapshot.projectId!, item.id);
+                                        }}
+                                        {...getLiveActionDisplayProps(resolveActionState === "pending", false, resolveActionState === "pending" ? resolvePendingReason : null)}
+                                        className="inline-flex items-center gap-1.5 rounded-md border border-status-green/20 bg-status-green/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.12em] text-status-green transition-colors hover:bg-status-green/15 aria-disabled:opacity-50"
+                                        aria-label={resolveActionState === "pending" ? `Resolve attention item: ${item.title}. ${resolvePendingReason}` : `Resolve attention item: ${item.title}`}
+                                        title={resolveActionState === "pending" ? resolvePendingReason : `Resolve attention item: ${item.title}`}
+                                    >
+                                        <CheckCircle2 className={`h-3 w-3 ${resolveActionState === "pending" ? "motion-safe:animate-spin" : ""}`} strokeWidth={2} aria-hidden="true" />
+                                        {resolveActionState === "pending" ? "Resolving" : "Resolve"}
+                                        {resolveActionState === "pending" && <span className="sr-only">Resolving attention item in progress.</span>}
+                                    </button>
+                                )}
+                                {onDismissAttentionItem && (
+                                    <button
+                                        type="button"
+                                        onClick={(event) => {
+                                            if (dismissActionState === "pending") {
+                                                event.preventDefault();
+                                                event.stopPropagation();
+                                                return;
+                                            }
+                                            onDismissAttentionItem(snapshot.projectId!, item.id);
+                                        }}
+                                        {...getLiveActionDisplayProps(dismissActionState === "pending", false, dismissActionState === "pending" ? dismissPendingReason : null)}
+                                        className="inline-flex items-center gap-1.5 rounded-md border border-black/[0.05] px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.12em] text-slate-500 transition-colors hover:bg-black/[0.035] aria-disabled:opacity-50 dark:border-white/[0.06] dark:text-slate-400 dark:hover:bg-white/[0.04]"
+                                        aria-label={dismissActionState === "pending" ? `Dismiss attention item: ${item.title}. ${dismissPendingReason}` : `Dismiss attention item: ${item.title}`}
+                                        title={dismissActionState === "pending" ? dismissPendingReason : `Dismiss attention item: ${item.title}`}
+                                    >
+                                        <XCircle className={`h-3 w-3 ${dismissActionState === "pending" ? "motion-safe:animate-spin" : ""}`} strokeWidth={2} aria-hidden="true" />
+                                        {dismissActionState === "pending" ? "Dismissing" : "Dismiss"}
+                                        {dismissActionState === "pending" && <span className="sr-only">Dismissing attention item in progress.</span>}
+                                    </button>
+                                )}
+                            </div>
+                        )}
+                    </div>
+                );
+            })}
         </div>
     );
 });
@@ -175,21 +283,10 @@ export const AttentionLedger: FunctionComponent<AttentionLedgerProps> = memo(({
 
     const [open, setOpen] = useState(defaultOpen);
     const contentId = useId();
-    const workersByEndpointId = useMemo(() => {
-        if (!snapshot) return new Map<string, string>();
-        const overflow = snapshot.overflowAssignedWorkers || [];
-        const pairs = [
-            snapshot.primaryAssignedWorker,
-            ...overflow,
-        ].filter(Boolean).map((worker) => [worker!.workerEndpointId || "", worker!.workerDisplayName] as const);
-        return new Map(pairs);
-    }, [snapshot?.overflowAssignedWorkers, snapshot?.primaryAssignedWorker, snapshot]);
-
-    const listRef = useRef<HTMLDivElement>(null);
-    const prevCountRef = useRef<number>(0);
-    const reducedMotion = useReducedMotion();
-    const duration = useResolvedMotionDuration(parseFloat(INTERACTION_TOKENS.enterExit.duration) / 1000);
     const attentionItems = snapshot?.attentionItems || [];
+    const contentRef = useRef<HTMLDivElement>(null);
+    const isReducedMotion = useReducedMotion();
+    const enterDuration = useResolvedMotionDuration(parseFloat(INTERACTION_TOKENS.enterExit.duration) / 1000);
 
     const { openCount, claimedCount, urgentCount } = useMemo(() => {
         return {
@@ -199,38 +296,25 @@ export const AttentionLedger: FunctionComponent<AttentionLedgerProps> = memo(({
         };
     }, [attentionItems, attentionItems.length]);
 
-    const visibleAttentionItems = useMemo(() => {
-        return attentionItems.slice(0, 8);
-    }, [attentionItems, attentionItems.length]);
-
     useLayoutEffect(() => {
-        if (!listRef.current || reducedMotion) {
-            prevCountRef.current = attentionItems.length;
-            return;
+        if (!contentRef.current || !collapsible) return;
+        if (isReducedMotion) {
+            gsap.set(contentRef.current, { height: open ? "auto" : 0, overflow: "hidden" });
+        } else {
+            gsap.killTweensOf(contentRef.current);
+            gsap.to(contentRef.current, {
+                height: open ? "auto" : 0,
+                duration: enterDuration,
+                ease: INTERACTION_TOKENS.enterExit.ease,
+                overwrite: "auto",
+                onComplete: () => {
+                    if (open && contentRef.current) gsap.set(contentRef.current, { height: "auto" });
+                }
+            });
         }
-
-        const currentCount = attentionItems.length;
-        let ctx: any;
-        if (currentCount > prevCountRef.current) {
-            // New items were added, animate them
-            const newElements = Array.from(listRef.current.children).filter(el => !el.hasAttribute('data-entered'));
-
-            if (newElements.length > 0) {
-                ctx = gsap.context(() => {
-                    gsap.fromTo(newElements, { opacity: 0, x: -10 }, { opacity: 1, x: 0, duration: duration, stagger: 0.04, ease: INTERACTION_TOKENS.enterExit.ease, overwrite: "auto" });
-                });
-                newElements.forEach(el => el.setAttribute('data-entered', 'true'));
-            }
-        }
-        prevCountRef.current = currentCount;
-        return () => {
-            if (ctx) ctx.revert();
-        };
-    }, [attentionItems, attentionItems.length, reducedMotion]);
+    }, [open, isReducedMotion, enterDuration, collapsible]);
 
     if (!snapshot) return null;
-
-    const canAutoClaim = Boolean(snapshot.primaryAssignedWorker || (snapshot.overflowAssignedWorkers && snapshot.overflowAssignedWorkers.length > 0));
 
     const header = (
         <>
@@ -261,28 +345,6 @@ export const AttentionLedger: FunctionComponent<AttentionLedgerProps> = memo(({
         </>
     );
 
-    const contentRef = useRef<HTMLDivElement>(null);
-    const isReducedMotion = useReducedMotion();
-    const enterDuration = useResolvedMotionDuration(parseFloat(INTERACTION_TOKENS.enterExit.duration) / 1000);
-
-    useLayoutEffect(() => {
-        if (!contentRef.current || !collapsible) return;
-        if (isReducedMotion) {
-            gsap.set(contentRef.current, { height: open ? "auto" : 0, overflow: "hidden" });
-        } else {
-            gsap.killTweensOf(contentRef.current);
-            gsap.to(contentRef.current, {
-                height: open ? "auto" : 0,
-                duration: enterDuration,
-                ease: INTERACTION_TOKENS.enterExit.ease,
-                overwrite: "auto",
-                onComplete: () => {
-                    if (open && contentRef.current) gsap.set(contentRef.current, { height: "auto" });
-                }
-            });
-        }
-    }, [open, isReducedMotion, enterDuration, collapsible]);
-
     return (
         <div className="group relative overflow-hidden rounded-[1.75rem] border border-black/[0.08] bg-white shadow-sm dark:border-white/[0.08] dark:bg-void-800">
 
@@ -307,172 +369,14 @@ export const AttentionLedger: FunctionComponent<AttentionLedgerProps> = memo(({
             <div className={`${collapsible ? `collapsible-section ${open ? "open" : ""}` : ""}`}>
                 <div id={contentId} ref={contentRef} className={`${collapsible ? "collapsible-content overflow-hidden" : ""}`}>
                     <div className="relative z-10 px-5 pb-5 pt-0">
-                        {attentionItems.length === 0 ? (
-                            <div role="status" aria-live="polite" className="rounded-xl border border-black/[0.04] bg-black/[0.015] p-3 dark:border-white/[0.04] dark:bg-white/[0.015]">
-                                <div className="flex items-start gap-3">
-                                    <span className="mt-0.5 h-2 w-2 rounded-full bg-status-green shadow-[0_0_0_4px_rgba(0,171,132,0.10)]" aria-hidden="true" />
-                                    <div>
-                                        <p className="text-xs font-semibold text-slate-700 dark:text-slate-300">Queue clear</p>
-                                        <p className="mt-1 text-[11px] font-mono leading-relaxed text-slate-400 dark:text-slate-500">
-                                            No active blockers are waiting in the project attention queue.
-                                        </p>
-                                    </div>
-                                </div>
-                            </div>
-                        ) : (
-                            <div ref={listRef} className="max-h-[50dvh] sm:max-h-96 space-y-2 overflow-y-auto pr-1 dashboard-scrollbar" role="list" aria-live="polite" aria-label="Active attention items">
-                                {visibleAttentionItems.map((item) => {
-                                    const assignedWorkerLabel = item.assignedWorkerEndpointId
-                                        ? workersByEndpointId.get(item.assignedWorkerEndpointId) || item.assignedWorkerEndpointId
-                                        : item.ownerType === "worker"
-                                            ? "Unassigned"
-                                            : ATTENTION_OWNER_LABELS[item.ownerType] || item.ownerType;
-                                    const canClaim = (
-                                        Boolean(snapshot.projectId)
-                                        && item.ownerType === "worker"
-                                        && item.status === "open"
-                                        && (Boolean(item.assignedWorkerEndpointId) || canAutoClaim)
-                                    );
-                                    const claimActionId = `attention-claim:${item.id}`;
-                                    const resolveActionId = `attention-resolve:${item.id}`;
-                                    const dismissActionId = `attention-dismiss:${item.id}`;
-                                    const claimActionState = getPendingActionState(pendingActionIds, claimActionId);
-                                    const resolveActionState = getPendingActionState(pendingActionIds, resolveActionId);
-                                    const dismissActionState = getPendingActionState(pendingActionIds, dismissActionId);
-                                    const claimPendingReason = `Claiming attention item ${item.title} is already in progress.`;
-                                    const resolvePendingReason = `Resolving attention item ${item.title} is already in progress.`;
-                                    const dismissPendingReason = `Dismissing attention item ${item.title} is already in progress.`;
-
-                                    return (
-                                        <div
-                                            key={item.id}
-                                            role="listitem"
-                                            className="group/row relative overflow-hidden rounded-xl border border-black/[0.04] bg-black/[0.015] p-3 transition-colors hover:border-status-amber/25 hover:bg-status-amber/[0.035] dark:border-white/[0.04] dark:bg-white/[0.015]"
-                                        >
-                                            <div className={`absolute inset-y-0 left-0 w-0.5 ${
-                                                item.severity === "critical" || item.severity === "high"
-                                                    ? "bg-status-red"
-                                                    : item.severity === "medium"
-                                                        ? "bg-status-amber"
-                                                        : "bg-signal-500"
-                                            }`} />
-                                            <div className="flex items-start justify-between gap-3">
-                                                <div className="min-w-0 pl-1.5">
-                                                    <div className="flex flex-wrap items-center gap-2">
-                                                        <span className="min-w-0 max-w-full break-words text-xs font-semibold text-slate-700 dark:text-slate-300">
-                                                            {item.title}
-                                                        </span>
-                                                        <span className={`rounded-md border px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.14em] ${
-                                                            ATTENTION_SEVERITY_TONE[item.severity] || ATTENTION_SEVERITY_TONE.medium
-                                                        }`}>
-                                                            {item.severity}
-                                                        </span>
-                                                        <span className="rounded-md border border-black/[0.05] px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.14em] text-slate-500 dark:border-white/[0.06] dark:text-slate-400">
-                                                            {ATTENTION_TYPE_LABELS[item.attentionType] || item.attentionType.replace(/_/g, " ")}
-                                                        </span>
-                                                    </div>
-                                                    <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] font-mono text-slate-400">
-                                                        <span className={ATTENTION_STATUS_TONE[item.status] || "text-slate-400"}>
-                                                            {item.status}
-                                                        </span>
-                                                        <span className="text-slate-300 dark:text-slate-700">/</span>
-                                                        <span>{ATTENTION_OWNER_LABELS[item.ownerType] || item.ownerType}</span>
-                                                        <span className="text-slate-300 dark:text-slate-700">/</span>
-                                                        <span className="break-all">{assignedWorkerLabel}</span>
-                                                        {shortenRuntimeId(item.taskId) && (
-                                                            <>
-                                                                <span className="text-slate-300 dark:text-slate-700">/</span>
-                                                                <span>task {shortenRuntimeId(item.taskId)}</span>
-                                                            </>
-                                                        )}
-                                                        {shortenRuntimeId(item.dispatchId) && (
-                                                            <>
-                                                                <span className="text-slate-300 dark:text-slate-700">/</span>
-                                                                <span>dispatch {shortenRuntimeId(item.dispatchId)}</span>
-                                                            </>
-                                                        )}
-                                                    </div>
-                                                </div>
-                                                <div className="shrink-0 text-right text-[10px] font-mono text-slate-400">
-                                                    {formatTime(item.updatedAt)}
-                                                </div>
-                                            </div>
-
-                                            <div
-                                                className={`mt-2 line-clamp-2 text-[11px] leading-relaxed text-slate-500 prose-p:my-0 dark:text-slate-400 ${MARKDOWN_PROSE_CLASS}`}
-                                                dangerouslySetInnerHTML={{ __html: renderMarkdown(item.summaryMarkdown || "No summary provided.") }}
-                                            />
-
-                                            <div className="mt-3 flex flex-wrap gap-2 border-t border-black/[0.04] pt-2 dark:border-white/[0.04]">
-                                                {canClaim && snapshot.projectId && (
-                                                    <button
-                                                        type="button"
-                                                        onClick={(event) => {
-                                                            if (claimActionState === "pending") {
-                                                                event.preventDefault();
-                                                                event.stopPropagation();
-                                                                return;
-                                                            }
-                                                            onClaimAttentionItem(snapshot.projectId!, item.id);
-                                                        }}
-                                                        {...getLiveActionDisplayProps(claimActionState === "pending", false, claimActionState === "pending" ? claimPendingReason : null)}
-                                                        className="inline-flex items-center gap-1.5 rounded-md border border-signal-500/20 bg-signal-500/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.12em] text-signal-600 transition-colors hover:bg-signal-500/15 aria-disabled:opacity-50 dark:text-signal-400"
-                                                        aria-label={claimActionState === "pending" ? `Claim attention item: ${item.title}. ${claimPendingReason}` : `Claim attention item: ${item.title}`}
-                                                        title={claimActionState === "pending" ? claimPendingReason : `Claim attention item: ${item.title}`}
-                                                    >
-                                                        <Bot className={`h-3 w-3 ${claimActionState === "pending" ? "motion-safe:animate-pulse" : ""}`} strokeWidth={2} aria-hidden="true" />
-                                                        {claimActionState === "pending" ? "Claiming" : "Claim"}
-                                                        {claimActionState === "pending" && <span className="sr-only">Claiming attention item in progress.</span>}
-                                                    </button>
-                                                )}
-                                                {snapshot.projectId && (
-                                                    <button
-                                                        type="button"
-                                                        onClick={(event) => {
-                                                            if (resolveActionState === "pending") {
-                                                                event.preventDefault();
-                                                                event.stopPropagation();
-                                                                return;
-                                                            }
-                                                            onResolveAttentionItem(snapshot.projectId!, item.id);
-                                                        }}
-                                                        {...getLiveActionDisplayProps(resolveActionState === "pending", false, resolveActionState === "pending" ? resolvePendingReason : null)}
-                                                        className="inline-flex items-center gap-1.5 rounded-md border border-status-green/20 bg-status-green/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.12em] text-status-green transition-colors hover:bg-status-green/15 aria-disabled:opacity-50"
-                                                        aria-label={resolveActionState === "pending" ? `Resolve attention item: ${item.title}. ${resolvePendingReason}` : `Resolve attention item: ${item.title}`}
-                                                        title={resolveActionState === "pending" ? resolvePendingReason : `Resolve attention item: ${item.title}`}
-                                                    >
-                                                        <CheckCircle2 className={`h-3 w-3 ${resolveActionState === "pending" ? "motion-safe:animate-spin" : ""}`} strokeWidth={2} aria-hidden="true" />
-                                                        {resolveActionState === "pending" ? "Resolving" : "Resolve"}
-                                                        {resolveActionState === "pending" && <span className="sr-only">Resolving attention item in progress.</span>}
-                                                    </button>
-                                                )}
-                                                {snapshot.projectId && (
-                                                    <button
-                                                        type="button"
-                                                        onClick={(event) => {
-                                                            if (dismissActionState === "pending") {
-                                                                event.preventDefault();
-                                                                event.stopPropagation();
-                                                                return;
-                                                            }
-                                                            onDismissAttentionItem(snapshot.projectId!, item.id);
-                                                        }}
-                                                        {...getLiveActionDisplayProps(dismissActionState === "pending", false, dismissActionState === "pending" ? dismissPendingReason : null)}
-                                                        className="inline-flex items-center gap-1.5 rounded-md border border-black/[0.05] px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.12em] text-slate-500 transition-colors hover:bg-black/[0.035] aria-disabled:opacity-50 dark:border-white/[0.06] dark:text-slate-400 dark:hover:bg-white/[0.04]"
-                                                        aria-label={dismissActionState === "pending" ? `Dismiss attention item: ${item.title}. ${dismissPendingReason}` : `Dismiss attention item: ${item.title}`}
-                                                        title={dismissActionState === "pending" ? dismissPendingReason : `Dismiss attention item: ${item.title}`}
-                                                    >
-                                                        <XCircle className={`h-3 w-3 ${dismissActionState === "pending" ? "motion-safe:animate-spin" : ""}`} strokeWidth={2} aria-hidden="true" />
-                                                        {dismissActionState === "pending" ? "Dismissing" : "Dismiss"}
-                                                        {dismissActionState === "pending" && <span className="sr-only">Dismissing attention item in progress.</span>}
-                                                    </button>
-                                                )}
-                                            </div>
-                                        </div>
-                                    );
-                                })}
-                            </div>
-                        )}
+                        <AttentionQueueItemsList
+                            attentionItems={attentionItems}
+                            snapshot={snapshot}
+                            onClaimAttentionItem={onClaimAttentionItem}
+                            onResolveAttentionItem={onResolveAttentionItem}
+                            onDismissAttentionItem={onDismissAttentionItem}
+                            pendingActionIds={pendingActionIds}
+                        />
                     </div>
                 </div>
             </div>
