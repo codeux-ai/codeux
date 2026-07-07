@@ -26,6 +26,7 @@ Live runtime implementation must also follow the bounded live snapshot, indexed 
 ## Live Task Card Boundary
 
 - `LiveTaskCard` owns task-level composition: status chrome, prompt expansion, runtime-feed toggles, PR links, rerun modal wiring, edit actions, and force-complete actions.
+- Rated live tasks use the shared `SelfReflectionRatingBadge` in the header metadata strip next to status, merge, and QA review signals. The badge must collapse to no output when `selfReflectionRating` is absent and its section-detail overlay must remain viewport-positioned so completed, coding-completed, and QA-failed cards do not clip it.
 - `live-session/LiveTaskTiming.tsx` owns the reusable timing badges used by task cards and dispatch rows. `QuotaCountdown` parses retry-after metadata and preserves the polite quota live region; `TaskDuration` derives visible elapsed time and only starts a ticking interval while the display is live.
 - `live-session/LiveTaskInvocationRow.tsx` owns the task-scoped invocation row visual language: purpose labels, provider/model fallbacks, token/duration chips, reduced-motion-safe running indicators, error snippets, and encoded transcript links.
 - Keep `QuotaCountdown` and `TaskDuration` re-exported from `LiveTaskCard.tsx` until downstream imports have migrated, because runtime panels still consume those compatibility exports.
