@@ -104,12 +104,12 @@ Project management:
 - `GET /api/conversations/threads/:threadId/messages`
   - Lists stored messages for one thread
 - `POST /api/projects/:projectId/conversations/messages`
-- Stores a dashboard-authored message and queues it for a listener
-- Chat message posts update the selected thread message cache from the returned `ConversationMessageRecord`; the Chat invocation rail remains backed by `GET /api/projects/:projectId/execution/invocations` snapshots and realtime refreshes, so it does not create client-only invocation rows while the backend record is still being persisted.
-- Threads now remain explicitly `unassigned` until the dashboard targets a connection or a real listener claims them
-- The active thread header now supports explicit assignment and reassignment to a project-bound connection
-- Reassigning a thread re-queues any unprocessed dashboard messages so the newly assigned listener can receive them
-- Connection badges now reflect heartbeat-derived `stale` and `offline` states instead of keeping dead listeners permanently `connected`
+  - Stores a dashboard-authored message and queues it for a listener or provider-backed dashboard reply
+  - Chat message posts update the selected thread message cache from the returned `ConversationMessageRecord`; the Chat invocation rail remains backed by `GET /api/projects/:projectId/execution/invocations` snapshots and realtime refreshes, so invocation rows are server-created and the browser does not create a frontend-only optimistic invocation placeholder while the backend record is still being persisted.
+  - Threads now remain explicitly `unassigned` until the dashboard targets a connection or a real listener claims them
+  - The active thread header now supports explicit assignment and reassignment to a project-bound connection
+  - Reassigning a thread re-queues any unprocessed dashboard messages so the newly assigned listener can receive them
+  - Connection badges now reflect heartbeat-derived `stale` and `offline` states instead of keeping dead listeners permanently `connected`
 - `GET /api/projects/:projectId/scheduler?from=<iso>&to=<iso>`
   - Lists persisted scheduler entries plus expanded calendar occurrences for the requested window
 - `POST /api/projects/:projectId/scheduler`
@@ -407,7 +407,7 @@ Legacy runtime:
 - Ledger search integrates with selection: the header select-all checkbox operates on the currently filtered set only, and the selection is automatically pruned when the filter changes so stale hidden selections cannot accumulate
 - When one or more ledger rows are selected, a bulk action bar appears with `Start` and `Delete` controls that operate on all selected sprints, plus a `Clear` button to deselect
 - Sprint ledger row controls now expose pause/resume in addition to existing start/stop semantics, and each runtime action shows pending/disabled state while the control request is in flight.
-- Sending a chat message now inserts an optimistic invocation row immediately in the invocations rail and reconciles it when the server returns the persisted invocation record.
+- Sending a chat message updates the thread transcript immediately from the returned message record, while the invocations rail waits for the server-created invocation row from the execution snapshot or realtime refresh.
 - Sortable column headers cycle through unsorted, ascending, and descending for showcasePinned, sprintKey, name, status, tasksCount, completion, and createdAt (default: newest-first)
 - Ledger rows expose: pinned/showcase state, sprint key, review and human-intervention badges, task count, gradient progress, created/updated metadata, a primary start/stop button, an `Open Subtasks` deep link (`/tasks?sprintId=<id>`) that navigates to the Tasks page pre-filtered to that sprint, and a compact settings menu for edit/export/showcase/overrides/delete
 - The sprint page no longer runs a full-page entrance fade on mount, which keeps initial navigation more immediate and avoids perceived flashing
