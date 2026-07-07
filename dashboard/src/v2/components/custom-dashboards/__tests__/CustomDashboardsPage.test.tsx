@@ -239,7 +239,7 @@ describe("CustomDashboardsPage", () => {
 
     expect(await screen.findByText("Dashboard Workspace")).toBeInTheDocument();
     expect(await screen.findByText("Delivery Pulse")).toBeInTheDocument();
-    const publishButton = screen.getByRole("button", { name: /Publish/i });
+    const publishButton = screen.getByRole("button", { name: /^Publish$/i });
     expect(publishButton).toBeDisabled();
 
     fireEvent.click(screen.getByRole("button", { name: /^Validate$/i }));
@@ -254,9 +254,9 @@ describe("CustomDashboardsPage", () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: /Publish/i })).toBeEnabled();
+      expect(screen.getByRole("button", { name: /^Publish$/i })).toBeEnabled();
     });
-    fireEvent.click(screen.getByRole("button", { name: /Publish/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^Publish$/i }));
 
     await waitFor(() => {
       expect(publishCustomDashboardRevision).toHaveBeenCalledWith("dashboard-1", "revision-1", "session-1");
