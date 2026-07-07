@@ -178,7 +178,23 @@ The restricted tool intentionally does not expose due-entry execution, arbitrary
 - `archive` clears any active publication and marks the dashboard archived. It follows the normal destructive-action approval fingerprint flow.
 - `data_catalog` returns project dashboard summaries and declared source nodes for agents building or inspecting generated dashboards.
 
-Failed, queued, running, cancelled, missing, or cross-revision validation sessions are rejected before publication state changes, so the prior published revision remains active.
+Payload fields:
+
+- `projectId` is required for `list`, `create`, `validate_revision`, and `data_catalog`.
+- `dashboardId` is required for `get`, `update`, `create_revision`, `validate_revision`, `publish_revision`, and `archive`.
+- `revisionId` is required for `validate_revision` and `publish_revision`.
+- `sessionId` is required for `validation_status` and `validation_logs`.
+- `validationSessionId` is optional for `publish_revision` and, when supplied, must identify a passed session for the same dashboard, revision, and project.
+- `manifest`, `fileBundle`, `sourceNodeGraph`, `styleguide`, and `runtimeMetadata` are accepted by `create`, `update`, and `create_revision` according to each action's required fields.
+- `tail` limits validation log output.
+
+Validation sessions move through `queued`, `building`, `running`, `passed`, `failed`, or `cancelled`. `validate_revision` starts the detached Docker validation runtime; it does not publish the revision. A passed session means install, build, detached preview startup, and root health checks completed successfully.
+
+`publish_revision` is gated by repository state. The revision must belong to the dashboard, have `validationStatus: "passed"`, have `validatedAt`, and have `validationReport.valid === true`. Failed, queued, running, cancelled, missing, or cross-revision validation sessions are rejected before publication state changes, so the prior published revision remains active.
+
+The generated dashboard data-source graph is user-declared JSON with `nodes`, `edges`, and optional `metadata`. Runtime viewer source types currently map to Code UX project execution data, project stats, overview telemetry, non-secret integration metadata, and unavailable `external_api` placeholders. Do not claim arbitrary external API connectors are available through this surface until a dedicated sanitized proxy contract exists.
+
+For the user workflow, REST route list, detached runtime details, and rollback expectations, see [Custom Dashboards](../dashboard/custom-dashboards.md).
 
 ### Destructive Action Approvals
 

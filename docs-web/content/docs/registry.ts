@@ -29,6 +29,7 @@ export type DocsSlug =
   | 'user-dashboard-file-browser'
   | 'user-dashboard-browser-preview'
   | 'user-dashboard-stats'
+  | 'user-dashboard-custom-dashboards'
   | 'user-dashboard-settings'
   | 'developer-overview'
   | 'developer-mcp-tools'
@@ -245,6 +246,13 @@ export const docsRegistry: Record<DocsSlug, DocsRegistryEntry> = {
     title: "Stats",
     description: "The Stats page (/stats) is the analytics surface for the active project. It shows project execution, usage, cost, Git, and invocation telemetry in one workspace with visual-mode navigation, responsive layouts, and lig...",
   },
+  'user-dashboard-custom-dashboards': {
+    id: 'user-dashboard-custom-dashboards',
+    path: '/docs/user-dashboard-custom-dashboards',
+    section: 'User Guide',
+    title: "Custom Dashboards",
+    description: "Custom dashboards are project-scoped dashboard apps generated and revised by agents, then validated in a detached Docker runtime before publication.",
+  },
   'user-dashboard-settings': {
     id: 'user-dashboard-settings',
     path: '/docs/user-dashboard-settings',
@@ -442,6 +450,7 @@ export const orderedDocs: DocsRegistryEntry[] = [
   docsRegistry['user-dashboard-file-browser'],
   docsRegistry['user-dashboard-browser-preview'],
   docsRegistry['user-dashboard-stats'],
+  docsRegistry['user-dashboard-custom-dashboards'],
   docsRegistry['user-dashboard-settings'],
   docsRegistry['developer-overview'],
   docsRegistry['developer-mcp-tools'],
