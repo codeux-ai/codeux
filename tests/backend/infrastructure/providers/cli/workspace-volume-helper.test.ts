@@ -125,6 +125,10 @@ describe("WorkspaceVolumeHelperPool", () => {
       "none",
       "--security-opt",
       "no-new-privileges",
+      "--label",
+      "code-ux.managed=true",
+      "--label",
+      "code-ux.helper=volume",
     ]));
     expect(fallbackCalls[0].args).not.toContain("-p");
     expect(fallbackCalls[0].args).not.toContain("--publish");
