@@ -7,8 +7,10 @@ The **Settings** page (`/config`) is the unified configuration surface. It expos
 Settings are evaluated as a cascade:
 
 ```
-Defaults → System → Project → Sprint
+System → Project → Sprint
 ```
+
+(System settings contain the built-in defaults.)
 
 You can edit at any level. Higher levels override lower ones; unspecified fields inherit. The side panel always shows the **effective** (merged) value.
 
@@ -53,6 +55,8 @@ You can also fetch effective settings programmatically:
 
 - `GET /api/projects/:projectId/settings/effective`
 - `GET /api/projects/:projectId/sprints/:sprintId/settings/effective`
+
+These endpoints return both the merged `settings` tree and a `sources` dictionary that tells you whether each setting value came from `system`, `project`, or `sprint`.
 
 ## External settings hints
 

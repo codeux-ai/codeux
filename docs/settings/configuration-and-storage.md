@@ -28,9 +28,13 @@ External hint env keys used for dashboard import:
 
 ## Settings Overrides and Scoped Resolution
 
-Code UX settings resolve through a scoped cascade: `system` → `project` → `sprint`.
+Code UX settings resolve through a scoped cascade: `system` (base) → `project` (inherits from system) → `sprint` (inherits from project effective). System settings are the base of the cascade.
 
-System settings hold global state, runtime behavior (e.g., ports, `consoleLogLevel`, `debugLogFileLevel`, `consoleLogMode`), and system integration credentials (Jira tokens, GitLab/GitHub tokens).
+System settings hold global state, runtime behavior (e.g., ports, `consoleLogLevel`, `debugLogFileLevel`, `consoleLogMode`), and system integration credentials (Jira tokens, GitLab/GitHub tokens). They are also populated with defaults.
+
+Effective settings API endpoints include a `sources` dictionary mapping each JSON path to its originating scope (`system`, `project`, or `sprint`).
+
+Many settings families are handled by specific sanitizers that ensure defaults are applied and invalid shapes are repaired (e.g., `aiProvider`, `ciIntelligence`, `guardrails`, `cliWorkflow`, `git`, `jira`, `sprintLoopSteps`, `memory`, `modelPricing`, `workers`).
 
 Project and sprint scopes can override execution-specific settings, such as `aiProvider` routes (which now include provider instances and `invocationRouting` as first-class citizens instead of legacy top-level keys), `cliWorkflow` settings (like `gitMode`, `executionMode`, `containerImage`, `containerSetupScriptPath`), and preview defaults (like `sprintPreview.startupScriptPath` defaulting to `.code-ux/browser/start-preview.sh`). `git.defaultBranch` fallback is resolved based on scoped overrides too. Jira and GitLab integration configurations are also scoped and can be overridden.
 
