@@ -88,6 +88,7 @@ That state lives under `runtimeState.createAppQuickaction` and remains durable u
 Plain chat messages posted in the same thread while create-app planning is running are treated as follow-up direction for the sprint. If the sprint has no tasks yet, the runtime stores those messages in `runtimeState.createAppQuickaction.queuedFollowUps`, marks them processed, and posts a system acknowledgement. When detached planning completes successfully, queued follow-ups are appended to the sprint-level goal under `## Additional direction from chat`; generated task prompts and already-created subtasks are not rewritten. If tasks already exist when a follow-up arrives, the same sprint-goal append happens immediately and the thread receives a confirmation. Failed planning keeps queued follow-up text in runtime state for recovery instead of discarding it.
 
 Because `ConnectionChatRepository.updateThread` replaces the whole `runtimeState` payload, create-app state updates re-read the latest thread before writing nested quickaction fields. Follow-up queue writes and planning-completion writes merge concurrent `queuedFollowUps`, `planningStatus`, and `activePlanningRequestId` changes rather than overwriting them with stale snapshots. After a follow-up is queued, the runtime re-checks sprint task count so direction posted as tasks materialize is flushed to the sprint immediately.
+JSON-mode dashboard replies may also include prompt suggestions for quick next steps. The accepted reply envelope remains backward compatible with `{ replyMarkdown, action }` and optionally accepts either `suggestions` or `promptSuggestions`, where each suggestion has `label`, `prompt`, and optional stable string `icon`/`id` fields. The management parser trims string fields, drops entries without non-empty labels and prompts, caps the stored list to six, and persists valid suggestions on the visible assistant/system message as `metadata.promptSuggestions`. Plain markdown MCP-native replies are not parsed for suggestions.
 
 ### First-Message Replay & Worker Switching
 
@@ -151,7 +152,7 @@ Thread and message list queries use explicit bounded pagination even when caller
 
 ### Virtual Provider Management Actions
 
-When operating in virtual provider mode, management actions follow a structured execution path. The `ChatManagementActionService` leverages `StructuredProviderResponseService` to prompt the virtual provider for a strict JSON payload containing `{ replyMarkdown, action }`.
+When operating in virtual provider mode, management actions follow a structured execution path. The `ChatManagementActionService` leverages `StructuredProviderResponseService` to prompt the virtual provider for a strict JSON payload containing `{ replyMarkdown, action }` plus optional prompt suggestions.
 
 If an action is proposed, it is evaluated through the shared `ManagementToolHandler`, aligning the virtual chat's business logic exactly with the connected MCP workers. If the action is approval-gated (e.g., destructive actions), the service returns a non-mutating confirmation result alongside the serialized payload, awaiting user confirmation without altering project state. All exchanges—prompts, JSON parsing results, and execution envelopes—are durably recorded in the invocation history.
 

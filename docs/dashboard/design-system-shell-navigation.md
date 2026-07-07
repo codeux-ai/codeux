@@ -36,7 +36,16 @@ Stable layouts on narrow widths (especially mobile or multi-panel layouts) must 
 - **Scheduled Agent Indicator:** The top nav may render a compact `CalendarClock` count control for active agent-created task runs and wakeups. Keep it hidden when there are no active agent schedules, use the same compact shell control sizing as adjacent status buttons, and keep the count stable with tabular numerals.
 
 ### 5. Standardized Components
-The shell relies on reusable layout components from `dashboard/src/v2/components/layout/` (such as `Sidebar`, `NavItem`, and `KineticDock` which features labels for Overview, Sprints, Tasks, Agents, Stats, Schedule, Memory, Knowledge, Browser, Files, Live, Config, and Chat) and top navigation components from `dashboard/src/v2/components/top-nav/` (such as `BrandSection`, `GlobalSearch`, and `TelemetryStats`).
+The shell relies on reusable layout components from `dashboard/src/v2/components/layout/` (such as `Sidebar`, `NavItem`, and `KineticDock`) and top navigation components from `dashboard/src/v2/components/top-nav/` (such as `BrandSection`, `GlobalSearch`, and `TelemetryStats`).
+
+Primary navigation is filtered by the persisted **Experience Mode** from Settings -> Appearance. The stored values are `EASY`, `STANDARD`, and `EXPERT`; the dashboard labels them **Easy**, **Standard**, and **Expert**, and Expert is the default for new or legacy settings.
+
+Mode-specific navigation:
+- **Easy**: Chat, Browser, Stats, Settings/Config, and external Docs.
+- **Standard**: Chat, Overview, Sprints, Tasks, Agents, Stats, Browser, Docs, and Settings/Config.
+- **Expert**: the full set: Chat, Overview, Sprints, Tasks, Agents, Stats, Schedule, Memory, Knowledge, Browser, Files, Live, Docs, and Settings/Config.
+
+The Settings route is labeled **Settings** in the sidebar and **Config** in the dock. Docs is an external navigation item. Browser still obeys the existing sprint-preview and in-app browser visibility checks; hidden mode-filtered routes remain registered routes rather than being removed from the app.
 
 ### 6. Hover and Active Indicators
 - **Motion Tokens:** Shell navigation must use the interaction contracts in `dashboard/src/v2/lib/motion`. Use `controlFeedback` for hover, focus, icon color, and label feedback; `selectionMovement` for active route backgrounds, vertical markers, and minimized/expanded label reveal; and `enterExit` for mobile drawer and backdrop transitions.

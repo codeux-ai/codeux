@@ -141,6 +141,50 @@ describe("SettingsGeneralPanel", () => {
     expect(screen.getByLabelText("Container setup script")).toHaveValue("/workspace/test-project/.code-ux/setup.sh");
   });
 
+  it("updates the Docker root execution toggle with an accessible label", async () => {
+    vi.mocked(useProjectData).mockReturnValue({ updateProject: vi.fn() } as any);
+
+    const StatefulHarness = () => {
+      const [settings, setSettings] = useState(cloneSettings());
+      return <SettingsGeneralPanel state={{
+        activeScope: "system",
+        systemSettings: { runtime: { dashboardPort: 4444, consoleLogLevel: "info", debugLogFileLevel: "error", consoleLogMode: "standard", dbPruningEnabled: true, dbRetentionDays: 14, dbAutoVacuumOnStartup: true } },
+        projectSettings: null,
+        selectedProject: null,
+        updateSystem: vi.fn(),
+        editableSettings: settings,
+        updateEditableSettings: (recipe: any) => setSettings((current: any) => recipe(current)),
+        projectSources: {},
+      } as any} />;
+    };
+
+    render(<StatefulHarness />);
+
+    const rootToggle = screen.getByRole("switch", { name: "Run Docker agents as root" });
+    expect(rootToggle).toHaveAttribute("aria-checked", "false");
+    expect(screen.getByText("Non-root default")).toBeInTheDocument();
+
+    fireEvent.click(rootToggle);
+
+    expect(rootToggle).toHaveAttribute("aria-checked", "true");
+    expect(screen.getByText("Root enabled")).toBeInTheDocument();
+  });
+
+  it("shows Docker runtime controls in project scope with override badges", () => {
+    vi.mocked(useProjectData).mockReturnValue({ updateProject: vi.fn() } as any);
+    const state = createProjectState();
+
+    render(<SettingsGeneralPanel state={{
+      ...state,
+      projectSources: {
+        "cliWorkflow.containerRunAsRoot": "project",
+      },
+    } as any} />);
+
+    expect(screen.getByRole("switch", { name: "Run Docker agents as root" })).toBeInTheDocument();
+    expect(screen.getByText("Project override")).toBeInTheDocument();
+  });
+
   it("keeps manual container setup script text when file browsing fails", async () => {
     vi.mocked(useProjectData).mockReturnValue({ updateProject: vi.fn() } as any);
     vi.mocked(fetchLocalFiles).mockRejectedValueOnce(new Error("Path is outside allowed roots"));

@@ -67,7 +67,7 @@ describe("ChatProviderActions", () => {
     expect(definitions).toHaveLength(1);
     expect(definitions[0]).toMatchObject({
       kind: "slack",
-      defaultBridgeMode: "openclaw",
+      defaultBridgeMode: "managed_bridge",
       setupGuidance: {
         providerKind: "slack",
         ingressUrlTemplate: "https://codeux.example.test/api/chat-providers/{providerConnectionId}/channels/{externalChannelId}/ingress",

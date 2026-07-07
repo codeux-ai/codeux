@@ -24,6 +24,8 @@ This document defines the visual patterns and rules for the Settings workspace. 
     *   Self-reflection controls live under Settings > Agents and are also visible in the Quality Assurance area. Planning and QA loops use explicit enable toggles, editable criteria rows, per-criterion thresholds, and max improvement attempts. Both loops are disabled by default and must remain discoverable through Settings search terms such as persistent skills, skill storage, self-reflection, criteria, planning rating, and QA rating.
     *   Planning self-reflection copy must make the autostart gate clear: when enabled, `autoStart` starts orchestration only after the final planning reflection decision passes. If reflection does not pass, the planned tasks remain saved and the user can manually start the sprint after review.
     *   MCP custom server transport selection keeps radiogroup semantics. HTTP / SSE setup must expose the URL field and auth headers JSON editor with durable accessible names, keep the generated config preview in a labelled region, and state that saved changes apply on the next CLI run.
+    *   Docker Runtime root execution controls must keep the default-off posture visible. The `cliWorkflow.containerRunAsRoot` toggle should show a neutral non-root state by default, switch to a danger/accent state only when enabled, and keep scoped override badges distinct from agent preset inheritance. Agent preset root-mode choices use radio semantics for Inherit (`null`), Force non-root (`false`), and Force root (`true`).
+    *   Experience Mode lives in Appearance and uses the user-facing labels **Easy**, **Standard**, and **Expert** for the persisted `EASY`, `STANDARD`, and `EXPERT` values. Expert is the default and exposes the full settings surface. Easy and Standard filter visible categories and advanced cards; they do not delete hidden values or save changes without the operator using the normal Save action.
 
 3.  **High-Risk Actions**:
     *   Destructive actions in the Danger Zone (`Wipe Project`, `Wipe Database`) use the `danger` tone, yielding clear semantic `bg-status-red text-white` presentation. Panels themselves hint at danger via red-tinted borders and backgrounds.
@@ -39,7 +41,7 @@ This document defines the visual patterns and rules for the Settings workspace. 
     *   Modals launched from settings (e.g., `TerminalLoginModal`, `TokenPricingModal`) adhere strictly to `design-system-feedback-overlays.md`: `bg-white dark:bg-void-800`, `rounded-2xl`, `shadow-[var(--elevation-floating)]`, and `border-[var(--border-hairline)]`.
 
 6.  **Smart Find**:
-    *   Smart Find filters the Settings category rail rather than returning standalone result rows. Matching categories remain navigable with the same button-based category switching and `aria-current` semantics as manual category selection.
+    *   Smart Find filters the currently mode-visible Settings category rail rather than returning standalone result rows. Matching categories remain navigable with the same button-based category switching and `aria-current` semantics as manual category selection. Categories hidden by Experience Mode must stay out of the rail and search index until the user switches to a mode that shows them.
     *   The search index must cover category labels, descriptions, and operational terms for General, Appearance, AI Models, Sprint & Git, Browser Preview, Agents, Memory, Integrations, MCP, and Danger Zone.
     *   AI Models matches provider names from shared provider metadata, invocation routes, model routing terms, pricing/token terms, and thinking-mode labels. Provider names also match Integrations because provider credentials are configured there as named instances.
     *   Integrations matches provider credential terms, API keys, authentication, local auth-copy mounts, dashboard login, GitHub/GitLab/Jira style git-host connections, repository, pull request, issue, token language, and Code UX Agent-specific clarification/CI autofix controls.
@@ -48,6 +50,13 @@ This document defines the visual patterns and rules for the Settings workspace. 
     *   Techstacks must remain searchable through catalog and project-assignment terms: techstack, stack, Preact, TanStack Router, GSAP, Three.js, Lucide, web app, desktop app, and package scan.
     *   Agents search terms also include persistent skills, skill storage, storage attachment, self-reflection, criteria, planning rating, and QA rating so users can find disabled-by-default configuration before enabling it.
     *   The Smart Find status text uses `role="status"` with `aria-live="polite"`. Idle copy stays to a quiet search affordance while preserving the exact category total for assistive technology; active searches include result counts, matching-category counts, active-category context, and match previews so assistive technology users receive the same filtered-category context as sighted users.
+
+## Experience Mode Rules
+
+*   **Easy** shows the essential settings categories: General, Appearance, Integrations, and Danger Zone. Keep onboarding, provider credentials, dashboard appearance, and destructive recovery reachable, but hide low-level routing, runtime, memory, MCP, and capacity internals.
+*   **Standard** shows the common project-operation surface: General, Appearance, AI Models, Sprint & Git, Browser Preview, Techstacks, Agents, Memory, Integrations, and Danger Zone. It hides MCP and expert-only cards such as model pricing, route mapping internals, low-level guardrails, Docker/runtime internals, database maintenance, and worker capacity limits.
+*   **Expert** shows every category and advanced card. It is the default for new installs and for missing or unrecognized stored values, preserving the historical full-control dashboard.
+*   Mode changes are presentation filters. They should preserve the underlying settings object, dirty tracking, reset behavior, project/system inheritance, and saved hidden values so the full data reappears when the user returns to Expert.
 
 ## Implementation details
 

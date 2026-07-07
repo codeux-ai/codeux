@@ -634,8 +634,13 @@ describe("ProviderRunner", () => {
   });
 
   it("uses the configured Qwen custom model and rewrites local Docker endpoints", async () => {
+    const originalPlatform = process.platform;
     const originalRewrite = process.env.CODE_UX_DOCKER_REWRITE_LOCALHOST;
-    process.env.CODE_UX_DOCKER_REWRITE_LOCALHOST = "1";
+    Object.defineProperty(process, "platform", {
+      value: "linux",
+      configurable: true,
+    });
+    delete process.env.CODE_UX_DOCKER_REWRITE_LOCALHOST;
     try {
       const runArgs = {
         provider: "qwen-code" as const,
@@ -657,6 +662,10 @@ describe("ProviderRunner", () => {
       const model = resolveEffectiveModel(runArgs);
       await runner.runProvider({ ...runArgs, model });
     } finally {
+      Object.defineProperty(process, "platform", {
+        value: originalPlatform,
+        configurable: true,
+      });
       if (originalRewrite === undefined) {
         delete process.env.CODE_UX_DOCKER_REWRITE_LOCALHOST;
       } else {
@@ -1067,8 +1076,13 @@ describe("ProviderRunner", () => {
   });
 
   it("uses the configured OpenCode custom provider model instead of a stale placeholder", async () => {
+    const originalPlatform = process.platform;
     const originalRewrite = process.env.CODE_UX_DOCKER_REWRITE_LOCALHOST;
-    process.env.CODE_UX_DOCKER_REWRITE_LOCALHOST = "1";
+    Object.defineProperty(process, "platform", {
+      value: "linux",
+      configurable: true,
+    });
+    delete process.env.CODE_UX_DOCKER_REWRITE_LOCALHOST;
     try {
       const runArgs = {
         provider: "opencode" as const,
@@ -1089,6 +1103,10 @@ describe("ProviderRunner", () => {
       const model = resolveEffectiveModel(runArgs);
       await runner.runProvider({ ...runArgs, model });
     } finally {
+      Object.defineProperty(process, "platform", {
+        value: originalPlatform,
+        configurable: true,
+      });
       if (originalRewrite === undefined) {
         delete process.env.CODE_UX_DOCKER_REWRITE_LOCALHOST;
       } else {

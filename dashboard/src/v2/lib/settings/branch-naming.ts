@@ -21,6 +21,18 @@ export const BRANCH_NAME_TOKEN_LABELS: Record<BranchNameToken, string> = {
   worker_model: "Worker Model",
 };
 
+export const TASK_PR_TITLE_TOKEN_LABELS = {
+  sprint_tag: "Sprint Tag",
+  sprint_key: "Sprint Key",
+  sprint_number: "Sprint Number",
+  sprint_title: "Sprint Title",
+  task_key: "Task Key",
+  task_title: "Task Title",
+  provider: "Provider",
+} as const;
+
+export type TaskPrTitleToken = keyof typeof TASK_PR_TITLE_TOKEN_LABELS;
+
 export const getCanonicalBranchNameToken = (tokenOrScheme: string): BranchNameToken => {
   const match = tokenOrScheme.match(/\{([^}]+)\}/);
   const token = match ? match[1] : tokenOrScheme;
@@ -31,5 +43,12 @@ export const getBranchSchemeOptions = (): BranchSchemeOption[] => (
   BRANCH_NAME_TOKENS.map((token) => ({
     value: `{${token}}`,
     label: BRANCH_NAME_TOKEN_LABELS[token],
+  }))
+);
+
+export const getTaskPrTitleSchemeOptions = (): BranchSchemeOption[] => (
+  Object.entries(TASK_PR_TITLE_TOKEN_LABELS).map(([token, label]) => ({
+    value: `{${token}}`,
+    label,
   }))
 );

@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
+import { DEFAULT_TASK_PR_TITLE_SCHEME } from "../../../../src/domain/git/task-pr-title-template.js";
 import { validateSettingsPayload } from "../../../../src/domain/settings/settings-schema.js";
+import { sanitizeGit } from "../../../../src/domain/settings/settings-sanitizers/git-sanitizer.js";
 import { cloneDefaults } from "../../../../src/repositories/settings-sanitizer.js";
 
 describe("validateSettingsPayload", () => {
@@ -32,7 +34,27 @@ describe("validateSettingsPayload", () => {
 
     expect(result.success).toBe(true);
     expect(result.issues).toEqual([]);
+    expect(result.data?.appearance.experienceMode).toBe("EXPERT");
     expect(result.data).toEqual(payload);
+  });
+
+  it("validates dashboard experience mode values", () => {
+    const payload = cloneDefaults({ env: {}, settingsJson: {}, resolved: {} });
+    payload.appearance.experienceMode = "EASY";
+
+    const validResult = validateSettingsPayload(payload);
+
+    expect(validResult.success).toBe(true);
+    expect(validResult.issues).toEqual([]);
+
+    payload.appearance.experienceMode = "standart" as any;
+    const invalidResult = validateSettingsPayload(payload);
+
+    expect(invalidResult.success).toBe(false);
+    expect(invalidResult.issues).toContainEqual({
+      path: "appearance.experienceMode",
+      message: "Expected one of: EASY, STANDARD, EXPERT",
+    });
   });
 
   it("accepts CREATE_PR for featurePrAutoMergeMode", () => {
@@ -50,6 +72,43 @@ describe("validateSettingsPayload", () => {
     expect(result.success).toBe(true);
     expect(result.issues).toEqual([]);
     expect(result.data.ciIntelligence.featurePrAutoMergeMode).toBe("CREATE_PR");
+  });
+
+  it("accepts taskPrTitleScheme in git settings", () => {
+    const payload = cloneDefaults({
+      env: {},
+      settingsJson: {},
+      resolved: {},
+    });
+    payload.git.taskPrTitleScheme = "({sprint_tag}) {task_key}: {task_title} [{provider}]";
+
+    const result = validateSettingsPayload(payload);
+
+    expect(result.success).toBe(true);
+    expect(result.issues).toEqual([]);
+    expect(result.data?.git.taskPrTitleScheme).toBe("({sprint_tag}) {task_key}: {task_title} [{provider}]");
+  });
+
+  it("rejects non-string taskPrTitleScheme values", () => {
+    const payload = cloneDefaults({
+      env: {},
+      settingsJson: {},
+      resolved: {},
+    });
+    payload.git.taskPrTitleScheme = 42 as any;
+
+    const result = validateSettingsPayload(payload);
+
+    expect(result.success).toBe(false);
+    expect(result.issues).toEqual(expect.arrayContaining([
+      { path: "git.taskPrTitleScheme", message: "Expected a string" },
+    ]));
+  });
+
+  it("defaults missing taskPrTitleScheme through the git sanitizer", () => {
+    const result = sanitizeGit({ git: { defaultBranch: "dev" } });
+
+    expect(result.taskPrTitleScheme).toBe(DEFAULT_TASK_PR_TITLE_SCHEME);
   });
 
   it("rejects invalid sprint preview container ports", () => {
@@ -238,6 +297,7 @@ describe("validateSettingsPayload", () => {
         containerMemoryLimitMb: "bad",
         containerCacheSetupScriptImage: "bad",
         containerInstallPlaywrightBrowsers: "bad",
+        containerRunAsRoot: "bad",
         containerMountGitConfig: "bad",
         containerGitUserName: 7,
         containerGitUserEmail: 8,
@@ -307,6 +367,7 @@ describe("validateSettingsPayload", () => {
     expect(paths).toContain("cliWorkflow.containerSetupScriptPath");
     expect(paths).toContain("cliWorkflow.containerCacheSetupScriptImage");
     expect(paths).toContain("cliWorkflow.containerInstallPlaywrightBrowsers");
+    expect(paths).toContain("cliWorkflow.containerRunAsRoot");
     expect(paths).toContain("cliWorkflow.containerClaudeCodeAuthPath");
     expect(paths).toContain("workers.executionMode");
     expect(paths).toContain("workers.virtualWorkerProvider");
@@ -367,6 +428,20 @@ describe("validateSettingsPayload", () => {
     expect(result.success).toBe(false);
     expect(result.issues).toEqual(expect.arrayContaining([
       { path: "cliWorkflow.containerSetupScriptPath", message: "Expected a string" },
+    ]));
+  });
+
+  it("requires Docker root execution to be boolean in full settings payloads", () => {
+    const payload = cloneDefaults({ env: {}, settingsJson: {}, resolved: {} });
+    expect(payload.cliWorkflow.containerRunAsRoot).toBe(false);
+
+    payload.cliWorkflow.containerRunAsRoot = "yes" as any;
+
+    const result = validateSettingsPayload(payload);
+
+    expect(result.success).toBe(false);
+    expect(result.issues).toEqual(expect.arrayContaining([
+      { path: "cliWorkflow.containerRunAsRoot", message: "Expected a boolean" },
     ]));
   });
 });

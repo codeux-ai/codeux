@@ -75,6 +75,11 @@ export interface AgentPresetRecord {
   avatarConfig?: AgentAvatarConfig;
   providerConfigId?: ProviderConfigId | null;
   model?: string | null;
+  /**
+   * Optional Docker root-mode override for local CLI provider containers.
+   * `null`/`undefined` inherits the resolved cliWorkflow.containerRunAsRoot setting.
+   */
+  containerRunAsRoot?: boolean | null;
   memoryTemplateOverrideEnabled?: boolean;
   memoryTemplateMarkdown?: string;
   memoryConfig?: AgentMemoryConfig;
@@ -95,6 +100,7 @@ export interface CreateAgentPresetInput {
   avatarConfig?: AgentAvatarConfig;
   providerConfigId?: ProviderConfigId | null;
   model?: string | null;
+  containerRunAsRoot?: boolean | null;
   memoryTemplateOverrideEnabled?: boolean;
   memoryTemplateMarkdown?: string;
   memoryConfig?: AgentMemoryConfig;
@@ -111,10 +117,15 @@ export interface UpdateAgentPresetInput {
   avatarConfig?: AgentAvatarConfig;
   providerConfigId?: ProviderConfigId | null;
   model?: string | null;
+  containerRunAsRoot?: boolean | null;
   memoryTemplateOverrideEnabled?: boolean;
   memoryTemplateMarkdown?: string;
   memoryConfig?: AgentMemoryConfig;
   mcpAccess?: AgentMcpAccessConfig;
   persistentSkillStorageIds?: string[];
   persistentSkillStorage?: AgentPersistentSkillStorageConfig;
+}
+
+export interface PushAgentPresetsToMarkdownOptions {
+  agentPresetIds?: string[];
 }

@@ -218,11 +218,12 @@ export const useChatThreadData = (options: {
   dashboardSettings?: DashboardSettings | null;
   composerRef?: RefObject<HTMLTextAreaElement>;
   messagesRef?: RefObject<HTMLDivElement>;
+  workerRouting?: unknown;
   onMessageSending?: (message: { projectId: string; createdAt: string }) => string | null | void;
   onMessageSent?: (payload: { message: ChatMessageRecord; optimisticInvocationId?: string | null }) => void;
   onMessageSendFailed?: (optimisticInvocationId: string) => void;
 }) => {
-  const { selectedProject, cache, execution, dashboardSettings, composerRef, messagesRef, onMessageSending, onMessageSent, onMessageSendFailed } = options;
+  const { selectedProject, cache, execution, dashboardSettings, composerRef, messagesRef, onMessageSent } = options;
 
   const [threads, setThreads] = useState<ChatThread[]>([]);
   const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
@@ -541,10 +542,6 @@ export const useChatThreadData = (options: {
     recordSentMessage(bodyMarkdown);
 
     setSending(true);
-    const optimisticInvocationId = onMessageSending?.({
-      projectId: selectedProject.id,
-      createdAt: new Date().toISOString(),
-    }) || null;
     try {
       let thread = selectedThread || await createThreadForCompose();
 
@@ -552,7 +549,6 @@ export const useChatThreadData = (options: {
         threadId: thread.id,
         bodyMarkdown,
       });
-      onMessageSent?.({ message: created, optimisticInvocationId });
       const nextMessages = upsertMessage(cache.getMessages(thread.id) || [], created);
       cache.setMessages(thread.id, nextMessages);
       if (thread.id === selectedThreadIdRef.current) {
@@ -563,9 +559,6 @@ export const useChatThreadData = (options: {
       // will handle the rest without needing full fetch.
       setError(null);
     } catch (sendError) {
-      if (optimisticInvocationId) {
-        onMessageSendFailed?.(optimisticInvocationId);
-      }
       setError(sendError instanceof Error ? sendError.message : String(sendError));
       setInput((current) => current || bodyMarkdown);
       if (composerRef?.current) {
@@ -574,7 +567,7 @@ export const useChatThreadData = (options: {
     } finally {
       setSending(false);
     }
-  }, [cache, composerRef, createThreadForCompose, execution, input, onMessageSendFailed, onMessageSending, onMessageSent, recordSentMessage, selectedProject, selectedThread, setMessagesSnapshot]);
+  }, [cache, composerRef, createThreadForCompose, input, recordSentMessage, selectedProject, selectedThread, setMessagesSnapshot]);
 
   const handleCreateAppQuickaction = useCallback(async (kind: DashboardCreateAppQuickactionKind): Promise<void> => {
     if (!selectedProject || sending) {

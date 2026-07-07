@@ -30,6 +30,9 @@ function makeBasePayload() {
     dbAutoVacuumOnStartup: true,
     dbPruningEnabled: true,
     dbRetentionDays: 14,
+    appearance: {
+      experienceMode: "EXPERT",
+    },
     automationLevel: "SEMI_AUTO",
     automationInterventions: {
       autoApprovePlan: true,
@@ -123,6 +126,7 @@ function makeBasePayload() {
       featureBranchPrefix: "feat/",
       sprintBranchScheme: "sprint-{sprint_id}",
       sprintKeyPrefix: "SPRINT",
+      taskPrTitleScheme: "({sprint_tag}) {task_title}",
     },
     jira: {
       host: "jira.com",
@@ -200,6 +204,7 @@ function makeBasePayload() {
       containerMemoryLimitMb: 6144,
       containerCacheSetupScriptImage: true,
       containerInstallPlaywrightBrowsers: true,
+      containerRunAsRoot: false,
       containerMountGitConfig: true,
       containerGitUserName: "Jules",
       containerGitUserEmail: "jules@example.com",
@@ -217,6 +222,8 @@ function makeBasePayload() {
       containerQwenCodeAuthPath: "",
       containerOpenCodeAuthPath: "",
       containerAntigravityAuthPath: "",
+      maxPlanningJsonRetries: 3,
+      maxQuotaRetriesWithoutTimer: 3,
     },
     sprintPreview: {
       enabled: false,

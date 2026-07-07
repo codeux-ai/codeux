@@ -8,6 +8,25 @@ export type ConversationMessageDirection = "dashboard_to_connection" | "connecti
 export type ConversationAuthorType = "dashboard_user" | "connection" | "system";
 export type ConversationDeliveryStatus = "pending" | "delivered" | "processed" | "failed";
 
+export type JsonPrimitive = string | number | boolean | null;
+export type JsonValue = JsonPrimitive | JsonObject | JsonValue[];
+export interface JsonObject {
+  [key: string]: JsonValue | undefined;
+}
+
+export interface PromptSuggestion extends JsonObject {
+  id?: string;
+  label: string;
+  prompt: string;
+  icon?: string;
+}
+
+export interface PromptSuggestionsMetadata extends JsonObject {
+  promptSuggestions: PromptSuggestion[];
+}
+
+export type ConversationMessageMetadata = JsonObject;
+
 export interface McpConnectionCapabilities {
   instruction?: string;
   model?: string;
@@ -69,7 +88,7 @@ export type DashboardCreateAppQuickactionKind = typeof DASHBOARD_CREATE_APP_QUIC
 
 export const DASHBOARD_APP_PROGRESS_WIDGET_TYPE = "app_progress" as const;
 
-export interface DashboardCreateAppQuickactionStackSummary {
+export interface DashboardCreateAppQuickactionStackSummary extends JsonObject {
   techstackId?: string | null;
   techstackName?: string | null;
   applicationKind?: DashboardCreateAppQuickactionKind | null;
@@ -81,16 +100,18 @@ export interface DashboardCreateAppQuickactionStackSummary {
   testFramework?: string | null;
 }
 
-export interface DashboardCreateAppQuickactionMetadata extends Record<string, unknown> {
-  quickaction: {
-    type: "create_app";
-    kind: DashboardCreateAppQuickactionKind;
-    requestId: string;
-    templateId: string;
-    taskCount?: number;
-    stackSummary?: DashboardCreateAppQuickactionStackSummary | null;
-    suggestionTags?: string[];
-  };
+export interface DashboardCreateAppQuickactionPayload extends JsonObject {
+  type: "create_app";
+  kind: DashboardCreateAppQuickactionKind;
+  requestId: string;
+  templateId: string;
+  taskCount?: number;
+  stackSummary?: DashboardCreateAppQuickactionStackSummary | null;
+  suggestionTags?: string[];
+}
+
+export interface DashboardCreateAppQuickactionMetadata extends JsonObject {
+  quickaction: DashboardCreateAppQuickactionPayload;
 }
 
 export type DashboardCreateAppQuickactionPlanningStatus = "running" | "completed" | "failed";
@@ -115,13 +136,13 @@ export interface DashboardCreateAppQuickactionRuntimeState {
   failedAt?: string;
 }
 
-export interface DashboardAppProgressPlanningStage {
+export interface DashboardAppProgressPlanningStage extends JsonObject {
   id: "planning" | "plan" | "start" | "finish";
   label: "Planning" | "Plan" | "Start" | "Finish";
   status: "running" | "pending" | "completed" | "failed";
 }
 
-export interface DashboardAppProgressWidgetMetadata {
+export interface DashboardAppProgressWidgetMetadata extends JsonObject {
   type: typeof DASHBOARD_APP_PROGRESS_WIDGET_TYPE;
   status: "running" | "completed" | "failed";
   appKind: DashboardCreateAppQuickactionKind;
@@ -167,7 +188,7 @@ export interface ConversationMessageRecord {
   authorConnectionId: string | null;
   bodyMarkdown: string;
   deliveryStatus: ConversationDeliveryStatus;
-  metadata?: Record<string, unknown> | null;
+  metadata?: ConversationMessageMetadata | null;
   createdAt: string;
 }
 
@@ -177,7 +198,7 @@ export interface ConnectionInboxMessage {
   threadTitle: string;
   projectId: string;
   bodyMarkdown: string;
-  metadata?: Record<string, unknown> | null;
+  metadata?: ConversationMessageMetadata | null;
   createdAt: string;
   deliveryStatus: ConversationDeliveryStatus;
 }
@@ -205,7 +226,7 @@ export interface PostListenReplyInput {
   threadId: string;
   bodyMarkdown: string;
   replyToMessageId?: string;
-  metadata?: Record<string, unknown> | null;
+  metadata?: ConversationMessageMetadata | null;
 }
 
 export interface UpsertMcpConnectionInput {
@@ -239,7 +260,7 @@ export interface CreateDashboardConversationMessageInput {
   title?: string;
   connectionId?: string | null;
   bodyMarkdown: string;
-  metadata?: Record<string, unknown> | DashboardCreateAppQuickactionMetadata | null;
+  metadata?: ConversationMessageMetadata | DashboardCreateAppQuickactionMetadata | null;
 }
 
 export interface UpdateConversationThreadInput {
@@ -285,7 +306,7 @@ export interface ListenDashboardMessagePayload {
   threadId: string;
   projectId: string;
   bodyMarkdown: string;
-  metadata?: Record<string, unknown> | null;
+  metadata?: ConversationMessageMetadata | null;
 }
 
 export interface ListenProjectPayload {

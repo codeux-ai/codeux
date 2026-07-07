@@ -1,5 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { ChatManagementActionService } from "../../../src/services/chat-management-action-service.js";
+import {
+  ChatManagementActionService,
+  parseProviderManagementJson,
+} from "../../../src/services/chat-management-action-service.js";
 import type { StructuredProviderResponseService } from "../../../src/services/structured-provider-response-service.js";
 import type { ManagementToolHandler } from "../../../src/mcp/management-tool-handler.js";
 import type { ExecutionRepository } from "../../../src/repositories/execution-repository.js";
@@ -184,6 +187,41 @@ describe("ChatManagementActionService", () => {
     expect(calls[1]).toEqual(["exec-123", { role: "assistant", contentMarkdown: "Hello world" }]);
   });
 
+  it("should pass sanitized prompt suggestions through reply-only results", async () => {
+    structuredProviderResponseService.executeAndParse.mockResolvedValue({
+      parsed: {
+        replyMarkdown: "Pick a next step.",
+        action: null,
+        promptSuggestions: [
+          { label: "Inspect status", prompt: "Show the current project status", icon: "search", id: "status" },
+        ],
+      },
+      nativeSessionId: "sess1",
+      bodyMarkdown: "",
+    });
+
+    const result = await service.processManagementAction({
+      projectId: "proj1",
+      provider: "claude-code",
+      model: "claude-3",
+      apiKey: "test-key",
+      sessionId: "sess1",
+      settings: mockSettings,
+      prompt: "What next?",
+      repoPath: "/tmp/test-repo",
+    });
+
+    expect(result).toEqual({
+      replyMarkdown: "Pick a next step.",
+      action: null,
+      approvalRequired: false,
+      nativeSessionId: "sess1",
+      promptSuggestions: [
+        { label: "Inspect status", prompt: "Show the current project status", icon: "search", id: "status" },
+      ],
+    });
+  });
+
   it("should track error in invocation on failure", async () => {
     structuredProviderResponseService.executeAndParse.mockRejectedValue(new Error("Provider timeout"));
 
@@ -233,6 +271,61 @@ describe("ChatManagementActionService", () => {
      expect(parseFn(`[setup] Bootstrap complete.\n${providerEnvelope}\nnpm notice`)).toEqual({replyMarkdown: "Nested hello", action: null});
 
      expect(() => parseFn('{"action": null}')).toThrow("Missing or invalid 'replyMarkdown'");
+  });
+
+  it("should parse and sanitize prompt suggestions from JSON provider replies", () => {
+    const parsed = parseProviderManagementJson(JSON.stringify({
+      replyMarkdown: "Here are options.",
+      action: null,
+      suggestions: [
+        { label: "  Start sprint  ", prompt: "  Start the queued sprint  ", icon: " play ", id: " start " },
+        { label: "", prompt: "Missing label" },
+        { label: "Missing prompt", prompt: "   " },
+        "not an object",
+      ],
+    }));
+
+    expect(parsed).toEqual({
+      replyMarkdown: "Here are options.",
+      action: null,
+      promptSuggestions: [
+        { label: "Start sprint", prompt: "Start the queued sprint", icon: "play", id: "start" },
+      ],
+    });
+  });
+
+  it("should parse promptSuggestions aliases and cap stored suggestions", () => {
+    const promptSuggestions = Array.from({ length: 8 }, (_, index) => ({
+      label: `Option ${index + 1}`,
+      prompt: `Run option ${index + 1}`,
+    }));
+
+    const parsed = parseProviderManagementJson(JSON.stringify({
+      replyMarkdown: "Choose one.",
+      action: null,
+      promptSuggestions,
+    }));
+
+    expect(parsed.promptSuggestions).toHaveLength(6);
+    expect(parsed.promptSuggestions?.at(0)).toEqual({ label: "Option 1", prompt: "Run option 1" });
+    expect(parsed.promptSuggestions?.at(5)).toEqual({ label: "Option 6", prompt: "Run option 6" });
+  });
+
+  it("should omit promptSuggestions when all suggestions are malformed", () => {
+    const parsed = parseProviderManagementJson(JSON.stringify({
+      replyMarkdown: "No useful options.",
+      action: null,
+      suggestions: [
+        { label: "Missing prompt" },
+        { prompt: "Missing label" },
+        null,
+      ],
+    }));
+
+    expect(parsed).toEqual({
+      replyMarkdown: "No useful options.",
+      action: null,
+    });
   });
 
   describe("MCP-native mode", () => {

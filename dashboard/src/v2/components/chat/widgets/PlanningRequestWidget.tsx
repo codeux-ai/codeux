@@ -3,13 +3,18 @@ import { AlertTriangle, CheckCircle2, Circle, Clock3, Loader2, PauseCircle, XCir
 import { ChatWidgetFrame, type ExecutionStatus } from "./ChatWidgetFrame.js";
 import { ContainerShip } from "../../ui/PlanningShip.js";
 import { ChatRuntimeBadge } from "../ChatRuntimeBadge.js";
-import type { LivePlanningTaskState, LivePlanningWidgetState } from "../../../lib/chat-widget-view-models.js";
+import type {
+  LivePlanningTaskState,
+  LivePlanningWidgetState,
+  PlanningExecutionPlanWidgetState,
+} from "../../../lib/chat-widget-view-models.js";
 
 export interface PlanningRequestWidgetProps {
   status: ExecutionStatus;
   planName: string;
   isDark?: boolean;
   liveStatus?: LivePlanningWidgetState;
+  executionPlan?: PlanningExecutionPlanWidgetState;
 }
 
 const statusTone: Record<LivePlanningTaskState["statusKind"], string> = {
@@ -127,11 +132,88 @@ const LivePlanningStatusCard: FunctionComponent<{ liveStatus: LivePlanningWidget
   );
 };
 
+const PersistedExecutionPlanCard: FunctionComponent<{ executionPlan: PlanningExecutionPlanWidgetState }> = ({ executionPlan }) => {
+  const visibleTasks = executionPlan.tasks.slice(0, 5);
+  const hiddenTaskCount = Math.max(0, executionPlan.tasks.length - visibleTasks.length);
+  const visibleCreatedTaskIds = visibleTasks.length === 0 ? executionPlan.createdTaskIds.slice(0, 5) : [];
+  const hiddenCreatedTaskCount = visibleTasks.length === 0
+    ? Math.max(0, executionPlan.createdTaskIds.length - visibleCreatedTaskIds.length)
+    : 0;
+
+  return (
+    <div className="min-w-0 space-y-3">
+      <span className="sr-only">{executionPlan.ariaLabel}</span>
+      <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
+          {executionPlan.sprintKey ? (
+            <div className="font-mono text-[11px] font-bold uppercase tracking-[0.14em] text-signal-600 dark:text-signal-400">
+              {executionPlan.sprintKey}
+            </div>
+          ) : null}
+          <div className="mt-0.5 truncate text-[14px] font-semibold text-slate-900 dark:text-white">
+            {executionPlan.sprintName}
+          </div>
+        </div>
+        <div className="shrink-0 rounded-lg border border-black/[0.06] bg-white/70 px-2.5 py-1 text-right font-mono text-[12px] font-bold tabular-nums text-slate-800 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-100">
+          {executionPlan.taskSummaryLabel}
+        </div>
+      </div>
+
+      {executionPlan.goal ? (
+        <p className="line-clamp-2 text-[12px] leading-5 text-slate-600 dark:text-slate-300">
+          {executionPlan.goal}
+        </p>
+      ) : null}
+
+      {visibleTasks.length > 0 ? (
+        <ul className="space-y-1.5" aria-label="Planned task summaries">
+          {visibleTasks.map((task) => (
+            <li
+              key={task.id}
+              className="flex min-w-0 flex-col gap-1 rounded-lg border border-black/[0.04] bg-white/60 px-2.5 py-2 dark:border-white/[0.06] dark:bg-white/[0.03]"
+            >
+              <div className="flex min-w-0 items-baseline gap-2">
+                <span className="shrink-0 font-mono text-[10px] font-semibold text-slate-400">{task.id}</span>
+                <span className="truncate text-[12px] font-medium text-slate-800 dark:text-slate-200">{task.title}</span>
+              </div>
+              {task.summary ? (
+                <div className="line-clamp-2 text-[11px] leading-4 text-slate-500 dark:text-slate-400">{task.summary}</div>
+              ) : null}
+            </li>
+          ))}
+          {hiddenTaskCount > 0 ? (
+            <li className="rounded-lg border border-dashed border-black/[0.08] px-2.5 py-2 text-[12px] font-medium text-slate-500 dark:border-white/[0.08] dark:text-slate-400">
+              {hiddenTaskCount} more task{hiddenTaskCount === 1 ? "" : "s"} in this execution plan
+            </li>
+          ) : null}
+        </ul>
+      ) : visibleCreatedTaskIds.length > 0 ? (
+        <div className="flex flex-wrap gap-1.5" aria-label="Created task ids">
+          {visibleCreatedTaskIds.map((taskId) => (
+            <span
+              key={taskId}
+              className="rounded-md border border-black/[0.06] bg-white/60 px-2 py-1 font-mono text-[11px] font-semibold text-slate-600 dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-slate-300"
+            >
+              {taskId}
+            </span>
+          ))}
+          {hiddenCreatedTaskCount > 0 ? (
+            <span className="rounded-md border border-dashed border-black/[0.08] px-2 py-1 text-[11px] font-medium text-slate-500 dark:border-white/[0.08] dark:text-slate-400">
+              +{hiddenCreatedTaskCount} more
+            </span>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
+  );
+};
+
 export const PlanningRequestWidget: FunctionComponent<PlanningRequestWidgetProps> = ({
   status,
   planName,
   isDark = true,
   liveStatus,
+  executionPlan,
 }) => {
   return (
     <ChatWidgetFrame
@@ -145,6 +227,8 @@ export const PlanningRequestWidget: FunctionComponent<PlanningRequestWidgetProps
     >
       {liveStatus ? (
         <LivePlanningStatusCard liveStatus={liveStatus} />
+      ) : executionPlan ? (
+        <PersistedExecutionPlanCard executionPlan={executionPlan} />
       ) : (
       <div class="flex flex-col items-center justify-center p-4 min-h-[120px]">
         {status === 'running' || status === 'queued' ? (

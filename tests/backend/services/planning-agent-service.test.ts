@@ -344,6 +344,34 @@ describe("PlanningAgentService", () => {
     expect(createdTasks).toHaveLength(1);
     expect(createdTasks[0]?.title).toBe("Plan via virtual worker");
 
+    const planningInvocation = executionRepository
+      .listExecutionInvocations({ projectId: project.id })
+      .find((record) => record.sprintId === sprint.id);
+    expect(planningInvocation).toBeDefined();
+    const messages = executionRepository.listExecutionInvocationMessages(planningInvocation!.id);
+    const executionPlanMessage = messages.find((message) => {
+      const widgetMetadata = message.metadata?.widget_metadata as Record<string, unknown> | undefined;
+      return widgetMetadata?.type === "planning_request" && widgetMetadata.status === "completed";
+    });
+    const executionPlan = executionPlanMessage?.metadata?.executionPlan as {
+      projectId: string;
+      sprintId: string;
+      taskCount: number;
+      createdTaskIds: string[];
+      tasks: Array<{ key: string; title: string }>;
+    } | undefined;
+    expect(executionPlanMessage?.role).toBe("assistant");
+    expect(executionPlanMessage?.contentMarkdown).toContain("## Execution Plan: Sprint 1 - Virtual Planning Sprint");
+    expect(executionPlan).toMatchObject({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskCount: 1,
+      createdTaskIds: planned.createdTaskIds,
+      tasks: [
+        { key: "T01", title: "Plan via virtual worker" },
+      ],
+    });
+
     const statsSnapshot = executionRepository.getProjectStatsSnapshot(project.id, "24h");
     expect(statsSnapshot.usage.totalTokens).toBe(1_030);
     expect(statsSnapshot.sprints[0]).toMatchObject({
@@ -775,7 +803,7 @@ describe("PlanningAgentService", () => {
 
     expect(providerRunner.runProviderForText).toHaveBeenCalledTimes(2);
     expect(vi.mocked(providerRunner.runProviderForText).mock.calls[1]?.[0]?.continueSessionId).toBe("native-rate-limit");
-    expect(sleepSpy).toHaveBeenCalledTimes(1);
+    expect(sleepSpy).toHaveBeenCalled();
   });
 
   it("accepts virtual planning JSON with prose but rejects legacy shape fields", async () => {

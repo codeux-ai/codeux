@@ -42,7 +42,8 @@ Flags can be passed in any order. Anything after `--` is ignored.
 | `JULES_API_BASE_URL` | URL | `https://jules.googleapis.com/v1alpha` | Override the Jules API endpoint. |
 | `JULES_API_MAX_FAILS` | int | `5` | Emergency-stop threshold (`maxFailures`). |
 | `DASHBOARD_PORT` | int | `4444` | Dashboard HTTP port. |
-| `DASHBOARD_HOST` | string | `127.0.0.1` | Dashboard bind address. |
+| `DASHBOARD_HOST` | string | `127.0.0.1` | Dashboard bind address. Non-loopback values require `CODE_UX_ALLOW_PUBLIC_DASHBOARD=1`. |
+| `CODE_UX_ALLOW_PUBLIC_DASHBOARD` | string | – | Set to `1` to explicitly allow unauthenticated dashboard binding outside loopback. |
 | `CODE_UX_SERVER_MODE` | bool | `false` | Enable authenticated MCP HTTP server mode and disable dashboard binding. |
 | `MCP_HTTP_ENABLED` | bool | `true` | Preferred MCP HTTP gateway enablement variable. |
 | `MCP_HTTPS_ENABLED` | bool | `true` | Enable the MCP HTTP gateway. |
@@ -108,6 +109,10 @@ DASHBOARD_PORT env  >  config.json (dashboardPort, DASHBOARD_PORT, dashboard.por
 
 If the chosen port is in use, Code UX increments and retries until it finds a free port (up to 65535) and logs the bound URL.
 
+### Dashboard host
+
+`DASHBOARD_HOST` defaults to `127.0.0.1`. Non-loopback values such as `0.0.0.0`, `::`, LAN addresses, or public hostnames require `CODE_UX_ALLOW_PUBLIC_DASHBOARD=1` for that startup. This is only a listener opt-in: the dashboard remains unauthenticated, runtime APIs keep trusted-host/origin protections, and interactive login callback ports stay loopback-bound.
+
 ### MCP HTTP port
 
 ```
@@ -150,6 +155,14 @@ On boot, Code UX inspects:
 - **GitHub** — `GITHUB_TOKEN` / `GH_TOKEN` env, `gh auth status`.
 
 Detected hints surface in **Settings → AI providers** as **Use detected value** buttons. They are *never* automatically applied.
+
+## Docker runtime settings
+
+Docker-backed provider runs read persisted scoped settings from `cliWorkflow`.
+
+- `cliWorkflow.containerRunAsRoot` defaults to `false`. System settings provide the base value, project and sprint settings inherit it unless they override it, and local CLI agent presets can override the resolved value with nullable `containerRunAsRoot`: `null` inherits, `false` forces non-root, and `true` forces root for that agent's local Docker-backed task runs. Root mode is privileged and should be reserved for trusted repositories that require package-manager or OS-level writes inside the provider container.
+- `cliWorkflow.containerCacheSetupScriptImage` defaults to `true`. When enabled, Code UX builds a content-addressed `code-ux-setup-cache-*` image from the base image, setup script content, setup-cache Dockerfile, and Playwright-browser setting.
+- `cliWorkflow.containerInstallPlaywrightBrowsers` defaults to `true` for provider coding containers. With setup-image caching enabled, Chromium is installed once into `/ms-playwright` and exposed through `PLAYWRIGHT_BROWSERS_PATH=/ms-playwright` for later non-root provider runs. When caching is disabled, a custom `cliWorkflow.containerSetupScriptPath` must honor `CODE_UX_INSTALL_PLAYWRIGHT=1` and install Chromium itself if operators expect Playwright to be available.
 
 ## Reset / migration
 

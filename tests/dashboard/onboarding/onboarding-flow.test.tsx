@@ -1,14 +1,15 @@
 /**
  * @vitest-environment jsdom
  */
-import { render, screen, waitFor } from "@testing-library/preact";
+import { fireEvent, render, screen, waitFor } from "@testing-library/preact";
 import { cleanup } from "@testing-library/preact";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi, afterEach } from "vitest";
+import { describe, expect, it, vi, afterEach, beforeEach } from "vitest";
 import { useOnboardingState } from "../../../dashboard/src/v2/hooks/useOnboardingState.js";
 import { OnboardingExperience } from "../../../dashboard/src/v2/components/onboarding/OnboardingExperience.js";
 import { GuidedDashboardTour } from "../../../dashboard/src/v2/components/onboarding/GuidedDashboardTour.js";
 import { DASHBOARD_TOUR_START_EVENT } from "../../../dashboard/src/v2/lib/onboarding-control.js";
+import { APPEARANCE_PREVIEW_EVENT } from "../../../dashboard/src/v2/lib/appearance-preview.js";
 import { cloneDefaultSettings } from "../../../dashboard/src/lib/settings.js";
 import { clearLivePayloadCacheForTests } from "../../../dashboard/src/lib/api/dashboard-api.js";
 import { DEFAULT_DASHBOARD_SETTINGS } from "../../../src/repositories/settings-defaults.js";
@@ -26,8 +27,12 @@ import {
   onboardingFlowReducer,
 } from "../../../dashboard/src/v2/components/onboarding/use-onboarding-step-flow.js";
 
+const { navigateMock } = vi.hoisted(() => ({
+  navigateMock: vi.fn(),
+}));
+
 vi.mock("@tanstack/react-router", () => ({
-  useNavigate: () => vi.fn(),
+  useNavigate: () => navigateMock,
 }));
 
 // Mock OnboardingIntro to fire callbacks immediately via microtask,
@@ -41,14 +46,23 @@ vi.mock("../../../dashboard/src/v2/components/onboarding/OnboardingIntro.js", ()
   },
 }));
 
+const deepOceanBackgroundMock = vi.hoisted(() => vi.fn());
+
 vi.mock("../../../dashboard/src/v2/components/chat/DeepOceanBackground.js", () => ({
-  DeepOceanBackground: () => null,
+  DeepOceanBackground: (props: { forceDark?: boolean; className?: string }) => {
+    deepOceanBackgroundMock(props);
+    return null;
+  },
 }));
 
 vi.mock("../../../dashboard/src/v2/lib/settings-api.js", () => ({
   fetchSystemSettings: vi.fn(),
   saveSystemSettings: vi.fn(),
 }));
+
+afterEach(() => {
+  navigateMock.mockClear();
+});
 
 const createSystemSettings = (): SystemSettings => {
   const defaultSettings = cloneDefaultSettings();
@@ -249,7 +263,7 @@ describe("onboarding flow reducer", () => {
     expect(state.activeStep).toBe(2);
 
     state = onboardingFlowReducer(state, { type: "set-active-step", step: 99 });
-    expect(state.activeStep).toBe(8);
+    expect(state.activeStep).toBe(9);
   });
 
   it("updates the settings draft without mutating the loaded settings object", () => {
@@ -464,8 +478,9 @@ describe("OnboardingExperience integration", () => {
 
     render(<OnboardingExperience />);
 
-    const activeStepBtn = await screen.findByRole("button", { name: /Installation/i, current: "step" });
+    const activeStepBtn = await screen.findByRole("button", { name: /Setup mode/i, current: "step" });
     expect(activeStepBtn).not.toBeNull();
+    await userEvent.click(screen.getByRole("button", { name: "Go to Installation" }));
 
     const readinessRegion = await screen.findAllByText("Blocked");
     expect(readinessRegion.length).toBeGreaterThan(0);
@@ -508,6 +523,7 @@ describe("OnboardingExperience integration", () => {
 
     render(<OnboardingExperience />);
 
+    await user.click(await screen.findByRole("button", { name: "Go to Installation" }));
     const autoInstallButton = await screen.findByRole("button", { name: "Auto Install dependencies" });
     await user.click(autoInstallButton);
 
@@ -580,11 +596,7 @@ describe("OnboardingExperience integration", () => {
     render(<OnboardingExperience />);
 
     await waitFor(() => expect(settingsApi.fetchSystemSettings).toHaveBeenCalled());
-    const nextButton = await screen.findByRole("button", { name: "Next" });
-    await userEvent.click(nextButton);
-    await userEvent.click(screen.getByRole("button", { name: "Next" }));
-    await userEvent.click(screen.getByRole("button", { name: "Next" }));
-    await userEvent.click(screen.getByRole("button", { name: "Next" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Go to Git" }));
 
     await screen.findByText("Git mode");
     expect(screen.getByText("GitHub token")).not.toBeNull();
@@ -680,6 +692,58 @@ describe("OnboardingExperience integration", () => {
     await waitFor(() => expect(settingsApi.saveSystemSettings).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith("/api/user/onboarding/complete", expect.objectContaining({ method: "POST" })));
     expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("runs the short Easy onboarding flow, saves the selected mode, and lands on Chat", async () => {
+    const systemSettings = createSystemSettings();
+    vi.mocked(settingsApi.fetchSystemSettings).mockResolvedValue(systemSettings);
+    vi.mocked(settingsApi.saveSystemSettings).mockImplementation(async (nextSettings) => nextSettings);
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = typeof input === "string" ? input : input.url;
+      if (url.endsWith("/api/user/onboarding")) {
+        return new Response(JSON.stringify({ completed: false, onboardingCompletedAt: null }), { status: 200 });
+      }
+      if (url.endsWith("/api/user/onboarding/complete")) {
+        return new Response(JSON.stringify({ completed: true, onboardingCompletedAt: "2026-06-01T00:00:00.000Z" }), { status: 200 });
+      }
+      if (url.endsWith("/api/onboarding/readiness")) {
+        return new Response(JSON.stringify({
+          checkedAt: "2026-06-01T00:00:00.000Z",
+          cluster: { status: "ready", label: "Healthy", detail: "Runtime environment is ready." },
+          dependencies: [],
+          providers: [
+            { provider: "codex", available: true, mountEnabled: false, authPath: "~/.codex", detectedFiles: ["auth.json"] },
+          ],
+        }), { status: 200, headers: { "Content-Type": "application/json" } });
+      }
+      return new Response(JSON.stringify({}), { status: 404 });
+    });
+
+    render(<OnboardingExperience />);
+
+    await userEvent.click(await screen.findByRole("radio", { name: /Easy/i }));
+    await userEvent.click(screen.getByRole("button", { name: "Next" }));
+
+    expect(await screen.findByText("Recommended provider: Codex")).not.toBeNull();
+    expect(screen.queryByText("Add instance")).toBeNull();
+
+    await userEvent.click(screen.getByRole("button", { name: "Next" }));
+
+    const githubCheckboxes = screen.getAllByRole("checkbox");
+    expect(githubCheckboxes).toHaveLength(2);
+    expect((screen.getByRole("checkbox", { name: /Use GitHub for this workspace/i }) as HTMLInputElement).checked).toBe(true);
+    expect((screen.getByRole("checkbox", { name: /Let Code UX create and manage GitHub PR workflow defaults/i }) as HTMLInputElement).checked).toBe(true);
+
+    await userEvent.click(screen.getByRole("button", { name: "Finish" }));
+
+    await waitFor(() => expect(settingsApi.saveSystemSettings).toHaveBeenCalled());
+    const saveCalls = vi.mocked(settingsApi.saveSystemSettings).mock.calls;
+    const savedSettings = saveCalls[saveCalls.length - 1]![0] as SystemSettings;
+    expect(savedSettings.defaults.appearance.experienceMode).toBe("EASY");
+    expect(savedSettings.defaults.cliWorkflow.executionMode).toBe("DOCKER");
+    expect(savedSettings.defaults.aiProvider.provider).toBe("codex");
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith("/api/user/onboarding/complete", expect.objectContaining({ method: "POST" })));
+    await waitFor(() => expect(navigateMock).toHaveBeenCalledWith({ to: "/chat" }));
   });
 
   it("shows a save failure and leaves onboarding open", async () => {
@@ -828,9 +892,7 @@ describe("OnboardingExperience integration", () => {
     render(<OnboardingExperience />);
 
     await waitFor(() => expect(settingsApi.fetchSystemSettings).toHaveBeenCalled());
-    // Introduction is step 2 (idx 1), navigate to it
-    const nextButton = await screen.findByRole("button", { name: "Next" });
-    await userEvent.click(nextButton);
+    await userEvent.click(await screen.findByRole("button", { name: "Go to Introduction" }));
 
     await screen.findByText("Welcome to Code UX.");
     const elements = screen.queryAllByText(/knowledge base/i);
@@ -842,13 +904,23 @@ describe("OnboardingExperience integration", () => {
 });
 
 describe("onboarding appearance step", () => {
+  beforeEach(() => {
+    deepOceanBackgroundMock.mockClear();
+    document.documentElement.className = "";
+    document.documentElement.style.background = "";
+    document.body.style.background = "";
+  });
+
   afterEach(() => {
     vi.restoreAllMocks();
     cleanup();
     delete (globalThis.window as any).codeUxDesktop;
+    document.documentElement.className = "";
+    document.documentElement.style.background = "";
+    document.body.style.background = "";
   });
 
-  it("renders remaining appearance controls and omits removed background controls", async () => {
+  it("renders onboarding appearance controls and omits settings-only background controls", async () => {
     globalThis.window.codeUxDesktop = {
       setZoom: vi.fn(),
     } as any;
@@ -886,6 +958,8 @@ describe("onboarding appearance step", () => {
       mcpTools: [],
     };
 
+    vi.mocked(settingsApi.fetchSystemSettings).mockResolvedValue(mockSystemSettings as SystemSettings);
+
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
       const url = typeof input === "string" ? input : input.url;
       if (url.endsWith("/api/user/onboarding")) {
@@ -898,9 +972,6 @@ describe("onboarding appearance step", () => {
           dependencies: [],
           providers: []
         }), { status: 200 });
-      }
-      if (url.endsWith("/api/system-settings")) {
-        return new Response(JSON.stringify(mockSystemSettings), { status: 200 });
       }
       return new Response(JSON.stringify({}), { status: 404 });
     });
@@ -917,8 +988,11 @@ describe("onboarding appearance step", () => {
     await screen.findByText("Theme");
     expect(screen.queryByText("Navigation Mode")).not.toBeNull();
     expect(screen.queryByText("Reduced Motion")).not.toBeNull();
-    // Zoom level omitted due to codeUxDesktop missing
-    // Background Mode omitted
+    expect(screen.queryByText("Zoom Level")).not.toBeNull();
+    expect(screen.queryByText("Background Mode")).not.toBeNull();
+
+    await userEvent.click(screen.getByRole("radio", { name: /^Static\b/i }));
+    expect(await screen.findByText("Static Color")).not.toBeNull();
 
     // Verify removed controls/options are ABSENT
     expect(screen.queryByText("Animation Style")).toBeNull();
@@ -927,5 +1001,170 @@ describe("onboarding appearance step", () => {
     expect(screen.queryByText("Hexagons")).toBeNull();
     expect(screen.queryByText("Custom Background Image")).toBeNull();
     expect(screen.queryByText("Upload Image")).toBeNull();
+  });
+
+  it("previews Light theme immediately without leaking dark-mode onboarding background state", async () => {
+    const mockSystemSettings = createSystemSettings();
+    mockSystemSettings.defaults.appearance = {
+      ...mockSystemSettings.defaults.appearance,
+      theme: "DARK",
+      backgroundMode: "ANIMATED",
+      staticBackgroundColor: "#0d0f12",
+    };
+    const previews: Array<SystemSettings["defaults"]["appearance"] | null> = [];
+    const listener = (event: Event) => {
+      previews.push((event as CustomEvent<{ appearance: SystemSettings["defaults"]["appearance"] | null }>).detail.appearance);
+    };
+    window.addEventListener(APPEARANCE_PREVIEW_EVENT, listener);
+    vi.mocked(settingsApi.fetchSystemSettings).mockResolvedValue(mockSystemSettings);
+
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = typeof input === "string" ? input : input.url;
+      if (url.endsWith("/api/user/onboarding")) {
+        return new Response(JSON.stringify({ completed: false, onboardingCompletedAt: null }), { status: 200 });
+      }
+      if (url.endsWith("/api/user/onboarding/cancel")) {
+        return new Response(JSON.stringify({ completed: true, onboardingCompletedAt: "2026-06-01T00:00:00.000Z" }), { status: 200 });
+      }
+      if (url.endsWith("/api/onboarding/readiness")) {
+        return new Response(JSON.stringify({
+          checkedAt: "2026-06-01T00:00:00.000Z",
+          cluster: { status: "ready" },
+          dependencies: [],
+          providers: [],
+        }), { status: 200 });
+      }
+      return new Response(JSON.stringify({}), { status: 404 });
+    });
+
+    render(<OnboardingExperience />);
+
+    await screen.findByRole("button", { name: "Go to Appearance" });
+    await waitFor(() => {
+      expect(previews.some((appearance) => appearance?.theme === "DARK")).toBe(true);
+    });
+    await waitFor(() => {
+      expect(document.documentElement.classList.contains("dark")).toBe(true);
+    });
+
+    await userEvent.click(screen.getByRole("button", { name: "Go to Appearance" }));
+    await userEvent.click(await screen.findByRole("radio", { name: /^Light\b/i }));
+    await waitFor(() => {
+      expect(previews.some((appearance) => appearance?.theme === "LIGHT")).toBe(true);
+    });
+    await waitFor(() => {
+      expect(document.documentElement.classList.contains("dark")).toBe(false);
+      expect(deepOceanBackgroundMock.mock.calls.some(([props]) => props.forceDark === false)).toBe(true);
+    });
+
+    await userEvent.click(screen.getByRole("button", { name: "Close onboarding" }));
+    await waitFor(() => {
+      expect(previews[previews.length - 1]).toBeNull();
+    });
+    window.removeEventListener(APPEARANCE_PREVIEW_EVENT, listener);
+  });
+
+  it("publishes static background previews from unsaved onboarding changes", async () => {
+    const mockSystemSettings = createSystemSettings();
+    mockSystemSettings.defaults.appearance = {
+      ...mockSystemSettings.defaults.appearance,
+      theme: "LIGHT",
+      backgroundMode: "ANIMATED",
+      staticBackgroundColor: "#0d0f12",
+    };
+    const previewDetails: Array<{ appearance: SystemSettings["defaults"]["appearance"] | null }> = [];
+    const listener = (event: Event) => {
+      previewDetails.push((event as CustomEvent<{ appearance: SystemSettings["defaults"]["appearance"] | null }>).detail);
+    };
+    window.addEventListener(APPEARANCE_PREVIEW_EVENT, listener);
+    vi.mocked(settingsApi.fetchSystemSettings).mockResolvedValue(mockSystemSettings);
+
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = typeof input === "string" ? input : input.url;
+      if (url.endsWith("/api/user/onboarding")) {
+        return new Response(JSON.stringify({ completed: false, onboardingCompletedAt: null }), { status: 200 });
+      }
+      if (url.endsWith("/api/onboarding/readiness")) {
+        return new Response(JSON.stringify({
+          checkedAt: "2026-06-01T00:00:00.000Z",
+          cluster: { status: "ready" },
+          dependencies: [],
+          providers: [],
+        }), { status: 200 });
+      }
+      return new Response(JSON.stringify({}), { status: 404 });
+    });
+
+    render(<OnboardingExperience />);
+
+    await screen.findByRole("button", { name: "Go to Appearance" });
+    await userEvent.click(screen.getByRole("button", { name: "Go to Appearance" }));
+    await userEvent.click(await screen.findByRole("radio", { name: /^Static\b/i }));
+
+    await waitFor(() => {
+      expect(previewDetails.some(({ appearance }) => (
+        appearance?.backgroundMode === "STATIC"
+          && appearance.staticBackgroundColor === "#0d0f12"
+      ))).toBe(true);
+    });
+
+    const staticColorInput = document.querySelector<HTMLInputElement>('input[type="color"]');
+    expect(staticColorInput).not.toBeNull();
+    fireEvent.input(staticColorInput!, { target: { value: "#123456" } });
+
+    await waitFor(() => {
+      expect(previewDetails.some(({ appearance }) => (
+        appearance?.backgroundMode === "STATIC"
+          && appearance.staticBackgroundColor === "#123456"
+      ))).toBe(true);
+    });
+
+    window.removeEventListener(APPEARANCE_PREVIEW_EVENT, listener);
+  });
+
+  it("emits a null appearance preview when onboarding unmounts before settings finish loading", async () => {
+    const mockSystemSettings = createSystemSettings();
+    mockSystemSettings.defaults.appearance = {
+      ...mockSystemSettings.defaults.appearance,
+      theme: "LIGHT",
+    };
+    let resolveSettings: (settings: SystemSettings) => void = () => {};
+    const delayedSettings = new Promise<SystemSettings>((resolve) => {
+      resolveSettings = resolve;
+    });
+    const previews: Array<SystemSettings["defaults"]["appearance"] | null> = [];
+    const listener = (event: Event) => {
+      previews.push((event as CustomEvent<{ appearance: SystemSettings["defaults"]["appearance"] | null }>).detail.appearance);
+    };
+    window.addEventListener(APPEARANCE_PREVIEW_EVENT, listener);
+    vi.mocked(settingsApi.fetchSystemSettings).mockReturnValue(delayedSettings);
+
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = typeof input === "string" ? input : input.url;
+      if (url.endsWith("/api/user/onboarding")) {
+        return new Response(JSON.stringify({ completed: false, onboardingCompletedAt: null }), { status: 200 });
+      }
+      if (url.endsWith("/api/onboarding/readiness")) {
+        return new Response(JSON.stringify({
+          checkedAt: "2026-06-01T00:00:00.000Z",
+          cluster: { status: "ready" },
+          dependencies: [],
+          providers: [],
+        }), { status: 200 });
+      }
+      return new Response(JSON.stringify({}), { status: 404 });
+    });
+
+    const { unmount } = render(<OnboardingExperience />);
+
+    await waitFor(() => expect(settingsApi.fetchSystemSettings).toHaveBeenCalled());
+    unmount();
+    resolveSettings(mockSystemSettings);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(previews.length).toBeGreaterThan(0);
+    expect(previews[previews.length - 1]).toBeNull();
+    expect(previews.every((appearance) => appearance === null)).toBe(true);
+    window.removeEventListener(APPEARANCE_PREVIEW_EVENT, listener);
   });
 });

@@ -41,6 +41,10 @@ import {
   providerDescriptions,
   providerLabels,
 } from "../lib/onboarding-provider-settings.js";
+import {
+  clearAppearancePreview,
+  publishAppearancePreview,
+} from "../lib/appearance-preview.js";
 import type {
   InvocationRoutingId,
   ProviderConfigId,
@@ -144,11 +148,11 @@ const INTEGRATIONS: IntegrationDefinition[] = [
   { id: "github", label: "GitHub", description: "Repository, pull request, branch, and CI integration" },
   { id: "gitlab", label: "GitLab", description: "GitLab repository, merge request, and CI token integration" },
   { id: "jira", label: "Jira", description: "Atlassian Jira issue search, sprint linking, and completion transitions" },
-  { id: "whatsapp", label: "WhatsApp", description: "OpenClaw or webhook bridge for WhatsApp groups and business conversations" },
-  { id: "imessage", label: "iMessage", description: "OpenClaw or native macOS bridge for iMessage routing" },
-  { id: "telegram", label: "Telegram", description: "Telegram bot or OpenClaw bridge for channel ingress and replies" },
-  { id: "slack", label: "Slack", description: "Slack Events or OpenClaw bridge with signed webhooks" },
-  { id: "microsoft-teams", label: "Microsoft Teams", description: "Teams bot or OpenClaw bridge for tenant channels" },
+  { id: "whatsapp", label: "WhatsApp", description: "Managed or webhook bridge for WhatsApp groups and business conversations" },
+  { id: "imessage", label: "iMessage", description: "Managed or native macOS bridge for iMessage routing" },
+  { id: "telegram", label: "Telegram", description: "Telegram bot or managed bridge for channel ingress and replies" },
+  { id: "slack", label: "Slack", description: "Slack Events or managed bridge with signed webhooks" },
+  { id: "microsoft-teams", label: "Microsoft Teams", description: "Teams bot or managed bridge for tenant channels" },
   { id: "discord", label: "Discord", description: "Discord bot or gateway connection for project chat" },
   { id: "notion", label: "Notion", description: "Read-only import from Notion workspace pages and databases" },
   { id: "asana", label: "Asana", description: "Read-only import from Asana workspaces, teams, and projects" },
@@ -431,23 +435,11 @@ export const useSettingsPageState = (
   const activeCategoryConfig = categories.find((category) => category.id === activeCategory) ?? categories[0]!;
 
   useEffect(() => {
-    if (typeof window === "undefined") {
-      return;
-    }
-    window.dispatchEvent(new CustomEvent("codeux:appearance-preview", {
-      detail: { appearance: editableSettings?.appearance ?? null },
-    }));
+    publishAppearancePreview(editableSettings?.appearance ?? null);
   }, [editableSettings?.appearance]);
 
   useEffect(() => {
-    if (typeof window === "undefined") {
-      return;
-    }
-    return () => {
-      window.dispatchEvent(new CustomEvent("codeux:appearance-preview", {
-        detail: { appearance: null },
-      }));
-    };
+    return clearAppearancePreview;
   }, []);
 
   const normalizedSearch = settingsSearch.trim().toLowerCase();

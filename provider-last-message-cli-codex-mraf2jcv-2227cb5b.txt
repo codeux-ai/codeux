@@ -1,0 +1,16 @@
+Implemented the Docker runtime hardening changes.
+
+Changed:
+- Provider Docker runs in [docker-runner.ts](/workspace/src/infrastructure/providers/cli/docker-runner.ts): bridge networking, no published ports, `no-new-privileges`, managed label, and root mode only when `containerRunAsRoot === true`.
+- Shared Docker arg constants in [cli-docker-utils.ts](/workspace/src/services/cli-docker-utils.ts).
+- Helper, preview, and file-browser container args in their builders/services to keep surfaces local-only or unexposed.
+- Tests covering default non-root, root opt-in, no host networking, loopback preview publishing, helper/file-browser labels and hardening.
+- Docs updated in `docs/` and `docs-web/`.
+- Added required `.task-learnings.md`.
+
+Verification passed:
+- `pnpm exec vitest run tests/backend/infrastructure/providers/cli/docker-runner.test.ts tests/backend/infrastructure/providers/cli/workspace-volume-helper.test.ts tests/backend/services/sprint-preview-docker-plan.test.ts`
+- `pnpm exec vitest run tests/backend/services/sprint-file-browser-service.test.ts`
+- `pnpm run lint`
+
+Note: the first test attempt failed because dependencies were missing; `pnpm install --frozen-lockfile` restored the toolchain. `pnpm run build` was not run; the requested verification plus TypeScript lint passed.

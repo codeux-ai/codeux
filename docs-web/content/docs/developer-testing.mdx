@@ -17,13 +17,13 @@ The Vitest config is at `vitest.config.ts`. Test environment is **Node** (not js
 ## Running tests
 
 ```bash
-pnpm test                       # full suite, single run
+pnpm run test                   # full suite, single run
 pnpm run test:watch             # watch mode
 pnpm run test:backend           # backend only
 pnpm run test:dashboard         # dashboard only
 pnpm run test:coverage          # full coverage with thresholds
 pnpm run test:backend:coverage  # backend coverage with thresholds
-pnpm test -- tests/backend/smoke.test.ts   # single file
+npx vitest run tests/backend/smoke.test.ts # single file
 ```
 
 ## Coverage thresholds
@@ -32,16 +32,16 @@ Enforced in CI:
 
 | Metric | Threshold |
 | --- | --- |
-| Lines | **80%** |
-| Functions | **69%** |
-| Branches | **64%** |
-| Statements | **80%** |
+| Lines | **77.4%** |
+| Functions | **71.5%** |
+| Branches | **66.1%** |
+| Statements | **76.0%** |
 
 Per-file gate:
 
 | File | Min line coverage |
 | --- | --- |
-| `src/services/activity-cache-service.ts` | 80% |
+| `src/server/activity-cache-service.ts` | 80% |
 
 A failing threshold fails CI.
 
@@ -82,12 +82,7 @@ pnpm run ci
 
 This runs (in order):
 
-1. `pnpm run quality:guardrails`
-2. `pnpm run audit`
-3. `pnpm run lint` — typecheck.
-4. `pnpm run test:backend:coverage` — backend tests + coverage threshold.
-5. `pnpm run test:dashboard` — dashboard tests.
-6. `pnpm run build` — server + dashboard build.
+`quality:guardrails -> audit -> lint -> test:backend:coverage -> test:dashboard -> build`
 
 If `pnpm run ci` is green, GitHub CI will be too (modulo platform-specific differences).
 

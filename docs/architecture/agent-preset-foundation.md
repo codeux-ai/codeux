@@ -27,6 +27,7 @@ Foundation fields:
 - `labels_json`
 - `provider_config_id`
 - `model`
+- `container_run_as_root` stores a nullable per-agent Docker root-mode override; `NULL` inherits the resolved `cliWorkflow.containerRunAsRoot` setting
 - `memory_config_json` stores `AgentMemoryConfig` as a JSON blob
 - `persistent_skill_storage_enabled` reserves a default-off runtime enablement flag for future persistent skill retrieval
 - `created_at`
@@ -116,7 +117,7 @@ Agent MCP access is default-deny for built-in Code UX tools. Absent, malformed, 
 
 Built-in Worker and Project manager presets seed `mcp_access_json` with the default `playwright` custom MCP server linked, but `code_ux` remains disabled in that seeded access. Planning and QA presets do not receive that link by default. Existing agents with a user-edited MCP access payload keep their selections; only newly imported/generated defaults or previously unconfigured built-in Worker/Project manager records receive the seeded custom-server-only link.
 
-Dashboard chat replies are the only default exception. When the reply route uses the built-in/default reply agent or a configured reply preset without explicit MCP access, runtime dispatch applies scheduler-only Code UX access for that chat turn: the restricted `scheduler` tool is enabled and all other built-in Code UX tools, including `manage_scheduler`, `manage_tasks`, `manage_sprints`, `manage_settings`, and `manage_code_ux`, are disabled. Planning, coding, CI fix, merge-conflict, clarification, QA, generated setup, and general Project manager agent runs remain denied unless their preset explicitly enables Code UX tools.
+Dashboard chat replies are the only default exception. Each dashboard chat turn receives the normal Code UX MCP project-manager surface plus the restricted `scheduler_code_ux` tool, even when the selected reply preset has Code UX disabled or a narrower saved access record. Runtime dispatch preserves the selected agent's linked custom MCP servers, but it injects the built-in `code_ux` connection without the per-agent MCP header so project, sprint, task, settings, preview, and Code UX scheduler tools remain available to dashboard chat. Planning, coding, CI fix, merge-conflict, clarification, QA, generated setup, and general Project manager agent runs remain denied unless their preset explicitly enables Code UX tools; when Code UX is first enabled for those non-dashboard agents, `scheduler_code_ux` is explicitly off by default.
 
 ## Dashboard Interaction Contract
 
@@ -140,6 +141,8 @@ Agent preset avatars have two rendering tiers:
 The 3D scene owns WebGL lifecycle cleanup. On unmount, fallback transition, WebGL failure, or reduced-motion changes, it cancels animation frames, removes event listeners, disposes avatar geometries, materials, textures, particle resources, and the renderer, and forces context loss when supported.
 
 Provider and model preferences are intentionally nullable. They only take effect when a provider invocation route uses the `AGENT` strategy; otherwise the agent inherits the configured route, worker, or global defaults.
+
+The Docker root-mode preference is also nullable. For local CLI task execution, the resolved worker preset may set `containerRunAsRoot` to `true` or `false` to override the scoped `cliWorkflow.containerRunAsRoot` value for that run. The dashboard agent editor presents this as Inherit (`null`), Force non-root (`false`), and Force root (`true`), and the detail panel reports the configured posture without treating inheritance as enabled root. Hosted Jules sessions do not use this field because they do not run in local Docker provider containers.
 
 At runtime, the CLI workflow now reads `AgentMemoryConfig` from the resolved worker agent and post-filters injected memories by configured tier, categories, strength thresholds, and max counts before composing the prompt. When the config is absent, the workflow keeps the default unrestricted memory injection path.
 

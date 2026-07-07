@@ -12,11 +12,19 @@ The dashboard uses a **dock-based navigation** by default:
 - **Sidebar** *(mobile or user preference)* — A collapsible left sidebar.
 - **Top bar** — Project selector, techstack selector, theme toggle, mobile menu.
 
-A choice of theme (Light / Dark / System) is in the top bar; navigation mode override is in **Settings → Appearance**.
+A choice of theme (Light / Dark / System) is in the top bar; navigation mode override is in **Settings → Appearance**. During onboarding, Appearance choices preview immediately and the setup shell follows the selected Light, Dark, or System theme instead of forcing dark mode. Background Mode, Static Color, and supported Zoom Level also preview before save, while advanced background controls such as Animation Style, Pattern Overlay, and custom background image remain in **Settings → Appearance**.
+
+Primary navigation also follows the persisted experience mode in **Settings → Appearance**:
+
+- **Easy** — Chat, Browser, Stats, Settings/Config, and external Docs.
+- **Standard** — Chat, Overview, Sprints, Tasks, Agents, Stats, Browser, Docs, and Settings/Config.
+- **Expert** — the full navigation, and the default for new or legacy settings.
+
+Hidden pages remain registered routes, Docs opens the external project docs, and Browser still follows the project sprint-preview visibility settings.
 
 When a project is active, the top bar also shows its techstack. Projects imported before classification can remain unassigned; in that state the selector displays **None**. Choosing a stack from the dropdown saves only the project techstack selection.
 
-The background is an animated Three.js scene ("Deep Ocean") that lazy-loads after the main UI is interactive, so it never blocks first paint.
+The background is an animated Three.js scene ("Deep Ocean") that lazy-loads after the main UI is interactive, so it never blocks first paint. Onboarding can preview Theme, Navigation Mode, Reduced Motion, Background Mode, Static Color, and supported Zoom Level; advanced background controls such as Animation Style, Pattern Overlay, and custom background image remain in **Settings → Appearance**.
 
 ## Pages
 
@@ -36,6 +44,16 @@ The background is an animated Three.js scene ("Deep Ocean") that lazy-loads afte
 | `/browser` | [Sprint Preview Browser](./browser-preview.md) | Docker-backed live previews per sprint |
 | `/stats` | [Stats](./stats.md) | Execution analytics, time-window filtering, trends |
 | `/config` | [Settings](./settings.md) | System / project / sprint settings hierarchy |
+
+## Overview telemetry
+
+The Overview telemetry rail combines cross-project runtime health with selected-project detail:
+
+- Cross-project intervention cards still show active projects that need human attention.
+- Active sprint cards and the runtime timeline continue to summarize work across active projects.
+- When the top bar has a project selected and that project's live snapshot contains active attention items, Overview shows a compact **Selected Sprint Attention Queue** inside the telemetry panel.
+
+The Overview queue follows the same selected sprint scope as the Live page. If a sprint is selected in the top navigation, the queue shows only the active attention items returned by the selected-sprint live snapshot; unrelated sprint blockers are not reconstructed in the browser. Overview renders the queue read-only, so claim, resolve, and dismiss actions remain on the Live page.
 
 ## Real-time data
 

@@ -173,6 +173,23 @@ describe("DockerRunner", () => {
     expect(dockerArgs).toContain("--env-file");
     expect(dockerArgs[dockerArgs.indexOf("--env-file") + 1]).toBe("/tmp/code-ux-docker-123/provider.env");
     expect(dockerArgs).toContain("CODE_UX_INSTALL_PLAYWRIGHT=1");
+    expect(dockerArgs).toEqual(expect.arrayContaining([
+      "--network",
+      "bridge",
+      "--security-opt",
+      "no-new-privileges",
+      "--label",
+      "code-ux.managed=true",
+      "--user",
+      "1000:1000",
+    ]));
+    expect(dockerArgs).not.toEqual(expect.arrayContaining(["--network", "host"]));
+    expect(dockerArgs).not.toContain("-p");
+    expect(dockerArgs).not.toContain("--publish");
+    expect(dockerArgs).toEqual(expect.arrayContaining([
+      "--mount",
+      expect.stringContaining("target=/etc/passwd"),
+    ]));
     expect(dockerArgs).not.toContain("HOME=/workspace/.code-ux-home");
     const cacheInstance = vi.mocked(DockerSetupImageCache).mock.results[0]?.value as any;
     expect(cacheInstance.resolveImage).toHaveBeenCalledWith(expect.objectContaining({
@@ -180,6 +197,189 @@ describe("DockerRunner", () => {
       runtimeRoot: "/runtime-root",
       onProgress: onSetupImageProgress,
     }));
+  });
+
+  it("keeps loopback MCP endpoints reachable from Linux Docker provider runs without host networking", async () => {
+    const originalPlatform = process.platform;
+    const originalRewrite = process.env.CODE_UX_DOCKER_REWRITE_LOCALHOST;
+    Object.defineProperty(process, "platform", {
+      value: "linux",
+      configurable: true,
+    });
+    delete process.env.CODE_UX_DOCKER_REWRITE_LOCALHOST;
+
+    try {
+      await runner.runProviderInDocker({
+        command: "claude",
+        args: ["--print", "plan"],
+        cwd: "docker-volume://workspace-1",
+        providerEnv: {},
+        sessionId: "session-1",
+        providerLabel: "claude-code",
+        workflowSettings: {
+          executionMode: "DOCKER",
+          containerImage: "node:24",
+          containerSetupScriptPath: "",
+          containerCacheSetupScriptImage: false,
+        } as any,
+        repoPath: "/repo/project",
+        onActivity: vi.fn(),
+        mcpConnection: {
+          url: "http://127.0.0.1:4445/mcp",
+          authToken: "secret",
+        },
+      });
+    } finally {
+      Object.defineProperty(process, "platform", {
+        value: originalPlatform,
+        configurable: true,
+      });
+      if (originalRewrite === undefined) {
+        delete process.env.CODE_UX_DOCKER_REWRITE_LOCALHOST;
+      } else {
+        process.env.CODE_UX_DOCKER_REWRITE_LOCALHOST = originalRewrite;
+      }
+    }
+
+    const dockerArgs = vi.mocked(runStreamingCommand).mock.calls[0]?.[1] as string[];
+    expect(dockerArgs).toEqual(expect.arrayContaining([
+      "--network",
+      "bridge",
+      "--add-host",
+      "host.docker.internal:host-gateway",
+    ]));
+    expect(dockerArgs).not.toEqual(expect.arrayContaining(["--network", "host"]));
+    expect(dockerArgs).not.toContain("-p");
+    expect(dockerArgs).not.toContain("--publish");
+
+    const configWrite = vi.mocked(fs.writeFile).mock.calls.find(([file]) => String(file).endsWith("claude-mcp.json"));
+    const config = JSON.parse(String(configWrite?.[1]));
+    expect(config.mcpServers.code_ux.url).toBe("http://host.docker.internal:4445/mcp");
+  });
+
+  it("honors the Docker localhost rewrite opt-out for Linux MCP endpoints", async () => {
+    const originalPlatform = process.platform;
+    const originalRewrite = process.env.CODE_UX_DOCKER_REWRITE_LOCALHOST;
+    Object.defineProperty(process, "platform", {
+      value: "linux",
+      configurable: true,
+    });
+    process.env.CODE_UX_DOCKER_REWRITE_LOCALHOST = "0";
+
+    try {
+      await runner.runProviderInDocker({
+        command: "claude",
+        args: ["--print", "plan"],
+        cwd: "docker-volume://workspace-1",
+        providerEnv: {},
+        sessionId: "session-1",
+        providerLabel: "claude-code",
+        workflowSettings: {
+          executionMode: "DOCKER",
+          containerImage: "node:24",
+          containerSetupScriptPath: "",
+          containerCacheSetupScriptImage: false,
+        } as any,
+        repoPath: "/repo/project",
+        onActivity: vi.fn(),
+        mcpConnection: {
+          url: "http://127.0.0.1:4445/mcp",
+          authToken: "secret",
+        },
+      });
+    } finally {
+      Object.defineProperty(process, "platform", {
+        value: originalPlatform,
+        configurable: true,
+      });
+      if (originalRewrite === undefined) {
+        delete process.env.CODE_UX_DOCKER_REWRITE_LOCALHOST;
+      } else {
+        process.env.CODE_UX_DOCKER_REWRITE_LOCALHOST = originalRewrite;
+      }
+    }
+
+    const dockerArgs = vi.mocked(runStreamingCommand).mock.calls[0]?.[1] as string[];
+    expect(dockerArgs).not.toEqual(expect.arrayContaining([
+      "--add-host",
+      "host.docker.internal:host-gateway",
+    ]));
+
+    const configWrite = vi.mocked(fs.writeFile).mock.calls.find(([file]) => String(file).endsWith("claude-mcp.json"));
+    const config = JSON.parse(String(configWrite?.[1]));
+    expect(config.mcpServers.code_ux.url).toBe("http://127.0.0.1:4445/mcp");
+  });
+
+  it("adds Linux host-gateway when generated provider environment targets the Docker host", async () => {
+    const originalPlatform = process.platform;
+    Object.defineProperty(process, "platform", {
+      value: "linux",
+      configurable: true,
+    });
+
+    try {
+      await runner.runProviderInDocker({
+        command: "qwen",
+        args: ["--prompt", "plan"],
+        cwd: "docker-volume://workspace-1",
+        providerEnv: {
+          OPENAI_BASE_URL: "http://host.docker.internal:11434/v1",
+        },
+        sessionId: "session-1",
+        providerLabel: "qwen-code",
+        workflowSettings: {
+          executionMode: "DOCKER",
+          containerImage: "node:24",
+          containerSetupScriptPath: "",
+          containerCacheSetupScriptImage: false,
+        } as any,
+        repoPath: "/repo/project",
+        onActivity: vi.fn(),
+      });
+    } finally {
+      Object.defineProperty(process, "platform", {
+        value: originalPlatform,
+        configurable: true,
+      });
+    }
+
+    const dockerArgs = vi.mocked(runStreamingCommand).mock.calls[0]?.[1] as string[];
+    expect(dockerArgs).toEqual(expect.arrayContaining([
+      "--add-host",
+      "host.docker.internal:host-gateway",
+    ]));
+    expect(dockerArgs).not.toEqual(expect.arrayContaining(["--network", "host"]));
+    expect(dockerArgs).not.toContain("-p");
+    expect(dockerArgs).not.toContain("--publish");
+  });
+
+  it("honors explicit root mode by omitting Docker user and passwd injection", async () => {
+    await runner.runProviderInDocker({
+      command: "codex",
+      args: ["exec", "--help"],
+      cwd: "docker-volume://workspace-1",
+      providerEnv: {},
+      sessionId: "session-1",
+      providerLabel: "codex",
+      workflowSettings: {
+        executionMode: "DOCKER",
+        containerImage: "node:24",
+        containerSetupScriptPath: "",
+        containerCacheSetupScriptImage: false,
+        containerRunAsRoot: true,
+      } as any,
+      repoPath: "/repo/project",
+      onActivity: vi.fn(),
+    });
+
+    const dockerArgs = vi.mocked(runStreamingCommand).mock.calls[0]?.[1] as string[];
+    expect(dockerArgs).not.toContain("--user");
+    expect(dockerArgs).not.toEqual(expect.arrayContaining([
+      "--mount",
+      expect.stringContaining("target=/etc/passwd"),
+    ]));
+    const passwdWrite = vi.mocked(fs.writeFile).mock.calls.find(([file]) => String(file).endsWith("/passwd"));
+    expect(passwdWrite).toBeUndefined();
   });
 
   it("supports mockup-cli Docker labels, names, env files, and argv files", async () => {

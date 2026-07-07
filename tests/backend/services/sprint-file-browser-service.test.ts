@@ -20,6 +20,9 @@ vi.mock("../../../src/services/git-http-auth.js", () => ({
 }));
 
 vi.mock("../../../src/services/cli-docker-utils.js", () => ({
+  DOCKER_DROP_ALL_CAPS_ARGS: ["--cap-drop", "ALL"],
+  DOCKER_NETWORK_NONE_ARGS: ["--network", "none"],
+  DOCKER_NO_NEW_PRIVILEGES_ARGS: ["--security-opt", "no-new-privileges"],
   getDockerUserSpec: vi.fn(() => "1000:1000"),
   mapPathPrefix: vi.fn((mapped: string) => mapped),
   toDockerMountArg: vi.fn((m: { source: string; destination: string }) => `type=bind,source=${m.source},destination=${m.destination}`),
@@ -191,6 +194,17 @@ describe("SprintFileBrowserService", () => {
     const dockerRunArgs = createCalls[0][1] as string[];
     expect(dockerRunArgs).toContain("--label");
     expect(dockerRunArgs).toContain("code-ux.file-browser=true");
+    expect(dockerRunArgs).toContain("code-ux.managed=true");
+    expect(dockerRunArgs).toEqual(expect.arrayContaining([
+      "--network",
+      "none",
+      "--security-opt",
+      "no-new-privileges",
+      "--cap-drop",
+      "ALL",
+    ]));
+    expect(dockerRunArgs).not.toContain("-p");
+    expect(dockerRunArgs).not.toContain("--publish");
     expect(dockerRunArgs).toContain("tail");
 
     expect(runCommandStrict).toHaveBeenCalledWith(

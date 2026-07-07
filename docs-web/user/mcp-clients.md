@@ -12,7 +12,7 @@ Code UX also runs an authenticated **MCP Streamable HTTP transport** (enabled by
 
 ## Local CLI HTTP setup
 
-Open **Settings → MCP** and use **Local CLI HTTP setup** to copy the active server URL and bearer token, regenerate the token, or install the `code_ux` MCP entry into supported local CLI config files automatically:
+Open **Settings → MCP** and use **Local CLI HTTP setup** to copy the active server URL and bearer token, regenerate the token, or install the `code_ux` MCP entry into supported local CLI config files automatically. This writes a remote HTTP MCP entry for the currently running Code UX gateway; keep Code UX running when those clients start.
 
 - Claude Code: `~/.claude.json`
 - Gemini: `~/.gemini/settings.json`
@@ -21,7 +21,7 @@ Open **Settings → MCP** and use **Local CLI HTTP setup** to copy the active se
 - OpenCode: `~/.config/opencode/opencode.json`
 - Antigravity: `~/.gemini/antigravity-cli/mcp_config.json`
 
-Regenerating the token immediately changes what the running MCP gateway accepts. Reinstall any local CLI configs that should keep connecting after regeneration.
+Regenerating the token immediately changes what the running MCP gateway accepts. Reinstall any local CLI configs that should keep connecting after regeneration. For Codex, reinstalling replaces the managed `[mcp_servers.code-ux]` block while preserving unrelated TOML settings and MCP servers.
 
 ## Gemini CLI
 
@@ -249,5 +249,6 @@ You can rename connections, view their pending message backlog, and (for stale e
 | Worker is stale | Heartbeats stopped, the worker process changed connection keys, or network access failed. Restart with the same `--connection-key` and verify `/ready`. |
 | Worker connects but does not claim work | No active project assignment, project not included in `--project-id` / `--active-project-id`, stale endpoint status, task executor mismatch, or no lease returned. |
 | "Tool not enabled" on `CallTool` | The tool is disabled in `Settings → MCP tools`. Re-enable it. |
+| Codex reports `HTTP request failed` for `http://127.0.0.1:4445/mcp` during initialize | The installed Codex entry points at the local HTTP gateway, but Code UX is not running or the gateway is on a different port. Start Code UX, verify `curl --fail http://127.0.0.1:4445/health`, then reinstall from Settings → MCP if the URL or token changed. |
 
 See the full [Troubleshooting](./troubleshooting.md) page for more.

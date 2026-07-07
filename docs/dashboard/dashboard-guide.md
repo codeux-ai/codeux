@@ -70,17 +70,23 @@ Project management:
 - `PATCH /api/connections/:connectionId`
   - Updates connection metadata such as role/status/instruction payload
 - `GET /api/projects/:projectId/agent-presets`
-  - Lists DB-backed project agents and auto-imports unseen markdown agents from `.code-ux/agents`
+  - Lists sqlite-backed project agents and auto-imports unseen markdown agents from `.code-ux/agents`
 - `POST /api/projects/:projectId/agent-presets`
-  - Creates a DB-backed agent and, when project markdown mirroring is enabled, also writes `.code-ux/agents/<name>.md`
+  - Creates a sqlite-backed agent and, when project markdown mirroring is enabled, also writes `.code-ux/agents/<name>.md`
 - `PATCH /api/agent-presets/:agentPresetId`
   - Updates agent metadata and instruction markdown, mirroring the markdown back into the project agent directory when enabled
 - `DELETE /api/agent-presets/:agentPresetId`
   - Deletes an agent record
 - `POST /api/agent-presets/:agentPresetId/import-markdown`
-  - Re-imports a linked markdown agent into sqlite
+  - Pulls one linked markdown source into sqlite
+- `POST /api/agent-presets/:agentPresetId/export-markdown`
+  - Pushes one sqlite agent preset to the selected project `.code-ux/agents` directory, links the preset to that project source, and refuses to overwrite a markdown file linked to a different agent
 - `POST /api/projects/:projectId/agent-presets/sync-markdown`
-  - Re-imports every out-of-sync linked markdown agent for the selected project
+  - Legacy/backward-compatible alias for the current **Pull from files** workflow; discovers `.code-ux/agents/*.md`, imports new files, and re-imports out-of-sync linked agents
+- `POST /api/projects/:projectId/agent-presets/pull-markdown`
+  - Explicitly pulls project markdown files into sqlite using the same precedence and default-agent discovery rules as normal agent sync
+- `POST /api/projects/:projectId/agent-presets/push-markdown`
+  - Pushes sqlite presets to project markdown files when `agents.saveToProjectDirectory` is enabled, exporting manual, missing-source, out-of-sync, home-backed, and default-backed agents as project-local files
 - `POST /api/projects/:projectId/agent-presets/push`
   - Commits `.code-ux/agents/*.md` changes from the selected project, optionally pushes the branch, and can open a pull request against the default branch when repository remotes are available
 - `POST /api/projects/:projectId/planning/improve-sprint-prompt`
@@ -90,6 +96,7 @@ Project management:
   - Sends a created sprint to the Planning agent through the configured virtual worker provider, creates subtasks from the reply, and can auto-start the sprint
   - Auto-start orchestration now prepares the local sprint feature branch automatically and attempts to push it to `origin` when that remote exists
   - Planning overrides may explicitly target a specific `planningAgentPresetId`, task coding routing mode, manual worker preset, and virtual CLI provider/model for that one request.
+  - Completed planning invocations persist the generated execution plan on that invocation's transcript message as `metadata.executionPlan`, scoped to the linked sprint for the request. Replaying the invocation transcript reads that persisted message metadata rather than the currently selected sprint or a later planning run.
 - `GET /api/projects/:projectId/conversations/threads`
   - Lists project conversation threads
 - `POST /api/projects/:projectId/conversations/threads`
@@ -106,6 +113,8 @@ Project management:
 - `POST /api/projects/:projectId/conversations/messages`
   - Stores a dashboard-authored message and queues it for a listener
   - Create-app quickactions use the same endpoint with `metadata.quickaction.type = "create_app"`, `kind` (`web_app` or `desktop_app`), `requestId`, `templateId`, stack summary, and suggestion tags. The server persists the dashboard message, bypasses normal provider reply routing, launches the matching detached quicksprint in `Plan & Start` mode, posts an `app_progress` widget, and tracks follow-up handling in thread `runtimeState.createAppQuickaction`.
+  - Stores a dashboard-authored message and queues it for a listener or provider-backed dashboard reply
+  - Chat message posts update the selected thread message cache from the returned `ConversationMessageRecord`; the Chat invocation rail remains backed by `GET /api/projects/:projectId/execution/invocations` snapshots and realtime refreshes, so invocation rows are server-created and the browser does not create a frontend-only optimistic invocation placeholder while the backend record is still being persisted.
   - Threads now remain explicitly `unassigned` until the dashboard targets a connection or a real listener claims them
   - The active thread header now supports explicit assignment and reassignment to a project-bound connection
   - Reassigning a thread re-queues any unprocessed dashboard messages so the newly assigned listener can receive them
@@ -135,7 +144,7 @@ Legacy runtime:
 - `GET /api/stats/header-throughput?projectId=<projectId>&window=20s|1h|24h|7d|30d|all`
   - Compact app-wide token throughput for the top dashboard header. The header polls the `20s` live activity window once per second and shows the active-duration token rate for invocations updated in that window; detailed charts, ledgers, and model/provider analysis remain on the Stats page.
 - `GET /api/live`
-  - Unified Live runtime snapshot for the selected project
+  - Unified Live runtime snapshot for the selected project, scoped to the selected sprint when the top-nav sprint selector has a persisted sprint
 - `PUT /api/projects/:projectId/preferred-worker`
   - Sets the preferred worker host for the selected project
 - `GET /api/realtime`
@@ -246,9 +255,12 @@ Legacy runtime:
 
 ### Overview
 - Overview metric cards use the restored `StatsCard` visual system from the operational command surface: four responsive cards with ambient bottom sparklines, stable card height, and compact detail rows for cost, invocations, active sprint, queue health, and active time.
+- Overview telemetry keeps the cross-project `Human Intervention Needed`, active sprint, and runtime timeline sections, and now adds a compact selected-sprint attention queue when the selected project live snapshot includes active attention items.
+- The Overview attention queue uses the same row labels, severity/status tones, markdown summary rendering, empty-state language, and bounded scrollbar treatment as the Live sidebar queue, but renders read-only so action handling stays centralized on the Live page.
 
 ### Navigation
 - Sidebar and dock navigation expose the primary routes in guided-tour order: Chat, Overview, Sprints, Tasks, Agents, Stats, Schedule (`/scheduler`), Memory, Knowledge (`/knowledge`), Browser, Files (`/files`, providing project and sprint File Browser capabilities), Live, and Settings/Config.
+- The primary navigation honors the persisted Settings -> Appearance experience mode. Easy shows Chat, Browser, Stats, Settings/Config, and external Docs. Standard shows Chat, Overview, Sprints, Tasks, Agents, Stats, Browser, Docs, and Settings/Config. Expert is the default and shows the full set. This only changes primary navigation visibility: routes remain registered, Docs opens the external project docs, and the Browser item still follows the project sprint-preview visibility settings.
 - The top-nav workspace search trigger uses a more opaque glass surface in light and dark mode so it stays readable against page content while preserving the existing blur treatment.
 - The notification panel announces refresh, mark-read, dismiss, and action outcomes through polite live regions. Refresh and mark-all-read controls expose pending state with `aria-busy`, disabled controls include visible reasons, and every repeated row action includes the notification title in its accessible name.
 - Notification rows include textual read/unread state in addition to the severity accent rail. Initial rows use the `listReveal` motion contract, read/dismiss compaction uses `listReorder`, and reduced-motion users receive immediate static state changes without transitional movement.
@@ -294,6 +306,7 @@ Legacy runtime:
 - The Agents page now includes a Push Agents header action with an inline destination picker, so users explicitly choose between a local commit, branch push, or pull request before dispatching the backend push request.
 - The Live Sprint Clock card in the Sprint Stats deck now shows a six-tile grid with Finished, Avg Finish, Accumulated, Input, Output, and Cached values, and the token tiles reuse the shared compact formatter from the Stats page.
 - Live runtime pages now use the persisted top-nav sprint selection as the page scope, so the Live view follows the selected sprint from the header menu
+- Overview telemetry reads the same selected-project live snapshot for its compact attention queue, so Overview and Live show the same selected-sprint queue items without client-side reconstruction from project-wide blockers.
 - That selection is view-only for the dashboard surface; it does not change which sprint run is actually executing in the backend
 - Live attention resolve/dismiss dialogs are portaled to a viewport-fixed overlay, preserve viewport position after confirmation, use action-specific tones, and return focus without scrolling the page when the originating queue row disappears.
 - The Live attention queue, Invocation Feed, and Execution Runtime panels share a compact sidebar feed language with smaller type, subtle row backgrounds, bounded scroll regions, explicit empty states, and narrow colored left rails for status/severity distinction.
@@ -360,7 +373,7 @@ Legacy runtime:
   - Git Flow lives in the Sprint tab with default branch, branch prefix, sprint branch scheme, remote/local mode, and auto-create PR
   - Integrations exposes system GitHub, GitLab, Jira, Notion, Asana, Linear, Miro, Lucid/Lucidspark, Figma/FigJam, and Mural credentials plus per-scope GitHub auth-copy mounts and Docker git identity; local `.gitconfig` copying hides the editable name/email fields when enabled
   - CLI provider credentials are managed per named instance, including optional local auth-copy mounts and custom auth paths for each Gemini, Codex, or Claude entry
-- The first-run onboarding flow guides operators through installation checks, container security basics, provider auth-copy setup, AI behaviour defaults, appearance preferences, and primary dashboard controls. See [Dashboard Onboarding](./onboarding.md).
+- The first-run onboarding flow starts with Easy, Standard, and Expert setup modes, then guides operators through installation checks, container security basics, provider auth-copy setup, AI behaviour defaults, and appearance preferences. Expert is the default and keeps the full installation, provider auth-copy, Git, Jira, default routing, automation, and appearance flow. Standard is the user-facing spelling for the balanced `STANDARD` mode. Easy uses one recommended-provider path, two GitHub checkboxes, and safe default settings, then lands on Chat. Appearance changes preview immediately during onboarding, including Light/Dark/System theme, navigation mode, reduced motion, background mode, static color, and supported desktop zoom. See [Dashboard Onboarding](./onboarding.md).
 - The Docker top-nav control now consumes onboarding readiness data. If Docker is unavailable, it shows a `Cluster not ready` badge with an info icon and explains that Docker is mandatory for containerized CLI execution.
 - Settings -> General now orders runtime setup as Automation, System Runtime, Docker Runtime, then Onboarding. The old Inheritance Model card has been removed from General, and `Open Onboarding` remains at the bottom to reopen setup without clearing saved settings.
 - Settings -> Appearance previews unsaved edits immediately in the active dashboard shell. Theme, motion, navigation mode, animated/static background selection, static color, uploaded background image, and pattern overlay all update before Save Changes; leaving Settings clears the preview back to the persisted effective settings. New installs default the pattern overlay to `None`.
@@ -407,7 +420,7 @@ Legacy runtime:
 - Ledger search integrates with selection: the header select-all checkbox operates on the currently filtered set only, and the selection is automatically pruned when the filter changes so stale hidden selections cannot accumulate
 - When one or more ledger rows are selected, a bulk action bar appears with `Start` and `Delete` controls that operate on all selected sprints, plus a `Clear` button to deselect
 - Sprint ledger row controls now expose pause/resume in addition to existing start/stop semantics, and each runtime action shows pending/disabled state while the control request is in flight.
-- Sending a chat message now inserts an optimistic invocation row immediately in the invocations rail and reconciles it when the server returns the persisted invocation record.
+- Sending a chat message updates the thread transcript immediately from the returned message record, while the invocations rail waits for the server-created invocation row from the execution snapshot or realtime refresh.
 - Sortable column headers cycle through unsorted, ascending, and descending for showcasePinned, sprintKey, name, status, tasksCount, completion, and createdAt (default: newest-first)
 - Ledger rows expose: pinned/showcase state, sprint key, review and human-intervention badges, task count, gradient progress, created/updated metadata, a primary start/stop button, an `Open Subtasks` deep link (`/tasks?sprintId=<id>`) that navigates to the Tasks page pre-filtered to that sprint, and a compact settings menu for edit/export/showcase/overrides/delete
 - The sprint page no longer runs a full-page entrance fade on mount, which keeps initial navigation more immediate and avoids perceived flashing
@@ -488,7 +501,7 @@ Legacy runtime:
 - Agents page is DB-backed and manages project-scoped agents (`name`, `short routing description`, `instruction markdown`, `memory template markdown`)
 - Agents are auto-imported from project and home `.code-ux/agents/*.md` when first discovered
 - Project-local markdown mirroring is enabled by default through project settings, so dashboard edits create/update `.code-ux/agents/*.md` in the selected repo without touching shipped defaults
-- Markdown-backed agents now show sync state and support both manual single-agent re-import and bulk `Sync All`
+- Markdown-backed agents now show sync state and support single-agent `Import`, roster-level `Pull from files`, roster-level `Push to files`, and single-agent `Push to file`; sqlite remains the live authority, pull copies file content into sqlite, and push exports sqlite presets to project files
 - The first built-in role is `Planning agent`, which is editable under Agents like any other DB-backed agent
 - `Settings > Sprint & Git` now includes the QA controls immediately below `Merge Gates & Autofix`, with comparable max-run and exhaustion-policy controls plus per-trigger toggle-linked rows. Each task-completion, sprint-completion, and completed-task-without-PR row combines the enable switch with a shared multi-select agent roster, selected-count feedback, keyboard focus, disabled guidance, and the same project-scope behavior for local QA edits. The persisted settings path stays anchored at `agents.qualityAssurance`; leaving a trigger with no custom agents selected clearly uses the built-in QA fallback without saving placeholder preset ids.
 - Chat page is DB-backed and stores project conversation threads/messages in sqlite
@@ -499,9 +512,11 @@ Legacy runtime:
 - Chat page now provides a `Threads / Invocations` toggle to switch between human conversation threads and read-only execution invocations.
 - Chat page UI is redesigned with animated identities, structured widgets for rich messages, and automatic worker pickup derived from active project routing.
 - Chat Threads mode exposes **Create Desktop App** and **Create Web App** quickactions beside the composer, including empty threads. Clicking either control posts the short visible chat message immediately, creates a thread first when needed, and does not open a confirmation dialog or switch to Invocations. The dashboard includes the active project's effective techstack in the quickaction metadata, using the assigned catalog entry or the catalog default plus stack item labels as suggestion tags. The backend launches the matching detached quicksprint with `Plan & Start`, then the transcript shows an app progress widget with app kind, sprint name, stack fields, metadata-driven stages, and suggestion tags. Users can keep typing in the same thread while planning runs; follow-up messages are queued until tasks exist, then appended to the sprint-level goal under `Additional direction from chat`.
+- Agent replies can append optional prompt suggestion tags from `metadata.promptSuggestions` below the normal markdown message. Each tag can show one supported generic icon (`sparkles`, `search`, `edit`, `code`, `terminal`, `bug`, `check`, `play`, `refresh`, `settings`, `file`, `folder`, `git-branch`, `git-pull-request`, `database`, `shield`, `book-open`, `message-circle`, `list-checks`, `rocket`, `zap`, `lightbulb`, `clipboard`, `download`, `upload`, `eye`, `package`, `server`, `clock`, or `help-circle`) and fills the composer with the next-step prompt when clicked, without auto-sending or changing read-only invocation transcripts.
 - Chat page logs invocation activity explicitly in the background, providing observable execution artifacts directly in the chat view.
 - Chat page filters the "Threads" mode to show user-facing conversation threads (`scope === "project"`).
 - Chat page "Invocations" mode provides a read-only list with metadata for active/completed execution invocations without cluttering the main thread rail.
+- Sprint-planning invocation transcripts include the execution plan generated for that invocation's linked sprint. The plan card is replayed from persisted invocation message metadata (`metadata.widget_metadata.type = "planning_request"` plus `metadata.executionPlan`), so historical transcripts do not change when the operator selects another sprint or replans the same project later.
 - Invocation cards and detail headers now show the resolved provider model when available, so planning runs expose the same model visibility as worker cards.
 - Invocation cards and the invocation message stream now surface classified provider errors such as `Rate limit` and `Quota reset`, including retry wait information when Code UX is backing off automatically. If Code UX restarts while an invocation is sleeping until a retry time, startup recovery closes the stale running invocation with a recovery message and moves task-backed work back to a retryable state so the recovered sprint loop can start a fresh continuation.
 - Chat page now receives websocket updates for thread assignment changes and incoming thread messages in the active thread
@@ -518,6 +533,7 @@ Legacy runtime:
 - Loading states are now reserved for first hydration only; realtime invalidation, manual refresh, send/delete flows, reassignment, and unrelated project updates refresh in the background without replacing the thread rail or active conversation with loading cards
 - Creating and deleting threads now stay on the cache-first path too, so the thread rail count and conversation pane no longer flash or fall back to blocking loaders during thread mutations
 - Fresh-install chat states now render polished placeholders for the no-project, no-thread, empty-thread, and no-invocation paths, including an animated sidebar rail placeholder instead of an empty sidebar column; the chat rail/detail layout now waits until large screens before splitting into two columns so empty states remain readable on narrower viewports
+- When no project is selected, `/chat` shows a local onboarding assistant with exactly five quick bubbles: Add my first project, Build a desktop app, Build a web app, Explain Code UX, and Change settings. These turns stay local to the browser page; they do not create persistent conversation threads or call project-scoped chat APIs. Provider-backed project chat starts only after a project exists.
 - Chat composer now sends on `Enter` and inserts a newline on `Shift+Enter`
 - Thread assignment control is explicitly labeled as `Worker:` in the thread header to make routing intent clearer
 - Virtual-worker-routed tasks are created from the same task editor and appear in the same board; the executor badge shows whether work is automatic, CLI-backed, Jules-backed, or handled by the virtual worker lane
@@ -557,6 +573,7 @@ Legacy runtime:
 - The execution runtime panel can now start or resume sprint orchestration, pause or cancel sprint runs, cancel queued dispatches, and retry terminal dispatches
 - The Live sidebar now renders `Invocation Feed`, `Runtime Timeline`, `Git / CI / PR`, `Attention Queue`, and `Execution Runtime` as separate standalone cards under the shared execution timeline context, with the invocation feed first and runtime timeline second while keeping the execution runtime card focused on runs and dispatches
 - The Live sidebar invocation feed is scoped to the selected sprint when a sprint is selected, while still falling back to project-wide recent invocations when no sprint context exists
+- The Live sidebar attention queue follows the same selected-sprint scope for active `open` and `claimed` items, including sprint-run-scoped blockers for that sprint; when no sprint is selected, the queue remains project-wide
 - The Live API includes all invocation records for the selected sprint plus all invocation records for expanded active/paused/queued sprint runs, so paused or stopped sprint feeds remain visible and concurrent live sprints do not evict each other from the feed
 - Jules task dispatches now appear in the Live invocation feed and Chat invocation tab immediately with a running placeholder row; Jules live/terminal sync later replaces the placeholder transcript with the real remote conversation and estimated usage
 - The Live page now keeps the Git/CI/PR card in a dedicated `GitCIStatusPanel` component so the page shell stays focused on wiring runtime state, controls, and layout

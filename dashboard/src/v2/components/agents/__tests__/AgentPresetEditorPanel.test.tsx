@@ -48,7 +48,7 @@ vi.mock("../AgentAvatarCustomizer.js", () => ({
 vi.mock("../AgentMcpManageModal.js", () => ({
   AgentMcpManagePanel: ({ isDashboardReplyAgent }: { isDashboardReplyAgent?: boolean }) => (
     <div data-testid="mcp-manage-panel">
-      {isDashboardReplyAgent ? "Dashboard reply scheduler-only recommendation" : "Non-chat Code UX risk gate"}
+      {isDashboardReplyAgent ? "Dashboard reply Code UX scheduler access" : "Non-chat Code UX risk gate"}
     </div>
   ),
 }));
@@ -187,6 +187,7 @@ function makePreset(overrides: Partial<AgentPreset> = {}): AgentPreset {
     model: null,
     memoryTemplateOverrideEnabled: false,
     memoryTemplateMarkdown: "",
+    containerRunAsRoot: null,
     memoryConfig: { ...DEFAULT_AGENT_MEMORY_CONFIG },
     mcpAccess: {
       codeUxEnabled: false,
@@ -358,7 +359,7 @@ describe("AgentPresetEditorPanel", () => {
       />
     );
 
-    const codeUxChip = screen.getByRole("button", { name: /Code UX Disabled/i });
+    const codeUxChip = screen.getByRole("button", { name: /Code UXDisabled/i });
     expect(codeUxChip).toHaveAttribute("aria-pressed", "false");
 
     fireEvent.click(codeUxChip);
@@ -378,10 +379,10 @@ describe("AgentPresetEditorPanel", () => {
       />
     );
 
-    fireEvent.click(screen.getByRole("button", { name: /Code UX Disabled/i }));
+    fireEvent.click(screen.getByRole("button", { name: /Code UXDisabled/i }));
 
-    expect(await screen.findByText("Review scheduler-only Code UX access before enabling it for the dashboard reply agent.")).toBeInTheDocument();
-    expect(await screen.findByTestId("mcp-manage-panel")).toHaveTextContent("Dashboard reply scheduler-only recommendation");
+    expect(await screen.findByText("Review Code UX MCP and scheduler access before enabling it for the dashboard reply agent.")).toBeInTheDocument();
+    expect(await screen.findByTestId("mcp-manage-panel")).toHaveTextContent("Dashboard reply Code UX scheduler access");
   });
 
   it("persists scheduler-only MCP access without dropping the explicit scheduler toggle", async () => {
@@ -403,7 +404,47 @@ describe("AgentPresetEditorPanel", () => {
     expect(payload.mcpAccess?.codeUxEnabled).toBe(true);
     expect(payload.mcpAccess?.linkedServerIds).toEqual(["playwright"]);
     expect(payload.mcpAccess?.codeUxToolToggles).toHaveLength(TOOL_DEFINITIONS.length);
-    expect(payload.mcpAccess?.codeUxToolToggles.find((toggle) => toggle.name === "scheduler")).toMatchObject({ enabled: true });
-    expect(payload.mcpAccess?.codeUxToolToggles.filter((toggle) => toggle.enabled).map((toggle) => toggle.name)).toEqual(["scheduler"]);
+    expect(payload.mcpAccess?.codeUxToolToggles.find((toggle) => toggle.name === "scheduler_code_ux")).toMatchObject({ enabled: true });
+    expect(payload.mcpAccess?.codeUxToolToggles.filter((toggle) => toggle.enabled).map((toggle) => toggle.name)).toEqual(["scheduler_code_ux"]);
+  });
+
+  it.each([
+    ["Force Docker root for this agent", true],
+    ["Force Docker non-root for this agent", false],
+    ["Inherit global Docker root setting", null],
+  ])("persists Docker root mode selection %s", async (radioName, expectedValue) => {
+    const onSave = vi.fn();
+    const preset = expectedValue === null
+      ? makePreset({ containerRunAsRoot: true })
+      : makePreset({ containerRunAsRoot: null });
+
+    render(<AgentPresetEditorPanel preset={preset} saving={false} onSave={onSave} onCancel={vi.fn()} />);
+
+    expect(screen.getByRole("radiogroup", { name: "Agent Docker root mode" })).toBeInTheDocument();
+    const rootModeRadio = screen.getByRole("radio", { name: radioName });
+    fireEvent.click(rootModeRadio);
+
+    const saveButton = screen.getByRole("button", { name: "Save Agent" });
+    expect(saveButton).toBeEnabled();
+    fireEvent.click(saveButton);
+
+    expect(onSave).toHaveBeenCalledTimes(1);
+    expect(onSave).toHaveBeenCalledWith(
+      "preset_1",
+      expect.objectContaining({ containerRunAsRoot: expectedValue }),
+    );
+  });
+
+  it("keeps the Docker root mode clean until the tri-state selection changes", () => {
+    const onSave = vi.fn();
+    render(<AgentPresetEditorPanel preset={makePreset({ containerRunAsRoot: false })} saving={false} onSave={onSave} onCancel={vi.fn()} />);
+
+    expect(screen.getByRole("button", { name: "Save Agent" })).toBeDisabled();
+    expect(screen.getByRole("radio", { name: "Force Docker non-root for this agent" })).toBeChecked();
+
+    fireEvent.click(screen.getByRole("radio", { name: "Force Docker root for this agent" }));
+
+    expect(screen.getByRole("button", { name: "Save Agent" })).toBeEnabled();
+    expect(screen.getByText("Docker root mode changed. Save Agent to persist the runtime posture.")).toBeInTheDocument();
   });
 });

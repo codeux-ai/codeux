@@ -8,7 +8,7 @@ The dashboard shows a first-run onboarding flow in the browser until the operato
 
 The browser-local key `codeux:onboarding-complete:v1` is still written for compatibility, but onboarding visibility is owned by the persisted user-preferences state so refreshes and sign-in sessions do not reopen onboarding after complete or cancel.
 
-The onboarding shell uses the same animated dashboard background and modal motion system as the Import and Add Project overlays. Onboarding forces the shared background into its dark palette and applies quieter color grading so the setup UI remains legible while still feeling integrated with the app. The shell is viewport-bounded, with the step body owning its own scrollbar for long provider configuration forms. Step entry, shortcut movement, progress feedback, selected provider/default choices, validation reveal, action feedback, and guided-tour highlight movement use the shared `enterExit`, `selectionMovement`, `inlineValidation`, `controlFeedback`, and `asyncFeedback` interaction contracts. Reduced-motion users receive static state changes, progress labels, visible outlines, and focus/selection states instead of animation-dependent cues.
+The onboarding shell uses the same dashboard background and modal motion system as the Import and Add Project overlays. It follows the selected Light, Dark, or System theme instead of forcing dark mode, and it can switch between the animated background and the draft static color while onboarding remains open. Appearance choices publish the same unsaved appearance preview used by Settings, so the step is previewed in place before final save. The shell is viewport-bounded, with the step body owning its own scrollbar for long provider configuration forms. Step entry, shortcut movement, progress feedback, selected provider/default choices, validation reveal, action feedback, and guided-tour highlight movement use the shared `enterExit`, `selectionMovement`, `inlineValidation`, `controlFeedback`, and `asyncFeedback` interaction contracts. Reduced-motion users receive static state changes, progress labels, visible outlines, and focus/selection states instead of animation-dependent cues.
 
 ## Component Structure
 
@@ -69,50 +69,71 @@ Notification read and dismissed state is stored locally in the browser under `co
 
 ## Onboarding Steps
 
-The flow currently contains nine detailed steps, with the provider configuration area grouped in the sidebar:
+Onboarding now starts with a setup-mode choice. New installs default to **Expert** so existing detailed behavior remains available unless the operator chooses a shorter path. **Standard** is the user-facing spelling for the persisted `STANDARD` value.
 
-1. Installation
+Mode choices:
+- **Easy**: short first-run path for one recommended CLI provider plus GitHub workflow defaults. Easy hides Docker, concurrency, Jira, MCP, model pricing, and advanced routing controls while keeping Docker as the default execution runtime.
+- **Standard**: balanced setup path that follows the detailed flow and uses the public `Standard` label in the dashboard.
+- **Expert**: full provider/setup/defaults/automation/appearance flow.
+
+The Easy path contains three steps:
+1. Setup mode
+   - Selects Easy, Standard, or Expert.
+   - Persists the selected mode to `defaults.appearance.experienceMode`.
+2. Provider
+   - Shows one recommended CLI provider configuration, preferring detected local CLI auth and falling back to the default provider recommendation when none is detected.
+   - Uses detected provider auth when available and stores API keys only through the existing provider settings path.
+3. GitHub
+   - Shows exactly two checkboxes: whether to use GitHub and whether Code UX should create/manage GitHub PR workflow defaults.
+   - Keeps Docker execution enabled and applies safe defaults for automation, routing, navigation, and appearance.
+
+The Standard and Expert flow contains the detailed setup sequence:
+
+1. Setup mode
+   - Selects Easy, Standard, or Expert.
+2. Installation
    - Checks Docker and Git availability.
    - Shows `Auto Install dependencies` when the recommended Docker/Git installer can run.
    - Offers advanced Docker Desktop + Git and Docker Engine + Git choices, including degraded/manual setup guidance.
    - Gives Docker installation/start guidance and manual download links when required checks fail or installer results need follow-up.
    - Mirrors failed required checks in the header Docker status control as the red runtime-not-ready warning, backed by the same Docker CLI, Docker daemon, and Git CLI readiness payload.
-2. Introduction
+3. Introduction
    - Opens with a short `Welcome to Code UX` overview of the containerized agentic workspace.
    - Explains the container-first runtime model.
    - Clarifies that provider credentials stay within the intended CLI workflow instead of being reused as raw application secrets.
    - Includes placeholder action badges for GitHub, starring the project on GitHub, and documentation.
-3. Provider Configuration
+4. Provider Configuration
    - Detects local provider auth directories.
    - Lets operators choose multiple providers to activate, including Jules API-key based usage.
    - Shows provider identities with vendored, pinned Lobe Icons SVG logos for the integration catalog.
    - Provider cards behave as multi-select controls with target-specific accessible names and pressed state, so keyboard and screen-reader users can tell whether selecting the card will add or remove that provider.
-4. Provider Setup
+5. Provider Setup
    - Provides a named-instance workspace for every selected provider.
    - Supports adding and removing multiple credential instances per provider.
    - Supports API keys, local auth-copy paths, and enablement per instance.
    - Supports Qwen modes for local auth, API-key/model-provider config, Alibaba Coding Plan, and custom endpoint details.
    - Supports OpenCode modes for local auth, provider keys, and custom OpenAI-compatible endpoint details.
    - Provider instance actions expose pending, success, warning, disabled-reason, and error feedback in live regions where the action can be retried or reversed.
-5. Git
+6. Git
    - Selects remote or local branch generation without changing post-onboarding route behavior.
    - Remote mode exposes GitHub/GitLab tokens, GitHub auth mounting, and GitHub auth path controls with target-specific labels.
    - Git identity controls remain available in both modes; mounted host git config disables the manual identity fields.
-6. Jira
+7. Jira
    - Lets operators configure Jira later by leaving every field empty.
    - Partial Jira configuration validates as a field group: site URL and API token are required once any Jira field is filled.
    - Failed validation focuses the first invalid field and also leaves a visible alert in the step body.
-7. Default Providers
+8. Default Providers
    - Requires at least one enabled provider instance before routing defaults can be selected.
    - Default and worker selections use named select controls and the selected instance list marks Default, Worker, or Available status without relying on motion.
-8. Automation
+9. Automation
    - Configures system defaults for automation level, feature PR automerge, main PR automerge, plan approval, and memory.
    - Controls virtual-worker resolution for main and feature merge conflicts.
    - Enables the QA agent for completion-time review workflows.
    - Choice groups use typed settings values, keyboard-operable selection, and visible selected/success feedback.
-9. Appearance
-   - Configures system defaults for theme, motion, and navigation mode.
-   - Explains primary dashboard controls such as project selection, sprint scope, worker routing, and Settings.
+10. Appearance
+   - Configures system defaults for Theme, Navigation Mode, Reduced Motion, Background Mode, Static Color, and Zoom Level when Electron zoom support is available.
+   - Previews Theme, Reduced Motion, Navigation Mode, Background Mode, Static Color, and Zoom Level immediately in both the onboarding shell and the underlying dashboard background manager.
+   - Keeps advanced background controls such as Animation Style, Pattern Overlay, and custom background image in Settings -> Appearance after onboarding.
 
 ## Settings Persistence
 
@@ -126,7 +147,9 @@ Provider choices update:
 - Legacy container auth-copy fields under `defaults.cliWorkflow` for compatibility
 - Git onboarding mode under `defaults.cliWorkflow.gitMode`, which toggles the remote GitHub/GitLab setup cards and keeps git identity controls available in both modes
 
-Appearance choices update `defaults.appearance`, which is also used by the Settings page. The root dashboard shell listens for settings updates and Settings-page preview events, then reapplies theme, reduced-motion, navigation, background mode/style/color, uploaded image, and pattern preferences without a page reload. New installs start with sidebar navigation and the pattern overlay set to `None`.
+Appearance choices update the onboarding draft under `defaults.appearance`, which is also used by the Settings page. While onboarding is open, the draft appearance is published through the shared `codeux:appearance-preview` event so the root dashboard shell reapplies Theme, Reduced Motion, Navigation Mode, Background Mode, Static Color, and Zoom Level without waiting for final save. The preview is cleared when onboarding closes, is canceled, completes, or unmounts. Final persistence still uses the same `PUT /api/system-settings` path as Settings. New installs start with sidebar navigation and the pattern overlay set to `None`.
+
+Easy onboarding applies a small settings recipe before save: one recommended CLI provider is enabled for default and worker routing, Docker execution stays enabled, automation remains semi-automatic with plan approval enabled, memory stays enabled, navigation stays in sidebar mode, and the two GitHub checkboxes map to existing Git/CI defaults. These defaults are saved only when the operator finishes the flow. No provider secrets are stored outside the existing system settings provider catalog.
 
 Operators can reopen onboarding from `Settings -> General -> Onboarding`. The action resets the persisted onboarding completion state and clears the browser-local marker; it does not reset saved system or project settings.
 
@@ -165,7 +188,7 @@ The Live runtime panels consume the same structured progress object from session
 
 ## Post-Onboarding Tour
 
-Finishing onboarding redirects the operator to `/` and starts the dashboard guide. The guide anchors to real UI elements through `data-tour-id` markers so it works with both dock navigation and sidebar navigation.
+Finishing Standard or Expert onboarding redirects the operator to `/` and starts the dashboard guide. Finishing Easy onboarding redirects to `/chat`, where the no-project assistant offers local onboarding guidance until a project is added. It triggers the same persisted completion flow and dashboard-tour start state. The guide anchors to real UI elements through `data-tour-id` markers so it works with both dock navigation and sidebar navigation.
 
 The guide covers:
 - Projects: project management and adding the first project

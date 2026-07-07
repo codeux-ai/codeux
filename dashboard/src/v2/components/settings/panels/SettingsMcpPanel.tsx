@@ -139,7 +139,7 @@ const LocalHttpSetup: FunctionComponent = () => {
     setMessage(null);
     try {
       const result: LocalMcpInstallResult = await installLocalMcpProvider(provider);
-      setMessage(`Installed ${setup?.providers.find((entry) => entry.id === provider)?.label ?? provider} config at ${result.configPath}.`);
+      setMessage(`Installed ${setup?.providers.find((entry) => entry.id === provider)?.label ?? provider} config at ${result.configPath}. Keep Code UX running so the local MCP client can connect.`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to install CLI config.");
     } finally {
@@ -161,7 +161,7 @@ const LocalHttpSetup: FunctionComponent = () => {
               <Pill label={setup?.enabled ? "HTTP active" : "Disabled"} tone={setup?.enabled ? "active" : "muted"} />
             </div>
             <p className="mt-1 max-w-3xl text-xs leading-relaxed text-slate-500 dark:text-slate-400">
-              Add this Code UX runtime as an authenticated Streamable HTTP MCP server for local CLI clients. HTTPS needs a trusted certificate or a TLS reverse proxy; localhost HTTP uses the bearer token below.
+              Add this running Code UX runtime as an authenticated Streamable HTTP MCP server for local CLI clients. Keep Code UX running while those clients connect. HTTPS needs a trusted certificate or a TLS reverse proxy; localhost HTTP uses the bearer token below.
             </p>
           </div>
           <ActionChip

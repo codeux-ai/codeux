@@ -6,6 +6,7 @@ export interface ParsedAgentMarkdown {
   avatarConfig?: AgentAvatarConfig;
   providerConfigId?: string | null;
   model?: string | null;
+  containerRunAsRoot?: boolean | null;
   memoryTemplateOverrideEnabled?: boolean;
   memoryTemplateMarkdown?: string;
   memoryConfig?: AgentMemoryConfig;
@@ -34,6 +35,7 @@ export function parseAgentMarkdown(rawMarkdown: string): ParsedAgentMarkdown {
     avatarConfig: parsedMetadata.avatarConfig,
     providerConfigId: typeof parsedMetadata.providerConfigId === "string" ? parsedMetadata.providerConfigId : undefined,
     model: typeof parsedMetadata.model === "string" ? parsedMetadata.model : undefined,
+    containerRunAsRoot: typeof parsedMetadata.containerRunAsRoot === "boolean" ? parsedMetadata.containerRunAsRoot : undefined,
     memoryTemplateOverrideEnabled: parsedMetadata.memoryTemplateOverrideEnabled,
     memoryTemplateMarkdown: parsedMetadata.memoryTemplateMarkdown,
     memoryConfig: parsedMetadata.memoryConfig,
@@ -45,11 +47,12 @@ export function formatAgentMarkdown(input: ParsedAgentMarkdown): string {
   const hasDescription = input.description !== undefined;
   const hasProviderConfigId = input.providerConfigId !== undefined && input.providerConfigId !== null;
   const hasModel = input.model !== undefined && input.model !== null;
+  const hasContainerRunAsRoot = typeof input.containerRunAsRoot === "boolean";
   const hasMemoryTemplateOverrideEnabled = input.memoryTemplateOverrideEnabled !== undefined;
   const hasMemoryTemplateMarkdown = input.memoryTemplateMarkdown !== undefined;
   const hasMemoryConfig = input.memoryConfig !== undefined && input.memoryConfig !== null;
 
-  if (!hasAvatarConfig && !hasDescription && !hasProviderConfigId && !hasModel && !hasMemoryTemplateOverrideEnabled && !hasMemoryTemplateMarkdown && !hasMemoryConfig) {
+  if (!hasAvatarConfig && !hasDescription && !hasProviderConfigId && !hasModel && !hasContainerRunAsRoot && !hasMemoryTemplateOverrideEnabled && !hasMemoryTemplateMarkdown && !hasMemoryConfig) {
     return input.instructionMarkdown;
   }
 
@@ -65,6 +68,9 @@ export function formatAgentMarkdown(input: ParsedAgentMarkdown): string {
   }
   if (hasModel) {
     metadata.model = input.model;
+  }
+  if (hasContainerRunAsRoot) {
+    metadata.containerRunAsRoot = input.containerRunAsRoot;
   }
   if (hasMemoryTemplateOverrideEnabled) {
     metadata.memoryTemplateOverrideEnabled = input.memoryTemplateOverrideEnabled;

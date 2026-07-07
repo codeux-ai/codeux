@@ -54,6 +54,7 @@ import type {
 import type {
   AgentPresetRecord,
   CreateAgentPresetInput,
+  PushAgentPresetsToMarkdownOptions,
   UpdateAgentPresetInput,
 } from "../contracts/agent-preset-types.js";
 import type { AgentPresetRepository } from "../repositories/agent-preset-repository.js";
@@ -119,6 +120,7 @@ import type { EmbeddingService } from "../services/embedding-service.js";
 import type { KnowledgeService } from "../services/knowledge-service.js";
 import type { UpdateStatus } from "../services/update-checker-service.js";
 import type { LocalMcpCliProvider, LocalMcpInstallResult, LocalMcpSetupInfo } from "../services/local-mcp-cli-config-service.js";
+import { resolveDashboardBindHost } from "../config/app-config.js";
 import type { ChatProviderIngressService } from "../services/chat-provider-ingress-service.js";
 import {
   parsePreviewSessionIdFromHost,
@@ -239,6 +241,9 @@ export interface DashboardServerOptions {
   deleteAgentPreset: (agentPresetId: string) => Promise<void> | void;
   importAgentPresetFromMarkdown?: (agentPresetId: string) => Promise<AgentPresetRecord> | AgentPresetRecord;
   syncAllAgentPresetsFromMarkdown?: (projectId: string) => Promise<AgentPresetRecord[]> | AgentPresetRecord[];
+  pullAgentPresetsFromMarkdown?: (projectId: string) => Promise<AgentPresetRecord[]> | AgentPresetRecord[];
+  pushAgentPresetsToMarkdown?: (projectId: string, options?: PushAgentPresetsToMarkdownOptions) => Promise<AgentPresetRecord[]> | AgentPresetRecord[];
+  exportAgentPresetToMarkdown?: (agentPresetId: string) => Promise<AgentPresetRecord> | AgentPresetRecord;
   pushAgentPresetsToRepository?: (projectId: string, options: {
     mode: "commit_only" | "commit_and_push" | "pull_request";
     branchName?: string;
@@ -436,7 +441,7 @@ const bindDashboardServer = async (
   startPort: number,
   logger: Logger
 ): Promise<DashboardServerHandle> => {
-  const host = (process.env.DASHBOARD_HOST || "127.0.0.1").trim() || "127.0.0.1";
+  const host = resolveDashboardBindHost();
   const roundedPort = Math.round(startPort);
   const initialPort = Number.isFinite(roundedPort)
     ? Math.max(0, Math.min(65535, roundedPort))

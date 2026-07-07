@@ -16,21 +16,21 @@ Code UX dispatches work across **seven providers**, each accepting one or more *
 
 All non-Jules providers are *virtual workers* — Code UX shells out to the provider's CLI, optionally inside a Docker container. Authentication is provided by the host CLI's normal login flow; Code UX merely detects and references it.
 
-## External chat providers
+## External chat connectors
 
-Settings -> Providers also includes external chat provider connections for WhatsApp, iMessage, Telegram, Slack, Microsoft Teams, and Discord channels. These are not AI model providers and they do not affect invocation routing. They bind authenticated external chat bridges to Code UX projects so inbound messages can enter project chat threads and assistant replies can be delivered back through the same bridge.
+Settings -> Integrations -> Chat Connectors includes external chat connector connections for WhatsApp, iMessage, Telegram, Slack, Microsoft Teams, and Discord channels. These are not AI model providers and they do not affect invocation routing. They bind authenticated external chat bridges to Code UX projects so inbound messages can enter project chat threads and assistant replies can be delivered back through the same bridge.
 
 Supported bridge modes are:
 
-- `openclaw` — HTTP delivery to a configured OpenClaw bridge URL.
+- `managed_bridge` — HTTP delivery to a configured managed bridge URL.
 - `webhook` — HTTP delivery to a configured generic bridge or bot gateway URL.
 - `native_bridge` — shell-free local command execution for native bridge scripts, with JSON on stdin and optional bridge token environment variables.
 
-Code UX does not call the official WhatsApp, iMessage, Telegram, Slack, Microsoft Teams, or Discord APIs directly. Provider-specific API interaction belongs to the OpenClaw integration, webhook gateway, or native bridge you connect.
+Code UX does not call the official WhatsApp, iMessage, Telegram, Slack, Microsoft Teams, or Discord APIs directly. Provider-specific API interaction belongs to the managed bridge, webhook gateway, or native bridge you connect.
 
-Chat provider setup stores connection records, write-only secrets, channel bindings, routing hints, and outbound delivery state separately from AI provider credentials. Webhook ingress requires HMAC signatures when a signing secret is configured; OpenClaw and native bridge ingress use bearer-style bridge tokens. Shared external channels can route to multiple projects only when a selector or routing hint chooses exactly one binding.
+Chat provider setup stores connection records, write-only secrets, channel bindings, routing hints, and outbound delivery state separately from AI provider credentials. Webhook ingress requires HMAC signatures when a signing secret is configured; Managed and native bridge ingress use bearer-style bridge tokens. Shared external channels can route to multiple projects only when a selector or routing hint chooses exactly one binding.
 
-For the full setup and routing contract in the published docs, see [External chat providers](../architecture/external-chat-providers.md).
+For the full setup and routing contract in the published docs, see [External chat connectors](../architecture/external-chat-providers.md).
 
 ## The models
 
@@ -84,7 +84,7 @@ qwen3-max, qwen3-max-2026-01-23,
 qwen-plus, qwen-max
 ```
 
-Qwen custom-endpoint instances define their model id in Settings -> Providers. Code UX adds that configured model to the AI Models selector and writes it into Qwen Code `modelProviders` at runtime. The Custom endpoint preset is Ollama-compatible by default: API key `your_api_key`, model `glm-4.7-flash`, environment key `OLLAMA_API_KEY`, and base URL `http://127.0.0.1:11434/v1`. In Docker mode on Docker Desktop, WSL, macOS, or Windows, Code UX rewrites that loopback URL to `host.docker.internal` inside the container.
+Qwen custom-endpoint instances define their model id in Settings -> Providers. Code UX adds that configured model to the AI Models selector and writes it into Qwen Code `modelProviders` at runtime. The Custom endpoint preset is Ollama-compatible by default: API key `your_api_key`, model `glm-4.7-flash`, environment key `OLLAMA_API_KEY`, and base URL `http://127.0.0.1:11434/v1`. In Docker mode, Code UX rewrites loopback URLs to `host.docker.internal` inside the container; Linux Docker Engine runs with loopback endpoints use Docker's `host-gateway` mapping.
 
 ### OpenCode
 ```
@@ -94,7 +94,7 @@ github-copilot/gpt-5,
 openrouter/anthropic/claude-sonnet-4.5
 ```
 
-OpenCode provider-key and custom-endpoint instances generate a per-run OpenCode config. Code UX writes that generated config to a temporary `opencode.json`, sets `OPENCODE_CONFIG`, and maps the saved key to `OPENCODE_API_KEY`. The Custom endpoint preset is Ollama-compatible by default: API key `your_api_key`, provider/model `ollama/glm-4.7-flash`, environment key `OLLAMA_API_KEY`, and base URL `http://127.0.0.1:11434/v1`. In Docker mode on Docker Desktop, WSL, macOS, or Windows, Code UX rewrites that loopback URL to `host.docker.internal` inside the container.
+OpenCode provider-key and custom-endpoint instances generate a per-run OpenCode config. Code UX writes that generated config to a temporary `opencode.json`, sets `OPENCODE_CONFIG`, and maps the saved key to `OPENCODE_API_KEY`. The Custom endpoint preset is Ollama-compatible by default: API key `your_api_key`, provider/model `ollama/glm-4.7-flash`, environment key `OLLAMA_API_KEY`, and base URL `http://127.0.0.1:11434/v1`. In Docker mode, Code UX rewrites loopback URLs to `host.docker.internal` inside the container; Linux Docker Engine runs with loopback endpoints use Docker's `host-gateway` mapping.
 
 ### Antigravity
 ```

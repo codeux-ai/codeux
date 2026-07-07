@@ -7,7 +7,7 @@ import type { ExecutionStatus } from "../components/chat/widgets/ChatWidgetFrame
 import { formatChatTime } from "./chat-time.js";
 import { buildLiveSessionTasks } from "./live-session-task-structure.js";
 
-export type ChatWidgetType = "planning" | "app_creation_progress" | "none";
+export type ChatWidgetType = "planning" | "app_creation_progress" | "external_reference" | "none";
 
 /** Per-turn token usage carried on tool-call invocation messages (mirrors the
  *  backend ParsedConversationTurn.tokens shape). */
@@ -26,6 +26,9 @@ export interface ChatWidgetState {
   targetWorker?: string;
   liveStatus?: LivePlanningWidgetState;
   appCreationProgress?: AppCreationProgressWidgetState;
+  executionPlan?: PlanningExecutionPlanWidgetState;
+  externalReference?: ExternalReferenceWidgetState;
+  suppressBodyMarkdown?: boolean;
 }
 
 export type AppCreationKind = "web_app" | "desktop_app" | "unknown";
@@ -67,6 +70,30 @@ export interface AppCreationProgressWidgetState {
   clientRequestId: string | null;
 }
 
+export type ExternalReferenceProvider = "jira" | "github" | "gitlab";
+export type ExternalReferenceKind = "issue" | "pull_request" | "merge_request";
+
+export interface ExternalReferenceWidgetState {
+  provider: ExternalReferenceProvider;
+  providerLabel: string;
+  kind: ExternalReferenceKind;
+  kindLabel: string;
+  title: string;
+  key: string | null;
+  number: number | null;
+  identifierLabel: string | null;
+  state: string | null;
+  stateLabel: string | null;
+  url: string | null;
+  repositoryPath: string | null;
+  projectPath: string | null;
+  labels: string[];
+  assignee: string | null;
+  author: string | null;
+  preview: string | null;
+  ariaLabel: string;
+}
+
 export type LivePlanningTaskStatusKind =
   | "queued"
   | "running"
@@ -103,6 +130,25 @@ export interface LivePlanningWidgetState {
   progressLabel: string;
   materialization: LivePlanningMaterializationState;
   tasks: LivePlanningTaskState[];
+}
+
+export interface PlanningExecutionPlanTaskSummaryState {
+  id: string;
+  title: string;
+  summary: string | null;
+}
+
+export interface PlanningExecutionPlanWidgetState {
+  sprintId: string | null;
+  sprintNumber: number | null;
+  sprintKey: string | null;
+  sprintName: string;
+  goal: string | null;
+  taskCount: number;
+  createdTaskIds: string[];
+  tasks: PlanningExecutionPlanTaskSummaryState[];
+  taskSummaryLabel: string;
+  ariaLabel: string;
 }
 
 export interface ChatWidgetLiveData {
@@ -218,6 +264,60 @@ const readStringList = (value: unknown, limit = 8): string[] => {
     }
   }
   return result;
+};
+
+const readStringArray = (value: unknown): string[] => (
+  readArray(value)
+    .map((entry) => readString(entry))
+    .filter((entry): entry is string => Boolean(entry))
+);
+
+const readFirstString = (...values: unknown[]): string | null => {
+  for (const value of values) {
+    const stringValue = readString(value);
+    if (stringValue) {
+      return stringValue;
+    }
+  }
+  return null;
+};
+
+const readFirstNumber = (...values: unknown[]): number | null => {
+  for (const value of values) {
+    const numberValue = readNumber(value);
+    if (numberValue !== null) {
+      return numberValue;
+    }
+    const stringValue = readString(value);
+    if (stringValue && /^\d+$/.test(stringValue)) {
+      return Number.parseInt(stringValue, 10);
+    }
+  }
+  return null;
+};
+
+const readNestedRecord = (base: Record<string, unknown> | null | undefined, keys: string[]): Record<string, unknown> | null => {
+  let current: unknown = base;
+  for (const key of keys) {
+    const record = readRecord(current);
+    if (!record) {
+      return null;
+    }
+    current = record[key];
+  }
+  return readRecord(current);
+};
+
+const readNestedValue = (base: Record<string, unknown> | null | undefined, keys: string[]): unknown => {
+  let current: unknown = base;
+  for (const key of keys) {
+    const record = readRecord(current);
+    if (!record) {
+      return undefined;
+    }
+    current = record[key];
+  }
+  return current;
 };
 
 const getWidgetMetadata = (metadata: Record<string, unknown> | null | undefined): Record<string, unknown> | null => {
@@ -551,6 +651,296 @@ const readStackFieldValue = (stackSummary: Record<string, unknown> | null, keys:
   return null;
 };
 
+const escapeRegExp = (value: string): string => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+const formatExecutionPlanName = (executionPlan: PlanningExecutionPlanWidgetState): string => {
+  if (!executionPlan.sprintKey) {
+    return executionPlan.sprintName;
+  }
+  const prefixPattern = new RegExp(`^${escapeRegExp(executionPlan.sprintKey)}\\s*[:\\-]?\\s*`, "i");
+  const normalizedName = executionPlan.sprintName.replace(prefixPattern, "").trim();
+  if (!normalizedName || normalizedName === executionPlan.sprintKey) {
+    return executionPlan.sprintKey;
+  }
+  return `${executionPlan.sprintKey}: ${normalizedName}`;
+};
+
+const readExecutionPlanTaskSummaries = (
+  executionPlan: Record<string, unknown>,
+  createdTaskIds: string[],
+): PlanningExecutionPlanTaskSummaryState[] => {
+  const candidates = [
+    executionPlan.taskSummaries,
+    executionPlan.task_summaries,
+    executionPlan.tasks,
+    executionPlan.createdTasks,
+    executionPlan.created_tasks,
+  ];
+  const rawTasks = candidates.find((candidate) => readArray(candidate).length > 0);
+  return readArray(rawTasks)
+    .map((entry, index): PlanningExecutionPlanTaskSummaryState | null => {
+      const record = readRecord(entry);
+      if (!record) {
+        const title = readString(entry);
+        return title ? { id: createdTaskIds[index] ?? `task-${index + 1}`, title, summary: null } : null;
+      }
+
+      const id = readFirstString(
+        record.id,
+        record.taskId,
+        record.task_id,
+        record.key,
+        record.taskKey,
+        record.task_key,
+        createdTaskIds[index],
+      ) ?? `task-${index + 1}`;
+      const title = readFirstString(record.title, record.name, record.summary, record.description, id);
+      if (!title) {
+        return null;
+      }
+
+      const summary = readFirstString(
+        record.summary,
+        record.description,
+        record.promptSummary,
+        record.prompt_summary,
+      );
+      return {
+        id,
+        title,
+        summary: summary && summary !== title ? summary : null,
+      };
+    })
+    .filter((entry): entry is PlanningExecutionPlanTaskSummaryState => Boolean(entry));
+};
+
+const formatExecutionPlanTaskSummaryLabel = (
+  taskCount: number,
+  createdTaskIds: string[],
+  tasks: PlanningExecutionPlanTaskSummaryState[],
+): string => {
+  const effectiveTaskCount = taskCount || tasks.length || createdTaskIds.length;
+  const plannedLabel = `${effectiveTaskCount} planned task${effectiveTaskCount === 1 ? "" : "s"}`;
+  if (createdTaskIds.length > 0 && createdTaskIds.length !== effectiveTaskCount) {
+    return `${plannedLabel}, ${createdTaskIds.length} created`;
+  }
+  return plannedLabel;
+};
+
+const readExecutionPlanState = (
+  metadata: Record<string, unknown> | null | undefined,
+  widgetMetadata: Record<string, unknown> | null,
+): PlanningExecutionPlanWidgetState | null => {
+  const executionPlan = readRecord(metadata?.executionPlan)
+    ?? readRecord(metadata?.execution_plan)
+    ?? readRecord(widgetMetadata?.executionPlan)
+    ?? readRecord(widgetMetadata?.execution_plan);
+  if (!executionPlan) {
+    return null;
+  }
+
+  const sprintId = readFirstString(executionPlan.sprintId, executionPlan.sprint_id);
+  const sprintNumber = readFirstNumber(executionPlan.sprintNumber, executionPlan.sprint_number);
+  const sprintKey = readFirstString(executionPlan.sprintKey, executionPlan.sprint_key)
+    ?? (sprintNumber !== null ? `SPR-${sprintNumber}` : sprintId);
+  const goal = readFirstString(executionPlan.goal);
+  const createdTaskIds = [
+    ...new Set([
+      ...readStringArray(executionPlan.createdTaskIds),
+      ...readStringArray(executionPlan.created_task_ids),
+    ]),
+  ];
+  const tasks = readExecutionPlanTaskSummaries(executionPlan, createdTaskIds);
+  const rawTaskCount = readFirstNumber(executionPlan.taskCount, executionPlan.task_count);
+  const taskCount = rawTaskCount !== null && rawTaskCount >= 0
+    ? Math.trunc(rawTaskCount)
+    : tasks.length || createdTaskIds.length;
+  const sprintName = readFirstString(executionPlan.sprintName, executionPlan.sprint_name)
+    ?? sprintKey
+    ?? "Execution Plan";
+
+  const hasPlanDetails = Boolean(
+    sprintId
+    || sprintNumber !== null
+    || sprintKey
+    || goal
+    || taskCount > 0
+    || createdTaskIds.length > 0
+    || tasks.length > 0
+    || readString(executionPlan.sprintName)
+    || readString(executionPlan.sprint_name),
+  );
+  if (!hasPlanDetails) {
+    return null;
+  }
+
+  const taskSummaryLabel = formatExecutionPlanTaskSummaryLabel(taskCount, createdTaskIds, tasks);
+  const ariaParts = ["Planning execution plan", formatExecutionPlanName({
+    sprintId,
+    sprintNumber,
+    sprintKey,
+    sprintName,
+    goal,
+    taskCount,
+    createdTaskIds,
+    tasks,
+    taskSummaryLabel,
+    ariaLabel: "",
+  })];
+  if (goal) {
+    ariaParts.push(`Goal ${goal}`);
+  }
+  ariaParts.push(taskSummaryLabel);
+
+  return {
+    sprintId,
+    sprintNumber,
+    sprintKey,
+    sprintName,
+    goal,
+    taskCount,
+    createdTaskIds,
+    tasks,
+    taskSummaryLabel,
+    ariaLabel: ariaParts.join(". "),
+  };
+};
+
+const normalizeExternalProviderValue = (value: unknown): ExternalReferenceProvider | null => {
+  const normalized = readString(value)?.toLowerCase().replace(/[\s_-]+/g, "") ?? "";
+  if (normalized.includes("jira") || normalized.includes("atlassian")) {
+    return "jira";
+  }
+  if (normalized.includes("github")) {
+    return "github";
+  }
+  if (normalized.includes("gitlab")) {
+    return "gitlab";
+  }
+  return null;
+};
+
+const inferExternalProviderFromUrl = (value: unknown): ExternalReferenceProvider | null => {
+  const url = readString(value);
+  if (!url) {
+    return null;
+  }
+  try {
+    const host = new URL(url).hostname.toLowerCase();
+    if (host.includes("atlassian.net") || host.includes("jira.")) {
+      return "jira";
+    }
+    if (host === "github.com" || host.endsWith(".github.com")) {
+      return "github";
+    }
+    if (host === "gitlab.com" || host.endsWith(".gitlab.com") || host.includes("gitlab.")) {
+      return "gitlab";
+    }
+  } catch {
+    return null;
+  }
+  return null;
+};
+
+const formatExternalProviderLabel = (provider: ExternalReferenceProvider): string => {
+  switch (provider) {
+    case "jira":
+      return "Jira";
+    case "github":
+      return "GitHub";
+    case "gitlab":
+      return "GitLab";
+  }
+};
+
+const normalizeExternalReferenceKind = (
+  value: unknown,
+  provider: ExternalReferenceProvider,
+  source: Record<string, unknown>,
+): ExternalReferenceKind => {
+  const normalized = readString(value)?.toLowerCase().replace(/[\s-]+/g, "_") ?? "";
+  if (
+    normalized === "pull_request"
+    || normalized === "pullrequest"
+    || normalized === "pr"
+    || normalized === "github_pr"
+    || normalized === "github_pull_request"
+    || readRecord(source.pull_request)
+    || readRecord(source.pullRequest)
+  ) {
+    return "pull_request";
+  }
+  if (
+    normalized === "merge_request"
+    || normalized === "mergerequest"
+    || normalized === "mr"
+    || normalized === "gitlab_mr"
+    || normalized === "gitlab_merge_request"
+    || readRecord(source.merge_request)
+    || readRecord(source.mergeRequest)
+  ) {
+    return "merge_request";
+  }
+  if (provider === "gitlab" && normalized.includes("merge")) {
+    return "merge_request";
+  }
+  return "issue";
+};
+
+const formatExternalKindLabel = (kind: ExternalReferenceKind): string => {
+  switch (kind) {
+    case "pull_request":
+      return "Pull request";
+    case "merge_request":
+      return "Merge request";
+    case "issue":
+      return "Issue";
+  }
+};
+
+const normalizeExternalStatus = (value: string | null): ExecutionStatus => {
+  const normalized = value?.toLowerCase().replace(/[\s_-]+/g, "") ?? "";
+  if (["closed", "done", "resolved", "merged", "complete", "completed"].includes(normalized)) {
+    return "completed";
+  }
+  if (["blocked", "failed", "declined"].includes(normalized)) {
+    return "failed";
+  }
+  if (["inprogress", "review", "reviewing", "reopened"].includes(normalized)) {
+    return "running";
+  }
+  return "queued";
+};
+
+const readDisplayName = (value: unknown): string | null => {
+  const stringValue = readString(value);
+  if (stringValue) {
+    return stringValue;
+  }
+  const record = readRecord(value);
+  if (!record) {
+    return null;
+  }
+  return readFirstString(record.displayName, record.display_name, record.name, record.login, record.username, record.emailAddress);
+};
+
+const readFirstDisplayName = (...values: unknown[]): string | null => {
+  for (const value of values) {
+    const array = readArray(value);
+    if (array.length > 0) {
+      const displayName = readDisplayName(array[0]);
+      if (displayName) {
+        return displayName;
+      }
+    }
+    const displayName = readDisplayName(value);
+    if (displayName) {
+      return displayName;
+    }
+  }
+  return null;
+};
+
 const normalizeAppCreationStackSummary = (value: unknown): AppCreationStackSummaryState => {
   const stackSummary = readRecord(value);
   const fieldDefs: Array<{ key: string; label: string; keys: string[] }> = [
@@ -604,6 +994,224 @@ const buildAppCreationProgressWidgetState = (
     planName: sprintLabel,
     appCreationProgress: progress,
   };
+};
+
+const readLabels = (...values: unknown[]): string[] => {
+  const labels: string[] = [];
+  const addLabel = (value: unknown): void => {
+    const direct = readString(value);
+    if (direct) {
+      direct.split(",").map((part) => part.trim()).filter(Boolean).forEach((part) => labels.push(part));
+      return;
+    }
+    const record = readRecord(value);
+    const label = readFirstString(record?.name, record?.title, record?.label);
+    if (label) {
+      labels.push(label);
+    }
+  };
+
+  values.forEach((value) => {
+    const array = readArray(value);
+    if (array.length > 0) {
+      array.forEach(addLabel);
+    } else {
+      addLabel(value);
+    }
+  });
+
+  return [...new Set(labels)].slice(0, 8);
+};
+
+const normalizeExternalPreview = (value: string | null): string | null => {
+  if (!value) {
+    return null;
+  }
+  const flattened = value.replace(/\s+/g, " ").trim();
+  if (flattened.length <= 280) {
+    return flattened;
+  }
+  return `${flattened.slice(0, 277).trimEnd()}...`;
+};
+
+const parseJsonLookingRecord = (bodyMarkdown: string | undefined): Record<string, unknown> | null => {
+  const trimmed = readString(bodyMarkdown);
+  if (!trimmed || !trimmed.startsWith("{") || !trimmed.endsWith("}")) {
+    return null;
+  }
+  try {
+    return readRecord(JSON.parse(trimmed));
+  } catch {
+    return null;
+  }
+};
+
+const collectExternalReferenceCandidates = (
+  metadata: Record<string, unknown> | null | undefined,
+): Record<string, unknown>[] => {
+  if (!metadata) {
+    return [];
+  }
+
+  const widgetMetadata = getWidgetMetadata(metadata);
+  const candidates: Record<string, unknown>[] = [];
+  if (widgetMetadata) {
+    candidates.push(widgetMetadata);
+    const widgetExternalReference = readRecord(widgetMetadata.externalReference);
+    if (widgetExternalReference) {
+      candidates.push(widgetExternalReference);
+    }
+    const widgetLinkedIssue = readRecord(widgetMetadata.linkedIssue) ?? readRecord(widgetMetadata.linked_issue);
+    if (widgetLinkedIssue) {
+      candidates.push(widgetLinkedIssue);
+    }
+  }
+
+  const externalReference = readRecord(metadata.externalReference);
+  if (externalReference) {
+    candidates.push(externalReference);
+  }
+  const linkedIssue = readRecord(metadata.linkedIssue) ?? readRecord(metadata.linked_issue);
+  if (linkedIssue) {
+    candidates.push(linkedIssue);
+  }
+  candidates.push(metadata);
+
+  return candidates;
+};
+
+const buildExternalReferenceState = (source: Record<string, unknown>): { status: ExecutionStatus; reference: ExternalReferenceWidgetState } | null => {
+  const fields = readRecord(source.fields);
+  const url = readFirstString(
+    source.webUrl,
+    source.web_url,
+    source.htmlUrl,
+    source.html_url,
+    source.issueUrl,
+    source.issue_url,
+    source.pullRequestUrl,
+    source.pull_request_url,
+    source.mergeRequestUrl,
+    source.merge_request_url,
+    source.browseUrl,
+    source.browse_url,
+    source.url,
+    source.self,
+  );
+  const provider = normalizeExternalProviderValue(source.provider)
+    ?? normalizeExternalProviderValue(source.source)
+    ?? normalizeExternalProviderValue(source.system)
+    ?? normalizeExternalProviderValue(source.kind)
+    ?? inferExternalProviderFromUrl(url);
+  if (!provider) {
+    return null;
+  }
+
+  const kind = normalizeExternalReferenceKind(source.kind ?? source.type ?? source.referenceType ?? source.reference_type, provider, source);
+  const title = readFirstString(source.title, source.summary, fields?.summary, source.name);
+  const key = readFirstString(source.key, source.issueKey, source.issue_key, source.ticketKey, source.ticket_key);
+  const number = readFirstNumber(source.number, source.issueNumber, source.issue_number, source.pullRequestNumber, source.pull_request_number, source.mergeRequestNumber, source.merge_request_number, source.iid);
+  const identifierLabel = key ?? (number !== null ? `#${number}` : null);
+  if (!title || (!identifierLabel && !url)) {
+    return null;
+  }
+
+  const state = readFirstString(source.state, source.status, readNestedValue(fields, ["status", "name"]));
+  const stateLabel = state ? formatStatusLabel(state) : null;
+  const path = readFirstString(
+    source.repositoryPath,
+    source.repository_path,
+    source.repo,
+    source.repoFullName,
+    source.repo_full_name,
+    source.projectPath,
+    source.project_path,
+    source.namespacePath,
+    source.namespace_path,
+    readNestedValue(readNestedRecord(source, ["repository"]), ["full_name"]),
+    readNestedValue(readNestedRecord(source, ["repository"]), ["nameWithOwner"]),
+    readNestedValue(readNestedRecord(source, ["repository"]), ["path_with_namespace"]),
+    readNestedValue(readNestedRecord(source, ["project"]), ["path_with_namespace"]),
+  );
+  const labels = readLabels(source.labels, fields?.labels);
+  const assignee = readFirstDisplayName(source.assignee, source.assignees, fields?.assignee);
+  const author = readFirstDisplayName(source.author, source.user, source.createdBy, source.created_by);
+  const preview = normalizeExternalPreview(readFirstString(
+    source.bodyPreview,
+    source.body_preview,
+    source.preview,
+    source.body,
+    source.description,
+    fields?.description,
+    source.summary,
+  ));
+  const providerLabel = formatExternalProviderLabel(provider);
+  const kindLabel = formatExternalKindLabel(kind);
+  const pathParts = provider === "github"
+    ? { repositoryPath: path, projectPath: null }
+    : { repositoryPath: null, projectPath: path };
+  const ariaParts = [providerLabel, kindLabel, title];
+  if (identifierLabel) {
+    ariaParts.push(identifierLabel);
+  }
+  if (stateLabel) {
+    ariaParts.push(stateLabel);
+  }
+
+  return {
+    status: normalizeExternalStatus(state),
+    reference: {
+      provider,
+      providerLabel,
+      kind,
+      kindLabel,
+      title,
+      key,
+      number,
+      identifierLabel,
+      state,
+      stateLabel,
+      url,
+      ...pathParts,
+      labels,
+      assignee,
+      author,
+      preview,
+      ariaLabel: ariaParts.join(". "),
+    },
+  };
+};
+
+const extractExternalReferenceWidgetState = (
+  metadata: Record<string, unknown> | null | undefined,
+  bodyMarkdown?: string,
+): { status: ExecutionStatus; reference: ExternalReferenceWidgetState; fromJsonBody: boolean } | null => {
+  for (const candidate of collectExternalReferenceCandidates(metadata)) {
+    const result = buildExternalReferenceState(candidate);
+    if (result) {
+      return { ...result, fromJsonBody: false };
+    }
+  }
+
+  const bodyRecord = parseJsonLookingRecord(bodyMarkdown);
+  if (!bodyRecord) {
+    return null;
+  }
+  for (const candidate of collectExternalReferenceCandidates(bodyRecord)) {
+    const result = buildExternalReferenceState(candidate);
+    if (result) {
+      return { ...result, fromJsonBody: true };
+    }
+  }
+  return null;
+};
+
+const hasExternalReferenceJsonBody = (bodyMarkdown?: string): boolean => {
+  const bodyRecord = parseJsonLookingRecord(bodyMarkdown);
+  if (!bodyRecord) {
+    return false;
+  }
+  return collectExternalReferenceCandidates(bodyRecord).some((candidate) => Boolean(buildExternalReferenceState(candidate)));
 };
 
 const normalizeReflectionPurpose = (value: unknown): SelfReflectionPurpose => {
@@ -843,28 +1451,44 @@ const extractWidgetStateFromMetadata = (
   bodyMarkdown?: string,
   liveData?: ChatWidgetLiveData,
 ): ChatWidgetState => {
-  if (!metadata) {
-    return { type: "none", status: "completed", planName: "" };
-  }
-
   const widgetMetadata = getWidgetMetadata(metadata);
+  const executionPlan = readExecutionPlanState(metadata, widgetMetadata);
 
   if (widgetMetadata && readString(widgetMetadata.type) === "app_progress") {
     return buildAppCreationProgressWidgetState(metadata, widgetMetadata);
   }
 
   if (widgetMetadata && widgetMetadata.type === "planning_request") {
-    const status = (widgetMetadata.status as ExecutionStatus) || (metadata.status as ExecutionStatus) || "completed";
-    const planName = (widgetMetadata.route_path as string) || (metadata.planName as string) || (metadata.title as string) || "Execution Plan";
+    const status = (widgetMetadata.status as ExecutionStatus) || (metadata?.status as ExecutionStatus) || "completed";
+    const planName = executionPlan
+      ? formatExecutionPlanName(executionPlan)
+      : (widgetMetadata.route_path as string) || (metadata?.planName as string) || (metadata?.title as string) || "Execution Plan";
     const targetWorker = widgetMetadata.target_worker as string | undefined;
-    const liveStatus = buildLivePlanningWidgetState(metadata, status, planName, liveData);
+    const liveStatus = executionPlan ? null : buildLivePlanningWidgetState(metadata, status, planName, liveData);
     return {
       type: "planning",
       status: liveStatus ? mapSprintRunStatusToExecutionStatus(liveStatus.runStatus, status) : status,
       planName,
       targetWorker,
+      ...(executionPlan ? { executionPlan } : {}),
       ...(liveStatus ? { liveStatus } : {}),
     };
+  }
+
+  const externalReference = extractExternalReferenceWidgetState(metadata, bodyMarkdown);
+  if (externalReference) {
+    const hasJsonBody = externalReference.fromJsonBody || hasExternalReferenceJsonBody(bodyMarkdown);
+    return {
+      type: "external_reference",
+      status: externalReference.status,
+      planName: "",
+      externalReference: externalReference.reference,
+      ...(hasJsonBody ? { suppressBodyMarkdown: true } : {}),
+    };
+  }
+
+  if (!metadata) {
+    return { type: "none", status: "completed", planName: "" };
   }
 
   const isPlanning = metadata.type === "planning" || metadata.routeKind === "planning" ||
@@ -872,12 +1496,15 @@ const extractWidgetStateFromMetadata = (
 
   if (isPlanning || metadata.routeKind === "virtual" || metadata.routeKind === "worker") {
     const status = (metadata.status as ExecutionStatus) || "completed";
-    const planName = (metadata.planName as string) || (metadata.title as string) || "Execution Plan";
-    const liveStatus = buildLivePlanningWidgetState(metadata, status, planName, liveData);
+    const planName = executionPlan
+      ? formatExecutionPlanName(executionPlan)
+      : (metadata.planName as string) || (metadata.title as string) || "Execution Plan";
+    const liveStatus = executionPlan ? null : buildLivePlanningWidgetState(metadata, status, planName, liveData);
     return {
       type: "planning",
       status: liveStatus ? mapSprintRunStatusToExecutionStatus(liveStatus.runStatus, status) : status,
       planName,
+      ...(executionPlan ? { executionPlan } : {}),
       ...(liveStatus ? { liveStatus } : {}),
     };
   }

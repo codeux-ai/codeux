@@ -19,7 +19,6 @@ vi.mock("gsap", () => ({
 }));
 import { ChatPageShell } from "../../../dashboard/src/v2/components/chat/ChatPageShell.js";
 import { ChatRail } from "../../../dashboard/src/v2/components/chat/ChatRail.js";
-import { EmptyChat } from "../../../dashboard/src/v2/components/chat/ChatEmptyState.js";
 import { ChatCreateAppQuickActions } from "../../../dashboard/src/v2/components/chat/ChatCreateAppQuickActions.js";
 
 const mockProject = {
@@ -31,32 +30,28 @@ const mockProject = {
 };
 
 describe("ChatPageShell", () => {
-  it("renders the empty state correctly when no project is selected", () => {
-    const { getByText } = render(
+  it("renders onboarding mode without project chat controls when no project is selected", () => {
+    const { getByText, queryByRole } = render(
       <ChatPageShell
         selectedProject={null}
-        chatMode="threads"
+        chatMode="stage"
         onSetChatMode={vi.fn()}
         onCreateThread={vi.fn()}
         pendingDashboardMessages={0}
         error={null}
-        railSlot={<div data-testid="empty-rail" />}
-        detailSlot={
-          <EmptyChat
-            tone="project"
-            message="Choose or add a project from the top navigation to unlock stored chat threads, listener routing, and project-scoped conversation history."
-          />
-        }
+        title="Code UX Assistant"
+        subtitle="Ask setup questions before a project exists."
+        showProjectControls={false}
+        railSlot={null}
+        detailSlot={<div>No-project assistant</div>}
       />
     );
 
-    expect(getByText("Project Required")).toBeInTheDocument();
-    expect(getByText("Ready When a Project Exists")).toBeInTheDocument();
-    expect(
-      getByText(
-        "Choose or add a project from the top navigation to unlock stored chat threads, listener routing, and project-scoped conversation history."
-      )
-    ).toBeInTheDocument();
+    expect(getByText("Code UX Assistant")).toBeInTheDocument();
+    expect(getByText("Ask setup questions before a project exists.")).toBeInTheDocument();
+    expect(getByText("No-project assistant")).toBeInTheDocument();
+    expect(queryByRole("tablist", { name: "Chat Mode" })).not.toBeInTheDocument();
+    expect(queryByRole("button", { name: /new thread/i })).not.toBeInTheDocument();
   });
 
   it("renders thread mode with rail and detail slots", () => {

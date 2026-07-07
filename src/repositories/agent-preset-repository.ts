@@ -25,6 +25,7 @@ interface AgentPresetRow {
   avatar_config_json: string | null;
   provider_config_id: string | null;
   model: string | null;
+  container_run_as_root: number | null;
   memory_template_override_enabled: number;
   memory_template_markdown: string | null;
   persistent_skill_storage_enabled: number;
@@ -104,6 +105,10 @@ function serializeMemoryConfig(value: AgentMemoryConfig | undefined): string | n
   return value ? JSON.stringify(value) : null;
 }
 
+function serializeNullableBoolean(value: boolean | null | undefined): number | null {
+  return typeof value === "boolean" ? (value ? 1 : 0) : null;
+}
+
 export class AgentPresetRepository {
   private readonly db: DatabaseAdapter;
 
@@ -167,6 +172,7 @@ export class AgentPresetRepository {
         avatar_config_json,
         provider_config_id,
         model,
+        container_run_as_root,
         memory_template_override_enabled,
         memory_template_markdown,
         persistent_skill_storage_enabled,
@@ -174,7 +180,7 @@ export class AgentPresetRepository {
         mcp_access_json,
         created_at,
         updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       id,
       projectId,
@@ -189,6 +195,7 @@ export class AgentPresetRepository {
       input.avatarConfig ? JSON.stringify(input.avatarConfig) : null,
       input.providerConfigId?.trim() || null,
       input.model?.trim() || null,
+      serializeNullableBoolean(input.containerRunAsRoot),
       input.memoryTemplateOverrideEnabled ? 1 : 0,
       input.memoryTemplateMarkdown || null,
       input.persistentSkillStorage?.enabled ? 1 : 0,
@@ -223,6 +230,7 @@ export class AgentPresetRepository {
         avatar_config_json,
         provider_config_id,
         model,
+        container_run_as_root,
         memory_template_override_enabled,
         memory_template_markdown,
         persistent_skill_storage_enabled,
@@ -230,7 +238,7 @@ export class AgentPresetRepository {
         mcp_access_json,
         created_at,
         updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       id,
       projectId,
@@ -245,6 +253,7 @@ export class AgentPresetRepository {
       input.avatarConfig ? JSON.stringify(input.avatarConfig) : null,
       input.providerConfigId?.trim() || null,
       input.model?.trim() || null,
+      serializeNullableBoolean(input.containerRunAsRoot),
       input.memoryTemplateOverrideEnabled ? 1 : 0,
       input.memoryTemplateMarkdown || null,
       input.persistentSkillStorage?.enabled ? 1 : 0,
@@ -263,7 +272,7 @@ export class AgentPresetRepository {
     const now = new Date().toISOString();
     this.db.prepare(`
       UPDATE agent_presets
-      SET name = ?, description = ?, instruction_markdown = ?, labels_json = ?, avatar_config_json = ?, provider_config_id = ?, model = ?, memory_template_override_enabled = ?, memory_template_markdown = ?, persistent_skill_storage_enabled = ?, memory_config_json = ?, mcp_access_json = ?, updated_at = ?
+      SET name = ?, description = ?, instruction_markdown = ?, labels_json = ?, avatar_config_json = ?, provider_config_id = ?, model = ?, container_run_as_root = ?, memory_template_override_enabled = ?, memory_template_markdown = ?, persistent_skill_storage_enabled = ?, memory_config_json = ?, mcp_access_json = ?, updated_at = ?
       WHERE id = ?
     `).run(
       input.name?.trim() || current.name,
@@ -275,6 +284,7 @@ export class AgentPresetRepository {
         : (input.avatarConfig ? JSON.stringify(input.avatarConfig) : null),
       input.providerConfigId === undefined ? current.providerConfigId || null : input.providerConfigId?.trim() || null,
       input.model === undefined ? current.model || null : input.model?.trim() || null,
+      input.containerRunAsRoot === undefined ? serializeNullableBoolean(current.containerRunAsRoot) : serializeNullableBoolean(input.containerRunAsRoot),
       input.memoryTemplateOverrideEnabled === undefined ? (current.memoryTemplateOverrideEnabled ? 1 : 0) : (input.memoryTemplateOverrideEnabled ? 1 : 0),
       input.memoryTemplateMarkdown === undefined ? (current.memoryTemplateMarkdown || null) : (input.memoryTemplateMarkdown || null),
       input.persistentSkillStorage === undefined ? (current.persistentSkillStorage?.enabled ? 1 : 0) : (input.persistentSkillStorage.enabled ? 1 : 0),
@@ -327,6 +337,7 @@ export class AgentPresetRepository {
     memoryTemplateOverrideEnabled?: boolean;
     memoryTemplateMarkdown?: string;
     memoryConfig?: AgentMemoryConfig;
+    containerRunAsRoot?: boolean | null;
   }): AgentPresetRecord {
     const current = requireRecord(this.getAgentPreset(agentPresetId), "Agent preset", agentPresetId);
     if (!current.sourcePath || !current.sourceScope) {
@@ -336,7 +347,7 @@ export class AgentPresetRepository {
 
     this.db.prepare(`
       UPDATE agent_presets
-      SET name = ?, description = ?, instruction_markdown = ?, source_updated_at = ?, source_imported_at = ?, avatar_config_json = ?, provider_config_id = ?, model = ?, memory_template_override_enabled = ?, memory_template_markdown = ?, memory_config_json = ?, updated_at = ?
+      SET name = ?, description = ?, instruction_markdown = ?, source_updated_at = ?, source_imported_at = ?, avatar_config_json = ?, provider_config_id = ?, model = ?, container_run_as_root = ?, memory_template_override_enabled = ?, memory_template_markdown = ?, memory_config_json = ?, updated_at = ?
       WHERE id = ?
     `).run(
       input.name.trim(),
@@ -347,6 +358,7 @@ export class AgentPresetRepository {
       input.avatarConfig ? JSON.stringify(input.avatarConfig) : null,
       input.providerConfigId === undefined ? current.providerConfigId || null : input.providerConfigId?.trim() || null,
       input.model === undefined ? current.model || null : input.model?.trim() || null,
+      input.containerRunAsRoot === undefined ? serializeNullableBoolean(current.containerRunAsRoot) : serializeNullableBoolean(input.containerRunAsRoot),
       input.memoryTemplateOverrideEnabled ? 1 : 0,
       input.memoryTemplateMarkdown || null,
       input.memoryConfig === undefined
@@ -440,6 +452,9 @@ export class AgentPresetRepository {
       avatarConfig: parseAvatarConfig(row.avatar_config_json),
       providerConfigId: row.provider_config_id || null,
       model: row.model || null,
+      containerRunAsRoot: row.container_run_as_root === null || row.container_run_as_root === undefined
+        ? null
+        : Boolean(row.container_run_as_root),
       memoryTemplateOverrideEnabled: Boolean(row.memory_template_override_enabled),
       memoryTemplateMarkdown: row.memory_template_markdown || undefined,
       memoryConfig: parseMemoryConfig(row.memory_config_json),
