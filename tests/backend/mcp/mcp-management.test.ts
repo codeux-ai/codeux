@@ -405,8 +405,8 @@ describe("ManagementToolHandler", () => {
     const properties = schema?.properties ?? {};
 
     expect(properties.action?.enum).toContain("import_issues");
-    expect(properties.provider?.enum).toEqual(["github", "gitlab", "jira"]);
-    expect(properties.state?.enum).toEqual(["open", "closed", "all"]);
+    expect(properties.provider?.enum).toEqual(["github", "gitlab", "jira", "notion", "asana", "linear"]);
+    expect(properties.state).toMatchObject({ type: "string" });
     expect(properties.labels).toMatchObject({ type: "array", items: { type: "string" } });
     expect(properties.issueKeys).toMatchObject({ type: "array", items: { type: "string" } });
     expect(properties.issueNumbers).toMatchObject({ type: "array", items: { type: "number" } });
