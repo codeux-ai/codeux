@@ -1015,7 +1015,6 @@ export class ProviderRunner implements IProviderRunner {
         }
         return { command: process.execPath, args };
       }
-
       // `codex exec resume --last` continues the most recent session in the cwd
       const args = continueSession
         ? ["exec", "resume", "--last", "--yolo", "--json", "--output-last-message", codexOutputPath]
