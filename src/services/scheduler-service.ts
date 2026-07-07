@@ -17,7 +17,7 @@ import type { ExecutionControlService } from "./execution-control-service.js";
 import type { MemoryRemediationService } from "./memory-remediation-service.js";
 import type { TaskRerunService } from "./task-rerun-service.js";
 import { buildSchedulerOccurrences, computeNextRunAfterOccurrence } from "../domain/scheduler/schedule-time.js";
-import type { CreateDashboardConversationMessageInput } from "../contracts/connection-chat-types.js";
+import type { ConversationMessageMetadata, CreateDashboardConversationMessageInput } from "../contracts/connection-chat-types.js";
 
 export interface SchedulerServiceDeps {
   schedulerRepository: SchedulerRepository;
@@ -279,7 +279,7 @@ export class SchedulerService {
       if (!target) {
         throw new Error("Scheduled agent wakeup target is missing.");
       }
-      const metadata: Record<string, unknown> = {
+      const metadata: ConversationMessageMetadata = {
         source: "agent_scheduler",
         origin: "agent_scheduler",
         schedulerEntryId: entry.id,

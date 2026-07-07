@@ -37,9 +37,9 @@ describe("ChatProviderIngressService", () => {
     const connection = context.providerRepository.createConnection({
       providerKind: "slack",
       displayName: "Slack ingress",
-      bridgeMode: "openclaw",
+      bridgeMode: "managed_bridge",
       status: "active",
-      secrets: { openclawApiKey: "bridge-token" },
+      secrets: { bridgeApiKey: "bridge-token" },
     });
     const bindingA = context.providerRepository.createChannelBinding({
       providerConnectionId: connection.id,

@@ -9,7 +9,7 @@ export interface McpToolArgsByName {
   manage_tasks: ManageTasksArgs;
   manage_quicksprints: ManageQuicksprintsArgs;
   manage_scheduler: ManageSchedulerArgs;
-  scheduler: SchedulerArgs;
+  scheduler_code_ux: SchedulerArgs;
   manage_agents: ManageAgentsArgs;
   manage_memory: ManageMemoryArgs;
   manage_skills: ManageSkillsArgs;

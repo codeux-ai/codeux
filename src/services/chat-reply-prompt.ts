@@ -91,7 +91,7 @@ export function getMessagesAfterCompaction(
 
 function buildJsonOutputInstructions(): string {
   return [
-    "You must return STRICT JSON format containing exactly two keys: `replyMarkdown` and `action`.",
+    "You must return STRICT JSON format containing `replyMarkdown`, `action`, and optional `suggestions`.",
     "1. `replyMarkdown`: A string containing your concise markdown reply to the user.",
     "2. `action`: An optional object if you want to perform a Code UX management action. Otherwise, set this to `null`.",
     "   - Format: `{ \"domain\": \"...\", \"action\": \"...\", \"payload\": { ... } }`",
@@ -99,12 +99,18 @@ function buildJsonOutputInstructions(): string {
     "   - Note: Destructive actions (starting with `delete_`, `reset_`, `replace_`) and all settings mutations MUST pause for explicit user approval.",
     "     If you propose an approval-gated action, it will not execute immediately; the user will see a confirmation prompt.",
     "     DO NOT call an approval-gated action again with `approval.confirmed: true` unless the user explicitly confirms it.",
+    "3. `suggestions`: Optional array of up to 6 next-step prompt suggestions for dashboard quick actions.",
+    "   - Each item must be `{ \"label\": string, \"prompt\": string, \"icon\"?: string, \"id\"?: string }`.",
+    "   - `prompt` is the literal message the user would send next.",
+    "   - Use only stable string icon identifiers such as `play`, `settings`, or `search`; do not use UI component names.",
+    "   - Omit `suggestions` when there are no useful next steps.",
   ].join("\n");
 }
 
 function buildMcpNativeOutputInstructions(): string {
   return [
     "You have the `manage_code_ux` MCP tool available. Use it directly to perform management actions.",
+    "You also have the `scheduler_code_ux` MCP tool available for agent-owned follow-ups, wakeups, and task reruns.",
     "",
     "The tool accepts: `{ domain, action, payload }` where:",
     "- **projects**: `list` (projectId), `get` (projectId), `create` (projectId, name, baseDir), `update` (projectId, ...), `select` (projectId), `delete` (projectId)",
@@ -126,7 +132,7 @@ function buildMcpNativeOutputInstructions(): string {
 
 function buildSchedulerOnlyOutputInstructions(): string {
   return [
-    "You have the `scheduler` MCP tool available for agent-owned follow-ups only.",
+    "You have the `scheduler_code_ux` MCP tool available for agent-owned follow-ups only.",
     "",
     "Use it only when you need to schedule your own future wakeup or task rerun. It supports `list`, `schedule_wakeup`, `schedule_task`, and `cancel`.",
     "You do not have broad Code UX management tools in this route. Do not call `manage_code_ux`, `manage_scheduler`, `manage_tasks`, `manage_sprints`, or `manage_settings`.",

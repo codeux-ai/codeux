@@ -41,7 +41,7 @@ import { OnboardingIntro } from "./OnboardingIntro.js";
 import { ProviderBrandIcon } from "../providers/ProviderBrandIcon.js";
 import { ProviderInstanceCard } from "../settings/ProviderInstanceCard.js";
 import { sanitizeSystemProviderConfig } from "../../lib/provider-runtime-preview.js";
-import { PillChoiceGroup, Row, SelectInput, TextInput, Toggle } from "../settings/SettingsFormFields.js";
+import { PillChoiceGroup, Row, SecretInput, SelectInput, TextInput, Toggle } from "../settings/SettingsFormFields.js";
 import { applyAppearanceSettings } from "../../lib/apply-appearance.js";
 import { clearAppearancePreview, publishAppearancePreview } from "../../lib/appearance-preview.js";
 import { SectionCard } from "../settings/panels/SharedPanelComponents.js";
@@ -51,6 +51,7 @@ import { OnboardingAppearanceStep } from "./OnboardingAppearanceStep.js";
 
 type IntroPhase = "intro" | "transitioning" | "onboarding";
 import type {
+  DashboardExperienceMode,
   OnboardingDependencyInstallerResult,
   OnboardingDependencyInstallMode,
   OnboardingProviderCredentialStatus,
@@ -62,10 +63,13 @@ import type {
 } from "../../../types.js";
 import { getSafeUrl } from "../../lib/safe-url.js";
 import {
+  applyOnboardingExperienceModeDefaults,
   buildProviderConfigId,
+  getEasyRecommendedProvider,
   getSystemProvidersByType,
   syncProjectProvidersToIntegrationCatalog
 } from "../../lib/onboarding-settings-draft.js";
+import { dashboardExperienceModeOptions } from "../../lib/experience-mode.js";
 import {
   createProjectProviderDraft,
   createSystemProviderDraft,
@@ -246,6 +250,7 @@ export const OnboardingExperience: FunctionComponent = () => {
     open,
     activeStep,
     lastStep,
+    experienceMode,
     readiness,
     settings,
     selectedProviders,
@@ -468,6 +473,25 @@ export const OnboardingExperience: FunctionComponent = () => {
     () => Object.fromEntries(readiness.providers.map((provider) => [provider.provider, provider])) as Partial<Record<ProviderId, OnboardingProviderCredentialStatus>>,
     [readiness.providers],
   );
+  const easyRecommendedProvider = useMemo(
+    () => getEasyRecommendedProvider(readiness.providers, settings),
+    [readiness.providers, settings],
+  );
+
+  const applyExperienceMode = (
+    mode: DashboardExperienceMode,
+    options: { useGithub?: boolean; manageGithubPrWorkflow?: boolean } = {},
+  ): void => {
+    dispatch({ type: "select-experience-mode", mode });
+    if (mode === "EASY") {
+      dispatch({ type: "set-selected-providers", providers: [easyRecommendedProvider] });
+    }
+    updateSettings((current) => applyOnboardingExperienceModeDefaults(current, mode, {
+      recommendedProvider: easyRecommendedProvider,
+      useGithub: options.useGithub,
+      manageGithubPrWorkflow: options.manageGithubPrWorkflow,
+    }));
+  };
 
   const updateAppearance = (updates: Partial<SystemSettings["defaults"]["appearance"]>) => {
     updateSettings((current) => {
@@ -638,6 +662,9 @@ export const OnboardingExperience: FunctionComponent = () => {
   };
 
   const gitMode = settings?.defaults.cliWorkflow.gitMode === "local" ? "local" : "remote";
+  const isEasyMode = experienceMode === "EASY";
+  const easyUseGithub = settings ? settings.defaults.cliWorkflow.gitMode !== "local" : true;
+  const easyManageGithubPrWorkflow = settings ? settings.defaults.git.autoCreatePr : true;
 
   const enabledProviderInstances = settings
     ? sortProviderConfigEntries(Object.entries(settings.defaults.aiProvider.providers))
@@ -706,13 +733,17 @@ export const OnboardingExperience: FunctionComponent = () => {
       await markOnboardingCompleted("complete");
       window.localStorage.setItem(ONBOARDING_STORAGE_KEY, "true");
       closeOnboarding();
-      await navigate({ to: "/" });
+      await navigate({ to: experienceMode === "EASY" ? "/chat" : "/" });
       window.setTimeout(startDashboardTour, 260);
       return;
     }
     dispatch({ type: "set-saving", saving: true });
     try {
-      let nextSettings = cloneSystemSettings(settings);
+      let nextSettings = applyOnboardingExperienceModeDefaults(cloneSystemSettings(settings), experienceMode, {
+        recommendedProvider: easyRecommendedProvider,
+        useGithub: settings.defaults.cliWorkflow.gitMode !== "local",
+        manageGithubPrWorkflow: settings.defaults.git.autoCreatePr,
+      });
       for (const provider of selectedProviderTypes) {
         if (!Object.values(nextSettings.integrations.providers).some((entry) => entry.provider === provider)) {
           nextSettings.integrations.providers[provider] = createSystemProviderDraft(provider, providerLabels[provider]);
@@ -777,7 +808,7 @@ export const OnboardingExperience: FunctionComponent = () => {
       await markOnboardingCompleted("complete");
       window.localStorage.setItem(ONBOARDING_STORAGE_KEY, "true");
       closeOnboarding();
-      await navigate({ to: "/" });
+      await navigate({ to: experienceMode === "EASY" ? "/chat" : "/" });
       window.setTimeout(startDashboardTour, 260);
     } catch (saveError) {
       dispatch({ type: "set-error", error: saveError instanceof Error ? saveError.message : String(saveError) });
@@ -908,73 +939,17 @@ export const OnboardingExperience: FunctionComponent = () => {
               </div>
             </div>
             <div className="mt-8 space-y-2">
-              {[
-                {
-                  id: "installation",
-                  label: "Installation",
-                  icon: Box,
-                  active: activeStep === 0,
-                  complete: activeStep > 0,
-                  onClick: () => setActiveStep(0),
-                },
-                {
-                  id: "introduction",
-                  label: "Introduction",
-                  icon: ShieldCheck,
-                  active: activeStep === 1,
-                  complete: activeStep > 1,
-                  onClick: () => setActiveStep(1),
-                },
-                {
-                  id: "providers",
-                  label: "Select Providers",
-                  icon: Cpu,
-                  active: activeStep === 2,
-                  complete: activeStep > 2,
-                  onClick: () => setActiveStep(2),
-                },
-                {
-                  id: "configure-flow",
-                  label:
-                    activeStep === 3 ? "Providers (1/4)"
-                    : activeStep === 4 ? "Git (2/4)"
-                    : activeStep === 5 ? "Jira (3/4)"
-                    : activeStep === 6 ? "Default providers (4/4)"
-                    : "Providers (1/4)",
-                  icon: Settings,
-                  active: activeStep >= 3 && activeStep <= 6,
-                  complete: activeStep > 6,
-                  onClick: () => {
-                    setActiveStep(activeStep >= 3 && activeStep <= 6 ? activeStep : 3);
-                  },
-                },
-                {
-                  id: "automation",
-                  label: "Automation",
-                  icon: Sparkles,
-                  active: activeStep === 7,
-                  complete: activeStep > 7,
-                  onClick: () => setActiveStep(7),
-                },
-                {
-                  id: "appearance",
-                  label: "Appearance",
-                  icon: Monitor,
-                  active: activeStep === 8,
-                  complete: activeStep > 8,
-                  onClick: () => setActiveStep(8),
-                },
-              ].map((step) => {
+              {steps.map((step, stepIndex) => {
                 const StepIcon = step.icon;
-                const activeItem = step.active;
-                const complete = step.complete;
+                const activeItem = activeStep === stepIndex;
+                const complete = activeStep > stepIndex;
                 return (
                   <button
                     key={step.id}
                     data-step-item
                     type="button"
                     aria-current={activeItem ? "step" : undefined}
-                    onClick={step.onClick}
+                    onClick={() => setActiveStep(stepIndex)}
                     className={`group flex w-full items-center gap-3 rounded-2xl border px-3 py-3 text-left transition-[background-color,border-color,transform] hover:translate-x-1 ${
                       activeItem ? "border-signal-500/28 bg-white text-slate-950 shadow-[0_16px_40px_rgba(15,23,42,0.12)] dark:border-white/30 dark:shadow-[0_16px_40px_rgba(0,0,0,0.18)]" : "border-black/0 text-slate-500 hover:border-black/[0.07] hover:bg-black/[0.035] hover:text-slate-900 dark:border-white/0 dark:text-slate-300 dark:hover:border-white/10 dark:hover:bg-white/8 dark:hover:text-white"
                     }`}
@@ -997,9 +972,7 @@ export const OnboardingExperience: FunctionComponent = () => {
             <div aria-hidden className="absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-transparent via-signal-500/30 to-transparent" />
             <div>
               <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">
-                {activeStep < 3 ? `Step ${activeStep + 1} of 6`
-                  : activeStep >= 3 && activeStep <= 6 ? `Step 4 of 6 (${activeStep - 2}/4)`
-                  : `Step ${activeStep - 2} of 6`}
+                Step {activeStep + 1} of {steps.length}
               </div>
               <h3 ref={stepHeadingRef} tabIndex={-1} className="mt-1 font-display text-xl font-semibold tracking-tight text-slate-900 outline-none focus-visible:ring-2 focus-visible:ring-signal-500/40 dark:text-white">{active.label}</h3>
               <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-slate-200 dark:bg-white/[0.08]" role="progressbar" aria-label={stepProgressLabel} aria-valuemin={1} aria-valuemax={steps.length} aria-valuenow={activeStep + 1}>
@@ -1042,6 +1015,60 @@ export const OnboardingExperience: FunctionComponent = () => {
                 style={{ transitionDuration: "var(--onboarding-validation-duration)", transitionTimingFunction: "var(--onboarding-validation-ease)" }}
               >
                 {validationMessage}
+              </div>
+            ) : null}
+
+            {active.id === "mode" ? (
+              <div className="space-y-4">
+                <div data-onboarding-card className="relative overflow-hidden rounded-[2rem] border border-black/[0.06] bg-white/80 p-6 shadow-[0_18px_48px_rgba(15,23,42,0.055)] dark:border-white/[0.06] dark:bg-white/[0.045]">
+                  <div aria-hidden className="absolute -right-8 -top-10 font-display text-[7rem] font-black leading-none tracking-tight text-black/[0.025] dark:text-white/[0.025]">UX</div>
+                  <div className="relative z-10 max-w-3xl">
+                    <div className="inline-flex items-center gap-2 rounded-full border border-signal-500/20 bg-signal-500/10 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.18em] text-signal-700 dark:text-signal-200">
+                      <Compass className="h-3.5 w-3.5" strokeWidth={2.4} />
+                      Choose your setup path
+                    </div>
+                    <h4 className="mt-4 font-display text-2xl font-semibold leading-none tracking-tight text-slate-950 dark:text-white">
+                      Start with the right amount of control.
+                    </h4>
+                    <p className="mt-3 text-sm font-medium leading-relaxed text-slate-600 dark:text-slate-300">
+                      Easy keeps setup to a recommended provider and GitHub defaults. Standard and Expert keep the detailed runtime, provider, automation, and appearance controls.
+                    </p>
+                  </div>
+                </div>
+                <div className="grid gap-3 md:grid-cols-3" role="radiogroup" aria-label="Onboarding setup mode">
+                  {dashboardExperienceModeOptions.map((option) => {
+                    const selected = experienceMode === option.value;
+                    return (
+                      <button
+                        key={option.value}
+                        data-onboarding-card
+                        type="button"
+                        role="radio"
+                        aria-checked={selected}
+                        disabled={!settings}
+                        onClick={() => applyExperienceMode(option.value)}
+                        className={`group relative overflow-hidden rounded-[1.5rem] border p-5 text-left shadow-[0_14px_34px_rgba(15,23,42,0.04)] transition-[border-color,background-color,transform,box-shadow] hover:-translate-y-1 disabled:cursor-wait disabled:opacity-60 ${
+                          selected
+                            ? "border-signal-500/30 bg-signal-500/10 shadow-[0_18px_46px_rgba(0,224,160,0.08)]"
+                            : "border-black/[0.06] bg-white/75 hover:border-black/[0.12] dark:border-white/[0.06] dark:bg-white/[0.04]"
+                        }`}
+                        style={{ transitionDuration: "var(--onboarding-selection-duration)", transitionTimingFunction: "var(--onboarding-selection-ease)" }}
+                      >
+                        <div aria-hidden className={`absolute left-0 top-5 bottom-5 w-1 rounded-r-full transition-opacity ${selected ? "bg-signal-500 opacity-100" : "bg-slate-300 opacity-0 group-hover:opacity-100 dark:bg-slate-600"}`} />
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="text-base font-black text-slate-900 dark:text-white">{option.label}</div>
+                          {selected ? <Check className="h-5 w-5 text-signal-600 dark:text-signal-300" /> : <ChevronRight className="h-5 w-5 text-slate-300 dark:text-slate-600" />}
+                        </div>
+                        <div className="mt-3 text-sm leading-relaxed text-slate-500 dark:text-slate-400">{option.description}</div>
+                        {option.value === "EASY" ? (
+                          <div className="mt-4 rounded-2xl border border-signal-500/15 bg-signal-500/[0.07] px-3 py-2 text-xs font-semibold leading-relaxed text-signal-800 dark:text-signal-200">
+                            Short flow: provider, GitHub, then Chat.
+                          </div>
+                        ) : null}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
             ) : null}
 
@@ -1194,7 +1221,88 @@ export const OnboardingExperience: FunctionComponent = () => {
             ) : null}
 
             {active.id === "provider-setup" ? (
-              <div className="space-y-4">
+              isEasyMode ? (
+                <div className="space-y-4">
+                  <div data-onboarding-card className="rounded-3xl border border-black/[0.06] bg-white/70 p-5 shadow-[0_16px_42px_rgba(15,23,42,0.04)] dark:border-white/[0.06] dark:bg-white/[0.04]">
+                    <div className="flex items-start gap-3">
+                      <ProviderBrandIcon id={easyRecommendedProvider} />
+                      <div className="min-w-0">
+                        <div className="text-base font-black text-slate-900 dark:text-white">
+                          Recommended provider: {providerLabels[easyRecommendedProvider]}
+                        </div>
+                        <div className="mt-1 text-sm leading-relaxed text-slate-500 dark:text-slate-400">
+                          Code UX will use this provider for Chat and worker tasks. You can add more providers and advanced routing later in Settings.
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  {settings ? getSystemProvidersByType(settings, easyRecommendedProvider).slice(0, 1).map(([providerConfigId, integrationProvider]) => {
+                    const currentAuthType = integrationProvider.authType || (integrationProvider.mountAuth ? "localAuth" : "apiKey");
+                    return (
+                      <div data-onboarding-card key={providerConfigId} className="rounded-[2rem] border border-black/[0.06] bg-white/78 p-5 shadow-[0_18px_50px_rgba(15,23,42,0.055)] dark:border-white/[0.06] dark:bg-white/[0.04]">
+                        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-black/[0.06] pb-4 dark:border-white/[0.06]">
+                          <div className="flex min-w-0 items-center gap-3">
+                            <ProviderBrandIcon id={integrationProvider.provider} />
+                            <div className="min-w-0">
+                              <div className="text-sm font-semibold text-slate-900 dark:text-white">{integrationProvider.name}</div>
+                              <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                                {readinessByProvider[easyRecommendedProvider]?.available ? "Local login detected." : "Use a local login or provider API key."}
+                              </div>
+                            </div>
+                          </div>
+                          <span className="rounded-full border border-signal-500/20 bg-signal-500/10 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.14em] text-signal-700 dark:text-signal-200">
+                            Included
+                          </span>
+                        </div>
+                        {integrationProvider.provider !== "jules" ? (
+                          <Row label="Authentication" description="Use your local provider login when available, or enter an API key for this provider instance.">
+                            <PillChoiceGroup
+                              aria-label={`${integrationProvider.name} authentication`}
+                              value={currentAuthType}
+                              onChange={(value) => {
+                                const authType = value as "apiKey" | "localAuth";
+                                configureProviderInstance(providerConfigId, {
+                                  authType,
+                                  mountAuth: authType === "localAuth",
+                                  authPath: authType === "localAuth" ? integrationProvider.authPath : integrationProvider.authPath,
+                                });
+                              }}
+                              options={[
+                                { value: "localAuth", label: "Local login", hint: "Use existing CLI auth" },
+                                { value: "apiKey", label: "API key", hint: "Store with this provider" },
+                              ]}
+                            />
+                          </Row>
+                        ) : null}
+                        {currentAuthType === "apiKey" ? (
+                          <Row label="API key" description="Stored through the existing provider settings path." last>
+                            <SecretInput
+                              value={integrationProvider.apiKey}
+                              onChange={(value) => configureProviderInstance(providerConfigId, { apiKey: value })}
+                              aria-label={`${integrationProvider.name} API key`}
+                              mono
+                            />
+                          </Row>
+                        ) : (
+                          <Row label="Local auth path" description="Host provider auth path used by the container runtime." last>
+                            <TextInput
+                              value={integrationProvider.authPath}
+                              onChange={(value) => configureProviderInstance(providerConfigId, { authPath: value, mountAuth: true })}
+                              aria-label={`${integrationProvider.name} local auth path`}
+                              mono
+                            />
+                          </Row>
+                        )}
+                      </div>
+                    );
+                  }) : (
+                    <div data-onboarding-card className="rounded-3xl border border-black/[0.06] bg-white/75 p-6 text-sm text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.04]">
+                      Loading provider settings.
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="space-y-4">
                 {selectedProviderTypes.length === 0 ? (
                   <div data-onboarding-card className="rounded-3xl border border-black/[0.06] bg-white/75 p-6 text-sm text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.04]">
                     No providers selected. You can add provider credentials later in Settings.
@@ -1259,10 +1367,63 @@ export const OnboardingExperience: FunctionComponent = () => {
                   );
                 })}
               </div>
+              )
             ) : null}
 
             {active.id === "git" && settings ? (
-              <div className="space-y-4">
+              isEasyMode ? (
+                <div className="space-y-4">
+                  <div data-onboarding-card className="rounded-3xl border border-black/[0.06] bg-white/70 p-5 shadow-[0_16px_42px_rgba(15,23,42,0.04)] dark:border-white/[0.06] dark:bg-white/[0.04]">
+                    <div className="flex items-start gap-3">
+                      <Github className="mt-0.5 h-5 w-5 shrink-0 text-signal-600 dark:text-signal-300" />
+                      <div>
+                        <div className="text-base font-black text-slate-900 dark:text-white">GitHub workflow</div>
+                        <div className="mt-1 text-sm leading-relaxed text-slate-500 dark:text-slate-400">
+                          Choose whether this setup should use GitHub PR workflow defaults. Tokens and deeper Git settings remain available later in Settings.
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  <div data-onboarding-card className="space-y-3 rounded-[2rem] border border-black/[0.06] bg-white/80 p-6 shadow-[0_18px_48px_rgba(15,23,42,0.055)] dark:border-white/[0.06] dark:bg-white/[0.045]">
+                    <label className="flex cursor-pointer items-start gap-3 rounded-2xl border border-black/[0.06] bg-white/75 p-4 text-left shadow-[0_12px_28px_rgba(15,23,42,0.035)] transition-colors hover:border-signal-500/20 dark:border-white/[0.06] dark:bg-white/[0.04]">
+                      <input
+                        type="checkbox"
+                        className="mt-1 h-4 w-4 rounded border-slate-300 text-signal-600 focus:ring-2 focus:ring-signal-500"
+                        checked={easyUseGithub}
+                        onChange={(event) => applyExperienceMode("EASY", {
+                          useGithub: event.currentTarget.checked,
+                          manageGithubPrWorkflow: event.currentTarget.checked ? easyManageGithubPrWorkflow : false,
+                        })}
+                      />
+                      <span>
+                        <span className="block text-sm font-bold text-slate-900 dark:text-white">Use GitHub for this workspace</span>
+                        <span className="mt-1 block text-xs leading-relaxed text-slate-500 dark:text-slate-400">
+                          Keep remote branches, pull requests, and CI-aware workflow enabled by default.
+                        </span>
+                      </span>
+                    </label>
+                    <label className={`flex items-start gap-3 rounded-2xl border border-black/[0.06] bg-white/75 p-4 text-left shadow-[0_12px_28px_rgba(15,23,42,0.035)] transition-colors dark:border-white/[0.06] dark:bg-white/[0.04] ${easyUseGithub ? "cursor-pointer hover:border-signal-500/20" : "cursor-not-allowed opacity-60"}`}>
+                      <input
+                        type="checkbox"
+                        className="mt-1 h-4 w-4 rounded border-slate-300 text-signal-600 focus:ring-2 focus:ring-signal-500 disabled:cursor-not-allowed"
+                        checked={easyUseGithub && easyManageGithubPrWorkflow}
+                        disabled={!easyUseGithub}
+                        onChange={(event) => applyExperienceMode("EASY", {
+                          useGithub: easyUseGithub,
+                          manageGithubPrWorkflow: event.currentTarget.checked,
+                        })}
+                      />
+                      <span>
+                        <span className="block text-sm font-bold text-slate-900 dark:text-white">Let Code UX create and manage GitHub PR workflow defaults</span>
+                        <span className="mt-1 block text-xs leading-relaxed text-slate-500 dark:text-slate-400">
+                          Create PRs and use conservative PR management defaults instead of configuring merge policies now.
+                        </span>
+                      </span>
+                    </label>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-4">
                 <div data-onboarding-card className="rounded-3xl border border-black/[0.06] bg-white/70 p-5 shadow-[0_16px_42px_rgba(15,23,42,0.04)] dark:border-white/[0.06] dark:bg-white/[0.04]">
                   <div className="flex items-start gap-3">
                     <GitBranch className="mt-0.5 h-5 w-5 shrink-0 text-signal-600 dark:text-signal-300" />
@@ -1365,6 +1526,7 @@ export const OnboardingExperience: FunctionComponent = () => {
                   </SectionCard>
                 </div>
               </div>
+              )
             ) : null}
 
             {active.id === "jira" && settings ? (
@@ -1538,20 +1700,13 @@ export const OnboardingExperience: FunctionComponent = () => {
               {saveStatusText}
             </div>
             <div className="flex items-center gap-2" aria-label="Onboarding step shortcuts">
-              {[
-                { active: activeStep === 0, onClick: () => setActiveStep(0), label: "Installation" },
-                { active: activeStep === 1, onClick: () => setActiveStep(1), label: "Introduction" },
-                { active: activeStep === 2, onClick: () => setActiveStep(2), label: "Select Providers" },
-                { active: activeStep >= 3 && activeStep <= 6, onClick: () => setActiveStep(activeStep >= 3 && activeStep <= 6 ? activeStep : 3), label: "Providers" },
-                { active: activeStep === 7, onClick: () => setActiveStep(7), label: "Automation" },
-                { active: activeStep === 8, onClick: () => setActiveStep(8), label: "Appearance" },
-              ].map((dot, idx) => (
+              {steps.map((dot, idx) => (
 	                <button
 	                  key={`dot-${idx}`}
 	                  type="button"
 	                  aria-label={`Go to ${dot.label}`}
-	                  onClick={dot.onClick}
-	                  className={`h-2 rounded-full transition-all motion-reduce:transition-none focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 ${dot.active ? "w-8 bg-signal-500" : "w-2 bg-slate-300 dark:bg-slate-700"}`}
+	                  onClick={() => setActiveStep(idx)}
+	                  className={`h-2 rounded-full transition-all motion-reduce:transition-none focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 ${activeStep === idx ? "w-8 bg-signal-500" : "w-2 bg-slate-300 dark:bg-slate-700"}`}
 	                  style={{ transitionDuration: "var(--onboarding-selection-duration)", transitionTimingFunction: "var(--onboarding-selection-ease)" }}
 	                />
               ))}

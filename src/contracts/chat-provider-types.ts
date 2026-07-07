@@ -6,7 +6,7 @@ export type ChatProviderKind =
   | "microsoft-teams"
   | "discord";
 
-export type ChatProviderBridgeMode = "openclaw" | "webhook" | "native_bridge";
+export type ChatProviderBridgeMode = "managed_bridge" | "webhook" | "native_bridge";
 
 export type ChatProviderConnectionStatus =
   | "draft"
@@ -34,8 +34,8 @@ export type ChatProviderSetupFieldType =
   | "select";
 
 export type ChatProviderBridgeIntegration =
-  | "openclaw_core"
-  | "openclaw_plugin"
+  | "managed_core"
+  | "managed_plugin"
   | "webhook"
   | "native_bridge"
   | "bot_gateway";
@@ -218,18 +218,18 @@ export const CHAT_PROVIDER_SETUP_SCHEMAS: readonly ChatProviderSetupSchema[] = [
   {
     kind: "whatsapp",
     label: "WhatsApp",
-    defaultBridgeMode: "openclaw",
+    defaultBridgeMode: "managed_bridge",
     bridgeModes: [
       {
-        mode: "openclaw",
-        label: "OpenClaw WhatsApp plugin",
-        integration: "openclaw_plugin",
+        mode: "managed_bridge",
+        label: "Managed WhatsApp bridge",
+        integration: "managed_plugin",
         setupFields: [
           { key: "pluginName", label: "Plugin name", type: "string", required: true, defaultValue: "whatsapp" },
-          { key: "workspaceId", label: "OpenClaw workspace", type: "string", required: false },
+          { key: "workspaceId", label: "Connector workspace", type: "string", required: false },
         ],
         secretFields: [
-          { key: "openclawApiKey", label: "OpenClaw API key", required: true },
+          { key: "bridgeApiKey", label: "Bridge API key", required: true },
         ],
       },
       {
@@ -250,18 +250,18 @@ export const CHAT_PROVIDER_SETUP_SCHEMAS: readonly ChatProviderSetupSchema[] = [
   {
     kind: "imessage",
     label: "iMessage",
-    defaultBridgeMode: "openclaw",
+    defaultBridgeMode: "managed_bridge",
     bridgeModes: [
       {
-        mode: "openclaw",
-        label: "OpenClaw iMessage core",
-        integration: "openclaw_core",
+        mode: "managed_bridge",
+        label: "Managed iMessage bridge",
+        integration: "managed_core",
         setupFields: [
-          { key: "workspaceId", label: "OpenClaw workspace", type: "string", required: false },
+          { key: "workspaceId", label: "Connector workspace", type: "string", required: false },
           { key: "deviceLabel", label: "Device label", type: "string", required: false },
         ],
         secretFields: [
-          { key: "openclawApiKey", label: "OpenClaw API key", required: true },
+          { key: "bridgeApiKey", label: "Bridge API key", required: true },
         ],
       },
       {
@@ -281,18 +281,18 @@ export const CHAT_PROVIDER_SETUP_SCHEMAS: readonly ChatProviderSetupSchema[] = [
   {
     kind: "telegram",
     label: "Telegram",
-    defaultBridgeMode: "openclaw",
+    defaultBridgeMode: "managed_bridge",
     bridgeModes: [
       {
-        mode: "openclaw",
-        label: "OpenClaw Telegram core",
-        integration: "openclaw_core",
+        mode: "managed_bridge",
+        label: "Managed Telegram bridge",
+        integration: "managed_core",
         setupFields: [
-          { key: "workspaceId", label: "OpenClaw workspace", type: "string", required: false },
+          { key: "workspaceId", label: "Connector workspace", type: "string", required: false },
           { key: "botUsername", label: "Bot username", type: "string", required: false },
         ],
         secretFields: [
-          { key: "openclawApiKey", label: "OpenClaw API key", required: true },
+          { key: "bridgeApiKey", label: "Bridge API key", required: true },
         ],
       },
       {
@@ -313,18 +313,18 @@ export const CHAT_PROVIDER_SETUP_SCHEMAS: readonly ChatProviderSetupSchema[] = [
   {
     kind: "slack",
     label: "Slack",
-    defaultBridgeMode: "openclaw",
+    defaultBridgeMode: "managed_bridge",
     bridgeModes: [
       {
-        mode: "openclaw",
-        label: "OpenClaw Slack plugin",
-        integration: "openclaw_plugin",
+        mode: "managed_bridge",
+        label: "Managed Slack bridge",
+        integration: "managed_plugin",
         setupFields: [
           { key: "pluginName", label: "Plugin name", type: "string", required: true, defaultValue: "slack" },
-          { key: "workspaceId", label: "OpenClaw workspace", type: "string", required: false },
+          { key: "workspaceId", label: "Connector workspace", type: "string", required: false },
         ],
         secretFields: [
-          { key: "openclawApiKey", label: "OpenClaw API key", required: true },
+          { key: "bridgeApiKey", label: "Bridge API key", required: true },
         ],
       },
       {
@@ -345,18 +345,18 @@ export const CHAT_PROVIDER_SETUP_SCHEMAS: readonly ChatProviderSetupSchema[] = [
   {
     kind: "microsoft-teams",
     label: "Microsoft Teams",
-    defaultBridgeMode: "openclaw",
+    defaultBridgeMode: "managed_bridge",
     bridgeModes: [
       {
-        mode: "openclaw",
-        label: "OpenClaw Teams plugin",
-        integration: "openclaw_plugin",
+        mode: "managed_bridge",
+        label: "Managed Teams bridge",
+        integration: "managed_plugin",
         setupFields: [
           { key: "pluginName", label: "Plugin name", type: "string", required: true, defaultValue: "microsoft-teams" },
           { key: "tenantId", label: "Tenant ID", type: "string", required: false },
         ],
         secretFields: [
-          { key: "openclawApiKey", label: "OpenClaw API key", required: true },
+          { key: "bridgeApiKey", label: "Bridge API key", required: true },
         ],
       },
       {

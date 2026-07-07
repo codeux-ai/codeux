@@ -109,7 +109,7 @@ describe("WorkerInboxReplyService", () => {
     );
   });
 
-  it("passes scheduler-only Code UX access for dashboard replies without explicit MCP access", async () => {
+  it("passes Code UX MCP with scheduler for dashboard replies without explicit MCP access", async () => {
     mockRunProviderForText.mockResolvedValue({ text: "I can schedule a follow-up." });
 
     const service = new WorkerInboxReplyService({
@@ -159,21 +159,21 @@ describe("WorkerInboxReplyService", () => {
     });
 
     expect(mockRunProviderForText).toHaveBeenCalledWith(expect.objectContaining({
-      mcpConnection: { url: "http://127.0.0.1:3000/mcp", authToken: "token", agentId: "reply-agent" },
+      mcpConnection: { url: "http://127.0.0.1:3000/mcp", authToken: "token" },
       customMcpServers: [],
-      prompt: expect.stringContaining("You have the `scheduler` MCP tool available"),
+      prompt: expect.stringContaining("You also have the `scheduler_code_ux` MCP tool available"),
     }));
     expect(mockRunProviderForText).toHaveBeenCalledWith(expect.objectContaining({
-      prompt: expect.not.stringContaining("You have the `manage_code_ux` MCP tool available"),
+      prompt: expect.stringContaining("You have the `manage_code_ux` MCP tool available"),
     }));
   });
 
-  it("preserves explicit dashboard reply MCP access in the inbox reply path", async () => {
+  it("uses full Code UX MCP access in the configured dashboard reply inbox path", async () => {
     mockRunProviderForText.mockResolvedValue({ text: "I can use the explicit access." });
     const explicitAccess = {
       codeUxEnabled: true,
       codeUxToolToggles: [{ name: "manage_tasks", enabled: false, isInternal: true }],
-      linkedServerIds: [],
+      linkedServerIds: ["docs"],
     };
 
     const service = new WorkerInboxReplyService({
@@ -208,6 +208,10 @@ describe("WorkerInboxReplyService", () => {
       getDashboardSettings: () => ({
         ...settings,
         agents: { routing: { dashboardReply: { agentPresetId: "custom-reply" } } },
+        customMcpServers: [
+          { id: "docs", name: "docs", enabled: true, transport: "http", url: "https://docs.example.com/mcp" },
+          { id: "other", name: "other", enabled: true, transport: "http", url: "https://other.example.com/mcp" },
+        ],
       }),
       getGithubToken: () => undefined,
       providerRunner: { runProviderForText: mockRunProviderForText } as any,
@@ -224,7 +228,8 @@ describe("WorkerInboxReplyService", () => {
     });
 
     expect(mockRunProviderForText).toHaveBeenCalledWith(expect.objectContaining({
-      mcpConnection: { url: "http://127.0.0.1:3000/mcp", authToken: "token", agentId: "custom-reply" },
+      mcpConnection: { url: "http://127.0.0.1:3000/mcp", authToken: "token" },
+      customMcpServers: [expect.objectContaining({ id: "docs" })],
       prompt: expect.stringContaining("You have the `manage_code_ux` MCP tool available"),
     }));
   });

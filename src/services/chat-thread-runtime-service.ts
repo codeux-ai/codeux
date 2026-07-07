@@ -9,7 +9,7 @@ import type { AgentPresetSyncService } from "./agent-preset-sync-service.js";
 import type { ProjectManagementRepository } from "../repositories/project-management-repository.js";
 import type { IProviderRunner } from "../infrastructure/providers/cli/provider-runner.js";
 import type { Logger } from "../shared/logging/logger.js";
-import type { ConversationCompactionSummary, CreateDashboardConversationMessageInput, ConversationThreadRecord, ConversationMessageRecord, ConversationRuntimeState, UpdateConversationThreadInput, UpdateConversationThreadRouteInput } from "../contracts/connection-chat-types.js";
+import type { ConversationCompactionSummary, CreateDashboardConversationMessageInput, ConversationThreadRecord, ConversationMessageRecord, ConversationRuntimeState, PromptSuggestionsMetadata, UpdateConversationThreadInput, UpdateConversationThreadRouteInput } from "../contracts/connection-chat-types.js";
 import { buildProviderPrompt } from "./cli-workflow-utils.js";
 import { resolveEffectiveModel } from "./provider-execution-service.js";
 import { getRepoCodeUxDir, getRepoCodeUxPath } from "../shared/config/code-ux-paths.js";
@@ -25,10 +25,7 @@ import type { McpConnectionInfo } from "../contracts/mcp-connection-types.js";
 import type { McpApprovalTracker } from "./mcp-approval-tracker.js";
 import { getCorrelationId } from "../shared/logging/correlation-id.js";
 import type { AgentMcpAccessConfig } from "../contracts/agent-preset-types.js";
-import {
-  isSchedulerOnlyAgentMcpAccess,
-  schedulerOnlyAgentMcpAccess,
-} from "./agent-mcp-access.js";
+import { codeUxAgentMcpAccess } from "./agent-mcp-access.js";
 
 interface ChatThreadRuntimeServiceDependencies {
   connectionChatRepository: ConnectionChatRepository;
@@ -548,7 +545,6 @@ export class ChatThreadRuntimeService {
         workerInstructions,
         isDashboardReply: false,
         mcpAvailable,
-        mcpAccessMode: mcpAvailable && isSchedulerOnlyAgentMcpAccess(agentMcpAccess) ? "scheduler_only" : undefined,
         knowledgeManifest,
         suppressRichWidgets,
       });
@@ -601,7 +597,7 @@ export class ChatThreadRuntimeService {
       snapshotCheckout,
       mcpConnection,
       agentMcpAccess,
-      mcpAgentId: respondingAgent.id,
+      mcpAgentId: null,
       signal,
     });
 
@@ -640,9 +636,14 @@ export class ChatThreadRuntimeService {
       }
     }
 
+    const promptSuggestionsMetadata: PromptSuggestionsMetadata | undefined = result.promptSuggestions?.length
+      ? { promptSuggestions: result.promptSuggestions }
+      : undefined;
+
     const replyMessage = this.deps.connectionChatRepository.postSystemMessage(projectId, {
       threadId: thread.id,
       bodyMarkdown: systemReply.trim(),
+      ...(promptSuggestionsMetadata ? { metadata: promptSuggestionsMetadata } : {}),
     });
     await this.deliverChatProviderReplyIfNeeded(projectId, thread, latestMessage, replyMessage);
 
@@ -669,12 +670,9 @@ export class ChatThreadRuntimeService {
 
   private resolveDashboardReplyMcpAccess(
     access: AgentMcpAccessConfig | undefined,
-    dashboardReplyAgentPresetId: string | null,
+    _dashboardReplyAgentPresetId: string | null,
   ): AgentMcpAccessConfig {
-    if (dashboardReplyAgentPresetId && access) {
-      return access;
-    }
-    return schedulerOnlyAgentMcpAccess(access?.linkedServerIds ?? []);
+    return codeUxAgentMcpAccess(access?.linkedServerIds ?? []);
   }
 
   private async deliverChatProviderReplyIfNeeded(

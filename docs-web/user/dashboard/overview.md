@@ -12,11 +12,19 @@ The dashboard uses a **dock-based navigation** by default:
 - **Sidebar** *(mobile or user preference)* — A collapsible left sidebar.
 - **Top bar** — Project selector, techstack selector, theme toggle, mobile menu.
 
-A choice of theme (Light / Dark / System) is in the top bar; navigation mode override is in **Settings → Appearance**. During onboarding, Appearance choices preview immediately and the setup shell follows the selected Light, Dark, or System theme instead of forcing dark mode.
+A choice of theme (Light / Dark / System) is in the top bar; navigation mode override is in **Settings → Appearance**. During onboarding, Appearance choices preview immediately and the setup shell follows the selected Light, Dark, or System theme instead of forcing dark mode. Background Mode, Static Color, and supported Zoom Level also preview before save, while advanced background controls such as Animation Style, Pattern Overlay, and custom background image remain in **Settings → Appearance**.
+
+Primary navigation also follows the persisted experience mode in **Settings → Appearance**:
+
+- **Easy** — Chat, Browser, Stats, Settings/Config, and external Docs.
+- **Standard** — Chat, Overview, Sprints, Tasks, Agents, Stats, Browser, Docs, and Settings/Config.
+- **Expert** — the full navigation, and the default for new or legacy settings.
+
+Hidden pages remain registered routes, Docs opens the external project docs, and Browser still follows the project sprint-preview visibility settings.
 
 When a project is active, the top bar also shows its techstack. Projects imported before classification can remain unassigned; in that state the selector displays **None**. Choosing a stack from the dropdown saves only the project techstack selection.
 
-The background is an animated Three.js scene ("Deep Ocean") that lazy-loads after the main UI is interactive, so it never blocks first paint. Onboarding can preview Background Mode and Static Color; advanced background controls such as Animation Style, Pattern Overlay, and custom background image remain in **Settings → Appearance**.
+The background is an animated Three.js scene ("Deep Ocean") that lazy-loads after the main UI is interactive, so it never blocks first paint. Onboarding can preview Theme, Navigation Mode, Reduced Motion, Background Mode, Static Color, and supported Zoom Level; advanced background controls such as Animation Style, Pattern Overlay, and custom background image remain in **Settings → Appearance**.
 
 ## Pages
 

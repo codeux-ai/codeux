@@ -60,8 +60,8 @@ export function createDefaultChatProviderOutboundAdapter(): ChatProviderOutbound
 export class ConfiguredChatProviderOutboundAdapter implements ChatProviderOutboundAdapter {
   async send(context: ChatProviderOutboundAdapterContext): Promise<ChatProviderOutboundAdapterResult> {
     switch (context.connection.bridgeMode) {
-      case "openclaw":
-        return this.sendHttp(context, resolveOpenClawUrl(context.connection.setup), "openclaw");
+      case "managed_bridge":
+        return this.sendHttp(context, resolveManagedUrl(context.connection.setup), "managed_bridge");
       case "webhook":
         return this.sendHttp(context, resolveWebhookUrl(context.connection.setup), "webhook");
       case "native_bridge":
@@ -74,7 +74,7 @@ export class ConfiguredChatProviderOutboundAdapter implements ChatProviderOutbou
   private async sendHttp(
     context: ChatProviderOutboundAdapterContext,
     url: string,
-    mode: "openclaw" | "webhook",
+    mode: "managed_bridge" | "webhook",
   ): Promise<ChatProviderOutboundAdapterResult> {
     const normalizedUrl = requireHttpUrl(url, `${mode} bridge URL`);
     const headers: Record<string, string> = {
@@ -84,7 +84,7 @@ export class ConfiguredChatProviderOutboundAdapter implements ChatProviderOutbou
       "x-codeux-bridge-mode": context.connection.bridgeMode,
     };
     const bearer = getFirstSecret(context.connection.secrets, [
-      "openclawApiKey",
+      "bridgeApiKey",
       "bridgeToken",
       "botToken",
       "webhookSecret",
@@ -148,10 +148,8 @@ export class ConfiguredChatProviderOutboundAdapter implements ChatProviderOutbou
   }
 }
 
-function resolveOpenClawUrl(setup: Record<string, unknown>): string {
+function resolveManagedUrl(setup: Record<string, unknown>): string {
   return getString(
-    setup.openclawBridgeUrl,
-    setup.openclawUrl,
     setup.bridgeUrl,
     setup.outboundUrl,
     setup.endpointUrl,

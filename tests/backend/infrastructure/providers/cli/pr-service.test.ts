@@ -70,6 +70,32 @@ describe("PrService", () => {
             );
         });
 
+        it("does not append the provider to pre-composed task PR titles", async () => {
+            const mockClient = {
+                gitRemoteUrl: vi.fn().mockResolvedValue({ ok: true, stdout: githubRemote }),
+                setProvider: vi.fn(),
+                ghPrListOpenMatching: vi.fn().mockResolvedValue({ ok: true, stdout: "[]" }),
+                ghPrCreate: vi.fn().mockResolvedValue({ ok: true, stdout: "http://newpr3\n" })
+            };
+            vi.mocked(GitStatusQueryClient).mockImplementation(function() { Object.assign(this, mockClient); } as any);
+
+            const service = new PrService();
+            const res = await service.resolveOrCreateFeaturePr({
+                ...defaultArgs,
+                provider: "codex",
+                title: "(CODUX-40) Task 1: Fix thing"
+            }, "/path", "token");
+
+            expect(res).toBe("http://newpr3");
+            expect(mockClient.ghPrCreate).toHaveBeenCalledWith(
+                "feat",
+                "worker",
+                "(CODUX-40) Task 1: Fix thing",
+                "body",
+                "token"
+            );
+        });
+
         it("uses the configured GitHub token in API mode without requiring gh", async () => {
             const mockClient = {
                 gitRemoteUrl: vi.fn().mockResolvedValue({ ok: true, stdout: githubRemote }),

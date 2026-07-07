@@ -104,11 +104,12 @@ Project management:
 - `GET /api/conversations/threads/:threadId/messages`
   - Lists stored messages for one thread
 - `POST /api/projects/:projectId/conversations/messages`
-- Stores a dashboard-authored message and queues it for a listener
-- Threads now remain explicitly `unassigned` until the dashboard targets a connection or a real listener claims them
-- The active thread header now supports explicit assignment and reassignment to a project-bound connection
-- Reassigning a thread re-queues any unprocessed dashboard messages so the newly assigned listener can receive them
-- Connection badges now reflect heartbeat-derived `stale` and `offline` states instead of keeping dead listeners permanently `connected`
+  - Stores a dashboard-authored message and queues it for a listener or provider-backed dashboard reply
+  - Chat message posts update the selected thread message cache from the returned `ConversationMessageRecord`; the Chat invocation rail remains backed by `GET /api/projects/:projectId/execution/invocations` snapshots and realtime refreshes, so invocation rows are server-created and the browser does not create a frontend-only optimistic invocation placeholder while the backend record is still being persisted.
+  - Threads now remain explicitly `unassigned` until the dashboard targets a connection or a real listener claims them
+  - The active thread header now supports explicit assignment and reassignment to a project-bound connection
+  - Reassigning a thread re-queues any unprocessed dashboard messages so the newly assigned listener can receive them
+  - Connection badges now reflect heartbeat-derived `stale` and `offline` states instead of keeping dead listeners permanently `connected`
 - `GET /api/projects/:projectId/scheduler?from=<iso>&to=<iso>`
   - Lists persisted scheduler entries plus expanded calendar occurrences for the requested window
 - `POST /api/projects/:projectId/scheduler`
@@ -248,6 +249,7 @@ Legacy runtime:
 
 ### Navigation
 - Sidebar and dock navigation expose the primary routes in guided-tour order: Chat, Overview, Sprints, Tasks, Agents, Stats, Schedule (`/scheduler`), Memory, Knowledge (`/knowledge`), Browser, Files (`/files`, providing project and sprint File Browser capabilities), Live, and Settings/Config.
+- The primary navigation honors the persisted Settings -> Appearance experience mode. Easy shows Chat, Browser, Stats, Settings/Config, and external Docs. Standard shows Chat, Overview, Sprints, Tasks, Agents, Stats, Browser, Docs, and Settings/Config. Expert is the default and shows the full set. This only changes primary navigation visibility: routes remain registered, Docs opens the external project docs, and the Browser item still follows the project sprint-preview visibility settings.
 - The top-nav workspace search trigger uses a more opaque glass surface in light and dark mode so it stays readable against page content while preserving the existing blur treatment.
 - The notification panel announces refresh, mark-read, dismiss, and action outcomes through polite live regions. Refresh and mark-all-read controls expose pending state with `aria-busy`, disabled controls include visible reasons, and every repeated row action includes the notification title in its accessible name.
 - Notification rows include textual read/unread state in addition to the severity accent rail. Initial rows use the `listReveal` motion contract, read/dismiss compaction uses `listReorder`, and reduced-motion users receive immediate static state changes without transitional movement.
@@ -359,7 +361,7 @@ Legacy runtime:
   - Git Flow lives in the Sprint tab with default branch, branch prefix, sprint branch scheme, remote/local mode, and auto-create PR
   - Integrations exposes system GitHub, GitLab, Jira, Notion, Asana, Linear, Miro, Lucid/Lucidspark, Figma/FigJam, and Mural credentials plus per-scope GitHub auth-copy mounts and Docker git identity; local `.gitconfig` copying hides the editable name/email fields when enabled
   - CLI provider credentials are managed per named instance, including optional local auth-copy mounts and custom auth paths for each Gemini, Codex, or Claude entry
-- The first-run onboarding flow guides operators through installation checks, container security basics, provider auth-copy setup, AI behaviour defaults, and appearance preferences. Appearance changes preview immediately during onboarding, including Light/Dark/System theme, navigation mode, reduced motion, background mode, static color, and supported desktop zoom. See [Dashboard Onboarding](./onboarding.md).
+- The first-run onboarding flow starts with Easy, Standard, and Expert setup modes, then guides operators through installation checks, container security basics, provider auth-copy setup, AI behaviour defaults, and appearance preferences. Expert is the default and keeps the full installation, provider auth-copy, Git, Jira, default routing, automation, and appearance flow. Standard is the user-facing spelling for the balanced `STANDARD` mode. Easy uses one recommended-provider path, two GitHub checkboxes, and safe default settings, then lands on Chat. Appearance changes preview immediately during onboarding, including Light/Dark/System theme, navigation mode, reduced motion, background mode, static color, and supported desktop zoom. See [Dashboard Onboarding](./onboarding.md).
 - The Docker top-nav control now consumes onboarding readiness data. If Docker is unavailable, it shows a `Cluster not ready` badge with an info icon and explains that Docker is mandatory for containerized CLI execution.
 - Settings -> General now orders runtime setup as Automation, System Runtime, Docker Runtime, then Onboarding. The old Inheritance Model card has been removed from General, and `Open Onboarding` remains at the bottom to reopen setup without clearing saved settings.
 - Settings -> Appearance previews unsaved edits immediately in the active dashboard shell. Theme, motion, navigation mode, animated/static background selection, static color, uploaded background image, and pattern overlay all update before Save Changes; leaving Settings clears the preview back to the persisted effective settings. New installs default the pattern overlay to `None`.
@@ -406,7 +408,7 @@ Legacy runtime:
 - Ledger search integrates with selection: the header select-all checkbox operates on the currently filtered set only, and the selection is automatically pruned when the filter changes so stale hidden selections cannot accumulate
 - When one or more ledger rows are selected, a bulk action bar appears with `Start` and `Delete` controls that operate on all selected sprints, plus a `Clear` button to deselect
 - Sprint ledger row controls now expose pause/resume in addition to existing start/stop semantics, and each runtime action shows pending/disabled state while the control request is in flight.
-- Sending a chat message now inserts an optimistic invocation row immediately in the invocations rail and reconciles it when the server returns the persisted invocation record.
+- Sending a chat message updates the thread transcript immediately from the returned message record, while the invocations rail waits for the server-created invocation row from the execution snapshot or realtime refresh.
 - Sortable column headers cycle through unsorted, ascending, and descending for showcasePinned, sprintKey, name, status, tasksCount, completion, and createdAt (default: newest-first)
 - Ledger rows expose: pinned/showcase state, sprint key, review and human-intervention badges, task count, gradient progress, created/updated metadata, a primary start/stop button, an `Open Subtasks` deep link (`/tasks?sprintId=<id>`) that navigates to the Tasks page pre-filtered to that sprint, and a compact settings menu for edit/export/showcase/overrides/delete
 - The sprint page no longer runs a full-page entrance fade on mount, which keeps initial navigation more immediate and avoids perceived flashing
@@ -497,6 +499,7 @@ Legacy runtime:
 - Active chat titles wrap or truncate inside the bounded header area, while thread rail titles clamp to two stable lines with long-word wrapping so manual renames remain readable without causing rail layout churn.
 - Chat page now provides a `Threads / Invocations` toggle to switch between human conversation threads and read-only execution invocations.
 - Chat page UI is redesigned with animated identities, structured widgets for rich messages, and automatic worker pickup derived from active project routing.
+- Agent replies can append optional prompt suggestion tags from `metadata.promptSuggestions` below the normal markdown message. Each tag can show one supported generic icon (`sparkles`, `search`, `edit`, `code`, `terminal`, `bug`, `check`, `play`, `refresh`, `settings`, `file`, `folder`, `git-branch`, `git-pull-request`, `database`, `shield`, `book-open`, `message-circle`, `list-checks`, `rocket`, `zap`, `lightbulb`, `clipboard`, `download`, `upload`, `eye`, `package`, `server`, `clock`, or `help-circle`) and fills the composer with the next-step prompt when clicked, without auto-sending or changing read-only invocation transcripts.
 - Chat page logs invocation activity explicitly in the background, providing observable execution artifacts directly in the chat view.
 - Chat page filters the "Threads" mode to show user-facing conversation threads (`scope === "project"`).
 - Chat page "Invocations" mode provides a read-only list with metadata for active/completed execution invocations without cluttering the main thread rail.
@@ -516,6 +519,7 @@ Legacy runtime:
 - Loading states are now reserved for first hydration only; realtime invalidation, manual refresh, send/delete flows, reassignment, and unrelated project updates refresh in the background without replacing the thread rail or active conversation with loading cards
 - Creating and deleting threads now stay on the cache-first path too, so the thread rail count and conversation pane no longer flash or fall back to blocking loaders during thread mutations
 - Fresh-install chat states now render polished placeholders for the no-project, no-thread, empty-thread, and no-invocation paths, including an animated sidebar rail placeholder instead of an empty sidebar column; the chat rail/detail layout now waits until large screens before splitting into two columns so empty states remain readable on narrower viewports
+- When no project is selected, `/chat` shows a local onboarding assistant with exactly five quick bubbles: Add my first project, Build a desktop app, Build a web app, Explain Code UX, and Change settings. These turns stay local to the browser page; they do not create persistent conversation threads or call project-scoped chat APIs. Provider-backed project chat starts only after a project exists.
 - Chat composer now sends on `Enter` and inserts a newline on `Shift+Enter`
 - Thread assignment control is explicitly labeled as `Worker:` in the thread header to make routing intent clearer
 - Virtual-worker-routed tasks are created from the same task editor and appear in the same board; the executor badge shows whether work is automatic, CLI-backed, Jules-backed, or handled by the virtual worker lane

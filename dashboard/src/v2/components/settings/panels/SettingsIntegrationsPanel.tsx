@@ -608,7 +608,7 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
     },
     {
       id: "chat",
-      label: "PROVIDERS",
+      label: "CHAT CONNECTORS",
       purpose: "Chat bridges, delivery health, and project/channel bindings",
       items: integrations.filter((integration) => isChatProviderIntegrationId(integration.id)),
     },
@@ -1090,7 +1090,7 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
             <Row label="Enabled" description="Disabled connections keep configuration but reject runtime use until enabled.">
               <Toggle aria-label={`${connection.displayName} enabled`} value={draft.enabled} onChange={() => updateConnectionDraft(connection, definition, (current) => ({ ...current, enabled: !current.enabled }))} />
             </Row>
-            <Row label="Ingress URL" description="Configure your bridge, webhook, or OpenClaw connection to send inbound provider events to this URL.">
+            <Row label="Ingress URL" description="Configure your managed bridge, webhook, or native connector to send inbound provider events to this URL.">
               <TextInput value={connection.ingressUrl} onChange={() => undefined} disabled mono aria-label={`${connection.displayName} ingress URL`} />
             </Row>
 
@@ -1200,7 +1200,7 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
           Back to Integrations
         </button>
         <SectionCard
-          title={`${label} Provider`}
+          title={`${label} Connector`}
           watermark={providerKind === "microsoft-teams" ? "TMS" : providerKind.slice(0, 3).toUpperCase()}
           icon={<MessageCircle strokeWidth={2.4} />}
           actions={
@@ -1213,10 +1213,10 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
           }
         >
           {chatProviders.loading ? (
-            <NoticePanel tone="pending" title="Loading chat providers">Loading provider setup definitions, connections, bindings, and delivery health.</NoticePanel>
+            <NoticePanel tone="pending" title="Loading chat connectors">Loading connector setup definitions, connections, bindings, and delivery health.</NoticePanel>
           ) : null}
           {chatProviders.error ? (
-            <NoticePanel tone="error" title="Chat provider settings unavailable">{chatProviders.error}</NoticePanel>
+            <NoticePanel tone="error" title="Chat connector settings unavailable">{chatProviders.error}</NoticePanel>
           ) : null}
           {definition ? (
             <NoticePanel title={`${definition.label} setup guidance`}>
@@ -1225,7 +1225,7 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
               </ul>
             </NoticePanel>
           ) : (
-            <NoticePanel tone="warning" title="Setup definition unavailable">Refresh chat provider settings to load setup fields for this provider.</NoticePanel>
+            <NoticePanel tone="warning" title="Setup definition unavailable">Refresh chat connector settings to load setup fields for this connector.</NoticePanel>
           )}
           {definition && providerConnections.length > 0 ? (
             <div className="space-y-5">

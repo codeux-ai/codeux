@@ -13,7 +13,7 @@ describe("tool availability", () => {
     expect(projectManagerTools.some((tool) => tool.name === "manage_tasks")).toBe(true);
     expect(projectManagerTools.some((tool) => tool.name === "manage_quicksprints")).toBe(true);
     expect(projectManagerTools.some((tool) => tool.name === "manage_scheduler")).toBe(true);
-    expect(projectManagerTools.some((tool) => tool.name === "scheduler")).toBe(true);
+    expect(projectManagerTools.some((tool) => tool.name === "scheduler_code_ux")).toBe(true);
     expect(projectManagerTools.some((tool) => tool.name === "manage_skills")).toBe(true);
     expect(projectManagerTools.some((tool) => tool.name === "search_skills")).toBe(true);
     expect(projectManagerTools.some((tool) => tool.name === "register_worker_endpoint")).toBe(true);
@@ -24,7 +24,7 @@ describe("tool availability", () => {
     expect(isToolEnabled(DEFAULT_DASHBOARD_SETTINGS, "manage_sprints", "project_manager")).toBe(true);
     expect(isToolEnabled(DEFAULT_DASHBOARD_SETTINGS, "manage_quicksprints", "project_manager")).toBe(true);
     expect(isToolEnabled(DEFAULT_DASHBOARD_SETTINGS, "manage_scheduler", "project_manager")).toBe(true);
-    expect(isToolEnabled(DEFAULT_DASHBOARD_SETTINGS, "scheduler", "project_manager")).toBe(true);
+    expect(isToolEnabled(DEFAULT_DASHBOARD_SETTINGS, "scheduler_code_ux", "project_manager")).toBe(true);
     expect(isToolEnabled(DEFAULT_DASHBOARD_SETTINGS, "manage_skills", "project_manager")).toBe(true);
     expect(isToolEnabled(DEFAULT_DASHBOARD_SETTINGS, "search_skills", "project_manager")).toBe(true);
     expect(isToolEnabled(DEFAULT_DASHBOARD_SETTINGS, "register_worker_endpoint", "project_manager")).toBe(true);
@@ -53,7 +53,7 @@ describe("tool availability", () => {
     const settings = {
       ...DEFAULT_DASHBOARD_SETTINGS,
       mcpTools: DEFAULT_DASHBOARD_SETTINGS.mcpTools.map((tool) =>
-        tool.name === "manage_preview" || tool.name === "manage_telemetry" || tool.name === "scheduler"
+        tool.name === "manage_preview" || tool.name === "manage_telemetry" || tool.name === "scheduler_code_ux"
           ? { ...tool, enabled: false }
           : tool
       ),
@@ -62,10 +62,10 @@ describe("tool availability", () => {
     const names = getEnabledToolDefinitions(settings, "project_manager").map((tool) => tool.name);
     expect(names).not.toContain("manage_preview");
     expect(names).not.toContain("manage_telemetry");
-    expect(names).not.toContain("scheduler");
+    expect(names).not.toContain("scheduler_code_ux");
     expect(isToolEnabled(settings, "manage_preview", "project_manager")).toBe(false);
     expect(isToolEnabled(settings, "manage_telemetry", "project_manager")).toBe(false);
-    expect(isToolEnabled(settings, "scheduler", "project_manager")).toBe(false);
+    expect(isToolEnabled(settings, "scheduler_code_ux", "project_manager")).toBe(false);
   });
 
   it("applies per-agent tool overrides over the system toggles", () => {

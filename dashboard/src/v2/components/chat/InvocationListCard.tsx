@@ -2,7 +2,7 @@ import type { ComponentChildren, FunctionComponent } from "preact";
 import { useState } from "preact/hooks";
 import type { ExecutionInvocationRecord, AgentPreset } from "../../types.js";
 import { formatRelativeChatTime } from "../../lib/chat-time.js";
-import { Loader2, BarChart3 } from "lucide-preact";
+import { BarChart3 } from "lucide-preact";
 import { ProviderLogo } from "../ui/ProviderLogo.js";
 import { WaveFluid } from "../ui/WaveFluid.js";
 import { BorderTrace } from "../ui/BorderTrace.js";
@@ -116,7 +116,6 @@ export const InvocationListCard: FunctionComponent<{
       const ss = STATUS_STYLES[invocation.status] || DEFAULT_STATUS_STYLE;
       const isSelected = selectedInvocationId === invocation.id;
       const isRunning = invocation.status === "running";
-      const isOptimistic = invocation.id.startsWith("optimistic:");
       const agentPreset = invocation.agentPresetId
         ? agentPresets?.find((p) => p.id === invocation.agentPresetId)
         : undefined;
@@ -134,7 +133,7 @@ export const InvocationListCard: FunctionComponent<{
           value: (
             <span className={`flex items-center gap-1.5 ${ss.text}`}>
               <span className={`inline-block h-1.5 w-1.5 rounded-full ${ss.dot} ${isRunning ? "animate-pulse motion-reduce:animate-none motion-reduce:ring-2 motion-reduce:ring-signal-500/40" : ""}`} />
-              <span aria-live="polite" className={`capitalize ${isOptimistic ? "opacity-70 text-slate-500" : ""}`}>{isOptimistic ? "Pending" : invocation.status}</span>
+              <span aria-live="polite" className="capitalize">{invocation.status}</span>
             </span>
           ),
         },
@@ -185,7 +184,6 @@ export const InvocationListCard: FunctionComponent<{
             className={`w-full cursor-pointer rounded-[1.5rem] p-4 text-left
               bg-white/70 dark:bg-void-800/60 backdrop-blur-2xl
               shadow-[0_2px_20px_rgba(0,0,0,0.04)] dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]
-              ${isOptimistic ? "opacity-70" : ""}
               focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500
               ${isSelected
                 ? "bg-signal-500/[0.05] border border-black/[0.06] dark:border-white/[0.06] border-l-[3px] border-l-signal-500"
@@ -214,7 +212,6 @@ export const InvocationListCard: FunctionComponent<{
                     {formatInvocationPurpose(invocation.type)}
                   </h3>
                   <div className="mt-0.5 flex items-center gap-1.5 text-[11px] text-slate-500 dark:text-slate-400">
-                    {isOptimistic && <Loader2 className="h-3 w-3 animate-spin motion-reduce:animate-none" />}
                     <span className="truncate font-medium">
                       {invocation.provider || "—"}
                       {invocation.model ? <span className="text-slate-400 dark:text-slate-500"> · {invocation.model}</span> : null}

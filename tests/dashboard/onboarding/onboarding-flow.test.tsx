@@ -27,8 +27,12 @@ import {
   onboardingFlowReducer,
 } from "../../../dashboard/src/v2/components/onboarding/use-onboarding-step-flow.js";
 
+const { navigateMock } = vi.hoisted(() => ({
+  navigateMock: vi.fn(),
+}));
+
 vi.mock("@tanstack/react-router", () => ({
-  useNavigate: () => vi.fn(),
+  useNavigate: () => navigateMock,
 }));
 
 // Mock OnboardingIntro to fire callbacks immediately via microtask,
@@ -55,6 +59,10 @@ vi.mock("../../../dashboard/src/v2/lib/settings-api.js", () => ({
   fetchSystemSettings: vi.fn(),
   saveSystemSettings: vi.fn(),
 }));
+
+afterEach(() => {
+  navigateMock.mockClear();
+});
 
 const createSystemSettings = (): SystemSettings => {
   const defaultSettings = cloneDefaultSettings();
@@ -255,7 +263,7 @@ describe("onboarding flow reducer", () => {
     expect(state.activeStep).toBe(2);
 
     state = onboardingFlowReducer(state, { type: "set-active-step", step: 99 });
-    expect(state.activeStep).toBe(8);
+    expect(state.activeStep).toBe(9);
   });
 
   it("updates the settings draft without mutating the loaded settings object", () => {
@@ -470,8 +478,9 @@ describe("OnboardingExperience integration", () => {
 
     render(<OnboardingExperience />);
 
-    const activeStepBtn = await screen.findByRole("button", { name: /Installation/i, current: "step" });
+    const activeStepBtn = await screen.findByRole("button", { name: /Setup mode/i, current: "step" });
     expect(activeStepBtn).not.toBeNull();
+    await userEvent.click(screen.getByRole("button", { name: "Go to Installation" }));
 
     const readinessRegion = await screen.findAllByText("Blocked");
     expect(readinessRegion.length).toBeGreaterThan(0);
@@ -514,6 +523,7 @@ describe("OnboardingExperience integration", () => {
 
     render(<OnboardingExperience />);
 
+    await user.click(await screen.findByRole("button", { name: "Go to Installation" }));
     const autoInstallButton = await screen.findByRole("button", { name: "Auto Install dependencies" });
     await user.click(autoInstallButton);
 
@@ -586,11 +596,7 @@ describe("OnboardingExperience integration", () => {
     render(<OnboardingExperience />);
 
     await waitFor(() => expect(settingsApi.fetchSystemSettings).toHaveBeenCalled());
-    const nextButton = await screen.findByRole("button", { name: "Next" });
-    await userEvent.click(nextButton);
-    await userEvent.click(screen.getByRole("button", { name: "Next" }));
-    await userEvent.click(screen.getByRole("button", { name: "Next" }));
-    await userEvent.click(screen.getByRole("button", { name: "Next" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Go to Git" }));
 
     await screen.findByText("Git mode");
     expect(screen.getByText("GitHub token")).not.toBeNull();
@@ -686,6 +692,58 @@ describe("OnboardingExperience integration", () => {
     await waitFor(() => expect(settingsApi.saveSystemSettings).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith("/api/user/onboarding/complete", expect.objectContaining({ method: "POST" })));
     expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("runs the short Easy onboarding flow, saves the selected mode, and lands on Chat", async () => {
+    const systemSettings = createSystemSettings();
+    vi.mocked(settingsApi.fetchSystemSettings).mockResolvedValue(systemSettings);
+    vi.mocked(settingsApi.saveSystemSettings).mockImplementation(async (nextSettings) => nextSettings);
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = typeof input === "string" ? input : input.url;
+      if (url.endsWith("/api/user/onboarding")) {
+        return new Response(JSON.stringify({ completed: false, onboardingCompletedAt: null }), { status: 200 });
+      }
+      if (url.endsWith("/api/user/onboarding/complete")) {
+        return new Response(JSON.stringify({ completed: true, onboardingCompletedAt: "2026-06-01T00:00:00.000Z" }), { status: 200 });
+      }
+      if (url.endsWith("/api/onboarding/readiness")) {
+        return new Response(JSON.stringify({
+          checkedAt: "2026-06-01T00:00:00.000Z",
+          cluster: { status: "ready", label: "Healthy", detail: "Runtime environment is ready." },
+          dependencies: [],
+          providers: [
+            { provider: "codex", available: true, mountEnabled: false, authPath: "~/.codex", detectedFiles: ["auth.json"] },
+          ],
+        }), { status: 200, headers: { "Content-Type": "application/json" } });
+      }
+      return new Response(JSON.stringify({}), { status: 404 });
+    });
+
+    render(<OnboardingExperience />);
+
+    await userEvent.click(await screen.findByRole("radio", { name: /Easy/i }));
+    await userEvent.click(screen.getByRole("button", { name: "Next" }));
+
+    expect(await screen.findByText("Recommended provider: Codex")).not.toBeNull();
+    expect(screen.queryByText("Add instance")).toBeNull();
+
+    await userEvent.click(screen.getByRole("button", { name: "Next" }));
+
+    const githubCheckboxes = screen.getAllByRole("checkbox");
+    expect(githubCheckboxes).toHaveLength(2);
+    expect((screen.getByRole("checkbox", { name: /Use GitHub for this workspace/i }) as HTMLInputElement).checked).toBe(true);
+    expect((screen.getByRole("checkbox", { name: /Let Code UX create and manage GitHub PR workflow defaults/i }) as HTMLInputElement).checked).toBe(true);
+
+    await userEvent.click(screen.getByRole("button", { name: "Finish" }));
+
+    await waitFor(() => expect(settingsApi.saveSystemSettings).toHaveBeenCalled());
+    const saveCalls = vi.mocked(settingsApi.saveSystemSettings).mock.calls;
+    const savedSettings = saveCalls[saveCalls.length - 1]![0] as SystemSettings;
+    expect(savedSettings.defaults.appearance.experienceMode).toBe("EASY");
+    expect(savedSettings.defaults.cliWorkflow.executionMode).toBe("DOCKER");
+    expect(savedSettings.defaults.aiProvider.provider).toBe("codex");
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith("/api/user/onboarding/complete", expect.objectContaining({ method: "POST" })));
+    await waitFor(() => expect(navigateMock).toHaveBeenCalledWith({ to: "/chat" }));
   });
 
   it("shows a save failure and leaves onboarding open", async () => {
@@ -834,9 +892,7 @@ describe("OnboardingExperience integration", () => {
     render(<OnboardingExperience />);
 
     await waitFor(() => expect(settingsApi.fetchSystemSettings).toHaveBeenCalled());
-    // Introduction is step 2 (idx 1), navigate to it
-    const nextButton = await screen.findByRole("button", { name: "Next" });
-    await userEvent.click(nextButton);
+    await userEvent.click(await screen.findByRole("button", { name: "Go to Introduction" }));
 
     await screen.findByText("Welcome to Code UX.");
     const elements = screen.queryAllByText(/knowledge base/i);
