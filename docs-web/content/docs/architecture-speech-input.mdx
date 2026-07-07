@@ -25,10 +25,10 @@ The transcription endpoint is handled by route-specific `multer` middleware, not
 Reusable v2 primitives keep microphone capture out of individual composers:
 
 - `speech-recorder.ts` requests microphone access, records mono audio, emits WAV/PCM with Web Audio when available, falls back to `MediaRecorder`, and cleans up tracks/audio nodes on stop, abort, error, and unmount paths.
-- `speech-api.ts` posts multipart audio to `POST /api/speech/transcriptions` and returns the shared typed transcription result.
+- `speech-api.ts` posts multipart audio to `POST /api/speech/transcriptions` with optional `projectId` and `sprintId` scope and returns the shared typed transcription result.
 - `SpeechInputButton.tsx` presents permission, recording, transcribing, success, unsupported, and error states while delegating transcript insertion to parent composers.
 
-Composer integration remains separate so each composer can choose append/replace behavior and focus handling.
+Composer integration remains separate so each composer can choose append/replace behavior, request scope, and focus handling.
 
 ## Provider Fallback Behavior
 
@@ -40,6 +40,6 @@ The contracts separate settings mode from execution provider:
 
 Structured transcription errors cover unsupported audio, missing local models, permission/client errors, and provider failures.
 
-Local model files are resolved under deterministic cache directories in `~/.code-ux/models/speech/<sanitized-model-id>`. The default `onnx-community/whisper-base.en` resolves to `~/.code-ux/models/speech/onnx-community--whisper-base.en/`; each model directory must contain `model.onnx` and may include `labels.json`. In `auto` mode, Code UX uses local ONNX first when the selected model is present. If the model is missing and an external base URL, API key, and model are configured, the service falls back to an OpenAI-style multipart request using bearer token auth and returns fallback metadata. Provider error messages are sanitized before returning to the dashboard so API keys are never echoed.
+Local model files are resolved under deterministic cache directories in `~/.code-ux/models/speech/<sanitized-model-id>`. The default `onnx-community/whisper-base.en` resolves to `~/.code-ux/models/speech/onnx-community--whisper-base.en/`; each model directory must contain `model.onnx` and may include `labels.json`. In `auto` mode, Code UX uses local ONNX first when the selected model is present. Before local inference, the service decodes the dashboard recorder's PCM WAV payload into mono `Float32Array` samples so the model input is audio waveform data rather than raw RIFF/container bytes. If the model is missing and an external base URL, API key, and model are configured, the service falls back to an OpenAI-style multipart request using bearer token auth and returns fallback metadata. Provider error messages are sanitized before returning to the dashboard so API keys are never echoed.
 
 Electron packages include the `onnxruntime-node` runtime dependency and unpack its native bindings from ASAR, but model weights remain user-cache data under `~/.code-ux/models/speech/` to avoid bloating installers and to let users replace or add models independently.

@@ -6,6 +6,8 @@ export interface TranscribeSpeechAudioInput {
   filename?: string;
   durationSeconds?: number | null;
   language?: string | null;
+  projectId?: string | null;
+  sprintId?: string | null;
   signal?: AbortSignal;
 }
 
@@ -28,6 +30,13 @@ const isAbortError = (error: unknown): boolean => {
   return error instanceof DOMException && error.name === "AbortError";
 };
 
+const setOptionalFormString = (formData: FormData, key: string, value: string | null | undefined): void => {
+  const trimmed = value?.trim();
+  if (trimmed) {
+    formData.set(key, trimmed);
+  }
+};
+
 export const transcribeSpeechAudio = async (
   input: TranscribeSpeechAudioInput,
 ): Promise<TranscribeSpeechAudioResult> => {
@@ -44,6 +53,8 @@ export const transcribeSpeechAudio = async (
   if (input.language) {
     formData.set("language", input.language);
   }
+  setOptionalFormString(formData, "projectId", input.projectId);
+  setOptionalFormString(formData, "sprintId", input.sprintId);
 
   try {
     return await fetchJson<SpeechTranscriptionResult>("/api/speech/transcriptions", {

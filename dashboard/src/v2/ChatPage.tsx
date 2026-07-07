@@ -646,6 +646,7 @@ export const ChatPage: FunctionComponent = () => {
                 <div className="flex w-full flex-wrap items-center justify-end gap-2 sm:w-auto">
                   <SpeechInputButton
                     disabled={!selectedProject || sending}
+                    projectId={selectedProject?.id ?? null}
                     onTranscript={handleSpeechTranscript}
                     className="h-11 min-w-[7.5rem] sm:min-w-[8.75rem]"
                   />

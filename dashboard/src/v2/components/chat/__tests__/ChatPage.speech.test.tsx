@@ -11,6 +11,8 @@ import { ProjectDataContext } from "../../../context/project-data.js";
 const speechButtonMock = vi.hoisted(() => ({
   transcript: "Dictated task",
   lastDisabled: false,
+  lastProjectId: null as string | null,
+  lastSprintId: null as string | null,
 }));
 
 const mocks = vi.hoisted(() => {
@@ -106,8 +108,10 @@ vi.mock("../../../hooks/use-chat-page-data.js", () => ({
 }));
 
 vi.mock("../../../components/speech/SpeechInputButton.js", () => ({
-  SpeechInputButton: ({ disabled = false, onTranscript }: any) => {
+  SpeechInputButton: ({ disabled = false, projectId = null, sprintId = null, onTranscript }: any) => {
     speechButtonMock.lastDisabled = disabled;
+    speechButtonMock.lastProjectId = projectId;
+    speechButtonMock.lastSprintId = sprintId;
     return (
       <button
         type="button"
@@ -136,6 +140,8 @@ describe("ChatPage speech input", () => {
     vi.clearAllMocks();
     speechButtonMock.transcript = "Dictated task";
     speechButtonMock.lastDisabled = false;
+    speechButtonMock.lastProjectId = null;
+    speechButtonMock.lastSprintId = null;
     mocks.data = {
       ...mocks.baseData,
       setChatMode: vi.fn(),
@@ -156,6 +162,8 @@ describe("ChatPage speech input", () => {
     fireEvent.click(screen.getByRole("button", { name: "Start speech recording" }));
 
     expect(mocks.data.setInput).toHaveBeenCalledWith("Dictated task");
+    expect(speechButtonMock.lastProjectId).toBe("p1");
+    expect(speechButtonMock.lastSprintId).toBeNull();
   });
 
   it("inserts a transcript at the current caret with sensible spacing", () => {

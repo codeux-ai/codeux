@@ -29,6 +29,8 @@ export interface SpeechInputButtonProps {
   disabled?: boolean;
   maxDurationSeconds?: number;
   appendMode?: boolean;
+  projectId?: string | null;
+  sprintId?: string | null;
   className?: string;
   onTranscript: (text: string, details: SpeechInputButtonTranscriptDetails) => void;
   onError?: (error: SpeechInputButtonError) => void;
@@ -65,6 +67,8 @@ export const SpeechInputButton: FunctionComponent<SpeechInputButtonProps> = ({
   disabled = false,
   maxDurationSeconds = DEFAULT_MAX_DURATION_SECONDS,
   appendMode = true,
+  projectId = null,
+  sprintId = null,
   className = "",
   onTranscript,
   onError,
@@ -143,6 +147,8 @@ export const SpeechInputButton: FunctionComponent<SpeechInputButtonProps> = ({
       audio: recordingResult.audio,
       filename: recordingResult.mimeType === "audio/wav" ? "speech-input.wav" : "speech-input.webm",
       durationSeconds: recordingResult.durationSeconds,
+      projectId,
+      sprintId,
       signal: transcriptionAbort.signal,
     });
     transcriptionAbortRef.current = null;
@@ -165,7 +171,7 @@ export const SpeechInputButton: FunctionComponent<SpeechInputButtonProps> = ({
 
     onTranscript(transcript, { appendMode, result: transcriptionResult });
     if (mountedRef.current) setState("success");
-  }, [appendMode, clearMaxDurationTimer, onTranscript, reportRecorderError, reportTranscriptionError]);
+  }, [appendMode, clearMaxDurationTimer, onTranscript, projectId, reportRecorderError, reportTranscriptionError, sprintId]);
 
   const startRecording = useCallback(async () => {
     if (disabled || state === "requesting_permission" || state === "transcribing") return;
