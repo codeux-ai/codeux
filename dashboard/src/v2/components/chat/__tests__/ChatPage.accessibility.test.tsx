@@ -160,11 +160,13 @@ describe('ChatPage Accessibility', () => {
     expect(tablist).toHaveClass('flex-wrap');
 
     const tabs = screen.getAllByRole('tab');
-    expect(tabs).toHaveLength(2);
-    expect(tabs[0]).toHaveAttribute('aria-selected', 'true');
-    expect(tabs[0]).toHaveAccessibleName('Threads, 2 threads');
-    expect(tabs[1]).toHaveAttribute('aria-selected', 'false');
-    expect(tabs[1]).toHaveAccessibleName('Invocations, 1 running');
+    expect(tabs).toHaveLength(3);
+    expect(tabs[0]).toHaveAttribute('aria-selected', 'false');
+    expect(tabs[0]).toHaveAccessibleName('3D Chat, animated project manager, 2 threads');
+    expect(tabs[1]).toHaveAttribute('aria-selected', 'true');
+    expect(tabs[1]).toHaveAccessibleName('Threads, 2 threads');
+    expect(tabs[2]).toHaveAttribute('aria-selected', 'false');
+    expect(tabs[2]).toHaveAccessibleName('Invocations, 1 running');
     expect(screen.queryByRole('button', { name: /refresh/i })).not.toBeInTheDocument();
   });
 

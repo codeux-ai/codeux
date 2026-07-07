@@ -3,6 +3,7 @@ import { lazy, Suspense } from "preact/compat";
 import { useEffect, useRef, useState } from "preact/hooks";
 import type { AgentAvatarConfig } from "../../types.js";
 import type { AgentAvatarExpression } from "../../lib/agent-avatar.js";
+import type { AgentSceneTool } from "./AgentAvatarScene.js";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 import { AgentAvatarSvg } from "./AgentAvatarSvg.js";
 
@@ -16,6 +17,8 @@ interface LazyAgentAvatarSceneProps {
   className?: string;
   fallbackMode?: boolean;
   eager?: boolean;
+  pointerTracking?: "hover" | "window";
+  tool?: AgentSceneTool | null;
 }
 
 function AgentAvatarSceneFallback({

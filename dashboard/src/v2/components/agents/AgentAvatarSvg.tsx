@@ -87,8 +87,8 @@ function renderEyes(
   accent: string,
   jadeBright: string,
 ): h.JSX.Element {
-  const wide = expression === "hyped";
-  const squint = expression === "sleepy" || expression === "bored";
+  const wide = expression === "hyped" || expression === "excited" || expression === "surprised" || expression === "laughing" || expression === "dance";
+  const squint = expression === "sleepy" || expression === "bored" || expression === "thinking" || expression === "proud";
   const sad = expression === "sad";
   const angry = expression === "angry";
 
@@ -322,7 +322,20 @@ function renderEyes(
        expressions we render alternate eye shapes at the same centers,
        all in the same jade green, preserving the brand language. */
 
-  if (expression === "happy" || expression === "hyped" || expression === "nod" || expression === "shake_head") {
+  if (expression === "wink") {
+    // Left eye closed to a line, right keeps the signature smile arc
+    return (
+      <g>
+        <rect x={EYE_L.x - 50} y={EYE_L.y - 5} width="100" height="10" rx="5" fill={accent} opacity="0.9" />
+        <path d={PATH_EYE_RIGHT_SMILE} fill={accent} />
+      </g>
+    );
+  }
+
+  if (
+    expression === "happy" || expression === "hyped" || expression === "nod" || expression === "shake_head"
+    || expression === "curious" || wide
+  ) {
     // The big smile-arc eyes of the logo, optionally scaled for "hyped"
     const transform = wide ? `translate(${EYE_L.x} ${EYE_L.y}) scale(1.18) translate(${-EYE_L.x} ${-EYE_L.y})` : undefined;
     return (

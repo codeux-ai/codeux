@@ -24,6 +24,7 @@ import { InvocationRoutingWidget } from "./components/chat/widgets/InvocationRou
 import { InvocationContainerWidget } from "./components/chat/widgets/InvocationContainerWidget.js";
 import { TruncatedSystemBubble } from "./components/chat/TruncatedSystemBubble.js";
 import { WorkingBubble } from "./components/chat/WorkingBubble.js";
+import { CinematicStage } from "./components/chat/cinematic/CinematicStage.js";
 import { ConfirmDialog } from "./components/ui/ConfirmDialog.js";
 import { ActionFeedbackRegion } from "./components/ui/ActionFeedbackRegion.js";
 import { ProviderLogo } from "./components/ui/ProviderLogo.js";
@@ -354,6 +355,51 @@ export const ChatPage: FunctionComponent = () => {
   };
 
   const renderDetail = () => {
+    if (chatMode === "stage") {
+      // Prefer the preset of the most recent agent reply; fall back to the
+      // thread/connection-linked preset (getLinkedAgentPreset handles both).
+      let stagePreset;
+      for (let i = messages.length - 1; i >= 0 && !stagePreset; i--) {
+        const message = messages[i];
+        if (message.direction !== "dashboard_to_connection" && message.authorType !== "system") {
+          stagePreset = getLinkedAgentPreset(message);
+        }
+      }
+      if (!stagePreset) {
+        stagePreset = getLinkedAgentPreset({ metadata: undefined } as (typeof messages)[0]);
+      }
+      return (
+        <>
+          <ConfirmDialog isOpen={isConfirmOpen} options={confirmOptions} onConfirm={handleConfirm} onCancel={handleCancel} />
+          {feedback.status !== "idle" && (
+            <div className="absolute top-4 right-4 z-50 shadow-lg">
+              <ActionFeedbackRegion status={feedback.status} message={feedback.message} onDismiss={clearFeedback} />
+            </div>
+          )}
+          <div id="chat-panel" role="tabpanel" aria-labelledby="tab-stage" className="flex flex-1 min-h-0 flex-col overflow-hidden">
+            <CinematicStage
+              selectedProject={selectedProject}
+              selectedThread={selectedThread}
+              messages={messages}
+              threadMessagesLoading={threadsLoading || threadMessagesLoading}
+              hasWorkingReply={hasWorkingReply}
+              runningInvocationCount={runningInvocationCount}
+              sending={sending}
+              error={error}
+              input={input}
+              setInput={setInput}
+              handleSend={handleSend}
+              navigateHistory={navigateHistory}
+              composerRef={composerRef}
+              activeConnection={activeConnection}
+              agentPreset={stagePreset}
+              onOpenThreads={() => setChatMode("threads")}
+            />
+          </div>
+        </>
+      );
+    }
+
     if (chatMode === "threads") {
       return (
         <>
@@ -823,7 +869,7 @@ export const ChatPage: FunctionComponent = () => {
       invocationCount={displayedInvocationTotal}
       runningInvocationCount={runningInvocationCount}
       error={error}
-      railSlot={renderRail()}
+      railSlot={chatMode === "stage" ? null : renderRail()}
       detailSlot={renderDetail()}
     />
   );

@@ -16,7 +16,15 @@ export type AgentAvatarExpression =
   | "bored"
   | "hyped"
   | "shake_head"
-  | "nod";
+  | "nod"
+  | "curious"
+  | "thinking"
+  | "excited"
+  | "laughing"
+  | "surprised"
+  | "wink"
+  | "dance"
+  | "proud";
 
 export const AGENT_AVATAR_EXPRESSIONS: AgentAvatarExpression[] = [
   "happy",
@@ -27,6 +35,14 @@ export const AGENT_AVATAR_EXPRESSIONS: AgentAvatarExpression[] = [
   "hyped",
   "shake_head",
   "nod",
+  "curious",
+  "thinking",
+  "excited",
+  "laughing",
+  "surprised",
+  "wink",
+  "dance",
+  "proud",
 ];
 
 export const SHOWCASE_EXPRESSIONS: AgentAvatarExpression[] = [
