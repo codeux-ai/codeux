@@ -53,9 +53,9 @@ New local and new remote project creation seeds an explicit project override for
 
 ## Prompt Effects
 
-Planning and Project Setup resolve the effective project settings before building prompts. Selected non-`none` tech-stack and styleguide entries are added as a compact `Project Guidance` section. `None` selections are omitted, so imported projects do not receive Code UX styleguide instructions by default.
+Planning and Project Setup resolve the effective project settings before building prompts. Selected non-`none` tech-stack and styleguide entries are added as a compact `Project Guidance` section. `None` selections do not inject catalog entry instructions, so imported projects do not receive Code UX styleguide instructions by default.
 
-When tech-stack guidance is selected but the styleguide remains `none`, Project Setup asks the setup agent to inspect the repository's existing styling, brand assets, design tokens, components, layouts, and interaction patterns before proposing a project-specific styleguide.
+When the styleguide remains `none`, Project Setup still asks the setup agent to inspect the repository's existing styling, brand assets, design tokens, components, layouts, and interaction patterns before proposing a project-specific styleguide. This setup-only discovery notice is included even when tech-stack guidance is also `none`; Planning prompts continue to omit inactive `none` selections entirely.
 
 ## Related Docs
 

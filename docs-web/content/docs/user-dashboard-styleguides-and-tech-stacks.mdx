@@ -18,7 +18,7 @@ Guidance has two catalogs:
 
 Each catalog includes built-in entries and any custom entries you add. Built-in entries are protected. Custom entries can be added, edited, deleted, and selected from Settings -> Guidance.
 
-Both catalogs include **None**. Choosing **None** saves the stable `none` selection and keeps that catalog out of worker prompt guidance.
+Both catalogs include **None**. Choosing **None** saves the stable `none` selection and keeps that catalog's entry instructions out of worker prompt guidance. Project Setup still adds a setup-only reminder to inspect existing styling, brand patterns, and design tokens when the styleguide selection is `none`, even when tech-stack guidance is also `none`.
 
 ## Header Selectors
 
