@@ -14,6 +14,7 @@ import type { SettingsRepository } from "../repositories/settings-repository.js"
 import { redactText } from "../shared/security/redaction.js";
 import type { Logger } from "../shared/logging/logger.js";
 import {
+  decodeWavePcmToFloat32,
   normalizeAudioMimeType,
   resolveKnownAudioDurationSeconds,
   validateSpeechAudio,
@@ -40,7 +41,8 @@ export interface LocalSpeechRuntimeResult {
 export interface LocalOnnxSpeechRuntime {
   isModelAvailable(modelId: string): Promise<boolean>;
   transcribe(args: {
-    audio: Buffer;
+    audio: Float32Array;
+    sampleRate: number;
     mimeType: string;
     model: SpeechModelCatalogEntry;
     dataDir?: string;
@@ -160,7 +162,8 @@ export class DefaultLocalOnnxSpeechRuntime implements LocalOnnxSpeechRuntime {
   }
 
   async transcribe(args: {
-    audio: Buffer;
+    audio: Float32Array;
+    sampleRate: number;
     mimeType: string;
     model: SpeechModelCatalogEntry;
     dataDir?: string;
@@ -181,10 +184,7 @@ export class DefaultLocalOnnxSpeechRuntime implements LocalOnnxSpeechRuntime {
       throw new Error("Local ONNX model does not declare an input tensor.");
     }
 
-    const samples = new Float32Array(args.audio.length);
-    for (let index = 0; index < args.audio.length; index += 1) {
-      samples[index] = (args.audio[index] - 128) / 128;
-    }
+    const samples = args.audio;
     const outputs = await session.run({
       [inputName]: new ort.Tensor("float32", samples, [1, samples.length]),
     });
@@ -329,8 +329,10 @@ export class SpeechTranscriptionService {
 
     try {
       const language = input.metadata.language ?? settings.externalTranscription.language ?? null;
+      const decodedAudio = decodeWavePcmToFloat32(input.audio);
       const result = await this.localRuntime.transcribe({
-        audio: input.audio,
+        audio: decodedAudio.samples,
+        sampleRate: decodedAudio.sampleRate,
         mimeType: normalizeAudioMimeType(input.metadata.mimeType),
         model,
         dataDir: this.deps.dataDir,

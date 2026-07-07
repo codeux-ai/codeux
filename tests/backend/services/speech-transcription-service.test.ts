@@ -8,6 +8,32 @@ import {
 
 const audio = Buffer.from("audio-bytes");
 
+function createPcm16Wav(samples: Int16Array, sampleRate = 16_000): Buffer {
+  const bytesPerSample = 2;
+  const channelCount = 1;
+  const dataByteLength = samples.length * bytesPerSample;
+  const buffer = Buffer.alloc(44 + dataByteLength);
+
+  buffer.write("RIFF", 0, "ascii");
+  buffer.writeUInt32LE(36 + dataByteLength, 4);
+  buffer.write("WAVE", 8, "ascii");
+  buffer.write("fmt ", 12, "ascii");
+  buffer.writeUInt32LE(16, 16);
+  buffer.writeUInt16LE(1, 20);
+  buffer.writeUInt16LE(channelCount, 22);
+  buffer.writeUInt32LE(sampleRate, 24);
+  buffer.writeUInt32LE(sampleRate * channelCount * bytesPerSample, 28);
+  buffer.writeUInt16LE(channelCount * bytesPerSample, 32);
+  buffer.writeUInt16LE(16, 34);
+  buffer.write("data", 36, "ascii");
+  buffer.writeUInt32LE(dataByteLength, 40);
+  for (let index = 0; index < samples.length; index += 1) {
+    buffer.writeInt16LE(samples[index] ?? 0, 44 + index * bytesPerSample);
+  }
+
+  return buffer;
+}
+
 function speechSettings(overrides: Partial<SpeechSettings> = {}): SpeechSettings {
   return {
     ...DEFAULT_DASHBOARD_SETTINGS.speech,
@@ -68,6 +94,7 @@ describe("SpeechTranscriptionService", () => {
   });
 
   it("uses local ONNX when the selected local model is available", async () => {
+    const wavAudio = createPcm16Wav(new Int16Array([0, 16_384, -32_768]));
     const localRuntime = createLocalRuntime({
       isModelAvailable: vi.fn().mockResolvedValue(true),
       transcribe: vi.fn().mockResolvedValue({
@@ -81,7 +108,14 @@ describe("SpeechTranscriptionService", () => {
       localRuntime,
     });
 
-    const result = await service.transcribe({ audio, metadata: createMetadata({ language: "en" }) });
+    const result = await service.transcribe({
+      audio: wavAudio,
+      metadata: createMetadata({
+        audioBytes: wavAudio.length,
+        mimeType: "audio/wav",
+        language: "en",
+      }),
+    });
 
     expect(result).toEqual({
       ok: true,
@@ -94,8 +128,16 @@ describe("SpeechTranscriptionService", () => {
     });
     expect(localRuntime.transcribe).toHaveBeenCalledWith(expect.objectContaining({
       model: expect.objectContaining({ id: "onnx-community/whisper-base.en" }),
+      audio: expect.any(Float32Array),
+      sampleRate: 16_000,
       language: "en",
     }));
+    const decodedAudio = vi.mocked(localRuntime.transcribe).mock.calls[0]?.[0].audio;
+    expect(decodedAudio).toBeInstanceOf(Float32Array);
+    expect(decodedAudio?.length).toBe(3);
+    expect(decodedAudio?.[0]).toBeCloseTo(0);
+    expect(decodedAudio?.[1]).toBeCloseTo(0.5);
+    expect(decodedAudio?.[2]).toBeCloseTo(-1);
   });
 
   it("falls back to an explicitly configured external API in auto mode", async () => {

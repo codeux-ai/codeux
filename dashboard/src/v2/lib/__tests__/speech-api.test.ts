@@ -28,6 +28,8 @@ describe("speech-api", () => {
       audio,
       durationSeconds: 1.4,
       language: "en",
+      projectId: "project-1",
+      sprintId: "sprint-1",
       signal,
     });
 
@@ -50,6 +52,8 @@ describe("speech-api", () => {
     expect(body.get("audioBytes")).toBe(String(audio.size));
     expect(body.get("durationSeconds")).toBe("1.4");
     expect(body.get("language")).toBe("en");
+    expect(body.get("projectId")).toBe("project-1");
+    expect(body.get("sprintId")).toBe("sprint-1");
   });
 
   it("returns a typed client error when fetch fails", async () => {

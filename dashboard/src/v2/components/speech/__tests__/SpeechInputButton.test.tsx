@@ -100,7 +100,14 @@ describe("SpeechInputButton", () => {
     speechApiMock.transcribeSpeechAudio.mockResolvedValueOnce(successfulTranscription);
     const onTranscript = vi.fn();
 
-    render(<SpeechInputButton appendMode={false} onTranscript={onTranscript} />);
+    render(
+      <SpeechInputButton
+        appendMode={false}
+        projectId="project-1"
+        sprintId="sprint-1"
+        onTranscript={onTranscript}
+      />,
+    );
     fireEvent.click(screen.getByRole("button", { name: "Start speech recording" }));
 
     await screen.findByRole("button", { name: "Stop speech recording" });
@@ -121,6 +128,8 @@ describe("SpeechInputButton", () => {
       audio,
       filename: "speech-input.wav",
       durationSeconds: 1.2,
+      projectId: "project-1",
+      sprintId: "sprint-1",
       signal: expect.any(AbortSignal),
     });
     expect(screen.getByRole("button", { name: "Start speech recording" })).toHaveTextContent("Added");

@@ -25,10 +25,10 @@ The npm-served dashboard relies on browser secure-context treatment for loopback
 The dashboard exposes reusable v2 speech primitives instead of wiring microphone capture directly into individual composers:
 
 - `dashboard/src/v2/lib/speech-recorder.ts` requests microphone access, records mono audio, encodes WAV/PCM through Web Audio when available, falls back to `MediaRecorder` when necessary, and stops tracks/audio nodes on stop, abort, error, and unmount paths.
-- `dashboard/src/v2/lib/speech-api.ts` posts multipart audio to `POST /api/speech/transcriptions` with dashboard metadata and returns the shared typed transcription result.
+- `dashboard/src/v2/lib/speech-api.ts` posts multipart audio to `POST /api/speech/transcriptions` with dashboard metadata, including optional `projectId` and `sprintId` scope, and returns the shared typed transcription result.
 - `dashboard/src/v2/components/speech/SpeechInputButton.tsx` owns permission, recording, transcribing, success, unsupported, and error states. It delegates transcript insertion to parent composers through `onTranscript` and reports structured recorder/transcription errors through `onError`.
 
-Composer integration remains intentionally separate so each composer can decide whether to append or replace text and how to handle focus restoration.
+Composer integration remains intentionally separate so each composer can decide whether to append or replace text, which project or sprint scope applies to the request, and how to handle focus restoration.
 
 ## Provider Fallback Behavior
 
@@ -40,7 +40,7 @@ The shared contracts distinguish configured provider mode from the provider that
 
 The external transcription default uses an OpenAI-compatible `/v1/audio/transcriptions` URL with an empty API key. Runtime code must treat a missing key, missing model, unsupported audio format, client permission error, and provider failure as structured error outcomes rather than generic exceptions.
 
-In `auto` mode, Code UX checks the selected local model first. Local speech models use deterministic cache directories under `~/.code-ux/models/speech/<sanitized-model-id>`, where slashes in model ids are normalized for filesystem safety; the default `onnx-community/whisper-base.en` resolves to `~/.code-ux/models/speech/onnx-community--whisper-base.en/`. Each model directory must contain `model.onnx` and may include `labels.json`. If the local model is missing and external transcription is explicitly configured with a base URL, API key, and model, the service sends the request to the external endpoint and returns fallback metadata describing the skipped local provider. If neither provider is usable, the service returns a structured 400-compatible `client_error` explaining that a local model or external credentials are required.
+In `auto` mode, Code UX checks the selected local model first. Local speech models use deterministic cache directories under `~/.code-ux/models/speech/<sanitized-model-id>`, where slashes in model ids are normalized for filesystem safety; the default `onnx-community/whisper-base.en` resolves to `~/.code-ux/models/speech/onnx-community--whisper-base.en/`. Each model directory must contain `model.onnx` and may include `labels.json`. Before local ONNX inference, the service decodes the dashboard recorder's PCM WAV payload into mono `Float32Array` samples so the model input is audio waveform data rather than raw RIFF/container bytes. If the local model is missing and external transcription is explicitly configured with a base URL, API key, and model, the service sends the original upload to the external endpoint and returns fallback metadata describing the skipped local provider. If neither provider is usable, the service returns a structured 400-compatible `client_error` explaining that a local model or external credentials are required.
 
 External requests use OpenAI-style multipart fields: `file`, `model`, and optional `language`, with bearer token authentication and a request timeout. Provider error text is sanitized before it is returned so API keys and bearer tokens are never echoed to the dashboard.
 
