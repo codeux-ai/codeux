@@ -91,6 +91,16 @@ Dashboard settings use `src/server/chat-provider-routes.ts` to manage chat provi
 | `GET /api/chat-providers/channel-bindings/:bindingId/delivery-status` | Lists recent outbound delivery records for one channel binding. |
 | `POST /api/chat-providers/ingress/:providerConnectionId` | Accepts authenticated inbound bridge messages, normalizes provider payloads, deduplicates external message IDs, and posts routed text to dashboard chat threads. |
 
+## Dashboard Settings UI
+
+Settings -> Integrations includes a Providers group for WhatsApp, iMessage, Telegram, Slack, Microsoft Teams, and Discord. Each provider detail view reads the setup definitions, redacted connection records, channel bindings, generated ingress URLs, and outbound delivery status from the dashboard API.
+
+The UI lets operators create and edit provider connections with display names, bridge modes, setup fields, enabled state, connection status, and write-only secret replacement fields. Saved secrets are never rendered back into the form; configured credentials appear only as redacted metadata and empty replacement inputs.
+
+Channel binding controls support multiple projects on the same external channel and multiple channels per project. Bindings expose project selection, optional project-manager agent preset selection, inbound and outbound toggles, project selector prefix or routing hint fields, and the `suppressRichWidgets` setting. The Settings copy explains that shared-channel routing uses these selectors before accepting inbound messages and records disambiguation instead of guessing when a channel maps to multiple projects.
+
+Provider cards and connection detail views surface enabled state, bridge mode, ingress URL, authentication status, configured channels, bound projects, outbound reply state, pending outbound delivery count, and failed outbound delivery count. Recent failed outbound messages are shown with retryable labels and redacted error text.
+
 The ingress endpoint supports OpenClaw, webhook, and native bridge payloads for WhatsApp, iMessage, Telegram, Slack, Microsoft Teams, and Discord. OpenClaw and native bridges authenticate with bearer tokens from the configured bridge secret. Webhook bridges require a configured signing secret and a valid HMAC signature; they do not accept bearer-only fallback. All ingress requests require a fresh timestamp, and signed requests or requests with explicit nonces are replay-checked before processing.
 
 Inbound messages normalize to provider connection id, provider kind, external channel id/name, external sender id/name, text, external message id, timestamp, and redacted raw metadata. The repository idempotency lookup runs before chat posting; duplicate external messages return the existing delivery record without creating another conversation message.
