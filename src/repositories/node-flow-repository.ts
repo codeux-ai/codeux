@@ -5,7 +5,9 @@ import { EntityNotFoundError, requireRecord, toNumber, ValidationError } from ".
 import type { DashboardRealtimeMutationNotifier } from "../services/dashboard-realtime-service.js";
 import type {
   AttachNodeFlowSkillInput,
+  CreateNodeFlowNodeRunInput,
   CreateNodeFlowInput,
+  CreateNodeFlowRunInput,
   NodeFlowGraph,
   NodeFlowJsonObject,
   NodeFlowJsonValue,
@@ -14,7 +16,9 @@ import type {
   NodeFlowRunRecord,
   NodeFlowSkillAttachment,
   NodeFlowVersionRecord,
+  UpdateNodeFlowNodeRunInput,
   UpdateNodeFlowInput,
+  UpdateNodeFlowRunInput,
 } from "../contracts/node-flow-types.js";
 
 interface NodeFlowRow {
@@ -55,6 +59,7 @@ interface NodeFlowRunRow {
   project_id: string;
   version: number | string;
   status: string;
+  execution_invocation_id: string | null;
   trigger_type: string;
   trigger_payload_json: string | null;
   input_json: string | null;
@@ -73,6 +78,7 @@ interface NodeFlowNodeRunRow {
   project_id: string;
   node_id: string;
   status: string;
+  execution_invocation_id: string | null;
   input_json: string | null;
   output_json: string | null;
   error_message: string | null;
@@ -294,9 +300,127 @@ export class NodeFlowRepository {
       FROM node_flow_node_runs
       WHERE run_id = ?
         AND project_id = ?
-      ORDER BY created_at ASC, node_id ASC
+      ORDER BY created_at ASC, rowid ASC
     `).all(run.id, run.projectId) as unknown as NodeFlowNodeRunRow[];
     return rows.map((row) => this.mapNodeRunRow(row));
+  }
+
+  createRun(input: CreateNodeFlowRunInput): NodeFlowRunRecord {
+    const flow = this.requireFlow(input.flowId);
+    if (flow.projectId !== input.projectId) {
+      throw new ValidationError("Node flow run projectId must match the flow project.");
+    }
+    this.requireProject(input.projectId);
+    const now = new Date().toISOString();
+    const id = randomUUID();
+    this.db.prepare(`
+      INSERT INTO node_flow_runs (
+        id, flow_id, project_id, version, status, execution_invocation_id, trigger_type,
+        trigger_payload_json, input_json, output_json, error_message, started_at, finished_at, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      id,
+      input.flowId,
+      input.projectId,
+      Math.max(1, Math.floor(input.version)),
+      input.status || "running",
+      input.executionInvocationId ?? null,
+      input.triggerType?.trim() || "manual",
+      input.triggerPayload ? this.serializeJson(input.triggerPayload) : null,
+      input.input ? this.serializeJson(input.input) : null,
+      input.output ? this.serializeJson(input.output) : null,
+      input.errorMessage ?? null,
+      input.startedAt ?? now,
+      input.finishedAt ?? null,
+      now,
+      now,
+    );
+    return requireRecord(this.getRun(id), "Node flow run", id);
+  }
+
+  updateRun(runId: string, input: UpdateNodeFlowRunInput): NodeFlowRunRecord {
+    const current = requireRecord(this.getRun(runId), "Node flow run", runId);
+    const now = new Date().toISOString();
+    this.db.prepare(`
+      UPDATE node_flow_runs
+      SET status = ?,
+          execution_invocation_id = ?,
+          output_json = ?,
+          error_message = ?,
+          started_at = ?,
+          finished_at = ?,
+          updated_at = ?
+      WHERE id = ?
+    `).run(
+      input.status ?? current.status,
+      input.executionInvocationId === undefined ? current.executionInvocationId : input.executionInvocationId,
+      input.output === undefined ? this.serializeNullableJson(current.output) : this.serializeNullableJson(input.output),
+      input.errorMessage === undefined ? current.errorMessage : input.errorMessage,
+      input.startedAt === undefined ? current.startedAt : input.startedAt,
+      input.finishedAt === undefined ? current.finishedAt : input.finishedAt,
+      now,
+      runId,
+    );
+    return requireRecord(this.getRun(runId), "Node flow run", runId);
+  }
+
+  createNodeRun(input: CreateNodeFlowNodeRunInput): NodeFlowNodeRunRecord {
+    const run = requireRecord(this.getRun(input.runId), "Node flow run", input.runId);
+    if (run.flowId !== input.flowId || run.projectId !== input.projectId) {
+      throw new ValidationError("Node flow node run scope must match the parent run.");
+    }
+    const now = new Date().toISOString();
+    const id = randomUUID();
+    this.db.prepare(`
+      INSERT INTO node_flow_node_runs (
+        id, run_id, flow_id, project_id, node_id, status, execution_invocation_id,
+        input_json, output_json, error_message, started_at, finished_at, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      id,
+      input.runId,
+      input.flowId,
+      input.projectId,
+      input.nodeId,
+      input.status || "pending",
+      input.executionInvocationId ?? null,
+      input.input ? this.serializeJson(input.input) : null,
+      input.output ? this.serializeJson(input.output) : null,
+      input.errorMessage ?? null,
+      input.startedAt ?? null,
+      input.finishedAt ?? null,
+      now,
+      now,
+    );
+    return requireRecord(this.getNodeRun(id), "Node flow node run", id);
+  }
+
+  updateNodeRun(nodeRunId: string, input: UpdateNodeFlowNodeRunInput): NodeFlowNodeRunRecord {
+    const current = requireRecord(this.getNodeRun(nodeRunId), "Node flow node run", nodeRunId);
+    const now = new Date().toISOString();
+    this.db.prepare(`
+      UPDATE node_flow_node_runs
+      SET status = ?,
+          execution_invocation_id = ?,
+          input_json = ?,
+          output_json = ?,
+          error_message = ?,
+          started_at = ?,
+          finished_at = ?,
+          updated_at = ?
+      WHERE id = ?
+    `).run(
+      input.status ?? current.status,
+      input.executionInvocationId === undefined ? current.executionInvocationId : input.executionInvocationId,
+      input.input === undefined ? this.serializeNullableJson(current.input) : this.serializeNullableJson(input.input),
+      input.output === undefined ? this.serializeNullableJson(current.output) : this.serializeNullableJson(input.output),
+      input.errorMessage === undefined ? current.errorMessage : input.errorMessage,
+      input.startedAt === undefined ? current.startedAt : input.startedAt,
+      input.finishedAt === undefined ? current.finishedAt : input.finishedAt,
+      now,
+      nodeRunId,
+    );
+    return requireRecord(this.getNodeRun(nodeRunId), "Node flow node run", nodeRunId);
   }
 
   private insertVersion(input: {
@@ -354,6 +478,15 @@ export class NodeFlowRepository {
     return row ? this.mapAttachmentRow(row) : null;
   }
 
+  private getNodeRun(nodeRunId: string): NodeFlowNodeRunRecord | null {
+    const row = this.db.prepare(`
+      SELECT *
+      FROM node_flow_node_runs
+      WHERE id = ?
+    `).get(nodeRunId) as NodeFlowNodeRunRow | undefined;
+    return row ? this.mapNodeRunRow(row) : null;
+  }
+
   private requireTitle(title: string | undefined): string {
     const normalized = title?.trim();
     if (!normalized) {
@@ -364,6 +497,10 @@ export class NodeFlowRepository {
 
   private serializeJson(value: unknown): string {
     return JSON.stringify(value ?? {});
+  }
+
+  private serializeNullableJson(value: NodeFlowJsonObject | null): string | null {
+    return value === null ? null : this.serializeJson(value);
   }
 
   private parseGraph(value: string): NodeFlowGraph {
@@ -456,6 +593,7 @@ export class NodeFlowRepository {
       projectId: row.project_id,
       version: toNumber(row.version),
       status: row.status as NodeFlowRunRecord["status"],
+      executionInvocationId: row.execution_invocation_id,
       triggerType: row.trigger_type,
       triggerPayload: this.parseObject(row.trigger_payload_json),
       input: this.parseObject(row.input_json),
@@ -476,6 +614,7 @@ export class NodeFlowRepository {
       projectId: row.project_id,
       nodeId: row.node_id,
       status: row.status as NodeFlowNodeRunRecord["status"],
+      executionInvocationId: row.execution_invocation_id,
       input: this.parseObject(row.input_json),
       output: this.parseObject(row.output_json),
       errorMessage: row.error_message,

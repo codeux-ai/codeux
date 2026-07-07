@@ -1,6 +1,6 @@
 # Node Flow Foundation
 
-Node flows are project-scoped, repeatable workflow graphs. This foundation adds the backend contracts, validation, persistence, and dashboard HTTP surface only; node execution is intentionally left to the runtime execution task.
+Node flows are project-scoped, repeatable workflow graphs. The backend owns typed contracts, validation, persistence, dashboard HTTP routes, and a deterministic runtime for the safe initial node set.
 
 ## Contracts
 
@@ -15,7 +15,7 @@ Primary records:
 - `NodeWidgetSchema` stores widget fields. Field types currently include `text`, `textarea`, `number`, `boolean`, `select`, `json`, `secretRef`, and `keyValue`.
 - `NodeFlowSkillAttachment` records that a flow is exposed as a repeatable skill for an agent preset.
 
-Run records are persisted as `NodeFlowRunRecord` and `NodeFlowNodeRunRecord`, but this slice only exposes read routes for persisted runs.
+Run records are persisted as `NodeFlowRunRecord` and `NodeFlowNodeRunRecord`. Both records include an optional `executionInvocationId` so the dashboard can connect a flow run or node step to the execution invocation feed.
 
 ## Validation
 
@@ -29,6 +29,23 @@ Run records are persisted as `NodeFlowRunRecord` and `NodeFlowNodeRunRecord`, bu
 
 Invalid graphs throw a `ValidationError` with field-level details when persistence is attempted. The validation route returns the same structured issue list without writing data.
 
+## Runtime
+
+`src/services/node-flow-runtime-service.ts` executes the current flow version after revalidating the graph. It creates a parent `execution_invocations` row with `type = "node_flow"`, then runs nodes in the validator's topological order.
+
+Supported node types:
+
+- `input`: emits the run input object.
+- `set_fields`: merges upstream object output with configured fields, including template interpolation.
+- `template`: renders a string template into a configured output key.
+- `provider_prompt`: calls the existing `ProviderExecutionService` with `type = "node_flow_node"` and an existing invocation id. It does not create a parallel provider runner.
+- `http_request`: performs bounded HTTP/HTTPS requests with method, URL, headers, query, body, timeout, and JSON response extraction.
+- `output`: selects the final output from upstream data, configured fields, or a configured path.
+
+Provider and HTTP nodes create linked child `execution_invocations` rows with `type = "node_flow_node"`. Prompt text and HTTP secrets are not written to invocation messages; persisted run inputs, outputs, node payloads, trigger payloads, and route responses are masked for secret-like keys.
+
+Failed nodes stop downstream descendants by default and persist skipped node runs. A node can set `data.continueOnError = true` to persist its own failure output while allowing downstream nodes to continue.
+
 ## Persistence
 
 SQLite tables are created in both the initial schema and startup migrations:
@@ -39,7 +56,7 @@ SQLite tables are created in both the initial schema and startup migrations:
 - `node_flow_runs`
 - `node_flow_node_runs`
 
-Graphs, widget schemas, run inputs, run outputs, and trigger payloads are stored as JSON text. Flow create/update/delete and agent-skill attachment changes schedule a project structure refresh so realtime dashboard clients can refetch project-scoped data.
+Graphs, widget schemas, run inputs, run outputs, and trigger payloads are stored as JSON text. Run and node-run rows store linked execution invocation ids where applicable. Flow create/update/delete and agent-skill attachment changes schedule a project structure refresh so realtime dashboard clients can refetch project-scoped data.
 
 ## HTTP Surface
 
@@ -51,6 +68,7 @@ Dashboard routes are registered through `registerNodeFlowRoutes`:
 - `PATCH /api/node-flows/:flowId`
 - `DELETE /api/node-flows/:flowId`
 - `POST /api/node-flows/:flowId/validate`
+- `POST /api/node-flows/:flowId/run`
 - `GET /api/node-flows/:flowId/agent-skills`
 - `POST /api/node-flows/:flowId/agent-skills`
 - `DELETE /api/node-flows/:flowId/agent-skills`

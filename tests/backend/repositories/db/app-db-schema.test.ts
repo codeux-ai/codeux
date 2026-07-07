@@ -180,6 +180,8 @@ describe("AppDbSchema", () => {
       expect(getTable("node_flow_agent_skills")).toBeDefined();
       expect(getTable("node_flow_runs")).toBeDefined();
       expect(getTable("node_flow_node_runs")).toBeDefined();
+      expect(getColumnNames("node_flow_runs")).toContain("execution_invocation_id");
+      expect(getColumnNames("node_flow_node_runs")).toContain("execution_invocation_id");
       expect(getColumnNames("provider_invocations")).toEqual(expect.arrayContaining([
         "tool_call_count",
         "execution_mode",

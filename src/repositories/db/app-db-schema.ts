@@ -707,6 +707,7 @@ CREATE TABLE IF NOT EXISTS node_flow_runs (
         project_id TEXT NOT NULL,
         version INTEGER NOT NULL,
         status TEXT NOT NULL,
+        execution_invocation_id TEXT,
         trigger_type TEXT NOT NULL DEFAULT 'manual',
         trigger_payload_json TEXT,
         input_json TEXT,
@@ -717,7 +718,8 @@ CREATE TABLE IF NOT EXISTS node_flow_runs (
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL,
         FOREIGN KEY (flow_id) REFERENCES node_flows(id) ON DELETE CASCADE,
-        FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+        FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+        FOREIGN KEY (execution_invocation_id) REFERENCES execution_invocations(id) ON DELETE SET NULL
       );
 
 CREATE TABLE IF NOT EXISTS node_flow_node_runs (
@@ -727,6 +729,7 @@ CREATE TABLE IF NOT EXISTS node_flow_node_runs (
         project_id TEXT NOT NULL,
         node_id TEXT NOT NULL,
         status TEXT NOT NULL,
+        execution_invocation_id TEXT,
         input_json TEXT,
         output_json TEXT,
         error_message TEXT,
@@ -736,7 +739,8 @@ CREATE TABLE IF NOT EXISTS node_flow_node_runs (
         updated_at TEXT NOT NULL,
         FOREIGN KEY (run_id) REFERENCES node_flow_runs(id) ON DELETE CASCADE,
         FOREIGN KEY (flow_id) REFERENCES node_flows(id) ON DELETE CASCADE,
-        FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+        FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+        FOREIGN KEY (execution_invocation_id) REFERENCES execution_invocations(id) ON DELETE SET NULL
       );
 
 CREATE TABLE IF NOT EXISTS execution_invocations (

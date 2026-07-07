@@ -112,4 +112,32 @@ describe("node flow routes", () => {
     expect(nodeFlowService.getRun).toHaveBeenCalledWith("run-1");
     expect(nodeFlowService.listNodeRuns).toHaveBeenCalledWith("run-1");
   });
+
+  it("runs a node flow through the runtime service route", async () => {
+    const nodeFlowService = {
+      runFlow: vi.fn().mockResolvedValue({
+        run: { id: "run-1", status: "succeeded", executionInvocationId: "xi-flow" },
+        nodeRuns: [{ id: "node-run-1", nodeId: "input", status: "succeeded" }],
+        output: { ok: true },
+      }),
+    };
+    const app = express();
+    app.use(express.json());
+    registerNodeFlowRoutes(app, { nodeFlowService } as any);
+
+    const response = await request(app)
+      .post("/api/node-flows/flow-1/run")
+      .send({
+        projectId: "project-1",
+        input: { prompt: "Ship" },
+        triggerType: "manual",
+      });
+
+    expect(response.status).toBe(201);
+    expect(response.body.output).toEqual({ ok: true });
+    expect(nodeFlowService.runFlow).toHaveBeenCalledWith("project-1", "flow-1", { prompt: "Ship" }, {
+      triggerType: "manual",
+      triggerPayload: undefined,
+    });
+  });
 });

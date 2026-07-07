@@ -141,6 +141,7 @@ export interface NodeFlowRunRecord {
   projectId: string;
   version: number;
   status: NodeFlowRunStatus;
+  executionInvocationId: string | null;
   triggerType: string;
   triggerPayload: NodeFlowJsonObject | null;
   input: NodeFlowJsonObject | null;
@@ -159,6 +160,7 @@ export interface NodeFlowNodeRunRecord {
   projectId: string;
   nodeId: string;
   status: NodeFlowNodeRunStatus;
+  executionInvocationId: string | null;
   input: NodeFlowJsonObject | null;
   output: NodeFlowJsonObject | null;
   errorMessage: string | null;
@@ -178,4 +180,64 @@ export interface NodeFlowRunListResponse {
 
 export interface NodeFlowNodeRunListResponse {
   nodeRuns: NodeFlowNodeRunRecord[];
+}
+
+export interface CreateNodeFlowRunInput {
+  flowId: string;
+  projectId: string;
+  version: number;
+  status?: NodeFlowRunStatus;
+  executionInvocationId?: string | null;
+  triggerType?: string;
+  triggerPayload?: NodeFlowJsonObject | null;
+  input?: NodeFlowJsonObject | null;
+  output?: NodeFlowJsonObject | null;
+  errorMessage?: string | null;
+  startedAt?: string | null;
+  finishedAt?: string | null;
+}
+
+export interface UpdateNodeFlowRunInput {
+  status?: NodeFlowRunStatus;
+  executionInvocationId?: string | null;
+  output?: NodeFlowJsonObject | null;
+  errorMessage?: string | null;
+  startedAt?: string | null;
+  finishedAt?: string | null;
+}
+
+export interface CreateNodeFlowNodeRunInput {
+  runId: string;
+  flowId: string;
+  projectId: string;
+  nodeId: string;
+  status?: NodeFlowNodeRunStatus;
+  executionInvocationId?: string | null;
+  input?: NodeFlowJsonObject | null;
+  output?: NodeFlowJsonObject | null;
+  errorMessage?: string | null;
+  startedAt?: string | null;
+  finishedAt?: string | null;
+}
+
+export interface UpdateNodeFlowNodeRunInput {
+  status?: NodeFlowNodeRunStatus;
+  executionInvocationId?: string | null;
+  input?: NodeFlowJsonObject | null;
+  output?: NodeFlowJsonObject | null;
+  errorMessage?: string | null;
+  startedAt?: string | null;
+  finishedAt?: string | null;
+}
+
+export interface RunNodeFlowOptions {
+  triggerType?: string;
+  triggerPayload?: NodeFlowJsonObject;
+  signal?: AbortSignal;
+}
+
+export interface NodeFlowRunSummaryResponse {
+  run: NodeFlowRunRecord;
+  nodeRuns: NodeFlowNodeRunRecord[];
+  output: NodeFlowJsonObject | null;
 }

@@ -164,6 +164,7 @@ export function ensureNodeFlowTables(db: DatabaseAdapter): void {
       project_id TEXT NOT NULL,
       version INTEGER NOT NULL,
       status TEXT NOT NULL,
+      execution_invocation_id TEXT,
       trigger_type TEXT NOT NULL DEFAULT 'manual',
       trigger_payload_json TEXT,
       input_json TEXT,
@@ -174,7 +175,8 @@ export function ensureNodeFlowTables(db: DatabaseAdapter): void {
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL,
       FOREIGN KEY (flow_id) REFERENCES node_flows(id) ON DELETE CASCADE,
-      FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+      FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+      FOREIGN KEY (execution_invocation_id) REFERENCES execution_invocations(id) ON DELETE SET NULL
     )
   `);
   db.exec(`
@@ -185,6 +187,7 @@ export function ensureNodeFlowTables(db: DatabaseAdapter): void {
       project_id TEXT NOT NULL,
       node_id TEXT NOT NULL,
       status TEXT NOT NULL,
+      execution_invocation_id TEXT,
       input_json TEXT,
       output_json TEXT,
       error_message TEXT,
@@ -194,9 +197,13 @@ export function ensureNodeFlowTables(db: DatabaseAdapter): void {
       updated_at TEXT NOT NULL,
       FOREIGN KEY (run_id) REFERENCES node_flow_runs(id) ON DELETE CASCADE,
       FOREIGN KEY (flow_id) REFERENCES node_flows(id) ON DELETE CASCADE,
-      FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+      FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+      FOREIGN KEY (execution_invocation_id) REFERENCES execution_invocations(id) ON DELETE SET NULL
     )
   `);
+
+  ensureColumn(db, "node_flow_runs", "execution_invocation_id", "TEXT");
+  ensureColumn(db, "node_flow_node_runs", "execution_invocation_id", "TEXT");
 
   ensureIndex(db, "idx_node_flows_project_updated", "node_flows", "project_id, updated_at DESC");
   ensureIndex(db, "idx_node_flow_versions_flow_version", "node_flow_versions", "flow_id, version DESC");
