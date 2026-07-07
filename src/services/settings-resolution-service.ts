@@ -735,6 +735,7 @@ export function buildDefaultProjectSettings(externalHints?: ExternalSettingsHint
       featureBranchPrefix: git.featureBranchPrefix,
       sprintBranchScheme: git.sprintBranchScheme,
       sprintKeyPrefix: git.sprintKeyPrefix,
+      taskPrTitleScheme: git.taskPrTitleScheme,
       prDescription: git.prDescription,
     },
     jira: sanitizeJira(undefined, {
@@ -901,6 +902,7 @@ export function sanitizeProjectSettings(value: unknown, externalHints?: External
       featureBranchPrefix: git.featureBranchPrefix,
       sprintBranchScheme: git.sprintBranchScheme,
       sprintKeyPrefix: git.sprintKeyPrefix,
+      taskPrTitleScheme: git.taskPrTitleScheme,
       prDescription: git.prDescription,
     },
     jira,

@@ -66,6 +66,8 @@ const createMockContext = (): PipelineContext => {
         defaultBranch: "main",
         featureBranchPrefix: "feature/",
         sprintBranchScheme: "sprint",
+        sprintKeyPrefix: "SPR",
+        taskPrTitleScheme: "({sprint_tag}) {task_title}",
         prDescription: {
           task: { summary: true, modelAndProvider: true, timing: true, fullPrompt: true, tokenUsage: true, qaFindings: true, branchInfo: true },
           sprint: { summary: true, taskChecklist: true, providerBreakdown: true, planningModel: true, mainPrompt: true, timing: true, tokenUsage: true, qaFindings: true, branchInfo: true },
@@ -627,7 +629,7 @@ describe("executePrFinalizeStage", () => {
       expect.objectContaining({
         taskId: "T1",
         provider: "gemini",
-        title: "test task (gemini)",
+        title: "(sprint-1) test task",
         featureBranch: "feature-branch",
         workerBranch: "worker-branch",
         body: expect.stringContaining("test prompt"),

@@ -224,12 +224,19 @@ Disabling a step is for debugging; in production, leave them all enabled.
   "featureBranchPrefix": "feature/codeux/",
   "sprintBranchScheme": "feature/sprint{sprint_id}-implementation",
   "sprintKeyPrefix": "SPR",
+  "taskPrTitleScheme": "({sprint_tag}) {task_title}",
   "githubMode": "REMOTE" | "LOCAL",
   "deleteMergedBranches": true,
   "autoCreatePr": true,
   "prDescription": { /* task and sprint PR template toggles */ }
 }
 ```
+
+`taskPrTitleScheme` controls automated task PR titles. Supported tokens are
+`{sprint_tag}`, `{sprint_key}`, `{sprint_number}`, `{sprint_title}`, `{task_key}`,
+`{task_title}`, and `{provider}`. `{sprint_tag}` resolves to the first linked issue key
+when present, then `<sprintKeyPrefix>-<sprint number>`, then a stable sprint slug/id.
+Provider text is included only when the template contains `{provider}`.
 
 `deleteMergedBranches` (default `true`) deletes a branch once its work has merged: worker
 branches after they merge into the sprint feature branch, and the feature branch after it merges

@@ -36,7 +36,11 @@ export async function executePrFinalizeStage(ctx: PipelineContext, options: PrFi
       {
         taskId: ctx.task.id,
         provider: ctx.provider,
-        title: composeTaskPrTitle(composerInput),
+        title: composeTaskPrTitle({
+          ...composerInput,
+          titleScheme: ctx.settings.git.taskPrTitleScheme,
+          sprintKeyPrefix: ctx.settings.git.sprintKeyPrefix,
+        }),
         body: composeTaskPrBody(composerInput),
         featureBranch: ctx.featureBranch,
         workerBranch: ctx.workerBranch,

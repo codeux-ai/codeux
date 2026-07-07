@@ -1700,7 +1700,11 @@ export class QualityAssuranceService {
           {
             taskId: args.task.id,
             provider: args.provider,
-            title: composeTaskPrTitle(composerInput),
+            title: composeTaskPrTitle({
+              ...composerInput,
+              titleScheme: settings.git.taskPrTitleScheme,
+              sprintKeyPrefix: settings.git.sprintKeyPrefix,
+            }),
             body: composeTaskPrBody(composerInput),
             featureBranch: args.featureBranch,
             workerBranch,
