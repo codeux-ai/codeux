@@ -69,11 +69,11 @@ Notification read and dismissed state is stored locally in the browser under `co
 
 ## Onboarding Steps
 
-Onboarding now starts with a setup-mode choice. New installs default to **Expert** so existing detailed behavior remains available unless the operator chooses a shorter path.
+Onboarding now starts with a setup-mode choice. New installs default to **Expert** so existing detailed behavior remains available unless the operator chooses a shorter path. **Standard** is the user-facing spelling for the persisted `STANDARD` value.
 
 Mode choices:
-- **Easy**: short first-run path for a recommended CLI provider plus GitHub workflow defaults. Easy hides Docker, concurrency, Jira, MCP, model pricing, and advanced routing controls while keeping Docker as the default execution runtime.
-- **Standard**: balanced setup path that follows the detailed flow and can omit the deepest advanced surfaces when the helper design supports it.
+- **Easy**: short first-run path for one recommended CLI provider plus GitHub workflow defaults. Easy hides Docker, concurrency, Jira, MCP, model pricing, and advanced routing controls while keeping Docker as the default execution runtime.
+- **Standard**: balanced setup path that follows the detailed flow and uses the public `Standard` label in the dashboard.
 - **Expert**: full provider/setup/defaults/automation/appearance flow.
 
 The Easy path contains three steps:
@@ -81,7 +81,7 @@ The Easy path contains three steps:
    - Selects Easy, Standard, or Expert.
    - Persists the selected mode to `defaults.appearance.experienceMode`.
 2. Provider
-   - Shows one recommended CLI provider configuration.
+   - Shows one recommended CLI provider configuration, preferring detected local CLI auth and falling back to the default provider recommendation when none is detected.
    - Uses detected provider auth when available and stores API keys only through the existing provider settings path.
 3. GitHub
    - Shows exactly two checkboxes: whether to use GitHub and whether Code UX should create/manage GitHub PR workflow defaults.
@@ -148,7 +148,7 @@ Provider choices update:
 
 Appearance choices update `defaults.appearance`, including `experienceMode`, which is also used by the Settings page. The root dashboard shell listens for settings updates and Settings-page preview events, then reapplies theme, reduced-motion, navigation, background mode/style/color, uploaded image, and pattern preferences without a page reload. New installs start with sidebar navigation, Expert experience mode, and the pattern overlay set to `None`.
 
-Easy onboarding applies a small settings recipe before save: one recommended CLI provider is enabled for default and worker routing, Docker execution stays enabled, automation remains semi-automatic with plan approval enabled, memory stays enabled, navigation stays in sidebar mode, and the two GitHub checkboxes map to existing Git/CI defaults. No provider secrets are stored outside the existing system settings provider catalog.
+Easy onboarding applies a small settings recipe before save: one recommended CLI provider is enabled for default and worker routing, Docker execution stays enabled, automation remains semi-automatic with plan approval enabled, memory stays enabled, navigation stays in sidebar mode, and the two GitHub checkboxes map to existing Git/CI defaults. These defaults are saved only when the operator finishes the flow. No provider secrets are stored outside the existing system settings provider catalog.
 
 Operators can reopen onboarding from `Settings -> General -> Onboarding`. The action resets the persisted onboarding completion state and clears the browser-local marker; it does not reset saved system or project settings.
 
@@ -187,7 +187,7 @@ The Live runtime panels consume the same structured progress object from session
 
 ## Post-Onboarding Tour
 
-Finishing Standard or Expert onboarding redirects the operator to `/` and starts the dashboard guide. Finishing Easy onboarding redirects to `/chat` and triggers the same persisted completion flow and dashboard-tour start state. The guide anchors to real UI elements through `data-tour-id` markers so it works with both dock navigation and sidebar navigation.
+Finishing Standard or Expert onboarding redirects the operator to `/` and starts the dashboard guide. Finishing Easy onboarding redirects to `/chat`, where the no-project assistant offers local onboarding guidance until a project is added. It triggers the same persisted completion flow and dashboard-tour start state. The guide anchors to real UI elements through `data-tour-id` markers so it works with both dock navigation and sidebar navigation.
 
 The guide covers:
 - Projects: project management and adding the first project

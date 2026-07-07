@@ -22,26 +22,33 @@ The sticky command/status bar keeps the System/Project selector, project availab
 
 ## Categories
 
-The category rail on the left includes:
+The category rail on the left includes these Expert-mode categories:
 
 | Category | What it covers |
 | --- | --- |
-| **AI providers** | Provider configs (model, thinking mode, weight, API key, auth path, max concurrency, token pricing). |
-| **Routing** | Per-invocation-type routing (`task_coding`, `planning`, …). Profiles: `GLOBAL` and `WORKER`. |
-| **Workers** | Virtual worker provider, execution mode (DOCKER/HOST), Docker image, mount paths. |
-| **CI & Merge** | `ciIntelligence` block — autofix retries, comment resolution, auto-merge modes. |
-| **Automation** | `automationLevel` (`FULL`/`SEMI_AUTO`/`ALWAYS_ASK`), action-required automation toggles. |
-| **Sprint loop** | Watch loop intervals, which loop steps are enabled. |
-| **Git** | Default branch, feature branch prefix, branch scheme, GitHub mode. |
-| **Skills** | Internal skill toggles (`git_manager_remote`, `git_manager_local`, etc.). |
-| **MCP tools** | Per-tool enable / disable. |
-| **Memory** | Active embedding model selection. |
-| **Agents** | Agent routing, markdown mirroring, persistent skill storage, storage attachments, and self-reflection criteria. |
+| **General** | Scope context, automation posture, runtime logging, Docker runtime, restart behavior, and onboarding. |
+| **Appearance** | Experience mode, theme, navigation mode, motion preference, background, and desktop zoom. |
+| **AI Models** | Default provider anchors, provider routing, model choices, thinking mode, weighting, pricing, and rate-limit controls. |
+| **Sprint & Git** | Git flow, PR behavior, merge gates, QA, guardrails, branch naming, and execution runtime controls. |
+| **Browser Preview** | Preview runtime, in-app browser visibility, container limits, port allocation, and startup scripts. |
 | **Techstacks** | System catalog management, protected built-in stack, project stack assignment, and web/desktop application kind. |
-| **Appearance** | Theme, navigation mode override, dashboard density. |
-| **Limits** | `maxFailures` emergency stop threshold and other safety caps. |
+| **Agents** | Agent routing, markdown mirroring, persistent skill storage, storage attachments, and self-reflection criteria. |
+| **Memory** | Embedding model selection, memory capture, promotion, and remediation policy. |
+| **Integrations** | Provider credentials, Git hosts, Jira, and read-only PM/canvas importers. |
+| **MCP** | MCP servers injected into provider CLIs and built-in tool access. |
+| **Danger Zone** | Project override reset, project deletion, memory clearing, and database reset. |
 
 Each category opens one or more **content panels** with grouped fields. Inputs are typed (text, number with min/max, toggle, multi-select) and validate inline.
+
+## Experience modes
+
+Experience mode is an Appearance setting with three user-facing choices:
+
+- **Easy** — shows the essentials: General, Appearance, Integrations, and Danger Zone. Primary navigation shows Chat, Browser, Stats, Settings/Config, and Docs.
+- **Standard** — the balanced project-operation surface: General, Appearance, AI Models, Sprint & Git, Browser Preview, Techstacks, Agents, Memory, Integrations, and Danger Zone. Primary navigation shows Chat, Overview, Sprints, Tasks, Agents, Stats, Browser, Docs, and Settings/Config.
+- **Expert** — shows all settings categories and advanced cards, and is the default for new or legacy settings.
+
+Changing mode filters what is visible. It does not delete hidden values, mutate project overrides, or save anything until you use the normal Save action.
 
 ## Agents settings
 
@@ -221,15 +228,15 @@ Related docs:
 
 Reopens the guided setup flow without changing saved settings by itself.
 
-**What it controls:** The action button launches onboarding so you can revisit provider, project, and setup prompts.
+**What it controls:** The action button launches onboarding so you can revisit Easy, Standard, or Expert setup, provider configuration, GitHub workflow choices, and setup prompts.
 
-**Recommended defaults:** Use it when setting up a new machine or after adding provider credentials.
+**Recommended defaults:** Use Easy for the shortest one-provider path, Standard for guided regular setup, and Expert when you need every runtime and routing control. Expert remains the default.
 
-**Risks and gotchas:** Saving new onboarding choices can overwrite the current system defaults.
+**Risks and gotchas:** Reopening onboarding does not change settings by itself. Finishing the flow saves the selected choices through the normal system settings path; Easy applies default settings only after explicit completion and redirects to Chat.
 
 Related docs:
 
-- [Dashboard Onboarding](./settings.md#onboarding)
+- [Onboarding settings](../../settings/subcategories/onboarding.md)
 - [Quickstart](../installation.md)
 
 ### Display Settings
@@ -468,8 +475,8 @@ Controls automatic preview lifecycle and whether browser workspace entry points 
 
 Related docs:
 
-- [Browser Preview](./browser.md)
-- [Sprint Preview Browser](./browser.md)
+- [Browser Preview](./browser-preview.md)
+- [Sprint Preview Browser](./browser-preview.md)
 
 ### Runtime Limits
 
@@ -485,7 +492,7 @@ Sets preview container concurrency, host port range, app port, and startup scrip
 
 Related docs:
 
-- [Browser Preview](./browser.md)
+- [Browser Preview](./browser-preview.md)
 - [Security Hardening](../troubleshooting.md)
 
 ### Techstacks

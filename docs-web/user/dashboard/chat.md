@@ -4,7 +4,7 @@ The **Chat** page (`/chat`) is a conversation surface that lets you talk to agen
 
 ## Layout
 
-- **No-project assistant** — When no project is selected, `/chat` shows a local onboarding assistant instead of a project-required empty state. It presents the Code UX assistant avatar, five quick bubbles, local replies, and explicit buttons for Add Project, Projects, Settings, onboarding, and docs. It does not create conversation threads or call project-scoped chat APIs.
+- **No-project assistant** — When no project is selected, `/chat` shows a local onboarding assistant instead of a project-required empty state. It presents the Code UX assistant avatar, five quick bubbles, local replies, and explicit buttons for Add Project, Projects, Settings, onboarding, and docs. It does not create conversation threads, persist messages, or call project-scoped chat APIs.
 - **Floating assistant widget** — Every dashboard subpage except `/chat` has a compact assistant entry point in the corner. Submitting text opens `/chat` with that text as a draft. If a project is selected, the draft appears in the normal composer; if no project is selected, it becomes a local no-project assistant turn. Nothing is sent automatically.
 - **Left rail** — In project chat, two tabs:
   - **Threads** — Conversation threads scoped to the active project.
@@ -15,15 +15,15 @@ The floating widget uses the configured Dashboard Reply agent avatar when a sele
 
 ## No-project assistant
 
-The no-project assistant is local to the browser page. Its quick bubbles cover:
+The no-project assistant is local onboarding guidance for the browser page. Its five quick bubbles are:
 
 - Add my first project.
-- Add a project and build a desktop app.
-- Add a project and build a web app.
+- Build a desktop app.
+- Build a web app.
 - Explain Code UX.
 - Change settings.
 
-Quick bubbles only add local user/assistant turns. Actions such as creating a project, opening settings, restarting onboarding, or reading docs remain explicit buttons and continue through the existing dashboard flows.
+Quick bubbles only add local user/assistant turns. Actions such as creating a project, opening settings, restarting onboarding, or reading docs remain explicit buttons and continue through the existing dashboard flows. Provider-backed chat is project-scoped; it starts only after a project exists and a persistent thread can be created or selected.
 
 ## Threads
 
