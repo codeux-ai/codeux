@@ -12,6 +12,45 @@ import { useInteractionTokens } from "../../lib/motion/tokens.js";
 
 export const Toggle = UiToggle;
 
+export interface SettingsOptionCard {
+  value: string;
+  label: string;
+  description?: string;
+  countLabel?: string;
+  icon?: ComponentChildren | (() => ComponentChildren);
+  disabled?: boolean;
+  disabledReason?: string;
+  "aria-label"?: string;
+}
+
+type SharedOptionCardGroupProps = {
+  options: SettingsOptionCard[];
+  disabled?: boolean;
+  helperText?: string;
+  selectedSummaryLabel?: string;
+  "aria-label"?: string;
+  "aria-labelledby"?: string;
+  "aria-describedby"?: string;
+};
+
+type SingleOptionCardGroupProps = SharedOptionCardGroupProps & {
+  selectionMode?: "single";
+  value: string;
+  onChange: (value: string) => void;
+};
+
+type MultipleOptionCardGroupProps = SharedOptionCardGroupProps & {
+  selectionMode: "multiple";
+  value: string[];
+  onChange: (value: string[]) => void;
+};
+
+export type OptionCardChoiceGroupProps = SingleOptionCardGroupProps | MultipleOptionCardGroupProps;
+
+function renderSettingsOptionIcon(icon: SettingsOptionCard["icon"]): ComponentChildren {
+  return typeof icon === "function" ? icon() : icon;
+}
+
 export const SelectInput: FunctionComponent<{
   value: string;
   onChange: (value: string) => void;
@@ -140,6 +179,210 @@ export const PillChoiceGroup: FunctionComponent<{
       {valid && !showError ? (
         <span id={validId} className="text-xs font-semibold text-signal-700 dark:text-signal-300">Ready to save.</span>
       ) : null}
+    </div>
+  );
+};
+
+export const OptionCardChoiceGroup: FunctionComponent<OptionCardChoiceGroupProps> = (props) => {
+  const generatedId = useId();
+  const optionRefs = useRef<Array<HTMLButtonElement | null>>([]);
+  const tokens = useInteractionTokens();
+  const multiple = props.selectionMode === "multiple";
+  const selectedValues = multiple ? props.value : [props.value];
+  const selectedOptions = props.options.filter((option) => selectedValues.includes(option.value));
+  const helperId = props.helperText ? `${generatedId}-helper` : undefined;
+  const summaryId = `${generatedId}-summary`;
+  const describedBy = [summaryId, helperId, props["aria-describedby"]].filter(Boolean).join(" ") || undefined;
+  const selectedSummary = props.selectedSummaryLabel
+    ?? (multiple
+      ? `${selectedOptions.length} selected`
+      : `Selected: ${selectedOptions[0]?.label ?? "None"}`);
+
+  const isOptionDisabled = (option: SettingsOptionCard): boolean => Boolean(props.disabled || option.disabled);
+
+  const findNextEnabledIndex = (currentIndex: number, offset: number): number => {
+    if (!props.options.length || props.disabled) {
+      return currentIndex;
+    }
+    for (let step = 1; step <= props.options.length; step += 1) {
+      const nextIndex = (currentIndex + (offset * step) + props.options.length) % props.options.length;
+      if (!isOptionDisabled(props.options[nextIndex])) {
+        return nextIndex;
+      }
+    }
+    return currentIndex;
+  };
+
+  const chooseOption = (option: SettingsOptionCard): void => {
+    if (isOptionDisabled(option)) {
+      return;
+    }
+    if (props.selectionMode === "multiple") {
+      const nextValue = props.value.includes(option.value)
+        ? props.value.filter((value) => value !== option.value)
+        : [...props.value, option.value];
+      props.onChange(nextValue);
+      return;
+    }
+    props.onChange(option.value);
+  };
+
+  const handleOptionKeyDown = (event: KeyboardEvent, index: number, option: SettingsOptionCard): void => {
+    if (event.key === "ArrowRight" || event.key === "ArrowDown") {
+      event.preventDefault();
+      const nextIndex = findNextEnabledIndex(index, 1);
+      optionRefs.current[nextIndex]?.focus();
+      if (!multiple) {
+        chooseOption(props.options[nextIndex]);
+      }
+      return;
+    }
+    if (event.key === "ArrowLeft" || event.key === "ArrowUp") {
+      event.preventDefault();
+      const nextIndex = findNextEnabledIndex(index, -1);
+      optionRefs.current[nextIndex]?.focus();
+      if (!multiple) {
+        chooseOption(props.options[nextIndex]);
+      }
+      return;
+    }
+    if (event.key === "Home" || event.key === "End") {
+      event.preventDefault();
+      const offset = event.key === "Home" ? 1 : -1;
+      const startIndex = event.key === "Home" ? props.options.length - 1 : 0;
+      const nextIndex = findNextEnabledIndex(startIndex, offset);
+      optionRefs.current[nextIndex]?.focus();
+      if (!multiple) {
+        chooseOption(props.options[nextIndex]);
+      }
+      return;
+    }
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      chooseOption(option);
+    }
+  };
+
+  return (
+    <div className="flex min-w-0 w-full flex-col gap-2">
+      <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
+        <div id={summaryId} className="min-w-0 break-words text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">
+          {selectedSummary}
+        </div>
+        {props.helperText ? (
+          <div id={helperId} className="min-w-0 break-words text-xs font-medium leading-relaxed text-slate-500 dark:text-slate-400">
+            {props.helperText}
+          </div>
+        ) : null}
+      </div>
+      <div
+        role={multiple ? "group" : "radiogroup"}
+        aria-label={props["aria-labelledby"] ? undefined : props["aria-label"] ?? "Setting options"}
+        aria-labelledby={props["aria-labelledby"]}
+        aria-describedby={describedBy}
+        className="grid min-w-0 w-full grid-cols-[repeat(auto-fit,minmax(min(100%,14rem),1fr))] gap-2"
+      >
+        {props.options.map((option, index) => {
+          const selected = selectedValues.includes(option.value);
+          const optionDisabled = isOptionDisabled(option);
+          const descriptionId = option.description ? `${generatedId}-${option.value}-description` : undefined;
+          const disabledReasonId = optionDisabled && option.disabledReason ? `${generatedId}-${option.value}-disabled` : undefined;
+          const optionDescribedBy = [descriptionId, disabledReasonId].filter(Boolean).join(" ") || undefined;
+
+          return (
+            <button
+              key={option.value}
+              ref={(element) => { optionRefs.current[index] = element; }}
+              type="button"
+              role={multiple ? "checkbox" : "radio"}
+              disabled={optionDisabled}
+              aria-label={option["aria-label"] ?? option.label}
+              aria-checked={selected}
+              aria-describedby={optionDescribedBy}
+              onClick={() => chooseOption(option)}
+              onKeyDown={(event) => handleOptionKeyDown(event, index, option)}
+              style={{ transitionDuration: tokens.controlFeedback.duration, transitionTimingFunction: tokens.controlFeedback.ease }}
+              className={`${SHARED_INTERACTION_CLASSES} group/card relative flex min-w-0 w-full items-start gap-3 overflow-hidden rounded-[1rem] border px-3 py-3 text-left ${
+                selected
+                  ? "border-signal-500/35 bg-signal-500/[0.10] text-slate-900 shadow-[0_0_0_1px_var(--status-static-running-aura)] dark:border-signal-400/35 dark:bg-signal-400/[0.12] dark:text-white"
+                  : "border-[color:var(--border-hairline)] bg-[var(--surface-glass)] text-slate-700 hover:bg-[var(--surface-glass-hover)] dark:text-slate-200"
+              }`}
+            >
+              {option.icon ? (
+                <span className={`mt-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-[0.85rem] border border-[color:var(--border-hairline)] bg-[var(--fill-muted)] ${selected ? "text-signal-700 dark:text-signal-200" : "text-slate-500 dark:text-slate-400"}`} aria-hidden>
+                  {renderSettingsOptionIcon(option.icon)}
+                </span>
+              ) : null}
+              <span className="min-w-0 flex-1">
+                <span className="flex min-w-0 items-start justify-between gap-2">
+                  <span className="min-w-0 break-words text-sm font-semibold leading-snug">{option.label}</span>
+                  {option.countLabel ? (
+                    <span className="shrink-0 rounded-full border border-[color:var(--border-hairline)] bg-[var(--fill-muted)] px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500 dark:text-slate-300">
+                      {option.countLabel}
+                    </span>
+                  ) : null}
+                </span>
+                {option.description ? (
+                  <span id={descriptionId} className="mt-1 block min-w-0 break-words text-xs font-medium leading-relaxed text-slate-500 dark:text-slate-400">
+                    {option.description}
+                  </span>
+                ) : null}
+                {disabledReasonId ? (
+                  <span id={disabledReasonId} className="mt-1 block min-w-0 break-words text-xs font-semibold leading-relaxed text-amber-700 dark:text-amber-200">
+                    {option.disabledReason}
+                  </span>
+                ) : null}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+};
+
+export const ToggleLinkedControlRow: FunctionComponent<{
+  enabled: boolean;
+  onEnabledChange: (value: boolean) => void;
+  toggleLabel: string;
+  description?: string;
+  disabled?: boolean;
+  disabledReason?: string;
+  children: ComponentChildren;
+  "aria-describedby"?: string;
+}> = ({ enabled, onEnabledChange, toggleLabel, description, disabled, disabledReason, children, "aria-describedby": ariaDescribedby }) => {
+  const generatedId = useId();
+  const descriptionId = description ? `${generatedId}-description` : undefined;
+  const disabledReasonId = disabled && disabledReason ? `${generatedId}-disabled` : undefined;
+  const describedBy = [descriptionId, disabledReasonId, ariaDescribedby].filter(Boolean).join(" ") || undefined;
+
+  return (
+    <div className="flex min-w-0 w-full flex-col gap-3 rounded-[1rem] border border-[color:var(--border-hairline)] bg-[var(--fill-muted)] p-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex min-w-0 items-start gap-3">
+        <Toggle
+          value={enabled}
+          onChange={onEnabledChange}
+          disabled={disabled}
+          aria-label={toggleLabel}
+          aria-describedby={describedBy}
+        />
+        <div className="min-w-0">
+          <div className="break-words text-sm font-semibold leading-snug text-slate-800 dark:text-slate-100">{toggleLabel}</div>
+          {description ? (
+            <div id={descriptionId} className="mt-0.5 break-words text-xs font-medium leading-relaxed text-slate-500 dark:text-slate-400">
+              {description}
+            </div>
+          ) : null}
+          {disabledReasonId ? (
+            <div id={disabledReasonId} className="mt-1 break-words text-xs font-semibold leading-relaxed text-amber-700 dark:text-amber-200">
+              {disabledReason}
+            </div>
+          ) : null}
+        </div>
+      </div>
+      <div className="min-w-0 w-full sm:w-auto sm:min-w-[14rem]">
+        {children}
+      </div>
     </div>
   );
 };

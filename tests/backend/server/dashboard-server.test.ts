@@ -1953,90 +1953,61 @@ describe("setupDashboardServer", () => {
     expect(await readyResponse.json()).toEqual(probeResponse);
   });
 
-  it("binds to DASHBOARD_HOST when provided", async () => {
+  it("rejects public DASHBOARD_HOST binding without explicit opt-in", async () => {
     const previousHost = process.env.DASHBOARD_HOST;
+    const previousAllowPublic = process.env.CODE_UX_ALLOW_PUBLIC_DASHBOARD;
     process.env.DASHBOARD_HOST = "0.0.0.0";
+    delete process.env.CODE_UX_ALLOW_PUBLIC_DASHBOARD;
 
     try {
       const app = express();
-      const handle = await setupDashboardServer({
-        app,
-        dashboardDir: "dashboard",
-        port: 0,
-        liveActivityCacheMs: 1000,
-        getStatus: () => ({ ok: true }),
-        getExecutionSnapshot: () => ({ projectId: null, projectName: null, sprintRuns: [], taskDispatches: [], connections: [], primaryAssignedWorker: null, overflowAssignedWorkers: [], attentionItems: [], recentEvents: [], updatedAt: null }),
-        getOverviewTelemetrySnapshot: () => ({ activeProjects: [], attentionProjects: [], recentEvents: [], updatedAt: null }),
-        getProjectLiveSnapshot: (projectId: string) => ({ projectId, selectedSprintId: null, status: { project_id: projectId, timestamp: null, subtasks: [] }, execution: { projectId, projectName: "Project 1", sprintRuns: [], taskDispatches: [], connections: [], primaryAssignedWorker: null, overflowAssignedWorkers: [], attentionItems: [], recentEvents: [], updatedAt: null }, gitStatus: null, gitStatusError: null, updatedAt: null } as any),
-      getProjectExecutionSnapshot: () => ({ projectId: null, projectName: null, sprintRuns: [], taskDispatches: [], connections: [], primaryAssignedWorker: null, overflowAssignedWorkers: [], attentionItems: [], recentEvents: [], updatedAt: null }),
-        getProjectStatsSnapshot: () => ({
-          projectId: "project-test",
-          projectName: "Project Test",
-          window: "7d",
-          generatedAt: new Date().toISOString(),
-          usage: {
-            invocationCount: 0,
-            activeTimeMs: 0,
-            wallTimeMs: 0,
-            inputTokens: 0,
-            cachedInputTokens: 0,
-            outputTokens: 0,
-            reasoningOutputTokens: 0,
-            totalTokens: 0,
-            reportedInvocationCount: 0,
-            estimatedInvocationCount: 0,
-            unavailableInvocationCount: 0,
-            unsupportedInvocationCount: 0,
-          },
-          activeSprint: null,
-          buckets: [],
-          sprints: [],
-          tasks: [],
-          providers: [],
-          purposes: [],
-          tokenSources: [],
-        }),
-        getLiveActivities: async () => ({}),
-        getGitStatus: async () => ({
-          mode: "LOCAL",
-          available: true,
-          repositoryRoot: null,
-          branch: null,
-          hasRemote: false,
-          dirty: false,
-          openPullRequests: [],
-          ciRuns: [],
-          mergedPullRequests: [],
-          tracking: { scope: "REPOSITORY", label: "Repository", branch: null },
-          warnings: [],
-          lastUpdated: new Date().toISOString(),
-        }),
-        getExternalSettingsHints: () => ({
-          env: { julesApiKey: "", geminiApiKey: "", codexApiKey: "", claudeCodeApiKey: "", githubToken: "" },
-          settingsJson: { julesApiKey: "", geminiApiKey: "", codexApiKey: "", claudeCodeApiKey: "", githubToken: "" },
-          resolved: { julesApiKey: "", geminiApiKey: "", codexApiKey: "", claudeCodeApiKey: "", githubToken: "" },
-        }),
-        ...buildSettingsServerOptions(),
-        listAgentPresets: () => [],
-        createAgentPreset: () => ({ id: "agent-1" } as any),
-        updateAgentPreset: () => ({ id: "agent-1" } as any),
-        deleteAgentPreset: () => {},
-        rerunTask: async () => ({ ok: true }),
-        orchestrateSprint: async () => ({ ok: true }),
-        pauseSprintRun: async () => ({ ok: true }),
-        cancelSprintRun: async () => ({ ok: true }),
-        cancelTaskDispatch: async () => ({ ok: true }),
-        retryTaskDispatch: async () => ({ ok: true }),
-      improveSprintPrompt: async () => ({ ok: true }),
-      planSprint: async () => ({ ok: true }),
-      });
-
-      serversToClose.push(handle.server);
-      expect((handle.server.address() as AddressInfo).address).toBe("0.0.0.0");
+      await expect(setupDashboardServer(buildDashboardTestOptions({ app })))
+        .rejects.toThrow("CODE_UX_ALLOW_PUBLIC_DASHBOARD=1");
     } finally {
       if (typeof previousHost === "string") process.env.DASHBOARD_HOST = previousHost;
       else delete process.env.DASHBOARD_HOST;
+      if (typeof previousAllowPublic === "string") process.env.CODE_UX_ALLOW_PUBLIC_DASHBOARD = previousAllowPublic;
+      else delete process.env.CODE_UX_ALLOW_PUBLIC_DASHBOARD;
     }
+  });
+
+  it("binds to public DASHBOARD_HOST when explicitly opted in", async () => {
+    const previousHost = process.env.DASHBOARD_HOST;
+    const previousAllowPublic = process.env.CODE_UX_ALLOW_PUBLIC_DASHBOARD;
+    process.env.DASHBOARD_HOST = "0.0.0.0";
+    process.env.CODE_UX_ALLOW_PUBLIC_DASHBOARD = "1";
+
+    try {
+      const app = express();
+      const handle = await setupDashboardServer(buildDashboardTestOptions({ app }));
+
+      serversToClose.push(handle.server);
+      expect((handle.server.address() as AddressInfo).address).toBe("0.0.0.0");
+
+      const healthResponse = await fetch(`http://127.0.0.1:${handle.port}/health`);
+      expect(healthResponse.status).toBe(200);
+      const readyResponse = await fetch(`http://127.0.0.1:${handle.port}/ready`);
+      expect(readyResponse.status).toBe(200);
+    } finally {
+      if (typeof previousHost === "string") process.env.DASHBOARD_HOST = previousHost;
+      else delete process.env.DASHBOARD_HOST;
+      if (typeof previousAllowPublic === "string") process.env.CODE_UX_ALLOW_PUBLIC_DASHBOARD = previousAllowPublic;
+      else delete process.env.CODE_UX_ALLOW_PUBLIC_DASHBOARD;
+    }
+  });
+
+  it("continues falling back to the next port when the dashboard port is in use", async () => {
+    const blockingServer = express().listen(0, "127.0.0.1");
+    serversToClose.push(blockingServer);
+    await new Promise<void>((resolve) => blockingServer.on("listening", () => resolve()));
+    const blockedPort = (blockingServer.address() as AddressInfo).port;
+
+    const app = express();
+    const handle = await setupDashboardServer(buildDashboardTestOptions({ app, port: blockedPort }));
+    serversToClose.push(handle.server);
+
+    expect(handle.port).toBe(blockedPort + 1);
+    expect((handle.server.address() as AddressInfo).address).toBe("127.0.0.1");
   });
 
   it("returns 503 for /ready when server is not ready", async () => {

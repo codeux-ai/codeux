@@ -53,7 +53,7 @@ const callManageProjects = async (handlers: RouterHandlers): Promise<unknown> =>
 const callScheduler = async (handlers: RouterHandlers): Promise<unknown> =>
   handlers.callTool({
     params: {
-      name: "scheduler",
+      name: "scheduler_code_ux",
       arguments: { action: "list", projectId: "project-1" },
     },
   });
@@ -134,11 +134,11 @@ describe("ToolRegistry", () => {
 
   it("can register and dispatch scheduler", async () => {
     const registry = new ToolRegistry<McpToolArgsByName, string>();
-    const handler = vi.fn(async (args: McpToolArgsByName["scheduler"]) => `scheduler:${args.action}`);
+    const handler = vi.fn(async (args: McpToolArgsByName["scheduler_code_ux"]) => `scheduler:${args.action}`);
 
-    registry.register("scheduler", handler);
+    registry.register("scheduler_code_ux", handler);
 
-    const result = await registry.dispatch("scheduler", {
+    const result = await registry.dispatch("scheduler_code_ux", {
       action: "schedule_wakeup",
       projectId: "proj-1",
       delaySeconds: 30,
@@ -206,13 +206,13 @@ describe("MCP router per-agent Code UX access", () => {
       agentId === "agent-scheduler"
         ? {
             codeUxEnabled: true,
-            codeUxToolToggles: [{ name: "scheduler", enabled: true, isInternal: true }],
+            codeUxToolToggles: [{ name: "scheduler_code_ux", enabled: true, isInternal: true }],
           }
         : null,
     );
 
     await runWithMcpAgentContext("agent-scheduler", async () => {
-      await expect(listToolNames(handlers)).resolves.toContain("scheduler");
+      await expect(listToolNames(handlers)).resolves.toContain("scheduler_code_ux");
       await expect(callScheduler(handlers)).resolves.toEqual({ content: [{ type: "text", text: "scheduled" }] });
     });
 
@@ -235,13 +235,13 @@ describe("MCP router per-agent Code UX access", () => {
       agentId === "agent-no-scheduler"
         ? {
             codeUxEnabled: true,
-            codeUxToolToggles: [{ name: "scheduler", enabled: false, isInternal: true }],
+            codeUxToolToggles: [{ name: "scheduler_code_ux", enabled: false, isInternal: true }],
           }
         : null,
     );
 
     await runWithMcpAgentContext("agent-no-scheduler", async () => {
-      await expect(listToolNames(handlers)).resolves.not.toContain("scheduler");
+      await expect(listToolNames(handlers)).resolves.not.toContain("scheduler_code_ux");
       await expect(callScheduler(handlers)).rejects.toMatchObject({ code: ErrorCode.MethodNotFound });
     });
 

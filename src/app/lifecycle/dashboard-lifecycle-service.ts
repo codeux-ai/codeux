@@ -685,6 +685,7 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<DashboardS
         settings.settings.jira.defaultProject,
       );
     },
+    searchJiraProjectStatuses: (projectId, projectKey) => deps.sprintIssueService.searchJiraProjectStatuses(projectId, projectKey),
     listSprintLinkedIssues: (sprintId) => deps.sprintIssueService.getLinkedIssues(sprintId),
     replaceSprintLinkedIssues: (sprintId, projectId, issues) => deps.sprintIssueService.replaceLinkedIssues(sprintId, projectId, issues),
     listConnections: (projectId) => deps.connectionChatRepository.listConnections(projectId),
@@ -695,6 +696,9 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<DashboardS
     deleteAgentPreset: async (agentPresetId) => await deps.agentPresetSyncService.deleteAgentPreset(agentPresetId),
     importAgentPresetFromMarkdown: async (agentPresetId) => await deps.agentPresetSyncService.importAgentPresetFromMarkdown(agentPresetId),
     syncAllAgentPresetsFromMarkdown: async (projectId) => await deps.agentPresetSyncService.syncAllAgentPresetsFromMarkdown(projectId),
+    pullAgentPresetsFromMarkdown: async (projectId) => await deps.agentPresetSyncService.pullAgentPresetsFromMarkdown(projectId),
+    pushAgentPresetsToMarkdown: async (projectId, options) => await deps.agentPresetSyncService.pushAgentPresetsToMarkdown(projectId, options),
+    exportAgentPresetToMarkdown: async (agentPresetId) => await deps.agentPresetSyncService.exportAgentPresetToMarkdown(agentPresetId),
     pushAgentPresetsToRepository: async (projectId, options) => await deps.agentPresetSyncService.pushAgentPresetsToRepository(projectId, options),
     listInstructionFiles: (projectId) => instructionFileService.listInstructionFiles(projectId),
     readInstructionFile: (projectId, fileId) => instructionFileService.readInstructionFile(projectId, fileId),

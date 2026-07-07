@@ -2,9 +2,10 @@ import type { FunctionComponent } from "preact";
 import { useState, useLayoutEffect, useMemo, useRef, useEffect } from "preact/hooks";
 import gsap from "gsap";
 import {
-  Edit2, FileUp, Trash2, RefreshCw, AlertTriangle,
+  Edit2, FileDown, FileUp, Trash2, RefreshCw, AlertTriangle,
   ChevronDown, ChevronUp, Cpu, Route, Plug, Server, FileText,
   BrainCircuit, FolderGit2, Library, DollarSign, BarChart3, CheckCircle2,
+  ShieldCheck,
 } from "lucide-preact";
 import {
   fetchAgentKnowledgeSubscriptions,
@@ -92,6 +93,12 @@ const syncStatusDisplay = (preset: AgentPreset) => {
     default:
       return { cls: "border-black/[0.06] bg-black/[0.03] text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-400", label: "Database Only" };
   }
+};
+
+const formatContainerRootMode = (value: boolean | null | undefined): string => {
+  if (value === true) return "Force root";
+  if (value === false) return "Force non-root";
+  return "Inherits setting";
 };
 
 /* ── Quick-fact stat tile ── */
@@ -188,8 +195,11 @@ export const AgentPresetDetailPanel: FunctionComponent<{
   onEdit: () => void;
   onDelete: (id: string) => void;
   onImport: (id: string) => void;
+  onPushToFile: (id: string) => void;
   deleting: boolean;
   importing: boolean;
+  pushingToFile: boolean;
+  canPushToFile: boolean;
 }> = ({
   preset,
   routeTags,
@@ -201,8 +211,11 @@ export const AgentPresetDetailPanel: FunctionComponent<{
   onEdit,
   onDelete,
   onImport,
+  onPushToFile,
   deleting,
   importing,
+  pushingToFile,
+  canPushToFile,
 }) => {
   const panelRef = useRef<HTMLDivElement>(null);
   const deleteButtonRef = useRef<HTMLButtonElement>(null);
@@ -220,6 +233,7 @@ export const AgentPresetDetailPanel: FunctionComponent<{
     .map((storageId) => availableSkillStorages.find((storage) => storage.id === storageId) ?? null)
     .filter((storage): storage is SkillStorageRecord => Boolean(storage));
   const persistentSkillsActive = Boolean(preset.persistentSkillStorage?.enabled && attachedSkillStorages.length > 0);
+  const containerRootModeLabel = formatContainerRootMode(preset.containerRunAsRoot);
 
   useLayoutEffect(() => {
     if (!panelRef.current) return;
@@ -341,6 +355,12 @@ export const AgentPresetDetailPanel: FunctionComponent<{
                 value={mcpTags.length === 0 ? "None" : `${mcpTags.length} server${mcpTags.length !== 1 ? "s" : ""}`}
                 iconNode={<Server className="h-4 w-4" strokeWidth={2.2} />}
                 accent={mcpTags.length > 0}
+              />
+              <StatTile
+                label="Docker Root"
+                value={containerRootModeLabel}
+                iconNode={<ShieldCheck className="h-4 w-4" strokeWidth={2.2} />}
+                accent={preset.containerRunAsRoot === true}
               />
               <StatTile
                 label="System Prompt"
@@ -540,10 +560,19 @@ export const AgentPresetDetailPanel: FunctionComponent<{
               disabled={importing || preset.syncStatus === "manual"}
               className="inline-flex items-center gap-2 rounded-full border border-signal-500/20 bg-signal-500/8 px-4 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-signal-600 transition-colors hover:bg-signal-500/15 disabled:cursor-not-allowed disabled:opacity-50 dark:text-signal-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30"
             >
-              {importing ? <RefreshCw className="h-3.5 w-3.5 animate-spin" strokeWidth={2.2} /> : <FileUp className="h-3.5 w-3.5" strokeWidth={2.2} />}
+              {importing ? <RefreshCw className="h-3.5 w-3.5 animate-spin" strokeWidth={2.2} /> : <FileDown className="h-3.5 w-3.5" strokeWidth={2.2} />}
               Import
             </button>
           )}
+          <button
+            type="button"
+            onClick={() => onPushToFile(preset.id)}
+            disabled={pushingToFile || !canPushToFile}
+            className="inline-flex items-center gap-2 rounded-full border border-signal-500/20 bg-signal-500/8 px-4 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-signal-600 transition-colors hover:bg-signal-500/15 disabled:cursor-not-allowed disabled:opacity-50 dark:text-signal-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30"
+          >
+            {pushingToFile ? <RefreshCw className="h-3.5 w-3.5 animate-spin" strokeWidth={2.2} /> : <FileUp className="h-3.5 w-3.5" strokeWidth={2.2} />}
+            Push to file
+          </button>
           <button
             ref={deleteButtonRef}
             type="button"

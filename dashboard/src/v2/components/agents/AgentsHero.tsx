@@ -1,7 +1,7 @@
 import type { ComponentChildren, FunctionComponent } from "preact";
 import { useLayoutEffect, useRef } from "preact/hooks";
 import gsap from "gsap";
-import { Bot, Plus, RefreshCw, Sparkles } from "lucide-preact";
+import { Bot, FileDown, FileUp, Loader2, Plus, Sparkles } from "lucide-preact";
 
 import type { Source, AgentPreset } from "../../types.js";
 import { PageHeader } from "../layout/PageHeader.js";
@@ -12,10 +12,23 @@ export const AgentsHero: FunctionComponent<{
   loading?: boolean;
   presets?: AgentPreset[];
   onCreate: () => void;
-  onSyncAll: () => void;
+  onPullFromFiles: () => void;
+  onPushToFiles: () => void;
   extraActions?: ComponentChildren;
-  syncingAll: boolean;
-}> = ({ selectedProject, presets, onCreate, onSyncAll, extraActions, syncingAll }) => {
+  pullingFromFiles: boolean;
+  pushingToFiles: boolean;
+  fileSyncDisabled?: boolean;
+}> = ({
+  selectedProject,
+  presets,
+  onCreate,
+  onPullFromFiles,
+  onPushToFiles,
+  extraActions,
+  pullingFromFiles,
+  pushingToFiles,
+  fileSyncDisabled = false,
+}) => {
   const heroRef = useRef<HTMLDivElement>(null);
 
   useLayoutEffect(() => {
@@ -29,6 +42,7 @@ export const AgentsHero: FunctionComponent<{
 
   const total = presets?.length ?? 0;
   const synced = (presets ?? []).filter((p) => p.syncStatus === "synced").length;
+  const fileActionsDisabled = !selectedProject || fileSyncDisabled;
 
   return (
     <div ref={heroRef} className="relative flex flex-col gap-5">
@@ -42,12 +56,29 @@ export const AgentsHero: FunctionComponent<{
           <>
             <button
               type="button"
-              onClick={onSyncAll}
-              disabled={!selectedProject || syncingAll}
+              onClick={onPullFromFiles}
+              disabled={fileActionsDisabled || pullingFromFiles}
               className="inline-flex items-center gap-2 rounded-full border border-black/[0.06] bg-white/70 px-5 py-2.5 text-[11px] font-bold uppercase tracking-[0.14em] text-slate-600 backdrop-blur-md transition-all hover:bg-white hover:text-slate-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-white/70 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-300 dark:hover:bg-white/[0.06] dark:hover:text-white disabled:dark:hover:bg-white/[0.03] disabled:dark:hover:text-slate-300"
             >
-              <RefreshCw className={`h-3.5 w-3.5 ${syncingAll ? "animate-spin" : ""}`} strokeWidth={2.3} />
-              Sync All
+              {pullingFromFiles ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" strokeWidth={2.3} />
+              ) : (
+                <FileDown className="h-3.5 w-3.5" strokeWidth={2.3} />
+              )}
+              Pull from files
+            </button>
+            <button
+              type="button"
+              onClick={onPushToFiles}
+              disabled={fileActionsDisabled || pushingToFiles}
+              className="inline-flex items-center gap-2 rounded-full border border-black/[0.06] bg-white/70 px-5 py-2.5 text-[11px] font-bold uppercase tracking-[0.14em] text-slate-600 backdrop-blur-md transition-all hover:bg-white hover:text-slate-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-white/70 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-300 dark:hover:bg-white/[0.06] dark:hover:text-white disabled:dark:hover:bg-white/[0.03] disabled:dark:hover:text-slate-300"
+            >
+              {pushingToFiles ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" strokeWidth={2.3} />
+              ) : (
+                <FileUp className="h-3.5 w-3.5" strokeWidth={2.3} />
+              )}
+              Push to files
             </button>
             {extraActions}
             <button

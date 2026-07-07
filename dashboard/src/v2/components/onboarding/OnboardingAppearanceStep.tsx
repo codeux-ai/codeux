@@ -1,11 +1,55 @@
-import type { FunctionComponent } from "preact";
+import type { FunctionComponent, TargetedEvent } from "preact";
 import type { SystemSettings } from "../../../types.js";
-import { PillChoiceGroup, Row, Toggle, SelectInput } from "../settings/SettingsFormFields.js";
-import { SectionCard } from "../settings/panels/SharedPanelComponents.js";
+import { PillChoiceGroup, SelectInput } from "../settings/SettingsFormFields.js";
 
 export interface OnboardingAppearanceStepProps {
   settings: SystemSettings | null;
   updateAppearance: (updates: Partial<SystemSettings["defaults"]["appearance"]>) => void;
+}
+
+type AppearanceSettings = SystemSettings["defaults"]["appearance"];
+type AppearanceOption<T extends string> = { value: T; label: string; hint?: string };
+
+const themeOptions: Array<AppearanceOption<AppearanceSettings["theme"]>> = [
+  { value: "SYSTEM", label: "System", hint: "Follow the OS preference." },
+  { value: "LIGHT", label: "Light", hint: "Use the bright dashboard palette." },
+  { value: "DARK", label: "Dark", hint: "Use the low-light dashboard palette." },
+];
+
+const navigationModeOptions: Array<AppearanceOption<AppearanceSettings["navigationMode"]>> = [
+  { value: "SIDEBAR", label: "Sidebar", hint: "Keep navigation visible." },
+  { value: "DOCK", label: "Dock", hint: "Use the compact floating dock." },
+];
+
+const reducedMotionOptions: Array<AppearanceOption<AppearanceSettings["reducedMotion"]>> = [
+  { value: "AUTO", label: "Auto", hint: "Follow the OS preference." },
+  { value: "REDUCE", label: "Reduce", hint: "Minimize motion." },
+  { value: "NONE", label: "None", hint: "Use standard motion." },
+];
+
+const backgroundModeOptions: Array<AppearanceOption<AppearanceSettings["backgroundMode"]>> = [
+  { value: "ANIMATED", label: "Animated", hint: "Use the dashboard shader background." },
+  { value: "STATIC", label: "Static", hint: "Use a solid color." },
+];
+
+const zoomLevelOptions: Array<{ value: string; label: string }> = [
+  { value: "0.75", label: "75%" },
+  { value: "0.9", label: "90%" },
+  { value: "1", label: "100%" },
+  { value: "1.1", label: "110%" },
+  { value: "1.25", label: "125%" },
+  { value: "1.5", label: "150%" },
+  { value: "1.75", label: "175%" },
+  { value: "2", label: "200%" },
+  { value: "2.25", label: "225%" },
+  { value: "2.5", label: "250%" },
+];
+
+function isOptionValue<T extends string>(
+  value: string,
+  options: ReadonlyArray<AppearanceOption<T>>,
+): value is T {
+  return options.some((option) => option.value === value);
 }
 
 export const OnboardingAppearanceStep: FunctionComponent<OnboardingAppearanceStepProps> = ({
@@ -14,96 +58,118 @@ export const OnboardingAppearanceStep: FunctionComponent<OnboardingAppearanceSte
 }) => {
   if (!settings) return null;
 
+  const appearance = settings.defaults.appearance;
+  const supportsNativeZoom = typeof window !== "undefined" && Boolean(window.codeUxDesktop?.setZoom);
+  const backgroundMode = appearance.backgroundMode ?? "ANIMATED";
+  const staticBackgroundColor = appearance.staticBackgroundColor || "#0d0f12";
+
   return (
     <div className="space-y-6">
       <div className="grid gap-6 md:grid-cols-2">
-        {/* Left Column: Core Layout & Feel */}
         <div className="space-y-4">
           <h4 className="text-xs font-black uppercase tracking-[0.2em] text-signal-400">Core Display</h4>
 
           <div data-onboarding-card className="rounded-3xl border border-black/[0.06] bg-white/70 p-5 shadow-[0_16px_42px_rgba(15,23,42,0.04)] dark:border-white/[0.06] dark:bg-white/[0.04]">
-            <div className="mb-3 text-xs font-bold uppercase tracking-[0.14em] text-slate-500">Theme</div>
-            <PillChoiceGroup
-              value={settings.defaults.appearance.theme}
-              onChange={(v) => updateAppearance({ theme: v as "SYSTEM" | "LIGHT" | "DARK" })}
-              options={[
-                { value: "SYSTEM", label: "System" },
-                { value: "LIGHT", label: "Light" },
-                { value: "DARK", label: "Dark" },
-              ]}
-            />
-          </div>
-
-          <div data-onboarding-card className="rounded-3xl border border-black/[0.06] bg-white/70 p-5 shadow-[0_16px_42px_rgba(15,23,42,0.04)] dark:border-white/[0.06] dark:bg-white/[0.04]">
-            <div className="mb-3 text-xs font-bold uppercase tracking-[0.14em] text-slate-500">Navigation Mode</div>
-            <PillChoiceGroup
-              value={settings.defaults.appearance.navigationMode}
-              onChange={(v) => updateAppearance({ navigationMode: v as "SIDEBAR" | "DOCK" })}
-              options={[
-                { value: "SIDEBAR", label: "Sidebar" },
-
-                { value: "DOCK", label: "Dock" },
-              ]}
-            />
-          </div>
-
-          <div data-onboarding-card className="rounded-3xl border border-black/[0.06] bg-white/70 p-5 shadow-[0_16px_42px_rgba(15,23,42,0.04)] dark:border-white/[0.06] dark:bg-white/[0.04]">
-            <Row
-              label="Reduced Motion"
-              description="Disable background animations and transitions"
-            >
-              <Toggle
-                aria-labelledby="reduced-motion-label"
-                value={settings.defaults.appearance.reducedMotion === "REDUCE"}
-                onChange={(v) => updateAppearance({ reducedMotion: v ? "REDUCE" : "NONE" })}
-              />
-            </Row>
-          </div>
-        </div>
-
-
-        {/* Right Column: Code & Terminal */}
-        <div className="space-y-4">
-          <h4 className="text-xs font-black uppercase tracking-[0.2em] text-signal-400">Environment</h4>
-
-          <div data-onboarding-card className="rounded-3xl border border-black/[0.06] bg-white/70 p-5 shadow-[0_16px_42px_rgba(15,23,42,0.04)] dark:border-white/[0.06] dark:bg-white/[0.04]">
-            <div className="text-sm font-semibold text-slate-900 dark:text-white">Background Mode</div>
-            <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">Choose between animated shaders or static colors.</div>
+            <div className="text-sm font-semibold text-slate-900 dark:text-white">Theme</div>
+            <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">Select light, dark, or sync with your system.</div>
             <div className="mt-4">
               <PillChoiceGroup
-                value={settings.defaults.appearance.backgroundMode}
-                onChange={(value) => updateAppearance({ backgroundMode: value as "ANIMATED" | "STATIC" })}
-                options={[
-                  { value: "ANIMATED", label: "Animated" },
-                  { value: "STATIC", label: "Static" },
-                ]}
+                value={appearance.theme}
+                onChange={(value) => {
+                  if (isOptionValue(value, themeOptions)) {
+                    updateAppearance({ theme: value });
+                  }
+                }}
+                options={themeOptions}
               />
             </div>
           </div>
 
-          {typeof window !== "undefined" && Boolean(window.codeUxDesktop?.setZoom) && (
+          <div data-onboarding-card className="rounded-3xl border border-black/[0.06] bg-white/70 p-5 shadow-[0_16px_42px_rgba(15,23,42,0.04)] dark:border-white/[0.06] dark:bg-white/[0.04]">
+            <div className="text-sm font-semibold text-slate-900 dark:text-white">Navigation Mode</div>
+            <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">Choose between floating dock or sidebar.</div>
+            <div className="mt-4">
+              <PillChoiceGroup
+                value={appearance.navigationMode}
+                onChange={(value) => {
+                  if (isOptionValue(value, navigationModeOptions)) {
+                    updateAppearance({ navigationMode: value });
+                  }
+                }}
+                options={navigationModeOptions}
+              />
+            </div>
+          </div>
+
+          <div data-onboarding-card className="rounded-3xl border border-black/[0.06] bg-white/70 p-5 shadow-[0_16px_42px_rgba(15,23,42,0.04)] dark:border-white/[0.06] dark:bg-white/[0.04]">
+            <div className="text-sm font-semibold text-slate-900 dark:text-white">Reduced Motion</div>
+            <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">Limit interface animations and transitions.</div>
+            <div className="mt-4">
+              <PillChoiceGroup
+                value={appearance.reducedMotion}
+                onChange={(value) => {
+                  if (isOptionValue(value, reducedMotionOptions)) {
+                    updateAppearance({ reducedMotion: value });
+                  }
+                }}
+                options={reducedMotionOptions}
+              />
+            </div>
+          </div>
+
+          {supportsNativeZoom ? (
             <div data-onboarding-card className="rounded-3xl border border-black/[0.06] bg-white/70 p-5 shadow-[0_16px_42px_rgba(15,23,42,0.04)] dark:border-white/[0.06] dark:bg-white/[0.04]">
               <div className="text-sm font-semibold text-slate-900 dark:text-white">Zoom Level</div>
               <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">Scale the desktop interface size.</div>
               <div className="mt-4">
                 <SelectInput
-                  value={String(settings.defaults.appearance.zoomLevel ?? 1)}
+                  value={String(appearance.zoomLevel ?? 1)}
                   onChange={(value) => updateAppearance({ zoomLevel: Number(value) })}
-                  options={[
-                    { value: "0.85", label: "85%" },
-                    { value: "0.9", label: "90%" },
-                    { value: "0.95", label: "95%" },
-                    { value: "1", label: "100%" },
-                    { value: "1.05", label: "105%" },
-                    { value: "1.1", label: "110%" },
-                    { value: "1.15", label: "115%" },
-                    { value: "1.2", label: "120%" },
-                  ]}
+                  options={zoomLevelOptions}
                 />
               </div>
             </div>
-          )}
+          ) : null}
+        </div>
 
+        <div className="space-y-4">
+          <h4 className="text-xs font-black uppercase tracking-[0.2em] text-signal-400">Background</h4>
+
+          <div data-onboarding-card className="rounded-3xl border border-black/[0.06] bg-white/70 p-5 shadow-[0_16px_42px_rgba(15,23,42,0.04)] dark:border-white/[0.06] dark:bg-white/[0.04]">
+            <div className="text-sm font-semibold text-slate-900 dark:text-white">Background Mode</div>
+            <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">Select animated textures or a flat color.</div>
+            <div className="mt-4">
+              <PillChoiceGroup
+                value={backgroundMode}
+                onChange={(value) => {
+                  if (isOptionValue(value, backgroundModeOptions)) {
+                    updateAppearance({ backgroundMode: value });
+                  }
+                }}
+                options={backgroundModeOptions}
+              />
+            </div>
+          </div>
+
+          {backgroundMode === "STATIC" ? (
+            <div data-onboarding-card className="rounded-3xl border border-black/[0.06] bg-white/70 p-5 shadow-[0_16px_42px_rgba(15,23,42,0.04)] dark:border-white/[0.06] dark:bg-white/[0.04]">
+              <div className="text-sm font-semibold text-slate-900 dark:text-white">Static Color</div>
+              <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">Choose a solid background color.</div>
+              <div className="mt-4 flex items-center gap-3">
+                <input
+                  type="color"
+                  value={staticBackgroundColor}
+                  onInput={(event: TargetedEvent<HTMLInputElement, Event>) => {
+                    updateAppearance({ staticBackgroundColor: event.currentTarget.value });
+                  }}
+                  className="h-10 w-20 cursor-pointer rounded-lg border-2 border-black/[0.06] bg-transparent p-1 focus:outline-none focus:ring-2 focus:ring-signal-500 dark:border-white/[0.06]"
+                />
+                <span className="font-mono text-sm uppercase text-slate-500 dark:text-slate-400">
+                  {staticBackgroundColor}
+                </span>
+              </div>
+            </div>
+          ) : null}
         </div>
       </div>
     </div>

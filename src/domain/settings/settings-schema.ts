@@ -1,5 +1,6 @@
 import type {
   DashboardSettings,
+  DashboardExperienceMode,
   AutomationLevel,
   ProviderId,
   ThinkingMode,
@@ -32,6 +33,7 @@ import {
   CONSOLE_LOG_MODES,
   RUNTIME_LOG_LEVELS,
   EXTERNAL_IMPORTER_PROVIDERS,
+  DASHBOARD_EXPERIENCE_MODES,
   GUARDRAIL_JOB_TYPES,
   GUARDRAIL_ON_LIMIT_ACTIONS,
   QA_EXHAUSTION_POLICIES,
@@ -67,6 +69,25 @@ const isRecord = (value: unknown): value is Record<string, unknown> => {
 const isValidPort = (value: unknown): value is number => (
   typeof value === "number" && Number.isInteger(value) && value >= 1 && value <= 65535
 );
+
+const DASHBOARD_EXPERIENCE_MODE_SET = new Set<DashboardExperienceMode>(DASHBOARD_EXPERIENCE_MODES);
+
+const validateAppearanceSettings = (
+  value: unknown,
+  path: string,
+  issues: ValidationIssue[]
+) => {
+  if (!isRecord(value)) {
+    issues.push({ path, message: "Expected an object" });
+    return;
+  }
+  if (
+    typeof value.experienceMode !== "string"
+    || !DASHBOARD_EXPERIENCE_MODE_SET.has(value.experienceMode as DashboardExperienceMode)
+  ) {
+    issues.push({ path: `${path}.experienceMode`, message: `Expected one of: ${DASHBOARD_EXPERIENCE_MODES.join(", ")}` });
+  }
+};
 
 const validateProviderSettings = (
   value: unknown,
@@ -271,6 +292,9 @@ const validateGitSettings = (
     issues.push({ path: `${path}.sprintKeyPrefix`, message: "Expected length between 2 and 10 characters" });
   } else if (value.sprintKeyPrefix !== value.sprintKeyPrefix.toUpperCase()) {
     issues.push({ path: `${path}.sprintKeyPrefix`, message: "Expected an uppercase string" });
+  }
+  if (typeof value.taskPrTitleScheme !== "string") {
+    issues.push({ path: `${path}.taskPrTitleScheme`, message: "Expected a string" });
   }
   if (value.prDescription !== undefined) {
     validatePrDescriptionSettings(value.prDescription, `${path}.prDescription`, issues);
@@ -509,6 +533,7 @@ const validateCliWorkflow = (
   }
   if (typeof value.containerCacheSetupScriptImage !== "boolean") issues.push({ path: `${path}.containerCacheSetupScriptImage`, message: "Expected a boolean" });
   if (typeof value.containerInstallPlaywrightBrowsers !== "boolean") issues.push({ path: `${path}.containerInstallPlaywrightBrowsers`, message: "Expected a boolean" });
+  if (typeof value.containerRunAsRoot !== "boolean") issues.push({ path: `${path}.containerRunAsRoot`, message: "Expected a boolean" });
   if (typeof value.containerMountGitConfig !== "boolean") issues.push({ path: `${path}.containerMountGitConfig`, message: "Expected a boolean" });
   if (typeof value.containerGitUserName !== "string") issues.push({ path: `${path}.containerGitUserName`, message: "Expected a string" });
   if (typeof value.containerGitUserEmail !== "string") issues.push({ path: `${path}.containerGitUserEmail`, message: "Expected a string" });
@@ -877,6 +902,7 @@ export const validateSettingsPayload = (payload: unknown): ValidationResult<Dash
   }
 
   validateAutomationInterventions(payload.automationInterventions, "automationInterventions", issues);
+  validateAppearanceSettings(payload.appearance, "appearance", issues);
   validateAiProvider(payload.aiProvider, "aiProvider", issues);
   validateGitSettings(payload.git, "git", issues);
   validateJiraSettings(payload.jira, "jira", issues);

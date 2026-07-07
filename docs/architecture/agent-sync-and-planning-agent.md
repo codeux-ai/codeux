@@ -41,7 +41,7 @@ These agents are used as follows:
 
 ## Source Of Truth
 
-Agents are stored in sqlite and edited from the dashboard.
+Agents are stored in sqlite and edited from the dashboard. SQLite is the live authority used by routing, planning, execution, chat, and the Agents dashboard. Markdown files are a project-reviewable import/export surface, not the runtime source of truth while Code UX is running.
 
 SQLite remains the live authority, but projects can also mirror dashboard edits into project-local markdown under:
 
@@ -59,7 +59,9 @@ That means:
 - mirrored project files use a filesystem-safe slug format such as `planning_agent.md`
 - editing a default or home-backed agent from the dashboard creates a project-local override file instead of modifying the default/home source
 - if the linked markdown file later differs from the DB copy (including changes to memory settings, avatar config, or provider/model preferences), the agent is marked `out_of_sync`
-- the dashboard can re-import one agent or bulk-sync all out-of-sync project agents back into sqlite on demand
+- the dashboard can re-import one linked agent or use **Pull from files** to explicitly copy project markdown into sqlite on demand
+- the dashboard can use **Push to files** to export sqlite-backed agents into project-local `.code-ux/agents/*.md` files when sqlite should win over file drift
+- the dashboard can use an individual agent's **Push to file** action to export only that sqlite preset to the selected project's `.code-ux/agents/` directory
 - the dashboard can push `.code-ux/agents/*.md` back into git, either as a local commit, a commit plus branch push, or a feature-branch pull request into the default branch
 - when opening a pull request, Code UX resolves the effective dashboard GitHub/GitLab host tokens and forwards them to the PR service so repository-host authentication stays aligned with the current project settings
 
@@ -102,7 +104,7 @@ When markdown does not include `avatarConfig`, Code UX still persists a resolved
 
 ## Import Resolution
 
-When Code UX syncs project agents:
+When Code UX pulls project agents from files:
 
 1. missing packaged base agents are installed into `~/.code-ux/agents` without overwriting existing files only until the project-level default-agent copy flag is recorded
 2. project-level `.code-ux/agents` is scanned first
@@ -112,6 +114,8 @@ When Code UX syncs project agents:
 6. project-scoped files win on name collisions
 7. previously unseen agents are imported into sqlite automatically
 8. after the first default-agent import for a project, built-in default/home roles are skipped on future automatic syncs so user deletions are not recreated
+
+When Code UX pushes project agents to files, it writes only under the selected repository's `.code-ux/agents/` directory. Manual, missing-source, out-of-sync, home-backed, and default-backed sqlite presets are exported as project-local markdown overrides, then linked back to those project files. The push path intentionally does not import markdown drift first, because an explicit push means sqlite should overwrite the project-file representation.
 
 ## Planning Agent Flow
 
@@ -280,7 +284,9 @@ The Agents page now shows:
 - whether an agent is DB-only or markdown-backed
 - out-of-sync state for changed markdown
 - `Import` action for linked markdown agents
-- `Sync All` action for pulling all out-of-sync local markdown back into sqlite
+- `Pull from files` action for copying project markdown into sqlite
+- `Push to files` action for exporting sqlite-backed agents to project markdown
+- `Push to file` action for exporting one sqlite-backed agent to project markdown
 - agent preset management only; QA execution settings live under `Settings -> Sprint & Git`
 
 ### Sprints page

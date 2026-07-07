@@ -29,9 +29,8 @@ import type { AgentPresetRepository } from "../repositories/agent-preset-reposit
 import type { McpConnectionInfo } from "../contracts/mcp-connection-types.js";
 import type { AgentMcpAccessConfig } from "../contracts/agent-preset-types.js";
 import {
-  isSchedulerOnlyAgentMcpAccess,
+  codeUxAgentMcpAccess,
   resolveAgentMcpRuntime,
-  schedulerOnlyAgentMcpAccess,
 } from "./agent-mcp-access.js";
 
 export interface GenerateDashboardReplyInput {
@@ -125,7 +124,7 @@ export class WorkerInboxReplyService {
         dashboardReplyAgent.mcpAccess,
         dashboardReplyAgentPresetId,
       );
-      mcpAgentId = dashboardReplyAgent.id;
+      mcpAgentId = null;
       const workerInstructions = dashboardReplyAgent.instructionMarkdown.trim();
       const knowledgeManifest = this.deps.knowledgeService?.buildManifestMarkdownForAgent(dashboardReplyAgent.id) ?? null;
       const mcpAvailable = Boolean(agentMcpAccess.codeUxEnabled && this.deps.getMcpConnectionInfo?.());
@@ -140,7 +139,6 @@ export class WorkerInboxReplyService {
         workerInstructions,
         isDashboardReply: true,
         mcpAvailable,
-        mcpAccessMode: mcpAvailable && isSchedulerOnlyAgentMcpAccess(agentMcpAccess) ? "scheduler_only" : undefined,
         knowledgeManifest,
       });
     }
@@ -618,7 +616,8 @@ export class WorkerInboxReplyService {
     agentMcpAccess?: AgentMcpAccessConfig | null;
     mcpAgentId?: string | null;
   }): Promise<ProviderRunResult & { text: string }> {
-    const workflowSettings = this.deps.getDashboardSettings().cliWorkflow;
+    const dashboardSettings = this.deps.getDashboardSettings();
+    const workflowSettings = dashboardSettings.cliWorkflow;
     const persistentSkillRuntime = await this.resolvePersistentSkillRuntime(input.projectId, input.mcpAgentId);
     const prompt = persistentSkillRuntime
       ? `${input.prompt}\n\n${persistentSkillRuntime.instructionMarkdown}`
@@ -629,7 +628,7 @@ export class WorkerInboxReplyService {
     const resolvedMcp = resolveAgentMcpRuntime({
       access: input.agentMcpAccess,
       agentId: input.mcpAgentId,
-      customMcpServers: [],
+      customMcpServers: dashboardSettings.customMcpServers ?? [],
       mcpConnection,
       persistentSkillRetrievalEnabled: Boolean(persistentSkillRuntime),
     });
@@ -684,12 +683,9 @@ export class WorkerInboxReplyService {
 
   private resolveDashboardReplyMcpAccess(
     access: AgentMcpAccessConfig | undefined,
-    dashboardReplyAgentPresetId: string | null,
+    _dashboardReplyAgentPresetId: string | null,
   ): AgentMcpAccessConfig {
-    if (dashboardReplyAgentPresetId && access) {
-      return access;
-    }
-    return schedulerOnlyAgentMcpAccess(access?.linkedServerIds ?? []);
+    return codeUxAgentMcpAccess(access?.linkedServerIds ?? []);
   }
 
   private async resolvePersistentSkillRuntime(

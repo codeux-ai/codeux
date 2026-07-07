@@ -18,35 +18,45 @@ Switch scope with the selector at the top:
 - **Project** — applies to the active project.
 - **Sprint** — applies to the selected sprint within the active project.
 
-The sticky command/status bar keeps the System/Project selector, project availability or inheritance context, active panel, and save state visible together while you scroll. It shows the visible-category count only while Smart Find is active; when search is inactive, the visible status stays to a quiet search prompt while the exact category total remains available to assistive technology. The bar uses compact controls and chips instead of one long background card, so focus rings, contrast, wrapping, and saved/dirty cues stay clear on narrow screens.
+The sticky command/status bar keeps the System/Project selector, project availability or inheritance context, active panel, and save state visible together while you scroll. Smart Find also shows compact context chips for the current scope, active category, and save state (`No edits`, `Unsaved edits`, `Saving`, or `Saved`) above the search input. It shows the visible-category count only while Smart Find is active; when search is inactive, the visible status stays to a quiet search prompt while the exact category total remains available to assistive technology. The bar uses compact controls and chips instead of one long background card, so focus rings, contrast, wrapping, and saved/dirty cues stay clear on narrow screens.
 
 ## Categories
 
-The category rail on the left includes:
+The category rail on the left includes these Expert-mode categories:
 
 | Category | What it covers |
 | --- | --- |
-| **AI providers** | Provider configs (model, thinking mode, weight, API key, auth path, max concurrency, token pricing). |
-| **Routing** | Per-invocation-type routing (`task_coding`, `planning`, …). Profiles: `GLOBAL` and `WORKER`. |
-| **Workers** | Virtual worker provider, execution mode (DOCKER/HOST), Docker image, mount paths. |
-| **CI & Merge** | `ciIntelligence` block — autofix retries, comment resolution, auto-merge modes. |
-| **Automation** | `automationLevel` (`FULL`/`SEMI_AUTO`/`ALWAYS_ASK`), action-required automation toggles. |
-| **Sprint loop** | Watch loop intervals, which loop steps are enabled. |
-| **Git** | Default branch, feature branch prefix, branch scheme, GitHub mode. |
-| **Skills** | Internal skill toggles (`git_manager_remote`, `git_manager_local`, etc.). |
-| **MCP tools** | Per-tool enable / disable. |
-| **Memory** | Active embedding model selection. |
-| **Agents** | Agent routing, markdown mirroring, persistent skill storage, storage attachments, and self-reflection criteria. |
+| **General** | Scope context, automation posture, runtime logging, Docker runtime, restart behavior, and onboarding. |
+| **Appearance** | Experience mode, theme, navigation mode, motion preference, background, and desktop zoom. |
+| **AI Models** | Default provider anchors, provider routing, model choices, thinking mode, weighting, pricing, and rate-limit controls. |
+| **Sprint & Git** | Git flow, PR behavior, merge gates, QA, guardrails, branch naming, and execution runtime controls. |
+| **Browser Preview** | Preview runtime, in-app browser visibility, container limits, port allocation, and startup scripts. |
 | **Techstacks** | System catalog management, protected built-in stack, project stack assignment, and web/desktop application kind. |
-| **Appearance** | Theme, navigation mode override, dashboard density. |
-| **Limits** | `maxFailures` emergency stop threshold and other safety caps. |
+| **Agents** | Agent routing, markdown mirroring, persistent skill storage, storage attachments, and self-reflection criteria. |
+| **Memory** | Embedding model selection, memory capture, promotion, and remediation policy. |
+| **Integrations** | Provider credentials, Git hosts, Jira, and read-only PM/canvas importers. |
+| **MCP** | MCP servers injected into provider CLIs and built-in tool access. |
+| **Danger Zone** | Project override reset, project deletion, memory clearing, and database reset. |
 
 Each category opens one or more **content panels** with grouped fields. Inputs are typed (text, number with min/max, toggle, multi-select) and validate inline.
+
+## Experience modes
+
+Experience mode is an Appearance setting with three user-facing choices:
+
+- **Easy** — shows the essentials: General, Appearance, Integrations, and Danger Zone. Primary navigation shows Chat, Browser, Stats, Settings/Config, and Docs.
+- **Standard** — the balanced project-operation surface: General, Appearance, AI Models, Sprint & Git, Browser Preview, Techstacks, Agents, Memory, Integrations, and Danger Zone. Primary navigation shows Chat, Overview, Sprints, Tasks, Agents, Stats, Browser, Docs, and Settings/Config.
+- **Expert** — shows all settings categories and advanced cards, and is the default for new or legacy settings.
+
+Changing mode filters what is visible. It does not delete hidden values, mutate project overrides, or save anything until you use the normal Save action.
 
 ## Agents settings
 
 The **Agents** category includes project markdown mirroring, agent routing, persistent skill storage, and self-reflection controls.
 
+- Project Markdown Mirror starts with a compact status summary, then the mirror toggle and `.code-ux/agents` target directory. The status summary makes it clear whether dashboard-authored project agents are mirrored to repository-visible markdown or kept database-backed only.
+- Agent Routing is split into a routing-mode choice, an orchestrator roster, and role-specific preset selectors. Manual mode pins coding to one preset or the built-in Worker fallback. Orchestrator mode gives the Planning agent a multi-select roster of project specialists; the selected-count summary stays visible, long agent names wrap, and an empty roster explains that project agents must be created first.
+- Role selectors for planning, coding, CI fix, merge conflict, dashboard reply, and clarification reply always keep the built-in fallback available. When custom project agents are unavailable, disabled selectors explain that you must select a project before choosing project presets.
 - Persistent skill storage is project-scoped and separate from memory. Creating a storage does not enable runtime retrieval. Attach one or more storages to an agent, then enable persistent skills for that agent.
 - Storage deletion is destructive and requires confirmation because it removes stored skills, embeddings, and agent attachments.
 - Planning and QA self-reflection are disabled by default. Each loop has an enable toggle, editable criteria rows, per-criterion thresholds, and a max improvement attempts setting.
@@ -153,11 +163,15 @@ Related docs:
 
 Defines the default container environment used by Docker-backed provider CLIs.
 
-**What it controls:** Image, setup script, memory limit, setup image caching, and Playwright browser preinstall shape each worker container.
+**What it controls:** Image, setup script, memory limit, setup image caching, root execution posture, and Playwright browser preinstall shape each worker container.
 
-**Recommended defaults:** Keep the default image unless your repo needs a custom toolchain; enable Playwright preinstall for browser-heavy QA.
+**Recommended defaults:** Keep the default image unless your repo needs a custom toolchain; keep `cliWorkflow.containerRunAsRoot` off unless a trusted tool requires package-manager or OS-level writes; enable Playwright preinstall for browser-heavy QA.
 
-**Risks and gotchas:** Broken setup scripts or overly tight memory limits can fail every provider invocation in the scope.
+`cliWorkflow.containerRunAsRoot` defaults to `false` and inherits through the settings cascade. Project overrides inherit the system value until changed. Agent presets can override only local Docker-backed CLI task runs with nullable `containerRunAsRoot`: **Inherit** stores `null`, **Force non-root** stores `false`, and **Force root** stores `true`. Root mode is privileged and is not a safety boundary for untrusted code.
+
+With setup-image caching enabled, Playwright preinstall is baked into the derived image at `/ms-playwright` and reused by later non-root provider runs without rerunning the browser download. Cache-disabled workflows and custom setup scripts must opt into this by honoring `CODE_UX_INSTALL_PLAYWRIGHT=1` and installing Chromium in the setup script when browser automation is required.
+
+**Risks and gotchas:** Broken setup scripts or overly tight memory limits can fail every provider invocation in the scope. Root mode changes the Docker user posture for provider containers in that scope, though an agent preset can still force non-root or force root for a specific local CLI worker.
 
 Related docs:
 
@@ -221,28 +235,28 @@ Related docs:
 
 Reopens the guided setup flow without changing saved settings by itself.
 
-**What it controls:** The action button launches onboarding so you can revisit provider, project, and setup prompts.
+**What it controls:** The action button launches onboarding so you can revisit Easy, Standard, or Expert setup, provider configuration, GitHub workflow choices, and Appearance prompts. Appearance choices preview immediately while onboarding is open, including Theme, Navigation Mode, Reduced Motion, Background Mode, Static Color, and supported Zoom Level.
 
-**Recommended defaults:** Use it when setting up a new machine or after adding provider credentials.
+**Recommended defaults:** Use Easy for the shortest one-provider path, Standard for guided regular setup, and Expert when you need every runtime and routing control. Expert remains the default.
 
-**Risks and gotchas:** Saving new onboarding choices can overwrite the current system defaults.
+**Risks and gotchas:** Reopening onboarding does not change settings by itself. Finishing the flow saves the selected choices through the normal system settings path; Easy applies default settings only after explicit completion and redirects to Chat.
 
 Related docs:
 
-- [Dashboard Onboarding](./settings.md#onboarding)
+- [Onboarding settings](../../settings/subcategories/onboarding.md)
 - [Quickstart](../installation.md)
 
 ### Display Settings
 
 <a id="display-settings"></a>
 
-Controls the dashboard shell layout, theme, motion preference, and desktop zoom when available.
+Controls the dashboard shell layout, experience mode, theme, motion preference, and desktop zoom when available.
 
-**What it controls:** Navigation mode switches dock/sidebar, theme sets color mode, reduced motion limits animation, and zoom scales Electron windows.
+**What it controls:** Experience mode stores one persisted Easy, Standard, or Expert dashboard preference and filters primary dock/sidebar navigation. Easy shows Chat, Browser, Stats, Settings/Config, and external Docs; Standard hides the specialized Schedule, Memory, Knowledge, Files, and Live pages; Expert shows the full primary navigation. Navigation Mode switches dock/sidebar, Theme sets Light, Dark, or System color mode, Reduced Motion limits animation, and Zoom Level scales Electron windows.
 
-**Recommended defaults:** Use System theme and Auto reduced motion unless you need a fixed accessibility preference.
+**Recommended defaults:** New installs default to Expert experience mode. Use System theme and Auto reduced motion unless you need a fixed accessibility preference.
 
-**Risks and gotchas:** High zoom or dense sidebars can reduce visible workspace on small screens.
+**Risks and gotchas:** Experience mode only hides primary navigation links; the underlying dashboard routes remain available. Browser navigation still depends on sprint preview and in-app browser visibility settings. High zoom or dense sidebars can reduce visible workspace on small screens.
 
 Related docs:
 
@@ -255,7 +269,7 @@ Related docs:
 
 Customizes the dashboard background image, animation mode, static color, and pattern overlay.
 
-**What it controls:** Image upload, animated/static mode, animation style, color picker, and overlay pattern shape the visual layer behind panels.
+**What it controls:** Background Image, Background Mode, Animation Style, Static Color, and Pattern Overlay shape the visual layer behind panels. Onboarding previews Theme, Navigation Mode, Reduced Motion, Background Mode, Static Color, and supported Zoom Level while it is open, while Animation Style, Pattern Overlay, and custom background image remain available here after onboarding.
 
 **Recommended defaults:** Prefer lightweight images and readable contrast; use static mode if motion is distracting.
 
@@ -339,13 +353,13 @@ Related docs:
 
 <a id="git-flow"></a>
 
-Controls branch naming, PR creation, issue closure, and cleanup for sprint work.
+Controls branch naming, task PR title naming, PR creation, issue closure, and cleanup for sprint work.
 
-**What it controls:** Git mode, default branch, prefixes, sprint key, branch template, PR toggles, linked issue closure, and branch deletion define the workflow.
+**What it controls:** Git mode, default branch, prefixes, sprint key, branch template, task PR title template, PR toggles, linked issue closure, and branch deletion define the workflow. The Task PR title scheme is saved as `git.taskPrTitleScheme`, defaults to `({sprint_tag}) {task_title}`, and accepts `{sprint_tag}`, `{sprint_key}`, `{sprint_number}`, `{sprint_title}`, `{task_key}`, `{task_title}`, and `{provider}`. `{sprint_tag}` uses the first linked issue key when present, otherwise `<sprintKeyPrefix>-<sprint number>`, then a stable sprint slug/id fallback. Provider text appears only when the template includes `{provider}`.
 
 **Recommended defaults:** Use Remote mode for PR/CI automation and Local mode for repositories where Code UX must not touch remotes.
 
-**Risks and gotchas:** Wrong default branches or aggressive cleanup can disrupt expected repository flow.
+**Risks and gotchas:** Wrong default branches can disrupt expected repository flow, and overly terse task PR title schemes can make automated pull requests harder to scan.
 
 Related docs:
 
@@ -375,11 +389,11 @@ Related docs:
 
 Controls completion-time QA review, QA routing, and trigger-specific agent assignment.
 
-**What it controls:** QA toggles, route choices, and trigger selectors decide when and how final reviews run.
+**What it controls:** QA toggles, max-run budgets, exhaustion policy, and trigger selectors decide when and how final reviews run. Each trigger uses one row with an enable switch and custom QA agent multi-select; leaving the selector empty uses the built-in QA fallback.
 
 **Recommended defaults:** Keep QA enabled for multi-task sprints and route it to a provider with strong review behavior.
 
-**Risks and gotchas:** Disabling QA removes an important last check before merge automation continues.
+**Risks and gotchas:** Disabling QA removes an important last check before merge automation continues. Project-specific QA agent selectors stay disabled until a project is selected, but the built-in QA fallback remains active.
 
 Related docs:
 
@@ -468,8 +482,8 @@ Controls automatic preview lifecycle and whether browser workspace entry points 
 
 Related docs:
 
-- [Browser Preview](./browser.md)
-- [Sprint Preview Browser](./browser.md)
+- [Browser Preview](./browser-preview.md)
+- [Sprint Preview Browser](./browser-preview.md)
 
 ### Runtime Limits
 
@@ -485,7 +499,7 @@ Sets preview container concurrency, host port range, app port, and startup scrip
 
 Related docs:
 
-- [Browser Preview](./browser.md)
+- [Browser Preview](./browser-preview.md)
 - [Security Hardening](../troubleshooting.md)
 
 ### Techstacks
@@ -528,7 +542,7 @@ Related docs:
 
 Assigns built-in or project agent presets to planning, coding, CI, merge, dashboard, and clarification work.
 
-**What it controls:** Coding can be manual or orchestrator-selected; each route can use a project preset or built-in fallback.
+**What it controls:** Coding can be manual or orchestrator-selected; each route can use a project preset or built-in fallback. The orchestrator roster uses shared multi-select option cards with selected-count feedback, keyboard focus, disabled guidance, and wrapping labels.
 
 **Recommended defaults:** Use built-ins first, then assign specialists where project-specific instructions materially improve outcomes.
 
@@ -696,18 +710,18 @@ Related docs:
 
 <a id="provider-integration"></a>
 
-Explains that AI provider credentials are system-owned while project scopes still control routing and auth-copy behavior. External chat provider connections also appear under Settings -> Providers, but they use a separate chat-provider runtime path for ingress, channel binding, and outbound reply delivery.
+Explains that AI provider credentials are system-owned while project scopes still control routing and auth-copy behavior. External chat connector connections appear under Settings -> Integrations -> Chat Connectors, but they use a separate chat-provider runtime path for ingress, channel binding, and outbound reply delivery.
 
-**What it controls:** The notices clarify where AI provider instances live, which settings remain project-scoped, and why chat provider connections are configured beside provider credentials without participating in AI model routing.
+**What it controls:** The notices clarify where AI provider instances live, which settings remain project-scoped, and why chat connector connections are configured beside provider credentials without participating in AI model routing.
 
-**Recommended defaults:** Switch to system scope to add AI provider credentials, then route them from AI Models. Configure chat provider connections from the provider integration cards only when an external chat bridge is ready to send authenticated ingress.
+**Recommended defaults:** Switch to system scope to add AI provider credentials, then route them from AI Models. Configure chat connector connections from the provider integration cards only when an external chat bridge is ready to send authenticated ingress.
 
-**Risks and gotchas:** Expecting project scope to create AI provider credentials can leave routes without provider instances. Expecting chat provider credentials to affect AI routing can also be misleading: chat provider connections bind external channels to projects, while AI provider credentials decide which model runs Code UX work.
+**Risks and gotchas:** Expecting project scope to create AI provider credentials can leave routes without provider instances. Expecting chat provider credentials to affect AI routing can also be misleading: chat connector connections bind external channels to projects, while AI provider credentials decide which model runs Code UX work.
 
 Related docs:
 
 - [Provider Routing](../providers-and-models.md)
-- [External chat providers](../../architecture/external-chat-providers.md)
+- [External chat connectors](../../architecture/external-chat-providers.md)
 - [Configuration and Storage](../../developer/settings-reference.md)
 
 ### Provider Credentials
@@ -754,9 +768,9 @@ Controls which built-in Code UX MCP tool categories are available to containeriz
 
 **What it controls:** Tool-category and individual-tool toggles decide what trusted provider and project-manager clients may call on their next run. Agent presets add their own access layer in the Agents editor.
 
-**Recommended defaults:** Keep the global surface aligned with project-manager workflows. For individual agents, start with Code UX disabled. When an agent needs scheduling, enable scheduler-only access from the agent MCP manager before considering broader tools.
+**Recommended defaults:** Keep the global surface aligned with project-manager workflows. Dashboard chat receives Code UX MCP plus scheduler at runtime. For individual non-dashboard agents, start with Code UX disabled; if built-in tools are enabled, keep scheduler disabled unless the preset specifically needs agent-owned wakeups or task reruns.
 
-**Risks and gotchas:** Disabling required tools can make provider workflows fail; enabling broad tools increases capability exposure. The restricted `scheduler` tool lets an agent create its own wakeups or task reruns, while `manage_scheduler` and other management tools expose broader runtime control. Non-chat agents should not receive scheduler or management tools unless that capability is intentional.
+**Risks and gotchas:** Disabling required tools can make provider workflows fail; enabling broad tools increases capability exposure. The restricted `scheduler_code_ux` tool lets an agent create its own wakeups or task reruns, while `manage_scheduler` and other management tools expose broader runtime control. Non-chat agents should not receive scheduler or management tools unless that capability is intentional.
 
 Related docs:
 

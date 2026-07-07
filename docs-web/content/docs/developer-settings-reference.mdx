@@ -1,8 +1,8 @@
 # Settings schema reference
 
-This page enumerates every settings field, its type, default, range (if applicable), and the JSON path you would use with `manage_code_ux` → `settings` → `patch_*_setting`.
+This page enumerates every settings field, its type, default, range (if applicable), and the JSON path you would use with `manage_settings` → `patch_*_setting`.
 
-Settings are evaluated in cascade: **Defaults → System → Project → Sprint**. Higher-level fields override lower; unspecified fields inherit.
+Settings are evaluated in cascade: **System → Project → Sprint** (with built-in defaults folded into System). Higher-level fields override lower; unspecified fields inherit. Effective settings API responses include a `sources` object mapping JSON paths to their originating scope (`system`, `project`, or `sprint`).
 
 ## Top-level structure
 
@@ -93,7 +93,7 @@ System settings own the techstack catalog:
   "entries": [
     {
       "id": "code-ux-internal",
-      "label": "Code UX Internal",
+      "label": "Code UX Stack",
       "items": [
         { "id": "preact", "label": "Preact" },
         { "id": "tanstack-router", "label": "TanStack Router" },
@@ -119,7 +119,7 @@ Project and sprint settings own the selected techstack:
 }
 ```
 
-Default project settings intentionally keep `selectedTechstackId` and `applicationKind` as `null`. Existing and imported projects therefore do not automatically inherit the built-in Code UX internal stack; a project creation flow must set an explicit override when it wants to apply the catalog default.
+Default project settings intentionally keep `selectedTechstackId` and `applicationKind` as `null`. Existing and imported projects therefore do not automatically inherit the built-in Code UX Stack; a project creation flow must set an explicit override when it wants to apply the catalog default.
 
 ## `cliWorkflow`
 
@@ -129,12 +129,16 @@ Default project settings intentionally keep `selectedTechstackId` and `applicati
   "executionMode": "DOCKER",
   "containerImage": "node:24-bookworm",
   "containerSetupScriptPath": "string?",
-  "containerMemoryLimitMb": 6144
+  "containerMemoryLimitMb": 6144,
+  "containerRunAsRoot": false
 }
 ```
 
 Default `gitMode`: `remote`. Default `executionMode`: `DOCKER`.
 `containerMemoryLimitMb` is a MiB ceiling for every Docker-backed CLI provider container. Positive values are passed to Docker as both `--memory` and `--memory-swap`; set it to `0` to omit Docker memory flags.
+`containerRunAsRoot` is an opt-in runtime mode for Docker provider containers that must run as root. It defaults to `false`, and invalid or missing settings sanitize back to `false`; otherwise provider containers run with the resolved host workspace UID/GID and receive a matching mounted `/etc/passwd` worker entry. Settings > General > Docker Runtime exposes this setting for system defaults and project-scoped overrides. A resolved worker agent preset can override this value for local CLI task execution with nullable `containerRunAsRoot`; `null` or omission inherits the scoped setting, `false` forces non-root, `true` forces root, and hosted Jules sessions ignore the preset field. Root mode is privileged and should be reserved for trusted repositories that require package-manager or OS-level writes inside the provider container. Provider containers use Docker bridge networking without published ports and keep managed labels for cleanup. Loopback MCP URLs are rewritten to `host.docker.internal`; Linux Docker Engine runs with loopback MCP endpoints also add `--add-host host.docker.internal:host-gateway` unless `CODE_UX_DOCKER_REWRITE_LOCALHOST=0` opts out.
+
+`containerInstallPlaywrightBrowsers` defaults to `true` for provider coding containers. When `containerCacheSetupScriptImage` is also enabled, Code UX installs Playwright Chromium and OS dependencies during the setup-cache image build, stores the browser under `/ms-playwright`, and exposes `PLAYWRIGHT_BROWSERS_PATH=/ms-playwright` so non-root provider runs can reuse the baked browser without rerunning setup. When setup-image caching is disabled, a custom `containerSetupScriptPath` must honor `CODE_UX_INSTALL_PLAYWRIGHT=1` and install Chromium itself if operators expect Playwright to be available.
 
 ## `sprintPreview`
 
@@ -222,11 +226,22 @@ Disabling a step is for debugging; in production, leave them all enabled.
 {
   "defaultBranch": "main",
   "featureBranchPrefix": "feature/codeux/",
-  "branchScheme": { /* DEFAULT_SPRINT_BRANCH_SCHEME */ },
+  "sprintBranchScheme": "feature/sprint{sprint_id}-implementation",
+  "sprintKeyPrefix": "SPR",
+  "taskPrTitleScheme": "({sprint_tag}) {task_title}",
   "githubMode": "REMOTE" | "LOCAL",
-  "deleteMergedBranches": true
+  "deleteMergedBranches": true,
+  "autoCreatePr": true,
+  "prDescription": { /* task and sprint PR template toggles */ }
 }
 ```
+
+`git.taskPrTitleScheme` controls automated task PR titles for initial task PR creation
+and QA follow-up PR resolution. Its default is `({sprint_tag}) {task_title}`. Supported tokens are
+`{sprint_tag}`, `{sprint_key}`, `{sprint_number}`, `{sprint_title}`, `{task_key}`,
+`{task_title}`, and `{provider}`. `{sprint_tag}` resolves in this order: first linked issue key
+when present, then `<sprintKeyPrefix>-<sprint number>`, then a stable sprint slug/id fallback.
+Provider text is included only when the template contains `{provider}`.
 
 `deleteMergedBranches` (default `true`) deletes a branch once its work has merged: worker
 branches after they merge into the sprint feature branch, and the feature branch after it merges
@@ -309,9 +324,9 @@ Disable a tool to hide it from `ListTools` and reject `CallTool` invocations.
 
 ```jsonc
 {
-  "theme": "system" | "light" | "dark",
-  "navigationMode": "auto" | "dock" | "sidebar",
-  "density": "comfortable" | "compact"
+  "experienceMode": "EASY" | "STANDARD" | "EXPERT",
+  "theme": "SYSTEM" | "LIGHT" | "DARK",
+  "navigationMode": "DOCK" | "SIDEBAR"
 }
 ```
 
@@ -327,21 +342,42 @@ Emergency stop threshold (consecutive task-start failures). Override via env: `J
 
 ```jsonc
 // Set the Codex model to gpt-5.4 system-wide
+// 1. First call (unconfirmed) - returns approvalRequired: true
+{ "domain": "settings", "action": "patch_system_setting",
+  "payload": { "path": "aiProvider.providers.codex.model", "value": "gpt-5.4" } }
+
+// 2. Second call (confirmed) - executes if within 15 minutes and exact same payload
 { "domain": "settings", "action": "patch_system_setting",
   "payload": { "path": "aiProvider.providers.codex.model", "value": "gpt-5.4" },
   "approval": { "confirmed": true } }
 
 // For one project, force WHEN_GREEN auto-merge
+// 1. First call (unconfirmed)
 { "domain": "settings", "action": "patch_project_setting",
   "payload": { "projectId": "proj-1", "path": "ciIntelligence.featurePrAutoMergeMode", "value": "WHEN_GREEN" } }
 
+// 2. Second call (confirmed)
+{ "domain": "settings", "action": "patch_project_setting",
+  "payload": { "projectId": "proj-1", "path": "ciIntelligence.featurePrAutoMergeMode", "value": "WHEN_GREEN" },
+  "approval": { "confirmed": true } }
+
 // For one sprint, route planning to Claude Opus
+// 1. First call (unconfirmed)
 { "domain": "settings", "action": "patch_sprint_setting",
   "payload": {
     "projectId": "proj-1", "sprintId": "spr-3",
     "path": "aiProvider.routing.planning",
     "value": { "providerConfigId": "claude-code", "profile": "GLOBAL" }
   } }
+
+// 2. Second call (confirmed)
+{ "domain": "settings", "action": "patch_sprint_setting",
+  "payload": {
+    "projectId": "proj-1", "sprintId": "spr-3",
+    "path": "aiProvider.routing.planning",
+    "value": { "providerConfigId": "claude-code", "profile": "GLOBAL" }
+  },
+  "approval": { "confirmed": true } }
 ```
 
 ## Validation

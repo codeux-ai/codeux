@@ -23,16 +23,38 @@ export const defaultCodingAgentMcpAccess = (): AgentMcpAccessConfig => ({
   linkedServerIds: defaultCodingAgentLinkedServerIds(),
 });
 
+const normalizeLinkedServerIds = (linkedServerIds: readonly string[] = []): string[] => Array.from(
+  new Set(linkedServerIds.filter((id) => typeof id === "string" && id.trim().length > 0).map((id) => id.trim())),
+);
+
+export const codeUxAgentMcpAccess = (linkedServerIds: readonly string[] = []): AgentMcpAccessConfig => ({
+  codeUxEnabled: true,
+  codeUxToolToggles: TOOL_DEFINITIONS.map((tool) => ({
+    name: tool.name,
+    enabled: true,
+    isInternal: true,
+  })),
+  linkedServerIds: normalizeLinkedServerIds(linkedServerIds),
+});
+
+export const codeUxAgentMcpAccessWithoutScheduler = (linkedServerIds: readonly string[] = []): AgentMcpAccessConfig => ({
+  codeUxEnabled: true,
+  codeUxToolToggles: TOOL_DEFINITIONS.map((tool) => ({
+    name: tool.name,
+    enabled: tool.name !== "scheduler_code_ux",
+    isInternal: true,
+  })),
+  linkedServerIds: normalizeLinkedServerIds(linkedServerIds),
+});
+
 export const schedulerOnlyAgentMcpAccess = (linkedServerIds: readonly string[] = []): AgentMcpAccessConfig => ({
   codeUxEnabled: true,
   codeUxToolToggles: TOOL_DEFINITIONS.map((tool) => ({
     name: tool.name,
-    enabled: tool.name === "scheduler",
+    enabled: tool.name === "scheduler_code_ux",
     isInternal: true,
   })),
-  linkedServerIds: Array.from(
-    new Set(linkedServerIds.filter((id) => typeof id === "string" && id.trim().length > 0).map((id) => id.trim())),
-  ),
+  linkedServerIds: normalizeLinkedServerIds(linkedServerIds),
 });
 
 export const isSchedulerOnlyAgentMcpAccess = (
@@ -40,7 +62,7 @@ export const isSchedulerOnlyAgentMcpAccess = (
 ): boolean => {
   if (!access.codeUxEnabled) return false;
   const enabledByName = new Map(access.codeUxToolToggles.map((toggle) => [toggle.name, toggle.enabled]));
-  return TOOL_DEFINITIONS.every((tool) => enabledByName.get(tool.name) === (tool.name === "scheduler"));
+  return TOOL_DEFINITIONS.every((tool) => enabledByName.get(tool.name) === (tool.name === "scheduler_code_ux"));
 };
 
 const sanitizeToolToggles = (value: unknown): McpToolToggle[] => {

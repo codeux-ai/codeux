@@ -129,12 +129,16 @@ Default project settings intentionally keep `selectedTechstackId` and `applicati
   "executionMode": "DOCKER",
   "containerImage": "node:24-bookworm",
   "containerSetupScriptPath": "string?",
-  "containerMemoryLimitMb": 6144
+  "containerMemoryLimitMb": 6144,
+  "containerRunAsRoot": false
 }
 ```
 
 Default `gitMode`: `remote`. Default `executionMode`: `DOCKER`.
 `containerMemoryLimitMb` is a MiB ceiling for every Docker-backed CLI provider container. Positive values are passed to Docker as both `--memory` and `--memory-swap`; set it to `0` to omit Docker memory flags.
+`containerRunAsRoot` is an opt-in runtime mode for Docker provider containers that must run as root. It defaults to `false`, and invalid or missing settings sanitize back to `false`; otherwise provider containers run with the resolved host workspace UID/GID and receive a matching mounted `/etc/passwd` worker entry. Settings > General > Docker Runtime exposes this setting for system defaults and project-scoped overrides. A resolved worker agent preset can override this value for local CLI task execution with nullable `containerRunAsRoot`; `null` or omission inherits the scoped setting, `false` forces non-root, `true` forces root, and hosted Jules sessions ignore the preset field. Root mode is privileged and should be reserved for trusted repositories that require package-manager or OS-level writes inside the provider container. Provider containers use Docker bridge networking without published ports and keep managed labels for cleanup. Loopback MCP URLs are rewritten to `host.docker.internal`; Linux Docker Engine runs with loopback MCP endpoints also add `--add-host host.docker.internal:host-gateway` unless `CODE_UX_DOCKER_REWRITE_LOCALHOST=0` opts out.
+
+`containerInstallPlaywrightBrowsers` defaults to `true` for provider coding containers. When `containerCacheSetupScriptImage` is also enabled, Code UX installs Playwright Chromium and OS dependencies during the setup-cache image build, stores the browser under `/ms-playwright`, and exposes `PLAYWRIGHT_BROWSERS_PATH=/ms-playwright` so non-root provider runs can reuse the baked browser without rerunning setup. When setup-image caching is disabled, a custom `containerSetupScriptPath` must honor `CODE_UX_INSTALL_PLAYWRIGHT=1` and install Chromium itself if operators expect Playwright to be available.
 
 ## `sprintPreview`
 
@@ -224,12 +228,20 @@ Disabling a step is for debugging; in production, leave them all enabled.
   "featureBranchPrefix": "feature/codeux/",
   "sprintBranchScheme": "feature/sprint{sprint_id}-implementation",
   "sprintKeyPrefix": "SPR",
+  "taskPrTitleScheme": "({sprint_tag}) {task_title}",
   "githubMode": "REMOTE" | "LOCAL",
   "deleteMergedBranches": true,
   "autoCreatePr": true,
   "prDescription": { /* task and sprint PR template toggles */ }
 }
 ```
+
+`git.taskPrTitleScheme` controls automated task PR titles for initial task PR creation
+and QA follow-up PR resolution. Its default is `({sprint_tag}) {task_title}`. Supported tokens are
+`{sprint_tag}`, `{sprint_key}`, `{sprint_number}`, `{sprint_title}`, `{task_key}`,
+`{task_title}`, and `{provider}`. `{sprint_tag}` resolves in this order: first linked issue key
+when present, then `<sprintKeyPrefix>-<sprint number>`, then a stable sprint slug/id fallback.
+Provider text is included only when the template contains `{provider}`.
 
 `deleteMergedBranches` (default `true`) deletes a branch once its work has merged: worker
 branches after they merge into the sprint feature branch, and the feature branch after it merges
@@ -312,9 +324,9 @@ Disable a tool to hide it from `ListTools` and reject `CallTool` invocations.
 
 ```jsonc
 {
-  "theme": "system" | "light" | "dark",
-  "navigationMode": "auto" | "dock" | "sidebar",
-  "density": "comfortable" | "compact"
+  "experienceMode": "EASY" | "STANDARD" | "EXPERT",
+  "theme": "SYSTEM" | "LIGHT" | "DARK",
+  "navigationMode": "DOCK" | "SIDEBAR"
 }
 ```
 

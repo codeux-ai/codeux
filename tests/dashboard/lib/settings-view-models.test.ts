@@ -30,6 +30,15 @@ import {
   getRelevantModelPricingRefs,
   normalizeModelPricingOverrideId,
   normalizeModelPricingOverrides,
+  TASK_PR_TITLE_TOKEN_LABELS,
+  getTaskPrTitleSchemeOptions,
+  dashboardExperienceModeOptions,
+  getDashboardExperienceModeDescription,
+  getDashboardExperienceModeLabel,
+  isEasyExperienceMode,
+  isExpertExperienceMode,
+  isStandardExperienceMode,
+  normalizeDashboardExperienceMode,
 } from "../../../dashboard/src/v2/lib/settings-view-models.js";
 import type { SystemSettings, ProjectSettings, ExternalSettingsHints, DashboardSettings } from "../../../dashboard/src/types.js";
 import { DEFAULT_DASHBOARD_SETTINGS } from "../../../src/repositories/settings-defaults.js";
@@ -65,6 +74,17 @@ describe("sortProviderConfigEntries", () => {
 });
 
 describe("settings view model source helpers", () => {
+  it("exposes dashboard experience mode labels, descriptions, and helpers", () => {
+    expect(dashboardExperienceModeOptions.map((option) => option.label)).toEqual(["Easy", "Standard", "Expert"]);
+    expect(normalizeDashboardExperienceMode("STANDARD")).toBe("STANDARD");
+    expect(normalizeDashboardExperienceMode("standart")).toBe("EXPERT");
+    expect(getDashboardExperienceModeLabel("STANDARD")).toBe("Standard");
+    expect(getDashboardExperienceModeDescription("EASY")).toContain("Simplified");
+    expect(isEasyExperienceMode("EASY")).toBe(true);
+    expect(isStandardExperienceMode("STANDARD")).toBe(true);
+    expect(isExpertExperienceMode("EXPERT")).toBe(true);
+  });
+
   it("returns the direct field source when a leaf path is present", () => {
     expect(getFieldSource({
       "git.defaultBranch": "project",
@@ -114,6 +134,27 @@ describe("settings view model source helpers", () => {
   it("provides provider labels", () => {
     expect(providerLabels.jules).toBe("Jules");
     expect(providerLabels.gemini).toBe("Gemini");
+  });
+
+  it("provides task PR title scheme placeholder metadata", () => {
+    expect(Object.keys(TASK_PR_TITLE_TOKEN_LABELS)).toEqual([
+      "sprint_tag",
+      "sprint_key",
+      "sprint_number",
+      "sprint_title",
+      "task_key",
+      "task_title",
+      "provider",
+    ]);
+    expect(getTaskPrTitleSchemeOptions()).toEqual([
+      { value: "{sprint_tag}", label: "Sprint Tag" },
+      { value: "{sprint_key}", label: "Sprint Key" },
+      { value: "{sprint_number}", label: "Sprint Number" },
+      { value: "{sprint_title}", label: "Sprint Title" },
+      { value: "{task_key}", label: "Task Key" },
+      { value: "{task_title}", label: "Task Title" },
+      { value: "{provider}", label: "Provider" },
+    ]);
   });
 
   it("marks Jules model and thinking controls as unsupported", () => {
@@ -836,7 +877,7 @@ describe("settings cloning helpers", () => {
   });
 
   const createMockProjectSettings = (): ProjectSettings => ({
-    appearance: { theme: "system" },
+    appearance: { experienceMode: "STANDARD", theme: "system" },
     automationLevel: "FULL",
     automationInterventions: {},
     aiProvider: {
@@ -846,7 +887,7 @@ describe("settings cloning helpers", () => {
       invocationRouting: {},
     },
     techstack: { applicationKind: null, selectedTechstackId: null },
-    git: { githubMode: "app", githubToken: "", defaultBranch: "main", autoCreatePr: false, autoCloseLinkedIssues: false, deleteMergedBranches: false, featureBranchPrefix: "", sprintBranchScheme: "FLAT", sprintKeyPrefix: "" },
+    git: { githubMode: "app", githubToken: "", defaultBranch: "main", autoCreatePr: false, autoCloseLinkedIssues: false, deleteMergedBranches: false, featureBranchPrefix: "", sprintBranchScheme: "FLAT", sprintKeyPrefix: "", taskPrTitleScheme: "({sprint_tag}) {task_title}" },
     jira: { host: "h", email: "e", apiToken: "t", autoTransitionLinkedIssuesOnImport: true, importTransitionName: "In Work", autoCloseLinkedIssues: false, defaultProject: "P", closeTransitionName: "Done" },
     notion: createMockImporterSettings(),
     asana: createMockImporterSettings(),
@@ -910,6 +951,7 @@ describe("settings cloning helpers", () => {
     expect(clone).not.toBe(original);
 
     // Mutate clone
+    clone.appearance.experienceMode = "EASY";
     clone.memory.enabled = false;
     clone.memory.autoCaptureSprint = false;
     clone.jira.host = "new-host";
@@ -920,12 +962,14 @@ describe("settings cloning helpers", () => {
     clone.agents.qualityAssurance.sprintCompletion.agentPresetIds.push("qa-extra");
     clone.agents.selfReflection.planning.criteria[0]!.threshold = 0.1;
     clone.agents.routing.taskCoding.orchestratorAgentPresetIds.push("c");
+    clone.git.taskPrTitleScheme = "{task_key}: {task_title}";
     clone.customMcpServers![0].headers!["X-New"] = "123";
     clone.customMcpServers![0].env!["BAZ"] = "qux";
     clone.mcpTools![0].enabled = false;
     clone.skills[0].enabled = false;
 
     // Verify original is untouched
+    expect(original.appearance.experienceMode).toBe("STANDARD");
     expect(original.memory.enabled).toBe(true);
     expect(original.memory.autoCaptureSprint).toBe(true);
     expect(original.jira.host).toBe("h");
@@ -936,6 +980,7 @@ describe("settings cloning helpers", () => {
     expect(original.agents.qualityAssurance.sprintCompletion.agentPresetIds).toEqual(["qa-sprint", "qa-peer"]);
     expect(original.agents.selfReflection.planning.criteria[0]!.threshold).toBe(0.8);
     expect(original.agents.routing.taskCoding.orchestratorAgentPresetIds).toEqual(["a", "b"]);
+    expect(original.git.taskPrTitleScheme).toBe("({sprint_tag}) {task_title}");
     expect(original.customMcpServers![0].headers!["X-New"]).toBeUndefined();
     expect(original.customMcpServers![0].env!["BAZ"]).toBeUndefined();
     expect(original.mcpTools![0].enabled).toBe(true);
@@ -949,6 +994,7 @@ describe("settings cloning helpers", () => {
     expect(clone).not.toBe(original);
 
     // Mutate clone
+    clone.appearance.experienceMode = "EASY";
     clone.memory.enabled = false;
     clone.jira.host = "new-host";
     clone.asana.workspaceId = "mutated-workspace";
@@ -957,9 +1003,11 @@ describe("settings cloning helpers", () => {
     clone.agents.qualityAssurance.sprintCompletion.agentPresetIds.push("qa-extra");
     clone.agents.selfReflection.qualityAssurance.criteria.push({ id: "scope_control", label: "Scope control", prompt: "Stay scoped.", threshold: 0.8 });
     clone.agents.routing.taskCoding.orchestratorAgentPresetIds.push("c");
+    clone.git.taskPrTitleScheme = "{provider}: {task_title}";
     clone.customMcpServers![0].headers!["X-New"] = "123";
 
     // Verify original is untouched
+    expect(original.appearance.experienceMode).toBe("STANDARD");
     expect(original.memory.enabled).toBe(true);
     expect(original.jira.host).toBe("h");
     expect(original.asana.workspaceId).toBe("");
@@ -968,6 +1016,7 @@ describe("settings cloning helpers", () => {
     expect(original.agents.qualityAssurance.sprintCompletion.agentPresetIds).toEqual(["qa-sprint", "qa-peer"]);
     expect(original.agents.selfReflection.qualityAssurance.criteria).toHaveLength(1);
     expect(original.agents.routing.taskCoding.orchestratorAgentPresetIds).toEqual(["a", "b"]);
+    expect(original.git.taskPrTitleScheme).toBe("({sprint_tag}) {task_title}");
     expect(original.customMcpServers![0].headers!["X-New"]).toBeUndefined();
   });
 
@@ -1022,6 +1071,7 @@ describe("settings cloning helpers", () => {
     clone.integrations.lucid.documentId = "mutated-document";
     clone.integrations.providers["p1"].apiKey = "mutated-key";
     clone.defaults.memory.enabled = false;
+    clone.defaults.git.taskPrTitleScheme = "{task_title}";
     clone.mcpTools[0].enabled = false;
 
     // Verify original is untouched
@@ -1030,6 +1080,7 @@ describe("settings cloning helpers", () => {
     expect(original.integrations.lucid.documentId).toBe("");
     expect(original.integrations.providers["p1"].apiKey).toBe("key");
     expect(original.defaults.memory.enabled).toBe(true);
+    expect(original.defaults.git.taskPrTitleScheme).toBe("({sprint_tag}) {task_title}");
     expect(original.mcpTools[0].enabled).toBe(true);
   });
 });

@@ -41,7 +41,7 @@ Code UX is a single Node process that hosts multiple cooperating services. This 
 └────────────────────────────────────────────────────────────────────┘
 ```
 
-The process is started by `src/index.ts` → `CodeUxServer.run()`. Lifecycle:
+The primary CLI/management entrypoint is `src/index.ts`, which loads configuration and starts `CodeUxServer.run()`. `CodeUxServer` wires all backend services. The dashboard/API serves on a configured port (default 4444), while the worker host and Electron shell operate as separate entrypoints. Lifecycle:
 
 1. **Boot settings** — load and migrate the settings DB.
 2. **Refresh API key** — pull from CLI / env / settings.
@@ -112,7 +112,7 @@ Subtask data is *also* persisted as markdown files for portability — see [Spri
 ## Data flow: a sprint cycle
 
 ```
-Dashboard click "Orchestrate"            MCP client calls manage_code_ux:start
+Dashboard click "Orchestrate"            MCP client calls grouped tools (e.g., manage_sprints:start) (manage_code_ux is deprecated)
             │                                            │
             ▼                                            ▼
       POST /api/sprints/.../orchestrate        ToolRegistry → sprint-actions.ts

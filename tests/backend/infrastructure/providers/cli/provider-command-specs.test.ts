@@ -3,6 +3,7 @@ import {
   E2E_PROVIDER_CLI_SHIM_ENV,
   providerSpecs,
   enabledCustomServersFor,
+  getNativeSessionOperationPrompt,
   isOpenCodeNativeSessionId
 } from "../../../../../src/infrastructure/providers/cli/provider-command-specs.js";
 import type { CustomMcpServer } from "../../../../../src/contracts/app-types.js";
@@ -219,6 +220,21 @@ describe("Provider Command Specs", () => {
       expect(isOpenCodeNativeSessionId("ses_")).toBe(false);
       expect(isOpenCodeNativeSessionId(null)).toBe(false);
       expect(isOpenCodeNativeSessionId(undefined)).toBe(false);
+    });
+  });
+
+  describe("getNativeSessionOperationPrompt", () => {
+    it("maps compact to provider-native session commands", () => {
+      expect(getNativeSessionOperationPrompt("codex", "compact")).toBe("/compact");
+      expect(getNativeSessionOperationPrompt("claude-code", "compact")).toBe("/compact");
+      expect(getNativeSessionOperationPrompt("gemini", "compact")).toBe("/compress");
+      expect(getNativeSessionOperationPrompt("qwen-code", "compact")).toBe("/compress");
+      expect(getNativeSessionOperationPrompt("opencode", "compact")).toBe("/compact");
+      expect(getNativeSessionOperationPrompt("antigravity", "compact")).toBe("/compact");
+    });
+
+    it("does not expose native compaction for mockup-cli", () => {
+      expect(getNativeSessionOperationPrompt("mockup-cli", "compact")).toBeNull();
     });
   });
 });

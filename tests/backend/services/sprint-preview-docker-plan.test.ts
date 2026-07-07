@@ -49,6 +49,15 @@ describe("SprintPreviewDockerPlanBuilder", () => {
     expect(args).toContain("-p");
     expect(args).toContain("127.0.0.1:4444:39000");
     expect(args).toContain("127.0.0.1:4445:5173");
+    expect(args).toEqual(expect.arrayContaining([
+      "--network",
+      "bridge",
+      "--security-opt",
+      "no-new-privileges",
+      "--label",
+      "code-ux.managed=true",
+    ]));
+    expect(args).not.toContain("0.0.0.0:4444:39000");
     expect(args).toContain("--workdir");
     expect(args).toContain("/workspace");
     expect(args).toContain("--label");

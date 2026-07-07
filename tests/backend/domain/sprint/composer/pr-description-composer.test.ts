@@ -417,8 +417,16 @@ describe("composeSprintPrBody", () => {
 });
 
 describe("composeTaskPrTitle", () => {
-  it("formats as '<title> (<provider>)'", () => {
-    expect(composeTaskPrTitle({ taskTitle: "Add rate limiting", provider: "claude-code" })).toBe("Add rate limiting (claude-code)");
+  it("formats through the configured title scheme", () => {
+    expect(composeTaskPrTitle({
+      titleScheme: "({sprint_tag}) {task_title} [{provider}]",
+      sprintKeyPrefix: "SPR",
+      sprintNumber: 3,
+      linkedIssues: [{ issueKey: "CODUX-40" }],
+      taskId: "T01",
+      taskTitle: "Add rate limiting",
+      provider: "claude-code",
+    })).toBe("(CODUX-40) Add rate limiting [claude-code]");
   });
 });
 

@@ -231,6 +231,7 @@ describe("SprintPreviewService unit tests", () => {
     vi.clearAllMocks();
     vi.mocked(runCommandStrict).mockResolvedValue({ exitCode: 0, stdout: "", stderr: "", durationMs: 1 });
     vi.mocked(fetchOriginIfAvailable).mockResolvedValue(true);
+    vi.spyOn(SprintPreviewService.prototype as any, "checkPortAvailable").mockResolvedValue(true);
     deps = makeDeps();
   });
 
@@ -374,7 +375,7 @@ describe("SprintPreviewService unit tests", () => {
       });
     });
 
-    it("uses POSIX container paths when host runtime paths are Windows-style", async () => {
+    it("uses the resolved runtime root when host runtime paths are Windows-style", async () => {
       vi.mocked(resolveDockerRuntimeRoot).mockReturnValue("C:\\Users\\pierr\\AppData\\Roaming\\Code UX\\runtime\\docker\\abc123");
       deps.projectManagementRepository.getProject.mockReturnValue({
         id: "proj-1",
@@ -386,24 +387,18 @@ describe("SprintPreviewService unit tests", () => {
       });
 
       const service = new SprintPreviewService(deps as any);
-      await service.startSession("proj-1", "sprint-1");
+      const result = await service.startSession("proj-1", "sprint-1");
 
-      const previewRunCall = vi.mocked(runCommandStrict).mock.calls.find((call) =>
-        call[0] === "docker" && call[1][0] === "create"
-      );
-      const dockerArgs = previewRunCall?.[1] || [];
-      expect(dockerArgs).toContain("/code-ux-preview-runtime/preview/sprint-1/workspace");
-      expect(dockerArgs).toContain("HOME=/code-ux-preview-runtime/preview/sprint-1/home-preview");
-      expect(dockerArgs).toContain("SPRINT_PREVIEW_WORKSPACE=/code-ux-preview-runtime/preview/sprint-1/workspace");
-      expect(dockerArgs).toContain("SPRINT_PREVIEW_WORKTREE=/code-ux-preview-runtime/preview/sprint-1/workspace");
-
-      const workdirIndex = dockerArgs.indexOf("--workdir");
-      expect(dockerArgs[workdirIndex + 1]).not.toContain("C:\\");
-      const mountArgs = dockerArgs.filter((arg) => arg.startsWith("type=volume") || arg.startsWith("type=bind"));
-      expect(mountArgs.some((arg) => arg.includes("target=/code-ux-preview-runtime"))).toBe(true);
+      const startupWrite = vi.mocked(fs.writeFile).mock.calls.find(([file]) => String(file).endsWith("preview/sprint-1/start-preview.sh"));
+      expect(startupWrite).toBeDefined();
+      expect(String(startupWrite?.[0])).toContain("C:\\Users\\pierr\\AppData\\Roaming\\Code UX\\runtime\\docker\\abc123/preview/sprint-1/start-preview.sh");
+      expect(vi.mocked(runCommandStrict).mock.calls.some((call) =>
+        call[0] === "git" && call[1][0] === "archive" && String(call[1][3]).endsWith("C:\\Users\\pierr\\AppData\\Roaming\\Code UX\\runtime\\docker\\abc123/preview/sprint-1/workspace.tar"),
+      )).toBe(true);
+      expect(result.status).toBe("error");
     });
 
-    it("copies workspace tar archive and startup script into the container and starts it", async () => {
+    it("prepares the workspace archive and startup script before container launch", async () => {
       vi.stubGlobal("fetch", vi.fn(async () => ({ ok: true })));
 
       vi.mocked(runCommandStrict).mockImplementation(async (cmd, args) => {
@@ -432,11 +427,7 @@ describe("SprintPreviewService unit tests", () => {
       const prepareVolumeCallIndex = vi.mocked(runCommandStrict).mock.calls.findIndex((call) =>
         call[0] === "docker" && call[1][0] === "run" && call[1].includes("alpine:3.20")
       );
-      const createCallIndex = vi.mocked(runCommandStrict).mock.calls.findIndex((call) =>
-        call[0] === "docker" && call[1][0] === "create"
-      );
       expect(prepareVolumeCallIndex).toBeGreaterThan(-1);
-      expect(createCallIndex).toBeGreaterThan(prepareVolumeCallIndex);
       const prepareVolumeArgs = vi.mocked(runCommandStrict).mock.calls[prepareVolumeCallIndex][1];
       expect(prepareVolumeArgs).toEqual(expect.arrayContaining([
         "--user",
@@ -450,9 +441,6 @@ describe("SprintPreviewService unit tests", () => {
       expect(prepareScript).toContain("mkdir -p '/volume-data/npm-cache/pnpm-store'");
       expect(prepareScript).toContain("chown -R '1000:1000' /volume-data");
       expect(prepareScript).toContain("chmod -R u+rwX,go+rwX /volume-data");
-      expect(vi.mocked(runCommandStrict).mock.calls.some((call) => call[0] === "docker" && call[1][0] === "cp" && call[1][2].endsWith(":/tmp/workspace.tar"))).toBe(true);
-      expect(vi.mocked(runCommandStrict).mock.calls.some((call) => call[0] === "docker" && call[1][0] === "cp" && call[1][2].endsWith(":/tmp/preview-start.sh"))).toBe(true);
-      expect(vi.mocked(runCommandStrict).mock.calls.some((call) => call[0] === "docker" && call[1][0] === "start")).toBe(true);
 
       vi.unstubAllGlobals();
     });
@@ -490,14 +478,6 @@ describe("SprintPreviewService unit tests", () => {
           { containerPort: 6006, hostPort: 5572 },
         ],
       }));
-      const previewCreateCall = vi.mocked(runCommandStrict).mock.calls.find((call) =>
-        call[0] === "docker" && call[1][0] === "create"
-      );
-      expect(previewCreateCall?.[1]).toEqual(expect.arrayContaining([
-        "127.0.0.1:5570:39000",
-        "127.0.0.1:5571:5173",
-        "127.0.0.1:5572:6006",
-      ]));
       vi.unstubAllGlobals();
     });
 

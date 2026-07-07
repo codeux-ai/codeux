@@ -367,6 +367,94 @@ describe("ProviderRunner", () => {
     }));
   });
 
+  it.each([
+    {
+      provider: "codex" as const,
+      continueSessionId: "codex-native-1",
+      expectedNativePrompt: "/compact",
+      expectedResumeArgs: ["exec", "resume", "--last"],
+    },
+    {
+      provider: "claude-code" as const,
+      continueSessionId: "66e95743-e82e-445d-891a-ac01b27ddcb9",
+      expectedNativePrompt: "/compact",
+      expectedResumeArgs: ["--resume", "66e95743-e82e-445d-891a-ac01b27ddcb9"],
+    },
+    {
+      provider: "gemini" as const,
+      continueSessionId: "gemini-native-1",
+      expectedNativePrompt: "/compress",
+      expectedResumeArgs: ["--resume"],
+    },
+    {
+      provider: "qwen-code" as const,
+      continueSessionId: "thread-qwen-code",
+      expectedNativePrompt: "/compress",
+      expectedResumeArgs: ["--continue"],
+    },
+    {
+      provider: "opencode" as const,
+      continueSessionId: "ses_19151020bffeNmMNdnhmFM3fA5",
+      expectedNativePrompt: "/compact",
+      expectedResumeArgs: ["--session", "ses_19151020bffeNmMNdnhmFM3fA5"],
+    },
+    {
+      provider: "antigravity" as const,
+      continueSessionId: "antigravity-native-1",
+      expectedNativePrompt: "/compact",
+      expectedResumeArgs: ["--conversation=antigravity-native-1"],
+    },
+  ])("runs native compaction for $provider by resuming the existing CLI session", async ({ provider, continueSessionId, expectedNativePrompt, expectedResumeArgs }) => {
+    const sessionId = `thread-${provider}`;
+
+    await runner.runProviderForText({
+      provider,
+      prompt: "this transcript must not be replayed for compaction",
+      cwd: "/repo",
+      model: "default",
+      apiKey: "key",
+      sessionId,
+      workspaceSessionId: sessionId,
+      continueSessionId,
+      nativeSessionOperation: "compact",
+      workflowSettings: { executionMode: "DOCKER" } as any,
+      repoPath: "/repo",
+      onActivity: vi.fn(),
+    });
+
+    const providerRun = dockerRunner.runProviderInDocker.mock.calls
+      .map((call: any[]) => call[0])
+      .find((call: any) => call.providerLabel === provider && call.sessionId === sessionId);
+
+    expect(providerRun).toBeTruthy();
+    expect(providerRun.args).toEqual(expect.arrayContaining(expectedResumeArgs));
+    expect(providerRun.args).toContain(expectedNativePrompt);
+    expect(providerRun.args).not.toContain("this transcript must not be replayed for compaction");
+    expect(JSON.stringify(dockerRunner.runProviderInDocker.mock.calls)).not.toContain(":compaction");
+    expect(dockerRunner.ensureWorkspace).toHaveBeenCalledWith(expect.objectContaining({
+      sessionId,
+      preserve: true,
+      reuseExisting: true,
+    }));
+  });
+
+  it("rejects native compaction when no continuation session is available", async () => {
+    await expect(runner.runProvider({
+      provider: "claude-code",
+      prompt: "compact",
+      cwd: "/repo",
+      model: "sonnet",
+      apiKey: "key",
+      sessionId: "thread-1",
+      nativeSessionOperation: "compact",
+      workflowSettings: { executionMode: "DOCKER" } as any,
+      repoPath: "/repo",
+      onActivity: vi.fn(),
+    })).rejects.toThrow("requires continueSessionId");
+
+    expect(dockerRunner.runProviderInDocker).not.toHaveBeenCalled();
+  });
+
   it("preserves provider result and logs errors when cleanup operations fail", async () => {
     vi.mocked(runStreamingCommand).mockResolvedValueOnce({
       ok: true,
@@ -546,8 +634,13 @@ describe("ProviderRunner", () => {
   });
 
   it("uses the configured Qwen custom model and rewrites local Docker endpoints", async () => {
+    const originalPlatform = process.platform;
     const originalRewrite = process.env.CODE_UX_DOCKER_REWRITE_LOCALHOST;
-    process.env.CODE_UX_DOCKER_REWRITE_LOCALHOST = "1";
+    Object.defineProperty(process, "platform", {
+      value: "linux",
+      configurable: true,
+    });
+    delete process.env.CODE_UX_DOCKER_REWRITE_LOCALHOST;
     try {
       const runArgs = {
         provider: "qwen-code" as const,
@@ -569,6 +662,10 @@ describe("ProviderRunner", () => {
       const model = resolveEffectiveModel(runArgs);
       await runner.runProvider({ ...runArgs, model });
     } finally {
+      Object.defineProperty(process, "platform", {
+        value: originalPlatform,
+        configurable: true,
+      });
       if (originalRewrite === undefined) {
         delete process.env.CODE_UX_DOCKER_REWRITE_LOCALHOST;
       } else {
@@ -979,8 +1076,13 @@ describe("ProviderRunner", () => {
   });
 
   it("uses the configured OpenCode custom provider model instead of a stale placeholder", async () => {
+    const originalPlatform = process.platform;
     const originalRewrite = process.env.CODE_UX_DOCKER_REWRITE_LOCALHOST;
-    process.env.CODE_UX_DOCKER_REWRITE_LOCALHOST = "1";
+    Object.defineProperty(process, "platform", {
+      value: "linux",
+      configurable: true,
+    });
+    delete process.env.CODE_UX_DOCKER_REWRITE_LOCALHOST;
     try {
       const runArgs = {
         provider: "opencode" as const,
@@ -1001,6 +1103,10 @@ describe("ProviderRunner", () => {
       const model = resolveEffectiveModel(runArgs);
       await runner.runProvider({ ...runArgs, model });
     } finally {
+      Object.defineProperty(process, "platform", {
+        value: originalPlatform,
+        configurable: true,
+      });
       if (originalRewrite === undefined) {
         delete process.env.CODE_UX_DOCKER_REWRITE_LOCALHOST;
       } else {

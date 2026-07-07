@@ -1,6 +1,5 @@
 import type { CustomMcpServer, CustomMcpTransport, DashboardSettings, McpToolToggle, ProviderId } from "../contracts/app-types.js";
 import { TOOL_DEFINITIONS, type McpRuntimeRole, type ToolName } from "../contracts/mcp-tool-definitions.js";
-import { isIP } from "node:net";
 
 export interface AgentCodeUxToolAccess {
   codeUxEnabled: boolean;
@@ -152,6 +151,12 @@ const isBlockedIpv6Target = (host: string): boolean => {
   return (first & 0xffc0) === 0xfe80 || (first & 0xff00) === 0xff00;
 };
 
+const getIpVersion = (host: string): 0 | 4 | 6 => {
+  if (parseDecimalIpv4(host)) return 4;
+  if (!host.includes(":")) return 0;
+  return /^[0-9a-f:.]+$/i.test(host) ? 6 : 0;
+};
+
 const isSafeHttpHostname = (hostname: string, rawHostname: string): boolean => {
   const raw = rawHostname.toLowerCase().replace(/\.$/, "");
   const host = hostname.toLowerCase().replace(/^\[|\]$/g, "").replace(/\.$/, "");
@@ -162,7 +167,7 @@ const isSafeHttpHostname = (hostname: string, rawHostname: string): boolean => {
   const rawIpv4 = parseDecimalIpv4(raw);
   if (rawIpv4) return !isBlockedIpv4Target(rawIpv4);
 
-  const ipVersion = isIP(host);
+  const ipVersion = getIpVersion(host);
   if (ipVersion === 4) {
     const octets = parseDecimalIpv4(host);
     return !!octets && !isBlockedIpv4Target(octets);

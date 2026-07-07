@@ -25,6 +25,7 @@ afterEach(() => {
 
 import { LiveSessionPage } from "../../../dashboard/src/v2/LiveSessionPage.js";
 import { useDashboardRuntimeData } from "../../../dashboard/src/hooks/use-dashboard-runtime-data.js";
+import { useSprints } from "../../../dashboard/src/hooks/useSprints.js";
 import { useProjectData } from "../../../dashboard/src/v2/context/project-data.js";
 import { useProjectGitStatus } from "../../../dashboard/src/v2/hooks/use-project-git-status.js";
 import { useLiveSessionActions } from "../../../dashboard/src/v2/hooks/use-live-session-actions.js";
@@ -66,6 +67,7 @@ vi.mock("gsap", () => ({
 }));
 
 vi.mock("../../../dashboard/src/hooks/use-dashboard-runtime-data.js");
+vi.mock("../../../dashboard/src/hooks/useSprints.js");
 vi.mock("../../../dashboard/src/v2/context/project-data.js");
 vi.mock("../../../dashboard/src/v2/hooks/use-project-git-status.js", () => ({
   useProjectGitStatus: vi.fn(() => ({ data: null, loading: false, error: null, refresh: vi.fn() })),
@@ -101,7 +103,32 @@ describe("LiveSessionPage Runtime Status", () => {
     liveSessionActionMocks.rerunningIds = new Set();
     liveSessionActionMocks.pendingActionIds = new Set();
     vi.mocked(useProjectData).mockReturnValue({ selectedProjectId: "p1" } as any);
+    vi.mocked(useSprints).mockReturnValue({ selectedSprintId: "s1", selectedSprint: null, data: [], selectSprint: vi.fn(), loading: false, error: null, refetch: vi.fn() } as any);
     vi.mocked(useLiveSessionActions).mockReturnValue(liveSessionActionMocks);
+  });
+
+  it("requests the selected sprint scoped live snapshot", () => {
+    vi.mocked(useSprints).mockReturnValue({ selectedSprintId: "sprint-selected", selectedSprint: null, data: [], selectSprint: vi.fn(), loading: false, error: null, refetch: vi.fn() } as any);
+    vi.mocked(useDashboardRuntimeData).mockReturnValue({
+      error: null,
+      gitStatus: null,
+      gitStatusError: null,
+      initialLoadComplete: true,
+      transportState: "connected",
+      isRecovering: false,
+      snapshotUpdatedAt: new Date().toISOString(),
+      refreshGitStatus: vi.fn(),
+      refreshRuntimeStatus: vi.fn(),
+      selectedSprintId: "sprint-selected",
+      status: { subtasks: [], timestamp: "2024-01-01T00:00:00Z", project_id: "p1", sprint_id: "sprint-selected" },
+      execution: mockExecution,
+      stats: { total: 0 } as any,
+      tasksWithLiveActivities: [],
+    });
+
+    render(<LiveSessionPage />);
+
+    expect(useDashboardRuntimeData).toHaveBeenCalledWith("p1", true, { selectedSprintId: "sprint-selected" });
   });
 
   it("renders the LiveTransportBanner in a disconnected state", () => {

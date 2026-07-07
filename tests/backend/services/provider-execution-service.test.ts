@@ -225,6 +225,27 @@ describe("ProviderExecutionService", () => {
     expect(providerRunner.runProvider.mock.calls[0]![0].prompt).toContain("## PERSISTENT SKILL STORAGE");
   });
 
+  it("auto-attaches the Code UX MCP gateway for agents with Code UX access enabled", async () => {
+    providerRunner.runProvider.mockResolvedValue(mockResult);
+    service = new ProviderExecutionService({
+      providerRunner,
+      executionRepository,
+      logger: logger as any,
+      getGithubToken: vi.fn(),
+      getMcpConnectionInfo: vi.fn().mockReturnValue({ url: "http://127.0.0.1:4444/mcp", authToken: "token" }),
+    });
+
+    await service.executeProvider({
+      ...defaultArgs,
+      agentMcpAccess: { codeUxEnabled: true, codeUxToolToggles: [], linkedServerIds: [] },
+      mcpAgentId: "agent-1",
+    });
+
+    expect(providerRunner.runProvider).toHaveBeenCalledWith(expect.objectContaining({
+      mcpConnection: { url: "http://127.0.0.1:4444/mcp", authToken: "token", agentId: "agent-1" },
+    }));
+  });
+
   it("logs provider subprocess crashes as invocation metadata without raw prompt, command payloads, or secrets", async () => {
     const rawPrompt = "implement the secret rollout transcript";
     const rawApiKey = "sk-provider-secret";
@@ -516,6 +537,92 @@ describe("ProviderExecutionService", () => {
         role: "assistant",
         contentMarkdown: "{\"verdict\":\"pass\"}",
       })
+    );
+  });
+
+  it("persists parsed planning text-output telemetry live before completion and skips duplicate ticks", async () => {
+    const liveConversation = [
+      { kind: "user", text: "Plan the sprint." },
+      { kind: "reasoning", text: "I need to inspect the repository shape first." },
+      { kind: "tool_call", text: "", toolName: "list_files", toolCallId: "plan-call-1", toolArguments: "{\"path\":\".\"}", toolStatus: "completed" },
+      { kind: "tool_result", text: "", toolCallId: "plan-call-1", toolName: "list_files", toolOutput: "src\n tests", toolStatus: "completed" },
+      { kind: "assistant", text: "{\"tasks\":[\"inspect\"]}" },
+    ];
+    providerRunner.runProviderForText.mockImplementation(async (opts: any) => {
+      opts.onTelemetry({
+        ...mockResult.usageTelemetry,
+        transcriptText: "live planning transcript",
+        conversation: liveConversation as any,
+      });
+
+      expect(executionRepository.clearExecutionInvocationMessages).toHaveBeenCalledTimes(1);
+      expect(executionRepository.appendExecutionInvocationMessage).toHaveBeenCalledWith(
+        "exec-inv-1",
+        expect.objectContaining({
+          role: "tool",
+          toolCallsJson: expect.objectContaining({
+            arguments: "{\"path\":\".\"}",
+            callId: "plan-call-1",
+          }),
+          metadata: expect.objectContaining({
+            kind: "tool_call",
+            toolName: "list_files",
+            toolStatus: "completed",
+          }),
+        }),
+      );
+      expect(executionRepository.appendExecutionInvocationMessage).toHaveBeenCalledWith(
+        "exec-inv-1",
+        expect.objectContaining({
+          role: "tool",
+          toolCallsJson: expect.objectContaining({
+            output: "src\n tests",
+          }),
+          metadata: expect.objectContaining({
+            kind: "tool_result",
+            toolName: "list_files",
+          }),
+        }),
+      );
+      expect(executionRepository.appendExecutionInvocationMessage).not.toHaveBeenCalledWith(
+        "exec-inv-1",
+        expect.objectContaining({ contentMarkdown: "{\"tasks\":[\"final\"]}" }),
+      );
+
+      opts.onTelemetry({
+        ...mockResult.usageTelemetry,
+        transcriptText: "live planning transcript",
+        conversation: liveConversation as any,
+      });
+      expect(executionRepository.clearExecutionInvocationMessages).toHaveBeenCalledTimes(1);
+
+      return {
+        ...mockResult,
+        text: "{\"tasks\":[\"final\"]}",
+        usageTelemetry: {
+          ...mockResult.usageTelemetry,
+          conversation: [],
+          transcriptText: "",
+        },
+      } as ProviderRunResult & { text: string };
+    });
+
+    await service.executeProvider({
+      ...defaultArgs,
+      purpose: "planning",
+      type: "planning",
+      expectTextOutput: true,
+      trackPromptInInvocation: false,
+    });
+
+    expect(providerRunner.runProviderForText).toHaveBeenCalled();
+    expect(executionRepository.clearExecutionInvocationMessages).toHaveBeenCalledTimes(1);
+    expect(executionRepository.appendExecutionInvocationMessage).toHaveBeenCalledWith(
+      "exec-inv-1",
+      expect.objectContaining({
+        role: "assistant",
+        contentMarkdown: "{\"tasks\":[\"final\"]}",
+      }),
     );
   });
 

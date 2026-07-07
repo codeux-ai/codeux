@@ -113,6 +113,14 @@ vi.mock("../../../dashboard/src/v2/components/agents/AgentsHero.js", async () =>
   const { h } = await import("preact");
   return {
     AgentsHero: (props: any) => h("div", { "data-testid": "agents-hero" },
+      h("button", {
+        disabled: !props.selectedProject || props.fileSyncDisabled || props.pullingFromFiles,
+        onClick: props.onPullFromFiles,
+      }, props.pullingFromFiles ? "Pulling from files" : "Pull from files"),
+      h("button", {
+        disabled: !props.selectedProject || props.fileSyncDisabled || props.pushingToFiles,
+        onClick: props.onPushToFiles,
+      }, props.pushingToFiles ? "Pushing to files" : "Push to files"),
       h("button", { onClick: props.onCreate }, "New Agent")
     )
   };
@@ -135,6 +143,14 @@ vi.mock("../../../dashboard/src/v2/components/agents/AgentPresetDetailPanel.js",
       h("h2", null, props.preset.name),
       ...(props.routeTags || []).map((tag: string) => h("span", { key: tag }, tag)),
       h("div", null, props.preset.instructionMarkdown),
+      props.preset.sourcePath && h("button", {
+        disabled: props.importing,
+        onClick: () => props.onImport(props.preset.id),
+      }, "Import"),
+      h("button", {
+        disabled: props.pushingToFile || !props.canPushToFile,
+        onClick: () => props.onPushToFile(props.preset.id),
+      }, props.pushingToFile ? "Pushing to file" : "Push to file"),
       h("button", { onClick: props.onEdit }, "Edit Agent")
     )
   };
@@ -292,6 +308,10 @@ describe("AgentsPage", () => {
     };
 
     vi.mocked(agentPresetApi.fetchAgentPresets).mockResolvedValue(mockPresets as any);
+    vi.mocked(agentPresetApi.importAgentPresetFromMarkdown).mockResolvedValue(mockPresets[0] as any);
+    vi.mocked(agentPresetApi.pullAgentPresetsFromMarkdown).mockResolvedValue(mockPresets as any);
+    vi.mocked(agentPresetApi.pushAgentPresetsToMarkdown).mockResolvedValue(mockPresets as any);
+    vi.mocked(agentPresetApi.exportAgentPresetToMarkdown).mockResolvedValue(mockPresets[0] as any);
     vi.mocked(agentPresetApi.fetchSkillStorages).mockResolvedValue([
       {
         id: "storage-1",
@@ -654,6 +674,69 @@ describe("AgentsPage", () => {
     await waitFor(() => {
       expect(screen.getByText("Dashboard reply MCP context")).toBeInTheDocument();
     });
+  });
+
+  it("pulls and pushes agent presets between project files and sqlite", async () => {
+    await renderPage();
+
+    await waitFor(() => {
+      expect(screen.getAllByText("Planning Agent")[0]).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByText("Pull from files"));
+
+    await waitFor(() => {
+      expect(agentPresetApi.pullAgentPresetsFromMarkdown).toHaveBeenCalledWith("project-1");
+    });
+    expect(await screen.findByText("Agent presets pulled from project files.")).toBeInTheDocument();
+    expect(screen.getByText("Do some planning")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByText("Push to files"));
+
+    await waitFor(() => {
+      expect(agentPresetApi.pushAgentPresetsToMarkdown).toHaveBeenCalledWith("project-1");
+    });
+    expect(await screen.findByText("Agent presets pushed to project files.")).toBeInTheDocument();
+    expect(screen.getByText("Do some planning")).toBeInTheDocument();
+  });
+
+  it("disables markdown file actions when project markdown mirroring is disabled", async () => {
+    const effective = createEffectiveSettings();
+    effective.settings.agents.saveToProjectDirectory = false;
+    vi.mocked(settingsApi.fetchProjectEffectiveSettings).mockResolvedValue(effective as any);
+
+    await renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByText("Pull from files")).toBeDisabled();
+      expect(screen.getByText("Push to files")).toBeDisabled();
+      expect(screen.getByText("Push to file")).toBeDisabled();
+    });
+  });
+
+  it("pushes the selected agent preset to a project file", async () => {
+    await renderPage();
+
+    await waitFor(() => {
+      expect(screen.getAllByText("Planning Agent")[0]).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByText("Push to file"));
+
+    await waitFor(() => {
+      expect(agentPresetApi.exportAgentPresetToMarkdown).toHaveBeenCalledWith("agent-1");
+    });
+    expect(await screen.findByText("Agent preset pushed to project file.")).toBeInTheDocument();
+  });
+
+  it("surfaces markdown sync backend errors in the existing error banner", async () => {
+    vi.mocked(agentPresetApi.pullAgentPresetsFromMarkdown).mockRejectedValueOnce(new Error("Project files unavailable"));
+
+    await renderPage();
+    fireEvent.click(await screen.findByText("Pull from files"));
+
+    expect(await screen.findByText("Project files unavailable")).toBeInTheDocument();
+    expect(screen.getByText("Pull failed: Project files unavailable")).toBeInTheDocument();
   });
 });
 

@@ -1,5 +1,9 @@
 import { CONTAINER_SETUP_SCRIPT } from "./cli-workflow-utils.js";
-import { toDockerMountArg } from "./cli-docker-utils.js";
+import {
+  DOCKER_BRIDGE_NETWORK_ARGS,
+  DOCKER_NO_NEW_PRIVILEGES_ARGS,
+  toDockerMountArg,
+} from "./cli-docker-utils.js";
 import type { SprintPreviewPortMapping } from "../contracts/app-types.js";
 
 export const CONTAINER_PREVIEW_PROXY_PORT = 39000;
@@ -43,11 +47,14 @@ export function buildSprintPreviewDockerCreateArgs(args: SprintPreviewDockerPlan
     "create",
     "--name", args.containerName,
     "--log-driver", PREVIEW_LOG_DRIVER,
+    ...DOCKER_BRIDGE_NETWORK_ARGS,
+    ...DOCKER_NO_NEW_PRIVILEGES_ARGS,
     ...portMappings.flatMap((mapping, index) => [
       "-p",
       `127.0.0.1:${mapping.hostPort}:${index === 0 ? CONTAINER_PREVIEW_PROXY_PORT : mapping.containerPort}`,
     ]),
     "--workdir", args.containerWorkspacePath,
+    "--label", "code-ux.managed=true",
     "--label", "code-ux.preview=true",
     "--label", `code-ux.project-id=${args.projectId}`,
     "--label", `code-ux.sprint-id=${args.sprintId}`,

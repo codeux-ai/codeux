@@ -9,13 +9,16 @@ import {
   Layers,
   Sparkles,
   Monitor,
+  SlidersHorizontal,
 } from "lucide-preact";
-import type { OnboardingRuntimeReadiness, ProviderId, SystemSettings } from "../../../types.js";
+import type { DashboardExperienceMode, OnboardingRuntimeReadiness, ProviderId, SystemSettings } from "../../../types.js";
+import { normalizeDashboardExperienceMode } from "../../lib/experience-mode.js";
 import { getProviderInitialSelection } from "../../lib/onboarding-settings-draft.js";
 
-export type StepId = "installation" | "introduction" | "providers" | "provider-setup" | "git" | "jira" | "defaults" | "automation" | "appearance";
+export type StepId = "mode" | "installation" | "introduction" | "providers" | "provider-setup" | "git" | "jira" | "defaults" | "automation" | "appearance";
 
 export const onboardingSteps: Array<{ id: StepId; label: string; icon: typeof Settings }> = [
+  { id: "mode", label: "Setup mode", icon: SlidersHorizontal },
   { id: "installation", label: "Installation", icon: Box },
   { id: "introduction", label: "Introduction", icon: ShieldCheck },
   { id: "providers", label: "Select Providers", icon: Cpu },
@@ -26,6 +29,18 @@ export const onboardingSteps: Array<{ id: StepId; label: string; icon: typeof Se
   { id: "automation", label: "Automation", icon: Sparkles },
   { id: "appearance", label: "Appearance", icon: Monitor },
 ];
+
+export const easyOnboardingSteps: Array<{ id: StepId; label: string; icon: typeof Settings }> = [
+  { id: "mode", label: "Setup mode", icon: SlidersHorizontal },
+  { id: "provider-setup", label: "Provider", icon: Cpu },
+  { id: "git", label: "GitHub", icon: GitBranch },
+];
+
+export const getOnboardingStepsForMode = (
+  mode: DashboardExperienceMode,
+): Array<{ id: StepId; label: string; icon: typeof Settings }> => (
+  mode === "EASY" ? easyOnboardingSteps : onboardingSteps
+);
 
 export const defaultOnboardingReadiness: OnboardingRuntimeReadiness = {
   checkedAt: "",
@@ -47,6 +62,7 @@ export interface OnboardingFlowState {
   open: boolean;
   activeStep: number;
   lastStep: number;
+  experienceMode: DashboardExperienceMode;
   readiness: OnboardingRuntimeReadiness;
   settings: SystemSettings | null;
   selectedProviders: ProviderId[];
@@ -63,20 +79,25 @@ export type OnboardingFlowAction =
   | { type: "go-previous" }
   | { type: "load-success"; readiness: OnboardingRuntimeReadiness; settings: SystemSettings }
   | { type: "load-failure"; error: string }
+  | { type: "select-experience-mode"; mode: DashboardExperienceMode }
   | { type: "update-settings"; recipe: (current: SystemSettings) => SystemSettings }
   | { type: "set-settings"; settings: SystemSettings }
   | { type: "select-provider"; provider: ProviderId }
+  | { type: "set-selected-providers"; providers: ProviderId[] }
   | { type: "deselect-provider"; provider: ProviderId }
   | { type: "toggle-provider"; provider: ProviderId }
   | { type: "set-saving"; saving: boolean }
   | { type: "set-error"; error: string | null };
 
-const clampStep = (step: number): number => Math.min(onboardingSteps.length - 1, Math.max(0, step));
+const clampStep = (step: number, mode: DashboardExperienceMode): number => (
+  Math.min(getOnboardingStepsForMode(mode).length - 1, Math.max(0, step))
+);
 
 export const createInitialOnboardingFlowState = (): OnboardingFlowState => ({
   open: false,
   activeStep: 0,
   lastStep: 0,
+  experienceMode: "EXPERT",
   readiness: defaultOnboardingReadiness,
   settings: null,
   selectedProviders: [],
@@ -98,14 +119,17 @@ export const onboardingFlowReducer = (
     case "close":
       return { ...state, open: false };
     case "set-active-step":
-      return { ...state, lastStep: state.activeStep, activeStep: clampStep(action.step) };
+      return { ...state, lastStep: state.activeStep, activeStep: clampStep(action.step, state.experienceMode) };
     case "go-next":
-      return { ...state, lastStep: state.activeStep, activeStep: clampStep(state.activeStep + 1) };
+      return { ...state, lastStep: state.activeStep, activeStep: clampStep(state.activeStep + 1, state.experienceMode) };
     case "go-previous":
-      return { ...state, lastStep: state.activeStep, activeStep: clampStep(state.activeStep - 1) };
+      return { ...state, lastStep: state.activeStep, activeStep: clampStep(state.activeStep - 1, state.experienceMode) };
     case "load-success":
+      const loadedMode = normalizeDashboardExperienceMode(action.settings.defaults.appearance.experienceMode);
       return {
         ...state,
+        experienceMode: state.settings ? state.experienceMode : loadedMode,
+        activeStep: clampStep(state.activeStep, state.settings ? state.experienceMode : loadedMode),
         readiness: action.readiness,
         settings: action.settings,
         selectedProviders: state.selectedProviders.length > 0
@@ -115,6 +139,12 @@ export const onboardingFlowReducer = (
       };
     case "load-failure":
       return { ...state, error: action.error };
+    case "select-experience-mode":
+      return {
+        ...state,
+        experienceMode: action.mode,
+        activeStep: clampStep(state.activeStep, action.mode),
+      };
     case "update-settings":
       return {
         ...state,
@@ -126,6 +156,8 @@ export const onboardingFlowReducer = (
       return state.selectedProviders.includes(action.provider)
         ? state
         : { ...state, selectedProviders: [...state.selectedProviders, action.provider] };
+    case "set-selected-providers":
+      return { ...state, selectedProviders: Array.from(new Set(action.providers)) };
     case "deselect-provider":
       return { ...state, selectedProviders: state.selectedProviders.filter((provider) => provider !== action.provider) };
     case "toggle-provider":
@@ -144,7 +176,8 @@ export const onboardingFlowReducer = (
 export function useOnboardingStepFlow() {
   const [state, dispatch] = useReducer(onboardingFlowReducer, undefined, createInitialOnboardingFlowState);
 
-  const activeStepData = onboardingSteps[state.activeStep] ?? onboardingSteps[0]!;
+  const steps = useMemo(() => getOnboardingStepsForMode(state.experienceMode), [state.experienceMode]);
+  const activeStepData = steps[state.activeStep] ?? steps[0]!;
   const selectedProviderTypes = useMemo(
     () => onboardingProviderTypes.filter((provider) => state.selectedProviders.includes(provider)),
     [state.selectedProviders],
@@ -166,7 +199,7 @@ export function useOnboardingStepFlow() {
     goToNextStep,
     goToPreviousStep,
     resetSteps,
-    steps: onboardingSteps,
+    steps,
     updateSettings,
   };
 }

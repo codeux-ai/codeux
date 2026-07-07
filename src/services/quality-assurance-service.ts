@@ -33,8 +33,9 @@ import type { Logger } from "../shared/logging/logger.js";
 import { runCommandStrict } from "./cli-process-runner.js";
 import { buildGitHttpAuthEnvForRepoWithFallbacks, type GitHttpAuthOptions } from "./git-http-auth.js";
 import { resolveAgentMemoryInstructions } from "./agent-memory-instructions.js";
+import { formatTaskPrTitle } from "../domain/git/task-pr-title-template.js";
 import { buildTaskPrComposerInput } from "../domain/sprint/composer/task-pr-input-builder.js";
-import { composeTaskPrBody, composeTaskPrTitle } from "../domain/sprint/composer/pr-description-composer.js";
+import { composeTaskPrBody } from "../domain/sprint/composer/pr-description-composer.js";
 import type { MemoryService } from "./memory-service.js";
 import type { SkillService } from "./skill-service.js";
 import type { AgentPresetRepository } from "../repositories/agent-preset-repository.js";
@@ -1700,7 +1701,17 @@ export class QualityAssuranceService {
           {
             taskId: args.task.id,
             provider: args.provider,
-            title: composeTaskPrTitle(composerInput),
+            title: formatTaskPrTitle({
+              scheme: settings.git.taskPrTitleScheme,
+              sprintKeyPrefix: settings.git.sprintKeyPrefix,
+              sprint: sprint ?? (args.task.sprint_id ? { id: args.task.sprint_id } : null),
+              task: {
+                id: args.task.record_id ?? args.task.id,
+                taskKey: args.task.id,
+                title: args.task.title,
+              },
+              provider: args.provider,
+            }),
             body: composeTaskPrBody(composerInput),
             featureBranch: args.featureBranch,
             workerBranch,

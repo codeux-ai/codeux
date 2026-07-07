@@ -193,6 +193,9 @@ export class DashboardSnapshotCache {
     );
 
     const baseSnapshot = this.deps.executionRepository.getProjectExecutionSnapshot(projectId, options);
+    const selectedSprintId = typeof options.selectedSprintId === "string" && options.selectedSprintId.length > 0
+      ? options.selectedSprintId
+      : null;
     const snapshot = {
       ...baseSnapshot,
       connections: mapExecutionConnections(
@@ -203,6 +206,7 @@ export class DashboardSnapshotCache {
         this.deps.projectAttentionRepository.listProjectAttentionItems(projectId, {
           statuses: ["open", "claimed"],
           limit: 50,
+          ...(selectedSprintId ? { selectedSprintId } : {}),
         }),
       ),
     };

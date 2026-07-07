@@ -5,6 +5,7 @@ import type {
   SkillStorageRecord,
   UpdateAgentPresetInput,
 } from "../types.js";
+import type { PushAgentPresetsToMarkdownOptions } from "../../../../src/contracts/agent-preset-types.js";
 import { fetchJson } from "../../lib/api/fetch-json.js";
 
 export const fetchAgentPresets = async (projectId: string): Promise<AgentPreset[]> => {
@@ -23,6 +24,7 @@ export const createAgentPreset = async (
     avatarConfig: input.avatarConfig,
     providerConfigId: input.providerConfigId,
     model: input.model,
+    containerRunAsRoot: input.containerRunAsRoot,
     memoryTemplateOverrideEnabled: input.memoryTemplateOverrideEnabled,
     memoryTemplateMarkdown: input.memoryTemplateMarkdown,
     memoryConfig: input.memoryConfig,
@@ -48,6 +50,7 @@ export const updateAgentPreset = async (
     avatarConfig: input.avatarConfig,
     providerConfigId: input.providerConfigId,
     model: input.model,
+    containerRunAsRoot: input.containerRunAsRoot,
     memoryTemplateOverrideEnabled: input.memoryTemplateOverrideEnabled,
     memoryTemplateMarkdown: input.memoryTemplateMarkdown,
     mcpAccess: input.mcpAccess,
@@ -76,6 +79,29 @@ export const importAgentPresetFromMarkdown = async (agentPresetId: string): Prom
 
 export const syncAllAgentPresetsFromMarkdown = async (projectId: string): Promise<AgentPreset[]> => {
   return fetchJson<AgentPreset[]>(`/api/projects/${encodeURIComponent(projectId)}/agent-presets/sync-markdown`, {
+    method: "POST",
+  });
+};
+
+export const pullAgentPresetsFromMarkdown = async (projectId: string): Promise<AgentPreset[]> => {
+  return fetchJson<AgentPreset[]>(`/api/projects/${encodeURIComponent(projectId)}/agent-presets/pull-markdown`, {
+    method: "POST",
+  });
+};
+
+export const pushAgentPresetsToMarkdown = async (
+  projectId: string,
+  options: PushAgentPresetsToMarkdownOptions = {},
+): Promise<AgentPreset[]> => {
+  return fetchJson<AgentPreset[]>(`/api/projects/${encodeURIComponent(projectId)}/agent-presets/push-markdown`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(options),
+  });
+};
+
+export const exportAgentPresetToMarkdown = async (agentPresetId: string): Promise<AgentPreset> => {
+  return fetchJson<AgentPreset>(`/api/agent-presets/${encodeURIComponent(agentPresetId)}/export-markdown`, {
     method: "POST",
   });
 };

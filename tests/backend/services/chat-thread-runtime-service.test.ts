@@ -3,7 +3,7 @@ import * as fs from "fs/promises";
 import * as os from "os";
 import * as path from "path";
 import { ChatThreadRuntimeService } from "../../../src/services/chat-thread-runtime-service.js";
-import { schedulerOnlyAgentMcpAccess } from "../../../src/services/agent-mcp-access.js";
+import { codeUxAgentMcpAccess } from "../../../src/services/agent-mcp-access.js";
 
 describe("ChatThreadRuntimeService", () => {
   let deps: any;
@@ -145,6 +145,76 @@ describe("ChatThreadRuntimeService", () => {
     });
   });
 
+  it("stores sanitized prompt suggestions on the visible virtual reply metadata", async () => {
+    deps.connectionChatRepository.postDashboardMessage.mockReturnValue({ id: "msg-suggestions", threadId: "t1", bodyMarkdown: "what next" });
+    deps.connectionChatRepository.getThread.mockReturnValue({
+      id: "t1",
+      projectId: "p1",
+      title: "Thread",
+      connectionId: null,
+      runtimeState: {},
+    });
+    deps.projectManagementRepository.getProject.mockReturnValue({ id: "p1", name: "proj", baseDir: "/tmp" });
+    deps.taskService.resolveInvocationProvider.mockReturnValue({
+      provider: "codex",
+      providers: { codex: { model: "gpt-5.3-codex", apiKey: "codex-key" } },
+    });
+    deps.connectionChatRepository.listMessages.mockReturnValue([
+      { id: "msg-suggestions", authorType: "dashboard_user", bodyMarkdown: "what next" },
+    ]);
+    deps.chatManagementActionService.processManagementAction.mockResolvedValue({
+      replyMarkdown: "Here are next steps.",
+      action: null,
+      approvalRequired: false,
+      promptSuggestions: [
+        { label: "Inspect status", prompt: "Show the current project status", icon: "search", id: "status" },
+      ],
+    });
+
+    await service.postMessage("p1", { bodyMarkdown: "what next" });
+
+    expect(deps.connectionChatRepository.postSystemMessage).toHaveBeenCalledWith("p1", {
+      threadId: "t1",
+      bodyMarkdown: "Here are next steps.",
+      metadata: {
+        promptSuggestions: [
+          { label: "Inspect status", prompt: "Show the current project status", icon: "search", id: "status" },
+        ],
+      },
+    });
+  });
+
+  it("leaves no-suggestion virtual replies without message metadata", async () => {
+    deps.connectionChatRepository.postDashboardMessage.mockReturnValue({ id: "msg-no-suggestions", threadId: "t1", bodyMarkdown: "hello" });
+    deps.connectionChatRepository.getThread.mockReturnValue({
+      id: "t1",
+      projectId: "p1",
+      title: "Thread",
+      connectionId: null,
+      runtimeState: {},
+    });
+    deps.projectManagementRepository.getProject.mockReturnValue({ id: "p1", name: "proj", baseDir: "/tmp" });
+    deps.taskService.resolveInvocationProvider.mockReturnValue({
+      provider: "codex",
+      providers: { codex: { model: "gpt-5.3-codex", apiKey: "codex-key" } },
+    });
+    deps.connectionChatRepository.listMessages.mockReturnValue([
+      { id: "msg-no-suggestions", authorType: "dashboard_user", bodyMarkdown: "hello" },
+    ]);
+    deps.chatManagementActionService.processManagementAction.mockResolvedValue({
+      replyMarkdown: "Plain reply",
+      action: null,
+      approvalRequired: false,
+    });
+
+    await service.postMessage("p1", { bodyMarkdown: "hello" });
+
+    expect(deps.connectionChatRepository.postSystemMessage).toHaveBeenCalledWith("p1", {
+      threadId: "t1",
+      bodyMarkdown: "Plain reply",
+    });
+  });
+
   it("suppresses rich widget prompt instructions and delivers persisted replies for chat-provider messages", async () => {
     const inboundMessage = {
       id: "msg-provider",
@@ -207,7 +277,7 @@ describe("ChatThreadRuntimeService", () => {
     });
   });
 
-  it("uses scheduler-only Code UX access for the default dashboard reply agent", async () => {
+  it("uses Code UX MCP with scheduler for the default dashboard reply agent", async () => {
     deps.getDashboardSettings.mockReturnValue({
       agents: { routing: { dashboardReply: { agentPresetId: null } } },
       cliWorkflow: {},
@@ -239,19 +309,19 @@ describe("ChatThreadRuntimeService", () => {
     expect(deps.chatManagementActionService.processManagementAction).toHaveBeenCalledWith(
       expect.objectContaining({
         mcpConnection: { url: "http://127.0.0.1:3000/mcp", authToken: "token" },
-        mcpAgentId: "reply-agent",
-        agentMcpAccess: schedulerOnlyAgentMcpAccess(),
-        prompt: expect.stringContaining("You have the `scheduler` MCP tool available"),
+        mcpAgentId: null,
+        agentMcpAccess: codeUxAgentMcpAccess(),
+        prompt: expect.stringContaining("You have the `manage_code_ux` MCP tool available"),
       }),
     );
     expect(deps.chatManagementActionService.processManagementAction).toHaveBeenCalledWith(
       expect.objectContaining({
-        prompt: expect.not.stringContaining("You have the `manage_code_ux` MCP tool available"),
+        prompt: expect.stringContaining("You also have the `scheduler_code_ux` MCP tool available"),
       }),
     );
   });
 
-  it("preserves explicit MCP access for a configured dashboard reply preset", async () => {
+  it("uses full Code UX MCP access for a configured dashboard reply preset", async () => {
     const explicitAccess = {
       codeUxEnabled: true,
       codeUxToolToggles: [{ name: "manage_tasks", enabled: false, isInternal: true }],
@@ -288,8 +358,8 @@ describe("ChatThreadRuntimeService", () => {
 
     expect(deps.chatManagementActionService.processManagementAction).toHaveBeenCalledWith(
       expect.objectContaining({
-        mcpAgentId: "custom-reply",
-        agentMcpAccess: explicitAccess,
+        mcpAgentId: null,
+        agentMcpAccess: codeUxAgentMcpAccess(["custom-docs"]),
         prompt: expect.stringContaining("You have the `manage_code_ux` MCP tool available"),
       }),
     );
@@ -525,7 +595,7 @@ describe("ChatThreadRuntimeService", () => {
     expect(deps.chatManagementActionService.processManagementAction).not.toHaveBeenCalled();
   });
 
-  it("compacts a virtual thread into a stored summary and clears the active session", async () => {
+  it("compacts a virtual thread natively and preserves the active session", async () => {
     deps.connectionChatRepository.getThread.mockReturnValue({
       id: "t1",
       projectId: "p1",
@@ -548,7 +618,7 @@ describe("ChatThreadRuntimeService", () => {
     });
     deps.agentPresetSyncService.getWorkerAgent.mockResolvedValue({ instructionMarkdown: "" });
     deps.executionRepository.createExecutionInvocation.mockReturnValue({ id: "exec-compact" });
-    deps.providerRunner.runProviderForText.mockResolvedValue({ text: "## Current Objective\nKeep context", nativeSessionId: "ignored" });
+    deps.providerRunner.runProviderForText.mockResolvedValue({ text: "## Current Objective\nKeep context", nativeSessionId: "session-1" });
     deps.connectionChatRepository.updateThread.mockImplementation((threadId: string, input: any) => ({
       id: threadId,
       projectId: "p1",
@@ -566,22 +636,134 @@ describe("ChatThreadRuntimeService", () => {
     }));
     expect(deps.providerRunner.runProviderForText).toHaveBeenCalledWith(expect.objectContaining({
       provider: "claude-code",
-      continueSessionId: null,
-      sessionId: "t1:compaction",
+      continueSessionId: "session-1",
+      nativeSessionOperation: "compact",
+      sessionId: "t1",
+      workspaceSessionId: "t1",
       providerMountAuth: true,
       providerAuthPath: "~/.claude",
     }));
+    expect(JSON.stringify(deps.providerRunner.runProviderForText.mock.calls)).not.toContain("t1:compaction");
     expect(updated.runtimeState).toMatchObject({
-      replayRequired: true,
-      sessionIds: [],
+      routeKind: "virtual",
+      virtualProvider: "claude-code",
+      modelLabel: "claude-3",
+      replayRequired: false,
+      sessionIds: ["session-1"],
       compactionSummary: {
         markdown: "## Current Objective\nKeep context",
         provider: "claude-code",
         model: "claude-3",
         sourceMessageId: "m2",
         sourceMessageCount: 2,
+        nativeSessionId: "session-1",
       },
     });
+  });
+
+  it("uses the thread logical session for native compaction when no native session is stored and preserves the resolved session", async () => {
+    deps.connectionChatRepository.getThread.mockReturnValue({
+      id: "t1",
+      projectId: "p1",
+      title: "Thread",
+      connectionId: null,
+      runtimeState: {
+        routeKind: "virtual",
+        virtualProvider: "qwen-code",
+        sessionIds: [],
+        replayRequired: true,
+      },
+    });
+    deps.connectionChatRepository.listMessages.mockReturnValue([
+      { id: "m1", authorType: "dashboard_user", bodyMarkdown: "hello" },
+    ]);
+    deps.projectManagementRepository.getProject.mockReturnValue({ id: "p1", name: "proj", baseDir: "/tmp" });
+    deps.taskService.resolveInvocationProvider.mockReturnValue({
+      provider: "qwen-code",
+      providers: {
+        "qwen-code": {
+          model: "qwen3-coder",
+          apiKey: "key",
+          qwenAuthMode: "MODEL_PROVIDER",
+          qwenRegion: "international",
+          qwenBaseUrl: "https://qwen.example.test",
+          qwenEnvKey: "QWEN_KEY",
+          qwenModelId: "qwen3-coder",
+          qwenProtocol: "openai",
+        },
+      },
+    });
+    deps.executionRepository.createExecutionInvocation.mockReturnValue({ id: "exec-compact-fallback" });
+    deps.providerRunner.runProviderForText.mockResolvedValue({
+      text: "## Compact Summary\nContinue from here",
+      nativeSessionId: "qwen-native-1",
+    });
+    deps.connectionChatRepository.updateThread.mockImplementation((threadId: string, input: any) => ({
+      id: threadId,
+      projectId: "p1",
+      title: "Thread",
+      runtimeState: input.runtimeState,
+    }));
+
+    const updated = await service.compactThreadSession("t1");
+
+    expect(deps.providerRunner.runProviderForText).toHaveBeenCalledWith(expect.objectContaining({
+      provider: "qwen-code",
+      sessionId: "t1",
+      workspaceSessionId: "t1",
+      continueSessionId: "t1",
+      nativeSessionOperation: "compact",
+      qwenAuthMode: "MODEL_PROVIDER",
+      qwenRegion: "international",
+      qwenBaseUrl: "https://qwen.example.test",
+      qwenEnvKey: "QWEN_KEY",
+      qwenModelId: "qwen3-coder",
+      qwenProtocol: "openai",
+    }));
+    expect(JSON.stringify(deps.providerRunner.runProviderForText.mock.calls)).not.toContain("t1:compaction");
+    expect(updated.runtimeState).toMatchObject({
+      routeKind: "virtual",
+      virtualProvider: "qwen-code",
+      modelLabel: "qwen3-coder",
+      replayRequired: false,
+      sessionIds: ["qwen-native-1"],
+      compactionSummary: {
+        markdown: "## Compact Summary\nContinue from here",
+        provider: "qwen-code",
+        model: "qwen3-coder",
+        sourceMessageId: "m1",
+        sourceMessageCount: 1,
+        nativeSessionId: "qwen-native-1",
+      },
+    });
+  });
+
+  it("returns an actionable error instead of native compaction when a provider has no logical continuation fallback", async () => {
+    deps.connectionChatRepository.getThread.mockReturnValue({
+      id: "t1",
+      projectId: "p1",
+      title: "Thread",
+      connectionId: null,
+      runtimeState: {
+        routeKind: "virtual",
+        virtualProvider: "claude-code",
+        sessionIds: [],
+      },
+    });
+    deps.connectionChatRepository.listMessages.mockReturnValue([
+      { id: "m1", authorType: "dashboard_user", bodyMarkdown: "hello" },
+    ]);
+    deps.projectManagementRepository.getProject.mockReturnValue({ id: "p1", name: "proj", baseDir: "/tmp" });
+    deps.taskService.resolveInvocationProvider.mockReturnValue({
+      provider: "claude-code",
+      providers: { "claude-code": { model: "claude-3", apiKey: "key" } },
+    });
+
+    await expect(service.compactThreadSession("t1")).rejects.toThrow(
+      "Native chat compaction for claude-code requires an active provider session. Send a message in this thread before compacting it.",
+    );
+    expect(deps.providerRunner.runProviderForText).not.toHaveBeenCalled();
+    expect(deps.executionRepository.createExecutionInvocation).not.toHaveBeenCalled();
   });
 
   it("replays from the stored compaction summary on the next fresh virtual turn using chatManagementActionService", async () => {

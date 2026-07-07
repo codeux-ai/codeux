@@ -127,6 +127,205 @@ describe("Chat Widget View Models", () => {
       expect(result).toEqual({ type: "none", status: "completed", planName: "" });
     });
 
+    it("builds a Jira issue widget from widget metadata", () => {
+      const message = {
+        metadata: {
+          widget_metadata: {
+            provider: "jira",
+            kind: "issue",
+            key: "UX-42",
+            title: "Improve chat reference cards",
+            status: "In Progress",
+            url: "https://example.atlassian.net/browse/UX-42",
+            labels: ["dashboard", "chat"],
+            assignee: { displayName: "Avery Stone" },
+            summary: "The chat should render linked work as a compact card.",
+          },
+        },
+      } as unknown as ChatMessageRecord;
+
+      const result = getChatWidgetData(message);
+
+      expect(result.type).toBe("external_reference");
+      expect(result.status).toBe("running");
+      expect(result.externalReference).toEqual(expect.objectContaining({
+        provider: "jira",
+        providerLabel: "Jira",
+        kind: "issue",
+        kindLabel: "Issue",
+        key: "UX-42",
+        identifierLabel: "UX-42",
+        title: "Improve chat reference cards",
+        stateLabel: "In Progress",
+        url: "https://example.atlassian.net/browse/UX-42",
+        labels: ["dashboard", "chat"],
+        assignee: "Avery Stone",
+        preview: "The chat should render linked work as a compact card.",
+      }));
+    });
+
+    it("prefers GitHub issue metadata over JSON-looking body content", () => {
+      const message = {
+        bodyMarkdown: JSON.stringify({
+          provider: "github",
+          kind: "issue",
+          number: 99,
+          title: "Body fallback issue",
+          url: "https://github.com/codeux-ai/codeux/issues/99",
+        }),
+        metadata: {
+          externalReference: {
+            provider: "github",
+            kind: "issue",
+            number: 12,
+            title: "Metadata issue wins",
+            state: "open",
+            html_url: "https://github.com/codeux-ai/codeux/issues/12",
+            repository: { full_name: "codeux-ai/codeux" },
+            user: { login: "octo-user" },
+            labels: [{ name: "bug" }, { name: "dashboard" }],
+          },
+        },
+      } as unknown as ChatMessageRecord;
+
+      const result = getChatWidgetData(message);
+
+      expect(result.type).toBe("external_reference");
+      expect(result.suppressBodyMarkdown).toBe(true);
+      expect(result.externalReference).toEqual(expect.objectContaining({
+        provider: "github",
+        kind: "issue",
+        number: 12,
+        identifierLabel: "#12",
+        title: "Metadata issue wins",
+        repositoryPath: "codeux-ai/codeux",
+        projectPath: null,
+        author: "octo-user",
+        labels: ["bug", "dashboard"],
+      }));
+    });
+
+    it("builds a GitHub pull request widget from a JSON-looking message body", () => {
+      const message = {
+        bodyMarkdown: JSON.stringify({
+          provider: "github",
+          kind: "pull_request",
+          number: 27,
+          title: "Add reference widgets",
+          state: "closed",
+          url: "https://github.com/codeux-ai/codeux/pull/27",
+          repositoryPath: "codeux-ai/codeux",
+          assignees: [{ login: "reviewer" }],
+          body: "Adds cards for external issue references.",
+        }),
+        metadata: null,
+      } as unknown as ChatMessageRecord;
+
+      const result = getChatWidgetData(message);
+
+      expect(result).toEqual(expect.objectContaining({
+        type: "external_reference",
+        status: "completed",
+        planName: "",
+        suppressBodyMarkdown: true,
+      }));
+      expect(result.externalReference).toEqual(expect.objectContaining({
+        provider: "github",
+        kind: "pull_request",
+        kindLabel: "Pull request",
+        number: 27,
+        identifierLabel: "#27",
+        title: "Add reference widgets",
+        assignee: "reviewer",
+        preview: "Adds cards for external issue references.",
+      }));
+    });
+
+    it("builds a GitLab issue widget from linked issue metadata", () => {
+      const message = {
+        metadata: {
+          linkedIssue: {
+            provider: "gitlab",
+            kind: "issue",
+            iid: "8",
+            title: "Track importer failures",
+            state: "opened",
+            web_url: "https://gitlab.com/codeux-ai/runtime/-/issues/8",
+            project: { path_with_namespace: "codeux-ai/runtime" },
+            labels: "importer,reliability",
+            author: { username: "maintainer" },
+          },
+        },
+      } as unknown as ChatMessageRecord;
+
+      const result = getChatWidgetData(message);
+
+      expect(result.type).toBe("external_reference");
+      expect(result.externalReference).toEqual(expect.objectContaining({
+        provider: "gitlab",
+        kind: "issue",
+        number: 8,
+        identifierLabel: "#8",
+        projectPath: "codeux-ai/runtime",
+        repositoryPath: null,
+        labels: ["importer", "reliability"],
+        author: "maintainer",
+      }));
+    });
+
+    it("builds a GitLab merge request widget from a JSON-looking message body", () => {
+      const message = {
+        bodyMarkdown: JSON.stringify({
+          externalReference: {
+            provider: "gitlab",
+            kind: "merge_request",
+            iid: 15,
+            title: "Harden external importer parsing",
+            state: "merged",
+            web_url: "https://gitlab.com/codeux-ai/runtime/-/merge_requests/15",
+            projectPath: "codeux-ai/runtime",
+            assignee: { name: "Dana" },
+            description: "Normalizes imported references before rendering.",
+          },
+        }),
+        metadata: null,
+      } as unknown as ChatMessageRecord;
+
+      const result = getChatWidgetData(message);
+
+      expect(result.type).toBe("external_reference");
+      expect(result.status).toBe("completed");
+      expect(result.suppressBodyMarkdown).toBe(true);
+      expect(result.externalReference).toEqual(expect.objectContaining({
+        provider: "gitlab",
+        kind: "merge_request",
+        kindLabel: "Merge request",
+        number: 15,
+        title: "Harden external importer parsing",
+        assignee: "Dana",
+      }));
+    });
+
+    it("keeps malformed JSON and unrecognized metadata on the markdown path", () => {
+      const malformed = {
+        bodyMarkdown: "{\"provider\":\"github\",\"kind\":\"issue\",",
+        metadata: null,
+      } as unknown as ChatMessageRecord;
+      const unrecognized = {
+        metadata: {
+          externalReference: {
+            provider: "bitbucket",
+            kind: "issue",
+            title: "Unsupported reference",
+            url: "https://bitbucket.example/project/issues/1",
+          },
+        },
+      } as unknown as ChatMessageRecord;
+
+      expect(getChatWidgetData(malformed)).toEqual({ type: "none", status: "completed", planName: "" });
+      expect(getChatWidgetData(unrecognized)).toEqual({ type: "none", status: "completed", planName: "" });
+    });
+
     it("returns planning if type is planning", () => {
       const message = {
         metadata: {
@@ -317,6 +516,79 @@ describe("Chat Widget View Models", () => {
           routeKind: "virtual",
           status: "queued"
         }
+      } as unknown as ExecutionInvocationMessageRecord;
+
+      const result = getInvocationWidgetData(message);
+      expect(result).toEqual({ type: "planning", status: "queued", planName: "Execution Plan" });
+    });
+
+    it("uses execution plan metadata for sprint-specific invocation planning widgets", () => {
+      const message = {
+        metadata: {
+          routeKind: "virtual",
+          status: "completed",
+          executionPlan: {
+            sprintId: "sprint-14",
+            sprintNumber: 14,
+            sprintName: "Stabilize chat transcripts",
+            goal: "Render persisted execution plans in invocation transcripts.",
+            taskCount: 2,
+            createdTaskIds: ["task-1", "task-2"],
+            taskSummaries: [
+              { key: "T01", title: "Parse execution plan metadata", summary: "Build a safe view model from the selected message." },
+              { key: "T02", title: "Render compact task summaries", summary: "Show enough task context to distinguish sprint plans." },
+            ],
+          },
+        },
+      } as unknown as ExecutionInvocationMessageRecord;
+
+      const result = getInvocationWidgetData(message, {
+        projectId: "project-1",
+        projectTasks: [createTask({ sprintId: "sprint-live", sprint: "Live Sprint", title: "Live task" })],
+        projectTasksLoading: false,
+        projectTasksLoaded: true,
+        execution: createExecution({
+          sprintRuns: [{ ...createExecution().sprintRuns[0]!, sprintId: "sprint-live", sprintName: "Live Sprint", sprintNumber: 99 }],
+        }),
+        executionLoading: false,
+        executionLoaded: true,
+      });
+
+      expect(result.type).toBe("planning");
+      expect(result.status).toBe("completed");
+      expect(result.planName).toBe("SPR-14: Stabilize chat transcripts");
+      expect(result.executionPlan).toEqual(expect.objectContaining({
+        sprintId: "sprint-14",
+        sprintNumber: 14,
+        sprintKey: "SPR-14",
+        sprintName: "Stabilize chat transcripts",
+        goal: "Render persisted execution plans in invocation transcripts.",
+        taskCount: 2,
+        createdTaskIds: ["task-1", "task-2"],
+        taskSummaryLabel: "2 planned tasks",
+      }));
+      expect(result.executionPlan?.tasks).toEqual([
+        {
+          id: "T01",
+          title: "Parse execution plan metadata",
+          summary: "Build a safe view model from the selected message.",
+        },
+        {
+          id: "T02",
+          title: "Render compact task summaries",
+          summary: "Show enough task context to distinguish sprint plans.",
+        },
+      ]);
+      expect(result.liveStatus).toBeUndefined();
+    });
+
+    it("keeps legacy virtual route fallback when execution plan metadata is absent or malformed", () => {
+      const message = {
+        metadata: {
+          routeKind: "virtual",
+          status: "queued",
+          executionPlan: "legacy-route-without-plan-details",
+        },
       } as unknown as ExecutionInvocationMessageRecord;
 
       const result = getInvocationWidgetData(message);

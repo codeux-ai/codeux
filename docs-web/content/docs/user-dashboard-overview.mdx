@@ -2,7 +2,7 @@
 
 The Code UX dashboard is a real-time Preact application served at `http://localhost:4444` (configurable with `DASHBOARD_PORT`). It is the primary interface for humans operating Code UX.
 
-This page introduces the layout. Each subsection links to a dedicated page.
+This page mirrors the canonical dashboard guide and the active v2 page files, where v2 is the active UI backed directly by `dashboard/src/v2/*Page.tsx`. Each subsection links to a dedicated page.
 
 ## Layout
 
@@ -12,11 +12,19 @@ The dashboard uses a **dock-based navigation** by default:
 - **Sidebar** *(mobile or user preference)* — A collapsible left sidebar.
 - **Top bar** — Project selector, techstack selector, theme toggle, mobile menu.
 
-A choice of theme (Light / Dark / System) is in the top bar; navigation mode override is in **Settings → Appearance**.
+A choice of theme (Light / Dark / System) is in the top bar; navigation mode override is in **Settings → Appearance**. During onboarding, Appearance choices preview immediately and the setup shell follows the selected Light, Dark, or System theme instead of forcing dark mode. Background Mode, Static Color, and supported Zoom Level also preview before save, while advanced background controls such as Animation Style, Pattern Overlay, and custom background image remain in **Settings → Appearance**.
 
-When a project is active, the top bar also shows its techstack. Projects imported before classification can remain **Unassigned**; in that state the selector displays the catalog default (the built-in Code UX Internal stack unless changed in system settings) as the working fallback without assigning it to the project. Choosing a stack from the dropdown saves only the project techstack selection.
+Primary navigation also follows the persisted experience mode in **Settings → Appearance**:
 
-The background is an animated Three.js scene ("Deep Ocean") that lazy-loads after the main UI is interactive, so it never blocks first paint.
+- **Easy** — Chat, Browser, Stats, Settings/Config, and external Docs.
+- **Standard** — Chat, Overview, Sprints, Tasks, Agents, Stats, Browser, Docs, and Settings/Config.
+- **Expert** — the full navigation, and the default for new or legacy settings.
+
+Hidden pages remain registered routes, Docs opens the external project docs, and Browser still follows the project sprint-preview visibility settings.
+
+When a project is active, the top bar also shows its techstack. Projects imported before classification can remain unassigned; in that state the selector displays **None**. Choosing a stack from the dropdown saves only the project techstack selection.
+
+The background is an animated Three.js scene ("Deep Ocean") that lazy-loads after the main UI is interactive, so it never blocks first paint. Onboarding can preview Theme, Navigation Mode, Reduced Motion, Background Mode, Static Color, and supported Zoom Level; advanced background controls such as Animation Style, Pattern Overlay, and custom background image remain in **Settings → Appearance**.
 
 ## Pages
 
@@ -37,9 +45,19 @@ The background is an animated Three.js scene ("Deep Ocean") that lazy-loads afte
 | `/stats` | [Stats](/docs/user-dashboard-stats) | Execution analytics, time-window filtering, trends |
 | `/config` | [Settings](/docs/user-dashboard-settings) | System / project / sprint settings hierarchy |
 
+## Overview telemetry
+
+The Overview telemetry rail combines cross-project runtime health with selected-project detail:
+
+- Cross-project intervention cards still show active projects that need human attention.
+- Active sprint cards and the runtime timeline continue to summarize work across active projects.
+- When the top bar has a project selected and that project's live snapshot contains active attention items, Overview shows a compact **Selected Sprint Attention Queue** inside the telemetry panel.
+
+The Overview queue follows the same selected sprint scope as the Live page. If a sprint is selected in the top navigation, the queue shows only the active attention items returned by the selected-sprint live snapshot; unrelated sprint blockers are not reconstructed in the browser. Overview renders the queue read-only, so claim, resolve, and dismiss actions remain on the Live page.
+
 ## Real-time data
 
-The dashboard maintains a live connection to the server using a custom WebSocket protocol at `wss://localhost:4444/api/realtime`. The connection:
+The dashboard maintains a live connection to the server using a custom WebSocket protocol via `GET /api/realtime` (e.g., `ws://localhost:4444/api/realtime` for local HTTP dashboards, and `wss://<host>/api/realtime` for HTTPS deployments). On the server side, `DashboardRealtimeService` in `src/services/dashboard-realtime-service.ts` coordinates events, and the websocket upgrade/transport is handled in `src/server/dashboard-realtime-websocket-server.ts`. The connection:
 
 - Subscribes to *scopes* (e.g. `project:<id>`, `execution`, `git-status`).
 - Receives push events for sprint/task transitions, attention items, memory updates, Git status changes.

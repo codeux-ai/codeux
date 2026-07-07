@@ -7,6 +7,7 @@ import { renderMarkdown } from "../../../../lib/markdown.js";
 import { formatChatTime } from "../../../lib/chat-time.js";
 import { getChatWidgetData } from "../../../lib/chat-widget-view-models.js";
 import { PlanningRequestWidget } from "../widgets/PlanningRequestWidget.js";
+import { ExternalReferenceWidget } from "../widgets/ExternalReferenceWidget.js";
 import { LazyAgentAvatarScene } from "../../agents/LazyAgentAvatarScene.js";
 import type { AgentSceneTool } from "../../agents/AgentAvatarScene.js";
 import { DEFAULT_AGENT_AVATAR_CONFIG } from "../../../lib/agent-avatar.js";
@@ -197,16 +198,23 @@ const AgentSpeechBubble: FunctionComponent<{
             segment.kind === "widget" ? (
               <StageWidgetRenderer key={index} widget={segment.widget} onAction={onAction} />
             ) : (
-              <div
-                key={index}
-                className={`${BUBBLE_MARKDOWN_CLASSES} prose-base text-[15px] leading-8`}
-                dangerouslySetInnerHTML={{ __html: renderMarkdown(segment.markdown) }}
-              />
+              !widgetData.suppressBodyMarkdown && (
+                <div
+                  key={index}
+                  className={`${BUBBLE_MARKDOWN_CLASSES} prose-base text-[15px] leading-8`}
+                  dangerouslySetInnerHTML={{ __html: renderMarkdown(segment.markdown) }}
+                />
+              )
             ),
           )}
           {widgetData.type === "planning" && (
             <div className="mt-4 border-t border-black/[0.05] pt-4 dark:border-white/[0.06]">
               <PlanningRequestWidget status={widgetData.status} planName={widgetData.planName} />
+            </div>
+          )}
+          {widgetData.type === "external_reference" && widgetData.externalReference && (
+            <div className={widgetData.suppressBodyMarkdown ? "mt-0" : "mt-4 border-t border-black/[0.05] pt-4 dark:border-white/[0.06]"}>
+              <ExternalReferenceWidget status={widgetData.status} reference={widgetData.externalReference} />
             </div>
           )}
         </div>

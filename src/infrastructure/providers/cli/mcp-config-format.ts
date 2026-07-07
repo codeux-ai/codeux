@@ -65,17 +65,6 @@ export const buildCodexMcpServerTomlLines = (tableName: string, server: CustomMc
 
 const CODEX_MCP_TABLE_PATTERN = /^\[mcp_servers\.([A-Za-z0-9_-]+)\]\s*$/;
 
-const collectCodexMcpTableNames = (content: string): Set<string> => {
-  const names = new Set<string>();
-  for (const line of content.split(/\r?\n/)) {
-    const match = CODEX_MCP_TABLE_PATTERN.exec(line.trim());
-    if (match) {
-      names.add(match[1]);
-    }
-  }
-  return names;
-};
-
 const splitCodexMcpTableBlocks = (content: string): Array<{ name: string; lines: string[] }> => {
   const blocks: Array<{ name: string; lines: string[] }> = [];
   let current: { name: string; lines: string[] } | null = null;
@@ -104,19 +93,48 @@ const splitCodexMcpTableBlocks = (content: string): Array<{ name: string; lines:
 
 export const mergeCodexMcpConfigToml = (existingContent: string | null | undefined, generatedContent: string): string => {
   const existing = existingContent?.trimEnd() ?? "";
-  const existingNames = collectCodexMcpTableNames(existing);
-  const missingBlocks = splitCodexMcpTableBlocks(generatedContent)
-    .filter((block) => !existingNames.has(block.name))
+  const generatedBlocks = splitCodexMcpTableBlocks(generatedContent);
+  const generatedByName = new Map(generatedBlocks.map((block) => [block.name, block]));
+
+  if (!existing) {
+    const generated = generatedBlocks
+      .map((block) => block.lines.join("\n").trimEnd())
+      .filter(Boolean);
+    return generated.length > 0 ? `${generated.join("\n")}\n` : "";
+  }
+
+  const emittedNames = new Set<string>();
+  const outputLines: string[] = [];
+  const existingLines = existing.split(/\r?\n/);
+
+  for (let index = 0; index < existingLines.length;) {
+    const line = existingLines[index] ?? "";
+    const match = CODEX_MCP_TABLE_PATTERN.exec(line.trim());
+    const generatedBlock = match ? generatedByName.get(match[1]) : undefined;
+    if (match && generatedBlock) {
+      outputLines.push(...generatedBlock.lines);
+      emittedNames.add(match[1]);
+      index += 1;
+      while (index < existingLines.length && !/^\[.+\]\s*$/.test((existingLines[index] ?? "").trim())) {
+        index += 1;
+      }
+      continue;
+    }
+
+    outputLines.push(line);
+    index += 1;
+  }
+
+  const missingBlocks = generatedBlocks
+    .filter((block) => !emittedNames.has(block.name))
     .map((block) => block.lines.join("\n").trimEnd())
     .filter(Boolean);
 
-  if (!existing) {
-    return missingBlocks.length > 0 ? `${missingBlocks.join("\n")}\n` : "";
-  }
+  const mergedExisting = outputLines.join("\n").trimEnd();
   if (missingBlocks.length === 0) {
-    return `${existing}\n`;
+    return `${mergedExisting}\n`;
   }
-  return `${existing}\n\n${missingBlocks.join("\n")}\n`;
+  return `${mergedExisting}\n\n${missingBlocks.join("\n")}\n`;
 };
 
 

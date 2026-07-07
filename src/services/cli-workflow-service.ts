@@ -52,6 +52,7 @@ import type { SprintRunLifecycleService } from "./sprint-run-lifecycle-service.j
 import type { SkillService } from "./skill-service.js";
 import type { AgentPresetRepository } from "../repositories/agent-preset-repository.js";
 import type { McpConnectionInfo } from "../contracts/mcp-connection-types.js";
+import type { AgentPresetRecord } from "../contracts/agent-preset-types.js";
 
 interface CliWorkflowServiceDependencies {
   sessionTracking: SessionTrackingRepository;
@@ -268,11 +269,12 @@ export class CliWorkflowService {
         this.deps.logger?.warn("Failed to resolve optional worker agent template", { repoPath: args.repoPath, error: err instanceof Error ? err.message : String(err) });
         return null;
       });
+    const effectiveWorkflowSettings = this.applyAgentWorkflowSettings(workflowSettings, workerAgent);
 
     const ctx: PipelineContext = {
       ...args,
       settings,
-      workflowSettings,
+      workflowSettings: effectiveWorkflowSettings,
       worktreePath,
       workspaceSessionId,
       abortSignal: abortController.signal,
@@ -611,6 +613,19 @@ export class CliWorkflowService {
     const merged: CliWorkflowSettings = { ...DEFAULT_CLI_WORKFLOW_SETTINGS, ...(settings.cliWorkflow || {}) };
     merged.containerImage = merged.containerImage.trim() || DEFAULT_CLI_WORKFLOW_SETTINGS.containerImage;
     return merged;
+  }
+
+  private applyAgentWorkflowSettings(
+    workflowSettings: CliWorkflowSettings,
+    workerAgent: Pick<AgentPresetRecord, "containerRunAsRoot"> | null,
+  ): CliWorkflowSettings {
+    if (typeof workerAgent?.containerRunAsRoot !== "boolean") {
+      return { ...workflowSettings };
+    }
+    return {
+      ...workflowSettings,
+      containerRunAsRoot: workerAgent.containerRunAsRoot,
+    };
   }
 
   private async runCommand(

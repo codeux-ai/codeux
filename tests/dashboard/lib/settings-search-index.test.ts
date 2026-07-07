@@ -76,7 +76,7 @@ describe("settings search index", () => {
     ["imessage", ["integrations"]],
     ["chat provider", ["integrations"]],
     ["channel binding", ["integrations"]],
-    ["openclaw", ["integrations"]],
+    ["managed_bridge", ["integrations"]],
     ["webhook", ["integrations"]],
     ["native bridge", ["integrations"]],
     ["model", ["models"]],
