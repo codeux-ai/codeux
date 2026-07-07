@@ -113,20 +113,22 @@ export interface ManageQuicksprintsArgs {
 }
 
 export interface ManageSchedulerArgs {
-  action: "list" | "create" | "schedule_sprint" | "schedule_quicksprint" | "schedule_chat" | "update" | "delete" | "run_due";
+  action: "list" | "create" | "schedule_sprint" | "schedule_quicksprint" | "schedule_chat" | "schedule_wakeup" | "update" | "delete" | "run_due";
   projectId?: string;
   entryId?: string;
   from?: string;
   to?: string;
   title?: string;
-  targetType?: "sprint" | "quicksprint" | "chat";
+  targetType?: "sprint" | "quicksprint" | "chat" | "wakeup";
   status?: "scheduled" | "paused" | "completed" | "failed" | "cancelled";
   scheduledFor?: string;
+  delaySeconds?: number | string;
   timezone?: string;
   recurrence?: Record<string, unknown>;
   sprintTarget?: Record<string, unknown>;
   quicksprintTarget?: Record<string, unknown>;
   chatTarget?: Record<string, unknown>;
+  wakeupTarget?: Record<string, unknown>;
   sprintId?: string;
   templateId?: string;
   taskCount?: number | string;
@@ -137,6 +139,8 @@ export interface ManageSchedulerArgs {
   bodyMarkdown?: string;
   threadId?: string | null;
   connectionId?: string | null;
+  sourceInvocationId?: string | null;
+  resumeAfterInvocationCompletion?: boolean;
   now?: string;
   approval?: ManagementApproval;
 }

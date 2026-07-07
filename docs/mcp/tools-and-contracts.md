@@ -156,10 +156,12 @@ Tool arguments are validated against `src/contracts/mcp-tool-definitions.ts` bef
 
 Code UX exposes two scheduler MCP surfaces:
 
-- `manage_scheduler` is the project-manager management surface. It can list, create, schedule sprints, schedule quicksprints, schedule chat messages, update entries, delete entries with approval, and run due entries. It remains unchanged for project-manager clients.
+- `manage_scheduler` is the project-manager management surface. It can list, create, schedule sprints, schedule quicksprints, schedule chat messages, schedule wakeup follow-ups, update entries, delete entries with approval, and run due entries.
 - `scheduler_code_ux` is the restricted agent-owned surface. It supports only `list`, `schedule_wakeup`, `schedule_task`, and `cancel`. The Code UX suffix intentionally avoids collisions with scheduler tools exposed by provider CLIs or other MCP servers.
 
 The restricted `scheduler_code_ux` tool accepts either an absolute `scheduledFor` ISO timestamp or one positive relative delay field, `delaySeconds` or `delayMinutes`. `schedule_wakeup` requires `projectId` and `bodyMarkdown`, and may include `title`, `timezone`, `threadId`, and `connectionId`. `schedule_task` requires `projectId` and `taskId`, and may include `title`, `timezone`, and a provider override.
+
+The broad `manage_scheduler` tool also supports `schedule_wakeup`. It requires `projectId`, `bodyMarkdown`, and either an absolute `scheduledFor` or positive `delaySeconds`; it creates a one-time `targetType: "wakeup"` entry by default. Wakeups may include `threadId`, `connectionId`, `title`, `sourceInvocationId`, and `resumeAfterInvocationCompletion`. When an MCP caller has request-scoped invocation context and `resumeAfterInvocationCompletion` is not `false`, Code UX stamps that invocation id onto the stored `wakeupTarget` so the follow-up can be associated with the originating provider invocation.
 
 Every `scheduler_code_ux` entry is persisted as an `agent_scheduler` target. The runtime stamps `origin: "agent_scheduler"`, `source: "agent_scheduler"`, and `createdByAgentId` from the current MCP agent context. `list` returns only entries created by the calling agent. `cancel` changes the matching entry status to `cancelled` only when the entry is an agent-scheduler wakeup or task entry created by that same agent. Dashboard-created entries, `manage_scheduler` entries, entries without agent-scheduler metadata, and entries created by another agent are rejected with the standard management validation envelope.
 
@@ -742,7 +744,7 @@ For quicksprint calls:
 - `delete_template` requires approval confirmation. Custom templates are removed from the project template directory; built-in/default templates are hidden for the project by writing a local tombstone marker instead of deleting shared bundled assets.
 
 For scheduler calls:
-- `manage_scheduler` supports `list`, `create`, `schedule_sprint`, `schedule_quicksprint`, `schedule_chat`, `update`, `delete`, and `run_due`.
+- `manage_scheduler` supports `list`, `create`, `schedule_sprint`, `schedule_quicksprint`, `schedule_chat`, `schedule_wakeup`, `update`, `delete`, and `run_due`.
 - Generic `create` requires `targetType: "sprint" | "quicksprint" | "chat"`.
 - The `schedule_*` aliases infer the target type and accept flattened target fields.
 - Recurrence `frequency` accepts `minutely`, `hourly`, `daily`, `weekly`, and `monthly`; the dashboard renders `minutely` as `Minutes` and the matching recurrence summaries use labels such as `Every minute` and `Every 15 minutes`.

@@ -126,12 +126,15 @@ Operators can modify existing scheduler entries without deleting and recreating 
 
 Agent-created `agent_wakeup` and `task` entries are display-only in the dashboard form. Operators can still pause, resume, or delete those entries from the scheduled-entry list, but editing their payload remains with the secured MCP scheduler flow so required target fields and agent-scheduler metadata are preserved.
 
+Project-manager MCP wakeup entries use `targetType: "wakeup"` and `wakeupTarget`. They are also display-only in the dashboard form because they can carry invocation follow-up metadata that is not represented in the operator form.
+
 ### Due Entry Execution
 
 Due entries execute through existing production paths:
 - sprint entries call `ExecutionControlService.orchestrateSprint`
 - quicksprint entries call `QuicksprintService.executeQuicksprint`
 - chat entries call `ChatThreadRuntimeService.postMessage`
+- wakeup entries call `ChatThreadRuntimeService.postMessage` with scheduler metadata plus `sourceInvocationId` and `resumeAfterInvocationCompletion` when those values were stored
 - memory remediation entries call `MemoryRemediationService.remediateLongTermMemories`
 - agent wakeup entries call `ChatThreadRuntimeService.postMessage` with `metadata.source = "agent_scheduler"`, `metadata.origin = "agent_scheduler"`, `metadata.schedulerEntryId`, and `metadata.createdByAgentId` when present
 - task entries call `TaskRerunService.rerunTask`, passing the stored provider override when one was scheduled
@@ -150,3 +153,5 @@ Anchored entries are evaluated separately from absolute `nextRunAt` polling:
 - Agent wakeups require non-empty `bodyMarkdown`.
 
 The MCP `manage_scheduler` tool accepts the same model. Use `scheduleMode: "after_sprint_end"` or `anchorMode: "after_sprint_end"` with `sourceSprintId`/`anchorSourceSprintId` and optional `offsetMinutes`/`anchorOffsetMinutes`, or pass the nested `scheduleAnchor` object directly. Absolute schedules continue to use `scheduledFor`; `scheduleMode: "absolute"` on update clears an existing anchor.
+
+`manage_scheduler.schedule_wakeup` creates a one-time wakeup entry with `targetType: "wakeup"`. It requires `projectId`, `bodyMarkdown`, and either `scheduledFor` or a positive `delaySeconds`; nested `wakeupTarget` payloads are also accepted. When called from an MCP request with an invocation id, Code UX stores that id as `wakeupTarget.sourceInvocationId` unless `resumeAfterInvocationCompletion` is explicitly `false`; callers may also pass an explicit `sourceInvocationId`.
