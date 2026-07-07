@@ -34,6 +34,12 @@ Use explicit badging inside `.code-ux/agents` lists:
 - Settings > Agents owns the project storage management and per-agent attachment controls. The regression in `tests/dashboard/v2/settings-agents-persistent-skills.test.tsx` verifies that attachment edits generate `updateAgentPreset` payloads containing both `persistentSkillStorageIds` and `persistentSkillStorage.enabled`, while self-reflection criteria edits remain in the project settings save payload.
 - Backend ownership and MCP/runtime behavior are documented in [Agent Preset Foundation](../architecture/agent-preset-foundation.md#data-model) and [MCP Tools and Contracts](../mcp/tools-and-contracts.md#search_skills-retrieval-tool).
 
+## MCP Access
+- Missing per-agent MCP access must display as default-deny: Code UX built-in tools are off, and custom MCP links are shown independently from built-in Code UX access.
+- The editor must not enable Code UX directly from the inactive chip. It should open the MCP manager so the visible risk warning is presented before the user grants built-in tools.
+- Enabling Code UX from the manager starts with scheduler-only access: every built-in tool has an explicit toggle, only `scheduler` is enabled, and broader management tools remain disabled until the user turns them on.
+- Dashboard reply agents may present scheduler-only as the recommended safe default. Planning, coding, QA, CI repair, merge-conflict, and other non-chat agents need stronger visible warning copy because scheduler access can create agent-owned wakeups or task reruns during operational workflows.
+
 ## Empty States
 For empty states on the Agents page, avoid generic `<EmptyState />` implementations. Instead, use tailored rounded containers (`rounded-[1.9rem]`), dashed borders (`border-dashed border-black/[0.08]`), and a highly blured backdrop (`backdrop-blur-2xl`) that houses an oversized icon container (`h-16 w-16 bg-signal-500/10 text-signal-600 shadow-sm ring-1 ring-slate-900/5`).
 
