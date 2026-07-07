@@ -237,7 +237,7 @@ export const TOOL_DEFINITIONS = [
     },
   },
   {
-    name: "scheduler",
+    name: "scheduler_code_ux",
     runtimeRoles: ["project_manager"],
     category: "orchestration",
     description: "Schedule agent-owned wakeups and task reruns. Supports list, schedule_wakeup, schedule_task, and cancel only. Cancellation is limited to agent_scheduler entries created by the calling agent.",
@@ -481,7 +481,7 @@ export const TOOL_DEFINITIONS = [
         providerConnectionId: { type: "string", description: "Provider connection id. Required for get_connection, update_connection, delete_connection, and binding creation." },
         connectionId: { type: "string", description: "Alias for providerConnectionId." },
         displayName: { type: "string", description: "Connection display name. Required for create_connection and optional for update_connection." },
-        bridgeMode: { type: "string", enum: ["openclaw", "webhook", "native_bridge"], description: "Optional provider bridge mode." },
+        bridgeMode: { type: "string", enum: ["managed_bridge", "webhook", "native_bridge"], description: "Optional provider bridge mode." },
         status: { type: "string", enum: ["draft", "active", "disabled", "error"], description: "Optional provider connection status for create_connection and update_connection." },
         enabled: { type: "boolean", description: "Optional enabled flag for connection or binding mutations." },
         enabledOnly: { type: "boolean", description: "Optional list filter that returns only enabled connections or bindings." },

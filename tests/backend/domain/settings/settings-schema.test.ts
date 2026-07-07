@@ -32,7 +32,27 @@ describe("validateSettingsPayload", () => {
 
     expect(result.success).toBe(true);
     expect(result.issues).toEqual([]);
+    expect(result.data?.appearance.experienceMode).toBe("EXPERT");
     expect(result.data).toEqual(payload);
+  });
+
+  it("validates dashboard experience mode values", () => {
+    const payload = cloneDefaults({ env: {}, settingsJson: {}, resolved: {} });
+    payload.appearance.experienceMode = "EASY";
+
+    const validResult = validateSettingsPayload(payload);
+
+    expect(validResult.success).toBe(true);
+    expect(validResult.issues).toEqual([]);
+
+    payload.appearance.experienceMode = "standart" as any;
+    const invalidResult = validateSettingsPayload(payload);
+
+    expect(invalidResult.success).toBe(false);
+    expect(invalidResult.issues).toContainEqual({
+      path: "appearance.experienceMode",
+      message: "Expected one of: EASY, STANDARD, EXPERT",
+    });
   });
 
   it("accepts CREATE_PR for featurePrAutoMergeMode", () => {

@@ -194,7 +194,7 @@ describe("chat-reply-prompt", () => {
         mcpAvailable: true,
         mcpAccessMode: "scheduler_only",
       });
-      expect(prompt).toContain("You have the `scheduler` MCP tool available");
+      expect(prompt).toContain("You have the `scheduler_code_ux` MCP tool available");
       expect(prompt).not.toContain("You have the `manage_code_ux` MCP tool available");
       expect(prompt).not.toContain("You must return STRICT JSON format");
     });

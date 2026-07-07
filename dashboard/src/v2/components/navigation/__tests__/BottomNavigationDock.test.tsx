@@ -7,32 +7,37 @@ import * as ProjectDataHook from '../../../context/project-data.js';
 import * as ProjectEffectiveSettingsHook from '../../../hooks/use-project-effective-settings.js';
 import * as ReducedMotionHook from '../../../hooks/use-reduced-motion.js';
 import * as RouterHook from '@tanstack/react-router';
+import { prefetchRoute } from '../../../router/route-prefetch.js';
 import * as matchers from '@testing-library/jest-dom/matchers';
 import { forwardRef } from 'preact/compat';
+import { EXTERNAL_DOCS_URL } from '../../../lib/navigation-items.js';
 
 expect.extend(matchers);
 
 vi.mock('../../../context/project-data.js');
 vi.mock('../../../hooks/use-project-effective-settings.js');
 vi.mock('../../../hooks/use-reduced-motion.js');
+vi.mock('../../../router/route-prefetch.js', () => ({
+    prefetchRoute: vi.fn(),
+}));
 vi.mock('@tanstack/react-router', async () => {
     const actual = await vi.importActual('@tanstack/react-router');
     const { forwardRef } = await vi.importActual('preact/compat') as any;
     return {
         ...actual as any,
         useRouterState: vi.fn(),
-        Link: forwardRef(({ children, to, className }: any, ref: any) => <a ref={ref} href={to} data-testid={`link-${to}`} className={className}>{children}</a>)
+        Link: forwardRef(({ children, to, className, ...props }: any, ref: any) => <a ref={ref} href={to} data-testid={`link-${to}`} className={className} {...props}>{children}</a>)
     };
 });
 
 describe('BottomNavigationDock (KineticDock)', () => {
     beforeEach(() => {
         vi.spyOn(ProjectDataHook, 'useProjectData').mockReturnValue({ selectedProject: { id: 'test-project' } } as any);
-        vi.spyOn(ProjectEffectiveSettingsHook, 'useProjectEffectiveSettings').mockReturnValue({ data: { settings: { sprintPreview: { enabled: true, showInAppBrowser: true } } } } as any);
+        vi.spyOn(ProjectEffectiveSettingsHook, 'useProjectEffectiveSettings').mockReturnValue({ data: { settings: { appearance: { experienceMode: 'EXPERT' }, sprintPreview: { enabled: true, showInAppBrowser: true } } } } as any);
         // CRITICAL: We must mock useReducedMotion to FALSE to prove that even when animations are enabled,
         // the cursor-snapping behavior is intentionally gone.
         vi.spyOn(ReducedMotionHook, 'useReducedMotion').mockReturnValue(false);
-        vi.spyOn(RouterHook, 'useRouterState').mockReturnValue({ matches: [{ pathname: '/' }] } as any);
+        vi.spyOn(RouterHook, 'useRouterState').mockReturnValue([{ pathname: '/' }] as any);
     });
 
     afterEach(() => {
@@ -101,8 +106,22 @@ describe('BottomNavigationDock (KineticDock)', () => {
             paddingBottom: 'calc(env(safe-area-inset-bottom) + 20px)',
         });
 
-        // Assert the spacer div is present (last child of nav)
-        const lastChild = nav.lastElementChild;
-        expect(lastChild?.getAttribute('class')).toContain('w-[1px] shrink-0');
+        // Assert the spacer div is present before the live route status.
+        expect(nav.querySelector('.w-\\[1px\\].shrink-0')).toBeInTheDocument();
+    });
+
+    it('renders Docs as an external link without route prefetch', () => {
+        render(<KineticDock />);
+
+        const docsLink = screen.getByRole('link', { name: 'Docs' });
+        expect(docsLink).toHaveAttribute('href', EXTERNAL_DOCS_URL);
+        expect(docsLink).toHaveAttribute('target', '_blank');
+        expect(docsLink).toHaveAttribute('data-tour-id', 'nav-docs');
+
+        fireEvent.mouseEnter(docsLink);
+        fireEvent.pointerDown(docsLink);
+        docsLink.focus();
+
+        expect(prefetchRoute).not.toHaveBeenCalledWith(EXTERNAL_DOCS_URL);
     });
 });

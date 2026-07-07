@@ -6,7 +6,7 @@ import { afterEach, describe, expect, test, vi } from "vitest";
 import { AgentMcpManagePanel } from "../AgentMcpManageModal.js";
 import type { AgentMcpAccessConfig, CustomMcpServer } from "../../../types.js";
 import { TOOL_DEFINITIONS } from "../../../../../../src/contracts/mcp-tool-definitions.js";
-import { schedulerOnlyAgentMcpAccess } from "../../../lib/agent-mcp-display.js";
+import { codeUxAgentMcpAccess, schedulerOnlyAgentMcpAccess } from "../../../lib/agent-mcp-display.js";
 
 vi.mock("gsap", () => ({
   default: {
@@ -69,7 +69,7 @@ describe("AgentMcpManagePanel", () => {
     expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ linkedServerIds: ["server_enabled"] }));
   });
 
-  test("starts from default-deny and enables Code UX as scheduler-only access", () => {
+  test("starts from default-deny and enables non-dashboard Code UX access with scheduler off", () => {
     const onChange = vi.fn();
     render(
       <AgentMcpManagePanel
@@ -89,24 +89,27 @@ describe("AgentMcpManagePanel", () => {
     expect(next.codeUxEnabled).toBe(true);
     expect(next.linkedServerIds).toEqual(["server_enabled"]);
     expect(next.codeUxToolToggles).toHaveLength(TOOL_DEFINITIONS.length);
-    expect(next.codeUxToolToggles.find((toggle) => toggle.name === "scheduler")).toMatchObject({ enabled: true });
-    expect(next.codeUxToolToggles.find((toggle) => toggle.name === "manage_scheduler")).toMatchObject({ enabled: false });
-    expect(next.codeUxToolToggles.filter((toggle) => toggle.enabled).map((toggle) => toggle.name)).toEqual(["scheduler"]);
+    expect(next.codeUxToolToggles.find((toggle) => toggle.name === "scheduler_code_ux")).toMatchObject({ enabled: false });
+    expect(next.codeUxToolToggles.find((toggle) => toggle.name === "manage_scheduler")).toMatchObject({ enabled: true });
+    expect(next.codeUxToolToggles.find((toggle) => toggle.name === "manage_code_ux")).toMatchObject({ enabled: true });
   });
 
-  test("shows dashboard reply scheduler-only as the recommended state", () => {
+  test("enables dashboard reply Code UX access with scheduler on", () => {
+    const onChange = vi.fn();
     render(
       <AgentMcpManagePanel
-        value={schedulerOnlyAgentMcpAccess()}
-        onChange={vi.fn()}
+        value={{ codeUxEnabled: false, codeUxToolToggles: [], linkedServerIds: [] }}
+        onChange={onChange}
         onClose={vi.fn()}
         availableServers={servers}
         isDashboardReplyAgent
       />
     );
 
-    expect(screen.getByText(`1/${TOOL_DEFINITIONS.length} tools enabled`)).toBeInTheDocument();
-    expect(screen.getByText(/Scheduler-only is the recommended safe default for the dashboard reply agent/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("switch", { name: "Enable Code UX for this agent" }));
+
+    expect(onChange).toHaveBeenCalledWith(codeUxAgentMcpAccess());
+    expect(screen.getByText(/Code UX MCP and scheduler enabled for dashboard chat/i)).toBeInTheDocument();
   });
 
   test("warns when scheduler-only access is active for a non-chat agent", () => {

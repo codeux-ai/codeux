@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   defaultAgentMcpAccess,
   defaultCodingAgentMcpAccess,
+  codeUxAgentMcpAccess,
+  codeUxAgentMcpAccessWithoutScheduler,
   schedulerOnlyAgentMcpAccess,
   sanitizeAgentMcpAccess,
   resolveAgentMcpRuntime,
@@ -60,13 +62,31 @@ describe("agent MCP defaults", () => {
     const enabledTools = access.codeUxToolToggles.filter((toggle) => toggle.enabled).map((toggle) => toggle.name);
 
     expect(access.codeUxEnabled).toBe(true);
-    expect(enabledTools).toEqual(["scheduler"]);
+    expect(enabledTools).toEqual(["scheduler_code_ux"]);
     expect(access.codeUxToolToggles.find((toggle) => toggle.name === "manage_scheduler")?.enabled).toBe(false);
     expect(access.codeUxToolToggles.find((toggle) => toggle.name === "manage_tasks")?.enabled).toBe(false);
     expect(access.codeUxToolToggles.find((toggle) => toggle.name === "manage_sprints")?.enabled).toBe(false);
     expect(access.codeUxToolToggles.find((toggle) => toggle.name === "manage_settings")?.enabled).toBe(false);
     expect(access.codeUxToolToggles.find((toggle) => toggle.name === "manage_code_ux")?.enabled).toBe(false);
     expect(access.linkedServerIds).toEqual(["playwright", "docs"]);
+  });
+
+  it("builds dashboard reply Code UX access with scheduler enabled", () => {
+    const access = codeUxAgentMcpAccess(["playwright", "playwright", " docs "]);
+
+    expect(access.codeUxEnabled).toBe(true);
+    expect(access.codeUxToolToggles.every((toggle) => toggle.enabled)).toBe(true);
+    expect(access.codeUxToolToggles.find((toggle) => toggle.name === "scheduler_code_ux")?.enabled).toBe(true);
+    expect(access.codeUxToolToggles.find((toggle) => toggle.name === "manage_code_ux")?.enabled).toBe(true);
+    expect(access.linkedServerIds).toEqual(["playwright", "docs"]);
+  });
+
+  it("builds non-dashboard Code UX defaults with scheduler disabled", () => {
+    const access = codeUxAgentMcpAccessWithoutScheduler(["playwright"]);
+
+    expect(access.codeUxEnabled).toBe(true);
+    expect(access.codeUxToolToggles.find((toggle) => toggle.name === "scheduler_code_ux")?.enabled).toBe(false);
+    expect(access.codeUxToolToggles.find((toggle) => toggle.name === "manage_code_ux")?.enabled).toBe(true);
   });
 });
 

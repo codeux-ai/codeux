@@ -1,6 +1,6 @@
 # Chat Provider Integrations
 
-External chat provider integrations let Code UX accept messages from chat channels, route them into project chat threads, and deliver assistant replies back through the same bridge. These integrations are configured under Settings -> Providers, but they are separate from AI provider credentials and model routing.
+External chat connector integrations let Code UX accept messages from chat channels, route them into project chat threads, and deliver assistant replies back through the same bridge. These integrations are configured under Settings -> Integrations -> Chat Connectors, but they are separate from AI provider credentials and model routing.
 
 ## Supported Providers And Bridge Modes
 
@@ -8,27 +8,27 @@ Code UX supports external chat channels through the bridge contracts implemented
 
 | Provider kind | Supported bridge modes |
 | --- | --- |
-| `whatsapp` | OpenClaw plugin, webhook |
-| `imessage` | OpenClaw core, native bridge command |
-| `telegram` | OpenClaw core, bot webhook |
-| `slack` | OpenClaw plugin, Events webhook |
-| `microsoft-teams` | OpenClaw plugin, bot webhook |
+| `whatsapp` | managed bridge, webhook |
+| `imessage` | managed bridge, native bridge command |
+| `telegram` | managed bridge, bot webhook |
+| `slack` | managed bridge, Events webhook |
+| `microsoft-teams` | managed bridge, bot webhook |
 | `discord` | bot/webhook gateway |
 
-These provider labels describe the normalized payloads Code UX can accept and the bridge setup schemas it exposes. Code UX does not call WhatsApp, iMessage, Telegram, Slack, Microsoft Teams, or Discord APIs directly. A bridge, webhook gateway, OpenClaw integration, or native command owns provider-specific API interaction.
+These connector labels describe the normalized payloads Code UX can accept and the bridge setup schemas it exposes. Code UX does not call WhatsApp, iMessage, Telegram, Slack, Microsoft Teams, or Discord APIs directly. A managed bridge, webhook gateway, or native command owns provider-specific API interaction.
 
 Bridge modes:
 
-- `openclaw`: HTTP delivery to a configured OpenClaw bridge URL, with OpenClaw credentials used as bridge transport credentials.
+- `managed_bridge`: HTTP delivery to a configured managed bridge URL, with bridge credentials used as transport credentials.
 - `webhook`: HTTP delivery to a configured generic gateway URL such as `webhookUrl`, `eventsUrl`, `botEndpointUrl`, or `gatewayUrl`.
 - `native_bridge`: local command execution for native bridge scripts. Code UX writes JSON to stdin, parses the configured command into executable and arguments without shell interpretation, and passes an optional bridge token through the environment.
 
 ## Setup Model
 
-Settings -> Providers contains two related but separate configuration families:
+Settings -> Integrations contains related but separate configuration families:
 
 - AI provider credentials and model routing configure CLI or hosted providers that do Code UX work, such as Codex, Gemini, Claude Code, Qwen Code, OpenCode, Antigravity, and Jules.
-- Chat provider connections configure external chat ingress, project/channel binding, and outbound reply delivery.
+- Chat connector connections configure external chat ingress, project/channel binding, and outbound reply delivery.
 
 Chat provider connections are stored in the Code UX SQLite database. Each connection records provider kind, bridge mode, display name, enabled state, status, non-secret setup fields, and secret fields. Public dashboard and MCP reads return redacted credential metadata only; runtime services that need raw secrets use an explicit internal repository path.
 
@@ -38,9 +38,9 @@ Saved secret fields are write-only in the dashboard. To rotate a secret, enter a
 
 Inbound chat provider requests are accepted on the dashboard server and must authenticate before routing:
 
-- OpenClaw and native bridge modes use bearer-style bridge credentials. The request can use an `Authorization: Bearer ...` header, `x-code-ux-bridge-token`, or `x-openclaw-token`.
+- Managed and native bridge modes use bearer-style bridge credentials. The request can use an `Authorization: Bearer ...` header or `x-code-ux-bridge-token`.
 - Webhook mode requires a configured HMAC signing secret and a valid signature. Webhook mode does not fall back to bearer-only authentication.
-- Every inbound request needs a fresh timestamp header such as `x-code-ux-timestamp`, `x-openclaw-timestamp`, `x-provider-timestamp`, or `x-slack-request-timestamp`.
+- Every inbound request needs a fresh timestamp header such as `x-code-ux-timestamp`, `x-provider-timestamp`, or `x-slack-request-timestamp`.
 - Signed requests and bearer requests with explicit nonce/request-id headers are replay-checked during the timestamp window.
 
 The primary ingress endpoint is:
@@ -103,7 +103,7 @@ Outbound states:
 - `retryable_failure`: a network, HTTP, or native bridge failure will be retried after `delivery.nextAttemptAt`.
 - `failed`: delivery is terminal because routing is disabled, bridge setup is missing, the bridge returned a non-retryable error, or retry attempts were exhausted.
 
-The dashboard lifecycle starts the retry loop. Failed and retryable deliveries are visible through Settings -> Providers delivery status views and through MCP `manage_chat_providers` inspection. Error text and payload metadata are redacted before being returned through dashboard or MCP reads.
+The dashboard lifecycle starts the retry loop. Failed and retryable deliveries are visible through Settings -> Integrations -> Chat Connectors delivery status views and through MCP `manage_chat_providers` inspection. Error text and payload metadata are redacted before being returned through dashboard or MCP reads.
 
 ## Rich Widget Suppression
 

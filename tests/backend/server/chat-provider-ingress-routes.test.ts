@@ -46,9 +46,9 @@ describe("chat provider ingress routes", () => {
     const connection = context.chatProviderRepository.createConnection({
       providerKind: "slack",
       displayName: "Slack bridge",
-      bridgeMode: "openclaw",
+      bridgeMode: "managed_bridge",
       status: "active",
-      secrets: { openclawApiKey: "bridge-token" },
+      secrets: { bridgeApiKey: "bridge-token" },
     });
     context.chatProviderRepository.createChannelBinding({
       providerConnectionId: connection.id,
@@ -148,9 +148,9 @@ describe("chat provider ingress routes", () => {
     const connection = context.chatProviderRepository.createConnection({
       providerKind: "slack",
       displayName: "Slack bridge",
-      bridgeMode: "openclaw",
+      bridgeMode: "managed_bridge",
       status: "active",
-      secrets: { openclawApiKey: "bridge-token" },
+      secrets: { bridgeApiKey: "bridge-token" },
     });
     context.chatProviderRepository.createChannelBinding({
       providerConnectionId: connection.id,
@@ -183,9 +183,9 @@ describe("chat provider ingress routes", () => {
     const connection = context.chatProviderRepository.createConnection({
       providerKind: "telegram",
       displayName: "Telegram gateway",
-      bridgeMode: "openclaw",
+      bridgeMode: "managed_bridge",
       status: "active",
-      secrets: { openclawApiKey: "telegram-token" },
+      secrets: { bridgeApiKey: "telegram-token" },
     });
     for (const project of [projectA, projectB]) {
       context.chatProviderRepository.createChannelBinding({
