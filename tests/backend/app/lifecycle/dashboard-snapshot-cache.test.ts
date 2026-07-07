@@ -1,10 +1,21 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import * as fs from "fs/promises";
+import * as os from "os";
+import * as path from "path";
 import { DashboardSnapshotCachePolicy } from "../../../../src/app/lifecycle/dashboard-snapshot-cache-policy.js";
 import { DashboardSnapshotCache, mapExecutionConnections, mapAssignedWorkers, mapAttentionItems } from "../../../../src/app/lifecycle/dashboard-snapshot-cache.js";
+import { AppDbStorage } from "../../../../src/repositories/app-db-storage.js";
+import { ConnectionChatRepository } from "../../../../src/repositories/connection-chat-repository.js";
+import { ExecutionRepository } from "../../../../src/repositories/execution-repository.js";
+import { ProjectAttentionRepository } from "../../../../src/repositories/project-attention-repository.js";
+import { ProjectManagementRepository } from "../../../../src/repositories/project-management-repository.js";
+import { ProjectWorkerAssignmentRepository } from "../../../../src/repositories/project-worker-assignment-repository.js";
+import { WorkerEndpointRepository } from "../../../../src/repositories/worker-endpoint-repository.js";
 
 describe("DashboardSnapshotCache", () => {
   let mockDeps: any;
   let cache: DashboardSnapshotCache;
+  const tempDirs: string[] = [];
 
   beforeEach(() => {
     mockDeps = {
@@ -27,6 +38,10 @@ describe("DashboardSnapshotCache", () => {
       },
     };
     cache = new DashboardSnapshotCache(mockDeps);
+  });
+
+  afterEach(async () => {
+    await Promise.all(tempDirs.splice(0).map((dir) => fs.rm(dir, { recursive: true, force: true })));
   });
 
 
@@ -152,6 +167,144 @@ describe("DashboardSnapshotCache", () => {
       expect(mockDeps.executionRepository.getProjectExecutionSnapshot).toHaveBeenNthCalledWith(2, "p1", {
         selectedSprintId: "sprint-1",
       });
+    });
+
+    it("scopes active attention queues to the selected sprint while project-wide mode keeps all active items", async () => {
+      const dir = await fs.mkdtemp(path.join(os.tmpdir(), "dashboard-snapshot-cache-"));
+      tempDirs.push(dir);
+      const storage = new AppDbStorage(path.join(dir, "app.db"));
+      try {
+        const projectManagementRepository = new ProjectManagementRepository(storage);
+        const executionRepository = new ExecutionRepository(storage);
+        const projectAttentionRepository = new ProjectAttentionRepository(storage);
+        const workerEndpointRepository = new WorkerEndpointRepository(storage);
+        const scopedCache = new DashboardSnapshotCache({
+          projectManagementRepository,
+          executionRepository,
+          projectAttentionRepository,
+          connectionChatRepository: new ConnectionChatRepository(storage),
+          projectWorkerAssignmentRepository: new ProjectWorkerAssignmentRepository(storage),
+        });
+
+        const project = projectManagementRepository.createProject({
+          name: "Attention Scope Project",
+          sourceType: "local",
+          sourceRef: "/workspace/attention-scope",
+        });
+        const sprintA = projectManagementRepository.createSprint(project.id, {
+          name: "Sprint A",
+          goal: "Ship A",
+        });
+        const sprintB = projectManagementRepository.createSprint(project.id, {
+          name: "Sprint B",
+          goal: "Ship B",
+        });
+        const runA = executionRepository.createSprintRun({
+          projectId: project.id,
+          sprintId: sprintA.id,
+          status: "running",
+        });
+
+        const sprintAItem = projectAttentionRepository.openOrRefreshItem({
+          projectId: project.id,
+          sprintId: sprintA.id,
+          attentionType: "manual_attention",
+          severity: "high",
+          ownerType: "human",
+          title: "Sprint A blocker",
+          summaryMarkdown: "A needs attention",
+        });
+        const sprintARunScopedItem = projectAttentionRepository.openOrRefreshItem({
+          projectId: project.id,
+          sprintId: null,
+          sprintRunId: runA.id,
+          attentionType: "merge_required",
+          severity: "medium",
+          ownerType: "human",
+          title: "Sprint A run blocker",
+          summaryMarkdown: "Run needs attention",
+        });
+        const sprintBItem = projectAttentionRepository.openOrRefreshItem({
+          projectId: project.id,
+          sprintId: sprintB.id,
+          attentionType: "action_required",
+          severity: "critical",
+          ownerType: "human",
+          title: "Sprint B blocker",
+          summaryMarkdown: "B needs attention",
+        });
+        const claimedSprintBItem = projectAttentionRepository.openOrRefreshItem({
+          projectId: project.id,
+          sprintId: sprintB.id,
+          attentionType: "merge_conflict",
+          severity: "high",
+          ownerType: "worker",
+          title: "Sprint B claimed blocker",
+          summaryMarkdown: "B worker attention",
+        });
+        const workerEndpoint = workerEndpointRepository.createVirtualEndpoint({
+          endpointKey: "worker-1",
+          displayName: "Worker 1",
+        });
+        projectAttentionRepository.claimAttentionItem(claimedSprintBItem.id, {
+          assignedWorkerEndpointId: workerEndpoint.id,
+        });
+        const projectWideItem = projectAttentionRepository.openOrRefreshItem({
+          projectId: project.id,
+          attentionType: "dashboard_reply_required",
+          severity: "medium",
+          ownerType: "human",
+          title: "Project blocker",
+          summaryMarkdown: "Project needs attention",
+        });
+        const resolvedSprintAItem = projectAttentionRepository.openOrRefreshItem({
+          projectId: project.id,
+          sprintId: sprintA.id,
+          attentionType: "ci_fix_required",
+          severity: "high",
+          ownerType: "human",
+          title: "Resolved Sprint A blocker",
+          summaryMarkdown: "Resolved",
+        });
+        projectAttentionRepository.resolveAttentionItem(resolvedSprintAItem.id, {
+          status: "resolved",
+          reason: "fixed",
+        });
+        const dismissedSprintAItem = projectAttentionRepository.openOrRefreshItem({
+          projectId: project.id,
+          sprintId: sprintA.id,
+          attentionType: "human_escalation_required",
+          severity: "high",
+          ownerType: "human",
+          title: "Dismissed Sprint A blocker",
+          summaryMarkdown: "Dismissed",
+        });
+        projectAttentionRepository.resolveAttentionItem(dismissedSprintAItem.id, {
+          status: "dismissed",
+          reason: "not needed",
+        });
+
+        const sprintASnapshot = scopedCache.getProjectExecutionSnapshot(project.id, {
+          selectedSprintId: sprintA.id,
+        });
+        const projectWideSnapshot = scopedCache.getProjectExecutionSnapshot(project.id);
+
+        expect(sprintASnapshot.attentionItems.map((item) => item.id).sort()).toEqual([
+          sprintAItem.id,
+          sprintARunScopedItem.id,
+        ].sort());
+        expect(projectWideSnapshot.attentionItems.map((item) => item.id).sort()).toEqual([
+          sprintAItem.id,
+          sprintARunScopedItem.id,
+          sprintBItem.id,
+          claimedSprintBItem.id,
+          projectWideItem.id,
+        ].sort());
+        expect(projectWideSnapshot.attentionItems.map((item) => item.id)).not.toContain(resolvedSprintAItem.id);
+        expect(projectWideSnapshot.attentionItems.map((item) => item.id)).not.toContain(dismissedSprintAItem.id);
+      } finally {
+        storage.close();
+      }
     });
 
     it("isolates full and lean execution snapshots across selected sprint scopes", () => {
