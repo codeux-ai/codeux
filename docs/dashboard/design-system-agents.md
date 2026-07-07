@@ -37,8 +37,8 @@ Use explicit badging inside `.code-ux/agents` lists:
 ## MCP Access
 - Missing per-agent MCP access must display as default-deny: Code UX built-in tools are off, and custom MCP links are shown independently from built-in Code UX access.
 - The editor must not enable Code UX directly from the inactive chip. It should open the MCP manager so the visible risk warning is presented before the user grants built-in tools.
-- Enabling Code UX from the manager starts with scheduler-only access: every built-in tool has an explicit toggle, only `scheduler` is enabled, and broader management tools remain disabled until the user turns them on.
-- Dashboard reply agents may present scheduler-only as the recommended safe default. Planning, coding, QA, CI repair, merge-conflict, and other non-chat agents need stronger visible warning copy because scheduler access can create agent-owned wakeups or task reruns during operational workflows.
+- Enabling Code UX from the manager for the dashboard reply agent enables the built-in MCP surface plus `scheduler_code_ux`.
+- Enabling Code UX from the manager for non-dashboard agents starts with every built-in tool represented explicitly and `scheduler_code_ux` disabled by default. Planning, coding, QA, CI repair, merge-conflict, and other non-chat agents need stronger visible warning copy because Code UX scheduler access can create agent-owned wakeups or task reruns during operational workflows.
 
 ## Empty States
 For empty states on the Agents page, avoid generic `<EmptyState />` implementations. Instead, use tailored rounded containers (`rounded-[1.9rem]`), dashed borders (`border-dashed border-black/[0.08]`), and a highly blured backdrop (`backdrop-blur-2xl`) that houses an oversized icon container (`h-16 w-16 bg-signal-500/10 text-signal-600 shadow-sm ring-1 ring-slate-900/5`).

@@ -16,11 +16,31 @@ export const defaultAgentMcpAccess = (): AgentMcpAccessConfig => ({
   linkedServerIds: [],
 });
 
+export const codeUxAgentMcpAccess = (linkedServerIds: readonly string[] = []): AgentMcpAccessConfig => ({
+  codeUxEnabled: true,
+  codeUxToolToggles: TOOL_DEFINITIONS.map((tool) => ({
+    name: tool.name,
+    enabled: true,
+    isInternal: true,
+  })),
+  linkedServerIds: Array.from(new Set(linkedServerIds)),
+});
+
+export const codeUxAgentMcpAccessWithoutScheduler = (linkedServerIds: readonly string[] = []): AgentMcpAccessConfig => ({
+  codeUxEnabled: true,
+  codeUxToolToggles: TOOL_DEFINITIONS.map((tool) => ({
+    name: tool.name,
+    enabled: tool.name !== "scheduler_code_ux",
+    isInternal: true,
+  })),
+  linkedServerIds: Array.from(new Set(linkedServerIds)),
+});
+
 export const schedulerOnlyAgentMcpAccess = (linkedServerIds: readonly string[] = []): AgentMcpAccessConfig => ({
   codeUxEnabled: true,
   codeUxToolToggles: TOOL_DEFINITIONS.map((tool) => ({
     name: tool.name,
-    enabled: tool.name === "scheduler",
+    enabled: tool.name === "scheduler_code_ux",
     isInternal: true,
   })),
   linkedServerIds: Array.from(new Set(linkedServerIds)),
@@ -31,14 +51,14 @@ export const isSchedulerOnlyAgentMcpAccess = (
 ): boolean => {
   if (!access.codeUxEnabled) return false;
   const enabledByName = new Map(access.codeUxToolToggles.map((toggle) => [toggle.name, toggle.enabled]));
-  return TOOL_DEFINITIONS.every((tool) => enabledByName.get(tool.name) === (tool.name === "scheduler"));
+  return TOOL_DEFINITIONS.every((tool) => enabledByName.get(tool.name) === (tool.name === "scheduler_code_ux"));
 };
 
 /**
  * Normalize a config for storage/comparison. Agent-scoped Code UX access must keep
  * explicit true and false tool toggles because absent toggles inherit system-level
- * defaults; scheduler-only access relies on scheduler being explicitly enabled while
- * every other built-in tool is explicitly disabled.
+ * defaults. Dashboard reply access explicitly enables scheduler; non-dashboard
+ * default Code UX access explicitly disables scheduler until the user enables it.
  */
 export const normalizeAgentMcpAccess = (access: AgentMcpAccessConfig): AgentMcpAccessConfig => ({
   codeUxEnabled: access.codeUxEnabled === true,

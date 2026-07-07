@@ -105,6 +105,7 @@ function buildJsonOutputInstructions(): string {
 function buildMcpNativeOutputInstructions(): string {
   return [
     "You have the `manage_code_ux` MCP tool available. Use it directly to perform management actions.",
+    "You also have the `scheduler_code_ux` MCP tool available for agent-owned follow-ups, wakeups, and task reruns.",
     "",
     "The tool accepts: `{ domain, action, payload }` where:",
     "- **projects**: `list` (projectId), `get` (projectId), `create` (projectId, name, baseDir), `update` (projectId, ...), `select` (projectId), `delete` (projectId)",
@@ -126,7 +127,7 @@ function buildMcpNativeOutputInstructions(): string {
 
 function buildSchedulerOnlyOutputInstructions(): string {
   return [
-    "You have the `scheduler` MCP tool available for agent-owned follow-ups only.",
+    "You have the `scheduler_code_ux` MCP tool available for agent-owned follow-ups only.",
     "",
     "Use it only when you need to schedule your own future wakeup or task rerun. It supports `list`, `schedule_wakeup`, `schedule_task`, and `cancel`.",
     "You do not have broad Code UX management tools in this route. Do not call `manage_code_ux`, `manage_scheduler`, `manage_tasks`, `manage_sprints`, or `manage_settings`.",

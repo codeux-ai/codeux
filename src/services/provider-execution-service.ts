@@ -227,7 +227,9 @@ export class ProviderExecutionService {
     let execInvocationId: string | null = args.invocationId || null;
     const effectiveModel = resolveEffectiveModel(args);
     const persistentSkillRuntime = await this.resolvePersistentSkillRuntime(args);
-    const baseMcpConnection = args.mcpConnection ?? (persistentSkillRuntime ? this.deps.getMcpConnectionInfo?.() ?? null : null);
+    const codeUxMcpEnabled = args.agentMcpAccess?.codeUxEnabled === true;
+    const baseMcpConnection = args.mcpConnection
+      ?? (persistentSkillRuntime || codeUxMcpEnabled ? this.deps.getMcpConnectionInfo?.() ?? null : null);
 
     const resolvedMcp = resolveAgentMcpRuntime({
       access: args.agentMcpAccess,
