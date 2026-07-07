@@ -113,6 +113,106 @@ export function ensureChatProviderTables(db: DatabaseAdapter): void {
   `);
 }
 
+export function ensureNodeFlowTables(db: DatabaseAdapter): void {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS node_flows (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL,
+      title TEXT NOT NULL,
+      description TEXT NOT NULL DEFAULT '',
+      graph_json TEXT NOT NULL,
+      version INTEGER NOT NULL DEFAULT 1,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+    )
+  `);
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS node_flow_versions (
+      id TEXT PRIMARY KEY,
+      flow_id TEXT NOT NULL,
+      project_id TEXT NOT NULL,
+      version INTEGER NOT NULL,
+      title TEXT NOT NULL,
+      description TEXT NOT NULL DEFAULT '',
+      graph_json TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      FOREIGN KEY (flow_id) REFERENCES node_flows(id) ON DELETE CASCADE,
+      FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+      UNIQUE (flow_id, version)
+    )
+  `);
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS node_flow_agent_skills (
+      flow_id TEXT NOT NULL,
+      project_id TEXT NOT NULL,
+      agent_preset_id TEXT NOT NULL,
+      skill_name TEXT NOT NULL,
+      description TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      PRIMARY KEY (flow_id, agent_preset_id),
+      FOREIGN KEY (flow_id) REFERENCES node_flows(id) ON DELETE CASCADE,
+      FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+      FOREIGN KEY (agent_preset_id) REFERENCES agent_presets(id) ON DELETE CASCADE
+    )
+  `);
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS node_flow_runs (
+      id TEXT PRIMARY KEY,
+      flow_id TEXT NOT NULL,
+      project_id TEXT NOT NULL,
+      version INTEGER NOT NULL,
+      status TEXT NOT NULL,
+      execution_invocation_id TEXT,
+      trigger_type TEXT NOT NULL DEFAULT 'manual',
+      trigger_payload_json TEXT,
+      input_json TEXT,
+      output_json TEXT,
+      error_message TEXT,
+      started_at TEXT,
+      finished_at TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      FOREIGN KEY (flow_id) REFERENCES node_flows(id) ON DELETE CASCADE,
+      FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+      FOREIGN KEY (execution_invocation_id) REFERENCES execution_invocations(id) ON DELETE SET NULL
+    )
+  `);
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS node_flow_node_runs (
+      id TEXT PRIMARY KEY,
+      run_id TEXT NOT NULL,
+      flow_id TEXT NOT NULL,
+      project_id TEXT NOT NULL,
+      node_id TEXT NOT NULL,
+      status TEXT NOT NULL,
+      execution_invocation_id TEXT,
+      input_json TEXT,
+      output_json TEXT,
+      error_message TEXT,
+      started_at TEXT,
+      finished_at TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      FOREIGN KEY (run_id) REFERENCES node_flow_runs(id) ON DELETE CASCADE,
+      FOREIGN KEY (flow_id) REFERENCES node_flows(id) ON DELETE CASCADE,
+      FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+      FOREIGN KEY (execution_invocation_id) REFERENCES execution_invocations(id) ON DELETE SET NULL
+    )
+  `);
+
+  ensureColumn(db, "node_flow_runs", "execution_invocation_id", "TEXT");
+  ensureColumn(db, "node_flow_node_runs", "execution_invocation_id", "TEXT");
+
+  ensureIndex(db, "idx_node_flows_project_updated", "node_flows", "project_id, updated_at DESC");
+  ensureIndex(db, "idx_node_flow_versions_flow_version", "node_flow_versions", "flow_id, version DESC");
+  ensureIndex(db, "idx_node_flow_agent_skills_agent", "node_flow_agent_skills", "project_id, agent_preset_id");
+  ensureIndex(db, "idx_node_flow_runs_flow_created", "node_flow_runs", "flow_id, created_at DESC");
+  ensureIndex(db, "idx_node_flow_runs_project_created", "node_flow_runs", "project_id, created_at DESC");
+  ensureIndex(db, "idx_node_flow_node_runs_run_created", "node_flow_node_runs", "run_id, created_at ASC");
+}
+
 export function migrateSprintLinkedIssuesExternalSources(db: DatabaseAdapter): void {
   ensureColumn(db, "sprint_linked_issues", "project_key", "TEXT");
   ensureColumn(db, "sprint_linked_issues", "external_id", "TEXT");
@@ -320,6 +420,7 @@ export function runMigrations(db: DatabaseAdapter): void {
   // The current phase 1 approach calls schema definitions directly, but these ensure*
   // helpers allow progressive column additions safely.
   ensureChatProviderTables(db);
+  ensureNodeFlowTables(db);
 
   ensureColumn(db, "provider_invocations", "tool_call_count", "INTEGER NOT NULL DEFAULT 0");
 

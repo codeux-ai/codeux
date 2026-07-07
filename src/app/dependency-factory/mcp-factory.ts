@@ -45,6 +45,7 @@ export function createMcpDependencies(
     memoryPromotionService: coreDeps.memoryPromotionService,
     embeddingModelManager: coreDeps.embeddingModelManager,
     skillService: coreDeps.skillService,
+    nodeFlowService: dashboardDeps.nodeFlowService,
     knowledgeService: coreDeps.knowledgeService,
     planningAgentService: dashboardDeps.planningAgentService,
     projectSetupService: dashboardDeps.projectSetupService,

@@ -13,6 +13,7 @@ Execution invocations span various purposes:
 - **Coding & Virtual Planning**: Core orchestration loops.
 - **Clarification**: Prompt rewrites or operator clarification flows.
 - **QA Coverage**: Automated verification and quality assurance sweeps.
+- **Node Flows**: Repeatable node-flow runs and externally observable node steps.
 
 Failed invocations can be explicitly preserved with `preserved_at`. Preservation is used for high-value transcripts such as quota-expensive planning runs that should remain available for operator review. Preserved sprint-scoped invocation rows block sprint deletion through the repository boundary so their transcripts are not removed by a foreign-key cascade.
 
@@ -45,6 +46,21 @@ The Chat -> Invocations detail view exposes same-session recovery actions for fa
 Running invocations can also be cancelled from the same detail header. Cancellation is available for every running invocation type, not just planning. The dashboard posts to `/api/execution/invocations/:invocationId/cancel`; the server requests any registered active dispatch to stop, finds Docker containers by the existing `code-ux.session-id` label from the linked provider/task runtime, kills those containers, marks the provider usage row `cancelled`, and appends a system cancellation message to the invocation transcript. Provider finalizers check the current invocation state before writing terminal status so a cancelled row is not overwritten by a late provider failure while the process unwinds.
 
 Invocations waiting on provider usage limits expose a **Reset timer** action when they are still active, have `last_retry_after_iso`, and carry `last_error_category = QUOTA_EXHAUSTED` or `RATE_LIMITED`. The dashboard posts to `/api/execution/invocations/:invocationId/reset-usage-limit`; the server clears the retry timestamp and records a transcript audit message. The provider retry loop watches that persisted timestamp while sleeping, so clearing it wakes the active wait and lets the same invocation retry immediately instead of waiting for the original reset time.
+
+## Node Flow Usage
+
+Node-flow execution uses `execution_invocations` as the dashboard-observable audit surface while keeping graph and run details in the node-flow tables.
+
+Runtime behavior:
+
+- `NodeFlowRuntimeService.runFlow` creates one parent invocation with `type = "node_flow"` and links it from `node_flow_runs.execution_invocation_id`.
+- The parent invocation starts as `running`, receives a system start message with `flowId` and flow version metadata, and is updated to `completed`, `failed`, or `cancelled` when the run finishes.
+- Externally observable node types create separate invocation rows with `type = "node_flow_node"` and link them from `node_flow_node_runs.execution_invocation_id`.
+- Current externally observable node types are `provider_prompt` and `http_request`. Deterministic nodes such as `input`, `set_fields`, `template`, and `output` only create `node_flow_node_runs` rows.
+- Provider prompt nodes pass the existing `node_flow_node` invocation id into `ProviderExecutionService` and disable raw prompt/assistant transcript capture for that node-flow prompt.
+- HTTP nodes append a redacted request summary to the node invocation. Secret-shaped query keys are redacted before they are written.
+
+The run tables remain the source for node order, node status, flow input/output, trigger payload, and per-node JSON payloads. Those payloads are masked for secret-shaped keys before persistence and before MCP/dashboard responses.
 
 ## Realtime Synchronization
 
@@ -85,6 +101,8 @@ This prevents stale `qa_review` or worker invocations from remaining indefinitel
 ## Relationships
 
 Execution invocations cascade when their parent \`project_id\`, \`sprint_id\`, or \`task_id\` are deleted. They optionally reference \`task_run_id\` or \`dispatch_id\` but function independently to track planning sweeps, conflict resolution, or ad-hoc agent activity.
+
+Node-flow run rows reference execution invocations with `ON DELETE SET NULL`. Deleting an invocation should not delete the node-flow run history, and deleting a node flow cascades its versions, attachments, run rows, and node-run rows through the node-flow table relationships.
 
 Additionally, every execution invocation explicitly links to a `provider_invocations` usage row. The execution transcripts stored in `execution_invocation_messages` serve as the replayable prompt history corresponding to the exact token and time consumption recorded in the usage row, allowing the dashboard Stats page to drill down into the exact sequence that generated specific costs.
 

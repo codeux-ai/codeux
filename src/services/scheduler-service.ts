@@ -16,6 +16,9 @@ import type { ChatThreadRuntimeService } from "./chat-thread-runtime-service.js"
 import type { ExecutionControlService } from "./execution-control-service.js";
 import type { MemoryRemediationService } from "./memory-remediation-service.js";
 import type { TaskRerunService } from "./task-rerun-service.js";
+import type { NodeFlowRuntimeService } from "./node-flow-runtime-service.js";
+import type { NodeFlowRepository } from "../repositories/node-flow-repository.js";
+import type { NodeFlowRunSummaryResponse } from "../contracts/node-flow-types.js";
 import { buildSchedulerOccurrences, computeNextRunAfterOccurrence } from "../domain/scheduler/schedule-time.js";
 import type { ConversationMessageMetadata, CreateDashboardConversationMessageInput } from "../contracts/connection-chat-types.js";
 
@@ -30,6 +33,8 @@ export interface SchedulerServiceDeps {
   executionControlService: ExecutionControlService;
   taskRerunService?: TaskRerunService;
   memoryRemediationService?: MemoryRemediationService;
+  nodeFlowRuntimeService?: NodeFlowRuntimeService;
+  nodeFlowRepository?: Pick<NodeFlowRepository, "getFlow">;
   logger: Logger;
   tickIntervalMs?: number;
 }
@@ -162,6 +167,7 @@ export class SchedulerService {
       agentWakeupTarget: input.agentWakeupTarget ?? current.agentWakeupTarget,
       taskTarget: input.taskTarget ?? current.taskTarget,
       memoryRemediationTarget: input.memoryRemediationTarget ?? current.memoryRemediationTarget,
+      nodeFlowTarget: input.nodeFlowTarget ?? current.nodeFlowTarget,
     });
     this.validateScheduleAnchor(current.projectId, {
       targetType: input.targetType ?? current.targetType,
@@ -173,6 +179,7 @@ export class SchedulerService {
       agentWakeupTarget: input.agentWakeupTarget ?? current.agentWakeupTarget,
       taskTarget: input.taskTarget ?? current.taskTarget,
       memoryRemediationTarget: input.memoryRemediationTarget ?? current.memoryRemediationTarget,
+      nodeFlowTarget: input.nodeFlowTarget ?? current.nodeFlowTarget,
       recurrence: input.recurrence ? { ...current.recurrence, ...input.recurrence } : current.recurrence,
     });
     return this.deps.schedulerRepository.updateEntry(entryId, input);
@@ -205,26 +212,67 @@ export class SchedulerService {
       const nextRunAt = freshEntry.scheduleAnchor
         ? null
         : computeNextRunAfterOccurrence(occurrenceIso, freshEntry.recurrence, freshEntry.runCount + 1);
-      
-      // Immediately mark as succeeded to prevent double firing if app restarts during execution
+
+      if (freshEntry.targetType === "node_flow") {
+        const claimedEntry = this.claimDueOccurrence(freshEntry, occurrenceIso, nextRunAt);
+        if (!claimedEntry) {
+          this.inFlightEntryIds.delete(entry.id);
+          continue;
+        }
+
+        this.executeNodeFlowEntry(claimedEntry, occurrenceIso).then((result) => {
+          if (result.run.status === "succeeded") {
+            this.deps.schedulerRepository.markRunSucceeded(claimedEntry.id, occurrenceIso, nextRunAt);
+            return;
+          }
+          this.deps.schedulerRepository.markRunFailed(
+            claimedEntry.id,
+            result.run.errorMessage ?? `Node flow run ${result.run.status}.`,
+            occurrenceIso,
+          );
+        }).catch((error) => {
+          this.handleExecutionFailure(claimedEntry, error);
+        }).finally(() => {
+          this.inFlightEntryIds.delete(entry.id);
+        });
+        continue;
+      }
+
+      // Existing scheduler targets are advanced before dispatch so an app restart does not double-fire them.
       this.deps.schedulerRepository.markRunSucceeded(freshEntry.id, occurrenceIso, nextRunAt);
 
-      this.executeEntry(freshEntry).catch((error) => {
-        const message = error instanceof Error ? error.message : String(error);
-        this.deps.logger.error("Scheduled entry execution failed", {
-          entryId: freshEntry.id,
-          projectId: freshEntry.projectId,
-          targetType: freshEntry.targetType,
-          error: message,
-        });
-        this.deps.schedulerRepository.markRunFailed(freshEntry.id, message);
+      this.executeEntry(freshEntry, occurrenceIso).catch((error) => {
+        this.handleExecutionFailure(freshEntry, error);
       }).finally(() => {
         this.inFlightEntryIds.delete(entry.id);
       });
     }
   }
 
-  private async executeEntry(entry: SchedulerEntryRecord): Promise<void> {
+  private handleExecutionFailure(entry: SchedulerEntryRecord, error: unknown): void {
+    const message = error instanceof Error ? error.message : String(error);
+    this.deps.logger.error("Scheduled entry execution failed", {
+      entryId: entry.id,
+      projectId: entry.projectId,
+      targetType: entry.targetType,
+      error: message,
+    });
+    this.deps.schedulerRepository.markRunFailed(entry.id, message);
+  }
+
+  private claimDueOccurrence(
+    entry: SchedulerEntryRecord,
+    occurrenceIso: string,
+    nextRunAt: string | null,
+  ): SchedulerEntryRecord | null {
+    const claimDueOccurrence = this.deps.schedulerRepository.claimDueOccurrence;
+    if (typeof claimDueOccurrence !== "function") {
+      return entry;
+    }
+    return claimDueOccurrence.call(this.deps.schedulerRepository, entry.id, occurrenceIso, nextRunAt);
+  }
+
+  private async executeEntry(entry: SchedulerEntryRecord, occurrenceIso: string): Promise<void> {
     if (entry.targetType === "sprint") {
       const sprintId = entry.sprintTarget?.sprintId;
       if (!sprintId) {
@@ -274,6 +322,11 @@ export class SchedulerService {
       return;
     }
 
+    if (entry.targetType === "node_flow") {
+      await this.executeNodeFlowEntry(entry, occurrenceIso);
+      return;
+    }
+
     if (entry.targetType === "agent_wakeup") {
       const target = entry.agentWakeupTarget;
       if (!target) {
@@ -299,22 +352,56 @@ export class SchedulerService {
       return;
     }
 
-    const target = entry.chatTarget;
-    if (!target) {
-      throw new Error("Scheduled chat target is missing.");
+    if (entry.targetType === "chat") {
+      const target = entry.chatTarget;
+      if (!target) {
+        throw new Error("Scheduled chat target is missing.");
+      }
+      const input: CreateDashboardConversationMessageInput = {
+        threadId: target.threadId || undefined,
+        title: target.title || entry.title,
+        connectionId: target.connectionId || undefined,
+        bodyMarkdown: target.bodyMarkdown,
+        metadata: {
+          source: "scheduler",
+          schedulerEntryId: entry.id,
+          scheduledFor: entry.nextRunAt ?? entry.scheduledFor,
+        },
+      };
+      await this.deps.chatThreadRuntimeService.postMessage(entry.projectId, input);
+      return;
     }
-    const input: CreateDashboardConversationMessageInput = {
-      threadId: target.threadId || undefined,
-      title: target.title || entry.title,
-      connectionId: target.connectionId || undefined,
-      bodyMarkdown: target.bodyMarkdown,
-      metadata: {
-        source: "scheduler",
-        schedulerEntryId: entry.id,
-        scheduledFor: entry.nextRunAt ?? entry.scheduledFor,
+
+    const exhaustive: never = entry.targetType;
+    throw new Error(`Unsupported scheduler target type: ${exhaustive}`);
+  }
+
+  private async executeNodeFlowEntry(entry: SchedulerEntryRecord, occurrenceIso: string): Promise<NodeFlowRunSummaryResponse> {
+    if (entry.targetType !== "node_flow") {
+      throw new Error(`Unsupported node flow scheduler target type: ${entry.targetType}`);
+    }
+    const target = entry.nodeFlowTarget;
+    if (!target) {
+      throw new Error("Scheduled node flow target is missing.");
+    }
+    if (!this.deps.nodeFlowRuntimeService) {
+      throw new Error("Node flow runtime service is not enabled.");
+    }
+    this.validateNodeFlowTargetOwnership(entry.projectId, target.flowId);
+    return await this.deps.nodeFlowRuntimeService.runFlow(
+      entry.projectId,
+      target.flowId,
+      target.input ?? {},
+      {
+        triggerType: "scheduler",
+        triggerPayload: {
+          schedulerEntryId: entry.id,
+          scheduledFor: occurrenceIso,
+          targetType: entry.targetType,
+          ...(target.flowVersion !== undefined ? { flowVersion: target.flowVersion } : {}),
+        },
       },
-    };
-    await this.deps.chatThreadRuntimeService.postMessage(entry.projectId, input);
+    );
   }
 
   private validateInputTarget(projectId: string, input: CreateSchedulerEntryInput | UpdateSchedulerEntryInput): void {
@@ -338,6 +425,15 @@ export class SchedulerService {
       return;
     }
 
+    if (input.targetType === "node_flow") {
+      const flowId = input.nodeFlowTarget?.flowId?.trim();
+      if (!flowId) {
+        throw new Error("nodeFlowTarget.flowId is required.");
+      }
+      this.validateNodeFlowTargetOwnership(projectId, flowId);
+      return;
+    }
+
     if (input.targetType !== "sprint") {
       return;
     }
@@ -352,6 +448,16 @@ export class SchedulerService {
     }
     if (sprint.status === "completed") {
       throw new Error("Completed sprints cannot be scheduled.");
+    }
+  }
+
+  private validateNodeFlowTargetOwnership(projectId: string, flowId: string): void {
+    if (!this.deps.nodeFlowRepository) {
+      throw new Error("Node flow repository is not enabled.");
+    }
+    const flow = this.deps.nodeFlowRepository.getFlow(flowId);
+    if (!flow || flow.projectId !== projectId) {
+      throw new Error("Only node flows in the selected project can be scheduled.");
     }
   }
 
@@ -407,7 +513,11 @@ export class SchedulerService {
       return null;
     }
     const dueAt = new Date(anchorTime.getTime() + ((entry.scheduleAnchor.offsetMinutes ?? 0) * 60_000));
-    return dueAt.getTime() <= now.getTime() ? dueAt.toISOString() : null;
+    const dueIso = dueAt.toISOString();
+    if (entry.lastRunAt === dueIso) {
+      return null;
+    }
+    return dueAt.getTime() <= now.getTime() ? dueIso : null;
   }
 
   private resolveAnchorOccurrenceStart(entry: SchedulerEntryRecord): string | null {

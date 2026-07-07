@@ -46,6 +46,7 @@ export type DocsSlug =
   | 'architecture-ci-integration'
   | 'architecture-dashboard-architecture'
   | 'architecture-data-model'
+  | 'architecture-node-flow-foundation'
   | 'architecture-configuration-resolution'
   | 'architecture-security'
 
@@ -359,6 +360,13 @@ export const docsRegistry: Record<DocsSlug, DocsRegistryEntry> = {
     title: "Data model",
     description: "This page describes the entities Code UX persists and how they relate. The default backend is SQLite; a Postgres migration is planned but not yet shipped.",
   },
+  'architecture-node-flow-foundation': {
+    id: 'architecture-node-flow-foundation',
+    path: '/docs/architecture-node-flow-foundation',
+    section: 'Architecture',
+    title: "Node Flow Foundation",
+    description: "Node flows are project-scoped, repeatable workflow graphs with typed contracts, validation, SQLite persistence, agent-skill attachments, and dashboard HTTP routes.",
+  },
   'architecture-configuration-resolution': {
     id: 'architecture-configuration-resolution',
     path: '/docs/architecture-configuration-resolution',
@@ -419,6 +427,7 @@ export const orderedDocs: DocsRegistryEntry[] = [
   docsRegistry['architecture-ci-integration'],
   docsRegistry['architecture-dashboard-architecture'],
   docsRegistry['architecture-data-model'],
+  docsRegistry['architecture-node-flow-foundation'],
   docsRegistry['architecture-configuration-resolution'],
   docsRegistry['architecture-security'],
 ]
