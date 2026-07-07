@@ -26,7 +26,7 @@ Loaded by `loadAppConfig` (`src/config/app-config.ts`) given `process.argv` and 
 | `mcpHttp.port` | `--mcp-https-port` CLI → `MCP_HTTPS_PORT` env → `config.json` (mcpHttpPort / MCP_HTTPS_PORT / mcpHttp.port) → `dashboardPort + 1` |
 | `mcpHttp.host` | `--mcp-https-host` CLI → `MCP_HTTPS_HOST` env → `127.0.0.1` |
 | `mcpHttp.path` | `--mcp-https-path` CLI → `MCP_HTTPS_PATH` env → `/mcp` |
-| `mcpHttp.authToken` | `--mcp-https-auth-token` CLI → `MCP_HTTPS_AUTH_TOKEN` env → unset |
+| `mcpHttp.authToken` | `--mcp-https-auth-token` CLI → `MCP_HTTPS_AUTH_TOKEN` env → generated/reused from `~/.code-ux/security.json` when the HTTP gateway is enabled |
 | `runtimeRole` | `--runtime-role` CLI → `project_manager` |
 | `headless` | `--headless` or `--no-dashboard` CLI → `false` |
 
@@ -46,6 +46,8 @@ The first file found at each path *wins for its specific key*. There is **no mer
 ### `.env` loading
 
 `dotenv` loads `<projectRoot>/.env` very early (before any config resolution). This means any of the above env-driven fields can be set in `.env` and behave identically.
+
+When the MCP HTTP gateway is enabled and no explicit auth token is supplied, bootstrap config creates a user-scoped bearer token in `~/.code-ux/security.json` with restrictive file permissions where the filesystem supports them. The Settings → MCP page can regenerate that token and install the current URL/token into supported local CLI config files.
 
 ## Settings tree
 

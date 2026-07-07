@@ -196,4 +196,4 @@ The CI tag pipeline runs the full build, runs the audit, and publishes to npm.
 
 - Use `pnpm run dev` + `pnpm run dev:dashboard` in two terminals for the fastest iteration loop.
 - The MCP stdio server only activates if stdin is not a TTY. To exercise it locally, pipe a JSON-RPC request: `echo '{"jsonrpc":"2.0","id":1,"method":"initialize"}' | node dist/index.js`.
-- For one-off MCP integration tests, the `--mcp-https` flag plus `curl` is the simplest harness.
+- For one-off MCP HTTP integration tests, the legacy `--mcp-https` flag plus `curl` is the simplest harness.

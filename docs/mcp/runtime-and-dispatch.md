@@ -108,13 +108,15 @@ That endpoint:
 - is configured through `MCP_HTTPS_*` env vars or `--mcp-https*` flags
 - exposes the same project-manager tool surface as stdio
 - no longer exposes a separate worker-control-plane runtime
+- uses a generated user bearer token from `~/.code-ux/security.json` when no explicit token is supplied
+- is HTTP at the Node listener; deploy TLS with a trusted reverse proxy/certificate when remote HTTPS is required
 
 ## Dashboard Settings Path
 
 The Settings > MCP panel explains both runtime connection modes in place:
 
-- Code UX exposes the built-in MCP server over stdio by default.
-- Authenticated Streamable HTTP for external MCP clients is enabled at startup with `MCP_HTTPS_*` environment variables or `--mcp-https*` flags.
+- Code UX exposes the built-in MCP server over stdio and authenticated Streamable HTTP.
+- The Local CLI HTTP setup section shows the active URL and bearer token, lets the user regenerate the token, and can install the Code UX MCP entry into local Claude Code, Gemini, Codex, Qwen Code, OpenCode, and Antigravity config files.
 - Custom remote MCP servers are added from system scope by choosing `HTTP / SSE`, pasting the server URL, and optionally entering auth headers as a JSON object of header names to string values.
 - HTTP custom server previews use `{ type: "http", url, headers }`; stdio custom server previews use command, args, and env.
 - Custom server changes are injected into MCP-capable CLI containers on the next CLI run. Project scope can enable, disable, or override inherited system servers, but new custom servers are created at system scope.

@@ -30,6 +30,7 @@ export interface BootMcpHttpTransportDeps {
   port: number | null;
   path: string;
   authToken: string | null;
+  getAuthToken?: () => string | null;
   maxSessions?: number;
   sessionTimeoutMs?: number;
   logger: Logger;
@@ -230,8 +231,10 @@ export async function bootMcpHttpTransport(deps: BootMcpHttpTransportDeps): Prom
     return null;
   }
 
-  if (!isLoopbackHost(deps.host) && !deps.authToken?.trim()) {
-    throw new Error("MCP HTTPS auth token is required when binding the MCP HTTPS server to a non-loopback host.");
+  const readAuthToken = (): string | null => deps.getAuthToken?.() ?? deps.authToken;
+
+  if (!isLoopbackHost(deps.host) && !readAuthToken()?.trim()) {
+    throw new Error("MCP HTTP auth token is required when binding the MCP HTTP server to a non-loopback host.");
   }
 
   const app = express();
@@ -265,20 +268,21 @@ export async function bootMcpHttpTransport(deps: BootMcpHttpTransportDeps): Prom
   app.all(deps.path, async (req, res) => {
     let headers: ValidatedMcpHttpRequestHeaders;
     try {
-      if (!isAuthorizedRequest(req, deps.authToken)) {
-        deps.logger.warn("Unauthorized MCP HTTPS request", {
+      const authToken = readAuthToken();
+      if (!isAuthorizedRequest(req, authToken)) {
+        deps.logger.warn("Unauthorized MCP HTTP request", {
           path: req.path,
           method: req.method,
-          authRequired: !!deps.authToken,
+          authRequired: !!authToken,
         });
         respondUnauthorized(res);
         return;
       }
     } catch {
-      deps.logger.warn("Rejected MCP HTTPS request with invalid security headers", {
+      deps.logger.warn("Rejected MCP HTTP request with invalid security headers", {
         path: req.path,
         method: req.method,
-        authRequired: !!deps.authToken,
+        authRequired: !!readAuthToken(),
       });
       respondUnauthorized(res);
       return;
@@ -289,7 +293,7 @@ export async function bootMcpHttpTransport(deps: BootMcpHttpTransportDeps): Prom
         agentId: readAgentIdHeader(req),
       };
     } catch {
-      deps.logger.warn("Rejected MCP HTTPS request with invalid identifiers", {
+      deps.logger.warn("Rejected MCP HTTP request with invalid identifiers", {
         path: req.path,
         method: req.method,
       });
@@ -301,7 +305,7 @@ export async function bootMcpHttpTransport(deps: BootMcpHttpTransportDeps): Prom
       let entry = headers.sessionId ? sessions.get(headers.sessionId) : undefined;
 
       if (headers.sessionId && !entry) {
-        deps.logger.warn("Rejected MCP HTTPS request with inactive session", { path: req.path, method: req.method });
+        deps.logger.warn("Rejected MCP HTTP request with inactive session", { path: req.path, method: req.method });
         respondBadRequest(res, "Bad Request: Invalid MCP session");
         return;
       }
@@ -315,7 +319,7 @@ export async function bootMcpHttpTransport(deps: BootMcpHttpTransportDeps): Prom
         await cleanupIdleSessions();
 
         if (sessions.size >= maxSessions) {
-          deps.logger.warn("MCP HTTPS session cap reached", {
+          deps.logger.warn("MCP HTTP session cap reached", {
             path: req.path,
             method: req.method,
             maxSessions,
@@ -351,7 +355,7 @@ export async function bootMcpHttpTransport(deps: BootMcpHttpTransportDeps): Prom
         }
       }
     } catch (error) {
-      deps.logger.error("MCP HTTPS request failed", { error, path: req.path, method: req.method });
+      deps.logger.error("MCP HTTP request failed", { error, path: req.path, method: req.method });
       if (!res.headersSent) {
         res.status(500).json({
           jsonrpc: "2.0",
@@ -394,11 +398,11 @@ export async function bootMcpHttpTransport(deps: BootMcpHttpTransportDeps): Prom
     }
   }
 
-  deps.logger.info(`${CODE_UX_DISPLAY_NAME} MCP HTTPS server running`, {
+  deps.logger.info(`${CODE_UX_DISPLAY_NAME} MCP HTTP server running`, {
     host: deps.host,
     port: resolvedPort,
     path: deps.path,
-    authRequired: !!deps.authToken,
+    authRequired: !!readAuthToken(),
   });
 
   return {

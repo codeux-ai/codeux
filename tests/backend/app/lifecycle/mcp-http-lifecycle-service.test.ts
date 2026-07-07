@@ -91,7 +91,7 @@ describe("bootMcpHttpTransport", () => {
       createServer: createTestServer,
       recoveryService: { recover: async () => ({ resumedSprintRunIds: [] }) } as any,
       runStartupRecovery: false,
-    })).rejects.toThrow("MCP HTTPS auth token is required");
+    })).rejects.toThrow("MCP HTTP auth token is required");
   });
 
   it.each(["127.0.0.1", "localhost", "::1"])("preserves unauthenticated loopback startup on %s", async (host) => {
@@ -303,7 +303,7 @@ describe("bootMcpHttpTransport", () => {
 
     const { client: clientOver, transport: transportOver } = createAuthClient(handle!, "secret-token");
     await expect(clientOver.connect(transportOver)).rejects.toThrow();
-    expect(JSON.stringify(warn.mock.calls)).toContain("MCP HTTPS session cap reached");
+    expect(JSON.stringify(warn.mock.calls)).toContain("MCP HTTP session cap reached");
     expect(JSON.stringify(warn.mock.calls)).not.toContain("secret-token");
     expect(JSON.stringify(warn.mock.calls)).not.toContain("Bearer");
 
@@ -436,7 +436,7 @@ describe("bootMcpHttpTransport", () => {
       },
     });
     const logs = JSON.stringify(warn.mock.calls);
-    expect(logs).toContain("Unauthorized MCP HTTPS request");
+    expect(logs).toContain("Unauthorized MCP HTTP request");
     expect(logs).not.toContain("wrong-token");
     expect(logs).not.toContain("secret-token");
     expect(logs).not.toContain("session-that-must-not-be-probed");

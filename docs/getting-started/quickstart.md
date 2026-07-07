@@ -96,7 +96,7 @@ curl http://localhost:4444/api/git-status
 
 ### Advanced Start Options
 
-For headless runs or remote workers, you can pass `--headless`, `--runtime-role`, and MCP HTTPS flags (`--mcp-https`, `--mcp-https-port`, etc.). See the [Installation CLI Flags](../docs-web/user/installation.md#cli-flags) reference for the complete list.
+For headless runs or remote workers, you can pass `--headless`, `--runtime-role`, and MCP HTTP gateway flags (`--mcp-https`, `--mcp-https-port`, etc.; legacy names). See the [Installation CLI Flags](../docs-web/user/installation.md#cli-flags) reference for the complete list.
 - Remote mode has no PR/CI data
   - Verify `gh` is installed and authenticated.
 

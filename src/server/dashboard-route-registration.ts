@@ -53,6 +53,21 @@ export const createDashboardRouteDependencies = (options: DashboardServerOptions
       releaseUrl: "https://github.com/codeux-ai/codeux/releases",
       checkedAt: new Date().toISOString(),
     })),
+    getLocalMcpSetup: routeDependencies.getLocalMcpSetup ?? (() => ({
+      enabled: false,
+      url: null,
+      authToken: null,
+      providers: [],
+    })),
+    regenerateLocalMcpAuthToken: routeDependencies.regenerateLocalMcpAuthToken ?? (() => ({
+      enabled: false,
+      url: null,
+      authToken: null,
+      providers: [],
+    })),
+    installLocalMcpProvider: routeDependencies.installLocalMcpProvider ?? (async () => {
+      throw new Error("Local MCP CLI installation is not available.");
+    }),
   };
 };
 
