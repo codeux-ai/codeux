@@ -92,6 +92,22 @@ Provider-specific search behavior:
 - Figma/FigJam uses `GET https://api.figma.com/v1/files/{fileKey}` and, when `includeConversation` is true, `GET https://api.figma.com/v1/files/{fileKey}/comments` with `X-Figma-Token`. Results include file name, last modified timestamp, top-level pages/nodes, and comments.
 - Mural uses `https://app.mural.co/api/public/v1`, `GET /workspaces/{workspaceId}/murals` for listing, and `GET /murals/{muralId}` for mural metadata/content available to the token. Mural public API support is beta/limited, so imported prompt context may contain only metadata and readable content the token can access.
 
+## Notion, Asana, And Linear Scope Import
+
+Use `Import -> Notion`, `Import -> Asana`, or `Import -> Linear` from the Sprints page import menu to attach project-management scope to the sprint composer. These entries open provider-specific search modals that share the same linked-issue import path as GitHub, GitLab, and Jira: selected results are fetched through the prompt-context endpoint, shown as linked issue cards in the composer, and merged into the sprint prompt as structured linked-source markdown when the sprint is submitted.
+
+The PM importers are read-only linked-scope importers. They do not create special imported tasks, archive Notion pages, complete Asana tasks, transition Linear issues, close external work, or mutate provider state. The only write is local Code UX sprint state: linked-source metadata, selected conversation inclusion, and prompt context.
+
+Each modal loads system/project effective settings before its first search:
+
+- Notion requires `notion.apiToken`; `notion.databaseId` is optional and narrows search to pages or databases under that database. Advanced filters also accept exact external object IDs for pages or databases.
+- Asana requires `asana.apiToken` plus either `asana.workspaceId` for workspace task search or `asana.projectId` for project task listing. The modal supports task text search, status, labels, assignee, exact task GIDs, result limit, and workspace/project overrides.
+- Linear requires `linear.apiToken`; `linear.teamId`, `linear.teamKey`, and `linear.projectId` are optional narrowing defaults. The modal supports issue text search, workflow state, status/state type, labels, assignee, exact issue IDs or identifiers, result limit, and team/project overrides.
+
+Missing tokens, missing Asana workspace/project targeting, provider API failures, and malformed backend responses are surfaced in the modal error panel with the backend message intact. Empty searches use provider-specific copy (`items` for Notion, `tasks` for Asana, `issues` for Linear) so operators can tell whether the search ran but returned no importable results.
+
+Result cards support multi-select, `Select all visible`, `Clear selection`, per-card `Append Conversation`, and a bulk append-conversation toggle for the selected set. Notion pages and databases attach readable block markdown when available. Asana and Linear attach descriptions by default and include stories/comments only when conversation is enabled for the selected result.
+
 ## Project-Management And Canvas Integration Settings
 
 Code UX carries shared typed settings for additional importer providers: Notion, Asana, Linear, Miro, Lucid, Figma, and Mural. These providers have API-backed read-only sprint importers. Jira continues to use the existing `jira` settings block, and GitHub/GitLab continue to use `git.githubToken` and `git.gitlabToken`.

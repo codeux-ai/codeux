@@ -1,6 +1,6 @@
-export type IssueImportProvider = "github" | "gitlab" | "jira";
+export type IssueImportProvider = "github" | "gitlab" | "jira" | "notion" | "asana" | "linear";
 
-export type IssueImportProviderIcon = "github" | "gitlab" | "jira";
+export type IssueImportProviderIcon = "github" | "gitlab" | "jira" | "notion" | "asana" | "linear";
 
 export interface IssueImportProviderAccent {
   badgeClassName: string;
@@ -19,7 +19,14 @@ export interface IssueImportProviderMetadata {
 
 export interface IssueImportMetadataSource {
   provider: IssueImportProvider;
+  sourceProvider?: string | null;
+  sourceKind?: string | null;
+  externalId?: string | null;
   repository?: string | null;
+  workspaceId?: string | null;
+  teamId?: string | null;
+  teamKey?: string | null;
+  databaseId?: string | null;
   projectKey?: string | null;
   issueKey?: string | null;
   issueNumber?: number | null;
@@ -93,6 +100,8 @@ export interface IssueImportCompactStateInput {
   sortDirection?: string | null;
   sortFieldOptions?: ReadonlyArray<{ value: string; label: string }>;
   sortDirectionOptions?: ReadonlyArray<{ value: string; label: string }>;
+  resultNounSingular?: string;
+  resultNounPlural?: string;
 }
 
 export interface IssueImportCompactState {
@@ -138,6 +147,42 @@ const PROVIDER_METADATA: Record<IssueImportProvider, IssueImportProviderMetadata
       selectedCardClassName: "border-[#0052CC]/35 bg-[#0052CC]/[0.08] shadow-[0_14px_32px_rgba(0,82,204,0.08)] dark:border-[#4C9AFF]/35 dark:bg-[#4C9AFF]/[0.12]",
       selectedIconClassName: "bg-[#0052CC] text-white dark:bg-[#4C9AFF] dark:text-slate-950",
       focusRingClassName: "focus-visible:ring-[#0052CC]/30",
+    },
+  },
+  notion: {
+    provider: "notion",
+    label: "Notion",
+    importLabel: "Notion scope import",
+    icon: "notion",
+    accent: {
+      badgeClassName: "border-slate-900/10 bg-slate-900/[0.04] text-slate-800 dark:border-white/10 dark:bg-white/[0.06] dark:text-white",
+      selectedCardClassName: "border-slate-900/20 bg-slate-900/[0.055] shadow-[0_14px_32px_rgba(15,23,42,0.08)] dark:border-white/16 dark:bg-white/[0.08]",
+      selectedIconClassName: "bg-slate-900 text-white dark:bg-white dark:text-slate-950",
+      focusRingClassName: "focus-visible:ring-slate-900/20 dark:focus-visible:ring-white/20",
+    },
+  },
+  asana: {
+    provider: "asana",
+    label: "Asana",
+    importLabel: "Asana task import",
+    icon: "asana",
+    accent: {
+      badgeClassName: "border-[#FC636B]/25 bg-[#FC636B]/10 text-[#B42334] dark:text-[#FDA4AF]",
+      selectedCardClassName: "border-[#FC636B]/35 bg-[#FC636B]/[0.08] shadow-[0_14px_32px_rgba(252,99,107,0.08)] dark:border-[#FDA4AF]/30 dark:bg-[#FC636B]/[0.12]",
+      selectedIconClassName: "bg-[#FC636B] text-white",
+      focusRingClassName: "focus-visible:ring-[#FC636B]/30",
+    },
+  },
+  linear: {
+    provider: "linear",
+    label: "Linear",
+    importLabel: "Linear issue import",
+    icon: "linear",
+    accent: {
+      badgeClassName: "border-[#5E6AD2]/25 bg-[#5E6AD2]/10 text-[#3F46A3] dark:text-[#B8BCF8]",
+      selectedCardClassName: "border-[#5E6AD2]/35 bg-[#5E6AD2]/[0.08] shadow-[0_14px_32px_rgba(94,106,210,0.08)] dark:border-[#B8BCF8]/30 dark:bg-[#5E6AD2]/[0.12]",
+      selectedIconClassName: "bg-[#5E6AD2] text-white",
+      focusRingClassName: "focus-visible:ring-[#5E6AD2]/30",
     },
   },
 };
@@ -215,7 +260,12 @@ export const getIssueImportProviderMetadata = (
   provider: IssueImportProvider | string | null | undefined,
   accentOverride?: Partial<IssueImportProviderAccent>,
 ): IssueImportProviderMetadata => {
-  const metadata = provider === "gitlab" || provider === "jira" || provider === "github"
+  const metadata = provider === "gitlab"
+    || provider === "jira"
+    || provider === "github"
+    || provider === "notion"
+    || provider === "asana"
+    || provider === "linear"
     ? PROVIDER_METADATA[provider]
     : PROVIDER_METADATA.github;
   return {
@@ -295,11 +345,13 @@ export const getIssueImportSelectedResultCountLabel = (
   selectedCount: number,
   visibleCount?: number,
   totalCount?: number,
+  resultNounSingular = "issue",
+  resultNounPlural = "issues",
 ): string => {
   const selected = Math.max(0, Math.trunc(selectedCount));
   const visible = typeof visibleCount === "number" ? Math.max(0, Math.trunc(visibleCount)) : null;
   const total = typeof totalCount === "number" ? Math.max(0, Math.trunc(totalCount)) : null;
-  const issueNoun = selected === 1 ? "issue" : "issues";
+  const issueNoun = selected === 1 ? resultNounSingular : resultNounPlural;
 
   if (visible !== null && total !== null && total !== visible) {
     return `${selected} selected ${issueNoun} across ${visible} visible of ${total} results.`;
@@ -319,6 +371,8 @@ export const buildIssueImportCompactState = ({
   sortDirection,
   sortFieldOptions,
   sortDirectionOptions,
+  resultNounSingular,
+  resultNounPlural,
 }: IssueImportCompactStateInput): IssueImportCompactState => {
   const chips = buildIssueImportFilterSummaryChips(filters);
   const activeFilterCount = getIssueImportActiveFilterCount(filters);
@@ -327,7 +381,13 @@ export const buildIssueImportCompactState = ({
     activeFilterCount,
     activeFilterCountLabel: getIssueImportActiveFilterCountLabel(activeFilterCount),
     sortLabel: getIssueImportDefaultSortLabel(sortField, sortDirection, sortFieldOptions, sortDirectionOptions),
-    selectedCountLabel: getIssueImportSelectedResultCountLabel(selectedCount, visibleCount, totalCount),
+    selectedCountLabel: getIssueImportSelectedResultCountLabel(
+      selectedCount,
+      visibleCount,
+      totalCount,
+      resultNounSingular,
+      resultNounPlural,
+    ),
   };
 };
 
@@ -355,9 +415,23 @@ export const buildIssueImportMetadataRows = (source: IssueImportMetadataSource):
   const rows: IssueImportMetadataRow[] = [];
   const provider = getIssueImportProviderMetadata(source.provider);
   const issueRef = normalizeText(source.issueKey) ?? (source.issueNumber ? `#${source.issueNumber}` : null);
+  const sourceLabel = source.provider === "jira"
+    ? "Project"
+    : source.provider === "notion"
+      ? "Source"
+      : source.provider === "asana"
+        ? "Workspace"
+        : source.provider === "linear"
+          ? "Team"
+          : "Repository";
 
   addMetadataRow(rows, "provider", "Provider", provider.label);
-  addMetadataRow(rows, "repository", source.provider === "jira" ? "Project" : "Repository", normalizeText(source.projectKey) ?? source.repository);
+  addMetadataRow(rows, "sourceKind", "Kind", source.sourceKind);
+  addMetadataRow(rows, "externalId", "External ID", source.externalId);
+  addMetadataRow(rows, "repository", sourceLabel, normalizeText(source.teamKey) ?? normalizeText(source.projectKey) ?? source.repository);
+  addMetadataRow(rows, "workspace", "Workspace", source.workspaceId);
+  addMetadataRow(rows, "teamId", "Team ID", source.teamId);
+  addMetadataRow(rows, "database", "Database", source.databaseId);
   addMetadataRow(rows, "issue", "Issue", issueRef);
   addMetadataRow(rows, "state", "State", formatState(source.state));
   addMetadataRow(rows, "type", "Type", source.issueType);
@@ -415,14 +489,15 @@ export const getIssueImportEmptyStateCopy = (
   hasSearched: boolean,
 ): IssueImportEmptyStateCopy => {
   const providerLabel = getIssueImportProviderMetadata(provider).label;
+  const noun = provider === "notion" ? "items" : provider === "asana" ? "tasks" : "issues";
   if (!hasSearched) {
     return {
-      title: `Search ${providerLabel} issues`,
+      title: `Search ${providerLabel} ${noun}`,
       description: "Choose filters and run a search to preview importable sprint context.",
     };
   }
   return {
-    title: `No ${providerLabel} issues found`,
+    title: `No ${providerLabel} ${noun} found`,
     description: "Adjust the filters, broaden the repository scope, or search for an exact issue key.",
   };
 };

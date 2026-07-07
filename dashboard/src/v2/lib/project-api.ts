@@ -143,7 +143,12 @@ export const fetchSprints = async (projectId: string, signal?: AbortSignal): Pro
 export type RemoteIssueSummary = RepositoryIssueSearchResult;
 export type JiraIssueSearchInput = SharedJiraIssueSearchInput;
 export type JiraIssueSearchResult = SharedJiraIssueSearchResult;
-export type RepositoryIssueSearchInput = SharedRepositoryIssueSearchInput;
+export type RepositoryIssueSearchInput = Omit<SharedRepositoryIssueSearchInput, "state" | "status"> & {
+  state?: SharedRepositoryIssueSearchInput["state"] | string;
+  status?: SharedJiraIssueSearchInput["status"] | string;
+  providerProjectId?: string;
+  includeConversation?: boolean;
+};
 
 export const searchJiraIssues = async (
   projectId: string,
@@ -221,13 +226,24 @@ export const searchProjectIssues = async (
 ): Promise<RemoteIssueSummary[]> => {
   const url = new URL(`/api/projects/${encodeURIComponent(projectId)}/issues`, window.location.origin);
   if (input.provider) url.searchParams.set("provider", input.provider);
+  if (input.externalId?.trim()) url.searchParams.set("externalIds", input.externalId.trim());
+  if (input.externalIds?.length) url.searchParams.set("externalIds", input.externalIds.join(","));
   if (input.repository?.trim()) url.searchParams.set("repository", input.repository.trim());
   if (input.hostDomain?.trim()) url.searchParams.set("hostDomain", input.hostDomain.trim());
+  if (input.workspaceId?.trim()) url.searchParams.set("workspaceId", input.workspaceId.trim());
+  if (input.providerProjectId?.trim()) url.searchParams.set("projectId", input.providerProjectId.trim());
+  if (input.projectId?.trim()) url.searchParams.set("projectId", input.projectId.trim());
+  if (input.teamId?.trim()) url.searchParams.set("teamId", input.teamId.trim());
+  if (input.teamKey?.trim()) url.searchParams.set("teamKey", input.teamKey.trim());
+  if (input.databaseId?.trim()) url.searchParams.set("databaseId", input.databaseId.trim());
+  if (input.projectKey?.trim()) url.searchParams.set("projectKey", input.projectKey.trim());
   if (input.search?.trim()) url.searchParams.set("search", input.search.trim());
   if (input.issueText?.trim()) url.searchParams.set("issueText", input.issueText.trim());
   if (input.state) url.searchParams.set("state", input.state);
+  if (input.status) url.searchParams.set("status", input.status);
   if (input.labels?.length) url.searchParams.set("labels", input.labels.join(","));
   if (input.assignee?.trim()) url.searchParams.set("assignee", input.assignee.trim());
+  if (input.assigneeText?.trim()) url.searchParams.set("assigneeText", input.assigneeText.trim());
   if (input.author?.trim()) url.searchParams.set("author", input.author.trim());
   if (input.reporter?.trim()) url.searchParams.set("reporter", input.reporter.trim());
   if (input.milestone?.trim()) url.searchParams.set("milestone", input.milestone.trim());
@@ -238,6 +254,7 @@ export const searchProjectIssues = async (
   if (input.sortField) url.searchParams.set("sortField", input.sortField);
   if (input.sortDirection) url.searchParams.set("sortDirection", input.sortDirection);
   if (input.limit !== undefined) url.searchParams.set("limit", String(input.limit));
+  if (input.includeConversation !== undefined) url.searchParams.set("includeConversation", String(input.includeConversation));
   return fetchJson<RemoteIssueSummary[]>(`${url.pathname}${url.search}`, { signal });
 };
 
