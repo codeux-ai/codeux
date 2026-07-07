@@ -87,6 +87,16 @@ const resolveEffectiveDefaultBranch = (
   || "main"
 );
 
+const resolveLogicalCompactionContinuationId = (
+  provider: Exclude<ProviderId, "jules">,
+  threadId: string,
+): string | null => {
+  if (provider === "codex" || provider === "gemini" || provider === "qwen-code" || provider === "opencode") {
+    return threadId;
+  }
+  return null;
+};
+
 function getThreadSessionTitlePath(repoPath: string, threadId: string): string {
   const safeThreadId = threadId.replace(/[^A-Za-z0-9_.-]/g, "-");
   const codeUxDir = path.resolve(getRepoCodeUxDir(repoPath));
@@ -246,7 +256,6 @@ export class ChatThreadRuntimeService {
     }
     const messages = this.deps.connectionChatRepository.listMessages(thread.id);
     const activeSessionId = thread.runtimeState?.sessionIds?.[0]?.trim() || null;
-    const preserveActiveSession = !!activeSessionId;
     if (messages.length === 0) {
       return this.deps.connectionChatRepository.updateThread(thread.id, {
         runtimeState: {
@@ -263,6 +272,10 @@ export class ChatThreadRuntimeService {
     if (!route.providerId || !route.model || typeof route.apiKey !== "string") {
       throw new Error("Failed to resolve a chat worker for thread compaction.");
     }
+    const continueSessionId = activeSessionId || resolveLogicalCompactionContinuationId(route.providerId, thread.id);
+    if (!continueSessionId) {
+      throw new Error(`Native chat compaction for ${route.providerId} requires an active provider session. Send a message in this thread before compacting it.`);
+    }
 
     const compacted = await this.generateThreadCompaction(
       project.id,
@@ -270,16 +283,17 @@ export class ChatThreadRuntimeService {
       thread,
       messages,
       route,
-      activeSessionId || thread.id,
-      preserveActiveSession,
+      continueSessionId,
     );
+    const compactedSessionId = compacted.nativeSessionId || compacted.summary.nativeSessionId || compacted.continueSessionId || null;
 
     const newRuntimeState: ConversationRuntimeState = {
       ...thread.runtimeState,
-      replayRequired: preserveActiveSession ? false : true,
-      sessionIds: preserveActiveSession
-        ? [compacted.nativeSessionId || compacted.summary.nativeSessionId || compacted.continueSessionId]
-        : [],
+      routeKind: "virtual",
+      virtualProvider: route.providerId,
+      modelLabel: compacted.summary.model,
+      replayRequired: compactedSessionId ? false : true,
+      sessionIds: compactedSessionId ? [compactedSessionId] : [],
       compactionSummary: compacted.summary,
     };
 
@@ -645,7 +659,6 @@ export class ChatThreadRuntimeService {
     messages: ConversationMessageRecord[],
     route: ThreadRouteResolution,
     continueSessionId: string,
-    preserveActiveSession: boolean,
   ): Promise<{ summary: ConversationCompactionSummary & { nativeSessionId?: string | null }; nativeSessionId: string | null; continueSessionId: string }> {
     const provider = route.providerId!;
     // Fold customModel into the model so a local-redirect instance (customModel/customBaseUrl)
@@ -759,7 +772,7 @@ export class ChatThreadRuntimeService {
           model,
           sourceMessageId: messages[messages.length - 1]?.id || null,
           sourceMessageCount: messages.length,
-          ...(preserveActiveSession ? { nativeSessionId } : {}),
+          nativeSessionId,
         },
         nativeSessionId,
         continueSessionId,

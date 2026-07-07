@@ -66,14 +66,17 @@ On the next message, the orchestration engine intercepts the request, concatenat
 
 Long-running conversations accumulate large prompt histories, risking context window exhaustion or unbounded token costs. The chat runtime introduces a compact-conversation action (`compactThreadSession`).
 
-When triggered on a virtual CLI chat route, the system runs a `chat_compaction` execution invocation against the selected provider's existing native session. The provider runner sends the CLI's native compact command through the normal resume/continue path (`/compact` or `/compress`, depending on provider) instead of replaying the full transcript into a separate summarization session.
+When triggered on a virtual CLI chat route for non-Jules providers, the system runs a `chat_compaction` execution invocation against the selected provider's active native session. The provider runner keeps the Code UX logical session id as the thread id, passes the saved native session id as `continueSessionId` when one exists, and sends the CLI's native compact command through the normal resume/continue path (`/compact` or `/compress`, depending on provider). It does not create a separate `<thread-id>:compaction` summarization session or replay the full transcript for compaction.
+
+If persisted runtime state has no saved native session id, only providers with a documented logical continuation fallback use the thread id as the continuation handle. Providers that require a concrete native session id fail the compact action with an actionable error instead of starting an unrelated fresh compaction session.
 
 When triggered on a connected MCP chat route, the dashboard now sends a hidden control message to the selected live worker, waits for that worker to answer with a hidden compaction result, and then stores the returned markdown as the thread handoff summary. Those internal control messages are excluded from visible thread history, badge counts, previews, and sidebar pending totals.
 
 The compact action then:
 - stores the provider's compaction output in `runtimeState.compactionSummary`
-- preserves the active native provider `sessionIds` for virtual CLI routes after native compaction when a live session exists
-- leaves `sessionIds` empty and keeps `replayRequired` enabled when compaction is only producing a stored handoff summary for a thread that does not already have an active provider session
+- preserves the resolved native provider `sessionIds` for virtual CLI routes after native compaction, including the active native session id when one exists and the logical continuation fallback session id when the provider resumes through the thread id
+- refreshes virtual route metadata (`routeKind`, `virtualProvider`, and `modelLabel`) to match the provider that performed compaction
+- leaves `sessionIds` empty and keeps `replayRequired` enabled only when no compacted provider session can be continued
 - sets `replayRequired` only when a route needs to restart from a stored handoff
 
 The original visible `ConversationMessageRecord` history remains intact in the dashboard. Virtual CLI routes continue from the compacted provider-native session, while any route that must start fresh can replay from the compacted summary plus only the messages created after that summary was generated.
