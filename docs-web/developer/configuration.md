@@ -52,7 +52,7 @@ Code UX looks for a `.code-ux/` directory at multiple locations and merges what 
 3. Project root (where `package.json` lives): `<root>/.code-ux/`
 4. Home directory: `~/.code-ux/`
 
-> Legacy: `.jules-subagents/` is also scanned for backwards compatibility. New installations should use `.code-ux/`.
+> Legacy: `.jules-subagents/` is deprecated. New installations should use `.code-ux/`.
 
 Files inside the directory:
 
@@ -117,7 +117,7 @@ Detected hints surface in **Settings → AI providers** as **Use detected value*
 
 ## Reset / migration
 
-- `.code-ux/` directories are migrated automatically from any `.jules-subagents/` siblings on first run.
+- `.code-ux/` is the active configuration directory.
 - `POST /api/system/reset-database` clears the DB but preserves on-disk markdown, allowing re-import.
 - Manual reset: stop the server, `rm -rf ~/.code-ux/database.sqlite`, restart.
 
