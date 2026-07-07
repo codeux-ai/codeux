@@ -209,6 +209,8 @@ Legacy runtime:
   - External key hints from env/json
 - `GET /api/onboarding/readiness`
   - First-run onboarding readiness payload with Docker/Git dependency checks and local provider auth detection
+- `POST /api/onboarding/dependencies/install`
+  - Explicitly confirmed Docker/Git installer execution for advertised onboarding modes
 - `GET /api/local-directories?path=/absolute/path`
   - Lists child directories for the local Add Project directory picker, including current, parent, root, and home paths for browser-style navigation
 - `GET /api/git-status`

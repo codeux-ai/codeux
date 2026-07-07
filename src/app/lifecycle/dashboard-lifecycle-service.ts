@@ -14,6 +14,8 @@ import type {
   ExternalSettingsHints,
   GitTrackingStatus,
   JulesActivity,
+  OnboardingDependencyInstallerResult,
+  OnboardingDependencyInstallMode,
   OnboardingRuntimeReadiness,
   ProjectLiveDashboardSnapshot,
   ProjectStatsQuery,
@@ -65,7 +67,11 @@ import { getRepoDebugLogPath, CODE_UX_SERVICE_NAME } from "../../shared/config/c
 import { getProjectLiveSnapshot } from "../live/project-live-snapshot.js";
 import { DashboardSnapshotCache, mapAssignedWorkers } from "./dashboard-snapshot-cache.js";
 import { prepareGitProjectCreateInput } from "../../services/project-git-clone-service.js";
-import { getOnboardingRuntimeReadiness } from "../../services/onboarding-readiness-service.js";
+import { executeOnboardingDependencyInstall } from "../../services/onboarding-dependency-installer-service.js";
+import {
+  getOnboardingRuntimeReadiness,
+  invalidateOnboardingRuntimeReadinessCache,
+} from "../../services/onboarding-readiness-service.js";
 import type { SprintImportedTaskInput } from "../../contracts/project-management-types.js";
 import type { McpConnectionInfo } from "../../contracts/mcp-connection-types.js";
 import type {
@@ -115,6 +121,7 @@ export interface BootDashboardDeps {
   isHealthy: () => ReadinessProbeStatus;
   listDockerContainers: () => Promise<DockerContainer[]>;
   getOnboardingRuntimeReadiness?: () => Promise<OnboardingRuntimeReadiness>;
+  installOnboardingDependencies?: (mode: OnboardingDependencyInstallMode) => Promise<OnboardingDependencyInstallerResult>;
   listSprintPreviewSessions: (projectId: string) => Promise<SprintPreviewSession[]>;
   getSprintPreviewSession: (sessionId: string) => Promise<SprintPreviewSession | null>;
   getSprintPreviewSessionForProjectSprint: (projectId: string, sprintId: string, sessionId: string) => Promise<SprintPreviewSession>;
@@ -397,6 +404,9 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<DashboardS
     projectManagementRepository: deps.projectManagementRepository,
     logger: deps.logger.child({ component: "instruction-file-service" }),
   });
+
+  const getDefaultOnboardingRuntimeReadiness = deps.getOnboardingRuntimeReadiness
+    ?? (() => getOnboardingRuntimeReadiness(deps.settingsRepository.getSystemSettings()));
 
   const handle = await setupDashboardServer({
     app: deps.app,
@@ -750,8 +760,16 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<DashboardS
     isReady: deps.isReady,
     isHealthy: deps.isHealthy,
     listDockerContainers: deps.listDockerContainers,
-    getOnboardingRuntimeReadiness: deps.getOnboardingRuntimeReadiness
-      ?? (() => getOnboardingRuntimeReadiness(deps.settingsRepository.getSystemSettings())),
+    getOnboardingRuntimeReadiness: getDefaultOnboardingRuntimeReadiness,
+    installOnboardingDependencies: deps.installOnboardingDependencies
+      ?? (async (mode) => {
+        const readiness = await getDefaultOnboardingRuntimeReadiness();
+        return executeOnboardingDependencyInstall({
+          mode,
+          dependencies: readiness.dependencies,
+          invalidateReadinessCache: invalidateOnboardingRuntimeReadinessCache,
+        });
+      }),
     getOnboardingState: () => deps.settingsRepository.getOnboardingState(),
     markOnboardingCompleted: () => deps.settingsRepository.markOnboardingCompleted(),
     resetOnboardingState: () => deps.settingsRepository.resetOnboardingState(),

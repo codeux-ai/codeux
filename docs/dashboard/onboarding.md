@@ -27,7 +27,7 @@ Navigation and step-sequencing state is managed by the shared `useOnboardingStep
 
 ## Runtime Readiness
 
-Onboarding begins with installation checks from `GET /api/onboarding/readiness`.
+Onboarding begins with installation checks from `GET /api/onboarding/readiness`. Dependency installation, when explicitly confirmed by the user, is invoked through `POST /api/onboarding/dependencies/install` with `{ mode, confirmInstall: true }`.
 
 The readiness payload reports:
 - Cluster status: `Cluster ready` or `Cluster not ready`
@@ -42,7 +42,7 @@ The readiness payload reports:
 
 Docker is mandatory for the default containerized workflow. When Docker is missing or the daemon is stopped, the top-nav Docker control also shows a `Cluster not ready` badge and its popover explains that provider CLIs cannot execute until Docker is reachable.
 
-The backend installer contract is intentionally constrained. It advertises platform-specific options in the readiness payload, then the installer service executes only hardcoded executable/argument arrays. It does not run shell snippets, downloaded remote scripts, or interactive password prompts.
+The backend installer contract is intentionally constrained. It advertises platform-specific options in the readiness payload, then the installer service executes only hardcoded executable/argument arrays for the selected `docker-desktop-git` or `docker-engine-git` mode. The install route rejects unsupported modes and missing confirmation, does not mutate settings, and does not run shell snippets, downloaded remote scripts, or interactive password prompts.
 
 Installer support matrix:
 
