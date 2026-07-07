@@ -178,7 +178,7 @@ export const docsRegistry: Record<DocsSlug, DocsRegistryEntry> = {
     path: '/docs/user-dashboard-chat',
     section: 'User Guide',
     title: "Chat",
-    description: "The Chat page (/chat) is a conversation surface that lets you talk to agents for project-backed Q&A, inspect MCP tool invocations, and get local onboarding help before any project exists.",
+    description: "The Chat page (/chat) is a thread-based conversation surface that lets you talk to agents for project-backed Q&A, inspect execution invocation transcripts and MCP tool invocations, and get local onboarding help before...",
   },
   'user-dashboard-agents': {
     id: 'user-dashboard-agents',

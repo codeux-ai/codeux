@@ -43,6 +43,38 @@ describe("LocalMcpCliConfigService", () => {
     expect(content).toContain('"Authorization" = "Bearer secret-token"');
   });
 
+  it("replaces an existing managed Codex MCP block on reinstall", async () => {
+    const service = new LocalMcpCliConfigService();
+    const configPath = path.join(tempHome, ".codex", "config.toml");
+    await fs.mkdir(path.dirname(configPath), { recursive: true });
+    await fs.writeFile(configPath, [
+      "model = \"gpt-5\"",
+      "",
+      "[mcp_servers.code-ux]",
+      "url = \"http://127.0.0.1:4445/old\"",
+      "http_headers = { \"Authorization\" = \"Bearer old-token\" }",
+      "",
+      "[mcp_servers.docs]",
+      "url = \"https://docs.example/mcp\"",
+      "",
+    ].join("\n"), "utf-8");
+
+    await service.installProvider("codex", {
+      url: "http://127.0.0.1:5555/mcp",
+      authToken: "new-token",
+    });
+    const content = await fs.readFile(configPath, "utf-8");
+
+    expect(content).toContain("model = \"gpt-5\"");
+    expect(content).toContain("[mcp_servers.docs]");
+    expect(content).toContain('url = "https://docs.example/mcp"');
+    expect(content).toContain("[mcp_servers.code-ux]");
+    expect(content).toContain('url = "http://127.0.0.1:5555/mcp"');
+    expect(content).toContain('"Authorization" = "Bearer new-token"');
+    expect(content).not.toContain("old-token");
+    expect(content).not.toContain("4445/old");
+  });
+
   it("installs OpenCode MCP config without dropping existing settings", async () => {
     const service = new LocalMcpCliConfigService();
     const configPath = path.join(tempHome, ".config", "opencode", "opencode.json");
