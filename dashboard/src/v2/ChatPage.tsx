@@ -160,6 +160,20 @@ export const ChatPage: FunctionComponent = () => {
     sprintKeyPrefix,
   ]);
 
+  const handlePromptSuggestionSelect = useCallback((prompt: string) => {
+    setInput(prompt);
+    composerRef.current?.focus();
+    requestAnimationFrame(() => {
+      const composer = composerRef.current;
+      if (!composer) {
+        return;
+      }
+      composer.style.height = "auto";
+      composer.style.height = `${composer.scrollHeight}px`;
+      composer.setSelectionRange(composer.value.length, composer.value.length);
+    });
+  }, [setInput]);
+
   const handleRestartInvocation = useCallback(async (mode: InvocationRestartMode = "retry_full_prompt") => {
     if (!selectedInvocation || selectedInvocation.status !== "failed" || restartingInvocation || cancellingInvocationId || resettingUsageLimitInvocationId) {
       return;
@@ -469,6 +483,7 @@ export const ChatPage: FunctionComponent = () => {
                       agentAvatarConfig={preset?.avatarConfig}
                       agentName={preset?.name}
                       widgetLiveData={widgetLiveData}
+                      onPromptSuggestionSelect={handlePromptSuggestionSelect}
                     />
                   );
                 })}

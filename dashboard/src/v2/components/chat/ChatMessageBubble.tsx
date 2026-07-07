@@ -8,10 +8,12 @@ import { getChatWidgetData } from "../../lib/chat-widget-view-models.js";
 import { formatChatTime } from "../../lib/chat-time.js";
 import { PlanningRequestWidget } from "./widgets/PlanningRequestWidget.js";
 import { ChatAvatar, type AvatarRole } from "./ChatAvatar.js";
+import { PromptSuggestionTags } from "./PromptSuggestionTags.js";
 import { resolveDisplayDeliveryStatus } from "../../hooks/use-chat-thread-data.js";
 import { useGsapDurations } from "../../lib/motion/constants.js";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 import type { ChatWidgetLiveData } from "../../lib/chat-widget-view-models.js";
+import { getPromptSuggestionViewModels } from "../../lib/chat-suggestion-view-models.js";
 
 export interface ChatMessageBubbleProps {
   message: ChatMessageRecord;
@@ -20,6 +22,7 @@ export interface ChatMessageBubbleProps {
   agentName?: string;
   animationDelay?: number;
   widgetLiveData?: ChatWidgetLiveData;
+  onPromptSuggestionSelect?: (prompt: string) => void;
 }
 
 export const ChatMessageBubble: FunctionComponent<ChatMessageBubbleProps> = ({
@@ -29,9 +32,13 @@ export const ChatMessageBubble: FunctionComponent<ChatMessageBubbleProps> = ({
   agentName,
   animationDelay = 0,
   widgetLiveData,
+  onPromptSuggestionSelect,
 }) => {
   const fromDashboard = message.direction === "dashboard_to_connection";
   const widgetData = getChatWidgetData(message, widgetLiveData);
+  const promptSuggestions = !fromDashboard
+    ? getPromptSuggestionViewModels(message.metadata)
+    : [];
 
   const bubbleRef = useRef<HTMLDivElement>(null);
   const durations = useGsapDurations();
@@ -103,6 +110,14 @@ export const ChatMessageBubble: FunctionComponent<ChatMessageBubbleProps> = ({
           <div className="prose prose-sm max-w-none text-[14px] leading-7 text-slate-800 dark:text-slate-200 prose-headings:text-inherit prose-p:text-inherit prose-strong:text-inherit prose-code:text-inherit prose-pre:overflow-x-auto break-words overflow-wrap-anywhere min-w-0"
             dangerouslySetInnerHTML={{ __html: renderMarkdown(message.bodyMarkdown) }}
           />
+
+          {promptSuggestions.length > 0 && (
+            <PromptSuggestionTags
+              suggestions={promptSuggestions}
+              onSelect={(suggestion) => onPromptSuggestionSelect?.(suggestion.prompt)}
+              className="mt-3"
+            />
+          )}
 
           {/* Widget Slot */}
           {widgetData.type === "planning" && (
