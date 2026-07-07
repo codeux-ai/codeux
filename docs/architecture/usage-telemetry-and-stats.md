@@ -244,7 +244,7 @@ Usage data now appears in two read models:
 
 - `GET /api/projects/:projectId/execution`
   - task and sprint execution summaries now include usage rollups
-- `GET /api/projects/:projectId/stats?window=24h|7d|30d|all|custom&from=YYYY-MM-DD&to=YYYY-MM-DD`
+- `GET /api/projects/:projectId/stats?window=1h|24h|7d|30d|all|custom&from=YYYY-MM-DD&to=YYYY-MM-DD`
   - project-scoped statistics snapshot for the Stats page. Custom ranges must be parseable dates, where `from <= to`, and invalid or incomplete ranges fail with validation errors.
 
 Historical Docker-backed CLI invocations that were persisted as `unavailable` before container telemetry fallback support are backfilled at startup when they have prompt or transcript character counts. The backfill marks them as `estimated` using the same conservative character heuristic, preserving rows that already have provider-reported or provider-specific estimated usage.
@@ -262,6 +262,7 @@ The stats snapshot includes:
 - active sprint metadata
 - the original query (`window`, optional `from`, optional `to`)
 - normalized range metadata (`label`, `resolution`, `resolutionLabel`, `from`, `to`, `bucketCount`, `isCustom`)
+- preset ranges are half-open and bucket aligned while still including the latest current bucket: `1h` returns exactly twelve 5-minute buckets through the current 5-minute bucket, `24h` returns exactly twenty-four hourly buckets through the current partial hour, and daily presets include the current UTC day. The normalized `range.to` is the exclusive end of that latest bucket, so the existing `started_at >= from` and `started_at < to` query shape includes fresh partial-bucket telemetry without changing SQL predicate semantics.
 - adaptive hourly, daily, or weekly buckets depending on the selected range
 - `chartSeries` array configuring the graph-series data for the interactive usage chart, expanding the snapshot-contract to align with the shipped response shape (`color`, `signalLabel`, `formatter`)
 - task rankings
@@ -272,7 +273,7 @@ The stats snapshot includes:
 - the trend workspace now presents a compact toolbar for selected range, bucket count, resolution, active zoom, reset, and graph filters, plus an interactive plot and persistent control rail with grouped series switches and an accessible live summary for the focused bucket
 - the usage chart summary surfaces selected-window peak tokens, peak active time, average tokens, peak invocations, invocation density, and total cost directly from bucket telemetry so the analysis surface reads like a telemetry panel instead of a single-scale line graph
 - the focused-bucket panel shows date, cost, tokens, active time, invocations, and enabled-series values in wrapping rows so compact viewports preserve exact values without clipping labels or pushing the chart edge
-- the graph filter reset action restores chart-series defaults from the snapshot and keeps at least one series enabled so the chart never collapses to an empty state
+- chart-series grouping and reset state are frontend view-model concerns: the full-width switch band and graph filter menu share ordered sections with active, total, and default-enabled counts. Reset restores snapshot defaults through the same enabled-series state used by individual switches, enable-defaults re-enables default series without hiding other selected series, and the last enabled series is guarded so the chart never collapses to an empty state.
 - the stats refactor did not change the snapshot contract or route shape; it only changed how the frontend composes the same project stats payload
 
 ## PR Description Rollups
