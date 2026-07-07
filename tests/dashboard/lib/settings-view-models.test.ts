@@ -887,6 +887,7 @@ describe("settings cloning helpers", () => {
       invocationRouting: {},
     },
     techstack: { applicationKind: null, selectedTechstackId: null },
+    designGuidance: { ...DEFAULT_DASHBOARD_SETTINGS.designGuidance },
     git: { githubMode: "app", githubToken: "", defaultBranch: "main", autoCreatePr: false, autoCloseLinkedIssues: false, deleteMergedBranches: false, featureBranchPrefix: "", sprintBranchScheme: "FLAT", sprintKeyPrefix: "", taskPrTitleScheme: "({sprint_tag}) {task_title}" },
     jira: { host: "h", email: "e", apiToken: "t", autoTransitionLinkedIssuesOnImport: true, importTransitionName: "In Work", autoCloseLinkedIssues: false, defaultProject: "P", closeTransitionName: "Done" },
     notion: createMockImporterSettings(),

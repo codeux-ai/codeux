@@ -5,6 +5,10 @@ import { createGitHubRepo, createGitLabRepo } from "../../infrastructure/git/rem
 import { validateSafeRepoName, validateSafeClonePath, validateNonEmptyDir } from "../../utils/path-validator.js";
 import type { CreateProjectInput, ProjectSummary } from "../../contracts/project-management-types.js";
 import { getHomeCodeUxPath } from "../../shared/config/code-ux-paths.js";
+import {
+  CODE_UX_AWARD_WINNING_STYLEGUIDE_ID,
+  DEFAULT_DESIGN_GUIDANCE_SETTINGS,
+} from "../settings/design-guidance-catalog.js";
 
 function resolveCloneParentDir(cloneDir?: string): string {
   const trimmed = cloneDir?.trim();
@@ -38,6 +42,21 @@ function resolveNewLocalProjectDir(sourceRef: string, cloneDir?: string): { targ
   };
 }
 
+function withNewProjectDesignGuidance(input: CreateProjectInput): CreateProjectInput {
+  const existingGuidance = input.settingsOverrides?.designGuidance;
+  return {
+    ...input,
+    settingsOverrides: {
+      ...input.settingsOverrides,
+      designGuidance: {
+        ...DEFAULT_DESIGN_GUIDANCE_SETTINGS,
+        ...existingGuidance,
+        selectedStyleguideId: existingGuidance?.selectedStyleguideId || CODE_UX_AWARD_WINNING_STYLEGUIDE_ID,
+      },
+    },
+  };
+}
+
 export async function initializeProject(
   input: CreateProjectInput,
   deps: {
@@ -55,12 +74,12 @@ export async function initializeProject(
     const safeSourceRef = validateSafeClonePath(targetDir, allowedRoot);
     validateNonEmptyDir(safeSourceRef, allowedRoot);
     await initLocalRepo(safeSourceRef, input.defaultBranch ?? "main", input.name);
-    return deps.createProject({
+    return deps.createProject(withNewProjectDesignGuidance({
       ...input,
       sourceType: "local",
       sourceRef: safeSourceRef,
       initMode: undefined,
-    });
+    }));
   }
 
   if (mode === "new-remote") {
@@ -90,13 +109,13 @@ export async function initializeProject(
         defaultBranch: input.defaultBranch,
       });
     }
-    return deps.createProject({
+    return deps.createProject(withNewProjectDesignGuidance({
       ...input,
       sourceType: "git",
       sourceRef: result.remoteUrl,
       cloneDir: cloneParentDir,
       initMode: undefined,
-    });
+    }));
   }
 
   // "existing" or absent — original behavior

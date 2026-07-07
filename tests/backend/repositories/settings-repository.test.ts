@@ -9,6 +9,10 @@ import {
   CODEX_MODELS,
   DEFAULT_VIRTUAL_WORKER_MODELS,
 } from "../../../src/repositories/settings-defaults.js";
+import {
+  CODE_UX_AWARD_WINNING_STYLEGUIDE_ID,
+  DESIGN_GUIDANCE_NONE_ID,
+} from "../../../src/domain/settings/design-guidance-catalog.js";
 
 const tempDirs: string[] = [];
 const openRepos: SettingsRepository[] = [];
@@ -70,6 +74,13 @@ describe("SettingsRepository", () => {
       selectedTechstackId: null,
       applicationKind: null,
     });
+    expect(system.defaults.designGuidance).toEqual({
+      selectedTechStackId: DESIGN_GUIDANCE_NONE_ID,
+      selectedStyleguideId: DESIGN_GUIDANCE_NONE_ID,
+      hideDefaultStyleguides: false,
+      customTechStacks: [],
+      customStyleguides: [],
+    });
     expect(DEFAULT_VIRTUAL_WORKER_MODELS.codex).toBe("gpt-5.5");
     expect(CODEX_MODELS.slice(0, 4)).toEqual([
       "gpt-5.5",
@@ -120,8 +131,11 @@ describe("SettingsRepository", () => {
     expect(effectiveProject.settings.techstackCatalog.defaultTechstackId).toBe(BUILTIN_CODE_UX_TECHSTACK_ID);
     expect(effectiveProject.settings.techstack.selectedTechstackId).toBe(null);
     expect(effectiveProject.settings.techstack.applicationKind).toBe(null);
+    expect(effectiveProject.settings.designGuidance.selectedTechStackId).toBe(DESIGN_GUIDANCE_NONE_ID);
+    expect(effectiveProject.settings.designGuidance.selectedStyleguideId).toBe(DESIGN_GUIDANCE_NONE_ID);
     expect(effectiveProject.settings.git.githubToken).toBe("");
     expect(effectiveProject.sources["automationLevel"]).toBe("system");
+    expect(effectiveProject.sources["designGuidance.selectedStyleguideId"]).toBe("system");
   });
 
   it("persists system settings and resolves project/sprint overrides", async () => {
@@ -526,6 +540,97 @@ describe("SettingsRepository", () => {
       selectedTechstackId: "custom-web",
       applicationKind: "web",
     });
+  });
+
+  it("sanitizes malformed design guidance while preserving valid custom entries", async () => {
+    const { repo } = await createRepo();
+    const now = new Date().toISOString();
+    const db = repo.getDatabase();
+
+    db.prepare(`
+      INSERT INTO system_settings (id, payload, updated_at)
+      VALUES (1, ?, ?)
+    `).run(JSON.stringify({
+      defaults: {
+        designGuidance: {
+          selectedTechStackId: " missing-tech-stack ",
+          selectedStyleguideId: " custom-style ",
+          hideDefaultStyleguides: true,
+          customTechStacks: [
+            {
+              id: " custom-stack ",
+              name: " Custom Stack ",
+              summary: " Stack summary ",
+              instructionMarkdown: " Use this stack thoughtfully. ",
+            },
+            {
+              id: "custom-stack",
+              name: "Duplicate",
+              summary: "Duplicate.",
+              instructionMarkdown: "Ignore duplicate.",
+            },
+            {
+              id: "invalid id",
+              name: "Invalid",
+              summary: "Invalid.",
+              instructionMarkdown: "Invalid.",
+            },
+          ],
+          customStyleguides: [
+            {
+              id: " custom-style ",
+              name: " Custom Style ",
+              summary: " Style summary ",
+              instructionMarkdown: " Make senior design decisions from context. ",
+            },
+            {
+              id: CODE_UX_AWARD_WINNING_STYLEGUIDE_ID,
+              name: "Override default",
+              summary: "Should be ignored.",
+              instructionMarkdown: "Should not replace default.",
+            },
+          ],
+        },
+      },
+    }), now);
+
+    const system = repo.getSystemSettings();
+    expect(system.defaults.designGuidance).toEqual({
+      selectedTechStackId: DESIGN_GUIDANCE_NONE_ID,
+      selectedStyleguideId: "custom-style",
+      hideDefaultStyleguides: true,
+      customTechStacks: [
+        {
+          id: "custom-stack",
+          name: "Custom Stack",
+          summary: "Stack summary",
+          instructionMarkdown: "Use this stack thoughtfully.",
+        },
+      ],
+      customStyleguides: [
+        {
+          id: "custom-style",
+          name: "Custom Style",
+          summary: "Style summary",
+          instructionMarkdown: "Make senior design decisions from context.",
+        },
+      ],
+    });
+
+    const projectOverride = repo.saveProjectSettings("project-1", {
+      designGuidance: {
+        selectedTechStackId: "custom-stack",
+        selectedStyleguideId: "missing-style",
+      },
+    });
+    expect(projectOverride.designGuidance?.selectedTechStackId).toBe("custom-stack");
+    expect(projectOverride.designGuidance?.selectedStyleguideId).toBe(DESIGN_GUIDANCE_NONE_ID);
+
+    const effectiveProject = repo.resolveProjectDashboardSettings("project-1");
+    expect(effectiveProject.settings.designGuidance.selectedTechStackId).toBe("custom-stack");
+    expect(effectiveProject.settings.designGuidance.selectedStyleguideId).toBe(DESIGN_GUIDANCE_NONE_ID);
+    expect(effectiveProject.sources["designGuidance.selectedTechStackId"]).toBe("project");
+    expect(effectiveProject.sources["designGuidance.selectedStyleguideId"]).toBe("project");
   });
 
   it("resets all scoped settings back to defaults", async () => {
