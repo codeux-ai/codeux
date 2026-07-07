@@ -240,6 +240,29 @@ const DockerRuntimeCard: FunctionComponent<{
         }))}
       />
     </Row>
+    <Row label="Run containers as root" description="Off by default. Enable only for tools that require package-manager or OS-level writes inside Docker." badge={getFieldBadge("cliWorkflow.containerRunAsRoot")}>
+      <div className="flex flex-wrap items-center gap-3">
+        <Toggle
+          aria-label="Run Docker agents as root"
+          value={settings.cliWorkflow.containerRunAsRoot}
+          danger={settings.cliWorkflow.containerRunAsRoot}
+          onChange={() => update((current) => ({
+            ...current,
+            cliWorkflow: {
+              ...current.cliWorkflow,
+              containerRunAsRoot: !current.cliWorkflow.containerRunAsRoot,
+            },
+          }))}
+        />
+        <span className={`rounded-full border px-3 py-1 text-[10px] font-bold uppercase tracking-[0.14em] ${
+          settings.cliWorkflow.containerRunAsRoot
+            ? "border-status-red/25 bg-status-red/[0.08] text-status-red"
+            : "border-black/[0.06] bg-black/[0.03] text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-400"
+        }`}>
+          {settings.cliWorkflow.containerRunAsRoot ? "Root enabled" : "Non-root default"}
+        </span>
+      </div>
+    </Row>
     <Row label="Cache setup as image" description="Build and reuse a derived Docker image from the base image plus setup script contents." badge={getFieldBadge("cliWorkflow.containerCacheSetupScriptImage")}>
       <Toggle aria-label="Toggle setting" value={settings.cliWorkflow.containerCacheSetupScriptImage} onChange={() => update((current) => ({
         ...current,
@@ -471,6 +494,13 @@ export const SettingsGeneralPanel: FunctionComponent<{ state: SettingsPageState 
         />
 
         <AutomationCard
+          settings={projectSettings}
+          update={updateEditableSettings}
+          getBadge={getBadge}
+          getFieldBadge={getFieldBadge}
+        />
+
+        <DockerRuntimeCard
           settings={projectSettings}
           update={updateEditableSettings}
           getBadge={getBadge}

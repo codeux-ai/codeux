@@ -88,7 +88,7 @@ When `memoryTemplateOverrideEnabled` is set, the preset's `memoryTemplateMarkdow
 
 ## Docker root-mode override
 
-Agent presets may store `containerRunAsRoot` as `true`, `false`, or `null`. For local CLI task execution, the resolved worker preset's explicit boolean overrides the scoped Settings value `cliWorkflow.containerRunAsRoot`; `null` or an omitted field inherits that scoped setting. Hosted Jules sessions ignore this preset field because they do not run in local Docker provider containers.
+Agent presets may store `containerRunAsRoot` as `true`, `false`, or `null`. The editor shows these as **Force root**, **Force non-root**, and **Inherit**. For local CLI task execution, the resolved worker preset's explicit boolean overrides the scoped Settings value `cliWorkflow.containerRunAsRoot`; `null` or an omitted field inherits that scoped setting. Root stays off by default, and the detail panel shows inherited posture as an inherited setting rather than implying root is enabled. Hosted Jules sessions ignore this preset field because they do not run in local Docker provider containers.
 
 ## Persistent skill storage
 
