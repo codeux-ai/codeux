@@ -28,7 +28,7 @@ Package manager is **pnpm** (`pnpm@10.33.0`), Node **22+**. Use `pnpm`, not `npm
 - `pnpm run typecheck` / `pnpm run lint`: strict `tsc --noEmit` (the two are the same command).
 - `pnpm run test`: full Vitest run. `pnpm run test:backend` / `pnpm run test:dashboard`: scoped suites.
 - `pnpm run test:watch`: watch mode. `pnpm run test:coverage`: coverage with threshold enforcement.
-- `pnpm run ci`: local CI equivalent (`lint -> test:backend:coverage -> test:dashboard -> build`).
+- `pnpm run ci`: local CI equivalent (`quality:guardrails -> audit -> lint -> test:backend:coverage -> test:dashboard -> build`).
 - `pnpm run audit`: `pnpm audit --audit-level=high`.
 - `pnpm start`: run compiled `dist/index.js`. `node dist/index.js --help`: list CLI flags / env vars.
 - Electron: `pnpm run electron:dev`, `pnpm run electron:dist[:linux|:mac|:win]`.

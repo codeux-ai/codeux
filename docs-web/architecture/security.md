@@ -34,6 +34,7 @@ Two listeners:
 - Bind only to loopback in production (the default).
 - If exposing remotely, **front with a reverse proxy** that handles auth (basic auth, OAuth proxy, mTLS, …).
 - The WebSocket inherits the same security posture.
+- Sets `X-Frame-Options: SAMEORIGIN` and `Permissions-Policy: camera=(), microphone=(), geolocation=()` to harden the UI against framing and unexpected hardware access.
 
 ### MCP HTTP gateway
 
@@ -84,7 +85,7 @@ This avoids storing literal secrets in the DB.
 
 ### DOCKER mode
 
-- Workers run inside a Docker container isolated from the host filesystem (only the worktree path and optionally the auth path are mounted).
+- Workers run inside a Docker container isolated from the host filesystem (the worktree path is mounted, and provider credentials use explicit isolated mounts like `~/.gemini`, `~/.codex`, `~/.claude`, `~/.qwen`, and OpenCode rather than broad workspace root exposure).
 - Container is removed on completion.
 - Workers cannot access other projects' worktrees within the same Code UX install.
 

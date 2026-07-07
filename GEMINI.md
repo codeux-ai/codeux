@@ -118,7 +118,7 @@ All UI work must meet the quality gate in `STYLEGUIDE.md`:
   `vi.spyOn()` for verification.
 
 ### Validation Workflow (`pnpm run ci`)
-Before a task is complete, all of these MUST pass (`ci` = lint -> test:backend:coverage -> test:dashboard -> build).
+Before a task is complete, all of these MUST pass (`ci` = quality:guardrails -> audit -> lint -> test:backend:coverage -> test:dashboard -> build).
 
 - Do not validate changes visually with Browser automation Tools unless explicitly told to
 ---

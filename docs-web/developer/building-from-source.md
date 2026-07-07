@@ -156,7 +156,7 @@ pnpm run test:backend          # backend only
 pnpm run test:dashboard        # dashboard only
 pnpm run test:coverage         # full coverage report
 pnpm run test:backend:coverage # backend coverage with threshold gate
-pnpm run ci                    # local CI: lint -> test:backend:coverage -> test:dashboard -> build
+pnpm run ci                    # local CI: quality:guardrails -> audit -> lint -> test:backend:coverage -> test:dashboard -> build
 pnpm run audit                 # pnpm audit --audit-level=high
 pnpm run smoke-test            # node dist/index.js --help
 pnpm run dev:server-only       # boot just the server from source

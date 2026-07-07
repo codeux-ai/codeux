@@ -62,6 +62,25 @@ The browser preview has two proxy paths with different credential rules:
 
 Both paths only route to loopback host ports recorded on the active preview session. The dashboard API proxy also removes `Set-Cookie`, CSP, CSP report-only, and `X-Frame-Options` response headers before writing the response on the dashboard origin. Preview-host HTML keeps iframe compatibility by stripping upstream document CSP and frame-blocking headers while allowing preview-origin app cookies to reach that preview host.
 
+## File Browser Comparison
+
+The File Browser is a distinct dashboard surface and runtime capability separate from Browser Preview. While Browser Preview proxies live container ports to a dashboard iframe, the File Browser manages its own dedicated sessions to provide filesystem inspection and Git change reviews.
+
+File Browser sessions expose their own API routes:
+- `/api/projects/:projectId/file-browser/sessions` (list sessions)
+- `/api/projects/:projectId/sprints/:sprintId/file-browser/start` (launch session)
+- `/api/file-browser/sessions/:sessionId/rebuild` (rebuild session)
+- `/api/file-browser/sessions/:sessionId/stop` (stop session)
+- `/api/file-browser/sessions/:sessionId` (DELETE to remove session)
+- `/api/file-browser/sessions/:sessionId/tree` (fetch folder tree)
+- `/api/file-browser/sessions/:sessionId/file` (fetch file content)
+- `/api/file-browser/sessions/:sessionId/changes` (fetch Git status changes)
+- `/api/file-browser/sessions/:sessionId/diff` (fetch Git diff)
+
+The UI provides two primary views:
+- **Files mode**: Shows a complete workspace tree and syntax-highlighted file viewer.
+- **Changes mode**: Shows a list of modified files in the sprint branch and a diff viewer.
+
 ## Verification Notes
 
 For documentation-only updates, run `pnpm run lint` and:

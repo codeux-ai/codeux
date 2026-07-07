@@ -48,12 +48,13 @@ Exposes deeper debugging and internal telemetry info:
 - Pub/Sub connection stability and message volume.
 - Background worker execution loops and active queue lengths.
 - System error distribution and unhandled exception traces.
+- Access to raw execution invocation records and programmatic execution messages.
 
 ## Cost Metrics and Pricing
 
 Cost data is visualized directly within the Usage Graph and Composition views, fueled by provider configurations.
 - You can set `Token pricing` (input / output) on a per-provider-instance basis in **Settings -> Integrations**.
-- The Stats page applies these settings retroactively to the raw token telemetry for the selected window.
+- The Stats page applies these settings retroactively to the raw token telemetry for the selected window, including explicit model pricing overrides caching.
 - **Zero-price / No-pricing behavior:** If a provider has no pricing configured, or if the price is set to `$0.00`, invocations for that provider are tracked and visualized in token counts but will contribute $0.00 to aggregate cost series and cost-focused widgets.
 
 ## Underlying telemetry

@@ -141,7 +141,7 @@ Docker-backed execution provides:
 
 - Hermetic task workspaces and snapshot-based QA reviews.
 - Reusable runtime caches for package managers and provider CLIs.
-- Auth-copy support for provider credentials such as `~/.codex`, `~/.claude`, `~/.gemini`, `~/.qwen`, and OpenCode auth.
+- Isolated credential mounts for provider auth (such as `~/.codex`, `~/.claude`, `~/.gemini`, `~/.qwen`, and OpenCode) rather than broad workspace root exposure.
 - Short-lived execution containers that are cleaned up after runs instead of becoming permanent agent environments.
 - Isolated merge-conflict repair and CI autofix flows.
 - Startup cleanup for stale containers, workspaces, and preview sessions.

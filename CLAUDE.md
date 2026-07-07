@@ -33,7 +33,7 @@ pnpm run test:watch     # Vitest watch mode
 pnpm test tests/backend/smoke.test.ts   # Single test file
 pnpm run test:coverage  # Coverage with threshold enforcement
 pnpm run typecheck      # tsc --noEmit (alias: lint — same command)
-pnpm run ci             # lint -> test:backend:coverage -> test:dashboard -> build
+pnpm run ci             # quality:guardrails -> audit -> lint -> test:backend:coverage -> test:dashboard -> build
 pnpm run audit          # pnpm audit --audit-level=high
 ```
 

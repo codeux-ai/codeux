@@ -32,16 +32,16 @@ Enforced in CI:
 
 | Metric | Threshold |
 | --- | --- |
-| Lines | **80%** |
-| Functions | **69%** |
-| Branches | **64%** |
-| Statements | **80%** |
+| Lines | **77.4%** |
+| Functions | **71.5%** |
+| Branches | **66.1%** |
+| Statements | **76.0%** |
 
 Per-file gate:
 
 | File | Min line coverage |
 | --- | --- |
-| `src/services/activity-cache-service.ts` | 80% |
+| `src/server/activity-cache-service.ts` | 80% |
 
 A failing threshold fails CI.
 
@@ -82,7 +82,7 @@ pnpm run ci
 
 This runs (in order):
 
-`lint -> test:backend:coverage -> test:dashboard -> build`
+`quality:guardrails -> audit -> lint -> test:backend:coverage -> test:dashboard -> build`
 
 If `pnpm run ci` is green, GitHub CI will be too (modulo platform-specific differences).
 

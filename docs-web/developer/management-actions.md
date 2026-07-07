@@ -221,6 +221,7 @@ Read-only execution telemetry.
 | `list_sprint_runs` | – | `projectId`, `sprintId` | Compact run list. |
 | `list_task_dispatches` | – | `projectId`, `sprintId`, `taskId` | Per-task dispatch list. |
 | `list_execution_invocations` | – | `projectId`, optional `sprintId`, `taskId`, `type` | Filter MCP invocations. |
+| `list_execution_invocation_messages` | – | `invocationId` | List messages for a specific execution invocation. |
 
 ---
 
