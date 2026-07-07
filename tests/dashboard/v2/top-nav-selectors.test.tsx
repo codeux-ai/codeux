@@ -10,7 +10,10 @@ import { useProjectData } from "../../../dashboard/src/v2/context/project-data.j
 import { useSprints } from "../../../dashboard/src/hooks/useSprints.js";
 import { useProjectEffectiveSettings, clearProjectEffectiveSettingsCache } from "../../../dashboard/src/v2/hooks/use-project-effective-settings.js";
 import { saveProjectDesignGuidanceSettings } from "../../../dashboard/src/v2/lib/settings-api.js";
-import { DESIGN_GUIDANCE_NONE_ID } from "../../../src/domain/settings/design-guidance-catalog.js";
+import {
+  CODE_UX_AWARD_WINNING_STYLEGUIDE_ID,
+  DESIGN_GUIDANCE_NONE_ID,
+} from "../../../src/domain/settings/design-guidance-catalog.js";
 
 expect.extend(matchers);
 
@@ -284,6 +287,33 @@ describe("TopNav guidance and sprint selectors", () => {
     const manageLink = screen.getByRole("link", { name: /Manage Guidance/i });
     expect(addLink).toHaveAttribute("href", "/config?category=guidance#guidance");
     expect(manageLink).toHaveAttribute("href", "/config?category=guidance#guidance");
+  });
+
+  it("uses a rendered active descendant when the selected built-in styleguide is hidden", async () => {
+    renderTopNav({
+      guidance: {
+        ...customGuidance,
+        selectedStyleguideId: CODE_UX_AWARD_WINNING_STYLEGUIDE_ID,
+        hideDefaultStyleguides: true,
+      },
+    });
+
+    const styleguideTrigger = screen.getByRole("button", { name: /Styleguide selector/i });
+    expect(styleguideTrigger).toHaveTextContent("Code UX Award-Winning Product UI");
+
+    fireEvent.click(styleguideTrigger);
+
+    const listbox = await screen.findByRole("listbox", { name: "Styleguide list" });
+    expect(screen.queryByRole("option", { name: /Code UX Award-Winning Product UI/i })).not.toBeInTheDocument();
+
+    const activeDescendantId = styleguideTrigger.getAttribute("aria-activedescendant");
+    expect(activeDescendantId).toBe("styleguide-option-none");
+    const activeDescendant = document.getElementById(activeDescendantId ?? "");
+    expect(activeDescendant).toBeInTheDocument();
+    if (!activeDescendant) {
+      throw new Error("Expected styleguide active descendant to reference a rendered option.");
+    }
+    expect(listbox).toContainElement(activeDescendant);
   });
 
   it("disables guidance selectors without a project but keeps the sprint Add action available for empty collections", async () => {
