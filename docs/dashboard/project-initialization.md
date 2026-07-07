@@ -4,18 +4,20 @@ Project Initialization runs a repository-specific setup pass through the `Projec
 
 ## Entry Points
 
-- `Add Project` keeps the existing `Initialize with Project Setup Agent` flow for local and git source types.
-- New local project creation treats the directory path as optional. When no directory is selected, the dashboard submits the project name and the backend resolves it under the user's home directory; relative typed paths resolve from the user's home directory, while absolute paths selected through the desktop picker are used as-is.
-- Local project creation, including `Local Project` and `new_project` with `Local Repo`, saves a project-level settings override for `git.githubMode: LOCAL`. The same dashboard git-mode updater synchronizes internal `git_manager`, `git_manager_local`, and `git_manager_remote` skills so local projects start with repo-local git behavior.
-- `New Project` opens the same modal with the `new_project` source selected, which exposes `Local Repo` / `Remote Repo` init modes instead of the setup scope controls.
+- `Add Project` keeps the existing `Initialize with Project Setup Agent` flow for imported local and git source types.
+- Imported local projects save only a project-level `git.githubMode: LOCAL` override. The same dashboard git-mode updater synchronizes internal `git_manager`, `git_manager_local`, and `git_manager_remote` skills so local imports start with repo-local git behavior.
+- Imported Git URL projects do not receive git-mode or techstack overrides. They continue to inherit the remote git and unassigned techstack defaults unless the operator explicitly changes project or sprint settings.
+- `New Project`, `Create Web App`, and `Create Desktop App` reuse the same Add Project modal with the `new_project` source selected. The modal exposes `Local Repo` / `Remote Repo` init modes instead of setup scope controls.
+- The navbar quickactions preselect Web App or Desktop App context and carry an explicit techstack override for the newly created project. They use the selected project's assigned techstack when one is set; otherwise they use the system catalog default built-in techstack.
+- All `new_project` submissions, local or remote, include an explicit project `techstack` override. New local projects also include `git.githubMode: LOCAL`; new remote projects do not.
 - The `new_project` branch hides the Project Setup Agent section entirely and routes creation through the backend `initMode` fields.
-- `new_project` local init does not require a Git URL slug; it only needs a project name and optional local directory path.
-- `new_project` remote init still requires a Git URL slug and auto-fills it from the project name until the user edits it.
-- `new_project` remote init clones into the selected clone directory, or `~/.code-ux/projects` when the field is blank, and stores the project base directory as the single checkout root `~/.code-ux/projects/<repo-name>`.
-- `new_project` remote init and existing Git URL projects do not receive a local-mode settings override. They continue to inherit the remote git defaults unless the operator explicitly changes the project or sprint settings.
+- New local project creation treats the directory path as optional. When no directory is selected, the dashboard submits the project name and the backend resolves it under the user's home directory; relative typed paths resolve from the user's home directory, while absolute paths selected through the desktop picker are used as-is.
+- New local init does not require a Git URL slug; it only needs a project name and optional local directory path.
+- New remote init still requires a Git URL slug and auto-fills it from the project name until the user edits it.
+- New remote init clones into the selected clone directory, or `~/.code-ux/projects` when the field is blank, and stores the project base directory as the single checkout root `~/.code-ux/projects/<repo-name>`.
 - Existing projects expose a `Setup Project` action from the project card agent button.
 
-Both flows let the operator choose which artifacts to create:
+Imported-project setup lets the operator choose which artifacts to create:
 
 - `Agents`
 - `Quicksprints`

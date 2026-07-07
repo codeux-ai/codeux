@@ -45,10 +45,47 @@ vi.mock("../../../dashboard/src/v2/components/feedback/ToastProvider.js", () => 
 }));
 
 vi.mock("../../../dashboard/src/v2/components/ui/AddProjectModal.js", () => ({
-  AddProjectModal: ({ onClose }: any) => h(
+  AddProjectModal: ({ onClose, onAdd, initialSourceType, quickActionDefaults }: any) => h(
     "div",
-    { "data-testid": "add-project-modal" },
+    {
+      "data-testid": "add-project-modal",
+      "data-initial-source-type": initialSourceType || "",
+      "data-quickaction-kind": quickActionDefaults?.applicationKind || "",
+    },
     h("button", { type: "button", onClick: onClose }, "Close"),
+    h("button", {
+      type: "button",
+      onClick: () => void onAdd({
+        name: "Imported Local",
+        type: "local",
+        path: "/workspace/imported-local",
+      }),
+    }, "Submit local import"),
+    h("button", {
+      type: "button",
+      onClick: () => void onAdd({
+        name: "New Local App",
+        type: "new_project",
+        path: "/workspace/new-local-app",
+        initMode: "new-local",
+        selectedTechstackId: "react-saas",
+        applicationKind: "web",
+      }),
+    }, "Submit new local app"),
+    h("button", {
+      type: "button",
+      onClick: () => void onAdd({
+        name: "New Remote App",
+        type: "new_project",
+        path: "",
+        initMode: "new-remote",
+        repoSlug: "new-remote-app",
+        remoteProvider: "github",
+        isPrivate: true,
+        selectedTechstackId: "react-saas",
+        applicationKind: "desktop",
+      }),
+    }, "Submit new remote app"),
   ),
 }));
 
@@ -185,6 +222,70 @@ describe("ProjectsPage", () => {
     fireEvent.click(screen.getByRole("button", { name: /Add Project/i }));
 
     expect(screen.getByTestId("add-project-modal")).toBeInTheDocument();
+  });
+
+  it("creates imported local projects with local git settings and no techstack assignment", () => {
+    render(<ProjectsPage />);
+
+    fireEvent.click(screen.getByRole("button", { name: /Add Project/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Submit local import" }));
+
+    expect(createProjectMock).toHaveBeenCalledWith({
+      name: "Imported Local",
+      sourceType: "local",
+      sourceRef: "/workspace/imported-local",
+      cloneDir: undefined,
+      settingsOverrides: expect.objectContaining({
+        git: { githubMode: "LOCAL" },
+        skills: expect.any(Array),
+      }),
+    });
+    expect(createProjectMock.mock.calls[0]?.[0].settingsOverrides.techstack).toBeUndefined();
+  });
+
+  it("creates new local projects with local git settings and explicit techstack assignment", () => {
+    render(<ProjectsPage />);
+
+    fireEvent.click(screen.getByRole("button", { name: "New Project" }));
+    expect(screen.getByTestId("add-project-modal")).toHaveAttribute("data-initial-source-type", "new_project");
+    fireEvent.click(screen.getByRole("button", { name: "Submit new local app" }));
+
+    expect(createProjectMock).toHaveBeenCalledWith(expect.objectContaining({
+      name: "New Local App",
+      sourceType: "local",
+      sourceRef: "/workspace/new-local-app",
+      initMode: "new-local",
+      settingsOverrides: expect.objectContaining({
+        git: { githubMode: "LOCAL" },
+        techstack: {
+          selectedTechstackId: "react-saas",
+          applicationKind: "web",
+        },
+      }),
+    }));
+  });
+
+  it("creates new remote projects with explicit techstack assignment and no local git override", () => {
+    render(<ProjectsPage />);
+
+    fireEvent.click(screen.getByRole("button", { name: "New Project" }));
+    fireEvent.click(screen.getByRole("button", { name: "Submit new remote app" }));
+
+    expect(createProjectMock).toHaveBeenCalledWith(expect.objectContaining({
+      name: "New Remote App",
+      sourceType: "git",
+      sourceRef: "new-remote-app",
+      initMode: "new-remote",
+      remoteProvider: "github",
+      isPrivate: true,
+      settingsOverrides: {
+        techstack: {
+          selectedTechstackId: "react-saas",
+          applicationKind: "desktop",
+        },
+      },
+    }));
+    expect(createProjectMock.mock.calls[0]?.[0].settingsOverrides.git).toBeUndefined();
   });
 
   it("announces project loading with busy region semantics and stable actions", () => {
