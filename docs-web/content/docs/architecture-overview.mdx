@@ -18,6 +18,10 @@ It is for contributors and integrators who need to reason about *how* Code UX ma
 | 8 | [Configuration resolution](/docs/architecture-configuration-resolution) | Cascade order, search paths, settings hierarchy |
 | 9 | [Security model](/docs/architecture-security) | Authentication, authorisation, secrets, network surface |
 
+## Runtime Notes
+
+Agent persistent skill storage is opt-in per preset. When enabled and attached to a storage, provider invocations receive search-first instructions, retrieval-only `search_skills` MCP access where eligible, and writable storage mounts outside the project workspace (`~/.code-ux/persistent-skill-storages/...` on host, `/code-ux/persistent-skills/...` in Docker).
+
 ## Reading order suggestions
 
 - **For new contributors** — read 1, 3, 7 in that order.

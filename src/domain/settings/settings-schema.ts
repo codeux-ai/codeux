@@ -102,6 +102,17 @@ const validateProviderSettings = (
   if (typeof value.authPath !== "string") {
     issues.push({ path: `${path}.authPath`, message: "Expected a string" });
   }
+  if (
+    value.providerConfigMode !== undefined
+    && value.providerConfigMode !== "none"
+    && value.providerConfigMode !== "copyHost"
+    && value.providerConfigMode !== "file"
+  ) {
+    issues.push({ path: `${path}.providerConfigMode`, message: "Expected one of: none, copyHost, file" });
+  }
+  if (value.providerConfigPath !== undefined && typeof value.providerConfigPath !== "string") {
+    issues.push({ path: `${path}.providerConfigPath`, message: "Expected a string" });
+  }
   if (value.lastLoginAt !== undefined && typeof value.lastLoginAt !== "number") {
     issues.push({ path: `${path}.lastLoginAt`, message: "Expected a number" });
   }
@@ -450,6 +461,14 @@ const validateCliWorkflow = (
   }
   if (typeof value.containerImage !== "string") issues.push({ path: `${path}.containerImage`, message: "Expected a string" });
   if (typeof value.containerSetupScriptPath !== "string") issues.push({ path: `${path}.containerSetupScriptPath`, message: "Expected a string" });
+  if (
+    typeof value.containerMemoryLimitMb !== "number"
+    || !Number.isInteger(value.containerMemoryLimitMb)
+    || value.containerMemoryLimitMb < 0
+    || value.containerMemoryLimitMb > 262144
+  ) {
+    issues.push({ path: `${path}.containerMemoryLimitMb`, message: "Expected an integer between 0 and 262144" });
+  }
   if (typeof value.containerCacheSetupScriptImage !== "boolean") issues.push({ path: `${path}.containerCacheSetupScriptImage`, message: "Expected a boolean" });
   if (typeof value.containerInstallPlaywrightBrowsers !== "boolean") issues.push({ path: `${path}.containerInstallPlaywrightBrowsers`, message: "Expected a boolean" });
   if (typeof value.containerMountGitConfig !== "boolean") issues.push({ path: `${path}.containerMountGitConfig`, message: "Expected a boolean" });

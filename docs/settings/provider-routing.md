@@ -24,6 +24,10 @@ Code UX now separates:
 
 Provider runtime artifacts (such as host log paths, temporary output files, and Docker paths) are owned and managed by the `provider-runtime-artifacts` module. `ProviderRunner` delegates path resolution and artifact cleanup logic to this helper to ensure safer execution boundaries and testing.
 
+Persistent skill storage is a separate provider runtime input, not a workspace artifact. When an invoked agent preset has persistent skill storage enabled and at least one attached storage, `ProviderExecutionService` appends a dedicated prompt section and passes explicit read/write storage mounts to the provider runner. The host root is derived under `~/.code-ux/persistent-skill-storages/<project-id>/<agent-id>/<storage-id>/`; Docker mounts that directory at `/code-ux/persistent-skills/<storage-id>/`. Code UX never mounts arbitrary storage paths from settings and never uses the project workspace or `.worktrees` directory as the persistent skill root.
+
+Agents should call `search_skills` before creating a durable skill so they do not duplicate existing guidance. If they need to save a new reusable skill, they should use `manage_skills import_markdown` or another available MCP write action when the agent has that authority; otherwise they may write a markdown skill file into the mounted persistent storage path. The retrieval-only `search_skills` MCP surface can be exposed to skill-enabled agents without enabling unrelated Code UX management tools.
+
 ## Configuration Model
 
 Backend types:
@@ -54,6 +58,7 @@ Each `aiProvider.invocationRouting.<routeId>` entry contains:
 Provider instances are first-class routing targets:
 - the default built-in instances use ids `jules`, `gemini`, `codex`, `claude-code`, `qwen-code`, and `opencode`
 - additional instances can be added under the same provider type, such as multiple Codex credentials with different names and weights
+- the internal `mockup-cli` provider id is reserved for deterministic credential-free sprint validation and should only be configured by test and CI paths such as the [Mockup Sprint Pentest](../development/mockup-sprint-pentest.md)
 - each CLI instance also carries its own optional Docker auth-copy source (`mountAuth` + `authPath`), so routing one Codex, Qwen, or OpenCode instance vs another can change both credentials and local auth mount source
 - Qwen Code instances additionally carry auth mode metadata for local OAuth cache copying, Alibaba Cloud Coding Plan, or custom `modelProviders`-style endpoints
 - OpenCode instances additionally carry auth mode metadata for local `auth.json` cache copying, built-in provider API keys, or generated OpenAI-compatible custom provider config
@@ -90,6 +95,7 @@ Manual route selection is authoritative for that route. If a route sets `provide
 8. When a CLI instance is selected for Docker execution, Code UX forwards that instance's `mountAuth` and `authPath` into the runtime so the chosen route controls which local credential directory is copied.
 9. If a persisted task already has a concrete provider assignment, such as `gemini` on retry, Code UX resolves the matching provider instance settings for that provider instead of reusing settings from a newly resolved fallback route. This keeps model and auth-copy settings aligned with the actual CLI being launched.
 10. Legacy provider-id keyed payloads are normalized into the instance model so older settings rows and tests continue to resolve through the new routing engine.
+11. If the resolved invocation is associated with an agent preset that has persistent skill storage enabled and attached, Code UX augments the prompt and runtime mounts after routing is resolved. This applies to task coding, planning, QA review and follow-up, dashboard replies, clarification replies, CI fix, merge-conflict repair, and memory remediation flows whenever the agent preset is known.
 
 ## Credential Mutual Exclusion
 
@@ -174,6 +180,7 @@ Dashboard route and model controls share provider display metadata from the sett
 - provider routes use provider instance ids internally but display the settings page instance name, such as `Codex Primary`, instead of legacy virtual-worker labels
 - provider icons use the underlying provider type, so additional Codex, Qwen Code, OpenCode, and Antigravity instances keep the correct brand icon
 - default route/model options show the resolved inherited worker defaults when available, such as `Default Route (Codex Primary)` and `Default Model (gpt-5.5)`
+- Codex model selectors include `gpt-5.6-sol`, `gpt-5.6-terra`, and `gpt-5.6-luna` as selectable catalog options while keeping `gpt-5.5` as the Codex default model
 - custom endpoint provider instances display their effective configured model in Settings defaults, route cards, and default model labels. Codex and Claude Code API-key custom endpoint instances use `customModel` and their custom base URL when local auth is not mounted; Qwen Code `MODEL_PROVIDER` and OpenCode `CUSTOM_PROVIDER` instances use their generated configured model ids and endpoint metadata. Mounted/local-auth and dashboard-auth instances ignore stale custom model or base URL fields and keep showing the saved provider default.
 - Sprint Composer and Quicksprint default route/model labels resolve from the `planning` invocation route mapping. A pinned Planning Route provider and its route-specific model override are displayed as the default, even when the worker default points at a different provider.
 - Sprint Composer and Quicksprint explicit route selections keep the selected provider-instance id as the option value for UI state, but send the underlying CLI provider type in `PlanningOverrides.virtualProvider`. That keeps a selected instance such as `Claude Live` paired with the `claude-code` runtime when a model override is also selected.

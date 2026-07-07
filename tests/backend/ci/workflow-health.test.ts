@@ -9,6 +9,7 @@ const WORKFLOWS = {
   playwright: ".github/workflows/playwright.yml",
   releaseChecks: ".github/workflows/release-checks.yml",
   openrouterSprintE2e: ".github/workflows/openrouter-sprint-e2e.yml",
+  mockupSprintPentest: ".github/workflows/mockup-sprint-pentest.yml",
 } as const;
 
 const PLAYWRIGHT_CONFIG = "playwright.config.ts";
@@ -236,6 +237,39 @@ describe("GitHub workflow health", () => {
     expect(config).toContain("name: 'chromium-mobile'");
     expect(config).toContain("testMatch: /sprint-ledger-responsive\\.spec\\.ts/");
     expect(config).toContain("...devices['Pixel 5']");
+  });
+
+  it("keeps mockup sprint pentest on a Docker-backed no-secret Linux CI lane", async () => {
+    const workflow = await readRepoFile(WORKFLOWS.mockupSprintPentest);
+    const job = getJobBlock(workflow, "mockup-sprint-pentest");
+
+    expect(workflow).toContain("Mockup Sprint Pentest (temporary dev validation)");
+    expectConcurrencyCancellation(workflow, "Mockup sprint pentest");
+    expect(workflow).toMatch(/push:\n    branches:\n      - main\n      # Temporary dev activation/);
+    expect(workflow).toContain("- dev");
+    expect(workflow).toContain("workflow_dispatch:");
+
+    expect(job).toContain("runs-on: ubuntu-latest");
+    expect(job).toContain("uses: pnpm/action-setup@v6");
+    expect(job).toContain("version: 10.33.0");
+    expect(job).toContain("run_install: false");
+    expect(job).toContain("uses: actions/setup-node@v5");
+    expect(job).toContain("node-version: 22");
+    expect(job).toContain("run: pnpm install --frozen-lockfile");
+    expect(job).toContain("run: pnpm run build");
+    expect(job).toContain("docker version");
+    expect(job).toContain("Docker is required for the mockup sprint pentest Docker lane.");
+    expect(job).toContain("run: pnpm run test:e2e:mockup-sprint-pentest");
+    expectCommandBefore(job, "run: pnpm run build", "- name: Verify Docker availability");
+    expectCommandBefore(job, "docker version", "run: pnpm run test:e2e:mockup-sprint-pentest");
+
+    expect(job).toMatch(/if: \$\{\{ failure\(\) \|\| hashFiles\('\.cache\/e2e-mockup-sprint-pentest\/\*\*'\) != '' \}\}/);
+    expect(job).toContain("uses: actions/upload-artifact@v4");
+    expect(job).toContain("path: .cache/e2e-mockup-sprint-pentest/");
+    expect(job).toContain("include-hidden-files: true");
+    expect(job).toContain("retention-days: 5");
+    expect(job).not.toContain("OPENROUTER_API_KEY");
+    expect(job).not.toContain("GITHUB_TOKEN");
   });
 
   it("keeps release checks separate from CI and Playwright validation lanes", async () => {

@@ -82,6 +82,9 @@ export function createSprintDependencies(
     getDashboardSettings: resolveDashboardSettings,
     agentPresetSyncService,
     getGithubToken: () => context.getEffectiveGithubToken(),
+    skillService: coreDeps.skillService,
+    agentPresetRepository: coreDeps.agentPresetRepository,
+    getMcpConnectionInfo: () => context.getMcpConnectionInfo?.() ?? null,
 
     logger: logger.child({ component: "cli-workflow-service" }),
   });
@@ -93,6 +96,9 @@ export function createSprintDependencies(
     providerConcurrencyService: coreDeps.providerConcurrencyService,
     logger: logger.child({ component: "provider-execution-service" }),
     getGithubToken: () => context.getEffectiveGithubToken(),
+    getMcpConnectionInfo: () => context.getMcpConnectionInfo?.() ?? null,
+    skillService: coreDeps.skillService,
+    agentPresetRepository: coreDeps.agentPresetRepository,
   });
   const structuredProviderResponseService = new StructuredProviderResponseService({
     providerExecutionService,
@@ -135,6 +141,9 @@ export function createSprintDependencies(
     providerRunner: coreDeps.providerRunner,
     providerConcurrencyService: coreDeps.providerConcurrencyService,
     knowledgeService: coreDeps.knowledgeService,
+    skillService: coreDeps.skillService,
+    agentPresetRepository: coreDeps.agentPresetRepository,
+    getMcpConnectionInfo: () => context.getMcpConnectionInfo?.() ?? null,
     fetchSessionActivities: (sessionName, pageSize) =>
       coreDeps.julesApi.fetchRecentActivitiesLite(sessionName, pageSize ?? 15),
     logger: logger.child({ component: "worker-inbox-reply-service" }),
@@ -155,6 +164,9 @@ export function createSprintDependencies(
     sendSessionMessage: (sessionId, prompt) => julesApi.sendSessionMessage(sessionId, prompt),
     logger: logger.child({ component: "quality-assurance-service" }),
     memoryService: coreDeps.memoryService,
+    skillService: coreDeps.skillService,
+    agentPresetRepository: coreDeps.agentPresetRepository,
+    getMcpConnectionInfo: () => context.getMcpConnectionInfo?.() ?? null,
     structuredAgentRequestService,
     dockerService: new DockerService(),
     sprintRunLifecycleService: coreDeps.sprintRunLifecycleService,
@@ -215,6 +227,9 @@ export function createSprintDependencies(
     sendSessionMessage: (sessionId, prompt) => julesApi.sendSessionMessage(sessionId, prompt),
     providerConcurrencyService: coreDeps.providerConcurrencyService,
     memoryService: coreDeps.memoryService,
+    skillService: coreDeps.skillService,
+    agentPresetRepository: coreDeps.agentPresetRepository,
+    getMcpConnectionInfo: () => context.getMcpConnectionInfo?.() ?? null,
     agentPresetSyncService,
     logger: logger.child({ component: "virtual-worker-service" }),
   });

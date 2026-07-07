@@ -1,28 +1,31 @@
 # Stats
 
-The **Stats** page (`/stats`) is the analytics surface for the active project. It leverages the high-interaction **Analysis Studio UX** with a unified glass-panel system, providing detailed insights into project execution, performance, cost, and system-level metrics. It fully supports visual-mode navigation, responsive behavior across screen sizes, and seamless light/dark mode transitions.
+The **Stats** page (`/stats`) is the analytics surface for the active project. It shows project execution, usage, cost, Git, and invocation telemetry in one workspace with visual-mode navigation, responsive layouts, and light/dark mode support.
 
 ## Time windows
 
 A selector at the top lets you pick the analysis window:
 
+- **Last 1 hour**
 - **Last 24 hours**
 - **Last 7 days**
 - **Last 30 days**
 - **All time**
-- **Custom range** — drag-to-zoom directly on the Usage Graph or pick start and end dates explicitly.
+- **Custom range** — pick start and end dates explicitly.
 
-All charts, ledgers, and metrics respect the selected timeframe.
+All charts, ledgers, and metrics respect the selected timeframe. Recent windows include the freshest available bucket: **Last 1 hour** includes the current 5-minute bucket, and **Last 24 hours** includes the current partial hour.
 
 ## Analysis Modes
 
 Navigation across the top of the workspace controls the primary analysis lens:
 
 ### Trend
-A full-width interactive **Usage Graph** displays usage over time for Tokens, Time, Cost, and Git activity.
-- You can toggle specific series (e.g. prompt tokens vs completion tokens, additions vs deletions) via the right-side metrics rail.
-- It includes hover bucket inspection for precise datapoints.
-- Hourly views reduce visible axis labels to a three-hour rhythm while preserving single-hour hover targets.
+A full-width interactive **Usage Graph** displays usage over time for the series included in the project stats snapshot, such as token totals, active time, cost, telemetry source confidence, and Git activity when those series are present.
+- Toggle series in the grouped switch band below the graph or from the graph filter menu. Groups show active/total counts, and each switch shows its color, label, signal type, and current On/Off state.
+- **Reset** restores the snapshot defaults. **Enable defaults** turns the default series back on without hiding other series you selected.
+- At least one series stays enabled. If you try to turn off the last visible series, the switch remains on and the page explains why.
+- Hover, focus, or select a bucket to inspect exact values. Drag-to-zoom changes the visible graph range; it does not change the selected Stats time window.
+- Hourly views reduce visible axis labels while preserving individual bucket inspection.
 
 ### Composition
 Visualizes structural breakdowns using interactive donut charts that slice by:
@@ -35,7 +38,7 @@ Charts feature hover emphasis, center-detail readouts, and are layered above cac
 Tracks specific model performance, invocation volume, and token throughput for each model used during the active timeframe.
 
 ### Providers / Reliability
-Focuses on error rates, retry counts, latency percentiles, and overall success rates across your connected providers.
+Focuses on provider usage, telemetry confidence, failure pressure, latency signals, and cost details when the selected snapshot includes those fields.
 
 ### Ledgers
 Provides tabbed telemetry tables containing raw Task and Sprint data.
@@ -43,11 +46,11 @@ Provides tabbed telemetry tables containing raw Task and Sprint data.
 - Richer token and time breakdowns compared to standard views.
 
 ### System
-Exposes deeper debugging and internal telemetry info:
-- Internal cache hit rates.
-- Pub/Sub connection stability and message volume.
-- Background worker execution loops and active queue lengths.
-- System error distribution and unhandled exception traces.
+Exposes administrative invocation telemetry:
+- Sprint state and invocation-health summaries.
+- Classified external API activity.
+- Error categories for recorded invocation failures.
+- Filtered invocation records with expandable transcript details.
 
 ## Cost Metrics and Pricing
 

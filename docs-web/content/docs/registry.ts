@@ -161,7 +161,7 @@ export const docsRegistry: Record<DocsSlug, DocsRegistryEntry> = {
     path: '/docs/user-dashboard-tasks',
     section: 'User Guide',
     title: "Tasks",
-    description: "The Tasks page (/tasks) is a flat, filterable view of every task in the active project, across all sprints.",
+    description: "The Tasks page (/tasks) is a Kanban-style task board for the active project. It organizes tasks into Queued, In Progress, and Completed lanes, with sprint scope, status, priority, and search controls above the board.",
   },
   'user-dashboard-live-session': {
     id: 'user-dashboard-live-session',
@@ -224,7 +224,7 @@ export const docsRegistry: Record<DocsSlug, DocsRegistryEntry> = {
     path: '/docs/user-dashboard-stats',
     section: 'User Guide',
     title: "Stats",
-    description: "The Stats page (/stats) is the analytics surface for the active project. It leverages the high-interaction Analysis Studio UX with a unified glass-panel system, providing detailed insights into project execution, perf...",
+    description: "The Stats page (/stats) is the analytics surface for the active project. It shows project execution, usage, cost, Git, and invocation telemetry in one workspace with visual-mode navigation, responsive layouts, and lig...",
   },
   'user-dashboard-settings': {
     id: 'user-dashboard-settings',
@@ -245,7 +245,7 @@ export const docsRegistry: Record<DocsSlug, DocsRegistryEntry> = {
     path: '/docs/developer-mcp-tools',
     section: 'Developer Reference',
     title: "MCP tools",
-    description: "Code UX is also an MCP server. When connected, it advertises a set of management tools that an MCP client (or another agent) can call to drive projects, sprints, tasks, agents, memory, settings, previews, and telemetr...",
+    description: "Code UX is also an MCP server. When connected, it advertises a set of management tools that an MCP client (or another agent) can call to drive projects, sprints, tasks, agents, memory, persistent skills, settings, pre...",
   },
   'developer-management-actions': {
     id: 'developer-management-actions',

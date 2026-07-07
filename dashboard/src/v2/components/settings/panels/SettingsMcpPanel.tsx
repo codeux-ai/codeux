@@ -335,6 +335,7 @@ export const SettingsMcpPanel: FunctionComponent<{ state: SettingsPageState }> =
               title={meta.label}
               icon={<Icon strokeWidth={2.4} />}
               badge={`${toolsInCategory.filter((def) => enabledByName.get(def.name) ?? true).length}/${toolsInCategory.length}`}
+              helpId="mcp-tool-category"
             >
               <Row label={`Enable all ${meta.label.toLowerCase()} tools`} description={meta.description}>
                 <Toggle aria-label="Toggle setting" value={allEnabled} onChange={(value) => setCategoryEnabled(category, value)} />
@@ -574,7 +575,7 @@ const CustomServerDetail: FunctionComponent<{
   };
 
   return (
-    <SectionCard title={server.label || server.name || "MCP server"} watermark="MCP" icon={<Server strokeWidth={2.4} />}>
+    <SectionCard title={server.label || server.name || "MCP server"} watermark="MCP" icon={<Server strokeWidth={2.4} />} helpId="custom-mcp-server">
       <NoticePanel title="HTTP / SSE setup">
         Choose HTTP / SSE for a remote MCP server that already exposes an HTTP or SSE endpoint. Paste the server URL below, add optional auth headers as a JSON object, and Code UX injects the updated config on the next CLI run.
       </NoticePanel>

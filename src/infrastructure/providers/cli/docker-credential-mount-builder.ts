@@ -12,7 +12,49 @@ import {
   OPENCODE_CREDENTIALS_MOUNT,
   ANTIGRAVITY_CREDENTIALS_MOUNT,
   GITCONFIG_CREDENTIALS_MOUNT,
+  CODEX_HOST_CONFIG_MOUNT,
+  GEMINI_HOST_CONFIG_MOUNT,
+  CLAUDE_CODE_HOST_CONFIG_MOUNT,
+  QWEN_CODE_HOST_CONFIG_MOUNT,
+  OPENCODE_HOST_CONFIG_MOUNT,
+  ANTIGRAVITY_HOST_CONFIG_MOUNT,
 } from "./docker-bootstrap-builder.js";
+import type { CliProviderId } from "./provider-command-specs.js";
+import type { ProviderConfigMode } from "../../../contracts/app-types.js";
+import { DEFAULT_PROVIDER_CONFIG_FILE_PATHS } from "../../../repositories/settings-defaults.js";
+
+const PROVIDER_CONFIG_MOUNTS: Partial<Record<CliProviderId, { source: string; destination: string; label: string }>> = {
+  gemini: {
+    source: DEFAULT_PROVIDER_CONFIG_FILE_PATHS.gemini,
+    destination: GEMINI_HOST_CONFIG_MOUNT,
+    label: "Gemini config",
+  },
+  codex: {
+    source: DEFAULT_PROVIDER_CONFIG_FILE_PATHS.codex,
+    destination: CODEX_HOST_CONFIG_MOUNT,
+    label: "Codex config",
+  },
+  "claude-code": {
+    source: DEFAULT_PROVIDER_CONFIG_FILE_PATHS["claude-code"],
+    destination: CLAUDE_CODE_HOST_CONFIG_MOUNT,
+    label: "Claude Code config",
+  },
+  "qwen-code": {
+    source: DEFAULT_PROVIDER_CONFIG_FILE_PATHS["qwen-code"],
+    destination: QWEN_CODE_HOST_CONFIG_MOUNT,
+    label: "Qwen Code config",
+  },
+  opencode: {
+    source: DEFAULT_PROVIDER_CONFIG_FILE_PATHS.opencode,
+    destination: OPENCODE_HOST_CONFIG_MOUNT,
+    label: "OpenCode config",
+  },
+  antigravity: {
+    source: DEFAULT_PROVIDER_CONFIG_FILE_PATHS.antigravity,
+    destination: ANTIGRAVITY_HOST_CONFIG_MOUNT,
+    label: "Antigravity config",
+  },
+};
 
 export class DockerCredentialMountBuilder {
   async build(
@@ -20,8 +62,13 @@ export class DockerCredentialMountBuilder {
     repoPath: string,
     onActivity: (desc: string) => void,
     providerAuthOverride?: {
-      provider: "gemini" | "codex" | "claude-code" | "qwen-code" | "opencode" | "antigravity";
+      provider: CliProviderId;
       enabled: boolean;
+      path: string;
+    },
+    providerConfigOverride?: {
+      provider: CliProviderId;
+      mode: ProviderConfigMode;
       path: string;
     },
   ): Promise<ContainerMount[]> {
@@ -45,6 +92,31 @@ export class DockerCredentialMountBuilder {
         onActivity(`Resolved credential mount for ${label}: ${p} -> ${dest}`);
       } catch {
         onActivity(`Credential mount for ${label} is enabled but source path does not exist: ${p}`);
+      }
+    };
+
+    const addFileMount = async (mode: ProviderConfigMode, source: string, dest: string, label: string) => {
+      if (mode === "none") {
+        onActivity(`Provider config mount for ${label} is disabled.`);
+        return;
+      }
+
+      if (!source || source.trim().length === 0) {
+        onActivity(`Provider config mount for ${label} is enabled but source path is empty.`);
+        return;
+      }
+
+      const p = resolveConfiguredPath(repoPath, source);
+      try {
+        const stat = await fs.stat(p);
+        if (!stat.isFile()) {
+          onActivity(`Provider config mount for ${label} is enabled but source path is not a file: ${p}`);
+          return;
+        }
+        mounts.push({ source: p, destination: dest, readonly: true });
+        onActivity(`Resolved provider config mount for ${label}: ${p} -> ${dest}`);
+      } catch {
+        onActivity(`Provider config mount for ${label} is enabled but source path does not exist: ${p}`);
       }
     };
 
@@ -118,6 +190,18 @@ export class DockerCredentialMountBuilder {
       ANTIGRAVITY_CREDENTIALS_MOUNT,
       "Antigravity",
     );
+
+    if (providerConfigOverride) {
+      const configMount = PROVIDER_CONFIG_MOUNTS[providerConfigOverride.provider];
+      if (configMount) {
+        const source = providerConfigOverride.mode === "copyHost"
+          ? configMount.source
+          : providerConfigOverride.path;
+        await addFileMount(providerConfigOverride.mode, source, configMount.destination, configMount.label);
+      } else if (providerConfigOverride.mode !== "none") {
+        onActivity(`Provider config mount for ${providerConfigOverride.provider} is unsupported.`);
+      }
+    }
 
     if (mounts.length === 0) {
       onActivity("No container credential mounts were enabled or resolved.");

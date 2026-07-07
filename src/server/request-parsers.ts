@@ -617,7 +617,16 @@ export function parseUpdateConversationThreadInput(body: unknown): UpdateConvers
     throw new Error("Invalid input: body must be an object");
   }
   const typedBody = body as Record<string, unknown>;
+  const title = typedBody.title === undefined
+    ? undefined
+    : typeof typedBody.title === "string"
+      ? typedBody.title.trim()
+      : "";
+  if (typedBody.title !== undefined && !title) {
+    throw new Error("Thread title must be a non-empty string.");
+  }
   return {
+    title,
     connectionId: typeof typedBody.connectionId === "string" ? typedBody.connectionId.trim() : (typedBody.connectionId === null ? null : undefined),
     runtimeState: typedBody.runtimeState as UpdateConversationThreadInput["runtimeState"],
   };

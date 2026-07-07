@@ -1,0 +1,179 @@
+# Troubleshooting
+
+Solutions to the most common issues. If your problem is not covered here, see the [Operations runbook](/docs/architecture-system-overview) or open an issue.
+
+## Code UX won't start
+
+### `JULES_API_KEY is required` (or similar)
+
+You launched without a Jules key and without enabling a virtual worker provider.
+
+**Fix:** set `JULES_API_KEY` in `.env`, pass `--api-key`, or add it to `~/.code-ux/settings.json`. Alternatively, set `workers.virtualWorkerProvider` in settings to a configured CLI provider — Code UX can run entirely on virtual workers.
+
+### Port 4444 already in use
+
+Another process holds the dashboard port.
+
+**Fix:** set `DASHBOARD_PORT` to a free port, or kill the offender. On Linux: `lsof -i :4444`.
+
+### Permission denied on Git operations
+
+The user running Code UX cannot write to the repo.
+
+**Fix:** Ensure the process has write permissions to the project's `repository path` and to the `.code-ux/` directory therein.
+
+## Dashboard issues
+
+### Dashboard loads but data is empty
+
+You haven't created a project yet, **or** the active project pointer is stale.
+
+**Fix:** open **Projects** page, create or select a project. Refresh.
+
+### Real-time updates stopped
+
+The WebSocket disconnected and reconnection failed.
+
+**Fix:** refresh the page. If it persists, check browser console for `WebSocket` errors; verify the dashboard process is alive and the port is reachable.
+
+### "Failed to fetch" on every API call
+
+The dashboard process died or the browser is on a different host than the server (e.g. `0.0.0.0` binding but firewall blocks the inbound).
+
+**Fix:** verify the server is running; if accessing remotely, ensure your firewall allows the port and you are using the correct hostname.
+
+## MCP integration
+
+### Client never sees `code-ux` tools
+
+The MCP server failed to start. Common causes:
+
+- The `command` in client config is wrong (typo in `npx @codeuxai/codeux`).
+- The `JULES_API_KEY` is missing in the client-supplied env block, and the server exited.
+- The npx command needed network access at first launch and the network was unavailable.
+
+**Fix:** run the same command manually in a terminal — `npx -y @codeuxai/codeux --help` — and observe the output. Then check your MCP client's error log.
+
+### `listen` returns no message and the call hangs
+
+This is normal. `listen` is a long-poll: it blocks until a message is available or `timeout_seconds` elapses (default = `watchLoopOutputIntervalSeconds`, i.e. ~5 minutes).
+
+**Fix:** call `listen` in a loop. The call returns immediately when a dashboard user posts to the connection.
+
+### HTTP gateway returns 401
+
+You enabled `--mcp-https-auth-token` but the client did not send `Authorization: Bearer <token>`, or the token mismatches.
+
+**Fix:** include the header. Tokens are case-sensitive.
+
+### HTTP gateway returns 400 "must be initialize"
+
+You called the endpoint without an `mcp-session-id` header, but with a non-`initialize` JSON-RPC method.
+
+**Fix:** the *first* call on a new session must be `{"method": "initialize"}`. The response carries the session ID via `mcp-session-id` header — include it on subsequent calls.
+
+## Sprint orchestration
+
+### `CRITICAL: Emergency stop active`
+
+The orchestrator hit `maxFailures` consecutive task-start failures.
+
+**Fix:** read the latest few cycle logs. Common causes:
+
+- `JULES_API_KEY` invalid or expired.
+- A virtual worker CLI not installed / not authenticated.
+- The repo has uncommitted state preventing branch creation.
+
+Re-run the sprint after fixing — the counter resets on each run.
+
+### Tasks stay BLOCKED forever
+
+A dependency is `COMPLETED` but `is_merged: false`. Code UX gates on merge, not just completion.
+
+**Fix:** open the dependency's PR; merge it. Then set `merged: true` in the subtask file (or use auto-merge so this is automated).
+
+### Task dispatch fails during branch refresh
+
+CLI-backed tasks refresh the remote branch before preparing the worker branch. That refresh is mandatory so local branch state cannot drift from the remote.
+
+**Fix:** verify `git fetch origin <branch>` works in the project repository and that the dashboard GitHub/GitLab token or local SSH setup can read the remote. Slow GitHub/GitLab smart HTTP connections may exceed short local timeouts; Code UX waits 120 seconds by default, and operators can raise it with `CODE_UX_GIT_FETCH_TIMEOUT_MS`.
+
+### CI autofix loops
+
+A `VirtualWorkerService` doing `ci_fix` tasks keeps trying and failing.
+
+**Fix:** the underlying CI failure is structural. Triage it operationally: inspect the failing PR's CI log, reproduce the issue locally with repo scripts, fix it manually, push, and mark the attention item resolved. Escalate only after you have local evidence. Optionally lower `julesCiAutofixMaxRetries` to fail faster next time.
+
+### Sprint paused at finalisation
+
+`mainBranchAutoMergeMode` is `OFF`, so the engine is waiting for you to merge the feature branch into `main` manually.
+
+**Fix:** run the printed `gh pr merge` command. Code UX detects the merge on the next cycle and transitions the sprint to `completed`.
+
+## Provider errors
+
+### "Provider quota exceeded" / `QUOTA` status
+
+Your API key hit a rate or token quota.
+
+**Fix:** wait, raise the quota, or route the affected invocation to a different provider via Settings → Routing. Tasks in `QUOTA` are retried automatically each cycle.
+
+### "Provider auth not detected" badge in settings
+
+The CLI is installed but not logged in.
+
+**Fix:** run the CLI's auth command directly (e.g. `gemini auth login`, `codex login`, `claude login`). Refresh Settings.
+
+### Preview/file-browser failures or Docker mode fails to start a container
+
+The Docker daemon is unreachable, or the worker image cannot be pulled.
+
+**Fix:** verify `docker ps` works. Pre-pull the image: `docker pull node:24-bookworm`. For preview/file-browser issues specifically, triage routes through preview host middleware (`src/server/preview-host-middleware.ts`) and cleanup/rebuild/restart steps. Ensure any commands used are safe and avoid exposing local DB contents, tokens, hostnames, or private paths.
+
+For packaged Windows builds, Docker errors that show `C:\...` as a container `--workdir`, `HOME`, or mount target indicate an outdated build. Current preview containers mount Windows/macOS/Linux host runtime storage at Linux container paths under `/code-ux-preview-runtime`.
+
+For packaged Windows builds, `spawn ENAMETOOLONG` during Docker provider launch indicates an outdated build or a launch path still passing a large prompt through the host command line. Current Docker provider runs mount provider arguments from a generated file so large prompts do not become `docker run` arguments.
+
+Chromium `tile_manager.cc` warnings about tile memory limits in the packaged Windows app indicate renderer memory pressure. Current Windows desktop builds use an opaque shell and GPU memory hints to mitigate this. All animated backgrounds remain enabled. If these warnings persist on older builds, try switching to a lighter animation style or setting background mode to Static in Settings > Appearance.
+
+## Memory & embeddings
+
+### Search returns no results
+
+The active embedding model has no memories embedded with it (you switched models without re-embedding).
+
+**Fix:** open **Memory → Embedding models** and click **Re-embed all**.
+
+### Embedding model download stuck
+
+The download failed mid-stream.
+
+**Fix:** click **Cancel download**, then **Download** again. Check disk space.
+
+## Where to find logs
+
+- **Dashboard process stdout/stderr** — the terminal you launched `codeux` from. Logs are JSON-structured.
+- **MCP client logs** — depends on client. Gemini CLI: `~/.gemini/logs/`. Claude Desktop: app log directory per OS.
+- **Per-task activity** — visible in the dashboard task detail panel; also at `/api/live-activities` and `/api/execution/invocations/:id/messages`.
+- **Cycle telemetry** — `/api/projects/:projectId/execution/invocations` (typed by `type`).
+
+## Recovery & reset
+
+If state is corrupted or unrecoverable:
+
+- **Soft reset (one project)** — Delete the project; re-create.
+- **Hard reset (all data)** — Settings → System → **Reset database**. *Irreversible.*
+- **Manual** — Stop Code UX. Delete `~/.code-ux/` and the project's `<repo>/.code-ux/`. Restart.
+
+## Filing an issue
+
+Include:
+
+- Code UX version (`codeux --help` shows the version banner).
+- Node version (`node --version`).
+- OS / shell.
+- The exact MCP client and version.
+- Relevant logs (last ~50 lines from the failing cycle, redacted of secrets).
+- Steps to reproduce.
+
+Issue tracker: https://github.com/codeux-ai/codeux/issues

@@ -9,6 +9,7 @@ import type {
 } from "../../../types.js";
 import { sanitizeSystemProviderConfig } from "../provider-runtime-preview.js";
 import {
+  DEFAULT_PROVIDER_CONFIG_FILE_PATHS,
   DEFAULT_PROVIDER_WEIGHT,
 } from "../../../../../src/repositories/settings-defaults.js";
 
@@ -20,6 +21,7 @@ export const providerLabels: Record<ProviderId, string> = {
   "qwen-code": "Qwen Code",
   opencode: "OpenCode",
   antigravity: "Antigravity",
+  "mockup-cli": "Mockup CLI",
 };
 
 export const getProviderTypeLabel = (providerId: ProviderId): string => providerLabels[providerId];
@@ -43,13 +45,23 @@ export const getProviderDefaultAuthPath = (providerId: ProviderId): string => {
   }
 };
 
+const getProviderDefaultConfigMode = (providerId: ProviderId): SystemProviderCredentialSettings["providerConfigMode"] => (
+  providerId === "jules" || providerId === "mockup-cli" ? "none" : "copyHost"
+);
+
+const getProviderDefaultConfigPath = (providerId: ProviderId): string => (
+  providerId === "jules" || providerId === "mockup-cli"
+    ? ""
+    : DEFAULT_PROVIDER_CONFIG_FILE_PATHS[providerId]
+);
+
 export const createProjectProviderDraft = (
   providerId: ProviderId,
   name: string,
 ): ProjectProviderSettings => ({
   provider: providerId,
   name,
-  enabled: providerId !== "claude-code" && providerId !== "qwen-code" && providerId !== "opencode",
+  enabled: providerId !== "claude-code" && providerId !== "qwen-code" && providerId !== "opencode" && providerId !== "mockup-cli",
   model: providerId === "codex"
     ? "gpt-5.5"
     : providerId === "qwen-code"
@@ -73,6 +85,8 @@ export const createSystemProviderDraft = (
     authType: "apiKey",
     mountAuth: false,
     authPath: getProviderDefaultAuthPath(providerId),
+    providerConfigMode: getProviderDefaultConfigMode(providerId),
+    providerConfigPath: getProviderDefaultConfigPath(providerId),
   };
 
   if (providerId === "qwen-code") {
@@ -163,6 +177,9 @@ export const getHintApiKey = (
   if (providerId === "antigravity") {
     return hints?.resolved.antigravityApiKey || "";
   }
+  if (providerId === "mockup-cli") {
+    return "";
+  }
   return hints?.resolved.openCodeApiKey || "";
 };
 
@@ -188,6 +205,9 @@ export const getLegacyIntegrationApiKey = (
   }
   if (providerId === "antigravity") {
     return typeof integrations.antigravityApiKey === "string" ? integrations.antigravityApiKey : "";
+  }
+  if (providerId === "mockup-cli") {
+    return "";
   }
   return typeof integrations.openCodeApiKey === "string" ? integrations.openCodeApiKey : "";
 };

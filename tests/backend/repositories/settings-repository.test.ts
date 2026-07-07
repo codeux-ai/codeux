@@ -4,6 +4,7 @@ import * as os from "os";
 import * as path from "path";
 import { DatabaseSync } from "node:sqlite";
 import { SettingsRepository } from "../../../src/repositories/settings-repository.js";
+import { CODEX_MODELS, DEFAULT_VIRTUAL_WORKER_MODELS } from "../../../src/repositories/settings-defaults.js";
 
 const tempDirs: string[] = [];
 const openRepos: SettingsRepository[] = [];
@@ -47,6 +48,13 @@ describe("SettingsRepository", () => {
     expect(system.defaults.automationLevel).toBe("SEMI_AUTO");
     expect(system.defaults.aiProvider.provider).toBe("jules");
     expect(system.defaults.aiProvider.providers.codex.model).toBe("gpt-5.5");
+    expect(DEFAULT_VIRTUAL_WORKER_MODELS.codex).toBe("gpt-5.5");
+    expect(CODEX_MODELS.slice(0, 4)).toEqual([
+      "gpt-5.5",
+      "gpt-5.6-sol",
+      "gpt-5.6-terra",
+      "gpt-5.6-luna",
+    ]);
     expect(system.defaults.git.defaultBranch).toBe("main");
     expect(system.defaults.cliWorkflow.containerMountGithubAuth).toBe(false);
     expect(system.defaults.cliWorkflow.containerMountGeminiAuth).toBe(false);
@@ -64,6 +72,19 @@ describe("SettingsRepository", () => {
     expect(system.defaults.agents.qualityAssurance.sprintCompletion.agentPresetIds).toEqual([]);
     expect(system.defaults.agents.qualityAssurance.completedTaskWithoutPr.enabled).toBe(true);
     expect(system.defaults.agents.qualityAssurance.completedTaskWithoutPr.agentPresetIds).toEqual([]);
+    expect(system.defaults.agents.selfReflection.planning.enabled).toBe(false);
+    expect(system.defaults.agents.selfReflection.planning.maxImprovementAttempts).toBe(1);
+    expect(system.defaults.agents.selfReflection.planning.criteria.map((criterion) => criterion.id)).toEqual([
+      "correctness",
+      "completeness",
+      "decomposition_quality",
+      "risk_handling",
+      "testability",
+      "maintainability",
+      "security",
+      "scope_control",
+    ]);
+    expect(system.defaults.agents.selfReflection.qualityAssurance.enabled).toBe(false);
     expect(system.defaults.agents.instructionTemplates.planningMissing).toContain("Sprint Planning Missing");
     expect(system.mcpTools.length).toBeGreaterThan(0);
 
@@ -191,6 +212,7 @@ describe("SettingsRepository", () => {
               agentPresetId: null,
             },
           },
+          selfReflection: repo.getSystemSettings().defaults.agents.selfReflection,
         },
         skills: [
           { name: "worker", enabled: true, isInternal: true },
@@ -313,6 +335,43 @@ describe("SettingsRepository", () => {
               enabled: false,
             },
           },
+          selfReflection: {
+            planning: {
+              enabled: true,
+              maxImprovementAttempts: 99,
+              criteria: [
+                {
+                  id: " correctness ",
+                  label: " Correctness ",
+                  prompt: " Check correctness. ",
+                  threshold: 2,
+                },
+                {
+                  id: "correctness",
+                  label: "Duplicate",
+                  prompt: "Duplicate should be ignored.",
+                  threshold: 0.1,
+                },
+                {
+                  id: "",
+                  label: "Invalid",
+                  prompt: "Missing id.",
+                  threshold: 0.5,
+                },
+                {
+                  id: "scope_control",
+                  label: "Scope control",
+                  prompt: "Stay inside scope.",
+                  threshold: -1,
+                },
+              ],
+            },
+            qualityAssurance: {
+              enabled: "yes",
+              maxImprovementAttempts: "many",
+              criteria: "invalid",
+            },
+          },
         },
       },
     }), now);
@@ -340,6 +399,24 @@ describe("SettingsRepository", () => {
     expect(effectiveProject.settings.git.featureBranchPrefix).toBe("work/");
     expect(effectiveProject.settings.agents.qualityAssurance.taskCompletion.enabled).toBe(false);
     expect(effectiveProject.settings.agents.qualityAssurance.maxTaskReviewRuns).toBe(3);
+    expect(effectiveProject.settings.agents.selfReflection.planning.enabled).toBe(true);
+    expect(effectiveProject.settings.agents.selfReflection.planning.maxImprovementAttempts).toBe(10);
+    expect(effectiveProject.settings.agents.selfReflection.planning.criteria).toEqual([
+      {
+        id: "correctness",
+        label: "Correctness",
+        prompt: "Check correctness.",
+        threshold: 1,
+      },
+      {
+        id: "scope_control",
+        label: "Scope control",
+        prompt: "Stay inside scope.",
+        threshold: 0,
+      },
+    ]);
+    expect(effectiveProject.settings.agents.selfReflection.qualityAssurance.enabled).toBe(false);
+    expect(effectiveProject.settings.agents.selfReflection.qualityAssurance.criteria.length).toBeGreaterThan(1);
     expect(effectiveProject.sources["git.featureBranchPrefix"]).toBe("project");
 
     const effectiveSprint = repo.resolveSprintDashboardSettings("project-partial", "sprint-partial");

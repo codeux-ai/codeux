@@ -11,7 +11,7 @@ import {
   fetchKnowledgeDocuments,
   type KnowledgeDocument,
 } from "../../lib/knowledge-api.js";
-import type { AgentPreset, CustomMcpServer } from "../../types.js";
+import type { AgentPreset, CustomMcpServer, SkillStorageRecord } from "../../types.js";
 import type { AgentProviderOption } from "./AgentPresetEditorPanel.js";
 import type { AgentAvatarExpression } from "../../lib/agent-avatar.js";
 import { AgentAvatarStage } from "./AgentAvatarStage.js";
@@ -182,6 +182,7 @@ export const AgentPresetDetailPanel: FunctionComponent<{
   routeTags: string[];
   providerOptions?: AgentProviderOption[];
   availableMcpServers?: CustomMcpServer[];
+  availableSkillStorages?: SkillStorageRecord[];
   usageSummary?: AgentUsageSummary | null;
   usageLoading?: boolean;
   onEdit: () => void;
@@ -194,6 +195,7 @@ export const AgentPresetDetailPanel: FunctionComponent<{
   routeTags,
   providerOptions = [],
   availableMcpServers = [],
+  availableSkillStorages = [],
   usageSummary,
   usageLoading = false,
   onEdit,
@@ -214,6 +216,10 @@ export const AgentPresetDetailPanel: FunctionComponent<{
   const mcpTags = resolveAgentMcpTags(preset.mcpAccess, availableMcpServers);
   const visibleMcpTags = mcpTags.slice(0, 6);
   const hiddenMcpTagCount = mcpTags.length - visibleMcpTags.length;
+  const attachedSkillStorages = (preset.persistentSkillStorageIds ?? [])
+    .map((storageId) => availableSkillStorages.find((storage) => storage.id === storageId) ?? null)
+    .filter((storage): storage is SkillStorageRecord => Boolean(storage));
+  const persistentSkillsActive = Boolean(preset.persistentSkillStorage?.enabled && attachedSkillStorages.length > 0);
 
   useLayoutEffect(() => {
     if (!panelRef.current) return;
@@ -396,6 +402,36 @@ export const AgentPresetDetailPanel: FunctionComponent<{
 
         {/* Knowledge subscriptions */}
         <AgentKnowledgeSummary preset={preset} />
+
+        {/* Persistent skills */}
+        <div className="flex flex-col gap-3">
+          <SectionHeader icon={Library} title="Persistent Skills" />
+          <div className="rounded-2xl border border-black/[0.05] bg-white/40 p-4 backdrop-blur-md dark:border-white/[0.05] dark:bg-white/[0.02]">
+            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+              <div className="text-xs leading-relaxed text-slate-500 dark:text-slate-400">
+                Persistent skill retrieval is separate from memory and knowledge documents.
+              </div>
+              <span className={`w-fit rounded-full border px-3 py-1 text-[10px] font-bold uppercase tracking-[0.14em] ${persistentSkillsActive ? "border-signal-500/25 bg-signal-500/[0.08] text-signal-700 dark:text-signal-200" : "border-black/[0.06] bg-black/[0.03] text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-400"}`}>
+                {persistentSkillsActive ? "Enabled" : "Default off"}
+              </span>
+            </div>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {attachedSkillStorages.length === 0 ? (
+                <span className="inline-flex rounded-full border border-black/[0.06] bg-white/50 px-2.5 py-1 text-[11px] font-bold text-slate-400 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-500">
+                  No storage attached
+                </span>
+              ) : attachedSkillStorages.map((storage) => (
+                <span
+                  key={storage.id}
+                  className="inline-flex items-center gap-1.5 rounded-full border border-signal-500/20 bg-signal-500/[0.08] px-2.5 py-1 text-[11px] font-bold text-signal-700 dark:text-signal-200"
+                >
+                  <Library className="h-3 w-3" strokeWidth={2.4} />
+                  {storage.name}
+                </span>
+              ))}
+            </div>
+          </div>
+        </div>
 
         {/* System Instructions */}
         <div className="flex flex-col gap-2">

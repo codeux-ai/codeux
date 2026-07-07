@@ -80,6 +80,9 @@ const inferProviderTypeFromConfigId = (providerConfigId: ProviderConfigId): Prov
   if (providerConfigId === "antigravity" || providerConfigId.startsWith("antigravity-")) {
     return "antigravity";
   }
+  if (providerConfigId === "mockup-cli" || providerConfigId.startsWith("mockup-cli-")) {
+    return "mockup-cli";
+  }
   return null;
 };
 

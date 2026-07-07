@@ -25,6 +25,7 @@ import {
   parseAntigravityTranscript,
   type AntigravityUsageTotals,
 } from "./provider-logs/antigravity-log-parser.js";
+import type { CliProviderId } from "./provider-command-specs.js";
 
 // Re-export the qwen log helpers so existing importers (provider-runner, tests)
 // keep their import paths. The implementations now live in provider-logs/.
@@ -114,6 +115,17 @@ function parseJsonObject(value: string): Record<string, unknown> | null {
   } catch {
     return null;
   }
+}
+
+function parseLastJsonObjectLine(value: string): Record<string, unknown> | null {
+  const lines = value.split(/\r?\n/).map((line) => line.trim()).filter(Boolean).reverse();
+  for (const line of lines) {
+    const parsed = parseJsonObject(line);
+    if (parsed) {
+      return parsed;
+    }
+  }
+  return null;
 }
 
 interface NormalizedUsageCounts {
@@ -238,7 +250,7 @@ function tokenizeWithCodexModel(model: string | null | undefined, text: string):
   }
 }
 
-function estimateTextTokens(provider: "gemini" | "codex" | "claude-code" | "qwen-code" | "opencode" | "antigravity", model: string | null | undefined, text: string): number {
+function estimateTextTokens(provider: CliProviderId, model: string | null | undefined, text: string): number {
   if (!text.trim()) {
     return 0;
   }
@@ -254,7 +266,7 @@ function estimateTextTokens(provider: "gemini" | "codex" | "claude-code" | "qwen
   return Math.ceil(text.length / 4);
 }
 
-function estimateTelemetry(provider: "gemini" | "codex" | "claude-code" | "qwen-code" | "opencode" | "antigravity", model: string | null | undefined, inputText: string, outputText: string): ProviderUsageTelemetry {
+function estimateTelemetry(provider: CliProviderId, model: string | null | undefined, inputText: string, outputText: string): ProviderUsageTelemetry {
   const inputTokens = estimateTextTokens(provider, model, inputText);
   const outputTokens = estimateTextTokens(provider, model, outputText);
   return {
@@ -549,7 +561,7 @@ function claudeJsonlToTelemetry(
 }
 
 export async function collectProviderUsageTelemetry(args: {
-  provider: "gemini" | "codex" | "claude-code" | "qwen-code" | "opencode" | "antigravity";
+  provider: CliProviderId;
   model: string;
   prompt: string;
   cwd: string;
@@ -581,6 +593,26 @@ export async function collectProviderUsageTelemetry(args: {
   opencodeBaselineUsage?: Record<string, unknown> | null;
 }): Promise<ProviderUsageTelemetry> {
   const fallbackOutput = [args.capturedText || "", args.stdout || "", args.stderr || ""].filter(Boolean).join("\n").trim();
+
+  if (args.provider === "mockup-cli") {
+    const parsed = parseLastJsonObjectLine(args.stdout) || parseLastJsonObjectLine(args.capturedText || "");
+    const transcriptText = typeof parsed?.response === "string" ? parsed.response : fallbackOutput;
+    const nativeSessionId = typeof parsed?.nativeSessionId === "string" ? parsed.nativeSessionId : args.nativeSessionId || null;
+    const conversation = withLeadingUserTurn(
+      transcriptText
+        ? [{ kind: "assistant", text: transcriptText }]
+        : [],
+      args.prompt,
+    );
+    return {
+      ...emptyTelemetry(),
+      usageSource: "unsupported",
+      rawUsageJson: parsed ? { provider: "mockup-cli", mock: true } : { provider: "mockup-cli", mock: true },
+      transcriptText,
+      nativeSessionId,
+      conversation,
+    };
+  }
 
   if (args.provider === "gemini") {
     const parsed = parseJsonObject(args.stdout);

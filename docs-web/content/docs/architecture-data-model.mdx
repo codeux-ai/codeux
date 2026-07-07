@@ -17,6 +17,10 @@ Project
 │   │   └── ExecutionInvocation
 │   └── PreviewSession
 ├── AgentPreset
+│   └── SkillStorageBinding
+├── SkillStorage
+│   ├── Skill
+│   └── SkillEmbedding
 ├── Memory
 │   ├── short-term (sprint-scoped)
 │   └── long-term (project-scoped)
@@ -142,7 +146,22 @@ A granular event in a sprint run (cycle start, task transition, gate decision, M
 | `avatarConfig` | json | Procedural avatar seed. |
 | `memoryTemplateOverrideEnabled` | bool | – |
 | `memoryTemplateMarkdown` | text | If override is on. |
+| `persistentSkillStorageIds` | string[] | Storage IDs attached through `agent_skill_storage_bindings`. |
+| `persistentSkillStorage.enabled` | bool | Default-off runtime opt-in for persistent skill retrieval. |
 | `createdAt`, `updatedAt` | datetime | – |
+
+## Persistent Skill Storage
+
+Persistent skills are stored separately from project workspaces, memories, knowledge documents, and model attachments.
+
+| Table | Purpose |
+| --- | --- |
+| `skill_storages` | Named, project-owned storage containers that multiple agents can attach to. |
+| `skills` | Individual reusable skill records under a storage container, with markdown body, tags, applies-to paths, version, source identity, and content hash. |
+| `skill_embeddings` | Embedding model, dimension, chunk index, content hash, and optional vector blob for skill search. |
+| `agent_skill_storage_bindings` | Normalized agent-to-storage attachments keyed by `(agent_preset_id, storage_id)`. |
+
+Skill markdown is imported from YAML-like frontmatter plus a body. Frontmatter maps to metadata; the body remains the authoritative agent instruction. Backend retrieval can search all project storages, one storage, or the storages attached to an agent preset. Enabled attached agents receive provider prompt guidance, retrieval-only `search_skills` MCP access where eligible, and writable persistent-skill mounts outside the project workspace.
 
 ## Memory
 

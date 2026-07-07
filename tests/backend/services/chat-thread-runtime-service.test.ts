@@ -1,4 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import * as fs from "fs/promises";
+import * as os from "os";
+import * as path from "path";
 import { ChatThreadRuntimeService } from "../../../src/services/chat-thread-runtime-service.js";
 
 describe("ChatThreadRuntimeService", () => {
@@ -65,6 +68,36 @@ describe("ChatThreadRuntimeService", () => {
     deps.connectionChatRepository.getThread.mockReturnValue(undefined); // Simulate missing thread
 
     await expect(service.postMessage("p1", { bodyMarkdown: "hello" })).rejects.toThrow("Thread not found");
+  });
+
+  it("persists a new chat thread title to the project session-title file", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-chat-title-"));
+    try {
+      deps.connectionChatRepository.postDashboardMessage.mockReturnValue({ id: "msg-title", threadId: "t1", bodyMarkdown: "Please fix the dashboard route title behavior" });
+      deps.connectionChatRepository.getThread.mockReturnValue({
+        id: "t1",
+        projectId: "p1",
+        connectionId: null,
+        title: "Please fix the dashboard route title behavior",
+        runtimeState: {},
+      });
+      deps.projectManagementRepository.getProject.mockReturnValue({ id: "p1", name: "proj", baseDir: dir });
+      deps.taskService.resolveInvocationProvider.mockReturnValue({
+        provider: "codex",
+        providers: { codex: { model: "gpt-5.3-codex", apiKey: "codex-key" } },
+      });
+      deps.connectionChatRepository.listMessages.mockReturnValue([
+        { authorType: "dashboard_user", bodyMarkdown: "Please fix the dashboard route title behavior" },
+      ]);
+      deps.chatManagementActionService.processManagementAction.mockResolvedValue({ replyMarkdown: "reply", action: null, approvalRequired: false });
+
+      await service.postMessage("p1", { bodyMarkdown: "Please fix the dashboard route title behavior" });
+
+      await expect(fs.readFile(path.join(dir, ".code-ux", "conversations", "t1", "session-title.md"), "utf8"))
+        .resolves.toBe("Please fix the dashboard route title behavior\n");
+    } finally {
+      await fs.rm(dir, { recursive: true, force: true });
+    }
   });
 
   it("runs virtual provider and replays history on provider switch using chatManagementActionService", async () => {

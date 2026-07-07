@@ -98,7 +98,9 @@ export const SprintJiraImportModal = ({
   const [sortDirection, setSortDirection] = useState<JiraSortDirection>("desc");
   const [limit, setLimit] = useState(40);
   const [jql, setJql] = useState("");
+  const [hideInWork, setHideInWork] = useState(true);
   const [advancedFiltersExpanded, setAdvancedFiltersExpanded] = useState(false);
+  const [fetchedResults, setFetchedResults] = useState<JiraIssueSearchResult[]>([]);
   const [results, setResults] = useState<JiraIssueSearchResult[]>([]);
   const [hasSearched, setHasSearched] = useState(false);
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
@@ -108,6 +110,7 @@ export const SprintJiraImportModal = ({
   const [importing, setImporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const hideInWorkRef = useRef(true);
 
   const selectedIssues = useMemo(() => (
     results.filter((issue) => selectedKeys.has(issue.key))
@@ -145,6 +148,14 @@ export const SprintJiraImportModal = ({
   const compactState = buildIssueImportCompactState({
     filters: [
       {
+        id: "hideInWork",
+        label: "Visibility",
+        value: hideInWork,
+        defaultValue: false,
+        valueLabel: hideInWork ? "Hide in Work" : null,
+        priority: 1,
+      },
+      {
         id: "status",
         label: "Status",
         value: status,
@@ -154,17 +165,17 @@ export const SprintJiraImportModal = ({
         alwaysShow: true,
         priority: 0,
       },
-      { id: "project", label: "Project", value: projectKey, priority: 1 },
-      { id: "issue", label: "Issue", value: issueKey, priority: 2 },
-      { id: "search", label: "Text", value: search, priority: 3 },
-      { id: "assignee", label: "Assignee", value: assigneeText, priority: 4 },
-      { id: "reporter", label: "Reporter", value: reporterText, priority: 5 },
-      { id: "type", label: "Type", value: issueType, priority: 6 },
-      { id: "priority", label: "Priority", value: priority, priority: 7 },
-      { id: "labels", label: "Labels", value: labels, priority: 8 },
-      { id: "updatedAfter", label: "Updated after", value: updatedAfter, priority: 9 },
-      { id: "updatedBefore", label: "Updated before", value: updatedBefore, priority: 10 },
-      { id: "jql", label: "JQL", value: jql, priority: 11 },
+      { id: "project", label: "Project", value: projectKey, priority: 2 },
+      { id: "issue", label: "Issue", value: issueKey, priority: 3 },
+      { id: "search", label: "Text", value: search, priority: 4 },
+      { id: "assignee", label: "Assignee", value: assigneeText, priority: 5 },
+      { id: "reporter", label: "Reporter", value: reporterText, priority: 6 },
+      { id: "type", label: "Type", value: issueType, priority: 7 },
+      { id: "priority", label: "Priority", value: priority, priority: 8 },
+      { id: "labels", label: "Labels", value: labels, priority: 9 },
+      { id: "updatedAfter", label: "Updated after", value: updatedAfter, priority: 10 },
+      { id: "updatedBefore", label: "Updated before", value: updatedBefore, priority: 11 },
+      { id: "jql", label: "JQL", value: jql, priority: 12 },
     ],
     selectedCount: selectedIssues.length,
     visibleCount: results.length,
@@ -225,25 +236,17 @@ export const SprintJiraImportModal = ({
         },
         controller.signal,
       );
-      setResults(data);
-      setSelectedKeys((current) => new Set([...current].filter((key) => data.some((issue) => issue.key === key))));
-      setConversationDisabledKeys((current) => new Set([...current].filter((key) => data.some((issue) => issue.key === key))));
-      setImportModes((current) => {
-        const visibleKeys = new Set(data.map((issue) => issue.key));
-        const next: Record<string, ImportedTaskMode> = {};
-        for (const [key, mode] of Object.entries(current)) {
-          if (visibleKeys.has(key)) {
-            next[key] = mode;
-          }
-        }
-        return next;
-      });
+      const visibleData = filterVisibleJiraIssues(data, hideInWorkRef.current);
+      setFetchedResults(data);
+      setResults(visibleData);
+      pruneIssueStateToVisibleResults(visibleData);
     } catch (err) {
       if (err instanceof DOMException && err.name === "AbortError") {
         return;
       }
       const copy = getIssueImportErrorCopy(err, "Jira search failed. Check the filters and try again.");
       setError(`Jira search error: ${copy.message}`);
+      setFetchedResults([]);
       setResults([]);
     } finally {
       if (abortRef.current === controller) {
@@ -348,6 +351,29 @@ export const SprintJiraImportModal = ({
     setSelectedKeys(new Set());
     setConversationDisabledKeys(new Set());
     setImportModes({});
+  };
+
+  const pruneIssueStateToVisibleResults = (visibleIssues: ReadonlyArray<JiraIssueSearchResult>): void => {
+    const visibleKeys = new Set(visibleIssues.map((issue) => issue.key));
+    setSelectedKeys((current) => new Set([...current].filter((key) => visibleKeys.has(key))));
+    setConversationDisabledKeys((current) => new Set([...current].filter((key) => visibleKeys.has(key))));
+    setImportModes((current) => {
+      const next: Record<string, ImportedTaskMode> = {};
+      for (const [key, mode] of Object.entries(current)) {
+        if (visibleKeys.has(key)) {
+          next[key] = mode;
+        }
+      }
+      return next;
+    });
+  };
+
+  const handleHideInWorkChange = (enabled: boolean): void => {
+    hideInWorkRef.current = enabled;
+    setHideInWork(enabled);
+    const visibleData = filterVisibleJiraIssues(fetchedResults, enabled);
+    setResults(visibleData);
+    pruneIssueStateToVisibleResults(visibleData);
   };
 
   const setImportModeForSelected = (mode: ImportedTaskMode): void => {
@@ -562,6 +588,21 @@ export const SprintJiraImportModal = ({
                   }}
                   aria-label="Jira result limit"
                 />
+              </IssueImportField>
+
+              <IssueImportField
+                label="Visibility"
+                hint="Client-side only. The Jira search still uses the selected status filter."
+              >
+                <label className="inline-flex min-h-11 items-center gap-3 rounded-[1rem] border border-black/[0.06] bg-white px-4 py-3 text-sm font-semibold text-slate-600 transition-colors hover:text-slate-900 dark:border-white/[0.08] dark:bg-white/[0.05] dark:text-slate-300 dark:hover:text-white">
+                  <input
+                    type="checkbox"
+                    checked={hideInWork}
+                    onChange={(event) => handleHideInWorkChange((event.target as HTMLInputElement).checked)}
+                    className="h-4 w-4 rounded border-slate-300 text-[#0052CC] focus:ring-[#0052CC] dark:border-white/[0.18] dark:bg-transparent"
+                  />
+                  Hide in Work
+                </label>
               </IssueImportField>
             </div>
           </IssueImportFilterSection>
@@ -933,6 +974,38 @@ function getOptionLabel<TValue extends string>(
   value: TValue,
 ): string {
   return options.find((option) => option.value === value)?.label ?? value;
+}
+
+function filterVisibleJiraIssues(
+  issues: ReadonlyArray<JiraIssueSearchResult>,
+  hideInWork: boolean,
+): JiraIssueSearchResult[] {
+  if (!hideInWork) {
+    return [...issues];
+  }
+  return issues.filter((issue) => !isInWorkJiraIssue(issue));
+}
+
+function isInWorkJiraIssue(issue: JiraIssueSearchResult): boolean {
+  const statusLikeIssue = issue as JiraIssueSearchResult & {
+    status?: string | null;
+    statusText?: string | null;
+    statusName?: string | null;
+  };
+  return [
+    statusLikeIssue.state,
+    statusLikeIssue.status,
+    statusLikeIssue.statusText,
+    statusLikeIssue.statusName,
+  ].some((value) => normalizeJiraStatusText(value) === "in work");
+}
+
+function normalizeJiraStatusText(value: string | null | undefined): string {
+  return (value ?? "")
+    .trim()
+    .replace(/[_-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .toLowerCase();
 }
 
 function buildImportedTaskPayload(

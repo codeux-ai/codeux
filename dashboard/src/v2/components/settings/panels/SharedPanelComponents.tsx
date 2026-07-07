@@ -1,7 +1,10 @@
 import type { ComponentChildren, FunctionComponent } from "preact";
 import { useId } from "preact/hooks";
+import { BookOpenText } from "lucide-preact";
 import type { SettingsValueSource } from "../../../../types.js";
+import { getSettingsSubcategoryDoc, toHelpSections, type SettingsSubcategoryId } from "../../../lib/settings-subcategory-docs.js";
 import { getFieldSourceLabel } from "../../../lib/settings-view-models.js";
+import { InfoIconPopover } from "../../ui/InfoIconPopover.js";
 
 export const SectionCard: FunctionComponent<{
   title: string;
@@ -11,8 +14,10 @@ export const SectionCard: FunctionComponent<{
   badge?: string;
   icon?: ComponentChildren;
   actions?: ComponentChildren;
-}> = ({ title, children, danger, badge, icon, actions }) => {
+  helpId?: SettingsSubcategoryId | string;
+}> = ({ title, children, danger, badge, icon, actions, helpId }) => {
   const titleId = useId();
+  const helpDoc = getSettingsSubcategoryDoc(helpId || title);
 
   return (
     <section aria-labelledby={titleId} className={`relative overflow-hidden rounded-[1.75rem] border p-5 shadow-[var(--elevation-base)] backdrop-blur-sm ${
@@ -29,6 +34,25 @@ export const SectionCard: FunctionComponent<{
       </div>
       <div className="flex flex-wrap items-center justify-end gap-2">
         {actions ? actions : null}
+        {helpDoc ? (
+          <>
+            <InfoIconPopover
+              className="h-8 w-8 items-center justify-center rounded-full border border-black/[0.06] bg-black/[0.02] text-slate-500 transition-colors hover:border-signal-500/24 hover:bg-signal-500/[0.08] focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-signal-500 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-300 dark:hover:border-signal-300/24 dark:hover:bg-signal-300/[0.08]"
+              title={`${helpDoc.title} settings`}
+              summary={helpDoc.summary}
+              sections={toHelpSections(helpDoc)}
+              label={`Show help for ${title}`}
+            />
+            <a
+              href={helpDoc.docsHref}
+              aria-label={`Open documentation for ${title}`}
+              title={`Open documentation for ${title}`}
+              className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-black/[0.06] bg-black/[0.02] text-slate-500 transition-colors hover:border-signal-500/24 hover:bg-signal-500/[0.08] hover:text-signal-600 focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-signal-500 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-300 dark:hover:border-signal-300/24 dark:hover:bg-signal-300/[0.08] dark:hover:text-signal-200"
+            >
+              <BookOpenText className="h-4 w-4" strokeWidth={1.8} aria-hidden />
+            </a>
+          </>
+        ) : null}
         {badge ? (
           <span className="rounded-full border border-signal-500/20 bg-signal-500/[0.08] px-3 py-1 text-[9px] font-bold uppercase tracking-[0.2em] text-signal-600 dark:text-signal-300">
             {badge}

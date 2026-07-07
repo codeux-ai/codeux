@@ -76,6 +76,7 @@ A field unspecified at higher scopes inherits from lower scopes. The merge is **
 
 - `DEFAULT_PROVIDER_SETTINGS` — per-provider defaults.
 - `DEFAULT_SKILLS`, `DEFAULT_MCP_TOOL_TOGGLES`, etc.
+- `DEFAULT_AGENT_SELF_REFLECTION` — default-off planning and QA self-reflection loop contracts with senior engineering criteria.
 - `DEFAULT_SPRINT_BRANCH_SCHEME`.
 
 System settings on a fresh install are the merge of these defaults plus any external hints applied by the user during onboarding.
@@ -88,6 +89,8 @@ Settings changes via `manage_code_ux` → `settings` → `patch_*_setting` (or t
 - Hot-reload of the relevant subscribers (e.g. the orchestrator picks up new `watchLoopIntervalSeconds` on the next cycle).
 
 There is no need to restart the process for settings changes.
+
+`agents.selfReflection.planning` and `agents.selfReflection.qualityAssurance` are resolved through the same cascade but default to disabled. Each stores criteria with thresholds and a maximum improvement-attempt count; malformed legacy payloads fall back safely during sanitization. When enabled, structured planning and QA requests run the optional rate-and-improve loop through the same provider session and keep the last valid parsed output if reflection fails.
 
 ### Effective resolution endpoints
 

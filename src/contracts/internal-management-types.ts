@@ -174,6 +174,49 @@ export interface ManageMemoryArgs {
   approval?: ManagementApproval;
 }
 
+export interface ManageSkillsArgs {
+  action:
+    | "authoring_prompt"
+    | "list_storages"
+    | "get_storage"
+    | "create_storage"
+    | "update_storage"
+    | "delete_storage"
+    | "reset_storage"
+    | "list_agent_storages"
+    | "attach_storage"
+    | "detach_storage"
+    | "list_skills"
+    | "get_skill"
+    | "create_skill"
+    | "update_skill"
+    | "delete_skill"
+    | "import_markdown"
+    | "export_markdown";
+  projectId?: string;
+  storageId?: string;
+  skillId?: string;
+  agentPresetId?: string;
+  name?: string;
+  description?: string;
+  storageKind?: string;
+  markdown?: string;
+  sourceType?: string;
+  sourceRef?: string | null;
+  limit?: number;
+  includeContent?: boolean;
+  approval?: ManagementApproval;
+}
+
+export interface SearchSkillsArgs {
+  projectId: string;
+  query: string;
+  agentPresetId?: string;
+  storageId?: string;
+  limit?: number;
+  minSimilarity?: number;
+}
+
 export interface ManageSettingsArgs {
   action: "get_system" | "get_project_override" | "resolve_project_effective" | "get_sprint_override" | "resolve_sprint_effective" | "replace_system_settings" | "patch_system_setting" | "replace_project_settings" | "patch_project_setting" | "reset_project_settings" | "replace_sprint_settings" | "patch_sprint_setting" | "reset_sprint_settings" | "export_settings_bundle" | "apply_settings_bundle";
   projectId?: string;

@@ -71,6 +71,23 @@ describe("validateSettingsPayload", () => {
     ]));
   });
 
+  it("rejects Docker memory limits outside the supported MiB range", () => {
+    const payload = cloneDefaults({
+      env: {},
+      settingsJson: {},
+      resolved: {},
+    });
+    payload.cliWorkflow.containerMemoryLimitMb = 262145;
+
+    const result = validateSettingsPayload(payload);
+
+    expect(result.success).toBe(false);
+    expect(result.issues).toContainEqual({
+      path: "cliWorkflow.containerMemoryLimitMb",
+      message: "Expected an integer between 0 and 262144",
+    });
+  });
+
   it("rejects non-object payloads early", () => {
     const result = validateSettingsPayload("invalid");
 
@@ -196,6 +213,7 @@ describe("validateSettingsPayload", () => {
         executionMode: "bad",
         containerImage: 1,
         containerSetupScriptPath: 2,
+        containerMemoryLimitMb: "bad",
         containerCacheSetupScriptImage: "bad",
         containerInstallPlaywrightBrowsers: "bad",
         containerMountGitConfig: "bad",
@@ -263,6 +281,7 @@ describe("validateSettingsPayload", () => {
     expect(paths).toContain("sprintLoopSteps.watchLoopOutputIntervalSeconds");
     expect(paths).toContain("cliWorkflow.executionMode");
     expect(paths).toContain("cliWorkflow.gitMode");
+    expect(paths).toContain("cliWorkflow.containerMemoryLimitMb");
     expect(paths).toContain("cliWorkflow.containerSetupScriptPath");
     expect(paths).toContain("cliWorkflow.containerCacheSetupScriptImage");
     expect(paths).toContain("cliWorkflow.containerInstallPlaywrightBrowsers");

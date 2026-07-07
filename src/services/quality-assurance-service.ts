@@ -36,6 +36,9 @@ import { resolveAgentMemoryInstructions } from "./agent-memory-instructions.js";
 import { buildTaskPrComposerInput } from "../domain/sprint/composer/task-pr-input-builder.js";
 import { composeTaskPrBody, composeTaskPrTitle } from "../domain/sprint/composer/pr-description-composer.js";
 import type { MemoryService } from "./memory-service.js";
+import type { SkillService } from "./skill-service.js";
+import type { AgentPresetRepository } from "../repositories/agent-preset-repository.js";
+import type { McpConnectionInfo } from "../contracts/mcp-connection-types.js";
 import { syncRemoteBranchIfAvailable } from "./git-branch-sync-service.js";
 import { evaluateQaReviewBudget, isRecoveredStaleQaRun } from "../domain/qa-review/qa-review-budget.js";
 import { isQaReviewCancellationError, parseQaError } from "../domain/qa-review/qa-review-types.js";
@@ -87,6 +90,9 @@ interface QualityAssuranceServiceDependencies {
   sendSessionMessage: (sessionId: string, prompt: string) => Promise<unknown>;
   logger?: Logger;
   memoryService?: MemoryService;
+  skillService?: SkillService;
+  agentPresetRepository?: AgentPresetRepository;
+  getMcpConnectionInfo?: () => McpConnectionInfo | null;
   structuredAgentRequestService?: StructuredAgentRequestService;
   dockerService?: Pick<{ listContainers: () => Promise<DockerContainer[]> }, "listContainers">;
   sprintRunLifecycleService?: Pick<SprintRunLifecycleService, "updateRun">;
@@ -109,6 +115,9 @@ export class QualityAssuranceService {
       logger: deps.logger,
       sessionTracking: deps.sessionTracking,
       getGithubToken: deps.getGithubToken,
+      getMcpConnectionInfo: deps.getMcpConnectionInfo,
+      skillService: deps.skillService,
+      agentPresetRepository: deps.agentPresetRepository,
     });
 
     if (deps.structuredAgentRequestService) {
@@ -966,6 +975,10 @@ export class QualityAssuranceService {
           providerLabel: "QA",
           sessionIdPrefix: "qa-review",
           systemRoutingMessage: args.agentInstructions.trim(),
+          agentMcpAccess: args.agentPresetId
+            ? this.deps.agentPresetRepository?.getAgentPreset(args.agentPresetId)?.mcpAccess ?? null
+            : undefined,
+          mcpAgentId: args.agentPresetId,
           onActivity: () => {
             this.touchSprintRunHeartbeat(args.sprintRunId, args.scope.sprintId);
           },
@@ -1609,6 +1622,10 @@ export class QualityAssuranceService {
       // would re-report every earlier turn's tokens too. See
       // execute-provider-stage.ts for the analogous first-pass wiring.
       openCodeBaselineRawUsageJson: args.provider === "opencode" ? (previousInvocation?.rawUsageJson ?? null) : null,
+      agentMcpAccess: workerAgent?.id
+        ? this.deps.agentPresetRepository?.getAgentPreset(workerAgent.id)?.mcpAccess ?? null
+        : undefined,
+      mcpAgentId: workerAgent?.id ?? null,
     });
 
     if (!result.ok) {

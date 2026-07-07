@@ -367,9 +367,73 @@ CREATE TABLE IF NOT EXISTS agent_presets (
         model TEXT,
         memory_template_override_enabled INTEGER NOT NULL DEFAULT 0,
         memory_template_markdown TEXT,
+        persistent_skill_storage_enabled INTEGER NOT NULL DEFAULT 0,
         mcp_access_json TEXT,
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL,
+        FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+      );
+
+CREATE TABLE IF NOT EXISTS skill_storages (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL,
+        name TEXT NOT NULL,
+        description TEXT NOT NULL DEFAULT '',
+        storage_kind TEXT NOT NULL DEFAULT 'project',
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+        UNIQUE (project_id, name)
+      );
+
+CREATE TABLE IF NOT EXISTS skills (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL,
+        storage_id TEXT NOT NULL,
+        name TEXT NOT NULL,
+        description TEXT NOT NULL DEFAULT '',
+        content_markdown TEXT NOT NULL DEFAULT '',
+        source_type TEXT NOT NULL DEFAULT 'manual',
+        source_ref TEXT,
+        content_hash TEXT NOT NULL,
+        tags_json TEXT NOT NULL DEFAULT '[]',
+        applies_to_json TEXT NOT NULL DEFAULT '[]',
+        version TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+        FOREIGN KEY (storage_id) REFERENCES skill_storages(id) ON DELETE CASCADE,
+        UNIQUE (storage_id, name)
+      );
+
+CREATE TABLE IF NOT EXISTS skill_embeddings (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL,
+        storage_id TEXT NOT NULL,
+        skill_id TEXT NOT NULL,
+        embedding_model TEXT NOT NULL,
+        embedding_dimension INTEGER NOT NULL,
+        chunk_index INTEGER NOT NULL DEFAULT 0,
+        content_hash TEXT NOT NULL,
+        embedding_blob BLOB,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+        FOREIGN KEY (storage_id) REFERENCES skill_storages(id) ON DELETE CASCADE,
+        FOREIGN KEY (skill_id) REFERENCES skills(id) ON DELETE CASCADE,
+        UNIQUE (skill_id, embedding_model, chunk_index)
+      );
+
+CREATE TABLE IF NOT EXISTS agent_skill_storage_bindings (
+        agent_preset_id TEXT NOT NULL,
+        storage_id TEXT NOT NULL,
+        project_id TEXT NOT NULL,
+        enabled INTEGER NOT NULL DEFAULT 1,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        PRIMARY KEY (agent_preset_id, storage_id),
+        FOREIGN KEY (agent_preset_id) REFERENCES agent_presets(id) ON DELETE CASCADE,
+        FOREIGN KEY (storage_id) REFERENCES skill_storages(id) ON DELETE CASCADE,
         FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
       );
 
@@ -714,4 +778,10 @@ CREATE INDEX IF NOT EXISTS idx_execution_invocations_project_sprint_started ON e
 CREATE INDEX IF NOT EXISTS idx_execution_invocations_project_sprint_run_started ON execution_invocations (project_id, sprint_run_id, started_at DESC);
 CREATE INDEX IF NOT EXISTS idx_execution_invocations_status_started ON execution_invocations (status, started_at DESC);
 CREATE INDEX IF NOT EXISTS idx_execution_invocations_provider_invocation ON execution_invocations (provider_invocation_id);
+CREATE INDEX IF NOT EXISTS idx_skill_storages_project ON skill_storages (project_id, updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_skills_project_storage ON skills (project_id, storage_id, updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_skill_embeddings_skill ON skill_embeddings (skill_id, embedding_model, chunk_index);
+CREATE INDEX IF NOT EXISTS idx_skill_embeddings_storage ON skill_embeddings (project_id, storage_id, embedding_model);
+CREATE INDEX IF NOT EXISTS idx_agent_skill_storage_bindings_agent ON agent_skill_storage_bindings (agent_preset_id);
+CREATE INDEX IF NOT EXISTS idx_agent_skill_storage_bindings_storage ON agent_skill_storage_bindings (project_id, storage_id);
 `;

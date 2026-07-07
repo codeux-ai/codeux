@@ -440,8 +440,18 @@ export class CodeUxServer {
       getDashboardSettings: () => this.runtimeContext.dashboardSettings || DEFAULT_DASHBOARD_SETTINGS,
       getRuntimeRole: () => runtimeRole,
       resolveAgentMcpToolAccess: (agentId) => {
-        const access = this.agentPresetRepository.getAgentPreset(agentId)?.mcpAccess;
-        return access ? toAgentCodeUxToolAccess(access) : null;
+        const agent = this.agentPresetRepository.getAgentPreset(agentId);
+        const access = agent?.mcpAccess;
+        const persistentSkillRetrievalEnabled = Boolean(
+          agent?.persistentSkillStorage?.enabled
+          && agent.persistentSkillStorageIds
+          && agent.persistentSkillStorageIds.length > 0,
+        );
+        return access
+          ? toAgentCodeUxToolAccess(access, persistentSkillRetrievalEnabled)
+          : persistentSkillRetrievalEnabled
+            ? toAgentCodeUxToolAccess({ codeUxEnabled: false, codeUxToolToggles: [] }, true)
+            : null;
       },
       formatError: (error: unknown) => this.formatError(error),
       logger: this.logger.child({ component: "mcp-request-router", runtimeRole }),

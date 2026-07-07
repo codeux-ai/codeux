@@ -57,6 +57,7 @@ export interface TaskBoardController {
   boardViewModel: TaskBoardViewModel;
   draggedTaskId: string | null;
   dropTargetContext: TaskBoardDropTargetContext | null;
+  agentPresets: AgentPreset[];
   agentPresetsMap: Map<string, AgentPreset>;
   resolvedTaskId: string | null;
   clearResolvedTaskId: () => void;
@@ -102,6 +103,7 @@ function buildOptimisticTask(args: {
     promptMarkdown: args.draft.promptMarkdown,
     description: args.draft.description,
     dependsOnTaskIds: args.draft.dependsOnTaskIds,
+    agentPresetId: args.draft.agentPresetId,
     isIndependent: false,
     isMerged: false,
     mergeIndicator: null,
@@ -132,6 +134,12 @@ export function useTaskBoardController(): TaskBoardController {
     refetch: refreshSprints,
   } = useSprints(projectId);
   const locationSearch = useRouterState({ select: (state) => state.location.searchStr });
+  const currentProjectSprints = useMemo(() => {
+    if (!projectId) {
+      return [];
+    }
+    return sprints.filter((sprint) => !sprint.projectId || sprint.projectId === projectId);
+  }, [projectId, sprints]);
   const initialSprint = useMemo(() => {
     const params = new URLSearchParams(locationSearch);
     return params.get("sprintId") || params.get("sprint");
@@ -140,9 +148,28 @@ export function useTaskBoardController(): TaskBoardController {
     if (!initialSprint) {
       return null;
     }
-    return sprints.some((sprint) => sprint.id === initialSprint) ? initialSprint : null;
-  }, [initialSprint, sprints]);
-  const taskScopeSprintId = routeSprintId ?? selectedSprintId;
+    return currentProjectSprints.some((sprint) => sprint.id === initialSprint) ? initialSprint : null;
+  }, [currentProjectSprints, initialSprint]);
+  const validSelectedSprintId = useMemo(() => {
+    if (!selectedSprintId) {
+      return null;
+    }
+    return currentProjectSprints.some((sprint) => sprint.id === selectedSprintId) ? selectedSprintId : null;
+  }, [currentProjectSprints, selectedSprintId]);
+  const taskScopeSprintId = routeSprintId ?? validSelectedSprintId;
+
+  useEffect(() => {
+    if (!initialSprint || routeSprintId || sprintsLoading) {
+      return;
+    }
+    const params = new URLSearchParams(locationSearch);
+    if (params.get("sprintId") !== initialSprint && params.get("sprint") !== initialSprint) {
+      return;
+    }
+    params.delete("sprintId");
+    params.delete("sprint");
+    replaceTaskBoardSearch(params);
+  }, [initialSprint, locationSearch, routeSprintId, sprintsLoading]);
 
   useEffect(() => {
     if (!routeSprintId || routeSprintId === selectedSprintId) {
@@ -154,7 +181,7 @@ export function useTaskBoardController(): TaskBoardController {
   const { execution, status } = useDashboardRuntimeData(
     projectId,
     !!selectedProject,
-    { selectedSprintId },
+    { selectedSprintId: taskScopeSprintId },
   );
   const taskDispatches = useStableArrayValue(execution.taskDispatches);
   const recentEvents = useStableArrayValue(execution.recentEvents);
@@ -166,18 +193,21 @@ export function useTaskBoardController(): TaskBoardController {
     ? gitSettings.githubMode !== "LOCAL" && gitSettings.autoCreatePr === true
     : true;
 
-  const [agentPresetsMap, setAgentPresetsMap] = useState<Map<string, AgentPreset>>(new Map());
+  const [agentPresets, setAgentPresets] = useState<AgentPreset[]>([]);
   useEffect(() => {
     if (!projectId) {
-      setAgentPresetsMap(new Map());
+      setAgentPresets([]);
       return;
     }
     let cancelled = false;
     fetchAgentPresets(projectId).then((presets) => {
-      if (!cancelled) setAgentPresetsMap(new Map(presets.map((preset) => [preset.id, preset])));
+      if (!cancelled) setAgentPresets(presets);
     }).catch(() => {});
     return () => { cancelled = true; };
   }, [projectId]);
+  const agentPresetsMap = useMemo(() => (
+    new Map(agentPresets.map((preset) => [preset.id, preset]))
+  ), [agentPresets]);
 
   const [statusFilter, setStatusFilter] = useState<TaskBoardStatusFilter>("all");
   const [priorityFilter, setPriorityFilter] = useState<TaskBoardPriorityFilter>("all");
@@ -195,7 +225,7 @@ export function useTaskBoardController(): TaskBoardController {
   const { tasks, loading, error, refresh: refreshTasks } = useProjectTasks(
     projectId,
     projects,
-    sprints,
+    currentProjectSprints,
     taskScopeSprintId,
   );
   const previousTaskViewModelsRef = useRef<TaskBoardViewModel["taskViewModels"] | undefined>(undefined);
@@ -300,21 +330,24 @@ export function useTaskBoardController(): TaskBoardController {
   }, [boardCountSummary, displayBoardViewModel.filterAnnouncement, filterTransitionPending, loading, showSkeletons]);
 
   const selectedSprintModel = taskScopeSprintId
-    ? sprints.find((sprint) => sprint.id === taskScopeSprintId) || null
+    ? currentProjectSprints.find((sprint) => sprint.id === taskScopeSprintId) || null
     : null;
-  const isTaskScopeReady = !!selectedProject && sprints.length > 0;
+  const isTaskScopeReady = !!selectedProject && currentProjectSprints.length > 0;
 
   const handleSprintScopeSelect = useCallback((sprintId: string | null) => {
+    const nextSprintId = sprintId && currentProjectSprints.some((sprint) => sprint.id === sprintId)
+      ? sprintId
+      : null;
     const params = new URLSearchParams(locationSearch);
-    if (sprintId) {
-      params.set("sprintId", sprintId);
+    if (nextSprintId) {
+      params.set("sprintId", nextSprintId);
     } else {
       params.delete("sprintId");
     }
     params.delete("sprint");
     replaceTaskBoardSearch(params);
-    void selectSprint(sprintId);
-  }, [locationSearch, selectSprint]);
+    void selectSprint(nextSprintId);
+  }, [currentProjectSprints, locationSearch, selectSprint]);
 
   const scrollComposerIntoView = useCallback(() => {
     setTimeout(() => {
@@ -468,9 +501,9 @@ export function useTaskBoardController(): TaskBoardController {
   return {
     projects,
     selectedProject,
-    sprints,
+    sprints: currentProjectSprints,
     sprintsLoading,
-    selectedSprintId,
+    selectedSprintId: validSelectedSprintId,
     taskScopeSprintId,
     selectedSprintModel,
     sprintKeyPrefix,
@@ -496,6 +529,7 @@ export function useTaskBoardController(): TaskBoardController {
     boardViewModel: displayBoardViewModel,
     draggedTaskId,
     dropTargetContext,
+    agentPresets,
     agentPresetsMap,
     resolvedTaskId,
     clearResolvedTaskId,

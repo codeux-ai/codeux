@@ -34,10 +34,12 @@ import { DockerRuntimePruneService } from "../../services/docker-runtime-prune-s
 import { DashboardRealtimeService } from "../../services/dashboard-realtime-service.js";
 import { MemoryRepository } from "../../repositories/memory-repository.js";
 import { SchedulerRepository } from "../../repositories/scheduler-repository.js";
+import { SkillRepository } from "../../repositories/skill-repository.js";
 import { EmbeddingService } from "../../services/embedding-service.js";
 import { EmbeddingModelManager } from "../../services/embedding-model-manager.js";
 import { MemoryService } from "../../services/memory-service.js";
 import { MemoryPromotionService } from "../../services/memory-promotion-service.js";
+import { SkillService } from "../../services/skill-service.js";
 import { KnowledgeRepository } from "../../repositories/knowledge-repository.js";
 import { KnowledgeIngestionService } from "../../services/knowledge-ingestion-service.js";
 import { KnowledgeService } from "../../services/knowledge-service.js";
@@ -98,10 +100,12 @@ export interface CoreDependencies {
   dashboardSettings: DashboardSettings;
   memoryRepository: MemoryRepository;
   schedulerRepository: SchedulerRepository;
+  skillRepository: SkillRepository;
   embeddingService: EmbeddingService;
   embeddingModelManager: EmbeddingModelManager;
   memoryService: MemoryService;
   memoryPromotionService: MemoryPromotionService;
+  skillService: SkillService;
   knowledgeRepository: KnowledgeRepository;
   knowledgeService: KnowledgeService;
   providerConcurrencyService: ProviderConcurrencyService;
@@ -258,6 +262,7 @@ export function createCoreDependencies(
   const activitySummary = new ActivitySummaryService();
   const memoryRepository = new MemoryRepository(appDbStorage);
   const schedulerRepository = new SchedulerRepository(appDbStorage, dashboardRealtimeService);
+  const skillRepository = new SkillRepository(appDbStorage);
   const embeddingService = new EmbeddingService();
   const embeddingModelManager = new EmbeddingModelManager(
     embeddingService,
@@ -275,6 +280,11 @@ export function createCoreDependencies(
     memoryService,
     memoryRepository,
     logger.child({ component: "memory-promotion-service" }),
+  );
+  const skillService = new SkillService(
+    skillRepository,
+    embeddingService,
+    logger.child({ component: "skill-service" }),
   );
   const knowledgeRepository = new KnowledgeRepository(appDbStorage);
   const knowledgeService = new KnowledgeService(
@@ -336,10 +346,12 @@ export function createCoreDependencies(
     dashboardSettings,
     memoryRepository,
     schedulerRepository,
+    skillRepository,
     embeddingService,
     embeddingModelManager,
     memoryService,
     memoryPromotionService,
+    skillService,
     knowledgeRepository,
     knowledgeService,
     providerConcurrencyService,
