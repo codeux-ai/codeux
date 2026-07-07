@@ -77,7 +77,7 @@ System settings on a fresh install are the merge of these defaults plus any exte
 
 ### Live reload
 
-Settings changes via `manage_code_ux` → `settings` → `patch_*_setting` (or the corresponding REST endpoints) trigger:
+Settings changes via `manage_settings` → `patch_*_setting` (or the corresponding REST endpoints) trigger:
 
 - A WebSocket event broadcasting the change.
 - Hot-reload of the relevant subscribers (e.g. the orchestrator picks up new `watchLoopIntervalSeconds` on the next cycle).
@@ -88,7 +88,7 @@ There is no need to restart the process for settings changes.
 
 - `GET /api/projects/:projectId/settings/effective` — merged at project scope.
 - `GET /api/projects/:projectId/sprints/:sprintId/settings/effective` — merged at sprint scope.
-- `manage_code_ux` → `settings` → `resolve_project_effective` / `resolve_sprint_effective`.
+- `manage_settings` → `resolve_project_effective` / `resolve_sprint_effective`.
 
 These endpoints return an `EffectiveSettingsResponse` which includes both the merged tree (`settings`) and field-level provenance metadata (`sources` mapping each path to `system`, `project`, or `sprint`), useful for debugging "why is this setting taking that value?".
 

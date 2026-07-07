@@ -40,7 +40,7 @@ Test from Gemini CLI:
 > list my code ux projects
 ```
 
-The model should call `manage_code_ux` with `domain: "projects", action: "list"`.
+The model should call `manage_projects` with `action: "list"`.
 
 ## Codex CLI
 
