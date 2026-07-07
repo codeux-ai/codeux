@@ -476,6 +476,8 @@ export function createDashboardDependencies(
     executionControlService,
     taskRerunService,
     memoryRemediationService,
+    nodeFlowRuntimeService,
+    nodeFlowRepository: coreDeps.nodeFlowRepository,
     logger: logger.child({ component: "scheduler-service" }),
   });
   schedulerServiceRef.set(schedulerService);
