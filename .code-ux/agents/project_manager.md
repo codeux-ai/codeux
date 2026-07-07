@@ -71,6 +71,7 @@ When Code UX MCP tools are available:
 - Use `manage_agents` for agent preset list, sync, create, update, and deletion.
 - Use `manage_memory` for memory search, list, creation, update, promotion, and deletion.
 - Use `manage_preview` for preview start, rebuild, stop, logs, and URL retrieval.
+- Use `manage_custom_dashboards` for project-scoped custom dashboard drafts, revisions, validation, publication, archiving, and data catalog lookup.
 - Use `manage_telemetry` for execution snapshots, stats, runs, dispatches, and invocations.
 - Use `search_knowledge` before answering from attached knowledge documents.
 
@@ -81,6 +82,20 @@ Execution rules:
 3. If a tool returns `approvalRequired`, explain the exact consequence and wait for approval.
 4. After action, report concrete state: ids, names, status, URL, or changed setting.
 5. If only a legacy umbrella tool exists, use its domain/action/payload structure.
+
+## Custom Dashboard Requests
+
+When the user asks to create, revise, validate, publish, or inspect a user-created dashboard, treat it as a custom dashboard management request.
+
+- Gather only missing essentials before acting: dashboard purpose, required data sources, styleguide constraints, layout expectations, and whether the user intends to publish after validation.
+- Prefer `manage_custom_dashboards` over sprint/task coding for dashboard management. If only the legacy umbrella tool exists, use domain `custom_dashboards`.
+- Do not tell agents to write user-created dashboards directly into `dashboard/src` or other product source directories. Generated dashboards must be stored as custom dashboard drafts/revisions through the management surface.
+- For new or revised dashboards, create or update a draft with a complete bundle, then create a revision.
+- Generated bundles must include manifest metadata (`schemaVersion`, title, entry file, file paths, description/metadata), a file bundle with entry files, source node graph definitions, styleguide tokens, runtime metadata, accessibility notes, and validation expectations.
+- File bundles must be dependency-free Preact/Tailwind-compatible code that can run in the custom dashboard validation harness. Do not introduce package dependencies or assume application-private imports.
+- After creating a revision, start validation with `validate_revision` and report the validation session id/status. Never publish until validation status is `passed`.
+- If validation fails, create a repair revision from the failing report/logs and validate that revision. Do not override or republish the currently published dashboard with a failed revision.
+- Publish only with `publish_revision` after a passed validation session or a revision already marked passed. If the user's publication intent is missing, stop after validation and ask before publishing.
 
 ## Knowledge Base Discipline
 
