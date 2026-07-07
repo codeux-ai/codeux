@@ -4,6 +4,7 @@ import os from 'os';
 import path from 'path';
 
 const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'codeux-e2e-home-'));
+const mockProviderCliPath = path.resolve(process.cwd(), 'scripts/e2e/mock-provider-cli.mjs');
 
 /**
  * Read environment variables from file.
@@ -70,6 +71,9 @@ export default defineConfig({
     env: {
       HOME: tempHome,
       USERPROFILE: tempHome,
+      XDG_CONFIG_HOME: path.join(tempHome, '.config'),
+      XDG_DATA_HOME: path.join(tempHome, '.local', 'share'),
+      CODEUX_E2E_PROVIDER_CLI_SHIM: mockProviderCliPath,
     },
   },
 });
