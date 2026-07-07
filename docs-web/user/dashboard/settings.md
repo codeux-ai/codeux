@@ -64,6 +64,18 @@ The **AI providers** category includes a **Detected** column. Code UX inspects:
 
 If a hint is detected, the panel offers a one-click **Use detected value** button so you don't paste secrets manually.
 
+## Provider config files
+
+Each CLI provider instance in **AI providers** includes a **Provider Config** choice that controls only provider config-file copying. It is separate from API Key, Local Copy, and Dashboard Login authentication modes.
+
+| Choice | Use it when |
+| --- | --- |
+| **None** | You do not want Code UX to copy a provider config file into the runtime. |
+| **Copy Host** | You want Docker runs to copy the provider's normal host config path, shown read-only in the card. Examples include Codex `~/.codex/config.toml`, Gemini `~/.gemini/settings.json`, Claude Code `~/.claude.json`, Qwen Code `~/.qwen/settings.json`, OpenCode `~/.config/opencode/opencode.json`, and Antigravity `~/.gemini/antigravity-cli/mcp_config.json`. |
+| **File** | You want to select a specific config file with the local file picker, such as an alternate Codex `config.toml` or OpenCode `opencode.json`. |
+
+Jules and the internal test provider do not use provider config files. Switching Provider Config choices does not clear API keys, auth paths, custom endpoints, or dashboard-login credentials.
+
 ## Connections panel
 
 A separate **Connections** panel lists active MCP client connections to this project — display name, role, transport, capabilities, last activity. From here you can rename connections or set the *preferred worker* for the project.

@@ -261,6 +261,8 @@ describe("settings view model source helpers", () => {
   it("prefills new Qwen and OpenCode custom endpoint settings for local Ollama", () => {
     expect(createSystemProviderDraft("qwen-code", "Qwen Ollama")).toMatchObject({
       apiKey: "",
+      providerConfigMode: "copyHost",
+      providerConfigPath: "~/.qwen/settings.json",
       qwenBaseUrl: "http://127.0.0.1:11434/v1",
       qwenEnvKey: "OLLAMA_API_KEY",
       qwenModelId: "glm-4.7-flash",
@@ -268,10 +270,27 @@ describe("settings view model source helpers", () => {
     });
     expect(createSystemProviderDraft("opencode", "OpenCode Ollama")).toMatchObject({
       apiKey: "",
+      providerConfigMode: "copyHost",
+      providerConfigPath: "~/.config/opencode/opencode.json",
       openCodeProviderId: "ollama",
       openCodeModelId: "glm-4.7-flash",
       openCodeBaseUrl: "http://127.0.0.1:11434/v1",
       openCodeEnvKey: "OLLAMA_API_KEY",
+    });
+  });
+
+  it("defaults provider config files only for CLI providers that support them", () => {
+    expect(createSystemProviderDraft("codex", "Codex Primary")).toMatchObject({
+      providerConfigMode: "copyHost",
+      providerConfigPath: "~/.codex/config.toml",
+    });
+    expect(createSystemProviderDraft("jules", "Jules Primary")).toMatchObject({
+      providerConfigMode: "none",
+      providerConfigPath: "",
+    });
+    expect(createSystemProviderDraft("mockup-cli", "Mockup CLI")).toMatchObject({
+      providerConfigMode: "none",
+      providerConfigPath: "",
     });
   });
 });
@@ -480,6 +499,74 @@ describe("provider settings sanitization", () => {
     expect(codex.customBaseUrl).toBe("");
     expect(codex.customModel).toBe("");
     expect(codex.mountAuth).toBe(true);
+  });
+
+  it("normalizes provider config mode/path combinations like the backend", () => {
+    const systemSettings = {
+      integrations: {
+        providers: {
+          "codex-empty-file": {
+            provider: "codex",
+            name: "Codex Empty File",
+            apiKey: "",
+            authType: "apiKey",
+            mountAuth: false,
+            authPath: "",
+            providerConfigMode: "file",
+            providerConfigPath: "   ",
+          },
+          "codex-custom-file": {
+            provider: "codex",
+            name: "Codex Custom File",
+            apiKey: "",
+            authType: "apiKey",
+            mountAuth: false,
+            authPath: "",
+            providerConfigMode: "file",
+            providerConfigPath: "~/configs/codex.toml",
+          },
+          "gemini-none": {
+            provider: "gemini",
+            name: "Gemini No Config",
+            apiKey: "",
+            authType: "apiKey",
+            mountAuth: false,
+            authPath: "",
+            providerConfigMode: "none",
+            providerConfigPath: "~/.gemini/settings.json",
+          },
+          "mockup-cli": {
+            provider: "mockup-cli",
+            name: "Mockup CLI",
+            apiKey: "",
+            authType: "apiKey",
+            mountAuth: false,
+            authPath: "",
+            providerConfigMode: "copyHost",
+            providerConfigPath: "~/.mockup/config.json",
+          },
+        },
+      },
+    } as any;
+
+    const providers = getSystemIntegrationProviders(systemSettings);
+
+    expect(providers["codex-empty-file"]).toMatchObject({
+      providerConfigMode: "copyHost",
+      providerConfigPath: "~/.codex/config.toml",
+    });
+    expect(providers["codex-custom-file"]).toMatchObject({
+      providerConfigMode: "file",
+      providerConfigPath: "~/configs/codex.toml",
+    });
+    expect(providers["gemini-none"]).toMatchObject({
+      providerConfigMode: "none",
+      providerConfigPath: "",
+    });
+    expect(providers["mockup-cli"]).toMatchObject({
+      providerConfigMode: "none",
+      providerConfigPath: "",
+    });
   });
 });
 

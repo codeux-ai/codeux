@@ -815,6 +815,14 @@ For provider-backed runs, session polling is now used to ingest durable runtime 
 
 Provider credentials and authentication modes support local auth-copy mounts, API keys, or dashboard-guided Docker logins.
 
+### Provider Config Files
+CLI provider instances also expose a **Provider Config** control that is independent from authentication mode:
+- **None**: Do not copy a provider config file into the runtime. Use this when the provider should run from generated defaults, environment variables, API-key fields, or dashboard-auth state only.
+- **Copy Host**: Copy the provider's standard host config file path when it exists, such as Codex `~/.codex/config.toml`, Gemini `~/.gemini/settings.json`, Claude Code `~/.claude.json`, Qwen Code `~/.qwen/settings.json`, OpenCode `~/.config/opencode/opencode.json`, or Antigravity `~/.gemini/antigravity-cli/mcp_config.json`. The path is shown as read-only context so users do not have to type it.
+- **File**: Copy a specific local config file selected with the accessible file picker. Use this for alternate profiles, checked-out config files, or provider-specific runtime experiments that should not depend on the default host location.
+
+Jules and the internal mock provider do not show Provider Config controls. Changing Provider Config does not clear API keys, local-auth paths, custom endpoints, or dashboard-login credentials.
+
 ### Mutual-Exclusion Contract
 To prevent credential and runtime config conflicts, provider configurations enforce a strict mutual-exclusion contract between API keys and local mounting:
 - **API Key mode**: API key input is rendered, and switching away from this mode dynamically clears the saved API key. Qwen Code and OpenCode authentication sub-modes (e.g. Alibaba Cloud Coding Plan, Custom model provider/endpoint options) are available only in API Key mode.

@@ -1,7 +1,7 @@
 /** @vitest-environment happy-dom */
 import { h } from "preact";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, fireEvent, screen, cleanup, waitFor } from "@testing-library/preact";
+import { render, fireEvent, screen, cleanup, waitFor, within } from "@testing-library/preact";
 import { ProviderInstanceCard } from "../../../../../../dashboard/src/v2/components/settings/ProviderInstanceCard";
 import type { SystemProviderConfig } from "../../../../../../dashboard/src/v2/lib/provider-runtime-preview";
 import { resetModelCatalogCache } from "../../../../../../dashboard/src/v2/components/ui/ModelCombobox";
@@ -290,6 +290,178 @@ describe("ProviderInstanceCard", () => {
       openCodeAuthMode: "LOCAL_AUTH",
     }));
     expect(screen.getByRole("status").textContent).toContain("OpenCode Auth authentication mode changed locally");
+  });
+
+  it("renders provider config choices for CLI providers and updates all three modes", () => {
+    const provider: SystemProviderConfig = {
+      provider: "codex",
+      name: "Codex Config",
+      apiKey: "test-key",
+      mountAuth: false,
+      authPath: "",
+      authType: "apiKey",
+      providerConfigMode: "copyHost",
+      providerConfigPath: "~/.codex/config.toml",
+    };
+    const onUpdate = vi.fn();
+
+    render(
+      <ProviderInstanceCard
+        providerConfigId="codex-config"
+        provider={provider}
+        providerModel="gpt-5.5"
+        dockerExecutionEnabled={false}
+        onUpdate={onUpdate}
+      />
+    );
+
+    const configModeGroup = screen.getByRole("radiogroup", { name: "Codex Config provider config mode" });
+    expect(configModeGroup).toBeDefined();
+    expect(within(configModeGroup).getByRole("radio", { name: /Copy Host/i }).getAttribute("aria-checked")).toBe("true");
+    expect(screen.getByText("~/.codex/config.toml")).toBeDefined();
+
+    fireEvent.click(within(configModeGroup).getByRole("radio", { name: /None/i }));
+    expect(onUpdate).toHaveBeenLastCalledWith(expect.objectContaining({
+      providerConfigMode: "none",
+      providerConfigPath: "",
+      apiKey: "test-key",
+      authType: "apiKey",
+    }));
+
+    fireEvent.click(within(configModeGroup).getByRole("radio", { name: /^File\b/i }));
+    expect(onUpdate).toHaveBeenLastCalledWith(expect.objectContaining({
+      providerConfigMode: "file",
+      providerConfigPath: "~/.codex/config.toml",
+      apiKey: "test-key",
+      authType: "apiKey",
+    }));
+
+    fireEvent.click(within(configModeGroup).getByRole("radio", { name: /Copy Host/i }));
+    expect(onUpdate).toHaveBeenLastCalledWith(expect.objectContaining({
+      providerConfigMode: "copyHost",
+      providerConfigPath: "~/.codex/config.toml",
+      apiKey: "test-key",
+      authType: "apiKey",
+    }));
+    expect(screen.getByRole("status").textContent).toContain("Codex Config provider config mode changed locally");
+  });
+
+  it("renders a local file picker for provider config file mode and stores path edits", () => {
+    const provider: SystemProviderConfig = {
+      provider: "codex",
+      name: "Codex File Config",
+      apiKey: "test-key",
+      mountAuth: false,
+      authPath: "",
+      authType: "apiKey",
+      providerConfigMode: "file",
+      providerConfigPath: "~/configs/codex.toml",
+    };
+    const onUpdate = vi.fn();
+
+    render(
+      <ProviderInstanceCard
+        providerConfigId="codex-file-config"
+        provider={provider}
+        providerModel="gpt-5.5"
+        dockerExecutionEnabled={false}
+        onUpdate={onUpdate}
+      />
+    );
+
+    const input = screen.getByLabelText("Codex File Config provider config file");
+    expect(input.getAttribute("placeholder")).toBe("~/.codex/config.toml");
+    expect(screen.getByText("Select the Codex config.toml file to copy into the provider runtime.")).toBeDefined();
+
+    fireEvent.input(input, { target: { value: "~/alternate/codex.toml" } });
+
+    expect(onUpdate).toHaveBeenCalledWith(expect.objectContaining({
+      providerConfigMode: "file",
+      providerConfigPath: "~/alternate/codex.toml",
+      apiKey: "test-key",
+      authType: "apiKey",
+    }));
+    expect(screen.getByRole("status").textContent).toContain("Codex File Config provider config file changed locally");
+  });
+
+  it("does not mutate local auth fields when provider config mode changes", () => {
+    const provider: SystemProviderConfig = {
+      provider: "codex",
+      name: "Codex Local Auth Config",
+      apiKey: "",
+      mountAuth: true,
+      authPath: "~/.codex",
+      authType: "localAuth",
+      providerConfigMode: "copyHost",
+      providerConfigPath: "~/.codex/config.toml",
+    };
+    const onUpdate = vi.fn();
+
+    render(
+      <ProviderInstanceCard
+        providerConfigId="codex-local-auth-config"
+        provider={provider}
+        providerModel="gpt-5.5"
+        dockerExecutionEnabled={false}
+        onUpdate={onUpdate}
+      />
+    );
+
+    fireEvent.click(screen.getByRole("radio", { name: /None/i }));
+
+    expect(onUpdate).toHaveBeenCalledWith(expect.objectContaining({
+      providerConfigMode: "none",
+      providerConfigPath: "",
+      authType: "localAuth",
+      mountAuth: true,
+      authPath: "~/.codex",
+      apiKey: "",
+    }));
+  });
+
+  it("does not show provider config controls for Jules or mockup CLI providers", () => {
+    const onUpdate = vi.fn();
+
+    const { rerender } = render(
+      <ProviderInstanceCard
+        providerConfigId="jules"
+        provider={{
+          provider: "jules",
+          name: "Jules Primary",
+          apiKey: "test-key",
+          mountAuth: false,
+          authPath: "",
+          providerConfigMode: "none",
+          providerConfigPath: "",
+        }}
+        providerModel="default"
+        dockerExecutionEnabled={false}
+        onUpdate={onUpdate}
+      />
+    );
+
+    expect(screen.queryByRole("radiogroup", { name: "Jules Primary provider config mode" })).toBeNull();
+
+    rerender(
+      <ProviderInstanceCard
+        providerConfigId="mockup-cli"
+        provider={{
+          provider: "mockup-cli",
+          name: "Mockup CLI",
+          apiKey: "",
+          mountAuth: false,
+          authPath: "",
+          authType: "apiKey",
+          providerConfigMode: "none",
+          providerConfigPath: "",
+        }}
+        providerModel="default"
+        dockerExecutionEnabled={false}
+        onUpdate={onUpdate}
+      />
+    );
+
+    expect(screen.queryByRole("radiogroup", { name: "Mockup CLI provider config mode" })).toBeNull();
   });
 
   it("names generated config previews by provider instance", () => {
