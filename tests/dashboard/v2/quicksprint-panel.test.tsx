@@ -536,6 +536,56 @@ describe("QuicksprintPanel", () => {
     resolveExecute!();
   });
 
+  it("runs the shared planning overlay through quicksprint coffee, minimize, new, and cancel controls", async () => {
+    let capturedSignal: AbortSignal | null = null;
+    const executePromise = new Promise<void>(() => undefined);
+    const mockOnExecute = vi.fn((_templateId, _taskCount, _mode, _prompt, _route, _model, signal: AbortSignal) => {
+      capturedSignal = signal;
+      return executePromise;
+    });
+
+    const { getByRole, getByText, queryByRole, queryByText } = render(
+      <QuicksprintPanel {...defaultProps} onExecute={mockOnExecute} />
+    );
+
+    fireEvent.click(getByRole("button", { name: "API Tests" }));
+    fireEvent.click(getByRole("button", { name: "Plan Only" }));
+
+    const planningDialog = await waitFor(() => getByRole("dialog", { name: "Quicksprint in motion" }));
+    expect(mockOnExecute).toHaveBeenCalledTimes(1);
+    expect(within(planningDialog).getByText("ETA")).toBeInTheDocument();
+    expect(within(planningDialog).getByText("Elapsed")).toBeInTheDocument();
+    expect(within(planningDialog).getByRole("progressbar")).toBeInTheDocument();
+
+    const vesselButton = within(planningDialog).getByRole("button", { name: /turn planning vessel into a coffee break reminder/i });
+    fireEvent.click(vesselButton);
+
+    expect(vesselButton).toHaveAttribute("aria-pressed", "true");
+    expect(within(planningDialog).getByTestId("planning-coffee-cup")).toBeInTheDocument();
+    expect(within(planningDialog).getByText("Coffee break unlocked. Grab a fresh cup while planning keeps moving.")).toBeInTheDocument();
+    expect(within(planningDialog).getByRole("button", { name: "New Quicksprint" })).toBeInTheDocument();
+    expect(within(planningDialog).getByRole("button", { name: "Minimize" })).toBeInTheDocument();
+    expect(within(planningDialog).getByRole("button", { name: "Cancel Quicksprint Request" })).toBeInTheDocument();
+
+    fireEvent.click(within(planningDialog).getByRole("button", { name: "Minimize" }));
+
+    await waitFor(() => {
+      expect(queryByText("Quicksprint in motion")).not.toBeInTheDocument();
+    });
+    expect(capturedSignal?.aborted).toBe(false);
+    expect(queryByRole("button", { name: "Minimize" })).not.toBeInTheDocument();
+    expect(getByRole("button", { name: "New Quicksprint" })).toBeInTheDocument();
+    expect(getByRole("button", { name: "Cancel Request" })).toBeInTheDocument();
+
+    fireEvent.click(getByRole("button", { name: "Cancel Request" }));
+
+    await waitFor(() => {
+      expect(capturedSignal?.aborted).toBe(true);
+    });
+    expect(getByText("Cancelled plan only request for API Tests.", { selector: "p" })).toBeInTheDocument();
+    expect(queryByText("Planning only")).not.toBeInTheDocument();
+  });
+
   it("blocks duplicate planning submissions and announces cancellation", async () => {
     let capturedSignal: AbortSignal | null = null;
     const executePromise = new Promise<void>(() => undefined);
