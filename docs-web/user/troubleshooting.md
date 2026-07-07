@@ -62,7 +62,7 @@ This is normal. `listen` is a long-poll: it blocks until a message is available 
 
 ### HTTP gateway returns 401
 
-You enabled `--mcp-https-auth-token` but the client did not send `Authorization: Bearer <token>`, or the token mismatches.
+You enabled `--mcp-http-auth-token` but the client did not send `Authorization: Bearer <token>`, or the token mismatches.
 
 **Fix:** include the header. Tokens are case-sensitive.
 

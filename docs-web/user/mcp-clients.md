@@ -21,7 +21,7 @@ Add Code UX to `~/.gemini/settings.json`:
       "command": "npx",
       "args": ["-y", "@codeuxai/codeux"],
       "env": {
-        "JULES_API_KEY": "your_api_key_here"
+        "JULES_API_KEY": "<YOUR_JULES_API_KEY>"
       }
     }
   }
@@ -31,7 +31,7 @@ Add Code UX to `~/.gemini/settings.json`:
 …or with the one-liner:
 
 ```bash
-gemini mcp add code-ux npx -- -y @codeuxai/codeux --api-key your_api_key_here
+gemini mcp add code-ux npx -- -y @codeuxai/codeux --api-key <YOUR_JULES_API_KEY>
 ```
 
 Test from Gemini CLI:
@@ -49,13 +49,13 @@ Add to `~/.codex/config.toml`:
 ```toml
 [mcp_servers.code-ux]
 command = "npx"
-args = ["-y", "@codeuxai/codeux", "--api-key", "your_api_key_here"]
+args = ["-y", "@codeuxai/codeux", "--api-key", "<YOUR_JULES_API_KEY>"]
 ```
 
 …or with the CLI:
 
 ```bash
-codex mcp add code-ux -- npx -y @codeuxai/codeux --api-key your_api_key_here
+codex mcp add code-ux -- npx -y @codeuxai/codeux --api-key <YOUR_JULES_API_KEY>
 ```
 
 ## Claude Desktop
@@ -69,7 +69,7 @@ Edit your platform's `claude_desktop_config.json` (location varies by OS — see
       "command": "npx",
       "args": ["-y", "@codeuxai/codeux"],
       "env": {
-        "JULES_API_KEY": "your_api_key_here"
+        "JULES_API_KEY": "<YOUR_JULES_API_KEY>"
       }
     }
   }
