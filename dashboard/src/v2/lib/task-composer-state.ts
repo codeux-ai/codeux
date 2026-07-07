@@ -9,6 +9,7 @@ export interface TaskDraft {
   status: TaskStatus;
   priority: TaskPriority;
   executorType: TaskExecutorType;
+  agentPresetId: string | null;
   dependsOnTaskIds: string[];
 }
 
@@ -27,6 +28,8 @@ export interface TaskComposerState {
   setPriority: (val: TaskPriority) => void;
   executorType: TaskExecutorType;
   setExecutorType: (val: TaskExecutorType) => void;
+  agentPresetId: string | null;
+  setAgentPresetId: (val: string | null) => void;
   dependsOnTaskIds: string[];
   setDependsOnTaskIds: (val: string[]) => void;
   toggleDependency: (taskId: string) => void;
@@ -76,6 +79,7 @@ export const useTaskComposerState = (
   const [status, setStatus] = useState<TaskStatus>(initialTask?.status || "pending");
   const [priority, setPriority] = useState<TaskPriority>(initialTask?.priority || "medium");
   const [executorType, setExecutorType] = useState<TaskExecutorType>(initialTask?.executorType || "auto");
+  const [agentPresetId, setAgentPresetId] = useState<string | null>(initialTask?.agentPresetId ?? null);
   const [dependsOnTaskIds, setDependsOnTaskIds] = useState<string[]>(initialTask?.dependsOnTaskIds || []);
 
   const isEditing = Boolean(initialTask);
@@ -126,6 +130,7 @@ export const useTaskComposerState = (
       setStatus(initialTask.status);
       setPriority(initialTask.priority);
       setExecutorType(initialTask.executorType);
+      setAgentPresetId(initialTask.agentPresetId ?? null);
       setDependsOnTaskIds(initialTask.dependsOnTaskIds || []);
     } else {
       setSprintId(initialSprintId || sprints[0]?.id || "");
@@ -135,6 +140,7 @@ export const useTaskComposerState = (
       setStatus("pending");
       setPriority("medium");
       setExecutorType("auto");
+      setAgentPresetId(null);
       setDependsOnTaskIds([]);
     }
   }, [initialTask, initialSprintId, sprints]);
@@ -197,6 +203,7 @@ export const useTaskComposerState = (
     status,
     priority,
     executorType,
+    agentPresetId: agentPresetId?.trim() || null,
     dependsOnTaskIds,
   });
 
@@ -208,6 +215,7 @@ export const useTaskComposerState = (
     status, setStatus,
     priority, setPriority,
     executorType, setExecutorType,
+    agentPresetId, setAgentPresetId,
     dependsOnTaskIds, setDependsOnTaskIds,
     toggleDependency,
     dependencyOptions,

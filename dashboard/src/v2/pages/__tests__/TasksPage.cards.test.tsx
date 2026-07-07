@@ -10,7 +10,8 @@ import { useProjectData, ProjectDataContext } from "../../context/project-data.j
 import { useSprints } from "../../../hooks/useSprints.js";
 import { useProjectTasks } from "../../hooks/use-project-tasks.js";
 import { useProjectEffectiveSettings } from "../../hooks/use-project-effective-settings.js";
-import { createTask, deleteTask } from "../../lib/project-api.js";
+import { fetchAgentPresets } from "../../lib/agent-preset-api.js";
+import { createTask, deleteTask, updateTask } from "../../lib/project-api.js";
 import { createMockTask } from "../../components/tasks/__tests__/fixtures/tasks.fixture.js";
 
 expect.extend(matchers);
@@ -79,6 +80,9 @@ vi.mock("../../lib/project-api.js", () => ({
   deleteTask: vi.fn(),
   updateTask: vi.fn(),
 }));
+vi.mock("../../lib/agent-preset-api.js", () => ({
+  fetchAgentPresets: vi.fn(),
+}));
 
 // Need to mock user interaction resize observers usually present in Kanban rendering
 global.ResizeObserver = class MockResizeObserver {
@@ -87,9 +91,17 @@ global.ResizeObserver = class MockResizeObserver {
     disconnect() {}
 } as any;
 
+const agentPresets = [
+  { id: "agent-alpha", projectId: "proj_1", name: "Agent Alpha", description: "", instructionMarkdown: "", labels: [], sourcePath: null, sourceScope: null, sourceUpdatedAt: null, sourceImportedAt: null, sourceExists: false, syncStatus: "manual", createdAt: "now", updatedAt: "now" },
+  { id: "agent-beta", projectId: "proj_1", name: "Agent Beta", description: "", instructionMarkdown: "", labels: [], sourcePath: null, sourceScope: null, sourceUpdatedAt: null, sourceImportedAt: null, sourceExists: false, syncStatus: "manual", createdAt: "now", updatedAt: "now" },
+];
+
 describe("TasksPage.cards Integration", () => {
   beforeEach(() => {
     routerState.searchStr = "";
+    (fetchAgentPresets as unknown as any).mockResolvedValue(agentPresets);
+    (createTask as unknown as any).mockResolvedValue({ id: "created_task_1" });
+    (updateTask as unknown as any).mockResolvedValue({ id: "updated_task_1" });
     (useProjectEffectiveSettings as unknown as any).mockReturnValue({
       data: {
         settings: {
@@ -471,12 +483,20 @@ describe("TasksPage.cards Integration", () => {
     expect(screen.getByText(/Filtered to show all status and critical priority/i)).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "New Task" }));
-    expect(screen.getByText("Create A New Task.")).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "New task editor" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Create task" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Task board" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Worker Agent" }));
+    expect(await screen.findByRole("option", { name: /Agent Alpha/i })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: /Agent Beta/i })).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Close task composer" }));
 
     await user.click(screen.getByRole("button", { name: /Edit task T-100: Foundation Setup/i }));
-    expect(screen.getByText("Refine The Task.")).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Edit task editor" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Refine task" })).toBeInTheDocument();
     expect(screen.getByDisplayValue("Foundation Setup")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Task sprint scope: SPR-1: Sprint One/i })).toBeInTheDocument();
+    expect(screen.getByText("Foundation Setup")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Close task composer" }));
 
     await user.click(screen.getByRole("button", { name: /Delete task T-100: Foundation Setup/i }));
@@ -529,6 +549,65 @@ describe("TasksPage.cards Integration", () => {
     expect(card).toHaveTextContent("Saving task changes");
   });
 
+  it("submits edited tasks with the selected worker-agent preset", async () => {
+    const user = userEvent.setup();
+    const refreshTasks = vi.fn().mockResolvedValue(undefined);
+    const refreshSprints = vi.fn().mockResolvedValue(undefined);
+    const task = createMockTask({
+      recordId: "task_rec_1",
+      id: "T-100",
+      title: "Foundation Setup",
+      status: "pending",
+      priority: "critical",
+      assignee: "Alice",
+      dependsOnTaskIds: [],
+      executorType: "jules",
+      agentPresetId: null,
+      promptMarkdown: "Implement the foundation setup.",
+    });
+
+    (useProjectData as unknown as any).mockReturnValue({
+      projects: [{ id: "proj_1", name: "Project Alpha" }],
+      selectedProject: { id: "proj_1", name: "Project Alpha" },
+    });
+    (useSprints as unknown as any).mockReturnValue({
+      data: [{ id: "sprint_1", number: 1, name: "Sprint One", status: "running", date: "Jan 1", tasksCount: 1, completion: 0, active: true }],
+      loading: false,
+      selectedSprintId: "sprint_1",
+      selectSprint: vi.fn(),
+      refetch: refreshSprints,
+    });
+    (useProjectTasks as any).mockReturnValue({
+      tasks: [task],
+      loading: false,
+      error: null,
+      refresh: refreshTasks,
+    });
+
+    render(
+      <ProjectDataContext.Provider value={{ projects: [{ id: "proj_1", name: "Project Alpha" } as any], selectedProject: { id: "proj_1", name: "Project Alpha" } as any } as any}>
+        <TasksPage />
+      </ProjectDataContext.Provider>
+    );
+
+    await user.click(screen.getByRole("button", { name: /Edit task T-100: Foundation Setup/i }));
+    expect(screen.getByRole("region", { name: "Edit task editor" })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Worker Agent" }));
+    await user.click(await screen.findByRole("option", { name: /Agent Alpha/i }));
+    await user.click(screen.getByRole("button", { name: "Save Task" }));
+
+    await waitFor(() => {
+      expect(updateTask).toHaveBeenCalledWith("task_rec_1", expect.objectContaining({
+        title: "Foundation Setup",
+        sprintId: "sprint_1",
+        agentPresetId: "agent-alpha",
+      }));
+      expect(refreshTasks).toHaveBeenCalled();
+      expect(refreshSprints).toHaveBeenCalled();
+    });
+  });
+
   it("renders and rolls back an optimistic task while a create request is pending", async () => {
     const user = userEvent.setup();
     const refreshTasks = vi.fn().mockResolvedValue(undefined);
@@ -566,14 +645,18 @@ describe("TasksPage.cards Integration", () => {
     await user.click(screen.getByRole("button", { name: "New Task" }));
     await user.type(screen.getByPlaceholderText("Fix navigation layout shift"), "Optimistic Created Task");
     await user.type(screen.getByPlaceholderText("Summarize the intent and outcome."), "Create a task through the extracted controller.");
-    await user.type(screen.getByPlaceholderText("Detailed markdown instructions for the agent."), "Implement the task with tests.");
+    await user.click(screen.getByRole("button", { name: "Worker Agent" }));
+    await user.click(await screen.findByRole("option", { name: /Agent Beta/i }));
+    await user.type(screen.getByPlaceholderText("Detailed markdown instructions for the worker agent."), "Implement the task with tests.");
     await user.click(screen.getByRole("button", { name: "Create Task" }));
 
     await waitFor(() => expect(screen.getByText("Optimistic Created Task")).toBeInTheDocument());
     expect(screen.getByText("Saving task changes")).toBeInTheDocument();
+    expect(screen.getAllByText("Agent Beta").length).toBeGreaterThan(0);
     expect(createTask).toHaveBeenCalledWith("proj_1", expect.objectContaining({
       sprintId: "sprint_1",
       title: "Optimistic Created Task",
+      agentPresetId: "agent-beta",
     }));
 
     resolveCreateTask({ id: "created_task_1" });
