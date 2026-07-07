@@ -22,7 +22,6 @@ import {
   calculateChartMetrics,
   describeChartMetrics,
   getTooltipState,
-  groupChartSeries,
   calculateHoverRect,
 } from '../chart-view-models.js';
 import { UsageGraphHeader } from './UsageGraphHeader.js';
@@ -79,6 +78,9 @@ export const InteractiveUsageChart: FunctionComponent<{
     setDragCurrentIndex,
     enabledSeries,
     setEnabledSeries,
+    resetEnabledSeries,
+    activeSeriesCount,
+    seriesGroups,
   } = chartState;
 
   const buckets = stats.buckets;
@@ -129,9 +131,6 @@ export const InteractiveUsageChart: FunctionComponent<{
   }, []);
 
   const { width, height } = dimensions;
-
-  const seriesGroups = useMemo(() => groupChartSeries(stats.chartSeries), [stats.chartSeries]);
-  const activeSeriesCount = Object.values(enabledSeries).filter(Boolean).length;
 
   const visibleSeries = useMemo(
     () => chartData.filter((series) => enabledSeries[series.id]),
@@ -320,6 +319,9 @@ export const InteractiveUsageChart: FunctionComponent<{
             stats={stats}
             enabledSeries={enabledSeries}
             setEnabledSeries={setEnabledSeries}
+            resetEnabledSeries={resetEnabledSeries}
+            activeSeriesCount={activeSeriesCount}
+            seriesGroups={seriesGroups}
             onStatusChange={setChartStatus}
           />
         </div>

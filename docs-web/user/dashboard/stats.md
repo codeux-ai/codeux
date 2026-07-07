@@ -20,7 +20,8 @@ Navigation across the top of the workspace controls the primary analysis lens:
 
 ### Trend
 A full-width interactive **Usage Graph** displays usage over time for Tokens, Time, Cost, and Git activity.
-- You can toggle specific series (e.g. prompt tokens vs completion tokens, additions vs deletions) via the right-side metrics rail.
+- You can toggle specific series (e.g. prompt tokens vs completion tokens, additions vs deletions) in grouped controls below the graph or from the graph filter menu.
+- Resetting graph filters restores the snapshot defaults and keeps at least one series enabled.
 - It includes hover bucket inspection for precise datapoints.
 - Hourly views reduce visible axis labels to a three-hour rhythm while preserving single-hour hover targets.
 
