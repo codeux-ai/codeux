@@ -72,6 +72,7 @@ The target payload keys are:
 - `sprintTarget`: `{ sprintId }`
 - `quicksprintTarget`: `{ templateId, taskCount, noTaskLimit?, submitMode, additionalPrompt?, agentPresetId?, planningOverrides? }`
 - `chatTarget`: `{ bodyMarkdown, threadId?, title?, connectionId? }`
+- `wakeupTarget`: `{ bodyMarkdown, threadId?, title?, connectionId?, sourceInvocationId?, resumeAfterInvocationCompletion? }`
 - `memoryRemediationTarget`: `{ mode, source? }`
 - `agentWakeupTarget`: `{ bodyMarkdown, threadId?, title?, connectionId?, origin: "agent_scheduler", source: "agent_scheduler", createdByAgentId? }`
 - `taskTarget`: `{ taskId, provider?, origin: "agent_scheduler", source: "agent_scheduler", createdByAgentId? }`
@@ -138,6 +139,15 @@ Due entries execute through existing production paths:
 - memory remediation entries call `MemoryRemediationService.remediateLongTermMemories`
 - agent wakeup entries call `ChatThreadRuntimeService.postMessage` with `metadata.source = "agent_scheduler"`, `metadata.origin = "agent_scheduler"`, `metadata.schedulerEntryId`, and `metadata.createdByAgentId` when present
 - task entries call `TaskRerunService.rerunTask`, passing the stored provider override when one was scheduled
+
+Project-manager `wakeup` entries can be gated on a source execution invocation. When
+`wakeupTarget.sourceInvocationId` is present and `resumeAfterInvocationCompletion` is not explicitly
+`false`, the scheduler waits until that invocation is `completed` before posting the wakeup message.
+Missing or still-running source invocations leave the entry `scheduled` with the same due time, so
+the scheduler can retry on a later tick without creating duplicate entries or mutating `nextRunAt`.
+If the source invocation ends as `failed`, `cancelled`, or `paused`, the wakeup is marked `failed`
+with `lastError` instead of posting stale follow-up text. Once the source invocation is completed,
+the wakeup posts through the chat runtime and only then is the scheduler run marked successful.
 
 AI memory remediation entries create a `remediation` invocation record even when no cleanup candidates are found; in that case the invocation is completed with a skipped reason instead of dispatching an empty provider request.
 

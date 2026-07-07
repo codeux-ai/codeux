@@ -16,15 +16,14 @@ import type { ChatThreadRuntimeService } from "./chat-thread-runtime-service.js"
 import type { ExecutionControlService } from "./execution-control-service.js";
 import type { MemoryRemediationService } from "./memory-remediation-service.js";
 import type { TaskRerunService } from "./task-rerun-service.js";
+import type { ExecutionRepository } from "../repositories/execution-repository.js";
 import { buildSchedulerOccurrences, computeNextRunAfterOccurrence } from "../domain/scheduler/schedule-time.js";
 import type { ConversationMessageMetadata, CreateDashboardConversationMessageInput } from "../contracts/connection-chat-types.js";
 
 export interface SchedulerServiceDeps {
   schedulerRepository: SchedulerRepository;
   projectManagementRepository: ProjectManagementRepository;
-  executionRepository?: {
-    listSprintRuns(projectId: string, sprintId?: string): SprintRunRecord[];
-  };
+  executionRepository?: ExecutionRepository;
   quicksprintService: QuicksprintService;
   chatThreadRuntimeService: ChatThreadRuntimeService;
   executionControlService: ExecutionControlService;
@@ -202,16 +201,32 @@ export class SchedulerService {
         continue;
       }
 
+      const wakeupGate = this.resolveWakeupInvocationGate(freshEntry);
+      if (wakeupGate.action === "defer") {
+        continue;
+      }
+      if (wakeupGate.action === "fail") {
+        this.deps.schedulerRepository.markRunFailed(freshEntry.id, wakeupGate.error);
+        continue;
+      }
+
       this.inFlightEntryIds.add(entry.id);
-      
+
       const nextRunAt = freshEntry.scheduleAnchor
         ? null
         : computeNextRunAfterOccurrence(occurrenceIso, freshEntry.recurrence, freshEntry.runCount + 1);
-      
-      // Immediately mark as succeeded to prevent double firing if app restarts during execution
-      this.deps.schedulerRepository.markRunSucceeded(freshEntry.id, occurrenceIso, nextRunAt);
 
-      this.executeEntry(freshEntry).catch((error) => {
+      const markSucceededAfterExecution = wakeupGate.action === "ready_after_execution";
+      if (!markSucceededAfterExecution) {
+        // Immediately mark as succeeded to prevent double firing if app restarts during execution.
+        this.deps.schedulerRepository.markRunSucceeded(freshEntry.id, occurrenceIso, nextRunAt);
+      }
+
+      this.executeEntry(freshEntry).then(() => {
+        if (markSucceededAfterExecution) {
+          this.deps.schedulerRepository.markRunSucceeded(freshEntry.id, occurrenceIso, nextRunAt);
+        }
+      }).catch((error) => {
         const message = error instanceof Error ? error.message : String(error);
         this.deps.logger.error("Scheduled entry execution failed", {
           entryId: freshEntry.id,
@@ -487,7 +502,38 @@ export class SchedulerService {
       && entry.status !== "cancelled"
     )) ?? null;
   }
+
+  private resolveWakeupInvocationGate(entry: SchedulerEntryRecord): WakeupInvocationGateResult {
+    if (entry.targetType !== "wakeup") {
+      return { action: "ready" };
+    }
+    const sourceInvocationId = entry.wakeupTarget?.sourceInvocationId?.trim();
+    if (!sourceInvocationId || entry.wakeupTarget?.resumeAfterInvocationCompletion === false) {
+      return { action: "ready" };
+    }
+
+    const invocation = this.deps.executionRepository?.getExecutionInvocation(sourceInvocationId) ?? null;
+    if (!invocation) {
+      return { action: "defer" };
+    }
+    if (invocation.status === "completed") {
+      return { action: "ready_after_execution" };
+    }
+    if (isTerminalExecutionInvocationStatus(invocation.status)) {
+      return {
+        action: "fail",
+        error: `Scheduled wakeup source invocation ${sourceInvocationId} ended with status ${invocation.status}.`,
+      };
+    }
+    return { action: "defer" };
+  }
 }
+
+type WakeupInvocationGateResult =
+  | { action: "ready" }
+  | { action: "ready_after_execution" }
+  | { action: "defer" }
+  | { action: "fail"; error: string };
 
 function isTerminalSprintStatus(status: string): boolean {
   return status === "completed" || status === "failed" || status === "cancelled";
@@ -508,6 +554,10 @@ function latestTerminalRunFinishedAt(runs: SprintRunRecord[]): Date | null {
     }
   }
   return latest;
+}
+
+function isTerminalExecutionInvocationStatus(status: string): boolean {
+  return status === "failed" || status === "cancelled" || status === "paused";
 }
 
 function normalizeScheduleStart(value?: string): string {
