@@ -22,6 +22,7 @@ export type DocsSlug =
   | 'user-dashboard-chat'
   | 'user-dashboard-agents'
   | 'user-dashboard-nodes'
+  | 'user-dashboard-nodes-canvas'
   | 'user-dashboard-node-flows'
   | 'user-dashboard-scheduler'
   | 'user-dashboard-memory'
@@ -197,7 +198,14 @@ export const docsRegistry: Record<DocsSlug, DocsRegistryEntry> = {
     path: '/docs/user-dashboard-nodes',
     section: 'User Guide',
     title: "Nodes",
-    description: "The Nodes page (/nodes) manages project-scoped workflow graphs for editing, widget configuration, agent attachments, validation, and persisted run inspection.",
+    description: "The Nodes page (/nodes) opens a browser-local canvas workspace for drafting workflow graphs with localStorage persistence, validation, JSON import/export, and agent command metadata.",
+  },
+  'user-dashboard-nodes-canvas': {
+    id: 'user-dashboard-nodes-canvas',
+    path: '/docs/user-dashboard-nodes-canvas',
+    section: 'User Guide',
+    title: "Nodes Canvas",
+    description: "The Nodes Canvas page is a local graph drafting surface with trigger, agent, task, condition, and output nodes, structural validation, deterministic JSON exchange, and agent command helpers.",
   },
   'user-dashboard-node-flows': {
     id: 'user-dashboard-node-flows',
@@ -459,6 +467,7 @@ export const orderedDocs: DocsRegistryEntry[] = [
   docsRegistry['user-dashboard-chat'],
   docsRegistry['user-dashboard-agents'],
   docsRegistry['user-dashboard-nodes'],
+  docsRegistry['user-dashboard-nodes-canvas'],
   docsRegistry['user-dashboard-node-flows'],
   docsRegistry['user-dashboard-scheduler'],
   docsRegistry['user-dashboard-memory'],

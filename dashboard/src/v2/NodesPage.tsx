@@ -1,576 +1,374 @@
+import type { FunctionComponent } from "preact";
 import { useCallback, useEffect, useMemo, useState } from "preact/hooks";
-import { AlertTriangle, GitBranch, Plus, Save, ShieldCheck, Workflow } from "lucide-preact";
+import {
+  AlertTriangle,
+  CheckCircle2,
+  ClipboardList,
+  Download,
+  FileJson,
+  RefreshCcw,
+  RotateCcw,
+  Upload,
+  Workflow,
+} from "lucide-preact";
 import { PageContainer } from "./components/layout/PageContainer.js";
 import { PageHeader } from "./components/layout/PageHeader.js";
-import { NodeFlowCanvas } from "./components/nodes/NodeFlowCanvas.js";
-import { NodeFlowInspector } from "./components/nodes/NodeFlowInspector.js";
-import { NodeFlowLibrary } from "./components/nodes/NodeFlowLibrary.js";
-import { NodeFlowRunPanel } from "./components/nodes/NodeFlowRunPanel.js";
-import { useProjectData } from "./context/project-data.js";
-import {
-  attachNodeFlowToAgent,
-  createNodeFlow,
-  deleteNodeFlow,
-  detachNodeFlowFromAgent,
-  fetchNodeFlowAgentSkills,
-  fetchNodeFlowNodeRuns,
-  fetchNodeFlowRuns,
-  fetchNodeFlows,
-  runNodeFlow,
-  updateNodeFlow,
-  validateNodeFlow,
-} from "./lib/node-flow-api.js";
-import { fetchAgentPresets } from "./lib/agent-preset-api.js";
+import { NodeCanvas } from "./components/nodes/NodeCanvas.js";
+import { NodeInspector } from "./components/nodes/NodeInspector.js";
+import { NodePalette } from "./components/nodes/NodePalette.js";
+import { NodeValidationPanel } from "./components/nodes/NodeValidationPanel.js";
+import { Button } from "./components/ui/Button.js";
 import type {
-  AgentPreset,
-  NodeFlowGraph,
-  NodeFlowJsonObject,
-  NodeFlowNode,
-  NodeFlowNodeRunRecord,
-  NodeFlowRecord,
-  NodeFlowRunRecord,
-  NodeFlowSkillAttachment,
-  NodeFlowValidationResponse,
-} from "./types.js";
+  NodeCanvasConfigValue,
+  NodeCanvasEdge,
+  NodeCanvasGraph,
+  NodeCanvasNode,
+  NodesCanvasAction,
+} from "./lib/nodes-canvas-state.js";
 import {
-  createDefaultNodeFlowGraph,
-  getValidationBadgeState,
-  isNodeFlowDirty,
-  updateNodeInGraph,
-} from "./lib/node-flow-view-models.js";
+  createInitialNodeCanvasGraph,
+  nodesCanvasReducer,
+  serializeNodeCanvasGraph,
+  validateNodeCanvasGraph,
+} from "./lib/nodes-canvas-state.js";
+import {
+  applyNodeCanvasAgentCommand,
+  buildNodeCanvasAgentSummary,
+} from "./lib/nodes-agent-surface.js";
 
-type Feedback = { tone: "success" | "error" | "info"; message: string } | null;
+export const NODES_CANVAS_STORAGE_KEY = "codeux:nodes-canvas:v1";
 
-const panelClass = "rounded-[1.6rem] border border-black/[0.08] bg-white/65 p-4 shadow-[0_18px_52px_rgba(15,23,42,0.06)] backdrop-blur-xl dark:border-white/[0.08] dark:bg-white/[0.04]";
+type FeedbackTone = "success" | "error" | "info" | "warning";
 
-export const NodesPage = () => {
-  const { selectedProject, loading: projectLoading } = useProjectData();
-  const [flows, setFlows] = useState<NodeFlowRecord[]>([]);
-  const [selectedFlowId, setSelectedFlowId] = useState<string | null>(null);
-  const [agents, setAgents] = useState<AgentPreset[]>([]);
-  const [attachments, setAttachments] = useState<NodeFlowSkillAttachment[]>([]);
-  const [runs, setRuns] = useState<NodeFlowRunRecord[]>([]);
-  const [nodeRuns, setNodeRuns] = useState<NodeFlowNodeRunRecord[]>([]);
-  const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
-  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
-  const [draftTitle, setDraftTitle] = useState("");
-  const [draftDescription, setDraftDescription] = useState("");
-  const [draftGraph, setDraftGraph] = useState<NodeFlowGraph>(() => createDefaultNodeFlowGraph());
-  const [validation, setValidation] = useState<NodeFlowValidationResponse | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [loadingRuns, setLoadingRuns] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [validating, setValidating] = useState(false);
-  const [running, setRunning] = useState(false);
-  const [attaching, setAttaching] = useState(false);
-  const [attachAgentId, setAttachAgentId] = useState("");
-  const [feedback, setFeedback] = useState<Feedback>(null);
-  const [runError, setRunError] = useState<string | null>(null);
+interface FeedbackState {
+  tone: FeedbackTone;
+  message: string;
+}
 
-  const selectedFlow = useMemo(() => flows.find((flow) => flow.id === selectedFlowId) ?? null, [flows, selectedFlowId]);
-  const selectedNode = useMemo(() => draftGraph.nodes.find((node) => node.id === selectedNodeId) ?? draftGraph.nodes[0] ?? null, [draftGraph.nodes, selectedNodeId]);
-  const dirty = isNodeFlowDirty(selectedFlow, draftTitle, draftDescription, draftGraph);
-  const validationBadge = getValidationBadgeState(validation, dirty);
+const panelClass = "rounded-[var(--radius-panel)] border border-black/[0.06] bg-white/70 p-4 shadow-[var(--elevation-soft)] dark:border-white/[0.06] dark:bg-white/[0.035]";
 
-  const loadProjectData = useCallback(async (projectId: string, signal?: AbortSignal): Promise<void> => {
-    setLoading(true);
-    setFeedback(null);
-    try {
-      const [flowResponse, nextAgents] = await Promise.all([
-        fetchNodeFlows(projectId, signal),
-        fetchAgentPresets(projectId),
-      ]);
-      setFlows(flowResponse.flows);
-      setAgents(nextAgents);
-      const nextSelected = flowResponse.flows.find((flow) => flow.id === selectedFlowId) ?? flowResponse.flows[0] ?? null;
-      setSelectedFlowId(nextSelected?.id ?? null);
-      if (!nextSelected) {
-        setDraftTitle("");
-        setDraftDescription("");
-        setDraftGraph(createDefaultNodeFlowGraph());
-        setSelectedNodeId(null);
-        setAttachments([]);
-        setRuns([]);
-        setNodeRuns([]);
-        setSelectedRunId(null);
-      }
-    } catch (error) {
-      if (!signal?.aborted) {
-        setFeedback({ tone: "error", message: error instanceof Error ? error.message : "Failed to load node flows." });
-      }
-    } finally {
-      if (!signal?.aborted) {
-        setLoading(false);
-      }
-    }
-  }, [selectedFlowId]);
+const toneClasses: Record<FeedbackTone, string> = {
+  success: "border-status-green/20 bg-status-green/[0.08] text-slate-700 dark:text-slate-200",
+  error: "border-status-red/25 bg-status-red/[0.08] text-slate-700 dark:text-slate-200",
+  info: "border-signal-500/20 bg-signal-500/[0.08] text-slate-700 dark:text-slate-200",
+  warning: "border-amber-500/25 bg-amber-500/[0.08] text-slate-700 dark:text-slate-200",
+};
 
-  useEffect(() => {
-    if (!selectedProject?.id) {
-      setFlows([]);
-      setSelectedFlowId(null);
-      return;
-    }
-    const controller = new AbortController();
-    void loadProjectData(selectedProject.id, controller.signal);
-    return () => controller.abort();
-  }, [loadProjectData, selectedProject?.id]);
-
-  useEffect(() => {
-    if (!selectedFlow) {
-      return;
-    }
-    setDraftTitle(selectedFlow.title);
-    setDraftDescription(selectedFlow.description);
-    setDraftGraph(selectedFlow.graph);
-    setSelectedNodeId(selectedFlow.graph.nodes[0]?.id ?? null);
-    setValidation(null);
-    setRunError(null);
-  }, [selectedFlow?.id]);
-
-  const refreshFlowDetails = useCallback(async (flowId: string): Promise<void> => {
-    const [nextAttachments, runResponse] = await Promise.all([
-      fetchNodeFlowAgentSkills(flowId),
-      fetchNodeFlowRuns(flowId, 25),
-    ]);
-    setAttachments(nextAttachments);
-    setRuns(runResponse.runs);
-    setSelectedRunId((current) => current && runResponse.runs.some((run) => run.id === current)
-      ? current
-      : runResponse.runs[0]?.id ?? null);
-  }, []);
-
-  useEffect(() => {
-    if (!selectedFlowId) {
-      return;
-    }
-    let cancelled = false;
-    setLoadingRuns(true);
-    refreshFlowDetails(selectedFlowId)
-      .catch((error) => {
-        if (!cancelled) {
-          setFeedback({ tone: "error", message: error instanceof Error ? error.message : "Failed to load node flow runs." });
-        }
-      })
-      .finally(() => {
-        if (!cancelled) {
-          setLoadingRuns(false);
-        }
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [refreshFlowDetails, selectedFlowId]);
-
-  useEffect(() => {
-    if (!selectedRunId) {
-      setNodeRuns([]);
-      return;
-    }
-    let cancelled = false;
-    fetchNodeFlowNodeRuns(selectedRunId)
-      .then((response) => {
-        if (!cancelled) {
-          setNodeRuns(response.nodeRuns);
-        }
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setNodeRuns([]);
-        }
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [selectedRunId]);
-
-  const handleCreateFlow = async (): Promise<void> => {
-    if (!selectedProject) {
-      return;
-    }
-    setSaving(true);
-    setFeedback(null);
-    try {
-      const created = await createNodeFlow(selectedProject.id, {
-        title: "Untitled Node Flow",
-        description: "",
-        graph: createDefaultNodeFlowGraph(),
-      });
-      setFlows((current) => [created, ...current]);
-      setSelectedFlowId(created.id);
-      setFeedback({ tone: "success", message: "Node flow created." });
-    } catch (error) {
-      setFeedback({ tone: "error", message: error instanceof Error ? error.message : "Failed to create node flow." });
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleSave = async (): Promise<void> => {
-    if (!selectedFlow) {
-      return;
-    }
-    setSaving(true);
-    setFeedback(null);
-    try {
-      const updated = await updateNodeFlow(selectedFlow.id, {
-        title: draftTitle,
-        description: draftDescription,
-        graph: draftGraph,
-      });
-      setFlows((current) => current.map((flow) => flow.id === updated.id ? updated : flow));
-      setValidation({ valid: true, errors: [], graph: updated.graph });
-      setFeedback({ tone: "success", message: "Node flow saved." });
-    } catch (error) {
-      setFeedback({ tone: "error", message: error instanceof Error ? error.message : "Failed to save node flow." });
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleValidate = async (): Promise<void> => {
-    if (!selectedFlow) {
-      return;
-    }
-    setValidating(true);
-    setFeedback(null);
-    try {
-      const result = await validateNodeFlow(selectedFlow.id, draftGraph);
-      setValidation(result);
-      setFeedback({ tone: result.valid ? "success" : "error", message: result.valid ? "Node flow is valid." : "Validation found graph issues." });
-    } catch (error) {
-      setFeedback({ tone: "error", message: error instanceof Error ? error.message : "Failed to validate node flow." });
-    } finally {
-      setValidating(false);
-    }
-  };
-
-  const handleDelete = async (flowId: string): Promise<void> => {
-    setSaving(true);
-    setFeedback(null);
-    try {
-      await deleteNodeFlow(flowId);
-      setFlows((current) => current.filter((flow) => flow.id !== flowId));
-      if (selectedFlowId === flowId) {
-        const remaining = flows.filter((flow) => flow.id !== flowId);
-        setSelectedFlowId(remaining[0]?.id ?? null);
-      }
-      setFeedback({ tone: "success", message: "Node flow deleted." });
-    } catch (error) {
-      setFeedback({ tone: "error", message: error instanceof Error ? error.message : "Failed to delete node flow." });
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleNodeChange = (nodeId: string, update: Partial<NodeFlowNode>): void => {
-    setDraftGraph((current) => updateNodeInGraph(current, nodeId, update));
-    setValidation(null);
-  };
-
-  const handleAddNode = (): void => {
-    const nextIndex = draftGraph.nodes.length + 1;
-    const nodeId = `node-${nextIndex}`;
-    const nextNode: NodeFlowNode = {
-      id: nodeId,
-      type: "set_fields",
-      title: `Set Fields ${nextIndex}`,
-      description: "",
-      position: { x: 80 + nextIndex * 36, y: 120 + nextIndex * 24 },
-      widgetSchema: {
-        fields: [
-          { id: "fields", type: "json", label: "Fields", defaultValue: {} },
-          { id: "enabled", type: "boolean", label: "Enabled", defaultValue: true },
-        ],
-      },
-      data: { fields: {}, enabled: true },
-    };
-    setDraftGraph((current) => ({ ...current, nodes: [...current.nodes, nextNode] }));
-    setSelectedNodeId(nodeId);
-    setValidation(null);
-  };
-
-  const handleAddEdge = (): void => {
-    if (draftGraph.nodes.length < 2) {
-      return;
-    }
-    const fromNode = selectedNode ?? draftGraph.nodes[0]!;
-    const toNode = draftGraph.nodes.find((node) => node.id !== fromNode.id && !draftGraph.edges.some((edge) => edge.fromNodeId === fromNode.id && edge.toNodeId === node.id));
-    if (!toNode) {
-      setFeedback({ tone: "info", message: "All simple edges from the selected node already exist." });
-      return;
-    }
-    setDraftGraph((current) => ({
-      ...current,
-      edges: [...current.edges, { id: `${fromNode.id}-${toNode.id}`, fromNodeId: fromNode.id, toNodeId: toNode.id }],
-    }));
-    setValidation(null);
-  };
-
-  const handleAttachAgent = async (): Promise<void> => {
-    if (!selectedFlow || !attachAgentId) {
-      return;
-    }
-    setAttaching(true);
-    try {
-      const attachment = await attachNodeFlowToAgent(selectedFlow.id, { agentPresetId: attachAgentId });
-      setAttachments((current) => [...current.filter((entry) => entry.agentPresetId !== attachment.agentPresetId), attachment]);
-      setAttachAgentId("");
-      setFeedback({ tone: "success", message: "Agent attached." });
-    } catch (error) {
-      setFeedback({ tone: "error", message: error instanceof Error ? error.message : "Failed to attach agent." });
-    } finally {
-      setAttaching(false);
-    }
-  };
-
-  const handleDetachAgent = async (agentPresetId: string): Promise<void> => {
-    if (!selectedFlow) {
-      return;
-    }
-    try {
-      await detachNodeFlowFromAgent(selectedFlow.id, agentPresetId);
-      setAttachments((current) => current.filter((entry) => entry.agentPresetId !== agentPresetId));
-      setFeedback({ tone: "success", message: "Agent detached." });
-    } catch (error) {
-      setFeedback({ tone: "error", message: error instanceof Error ? error.message : "Failed to detach agent." });
-    }
-  };
-
-  const handleRun = async (input: NodeFlowJsonObject): Promise<void> => {
-    if (!selectedFlow) {
-      return;
-    }
-    setRunning(true);
-    setRunError(null);
-    try {
-      const result = await runNodeFlow(selectedFlow.id, { projectId: selectedFlow.projectId, input });
-      const run = { ...result.run, output: result.output ?? result.run.output };
-      setRuns((current) => [run, ...current.filter((entry) => entry.id !== run.id)]);
-      setSelectedRunId(run.id);
-      setNodeRuns(result.nodeRuns);
-      setFeedback({ tone: "success", message: `Node flow run ${run.status}.` });
-    } catch (error) {
-      setRunError(error instanceof Error ? error.message : "Failed to run node flow.");
-    } finally {
-      setRunning(false);
-    }
-  };
-
-  const refreshRuns = async (): Promise<void> => {
-    if (!selectedFlow) {
-      return;
-    }
-    setLoadingRuns(true);
-    try {
-      const response = await fetchNodeFlowRuns(selectedFlow.id, 25);
-      setRuns(response.runs);
-      setSelectedRunId((current) => current && response.runs.some((run) => run.id === current)
-        ? current
-        : response.runs[0]?.id ?? null);
-    } catch (error) {
-      setFeedback({ tone: "error", message: error instanceof Error ? error.message : "Failed to refresh runs." });
-    } finally {
-      setLoadingRuns(false);
-    }
-  };
-
-  if (projectLoading || !selectedProject) {
-    return (
-      <PageContainer aria-label="Nodes" padding="standard" className="gap-8">
-        {!selectedProject ? <ProjectPlaceholder /> : (
-          <div role="status" className={panelClass}>Loading project node flows…</div>
-        )}
-      </PageContainer>
-    );
+const loadPersistedGraph = (): NodeCanvasGraph => {
+  if (typeof window === "undefined") {
+    return createInitialNodeCanvasGraph();
   }
 
+  const persisted = window.localStorage.getItem(NODES_CANVAS_STORAGE_KEY);
+  if (!persisted) {
+    return createInitialNodeCanvasGraph();
+  }
+
+  const result = applyNodeCanvasAgentCommand(createInitialNodeCanvasGraph(), {
+    command: "replace_graph",
+    serializedGraph: persisted,
+  });
+
+  return result.issues.some((issue) => issue.field === "serializedGraph")
+    ? createInitialNodeCanvasGraph()
+    : result.graph;
+};
+
+const selectedNodeFromGraph = (graph: NodeCanvasGraph): NodeCanvasNode | null => {
+  const selectedId = graph.selection.nodeIds[0];
+  return selectedId ? graph.nodes.find((node) => node.id === selectedId) ?? null : null;
+};
+
+const selectedEdgeFromGraph = (graph: NodeCanvasGraph): NodeCanvasEdge | null => {
+  const selectedId = graph.selection.edgeIds[0];
+  return selectedId ? graph.edges.find((edge) => edge.id === selectedId) ?? null : null;
+};
+
+const updateNodePatch = (
+  graph: NodeCanvasGraph,
+  nodeId: string,
+  patch: Partial<Pick<NodeCanvasNode, "description" | "label" | "metadata">>,
+): NodeCanvasGraph => {
+  let nextGraph = graph;
+  if (patch.label !== undefined) {
+    nextGraph = nodesCanvasReducer(nextGraph, { type: "update_node_label", nodeId, label: patch.label });
+  }
+
+  if (patch.description !== undefined || patch.metadata !== undefined) {
+    nextGraph = nodesCanvasReducer(nextGraph, {
+      type: "replace_graph",
+      graph: {
+        ...nextGraph,
+        nodes: nextGraph.nodes.map((node) => node.id === nodeId
+          ? {
+              ...node,
+              ...(patch.description !== undefined ? { description: patch.description } : {}),
+              ...(patch.metadata !== undefined ? { metadata: { ...node.metadata, ...patch.metadata } } : {}),
+            }
+          : node),
+      },
+    });
+  }
+
+  return nextGraph;
+};
+
+const formatSummaryJson = (graph: NodeCanvasGraph): string => (
+  JSON.stringify(buildNodeCanvasAgentSummary(graph), null, 2)
+);
+
+export const NodesPage: FunctionComponent = () => {
+  const [graph, setGraph] = useState<NodeCanvasGraph>(() => loadPersistedGraph());
+  const [exchangeJson, setExchangeJson] = useState(() => serializeNodeCanvasGraph(graph));
+  const [feedback, setFeedback] = useState<FeedbackState>({
+    tone: "info",
+    message: "Canvas restored from local browser storage.",
+  });
+  const [enabledNodeIds, setEnabledNodeIds] = useState<Set<string>>(() => new Set(graph.nodes.map((node) => node.id)));
+
+  const validationIssues = useMemo(() => validateNodeCanvasGraph(graph), [graph]);
+  const summary = useMemo(() => buildNodeCanvasAgentSummary(graph), [graph]);
+  const selectedNode = useMemo(() => selectedNodeFromGraph(graph), [graph]);
+  const selectedEdge = useMemo(() => selectedEdgeFromGraph(graph), [graph]);
+  const serializedGraph = useMemo(() => serializeNodeCanvasGraph(graph), [graph]);
+  const summaryJson = useMemo(() => formatSummaryJson(graph), [graph]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    window.localStorage.setItem(NODES_CANVAS_STORAGE_KEY, serializedGraph);
+  }, [serializedGraph]);
+
+  const dispatch = useCallback((action: NodesCanvasAction): void => {
+    setGraph((current) => nodesCanvasReducer(current, action));
+  }, []);
+
+  const handleExport = (): void => {
+    setExchangeJson(serializedGraph);
+    setFeedback({
+      tone: validationIssues.length === 0 ? "success" : "warning",
+      message: `Exported ${summary.nodeCount} nodes and ${summary.edgeCount} edges as deterministic JSON.`,
+    });
+  };
+
+  const handleImport = (): void => {
+    const result = applyNodeCanvasAgentCommand(graph, {
+      command: "replace_graph",
+      serializedGraph: exchangeJson,
+    });
+    const importIssues = result.issues.filter((issue) => issue.entityId.startsWith("command[0]"));
+    if (importIssues.length > 0) {
+      setFeedback({ tone: "error", message: importIssues[0]?.message ?? "Import failed." });
+      return;
+    }
+
+    setGraph(result.graph);
+    setEnabledNodeIds(new Set(result.graph.nodes.map((node) => node.id)));
+    const nextIssueCount = validateNodeCanvasGraph(result.graph).length;
+    setFeedback({
+      tone: nextIssueCount === 0 ? "success" : "warning",
+      message: nextIssueCount === 0
+        ? "Imported graph JSON and saved it locally."
+        : `Imported graph JSON with ${nextIssueCount} validation issue${nextIssueCount === 1 ? "" : "s"}.`,
+    });
+  };
+
+  const handleReset = (): void => {
+    const nextGraph = createInitialNodeCanvasGraph();
+    setGraph(nextGraph);
+    setExchangeJson(serializeNodeCanvasGraph(nextGraph));
+    setEnabledNodeIds(new Set(nextGraph.nodes.map((node) => node.id)));
+    setFeedback({ tone: "info", message: "Canvas reset to the starter workflow." });
+  };
+
+  const handleClear = (): void => {
+    setGraph({ nodes: [], edges: [], selection: { nodeIds: [], edgeIds: [] } });
+    setEnabledNodeIds(new Set());
+    setFeedback({ tone: "info", message: "Canvas cleared. Add a node from the palette to start again." });
+  };
+
+  const handleNodeChange = (
+    nodeId: string,
+    patch: Partial<Pick<NodeCanvasNode, "description" | "label" | "metadata">>,
+  ): void => {
+    setGraph((current) => updateNodePatch(current, nodeId, patch));
+  };
+
+  const handleNodeConfigChange = (nodeId: string, fieldId: string, value: NodeCanvasConfigValue): void => {
+    dispatch({ type: "update_node_config", nodeId, fieldId, value });
+  };
+
+  const handleNodeEnabledChange = (nodeId: string, enabled: boolean): void => {
+    setEnabledNodeIds((current) => {
+      const next = new Set(current);
+      if (enabled) {
+        next.add(nodeId);
+      } else {
+        next.delete(nodeId);
+      }
+      return next;
+    });
+    setFeedback({ tone: "info", message: `${enabled ? "Enabled" : "Disabled"} ${nodeId} for this editing session.` });
+  };
+
+  const selectNode = (nodeId: string, append = false): void => dispatch({ type: "select_node", nodeId, append });
+  const selectEdge = (edgeId: string, append = false): void => dispatch({ type: "select_edge", edgeId, append });
+
+  const statusIcon = validationIssues.length === 0 ? CheckCircle2 : AlertTriangle;
+  const StatusIcon = statusIcon;
+
   return (
-    <PageContainer aria-label="Nodes" padding="standard" className="gap-8" data-testid="nodes-page-root">
+    <PageContainer
+      aria-labelledby="nodes-canvas-title"
+      className="gap-5"
+      padding="workbench"
+    >
       <PageHeader
-        data-testid="nodes-primary-header"
-        icon={GitBranch}
+        icon={Workflow}
         eyebrow="Nodes"
-        title="Workflow Nodes"
-        subtitle="Project workflow graphs, agent attachments, validation, and manual runs."
-        actions={
-          <div className="flex flex-wrap items-center gap-2">
-            <span
-              title={validationBadge.title}
-              className={`inline-flex items-center gap-2 rounded-full border px-3 py-2 text-xs font-bold uppercase tracking-[0.13em] ${
-                validationBadge.tone === "success" ? "border-signal-500/25 bg-signal-500/[0.08] text-signal-700 dark:text-signal-300"
-                  : validationBadge.tone === "danger" ? "border-status-red/25 bg-status-red/[0.08] text-status-red"
-                  : validationBadge.tone === "warning" ? "border-ember-500/25 bg-ember-500/[0.08] text-ember-700 dark:text-ember-300"
-                  : "border-black/[0.08] bg-white/60 text-slate-500 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-400"
-              }`}
-            >
-              {validationBadge.label}
-            </span>
-            <button
-              type="button"
-              onClick={handleValidate}
-              disabled={!selectedFlow || validating}
-              className="inline-flex items-center gap-2 rounded-xl border border-black/[0.08] bg-white/70 px-4 py-2 text-sm font-bold text-slate-600 transition hover:text-slate-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/40 disabled:opacity-50 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-300"
-            >
-              <ShieldCheck className="h-4 w-4" aria-hidden="true" />
-              Validate
-            </button>
-            <button
-              type="button"
-              onClick={handleSave}
-              disabled={!selectedFlow || !dirty || saving}
-              className="inline-flex items-center gap-2 rounded-xl bg-signal-500 px-4 py-2 text-sm font-bold text-white transition hover:bg-signal-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/40 disabled:opacity-50 dark:text-void-900"
-            >
-              <Save className="h-4 w-4" aria-hidden="true" />
-              Save
-            </button>
-          </div>
-        }
+        title={<span id="nodes-canvas-title">Nodes Canvas</span>}
+        subtitle="Compose local workflow graphs with typed nodes, reducer-backed edits, validation feedback, and JSON exchange for agents."
+        actions={(
+          <>
+            <Button type="button" size="sm" variant="secondary" icon={Download} onClick={handleExport}>
+              Export JSON
+            </Button>
+            <Button type="button" size="sm" variant="secondary" icon={Upload} onClick={handleImport}>
+              Import JSON
+            </Button>
+            <Button type="button" size="sm" variant="ghost" icon={RefreshCcw} onClick={handleClear}>
+              Clear
+            </Button>
+            <Button type="button" size="sm" variant="ghost" icon={RotateCcw} onClick={handleReset}>
+              Reset
+            </Button>
+          </>
+        )}
       />
 
-      {feedback ? (
-        <div
-          role={feedback.tone === "error" ? "alert" : "status"}
-          className={`rounded-2xl border px-4 py-3 text-sm ${
-            feedback.tone === "error"
-              ? "border-status-red/25 bg-status-red/[0.08] text-status-red"
-              : "border-signal-500/20 bg-signal-500/[0.08] text-signal-700 dark:text-signal-300"
-          }`}
+      <section
+        aria-label="Node canvas status"
+        className={`${panelClass} flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between`}
+      >
+        <div className="flex min-w-0 items-start gap-3">
+          <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-[var(--radius-ui)] bg-slate-900/[0.06] text-slate-600 dark:bg-white/[0.08] dark:text-slate-200">
+            <StatusIcon className={validationIssues.length === 0 ? "h-4 w-4 text-status-green" : "h-4 w-4 text-status-red"} aria-hidden="true" />
+          </div>
+          <div className="min-w-0">
+            <p className="text-sm font-bold text-slate-900 dark:text-white">
+              {validationIssues.length === 0 ? "Graph is structurally valid" : `${validationIssues.length} validation issue${validationIssues.length === 1 ? "" : "s"}`}
+            </p>
+            <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+              {summary.nodeCount} nodes, {summary.edgeCount} edges, {summary.selectedNodeIds.length + summary.selectedEdgeIds.length} selected. Saved locally under <code>{NODES_CANVAS_STORAGE_KEY}</code>.
+            </p>
+          </div>
+        </div>
+        <p
+          role="status"
+          aria-live="polite"
+          className={`rounded-[var(--radius-ui)] border px-3 py-2 text-sm ${toneClasses[feedback.tone]}`}
         >
           {feedback.message}
-        </div>
-      ) : null}
+        </p>
+      </section>
 
-      <div className="flex flex-col gap-6 xl:flex-row xl:items-start">
-        <NodeFlowLibrary
-          flows={flows}
-          selectedFlowId={selectedFlowId}
-          loading={loading}
-          onSelect={setSelectedFlowId}
-          onCreate={() => void handleCreateFlow()}
-          onDelete={(flowId) => void handleDelete(flowId)}
+      <div className="grid min-h-0 gap-4 xl:grid-cols-[300px_minmax(0,1fr)_380px]">
+        <NodePalette
+          onCreateNode={(action) => {
+            dispatch(action);
+            setFeedback({ tone: "success", message: `Added ${action.kind} node.` });
+          }}
         />
 
-        {selectedFlow ? (
-          <div className="flex min-w-0 flex-1 flex-col gap-4">
-            <section className={panelClass} aria-label="Flow settings">
-              <div className="grid gap-3 md:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)]">
-                <label className="flex flex-col gap-1.5 text-xs font-bold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">
-                  Flow title
-                  <input
-                    className="w-full rounded-xl border border-black/[0.08] bg-white/75 px-3 py-2 text-sm normal-case tracking-normal text-slate-800 outline-none focus:border-signal-500/50 focus:ring-2 focus:ring-signal-500/20 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-100"
-                    value={draftTitle}
-                    onInput={(event) => setDraftTitle(event.currentTarget.value)}
-                  />
-                </label>
-                <label className="flex flex-col gap-1.5 text-xs font-bold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">
-                  Description
-                  <input
-                    className="w-full rounded-xl border border-black/[0.08] bg-white/75 px-3 py-2 text-sm normal-case tracking-normal text-slate-800 outline-none focus:border-signal-500/50 focus:ring-2 focus:ring-signal-500/20 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-100"
-                    value={draftDescription}
-                    onInput={(event) => setDraftDescription(event.currentTarget.value)}
-                  />
-                </label>
-              </div>
-              <div className="mt-3 flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={handleAddNode}
-                  className="inline-flex items-center gap-2 rounded-xl border border-black/[0.08] bg-white/70 px-3 py-2 text-xs font-bold text-slate-600 transition hover:text-slate-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/40 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-300"
-                >
-                  <Plus className="h-3.5 w-3.5" aria-hidden="true" />
-                  Add Node
-                </button>
-                <button
-                  type="button"
-                  onClick={handleAddEdge}
-                  disabled={draftGraph.nodes.length < 2}
-                  className="inline-flex items-center gap-2 rounded-xl border border-black/[0.08] bg-white/70 px-3 py-2 text-xs font-bold text-slate-600 transition hover:text-slate-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/40 disabled:opacity-50 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-300"
-                >
-                  <Workflow className="h-3.5 w-3.5" aria-hidden="true" />
-                  Add Edge
-                </button>
-              </div>
-            </section>
-
-            {validation && !validation.valid ? (
-              <section role="alert" className="rounded-2xl border border-status-red/25 bg-status-red/[0.08] px-4 py-3 text-sm text-status-red">
-                <div className="flex items-center gap-2 font-bold">
-                  <AlertTriangle className="h-4 w-4" aria-hidden="true" />
-                  Validation issues
-                </div>
-                <ul className="mt-2 list-disc space-y-1 pl-5">
-                  {validation.errors.map((error) => (
-                    <li key={`${error.field}-${error.code}-${error.message}`}>
-                      <span className="font-mono text-xs">{error.field}</span>: {error.message}
-                    </li>
-                  ))}
-                </ul>
-              </section>
-            ) : null}
-
-            <div className="flex flex-col gap-4 2xl:flex-row 2xl:items-start">
-              <div className="min-w-0 flex-1">
-                <NodeFlowCanvas
-                  graph={draftGraph}
-                  selectedNodeId={selectedNode?.id ?? null}
-                  onSelectNode={setSelectedNodeId}
-                  onMoveNode={(nodeId, position) => handleNodeChange(nodeId, { position })}
-                />
-              </div>
-              <NodeFlowInspector
-                selectedNode={selectedNode}
-                validation={validation}
-                agents={agents}
-                attachments={attachments}
-                attachAgentId={attachAgentId}
-                attaching={attaching}
-                onAttachAgentIdChange={setAttachAgentId}
-                onAttachAgent={() => void handleAttachAgent()}
-                onDetachAgent={(agentPresetId) => void handleDetachAgent(agentPresetId)}
-                onNodeChange={handleNodeChange}
-              />
+        <div className="flex min-w-0 flex-col gap-4">
+          <NodeCanvas
+            graph={graph}
+            validationIssues={validationIssues}
+            onSelectNode={selectNode}
+            onSelectEdge={selectEdge}
+            onClearSelection={() => dispatch({ type: "clear_selection" })}
+            onDeleteNode={(nodeId) => dispatch({ type: "delete_node", nodeId })}
+            onDeleteEdge={(edgeId) => dispatch({ type: "delete_edge", edgeId })}
+            onMoveNode={(nodeId, position) => dispatch({ type: "move_node", nodeId, position })}
+          />
+          {graph.nodes.length === 0 ? (
+            <div className={`${panelClass} flex items-center gap-3 text-sm text-slate-500 dark:text-slate-400`} role="status">
+              <FileJson className="h-4 w-4 shrink-0 text-signal-500" aria-hidden="true" />
+              The canvas is empty. Palette actions and valid imported JSON can rebuild it.
             </div>
+          ) : null}
+          <NodeValidationPanel
+            graph={graph}
+            onSelectNode={(nodeId) => selectNode(nodeId)}
+            onSelectEdge={(edgeId) => selectEdge(edgeId)}
+            onFocusNode={(nodeId) => {
+              selectNode(nodeId);
+              setFeedback({ tone: "info", message: `Selected node ${nodeId}.` });
+            }}
+            onFocusEdge={(edgeId) => {
+              selectEdge(edgeId);
+              setFeedback({ tone: "info", message: `Selected edge ${edgeId}.` });
+            }}
+          />
+        </div>
 
-            <NodeFlowRunPanel
-              graph={draftGraph}
-              runs={runs}
-              nodeRuns={nodeRuns}
-              selectedRunId={selectedRunId}
-              running={running}
-              loadingRuns={loadingRuns}
-              runError={runError}
-              onRun={(input) => void handleRun(input)}
-              onRefreshRuns={() => void refreshRuns()}
-              onSelectRun={setSelectedRunId}
+        <div className="flex min-w-0 flex-col gap-4">
+          <NodeInspector
+            graph={graph}
+            selectedNode={selectedNode}
+            selectedEdge={selectedEdge}
+            selectedNodeEnabled={selectedNode ? enabledNodeIds.has(selectedNode.id) : true}
+            validationIssues={validationIssues}
+            onNodeChange={handleNodeChange}
+            onNodeConfigChange={handleNodeConfigChange}
+            onNodeEnabledChange={handleNodeEnabledChange}
+            onSelectNode={(nodeId) => selectNode(nodeId)}
+            onSelectEdge={(edgeId) => selectEdge(edgeId)}
+          />
+
+          <section className={`${panelClass} flex flex-col gap-3`} aria-labelledby="nodes-json-heading">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-signal-600 dark:text-signal-400">Exchange</p>
+                <h2 id="nodes-json-heading" className="text-base font-bold text-slate-900 dark:text-white">Graph JSON</h2>
+              </div>
+              <ClipboardList className="h-4 w-4 text-slate-400" aria-hidden="true" />
+            </div>
+            <label className="text-sm font-medium text-slate-700 dark:text-slate-300" htmlFor="nodes-graph-json">
+              Import or exported graph
+            </label>
+            <textarea
+              id="nodes-graph-json"
+              className="min-h-56 w-full resize-y rounded-[var(--radius-ui)] border border-[color:var(--border-hairline)] bg-[var(--fill-muted)] px-3 py-2 font-mono text-xs leading-relaxed text-slate-700 outline-none transition focus-visible:ring-2 focus-visible:ring-[var(--accent-focus-ring)] dark:text-slate-200"
+              spellcheck={false}
+              value={exchangeJson}
+              onInput={(event) => setExchangeJson(event.currentTarget.value)}
             />
-          </div>
-        ) : (
-          <div className="flex min-h-[420px] flex-1 flex-col items-center justify-center gap-4 rounded-[1.9rem] border border-dashed border-black/[0.08] bg-white/45 px-8 py-16 text-center backdrop-blur-2xl dark:border-white/[0.08] dark:bg-white/[0.03]">
-            <Workflow className="h-12 w-12 text-signal-500" strokeWidth={1.5} aria-hidden="true" />
-            <h2 className="font-display text-xl font-bold text-slate-900 dark:text-white">No Node Flows</h2>
-            <p className="max-w-sm text-sm leading-relaxed text-slate-500 dark:text-slate-400">Create a project workflow graph to configure nodes and attach it to agents.</p>
-            <button
-              type="button"
-              onClick={() => void handleCreateFlow()}
-              className="inline-flex items-center gap-2 rounded-full bg-signal-500 px-5 py-2.5 text-sm font-bold text-white transition hover:bg-signal-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/40 dark:text-void-900"
-            >
-              <Plus className="h-4 w-4" aria-hidden="true" />
-              Create Node Flow
-            </button>
-          </div>
-        )}
+            <div className="flex flex-wrap gap-2">
+              <Button type="button" size="sm" variant="secondary" icon={Download} onClick={handleExport}>
+                Export
+              </Button>
+              <Button type="button" size="sm" variant="signal" icon={Upload} onClick={handleImport}>
+                Import
+              </Button>
+            </div>
+          </section>
+
+          <section className={`${panelClass} flex flex-col gap-3`} aria-labelledby="nodes-agent-heading">
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-signal-600 dark:text-signal-400">Agent surface</p>
+              <h2 id="nodes-agent-heading" className="text-base font-bold text-slate-900 dark:text-white">Command metadata</h2>
+            </div>
+            <p className="text-sm leading-relaxed text-slate-500 dark:text-slate-400">
+              Agents can use add_node, patch_node, connect_ports, delete_entities, select_entities, and replace_graph commands against this graph contract.
+            </p>
+            <pre className="max-h-72 overflow-auto rounded-[var(--radius-ui)] border border-black/[0.06] bg-slate-950 p-3 text-xs leading-relaxed text-slate-100 dark:border-white/[0.08]">
+              {summaryJson}
+            </pre>
+          </section>
+        </div>
       </div>
     </PageContainer>
   );
 };
-
-const ProjectPlaceholder = () => (
-  <div className="flex min-h-[320px] flex-col items-center justify-center gap-3 rounded-[1.9rem] border border-dashed border-black/[0.08] bg-white/40 px-8 py-16 text-center backdrop-blur-2xl dark:border-white/[0.08] dark:bg-void-800/40">
-    <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-signal-500/10 text-signal-600 shadow-sm ring-1 ring-slate-900/5 dark:bg-signal-500/15 dark:text-signal-400 dark:ring-white/[0.06]">
-      <GitBranch className="h-8 w-8 text-signal-600 dark:text-signal-400" strokeWidth={1.4} aria-hidden="true" />
-    </div>
-    <h1 className="font-display text-xl font-semibold tracking-tight text-slate-900 dark:text-white">Select a project to edit node workflows.</h1>
-    <p className="max-w-sm text-sm leading-relaxed text-slate-500 dark:text-slate-400">Node flows are project-scoped so runs and agent attachments stay tied to the right workspace.</p>
-  </div>
-);

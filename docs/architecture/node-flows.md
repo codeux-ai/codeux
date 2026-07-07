@@ -33,6 +33,8 @@ Validation is owned by `src/domain/node-flows/node-flow-validation.ts`. It norma
 
 Validation intentionally permits arbitrary string node types at graph-save time so future node libraries can be drafted and stored. Runtime execution separately enforces the executable allowlist.
 
+Dashboard-only editable canvas state lives in `dashboard/src/v2/lib/nodes-canvas-state.ts`. It is a pure TypeScript layer for in-progress graph editing: typed node kinds, input/output ports, port-based edges, config fields, selection state, reducer actions, deterministic layout helpers, validation issue codes, stable JSON serialization, and recovery from malformed persisted canvas drafts. The seed graph uses trigger, agent, task, condition, and output nodes so UI tasks can start from a meaningful workflow without depending on a rendering library.
+
 ## Runtime
 
 `NodeFlowRuntimeService.runFlow(projectId, flowId, input, options)` revalidates the saved graph, checks project ownership, and then executes nodes in the validator's topological order.

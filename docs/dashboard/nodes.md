@@ -1,57 +1,17 @@
 # Nodes
 
-The **Nodes** page (`/nodes`) is the project-scoped dashboard surface for node-flow workflows.
-It lists saved flows for the selected project, opens an editable graph canvas, renders each node's
-dynamic widget schema, manages agent attachments, validates graphs, and shows persisted run history.
+The **Nodes** page (`/nodes`) opens the browser-local Nodes Canvas workspace for drafting Code UX workflow graphs. It does not require a selected project and does not call the node-flow backend APIs.
 
-## Project scope
+Use it to:
 
-Node flows are tied to the active project. When no project is selected, the page renders the same
-project-required placeholder pattern used by other v2 pages. Selecting a project loads:
+- add trigger, agent, task, condition, and output nodes from the palette
+- select and move nodes on the canvas
+- edit selected node labels, descriptions, metadata intents, and config fields in the inspector
+- inspect selected edge source and target wiring
+- review local structural validation issues
+- import and export deterministic graph JSON
+- view command-friendly graph metadata for agent workflows
 
-- node-flow records from `/api/projects/:projectId/node-flows`
-- project agent presets for attachment controls
-- agent-skill attachments and recent persisted runs for the selected flow
+The graph is saved to browser `localStorage` under `codeux:nodes-canvas:v1`. There is no cloud sync, database persistence, or real workflow execution on this page.
 
-## Editor
-
-The editor keeps a local draft of the selected flow title, description, graph nodes, edges, positions,
-and widget data. The canvas is built in-house without React Flow or a diagram dependency. Nodes have
-stable dimensions, keyboard-focusable selection, accessible labels, and pointer-based position edits.
-
-The inspector renders each selected node's `widgetSchema` fields:
-
-- text and textarea values
-- finite numeric inputs
-- booleans
-- select options
-- JSON payloads parsed with `JSON.parse`
-- secret references as reference strings only
-- key-value string records
-
-Widget values are stored as JSON data on the node. The dashboard never executes widget content.
-
-## Validation and saving
-
-Validation posts the draft graph to `/api/node-flows/:flowId/validate` and displays field-level issues
-returned by the backend validator. Saving patches `/api/node-flows/:flowId` with the current draft.
-The page marks unsaved edits separately from validation state so operators can see when a previously
-valid graph has changed.
-
-## Agent attachments
-
-The inspector can attach a flow to project agent presets through the existing node-flow agent-skill
-routes. Attachments expose the flow as a reusable skill for the agent. Detaching removes only the
-agent-skill binding; it does not delete the flow.
-
-## Runs
-
-The run panel accepts project-safe JSON input from the flow `inputSchema` and calls the manual run API
-with the active `projectId`. The response is a run summary containing the parent run, per-node run rows,
-and the final output object, so the dashboard can update history and node status immediately after a
-run completes.
-
-Persisted flow runs and per-node run rows remain readable from the node-flow run routes. The panel shows
-the parent run id separately from linked execution invocation ids, and per-node rows display
-`executionInvocationId` when a provider or HTTP node created an observable invocation. Output JSON is
-redacted for secret-shaped keys such as `token`, `password`, `secret`, and `apiKey` before rendering.
+For the full local canvas contract, see [Nodes Canvas](./nodes-canvas.md). For the saved project-scoped runtime, validation API, manual runs, scheduling, and agent-skill attachments, see [Node Flows Dashboard](./node-flows.md).
