@@ -119,6 +119,7 @@ Behavior:
 - defaults to `dashboardPort + 1` when no explicit MCP HTTPS port is configured
 - fails startup when binding to any non-loopback host such as `0.0.0.0`, `::`, or a LAN address without a non-empty auth token
 - preserves unauthenticated loopback-only development binds on `127.0.0.1`, `localhost`, and `::1`
+- exposes unauthenticated operational probes at `GET /health` and `GET /ready` on the MCP HTTP listener; these return the same bounded readiness payloads as the dashboard listener when the dashboard is available
 
 Default path:
 
@@ -165,8 +166,10 @@ If the gateway is exposed on anything other than loopback, Code UX requires a co
 The request preflight validates security-sensitive headers before any session lookup:
 
 - malformed or missing bearer auth for a token-protected gateway returns the same sanitized `401 Unauthorized` JSON-RPC envelope
+- duplicate `Authorization` headers and malformed bearer schemes are rejected before session state is inspected
 - malformed `mcp-session-id` or `x-code-ux-agent` headers return a sanitized `400 Bad Request` JSON-RPC envelope
 - inactive session ids return a generic invalid-session response and logs do not include the supplied session id or bearer value
+- `GET /health` and `GET /ready` never require bearer auth and do not expose tokens, session ids, project names, or other sensitive payloads
 
 Session lifecycle limits are enforced at the gateway:
 

@@ -144,7 +144,7 @@ http://<host>:4445/mcp
 
 …with header `Authorization: Bearer <token>`.
 
-A `GET /health` endpoint returns `{ "status": "UP" }` and is the recommended liveness check.
+`GET /health` and `GET /ready` are available on the MCP HTTPS listener without bearer auth. Use `/health` for liveness and `/ready` for readiness; `/ready` returns HTTP 503 until the runtime reports ready. Probe responses are intentionally bounded status payloads and do not include tokens, session ids, or project details.
 
 > **Security:** When `--mcp-https-host` is *not* loopback, an auth token is **required**. Server mode always requires a token, including loopback. Plain loopback (`127.0.0.1`/`localhost`/`::1`) hosts may run unauthenticated only outside server mode for local development. Always use HTTPS in production via a reverse proxy.
 

@@ -44,7 +44,10 @@ By default (disable with `--no-mcp-https` or `MCP_HTTPS_ENABLED=false`), Code UX
   - First request on a new session **must** be `{"method": "initialize"}`.
   - Server returns `mcp-session-id` header; client must echo it on subsequent calls.
   - `DELETE` against the path with `mcp-session-id` closes the session.
-- `GET /health` — `{ "status": "UP" }`.
+- `GET /health` — liveness probe. Does not require bearer auth.
+- `GET /ready` — readiness probe. Does not require bearer auth and returns HTTP 503 when the runtime is not ready.
+
+The probe payloads use the same bounded status shape as the dashboard listener, for example `{ "status": "READY", "components": { "settingsDb": "UP", "dashboardBind": "UP", "mcpService": "UP" } }`.
 
 #### Authentication
 
@@ -56,6 +59,8 @@ Bearer token via `Authorization: Bearer <token>` header.
 | Non-loopback | **Required** — server rejects unauthenticated requests with HTTP 401 + JSON-RPC error `-32001`. |
 
 The Express middleware uses `express.json({ limit: "1mb" })`. Larger payloads return HTTP 400.
+
+Authorization is evaluated before MCP session lookup on every JSON-RPC path request. Missing, malformed, duplicate, or mismatched `Authorization` headers return the same sanitized JSON-RPC unauthorized envelope and logs do not include bearer values or MCP session ids.
 
 Source: `src/app/lifecycle/mcp-lifecycle-service.ts:108-240`.
 

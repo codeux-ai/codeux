@@ -3,6 +3,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { ListToolsRequestSchema, ListToolsResultSchema } from "@modelcontextprotocol/sdk/types.js";
+import { connect } from "node:net";
 import { bootMcpHttpTransport, type McpHttpTransportHandle } from "../../../../src/app/lifecycle/mcp-lifecycle-service.js";
 
 const handles: McpHttpTransportHandle[] = [];
@@ -79,6 +80,40 @@ function createAuthClient(handle: McpHttpTransportHandle, authToken?: string): {
   return { client, transport };
 }
 
+async function sendRawHttpRequest(args: {
+  port: number;
+  path: string;
+  headers: string[];
+  body: string;
+}): Promise<{ status: number; body: unknown }> {
+  const contentLength = Buffer.byteLength(args.body);
+  const request = [
+    `POST ${args.path} HTTP/1.1`,
+    "Host: 127.0.0.1",
+    `Content-Length: ${contentLength}`,
+    "Connection: close",
+    ...args.headers,
+    "",
+    args.body,
+  ].join("\r\n");
+
+  return await new Promise((resolve, reject) => {
+    const socket = connect(args.port, "127.0.0.1");
+    let response = "";
+    socket.setEncoding("utf8");
+    socket.on("connect", () => socket.write(request));
+    socket.on("data", (chunk) => {
+      response += chunk;
+    });
+    socket.on("error", reject);
+    socket.on("end", () => {
+      const [head, body = ""] = response.split("\r\n\r\n");
+      const status = Number(head?.match(/^HTTP\/1\.1\s+(\d+)/)?.[1] ?? 0);
+      resolve({ status, body: JSON.parse(body) });
+    });
+  });
+}
+
 describe("bootMcpHttpTransport", () => {
   it.each(["0.0.0.0", "::", "192.168.1.10"])("fails startup on non-loopback host %s without auth", async (host) => {
     await expect(bootMcpHttpTransport({
@@ -140,6 +175,74 @@ describe("bootMcpHttpTransport", () => {
 
     expect(handle).not.toBeNull();
     expect(recover).not.toHaveBeenCalled();
+  });
+
+  it("exposes unauthenticated readiness probes on the MCP HTTP listener", async () => {
+    const readyPayload = {
+      status: "READY" as const,
+      components: {
+        settingsDb: "UP" as const,
+        dashboardBind: "UP" as const,
+        mcpService: "UP" as const,
+      },
+    };
+    const healthyPayload = {
+      status: "UP" as const,
+      components: {
+        settingsDb: "UP" as const,
+        dashboardBind: "UP" as const,
+        mcpService: "UP" as const,
+      },
+    };
+    const handle = await bootMcpHttpTransport({
+      enabled: true,
+      host: "127.0.0.1",
+      port: 0,
+      path: "/mcp",
+      authToken: "secret-token",
+      logger: createLogger(),
+      createServer: createTestServer,
+      recoveryService: { recover: async () => ({ resumedSprintRunIds: [] }) } as any,
+      isReady: () => readyPayload,
+      isHealthy: () => healthyPayload,
+    });
+    handles.push(handle!);
+
+    const readyResponse = await fetch(`http://127.0.0.1:${handle!.port}/ready`);
+    const healthResponse = await fetch(`http://127.0.0.1:${handle!.port}/health`);
+
+    expect(readyResponse.status).toBe(200);
+    await expect(readyResponse.json()).resolves.toEqual(readyPayload);
+    expect(healthResponse.status).toBe(200);
+    await expect(healthResponse.json()).resolves.toEqual(healthyPayload);
+  });
+
+  it("returns 503 when the MCP HTTP readiness probe is not ready", async () => {
+    const readyPayload = {
+      status: "NOT_READY" as const,
+      components: {
+        settingsDb: "UP" as const,
+        dashboardBind: "UP" as const,
+        mcpService: "DOWN" as const,
+      },
+    };
+    const handle = await bootMcpHttpTransport({
+      enabled: true,
+      host: "127.0.0.1",
+      port: 0,
+      path: "/mcp",
+      authToken: "secret-token",
+      logger: createLogger(),
+      createServer: createTestServer,
+      recoveryService: { recover: async () => ({ resumedSprintRunIds: [] }) } as any,
+      isReady: () => readyPayload,
+    });
+    handles.push(handle!);
+
+    const response = await fetch(`http://127.0.0.1:${handle!.port}/ready`);
+
+    expect(response.status).toBe(503);
+    await expect(response.json()).resolves.toEqual(readyPayload);
   });
 
   it("rejects unauthorized missing token", async () => {
@@ -442,6 +545,88 @@ describe("bootMcpHttpTransport", () => {
     expect(logs).not.toContain("session-that-must-not-be-probed");
     expect(logs).not.toContain("Unknown MCP session id");
   });
+
+  it("rejects duplicate authorization headers without leaking bearer values or session ids", async () => {
+    const warn = vi.fn();
+    const handle = await bootMcpHttpTransport({
+      enabled: true,
+      host: "127.0.0.1",
+      port: 0,
+      path: "/mcp",
+      authToken: "secret-token",
+      logger: createLogger({ warn }),
+      createServer: createTestServer,
+      recoveryService: { recover: async () => ({ resumedSprintRunIds: [] }) } as any,
+    });
+    handles.push(handle!);
+
+    const response = await sendRawHttpRequest({
+      port: handle!.port,
+      path: handle!.path,
+      headers: [
+        "Content-Type: application/json",
+        "Authorization: Bearer wrong-token",
+        "Authorization: Bearer secret-token",
+        "mcp-session-id: session-that-must-not-be-probed",
+      ],
+      body: "{}",
+    });
+
+    expect(response.status).toBe(401);
+    expect(response.body).toMatchObject({
+      error: {
+        message: "Unauthorized",
+      },
+    });
+    const logs = JSON.stringify(warn.mock.calls);
+    expect(logs).toContain("Rejected MCP HTTPS request with invalid security headers");
+    expect(logs).not.toContain("wrong-token");
+    expect(logs).not.toContain("secret-token");
+    expect(logs).not.toContain("Bearer");
+    expect(logs).not.toContain("session-that-must-not-be-probed");
+    expect(logs).not.toContain("Invalid MCP session");
+  });
+
+  it.each(["Basic secret-token", "Bearer", "Bearer secret token"])(
+    "rejects malformed authorization scheme %s without leaking sensitive values",
+    async (authorization) => {
+      const warn = vi.fn();
+      const handle = await bootMcpHttpTransport({
+        enabled: true,
+        host: "127.0.0.1",
+        port: 0,
+        path: "/mcp",
+        authToken: "secret-token",
+        logger: createLogger({ warn }),
+        createServer: createTestServer,
+        recoveryService: { recover: async () => ({ resumedSprintRunIds: [] }) } as any,
+      });
+      handles.push(handle!);
+
+      const response = await fetch(`http://127.0.0.1:${handle!.port}${handle!.path}`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": authorization,
+          "mcp-session-id": "session-that-must-not-be-probed",
+        },
+        body: "{}",
+      });
+
+      expect(response.status).toBe(401);
+      await expect(response.json()).resolves.toMatchObject({
+        error: {
+          message: "Unauthorized",
+        },
+      });
+      const logs = JSON.stringify(warn.mock.calls);
+      expect(logs).toContain("Rejected MCP HTTPS request with invalid security headers");
+      expect(logs).not.toContain(authorization);
+      expect(logs).not.toContain("secret-token");
+      expect(logs).not.toContain("session-that-must-not-be-probed");
+      expect(logs).not.toContain("Invalid MCP session");
+    },
+  );
 
   it("returns a generic bad request for inactive sessions", async () => {
     const warn = vi.fn();

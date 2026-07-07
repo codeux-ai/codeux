@@ -1364,6 +1364,8 @@ export class CodeUxServer {
       createServer: () => this.createMcpServerInstance("project_manager"),
       recoveryService: this.runtimeStartupRecoveryService,
       runStartupRecovery: false,
+      isReady: () => this.isReady(),
+      isHealthy: () => this.isHealthy(),
     });
     this.mcpServiceBound = true;
     this.startRuntimeCleanupLoop();
