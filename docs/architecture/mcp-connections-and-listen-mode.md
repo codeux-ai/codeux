@@ -151,8 +151,10 @@ Transport notes:
 ## Current Routing Rules
 
 When a dashboard message is posted:
-- if the thread already has a bound connection, the message stays with that connection
-- otherwise the message remains queued and unassigned until a listener claims it or the dashboard explicitly targets a connection
+- it honors an explicit thread-level worker route if the targeted worker is live
+- otherwise it honors an explicit thread-level virtual provider route
+- otherwise it falls back to automatic live-worker pickup
+- finally it resolves the `dashboard_reply` invocation route
 
 When a dashboard thread is reassigned:
 - the thread's `connection_id` is updated explicitly
