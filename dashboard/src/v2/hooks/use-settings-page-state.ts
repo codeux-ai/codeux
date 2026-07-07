@@ -41,6 +41,10 @@ import {
   providerDescriptions,
   providerLabels,
 } from "../lib/onboarding-provider-settings.js";
+import {
+  clearAppearancePreview,
+  publishAppearancePreview,
+} from "../lib/appearance-preview.js";
 import type {
   InvocationRoutingId,
   ProviderConfigId,
@@ -431,23 +435,11 @@ export const useSettingsPageState = (
   const activeCategoryConfig = categories.find((category) => category.id === activeCategory) ?? categories[0]!;
 
   useEffect(() => {
-    if (typeof window === "undefined") {
-      return;
-    }
-    window.dispatchEvent(new CustomEvent("codeux:appearance-preview", {
-      detail: { appearance: editableSettings?.appearance ?? null },
-    }));
+    publishAppearancePreview(editableSettings?.appearance ?? null);
   }, [editableSettings?.appearance]);
 
   useEffect(() => {
-    if (typeof window === "undefined") {
-      return;
-    }
-    return () => {
-      window.dispatchEvent(new CustomEvent("codeux:appearance-preview", {
-        detail: { appearance: null },
-      }));
-    };
+    return clearAppearancePreview;
   }, []);
 
   const normalizedSearch = settingsSearch.trim().toLowerCase();
