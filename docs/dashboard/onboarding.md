@@ -8,7 +8,7 @@ The dashboard shows a first-run onboarding flow in the browser until the operato
 
 The browser-local key `codeux:onboarding-complete:v1` is still written for compatibility, but onboarding visibility is owned by the persisted user-preferences state so refreshes and sign-in sessions do not reopen onboarding after complete or cancel.
 
-The onboarding shell uses the same dashboard background and modal motion system as the Import and Add Project overlays. It derives its light or dark chrome from the current appearance draft and can switch between the animated background and the draft static color while onboarding remains open, so the Appearance step is previewed in place before final save. The shell is viewport-bounded, with the step body owning its own scrollbar for long provider configuration forms. Step entry, shortcut movement, progress feedback, selected provider/default choices, validation reveal, action feedback, and guided-tour highlight movement use the shared `enterExit`, `selectionMovement`, `inlineValidation`, `controlFeedback`, and `asyncFeedback` interaction contracts. Reduced-motion users receive static state changes, progress labels, visible outlines, and focus/selection states instead of animation-dependent cues.
+The onboarding shell uses the same dashboard background and modal motion system as the Import and Add Project overlays. It follows the selected Light, Dark, or System theme instead of forcing dark mode, and it can switch between the animated background and the draft static color while onboarding remains open. Appearance choices publish the same unsaved appearance preview used by Settings, so the step is previewed in place before final save. The shell is viewport-bounded, with the step body owning its own scrollbar for long provider configuration forms. Step entry, shortcut movement, progress feedback, selected provider/default choices, validation reveal, action feedback, and guided-tour highlight movement use the shared `enterExit`, `selectionMovement`, `inlineValidation`, `controlFeedback`, and `asyncFeedback` interaction contracts. Reduced-motion users receive static state changes, progress labels, visible outlines, and focus/selection states instead of animation-dependent cues.
 
 ## Component Structure
 
@@ -111,9 +111,9 @@ The flow currently contains nine detailed steps, with the provider configuration
    - Enables the QA agent for completion-time review workflows.
    - Choice groups use typed settings values, keyboard-operable selection, and visible selected/success feedback.
 9. Appearance
-   - Configures system defaults for theme, navigation mode, reduced motion, background mode, static background color, and desktop zoom when Electron zoom support is available.
-   - Previews Light, Dark, System, animated, and static background choices immediately in both the onboarding shell and the underlying dashboard background manager.
-   - Keeps advanced Settings-only controls such as animation style, pattern overlay, and custom background image out of onboarding.
+   - Configures system defaults for Theme, Navigation Mode, Reduced Motion, Background Mode, Static Color, and Zoom Level when Electron zoom support is available.
+   - Previews Theme, Reduced Motion, Navigation Mode, Background Mode, Static Color, and Zoom Level immediately in both the onboarding shell and the underlying dashboard background manager.
+   - Keeps advanced background controls such as Animation Style, Pattern Overlay, and custom background image in Settings -> Appearance after onboarding.
 
 ## Settings Persistence
 
@@ -127,7 +127,7 @@ Provider choices update:
 - Legacy container auth-copy fields under `defaults.cliWorkflow` for compatibility
 - Git onboarding mode under `defaults.cliWorkflow.gitMode`, which toggles the remote GitHub/GitLab setup cards and keeps git identity controls available in both modes
 
-Appearance choices update the onboarding draft under `defaults.appearance`, which is also used by the Settings page. While onboarding is open, the draft appearance is published through the shared `codeux:appearance-preview` event so the root dashboard shell reapplies theme, reduced-motion, navigation, background mode, and static color without waiting for final save. The preview is cleared when onboarding closes, is canceled, completes, or unmounts. Final persistence still uses the same `PUT /api/system-settings` path as Settings. New installs start with sidebar navigation and the pattern overlay set to `None`.
+Appearance choices update the onboarding draft under `defaults.appearance`, which is also used by the Settings page. While onboarding is open, the draft appearance is published through the shared `codeux:appearance-preview` event so the root dashboard shell reapplies Theme, Reduced Motion, Navigation Mode, Background Mode, Static Color, and Zoom Level without waiting for final save. The preview is cleared when onboarding closes, is canceled, completes, or unmounts. Final persistence still uses the same `PUT /api/system-settings` path as Settings. New installs start with sidebar navigation and the pattern overlay set to `None`.
 
 Operators can reopen onboarding from `Settings -> General -> Onboarding`. The action resets the persisted onboarding completion state and clears the browser-local marker; it does not reset saved system or project settings.
 

@@ -38,7 +38,7 @@ The category rail on the left includes:
 | **Memory** | Active embedding model selection. |
 | **Agents** | Agent routing, markdown mirroring, persistent skill storage, storage attachments, and self-reflection criteria. |
 | **Techstacks** | System catalog management, protected built-in stack, project stack assignment, and web/desktop application kind. |
-| **Appearance** | Theme, navigation mode override, dashboard density. |
+| **Appearance** | Theme, Navigation Mode, Reduced Motion, Background Mode, Static Color, and Zoom Level. |
 | **Limits** | `maxFailures` emergency stop threshold and other safety caps. |
 
 Each category opens one or more **content panels** with grouped fields. Inputs are typed (text, number with min/max, toggle, multi-select) and validate inline.
@@ -224,7 +224,7 @@ Related docs:
 
 Reopens the guided setup flow without changing saved settings by itself.
 
-**What it controls:** The action button launches onboarding so you can revisit provider, project, setup, and appearance prompts. Appearance choices preview immediately while onboarding is open, including theme, navigation mode, reduced motion, background mode, static color, and supported desktop zoom.
+**What it controls:** The action button launches onboarding so you can revisit provider, project, setup, and Appearance prompts. Theme, Navigation Mode, Reduced Motion, Background Mode, Static Color, and supported Zoom Level choices preview immediately while onboarding is open, and the onboarding shell follows Light, Dark, or System instead of forcing dark mode.
 
 **Recommended defaults:** Use it when setting up a new machine or after adding provider credentials.
 
@@ -241,7 +241,7 @@ Related docs:
 
 Controls the dashboard shell layout, theme, motion preference, and desktop zoom when available.
 
-**What it controls:** Navigation mode switches dock/sidebar, theme sets color mode, reduced motion limits animation, and zoom scales Electron windows.
+**What it controls:** Navigation Mode switches dock/sidebar, Theme sets Light, Dark, or System color mode, Reduced Motion limits animation, and Zoom Level scales Electron windows.
 
 **Recommended defaults:** Use System theme and Auto reduced motion unless you need a fixed accessibility preference.
 
@@ -258,7 +258,7 @@ Related docs:
 
 Customizes the dashboard background image, animation mode, static color, and pattern overlay.
 
-**What it controls:** Image upload, animated/static mode, animation style, color picker, and overlay pattern shape the visual layer behind panels.
+**What it controls:** Background Image, Background Mode, Animation Style, Static Color, and Pattern Overlay shape the visual layer behind panels. Onboarding previews Background Mode and Static Color, while Animation Style, Pattern Overlay, and custom background image remain available here after onboarding.
 
 **Recommended defaults:** Prefer lightweight images and readable contrast; use static mode if motion is distracting.
 
