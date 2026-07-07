@@ -222,6 +222,67 @@ describe("chat-reply-prompt", () => {
       expect(prompt).not.toContain("## RICH WIDGETS");
       expect(prompt).not.toContain("codeux:status");
     });
+
+    it("strips dashboard widget fences from replayed assistant replies for external chat threads", () => {
+      const prompt = buildChatReplayPrompt({
+        projectId: "p1",
+        repoPath: "/repo",
+        projectName: "Proj",
+        thread,
+        messages: [
+          { authorType: "dashboard_user", bodyMarkdown: "How is the build?" } as any,
+          {
+            authorType: "connection",
+            bodyMarkdown: [
+              "The build is green.",
+              "",
+              "```codeux:status",
+              JSON.stringify({ title: "Build", items: [{ label: "Lint", state: "ok" }] }),
+              "```",
+            ].join("\n"),
+          } as any,
+        ],
+        workerInstructions: "",
+        suppressRichWidgets: true,
+      });
+
+      expect(prompt).toContain("The build is green.");
+      expect(prompt).toContain("Build\n- Lint: ok");
+      expect(prompt).not.toContain("```codeux:status");
+      expect(prompt).not.toContain('"items"');
+    });
+
+    it("strips dashboard widget fences from compacted history for external chat threads", () => {
+      const compactedThread = {
+        id: "t1",
+        title: "Test",
+        runtimeState: {
+          compactionSummary: {
+            markdown: [
+              "Earlier status was summarized.",
+              "",
+              "```codeux:status",
+              JSON.stringify({ title: "Deploy", items: [{ label: "Ready", state: "ok" }] }),
+              "```",
+            ].join("\n"),
+          },
+        },
+      } as any;
+      const prompt = buildChatReplayPrompt({
+        projectId: "p1",
+        repoPath: "/repo",
+        projectName: "Proj",
+        thread: compactedThread,
+        messages: [],
+        workerInstructions: "",
+        suppressRichWidgets: true,
+      });
+
+      expect(prompt).toContain("Earlier status was summarized.");
+      expect(prompt).toContain("Deploy\n- Ready: ok");
+      expect(prompt).not.toContain("```codeux:status");
+      expect(prompt).not.toContain('"items"');
+    });
   });
 
   describe("buildChatContinuationPrompt", () => {

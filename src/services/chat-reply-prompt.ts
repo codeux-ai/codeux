@@ -201,7 +201,10 @@ export function buildChatReplayPrompt(args: {
 
   const history = replayMessages.map((message) => {
     const role = message.authorType === "dashboard_user" ? "User" : "Worker";
-    return `### ${role}\n${message.bodyMarkdown.trim()}`;
+    const bodyMarkdown = args.suppressRichWidgets
+      ? stripDashboardOnlyWidgets(message.bodyMarkdown)
+      : message.bodyMarkdown.trim();
+    return `### ${role}\n${bodyMarkdown}`;
   }).join("\n\n");
 
   const fallbackBody = args.bodyMarkdown ? args.bodyMarkdown.trim() : "_No new messages since the compaction summary was generated._";
@@ -226,6 +229,11 @@ export function buildChatReplayPrompt(args: {
     ? `## KNOWLEDGE BASE\n\n${args.knowledgeManifest.trim()}`
     : "";
   const currentThreadTitle = args.threadTitle || args.thread.title;
+  const compactedHistoryMarkdown = compactionSummary
+    ? args.suppressRichWidgets
+      ? stripDashboardOnlyWidgets(compactionSummary.markdown)
+      : compactionSummary.markdown
+    : "";
 
   return [
     args.workerInstructions ? `## WORKER INSTRUCTIONS\n\n${args.workerInstructions}` : "",
@@ -245,7 +253,7 @@ export function buildChatReplayPrompt(args: {
     "",
     ...(compactionSummary ? [
       "## COMPACTED HISTORY",
-      compactionSummary.markdown,
+      compactedHistoryMarkdown,
       "",
       "## MESSAGES SINCE COMPACTION",
     ] : [
