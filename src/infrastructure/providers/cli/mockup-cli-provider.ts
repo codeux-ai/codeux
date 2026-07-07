@@ -47,6 +47,57 @@ function addWrite(operations, mode, rawPath, rawContent) {
   operations.push({ type: mode, filePath: rawPath.trim(), content: normalizeContent(rawContent) });
 }
 
+function splitCommandLine(command) {
+  const argv = [];
+  let current = "";
+  let quote = null;
+  let escaped = false;
+
+  for (const char of command.trim()) {
+    if (escaped) {
+      current += char;
+      escaped = false;
+      continue;
+    }
+    if (char === "\\") {
+      escaped = true;
+      continue;
+    }
+    if (quote) {
+      if (char === quote) {
+        quote = null;
+      } else {
+        current += char;
+      }
+      continue;
+    }
+    if (char === "\"" || char === "'") {
+      quote = char;
+      continue;
+    }
+    if (/\s/.test(char)) {
+      if (current.length > 0) {
+        argv.push(current);
+        current = "";
+      }
+      continue;
+    }
+    current += char;
+  }
+
+  if (escaped) {
+    current += "\\";
+  }
+  if (quote) {
+    throw new Error("mockup-cli validation command has an unterminated quote");
+  }
+  if (current.length > 0) {
+    argv.push(current);
+  }
+
+  return argv;
+}
+
 function parseOperations() {
   const operations = [];
   const validations = [];
@@ -146,10 +197,19 @@ async function applyOperation(operation) {
 }
 
 function runValidation(command) {
-  const result = cp.spawnSync(command, {
+  const [resolvedCommand, ...resolvedArgs] = splitCommandLine(command);
+  if (!resolvedCommand) {
+    return {
+      command,
+      code: 1,
+      ok: false,
+      stdout: "",
+      stderr: "mockup-cli validation command was empty",
+    };
+  }
+  const result = cp.spawnSync(resolvedCommand, resolvedArgs, {
     cwd,
     env: process.env,
-    shell: true,
     encoding: "utf8",
     timeout: 60000,
     maxBuffer: 1024 * 1024,
