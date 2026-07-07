@@ -61,7 +61,7 @@ This page lists every endpoint, grouped by domain. Path parameters use `:name` n
 
 | Method | Path | Description |
 | --- | --- | --- |
-| `GET` | `/api/projects/:projectId/tasks?sprintId=` | List. |
+| `GET` | `/api/projects/:projectId/tasks?sprintId=` | List tasks. Rated tasks include optional latest `selfReflectionRating`; unrated tasks omit it. |
 | `POST` | `/api/projects/:projectId/tasks` | Create. |
 | `PATCH` | `/api/tasks/:taskId` | Update. |
 | `DELETE` | `/api/tasks/:taskId` | Delete. |

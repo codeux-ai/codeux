@@ -113,6 +113,30 @@ export function ensureChatProviderTables(db: DatabaseAdapter): void {
   `);
 }
 
+export function ensureTaskSelfReflectionRatingTables(db: DatabaseAdapter): void {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS task_self_reflection_ratings (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL,
+      sprint_id TEXT NOT NULL,
+      task_id TEXT NOT NULL,
+      source_task_run_id TEXT NOT NULL UNIQUE,
+      overall_rating REAL NOT NULL CHECK (overall_rating >= 0 AND overall_rating <= 5),
+      sections_json TEXT NOT NULL DEFAULT '[]',
+      captured_at TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+      FOREIGN KEY (sprint_id) REFERENCES sprints(id) ON DELETE CASCADE,
+      FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE,
+      FOREIGN KEY (source_task_run_id) REFERENCES task_runs(id) ON DELETE CASCADE
+    )
+  `);
+  ensureUniqueIndex(db, "idx_task_self_reflection_ratings_task_run", "task_self_reflection_ratings", "source_task_run_id");
+  ensureIndex(db, "idx_task_self_reflection_ratings_task_latest", "task_self_reflection_ratings", "task_id, captured_at DESC, updated_at DESC");
+  ensureIndex(db, "idx_task_self_reflection_ratings_project_task_latest", "task_self_reflection_ratings", "project_id, task_id, captured_at DESC");
+}
+
 export function ensureNodeFlowTables(db: DatabaseAdapter): void {
   db.exec(`
     CREATE TABLE IF NOT EXISTS node_flows (
@@ -420,6 +444,7 @@ export function runMigrations(db: DatabaseAdapter): void {
   // The current phase 1 approach calls schema definitions directly, but these ensure*
   // helpers allow progressive column additions safely.
   ensureChatProviderTables(db);
+  ensureTaskSelfReflectionRatingTables(db);
   ensureNodeFlowTables(db);
 
   ensureColumn(db, "provider_invocations", "tool_call_count", "INTEGER NOT NULL DEFAULT 0");

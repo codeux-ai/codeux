@@ -21,7 +21,9 @@ The board keeps the current sprint scope and filters visible while you work:
 
 ## Columns
 
-Task cards show the task title, status, priority, dependency state, downstream dependents, executor metadata, recent activity context, and available actions. Dragging a card to another lane changes its status when that transition is available.
+Task cards show the task title, status, priority, dependency state, downstream dependents, executor metadata, recent activity context, optional self-reflection ratings, and available actions. Dragging a card to another lane changes its status when that transition is available.
+
+When a worker reports a task-run self-reflection rating, the shared rating badge appears in the compact card metadata near the task id, status, and priority. It shows the overall `overallRating` as a numeric score with a compact 5-star meter. Hovering the badge, or focusing it with the keyboard, opens a viewport-positioned details panel with each section from `sections`: the section label, matching stars, numeric rating, and any note captured by the worker. Tasks without a captured rating, including older tasks that never produced one, do not render an empty badge slot.
 
 ## Create and edit tasks
 

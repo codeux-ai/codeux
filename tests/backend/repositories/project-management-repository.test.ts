@@ -12,6 +12,7 @@ import {
 } from "../../../src/repositories/project-management-repository.js";
 import { ExecutionRepository } from "../../../src/repositories/execution-repository.js";
 import { SprintMarkdownService } from "../../../src/services/sprint-markdown-service.js";
+import { TaskSelfReflectionRatingRepository } from "../../../src/repositories/task-self-reflection-rating-repository.js";
 
 const tempDirs: string[] = [];
 
@@ -929,6 +930,85 @@ describe("ProjectManagementRepository", () => {
       findings: ["Missing regression test"],
       reviewer: "QA Bot",
       finishedAt: "2026-05-30T09:06:00.000Z",
+    });
+  });
+
+  it("includes latest task self-reflection ratings in listTasks and omits unrated tasks", async () => {
+    const { storage, repository, executionRepository } = await createRepository();
+    const ratingRepository = new TaskSelfReflectionRatingRepository(storage);
+
+    const project = repository.createProject({
+      name: "Task Self Reflection Project",
+      sourceType: "local",
+      sourceRef: "/tmp/task-self-reflection",
+    });
+    const sprint = repository.createSprint(project.id, {
+      name: "Task Self Reflection Sprint",
+      goal: "Expose task self-reflection state",
+    });
+    const ratedTask = repository.createTask(project.id, {
+      sprintId: sprint.id,
+      taskKey: "T1",
+      title: "Rated task",
+    });
+    const unratedTask = repository.createTask(project.id, {
+      sprintId: sprint.id,
+      taskKey: "T2",
+      title: "Unrated task",
+    });
+    const olderRun = executionRepository.createTaskRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: ratedTask.id,
+      provider: "codex",
+      state: "COMPLETED",
+    });
+    const latestRun = executionRepository.createTaskRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: ratedTask.id,
+      provider: "codex",
+      state: "COMPLETED",
+    });
+
+    ratingRepository.upsertForTaskRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: ratedTask.id,
+      sourceTaskRunId: olderRun.id,
+      overallRating: 2,
+      sections: [
+        { label: "Implementation", normalizedLabel: "implementation", rating: 2, note: "Earlier run" },
+      ],
+      capturedAt: "2026-06-01T10:00:00.000Z",
+    });
+    ratingRepository.upsertForTaskRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: ratedTask.id,
+      sourceTaskRunId: latestRun.id,
+      overallRating: 4,
+      sections: [
+        { label: "Tests", normalizedLabel: "tests", rating: 5, note: "Covered" },
+      ],
+      capturedAt: "2026-06-01T10:00:00.000Z",
+    });
+
+    const tasks = repository.listTasks(project.id, sprint.id);
+    const mappedRated = tasks.find((task) => task.id === ratedTask.id);
+    const mappedUnrated = tasks.find((task) => task.id === unratedTask.id);
+
+    expect(mappedUnrated?.selfReflectionRating).toBeUndefined();
+    expect(mappedRated?.selfReflectionRating).toMatchObject({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: ratedTask.id,
+      sourceTaskRunId: latestRun.id,
+      overallRating: 4,
+      sections: [
+        { label: "Tests", normalizedLabel: "tests", rating: 5, note: "Covered" },
+      ],
+      capturedAt: "2026-06-01T10:00:00.000Z",
     });
   });
 

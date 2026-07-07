@@ -39,6 +39,7 @@ export function toTaskViewModel(task: TaskRecord, sourcesById: Map<string, Sourc
     prevTask.isIndependent === task.isIndependent &&
     prevTask.isMerged === task.isMerged &&
     areReviewSummariesEqual(prevTask.latestReview, task.latestReview) &&
+    areSelfReflectionRatingsEqual(prevTask.selfReflectionRating, task.selfReflectionRating) &&
     prevTask.mergeIndicator === task.mergeIndicator &&
     prevTask.dependsOnTaskIds.length === task.dependsOnTaskIds.length &&
     prevTask.dependsOnTaskIds.every((id, idx) => id === task.dependsOnTaskIds[idx])
@@ -67,6 +68,7 @@ export function toTaskViewModel(task: TaskRecord, sourcesById: Map<string, Sourc
     isIndependent: task.isIndependent,
     isMerged: task.isMerged,
     latestReview: task.latestReview,
+    selfReflectionRating: task.selfReflectionRating,
     mergeIndicator: task.mergeIndicator,
   };
 }
@@ -85,6 +87,33 @@ function areReviewSummariesEqual(left: Task["latestReview"], right: TaskRecord["
     && left.finishedAt === right.finishedAt
     && left.findings.length === right.findings.length
     && left.findings.every((finding, index) => finding === right.findings[index]);
+}
+
+function areSelfReflectionRatingsEqual(left: Task["selfReflectionRating"], right: TaskRecord["selfReflectionRating"]): boolean {
+  if (!left && !right) {
+    return true;
+  }
+  if (!left || !right) {
+    return false;
+  }
+  return left.id === right.id
+    && left.projectId === right.projectId
+    && left.sprintId === right.sprintId
+    && left.taskId === right.taskId
+    && left.sourceTaskRunId === right.sourceTaskRunId
+    && left.overallRating === right.overallRating
+    && left.capturedAt === right.capturedAt
+    && left.createdAt === right.createdAt
+    && left.updatedAt === right.updatedAt
+    && left.sections.length === right.sections.length
+    && left.sections.every((section, index) => {
+      const other = right.sections[index];
+      return Boolean(other)
+        && section.label === other.label
+        && section.normalizedLabel === other.normalizedLabel
+        && section.rating === other.rating
+        && section.note === other.note;
+    });
 }
 
 export function formatSprintDateRange(startDate: string | null, endDate: string | null): string {

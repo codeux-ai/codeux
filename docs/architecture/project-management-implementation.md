@@ -102,6 +102,8 @@ The dashboard now has project-scoped CRUD endpoints:
 
 `GET /api/projects` is the single data source for Projects page cards. The project summary payload includes the source kind, repository metadata, local base path, creation and update timestamps, and the latest project-scoped run activity derived from `sprint_runs` and `task_runs`.
 
+`GET /api/projects/:projectId/tasks` returns each task with optional `latestReview` and `selfReflectionRating` fields. `selfReflectionRating` is omitted for unrated tasks and, when present, is the latest persisted task-run self-reflection rating selected by captured timestamp and persisted row order.
+
 Legacy runtime endpoints still exist for the old live runtime/status surfaces:
 - `GET /api/status`
 - `GET /api/live-activities`
