@@ -14,6 +14,9 @@ import type {
   ProviderSettings,
   ProviderStrategy,
   SkillToggle,
+  TechstackCatalogEntrySettings,
+  TechstackCatalogSettings,
+  TechstackSelectionSettings,
   VirtualWorkerProvider,
   WorkerExecutionMode,
   ThinkingMode,
@@ -36,6 +39,35 @@ export const DEFAULT_SKILLS: SkillToggle[] = INTERNAL_SKILL_NAMES.map((name) => 
   enabled: name === "git_manager_local" ? false : true,
   isInternal: true,
 }));
+
+export const BUILTIN_CODE_UX_TECHSTACK_ID = "code-ux-internal";
+
+export const BUILTIN_CODE_UX_TECHSTACK: TechstackCatalogEntrySettings = {
+  id: BUILTIN_CODE_UX_TECHSTACK_ID,
+  label: "Code UX Internal",
+  items: [
+    { id: "preact", label: "Preact" },
+    { id: "tanstack-router", label: "TanStack Router" },
+    { id: "gsap", label: "GSAP" },
+    { id: "three-js", label: "Three.js" },
+    { id: "lucide-icons", label: "Lucide Icons" },
+  ],
+};
+
+export const DEFAULT_TECHSTACK_CATALOG: TechstackCatalogSettings = {
+  defaultTechstackId: BUILTIN_CODE_UX_TECHSTACK_ID,
+  entries: [
+    {
+      ...BUILTIN_CODE_UX_TECHSTACK,
+      items: BUILTIN_CODE_UX_TECHSTACK.items.map((item) => ({ ...item })),
+    },
+  ],
+};
+
+export const DEFAULT_PROJECT_TECHSTACK: TechstackSelectionSettings = {
+  selectedTechstackId: null,
+  applicationKind: null,
+};
 
 export const DEFAULT_PR_DESCRIPTION_SETTINGS: PrDescriptionSettings = {
   task: {
@@ -585,6 +617,14 @@ export const DEFAULT_DASHBOARD_SETTINGS: DashboardSettings = {
       remediation: { ...DEFAULT_INVOCATION_ROUTING.remediation, allowedProviders: [], providers: {} },
     },
   },
+  techstackCatalog: {
+    defaultTechstackId: DEFAULT_TECHSTACK_CATALOG.defaultTechstackId,
+    entries: DEFAULT_TECHSTACK_CATALOG.entries.map((entry) => ({
+      ...entry,
+      items: entry.items.map((item) => ({ ...item })),
+    })),
+  },
+  techstack: { ...DEFAULT_PROJECT_TECHSTACK },
   git: {
     githubMode: "REMOTE",
     githubToken: "",
