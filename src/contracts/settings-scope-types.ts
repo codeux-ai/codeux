@@ -141,6 +141,32 @@ export interface SystemIntegrationSettings {
   jira: JiraSettings;
 }
 
+export interface SystemClusterSyncPolicySettings {
+  systemSettings: boolean;
+  providerSettings: boolean;
+  localAuthArtifacts: boolean;
+}
+
+export interface SystemClusterLastSyncSettings {
+  syncedAt?: string;
+  status?: "success" | "failed" | "partial";
+  message?: string;
+}
+
+export interface SystemClusterConnectionSettings {
+  id: string;
+  displayName: string;
+  url: string;
+  enabled: boolean;
+  bearerTokenRef?: string;
+  lastSync?: SystemClusterLastSyncSettings;
+  syncPolicy: SystemClusterSyncPolicySettings;
+}
+
+export interface SystemClusterSettings {
+  connections: SystemClusterConnectionSettings[];
+}
+
 export interface QwenModelProviderSettings {
   id: string;
   name: string;
@@ -154,6 +180,7 @@ export interface QwenModelProviderSettings {
 export interface SystemSettings {
   runtime: SystemRuntimeSettings;
   integrations: SystemIntegrationSettings;
+  cluster: SystemClusterSettings;
   defaults: ProjectSettings;
   mcpTools: McpToolToggle[];
   customMcpServers: CustomMcpServer[];

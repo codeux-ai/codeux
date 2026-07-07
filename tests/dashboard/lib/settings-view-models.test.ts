@@ -832,6 +832,9 @@ describe("settings cloning helpers", () => {
           "p1": { provider: "jules", name: "Jules", apiKey: "key", mountAuth: false, authPath: "" }
         }
       },
+      cluster: {
+        connections: [],
+      },
       defaults: createMockProjectSettings(),
       mcpTools: [{ serverName: "s1", toolName: "t1", enabled: true }],
       customMcpServers: [],

@@ -17,6 +17,7 @@ Settings are evaluated in cascade: **Defaults → System → Project → Sprint*
   "cliWorkflow": { /* CLI workflow behavior */ },
   "sprintPreview": { /* preview container settings */ },
   "git": { /* branches, schemes, GitHub mode */ },
+  "cluster": { /* system-scoped remote Code UX instances */ },
   "skills": [ /* internal skill toggles */ ],
   "mcpTools": [ /* per-tool enabled flags */ ],
   "memory": { /* embedding model */ },
@@ -186,6 +187,35 @@ into the default branch. In REMOTE mode PR merges already delete the remote bran
 governs LOCAL-mode cleanup. A startup reaper also removes already-merged Code UX-managed branches
 (`task/…` and `<featureBranchPrefix>…`) so long-lived repos don't accumulate thousands of dead
 branches — only branches fully contained in the default branch are removed.
+
+## `cluster`
+
+```jsonc
+{
+  "connections": [
+    {
+      "id": "remote-primary",
+      "displayName": "Primary remote",
+      "url": "https://codeux.example.com",
+      "enabled": true,
+      "bearerTokenRef": "token-storage-key",
+      "lastSync": {
+        "syncedAt": "2026-07-07T00:00:00.000Z",
+        "status": "success" // success | failed | partial
+      },
+      "syncPolicy": {
+        "systemSettings": false,
+        "providerSettings": false,
+        "localAuthArtifacts": false
+      }
+    }
+  ]
+}
+```
+
+Default: `{ "connections": [] }`.
+
+Cluster connections are system-scoped only. The sanitizer trims ids, display names, and token references; accepts only valid `http`/`https` URLs; removes URL fragments; deduplicates by id; drops blank or invalid entries; and defaults all sync policy flags to `false`. `bearerTokenRef` is a storage reference, not a bearer token value, and provider login file contents must not be stored in this object.
 
 ## `skills`
 

@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { applyExternalSettingsHints, cloneDefaultSettings } from "../../../dashboard/src/lib/settings.js";
+import { cloneSystemSettings } from "../../../dashboard/src/v2/lib/settings-view-models.js";
+import type { SystemSettings } from "../../../dashboard/src/types.js";
 
 describe("dashboard settings helpers", () => {
   it("returns fresh default objects", () => {
@@ -91,5 +93,63 @@ describe("dashboard settings helpers", () => {
     expect(settings.sprintPreview.enabled).toBe(true);
     expect(settings.sprintPreview.showInAppBrowser).toBe(true);
     expect(settings.sprintPreview.autoStartOnRunningSprint).toBe(false);
+  });
+
+  it("deep clones system cluster settings while preserving token references", () => {
+    const defaults = cloneDefaultSettings();
+    const original: SystemSettings = {
+      runtime: {
+        dashboardPort: defaults.dashboardPort,
+        consoleLogLevel: defaults.consoleLogLevel,
+        debugLogFileLevel: defaults.debugLogFileLevel,
+        consoleLogMode: defaults.consoleLogMode,
+        dbAutoVacuumOnStartup: defaults.dbAutoVacuumOnStartup,
+        dbPruningEnabled: defaults.dbPruningEnabled,
+        dbRetentionDays: defaults.dbRetentionDays,
+        restartSprintPolicy: defaults.restartSprintPolicy,
+        restartInvocationPolicy: defaults.restartInvocationPolicy,
+      },
+      integrations: {
+        providers: {},
+        githubToken: "",
+        gitlabToken: "",
+        jira: { ...defaults.jira },
+      },
+      cluster: {
+        connections: [
+          {
+            id: "remote-primary",
+            displayName: "Primary Remote",
+            url: "https://remote.example",
+            enabled: false,
+            bearerTokenRef: "token-ref-primary",
+            lastSync: {
+              syncedAt: "2026-07-07T00:00:00.000Z",
+              status: "success",
+            },
+            syncPolicy: {
+              systemSettings: false,
+              providerSettings: false,
+              localAuthArtifacts: false,
+            },
+          },
+        ],
+      },
+      defaults,
+      mcpTools: [],
+      customMcpServers: [],
+      modelPricing: { overrides: {} },
+    };
+
+    const clone = cloneSystemSettings(original);
+    clone.cluster.connections[0].displayName = "Mutated Remote";
+    clone.cluster.connections[0].bearerTokenRef = "token-ref-mutated";
+    clone.cluster.connections[0].lastSync!.status = "failed";
+    clone.cluster.connections[0].syncPolicy.systemSettings = true;
+
+    expect(original.cluster.connections[0].displayName).toBe("Primary Remote");
+    expect(original.cluster.connections[0].bearerTokenRef).toBe("token-ref-primary");
+    expect(original.cluster.connections[0].lastSync!.status).toBe("success");
+    expect(original.cluster.connections[0].syncPolicy.systemSettings).toBe(false);
   });
 });
