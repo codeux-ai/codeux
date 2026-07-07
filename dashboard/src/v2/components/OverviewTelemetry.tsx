@@ -2,22 +2,34 @@ import type { FunctionComponent } from "preact";
 import { Activity, AlertTriangle, FolderKanban, Layers, Radio, Zap } from "lucide-preact";
 import { useMemo } from "preact/hooks";
 import { SkeletonPanel } from "./layout/SkeletonLoader.js";
+import { useDashboardRuntimeData } from "../../hooks/use-dashboard-runtime-data.js";
 import { useOverviewTelemetry } from "../../hooks/use-overview-telemetry.js";
+import { useSprints } from "../../hooks/useSprints.js";
 import { formatTime } from "../../lib/time.js";
 import { buildProjectLookup, getEventStyle, getInterventionContent } from "../lib/overview-telemetry-view-models.js";
 import { useProjectData } from "../context/project-data.js";
+import { AttentionQueueItemsList } from "./AttentionLedger.js";
 
 
 export const OverviewTelemetry: FunctionComponent = () => {
   const { telemetry, loading: telemetryLoading, error } = useOverviewTelemetry();
-  const { loading: projectsLoading } = useProjectData();
+  const { selectedProject, selectedProjectId, loading: projectsLoading } = useProjectData();
+  const { selectedSprintId } = useSprints(selectedProjectId);
+  const { execution: selectedProjectExecution } = useDashboardRuntimeData(
+    selectedProjectId,
+    Boolean(selectedProjectId),
+    { selectedSprintId },
+  );
   const isLoading = telemetryLoading || projectsLoading;
 
   const hasActiveProjects = telemetry?.activeProjects?.length > 0;
   const hasAttentionProjects = telemetry?.attentionProjects?.length > 0;
+  const scopedAttentionItems = selectedProjectId ? selectedProjectExecution.attentionItems : [];
+  const hasScopedAttentionItems = scopedAttentionItems.length > 0;
+  const hasAnyAttentionSignal = hasAttentionProjects || hasScopedAttentionItems;
 
   const projectLookup = useMemo(() => buildProjectLookup(telemetry), [telemetry]);
-  const hasRuntimeSignal = hasActiveProjects || hasAttentionProjects;
+  const hasRuntimeSignal = hasActiveProjects || hasAnyAttentionSignal;
 
   const totalRunningDispatches = useMemo(
     () => (telemetry?.activeProjects ?? []).reduce((sum, project) => sum + (project.runningDispatchCount ?? 0), 0),
@@ -45,12 +57,12 @@ export const OverviewTelemetry: FunctionComponent = () => {
           <div className={`w-3.5 h-3.5 rounded-full relative z-10 shadow-sm ${
             hasActiveProjects
               ? "bg-status-green shadow-[0_0_8px_rgba(0,171,132,0.4)]"
-              : hasAttentionProjects
+              : hasAnyAttentionSignal
                 ? "bg-status-amber shadow-[0_0_8px_rgba(245,158,11,0.4)]"
                 : "bg-slate-400 dark:bg-slate-500"
           }`} />
           <span className="sr-only">
-            {hasActiveProjects ? "Telemetry status: active projects running" : hasAttentionProjects ? "Telemetry status: attention needed" : "Telemetry status: idle"}
+            {hasActiveProjects ? "Telemetry status: active projects running" : hasAnyAttentionSignal ? "Telemetry status: attention needed" : "Telemetry status: idle"}
           </span>
         </div>
         Telemetry.
@@ -100,6 +112,32 @@ export const OverviewTelemetry: FunctionComponent = () => {
                 <div className="mt-1.5 font-mono text-xl font-semibold text-slate-900 dark:text-white">{telemetry?.recentEvents?.length ?? 0}</div>
               </div>
             </div>
+
+            {selectedProjectId && hasScopedAttentionItems && (
+              <div className="mt-5 max-h-[30%] shrink-0 overflow-hidden rounded-[1.5rem] border border-status-amber/18 bg-status-amber/[0.055] p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex min-w-0 items-center gap-2 text-[10px] font-bold uppercase tracking-[0.16em] text-status-amber">
+                    <AlertTriangle className="h-3.5 w-3.5 shrink-0" strokeWidth={2.1} aria-hidden="true" />
+                    <span className="min-w-0 break-words">Selected Sprint Attention Queue</span>
+                  </div>
+                  <span className="shrink-0 rounded-md bg-status-amber/10 px-2 py-0.5 font-mono text-[10px] font-bold uppercase tracking-[0.14em] text-status-amber">
+                    {scopedAttentionItems.length}
+                  </span>
+                </div>
+                <p className="mt-1 break-words text-[11px] font-mono leading-relaxed text-slate-500 dark:text-slate-500">
+                  {selectedProject?.name || "Selected project"}
+                </p>
+                <div className="mt-3 min-h-0">
+                  <AttentionQueueItemsList
+                    attentionItems={scopedAttentionItems}
+                    snapshot={selectedProjectExecution}
+                    showActions={false}
+                    listLabel="Selected sprint attention items"
+                    listClassName="max-h-40 space-y-2 overflow-y-auto pr-1 dashboard-scrollbar"
+                  />
+                </div>
+              </div>
+            )}
 
             {/* Attention block (capped, scrollable) */}
             {telemetry?.attentionProjects?.length > 0 && (

@@ -4,14 +4,16 @@
  */
 import { h } from "preact";
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { render, screen, cleanup } from "@testing-library/preact";
+import { render, screen, cleanup, within } from "@testing-library/preact";
 import { renderHook, act } from "@testing-library/preact";
 import * as matchers from "@testing-library/jest-dom/matchers";
 
 import { OverviewTelemetry } from "../../../dashboard/src/v2/components/OverviewTelemetry.js";
+import { useDashboardRuntimeData } from "../../../dashboard/src/hooks/use-dashboard-runtime-data.js";
 import { useOverviewTelemetry } from "../../../dashboard/src/hooks/use-overview-telemetry.js";
-import { useProjectData, ProjectDataContext } from "../../../dashboard/src/v2/context/project-data.js";
-import type { OverviewTelemetrySnapshot } from "../../../dashboard/src/types.js";
+import { useSprints } from "../../../dashboard/src/hooks/useSprints.js";
+import { useProjectData } from "../../../dashboard/src/v2/context/project-data.js";
+import type { ExecutionAttentionItemSummary, OverviewTelemetrySnapshot } from "../../../dashboard/src/types.js";
 import * as api from "../../../dashboard/src/lib/api/dashboard-api.js";
 import * as realtime from "../../../dashboard/src/lib/realtime/dashboard-realtime-client.js";
 
@@ -19,6 +21,18 @@ expect.extend(matchers);
 
 vi.mock("../../../dashboard/src/lib/api/dashboard-api.js");
 vi.mock("../../../dashboard/src/lib/realtime/dashboard-realtime-client.js");
+vi.mock("gsap", () => ({
+  default: {
+    fromTo: vi.fn(),
+    killTweensOf: vi.fn(),
+    to: vi.fn(),
+    set: vi.fn(),
+    context: vi.fn(() => ({ revert: vi.fn() })),
+  },
+}));
+
+vi.mock("../../../dashboard/src/hooks/use-dashboard-runtime-data.js");
+vi.mock("../../../dashboard/src/hooks/useSprints.js");
 
 vi.mock("../../../dashboard/src/hooks/use-overview-telemetry.js", async (importOriginal) => {
   const actual = await importOriginal<any>();
@@ -33,10 +47,62 @@ vi.mock("../../../dashboard/src/v2/context/project-data.js", () => ({
   ProjectDataContext: { Provider: ({children}: any) => children, Consumer: ({children}: any) => children } as any
 }));
 
+const makeRuntimeData = (attentionItems: ExecutionAttentionItemSummary[] = []) => ({
+  error: null,
+  gitStatus: null,
+  gitStatusError: null,
+  initialLoadComplete: true,
+  transportState: "connected",
+  isRecovering: false,
+  snapshotUpdatedAt: "2024-01-01T00:00:00Z",
+  refreshGitStatus: vi.fn(),
+  refreshRuntimeStatus: vi.fn(),
+  selectedSprintId: "sprint-selected",
+  status: { subtasks: [], timestamp: "2024-01-01T00:00:00Z", project_id: "p1", sprint_id: "sprint-selected" },
+  execution: {
+    projectId: "p1",
+    projectName: "Selected Project",
+    sprintRuns: [],
+    taskDispatches: [],
+    connections: [],
+    primaryAssignedWorker: null,
+    overflowAssignedWorkers: [],
+    attentionItems,
+    recentEvents: [],
+    updatedAt: "2024-01-01T00:00:00Z",
+  },
+  stats: { total: 0 } as any,
+  tasksWithLiveActivities: [],
+});
+
+const makeAttentionItem = (overrides: Partial<ExecutionAttentionItemSummary> = {}): ExecutionAttentionItemSummary => ({
+  id: "attention-selected",
+  sprintId: "sprint-selected",
+  taskId: "task-selected",
+  sprintRunId: "run-selected",
+  dispatchId: "dispatch-selected",
+  attentionType: "merge_conflict",
+  severity: "high",
+  ownerType: "worker",
+  status: "open",
+  assignedWorkerEndpointId: null,
+  title: "Resolve selected sprint blocker",
+  summaryMarkdown: "Selected sprint needs operator review.",
+  payload: null,
+  openedAt: "2024-01-01T00:00:00Z",
+  claimedAt: null,
+  resolvedAt: null,
+  updatedAt: "2024-01-01T00:01:00Z",
+  ...overrides,
+});
+
 describe("OverviewTelemetry Component", () => {
   beforeEach(() => {
     cleanup();
-    vi.mocked(useProjectData).mockReturnValue({ loading: false } as any);
+    vi.clearAllMocks();
+    vi.mocked(useProjectData).mockReturnValue({ selectedProjectId: null, selectedProject: null, loading: false } as any);
+    vi.mocked(useSprints).mockReturnValue({ selectedSprintId: null, selectedSprint: null, data: [], selectSprint: vi.fn(), loading: false, error: null, refetch: vi.fn() } as any);
+    vi.mocked(useDashboardRuntimeData).mockReturnValue(makeRuntimeData([]) as any);
   });
 
   it("renders skeletons when loading", () => {
@@ -74,6 +140,87 @@ describe("OverviewTelemetry Component", () => {
     expect(screen.getByText("Awaiting Runtime")).toBeInTheDocument();
     expect(screen.getByText("No active project telemetry yet")).toBeInTheDocument();
     expect(screen.getByRole("status")).toHaveTextContent("Awaiting Runtime");
+  });
+
+  it("renders selected-project attention queue items from the scoped live snapshot", () => {
+    vi.mocked(useProjectData).mockReturnValue({
+      selectedProjectId: "p1",
+      selectedProject: { id: "p1", name: "Selected Project" },
+      loading: false,
+    } as any);
+    vi.mocked(useSprints).mockReturnValue({ selectedSprintId: "sprint-selected", selectedSprint: null, data: [], selectSprint: vi.fn(), loading: false, error: null, refetch: vi.fn() } as any);
+    vi.mocked(useDashboardRuntimeData).mockReturnValue(makeRuntimeData([makeAttentionItem()]) as any);
+    vi.mocked(useOverviewTelemetry).mockReturnValue({
+      telemetry: {
+        activeProjects: [],
+        attentionProjects: [],
+        recentEvents: [],
+        updatedAt: null,
+      },
+      loading: false,
+      error: null,
+      refresh: vi.fn(),
+    });
+
+    render(<OverviewTelemetry />);
+
+    expect(useDashboardRuntimeData).toHaveBeenCalledWith("p1", true, { selectedSprintId: "sprint-selected" });
+    expect(screen.getByText("Selected Sprint Attention Queue")).toBeInTheDocument();
+    expect(screen.getByText("Resolve selected sprint blocker")).toBeInTheDocument();
+    expect(screen.getByText("Selected sprint needs operator review.")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Resolve attention item/i })).not.toBeInTheDocument();
+  });
+
+  it("does not render unrelated sprint blockers when the live snapshot is already scoped", () => {
+    vi.mocked(useProjectData).mockReturnValue({
+      selectedProjectId: "p1",
+      selectedProject: { id: "p1", name: "Selected Project" },
+      loading: false,
+    } as any);
+    vi.mocked(useSprints).mockReturnValue({ selectedSprintId: "sprint-selected", selectedSprint: null, data: [], selectSprint: vi.fn(), loading: false, error: null, refetch: vi.fn() } as any);
+    vi.mocked(useDashboardRuntimeData).mockReturnValue(makeRuntimeData([
+      makeAttentionItem({ title: "Scoped sprint blocker", summaryMarkdown: "Only selected sprint data is present." }),
+    ]) as any);
+    vi.mocked(useOverviewTelemetry).mockReturnValue({
+      telemetry: {
+        activeProjects: [],
+        attentionProjects: [
+          {
+            projectId: "p1",
+            projectName: "Selected Project",
+            sprintId: "sprint-unrelated",
+            sprintName: "Unrelated Sprint",
+            sprintNumber: 2,
+            sprintRunId: "run-unrelated",
+            sprintRunStatus: "paused",
+            activeDispatchCount: 0,
+            runningDispatchCount: 0,
+            updatedAt: null,
+            humanIntervention: {
+              title: "Unrelated sprint blocker",
+              reason: "Different sprint needs work.",
+              instructions: "Do not show this in the selected queue.",
+              attentionType: "manual_attention",
+              severity: "medium",
+              ownerType: "human",
+            },
+          },
+        ],
+        recentEvents: [],
+        updatedAt: null,
+      },
+      loading: false,
+      error: null,
+      refresh: vi.fn(),
+    });
+
+    render(<OverviewTelemetry />);
+
+    const selectedQueue = screen.getByRole("list", { name: "Selected sprint attention items" });
+    expect(within(selectedQueue).getByText("Scoped sprint blocker")).toBeInTheDocument();
+    expect(within(selectedQueue).queryByText("Unrelated sprint blocker")).not.toBeInTheDocument();
+    expect(screen.getByText("Human Intervention Needed")).toBeInTheDocument();
+    expect(screen.getByText("Unrelated sprint blocker")).toBeInTheDocument();
   });
 
   it("renders compact intervention cards", () => {

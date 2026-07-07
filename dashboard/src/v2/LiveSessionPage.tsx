@@ -7,6 +7,7 @@ import { SprintStatsDeck, useLiveTaskTimingSummaries } from "./components/Sprint
 
 
 import { useDashboardRuntimeData } from "../hooks/use-dashboard-runtime-data.js";
+import { useSprints } from "../hooks/useSprints.js";
 import { useProjectGitStatus } from "./hooks/use-project-git-status.js";
 import { usePreviewSessions } from "./hooks/use-preview-sessions.js";
 import { useLiveSessionActions } from "./hooks/use-live-session-actions.js";
@@ -70,6 +71,7 @@ export const LiveSessionPage: FunctionComponent = () => {
     const prefersReducedMotion = useReducedMotion();
     const interactionTokens = useInteractionTokens();
     const { selectedProjectId, loading: projectsLoading } = useProjectData();
+    const { selectedSprintId: selectedNavigationSprintId, loading: sprintsLoading } = useSprints(selectedProjectId);
     const { data: effectiveSettings } = useProjectEffectiveSettings(selectedProjectId);
     const sprintKeyPrefix = effectiveSettings?.settings?.git?.sprintKeyPrefix || "SPR";
     const {
@@ -83,7 +85,11 @@ export const LiveSessionPage: FunctionComponent = () => {
         selectedSprintId,
         status,
         tasksWithLiveActivities,
-    } = useDashboardRuntimeData(selectedProjectId, !projectsLoading && !!selectedProjectId);
+    } = useDashboardRuntimeData(
+        selectedProjectId,
+        !projectsLoading && !sprintsLoading && !!selectedProjectId,
+        { selectedSprintId: selectedNavigationSprintId },
+    );
     // Git/CI/PR status lives on its own dedicated channel — it is large/slow and only rendered here,
     // so it no longer rides the shared live snapshot every page parses.
     const {

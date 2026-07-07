@@ -1,0 +1,17 @@
+Implemented the dashboard attention queue update.
+
+Changed:
+- Extracted shared attention row rendering into `AttentionQueueItemsList` in `dashboard/src/v2/components/AttentionLedger.tsx`.
+- Added a bounded, read-only selected-sprint queue inside `OverviewTelemetry`.
+- Updated `LiveSessionPage` to pass the top-nav selected sprint scope into `useDashboardRuntimeData`.
+- Added focused tests for Overview queue rendering, scoped blocker behavior, read-only queue mode, and Live scoped snapshot requests.
+- Updated canonical docs and public docs.
+- Created required `.task-learnings.md`.
+
+Verification passed:
+- `pnpm exec vitest run tests/dashboard/v2/overview-telemetry.test.tsx tests/dashboard/v2/attention-ledger.test.tsx tests/dashboard/v2/live-session-page-runtime.test.tsx`
+- `pnpm run test:dashboard`
+- `pnpm run lint`
+- `pnpm run build`
+
+Note: the first test attempt failed because `vitest` was not installed locally; `pnpm install` restored dependencies. No residual risk identified.
