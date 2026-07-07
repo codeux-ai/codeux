@@ -9,6 +9,7 @@ import { useReducedMotion } from "../../../dashboard/src/v2/hooks/use-reduced-mo
 import { afterEach, describe, it, expect, vi } from "vitest";
 import { render, screen, fireEvent, cleanup, waitFor } from "@testing-library/preact";
 import { PlanningProgressOverlay } from "../../../dashboard/src/v2/components/ui/PlanningProgressOverlay.js";
+import { getPlanningFeedback, SHIP_LOOP_MS } from "../../../dashboard/src/v2/lib/sprint-planning-feedback.js";
 import { ToastProvider, useToast } from "../../../dashboard/src/v2/components/feedback/ToastProvider.js";
 import { ActionFeedbackRegion } from "../../../dashboard/src/v2/components/ui/ActionFeedbackRegion.js";
 import { SkeletonRow, SkeletonCard, SkeletonPanel } from "../../../dashboard/src/v2/components/layout/SkeletonLoader.js";
@@ -227,7 +228,7 @@ describe("UI Components Coverage", () => {
   });
 
   it("renders PlanningProgressOverlay in various states", () => {
-    const feedback = { shipType: "container" as const, shipProgress: 0.5, text: "Test Message" };
+    const feedback = { ...getPlanningFeedback("plan_only", SHIP_LOOP_MS * 0.45), text: "Test Message" };
     const { rerender } = render(
       <PlanningProgressOverlay 
         isBusy={false} 
@@ -254,11 +255,21 @@ describe("UI Components Coverage", () => {
     );
     expect(document.body.textContent).toContain("Test Message");
     expect(document.body.textContent).toContain("Generating subtasks");
+    expect(screen.getByRole("progressbar", { name: "Test Message" })).toHaveAttribute(
+      "aria-valuenow",
+      String(Math.round(feedback.progress * 100))
+    );
+    expect(screen.getByTestId("planning-ship-course")).toHaveAttribute("data-reduced-motion", "false");
+    const traveler = screen.getByTestId("planning-ship-traveler");
+    expect(traveler).toHaveAttribute("data-ship-phase", feedback.shipVisual.phase);
+    expect(traveler).toHaveAttribute("data-ship-visible", "true");
+    expect(traveler.getAttribute("style")).toContain("transform: translate3d(");
+    expect(traveler.getAttribute("style")).not.toContain("left:");
 
     rerender(
       <PlanningProgressOverlay 
         isBusy={true} 
-        feedback={{ ...feedback, shipType: "wooden" }} 
+        feedback={{ ...getPlanningFeedback("improve", SHIP_LOOP_MS * 0.45), text: "Test Message" }}
         planningEta={60000} 
         elapsedMs={1000} 
         isDark={true} 
@@ -269,6 +280,22 @@ describe("UI Components Coverage", () => {
       />
     );
     expect(document.body.textContent).toContain("The Planning agent is researching your codebase");
+
+    const hiddenWrapFeedback = { ...getPlanningFeedback("plan_only", SHIP_LOOP_MS * 0.95), text: "Test Message" };
+    rerender(
+      <PlanningProgressOverlay
+        isBusy={true}
+        feedback={hiddenWrapFeedback}
+        planningEta={60000}
+        elapsedMs={1000}
+        isDark={false}
+        actionType="plan_only"
+        onDismiss={() => {}}
+      />
+    );
+    expect(screen.getByTestId("planning-ship-traveler")).toHaveAttribute("data-ship-phase", "hidden");
+    expect(screen.getByTestId("planning-ship-traveler")).toHaveAttribute("data-ship-visible", "false");
+    expect(screen.getByTestId("planning-ship-traveler")).toHaveStyle({ visibility: "hidden" });
 
     rerender(
       <PlanningProgressOverlay 

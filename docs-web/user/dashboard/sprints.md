@@ -36,6 +36,8 @@ Click **Plan sprint**. The planner agent (typically a Gemini, Codex or Claude se
 - Inferred `depends_on` edges.
 - A best-effort `is_independent` flag.
 
+While planning is in flight, the dashboard shows an ETA/elapsed overlay with a course indicator, request-specific status copy, minimize controls, and cancel/recovery actions when they are available.
+
 You can:
 
 - **Edit** each subtask inline.
