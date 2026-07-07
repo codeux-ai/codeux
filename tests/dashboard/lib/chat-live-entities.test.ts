@@ -197,6 +197,27 @@ describe("resolveChatLiveEntities", () => {
     expect(result.map((entity) => `${entity.kind}:${entity.recordId}`)).toEqual(["sprint:sprint-4", "task:task-4"]);
   });
 
+  it("ignores external absolute dashboard-shaped links while preserving relative dashboard links", () => {
+    const sprints = [createSprint({ id: "sprint-8", number: 8, name: "Link Origin Sprint" })];
+    const tasks = [createTask({ recordId: "task-8", id: "T08", sprintId: "sprint-8", title: "Link origin task" })];
+
+    const externalResult = resolveChatLiveEntities({
+      sprints,
+      tasks,
+      sprintKeyPrefix: "SPR",
+      bodyMarkdown: "External link https://example.com/tasks?sprintId=sprint-8&taskId=task-8 should stay plain.",
+    });
+    const relativeResult = resolveChatLiveEntities({
+      sprints,
+      tasks,
+      sprintKeyPrefix: "SPR",
+      bodyMarkdown: "Relative link /tasks?sprintId=sprint-8&taskId=task-8 should resolve.",
+    });
+
+    expect(externalResult).toEqual([]);
+    expect(relativeResult.map((entity) => `${entity.kind}:${entity.recordId}`)).toEqual(["task:task-8"]);
+  });
+
   it("ignores stale ids, stale keys, and mismatched task links", () => {
     const result = resolveChatLiveEntities({
       sprints: [createSprint({ id: "sprint-1", number: 1 })],
