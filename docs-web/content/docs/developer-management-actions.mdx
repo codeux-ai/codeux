@@ -1,7 +1,7 @@
 # Management actions
 
 Code UX exposes **one MCP tool per management domain** — `manage_projects`, `manage_sprints`,
-`manage_tasks`, `manage_quicksprints`, `manage_scheduler`, `manage_agents`, `manage_memory`,
+`manage_tasks`, `manage_quicksprints`, `manage_scheduler`, `manage_agents`, `manage_node_flows`, `manage_memory`,
 `manage_settings`, `manage_preview`, `manage_chat_providers`, and `manage_telemetry` — each with a set of
 **actions**. This page is the complete matrix. (See [MCP tools](/docs/developer-mcp-tools) for the tool list and
 schemas.)
@@ -99,15 +99,16 @@ Task create/update fields include `title`, `name`, `promptMarkdown`, `descriptio
 | Action | Destructive | Required payload | Description |
 | --- | --- | --- | --- |
 | `list` | – | `projectId`, optional `from`, `to` | List scheduler entries and occurrences for a project window. |
-| `create` | – | `projectId`, `targetType`, `scheduledFor`, target payload | Create a generic scheduler entry for `sprint`, `quicksprint`, `chat`, or `memory_remediation`. |
+| `create` | – | `projectId`, `targetType`, `scheduledFor`, target payload | Create a generic scheduler entry for `sprint`, `quicksprint`, `chat`, `node_flow`, or `memory_remediation`. |
 | `schedule_sprint` | – | `projectId`, `scheduledFor`, `sprintId` | Schedule a sprint orchestration. |
 | `schedule_quicksprint` | – | `projectId`, `scheduledFor`, `templateId` | Schedule a quicksprint. Optional `taskCount`, `submitMode`, `additionalPrompt`, `agentPresetId`, `planningOverrides`. |
 | `schedule_chat` | – | `projectId`, `scheduledFor`, `bodyMarkdown` | Schedule a chat message. Optional `threadId`, `connectionId`, `title`, `timezone`, `recurrence`. |
+| `schedule_node_flow` | – | `projectId`, `scheduledFor`, `flowId` | Schedule a node flow. Optional JSON `input`, `flowVersion`, `timezone`, and `recurrence`. |
 | `update` | – | `entryId`, update fields | Update scheduler title, status, time, recurrence, or target payload. |
 | `delete` | ✅ | `entryId` | Delete a scheduler entry. |
 | `run_due` | – | optional `now` ISO date override | Evaluate due entries immediately, mostly for operational verification. |
 
-`create` accepts nested targets (`sprintTarget`, `quicksprintTarget`, `chatTarget`) or the flattened fields used by the `schedule_*` aliases. `schedule_sprint`, `schedule_quicksprint`, and `schedule_chat` infer the target type. Scheduling supports an absolute time (`scheduledFor`) or an `after_sprint_end` anchor via `scheduleMode` or `anchorMode`, with `sourceSprintId` / `anchorSourceSprintId` and optional `offsetMinutes` / `anchorOffsetMinutes`.
+`create` accepts nested targets (`sprintTarget`, `quicksprintTarget`, `chatTarget`, `nodeFlowTarget`) or the flattened fields used by the `schedule_*` aliases. `schedule_sprint`, `schedule_quicksprint`, `schedule_chat`, and `schedule_node_flow` infer the target type. Scheduling supports an absolute time (`scheduledFor`) or an `after_sprint_end` anchor via `scheduleMode` or `anchorMode`, with `sourceSprintId` / `anchorSourceSprintId` and optional `offsetMinutes` / `anchorOffsetMinutes`.
 
 Memory remediation schedules use `targetType: "memory_remediation"` but have their own dedicated `/api/projects/:projectId/scheduler/memory-remediation` HTTP routes separate from the normal scheduler entries.
 

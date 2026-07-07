@@ -15,9 +15,9 @@ This page lists every endpoint, grouped by domain. Path parameters use `:name` n
 | Method | Path | Returns |
 | --- | --- | --- |
 | `GET` | `/health` | `{ "status": "UP" }` — liveness. |
-| `GET` | `/ready` | `{ "components": { "settingsDb", "dashboardBind", "mcpService" } }` — readiness. |
+| `GET` | `/ready` | `{ "components": { "settingsDb", "dashboardBind", "mcpService", "startupRecovery" } }` — readiness. |
 | `GET` | `/api/status` | High-level system status snapshot. |
-| `GET` | `/api/execution` | Current execution state across all sprints. |
+| `GET` | `/api/execution` | Current selected-project execution state without heavy recent feeds. |
 | `GET` | `/api/live?projectId=` | Combined live snapshot. Optional project filter. |
 | `GET` | `/api/telemetry/overview` | Overview metrics for the home page. |
 | `GET` | `/api/live-activities` | Live agent activities (cached 10 s). |
@@ -36,7 +36,7 @@ This page lists every endpoint, grouped by domain. Path parameters use `:name` n
 | `DELETE` | `/api/projects/:projectId` | Delete. |
 | `PUT` | `/api/projects/:projectId/select` | Set active project. |
 | `PUT` | `/api/projects/:projectId/selected-sprint` | Set selected sprint for project. |
-| `GET` | `/api/projects/:projectId/execution` | Project execution state. |
+| `GET` | `/api/projects/:projectId/execution` | Project execution state with recent runtime events and invocation summaries. |
 | `GET` | `/api/projects/:projectId/stats?window=24h\|7d\|30d\|custom` | Stats. |
 | `PUT` | `/api/projects/:projectId/preferred-worker` | Set preferred worker connection. |
 | `POST` | `/api/projects/:projectId/attention-items/:id/claim` | Claim an attention item. |

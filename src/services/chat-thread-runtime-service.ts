@@ -9,7 +9,28 @@ import type { AgentPresetSyncService } from "./agent-preset-sync-service.js";
 import type { ProjectManagementRepository } from "../repositories/project-management-repository.js";
 import type { IProviderRunner } from "../infrastructure/providers/cli/provider-runner.js";
 import type { Logger } from "../shared/logging/logger.js";
-import type { ConversationCompactionSummary, CreateDashboardConversationMessageInput, ConversationThreadRecord, ConversationMessageRecord, ConversationRuntimeState, PromptSuggestionsMetadata, UpdateConversationThreadInput, UpdateConversationThreadRouteInput } from "../contracts/connection-chat-types.js";
+import type {
+  ConversationCompactionSummary,
+  CreateDashboardConversationMessageInput,
+  ConversationThreadRecord,
+  ConversationMessageRecord,
+  ConversationRuntimeState,
+  PromptSuggestionsMetadata,
+  DashboardAppProgressPlanningStage,
+  DashboardAppProgressWidgetMetadata,
+  DashboardCreateAppQuickactionKind,
+  DashboardCreateAppQuickactionPlanningStatus,
+  DashboardCreateAppQuickactionRuntimeState,
+  DashboardCreateAppQuickactionStackSummary,
+  DashboardCreateAppQueuedFollowUp,
+  UpdateConversationThreadInput,
+  UpdateConversationThreadRouteInput,
+} from "../contracts/connection-chat-types.js";
+import { DASHBOARD_APP_PROGRESS_WIDGET_TYPE } from "../contracts/connection-chat-types.js";
+import type {
+  DetachedQuicksprintLaunchInput,
+  DetachedQuicksprintLaunchResult,
+} from "../contracts/quicksprint-types.js";
 import { buildProviderPrompt } from "./cli-workflow-utils.js";
 import { resolveEffectiveModel } from "./provider-execution-service.js";
 import { getRepoCodeUxDir, getRepoCodeUxPath } from "../shared/config/code-ux-paths.js";
@@ -43,6 +64,19 @@ interface ChatThreadRuntimeServiceDependencies {
   getMcpConnectionInfo?: () => McpConnectionInfo | null;
   getMcpApprovalTracker?: () => McpApprovalTracker;
   logger?: Logger;
+}
+
+interface ChatCreateAppQuicksprintLauncher {
+  launchDetachedQuicksprint(projectId: string, input: DetachedQuicksprintLaunchInput): Promise<DetachedQuicksprintLaunchResult>;
+}
+
+interface NormalizedCreateAppQuickaction {
+  kind: DashboardCreateAppQuickactionKind;
+  requestId: string;
+  templateId: string;
+  taskCount: number;
+  stackSummary: DashboardCreateAppQuickactionStackSummary | null;
+  suggestionTags: string[];
 }
 
 export interface ThreadRouteResolution {
@@ -113,6 +147,121 @@ function isChatProviderSourcedMessage(message: Pick<ConversationMessageRecord, "
   return message?.metadata?.source === "chat_provider" || message?.metadata?.suppressRichWidgets === true;
 }
 
+function readRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null;
+}
+
+function readString(value: unknown): string | null {
+  const normalized = typeof value === "string" ? value.trim() : "";
+  return normalized ? normalized : null;
+}
+
+function normalizeCreateAppQuickactionKind(value: unknown): DashboardCreateAppQuickactionKind | null {
+  const normalized = readString(value);
+  if (normalized === "web_app" || normalized === "web") {
+    return "web_app";
+  }
+  if (normalized === "desktop_app" || normalized === "desktop") {
+    return "desktop_app";
+  }
+  return null;
+}
+
+function readStringList(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value
+    .map((entry) => readString(entry))
+    .filter((entry): entry is string => Boolean(entry));
+}
+
+type DashboardCreateAppStackStringField = Exclude<keyof DashboardCreateAppQuickactionStackSummary, "applicationKind">;
+
+function readOptionalStackField(raw: Record<string, unknown>, key: DashboardCreateAppStackStringField): string | null | undefined {
+  if (!Object.prototype.hasOwnProperty.call(raw, key)) {
+    return undefined;
+  }
+  return readString(raw[key]) ?? null;
+}
+
+function readCreateAppStackSummary(value: unknown, kind: DashboardCreateAppQuickactionKind): DashboardCreateAppQuickactionStackSummary | null {
+  const raw = readRecord(value);
+  if (!raw) {
+    return null;
+  }
+
+  const stackSummary: DashboardCreateAppQuickactionStackSummary = {
+    applicationKind: normalizeCreateAppQuickactionKind(raw.applicationKind) ?? kind,
+  };
+  const fields: DashboardCreateAppStackStringField[] = [
+    "techstackId",
+    "techstackName",
+    "language",
+    "framework",
+    "runtime",
+    "packageManager",
+    "styling",
+    "testFramework",
+  ];
+  for (const field of fields) {
+    const valueForField = readOptionalStackField(raw, field);
+    if (valueForField !== undefined) {
+      stackSummary[field] = valueForField;
+    }
+  }
+  return stackSummary;
+}
+
+function readPositiveInteger(value: unknown, fallback: number): number {
+  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
+    return fallback;
+  }
+  return Math.floor(value);
+}
+
+function parseCreateAppQuickactionMetadata(metadata: Record<string, unknown> | null | undefined): NormalizedCreateAppQuickaction | null {
+  const root = readRecord(metadata);
+  if (!root) {
+    return null;
+  }
+  const quickaction = readRecord(root.quickaction) ?? readRecord(root.quickaction_metadata);
+  if (!quickaction) {
+    return null;
+  }
+  const type = readString(quickaction.type);
+  if (type !== "create_app") {
+    return null;
+  }
+
+  const kind = normalizeCreateAppQuickactionKind(quickaction.kind ?? root.quickactionKind ?? root.appKind);
+  if (!kind) {
+    throw new Error("Create app quickaction metadata is missing a supported app kind.");
+  }
+  const requestId = readString(quickaction.requestId ?? root.quickactionRequestId);
+  if (!requestId) {
+    throw new Error("Create app quickaction metadata is missing requestId.");
+  }
+  const templateId = readString(quickaction.templateId ?? root.templateId);
+  if (!templateId) {
+    throw new Error("Create app quickaction metadata is missing templateId.");
+  }
+
+  return {
+    kind,
+    requestId,
+    templateId,
+    taskCount: readPositiveInteger(quickaction.taskCount ?? root.taskCount, 5),
+    stackSummary: readCreateAppStackSummary(quickaction.stackSummary ?? root.stackSummary, kind),
+    suggestionTags: readStringList(quickaction.suggestionTags ?? root.suggestionTags),
+  };
+}
+
+function hasAnyQuickactionMetadata(metadata: Record<string, unknown> | null | undefined): boolean {
+  const root = readRecord(metadata);
+  return Boolean(root && (readRecord(root.quickaction) || readRecord(root.quickaction_metadata)));
+}
+
 function isChatProviderSourcedThread(
   thread: ConversationThreadRecord,
   messages: ConversationMessageRecord[],
@@ -136,8 +285,13 @@ async function writeThreadSessionTitleFile(repoPath: string, threadId: string, t
 
 export class ChatThreadRuntimeService {
   private readonly inFlightTurns = new Map<string, InFlightChatTurn>();
+  private quicksprintLauncher: ChatCreateAppQuicksprintLauncher | null = null;
 
   constructor(private readonly deps: ChatThreadRuntimeServiceDependencies) {}
+
+  public setQuicksprintLauncher(launcher: ChatCreateAppQuicksprintLauncher): void {
+    this.quicksprintLauncher = launcher;
+  }
 
   public async resolveThreadRoute(
     thread: Pick<ConversationThreadRecord, "connectionId" | "projectId" | "runtimeState">,
@@ -338,6 +492,84 @@ export class ChatThreadRuntimeService {
       }
     }
 
+    let createAppQuickaction: NormalizedCreateAppQuickaction | null = null;
+    try {
+      createAppQuickaction = parseCreateAppQuickactionMetadata(userMessage.metadata);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      this.deps.logger?.error("Dashboard create-app quickaction metadata was invalid", {
+        projectId,
+        threadId: thread.id,
+        messageId: userMessage.id,
+        error: message,
+      });
+      this.deps.connectionChatRepository.markDashboardMessagesFailed(thread.id, {
+        upToMessageId: userMessage.id,
+      });
+      this.deps.connectionChatRepository.postSystemMessage(projectId, {
+        threadId: thread.id,
+        bodyMarkdown: `Create-app quickaction failed: ${message}`,
+      });
+      return {
+        ...userMessage,
+        deliveryStatus: "failed",
+      };
+    }
+    if (createAppQuickaction) {
+      try {
+        await this.handleCreateAppQuickaction(projectId, thread, userMessage, createAppQuickaction);
+        return userMessage;
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
+        this.deps.logger?.error("Dashboard create-app quickaction failed", {
+          projectId,
+          threadId: thread.id,
+          messageId: userMessage.id,
+          quickactionRequestId: createAppQuickaction.requestId,
+          error: message,
+        });
+        this.deps.connectionChatRepository.markDashboardMessagesFailed(thread.id, {
+          upToMessageId: userMessage.id,
+        });
+        this.deps.connectionChatRepository.postSystemMessage(projectId, {
+          threadId: thread.id,
+          bodyMarkdown: `Create-app quickaction failed: ${message}`,
+        });
+        return {
+          ...userMessage,
+          deliveryStatus: "failed",
+        };
+      }
+    }
+
+    if (!hasAnyQuickactionMetadata(userMessage.metadata)) {
+      try {
+        const handledCreateAppFollowUp = await this.handleCreateAppFollowUp(projectId, thread, userMessage);
+        if (handledCreateAppFollowUp) {
+          return userMessage;
+        }
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
+        this.deps.logger?.error("Dashboard create-app follow-up failed", {
+          projectId,
+          threadId: thread.id,
+          messageId: userMessage.id,
+          error: message,
+        });
+        this.deps.connectionChatRepository.markDashboardMessagesFailed(thread.id, {
+          upToMessageId: userMessage.id,
+        });
+        this.deps.connectionChatRepository.postSystemMessage(projectId, {
+          threadId: thread.id,
+          bodyMarkdown: `Create-app follow-up failed: ${message}`,
+        });
+        return {
+          ...userMessage,
+          deliveryStatus: "failed",
+        };
+      }
+    }
+
     const existingTurn = this.inFlightTurns.get(thread.id);
     if (existingTurn) {
       // A turn for this thread is already in flight — either still waiting on a provider
@@ -409,6 +641,473 @@ export class ChatThreadRuntimeService {
       this.inFlightTurns.delete(thread.id);
     }
     return userMessage;
+  }
+
+  private async handleCreateAppQuickaction(
+    projectId: string,
+    thread: ConversationThreadRecord,
+    userMessage: ConversationMessageRecord,
+    quickaction: NormalizedCreateAppQuickaction,
+  ): Promise<void> {
+    if (!this.quicksprintLauncher) {
+      throw new Error("Create-app quickactions are not available until quicksprint launch is initialized.");
+    }
+
+    const launch = await this.quicksprintLauncher.launchDetachedQuicksprint(projectId, {
+      templateId: quickaction.templateId,
+      taskCount: quickaction.taskCount,
+      submitMode: "plan_and_start",
+      clientRequestId: quickaction.requestId,
+      additionalPrompt: this.buildCreateAppAdditionalPrompt(userMessage.bodyMarkdown, quickaction),
+    });
+
+    this.deps.connectionChatRepository.markDashboardMessagesProcessed(thread.id, {
+      upToMessageId: userMessage.id,
+    });
+
+    const appLabel = quickaction.kind === "web_app" ? "web app" : "desktop app";
+    const progressMessage = this.deps.connectionChatRepository.postSystemMessage(projectId, {
+      threadId: thread.id,
+      bodyMarkdown: `Started a ${appLabel} sprint: **${launch.sprint.name}**. Planning is running now; add any directional details here and they can be appended after planning finishes.`,
+      metadata: {
+        widget_metadata: this.buildCreateAppProgressWidgetMetadata(quickaction, launch),
+      },
+    });
+
+    const currentThread = this.deps.connectionChatRepository.getThread(thread.id) || thread;
+    const quickactionState: DashboardCreateAppQuickactionRuntimeState = {
+      activeSprintId: launch.sprint.id,
+      appKind: quickaction.kind,
+      planningStatus: "running",
+      queuedFollowUps: [],
+      quickactionRequestId: quickaction.requestId,
+      clientRequestId: launch.planningRequest.clientRequestId,
+      activePlanningRequestId: launch.planningRequest.clientRequestId,
+      progressMessageId: progressMessage?.id ?? null,
+      planningError: null,
+    };
+    this.deps.connectionChatRepository.updateThread(thread.id, {
+      runtimeState: {
+        ...currentThread.runtimeState,
+        createAppQuickaction: quickactionState,
+      },
+    });
+
+    this.attachCreateAppPlanningCompletion(projectId, thread.id, launch);
+  }
+
+  private async handleCreateAppFollowUp(
+    projectId: string,
+    thread: ConversationThreadRecord,
+    userMessage: ConversationMessageRecord,
+  ): Promise<boolean> {
+    const currentThread = this.deps.connectionChatRepository.getThread(thread.id) || thread;
+    const quickactionState = currentThread.runtimeState?.createAppQuickaction ?? null;
+    if (!quickactionState?.activeSprintId) {
+      return false;
+    }
+
+    const followUp: DashboardCreateAppQueuedFollowUp = {
+      messageId: userMessage.id,
+      bodyMarkdown: userMessage.bodyMarkdown,
+      createdAt: userMessage.createdAt,
+    };
+    const taskCount = this.deps.projectManagementRepository.listTasks(projectId, quickactionState.activeSprintId).length;
+
+    if (quickactionState.planningStatus === "running" && taskCount === 0) {
+      const queued = this.updateCreateAppQuickactionRuntimeState(thread.id, (latestQuickactionState) => {
+        if (
+          !latestQuickactionState
+          || latestQuickactionState.activeSprintId !== quickactionState.activeSprintId
+          || latestQuickactionState.planningStatus !== "running"
+        ) {
+          return null;
+        }
+        return {
+          ...latestQuickactionState,
+          queuedFollowUps: [
+            ...latestQuickactionState.queuedFollowUps.filter((entry) => entry.messageId !== followUp.messageId),
+            followUp,
+          ],
+        };
+      });
+      if (!queued) {
+        this.appendCreateAppFollowUpsToSprint(projectId, quickactionState.activeSprintId, [followUp]);
+        this.deps.connectionChatRepository.markDashboardMessagesProcessed(thread.id, {
+          upToMessageId: userMessage.id,
+        });
+        this.deps.connectionChatRepository.postSystemMessage(projectId, {
+          threadId: thread.id,
+          bodyMarkdown: "Updated the app sprint direction with your latest note.",
+        });
+        return true;
+      }
+      const latestTaskCount = this.deps.projectManagementRepository.listTasks(projectId, quickactionState.activeSprintId).length;
+      if (latestTaskCount > 0) {
+        this.appendAndClearCreateAppQueuedFollowUps(projectId, thread.id, quickactionState.activeSprintId);
+        this.deps.connectionChatRepository.markDashboardMessagesProcessed(thread.id, {
+          upToMessageId: userMessage.id,
+        });
+        this.deps.connectionChatRepository.postSystemMessage(projectId, {
+          threadId: thread.id,
+          bodyMarkdown: "Updated the app sprint direction with your latest note.",
+        });
+        return true;
+      }
+      this.deps.connectionChatRepository.markDashboardMessagesProcessed(thread.id, {
+        upToMessageId: userMessage.id,
+      });
+      this.deps.connectionChatRepository.postSystemMessage(projectId, {
+        threadId: thread.id,
+        bodyMarkdown: "Got it. I'll apply that direction to the app sprint after planning finishes.",
+      });
+      return true;
+    }
+
+    const appendedQueuedFollowUps = this.appendAndClearCreateAppQueuedFollowUps(projectId, thread.id, quickactionState.activeSprintId);
+    const alreadyAppendedCurrentFollowUp = appendedQueuedFollowUps
+      .some((entry) => entry.messageId === followUp.messageId);
+    if (!alreadyAppendedCurrentFollowUp) {
+      this.appendCreateAppFollowUpsToSprint(projectId, quickactionState.activeSprintId, [followUp]);
+    }
+    this.deps.connectionChatRepository.markDashboardMessagesProcessed(thread.id, {
+      upToMessageId: userMessage.id,
+    });
+    this.deps.connectionChatRepository.postSystemMessage(projectId, {
+      threadId: thread.id,
+      bodyMarkdown: "Updated the app sprint direction with your latest note.",
+    });
+    return true;
+  }
+
+  private attachCreateAppPlanningCompletion(
+    projectId: string,
+    threadId: string,
+    launch: DetachedQuicksprintLaunchResult,
+  ): void {
+    void launch.planningPromise.then(
+      () => this.finalizeCreateAppPlanning(projectId, threadId, launch.sprint.id, launch.planningRequest.clientRequestId, "completed"),
+      (error: unknown) => this.finalizeCreateAppPlanning(projectId, threadId, launch.sprint.id, launch.planningRequest.clientRequestId, "failed", error),
+    );
+  }
+
+  private async finalizeCreateAppPlanning(
+    projectId: string,
+    threadId: string,
+    sprintId: string,
+    planningRequestId: string,
+    planningStatus: DashboardCreateAppQuickactionPlanningStatus,
+    error?: unknown,
+  ): Promise<void> {
+    try {
+      const thread = this.deps.connectionChatRepository.getThread(threadId);
+      const quickactionState = thread.runtimeState?.createAppQuickaction ?? null;
+      if (!quickactionState || quickactionState.activeSprintId !== sprintId) {
+        return;
+      }
+
+      const appendedFollowUpIds = new Set<string>();
+      if (planningStatus === "completed") {
+        try {
+          for (;;) {
+            const latestThread = this.deps.connectionChatRepository.getThread(threadId);
+            const latestQuickactionState = latestThread.runtimeState?.createAppQuickaction ?? null;
+            if (!latestQuickactionState || latestQuickactionState.activeSprintId !== sprintId) {
+              return;
+            }
+            if (
+              latestQuickactionState.activePlanningRequestId
+              && latestQuickactionState.activePlanningRequestId !== planningRequestId
+            ) {
+              return;
+            }
+            const followUpsToAppend = latestQuickactionState.queuedFollowUps
+              .filter((entry) => !appendedFollowUpIds.has(entry.messageId));
+            if (followUpsToAppend.length === 0) {
+              break;
+            }
+            this.appendCreateAppFollowUpsToSprint(projectId, sprintId, followUpsToAppend);
+            for (const followUp of followUpsToAppend) {
+              appendedFollowUpIds.add(followUp.messageId);
+            }
+          }
+        } catch (appendError: unknown) {
+          this.deps.logger?.error("Failed to append queued create-app follow-ups after planning completed", {
+            projectId,
+            threadId,
+            sprintId,
+            error: appendError instanceof Error ? appendError.message : String(appendError),
+          });
+        }
+      }
+
+      const now = new Date().toISOString();
+      const nextQuickactionState = this.updateCreateAppQuickactionRuntimeState(thread.id, (latestQuickactionState) => {
+        if (!latestQuickactionState || latestQuickactionState.activeSprintId !== sprintId) {
+          return null;
+        }
+        if (
+          latestQuickactionState.activePlanningRequestId
+          && latestQuickactionState.activePlanningRequestId !== planningRequestId
+        ) {
+          return null;
+        }
+        let queuedFollowUps = planningStatus === "completed"
+          ? latestQuickactionState.queuedFollowUps.filter((entry) => !appendedFollowUpIds.has(entry.messageId))
+          : latestQuickactionState.queuedFollowUps;
+        if (planningStatus === "completed" && queuedFollowUps.length > 0) {
+          try {
+            this.appendCreateAppFollowUpsToSprint(projectId, sprintId, queuedFollowUps);
+            for (const followUp of queuedFollowUps) {
+              appendedFollowUpIds.add(followUp.messageId);
+            }
+            queuedFollowUps = [];
+          } catch (appendError: unknown) {
+            this.deps.logger?.error("Failed to append queued create-app follow-ups during final planning state merge", {
+              projectId,
+              threadId,
+              sprintId,
+              error: appendError instanceof Error ? appendError.message : String(appendError),
+            });
+          }
+        }
+        const nextState: DashboardCreateAppQuickactionRuntimeState = {
+          ...latestQuickactionState,
+          planningStatus,
+          queuedFollowUps,
+          planningError: planningStatus === "failed"
+            ? (error instanceof Error ? error.message : String(error ?? "Planning failed"))
+            : null,
+          ...(planningStatus === "completed" ? { completedAt: now } : { failedAt: now }),
+        };
+        if (nextState.activePlanningRequestId === planningRequestId) {
+          delete nextState.activePlanningRequestId;
+        }
+        return nextState;
+      });
+      this.updateCreateAppProgressWidgetStatus(nextQuickactionState?.progressMessageId ?? quickactionState.progressMessageId ?? null, planningStatus);
+    } catch (settleError: unknown) {
+      this.deps.logger?.error("Failed to finalize dashboard create-app planning state", {
+        projectId,
+        threadId,
+        sprintId,
+        planningStatus,
+        error: settleError instanceof Error ? settleError.message : String(settleError),
+      });
+    }
+  }
+
+  private updateCreateAppQuickactionRuntimeState(
+    threadId: string,
+    updater: (
+      current: DashboardCreateAppQuickactionRuntimeState | null,
+      thread: ConversationThreadRecord,
+    ) => DashboardCreateAppQuickactionRuntimeState | null,
+  ): DashboardCreateAppQuickactionRuntimeState | null {
+    const latestThread = this.deps.connectionChatRepository.getThread(threadId);
+    const currentRuntimeState = latestThread.runtimeState ?? {};
+    const nextQuickactionState = updater(currentRuntimeState.createAppQuickaction ?? null, latestThread);
+    if (!nextQuickactionState) {
+      return null;
+    }
+
+    this.deps.connectionChatRepository.updateThread(threadId, {
+      runtimeState: {
+        ...currentRuntimeState,
+        createAppQuickaction: nextQuickactionState,
+      },
+    });
+    return nextQuickactionState;
+  }
+
+  private appendAndClearCreateAppQueuedFollowUps(
+    projectId: string,
+    threadId: string,
+    sprintId: string,
+  ): DashboardCreateAppQueuedFollowUp[] {
+    const latestThread = this.deps.connectionChatRepository.getThread(threadId);
+    const latestQuickactionState = latestThread.runtimeState?.createAppQuickaction ?? null;
+    if (!latestQuickactionState || latestQuickactionState.activeSprintId !== sprintId) {
+      return [];
+    }
+    const queuedFollowUps = latestQuickactionState.queuedFollowUps;
+    if (queuedFollowUps.length === 0) {
+      return [];
+    }
+
+    this.appendCreateAppFollowUpsToSprint(projectId, sprintId, queuedFollowUps);
+    const appendedFollowUpIds = new Set(queuedFollowUps.map((entry) => entry.messageId));
+    this.updateCreateAppQuickactionRuntimeState(threadId, (currentQuickactionState) => {
+      if (!currentQuickactionState || currentQuickactionState.activeSprintId !== sprintId) {
+        return null;
+      }
+      return {
+        ...currentQuickactionState,
+        queuedFollowUps: currentQuickactionState.queuedFollowUps
+          .filter((entry) => !appendedFollowUpIds.has(entry.messageId)),
+      };
+    });
+    return queuedFollowUps;
+  }
+
+  private appendCreateAppFollowUpsToSprint(
+    projectId: string,
+    sprintId: string,
+    followUps: DashboardCreateAppQueuedFollowUp[],
+  ): void {
+    const normalizedFollowUps = followUps
+      .map((entry) => ({
+        ...entry,
+        bodyMarkdown: entry.bodyMarkdown.trim(),
+      }))
+      .filter((entry) => entry.bodyMarkdown.length > 0);
+    if (normalizedFollowUps.length === 0) {
+      return;
+    }
+
+    const sprint = this.deps.projectManagementRepository.getSprint(sprintId);
+    if (!sprint || sprint.projectId !== projectId) {
+      throw new Error(`Sprint not found for create-app follow-up: ${sprintId}`);
+    }
+
+    const currentGoal = sprint.goal.trim();
+    const currentOriginalPrompt = sprint.originalPrompt?.trim() ?? "";
+    const appendedText = this.appendAdditionalDirectionSection(
+      currentGoal || currentOriginalPrompt,
+      normalizedFollowUps,
+    );
+    if (currentGoal) {
+      this.deps.projectManagementRepository.updateSprint(sprintId, { goal: appendedText });
+    } else {
+      this.deps.projectManagementRepository.updateSprint(sprintId, { originalPrompt: appendedText });
+    }
+  }
+
+  private appendAdditionalDirectionSection(
+    currentText: string,
+    followUps: DashboardCreateAppQueuedFollowUp[],
+  ): string {
+    const heading = "## Additional direction from chat";
+    const followUpBlock = followUps
+      .map((entry) => `### ${entry.createdAt}\n\n${entry.bodyMarkdown.trim()}`)
+      .join("\n\n");
+    const trimmedCurrentText = currentText.trimEnd();
+    if (!trimmedCurrentText) {
+      return `${heading}\n\n${followUpBlock}`;
+    }
+    if (trimmedCurrentText.includes(heading)) {
+      return `${trimmedCurrentText}\n\n${followUpBlock}`;
+    }
+    return `${trimmedCurrentText}\n\n${heading}\n\n${followUpBlock}`;
+  }
+
+  private updateCreateAppProgressWidgetStatus(
+    progressMessageId: string | null,
+    planningStatus: DashboardCreateAppQuickactionPlanningStatus,
+  ): void {
+    if (!progressMessageId) {
+      return;
+    }
+    const message = this.deps.connectionChatRepository.getMessage(progressMessageId);
+    const metadata = message.metadata ?? {};
+    const widgetMetadata = readRecord(metadata.widget_metadata);
+    if (!widgetMetadata || widgetMetadata.type !== DASHBOARD_APP_PROGRESS_WIDGET_TYPE) {
+      return;
+    }
+
+    const status = planningStatus === "completed" ? "completed" : "failed";
+    const existingStages = Array.isArray(widgetMetadata.planningStages)
+      ? widgetMetadata.planningStages
+      : [];
+    const planningStages = existingStages.map((stage) => {
+      const stageRecord = readRecord(stage);
+      if (!stageRecord) {
+        return stage;
+      }
+      if (status === "completed") {
+        return { ...stageRecord, status: "completed" };
+      }
+      return stageRecord.id === "planning"
+        ? { ...stageRecord, status: "failed" }
+        : stageRecord;
+    });
+
+    this.deps.connectionChatRepository.updateMessageMetadata(progressMessageId, {
+      ...metadata,
+      widget_metadata: {
+        ...widgetMetadata,
+        status,
+        planningStages,
+      },
+    });
+  }
+
+  private buildCreateAppAdditionalPrompt(bodyMarkdown: string, quickaction: NormalizedCreateAppQuickaction): string {
+    const appLabel = quickaction.kind === "web_app" ? "web application" : "desktop application";
+    const stackLines = this.formatCreateAppStackSummary(quickaction.stackSummary);
+    const suggestionLine = quickaction.suggestionTags.length > 0
+      ? `Suggestion tags from the dashboard: ${quickaction.suggestionTags.join(", ")}.`
+      : "No dashboard suggestion tags were provided.";
+
+    return [
+      "Dashboard create-app quickaction.",
+      `Quickaction request id: ${quickaction.requestId}.`,
+      `Create an app sprint for a ${appLabel}.`,
+      stackLines ? `Suggested stack summary:\n${stackLines}` : "No suggested stack summary was provided; infer the right stack from the selected project before planning.",
+      suggestionLine,
+      `Original dashboard message:\n${bodyMarkdown.trim()}`,
+      "Planning instructions: answer quickly, create a concrete app sprint, do not ask for confirmation before planning or starting, and keep the plan directional enough that the user can steer it.",
+      "Invite directional follow-up in the resulting planning summary, and prepare for follow-up details to be appended after planning finishes.",
+    ].join("\n\n");
+  }
+
+  private formatCreateAppStackSummary(stackSummary: DashboardCreateAppQuickactionStackSummary | null): string | null {
+    if (!stackSummary) {
+      return null;
+    }
+    const labels: Array<[keyof DashboardCreateAppQuickactionStackSummary, string]> = [
+      ["techstackId", "Techstack ID"],
+      ["techstackName", "Techstack"],
+      ["applicationKind", "Application kind"],
+      ["language", "Language"],
+      ["framework", "Framework"],
+      ["runtime", "Runtime"],
+      ["packageManager", "Package manager"],
+      ["styling", "Styling"],
+      ["testFramework", "Test framework"],
+    ];
+    const lines = labels.flatMap(([key, label]) => {
+      const value = stackSummary[key];
+      return typeof value === "string" && value.trim() ? [`- ${label}: ${value.trim()}`] : [];
+    });
+    return lines.length > 0 ? lines.join("\n") : null;
+  }
+
+  private buildCreateAppProgressWidgetMetadata(
+    quickaction: NormalizedCreateAppQuickaction,
+    launch: DetachedQuicksprintLaunchResult,
+  ): DashboardAppProgressWidgetMetadata {
+    return {
+      type: DASHBOARD_APP_PROGRESS_WIDGET_TYPE,
+      status: "running",
+      appKind: quickaction.kind,
+      sprintId: launch.sprint.id,
+      sprintName: launch.sprint.name,
+      stackSummary: quickaction.stackSummary,
+      planningStages: this.buildCreateAppPlanningStages(),
+      suggestionTags: quickaction.suggestionTags,
+      quickactionRequestId: quickaction.requestId,
+      clientRequestId: launch.planningRequest.clientRequestId,
+    };
+  }
+
+  private buildCreateAppPlanningStages(): DashboardAppProgressPlanningStage[] {
+    return [
+      { id: "planning", label: "Planning", status: "running" },
+      { id: "plan", label: "Plan", status: "pending" },
+      { id: "start", label: "Start", status: "pending" },
+      { id: "finish", label: "Finish", status: "pending" },
+    ];
   }
 
   private async runVirtualProvider(

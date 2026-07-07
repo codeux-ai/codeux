@@ -225,7 +225,20 @@ describe("GitHub workflow health", () => {
     const config = await readRepoFile(PLAYWRIGHT_CONFIG);
 
     expect(config).toContain("command: 'node dist/index.js'");
-    expect(config).toContain("url: 'http://127.0.0.1:4444/health'");
+    expect(config).toContain("process.env.CODEUX_E2E_DASHBOARD_PORT || process.env.DASHBOARD_PORT || '4464'");
+    expect(config).toContain("const resolvedDashboardPort = Number.isFinite(dashboardPort) ? dashboardPort : 4464;");
+    expect(config).toContain("const dashboardBaseUrl = `http://127.0.0.1:${resolvedDashboardPort}`;");
+    expect(config).toContain("baseURL: dashboardBaseUrl");
+    expect(config).toContain("url: `${dashboardBaseUrl}/health`");
+    expect(config).toContain("const chromiumExecutablePath = (() => {");
+    expect(config).toContain("launchOptions: chromiumExecutablePath ? { executablePath: chromiumExecutablePath } : undefined,");
+    expect(config).toContain("CODE_UX_DIRECTORY_BROWSER_ROOTS: os.tmpdir()");
+    expect(config).toContain("DASHBOARD_PORT: String(resolvedDashboardPort)");
+    expect(config).toContain("CODEUX_E2E_DASHBOARD_PORT");
+    expect(config).toContain("CODEUX_E2E_PROVIDER_CLI_SHIM: mockProviderCliPath");
+    expect(config).toContain("MCP_HTTP_PORT: String(resolvedDashboardPort + 1)");
+    expect(config).toContain("CODE_UX_CONTAINERIZED_GIT: '0'");
+    expect(config).toContain("CODE_UX_GIT_CONTAINER_MODE: 'host'");
     expect(config).toContain("reuseExistingServer: false");
     expect(config).toContain("workers: 1");
     expect(config).toContain("trace: 'retain-on-failure'");

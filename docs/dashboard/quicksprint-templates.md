@@ -105,6 +105,8 @@ The REST API and MCP `manage_quicksprints` tool expose these actions:
 - `execute`: Plans a quicksprint. Payload supports `taskCount`, `noTaskLimit`, `submitMode`, `routeOverride`, and `modelOverride`. Defaults to `submitMode: "plan_only"`.
 - `start`: Alias for execution defaulting to `submitMode: "plan_and_start"`.
 
+`QuicksprintService.launchDetachedQuicksprint` is the internal primitive for chat quickactions that need a sprint record immediately while planning continues in the background. It creates the sprint synchronously, starts the same planning flow with the same prompt composition and override resolution as `execute`, and returns a planning request descriptor with `projectId`, `sprintId`, `templateId`, `submitMode`, `clientRequestId`, planner options for request tracking, and the detached planning promise. Chat create-app quickactions attach to that promise so the backend can update the app progress widget and append any queued thread follow-ups to the sprint goal after planning resolves, without frontend polling. The existing REST `/api/projects/:projectId/quicksprints/execute` route and MCP `execute` / `start` actions remain awaited: they return only after planning completes or fails.
+
 Current built-in purpose set:
 - `Fullstack JS App`
 

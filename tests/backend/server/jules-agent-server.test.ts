@@ -62,6 +62,7 @@ describe("CodeUxServer", () => {
     (server as any).sessionTracking = sharedSessionTracking;
     (server as any).activityCacheService = sharedActivityCacheService;
     (server as any).completedSprints = new Set();
+    (server as any).startupRecoveryCompleted = false;
   });
 
   afterAll(async () => {
@@ -939,7 +940,7 @@ describe("CodeUxServer", () => {
       expect(bootMcpArgs.getMissingJulesApiKeyInstruction).toBeUndefined();
     }, 30000);
 
-    it("reports ready once runtime services are bound even before a project status timestamp exists", async () => {
+    it("reports ready once runtime services are bound and startup recovery has completed", async () => {
       (runServer as any).runtimeStartupRecoveryService = {
         recover: vi.fn().mockResolvedValue({
           recoveredCliSessionIds: [],
@@ -966,11 +967,24 @@ describe("CodeUxServer", () => {
       const bootDashboardArgs = (bootDashboard as any).mock.calls.at(-1)?.[0];
 
       expect(bootDashboardArgs.isReady()).toEqual({
+        status: "NOT_READY",
+        components: {
+          settingsDb: "UP",
+          dashboardBind: "UP",
+          mcpService: "UP",
+          startupRecovery: "DOWN",
+        },
+      });
+
+      await (runServer as any).runStartupRecovery();
+
+      expect(bootDashboardArgs.isReady()).toEqual({
         status: "READY",
         components: {
           settingsDb: "UP",
           dashboardBind: "UP",
           mcpService: "UP",
+          startupRecovery: "UP",
         },
       });
     }, 30000);

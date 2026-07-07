@@ -679,6 +679,88 @@ CREATE TABLE IF NOT EXISTS agent_knowledge_subscriptions (
         FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
       );
 
+CREATE TABLE IF NOT EXISTS node_flows (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL,
+        title TEXT NOT NULL,
+        description TEXT NOT NULL DEFAULT '',
+        graph_json TEXT NOT NULL,
+        version INTEGER NOT NULL DEFAULT 1,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+      );
+
+CREATE TABLE IF NOT EXISTS node_flow_versions (
+        id TEXT PRIMARY KEY,
+        flow_id TEXT NOT NULL,
+        project_id TEXT NOT NULL,
+        version INTEGER NOT NULL,
+        title TEXT NOT NULL,
+        description TEXT NOT NULL DEFAULT '',
+        graph_json TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        FOREIGN KEY (flow_id) REFERENCES node_flows(id) ON DELETE CASCADE,
+        FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+        UNIQUE (flow_id, version)
+      );
+
+CREATE TABLE IF NOT EXISTS node_flow_agent_skills (
+        flow_id TEXT NOT NULL,
+        project_id TEXT NOT NULL,
+        agent_preset_id TEXT NOT NULL,
+        skill_name TEXT NOT NULL,
+        description TEXT NOT NULL DEFAULT '',
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        PRIMARY KEY (flow_id, agent_preset_id),
+        FOREIGN KEY (flow_id) REFERENCES node_flows(id) ON DELETE CASCADE,
+        FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+        FOREIGN KEY (agent_preset_id) REFERENCES agent_presets(id) ON DELETE CASCADE
+      );
+
+CREATE TABLE IF NOT EXISTS node_flow_runs (
+        id TEXT PRIMARY KEY,
+        flow_id TEXT NOT NULL,
+        project_id TEXT NOT NULL,
+        version INTEGER NOT NULL,
+        status TEXT NOT NULL,
+        execution_invocation_id TEXT,
+        trigger_type TEXT NOT NULL DEFAULT 'manual',
+        trigger_payload_json TEXT,
+        input_json TEXT,
+        output_json TEXT,
+        error_message TEXT,
+        started_at TEXT,
+        finished_at TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        FOREIGN KEY (flow_id) REFERENCES node_flows(id) ON DELETE CASCADE,
+        FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+        FOREIGN KEY (execution_invocation_id) REFERENCES execution_invocations(id) ON DELETE SET NULL
+      );
+
+CREATE TABLE IF NOT EXISTS node_flow_node_runs (
+        id TEXT PRIMARY KEY,
+        run_id TEXT NOT NULL,
+        flow_id TEXT NOT NULL,
+        project_id TEXT NOT NULL,
+        node_id TEXT NOT NULL,
+        status TEXT NOT NULL,
+        execution_invocation_id TEXT,
+        input_json TEXT,
+        output_json TEXT,
+        error_message TEXT,
+        started_at TEXT,
+        finished_at TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        FOREIGN KEY (run_id) REFERENCES node_flow_runs(id) ON DELETE CASCADE,
+        FOREIGN KEY (flow_id) REFERENCES node_flows(id) ON DELETE CASCADE,
+        FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+        FOREIGN KEY (execution_invocation_id) REFERENCES execution_invocations(id) ON DELETE SET NULL
+      );
+
 CREATE TABLE IF NOT EXISTS execution_invocations (
         id TEXT PRIMARY KEY,
         project_id TEXT NOT NULL,
@@ -865,6 +947,12 @@ CREATE INDEX IF NOT EXISTS idx_skill_embeddings_skill ON skill_embeddings (skill
 CREATE INDEX IF NOT EXISTS idx_skill_embeddings_storage ON skill_embeddings (project_id, storage_id, embedding_model);
 CREATE INDEX IF NOT EXISTS idx_agent_skill_storage_bindings_agent ON agent_skill_storage_bindings (agent_preset_id);
 CREATE INDEX IF NOT EXISTS idx_agent_skill_storage_bindings_storage ON agent_skill_storage_bindings (project_id, storage_id);
+CREATE INDEX IF NOT EXISTS idx_node_flows_project_updated ON node_flows (project_id, updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_node_flow_versions_flow_version ON node_flow_versions (flow_id, version DESC);
+CREATE INDEX IF NOT EXISTS idx_node_flow_agent_skills_agent ON node_flow_agent_skills (project_id, agent_preset_id);
+CREATE INDEX IF NOT EXISTS idx_node_flow_runs_flow_created ON node_flow_runs (flow_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_node_flow_runs_project_created ON node_flow_runs (project_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_node_flow_node_runs_run_created ON node_flow_node_runs (run_id, created_at ASC);
 CREATE INDEX IF NOT EXISTS idx_chat_provider_connections_kind ON chat_provider_connections (provider_kind, updated_at DESC);
 CREATE INDEX IF NOT EXISTS idx_chat_provider_connections_enabled ON chat_provider_connections (enabled, status, updated_at DESC);
 CREATE INDEX IF NOT EXISTS idx_chat_provider_channel_bindings_project ON chat_provider_channel_bindings (project_id, enabled, updated_at DESC);
