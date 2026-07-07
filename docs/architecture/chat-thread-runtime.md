@@ -56,6 +56,8 @@ Virtual chat failures are terminal for that dashboard turn:
 
 Structured dashboard replies parse provider output defensively. Some CLI providers emit bootstrap logs around a JSON envelope and place the requested strict JSON inside an envelope field such as `response`. The chat runtime extracts fenced JSON, bare JSON, and nested provider-envelope `response` payloads before deciding a parse retry is required. While structured parsing is still pending, provider execution does not mark the parent execution invocation completed; the chat management layer finalizes it only after the structured reply is accepted or the retry flow has failed.
 
+JSON-mode dashboard replies may also include prompt suggestions for quick next steps. The accepted reply envelope remains backward compatible with `{ replyMarkdown, action }` and optionally accepts either `suggestions` or `promptSuggestions`, where each suggestion has `label`, `prompt`, and optional stable string `icon`/`id` fields. The management parser trims string fields, drops entries without non-empty labels and prompts, caps the stored list to six, and persists valid suggestions on the visible assistant/system message as `metadata.promptSuggestions`. Plain markdown MCP-native replies are not parsed for suggestions.
+
 ### First-Message Replay & Worker Switching
 
 A thread's conversation history is independent of the provider processing it. If a user switches the active worker mid-conversation (e.g., from a Claude CLI to a connected Gemini MCP worker), the `ChatThreadRuntimeService` marks the `runtimeState.replayRequired` flag as `true`.
@@ -118,7 +120,7 @@ Thread and message list queries use explicit bounded pagination even when caller
 
 ### Virtual Provider Management Actions
 
-When operating in virtual provider mode, management actions follow a structured execution path. The `ChatManagementActionService` leverages `StructuredProviderResponseService` to prompt the virtual provider for a strict JSON payload containing `{ replyMarkdown, action }`.
+When operating in virtual provider mode, management actions follow a structured execution path. The `ChatManagementActionService` leverages `StructuredProviderResponseService` to prompt the virtual provider for a strict JSON payload containing `{ replyMarkdown, action }` plus optional prompt suggestions.
 
 If an action is proposed, it is evaluated through the shared `ManagementToolHandler`, aligning the virtual chat's business logic exactly with the connected MCP workers. If the action is approval-gated (e.g., destructive actions), the service returns a non-mutating confirmation result alongside the serialized payload, awaiting user confirmation without altering project state. All exchanges—prompts, JSON parsing results, and execution envelopes—are durably recorded in the invocation history.
 
