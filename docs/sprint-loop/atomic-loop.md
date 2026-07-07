@@ -154,6 +154,7 @@ When `action=orchestrate`, `wait` is true, and `watchLoop` is enabled:
   - merge-required tasks are detected that need manual intervention.
 - The checkpoint window triggers internal reports and lease renewals without stopping the run. The run pauses for human handoff (such as `CREATE_PR` mode for main-branch merges) or cancels if aborted.
 - In local-git mode, the final sprint feature-branch merge runs in a temporary Git worktree and force-updates the configured default branch after the merge succeeds. The visible project checkout is not switched between branches, so user-facing local workspaces stay clean and stay on the branch the operator had checked out.
+- If that visible checkout is dirty at finalization time, Code UX preserves the work on a `dirty-ref-<uuid>` branch, completes the clean merge first, and then only attempts to merge the preserved branch back when Git can do so without conflict. When the checked-out target branch is the one being updated, the working tree is refreshed to match the merged commit so the local project immediately reflects the completed sprint state.
 - The watch loop uses the same `task-transition-state.ts` helper as the cycle
   runner to classify settled tasks, failed terminal tasks, PR-backed merge waits,
   QA-pending tasks, quota waits, dependency blockers, and worker attention waits.

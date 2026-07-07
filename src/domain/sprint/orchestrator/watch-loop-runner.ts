@@ -1,6 +1,11 @@
 import { runCompletionStep } from "../../../sprint/steps/completion-step.js";
 import type { SprintAgentArgs } from "../../../sprint/sprint-types.js";
-import { deleteBranchLocally, mergeBranchLocallyInTemporaryWorktree, type LocalMergeResult } from "../../../infrastructure/git/local-merge.js";
+import {
+  deleteBranchLocally,
+  mergeBranchLocallyInTemporaryWorktree,
+  preserveDirtyCheckout,
+  type LocalMergeResult,
+} from "../../../infrastructure/git/local-merge.js";
 import { determineNextState, WatchLoopState } from "./watch-loop-state-machine.js";
 import type { Subtask,
   AutomationInterventionsSettings,
@@ -742,6 +747,22 @@ export class WatchLoopRunner {
           }
 
           this.deps.logger.info(`LOCAL Mode: Merging feature branch ${defaultFeatureBranch} into default branch ${defaultBranch}`);
+          let dirtyCheckout = null as Awaited<ReturnType<typeof preserveDirtyCheckout>>;
+          try {
+            dirtyCheckout = await preserveDirtyCheckout(repoPath);
+          } catch (err) {
+            const errorMessage = err instanceof Error ? err.message : String(err);
+            this.deps.logger.error(`LOCAL Mode: Failed to preserve dirty checkout before merge: ${errorMessage}`);
+            return {
+              status: "exit",
+              report: report + `- ⚠️ **Local Merge Blocked:** Failed to preserve dirty work before merging \`${defaultFeatureBranch}\` into \`${defaultBranch}\`. Error: ${errorMessage}\n`,
+            };
+          }
+
+          if (dirtyCheckout) {
+            report += `- ⚠️ **Dirty checkout preserved:** Committed dirty work on \`${dirtyCheckout.dirtyRefBranch}\` before the local merge continued.\n`;
+          }
+
           let mainMerge: LocalMergeResult = {
             ok: false,
             conflict: false,
@@ -769,6 +790,41 @@ export class WatchLoopRunner {
 
           if (mainMerge.ok) {
             report += `- ✅ **Merged locally:** Sprint feature branch \`${defaultFeatureBranch}\` merged into default branch \`${defaultBranch}\`.\n`;
+            if (dirtyCheckout) {
+              let dirtyMerge: LocalMergeResult = {
+                ok: false,
+                conflict: false,
+                error: "Dirty checkout merge did not run.",
+              };
+              try {
+                dirtyMerge = await mergeBranchLocallyInTemporaryWorktree({
+                  repoPath,
+                  targetBranch: defaultBranch,
+                  sourceBranch: dirtyCheckout.dirtyRefBranch,
+                  commitMessage: `Merge preserved dirty checkout '${dirtyCheckout.dirtyRefBranch}' into ${defaultBranch}`,
+                  fallbackTargetBranches: [
+                    scopedExecutionContext.project.defaultBranch || "",
+                    "main",
+                    "master",
+                  ],
+                });
+              } catch (err) {
+                dirtyMerge = {
+                  ok: false,
+                  conflict: false,
+                  error: err instanceof Error ? err.message : String(err),
+                };
+              }
+
+              if (dirtyMerge.ok) {
+                report += `- ✅ **Dirty checkout merged:** Preserved branch \`${dirtyCheckout.dirtyRefBranch}\` merged into default branch \`${defaultBranch}\` after the sprint merge.\n`;
+              } else {
+                report += `- ⚠️ **Dirty checkout preserved:** Branch \`${dirtyCheckout.dirtyRefBranch}\` could not merge cleanly after the sprint merge and was kept as a backup.\n`;
+                this.deps.logger.warn(
+                  `LOCAL Mode: Preserved dirty checkout ${dirtyCheckout.dirtyRefBranch} could not merge cleanly into ${defaultBranch}: ${dirtyMerge.error}`,
+                );
+              }
+            }
             // The sprint's work is now on the default branch; drop the feature branch so finished
             // sprints don't leave dead branches behind. Temporary-worktree merges leave the visible
             // checkout untouched, and git refuses to delete the currently checked-out branch anyway.

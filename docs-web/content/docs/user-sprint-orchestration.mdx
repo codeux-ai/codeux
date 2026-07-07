@@ -157,6 +157,8 @@ When every subtask reaches a terminal merged state, the watch loop runs the **fi
 4. **Cleanup** — remove Docker worktrees from terminal CLI dispatches; trigger memory auto-promotion.
 5. **Status transition** — `completed`, `failed`, `paused` (if main merge needs human), or `cancelled`.
 
+In `LOCAL` mode, the final merge runs in a temporary worktree. If the visible checkout is dirty, Code UX preserves that work on a `dirty-ref-<uuid>` backup branch first, completes the clean merge, and then only tries to merge the preserved branch back when Git can do so cleanly. When the target branch is the checked-out branch in the visible repo, the working tree is refreshed after the merge so the local project reflects the merged state immediately.
+
 ## Cancellation & pause
 
 Both are emitted as **control interventions** picked up at the top of each cycle:

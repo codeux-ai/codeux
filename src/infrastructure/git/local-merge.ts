@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -74,6 +75,58 @@ export async function restoreCheckedOutRef(
   } catch {
     // Leave HEAD where the merge left it rather than throwing during cleanup.
     return false;
+  }
+}
+
+async function hasDirtyWorkingTree(repoPath: string, runner: LocalMergeRunner): Promise<boolean> {
+  try {
+    const status = await runner("git", ["status", "--porcelain"], repoPath);
+    return status.stdout.trim().length > 0;
+  } catch {
+    return false;
+  }
+}
+
+export interface DirtyCheckoutPreservationResult {
+  dirtyRefBranch: string;
+  originalRef: CheckedOutRef | null;
+}
+
+/**
+ * Captures the current dirty checkout on a dedicated `dirty-ref-<uuid>` branch,
+ * commits all tracked and untracked work onto that branch, and restores the
+ * original checked-out ref cleanly so the caller can continue with a separate
+ * merge flow.
+ */
+export async function preserveDirtyCheckout(
+  repoPath: string,
+  runner: LocalMergeRunner = defaultRunner,
+): Promise<DirtyCheckoutPreservationResult | null> {
+  const originalRef = await getCheckedOutRef(repoPath, runner);
+  if (!originalRef) {
+    return null;
+  }
+
+  if (!(await hasDirtyWorkingTree(repoPath, runner))) {
+    return null;
+  }
+
+  const dirtyRefBranch = `dirty-ref-${randomUUID()}`;
+  try {
+    await runner("git", ["checkout", "-b", dirtyRefBranch], repoPath);
+    await runner("git", ["add", "-A"], repoPath);
+    await runner("git", ["commit", "-m", `Preserve dirty work before local merge into ${originalRef.ref}`], repoPath);
+    if (!(await restoreCheckedOutRef(repoPath, originalRef, runner))) {
+      throw new Error(`Failed to restore the original ref ${originalRef.ref} after preserving dirty work.`);
+    }
+    return { dirtyRefBranch, originalRef };
+  } catch (error) {
+    try {
+      await runner("git", ["merge", "--abort"], repoPath);
+    } catch {
+      // Best-effort cleanup. The caller will surface the failure.
+    }
+    throw error;
   }
 }
 
@@ -398,6 +451,7 @@ export async function mergeBranchLocallyInTemporaryWorktree(args: {
     };
   }
 
+  const visibleCheckout = await getCheckedOutRef(args.repoPath, runner);
   const targetExists = await gitRefExists(args.repoPath, `refs/heads/${targetBranch}`, runner);
   if (!targetExists) {
     try {
@@ -426,7 +480,10 @@ export async function mergeBranchLocallyInTemporaryWorktree(args: {
       ["merge", "--no-ff", "-m", args.commitMessage, sourceBranch],
       worktreePath,
     );
-    await runner("git", ["branch", "-f", targetBranch, "HEAD"], worktreePath);
+    await runner("git", ["update-ref", `refs/heads/${targetBranch}`, "HEAD"], worktreePath);
+    if (visibleCheckout && !visibleCheckout.detached && visibleCheckout.ref === targetBranch) {
+      await runner("git", ["reset", "--hard", "HEAD"], args.repoPath);
+    }
     return { ok: true, conflict: false };
   } catch (err) {
     const conflict = worktreeCreated ? await hasUnmergedConflictEntries(worktreePath, runner) : false;

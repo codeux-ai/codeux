@@ -26,9 +26,9 @@ Each preset is a card with avatar, name, label tags, and a one-line description.
 
 ## Avatar preview behavior
 
-The 3D avatar preview uses lightweight WebGL presentation effects only. Its flashlight is a translucent beam mesh with accent-aware scene lighting and material glow, not real ray tracing or post-processing.
+The 3D avatar preview uses lightweight WebGL presentation effects only. It relies on studio lighting, material finish, and avatar/tool animation rather than flashlight beams, target glows, or post-processing.
 
-When motion is allowed, the flashlight tracks pointer hover and slowly scans while idle. Rare low-battery flickers can briefly show a `battery` humor line inside the avatar frame. Reduced-motion settings and WebGL fallback mode use the static SVG avatar instead, so the Agents page remains usable without animation or a WebGL context.
+When motion is allowed, the avatar head can track pointer hover and runtime tool props animate beside the bot. Reduced-motion settings and WebGL fallback mode use the static SVG avatar instead, so the Agents page remains usable without animation or a WebGL context.
 
 ## Creating an agent
 

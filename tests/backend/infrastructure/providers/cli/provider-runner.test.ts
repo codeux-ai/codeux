@@ -129,6 +129,38 @@ describe("ProviderRunner", () => {
     await fs.rm(repoPath, { recursive: true, force: true });
   });
 
+  it("supports the full deterministic mockup directive surface in one sprint step", async () => {
+    const repoPath = await fs.mkdtemp(path.join(os.tmpdir(), "mockup-cli-full-"));
+
+    const result = await runner.runProviderForText({
+      provider: "mockup-cli",
+      prompt: [
+        "mockup-cli:write src/base.txt :: base",
+        "mockup-cli:append src/base.txt :: appended",
+        "mockup-cli:replace src/base.txt :: appended => replaced",
+        "mockup-cli:write src/delete-me.txt :: remove me",
+        "mockup-cli:delete src/delete-me.txt",
+        "mockup-cli:conflict src/conflict.txt :: incoming deterministic edit",
+        `mockup-cli:run node -e "const fs=require('fs'); const text=fs.readFileSync('src/base.txt','utf8'); if (!text.includes('replaced')) process.exit(1)"`,
+      ].join("\n"),
+      cwd: repoPath,
+      model: "default",
+      apiKey: "",
+      sessionId: "mock-session-full",
+      workflowSettings: { executionMode: "HOST" } as any,
+      repoPath,
+      onActivity: vi.fn(),
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.text).toBe("Mockup CLI completed deterministic workspace task.");
+    await expect(fs.readFile(path.join(repoPath, "src/base.txt"), "utf8")).resolves.toContain("replaced");
+    await expect(fs.access(path.join(repoPath, "src", "delete-me.txt"))).rejects.toThrow();
+    await expect(fs.readFile(path.join(repoPath, "src", "conflict.txt"), "utf8")).resolves.toContain("<<<<<<< mockup-cli-current");
+
+    await fs.rm(repoPath, { recursive: true, force: true });
+  });
+
   it("forwards mockup-cli through Docker command construction with no API key requirement", async () => {
     await runner.runProvider({
       provider: "mockup-cli",

@@ -23,7 +23,7 @@ Do not document or render speculative metrics. Missing telemetry is a first-clas
 The redesigned Stats page uses a stable top-to-bottom shell:
 
 1. Header command band
-   - The hero names the Stats workspace with a Stats-native command masthead rather than the generic dashboard page header. It uses flat neutral panel, subpanel, chip, and input primitives, a compact current-state pill, active lens chips for the selected time window and mode, and context chips for selected project, generated snapshot time, and sprint lens.
+   - The hero names the Stats workspace with a Stats-native command masthead rather than the generic dashboard page header. It uses warm void panel, subpanel, chip, and input primitives, a compact current-state pill, active lens chips for the selected time window and mode, and context chips for selected project, generated snapshot time, and sprint lens.
    - The command controls are flat administrative rows inside the subpanel surface. Avoid nested framed material panels, decorative gradients, or extra wrappers around the preset, custom range, and mode controls.
    - Keep only selected project, generated snapshot time, sprint lens, time window, and active visual mode controls visible in the command band.
    - Time presets are `1h`, `24h`, `7d`, `30d`, `All time`, and `Custom`.
@@ -159,16 +159,16 @@ Cost displays use two fractional digits for scanability, rounding values such as
 
 ## Primitives And Styling
 
-Use page-scoped Stats primitives instead of one-off analytics chrome. The post-refactor Stats surface vocabulary is a flat neutral hierarchy:
+Use page-scoped Stats primitives instead of one-off analytics chrome. The Stats surface vocabulary is a warm void hierarchy:
 
 - `stats-theme.css` defines Stats-specific aliases for panel surfaces, subpanels, chips, inputs, focus rings, status fills, borders, minimal focus shadows, and motion.
 - `PANEL_CLASS`, `SUBPANEL_CLASS`, `CHIP_CLASS`, `INPUT_CLASS`, `LEDGER_ROW_CLASS`, `LEDGER_ROW_MODERN_CLASS`, `STATUS_TONE_CLASS`, `TAB_ACTIVE_CLASS`, `TAB_IDLE_CLASS`, `DASHED_EMPTY_CLASS`, and `TRACK_CLASS` provide the shell vocabulary.
 - `StatsCard`, `StudioHeader`, `SignalMetricCard`, `DonutCard`, `PurposeRibbon`, `TokenChip`, `TokenFlowBar`, `ChurnFlowBar`, `SortButton`, `ViewToggle`, and `SeriesLegendButton` cover repeated Stats patterns.
 - Typed view-model helpers should own reusable derivations for trend, chart, model, provider, and ledger projections. `stats-page-view-model.ts` owns page-level snapshot derivations such as usage defaults, token/active/wall time series, planning lookup, provider/source/token segments, and completion-confidence copy so `useStatsPageData` can stay focused on fetch state, date controls, and chart state. Avoid recalculating meaningful bucket or efficiency summaries directly in JSX or stateful hooks.
 - New or touched Stats surfaces should use semantic Stats variables for backgrounds, borders, text, status tones, focus rings, chart tracks, selection fills, and scrims instead of raw slate/white/black light-dark utility pairs.
-- Signal fills, chart strokes, metric sparklines, selected controls, and Stats card accents must resolve through `--stats-accent-signal`, `--stats-accent-signal-fill`, or `--signal-rgb`. Light mode uses the dashboard blue signal; dark mode keeps the existing dark signal without per-component overrides.
+- Signal fills, chart strokes, metric sparklines, selected controls, and Stats card accents must resolve through `--stats-accent-signal`, `--stats-accent-signal-fill`, or `--signal-rgb`. Light mode uses the dashboard blue signal; dark mode keeps the warm void jade signal without per-component overrides that leak blue into dark surfaces.
 - Stats typography follows the dashboard heading scale directly in Tailwind or component tokens: the page title is the only hero-scale heading, section and studio headings use `text-xl`/`text-2xl font-semibold`, row and card titles use `text-base`/`text-lg font-semibold`, and metric-card values use the restrained `--stats-card-value-size` tokens.
-- Panels are flat, grounded work surfaces with solid or lightly translucent neutral `--stats-surface-*` tokens, hairline borders, and no default depth shadow. They should feel administrative, compact, and durable.
+- Panels and stat cards are grounded warm void work surfaces with solid `--stats-surface-*` tokens, hairline borders, and subtle depth shadows. They should feel administrative, compact, and durable without blue ambient color.
 - Chips, tabs, inputs, subpanels, summary rows, and table cells are flat primitives. Use quiet fills, fixed control geometry, compact labels, small radii, and neutral selected states instead of decorative capsules, glow, animated elevation, or nested decorative cards.
 - Status fills are semantic. Signal, positive, warning, negative, neutral, and cyan tones should communicate running, success, warning, failure, informational, or data-accent meaning; avoid using them as ambient decoration.
 - Backdrop blur is not a primary Stats material. Do not add `backdrop-blur-*`, shared translucent material tokens, large glow washes, or translucent chrome to panels, chips, inactive legend controls, ledger rows, System filters, invocation tables, or transcript detail as the default treatment.

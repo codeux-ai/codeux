@@ -10,6 +10,7 @@ import { evaluateSprintRunState } from "../../../src/domain/sprint/orchestrator/
 import { decideMainMergeWaitOrPause, decideTerminalCompletion } from "../../../src/domain/sprint/orchestrator/watch-loop-policies.js";
 import { buildMockSettings } from "../../builders/settings-builder.js";
 import { buildMockSubtask } from "../../builders/subtask-builder.js";
+import * as localMerge from "../../../src/infrastructure/git/local-merge.js";
 
 const buildDeps = () => ({
   heartbeatService: {
@@ -1359,7 +1360,7 @@ describe("WatchLoopRunner", () => {
     );
     expect(runCommandStrict).toHaveBeenCalledWith(
       "git",
-      ["branch", "-f", "main", "HEAD"],
+      ["update-ref", "refs/heads/main", "HEAD"],
       expect.stringContaining("code-ux-local-merge-"),
       expect.objectContaining({ CODE_UX_GIT_CONTAINER_MODE: "host" }),
     );
@@ -3043,6 +3044,84 @@ describe.skip("Sprint Run Heartbeat", () => {
     expect(deps.executionRepository.renewLease).toHaveBeenCalledWith(
       expect.objectContaining({ scopeId: "sprint-1", leaseToken: "test-token" })
     );
+  });
+
+  it("preserves dirty local checkout work and attempts to merge the backup after the clean merge", async () => {
+    const deps = buildDeps();
+    const cycleRunner = buildCycleRunner();
+    cycleRunner.run.mockResolvedValue({
+      subtasks: [buildMockSubtask({ status: "COMPLETED", is_merged: true })],
+      reportText: "REPORT",
+      statusTable: "TABLE",
+      instructions: "INST",
+      awaitingMerge: [],
+      manualMergeTasks: [],
+      workerEscalatedMergeConflictTasks: [],
+    });
+
+    const renderMergeFeedbackMock = vi.fn().mockResolvedValue({
+      text: "",
+      state: "ready_for_merge",
+      prNumber: null,
+      prUrl: null,
+      hasMergeConflict: false,
+      mergeStateStatus: null,
+      hasFailedChecks: false,
+      hasPendingChecks: false,
+      hasReviewBlockers: false,
+      failedChecks: [],
+    });
+
+    const preserveSpy = vi.spyOn(localMerge, "preserveDirtyCheckout").mockResolvedValue({
+      dirtyRefBranch: "dirty-ref-123",
+      originalRef: { ref: "main", detached: false },
+    });
+    const mergeSpy = vi.spyOn(localMerge, "mergeBranchLocallyInTemporaryWorktree")
+      .mockResolvedValueOnce({ ok: true, conflict: false })
+      .mockResolvedValueOnce({ ok: true, conflict: false });
+
+    try {
+      const runner = new WatchLoopRunner(deps as any, cycleRunner as any, renderMergeFeedbackMock);
+      const result = await runner.run({
+        args: { sprint_number: 1, action: "orchestrate" } as any,
+        executionContext: {
+          project: { id: "project-1", name: "Test Project" },
+          sprint: { id: "sprint-1", name: "Sprint 1" },
+          sprintNumber: 1,
+          repoPath: "/tmp",
+          featureBranch: "feat",
+          defaultBranch: "main",
+        },
+        repoPath: "/tmp",
+        defaultFeatureBranch: "feat",
+        defaultBranch: "main",
+        githubMode: "LOCAL",
+        retryFailed: false,
+        loopSteps: { watchLoopOutputIntervalSeconds: 60, watchLoopIntervalSeconds: 1 } as any,
+        ciIntelligence: {} as any,
+        automationLevel: "SEMI_AUTO",
+        automationInterventions: {} as any,
+        dashboardPort: 4444,
+        sprintRunId: "run-1",
+      });
+
+      expect(preserveSpy).toHaveBeenCalledWith("/tmp");
+      expect(mergeSpy).toHaveBeenNthCalledWith(1, expect.objectContaining({
+        repoPath: "/tmp",
+        targetBranch: "main",
+        sourceBranch: "feat",
+      }));
+      expect(mergeSpy).toHaveBeenNthCalledWith(2, expect.objectContaining({
+        repoPath: "/tmp",
+        targetBranch: "main",
+        sourceBranch: "dirty-ref-123",
+      }));
+      expect(result).toContain("Dirty checkout preserved");
+      expect(result).toContain("Dirty checkout merged");
+    } finally {
+      preserveSpy.mockRestore();
+      mergeSpy.mockRestore();
+    }
   });
 
   it("renews heartbeat and lease in CHECKPOINT branch when output interval is reached but not all finished", async () => {

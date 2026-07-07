@@ -6,6 +6,7 @@ import { runCommandStrict } from "../../../../src/services/cli-process-runner.js
 import {
   getCheckedOutRef,
   restoreCheckedOutRef,
+  preserveDirtyCheckout,
   mergeBranchLocally,
   mergeBranchLocallyInTemporaryWorktree,
   findRecoverableWorkerBranch,
@@ -84,6 +85,26 @@ describe("local-merge helpers", () => {
     const files = (await git(repo, "ls-tree", "--name-only", "main")).stdout;
     expect(files).toContain("feature.txt");
     expect(await currentBranch()).toBe("feature");
+  });
+
+  it("updates a checked-out target branch through a temporary worktree merge", async () => {
+    await git(repo, "checkout", "main");
+    await git(repo, "checkout", "-b", "feature-work", "feature");
+    await commitFile(repo, "work.txt", "work\n", "feat: work");
+    await git(repo, "checkout", "main");
+
+    const result = await mergeBranchLocallyInTemporaryWorktree({
+      repoPath: repo,
+      targetBranch: "main",
+      sourceBranch: "feature-work",
+      commitMessage: "Merge branch 'feature-work' into main",
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.conflict).toBe(false);
+    expect(await currentBranch()).toBe("main");
+    const files = (await git(repo, "ls-tree", "--name-only", "main")).stdout;
+    expect(files).toContain("work.txt");
   });
 
   it("creates a missing unborn local default branch from the source branch", async () => {
@@ -265,6 +286,41 @@ describe("local-merge helpers", () => {
     expect((await git(repo, "rev-parse", "main")).stdout.trim()).toBe(mainAfterDivergence);
     expect(await currentBranch()).toBe("operator/topic");
     expect((await git(repo, "status", "--porcelain")).stdout).toContain("?? local-note.txt");
+  });
+
+  it("preserves a dirty checkout on a backup branch and can merge it after the clean sprint merge", async () => {
+    await git(repo, "checkout", "feature");
+    await commitFile(repo, "feature.txt", "feature\n", "feat: sprint work");
+    await git(repo, "checkout", "main");
+    await writeFile(path.join(repo, "dirty-note.txt"), "dirty work\n", "utf8");
+
+    const preserved = await preserveDirtyCheckout(repo);
+    expect(preserved).not.toBeNull();
+    expect(preserved?.dirtyRefBranch).toMatch(/^dirty-ref-[0-9a-f-]+$/);
+    expect(await currentBranch()).toBe("main");
+    expect((await git(repo, "status", "--porcelain")).stdout.trim()).toBe("");
+
+    const cleanMerge = await mergeBranchLocallyInTemporaryWorktree({
+      repoPath: repo,
+      targetBranch: "main",
+      sourceBranch: "feature",
+      commitMessage: "Merge branch 'feature' into main",
+    });
+    expect(cleanMerge.ok).toBe(true);
+    expect(cleanMerge.conflict).toBe(false);
+
+    const dirtyMerge = await mergeBranchLocallyInTemporaryWorktree({
+      repoPath: repo,
+      targetBranch: "main",
+      sourceBranch: preserved!.dirtyRefBranch,
+      commitMessage: `Merge preserved dirty checkout '${preserved!.dirtyRefBranch}' into main`,
+    });
+    expect(dirtyMerge.ok).toBe(true);
+    expect(dirtyMerge.conflict).toBe(false);
+
+    const files = (await git(repo, "ls-tree", "--name-only", "main")).stdout;
+    expect(files).toContain("feature.txt");
+    expect(files).toContain("dirty-note.txt");
   });
 
   it("creates a missing temporary-worktree target from a fallback branch before merging", async () => {

@@ -1,8 +1,10 @@
 @import "tailwindcss";
 
 .card {
-  @apply relative flex min-w-0 flex-col justify-between overflow-visible;
-  background: var(--stats-card-bg);
+  @apply relative flex min-w-0 flex-col justify-between overflow-visible motion-safe:transform-gpu;
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--stats-card-bg) 96%, var(--stats-card-accent-fill, transparent) 4%), var(--stats-card-bg)),
+    var(--stats-card-bg);
   border: 1px solid var(--stats-card-border);
   border-radius: var(--stats-card-radius);
   padding: var(--stats-card-padding);
@@ -10,24 +12,23 @@
   height: 100%;
   box-shadow: var(--stats-card-shadow);
   transition:
+    transform var(--stats-motion-fast),
     background-color var(--stats-motion-fast),
-    border-color var(--stats-motion-fast);
-}
-
-.card::before {
-  content: "";
-  position: absolute;
-  inset: 0 auto 0 0;
-  width: 3px;
-  border-radius: var(--stats-card-radius) 0 0 var(--stats-card-radius);
-  background: var(--stats-card-accent, transparent);
-  opacity: 0.68;
+    border-color var(--stats-motion-fast),
+    box-shadow var(--stats-motion-fast);
 }
 
 .card:hover,
 .card.active {
-  background: var(--stats-surface-panel-hover);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--stats-surface-panel-hover) 94%, var(--stats-card-accent-fill, transparent) 6%), var(--stats-surface-panel-hover)),
+    var(--stats-surface-panel-hover);
   border-color: var(--stats-border-strong);
+  box-shadow: var(--stats-card-shadow-hover);
+}
+
+.card:hover {
+  transform: translateY(-1px);
 }
 
 .card:focus-within {
@@ -48,19 +49,23 @@
 }
 
 .toneWarm {
-  background: var(--stats-surface-panel);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--stats-surface-panel) 96%, var(--stats-card-accent-fill, transparent) 4%), var(--stats-surface-panel)),
+    var(--stats-surface-panel);
 }
 
 .toneMuted {
-  background: var(--stats-surface-subpanel);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--stats-surface-subpanel) 96%, var(--stats-card-accent-fill, transparent) 4%), var(--stats-surface-subpanel)),
+    var(--stats-surface-subpanel);
 }
 
 .header {
-  @apply relative z-10 mb-3 flex min-h-8 min-w-0 flex-wrap items-start justify-between gap-2;
+  @apply relative z-10 mb-3 flex min-w-0 flex-wrap items-start justify-between gap-2;
 }
 
 .titleGroup {
-  @apply flex min-w-0 flex-1 items-start gap-2 pr-1;
+  @apply flex min-w-0 flex-1 items-start gap-2;
 }
 
 .title {
@@ -73,7 +78,7 @@
 }
 
 .iconContainer {
-  @apply flex h-7 w-7 shrink-0 items-center justify-center rounded-[var(--stats-control-radius)] border border-[color:var(--stats-border-hairline)];
+  @apply flex h-7 w-7 shrink-0 items-center justify-center rounded-[var(--stats-control-radius)];
   background: var(--stats-accent-muted-fill);
   color: var(--stats-card-accent, var(--stats-detail-color));
   transition:
@@ -82,7 +87,7 @@
 }
 
 .valueContainer {
-  @apply relative z-10 mt-auto flex min-w-0 flex-col gap-1.5 pt-1;
+  @apply relative z-10 mt-auto flex min-w-0 flex-col gap-1.5;
 }
 
 .valueRow {
@@ -109,13 +114,24 @@
 }
 
 .trendContainer {
-  @apply flex min-h-7 min-w-0 flex-[1_1_auto] items-center justify-end;
-  max-width: min(100%, 12rem);
+  @apply flex min-w-0 flex-[1_1_auto] items-center justify-end;
+  max-width: min(100%, 14rem);
 }
 
 .trendContainer > * {
   min-width: 0;
   max-width: 100%;
+}
+
+.tint {
+  @apply pointer-events-none absolute inset-0 opacity-0;
+  border-radius: inherit;
+  background: var(--stats-card-accent-fill, var(--stats-accent-muted-fill));
+  transition: opacity var(--stats-motion-standard);
+}
+
+.card:hover .tint {
+  opacity: 0.5;
 }
 
 .card > :global(svg.absolute) {
@@ -162,7 +178,7 @@
 .card:hover .title,
 .card:focus-within .title,
 .card.active .title {
-  color: var(--stats-value-color);
+  color: var(--stats-card-accent, var(--stats-value-color));
 }
 
 .accentSignal .iconContainer,
@@ -176,8 +192,13 @@
 
 @media (prefers-reduced-motion: reduce) {
   .card,
+  .tint,
   .iconContainer {
     transition: none;
     animation: none;
+  }
+
+  .card:hover {
+    transform: none;
   }
 }

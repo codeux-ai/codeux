@@ -13,7 +13,7 @@ The **Chat** page (`/chat`) is a thread-based conversation surface that lets you
 
 The floating widget uses the configured Dashboard Reply agent avatar when a selected project has one. If no Dashboard Reply preset or project is available, it falls back to the generated Code UX avatar.
 
-3D chat and agent avatar surfaces may show a lightweight WebGL flashlight effect. It is a performant pseudo-raytraced presentation effect built from a translucent beam, target glow, accent-aware lighting, and material glow, not real ray tracing or post-processing. When motion is allowed, the flashlight can follow the pointer and gently scan while idle; reduced-motion settings or WebGL fallback mode use the static SVG avatar instead and skip scanning or flicker effects.
+3D chat and agent avatar surfaces use the standard WebGL avatar with studio lighting and pointer-aware head movement. The removed flashlight beam, target glow, low-battery flicker, and emissive shell boost are no longer part of the chat layout; reduced-motion settings or WebGL fallback mode continue to use the static SVG avatar.
 
 ## No-project assistant
 
@@ -73,7 +73,7 @@ Virtual chat replies can persist structured prompt suggestions for quick next st
 
 Assistant prose bubbles can also show a short italic project-manager thought below the provider text. The dashboard uses safe explicit metadata (`metadata.moodComment`, `metadata.thinkingLine`, or `metadata.pmAside`) when present, otherwise it chooses a deterministic line from the shared `mood` catalog. These asides are visual adjuncts only: they do not replace provider markdown, do not change stored chat contracts, and do not appear on user, system, tool, reasoning, tool-call, or tool-result cards.
 
-All playful chat-agent copy is curated to stay workplace-safe and non-offensive. Status jokes, tool-call quips, reasoning/thinking lines, assistant mood asides, and brief avatar low-battery messages are decorative context around the transcript. They never replace the provider response, tool name, arguments, output, reasoning text, debug metadata, or persisted conversation content.
+All playful chat-agent copy is curated to stay workplace-safe and non-offensive. Status jokes, tool-call quips, reasoning/thinking lines, and assistant mood asides are decorative context around the transcript. They never replace the provider response, tool name, arguments, output, reasoning text, debug metadata, or persisted conversation content.
 
 For integrators, the stored metadata uses `metadata.promptSuggestions` with `label`, `prompt`, and optional `icon` fields:
 
