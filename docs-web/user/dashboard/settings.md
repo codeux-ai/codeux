@@ -529,7 +529,7 @@ Manages active tech-stack guidance, active styleguide guidance, and custom instr
 
 **Recommended defaults:** Keep both selections at `None` until a project needs explicit guidance beyond its repository instructions. Add custom entries for stable team or product guidance that should be reused.
 
-**Risks and gotchas:** `hideDefaultStyleguides` hides built-in styleguides from the dashboard selector while preserving `None`, custom styleguides, and the saved selected id. Deleting a selected custom entry clears that selection back to `None`.
+**Risks and gotchas:** `hideDefaultStyleguides` hides built-in styleguides from the dashboard selector while preserving `None`, custom styleguides, and the saved selected id. Deleting a selected custom entry clears that selection back to `None`. Design guidance also feeds the Planning and Project Setup prompts, which resolve the selected entries from effective project settings and omit `None` selections from guidance text.
 
 Related docs:
 

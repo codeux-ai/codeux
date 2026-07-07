@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { AgentPresetRecord } from "../../../src/contracts/agent-preset-types.js";
+import type { DesignGuidanceSettings } from "../../../src/contracts/app-types.js";
 import type { ProjectSetupOptions, ProjectSummary } from "../../../src/contracts/project-management-types.js";
 import { buildProjectSetupPrompt } from "../../../src/services/project-setup-prompt-builder.js";
 
@@ -53,6 +54,41 @@ const options = (techstack: boolean): ProjectSetupOptions => ({
   techstack,
 });
 
+const designGuidance: DesignGuidanceSettings = {
+  selectedTechStackId: "setup-stack",
+  selectedStyleguideId: "setup-style",
+  hideDefaultStyleguides: false,
+  customTechStacks: [
+    {
+      id: "setup-stack",
+      name: "Setup TypeScript Stack",
+      summary: "Generate setup artifacts for a typed Preact service.",
+      instructionMarkdown: "Use pnpm, strict TypeScript, and Vitest-backed workflows.",
+    },
+  ],
+  customStyleguides: [
+    {
+      id: "setup-style",
+      name: "Setup Product Style",
+      summary: "Generate setup artifacts with compact product UI guidance.",
+      instructionMarkdown: "Preserve existing design tokens, interaction states, and responsive behavior.",
+    },
+  ],
+};
+
+const noneStyleguideGuidance: DesignGuidanceSettings = {
+  ...designGuidance,
+  selectedStyleguideId: "none",
+};
+
+const noDesignGuidance: DesignGuidanceSettings = {
+  selectedTechStackId: "none",
+  selectedStyleguideId: "none",
+  hideDefaultStyleguides: false,
+  customTechStacks: designGuidance.customTechStacks,
+  customStyleguides: designGuidance.customStyleguides,
+};
+
 describe("buildProjectSetupPrompt", () => {
   it("includes package-manifest techstack detection instructions when enabled", () => {
     const prompt = buildProjectSetupPrompt({
@@ -80,5 +116,56 @@ describe("buildProjectSetupPrompt", () => {
     expect(prompt).not.toContain('"detectedFrameworks": ["Vite", "React"]');
     expect(prompt).toContain('"techstack": null');
     expect(prompt).toContain("Set `techstack` to null.");
+  });
+
+  it("includes selected project guidance before setup task instructions", () => {
+    const prompt = buildProjectSetupPrompt({
+      project,
+      setupAgent,
+      designGuidance,
+      options: options(false),
+    });
+
+    expect(prompt).toContain("## Project Guidance");
+    expect(prompt).toContain("### Selected Tech Stack");
+    expect(prompt).toContain("Name: Setup TypeScript Stack");
+    expect(prompt).toContain("Summary: Generate setup artifacts for a typed Preact service.");
+    expect(prompt).toContain("Use pnpm, strict TypeScript, and Vitest-backed workflows.");
+    expect(prompt).toContain("### Selected Styleguide");
+    expect(prompt).toContain("Name: Setup Product Style");
+    expect(prompt).toContain("Preserve existing design tokens, interaction states, and responsive behavior.");
+    expect(prompt.indexOf("## Project Guidance")).toBeLessThan(prompt.indexOf("## Task"));
+  });
+
+  it("omits none styleguide text but tells setup to inspect existing styling before replacing it", () => {
+    const prompt = buildProjectSetupPrompt({
+      project,
+      setupAgent,
+      designGuidance: noneStyleguideGuidance,
+      options: options(false),
+    });
+
+    expect(prompt).toContain("## Project Guidance");
+    expect(prompt).toContain("Name: Setup TypeScript Stack");
+    expect(prompt).not.toContain("Name: None");
+    expect(prompt).not.toContain("No additional project guidance is selected.");
+    expect(prompt).not.toContain("Do not apply extra tech stack or styleguide guidance");
+    expect(prompt).toContain("No active styleguide guidance is selected.");
+    expect(prompt).toContain("investigate the repository's existing styling, brand assets, design tokens, components, layouts, and user-facing interaction patterns");
+  });
+
+  it("omits project guidance when setup selections are none", () => {
+    const prompt = buildProjectSetupPrompt({
+      project,
+      setupAgent,
+      designGuidance: noDesignGuidance,
+      options: options(false),
+    });
+
+    expect(prompt).not.toContain("## Project Guidance");
+    expect(prompt).not.toContain("Setup TypeScript Stack");
+    expect(prompt).not.toContain("Setup Product Style");
+    expect(prompt).not.toContain("No active styleguide guidance is selected.");
+    expect(prompt).not.toContain("No additional project guidance is selected.");
   });
 });

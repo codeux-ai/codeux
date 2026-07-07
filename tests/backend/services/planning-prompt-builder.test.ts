@@ -1,7 +1,38 @@
 import { describe, it, expect } from "vitest";
 import { buildImprovePrompt, buildPlanPrompt, buildMemoryContext } from "../../../src/services/planning-prompt-builder.js";
 import type { AgentPresetRecord } from "../../../src/contracts/agent-preset-types.js";
+import type { DesignGuidanceSettings } from "../../../src/contracts/app-types.js";
 import type { MemoryRecord } from "../../../src/contracts/memory-types.js";
+
+const guidanceWithSelections: DesignGuidanceSettings = {
+  selectedTechStackId: "custom-stack",
+  selectedStyleguideId: "custom-style",
+  hideDefaultStyleguides: false,
+  customTechStacks: [
+    {
+      id: "custom-stack",
+      name: "Repository TypeScript Stack",
+      summary: "Use the repository's TypeScript service conventions.",
+      instructionMarkdown: "Keep exported APIs typed and cover service behavior with Vitest.",
+    },
+  ],
+  customStyleguides: [
+    {
+      id: "custom-style",
+      name: "Repository Product UI",
+      summary: "Use compact, accessible product workflows.",
+      instructionMarkdown: "Prefer existing tokens, clear focus states, and responsive controls.",
+    },
+  ],
+};
+
+const guidanceWithNoneSelections: DesignGuidanceSettings = {
+  selectedTechStackId: "none",
+  selectedStyleguideId: "none",
+  hideDefaultStyleguides: false,
+  customTechStacks: guidanceWithSelections.customTechStacks,
+  customStyleguides: guidanceWithSelections.customStyleguides,
+};
 
 describe("PlanningPromptBuilder", () => {
   const mockAgent: AgentPresetRecord = {
@@ -54,6 +85,25 @@ describe("PlanningPromptBuilder", () => {
 
       expect(prompt).toContain("## LEARNINGS CAPTURE (Required)");
       expect(prompt).toContain("Capture these things.");
+    });
+
+    it("includes selected project guidance when improving a prompt", () => {
+      const prompt = buildImprovePrompt({
+        projectName: "Test Project",
+        planningAgent: mockAgent,
+        sprintName: "Sprint 1",
+        goal: "Initial goal",
+        designGuidance: guidanceWithSelections,
+      });
+
+      expect(prompt).toContain("## Project Guidance");
+      expect(prompt).toContain("### Selected Tech Stack");
+      expect(prompt).toContain("Name: Repository TypeScript Stack");
+      expect(prompt).toContain("Summary: Use the repository's TypeScript service conventions.");
+      expect(prompt).toContain("Keep exported APIs typed and cover service behavior with Vitest.");
+      expect(prompt).toContain("### Selected Styleguide");
+      expect(prompt).toContain("Name: Repository Product UI");
+      expect(prompt).toContain("Prefer existing tokens, clear focus states, and responsive controls.");
     });
   });
 
@@ -142,6 +192,42 @@ describe("PlanningPromptBuilder", () => {
       expect(prompt).toContain("## Coding Agent Routing");
       expect(prompt).toContain("frontend-agent: Frontend Coder - Preact UI and accessibility.");
       expect(prompt).toContain('"agentPresetId": "agent-preset-id"');
+    });
+
+    it("includes selected project guidance in planning prompts", () => {
+      const prompt = buildPlanPrompt({
+        projectName: "Test Project",
+        planningAgent: mockAgent,
+        sprintNumber: 1,
+        sprintName: "Sprint One",
+        goal: "Plan this",
+        designGuidance: guidanceWithSelections,
+      });
+
+      expect(prompt).toContain("## Project Guidance");
+      expect(prompt).toContain("### Selected Tech Stack");
+      expect(prompt).toContain("Name: Repository TypeScript Stack");
+      expect(prompt).toContain("Summary: Use the repository's TypeScript service conventions.");
+      expect(prompt).toContain("Keep exported APIs typed and cover service behavior with Vitest.");
+      expect(prompt).toContain("### Selected Styleguide");
+      expect(prompt).toContain("Name: Repository Product UI");
+      expect(prompt).toContain("Prefer existing tokens, clear focus states, and responsive controls.");
+    });
+
+    it("omits project guidance when selections are none", () => {
+      const prompt = buildPlanPrompt({
+        projectName: "Test Project",
+        planningAgent: mockAgent,
+        sprintNumber: 1,
+        sprintName: "Sprint One",
+        goal: "Plan this",
+        designGuidance: guidanceWithNoneSelections,
+      });
+
+      expect(prompt).not.toContain("## Project Guidance");
+      expect(prompt).not.toContain("Repository TypeScript Stack");
+      expect(prompt).not.toContain("Repository Product UI");
+      expect(prompt).not.toContain("No additional project guidance is selected.");
     });
   });
 

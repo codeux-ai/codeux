@@ -1,7 +1,9 @@
 import type { AgentPresetRecord } from "../contracts/agent-preset-types.js";
+import type { DesignGuidanceSettings } from "../contracts/app-types.js";
 import type { ProjectSetupOptions, ProjectSummary } from "../contracts/project-management-types.js";
 import type { QuicksprintTemplateRecord } from "../contracts/quicksprint-types.js";
 import { formatQuicksprintTemplateMarkdown } from "../domain/quicksprint/quicksprint-template-markdown.js";
+import { buildProjectGuidanceSection } from "./planning-prompt-builder.js";
 import { buildGeneratedSprintPreviewScript } from "./sprint-preview-utils.js";
 
 
@@ -11,6 +13,7 @@ export interface ProjectSetupPromptArgs {
   baseAgentTemplates?: AgentPresetRecord[];
   baseQuicksprintTemplates?: QuicksprintTemplateRecord[];
   containerSetupScriptTemplate?: string | null;
+  designGuidance?: DesignGuidanceSettings;
   options: ProjectSetupOptions;
 }
 
@@ -192,6 +195,9 @@ export function buildDefaultProjectSetupAgentInstructions(): string {
 
 export function buildProjectSetupPrompt(args: ProjectSetupPromptArgs): string {
   const selected = requestedArtifacts(args.options);
+  const projectGuidanceSection = buildProjectGuidanceSection(args.designGuidance, {
+    includeStyleguideInvestigationNotice: true,
+  });
   const baseTemplateSection = args.options.agents && args.baseAgentTemplates?.length
     ? [
       "## Base Agent Templates To Adapt",
@@ -243,6 +249,8 @@ export function buildProjectSetupPrompt(args: ProjectSetupPromptArgs): string {
     "## Project Setup Agent Instructions",
     args.setupAgent.instructionMarkdown.trim() || buildDefaultProjectSetupAgentInstructions(),
     "",
+    ...projectGuidanceSection,
+    ...(projectGuidanceSection.length > 0 ? [""] : []),
     ...baseTemplateSection,
     ...(baseTemplateSection.length > 0 ? [""] : []),
     ...quicksprintTemplateSection,
