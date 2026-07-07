@@ -115,6 +115,13 @@ export interface ListChatProviderChannelBindingsOptions {
   enabledOnly?: boolean;
 }
 
+export interface ListChatProviderDeliveriesOptions {
+  providerConnectionId?: string;
+  channelBindingId?: string;
+  direction?: ChatProviderDeliveryDirection;
+  limit?: number;
+}
+
 export interface RecordInboundChatProviderMessageResult {
   delivery: ChatProviderMessageDeliveryRecord;
   duplicate: boolean;
@@ -531,6 +538,34 @@ export class ChatProviderRepository {
   getDelivery(deliveryId: string): ChatProviderMessageDeliveryRecord | null {
     const row = this.getDeliveryRow(deliveryId);
     return row ? this.mapDelivery(row) : null;
+  }
+
+  listDeliveries(options: ListChatProviderDeliveriesOptions = {}): ChatProviderMessageDeliveryRecord[] {
+    const clauses: string[] = [];
+    const params: string[] = [];
+    if (options.providerConnectionId) {
+      clauses.push("d.provider_connection_id = ?");
+      params.push(options.providerConnectionId);
+    }
+    if (options.channelBindingId) {
+      clauses.push("d.channel_binding_id = ?");
+      params.push(options.channelBindingId);
+    }
+    if (options.direction) {
+      clauses.push("d.direction = ?");
+      params.push(this.requireDeliveryDirection(options.direction));
+    }
+    const boundedLimit = Math.max(1, Math.min(Math.trunc(options.limit ?? 100), 500));
+    const where = clauses.length > 0 ? `WHERE ${clauses.join(" AND ")}` : "";
+    const rows = this.db.prepare(`
+      SELECT d.*, c.provider_kind
+      FROM chat_provider_message_deliveries d
+      INNER JOIN chat_provider_connections c ON c.id = d.provider_connection_id
+      ${where}
+      ORDER BY d.updated_at DESC, d.created_at DESC
+      LIMIT ${boundedLimit}
+    `).all(...params) as unknown as ChatProviderMessageDeliveryRow[];
+    return rows.map((row) => this.mapDelivery(row));
   }
 
   listPendingOutboundDeliveries(limit = 100): ChatProviderMessageDeliveryRecord[] {
