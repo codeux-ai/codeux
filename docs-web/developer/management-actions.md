@@ -1,10 +1,11 @@
 # Management actions
 
-Code UX exposes **one MCP tool per management domain** — `manage_projects`, `manage_sprints`,
+Code UX exposes grouped MCP tools per management domain — `manage_projects`, `manage_sprints`,
 `manage_tasks`, `manage_quicksprints`, `manage_scheduler`, `manage_agents`, `manage_memory`,
-`manage_settings`, `manage_preview`, and `manage_telemetry` — ten domains, each with a set of
-**actions**. This page is the complete matrix. (See [MCP tools](./mcp-tools.md) for the tool list and
-schemas.)
+`search_knowledge`, `manage_settings`, `manage_preview`, and `manage_telemetry`. The deprecated
+`manage_code_ux` tool remains available for compatibility, but the grouped tools are the primary
+surface. Each domain has a set of **actions**. This page is the complete matrix. (See
+[MCP tools](./mcp-tools.md) for the tool list and schemas.)
 
 A dedicated-tool call takes the `action` plus action-specific fields:
 
@@ -16,7 +17,7 @@ A dedicated-tool call takes the `action` plus action-specific fields:
 }
 ```
 
-**Approval handshake:** Destructive actions return `{ approvalRequired: true, approvalMessage: "..." }` on first call. Re-call with `approval: { confirmed: true }` to proceed.
+**Approval handshake:** Destructive actions return `{ approvalRequired: true, approvalMessage: "..." }` on first call. Re-call with `approval: { confirmed: true }` (or `--payload-json '{"approval":{"confirmed":true}}'` in the CLI) to proceed.
 
 ---
 
@@ -99,15 +100,17 @@ Task create/update fields include `title`, `name`, `promptMarkdown`, `descriptio
 | Action | Destructive | Required payload | Description |
 | --- | --- | --- | --- |
 | `list` | – | `projectId`, optional `from`, `to` | List scheduler entries and occurrences for a project window. |
-| `create` | – | `projectId`, `targetType`, `scheduledFor`, target payload | Create a generic scheduler entry for `sprint`, `quicksprint`, or `chat`. |
+| `create` | – | `projectId`, `targetType`, `scheduledFor`, target payload | Create a generic scheduler entry for `sprint`, `quicksprint`, `chat`, or `memory_remediation`. |
 | `schedule_sprint` | – | `projectId`, `scheduledFor`, `sprintId` | Schedule a sprint orchestration. |
 | `schedule_quicksprint` | – | `projectId`, `scheduledFor`, `templateId` | Schedule a quicksprint. Optional `taskCount`, `submitMode`, `additionalPrompt`, `agentPresetId`, `planningOverrides`. |
 | `schedule_chat` | – | `projectId`, `scheduledFor`, `bodyMarkdown` | Schedule a chat message. Optional `threadId`, `connectionId`, `title`, `timezone`, `recurrence`. |
 | `update` | – | `entryId`, update fields | Update scheduler title, status, time, recurrence, or target payload. |
 | `delete` | ✅ | `entryId` | Delete a scheduler entry. |
-| `run_due` | – | optional `now` | Evaluate due entries immediately, mostly for operational verification. |
+| `run_due` | – | optional `now` ISO date override | Evaluate due entries immediately, mostly for operational verification. |
 
-`create` accepts nested targets (`sprintTarget`, `quicksprintTarget`, `chatTarget`) or the flattened fields used by the `schedule_*` aliases. Scheduled chat entries post through the dashboard chat runtime when due, so they can target an existing thread with `threadId` or create/use a titled thread with `title`.
+`create` accepts nested targets (`sprintTarget`, `quicksprintTarget`, `chatTarget`) or the flattened fields used by the `schedule_*` aliases. `schedule_sprint`, `schedule_quicksprint`, and `schedule_chat` infer the target type. Scheduling supports an absolute time (`scheduledFor`) or an `after_sprint_end` anchor via `scheduleMode` or `anchorMode`, with `sourceSprintId` / `anchorSourceSprintId` and optional `offsetMinutes` / `anchorOffsetMinutes`.
+
+Memory remediation schedules use `targetType: "memory_remediation"` but have their own dedicated `/api/projects/:projectId/scheduler/memory-remediation` HTTP routes separate from the normal scheduler entries.
 
 ---
 
@@ -123,13 +126,13 @@ Task create/update fields include `title`, `name`, `promptMarkdown`, `descriptio
 | `replace_system_settings` | ✅ | `settings` | Replace all system settings. |
 | `patch_system_setting` | ✅ | `path`, `value` | Patch one field by JSON path. |
 | `replace_project_settings` | ✅ | `projectId`, `settings` | Replace project settings. |
-| `patch_project_setting` | – | `projectId`, `path`, `value` | Patch a project setting. |
+| `patch_project_setting` | ✅ | `projectId`, `path`, `value` | Patch a project setting. |
 | `reset_project_settings` | ✅ | `projectId` | Reset project to defaults. |
 | `replace_sprint_settings` | ✅ | `projectId`, `sprintId`, `settings` | Replace sprint settings. |
-| `patch_sprint_setting` | – | `projectId`, `sprintId`, `path`, `value` | Patch a sprint setting. |
+| `patch_sprint_setting` | ✅ | `projectId`, `sprintId`, `path`, `value` | Patch a sprint setting. |
 | `reset_sprint_settings` | ✅ | `projectId`, `sprintId` | Reset sprint to defaults. |
 
-All mutating settings actions are human-confirmation gated, including patch actions. The first call records the exact action and payload for up to 15 minutes and returns `approvalRequired: true`; it does not mutate settings, even if `approval.confirmed: true` was sent. After the user explicitly confirms, repeat the same action with the same payload and `approval.confirmed: true`. The approval is one-use and cannot approve a different settings payload.
+All mutating settings actions (replace, patch, reset) require human confirmation. Get/resolve actions are read-only. Mutating settings actions first return an approval-required response; only the exact same action and payload may execute once with `approval.confirmed: true` within 15 minutes. The approval is one-use and cannot approve a different settings payload.
 
 JSON path examples for `patch_*`:
 - `aiProvider.providers.codex.model` → string
@@ -174,6 +177,19 @@ Manages agent presets per project.
 | `count` | – | `projectId`, `scope` | Count by scope. |
 | `model_status` | – | – | Get embedding model status. |
 
+### Claim actions
+
+The memory domain also exposes durable claim management:
+
+| Action | Destructive | Required payload | Description |
+| --- | --- | --- | --- |
+| `create_claim` | – | `projectId`, `claim` | Create a project claim. Accepts `category`, `confidence`, `durability`, `tags`, `appliesToPaths`, `sourceMemoryId`, `supersedesClaimId`, `supportType`, `weight`, and `evidenceWeight`. |
+| `list_claims` | – | `projectId` | List project claims. Accepts `status`, `category`, and `limit`. |
+| `get_claim` | – | `projectId`, `claimId` | Get a specific claim. |
+| `update_claim` | – | `projectId`, `claimId` | Update a claim. Accepts `claim`, `category`, `confidence`, `durability`, `status`, `tags`, `appliesToPaths`, and `supersedesClaimId`. |
+| `add_claim_evidence` | – | `projectId`, `claimId`, `memoryId` | Add evidence to a claim. Accepts `supportType` and `weight`. |
+| `deprecate_claim` | ✅ | `projectId`, `claimId` | Deprecate a claim and require approval confirmation. |
+
 ---
 
 ## `preview`
@@ -205,6 +221,7 @@ Read-only execution telemetry.
 | `list_sprint_runs` | – | `projectId`, `sprintId` | Compact run list. |
 | `list_task_dispatches` | – | `projectId`, `sprintId`, `taskId` | Per-task dispatch list. |
 | `list_execution_invocations` | – | `projectId`, optional `sprintId`, `taskId`, `type` | Filter MCP invocations. |
+| `list_execution_invocation_messages` | – | `invocationId` | List messages for a specific execution invocation. |
 
 ---
 

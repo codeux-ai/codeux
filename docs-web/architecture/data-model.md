@@ -227,7 +227,7 @@ Memories with mismatched `embeddingModelId` are excluded from search; trigger re
 | `id` | string | – |
 | `endpointKey` | string | Stable client-supplied ID. |
 | `displayName` | string | – |
-| `role` | enum | `project_manager`/`worker`/`listener`. |
+| `role` | enum | `project_manager`/`worker-host`. |
 | `transport` | enum | `stdio`/`http`/`internal`. |
 | `capabilities` | json | – |
 | `status` | enum | `connected`/`disconnected`. |

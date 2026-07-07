@@ -3,8 +3,8 @@
 ## Code UX
 The container-first, local-first agentic coding runtime that coordinates the CLI, MCP server, sprint orchestrator, dashboard, and Electron shell around project work.
 
-## Hosted Jules provider
-The hosted remote provider accessed through the Jules API. Code UX treats it as one provider among several and can route sprint work to it when settings select Jules.
+## Hosted Code UX provider
+The hosted remote provider accessed through the Code UX API. Code UX treats it as one provider among several and can route sprint work to it when settings select Code UX.
 
 ## Local CLI providers
 Provider runtimes that execute through local CLI workflows, often inside Docker or host-backed worktrees, such as Gemini, Codex, Claude Code, Qwen Code, OpenCode, and Antigravity.
@@ -12,11 +12,7 @@ Provider runtimes that execute through local CLI workflows, often inside Docker 
 ## MCP tools
 The Model Context Protocol tool surface exposed by Code UX, including management, runtime, and dispatch contracts.
 
-## Quicksprints
-Short-lived, template-driven execution workflows for tightly scoped work.
 
-## Scheduler
-The persistent scheduler that queues sprint, quicksprint, and chat targets and releases them when they are due.
 
 ## .code-ux
 The canonical active project artifact directory for sprints, agents, instruction templates, logs, and runtime files.
@@ -24,17 +20,11 @@ The canonical active project artifact directory for sprints, agents, instruction
 ## Provider instances
 Persisted provider configurations and the runtime sessions or dispatches created from them during execution.
 
-## Memory / Knowledge
-The short-term sprint evidence and durable project claims that Code UX stores for retrieval and review.
 
-## Preview sessions
-Browser preview sessions and their associated URLs, logs, and scripts used for frontend verification.
 
 ## Dashboard v2 surfaces
 The current Preact dashboard surfaces under `dashboard/src/v2/`, including execution, sprints, memory, settings, chat, and related views.
 
-## Legacy `.jules-subagents`
-Historical artifact directory used by older docs and migration notes. Current project artifacts live under `.code-ux/`.
 
 ## Agent Tool Handler
 Module that handles worker-local execution and reply helper calls.
@@ -62,3 +52,24 @@ A markdown-defined unit of work in a sprint with fields like `depends_on`, `is_i
 
 ## Watch Loop
 Continuous orchestration mode that runs periodic cycles until exit criteria are reached.
+
+## Quicksprint
+Reusable Markdown template resolved from project, home, bundled `.code-ux/quicksprints/templates`, or TS fallback, converted into a sprint goal and sent through normal sprint planning.
+
+## Scheduler
+Project-scoped automation persisted in `scheduler_entries`; can run sprints, quicksprints, or chat messages once or on recurrence.
+
+## Memory
+Runtime-learned short-term sprint and long-term project learnings, embedded and injected into prompts according to agent memory config.
+
+## Knowledge
+Project-scoped document library ingested/uploaded/imported separately from memory, embedded locally, and attached to agent presets via subscriptions; agents use `search_knowledge` for exact passages.
+
+## Preview container
+Sprint-scoped Docker preview session for one `(projectId, sprintId)`, persisted in `sprint_preview_sessions`, served through the in-app browser on a preview origin, using `.code-ux/browser/start-preview.sh` or generated fallback startup.
+
+## `manage_code_ux` (Deprecated)
+Deprecated unified MCP dispatcher; dedicated `manage_*` tools are preferred.
+
+## Legacy `.jules-subagents`
+Historical artifact directory used by older docs and migration notes. Current project artifacts live under `.code-ux/`.

@@ -5,17 +5,17 @@ This document describes the refactor that introduces:
 - Atomic sprint-loop architecture with independent step toggles.
 - Separation of MCP core tool logic and task/worker agent tool logic.
 - Editable markdown instruction templates with placeholder parsing.
-- Home directory migration from `~/jules-subagents` to `~/.jules-subagents`.
+- Home directory migration from `~/.code-ux` to `~/.code-ux`.
 - Dashboard settings for CI Intelligence merge gates.
 
 ## What Changed
 
 ### 1. Home Directory Path Migration
 The canonical runtime directory is now:
-- `~/.jules-subagents`
+- `~/.code-ux`
 
 Legacy path support:
-- If `~/.jules-subagents/settings.db` does not exist and `~/jules-subagents/settings.db` exists, the DB is copied forward automatically.
+- If `~/.code-ux/settings.db` does not exist and `~/.code-ux/settings.db` exists, the DB is copied forward automatically.
 - Runtime code now resolves to the dot-directory by default.
 
 Relevant file:
@@ -64,17 +64,17 @@ This makes loop behavior reorderable/editable without touching MCP tool plumbing
 
 ### 1. Directory Layout
 Instruction templates are now expected at:
-- `.jules-subagents/instructions/**`
+- `.code-ux/instructions/**`
 
 Current sprint loop templates:
-- `.jules-subagents/instructions/sprint-main-loop/guards/*`
-- `.jules-subagents/instructions/sprint-main-loop/planning/*`
-- `.jules-subagents/instructions/sprint-main-loop/protocol/*`
-- `.jules-subagents/instructions/sprint-main-loop/watch/*`
-- `.jules-subagents/instructions/sprint-main-loop/cleanup/*`
+- `.code-ux/instructions/sprint-main-loop/guards/*`
+- `.code-ux/instructions/sprint-main-loop/planning/*`
+- `.code-ux/instructions/sprint-main-loop/protocol/*`
+- `.code-ux/instructions/sprint-main-loop/watch/*`
+- `.code-ux/instructions/sprint-main-loop/cleanup/*`
 
 Compatibility alias:
-- `.jules-subagents/intructions/**` is also supported as a fallback search path for typo-safe compatibility.
+- `.code-ux/intructions/**` is also supported as a fallback search path for typo-safe compatibility.
 
 ### 2. Placeholder Engine
 Template placeholder syntax:
@@ -165,7 +165,7 @@ Validation run:
 
 ## Operational Notes
 
-1. Existing projects can now override sprint loop messaging entirely by editing markdown templates under `.jules-subagents/instructions`.
+1. Existing projects can now override sprint loop messaging entirely by editing markdown templates under `.code-ux/instructions`.
 2. CI merge protocol can be tightened/relaxed in dashboard settings without code edits.
 3. Loop behavior can be shaped for debugging or staged rollout by disabling selected steps.
 4. Dot-directory migration is handled safely by default path resolution and legacy DB copy-forward.
@@ -177,7 +177,7 @@ Validation run:
 - Startup no longer hard-fails when `JULES_API_KEY` is absent.
 - Server logs actionable setup instructions with sources:
   - `.env`
-  - `.jules-subagents/settings.json`
+  - `.code-ux/settings.json`
   - dashboard settings (`http://localhost:4444` default)
 - API-backed MCP handlers now preflight key presence and return setup guidance text when missing.
 - Dashboard planning remains available without a Jules key, but API-backed execution and session tools still return setup guidance until a key exists.
@@ -347,10 +347,10 @@ Files:
 Change:
 - Background provider worktrees are now created under home-scoped runtime storage instead of inside the target repository.
 - New location pattern:
-  - `~/.jules-subagents/worktrees/<repo-name>-<repo-hash>/<session-id>`
+  - `~/.code-ux/worktrees/<repo-name>-<repo-hash>/<session-id>`
 
 Rationale:
-- Prevents repository pollution when `.jules-subagents/worktrees` is not ignored.
+- Prevents repository pollution when `.code-ux/worktrees` is not ignored.
 - Keeps transient execution workspaces in one runtime-managed location.
 
 File:
@@ -409,8 +409,8 @@ Allow background Gemini/Codex runs to execute in isolated containers while prese
   - optional setup script execution before provider command
 - Setup script resolution order:
   1. `containerSetupScriptPath` (if set)
-  2. `<repo>/.jules-subagents/container/setup.sh`
-  3. `~/.jules-subagents/container/setup.sh`
+  2. `<repo>/.code-ux/container/setup.sh`
+  3. `~/.code-ux/container/setup.sh`
 
 ### Files
 
@@ -426,7 +426,7 @@ Allow background Gemini/Codex runs to execute in isolated containers while prese
 ## Incremental Update: Demo Container Bootstrap Script
 
 Added repository demo setup script for Docker execution bootstrap:
-- Path: `.jules-subagents/container/setup.sh`
+- Path: `.code-ux/container/setup.sh`
 - Purpose:
   - ensure `git` and GitHub CLI `gh` are available
   - ensure `pnpm` is available
@@ -533,7 +533,7 @@ Files:
 ### SQLite Session Tracking for CLI Providers
 
 Added provider session/activity persistence:
-- DB: `~/.jules-subagents/session-tracking.db`
+- DB: `~/.code-ux/session-tracking.db`
 - Tables:
   - `provider_sessions`
   - `provider_activities`
@@ -562,4 +562,4 @@ Files:
 - `src/sprint/steps/protocol-step.ts`
 - `src/sprint/steps/status-table-step.ts`
 - `src/instructions/instruction-template-catalog.ts`
-- `.jules-subagents/instructions/sprint-main-loop/protocol/*.md`
+- `.code-ux/instructions/sprint-main-loop/protocol/*.md`

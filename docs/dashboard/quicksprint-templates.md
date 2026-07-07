@@ -94,6 +94,17 @@ Editor validation must stay visible and durable. Saving is disabled until the te
 
 Template deletion is always confirmed in UI that names the target template. Browse deletion uses the shared destructive confirmation dialog and restores focus to the original delete control or the template rail fallback after removal. Inline editor deletion uses a two-step confirmation with Cancel/Escape and pending deletion copy. Neither deletion path may rely on browser-native confirmation prompts, color alone, or animation-only cues.
 
+## API and Execution Contract
+
+The REST API and MCP `manage_quicksprints` tool expose these actions:
+- `list_templates`: List built-in and custom templates for a project.
+- `get_template`: Retrieve a specific template.
+- `create_template`: Create a custom template with `name`, `description`, `icon`, `category`, and `agentInstructionMarkdown`. Optional fields include `categoryColor`, and `defaultTaskCount`.
+- `update_template`: Update custom template fields.
+- `delete_template`: Remove a custom template or hide a built-in template for a project. Requires explicit approval via MCP.
+- `execute`: Plans a quicksprint. Payload supports `taskCount`, `noTaskLimit`, `submitMode`, `routeOverride`, and `modelOverride`. Defaults to `submitMode: "plan_only"`.
+- `start`: Alias for execution defaulting to `submitMode: "plan_and_start"`.
+
 Current built-in purpose set:
 - `Fullstack JS App`
 

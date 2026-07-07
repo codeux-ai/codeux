@@ -33,7 +33,7 @@ pnpm run test:watch     # Vitest watch mode
 pnpm test tests/backend/smoke.test.ts   # Single test file
 pnpm run test:coverage  # Coverage with threshold enforcement
 pnpm run typecheck      # tsc --noEmit (alias: lint — same command)
-pnpm run ci             # lint + test:backend:coverage + test:dashboard + build
+pnpm run ci             # quality:guardrails -> audit -> lint -> test:backend:coverage -> test:dashboard -> build
 pnpm run audit          # pnpm audit --audit-level=high
 ```
 
@@ -41,7 +41,7 @@ Electron: `pnpm run electron:dev`, `pnpm run electron:dist[:linux|:mac|:win]`.
 
 Coverage thresholds (vitest.config.ts, ratchet-only — never lower): lines 77.4%, functions 71.5%,
 branches 66.1%, statements 76.0%. `src/server/activity-cache-service.ts` has a separate 80% line
-gate. CI runs on Node 22: lint → backend coverage → dashboard tests → build.
+gate. CI runs on Node 22: lint -> test:backend:coverage -> test:dashboard -> build.
 
 ## Architecture
 
@@ -152,7 +152,8 @@ In this working environment you have broad latitude to operate the running syste
 
 - Conventional Commits (`feat:`, `fix:`, `docs:`, `chore:`). **`dev` is the integration branch** —
   branch off `dev` and open PRs **into `dev`** (not `main`) after CI passes; use `gh` for PR workflow.
-- Remotes: `origin` is `codeux-ai/codeux` — push feature branches there and target it for PRs.
+- Remotes: `origin` is the **`numnx/codeux` fork** — push branches there and target it for PRs.
+  `upstream` is `codeux-ai/codeux`; do not push or PR there unless explicitly asked.
 - 2-space indent, `camelCase` vars/functions, `PascalCase` types/components. Strict typing — avoid
   `any`. No new plain-JS modules. Tailwind is the only styling approach; don't add UI frameworks.
 - Documentation source of truth is `docs/` (entrypoint `docs/index.md`, index `docs/SUMMARY.md`).

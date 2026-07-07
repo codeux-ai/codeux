@@ -23,6 +23,11 @@ backup files appear there.
 
 - `index.ts`
   - Minimal bootstrap (`dotenv`, app config, server launch).
+- `electron/`
+  - `main.ts`
+  - Desktop shell entrypoint and network policy, which hosts the Code UX UI without owning backend orchestration.
+- `worker/`
+  - Headless execution role entrypoint for worker-host mode.
 - `config/`
   - `app-config.ts`, `external-settings.ts`
   - Startup/env config loading and external settings hints.
@@ -37,7 +42,7 @@ backup files appear there.
   - Jules API HTTP client.
 - `server/`
   - `code-ux-server.ts`
-  - Main runtime composition and MCP server class.
+  - Main runtime composition wiring backend services (dashboard API on default port 4444 and MCP server).
   - `mcp-request-router.ts`
   - MCP list/call handler registration and dispatch routing.
   - `activity-cache-service.ts`

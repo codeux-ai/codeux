@@ -34,8 +34,21 @@ The direct domain form is the preferred shell interface. The generic `manage` fo
 - The CLI prompts for missing required flags only when `stdin` is a TTY.
 - If required flags are missing in non-interactive mode, the command fails instead of guessing.
 - `--json` prints the raw management envelope returned by the handler.
-- `--payload-json` can carry `domain`, `action`, `payload`, and `approval` for the `manage` passthrough.
-- Destructive actions require an approval retry. The first call returns an approval request, and the exact same action must be sent again with `approval.confirmed: true`.
+- `--payload-json` properties merge with explicitly passed command-line flags. For the `manage` passthrough, it can carry `domain`, `action`, `payload`, and `approval`. For direct domain commands, it acts as a base payload.
+- Destructive actions require an approval retry. The first call returns an approval request, and the exact same action must be sent again with approval confirmation via `--payload-json '{"approval":{"confirmed":true}}'`.
+
+## Startup Behavior
+
+Before parsing regular management commands, the CLI intercepts startup flags.
+- `--help` and `-h` show global help. However, if they are placed after a management command (e.g. `codeux projects --help`), the CLI intercepts it as domain-specific help.
+- The CLI parses global start-up flags with values (e.g. `--api-key`, `--runtime-role`) before routing to the management handler.
+
+## Flag Coercion
+
+The CLI parser automatically coerces certain flags into appropriate types before forwarding them to the management handlers:
+- **Booleans**: Flags like `--auto-start`, `--replan`, or `--no-task-limit` will be parsed as true/false depending on value (e.g. `true`, `yes`, `1`, `on` vs `false`, `no`, `0`, `off`).
+- **Numbers**: Numeric flags like `--tasks` (`taskCount`), `--limit`, or `--min-similarity` are parsed as finite numbers.
+- **Arrays**: Certain flags accept array values by repeating the flag multiple times. For example: `--memory-ids mem-1 --memory-ids mem-2` will be merged into an array `["mem-1", "mem-2"]`.
 
 ## Common Aliases
 
@@ -49,11 +62,37 @@ These aliases are accepted and normalized before dispatch:
 - `schedule-sprint` -> `schedule_sprint`
 - `schedule-quicksprint` -> `schedule_quicksprint`
 - `schedule-chat` -> `schedule_chat`
+- `force-cancel` -> `force_cancel`
+- `inspect-run` -> `inspect_run`
+- `import-issues` -> `import_issues`
+- `start-reembed` -> `start_reembed`
+- `model-status` -> `model_status`
 - `get-system` -> `get_system`
+- `get-project-override` -> `get_project_override`
+- `resolve-project-effective` -> `resolve_project_effective`
+- `get-sprint-override` -> `get_sprint_override`
+- `resolve-sprint-effective` -> `resolve_sprint_effective`
 - `replace-system-settings` -> `replace_system_settings`
+- `patch-system-setting` -> `patch_system_setting`
+- `replace-project-settings` -> `replace_project_settings`
 - `patch-project-setting` -> `patch_project_setting`
+- `reset-project-settings` -> `reset_project_settings`
+- `replace-sprint-settings` -> `replace_sprint_settings`
+- `patch-sprint-setting` -> `patch_sprint_setting`
+- `reset-sprint-settings` -> `reset_sprint_settings`
 - `start-session` -> `start_session`
+- `rebuild-session` -> `rebuild_session`
+- `stop-session` -> `stop_session`
+- `remove-session` -> `remove_session`
+- `get-script` -> `get_script`
+- `get-logs` -> `get_logs`
+- `get-url` -> `get_url`
+- `get-project-execution-snapshot` -> `get_project_execution_snapshot`
 - `get-project-stats-snapshot` -> `get_project_stats_snapshot`
+- `list-sprint-runs` -> `list_sprint_runs`
+- `list-task-dispatches` -> `list_task_dispatches`
+- `list-execution-invocations` -> `list_execution_invocations`
+- `list-execution-invocation-messages` -> `list_execution_invocation_messages`
 
 ## Flag Conventions
 
@@ -103,7 +142,7 @@ Some commands intentionally block on approval before they mutate state:
 - `replace_*` settings actions
 - selected scheduler delete operations
 
-When one of those commands runs without approval, Code UX returns an approval request instead of mutating anything. Re-run the same command with `approval.confirmed: true` once the user approves the change.
+When one of those commands runs without approval, Code UX returns an approval request instead of mutating anything. Re-run the same command with `--payload-json '{"approval":{"confirmed":true}}'` once the user approves the change.
 
 ## Domain Examples
 
@@ -163,12 +202,12 @@ codeux agents update --project proj-1 --preset qa-agent --payload-json '{"instru
 
 ```bash
 codeux memory search --project proj-1 --query "pricing page"
-codeux memory promote --project proj-1 --memory-ids '["mem-1","mem-2"]'
+codeux memory promote --project proj-1 --memory-ids mem-1 --memory-ids mem-2
 codeux memory start_reembed --project proj-1
 codeux manage --payload-json '{"domain":"memory","action":"create_claim","payload":{"projectId":"proj-1","claim":"Use dependency factory composition for service wiring.","category":"patterns","confidence":0.9,"durability":0.85}}'
 ```
 
-Durable claim actions exposed through the management surface are `create_claim`, `list_claims`, `get_claim`, `update_claim`, `add_claim_evidence`, and `deprecate_claim`. `deprecate_claim` follows the destructive approval flow: the first call returns an approval request, and the confirmed retry must include `approval.confirmed: true`.
+Durable claim actions exposed through the management surface are `create_claim`, `list_claims`, `get_claim`, `update_claim`, `add_claim_evidence`, and `deprecate_claim`. `deprecate_claim` follows the destructive approval flow: the first call returns an approval request, and the confirmed retry must include `--payload-json '{"approval":{"confirmed":true}}'`.
 
 ### Preview
 

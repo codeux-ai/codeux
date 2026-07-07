@@ -172,6 +172,10 @@ Use page-scoped Stats primitives instead of one-off analytics chrome. The post-r
 
 Dense analytics layouts should stay calm: restrained contrast, low-opacity fills, semantic color, stable grids, and short labels. Avoid nested decorative cards; repeated cards, ledger rows, modals, and tool panels may be framed, while page sections should read as workspaces.
 
+## Architecture
+
+The `StatsPage` uses the `useStatsPageData` hook to coordinate visual modes. The hook manages and exposes state including `activeQuery`, `visualMode`, `chartState`, `providerSegments`, `sourceSegments`, `tokenSegments`, and `planningUsage`, ensuring seamless transitions across Trend, Composition, Models, Providers, Ledgers, and System views.
+
 ## Responsive Behavior
 
 - The hero uses a two-zone command band on wide screens and stacks project context, time controls, and mode navigation on narrow screens.

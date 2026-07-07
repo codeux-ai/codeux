@@ -21,7 +21,7 @@ Key behavior:
 - orchestrator status updates are now mirrored into sqlite
 - selected-project live dashboard data is read back from sqlite
 - rerun actions can target DB task ids while still resetting markdown task state by task key
-- git/CI tracking now resolves repo path and active branch from the selected project's stored runtime context
+- git/CI tracking now resolves repo path and active branch from the selected project's stored runtime context, replacing tokens such as `{sprint_key_prefix}`, `{sprint_id}`, `{worker_provider}`, and `{worker_model}`
 
 ## Runtime Source Of Truth
 
@@ -56,6 +56,9 @@ Task matching:
 Legacy cleanup:
 - unscoped project-level runtime rows from the pre-multi-sprint bridge are treated as deprecated
 - explicit sprint reads and rerun flows now use sprint-scoped runtime only, so stale data from an old sprint cannot override the active sprint branch
+
+Runtime cleanup:
+- Dedicated cleanup paths (`RuntimeCleanupService`, `DockerRuntimePruneService`, `DockerAssetPruneService`) handle stale previews, orphaned containers, setup images, and workspace/runtime volumes, keeping execution state aligned with container assets.
 
 ## Current Boundaries
 

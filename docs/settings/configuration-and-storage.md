@@ -29,9 +29,13 @@ External hint env keys used for dashboard import:
 
 ## Settings Overrides and Scoped Resolution
 
-Code UX settings resolve through a scoped cascade: `system` → `project` → `sprint`.
+Code UX settings resolve through a scoped cascade: `system` (base) → `project` (inherits from system) → `sprint` (inherits from project effective). System settings are the base of the cascade.
 
-System settings hold global state, runtime behavior (e.g., ports, `consoleLogLevel`, `debugLogFileLevel`, `consoleLogMode`), and system integration credentials (Jira tokens, GitLab/GitHub tokens).
+System settings hold global state, runtime behavior (e.g., ports, `consoleLogLevel`, `debugLogFileLevel`, `consoleLogMode`), and system integration credentials (Jira tokens, GitLab/GitHub tokens). They are also populated with defaults.
+
+Effective settings API endpoints include a `sources` dictionary mapping each JSON path to its originating scope (`system`, `project`, or `sprint`).
+
+Many settings families are handled by specific sanitizers that ensure defaults are applied and invalid shapes are repaired (e.g., `aiProvider`, `ciIntelligence`, `guardrails`, `cliWorkflow`, `git`, `jira`, `sprintLoopSteps`, `memory`, `modelPricing`, `workers`).
 
 Project and sprint scopes can override execution-specific settings, such as `aiProvider` routes (which now include provider instances and `invocationRouting` as first-class citizens instead of legacy top-level keys), `cliWorkflow` settings (like `gitMode`, `executionMode`, `containerImage`, `containerSetupScriptPath`), and preview defaults (like `sprintPreview.startupScriptPath` defaulting to `.code-ux/browser/start-preview.sh`). `git.defaultBranch` fallback is resolved based on scoped overrides too. Jira and GitLab integration configurations are also scoped and can be overridden.
 
@@ -80,6 +84,7 @@ Runtime resolution:
   2. Project setting override (Dashboard)
   3. System setting default (Dashboard)
   4. Hardcoded default (`main`)
+- Additional Git branching behaviors configured here include `git.featureBranchPrefix` (e.g. `feature/codeux/`), `git.sprintBranchScheme` (e.g. `feature/sprint{sprint_id}-implementation`), and `git.sprintKeyPrefix` (uppercase identifier such as `SPR`).
 - The legacy project metadata `defaultBranch` column is retained for project records created before the scoped settings model and for display/initialization context, but sprint orchestration and final merge targets do not let that metadata override resolved scoped settings. A project inheriting a system default of `dev` must merge sprint completion PRs into `dev`, even if the older project row still says `main`.
 - In remote git mode, Code UX refreshes `origin` before sprint branch preflight and before each task start so branch resolution is based on current remote state instead of stale local refs.
 - HTTPS GitHub remotes use the configured dashboard token as a temporary Git extraheader during origin refresh, remote branch checks, and branch pushes. HTTPS origin refreshes and branch preflight network checks run with interactive credential prompts disabled and a bounded timeout so orchestration cannot remain stuck waiting on local credential helpers. Mandatory CLI task refreshes fetch the requested starting branch's remote-tracking ref when possible, avoiding a whole-origin fetch for every task dispatch. They use a 120 second default fetch timeout, configurable with `CODE_UX_GIT_FETCH_TIMEOUT_MS` for slow Git transports. If direct remote inspection is unavailable, branch preflight can use an existing `refs/remotes/origin/<branch>` ref as remote-branch evidence. Local origin-refresh failures remain strict for CLI-backed work that needs local git state, but are best-effort for branch preflight and Jules dispatch because Jules works from the remote source and starting branch. SSH remotes continue to use the local SSH agent/key setup unchanged.
@@ -120,6 +125,7 @@ Runtime resolution:
 - `main` is only the final fallback when no sprint, project, or system base branch is configured. Normal sprint and task flows use the resolved `git.defaultBranch` value from scoped settings.
 - the old global `/api/settings` contract is removed in favor of explicit scoped endpoints
 - dashboard v2 settings queries clear both cached and in-flight effective-settings requests whenever system/project settings are saved or reset, which prevents stale AI model options immediately after integration updates.
+- Settings actions that mutate state (replace, patch, reset) require human confirmation. Mutating settings actions first return an approval-required response; only the exact same action and payload may execute once with `approval.confirmed: true` within 15 minutes. Get/resolve actions are read-only.
 
 ## Persisted Scoped Settings Model
 

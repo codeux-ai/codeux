@@ -97,10 +97,11 @@ Per provider, `executionMode` is `DOCKER` (default) or `HOST`.
 
 ### DOCKER mode
 
-- Image: `node:24-bookworm` (override via `workers.dockerImage`).
+- Image: `node:24-bookworm` (override via `workers.dockerImage`). Images are cached across runs using a setup image cache.
 - Mounts:
-  - The worktree path read-write.
-  - The provider auth path (e.g. `~/.gemini`) read-only, if `mountAuth: true`.
+  - The workspace volume (`code-ux.workspace=true`) is mounted read-write.
+  - Runtime volumes (`code-ux.workspace-runtime=true`) are used for preserving package manager caches and the provider home directory outside of the main workspace.
+  - Provider credentials are conceptually mounted via dedicated, isolated credential mounts (e.g. `mountAuth: true` builds provider-specific mounts without exposing raw host tokens or keys to the workspace root or command arguments).
   - Optional setup script.
 - Network: default bridge.
 - The CLI runs as the container's default user (root, in the default image).
@@ -110,7 +111,7 @@ Per provider, `executionMode` is `DOCKER` (default) or `HOST`.
 
 - The CLI runs directly on the host as the Code UX process user.
 - No mount; the CLI uses its native auth.
-- Faster startup, no Docker dependency, but less hermetic.
+- Used *only* as a fallback for specific edge cases (such as degraded CI autofix runs when Docker is unrecoverably unavailable). Docker is the strict default and is required for merge conflict isolation.
 
 ## Worktree management
 
@@ -194,7 +195,7 @@ Each dispatch records:
 - PR URL on success.
 - Failure reason.
 
-Visible in the dashboard's **Tasks** detail panel and via `manage_code_ux` → `tasks` → `inspect_run` and `telemetry` → `list_task_dispatches`.
+Visible in the dashboard's **Tasks** detail panel and via `manage_tasks` → `inspect_run` and `manage_telemetry` → `list_task_dispatches`.
 
 ## Tuning
 

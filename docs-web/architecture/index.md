@@ -8,7 +8,7 @@ It is for contributors and integrators who need to reason about *how* Code UX ma
 
 | # | Page | Topic |
 | --- | --- | --- |
-| 1 | [System overview](./system-overview.md) | Process model, runtime composition, top-level data flow |
+| 1 | [System overview](./system-overview.md) | Container-first process model, runtime composition, top-level data flow |
 | 2 | [MCP server](./mcp-server.md) | Tool dispatch, transports, authentication, session lifecycle |
 | 3 | [Sprint engine](./sprint-engine.md) | Cycle pipeline, watch loop state machine, dependency resolution, retries |
 | 4 | [Virtual workers](./virtual-workers.md) | Provisioning, lifecycle, Docker vs host execution, attention-item handling |

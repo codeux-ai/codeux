@@ -55,7 +55,7 @@ Click the card's **Open** action to make it the active project, or use the **Set
 
 ## Deleting a project
 
-Deletion is destructive — it removes the project's database row and runtime state, but **does not** delete files inside `<repo>/.code-ux/`. The MCP `manage_code_ux` action requires explicit `approval.confirmed = true`.
+Deletion is destructive — it removes the project's database row and runtime state, but **does not** delete files inside `<repo>/.code-ux/`. The MCP `manage_projects` action requires explicit `approval.confirmed = true`.
 
 In the dashboard, the **Delete** action shows a confirm dialog with the count of sprints, tasks and memories that will become orphaned.
 
