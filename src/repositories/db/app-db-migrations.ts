@@ -233,6 +233,8 @@ export function runMigrations(db: DatabaseAdapter): void {
   ensureColumn(db, "provider_invocations", "token_accounting_version", "INTEGER NOT NULL DEFAULT 1");
   backfillTokenAccountingV2(db);
   ensureIndex(db, "idx_provider_invocations_project_started", "provider_invocations", "project_id, started_at DESC");
+  ensureIndex(db, "idx_provider_invocations_started", "provider_invocations", "started_at DESC");
+  ensureIndex(db, "idx_provider_invocations_updated", "provider_invocations", "updated_at DESC");
   ensureIndex(db, "idx_provider_invocations_project_sprint_started", "provider_invocations", "project_id, sprint_id, started_at DESC");
   ensureIndex(db, "idx_provider_invocations_project_sprint_run_started", "provider_invocations", "project_id, sprint_run_id, started_at DESC");
   ensureIndex(db, "idx_provider_invocations_sprint_started", "provider_invocations", "sprint_id, started_at DESC");

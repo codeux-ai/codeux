@@ -45,22 +45,22 @@ export const buildTechstackSelectorViewModel = (
   const selectedTechstackId = selection?.selectedTechstackId ?? null;
   const activeEntry = selectedTechstackId
     ? normalizedCatalog.entries.find((entry) => entry.id === selectedTechstackId) ?? defaultEntry
-    : defaultEntry;
+    : null;
   const orderedEntries = [
     defaultEntry,
     ...normalizedCatalog.entries.filter((entry) => entry.id !== defaultEntry.id),
   ];
 
   return {
-    activeLabel: activeEntry.label,
-    activeTechstackId: activeEntry.id,
+    activeLabel: activeEntry?.label ?? "None",
+    activeTechstackId: activeEntry?.id ?? "",
     selectedTechstackId,
     isUnassigned: selectedTechstackId === null,
     defaultLabel: defaultEntry.label,
     options: [
       {
         id: UNASSIGNED_OPTION_ID,
-        label: "Unassigned",
+        label: "None",
         kind: "unassigned",
         techstackId: null,
       },

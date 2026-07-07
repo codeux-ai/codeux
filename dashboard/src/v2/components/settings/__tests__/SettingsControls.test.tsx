@@ -295,8 +295,8 @@ const createSystemSettings = (projectSettings: ProjectSettings): SystemSettings 
     renderSettingsSmartFindSearch();
 
     expect(screen.getByText("Press slash to search settings.")).toBeInTheDocument();
-    expect(screen.getByText("10 settings categories available.")).toHaveClass("sr-only");
-    expect(screen.queryByText("10 settings categories available. Press slash to search.")).not.toBeInTheDocument();
+    expect(screen.getByText("11 settings categories available.")).toHaveClass("sr-only");
+    expect(screen.queryByText("11 settings categories available. Press slash to search.")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Clear settings search" })).not.toBeInTheDocument();
     expect(screen.getByText("/")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Appearance" })).toBeInTheDocument();
@@ -963,10 +963,10 @@ describe("SettingsControls Accessibility", () => {
     );
 
     expect(screen.getByText("Techstacks Catalog")).toBeInTheDocument();
-    expect(screen.getAllByText("Code UX Internal").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Code UX Stack").length).toBeGreaterThan(0);
   });
 
-  it("SettingsTechstacksPanel protects the built-in internal stack from removal", () => {
+  it("SettingsTechstacksPanel protects the built-in Code UX Stack from removal", () => {
     const projectSettings = createProjectSettings();
     render(
       <SettingsTechstacksPanel
@@ -980,7 +980,7 @@ describe("SettingsControls Accessibility", () => {
     );
 
     expect(screen.getByText("Built-in stack protected")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Remove Code UX Internal" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Remove Code UX Stack" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Remove Custom Web" })).toBeInTheDocument();
   });
 

@@ -39,7 +39,7 @@ Techstack settings are split across scopes:
 - system settings own `techstackCatalog`, a catalog with `defaultTechstackId` and `entries`
 - project and sprint settings own `techstack`, a selection with `selectedTechstackId` and `applicationKind`
 
-The built-in catalog always includes the Code UX internal stack (`code-ux-internal`) with Preact, TanStack Router, GSAP, Three.js, and Lucide Icons. Catalog sanitization trims ids and labels, drops malformed or duplicate ids, preserves the built-in entry, and falls back `defaultTechstackId` to `code-ux-internal` if the saved default is missing or invalid. Project defaults intentionally keep `techstack.selectedTechstackId = null` and `techstack.applicationKind = null`; existing and imported projects therefore do not inherit the internal techstack automatically. New-project flows must apply a catalog default explicitly when they need one.
+The built-in catalog always includes the Code UX Stack (`code-ux-internal`) with Preact, TanStack Router, GSAP, Three.js, and Lucide Icons. Catalog sanitization trims ids and labels, drops malformed or duplicate ids, preserves the built-in entry, and falls back `defaultTechstackId` to `code-ux-internal` if the saved default is missing or invalid. Project defaults intentionally keep `techstack.selectedTechstackId = null` and `techstack.applicationKind = null`; existing and imported projects therefore do not inherit the built-in stack automatically. New-project flows must apply a catalog default explicitly when they need one.
 
 For `.code-ux/settings.json` (used primarily for credential hints during initial onboarding), search roots include:
 - current working directory

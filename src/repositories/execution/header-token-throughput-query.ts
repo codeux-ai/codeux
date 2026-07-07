@@ -36,12 +36,13 @@ export function queryHeaderTokenThroughputSnapshot(
   const now = new Date();
   const range = normalizeHeaderTokenThroughputRange(db, window, now);
 
-  const app = queryThroughputTotals(db, range.from, range.to);
+  const useActivityWindow = window === "20s";
+  const app = queryThroughputTotals(db, range.from, range.to, undefined, useActivityWindow);
   const project = projectRow
     ? {
       projectId: projectRow.id,
       projectName: projectRow.name,
-      ...queryThroughputTotals(db, range.from, range.to, projectRow.id),
+      ...queryThroughputTotals(db, range.from, range.to, projectRow.id, useActivityWindow),
     } satisfies HeaderTokenThroughputProjectSnapshot
     : null;
 
@@ -56,7 +57,8 @@ export function queryHeaderTokenThroughputSnapshot(
 
 export function normalizeHeaderTokenThroughputWindow(window: unknown): HeaderTokenThroughputWindow {
   if (
-    window === "1h"
+    window === "20s"
+    || window === "1h"
     || window === "24h"
     || window === "7d"
     || window === "30d"
@@ -64,7 +66,7 @@ export function normalizeHeaderTokenThroughputWindow(window: unknown): HeaderTok
   ) {
     return window;
   }
-  throw new ValidationError("Invalid header throughput window. Expected one of: 1h, 24h, 7d, 30d, all.");
+  throw new ValidationError("Invalid header throughput window. Expected one of: 20s, 1h, 24h, 7d, 30d, all.");
 }
 
 function normalizeProjectId(projectId: string | null | undefined): string | null {
@@ -95,6 +97,18 @@ function normalizeHeaderTokenThroughputRange(
   window: HeaderTokenThroughputWindow,
   now: Date,
 ): ProjectStatsRangeSummary {
+  if (window === "20s") {
+    return buildPresetRange({
+      window,
+      from: new Date(startOfUtcBucket(now, 5 * 1000).getTime() - 3 * 5 * 1000),
+      bucketSizeMs: 5 * 1000,
+      bucketCount: 4,
+      resolution: "5sec",
+      label: "Last 20 seconds",
+      resolutionLabel: "5-second telemetry buckets",
+    });
+  }
+
   if (window === "1h") {
     return buildPresetRange({
       window,
@@ -241,9 +255,11 @@ function queryThroughputTotals(
   rangeStartIso: string,
   rangeEndIso: string,
   projectId?: string,
+  useActivityWindow = false,
 ): HeaderTokenThroughputTotals {
   const projectPredicate = projectId ? "AND project_id = ?" : "";
   const params = projectId ? [rangeStartIso, rangeEndIso, projectId] : [rangeStartIso, rangeEndIso];
+  const timeColumn = useActivityWindow ? "updated_at" : "started_at";
   const row = db.prepare(`
     SELECT
       COUNT(*) as invocationCount,
@@ -254,7 +270,7 @@ function queryThroughputTotals(
       COALESCE(SUM(reasoning_output_tokens), 0) as reasoningTokens,
       COALESCE(SUM(total_tokens), 0) as totalTokens
     FROM provider_invocations
-    WHERE started_at >= ? AND started_at < ?
+    WHERE ${timeColumn} >= ? AND ${timeColumn} < ?
       ${projectPredicate}
   `).get(...params) as ThroughputAggregateRow | undefined;
 
@@ -273,7 +289,10 @@ function queryThroughputTotals(
 }
 
 function calculateTokensPerMinute(totalTokens: number, activeTimeMs: number): number {
-  if (totalTokens <= 0 || activeTimeMs <= 0) {
+  if (totalTokens <= 0) {
+    return 0;
+  }
+  if (activeTimeMs <= 0) {
     return 0;
   }
   return Math.round((totalTokens / (activeTimeMs / 60_000)) * 100) / 100;

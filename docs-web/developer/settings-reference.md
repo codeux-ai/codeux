@@ -93,7 +93,7 @@ System settings own the techstack catalog:
   "entries": [
     {
       "id": "code-ux-internal",
-      "label": "Code UX Internal",
+      "label": "Code UX Stack",
       "items": [
         { "id": "preact", "label": "Preact" },
         { "id": "tanstack-router", "label": "TanStack Router" },
@@ -119,7 +119,7 @@ Project and sprint settings own the selected techstack:
 }
 ```
 
-Default project settings intentionally keep `selectedTechstackId` and `applicationKind` as `null`. Existing and imported projects therefore do not automatically inherit the built-in Code UX internal stack; a project creation flow must set an explicit override when it wants to apply the catalog default.
+Default project settings intentionally keep `selectedTechstackId` and `applicationKind` as `null`. Existing and imported projects therefore do not automatically inherit the built-in Code UX Stack; a project creation flow must set an explicit override when it wants to apply the catalog default.
 
 ## `cliWorkflow`
 
