@@ -375,7 +375,7 @@ Local equivalents:
 - `pnpm run test:dashboard` mirrors the dashboard Vitest job.
 - `pnpm run audit` mirrors the independent security audit job.
 - `pnpm run build` validates the compiled server and dashboard bundle.
-- `pnpm run build` followed by `pnpm exec playwright test` runs the browser E2E suite locally against the compiled app after dependencies and Playwright browsers are installed.
+- `pnpm run build` followed by `pnpm run test:e2e` runs the browser E2E suite locally against the compiled app after dependencies and Playwright browsers are installed. The wrapper delegates to `pnpm exec playwright test` after choosing isolated local ports.
 - `node scripts/verify-release-install.mjs` mirrors the release install smoke check before Electron packaging.
 
 Dependency and cache behavior:

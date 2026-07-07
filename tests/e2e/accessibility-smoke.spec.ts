@@ -1,17 +1,22 @@
 import { test, expect } from '@playwright/test';
-import { completeOnboarding, ensureSelectedProject } from './helpers/prepare-app';
+import { prepareSelectedLocalGitProject, type SeededCodeUxProject } from './helpers/e2e-fixtures';
+
+let fixture: SeededCodeUxProject | null = null;
 
 test.beforeEach(async ({ page, request }, testInfo) => {
-  await completeOnboarding(request);
-  await ensureSelectedProject(request, { testInfo, fixtureKey: 'accessibility' });
+  fixture = await prepareSelectedLocalGitProject(page, request, testInfo, 'accessibility');
+});
 
-  await page.addInitScript(() => {
-    localStorage.setItem('codeux:dashboard-tour-hidden:v1', 'true');
-  });
+test.afterEach(async () => {
+  await fixture?.cleanup();
+  fixture = null;
 });
 
 test('Dashboard accessibility smoke test', async ({ page }) => {
   await page.goto('/');
+
+  await expect(page.getByRole('dialog', { name: /make the runtime ready/i })).toHaveCount(0);
+  await expect(page.getByRole('dialog', { name: /projects|sprints|tasks|settings/i })).toHaveCount(0);
 
   // 1. Skip link
   const skipLink = page.locator('a[href="#main-content"]');
@@ -34,6 +39,7 @@ test('Dashboard accessibility smoke test', async ({ page }) => {
   // 5. Project Selector
   const projectSelector = page.getByRole('button', { name: /Project/i });
   await expect(projectSelector).toBeVisible();
+  await expect(projectSelector).toContainText(fixture?.project.name ?? '');
 
   // 6. Stats Chart (if visible)
   const statsChart = page.getByRole('region', { name: /Statistics|Chart/i }).first();
@@ -58,4 +64,5 @@ test('Dashboard accessibility smoke test', async ({ page }) => {
 
   const sprintLedger = page.getByRole('region', { name: 'Sprint Ledger' });
   await expect(sprintLedger).toBeVisible();
+  await expect(projectSelector).toContainText(fixture?.project.name ?? '');
 });
