@@ -287,6 +287,8 @@ Project isolation is enforced below the MCP handler by `SkillService` and `Skill
 
 `search_skills` is the retrieval-focused skill surface. It can be exposed to agents independently from `manage_skills` through per-agent MCP tool filtering. This lets an agent retrieve durable skill guidance without granting it storage creation, mutation, attachment management, export, delete, or reset capabilities.
 
+Persistent skill runtime behavior is documented with agent preset storage ownership in [Agent Preset Foundation](../architecture/agent-preset-foundation.md#data-model) and the Settings/Agents UI contract in [Agents Design System](../dashboard/design-system-agents.md#persistent-skills). The integration regression in `tests/backend/integration/persistent-skills-runtime.test.ts` covers the MCP retrieval contract together with repository attachments and provider runtime injection.
+
 Schema:
 
 ```json

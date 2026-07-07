@@ -85,7 +85,7 @@ Settings changes via `manage_code_ux` → `settings` → `patch_*_setting` (or t
 
 There is no need to restart the process for settings changes.
 
-`agents.selfReflection.planning` and `agents.selfReflection.qualityAssurance` are resolved through the same cascade but default to disabled. Each stores criteria with thresholds and a maximum improvement-attempt count; malformed legacy payloads fall back safely during sanitization. Runtime reflection calls are not wired yet.
+`agents.selfReflection.planning` and `agents.selfReflection.qualityAssurance` are resolved through the same cascade but default to disabled. Each stores criteria with thresholds and a maximum improvement-attempt count; malformed legacy payloads fall back safely during sanitization. When enabled, structured planning and QA requests run the optional rate-and-improve loop through the same provider session and keep the last valid parsed output if reflection fails.
 
 ### Effective resolution endpoints
 

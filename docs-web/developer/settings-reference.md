@@ -227,7 +227,7 @@ These are internal skills toggleable for advanced workflows. Most users should n
 }
 ```
 
-Both reflection loops are disabled by default and are contracts only until runtime reflection calls and dashboard controls are wired. Criteria are senior engineering checks such as correctness, completeness, decomposition quality, risk handling, testability, maintainability, security, and scope control. Sanitization dedupes criteria by `id`, clamps thresholds to `0..1`, clamps `maxImprovementAttempts` to `0..10`, and falls back to defaults for malformed legacy payloads.
+Both reflection loops are disabled by default. When enabled, planning and QA structured responses are rated against the configured criteria and can request an improved JSON payload before acceptance; invalid reflection output fails open to the last valid parsed response. Criteria are senior engineering checks such as correctness, completeness, decomposition quality, risk handling, testability, maintainability, security, and scope control. Sanitization dedupes criteria by `id`, clamps thresholds to `0..1`, clamps `maxImprovementAttempts` to `0..10`, and falls back to defaults for malformed legacy payloads.
 
 ## `mcpTools`
 
