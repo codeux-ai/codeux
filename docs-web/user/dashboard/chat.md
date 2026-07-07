@@ -117,7 +117,12 @@ Planning and QA self-reflection messages appear as structured cards instead of r
 The composer at the bottom supports:
 
 - **Multi-line input** with Enter to send, Shift+Enter for newline.
+- **Speech input** with the microphone control beside Send in project Threads mode.
 - **Slash commands** that invoke management actions inline.
 - **Attachments** *(planned)*.
+
+Use the microphone control to dictate into the current thread draft. When transcription succeeds, Code UX inserts the transcript at the current caret position when the composer selection is available; otherwise it appends the text to the end of the draft with normal spacing. The composer resizes after insertion, and you can edit the dictated text before pressing Enter or Send.
+
+Speech input is only available for project thread composers. It is disabled while a message is sending and is not shown in no-project assistant chat or invocation transcripts. If the browser cannot record audio, microphone permission is denied, the local speech model is missing, or the configured provider fails, the button reports the failure and leaves the draft unchanged so you can retry or type normally.
 
 The active thread can be deleted from the **⋯** menu. Deletion is local (the underlying provider session is closed) and does not affect sprints or tasks. You can also cancel the currently running turn for a specific thread, which aborts only the matching in-flight thread turn.
