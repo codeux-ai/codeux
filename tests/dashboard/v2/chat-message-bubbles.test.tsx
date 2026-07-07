@@ -91,6 +91,93 @@ describe("Chat Message Bubbles", () => {
       expect(container.innerHTML).toContain("Hello world");
     });
 
+    it("renders prompt suggestion tags for normal agent replies", () => {
+      const message: ChatMessageRecord = {
+        id: "msg_suggestions",
+        threadId: "thread_1",
+        direction: "connection_to_dashboard",
+        authorType: "connection",
+        authorConnectionId: "conn_1",
+        bodyMarkdown: "I can help with next steps.",
+        deliveryStatus: "delivered",
+        createdAt: new Date().toISOString(),
+        metadata: {
+          type: "none",
+          promptSuggestions: [
+            {
+              id: "focused-tests",
+              label: "Run focused tests",
+              prompt: "Run the focused chat bubble tests.",
+              icon: "play",
+            },
+          ],
+        },
+      };
+
+      const { getByRole } = render(<ChatMessageBubble message={message} onPromptSuggestionSelect={vi.fn()} />);
+
+      expect(getByRole("button", { name: "Use suggestion: Run focused tests" })).toBeInTheDocument();
+    });
+
+    it("passes the selected prompt to the suggestion callback", () => {
+      const onPromptSuggestionSelect = vi.fn();
+      const message: ChatMessageRecord = {
+        id: "msg_suggestion_click",
+        threadId: "thread_1",
+        direction: "connection_to_dashboard",
+        authorType: "connection",
+        authorConnectionId: "conn_1",
+        bodyMarkdown: "Choose a follow-up.",
+        deliveryStatus: "delivered",
+        createdAt: new Date().toISOString(),
+        metadata: {
+          promptSuggestions: [
+            {
+              label: "Inspect logs",
+              prompt: "Inspect the latest worker logs.",
+              icon: "search",
+            },
+          ],
+        },
+      };
+
+      const { getByRole } = render(
+        <ChatMessageBubble message={message} onPromptSuggestionSelect={onPromptSuggestionSelect} />
+      );
+
+      fireEvent.click(getByRole("button", { name: "Use suggestion: Inspect logs" }));
+
+      expect(onPromptSuggestionSelect).toHaveBeenCalledTimes(1);
+      expect(onPromptSuggestionSelect).toHaveBeenCalledWith("Inspect the latest worker logs.");
+    });
+
+    it("does not render prompt suggestion tags for dashboard-authored messages", () => {
+      const message: ChatMessageRecord = {
+        id: "msg_dashboard_suggestions",
+        threadId: "thread_1",
+        direction: "dashboard_to_connection",
+        authorType: "dashboard_user",
+        authorConnectionId: null,
+        bodyMarkdown: "User message with metadata",
+        deliveryStatus: "delivered",
+        createdAt: new Date().toISOString(),
+        metadata: {
+          promptSuggestions: [
+            {
+              label: "Should stay hidden",
+              prompt: "This prompt should not render.",
+              icon: "sparkles",
+            },
+          ],
+        },
+      };
+
+      const { queryByRole, queryByText } = render(<ChatMessageBubble message={message} />);
+
+      expect(queryByRole("button", { name: "Use suggestion: Should stay hidden" })).not.toBeInTheDocument();
+      expect(queryByText("Should stay hidden")).not.toBeInTheDocument();
+    });
+
     it("does not render Invalid Date when the timestamp is missing or malformed", () => {
       const message: ChatMessageRecord = {
         id: "msg_invalid",
@@ -128,6 +215,39 @@ describe("Chat Message Bubbles", () => {
       const { container, getByText } = render(<ChatMessageBubble message={message} />);
       expect(getByText("My special plan")).toBeInTheDocument();
       expect(getByText("Navigating solutions...")).toBeInTheDocument();
+    });
+
+    it("renders prompt suggestions alongside the planning widget for agent replies", () => {
+      const message: ChatMessageRecord = {
+        id: "msg_planning_suggestions",
+        threadId: "thread_1",
+        direction: "connection_to_dashboard",
+        authorType: "connection",
+        authorConnectionId: "conn_1",
+        bodyMarkdown: "Planning is ready.",
+        deliveryStatus: "delivered",
+        createdAt: new Date().toISOString(),
+        metadata: {
+          type: "planning",
+          status: "queued",
+          planName: "Suggestion-backed plan",
+          promptSuggestions: [
+            {
+              label: "Review plan",
+              prompt: "Review the proposed execution plan.",
+              icon: "list-checks",
+            },
+          ],
+        },
+      };
+
+      const { getByRole, getByText } = render(
+        <ChatMessageBubble message={message} onPromptSuggestionSelect={vi.fn()} />
+      );
+
+      expect(getByRole("button", { name: "Use suggestion: Review plan" })).toBeInTheDocument();
+      expect(getByText("Suggestion-backed plan")).toBeInTheDocument();
+      expect(getByText("Preparing to plan...")).toBeInTheDocument();
     });
 
     it("renders live sprint task progress when planning metadata can be matched to project state", () => {

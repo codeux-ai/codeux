@@ -91,7 +91,7 @@ export function getMessagesAfterCompaction(
 
 function buildJsonOutputInstructions(): string {
   return [
-    "You must return STRICT JSON format containing exactly two keys: `replyMarkdown` and `action`.",
+    "You must return STRICT JSON format containing `replyMarkdown`, `action`, and optional `suggestions`.",
     "1. `replyMarkdown`: A string containing your concise markdown reply to the user.",
     "2. `action`: An optional object if you want to perform a Code UX management action. Otherwise, set this to `null`.",
     "   - Format: `{ \"domain\": \"...\", \"action\": \"...\", \"payload\": { ... } }`",
@@ -99,6 +99,11 @@ function buildJsonOutputInstructions(): string {
     "   - Note: Destructive actions (starting with `delete_`, `reset_`, `replace_`) and all settings mutations MUST pause for explicit user approval.",
     "     If you propose an approval-gated action, it will not execute immediately; the user will see a confirmation prompt.",
     "     DO NOT call an approval-gated action again with `approval.confirmed: true` unless the user explicitly confirms it.",
+    "3. `suggestions`: Optional array of up to 6 next-step prompt suggestions for dashboard quick actions.",
+    "   - Each item must be `{ \"label\": string, \"prompt\": string, \"icon\"?: string, \"id\"?: string }`.",
+    "   - `prompt` is the literal message the user would send next.",
+    "   - Use only stable string icon identifiers such as `play`, `settings`, or `search`; do not use UI component names.",
+    "   - Omit `suggestions` when there are no useful next steps.",
   ].join("\n");
 }
 

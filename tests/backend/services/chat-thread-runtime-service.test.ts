@@ -145,6 +145,76 @@ describe("ChatThreadRuntimeService", () => {
     });
   });
 
+  it("stores sanitized prompt suggestions on the visible virtual reply metadata", async () => {
+    deps.connectionChatRepository.postDashboardMessage.mockReturnValue({ id: "msg-suggestions", threadId: "t1", bodyMarkdown: "what next" });
+    deps.connectionChatRepository.getThread.mockReturnValue({
+      id: "t1",
+      projectId: "p1",
+      title: "Thread",
+      connectionId: null,
+      runtimeState: {},
+    });
+    deps.projectManagementRepository.getProject.mockReturnValue({ id: "p1", name: "proj", baseDir: "/tmp" });
+    deps.taskService.resolveInvocationProvider.mockReturnValue({
+      provider: "codex",
+      providers: { codex: { model: "gpt-5.3-codex", apiKey: "codex-key" } },
+    });
+    deps.connectionChatRepository.listMessages.mockReturnValue([
+      { id: "msg-suggestions", authorType: "dashboard_user", bodyMarkdown: "what next" },
+    ]);
+    deps.chatManagementActionService.processManagementAction.mockResolvedValue({
+      replyMarkdown: "Here are next steps.",
+      action: null,
+      approvalRequired: false,
+      promptSuggestions: [
+        { label: "Inspect status", prompt: "Show the current project status", icon: "search", id: "status" },
+      ],
+    });
+
+    await service.postMessage("p1", { bodyMarkdown: "what next" });
+
+    expect(deps.connectionChatRepository.postSystemMessage).toHaveBeenCalledWith("p1", {
+      threadId: "t1",
+      bodyMarkdown: "Here are next steps.",
+      metadata: {
+        promptSuggestions: [
+          { label: "Inspect status", prompt: "Show the current project status", icon: "search", id: "status" },
+        ],
+      },
+    });
+  });
+
+  it("leaves no-suggestion virtual replies without message metadata", async () => {
+    deps.connectionChatRepository.postDashboardMessage.mockReturnValue({ id: "msg-no-suggestions", threadId: "t1", bodyMarkdown: "hello" });
+    deps.connectionChatRepository.getThread.mockReturnValue({
+      id: "t1",
+      projectId: "p1",
+      title: "Thread",
+      connectionId: null,
+      runtimeState: {},
+    });
+    deps.projectManagementRepository.getProject.mockReturnValue({ id: "p1", name: "proj", baseDir: "/tmp" });
+    deps.taskService.resolveInvocationProvider.mockReturnValue({
+      provider: "codex",
+      providers: { codex: { model: "gpt-5.3-codex", apiKey: "codex-key" } },
+    });
+    deps.connectionChatRepository.listMessages.mockReturnValue([
+      { id: "msg-no-suggestions", authorType: "dashboard_user", bodyMarkdown: "hello" },
+    ]);
+    deps.chatManagementActionService.processManagementAction.mockResolvedValue({
+      replyMarkdown: "Plain reply",
+      action: null,
+      approvalRequired: false,
+    });
+
+    await service.postMessage("p1", { bodyMarkdown: "hello" });
+
+    expect(deps.connectionChatRepository.postSystemMessage).toHaveBeenCalledWith("p1", {
+      threadId: "t1",
+      bodyMarkdown: "Plain reply",
+    });
+  });
+
   it("suppresses rich widget prompt instructions and delivers persisted replies for chat-provider messages", async () => {
     const inboundMessage = {
       id: "msg-provider",
