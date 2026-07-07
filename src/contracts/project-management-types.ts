@@ -365,6 +365,7 @@ export interface ProjectSetupOptions {
   quicksprints: boolean;
   previewScript: boolean;
   ci: boolean;
+  techstack: boolean;
 }
 
 export interface ProjectSetupRequestInput {
@@ -396,6 +397,13 @@ export interface ProjectSetupCiArtifact {
   content: string;
 }
 
+export interface ProjectSetupTechstackArtifact {
+  name: string;
+  description: string;
+  detectedFrameworks?: string[];
+  detectedLibraries?: string[];
+}
+
 export interface ProjectSetupArtifactPayload {
   summary: string;
   agents?: ProjectSetupAgentArtifact[];
@@ -405,6 +413,7 @@ export interface ProjectSetupArtifactPayload {
     content: string;
   } | null;
   ci?: ProjectSetupCiArtifact[];
+  techstack?: ProjectSetupTechstackArtifact | null;
 }
 
 export interface ProjectSetupResult {

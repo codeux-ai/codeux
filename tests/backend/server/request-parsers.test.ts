@@ -10,6 +10,7 @@ import {
   parseCreateDashboardConversationMessageInput,
   parseProjectStatsQuery,
   parseCreateProjectInput,
+  parseProjectSetupRequestInput,
   parseUpdateProjectInput,
   parseCreateSprintInput,
   parseUpdateSprintInput,
@@ -297,6 +298,38 @@ describe("Request Parsers", () => {
       expect(() => parseCreateProjectInput({ name: "n", sourceType: "ftp", sourceRef: "r" })).toThrow(/sourceType/);
       expect(() => parseCreateProjectInput({ name: "n", sourceType: null, sourceRef: "r" })).toThrow(/sourceType/);
       expect(() => parseCreateProjectInput({ name: "n", sourceType: "", sourceRef: "r" })).toThrow(/sourceType/);
+    });
+  });
+
+  describe("parseProjectSetupRequestInput", () => {
+    it("parses setup option booleans including techstack", () => {
+      expect(parseProjectSetupRequestInput({
+        enabled: true,
+        clientRequestId: " setup-1 ",
+        options: {
+          agents: "true",
+          quicksprints: "false",
+          previewScript: 1,
+          ci: 0,
+          techstack: true,
+        },
+      })).toEqual({
+        enabled: true,
+        clientRequestId: "setup-1",
+        options: {
+          agents: true,
+          quicksprints: false,
+          previewScript: true,
+          ci: false,
+          techstack: true,
+        },
+      });
+    });
+
+    it("rejects invalid setup option booleans", () => {
+      expect(() => parseProjectSetupRequestInput({
+        options: { techstack: "yes" },
+      })).toThrow(/setup.options.techstack/);
     });
   });
 

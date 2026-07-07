@@ -1,7 +1,7 @@
 import type { FunctionComponent } from "preact";
 import { useRef, useState, useMemo } from "preact/hooks";
 import gsap from "gsap";
-import { AlertCircle, Bot, Check, ChevronUp, Cloud, FolderOpen, GitBranch, FolderInput, Globe, Home, Info, Link2, Loader2, Lock, PlaySquare, Plus, RefreshCw, ShieldCheck, Sparkles, Workflow, X } from "lucide-preact";
+import { AlertCircle, Bot, Check, ChevronUp, Cloud, FolderOpen, GitBranch, FolderInput, Globe, Home, Info, Layers3, Link2, Loader2, Lock, PlaySquare, Plus, RefreshCw, ShieldCheck, Sparkles, Workflow, X } from "lucide-preact";
 import { FormError } from "../forms/FormError.js";
 import { Modal } from "./Modal.js";
 import { ActionFeedbackRegion } from "./ActionFeedbackRegion.js";
@@ -17,6 +17,7 @@ type ProjectSetupOptions = {
     quicksprints: boolean;
     previewScript: boolean;
     ci: boolean;
+    techstack: boolean;
 };
 
 type ExistingProjectSubmission = {
@@ -106,6 +107,7 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
         quicksprints: true,
         previewScript: false,
         ci: true,
+        techstack: true,
     });
     const [submitError, setSubmitError] = useState<string | null>(null);
     const [activeDirectoryPickerTarget, setActiveDirectoryPickerTarget] = useState<DirectoryPickerTarget | null>(null);
@@ -376,6 +378,7 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
         { key: "quicksprints", label: "Quicksprints", description: "Repository-specific sprint templates.", icon: Workflow },
         { key: "previewScript", label: "Preview Script", description: "Container startup script for browser previews.", icon: PlaySquare },
         { key: "ci", label: "CI", description: "Basic GitHub/GitLab error-checking pipelines.", icon: ShieldCheck },
+        { key: "techstack", label: "Techstack", description: "Detect and assign a project stack from manifests.", icon: Layers3 },
     ] as const;
 
     return (
@@ -637,7 +640,7 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                                                     Initialize with Project Setup Agent
                                                 </span>
                                                 <span className="mt-1 block text-xs font-medium leading-relaxed text-slate-500 dark:text-slate-400">
-                                                    Research the codebase after creation and generate project-specific agents, routing, quicksprints, preview startup, and basic CI.
+                                                    Research the codebase after creation and generate project-specific agents, routing, quicksprints, preview startup, basic CI, and a detected techstack.
                                                 </span>
                                             </span>
                                         </label>
@@ -656,7 +659,7 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                                                 </div>
                                                 <button
                                                     type="button"
-                                                    onClick={() => setSetupOptions({ agents: true, quicksprints: true, previewScript: true, ci: true })}
+                                                    onClick={() => setSetupOptions({ agents: true, quicksprints: true, previewScript: true, ci: true, techstack: true })}
                                                     className="rounded-xl bg-white px-3 py-2 text-[10px] font-black uppercase tracking-[0.14em] text-slate-600 shadow-sm transition-colors hover:text-slate-900 dark:bg-white/[0.08] dark:text-slate-300 dark:hover:text-white"
                                                 >
                                                     All

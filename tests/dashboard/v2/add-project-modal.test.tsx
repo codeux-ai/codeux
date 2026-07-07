@@ -118,6 +118,7 @@ describe("AddProjectModal", () => {
           quicksprints: true,
           previewScript: false,
           ci: true,
+          techstack: true,
         },
       },
     });
