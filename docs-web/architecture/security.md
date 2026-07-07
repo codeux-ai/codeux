@@ -49,7 +49,7 @@ The stdio transport exists only when stdin is not a TTY. Since the MCP client la
 
 ## Authentication & authorisation
 
-There is no in-process user model. All authenticated callers (including `manage_code_ux`) have the same level of access — read, mutate, destroy.
+There is no in-process user model. All authenticated callers (including management tools and the deprecated `manage_code_ux` compatibility tool) have the same level of access — read, mutate, destroy.
 
 The only protection layer is the **destructive-action approval handshake**:
 
@@ -96,11 +96,11 @@ This avoids storing literal secrets in the DB.
 
 ## Audit trail
 
-Every `manage_code_ux` invocation, every cycle event, every dispatch, and every gate decision is recorded in `ExecutionInvocations`. Inspect via:
+Every management tool invocation, every cycle event, every dispatch, and every gate decision is recorded in `ExecutionInvocations`. Inspect via:
 
 - Dashboard → Chat → Invocations.
 - `GET /api/projects/:projectId/execution/invocations`.
-- `manage_code_ux` → `telemetry` → `list_execution_invocations`.
+- `manage_telemetry` → `list_execution_invocations`.
 
 ## Recommended deployment
 

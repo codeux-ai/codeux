@@ -179,7 +179,7 @@ Each dispatch records:
 - PR URL on success.
 - Failure reason.
 
-Visible in the dashboard's **Tasks** detail panel and via `manage_code_ux` → `tasks` → `inspect_run` and `telemetry` → `list_task_dispatches`.
+Visible in the dashboard's **Tasks** detail panel and via `manage_tasks` → `inspect_run` and `manage_telemetry` → `list_task_dispatches`.
 
 ## Tuning
 
