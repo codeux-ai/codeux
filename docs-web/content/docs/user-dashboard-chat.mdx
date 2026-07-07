@@ -91,6 +91,8 @@ Use this for debugging provider runs and MCP client integrations, for example to
 
 Invocation transcripts use the same live sprint status card as thread messages when planning metadata links them to a sprint. This means a planning invocation and its related chat message should show consistent task progress without a separate refresh control. Parsed provider conversation turns stream into running invocation transcripts for provider-backed planning, QA review, dashboard/chat replies, CI repair, merge-conflict repair, memory remediation, setup, and task coding; text-only provider output is appended when the run completes.
 
+Tool-call and reasoning transcript cards can include compact workplace-safe contextual lines, such as search or terminal quips for tool calls and a short thinking line for reasoning turns. These lines are adjunct UI only: the raw tool name, status, call id, token count, arguments, output, and expandable reasoning text remain available in the transcript.
+
 Planning and QA self-reflection messages appear as structured cards instead of raw system text. Each card shows whether the reflection passed, needed improvement, or hit an error; the final decision; the attempt number; and each criterion's 5-star rating, numeric score, threshold, rationale, and improvement instructions when available.
 
 Invocation transcripts use the same external-reference cards as thread messages for recognized Jira, GitHub, and GitLab payloads, including JSON payloads that would otherwise appear as raw punctuation-heavy output. This keeps linked work readable while preserving the original backend metadata and message content.
