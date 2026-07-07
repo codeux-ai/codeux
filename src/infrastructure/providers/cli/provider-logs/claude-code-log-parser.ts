@@ -1,4 +1,4 @@
-import type { ParsedConversationTurn } from "./provider-conversation-types.js";
+import type { ParsedConversationTurn, ParsedProviderLogResult } from "./provider-conversation-types.js";
 import { parseJsonObject, toNumber } from "./usage-parse-utils.js";
 
 /**
@@ -19,12 +19,9 @@ export interface ClaudeUsageTotals {
   cacheReadTokens: number;
 }
 
-export interface ClaudeCodeLogResult {
-  usage: ClaudeUsageTotals | null;
+export interface ClaudeCodeLogResult extends ParsedProviderLogResult<ClaudeUsageTotals> {
   /** Raw object of the last usage seen, for telemetry storage. */
   rawUsageJson: Record<string, unknown> | null;
-  conversation: ParsedConversationTurn[];
-  nativeSessionId: string | null;
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {

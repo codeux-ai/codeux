@@ -14,7 +14,9 @@ import {
   Square,
   XCircle,
 } from "lucide-preact";
+import { useConfirmDialog } from "../../hooks/use-confirm-dialog.js";
 import type { Sprint } from "../../types.js";
+import { ConfirmDialog } from "../ui/ConfirmDialog.js";
 
 export interface SprintActionMenuProps {
   sprint: Sprint;
@@ -72,6 +74,7 @@ export const SprintActionMenu: FunctionComponent<SprintActionMenuProps> = ({
   role,
   buttonClassName = "flex w-full min-w-0 items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs font-medium leading-snug text-slate-600 transition-colors hover:bg-black/[0.04] hover:text-slate-900 dark:text-slate-300 dark:hover:bg-white/[0.05] dark:hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2 [&>span]:min-w-0 [&>span]:break-words",
 }) => {
+  const actionConfirm = useConfirmDialog();
   const handleDeleteClassName = buttonClassName.replace(
     /text-slate-600 transition-colors hover:bg-black\/\[0\.04\] hover:text-slate-900/,
     "text-status-red hover:bg-status-red/10"
@@ -87,8 +90,35 @@ export const SprintActionMenu: FunctionComponent<SprintActionMenuProps> = ({
   const canPauseResume = Boolean(onPauseResume) && (isRunning || isPaused);
   const hasRunControls = Boolean(onPrimaryAction) || canPauseResume || Boolean(viewTasksHref) || Boolean(onAddTasks);
 
+  const confirmMenuAction = async (
+    options: {
+      title: string;
+      body: string;
+      confirmLabel: string;
+      destructive?: boolean;
+      tone?: "default" | "success" | "warning" | "danger" | "neutral";
+    },
+    action?: () => void,
+  ): Promise<void> => {
+    if (!action) {
+      onClose?.();
+      return;
+    }
+    const confirmed = await actionConfirm.requestConfirm(options);
+    onClose?.();
+    if (confirmed) {
+      action();
+    }
+  };
+
   return (
     <>
+      <ConfirmDialog
+        isOpen={actionConfirm.isOpen}
+        options={actionConfirm.options}
+        onConfirm={actionConfirm.handleConfirm}
+        onCancel={actionConfirm.handleCancel}
+      />
       {hasRunControls && (
         <>
           {onPrimaryAction && (
@@ -96,12 +126,22 @@ export const SprintActionMenu: FunctionComponent<SprintActionMenuProps> = ({
               type="button"
               role={role}
               onClick={() => {
+                if (isRunning) {
+                  void confirmMenuAction({
+                    title: "Stop Sprint",
+                    body: `Stop sprint "${sprint.name}"? Active task dispatches may be interrupted.`,
+                    confirmLabel: "Stop Sprint",
+                    destructive: true,
+                  }, onPrimaryAction);
+                  return;
+                }
                 onClose?.();
                 onPrimaryAction();
               }}
               disabled={primaryBusy}
               title={primaryBusy ? "Sprint action in progress" : undefined}
               aria-busy={primaryBusy}
+              aria-disabled={primaryBusy}
               className={disabledClassName}
             >
               {primaryBusy ? (
@@ -119,12 +159,22 @@ export const SprintActionMenu: FunctionComponent<SprintActionMenuProps> = ({
               type="button"
               role={role}
               onClick={() => {
-                onClose?.();
-                onPauseResume?.();
+                if (isPaused) {
+                  onClose?.();
+                  onPauseResume?.();
+                  return;
+                }
+                void confirmMenuAction({
+                  title: "Pause Sprint",
+                  body: `Pause sprint "${sprint.name}"? Running work will stop accepting new sprint actions until it is resumed.`,
+                  confirmLabel: "Pause",
+                  tone: "warning",
+                }, onPauseResume);
               }}
               disabled={pauseResumeBusy}
               title={pauseResumeBusy ? "Sprint pause or resume action in progress" : undefined}
               aria-busy={pauseResumeBusy}
+              aria-disabled={pauseResumeBusy}
               className={disabledClassName}
             >
               {pauseResumeBusy ? (
@@ -216,6 +266,7 @@ export const SprintActionMenu: FunctionComponent<SprintActionMenuProps> = ({
         disabled={showcaseBusy}
         title={showcaseBusy ? "Showcase update in progress" : undefined}
         aria-busy={showcaseBusy}
+        aria-disabled={showcaseBusy}
         className={disabledClassName}
       >
         {showcaseBusy ? (
@@ -239,6 +290,7 @@ export const SprintActionMenu: FunctionComponent<SprintActionMenuProps> = ({
           disabled={markCompletedDisabled}
           title={markCompletedDisabled ? "Mark complete is disabled while another sprint action is in progress" : undefined}
           aria-label={`Mark sprint ${sprint.name} as completed`}
+          aria-disabled={markCompletedDisabled}
           className={disabledClassName}
         >
           {markCompletedIcon === "square" ? (
@@ -258,6 +310,7 @@ export const SprintActionMenu: FunctionComponent<SprintActionMenuProps> = ({
         }}
         disabled={deleteBusy}
         aria-busy={deleteBusy}
+        aria-disabled={deleteBusy}
         aria-label={deleteBusy ? `Deleting sprint ${sprint.name}` : `Delete sprint ${sprint.name}`}
         title={deleteBusy ? "Delete action in progress" : undefined}
         className={deleteBusy ? `${handleDeleteClassName} disabled:cursor-not-allowed disabled:opacity-40` : handleDeleteClassName}
@@ -267,7 +320,7 @@ export const SprintActionMenu: FunctionComponent<SprintActionMenuProps> = ({
         ) : (
           <XCircle className="h-3.5 w-3.5" strokeWidth={2.1} />
         )}
-        {deleteBusy ? "Deleting..." : "Delete"}
+        {deleteBusy ? "Deleting" : "Delete"}
       </button>
     </>
   );

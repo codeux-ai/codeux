@@ -320,6 +320,68 @@ describe("SprintComposer", () => {
     });
   });
 
+  it("submits schedule payloads with after-sprint-end anchors and preserves composer fields", async () => {
+    const onSubmit = vi.fn();
+    const issue: SprintLinkedIssueInput = {
+      provider: "github",
+      hostDomain: "github.com",
+      repository: "openai/example",
+      issueNumber: 12,
+      issueKey: "#12",
+      title: "Follow linked issue",
+      url: "https://github.com/openai/example/issues/12",
+      state: "open",
+      labels: ["scheduler"],
+      assignees: [],
+      includeConversation: false,
+    };
+
+    const { getByPlaceholderText, getByRole, getAllByText, getByText } = render(
+      <SprintComposer
+        {...defaultProps}
+        onSubmit={onSubmit}
+        linkedIssues={[issue]}
+        defaultPlanningAgentPresetId="planner-1"
+        defaultAgentRoutingMode="ORCHESTRATOR"
+        scheduleAnchorSprintOptions={[{ id: "source-sprint-1", label: "Release prep" }]}
+      />
+    );
+
+    fireEvent.input(getByPlaceholderText("Runtime hardening"), { target: { value: "Scheduled Sprint" } });
+    fireEvent.input(getByPlaceholderText("Describe the outcome, affected systems, and what done looks like when this sprint lands."), {
+      target: { value: "Run after the release prep sprint ends." },
+    });
+    fireEvent.input(getByRole("textbox", { name: /sprint key override/i }), { target: { value: "OPS-42" } });
+
+    fireEvent.click(getAllByText("Schedule")[0]!);
+    fireEvent.click(getByRole("button", { name: "After End" }));
+    fireEvent.click(getByRole("button", { name: "Source Sprint" }));
+    fireEvent.click(getByText("Release prep"));
+    fireEvent.input(getByRole("spinbutton", { name: /offset minutes/i }), { target: { value: "15" } });
+    fireEvent.click(getAllByText("Schedule").pop()!);
+
+    await waitFor(() => {
+      expect(onSubmit).toHaveBeenCalledTimes(1);
+    });
+    expect(onSubmit.mock.calls[0]?.[0]).toMatchObject({
+      name: "Scheduled Sprint",
+      goal: "Run after the release prep sprint ends.",
+      submitMode: "schedule",
+      sprintKeyOverride: "OPS-42",
+      planningAgentPresetId: "planner-1",
+      agentRoutingMode: "ORCHESTRATOR",
+      workerAgentPresetId: null,
+      linkedIssues: [issue],
+      schedule: {
+        scheduleAnchor: {
+          mode: "after_sprint_end",
+          sourceSprintId: "source-sprint-1",
+          offsetMinutes: 15,
+        },
+      },
+    });
+  });
+
   it("keeps default planning and worker agents while agent options load", async () => {
     const agentPresets = [
       {
@@ -423,8 +485,9 @@ describe("SprintComposer", () => {
       expect(queryByText("Planning in motion")).not.toBeInTheDocument();
     });
     expect(queryByRole("button", { name: "Minimize" })).not.toBeInTheDocument();
-    expect(queryByRole("button", { name: "New Sprint" })).not.toBeInTheDocument();
-    expect(queryAllByText("Cancel Active Request")).toHaveLength(1);
+    expect(queryByRole("button", { name: "New Sprint" })).toBeInTheDocument();
+    expect(queryByRole("button", { name: "Cancel" })).toBeInTheDocument();
+    expect(queryAllByText("Cancel Active Request")).toHaveLength(0);
 
     // We didn't cancel, so we can now resolve the submit to finish
     resolveSubmit!(undefined);

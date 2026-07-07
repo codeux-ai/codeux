@@ -34,10 +34,10 @@
     --focus-ring-danger: rgb(227 0 15 / 0.55);
     --surface-metric-card: rgba(255, 255, 255, 0.8);
     --surface-metric-card-dark: rgba(24, 20, 17, 0.75);
-    --surface-metric-hover: rgba(0, 224, 160, 0.035);
-    --primitive-signal-highlight: rgba(0, 224, 160, 0.1);
-    --primitive-signal-glow: 0 0 0 6px rgba(0, 224, 160, 0.3);
-    --primitive-signal-glow-empty: 0 0 0 0 rgba(0, 224, 160, 0);
+    --surface-metric-hover: rgb(var(--signal-rgb) / 0.035);
+    --primitive-signal-highlight: rgb(var(--signal-rgb) / 0.1);
+    --primitive-signal-glow: 0 0 0 6px rgb(var(--signal-rgb) / 0.3);
+    --primitive-signal-glow-empty: 0 0 0 0 rgb(var(--signal-rgb) / 0);
     --status-static-running-ring: rgba(0, 171, 132, 0.42);
     --status-static-running-aura: rgba(0, 171, 132, 0.18);
     --status-static-failed-ring: rgba(227, 0, 15, 0.42);
@@ -78,7 +78,8 @@
     }
   }
 
-  :root[data-reduced-motion="true"] {
+  :root[data-reduced-motion="true"],
+  :root[data-reduced-motion="REDUCE"] {
     --motion-fast: 0ms;
     --motion-standard: 0ms;
     --motion-slow: 0ms;

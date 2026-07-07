@@ -2,6 +2,8 @@
 
 This page describes the provider-usage telemetry model that powers token and time statistics across tasks, sprints, and projects.
 
+For the metadata-first provider telemetry and bounded stats/projection invariants that should guide implementation changes, see [Code Quality And Performance Contracts](./code-quality-performance-contracts.md).
+
 ## Purpose
 
 Code UX now tracks CLI-provider execution usage in a DB-native form so the dashboard can answer:
@@ -61,6 +63,28 @@ Rollups are exposed in:
 
 ## Provider Collection Rules
 
+### CLI Log Parser Contract
+
+Provider log parsers normalize missing data before `provider-usage.ts` consumes
+it. A parser that can read a log source but finds no conversation turns returns
+`conversation: []`; it does not omit the field or return `undefined`. Usage
+that is absent, malformed, or otherwise unavailable is represented as
+`usage: null` and `rawUsageJson: null`. Downstream telemetry code decides
+whether that becomes `estimated` or `unavailable` usage, preserving the
+persisted provider invocation schema and dashboard API shape.
+
+Malformed JSON fragments are classified by the shared parser utilities without
+returning the raw fragment on failure, so synthetic or provider-specific errors
+do not carry secret-like transcript content into telemetry diagnostics. Numeric
+usage fields are normalized as non-negative counters; missing, zero, malformed,
+or negative token fields become `0`, while recoverable mixed payloads continue
+to preserve valid input, output, cached, reasoning, and total-token metadata.
+
+Provider-specific usage inference remains intentionally narrow. Codex and Qwen
+share the OpenAI-style usage adapter, OpenCode keeps its raw cumulative export
+snapshot for resumed-session baselines, and Antigravity continues to document
+its internal protobuf mapping as inferred rather than official.
+
 ### Gemini
 
 Gemini CLI runs with structured JSON output enabled.
@@ -78,6 +102,8 @@ Codex runs with `codex exec --json`.
 
 Code UX first looks for `token_count` JSONL events, then normalizes the usage payload via the same shared `prompt/completion/total` adapter used by other providers. Codex/OpenAI-style prompt counters can include cached tokens while also reporting `cached_input_tokens` or `*_token_details.cached_tokens`; Code UX subtracts those cached tokens from `inputTokens`, records them in `cachedInputTokens`, and keeps them inside `totalTokens`. This prevents cached context from being double-priced as full-rate input while preserving total token volume. If Codex omits completion counts but provides prompt and total tokens, the parser can infer output from either all prompt tokens or non-cached prompt tokens depending on whether the provider total includes cache. If JSONL usage is missing, Code UX falls back to session JSON usage, then token estimation using `js-tiktoken` over the prompt plus captured transcript.
 Visible Codex reasoning summaries are also preserved as `reasoning` turns when the rollout JSONL or exec stream exposes them, but encrypted or empty reasoning blobs are skipped.
+
+Codex token estimation keeps process-local caches bounded for long-running workers. Model encodings are cached with a small LRU cap, and estimated token counts are cached with a larger LRU cap keyed by model, text length, and a SHA-256 digest rather than the full prompt or transcript text. Repeated estimates for the same large text therefore avoid retokenizing without retaining the full content in memory. If a model-specific `js-tiktoken` encoding is unavailable, estimation falls back to the `gpt-4o` encoding; these estimates remain conservative fallback telemetry and never replace provider-native `reported` counts when Codex supplies usage events.
 
 Codex's rollout file (`~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl`) is cumulative for the whole session and keeps accumulating across `codex exec resume --last` (used for follow-up/QA-reopened runs and multi-turn retries). `parseCodexRolloutJsonl` isolates each run's own usage by treating the last `total_token_usage` snapshot *before* the run's time window as a baseline and subtracting it from the final cumulative snapshot — otherwise a follow-up would re-report every earlier turn's tokens too, inflating that run's persisted usage.
 
@@ -126,11 +152,29 @@ Code UX parses session data from two sources:
 
 For Docker-backed Antigravity runs, the SQLite database is encoded to Base64 within the container first, and then decoded to a temporary file on the host before parsing to bypass Docker named volume permission issues.
 
+## Live Watcher Polling
+
+The live provider telemetry watcher polls once after startup and then at a 1.5 second cadence while the provider command is active. Each poll builds a cheap metadata signature first. That signature includes:
+
+- provider and model
+- resolved native session id when one is known
+- stdout and stderr stream signatures
+- provider-specific metadata for transcript/log sources
+- Antigravity database metadata when the source conversation database can be statted before copying it
+
+When the metadata signature matches the last successful telemetry emission, the watcher skips full transcript/log reads and skips Antigravity temporary database refreshes. This is the primary fast path for Claude Code JSONL, Codex rollout JSONL, Qwen Code OpenAI logs, and Antigravity log/transcript/database sources. When metadata helpers are unavailable, such as Docker reads or older tests/callers, the watcher falls back to the full read path so telemetry emissions are not dropped.
+
+Provider metadata helpers must return a stable string that changes when the underlying source changes. Current helpers use file name, size, and integer mtime for single files or sorted directory entries. Missing-but-valid sources should return a sentinel such as `missing` or `none`; an unavailable helper is represented by omitting the helper entirely, which deliberately disables the metadata fast path for that provider. Antigravity performs one additional signature pass after the conversation id is parsed from the log so the resolved id, transcript metadata, and database metadata all participate before deciding whether to read the transcript or refresh the temporary database copy.
+
+Repeated watcher read failures are logged at bounded checkpoints with provider/session context, and watcher shutdown clears active polling before removing any temporary Antigravity database copy once.
+
 Each `gen_metadata` row is **one model call**, not a running session total — confirmed empirically against live conversation databases, where a single conversation can carry anywhere from a handful to several hundred rows and consecutive rows' input-token fields fluctuate rather than grow monotonically. The original implementation read only the *latest* row, which under-reported total usage by roughly the number of generations in the run (verified against real data: a 203-generation conversation showed 1,268 input tokens under the old logic vs. 2,372,421 actually used). `parseAntigravityDatabase` now sums every row instead.
 
 There is no official schema for this internal protobuf, so the field mapping is inferred rather than documented: input/output/reasoning/candidates are the same fields the original implementation used, and a new field (proto field 5) is treated as **cached/reused-context tokens** — it's present only on some rows (consistent with proto3 omitting zero-valued fields, i.e. "no cache hit this turn"), and where present its value closely tracks the *previous* row's input tokens (that turn's context, now served from cache on the next one).
 
 Because `agy --conversation=<id>` resumes the same conversation db across follow-up/retry invocations — accumulating `gen_metadata` rows across separate CLI runs just like Codex's rollout file or OpenCode's session store — a resumed run must not re-sum generations an earlier invocation already reported. There's no timestamp column to window by, so instead `ProviderRunner` peeks the db's current highest `idx` *before* a resumed run starts (a lightweight read-only query, self-contained to `provider-runner.ts`/`antigravity-log-parser.ts` — no cross-invocation baseline needs to be persisted or threaded through callers, unlike the OpenCode fix) and only sums rows past that cutoff afterward.
+
+If the Antigravity database is missing, malformed, missing `gen_metadata`, or has no rows after the resume cutoff, `parseAntigravityDatabase` returns a structured result with `usage: null`, `rawUsageJson: null`, and `lastIdx: null` unless malformed rows were seen, in which case `lastIdx` records the highest inspected row. Transcript parsing separately returns `[]` for empty or malformed-only transcript files.
 
 ### OpenCode
 

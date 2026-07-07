@@ -677,6 +677,8 @@ describe("SprintsPage", () => {
 
     const hideGalleryButton = screen.getByRole("button", { name: /hide gallery/i });
     expect(hideGalleryButton).toBeInTheDocument();
+    expect(hideGalleryButton.parentElement?.className).toContain("grid-cols-[minmax(5.5rem,0.85fr)_repeat(3,minmax(0,1fr))]");
+    expect(hideGalleryButton.parentElement?.firstElementChild).toBe(hideGalleryButton);
 
     fireEvent.click(hideGalleryButton);
 
@@ -1002,7 +1004,7 @@ describe("SprintsPage", () => {
     fireEvent.click(cancelButtons[cancelButtons.length - 1]);
 
     await vi.waitFor(() => expect(deleteButton).toHaveFocus());
-    expect(screen.getByText(/Bulk delete canceled\. 2 sprints visible\. 2 selected\./)).toBeInTheDocument();
+    expect(screen.getByText(/Bulk delete canceled\. Selected sprints were not deleted\. 2 sprints visible\. 2 selected\./)).toBeInTheDocument();
   });
 
 

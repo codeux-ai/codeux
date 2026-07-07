@@ -21,7 +21,15 @@ import {
   startPreviewSession,
   stopPreviewSession,
 } from "./lib/browser-api.js";
-import { normalizePath, buildPreviewOrigin } from "./lib/preview-origin.js";
+import {
+  buildPreviewOrigin,
+  buildPreviewUrl,
+  formatPreviewPortMapping,
+  formatPreviewPortMappingsSummary,
+  getPreviewPortMappings,
+  getPrimaryPreviewPortMapping,
+  normalizePath,
+} from "./lib/preview-origin.js";
 import { usePreviewSessions } from "./hooks/use-preview-sessions.js";
 import { useProjectEffectiveSettings } from "./hooks/use-project-effective-settings.js";
 import { PreviewSessionSlider } from "./components/browser/PreviewSessionSlider.js";
@@ -36,20 +44,7 @@ import { getSafeUrl } from "./lib/safe-url.js";
 const PREVIEW_MESSAGE_TYPE = "sprint-preview:state";
 const PREVIEW_NAVIGATION_TYPE = "sprint-preview:navigate";
 
-const formatPortMapping = (session: SprintPreviewSession): string => {
-  const sourcePort = typeof session.containerAppPort === "number" ? session.containerAppPort : null;
-  const routedPort = typeof session.hostPort === "number" ? session.hostPort : null;
-  if (sourcePort && routedPort) {
-    return `:${sourcePort} -> :${routedPort}`;
-  }
-  if (sourcePort) {
-    return `:${sourcePort} -> pending`;
-  }
-  if (routedPort) {
-    return `pending -> :${routedPort}`;
-  }
-  return "port pending";
-};
+const getSessionPortPathKey = (sessionId: string, containerPort: number): string => `${sessionId}:${containerPort}`;
 
 export const BrowserPage: FunctionComponent = () => {
   const frameRef = useRef<HTMLIFrameElement>(null);
@@ -78,15 +73,22 @@ export const BrowserPage: FunctionComponent = () => {
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [launchSprintId, setLaunchSprintId] = useState("");
   const [frameSrc, setFrameSrc] = useState("");
+  const [selectedPortBySessionId, setSelectedPortBySessionId] = useState<Record<string, number>>({});
 
   const browserFeedback = useActionFeedback();
   const navigationPendingTimerRef = useRef<number | null>(null);
+  const navigationActionSuccessTimerRef = useRef<number | null>(null);
+  const addressNavigationSuccessTimerRef = useRef<number | null>(null);
+  const mountedRef = useRef(true);
   const navigationPendingRef = useRef(false);
   const launchingRef = useRef(false);
   const pendingSessionActionRef = useRef<"rebuild" | "stop" | null>(null);
   const savingScriptRef = useRef(false);
   const removingSessionIdsRef = useRef<Set<string>>(new Set());
   const logsCacheRef = useRef<Map<string, string>>(new Map());
+  const logsRef = useRef("");
+  const pathBySessionPortRef = useRef<Map<string, string>>(new Map());
+  const selectedPortPathKeyRef = useRef<string | null>(null);
 
   const { sessions, selectedSession, loading, error: fetchError, refresh: refreshSessions } = usePreviewSessions({
     projectId: selectedProject?.id || null,
@@ -120,7 +122,24 @@ export const BrowserPage: FunctionComponent = () => {
   const visibleSelectedSession = selectedSession && !removingSessionIdSet.has(selectedSession.id)
     ? selectedSession
     : null;
-  const navigationEnabled = Boolean(visibleSelectedSession && visibleSelectedSession.status === "running" && visibleSelectedSession.hostPort);
+  const portMappings = useMemo(() => getPreviewPortMappings(visibleSelectedSession), [visibleSelectedSession]);
+  const primaryPortMapping = useMemo(() => getPrimaryPreviewPortMapping(visibleSelectedSession), [visibleSelectedSession]);
+  const selectedPortMapping = useMemo(() => {
+    if (!visibleSelectedSession) {
+      return null;
+    }
+    const selectedContainerPort = selectedPortBySessionId[visibleSelectedSession.id] ?? primaryPortMapping?.containerPort;
+    return portMappings.find((mapping) => mapping.containerPort === selectedContainerPort)
+      ?? primaryPortMapping
+      ?? portMappings[0]
+      ?? null;
+  }, [portMappings, primaryPortMapping, selectedPortBySessionId, visibleSelectedSession]);
+  const selectedHostPort = selectedPortMapping?.hostPort ?? null;
+  const selectedContainerPort = selectedPortMapping?.containerPort ?? null;
+  const selectedUrlContainerPort = portMappings.length > 1 && selectedContainerPort !== primaryPortMapping?.containerPort
+    ? selectedContainerPort
+    : null;
+  const navigationEnabled = Boolean(visibleSelectedSession && visibleSelectedSession.status === "running" && selectedHostPort);
   const sessionCards = sessions.filter((session) =>
     (!selectedProject || session.projectId === selectedProject.id) && !removingSessionIdSet.has(session.id)
   );
@@ -134,8 +153,10 @@ export const BrowserPage: FunctionComponent = () => {
           ? `Preview navigation is disabled because the selected container is in an error state${visibleSelectedSession.lastError ? `: ${visibleSelectedSession.lastError}` : "."}`
           : visibleSelectedSession.status !== "running"
             ? "Preview navigation is disabled because the selected container is stopped. Start or rebuild the container to navigate."
-            : !visibleSelectedSession.hostPort
-              ? "Preview navigation is disabled until the running container receives a routed host port."
+            : !selectedHostPort
+              ? selectedContainerPort
+                ? `Preview navigation is disabled until port :${selectedContainerPort} receives a routed host port.`
+                : "Preview navigation is disabled until the running container receives a routed host port."
               : "";
   const previewStatusMessage = visibleSelectedSession
     ? visibleSelectedSession.status === "running"
@@ -165,6 +186,13 @@ export const BrowserPage: FunctionComponent = () => {
           : "Preview logs loaded. Logs refresh automatically and may be slightly stale."
         : "No preview logs are available yet."
     : "No preview session selected for logs.";
+  const sessionActionDisabledReason = pendingSessionAction === "rebuild"
+    ? "Rebuild in progress. Rebuild and stop controls are temporarily unavailable."
+    : pendingSessionAction === "stop"
+      ? "Stop in progress. Rebuild and stop controls are temporarily unavailable."
+      : !visibleSelectedSession
+        ? "Select or launch a preview session to enable container actions."
+        : "Container actions are available.";
 
   const scriptTargetSprint = useMemo(() => {
     if (visibleSelectedSession) {
@@ -175,29 +203,53 @@ export const BrowserPage: FunctionComponent = () => {
 
   useEffect(() => {
     if (visibleSelectedSession) {
+      const nextPrimary = getPrimaryPreviewPortMapping(visibleSelectedSession);
+      if (nextPrimary) {
+        setSelectedPortBySessionId((current) => (
+          current[visibleSelectedSession.id] ? current : { ...current, [visibleSelectedSession.id]: nextPrimary.containerPort }
+        ));
+      }
+    }
+  }, [visibleSelectedSession?.id]);
+
+  useEffect(() => {
+    if (visibleSelectedSession && selectedPortMapping) {
       setActiveSessionId(visibleSelectedSession.id);
-      const nextPath = normalizePath(visibleSelectedSession.lastKnownPath || "/");
+      const pathKey = getSessionPortPathKey(visibleSelectedSession.id, selectedPortMapping.containerPort);
+      selectedPortPathKeyRef.current = pathKey;
+      const fallbackPath = selectedPortMapping.isPrimary || selectedPortMapping.containerPort === primaryPortMapping?.containerPort
+        ? visibleSelectedSession.lastKnownPath || "/"
+        : "/";
+      const nextPath = normalizePath(pathBySessionPortRef.current.get(pathKey) ?? fallbackPath);
       currentPathRef.current = nextPath;
       setCurrentPath(nextPath);
       setAddressValue(nextPath);
-      setFrameSrc(`${buildPreviewOrigin(visibleSelectedSession.id)}${nextPath}`);
+      const nextUrlContainerPort = portMappings.length > 1 && selectedPortMapping.containerPort !== primaryPortMapping?.containerPort
+        ? selectedPortMapping.containerPort
+        : null;
+      setFrameSrc(buildPreviewUrl(visibleSelectedSession.id, nextPath, nextUrlContainerPort));
 
       return;
     }
+    selectedPortPathKeyRef.current = null;
     setFrameSrc("");
-  }, [visibleSelectedSession?.id]);
+  }, [primaryPortMapping?.containerPort, selectedPortMapping?.containerPort, visibleSelectedSession?.id]);
 
   useEffect(() => {
     currentPathRef.current = currentPath;
   }, [currentPath]);
 
   useEffect(() => {
+    logsRef.current = logs;
+  }, [logs]);
+
+  useEffect(() => {
     if (!visibleSelectedSession || !frameSrc) {
       return;
     }
-    setFrameSrc(`${buildPreviewOrigin(visibleSelectedSession.id)}${normalizePath(currentPathRef.current)}`);
+    setFrameSrc(buildPreviewUrl(visibleSelectedSession.id, normalizePath(currentPathRef.current), selectedUrlContainerPort));
 
-  }, [visibleSelectedSession?.status, visibleSelectedSession?.hostPort]);
+  }, [selectedHostPort, selectedUrlContainerPort, visibleSelectedSession?.status]);
 
   const refreshLogsForSession = async (session: SprintPreviewSession, announce = false) => {
     if (announce) {
@@ -206,7 +258,7 @@ export const BrowserPage: FunctionComponent = () => {
     setLogsLoading(true);
     setLogsError(null);
     try {
-      const result = await fetchPreviewLogs(session.id, 160);
+      const result = await fetchPreviewLogs(session.projectId, session.sprintId, session.id, 160);
       const nextLogs = result.logs;
       if (nextLogs) {
         logsCacheRef.current.set(session.id, nextLogs);
@@ -222,7 +274,7 @@ export const BrowserPage: FunctionComponent = () => {
         } else {
           setLogs((current) => current || "");
           setLogsSessionId((current) => current || session.id);
-          setLogsStale(Boolean(logs));
+          setLogsStale(Boolean(logsRef.current));
         }
       }
       setLogsError(null);
@@ -232,7 +284,7 @@ export const BrowserPage: FunctionComponent = () => {
     } catch (fetchLogsError) {
       const message = fetchLogsError instanceof Error ? fetchLogsError.message : "Unknown log error";
       setLogsError(message);
-      setLogsStale(Boolean(logs || logsCacheRef.current.get(session.id)));
+      setLogsStale(Boolean(logsRef.current || logsCacheRef.current.get(session.id)));
       if (announce) {
         browserFeedback.setError(`Failed to refresh logs: ${message}`);
       }
@@ -296,7 +348,7 @@ export const BrowserPage: FunctionComponent = () => {
     setLogsError(null);
     let cancelled = false;
     const deferredFetch = window.setTimeout(() => {
-      void fetchPreviewLogs(visibleSelectedSession.id, 160)
+      void fetchPreviewLogs(visibleSelectedSession.projectId, visibleSelectedSession.sprintId, visibleSelectedSession.id, 160)
         .then((result) => {
           if (cancelled) {
             return;
@@ -310,7 +362,7 @@ export const BrowserPage: FunctionComponent = () => {
           } else if (!logsCacheRef.current.has(visibleSelectedSession.id)) {
             setLogs((current) => current || "");
             setLogsSessionId((current) => current || visibleSelectedSession.id);
-            setLogsStale(Boolean(logs));
+            setLogsStale(Boolean(logsRef.current));
           } else {
             setLogs(logsCacheRef.current.get(visibleSelectedSession.id) || "");
             setLogsSessionId(visibleSelectedSession.id);
@@ -321,7 +373,7 @@ export const BrowserPage: FunctionComponent = () => {
         .catch((fetchLogsError) => {
           if (!cancelled) {
             setLogsError(fetchLogsError instanceof Error ? fetchLogsError.message : "Unknown log error");
-            setLogsStale(Boolean(logs || logsCacheRef.current.get(visibleSelectedSession.id)));
+            setLogsStale(Boolean(logsRef.current || logsCacheRef.current.get(visibleSelectedSession.id)));
           }
         })
         .finally(() => {
@@ -346,10 +398,25 @@ export const BrowserPage: FunctionComponent = () => {
     return () => window.clearInterval(timer);
   }, [visibleSelectedSession?.id]);
 
+  const clearNavigationTimer = (timerRef: { current: number | null }) => {
+    if (timerRef.current !== null) {
+      window.clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+  };
+
+  const clearNavigationSuccessTimers = () => {
+    clearNavigationTimer(navigationActionSuccessTimerRef);
+    clearNavigationTimer(addressNavigationSuccessTimerRef);
+  };
+
   useEffect(() => () => {
+    mountedRef.current = false;
     if (navigationPendingTimerRef.current !== null) {
       window.clearTimeout(navigationPendingTimerRef.current);
+      navigationPendingTimerRef.current = null;
     }
+    clearNavigationSuccessTimers();
     navigationPendingRef.current = false;
   }, []);
 
@@ -366,6 +433,9 @@ export const BrowserPage: FunctionComponent = () => {
         return;
       }
       const nextPath = normalizePath(payload.path || "/");
+      if (selectedPortPathKeyRef.current) {
+        pathBySessionPortRef.current.set(selectedPortPathKeyRef.current, nextPath);
+      }
       setCurrentPath(nextPath);
       setAddressValue(nextPath);
     };
@@ -389,8 +459,23 @@ export const BrowserPage: FunctionComponent = () => {
     if (!visibleSelectedSession) {
       return;
     }
-    setFrameSrc(`${buildPreviewOrigin(visibleSelectedSession.id)}${normalizePath(path)}`);
+    setFrameSrc(buildPreviewUrl(visibleSelectedSession.id, normalizePath(path), selectedUrlContainerPort));
 
+  };
+
+  const handleSelectPort = (containerPort: number) => {
+    if (!visibleSelectedSession || containerPort === selectedContainerPort) {
+      return;
+    }
+    clearNavigationSuccessTimers();
+    if (selectedPortPathKeyRef.current) {
+      pathBySessionPortRef.current.set(selectedPortPathKeyRef.current, normalizePath(currentPathRef.current));
+    }
+    setSelectedPortBySessionId((current) => ({
+      ...current,
+      [visibleSelectedSession.id]: containerPort,
+    }));
+    browserFeedback.setSuccess(`Selected preview port :${containerPort} for ${visibleSelectedSession.sprintName}`);
   };
 
   const markNavigationPending = () => {
@@ -413,7 +498,12 @@ export const BrowserPage: FunctionComponent = () => {
     browserFeedback.setPending(pendingMessage);
     markNavigationPending();
     action();
-    window.setTimeout(() => {
+    clearNavigationSuccessTimers();
+    navigationActionSuccessTimerRef.current = window.setTimeout(() => {
+      navigationActionSuccessTimerRef.current = null;
+      if (!mountedRef.current) {
+        return;
+      }
       browserFeedback.setSuccess(successMessage);
     }, 360);
   };
@@ -431,8 +521,12 @@ export const BrowserPage: FunctionComponent = () => {
     try {
       const session = await startPreviewSession(selectedProject.id, sprintId);
       setActiveSessionId(session.id);
+      const nextPrimary = getPrimaryPreviewPortMapping(session);
+      if (nextPrimary) {
+        setSelectedPortBySessionId((current) => ({ ...current, [session.id]: nextPrimary.containerPort }));
+      }
       await refreshSessions(true);
-      setFrameSrc(`${buildPreviewOrigin(session.id)}${normalizePath(currentPathRef.current)}`);
+      setFrameSrc(buildPreviewUrl(session.id, normalizePath(currentPathRef.current)));
 
       browserFeedback.setSuccess("Container launched successfully");
     } catch (actionError) {
@@ -454,7 +548,7 @@ export const BrowserPage: FunctionComponent = () => {
     setPendingSessionAction("rebuild");
     browserFeedback.setPending("Rebuilding container...");
     try {
-      await rebuildPreviewSession(visibleSelectedSession.id);
+      await rebuildPreviewSession(visibleSelectedSession.projectId, visibleSelectedSession.sprintId, visibleSelectedSession.id);
       await refreshSessions(true);
       reloadFrame();
       browserFeedback.setSuccess("Container rebuilt successfully");
@@ -473,7 +567,7 @@ export const BrowserPage: FunctionComponent = () => {
     setPendingSessionAction("stop");
     browserFeedback.setPending("Stopping container...");
     try {
-      await stopPreviewSession(visibleSelectedSession.id);
+      await stopPreviewSession(visibleSelectedSession.projectId, visibleSelectedSession.sprintId, visibleSelectedSession.id);
       await refreshSessions(true);
       browserFeedback.setSuccess("Container stopped successfully");
     } catch (actionError) {
@@ -497,7 +591,11 @@ export const BrowserPage: FunctionComponent = () => {
     }
     browserFeedback.setPending("Removing preview session...");
     try {
-      await removePreviewSession(sessionId);
+      const session = sessions.find((candidate) => candidate.id === sessionId);
+      if (!session) {
+        throw new Error("Preview session is unavailable.");
+      }
+      await removePreviewSession(session.projectId, session.sprintId, session.id);
       await refreshSessions(true);
       browserFeedback.setSuccess("Preview session removed successfully");
     } catch (actionError) {
@@ -536,10 +634,19 @@ export const BrowserPage: FunctionComponent = () => {
     const nextPath = normalizePath(addressValue);
     browserFeedback.setPending(`Navigating preview to ${nextPath}...`);
     markNavigationPending();
+    clearNavigationSuccessTimers();
+    if (selectedPortPathKeyRef.current) {
+      pathBySessionPortRef.current.set(selectedPortPathKeyRef.current, nextPath);
+    }
     setCurrentPath(nextPath);
     setAddressValue(nextPath);
     postNavigationCommand("push", nextPath);
-    window.setTimeout(() => {
+    clearNavigationTimer(addressNavigationSuccessTimerRef);
+    addressNavigationSuccessTimerRef.current = window.setTimeout(() => {
+      addressNavigationSuccessTimerRef.current = null;
+      if (!mountedRef.current) {
+        return;
+      }
       browserFeedback.setSuccess(`Navigation sent for ${nextPath}`);
     }, 360);
   };
@@ -547,7 +654,7 @@ export const BrowserPage: FunctionComponent = () => {
   if (!selectedProject) {
     return (
       <PageContainer aria-label="Browser" padding="workbench">
-        <div className="rounded-[2rem] border border-black/[0.06] bg-white/60 p-8 text-sm text-slate-500 backdrop-blur-md dark:border-white/[0.06] dark:bg-white/[0.04] dark:text-slate-300">
+        <div role="status" aria-live="polite" className="rounded-[2rem] border border-black/[0.06] bg-white/60 p-8 text-sm text-slate-500 backdrop-blur-md dark:border-white/[0.06] dark:bg-white/[0.04] dark:text-slate-300">
           Select a project first. The in-app browser launches one isolated preview container per sprint.
         </div>
       </PageContainer>
@@ -555,7 +662,7 @@ export const BrowserPage: FunctionComponent = () => {
   }
 
   return (
-    <PageContainer aria-label="Browser" padding="workbench" className="min-h-full" data-testid="browser-page-root">
+    <PageContainer aria-label="Browser" padding="workbench" className="min-h-full" data-testid="browser-page-root" aria-busy={loading ? "true" : undefined}>
       <PageHeader
         data-testid="browser-page-header"
         className="mb-8"
@@ -610,6 +717,10 @@ export const BrowserPage: FunctionComponent = () => {
         </div>
       )}
 
+      <div role="status" aria-live="polite" aria-busy={loading ? "true" : undefined} className="sr-only">
+        {loading ? "Refreshing preview sessions." : previewStatusMessage}
+      </div>
+
       <div className="mb-5">
         <PreviewSessionSlider
           sessions={sessionCards}
@@ -630,7 +741,7 @@ export const BrowserPage: FunctionComponent = () => {
       </div>
 
       {(!showInAppBrowser || !previewEnabled) && (
-        <div className="rounded-[2rem] border border-black/[0.06] bg-white/70 p-8 text-sm text-slate-500 shadow-[0_20px_60px_rgba(15,23,42,0.06)] backdrop-blur-md dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-300 dark:shadow-[0_20px_60px_rgba(0,0,0,0.24)]">
+        <div role="status" aria-live="polite" className="rounded-[2rem] border border-black/[0.06] bg-white/70 p-8 text-sm text-slate-500 shadow-[0_20px_60px_rgba(15,23,42,0.06)] backdrop-blur-md dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-300 dark:shadow-[0_20px_60px_rgba(0,0,0,0.24)]">
           <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">Browser Preview</div>
           <div className="mt-3 text-lg font-semibold text-slate-900 dark:text-white">
             {!previewEnabled ? "Preview runtime is disabled." : "In-app browser workspace is hidden."}
@@ -668,6 +779,9 @@ export const BrowserPage: FunctionComponent = () => {
           navigationEnabled={navigationEnabled}
           navigationBusy={navigationPending}
           navigationDisabledReason={navigationDisabledReason}
+          portMappings={portMappings}
+          selectedContainerPort={selectedContainerPort}
+          onSelectPort={handleSelectPort}
         >
           <div aria-live="polite" role="status" className="sr-only">
             {previewStatusMessage}
@@ -693,7 +807,7 @@ export const BrowserPage: FunctionComponent = () => {
               <iframe
                 key={visibleSelectedSession.id}
                 ref={frameRef}
-                title={`Preview: ${selectedProject?.name || 'Unknown Project'} - ${visibleSelectedSession.sprintName}`}
+                title={`Preview: ${selectedProject?.name || 'Unknown Project'} - ${visibleSelectedSession.sprintName}${selectedContainerPort ? ` on port ${selectedContainerPort}` : ""}`}
                 src={frameSrc}
                 className="h-full w-full border-0 bg-white"
               />
@@ -734,7 +848,12 @@ export const BrowserPage: FunctionComponent = () => {
               {visibleSelectedSession && (
                 <div className="rounded-2xl border border-sky-500/20 bg-sky-500/10 px-4 py-3 dark:border-sky-500/25 dark:bg-sky-500/12">
                   <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Port routing</div>
-                  <div className="mt-1 font-mono text-[12px] text-slate-700 dark:text-slate-300">{formatPortMapping(visibleSelectedSession)}</div>
+                  <div className="mt-1 font-mono text-[12px] text-slate-700 dark:text-slate-300">{formatPreviewPortMappingsSummary(visibleSelectedSession)}</div>
+                  {selectedPortMapping && (
+                    <div className="mt-1 text-[11px] font-semibold text-slate-500 dark:text-slate-400">
+                      Selected {formatPreviewPortMapping(selectedPortMapping)}
+                    </div>
+                  )}
                 </div>
               )}
               <div className="rounded-2xl border border-ember-500/20 bg-ember-500/10 px-4 py-3 dark:border-ember-500/25 dark:bg-ember-500/12">
@@ -752,6 +871,7 @@ export const BrowserPage: FunctionComponent = () => {
                   aria-label={pendingSessionAction === "rebuild" ? "Rebuilding preview container" : "Rebuild preview container"}
                   aria-busy={pendingSessionAction === "rebuild"}
                   aria-describedby="preview-session-action-status"
+                  title={sessionActionPending || !visibleSelectedSession ? sessionActionDisabledReason : "Rebuild preview container"}
                   className="inline-flex h-10 items-center justify-center gap-2 rounded-2xl border border-black/[0.08] text-xs font-semibold text-slate-700 transition hover:border-black/[0.16] hover:text-slate-900 disabled:cursor-not-allowed disabled:border-slate-300/50 disabled:bg-slate-200/60 disabled:text-slate-500 disabled:opacity-100 dark:border-white/[0.08] dark:text-slate-200 dark:hover:border-white/[0.16] dark:hover:text-white dark:disabled:border-slate-700 dark:disabled:bg-slate-800/60 dark:disabled:text-slate-500"
                 >
                   <RotateCcw className={`h-4 w-4 ${pendingSessionAction === "rebuild" ? 'animate-spin motion-reduce:animate-none' : ''}`} strokeWidth={2} />
@@ -765,13 +885,14 @@ export const BrowserPage: FunctionComponent = () => {
                   aria-label={pendingSessionAction === "stop" ? "Stopping preview container" : "Stop preview container"}
                   aria-busy={pendingSessionAction === "stop"}
                   aria-describedby="preview-session-action-status"
+                  title={sessionActionPending || !visibleSelectedSession ? sessionActionDisabledReason : "Stop preview container"}
                   className="inline-flex h-10 items-center justify-center gap-2 rounded-2xl border border-black/[0.08] text-xs font-semibold text-slate-700 transition hover:border-black/[0.16] hover:text-slate-900 disabled:cursor-not-allowed disabled:border-slate-300/50 disabled:bg-slate-200/60 disabled:text-slate-500 disabled:opacity-100 dark:border-white/[0.08] dark:text-slate-200 dark:hover:border-white/[0.16] dark:hover:text-white dark:disabled:border-slate-700 dark:disabled:bg-slate-800/60 dark:disabled:text-slate-500"
                 >
                   <Square className="h-4 w-4" strokeWidth={2} />
                   {pendingSessionAction === "stop" ? "Stopping..." : "Stop"}
                 </button>
                 <a
-                  href={visibleSelectedSession ? getSafeUrl(`${buildPreviewOrigin(visibleSelectedSession.id)}${normalizePath(currentPath)}`) : undefined}
+                  href={visibleSelectedSession ? getSafeUrl(buildPreviewUrl(visibleSelectedSession.id, normalizePath(currentPath), selectedUrlContainerPort)) : undefined}
                   target="_blank"
                   rel="noopener noreferrer"
                   aria-disabled={!visibleSelectedSession}
@@ -784,13 +905,7 @@ export const BrowserPage: FunctionComponent = () => {
                 </a>
               </div>
               <div id="preview-session-action-status" role="status" aria-live="polite" className="mt-3 min-h-4 text-xs text-slate-500 dark:text-slate-400">
-                {pendingSessionAction === "rebuild"
-                  ? "Rebuild in progress. Rebuild and stop controls are temporarily unavailable."
-                  : pendingSessionAction === "stop"
-                    ? "Stop in progress. Rebuild and stop controls are temporarily unavailable."
-                    : !visibleSelectedSession
-                      ? "Select or launch a preview session to enable container actions."
-                      : "Container actions are available."}
+                {sessionActionDisabledReason}
               </div>
             </div>
           </div>
@@ -871,6 +986,8 @@ export const BrowserPage: FunctionComponent = () => {
                   aria-disabled={!visibleSelectedSession || logsLoading}
                   aria-busy={logsLoading}
                   aria-label={logsLoading ? "Refreshing preview logs" : "Refresh preview logs"}
+                  aria-describedby="preview-logs-status"
+                  title={logsLoading ? logsStatusMessage : visibleSelectedSession ? "Refresh preview logs" : logsStatusMessage}
                   className="inline-flex h-8 items-center gap-1.5 rounded-xl border border-black/[0.08] px-2.5 text-[11px] font-semibold text-slate-600 transition hover:border-black/[0.16] hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-50 motion-reduce:transition-none dark:border-white/[0.08] dark:text-slate-300 dark:hover:border-white/[0.16] dark:hover:text-white"
                 >
                   <RefreshCw className={`h-3.5 w-3.5 ${logsLoading ? "animate-spin motion-reduce:animate-none" : ""}`} strokeWidth={2.2} />

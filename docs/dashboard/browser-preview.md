@@ -2,9 +2,17 @@
 
 The browser preview provides an integrated environment for interacting with running sprint containers directly from the dashboard.
 
+## Defaults
+
+- Fresh system and project settings enable the preview runtime and show the in-app browser workspace by default.
+- Existing persisted system, project, or sprint overrides remain authoritative. Sanitization only fills missing preview fields from the current defaults, so an explicit disabled preview stays disabled.
+- `autoStartOnRunningSprint` remains false by default. Operators still choose whether sprint runs should launch preview containers automatically; the default only makes preview controls and the embedded browser available.
+
 ## Interaction Contracts
 
 - Preview refresh, launch, rebuild, stop, remove, navigation, and startup-script save operations use visible async feedback plus local status text. Page-level operation results use `ActionFeedbackRegion` where available; control-specific progress stays beside the control that is pending.
+- Dashboard API calls that operate on an existing preview session must carry the owning project and sprint scope. Rebuild, stop, remove, log, and dashboard proxy requests verify the session belongs to the requested project and sprint before returning data or taking action; a foreign or missing session receives the same generic not-found response.
+- Preview-host iframe traffic keeps the existing `preview-<sessionId>.<dashboard-host>` URL format. Host-side start, rebuild, and status controls first resolve that host session, then accept only the canonical preview origin or its canonical dashboard origin.
 - Use `controlFeedback` for preview chrome buttons, session rail controls, launch controls, rebuild/stop/open actions, script save, and address navigation controls.
 - Use `enterExit` for preview window empty/starting/error states, menus, and browser chrome state surfaces.
 - Use `selectionMovement` for active session cards and rail selection changes.
@@ -30,7 +38,29 @@ The browser preview provides an integrated environment for interacting with runn
 - Launch pending state keeps the selected sprint value visible, explains the disabled select and launch controls through status text and control titles, and prevents duplicate launch submission until the start request settles.
 - Startup-script saving sets `aria-busy` on the save button and textarea and pauses editing until the save completes. Script save status is a polite live region connected through `aria-describedby`.
 - Container logs keep stale log text mounted during refresh, set `aria-busy` on the log region, and show a visible Ready/Refreshing/Error badge plus polite live-region copy.
+- File-browser launch, rebuild, and stop follow the same async contract as browser preview: the affected region or button sets `aria-busy`, the visible label names the pending operation, duplicate activation is suppressed, and disabled sibling controls describe whether launch, rebuild, or stop is blocking recovery.
+- File tree rows and changed-file rows keep keyboard tree/listbox semantics while selection loads. The selected row sets `aria-busy`, shows a non-animation-only Loading badge, and keeps focusable row activation available for normal selection behavior.
+- File and diff viewers keep cached editor content mounted during background refresh. The viewer region sets `aria-busy`, the retained content is visually marked with a stale/refresh ring and visible status copy, and empty states are reserved for committed empty selections where no cached file or diff exists.
+- Changed-file refreshes keep the cached list mounted when available. Refresh and error banners must say whether the list is current, refreshing, or a cached fallback, and unavailable diffs keep their backend-provided reason visible.
 - Navigation pending state is a short client-side command guard. Back, forward, reload, and address submit controls announce that the navigation command is being sent; the iframe bridge does not acknowledge command completion.
+- A new navigation command clears any delayed success announcement from a previous back, forward, reload, address, or port-selection action. Delayed success copy must only describe the most recent originating surface and must not fire after the browser page unmounts.
+- Disabled navigation controls keep persistent reason text visible in the chrome and attach the same reason through `aria-describedby` and `title`. Pending navigation uses the same surface with `aria-busy` so duplicate activation is suppressed without relying on a transient toast.
+- Multi-port preview sessions render as one persisted browser session with an accessible port tablist in the browser chrome. The first container-to-host port mapping is the primary tab, tabs support pointer and arrow-key selection, and secondary tabs route through the existing selected-port proxy query while preserving a separate current path per selected port.
+- Port tabs are keyboard-operable with arrow keys plus `Home` and `End`, keep focus on the selected tab after keyboard selection, and describe whether each container port is routed or waiting for a host port.
+- Minimize and close hide the browser frame visually but keep the embedded preview content mounted. Restore and reopen move focus back to the chrome control that initiated the state change; fullscreen restore returns focus to the fullscreen control.
+- Iframe refreshes, selected-port changes, and session refreshes should preserve the previous iframe whenever it remains useful. Starting, stopped, missing-port, and error states use overlays, disabled chrome, and visible reason text instead of blanking already-mounted preview content.
+- The Live Preview button uses the same mapping model outside the full browser page. Its primary click opens the primary routed port. When the session exposes additional routed ports, the adjacent arrow menu lists each port mapping so operators can open a secondary port directly; mappings that do not yet have a host port stay visible but disabled with their pending reason.
+- Preview links only activate when a session is running and has a routed host port. Starting, stopped, errored, and missing-port sessions remain visible but disabled, omit navigable URLs, suppress activation, and expose a persistent reason through visible copy plus `aria-describedby` or `title`.
+- Container log refreshes keep cached log output visible during foreground refresh, silent polling, empty responses, and refresh errors. The logs region exposes `aria-busy`, a visible Ready/Refreshing/Stale/Error badge, and status copy that names whether the user is seeing current logs or a cached fallback.
+
+## Proxy Credential Boundaries
+
+The browser preview has two proxy paths with different credential rules:
+
+- Dashboard API proxy requests under `/api/browser/sessions/:sessionId/proxy*` originate from the dashboard runtime. Before forwarding to the selected preview port, the proxy strips dashboard cookies, bearer authorization, `set-cookie`, hop-by-hop headers, `proxy-*`, `x-code-ux-*`, `host`, `content-length`, and compression negotiation headers. It also normalizes `Origin`, `Referer`, and `Sec-Fetch-Site` so the preview app sees the selected local upstream origin, such as `http://127.0.0.1:<hostPort>`.
+- Preview-host iframe requests on `preview-<session>.localhost` are the preview app's own origin. Those requests may forward the preview app's own `Authorization` and `Cookie` headers so stateful login/session flows continue to work inside the iframe. Transport, proxy-control, and Code UX control headers are still stripped before the request reaches the container.
+
+Both paths only route to loopback host ports recorded on the active preview session. The dashboard API proxy also removes `Set-Cookie`, CSP, CSP report-only, and `X-Frame-Options` response headers before writing the response on the dashboard origin. Preview-host HTML keeps iframe compatibility by stripping upstream document CSP and frame-blocking headers while allowing preview-origin app cookies to reach that preview host.
 
 ## Verification Notes
 

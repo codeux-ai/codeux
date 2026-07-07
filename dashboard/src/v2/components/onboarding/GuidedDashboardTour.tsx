@@ -1,9 +1,10 @@
 import type { FunctionComponent } from "preact";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "preact/hooks";
 import gsap from "gsap";
-import { ArrowLeft, ArrowRight, Box, CalendarDays, Check, Compass, EyeOff, FolderOpen, FolderTree, MessageCircle, Sparkles } from "lucide-preact";
+import { ArrowLeft, ArrowRight, BookOpen, Box, CalendarDays, Check, Compass, EyeOff, FolderOpen, FolderTree, Library, MessageCircle, Sparkles } from "lucide-preact";
 import { DASHBOARD_TOUR_START_EVENT, DASHBOARD_TOUR_STORAGE_KEY } from "../../lib/onboarding-control.js";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
+import { useInteractionTokens } from "../../lib/motion/tokens.js";
 
 type TourStep = {
   id: string;
@@ -111,6 +112,14 @@ const TOUR_STEPS: TourStep[] = [
     accent: "ember",
   },
   {
+    id: "knowledge",
+    targetId: "nav-knowledge",
+    eyebrow: "Reference layer",
+    title: "Knowledge",
+    body: "Knowledge is the project reference base for durable facts, source material, and curated context that agents can reuse during planning and execution.",
+    accent: "signal",
+  },
+  {
     id: "browser",
     targetId: "nav-browser",
     eyebrow: "Preview lab",
@@ -133,6 +142,14 @@ const TOUR_STEPS: TourStep[] = [
     title: "Live",
     body: "Live exposes active connections and runtime activity so you can see what is listening, connected, or waiting for work.",
     accent: "ember",
+  },
+  {
+    id: "docs",
+    targetId: "nav-docs",
+    eyebrow: "Reference guide",
+    title: "Docs",
+    body: "Docs opens the built-in operator guide for dashboard concepts, runtime behavior, MCP tools, and operational workflows.",
+    accent: "sky",
   },
   {
     id: "config",
@@ -218,6 +235,7 @@ export const GuidedDashboardTour: FunctionComponent = () => {
   const [progress, setProgress] = useState(0);
   const [paused, setPaused] = useState(false);
   const reducedMotion = useReducedMotion();
+  const interactionTokens = useInteractionTokens();
 
   const refreshSteps = useCallback(() => {
     const steps = TOUR_STEPS.filter((step) => {
@@ -416,11 +434,21 @@ export const GuidedDashboardTour: FunctionComponent = () => {
 
   const accent = accentClasses[activeStep.accent];
   const isLast = activeIndex === availableSteps.length - 1;
+  const previousStep = availableSteps[Math.max(0, activeIndex - 1)] || null;
+  const nextStep = availableSteps[Math.min(availableSteps.length - 1, activeIndex + 1)] || null;
+  const tourProgressValue = reducedMotion
+    ? Math.round(((activeIndex + 1) / availableSteps.length) * 100)
+    : Math.round(progress);
+  const tourStatusText = reducedMotion
+    ? `Manual tour step ${activeIndex + 1} of ${availableSteps.length}. ${activeStep.title} is highlighted with a static outline.`
+    : paused
+      ? `Tour paused on step ${activeIndex + 1} of ${availableSteps.length}: ${activeStep.title}.`
+      : `Tour step ${activeIndex + 1} of ${availableSteps.length}: ${activeStep.title}.`;
   const path = `M ${geometry.targetCenterX} ${geometry.targetCenterY} C ${geometry.targetCenterX} ${geometry.cardCenterY}, ${geometry.cardCenterX} ${geometry.targetCenterY}, ${geometry.cardCenterX} ${geometry.cardCenterY}`;
 
   return (
     <div className="fixed inset-0 z-[180] pointer-events-none">
-      <svg ref={lineLayerRef} className="absolute inset-0 h-full w-full opacity-0" aria-hidden="true">
+      <svg ref={lineLayerRef} className={`absolute inset-0 h-full w-full ${reducedMotion ? "opacity-100" : "opacity-0"}`} aria-hidden="true">
         <path
           ref={linePathRef}
           d={path}
@@ -436,7 +464,8 @@ export const GuidedDashboardTour: FunctionComponent = () => {
       <div
         ref={targetRingRef}
         aria-hidden="true"
-        className={`absolute rounded-[1.35rem] border opacity-0 ${accent.border} ${accent.shadow}`}
+        className={`absolute rounded-[1.35rem] border ${reducedMotion ? "opacity-100" : "opacity-0"} ${accent.border} ${accent.shadow}`}
+        data-reduced-motion={reducedMotion ? "true" : undefined}
         style={{
           left: `${targetRect.left - 8}px`,
           top: `${targetRect.top - 8}px`,
@@ -445,7 +474,7 @@ export const GuidedDashboardTour: FunctionComponent = () => {
         }}
       >
         <div className={`absolute inset-0 rounded-[1.35rem] ${accent.bgSoft}`} />
-        <div className={`absolute inset-[-8px] rounded-[1.65rem] border ${accent.border} opacity-70 motion-safe:animate-ping`} />
+        <div className={`absolute inset-[-8px] rounded-[1.65rem] border ${accent.border} opacity-70 motion-safe:animate-ping motion-reduce:animate-none`} />
       </div>
 
       <div
@@ -464,6 +493,8 @@ export const GuidedDashboardTour: FunctionComponent = () => {
           left: `${geometry.card.left}px`,
           top: `${geometry.card.top}px`,
           width: `${geometry.width}px`,
+          transitionDuration: interactionTokens.enterExit.duration,
+          transitionTimingFunction: interactionTokens.enterExit.ease,
         }}
       >
         <div aria-hidden="true" className="absolute inset-0 bg-[radial-gradient(circle_at_18%_0%,rgba(0,224,160,0.14),transparent_34%),linear-gradient(135deg,rgba(255,255,255,0.09),transparent_42%)]" />
@@ -481,18 +512,22 @@ export const GuidedDashboardTour: FunctionComponent = () => {
 
           <div className="mt-5 flex items-start gap-4">
             <div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl ${accent.bgPanel} ${accent.text} ring-1 ring-white/10`}>
-              {activeStep.id === "projects" ? <FolderOpen className="h-5 w-5" /> : activeStep.id === "docker" ? <Box className="h-5 w-5" /> : activeStep.id === "chat" ? <MessageCircle className="h-5 w-5" /> : activeStep.id === "schedule" ? <CalendarDays className="h-5 w-5" /> : activeStep.id === "files" ? <FolderTree className="h-5 w-5" /> : <Compass className="h-5 w-5" />}
+              {activeStep.id === "projects" ? <FolderOpen className="h-5 w-5" /> : activeStep.id === "docker" ? <Box className="h-5 w-5" /> : activeStep.id === "chat" ? <MessageCircle className="h-5 w-5" /> : activeStep.id === "schedule" ? <CalendarDays className="h-5 w-5" /> : activeStep.id === "knowledge" ? <Library className="h-5 w-5" /> : activeStep.id === "files" ? <FolderTree className="h-5 w-5" /> : activeStep.id === "docs" ? <BookOpen className="h-5 w-5" /> : <Compass className="h-5 w-5" />}
             </div>
             <div>
-              <h2 id="dashboard-tour-title" className="font-display text-2xl font-black leading-none tracking-tight">{activeStep.title}</h2>
+              <h2 id="dashboard-tour-title" className="font-display text-xl font-semibold leading-none tracking-tight">{activeStep.title}</h2>
               <p id="dashboard-tour-description" className="mt-3 text-sm font-medium leading-relaxed text-slate-300">{activeStep.body}</p>
             </div>
           </div>
 
-          <div className="mt-5 overflow-hidden rounded-full bg-white/10" role="progressbar" aria-label="Tour auto-advance progress" aria-valuemin={0} aria-valuemax={100} aria-valuenow={reducedMotion ? 0 : Math.round(progress)}>
+          <p className="mt-4 rounded-xl border border-white/10 bg-white/[0.055] px-3 py-2 text-xs font-semibold text-slate-300" role="status" aria-live="polite">
+            {tourStatusText}
+          </p>
+
+          <div className="mt-4 overflow-hidden rounded-full bg-white/10" role="progressbar" aria-label={reducedMotion ? "Tour step progress" : "Tour auto-advance progress"} aria-valuemin={0} aria-valuemax={100} aria-valuenow={tourProgressValue}>
             <div
               className={`h-1.5 rounded-full ${accent.bg} shadow-[0_0_18px_rgba(0,224,160,0.45)] transition-[width] duration-100 motion-reduce:transition-none`}
-              style={{ width: `${reducedMotion ? 0 : progress}%` }}
+              style={{ width: `${tourProgressValue}%`, transitionDuration: interactionTokens.selectionMovement.duration, transitionTimingFunction: interactionTokens.selectionMovement.ease }}
             />
           </div>
 
@@ -500,7 +535,7 @@ export const GuidedDashboardTour: FunctionComponent = () => {
             <button
               type="button"
               onClick={hideTour}
-              aria-label="Skip guided tour"
+              aria-label={`Skip guided tour from ${activeStep.title}`}
               className="inline-flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-bold uppercase tracking-[0.12em] text-slate-400 transition-colors hover:bg-white/8 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50"
             >
               <EyeOff className="h-3.5 w-3.5" />
@@ -512,7 +547,7 @@ export const GuidedDashboardTour: FunctionComponent = () => {
                 disabled={activeIndex === 0}
                 onClick={goPrevious}
                 className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-white/10 bg-white/[0.06] text-slate-300 transition-colors hover:bg-white/[0.1] hover:text-white disabled:cursor-not-allowed disabled:opacity-35 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 motion-reduce:transition-none"
-                aria-label="Previous tour step"
+                aria-label={previousStep && activeIndex > 0 ? `Previous tour step: ${previousStep.title}` : "Previous tour step unavailable"}
               >
                 <ArrowLeft className="h-4 w-4" />
               </button>
@@ -520,7 +555,9 @@ export const GuidedDashboardTour: FunctionComponent = () => {
                 type="button"
                 ref={primaryActionRef}
                 onClick={isLast ? hideTour : goNext}
+                aria-label={isLast ? "Finish guided tour" : nextStep ? `Next tour step: ${nextStep.title}` : "Next tour step"}
                 className="inline-flex h-10 items-center gap-2 rounded-xl bg-white px-4 text-xs font-black uppercase tracking-[0.12em] text-void-950 transition-transform hover:-translate-y-0.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 motion-reduce:transition-none motion-reduce:hover:translate-y-0"
+                style={{ transitionDuration: interactionTokens.controlFeedback.duration, transitionTimingFunction: interactionTokens.controlFeedback.ease }}
               >
                 {isLast ? (
                   <>

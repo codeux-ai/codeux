@@ -326,13 +326,18 @@ export class CommandRunner {
   }
 
   private getSpawner(): CommandSpawnerClient | null {
-    if (!CommandRunner.spawnerEnabled) {
+    if (!CommandRunner.spawnerEnabled || isRuntimeShutdownInProgress()) {
       return null;
     }
     if (!this.spawner) {
       this.spawner = new CommandSpawnerClient();
     }
     return this.spawner.isAvailable() ? this.spawner : null;
+  }
+
+  dispose(): void {
+    this.spawner?.dispose();
+    this.spawner = null;
   }
 
   private validateSpawnCommand(command: string): SpawnCommand {
@@ -647,13 +652,14 @@ export class CommandRunner {
   }
 
   private shouldRunGitInContainer(options: CommandOptions): boolean {
+    const env = options.env ?? process.env;
     if (isRuntimeShutdownInProgress()) {
       return false;
     }
     if (process.env.NODE_ENV === "test") {
-      return process.env.CODE_UX_CONTAINERIZED_GIT === "1";
+      return env.CODE_UX_CONTAINERIZED_GIT === "1" && env.CODE_UX_GIT_CONTAINER_MODE !== "host";
     }
-    if (process.env.CODE_UX_CONTAINERIZED_GIT === "0" || process.env.CODE_UX_GIT_CONTAINER_MODE === "host") {
+    if (env.CODE_UX_CONTAINERIZED_GIT === "0" || env.CODE_UX_GIT_CONTAINER_MODE === "host") {
       return false;
     }
     return Boolean(options.cwd);
@@ -852,3 +858,7 @@ export class CommandRunner {
  * Singleton instance of CommandRunner for project-wide use.
  */
 export const commandRunner = new CommandRunner();
+
+export function disposeCommandSpawner(): void {
+  commandRunner.dispose();
+}

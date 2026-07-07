@@ -72,6 +72,13 @@ describe("AddProjectModal", () => {
     expect(dialogCard.style.minHeight).toBe("min(640px, calc(100dvh - 2rem))");
   });
 
+  it("preselects the local project source by default", () => {
+    render(<AddProjectModal onClose={vi.fn()} onAdd={vi.fn()} />);
+
+    expect(screen.getByRole("button", { name: /local project/i }).className).toContain("bg-ember-500");
+    expect(screen.queryByLabelText(/repository url/i)).not.toBeInTheDocument();
+  });
+
   it("preselects the new project flow and hides setup controls", () => {
     render(<AddProjectModal onClose={vi.fn()} onAdd={vi.fn()} initialSourceType="new_project" />);
 

@@ -163,11 +163,13 @@ describe("TelemetryLedgerTabs", () => {
     expect(tabs[2]).toHaveAccessibleName("Git Telemetry, 3 entries");
     expect(tabs[0]).toHaveAttribute("aria-selected", "true");
     expect(screen.getByRole("tabpanel")).toHaveAttribute("aria-labelledby", "tab-tasks");
+    expect(screen.getByText("Task Telemetry selected, 2 entries.")).toBeInTheDocument();
 
     tabs[0].focus();
     fireEvent.keyDown(tablist, { key: "ArrowRight" });
     expect(tabs[1]).toHaveAttribute("aria-selected", "true");
     expect(tabs[1]).toHaveFocus();
+    expect(screen.getByText("Sprint Telemetry selected, 2 entries.")).toBeInTheDocument();
 
     fireEvent.keyDown(tablist, { key: "ArrowDown" });
     expect(tabs[2]).toHaveAttribute("aria-selected", "true");

@@ -32,6 +32,7 @@ import type { AgentPresetRecord } from "../contracts/agent-preset-types.js";
 import type { QuicksprintTemplateRecord } from "../contracts/quicksprint-types.js";
 import type { DashboardRealtimeMutationNotifier } from "./dashboard-realtime-service.js";
 import { resolveAgentAvatarConfig } from "../contracts/agent-avatar-style.js";
+import { defaultCodingAgentMcpAccess } from "./agent-mcp-access.js";
 
 export const PROJECT_SETUP_AGENT_NAME = "Project Setup Agent";
 
@@ -535,7 +536,24 @@ export class ProjectSetupService {
     };
     return existing
       ? await this.deps.agentPresetSyncService.updateAgentPreset(existing.id, input)
-      : await this.deps.agentPresetSyncService.createAgentPreset(projectId, input);
+      : await this.deps.agentPresetSyncService.createAgentPreset(projectId, {
+        ...input,
+        ...(this.isGeneratedCodingAgent(agent.name, labels) ? { mcpAccess: defaultCodingAgentMcpAccess() } : {}),
+      });
+  }
+
+  private isGeneratedCodingAgent(name: string, labels: string[]): boolean {
+    const normalizedName = name.trim().toLowerCase();
+    if (
+      normalizedName === PROJECT_SETUP_AGENT_NAME.toLowerCase()
+      || normalizedName === "planning agent"
+      || normalizedName === "project manager"
+      || normalizedName === "quality assurance agent"
+      || normalizedName === "worker"
+    ) {
+      return false;
+    }
+    return labels.includes("worker") || !labels.includes("planning");
   }
 
   private async configureAgentRouting(projectId: string): Promise<void> {

@@ -43,7 +43,7 @@ function insertInvocation(
   storage: AppDbStorage,
   params: {
     id: string;
-    sprintId: string;
+    sprintId?: string | null;
     sprintRunId?: string | null;
     startedAt: string;
     providerInvocationId?: string | null;
@@ -57,7 +57,7 @@ function insertInvocation(
     VALUES (?, 'project-1', ?, ?, ?, 'cli_task_coding', 'completed', 'codex', ?, 1, 'internal', ?, ?)
   `).run(
     params.id,
-    params.sprintId,
+    params.sprintId ?? null,
     params.sprintRunId ?? null,
     params.providerInvocationId ?? null,
     params.startedAt,
@@ -125,7 +125,7 @@ describe("execution snapshot invocation slices", () => {
     });
   });
 
-  it("keeps a selected inactive sprint invocation outside the project-recent slice", async () => {
+  it("keeps a selected inactive sprint invocation outside the project-recent and active expanded-run slices", async () => {
     const storage = await createStorage();
     seedProject(storage);
 
@@ -146,12 +146,82 @@ describe("execution snapshot invocation slices", () => {
 
     const invocations = queryProjectExecutionSnapshotInvocations(storage.getDatabase(), {
       projectId: "project-1",
-      sprintRunIds: [],
+      sprintRunIds: ["run-active"],
       selectedSprintId: "sprint-inactive",
     });
 
     expect(invocations.map((invocation) => invocation.id)).toContain("inv-selected-inactive");
     expect(invocations).toHaveLength(25);
+  });
+
+  it("keeps selected sprint-run invocations outside project-recent and expanded-run slices", async () => {
+    const storage = await createStorage();
+    seedProject(storage);
+    const db = storage.getDatabase();
+
+    db.prepare(`
+      INSERT INTO sprint_runs (id, project_id, sprint_id, status, trigger_type, executor_mode, created_at, updated_at)
+      VALUES ('run-inactive-selected', 'project-1', 'sprint-inactive', 'completed', 'dashboard', 'mixed', '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z')
+    `).run();
+    db.prepare(`
+      INSERT INTO provider_invocations (
+        id, project_id, sprint_id, sprint_run_id, session_id, provider, purpose, status,
+        started_at, input_tokens, cached_input_tokens, output_tokens, total_tokens,
+        created_at, updated_at
+      )
+      VALUES (
+        'provider-selected-fallback', 'project-1', 'sprint-inactive', 'run-inactive-selected', 'session-selected', 'codex', 'coding', 'completed',
+        '2026-01-01T09:01:00.000Z', 4, 1, 8, 12,
+        '2026-01-01T09:01:00.000Z', '2026-01-01T09:01:00.000Z'
+      )
+    `).run();
+
+    for (let i = 0; i < 30; i += 1) {
+      insertInvocation(storage, {
+        id: `inv-newer-other-${String(i).padStart(2, "0")}`,
+        sprintId: "sprint-other",
+        sprintRunId: "run-quiet",
+        startedAt: `2026-01-01T11:${String(i).padStart(2, "0")}:00.000Z`,
+      });
+    }
+    insertInvocation(storage, {
+      id: "inv-expanded-active",
+      sprintId: "sprint-active",
+      sprintRunId: "run-active",
+      startedAt: "2026-01-01T12:00:00.000Z",
+    });
+    insertInvocation(storage, {
+      id: "inv-selected-direct",
+      sprintId: "sprint-inactive",
+      sprintRunId: "run-inactive-selected",
+      startedAt: "2026-01-01T09:00:00.000Z",
+    });
+    insertInvocation(storage, {
+      id: "inv-selected-provider-fallback",
+      sprintId: null,
+      sprintRunId: null,
+      providerInvocationId: "provider-selected-fallback",
+      startedAt: "2026-01-01T09:01:00.000Z",
+    });
+
+    const invocations = queryProjectExecutionSnapshotInvocations(storage.getDatabase(), {
+      projectId: "project-1",
+      sprintRunIds: ["run-active", "run-quiet"],
+      selectedSprintId: "sprint-inactive",
+    });
+    const invocationIds = invocations.map((invocation) => invocation.id);
+
+    expect(invocationIds).toContain("inv-expanded-active");
+    expect(invocationIds).toContain("inv-selected-direct");
+    expect(invocationIds).toContain("inv-selected-provider-fallback");
+    expect(invocations.find((invocation) => invocation.id === "inv-selected-provider-fallback")).toMatchObject({
+      sprintId: "sprint-inactive",
+      sprintRunId: "run-inactive-selected",
+      inputTokens: 4,
+      cachedInputTokens: 1,
+      outputTokens: 8,
+      totalTokens: 12,
+    });
   });
 });
 
@@ -176,6 +246,98 @@ function seedRuntimeTask(
 }
 
 describe("execution snapshot runtime event slices", () => {
+  it("deduplicates overlapping recent and selected-sprint events by recency", async () => {
+    const storage = await createStorage();
+    seedProject(storage);
+    const db = storage.getDatabase();
+
+    db.prepare(`
+      INSERT INTO sprint_runs (id, project_id, sprint_id, status, trigger_type, executor_mode, created_at, updated_at)
+      VALUES ('run-inactive', 'project-1', 'sprint-inactive', 'completed', 'dashboard', 'mixed', '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z')
+    `).run();
+    db.prepare(`
+      INSERT INTO sprint_run_events (id, sprint_run_id, event_type, originator, created_at)
+      VALUES
+        ('event-selected-overlap', 'run-inactive', 'sprint_completed', 'system', '2026-01-01T10:05:00.000Z'),
+        ('event-recent-newer', 'run-quiet', 'sprint_started', 'system', '2026-01-01T10:06:00.000Z'),
+        ('event-recent-older', 'run-active', 'sprint_started', 'system', '2026-01-01T10:04:00.000Z')
+    `).run();
+
+    const events = queryExecutionRuntimeEvents(
+      storage.getDatabase(),
+      storage,
+      "project-1",
+      [],
+      "sprint-inactive",
+    );
+
+    expect(events.map((event) => event.id)).toEqual([
+      "event-recent-newer",
+      "event-selected-overlap",
+      "event-recent-older",
+    ]);
+    expect(events.filter((event) => event.id === "event-selected-overlap")).toHaveLength(1);
+  });
+
+  it("keeps a selected inactive sprint event outside the project-recent and active expanded-run slices", async () => {
+    const storage = await createStorage();
+    seedProject(storage);
+    seedRuntimeTask(storage, {
+      sprintId: "sprint-active",
+      taskId: "task-active-selected-guard",
+      taskRunId: "task-run-active-selected-guard",
+      sprintRunId: "run-active",
+    });
+    seedRuntimeTask(storage, {
+      sprintId: "sprint-other",
+      taskId: "task-recent-selected-guard",
+      taskRunId: "task-run-recent-selected-guard",
+      sprintRunId: "run-quiet",
+    });
+
+    const db = storage.getDatabase();
+    db.prepare(`
+      INSERT INTO sprint_runs (id, project_id, sprint_id, status, trigger_type, executor_mode, created_at, updated_at)
+      VALUES ('run-inactive-selected-events', 'project-1', 'sprint-inactive', 'completed', 'dashboard', 'mixed', '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z')
+    `).run();
+    seedRuntimeTask(storage, {
+      sprintId: "sprint-inactive",
+      taskId: "task-selected-inactive",
+      taskRunId: "task-run-selected-inactive",
+      sprintRunId: "run-inactive-selected-events",
+    });
+
+    for (let i = 0; i < 245; i += 1) {
+      db.prepare(`
+        INSERT INTO task_run_events (id, task_run_id, project_id, event_type, originator, created_at)
+        VALUES (?, 'task-run-recent-selected-guard', 'project-1', 'provider_activity', 'system', ?)
+      `).run(
+        `event-recent-selected-guard-${String(i).padStart(3, "0")}`,
+        `2026-01-01T11:${String(Math.floor(i / 60)).padStart(2, "0")}:${String(i % 60).padStart(2, "0")}.000Z`,
+      );
+    }
+    db.prepare(`
+      INSERT INTO task_run_events (id, task_run_id, project_id, event_type, originator, created_at)
+      VALUES ('event-active-selected-guard', 'task-run-active-selected-guard', 'project-1', 'provider_activity', 'system', '2026-01-01T12:00:00.000Z')
+    `).run();
+    db.prepare(`
+      INSERT INTO task_run_events (id, task_run_id, project_id, event_type, originator, created_at)
+      VALUES ('event-selected-inactive', 'task-run-selected-inactive', 'project-1', 'provider_activity', 'system', '2026-01-01T09:00:00.000Z')
+    `).run();
+
+    const events = queryExecutionRuntimeEvents(
+      storage.getDatabase(),
+      storage,
+      "project-1",
+      ["run-active", "run-active"],
+      "sprint-inactive",
+    );
+
+    expect(events.map((event) => event.id)).toContain("event-active-selected-guard");
+    expect(events.map((event) => event.id)).toContain("event-selected-inactive");
+    expect(events.filter((event) => event.id === "event-selected-inactive")).toHaveLength(1);
+  });
+
   it("keeps another expanded run's event when one active run is chatty", async () => {
     const storage = await createStorage();
     seedProject(storage);
@@ -216,8 +378,88 @@ describe("execution snapshot runtime event slices", () => {
       "run-quiet",
     ]);
 
-    expect(events).toHaveLength(300);
+    expect(events).toHaveLength(121);
+    expect(events.filter((event) => event.id.startsWith("event-chatty-"))).toHaveLength(120);
     expect(events.map((event) => event.id)).toContain("event-quiet");
     expect(events.map((event) => event.id)).not.toContain("event-status-sync");
+  });
+
+  it("bounds chatty expanded runs while retaining quieter selected-sprint events", async () => {
+    const storage = await createStorage();
+    seedProject(storage);
+    const db = storage.getDatabase();
+
+    db.prepare(`
+      INSERT INTO sprint_runs (id, project_id, sprint_id, status, trigger_type, executor_mode, created_at, updated_at)
+      VALUES
+        ('run-selected-quiet', 'project-1', 'sprint-inactive', 'completed', 'dashboard', 'mixed', '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z'),
+        ('run-background', 'project-1', 'sprint-other', 'completed', 'dashboard', 'mixed', '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z')
+    `).run();
+    seedRuntimeTask(storage, {
+      sprintId: "sprint-active",
+      taskId: "task-chatty-retention",
+      taskRunId: "task-run-chatty-retention",
+      sprintRunId: "run-active",
+    });
+    seedRuntimeTask(storage, {
+      sprintId: "sprint-other",
+      taskId: "task-expanded-quiet-retention",
+      taskRunId: "task-run-expanded-quiet-retention",
+      sprintRunId: "run-quiet",
+    });
+    seedRuntimeTask(storage, {
+      sprintId: "sprint-other",
+      taskId: "task-background-retention",
+      taskRunId: "task-run-background-retention",
+      sprintRunId: "run-background",
+    });
+    seedRuntimeTask(storage, {
+      sprintId: "sprint-inactive",
+      taskId: "task-selected-quiet-retention",
+      taskRunId: "task-run-selected-quiet-retention",
+      sprintRunId: "run-selected-quiet",
+    });
+
+    for (let i = 0; i < 400; i += 1) {
+      db.prepare(`
+        INSERT INTO task_run_events (id, task_run_id, project_id, event_type, originator, created_at)
+        VALUES (?, 'task-run-chatty-retention', 'project-1', 'provider_activity', 'system', ?)
+      `).run(
+        `event-chatty-retention-${String(i).padStart(3, "0")}`,
+        `2026-01-01T12:${String(Math.floor(i / 60)).padStart(2, "0")}:${String(i % 60).padStart(2, "0")}.000Z`,
+      );
+    }
+    db.prepare(`
+      INSERT INTO task_run_events (id, task_run_id, project_id, event_type, originator, created_at)
+      VALUES ('event-expanded-quiet-retention', 'task-run-expanded-quiet-retention', 'project-1', 'provider_activity', 'system', '2026-01-01T12:07:00.000Z')
+    `).run();
+    for (let i = 0; i < 240; i += 1) {
+      db.prepare(`
+        INSERT INTO task_run_events (id, task_run_id, project_id, event_type, originator, created_at)
+        VALUES (?, 'task-run-background-retention', 'project-1', 'provider_activity', 'system', ?)
+      `).run(
+        `event-background-retention-${String(i).padStart(3, "0")}`,
+        `2026-01-01T11:${String(Math.floor(i / 60)).padStart(2, "0")}:${String(i % 60).padStart(2, "0")}.000Z`,
+      );
+    }
+    db.prepare(`
+      INSERT INTO task_run_events (id, task_run_id, project_id, event_type, originator, created_at)
+      VALUES ('event-selected-quiet-retention', 'task-run-selected-quiet-retention', 'project-1', 'provider_activity', 'system', '2026-01-01T09:00:00.000Z')
+    `).run();
+
+    const events = queryExecutionRuntimeEvents(
+      storage.getDatabase(),
+      storage,
+      "project-1",
+      ["run-active", "run-quiet"],
+      "sprint-inactive",
+    );
+
+    const eventIds = events.map((event) => event.id);
+    expect(events).toHaveLength(300);
+    expect(eventIds).toContain("event-selected-quiet-retention");
+    expect(eventIds).toContain("event-expanded-quiet-retention");
+    expect(events.filter((event) => event.id.startsWith("event-chatty-retention-"))).toHaveLength(120);
+    expect(events.filter((event) => event.id.startsWith("event-background-retention-"))).toHaveLength(178);
   });
 });

@@ -66,6 +66,8 @@ const createSystemSettings = (): SystemSettings => {
         host: "",
         email: "",
         apiToken: "",
+        autoTransitionLinkedIssuesOnImport: true,
+        importTransitionName: "In Work",
         autoCloseLinkedIssues: false,
         defaultProject: "",
         closeTransitionName: "Done",
@@ -101,6 +103,24 @@ const HookProbe = () => {
       <button type="button" onClick={() => void markCompleted("cancel")}>cancel</button>
     </div>
   );
+};
+
+const createTourTarget = (targetId: string): HTMLElement => {
+  const target = document.createElement("button");
+  target.setAttribute("data-tour-id", targetId);
+  target.getBoundingClientRect = () => ({
+    top: 80,
+    left: 80,
+    width: 120,
+    height: 44,
+    right: 200,
+    bottom: 124,
+    x: 80,
+    y: 80,
+    toJSON: () => ({}),
+  });
+  document.body.appendChild(target);
+  return target;
 };
 
 describe("onboarding flow reducer", () => {
@@ -210,20 +230,7 @@ describe("GuidedDashboardTour integration", () => {
     document.body.appendChild(launcher);
     launcher.focus();
 
-    const target = document.createElement("button");
-    target.setAttribute("data-tour-id", "project-selector");
-    target.getBoundingClientRect = () => ({
-      top: 80,
-      left: 80,
-      width: 120,
-      height: 44,
-      right: 200,
-      bottom: 124,
-      x: 80,
-      y: 80,
-      toJSON: () => ({}),
-    });
-    document.body.appendChild(target);
+    createTourTarget("project-selector");
 
     render(<GuidedDashboardTour />);
     window.dispatchEvent(new CustomEvent(DASHBOARD_TOUR_START_EVENT));
@@ -234,6 +241,84 @@ describe("GuidedDashboardTour integration", () => {
     await userEvent.keyboard("{Escape}");
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
     await waitFor(() => expect(document.activeElement).toBe(launcher));
+  });
+
+  it("walks Schedule, Knowledge, and Docs in navigation order", async () => {
+    [
+      "project-selector",
+      "docker-containers",
+      "active-sessions",
+      "nav-chat",
+      "nav-overview",
+      "nav-sprints",
+      "nav-tasks",
+      "nav-agents",
+      "nav-stats",
+      "nav-schedule",
+      "nav-memory",
+      "nav-knowledge",
+      "nav-browser",
+      "nav-files",
+      "nav-live",
+      "nav-docs",
+      "nav-config",
+    ].forEach(createTourTarget);
+
+    render(<GuidedDashboardTour />);
+    window.dispatchEvent(new CustomEvent(DASHBOARD_TOUR_START_EVENT));
+
+    const expectedTitles = [
+      "Projects",
+      "Docker Containers",
+      "Active Sessions",
+      "Chat",
+      "Overview",
+      "Sprints",
+      "Tasks",
+      "Agents",
+      "Stats",
+      "Schedule",
+      "Memory",
+      "Knowledge",
+      "Browser",
+      "Files",
+      "Live",
+      "Docs",
+      "Settings",
+    ];
+
+    for (const [index, title] of expectedTitles.entries()) {
+      expect(await screen.findByRole("dialog", { name: title })).not.toBeNull();
+      expect(screen.getByText(`Step ${index + 1} of ${expectedTitles.length}`)).not.toBeNull();
+      if (index < expectedTitles.length - 1) {
+        await userEvent.click(screen.getByRole("button", { name: new RegExp(`Next tour step: ${expectedTitles[index + 1]}`) }));
+      }
+    }
+  });
+
+  it("skips missing navigation targets without breaking the remaining order", async () => {
+    [
+      "project-selector",
+      "nav-schedule",
+      "nav-memory",
+      "nav-docs",
+      "nav-config",
+    ].forEach(createTourTarget);
+
+    render(<GuidedDashboardTour />);
+    window.dispatchEvent(new CustomEvent(DASHBOARD_TOUR_START_EVENT));
+
+    const expectedTitles = ["Projects", "Schedule", "Memory", "Docs", "Settings"];
+
+    for (const [index, title] of expectedTitles.entries()) {
+      expect(await screen.findByRole("dialog", { name: title })).not.toBeNull();
+      expect(screen.getByText(`Step ${index + 1} of ${expectedTitles.length}`)).not.toBeNull();
+      if (index < expectedTitles.length - 1) {
+        await userEvent.click(screen.getByRole("button", { name: new RegExp(`Next tour step: ${expectedTitles[index + 1]}`) }));
+      }
+    }
+
+    expect(screen.queryByRole("dialog", { name: "Knowledge" })).toBeNull();
   });
 });
 
@@ -456,7 +541,7 @@ describe("OnboardingExperience integration", () => {
     expect(screen.getByRole("dialog")).not.toBeNull();
   });
 
-  it("focuses a retryable validation error when Jira fields are partially configured", async () => {
+  it("focuses the first invalid Jira field when Jira fields are partially configured", async () => {
     const systemSettings = createSystemSettings();
     vi.mocked(settingsApi.fetchSystemSettings).mockResolvedValue(systemSettings);
     vi.mocked(settingsApi.saveSystemSettings).mockResolvedValue(systemSettings);
@@ -486,8 +571,8 @@ describe("OnboardingExperience integration", () => {
     await userEvent.click(screen.getByRole("button", { name: "Next" }));
 
     const alert = await screen.findByRole("alert");
-    expect(alert.textContent).toContain("Enter both Jira site URL and API token");
-    await waitFor(() => expect(document.activeElement).toBe(alert));
+    expect(alert.textContent).toContain("Enter a Jira API token");
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByLabelText("Jira API token")));
   });
 
   it("announces pending save state on the final onboarding action", async () => {
@@ -606,6 +691,8 @@ describe("onboarding appearance step", () => {
           host: "",
           email: "",
           apiToken: "",
+          autoTransitionLinkedIssuesOnImport: true,
+          importTransitionName: "In Work",
           autoCloseLinkedIssues: false,
           defaultProject: "",
           closeTransitionName: "Done"

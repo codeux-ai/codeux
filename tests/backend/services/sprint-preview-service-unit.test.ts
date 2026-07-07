@@ -109,6 +109,7 @@ function makePreviewSettings(overrides: Record<string, unknown> = {}) {
     hostPortRangeStart: 5555,
     hostPortRangeEnd: 5560,
     containerAppPort: 3000,
+    containerAppPorts: [3000],
     startupScriptPath: ".code-ux/browser/start-preview.sh",
     ...overrides,
   };
@@ -125,6 +126,7 @@ function makeSession(overrides: Partial<SprintPreviewSession> = {}): SprintPrevi
     status: "running",
     hostPort: 5555,
     containerAppPort: 3000,
+    portMappings: [{ containerPort: 3000, hostPort: 5555, isPrimary: true }],
     containerId: "abc123",
     containerName: "code-ux-preview-test",
     worktreePath: "/workspace",
@@ -153,6 +155,7 @@ function makeDeps(overrides: Record<string, unknown> = {}) {
     sprintPreviewRepository: {
       listSessions: vi.fn(() => []),
       getSession: vi.fn(() => null),
+      getSessionForProjectSprint: vi.fn(() => null),
       getSessionByProjectSprint: vi.fn(() => null),
       createSession: vi.fn((input: Record<string, unknown>) => makeSession(input as Partial<SprintPreviewSession>)),
       updateSession: vi.fn((id: string, patch: Partial<SprintPreviewSession>) => makeSession({ id, ...patch })),
@@ -291,6 +294,34 @@ describe("SprintPreviewService unit tests", () => {
       const service = new SprintPreviewService(deps as any);
       await expect(service.stopSession("nonexistent")).rejects.toThrow("Sprint preview session not found");
     });
+
+    it("rejects scoped stop when the session belongs to another project", async () => {
+      deps.sprintPreviewRepository.getSessionForProjectSprint.mockReturnValue(null);
+      const service = new SprintPreviewService(deps as any);
+
+      await expect(service.stopSessionForProjectSprint("proj-2", "sprint-2", "session-1"))
+        .rejects.toThrow("Sprint preview session not found");
+      expect(runCommandStrict).not.toHaveBeenCalledWith(
+        "docker",
+        ["rm", "-f", "-v", expect.any(String)],
+        expect.any(String),
+      );
+    });
+
+    it("allows scoped stop when the project and sprint match", async () => {
+      const session = makeSession();
+      deps.sprintPreviewRepository.getSessionForProjectSprint.mockReturnValue(session);
+      deps.sprintPreviewRepository.getSession.mockReturnValue(session);
+      deps.sprintPreviewRepository.updateSession.mockImplementation(
+        (id: string, patch: Partial<SprintPreviewSession>) => makeSession({ id, ...patch }),
+      );
+      const service = new SprintPreviewService(deps as any);
+
+      const result = await service.stopSessionForProjectSprint("proj-1", "sprint-1", "session-1");
+
+      expect(result.status).toBe("stopped");
+      expect(deps.sprintPreviewRepository.getSessionForProjectSprint).toHaveBeenCalledWith("proj-1", "sprint-1", "session-1");
+    });
   });
 
   describe("rebuildSession", () => {
@@ -423,6 +454,118 @@ describe("SprintPreviewService unit tests", () => {
       expect(vi.mocked(runCommandStrict).mock.calls.some((call) => call[0] === "docker" && call[1][0] === "cp" && call[1][2].endsWith(":/tmp/preview-start.sh"))).toBe(true);
       expect(vi.mocked(runCommandStrict).mock.calls.some((call) => call[0] === "docker" && call[1][0] === "start")).toBe(true);
 
+      vi.unstubAllGlobals();
+    });
+
+    it("allocates one host port per configured container app port", async () => {
+      vi.stubGlobal("fetch", vi.fn(async () => ({ ok: true })));
+      deps.settingsRepository.resolveSprintDashboardSettings.mockReturnValue({
+        settings: { ...DEFAULT_DASHBOARD_SETTINGS,
+          sprintPreview: makePreviewSettings({
+            hostPortRangeStart: 5570,
+            hostPortRangeEnd: 5575,
+            containerAppPort: 3000,
+            containerAppPorts: [3000, 5173, 6006],
+          }),
+          git: { githubMode: "REMOTE", defaultBranch: "main", sprintBranchScheme: "feature/sprint-{number}" },
+          cliWorkflow: { containerImage: "", containerCacheSetupScriptImage: false, containerSetupScriptPath: "" },
+        },
+      });
+      vi.mocked(runCommandStrict).mockImplementation(async (cmd, args) => {
+        if (cmd === "docker" && args[0] === "create") {
+          return { exitCode: 0, stdout: "cid123\n", stderr: "", durationMs: 1 };
+        }
+        return { exitCode: 0, stdout: "", stderr: "", durationMs: 1 };
+      });
+
+      const service = new SprintPreviewService(deps as any);
+      await service.startSession("proj-1", "sprint-1");
+
+      expect(deps.sprintPreviewRepository.createSession).toHaveBeenCalledWith(expect.objectContaining({
+        hostPort: 5570,
+        containerAppPort: 3000,
+        portMappings: [
+          { containerPort: 3000, hostPort: 5570, isPrimary: true },
+          { containerPort: 5173, hostPort: 5571 },
+          { containerPort: 6006, hostPort: 5572 },
+        ],
+      }));
+      const previewCreateCall = vi.mocked(runCommandStrict).mock.calls.find((call) =>
+        call[0] === "docker" && call[1][0] === "create"
+      );
+      expect(previewCreateCall?.[1]).toEqual(expect.arrayContaining([
+        "127.0.0.1:5570:39000",
+        "127.0.0.1:5571:5173",
+        "127.0.0.1:5572:6006",
+      ]));
+      vi.unstubAllGlobals();
+    });
+
+    it("fails before container creation when the host port range cannot cover all container ports", async () => {
+      deps.settingsRepository.resolveSprintDashboardSettings.mockReturnValue({
+        settings: { ...DEFAULT_DASHBOARD_SETTINGS,
+          sprintPreview: makePreviewSettings({
+            hostPortRangeStart: 5580,
+            hostPortRangeEnd: 5580,
+            containerAppPort: 3000,
+            containerAppPorts: [3000, 5173],
+          }),
+          git: { githubMode: "REMOTE", defaultBranch: "main", sprintBranchScheme: "feature/sprint-{number}" },
+          cliWorkflow: { containerImage: "", containerCacheSetupScriptImage: false, containerSetupScriptPath: "" },
+        },
+      });
+
+      const service = new SprintPreviewService(deps as any);
+      await expect(service.startSession("proj-1", "sprint-1")).rejects.toThrow("No free preview ports available");
+      expect(vi.mocked(runCommandStrict).mock.calls.some((call) => call[0] === "docker" && call[1][0] === "create")).toBe(false);
+    });
+
+    it("preserves existing port mappings on rebuild", async () => {
+      vi.stubGlobal("fetch", vi.fn(async () => ({ ok: true })));
+      const existing = makeSession({
+        id: "session-existing",
+        portMappings: [
+          { containerPort: 3000, hostPort: 5590, isPrimary: true },
+          { containerPort: 5173, hostPort: 5591 },
+        ],
+        hostPort: 5590,
+        containerAppPort: 3000,
+      });
+      deps.sprintPreviewRepository.getSessionByProjectSprint.mockReturnValue(existing);
+      deps.sprintPreviewRepository.getSession.mockReturnValue(existing);
+      deps.settingsRepository.resolveSprintDashboardSettings.mockReturnValue({
+        settings: { ...DEFAULT_DASHBOARD_SETTINGS,
+          sprintPreview: makePreviewSettings({
+            hostPortRangeStart: 5590,
+            hostPortRangeEnd: 5595,
+            containerAppPort: 3000,
+            containerAppPorts: [3000, 5173],
+          }),
+          git: { githubMode: "REMOTE", defaultBranch: "main", sprintBranchScheme: "feature/sprint-{number}" },
+          cliWorkflow: { containerImage: "", containerCacheSetupScriptImage: false, containerSetupScriptPath: "" },
+        },
+      });
+      vi.mocked(runCommandStrict).mockImplementation(async (cmd, args) => {
+        if (cmd === "docker" && args[0] === "create") {
+          return { exitCode: 0, stdout: "cid123\n", stderr: "", durationMs: 1 };
+        }
+        return { exitCode: 0, stdout: "", stderr: "", durationMs: 1 };
+      });
+
+      const service = new SprintPreviewService(deps as any);
+      await service.startSession("proj-1", "sprint-1", { rebuild: true });
+
+      expect(deps.sprintPreviewRepository.updateSession).toHaveBeenCalledWith(
+        "session-existing",
+        expect.objectContaining({
+          hostPort: 5590,
+          containerAppPort: 3000,
+          portMappings: [
+            { containerPort: 3000, hostPort: 5590, isPrimary: true },
+            { containerPort: 5173, hostPort: 5591 },
+          ],
+        }),
+      );
       vi.unstubAllGlobals();
     });
   });
@@ -633,7 +776,17 @@ describe("SprintPreviewService unit tests", () => {
           "cookie": "val",
           "set-cookie": "val",
           "x-code-ux-test": "test",
+          "x-code-ux-preview-port": "5556",
           "connection": "close",
+          "upgrade": "websocket",
+          "transfer-encoding": "chunked",
+          "host": "localhost:4444",
+          "content-length": "42",
+          "accept-encoding": "gzip",
+          "proxy-authorization": "Basic secret",
+          "origin": "http://localhost:4444",
+          "referer": "http://localhost:4444/browser?path=/test",
+          "sec-fetch-site": "same-site",
           "x-custom": "allowed",
         },
       });
@@ -643,7 +796,17 @@ describe("SprintPreviewService unit tests", () => {
       expect(calledOptions.headers).not.toHaveProperty("cookie");
       expect(calledOptions.headers).not.toHaveProperty("set-cookie");
       expect(calledOptions.headers).not.toHaveProperty("x-code-ux-test");
+      expect(calledOptions.headers).not.toHaveProperty("x-code-ux-preview-port");
       expect(calledOptions.headers).not.toHaveProperty("connection");
+      expect(calledOptions.headers).not.toHaveProperty("upgrade");
+      expect(calledOptions.headers).not.toHaveProperty("transfer-encoding");
+      expect(calledOptions.headers).not.toHaveProperty("host");
+      expect(calledOptions.headers).not.toHaveProperty("content-length");
+      expect(calledOptions.headers).not.toHaveProperty("accept-encoding");
+      expect(calledOptions.headers).not.toHaveProperty("proxy-authorization");
+      expect(calledOptions.headers).toHaveProperty("origin", "http://127.0.0.1:5555");
+      expect(calledOptions.headers).toHaveProperty("referer", "http://127.0.0.1:5555/browser?path=/test");
+      expect(calledOptions.headers).toHaveProperty("sec-fetch-site", "same-origin");
       expect(calledOptions.headers).toHaveProperty("x-custom", "allowed");
     });
 
@@ -693,7 +856,8 @@ describe("SprintPreviewService unit tests", () => {
         headers: mockHeaders,
         arrayBuffer: vi.fn(async () => new TextEncoder().encode("hello").buffer),
       };
-      vi.stubGlobal("fetch", vi.fn(async () => mockResponse));
+      const fetchMock = vi.fn(async () => mockResponse);
+      vi.stubGlobal("fetch", fetchMock);
 
       const service = new SprintPreviewService(deps as any);
       const result = await service.proxyRequest({
@@ -704,7 +868,66 @@ describe("SprintPreviewService unit tests", () => {
 
       expect(result.status).toBe(200);
       expect(result.body.toString()).toBe("hello");
+      expect(fetchMock).toHaveBeenCalledWith(new URL("http://127.0.0.1:5555/test"), expect.any(Object));
       vi.unstubAllGlobals();
+    });
+
+    it("routes selected secondary preview ports from the persisted mapping", async () => {
+      const session = makeSession({
+        containerId: null,
+        containerName: null,
+        portMappings: [
+          { containerPort: 3000, hostPort: 5555, isPrimary: true },
+          { containerPort: 5173, hostPort: 5556 },
+        ],
+      });
+      deps.sprintPreviewRepository.getSession.mockReturnValue(session);
+      deps.sprintPreviewRepository.updateSession.mockImplementation(
+        (id: string, patch: Partial<SprintPreviewSession>) => makeSession({ id, ...patch }),
+      );
+
+      vi.mocked(normalizePreviewPath).mockReturnValue("/secondary");
+      const fetchMock = vi.fn(async () => ({
+        status: 200,
+        headers: new Headers({ "content-type": "text/plain" }),
+        arrayBuffer: async () => new TextEncoder().encode("secondary").buffer,
+      }));
+      vi.stubGlobal("fetch", fetchMock);
+
+      const service = new SprintPreviewService(deps as any);
+      const result = await service.proxyRequest({
+        sessionId: "session-1",
+        method: "GET",
+        path: "/secondary",
+        selectedPort: "5173",
+      });
+
+      expect(result.body.toString()).toBe("secondary");
+      expect(fetchMock).toHaveBeenCalledWith(new URL("http://127.0.0.1:5556/secondary"), expect.any(Object));
+      vi.unstubAllGlobals();
+    });
+
+    it("rejects selected ports outside the session mapping", async () => {
+      const session = makeSession({
+        containerId: null,
+        containerName: null,
+        portMappings: [
+          { containerPort: 3000, hostPort: 5555, isPrimary: true },
+          { containerPort: 5173, hostPort: 5556 },
+        ],
+      });
+      deps.sprintPreviewRepository.getSession.mockReturnValue(session);
+      deps.sprintPreviewRepository.updateSession.mockImplementation(
+        (id: string, patch: Partial<SprintPreviewSession>) => makeSession({ id, ...patch }),
+      );
+
+      const service = new SprintPreviewService(deps as any);
+      await expect(service.proxyRequest({
+        sessionId: "session-1",
+        method: "GET",
+        path: "/",
+        selectedPort: "6553",
+      })).rejects.toThrow("not available for this session");
     });
 
     it("rewrites HTML body content with proxy prefix", async () => {
@@ -738,7 +961,7 @@ describe("SprintPreviewService unit tests", () => {
       vi.unstubAllGlobals();
     });
 
-    it("strips set-cookie and rewrites location headers", async () => {
+    it("strips unsafe response headers and rewrites location headers", async () => {
       const session = makeSession({ containerId: null, containerName: null });
       deps.sprintPreviewRepository.getSession.mockReturnValue(session);
       deps.sprintPreviewRepository.updateSession.mockImplementation(
@@ -751,6 +974,10 @@ describe("SprintPreviewService unit tests", () => {
         "content-type": "text/plain",
         "location": "/redirect",
         "set-cookie": "token=abc",
+        "content-security-policy": "default-src 'none'",
+        "content-security-policy-report-only": "default-src 'self'",
+        "x-frame-options": "DENY",
+        "x-custom": "allowed",
       });
       const mockResponse = {
         status: 302,
@@ -769,6 +996,10 @@ describe("SprintPreviewService unit tests", () => {
       expect(result.status).toBe(302);
       expect(result.headers["location"]).toContain("/api/browser/sessions/session-1/proxy/redirect");
       expect(result.headers["set-cookie"]).toBeUndefined();
+      expect(result.headers["content-security-policy"]).toBeUndefined();
+      expect(result.headers["content-security-policy-report-only"]).toBeUndefined();
+      expect(result.headers["x-frame-options"]).toBeUndefined();
+      expect(result.headers["x-custom"]).toBe("allowed");
       vi.unstubAllGlobals();
     });
 

@@ -64,6 +64,8 @@ Memory records encapsulate the base `content` string alongside its vectorized by
 
 **Note:** Knowledge subscriptions validate requested document IDs in batched chunk-safe queries (validating project ownership efficiently) before applying the replace-all transaction.
 
+Knowledge document object access is project-scoped. Document read, delete, re-embed, and project-import operations must prove the document belongs to the route or request project before returning content or mutating rows. Legacy unscoped document endpoints require an explicit `projectId` value and treat missing documents and cross-project mismatches as the same not-found response.
+
 ## Long-Term Claims and Evidence
 
 Sprint-scoped memories are treated as observations. Durable project knowledge is stored as canonical claims:
@@ -73,6 +75,25 @@ Sprint-scoped memories are treated as observations. Durable project knowledge is
 - A project-scope memory is still created for every new claim so existing semantic memory search can retrieve the claim without a separate search path.
 
 Active claims use a normalized fingerprint. If a later sprint produces the same durable claim, remediation links the new sprint memories as evidence on the existing claim instead of creating another long-term memory copy.
+
+Internal MCP can also create and maintain durable claims directly through `manage_memory` without requiring a sprint ID. The canonical schema and required fields live in [MCP Tools and Contracts](../mcp/tools-and-contracts.md#manage_memory-claim-actions). The `create_claim` action writes the canonical claim row and a project-scoped mirror memory tagged with `source.originType = "memory_claim"` and `source.originId = <claimId>`, which lets `MemoryService.searchClaims` hydrate active claims from normal project memory search results. `update_claim` keeps those mirror memories aligned with the current claim text, category, confidence, and durability.
+
+Project managers can use `list_claims`, `get_claim`, `update_claim`, and `add_claim_evidence` without approval. Destructive claim lifecycle actions use explicit approval: `deprecate_claim` returns `approvalRequired: true` until the caller repeats the same request with `approval.confirmed: true`, and it only reports success when the repository changes the claim status.
+
+Example direct durable claim:
+
+```json
+{
+  "action": "create_claim",
+  "projectId": "project-123",
+  "claim": "Keep provider routing decisions in project settings.",
+  "category": "architecture",
+  "confidence": 0.86,
+  "durability": 0.9,
+  "tags": ["providers"],
+  "appliesToPaths": ["src/services"]
+}
+```
 
 Claims can be audited through read-only endpoints:
 
@@ -126,9 +147,10 @@ The Memory settings panel also manages one project-scoped scheduler entry for lo
 - Expanding the sidebar opens directly to the current alive memory list for the selected tier, sprint, and agent filter set, with an embedded search input above the list. Browsing all visible memories is still the default path; search is not required before the list is useful.
 - Closing the sidebar clears the current search query and selected memory IDs so returning to the sidebar starts from the current visible memory list.
 - `MemorySearch.tsx` provides debounced text filtering by memory text/category and keyboard-accessible clear behavior (supports clearing via `Escape` and a dedicated clear button with an explicit `<kbd>Esc</kbd>` visual affordance). Search exposes a visible typing/pending state while the debounced query is applying and uses a polite live region only for committed or cleared search changes instead of announcing every keystroke.
+- Search and filter controls use `controlFeedback` for focus/pressed states, `selectionMovement` for tier movement, `inlineValidation` for danger/delete-state copy, and `asyncFeedback` for pending search status. If reduced motion resolves token durations to `0ms`, the visible pending text, selected tab state, result count, and live-region announcement remain the source of truth.
 - Enhanced `MemoryList.tsx` to prominently display visible memory counts and active search text directly in the UI instead of relying solely on `sr-only` live regions, while keeping the list layout `min-w-0` and overflow-safe on narrow screens. Empty filtered results keep the `memory-panel` target available for tab/search controls and announce that no memories match the current search or filters.
 - Added per-memory selection toggles and a batch action bar to the sidebar list so users can select visible memories, clear the selection, or select all currently rendered results without touching hidden records. The select-all control states the current visible scope, and batch delete copy includes the selected count and visible scope.
-- Batch deletion requires an explicit confirmation dialog when more than one memory is selected. The delete flow is optimistic, restores any failed deletions, and reports partial failures through the memory feedback region with a retry action.
+- Batch deletion requires an explicit confirmation dialog for every selected-delete request, including one selected memory. The delete flow is optimistic, restores any failed deletions, and reports partial failures through the memory feedback region with a retry action.
 - Lobotomize mode is immediate by design for graph nodes and the inspector delete action: a single graph click deletes through the canvas deletion animation, and the inspector delete button does not open a confirmation dialog. Sidebar card deletion is less easy to trigger: each card shows persistent danger copy, must be armed first, exposes a cancel action, and only then calls the existing optimistic removal path with undo feedback.
 - Selection is pruned automatically when search, tier, sprint, agent, or sidebar state changes make a memory invisible, which keeps batch actions scoped to the current visible slice of memory.
 - Improved memory list accessibility and reduced motion fallbacks in `MemoryList.tsx`, utilizing `useInteractionTokens` to respect OS-level reduced motion preferences.
@@ -138,8 +160,10 @@ The Memory settings panel also manages one project-scoped scheduler entry for lo
 - The memory list uses the shared `listReveal`, `listReorder`, and `expansionCollapse` motion tokens for search/filter transitions. Reduced-motion users receive immediate list updates while visible result counts and live regions continue to communicate what changed.
 - Graph and list selection state is mirrored in text: selected cards show an `Open` badge, the graph area includes a visible selection status, and the inspector announces when a selected memory is open. This keeps critical selection feedback available without depending on canvas animation alone.
 - During background refresh or failed refreshes, the sidebar keeps the last useful memory result list visible when available, marks the region busy or stale with visible copy, and exposes retry or next-action controls instead of replacing the list with a blank panel. Stale content is only reused for the same committed search query, so a new no-match search shows the no-match recovery state rather than old matches.
+- Background refresh, retry, and stale-data states use `aria-busy` on the list region, polite refreshing copy, and assertive retryable error copy while preserving the previous useful rows only when the committed query, tier, sprint, and agent filter context still match. A newly committed search or filter with no matches must render the real no-match empty state and must not reuse stale rows from another query or scope.
 - The inspector stays recoverable when a previously selected memory falls out of the current result set. It opens a visible unavailable-state panel with close guidance rather than silently disappearing.
+- Memory card selection, batch selection, graph selection, and inspector reveals do not rely on hover or animation. Cards expose keyboard-reachable Open and Select controls, visible Open/Selected badges, `aria-selected`, and stable inspector status copy; the inspector uses tokenized reveal/progress styling but remains fully readable when motion is disabled.
 - Adding a manual memory uses explicit form validation and async feedback: invalid submits focus the content field, pending submits mark the dialog busy, failures remain in an assertive status region, and successful creates briefly confirm before restoring focus to the opener.
-- Embedding model actions now surface pending, success, and error messages from the catalog so downloads, activation, deletion, and re-embedding changes are announced without relying on model-card state changes alone.
-- Batch deletion shows selected-count and visible-scope copy, requires confirmation for multi-delete, marks the list busy, disables conflicting batch controls while deletion is pending, and restores focus to the list controls after the async mutation settles. Mutation errors remain in the feedback region with a retry action.
+- Embedding model actions now surface pending, success, and error messages from the catalog so downloads, activation, deletion, and re-embedding changes are announced without relying on model-card state changes alone. Model cards keep stable action/status slots, show text progress next to progress bars, expose disabled reasons for active/download/re-embed conflicts, suppress duplicate activations while an async action is pending, and confirm local model deletion before removal. Re-embedding progress includes both completed/total text and a progressbar so `0ms` motion still communicates progress.
+- Batch deletion shows selected-count and visible-scope copy, requires confirmation that names the active tier, sprint/agent scope, and committed search, marks the list busy, disables conflicting batch controls while deletion is pending, and restores focus to the list controls after the async mutation settles or the confirmation is canceled. Mutation errors remain in the feedback region with a retry action, and duplicate refresh or mutation retries are suppressed while a retry is pending.
 - Danger delete mode uses explicit armed/off copy at the filter toggle, page warning, card delete controls, and inspector delete action. Graph and inspector single-memory deletes remain immediate in this mode, while sidebar cards use an arm/cancel step before deletion.

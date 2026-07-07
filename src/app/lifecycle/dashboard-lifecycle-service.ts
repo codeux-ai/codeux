@@ -35,6 +35,7 @@ import type { ConnectionChatRepository } from "../../repositories/connection-cha
 import type { ProjectWorkerAssignmentRepository } from "../../repositories/project-worker-assignment-repository.js";
 import type { ProjectWorkerAssignmentService } from "../../domain/workers/project-worker-assignment-service.js";
 import type { ProjectAttentionRepository } from "../../repositories/project-attention-repository.js";
+import type { QaReviewRepository } from "../../repositories/qa-review-repository.js";
 import type { AgentPresetRepository } from "../../repositories/agent-preset-repository.js";
 import type { AgentPresetSyncService } from "../../services/agent-preset-sync-service.js";
 import type { ExecutionRepository } from "../../repositories/execution-repository.js";
@@ -66,6 +67,13 @@ import { DashboardSnapshotCache, mapAssignedWorkers } from "./dashboard-snapshot
 import { prepareGitProjectCreateInput } from "../../services/project-git-clone-service.js";
 import { getOnboardingRuntimeReadiness } from "../../services/onboarding-readiness-service.js";
 import type { SprintImportedTaskInput } from "../../contracts/project-management-types.js";
+import type { McpConnectionInfo } from "../../contracts/mcp-connection-types.js";
+import type {
+  LocalMcpCliConfigService,
+  LocalMcpCliProvider,
+  LocalMcpInstallResult,
+  LocalMcpSetupInfo,
+} from "../../services/local-mcp-cli-config-service.js";
 
 const updateCheckerService = new UpdateCheckerService();
 
@@ -84,6 +92,7 @@ export interface BootDashboardDeps {
   projectWorkerAssignmentRepository: ProjectWorkerAssignmentRepository;
   projectWorkerAssignmentService: ProjectWorkerAssignmentService;
   projectAttentionRepository: ProjectAttentionRepository;
+  qaReviewRepository: QaReviewRepository;
   guardrailService: GuardrailService;
   agentPresetRepository: AgentPresetRepository;
   agentPresetSyncService: AgentPresetSyncService;
@@ -108,19 +117,32 @@ export interface BootDashboardDeps {
   getOnboardingRuntimeReadiness?: () => Promise<OnboardingRuntimeReadiness>;
   listSprintPreviewSessions: (projectId: string) => Promise<SprintPreviewSession[]>;
   getSprintPreviewSession: (sessionId: string) => Promise<SprintPreviewSession | null>;
+  getSprintPreviewSessionForProjectSprint: (projectId: string, sprintId: string, sessionId: string) => Promise<SprintPreviewSession>;
   startSprintPreviewSession: (projectId: string, sprintId: string) => Promise<SprintPreviewSession>;
   rebuildSprintPreviewSession: (sessionId: string) => Promise<SprintPreviewSession>;
+  rebuildSprintPreviewSessionForProjectSprint: (projectId: string, sprintId: string, sessionId: string) => Promise<SprintPreviewSession>;
   stopSprintPreviewSession: (sessionId: string) => Promise<SprintPreviewSession>;
+  stopSprintPreviewSessionForProjectSprint: (projectId: string, sprintId: string, sessionId: string) => Promise<SprintPreviewSession>;
   removeSprintPreviewSession: (sessionId: string) => Promise<void>;
+  removeSprintPreviewSessionForProjectSprint: (projectId: string, sprintId: string, sessionId: string) => Promise<void>;
   getSprintPreviewScript: (projectId: string, sprintId: string) => Promise<SprintPreviewScript>;
   saveSprintPreviewScript: (projectId: string, sprintId: string, content: string) => Promise<SprintPreviewScript>;
   getSprintPreviewLogs: (sessionId: string, tail?: number) => Promise<{ logs: string }>;
+  getSprintPreviewLogsForProjectSprint: (projectId: string, sprintId: string, sessionId: string, tail?: number) => Promise<{ logs: string }>;
   proxySprintPreviewRequest: (args: {
     sessionId: string;
     method: string;
     path: string;
     headers?: Record<string, string | undefined>;
     body?: Buffer;
+  }) => Promise<{ status: number; headers: Record<string, string>; body: Buffer }>;
+  proxySprintPreviewRequestForProjectSprint: (projectId: string, sprintId: string, args: {
+    sessionId: string;
+    method: string;
+    path: string;
+    headers?: Record<string, string | undefined>;
+    body?: Buffer;
+    selectedPort?: string | number | null;
   }) => Promise<{ status: number; headers: Record<string, string>; body: Buffer }>;
   listFileBrowserSessions: (projectId: string) => Promise<FileBrowserSession[]>;
   startFileBrowserSession: (projectId: string, sprintId: string) => Promise<FileBrowserSession>;
@@ -141,6 +163,9 @@ export interface BootDashboardDeps {
   embeddingService: EmbeddingService;
   memoryRepository: MemoryRepository;
   knowledgeService: KnowledgeService;
+  localMcpCliConfigService: LocalMcpCliConfigService;
+  getLocalMcpConnectionInfo: () => McpConnectionInfo | null;
+  regenerateMcpHttpAuthToken: () => string;
 }
 
 export function reinitializeLogger(deps: { projectRoot: string, runtimeContext: RuntimeContext }): Logger {
@@ -209,7 +234,7 @@ function requireProjectAttentionItem(
 }
 
 function resetGuardrailForResolvedHumanAttention(
-  deps: Pick<BootDashboardDeps, "guardrailService">,
+  deps: Pick<BootDashboardDeps, "guardrailService" | "qaReviewRepository" | "logger">,
   item: NonNullable<ReturnType<ProjectAttentionRepository["getAttentionItem"]>>,
 ): void {
   if (
@@ -221,6 +246,20 @@ function resetGuardrailForResolvedHumanAttention(
   }
 
   const sourceAttentionType = item.payload?.sourceAttentionType;
+  if (sourceAttentionType === "qa_review" || isQaReviewHumanEscalation(item)) {
+    const clearedRuns = deps.qaReviewRepository.resetTaskReviewRuns(item.taskId);
+    deps.guardrailService.resetPurpose(item.taskId, "qa_review");
+    deps.logger.info("Reset QA review budget after human attention resolution", {
+      projectId: item.projectId,
+      sprintId: item.sprintId,
+      sprintRunId: item.sprintRunId,
+      taskId: item.taskId,
+      attentionItemId: item.id,
+      clearedRuns,
+    });
+    return;
+  }
+
   if (
     typeof sourceAttentionType !== "string"
     || !(GUARDRAIL_LEDGER_PURPOSES as string[]).includes(sourceAttentionType)
@@ -229,6 +268,21 @@ function resetGuardrailForResolvedHumanAttention(
   }
 
   deps.guardrailService.resetPurpose(item.taskId, sourceAttentionType as GuardrailLedgerPurpose);
+}
+
+function isQaReviewHumanEscalation(
+  item: NonNullable<ReturnType<ProjectAttentionRepository["getAttentionItem"]>>,
+): boolean {
+  const payload = item.payload;
+  if (!payload || typeof payload !== "object") {
+    return false;
+  }
+
+  return (
+    typeof payload.qaReason === "string"
+    && typeof payload.runsUsed === "number"
+    && typeof payload.maxRuns === "number"
+  );
 }
 
 function requireProject(
@@ -425,6 +479,13 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<DashboardS
     getLiveActivities: deps.getLiveActivitiesForActiveTasks,
     getGitStatus: deps.getGitStatus,
     getExternalSettingsHints: () => deps.externalSettingsHints,
+    getLocalMcpSetup: (): LocalMcpSetupInfo => deps.localMcpCliConfigService.getSetupInfo(deps.getLocalMcpConnectionInfo()),
+    regenerateLocalMcpAuthToken: (): LocalMcpSetupInfo => {
+      deps.regenerateMcpHttpAuthToken();
+      return deps.localMcpCliConfigService.getSetupInfo(deps.getLocalMcpConnectionInfo());
+    },
+    installLocalMcpProvider: (provider: LocalMcpCliProvider): Promise<LocalMcpInstallResult> =>
+      deps.localMcpCliConfigService.installProvider(provider, deps.getLocalMcpConnectionInfo()),
     getSystemSettings: () => deps.settingsRepository.getSystemSettings(),
     getUpdateStatus: () => updateCheckerService.checkForUpdate(),
     saveSystemSettings: (settings) => {
@@ -633,6 +694,11 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<DashboardS
       deps.activityCacheService.invalidateGitStatusCache();
       return result;
     },
+    resetInvocationUsageLimitTimer: async (invocationId) => {
+      const result = await deps.executionInvocationControlService.resetUsageLimitTimer(invocationId);
+      deps.activityCacheService.invalidateGitStatusCache();
+      return result;
+    },
 
     rerunTask: async (taskId: string, options?: { provider?: string; providerConfigId?: string; model?: string; clearWorktree?: boolean; resetDependents?: boolean; undoMerge?: boolean }) => {
       const task = await deps.taskRerunService.rerunTask(taskId, {
@@ -691,14 +757,20 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<DashboardS
     resetOnboardingState: () => deps.settingsRepository.resetOnboardingState(),
     listSprintPreviewSessions: deps.listSprintPreviewSessions,
     getSprintPreviewSession: deps.getSprintPreviewSession,
+    getSprintPreviewSessionForProjectSprint: deps.getSprintPreviewSessionForProjectSprint,
     startSprintPreviewSession: deps.startSprintPreviewSession,
     rebuildSprintPreviewSession: deps.rebuildSprintPreviewSession,
+    rebuildSprintPreviewSessionForProjectSprint: deps.rebuildSprintPreviewSessionForProjectSprint,
     stopSprintPreviewSession: deps.stopSprintPreviewSession,
+    stopSprintPreviewSessionForProjectSprint: deps.stopSprintPreviewSessionForProjectSprint,
     removeSprintPreviewSession: deps.removeSprintPreviewSession,
+    removeSprintPreviewSessionForProjectSprint: deps.removeSprintPreviewSessionForProjectSprint,
     getSprintPreviewScript: deps.getSprintPreviewScript,
     saveSprintPreviewScript: deps.saveSprintPreviewScript,
     getSprintPreviewLogs: deps.getSprintPreviewLogs,
+    getSprintPreviewLogsForProjectSprint: deps.getSprintPreviewLogsForProjectSprint,
     proxySprintPreviewRequest: deps.proxySprintPreviewRequest,
+    proxySprintPreviewRequestForProjectSprint: deps.proxySprintPreviewRequestForProjectSprint,
     listFileBrowserSessions: deps.listFileBrowserSessions,
     startFileBrowserSession: deps.startFileBrowserSession,
     rebuildFileBrowserSession: deps.rebuildFileBrowserSession,

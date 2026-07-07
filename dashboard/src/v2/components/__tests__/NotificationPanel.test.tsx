@@ -77,6 +77,27 @@ describe("NotificationPanel", () => {
     await waitFor(() => {
       expect(screen.getByRole("dialog", { name: "Notifications Panel" })).toHaveAttribute("aria-busy", "false");
     });
+    expect(screen.getByRole("dialog", { name: "Notifications Panel" })).toHaveFocus();
+    expect(screen.getByText("Notifications refreshed.")).toBeInTheDocument();
+  });
+
+  it("renders the empty notification list as a visible status region", () => {
+    render(
+      <NotificationPanel
+        unreadCount={0}
+        notifications={[]}
+        onMarkAllRead={vi.fn()}
+        onMarkRead={vi.fn()}
+        onDismiss={vi.fn()}
+        onRefresh={vi.fn()}
+      />,
+    );
+
+    const panel = screen.getByRole("dialog", { name: "Notifications Panel" });
+    expect(panel).toHaveAttribute("aria-busy", "false");
+    expect(screen.getByRole("list", { name: "Notifications list" })).toHaveAttribute("aria-live", "polite");
+    expect(screen.getByRole("status")).toHaveTextContent("No notifications");
+    expect(screen.getByText("Startup checks are healthy and there is nothing waiting for operator attention.")).toBeInTheDocument();
   });
 
   it("explains why mark-all-read is disabled when there is nothing unread", () => {
@@ -186,6 +207,78 @@ describe("NotificationPanel", () => {
     expect(screen.getByRole("button", { name: "Retry Startup checks blocked" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Open Human intervention required" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Mark read Startup checks blocked" })).toBeInTheDocument();
+  });
+
+  it("suppresses duplicate mark-read activation while the row is pending", async () => {
+    let resolveMarkRead: () => void = () => undefined;
+    const onMarkRead = vi.fn(() => new Promise<void>((resolve) => {
+      resolveMarkRead = resolve;
+    }));
+
+    render(
+      <NotificationPanel
+        unreadCount={1}
+        notifications={[makeNotification({ title: "Startup checks blocked" })]}
+        onMarkAllRead={vi.fn()}
+        onMarkRead={onMarkRead}
+        onDismiss={vi.fn()}
+        onRefresh={vi.fn()}
+      />,
+    );
+
+    const markRead = screen.getByRole("button", { name: "Mark read Startup checks blocked" });
+    fireEvent.click(markRead);
+    fireEvent.click(markRead);
+
+    expect(onMarkRead).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole("listitem")).toHaveAttribute("aria-busy", "true");
+    expect(screen.getByRole("button", { name: "Marking read Startup checks blocked" })).toBeDisabled();
+    expect(screen.getAllByText("Marking read")).toHaveLength(2);
+
+    resolveMarkRead();
+
+    await waitFor(() => {
+      expect(screen.getByRole("listitem")).toHaveAttribute("aria-busy", "false");
+    });
+  });
+
+  it("keeps focus on a mounted mark-read button after it succeeds", async () => {
+    const onMarkRead = vi.fn();
+    let rerenderPanel: ReturnType<typeof render>["rerender"] = () => undefined;
+    const { rerender } = render(
+      <NotificationPanel
+        unreadCount={1}
+        notifications={[makeNotification({ title: "Startup checks blocked" })]}
+        onMarkAllRead={vi.fn()}
+        onMarkRead={(id) => {
+          onMarkRead(id);
+          rerenderPanel(
+            <NotificationPanel
+              unreadCount={0}
+              notifications={[makeNotification({ title: "Startup checks blocked", unread: false })]}
+              onMarkAllRead={vi.fn()}
+              onMarkRead={onMarkRead}
+              onDismiss={vi.fn()}
+              onRefresh={vi.fn()}
+            />,
+          );
+        }}
+        onDismiss={vi.fn()}
+        onRefresh={vi.fn()}
+      />,
+    );
+    rerenderPanel = rerender;
+
+    const markRead = screen.getByRole("button", { name: "Mark read Startup checks blocked" });
+    markRead.focus();
+    fireEvent.click(markRead);
+
+    await waitFor(() => {
+      expect(onMarkRead).toHaveBeenCalledWith("startup-cluster-not-ready");
+      expect(screen.getByRole("button", { name: "Read Startup checks blocked" })).toBeInTheDocument();
+      expect(document.activeElement).toBe(markRead);
+      expect(document.activeElement).not.toBe(screen.getByRole("dialog", { name: "Notifications Panel" }));
+    });
   });
 
   it("compacts lists immediately under reduced motion while preserving critical items first", () => {

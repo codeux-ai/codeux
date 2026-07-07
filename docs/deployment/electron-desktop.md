@@ -12,10 +12,12 @@ Code UX can run as an installable Electron desktop app while preserving the exis
 - Mutable dashboard runtime traffic (`/api/*`, `/health`, and `/ready`) is treated as non-cacheable in both the backend response headers and the Electron session. The desktop app clears the Electron HTTP cache on startup, injects no-cache request headers only for runtime `GET`/`HEAD` reads, and injects no-store response headers for all loopback runtime data so stale Chromium cache entries cannot make settings, project, agent, or runtime pages appear frozen after navigation without interfering with JSON upload bodies.
 - Windows packaged builds keep the active WebGL context cap at 16 so the persistent shell canvas, avatar canvases, and route-scoped chart canvases have enough headroom during long navigation sessions while old Chromium contexts are waiting for garbage collection.
 - External links are opened through the host operating system. In-app dashboard and sprint-preview URLs remain inside the Electron app.
+- The desktop shell renders only the resolved dashboard origin and same-port sprint preview origins that match `preview-<session>.localhost:<dashboardPort>` internally. Other `http`, `https`, and `mailto` navigations are denied in the renderer and opened through the host operating system after scheme validation; all other schemes are blocked.
+- The compact title bar version label polls `/api/system/update-status` on startup and every 30 minutes. When the response reports a newer version without an error, the title bar shows a no-drag "Update available" release link with an external-link icon; activating it opens the GitHub release URL in the user's default browser. No update action is shown for failed checks or current installations.
 
 ## Native Desktop Integration
 
-The Add Project dialog uses a native Electron directory picker when running in the desktop app. Browser-only dashboard sessions keep the existing HTTP directory browser fallback.
+The Add Project dialog uses a native Electron directory picker when running in the desktop app. Browser-only dashboard sessions keep the existing HTTP directory browser fallback. When no current path is typed, the native picker opens at the user's home directory; relative defaults are resolved from the user's home directory before opening the dialog.
 
 The native picker is exposed through the isolated preload bridge:
 
@@ -23,6 +25,10 @@ The native picker is exposed through the isolated preload bridge:
 - returns `{ canceled, filePath }`
 
 Renderer Node access remains disabled. The preload exposes only this narrow IPC surface.
+
+Renderer privileges are constrained with `contextIsolation: true`, `nodeIntegration: false`, and `sandbox: true`. The preload bridge keeps the supported desktop API limited to directory selection, zoom control, and window controls. IPC handlers validate renderer input before using it: directory picker defaults must be strings without control characters, and zoom factors must be finite numbers before being clamped to the supported range.
+
+Electron permission prompts are denied by default for dashboard and preview pages, including camera, microphone, geolocation, notifications, and media requests. Preview origins currently do not require a permission exception; add one only with a documented product need and a targeted test for that origin and permission.
 
 The desktop BrowserWindow is frameless and transparent on every supported platform so the renderer-level `.app-shell` clip can expose real rounded window corners. The shell uses a fixed corner radius and subtle gray border in normal windowed mode, then removes that treatment when Electron reports maximized or fullscreen state, matching the host operating system's square maximized-window behavior. Keep the native BrowserWindow `backgroundColor` transparent when changing package settings; an opaque native background will make the corners appear square even if the renderer content is clipped.
 
@@ -55,7 +61,7 @@ The release output is written to `release/electron/`.
 
 Electron package builds run `pnpm run electron:prepare-deps` before Electron Builder. That script creates a production-only, hoisted runtime dependency tree in `.cache/electron-runtime/node_modules`, prunes non-runtime package files, generates deterministic PNG/ICO/BMP desktop artwork, and Electron Builder copies it to `resources/node_modules` so ASAR-packaged builds can resolve pnpm transitive dependencies at runtime.
 
-Electron Builder also copies the bundled `.code-ux` runtime defaults to `resources/.code-ux-defaults`. Keep that resource filter aligned with the default asset seeding contract in `src/services/code-ux-default-assets-service.ts`; the packaged app depends on `planning_agent.md`, `project_manager.md`, `quality_assurance_agent.md`, `worker.md`, and `container/setup.sh` being present because it cannot fall back to the workspace `.code-ux` directory after installation.
+Electron Builder also copies the bundled `.code-ux` runtime defaults to `resources/.code-ux-defaults`. Keep that resource filter aligned with the default asset seeding contract in `src/services/code-ux-default-assets-service.ts`; the packaged app depends on `planning_agent.md`, `project_manager.md`, `quality_assurance_agent.md`, `worker.md`, `container/setup.sh`, and `.code-ux/quicksprints/templates/*.md` being present because it cannot fall back to the workspace `.code-ux` directory after installation. Built-in agent preset sync reads those bundled defaults directly, so Project Setup Agent prompts can still use the base agent templates even if a user removes the seeded copies under `~/.code-ux/agents`.
 
 The runtime dependency tree is fingerprinted from production dependencies and the lockfile. If the fingerprint matches a previous run, `electron:prepare-deps` reuses the existing tree instead of deleting and reinstalling it.
 
@@ -91,6 +97,29 @@ Each job uploads its generated files as a workflow artifact. For published GitHu
 Release builds set `CSC_IDENTITY_AUTO_DISCOVERY=false`, so the default workflow produces unsigned desktop artifacts unless signing secrets and Electron Builder signing configuration are added later.
 
 The release workflow caches pnpm downloads, TypeScript/Vite caches, Electron downloads, Electron Builder caches, and `.cache/electron-runtime` to reduce repeated desktop build time on native runners.
+
+Use this workflow for published desktop releases. It is the lane that attaches generated installers/packages to a GitHub Release when the release event is published.
+
+## Main PR Release Checks
+
+The no-secret release validation lane is `.github/workflows/release-checks.yml`. It runs on pull requests targeting `main` and manual `workflow_dispatch` starts, using native `ubuntu-latest`, `macos-latest`, and `windows-latest` runners.
+
+Each matrix job installs with pnpm 10.33.0 on Node 22, runs `pnpm run build`, runs `node scripts/verify-release-install.mjs`, rebuilds Electron native dependencies, then builds the current platform desktop package with the matching `electron:dist:*` script. The verifier builds the workspace, creates a local npm tarball with `npm pack --ignore-scripts`, installs that tarball into an isolated temporary npm project, and runs the installed `codeux --help` command.
+
+Release checks set `CSC_IDENTITY_AUTO_DISCOVERY=false` for unsigned Electron packaging and pass `--publish never` to Electron Builder. They do not require provider API keys, npm publishing credentials, Docker credentials, GitHub Release events, or real project state. When Electron output exists, the workflow uploads files from `release/electron/` as workflow artifacts only; it does not publish to npm or attach files to a GitHub Release.
+
+This lane validates desktop package creation before code reaches `main`; it is not the publishing lane. Treat its artifacts as CI evidence for installability and package generation, while `.github/workflows/desktop-release.yml` remains the source for release-attached desktop builds.
+
+Developers can reproduce the main-PR desktop package portion locally with:
+
+```bash
+pnpm run build
+node scripts/verify-release-install.mjs
+pnpm run electron:install-deps
+pnpm run electron:dist -- --publish never
+```
+
+Use `pnpm run electron:dist:linux -- --publish never`, `pnpm run electron:dist:mac -- --publish never`, or `pnpm run electron:dist:win -- --publish never` when matching a specific GitHub Actions matrix leg.
 
 ## Cross-Platform Compatibility Findings
 

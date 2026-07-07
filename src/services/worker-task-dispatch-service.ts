@@ -11,6 +11,7 @@ import { ProjectWorkerAssignmentService } from "../domain/workers/project-worker
 import { ProjectAttentionService } from "../domain/workers/project-attention-service.js";
 import type { MemoryService } from "./memory-service.js";
 import type { Logger } from "../shared/logging/logger.js";
+import type { SprintRunLifecycleService } from "./sprint-run-lifecycle-service.js";
 
 export interface PullWorkerTaskDispatchArgs {
   connectionKey: string;
@@ -50,6 +51,7 @@ export class WorkerTaskDispatchService {
     private readonly logger?: Logger,
     private readonly memoryService?: MemoryService,
     private readonly resolveWorkerAgentPresetId?: (projectId: string) => Promise<string | undefined>,
+    private readonly sprintRunLifecycleService?: Pick<SprintRunLifecycleService, "finalizeCancellationIfIdle">,
   ) {}
 
   pullNextDispatch(args: PullWorkerTaskDispatchArgs): WorkerTaskDispatchClaim | null {
@@ -231,7 +233,10 @@ export class WorkerTaskDispatchService {
       });
     }
     if (nextDispatch.sprintRunId) {
-      this.executionRepository.finalizeSprintRunCancellationIfIdle(nextDispatch.sprintRunId);
+      if (!this.sprintRunLifecycleService) {
+        throw new Error("Sprint run lifecycle service is required to finalize sprint cancellation.");
+      }
+      this.sprintRunLifecycleService.finalizeCancellationIfIdle(nextDispatch.sprintRunId);
     }
     if (args.connectionId) {
       this.connectionChatRepository.touchConnectionHeartbeat(args.connectionId, "listening");

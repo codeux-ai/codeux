@@ -2,12 +2,13 @@
  * @vitest-environment jsdom
  */
 import { h } from "preact";
+import { readFileSync } from "node:fs";
 import { describe, it, expect, afterEach, vi } from "vitest";
-import { render, screen, cleanup, waitFor } from "@testing-library/preact";
+import { render, screen, cleanup, fireEvent, waitFor } from "@testing-library/preact";
 import "@testing-library/jest-dom/vitest";
 import { BranchNameSchemeEditor } from "../BranchNameSchemeEditor";
 import { SprintKeyEditor } from "../SprintKeyEditor";
-import { TextInput, SecretInput, NumberInput, TextAreaInput, PillChoiceGroup } from "../SettingsFormFields";
+import { TextInput, SecretInput, NumberInput, TextAreaInput, PillChoiceGroup, SelectInput } from "../SettingsFormFields";
 
 
 import { SettingsCategoryRail } from "../SettingsCategoryRail";
@@ -18,6 +19,15 @@ import type { SettingsSearchMatches } from "../../../lib/settings-search-index";
 import userEvent from "@testing-library/user-event";
 import { SettingsContentPanels } from "../SettingsContentPanels";
 import { UnsavedChangesModal } from "../../ui/UnsavedChangesModal";
+import { ProviderInstanceCard } from "../ProviderInstanceCard";
+
+const defaultInnerHeight = window.innerHeight;
+
+afterEach(() => {
+  vi.restoreAllMocks();
+  Object.defineProperty(window, "innerHeight", { configurable: true, value: defaultInnerHeight });
+  cleanup();
+});
 
 vi.mock("../panels/SettingsGeneralPanel", () => ({
   SettingsGeneralPanel: () => <div>General panel values stay mounted</div>,
@@ -38,6 +48,99 @@ vi.mock("../panels/SettingsGeneralPanel", () => ({
     );
     const btn = screen.getByRole("button", { name: /General/ });
     expect(btn).toHaveAttribute("aria-current", "page");
+    expect(screen.getByRole("navigation", { name: "Settings categories" })).toHaveClass(
+      "lg:max-h-[var(--settings-category-rail-available-height)]",
+      "lg:overflow-y-auto",
+      "scrollbar-hide",
+    );
+    expect(screen.queryByText("Categories")).not.toBeInTheDocument();
+    expect(screen.queryByText("Jump directly into the area you need without digging through the full settings tree.")).not.toBeInTheDocument();
+  });
+
+  it("SettingsCategoryRail subtracts the measured page-top margin from its desktop height", async () => {
+    Object.defineProperty(window, "innerHeight", { configurable: true, value: 900 });
+    vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => {
+      callback(0);
+      return 1;
+    });
+    vi.spyOn(window, "cancelAnimationFrame").mockImplementation(() => {});
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue({
+      x: 0,
+      y: 240,
+      top: 240,
+      right: 240,
+      bottom: 640,
+      left: 0,
+      width: 240,
+      height: 400,
+      toJSON: () => ({}),
+    });
+    const mockCategories = [
+      { id: "general" as const, num: "01", label: "General", icon: SlidersHorizontal, description: "Test" }
+    ];
+
+    render(
+      <SettingsCategoryRail
+        filteredCategories={mockCategories}
+        activeCategory="general"
+        settingsSearch=""
+        settingsSearchMatches={{}}
+        onSwitchCategory={() => {}}
+      />
+    );
+
+    const rail = screen.getByRole("navigation", { name: "Settings categories" });
+    await waitFor(() => {
+      expect(rail).toHaveStyle("--settings-category-rail-available-height: 644px");
+    });
+    expect(rail).not.toHaveClass("lg:h-[calc(100dvh-5rem)]");
+  });
+
+  it("SettingsCategoryRail shows a hidden-scrollbar scroll hint only while more categories are below", async () => {
+    Object.defineProperty(window, "innerHeight", { configurable: true, value: 900 });
+    vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => {
+      callback(0);
+      return 1;
+    });
+    vi.spyOn(window, "cancelAnimationFrame").mockImplementation(() => {});
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue({
+      x: 0,
+      y: 240,
+      top: 240,
+      right: 280,
+      bottom: 640,
+      left: 0,
+      width: 280,
+      height: 400,
+      toJSON: () => ({}),
+    });
+    vi.spyOn(HTMLElement.prototype, "scrollHeight", "get").mockReturnValue(900);
+    vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockReturnValue(320);
+    const scrollTopSpy = vi.spyOn(HTMLElement.prototype, "scrollTop", "get").mockReturnValue(0);
+    const mockCategories = [
+      { id: "general" as const, num: "01", label: "General", icon: SlidersHorizontal, description: "Test" }
+    ];
+
+    render(
+      <SettingsCategoryRail
+        filteredCategories={mockCategories}
+        activeCategory="general"
+        settingsSearch=""
+        settingsSearchMatches={{}}
+        onSwitchCategory={() => {}}
+      />
+    );
+
+    const rail = screen.getByRole("navigation", { name: "Settings categories" });
+    expect(await screen.findByTestId("settings-category-scroll-hint")).toHaveClass("-bottom-4", "-mb-4", "pb-4");
+    expect(rail).toHaveClass("scrollbar-hide");
+
+    scrollTopSpy.mockReturnValue(580);
+    fireEvent.scroll(rail);
+
+    await waitFor(() => {
+      expect(screen.queryByTestId("settings-category-scroll-hint")).not.toBeInTheDocument();
+    });
   });
 
   it("SettingsCategoryRail explains provider search matches", () => {
@@ -63,7 +166,7 @@ vi.mock("../panels/SettingsGeneralPanel", () => ({
       />
     );
 
-    expect(screen.getByText("Showing 1 categories for \"claude\".")).toBeInTheDocument();
+    expect(screen.getByText(/Showing 1 categories for "claude"\./)).toBeInTheDocument();
     expect(screen.getByText("Claude Code")).toBeInTheDocument();
   });
 
@@ -82,7 +185,7 @@ vi.mock("../panels/SettingsGeneralPanel", () => ({
     expect(screen.getByText(/Keep the search field focused/)).toBeInTheDocument();
   });
 
-  it("SettingsCategoryRail exposes pending and disabled category states with visible labels", () => {
+  it("SettingsCategoryRail exposes pending and disabled category states without selected or pending badges", () => {
     cleanup();
     const mockCategories = [
       { id: "general" as const, num: "01", label: "General", icon: SlidersHorizontal, description: "Test" }
@@ -102,11 +205,32 @@ vi.mock("../panels/SettingsGeneralPanel", () => ({
 
     const btn = screen.getByRole("button", { name: /General/ });
     expect(btn).toHaveAttribute("aria-current", "page");
+    expect(btn).toHaveAttribute("aria-selected", "true");
     expect(btn).toHaveAttribute("aria-busy", "true");
     expect(btn).toBeDisabled();
-    expect(screen.getByText("Selected")).toBeInTheDocument();
-    expect(screen.getByText("Pending")).toBeInTheDocument();
+    expect(screen.queryByText("Selected")).not.toBeInTheDocument();
+    expect(screen.queryByText("Pending")).not.toBeInTheDocument();
     expect(screen.getByText("Disabled")).toBeInTheDocument();
+  });
+
+  it("SettingsCategoryRail marks category movement with the selectionMovement contract", () => {
+    cleanup();
+    const mockCategories = [
+      { id: "general" as const, num: "01", label: "General", icon: SlidersHorizontal, description: "Test" }
+    ];
+
+    render(
+      <SettingsCategoryRail
+        filteredCategories={mockCategories}
+        activeCategory="general"
+        settingsSearch=""
+        settingsSearchMatches={{}}
+        onSwitchCategory={() => {}}
+      />
+    );
+
+    expect(screen.getByRole("navigation", { name: "Settings categories" })).toHaveAttribute("data-motion-contract", "selectionMovement");
+    expect(screen.getByRole("button", { name: /General/ })).toHaveAttribute("data-motion-contract", "selectionMovement");
   });
 
   it("PillChoiceGroup exposes radio semantics for the selected option", () => {
@@ -125,6 +249,27 @@ vi.mock("../panels/SettingsGeneralPanel", () => ({
     expect(screen.getByRole("radiogroup", { name: "Scope choice" })).toBeInTheDocument();
     expect(screen.getByRole("radio", { name: "System" })).toHaveAttribute("aria-checked", "true");
     expect(screen.getByRole("radio", { name: "Project" })).toHaveAttribute("aria-checked", "false");
+  });
+
+  it("SelectInput keeps disabled reason visible and described by the control", () => {
+    render(
+      <SelectInput
+        value="off"
+        onChange={() => {}}
+        disabled
+        disabledReason="Switch GitHub mode to Remote to use this policy."
+        aria-label="Feature PR auto-merge"
+        options={[
+          { value: "off", label: "Off" },
+          { value: "green", label: "When green" },
+        ]}
+      />
+    );
+
+    const trigger = screen.getByRole("button", { name: "Feature PR auto-merge" });
+    const reason = screen.getByText("Switch GitHub mode to Remote to use this policy.");
+    expect(reason.id).toBeTruthy();
+    expect(trigger).toHaveAccessibleDescription("Switch GitHub mode to Remote to use this policy.");
   });
 
   it("ActionButton provides busy state feedback", () => {
@@ -169,10 +314,6 @@ vi.mock("../panels/SettingsGeneralPanel", () => ({
 
 
 describe("SettingsControls Accessibility", () => {
-  afterEach(() => {
-    cleanup();
-  });
-
   it("BranchNameSchemeEditor passes aria-label and aria-description", () => {
     render(
       <BranchNameSchemeEditor
@@ -226,9 +367,9 @@ describe("SettingsControls Accessibility", () => {
     expect(input).toHaveAttribute("type", "password");
     expect(input).toHaveAttribute("aria-description", "Secret token");
 
-    await user.click(screen.getByRole("button", { name: "Show secret" }));
+    await user.click(screen.getByRole("button", { name: "Show API key" }));
     expect(input).toHaveAttribute("type", "text");
-    expect(screen.getByRole("button", { name: "Hide secret" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "Hide API key" })).toHaveAttribute("aria-pressed", "true");
   });
 
   it("NumberInput passes aria-label and aria-description", () => {
@@ -388,6 +529,13 @@ describe("SettingsControls Accessibility", () => {
 
     expect(screen.getByText("You have unsaved changes in this settings scope.")).toBeInTheDocument();
     expect(screen.getByText("General panel values stay mounted")).toBeInTheDocument();
+    expect(screen.getByText("General")).toBeInTheDocument();
+    expect(screen.getByText("Unsaved changes")).toBeInTheDocument();
+    const activePanelStrip = screen.getByText("Active panel").parentElement;
+    expect(activePanelStrip).toHaveAttribute("data-settings-sticky", "active-panel");
+    expect(activePanelStrip).toHaveClass("sticky", "top-[var(--settings-active-panel-top)]", "flex-wrap", "overflow-visible");
+    expect(activePanelStrip).toHaveStyle("--settings-active-panel-top: 9.5rem");
+    expect(screen.getByText("General panel values stay mounted").parentElement).toHaveAttribute("data-motion-contract", "enterExit");
     expect(screen.getByText("General panel values stay mounted").parentElement).toHaveClass("motion-reduce:animate-none");
 
     rerender(
@@ -404,6 +552,7 @@ describe("SettingsControls Accessibility", () => {
       />
     );
     await waitFor(() => expect(screen.getByText("Saving settings. Current values remain visible.")).toBeInTheDocument());
+    expect(screen.getByText("Saving")).toBeInTheDocument();
     expect(screen.getByText("General panel values stay mounted")).toBeInTheDocument();
 
     rerender(
@@ -419,8 +568,38 @@ describe("SettingsControls Accessibility", () => {
         } as any}
       />
     );
-    await waitFor(() => expect(screen.getByText("Settings saved.")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getAllByText("Settings saved.").length).toBeGreaterThan(0));
+    expect(screen.getByText("Saved")).toBeInTheDocument();
     expect(screen.getByText("General panel values stay mounted")).toBeInTheDocument();
+  });
+
+  it("SettingsContentPanels accepts the measured sticky offset from the settings scope strip", () => {
+    render(
+      <SettingsContentPanels
+        stickyTop="148px"
+        state={{
+          activeCategory: "general",
+          activeDirty: false,
+          activeSaving: false,
+          error: null,
+          saveMessage: null,
+          loading: false,
+          resettingProject: false,
+        } as any}
+      />
+    );
+
+    expect(screen.getByText("Active panel").parentElement).toHaveStyle("--settings-active-panel-top: 148px");
+  });
+
+  it("SettingsPage keeps the scope controls in a sticky wrapping strip and passes its measured offset to the panel strip", () => {
+    const source = readFileSync("dashboard/src/v2/SettingsPage.tsx", "utf8");
+
+    expect(source).toContain('data-settings-sticky="scope"');
+    expect(source).toContain("sticky top-16 z-30");
+    expect(source).toContain("flex min-w-0 flex-wrap");
+    expect(source).toContain("scopeSticky.getBoundingClientRect().height + appShellOffset + stickyGap");
+    expect(source).toContain("<SettingsContentPanels state={state} stickyTop={panelStickyTop} />");
   });
 
   it("SettingsContentPanels renders reset pending feedback while keeping values mounted", () => {
@@ -440,5 +619,41 @@ describe("SettingsControls Accessibility", () => {
 
     expect(screen.getByText("Resetting project overrides. Current values remain visible.")).toBeInTheDocument();
     expect(screen.getByText("General panel values stay mounted")).toBeInTheDocument();
+  });
+
+  it("ProviderInstanceCard confirms target-specific removal, suppresses duplicate confirms, and restores fallback focus", async () => {
+    const user = userEvent.setup();
+    const fallback = document.createElement("div");
+    fallback.id = "settings-active-category-panel";
+    document.body.append(fallback);
+    const onRemove = vi.fn(() => new Promise<void>((resolve) => window.setTimeout(resolve, 10)));
+
+    render(
+      <ProviderInstanceCard
+        providerConfigId="codex"
+        provider={{
+          provider: "codex",
+          name: "Codex Primary",
+          apiKey: "",
+          authType: "apiKey",
+          mountAuth: false,
+          authPath: "",
+        } as any}
+        providerModel="gpt-5"
+        dockerExecutionEnabled
+        onUpdate={() => {}}
+        onRemove={onRemove}
+      />
+    );
+
+    await user.click(screen.getByRole("button", { name: "Remove Codex Primary" }));
+    const confirmButton = screen.getByRole("button", { name: "Confirm remove Codex Primary" });
+    await user.click(confirmButton);
+    await user.click(confirmButton);
+
+    expect(onRemove).toHaveBeenCalledTimes(1);
+    expect(confirmButton).toHaveAttribute("aria-busy", "true");
+    await waitFor(() => expect(document.activeElement).toBe(fallback));
+    fallback.remove();
   });
 });

@@ -6,6 +6,7 @@ import type {
   IssuePromptContextInput,
   ImprovePromptInput,
   LocalDirectoryBrowserResponse,
+  LocalFileBrowserResponse,
   PlanSprintOptions,
   ProjectCollectionResponse,
   ProjectSummary,
@@ -49,6 +50,14 @@ export const fetchLocalDirectories = async (directoryPath?: string): Promise<Loc
     url.searchParams.set("path", directoryPath.trim());
   }
   return fetchJson<LocalDirectoryBrowserResponse>(`${url.pathname}${url.search}`);
+};
+
+export const fetchLocalFiles = async (directoryPath?: string): Promise<LocalFileBrowserResponse> => {
+  const url = new URL("/api/local-files", window.location.origin);
+  if (directoryPath?.trim()) {
+    url.searchParams.set("path", directoryPath.trim());
+  }
+  return fetchJson<LocalFileBrowserResponse>(`${url.pathname}${url.search}`);
 };
 
 export const createProject = async (input: CreateProjectInput): Promise<ProjectSummary> => {
@@ -176,8 +185,8 @@ export const replaceSprintLinkedIssues = async (
   sprintId: string,
   projectId: string,
   issues: SprintLinkedIssueInput[],
-): Promise<SprintLinkedIssueRecord[]> => {
-  return fetchJson<SprintLinkedIssueRecord[]>(
+): Promise<{ linkedIssues: SprintLinkedIssueRecord[]; warnings: Array<{ issueId: string; issueKey: string; message: string }> }> => {
+  return fetchJson<{ linkedIssues: SprintLinkedIssueRecord[]; warnings: Array<{ issueId: string; issueKey: string; message: string }> }>(
     `/api/sprints/${encodeURIComponent(sprintId)}/linked-issues`,
     {
       method: "PUT",

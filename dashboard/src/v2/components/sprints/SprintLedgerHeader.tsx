@@ -66,7 +66,7 @@ export const SprintLedgerHeader: FunctionComponent<SprintLedgerHeaderProps> = ({
             <Heart className="h-3.5 w-3.5" strokeWidth={2.3} />
             Sprint Ledger
           </div>
-          <h2 className="mt-3 font-display text-2xl font-bold text-slate-900 dark:text-white sm:text-3xl">
+          <h2 className="mt-3 font-display text-xl font-semibold text-slate-900 dark:text-white sm:text-2xl">
             All sprints, fully sortable.
           </h2>
           <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-500 dark:text-slate-400">
@@ -88,7 +88,7 @@ export const SprintLedgerHeader: FunctionComponent<SprintLedgerHeaderProps> = ({
                   <Icon className="h-3.5 w-3.5" strokeWidth={2.2} />
                   {item.label}
                 </div>
-                <div className="mt-1 font-mono text-xl font-bold text-slate-900 dark:text-white">{item.value}</div>
+                <div className="mt-1 font-mono text-lg font-semibold text-slate-900 dark:text-white">{item.value}</div>
               </div>
             );
           })}
@@ -125,7 +125,7 @@ export const SprintLedgerHeader: FunctionComponent<SprintLedgerHeaderProps> = ({
               onChange={onListWindowChange}
               label="Show"
             />
-            <span className="rounded-full border border-black/[0.06] bg-white/70 px-3 py-1.5 font-mono text-xs text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.04] dark:text-slate-400" aria-live="polite" aria-atomic="true" aria-label={`Showing ${ledgerSprintsCount} of ${sprintsCount} sprints`}>
+            <span className="rounded-full border border-black/[0.06] bg-white/70 px-3 py-1.5 font-mono text-xs text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.04] dark:text-slate-400" aria-label={`Showing ${ledgerSprintsCount} of ${sprintsCount} sprints`}>
               {ledgerSprintsCount} / {sprintsCount}
             </span>
             {hasFilters ? (
@@ -182,7 +182,7 @@ export const SprintLedgerHeader: FunctionComponent<SprintLedgerHeaderProps> = ({
         </div>
       </div>
 
-      <div className="sr-only" aria-live="polite" aria-atomic="true">
+      <div className="sr-only">
         {ledgerSprintsCount === 0 && hasFilters
           ? "No matching sprints. Adjust search or filters."
           : hasFilters

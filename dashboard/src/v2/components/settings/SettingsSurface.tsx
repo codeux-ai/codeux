@@ -3,7 +3,7 @@ import { RefreshCw, CheckCircle, AlertTriangle, XCircle, Loader2 } from "lucide-
 import { SHARED_INTERACTION_CLASSES } from "../ui/Button.js";
 import { MODAL_MOTION } from "../../lib/motion/modal-motion.js";
 import gsap from "gsap";
-import { useLayoutEffect, useRef } from "preact/hooks";
+import { useId, useLayoutEffect, useRef } from "preact/hooks";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 import { useGsapDurations } from "../../lib/motion/constants.js";
 import { ActionFeedbackRegion } from "../ui/ActionFeedbackRegion.js";
@@ -70,6 +70,8 @@ export const ActionButton: FunctionComponent<{
   disabled?: boolean;
   disabledReason?: string;
 }> = ({ label, onClick, tone = "secondary", busy = false, disabled = false, disabledReason }) => {
+  const disabledReasonId = useId();
+  const describedBy = disabled && disabledReason ? disabledReasonId : undefined;
   let toneClass = "border border-[color:var(--border-hairline)] bg-[var(--surface-glass)] text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white";
 
   if (tone === "primary") {
@@ -96,7 +98,7 @@ export const ActionButton: FunctionComponent<{
       aria-disabled={disabled || busy}
       aria-busy={busy}
       aria-label={label}
-      aria-description={disabled && disabledReason ? disabledReason : undefined}
+      aria-describedby={describedBy}
       title={disabled && disabledReason ? disabledReason : undefined}
       className={`inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 text-xs font-bold relative overflow-hidden ${SHARED_INTERACTION_CLASSES} ${toneClass}`}
     >
@@ -109,6 +111,7 @@ export const ActionButton: FunctionComponent<{
           <span className="sr-only">{label} in progress</span>
         </div>
       )}
+      {describedBy ? <span id={disabledReasonId} className="sr-only">{disabledReason}</span> : null}
     </button>
   );
 };
@@ -127,7 +130,7 @@ export const SettingsHeader: FunctionComponent<{
         <Icon className="h-3.5 w-3.5" strokeWidth={2.3} />
         {eyebrow}
       </div>
-      <h2 className="mt-3 font-display text-4xl font-black tracking-tight text-slate-900 dark:text-white">
+      <h2 className="mt-3 font-display text-2xl font-semibold tracking-tight text-slate-900 dark:text-white">
         {title}
       </h2>
       <p className="mt-2 max-w-3xl text-sm font-medium leading-relaxed text-slate-500 dark:text-slate-400">

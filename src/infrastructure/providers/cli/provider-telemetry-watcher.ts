@@ -4,6 +4,7 @@ import * as fs from "fs/promises";
 import { randomUUID } from "crypto";
 import { CliWorkflowSettings } from "../../../contracts/app-types.js";
 import type { Logger } from "../../../shared/logging/logger.js";
+import { getCorrelationId } from "../../../shared/logging/correlation-id.js";
 import { CliProviderId } from "./provider-command-specs.js";
 import {
   collectProviderUsageTelemetry,
@@ -20,13 +21,18 @@ export interface TelemetryWatcherOptions {
   startedMs: number;
   workflowSettings: CliWorkflowSettings;
   signal?: AbortSignal;
-  logger?: Pick<Logger, "warn">;
+  logger?: Pick<Logger, "debug" | "warn">;
   onTelemetry: (telemetry: ProviderUsageTelemetry) => void;
+  invocationId?: string | null;
+  providerInvocationId?: string | null;
+  purpose?: string | null;
   getAccumulatedRawStdout: () => string;
   getAccumulatedStderr: () => string;
   nativeSessionId: string | null;
   sessionId: string;
   antigravityLogPath: string | null;
+  initialPollDelayMs?: number;
+  pollIntervalMs?: number;
   getClaudeSessionJsonlMetadata?: (nativeSessionId: string) => Promise<string | null>;
   readClaudeSessionJsonl: (nativeSessionId: string) => Promise<string | null>;
   getCodexLatestSessionJsonMetadata?: () => Promise<string | null>;
@@ -36,8 +42,116 @@ export interface TelemetryWatcherOptions {
   getAntigravityLogMetadata?: (logPath: string) => Promise<string | null>;
   parseAntigravityConversationId: (logPath: string) => Promise<string | null>;
   getAntigravityTranscriptMetadata?: (resolvedSessionId: string) => Promise<string | null>;
+  getAntigravityDatabaseMetadata?: (resolvedSessionId: string) => Promise<string | null>;
   readAntigravityTranscript: (resolvedSessionId: string) => Promise<string | null>;
   resolveAntigravityDatabase: (resolvedSessionId: string, destPath: string) => Promise<boolean | string | null>;
+}
+
+type ProviderMetadataSignature = { available: true; signature: string } | { available: false };
+
+interface FullReadInputs {
+  resolvedNativeSessionId: string | null;
+  claudeSessionJsonl: string | null;
+  codexSessionJson: string | null;
+  qwenLog: { usage: QwenUsageTotals | null; conversation: ParsedConversationTurn[] } | null;
+  antigravityTranscriptJsonl: string | null;
+}
+
+interface FailureBackoffState {
+  sourceSignature: string | null;
+  remainingSkippedPolls: number;
+}
+
+interface FullReadResult {
+  skipped: boolean;
+  preReadSourceSignature: string | null;
+  inputs: FullReadInputs;
+}
+
+const FAILURE_BACKOFF_MAX_SKIPPED_POLLS = 20;
+
+function buildMetadataSourceSignature(args: {
+  provider: CliProviderId;
+  model: string;
+  resolvedNativeSessionId: string | null;
+  stdout: string;
+  stderr: string;
+  providerMetadata: string | null;
+}): string {
+  return [
+    args.provider,
+    args.model,
+    args.resolvedNativeSessionId || "",
+    signatureForString(args.stdout),
+    signatureForString(args.stderr),
+    args.providerMetadata || "",
+  ].join("|");
+}
+
+async function buildTelemetrySourceSignature(args: {
+  provider: CliProviderId;
+  model: string;
+  resolvedNativeSessionId: string | null;
+  stdout: string;
+  stderr: string;
+  claudeSessionJsonl: string | null;
+  codexSessionJson: string | null;
+  qwenLog: { usage: QwenUsageTotals | null; conversation: ParsedConversationTurn[] } | null;
+  antigravityTranscriptJsonl: string | null;
+  antigravityTempDbPath: string | null;
+}): Promise<string> {
+  const parts = [
+    args.provider,
+    args.model,
+    args.resolvedNativeSessionId || "",
+    signatureForString(args.stdout),
+    signatureForString(args.stderr),
+    signatureForString(args.claudeSessionJsonl || ""),
+    signatureForString(args.codexSessionJson || ""),
+    signatureForString(args.antigravityTranscriptJsonl || ""),
+  ];
+
+  if (args.qwenLog) {
+    parts.push(signatureForString(JSON.stringify(args.qwenLog)));
+  }
+
+  if (args.antigravityTempDbPath) {
+    parts.push(`antigravity-temp-db:${await readFileMetadataSignature(args.antigravityTempDbPath)}`);
+  }
+
+  return parts.join("|");
+}
+
+async function readFileMetadataSignature(filePath: string): Promise<string> {
+  const stat = await fs.stat(filePath).catch(() => null);
+  if (!stat) {
+    return "missing";
+  }
+  return `${stat.size}:${Math.floor(stat.mtimeMs)}`;
+}
+
+function signatureForString(value: string): string {
+  if (!value) {
+    return "0:";
+  }
+  if (value.length > 32768) {
+    return [
+      value.length,
+      hashString(value.slice(0, 4096)),
+      hashString(value.slice(Math.floor(value.length / 2), Math.floor(value.length / 2) + 4096)),
+      hashString(value.slice(-16384)),
+    ].join(":");
+  }
+  return `${value.length}:${hashString(value)}`;
+}
+
+function hashString(value: string): string {
+  let hash = 2166136261;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(36);
 }
 
 export class ProviderTelemetryWatcher {
@@ -45,9 +159,10 @@ export class ProviderTelemetryWatcher {
   private promise: Promise<void> | null = null;
   private tempDbPath: string | null = null;
   private lastTelemetrySourceSignature: string | null = null;
-  private lastPreReadSourceSignature: string | null = null;
+  private lastEmittedPreReadSourceSignature: string | null = null;
   private readFailureCount = 0;
   private lastFailureWarningCount = 0;
+  private failureBackoff: FailureBackoffState | null = null;
   private resolvedNativeSessionId: string | null = null;
 
   constructor(private readonly opts: TelemetryWatcherOptions) {}
@@ -63,70 +178,106 @@ export class ProviderTelemetryWatcher {
       await this.promise.catch(() => undefined);
     }
     if (this.tempDbPath) {
-      await fs.rm(this.tempDbPath, { force: true }).catch(() => undefined);
+      const tempDbPath = this.tempDbPath;
+      this.tempDbPath = null;
+      await fs.rm(tempDbPath, { force: true }).catch(() => undefined);
     }
   }
 
   private async loop() {
-    await this.wait(1000);
+    await this.wait(this.getInitialPollDelayMs());
     while (this.active && !this.opts.signal?.aborted) {
+      let failureSourceSignature: string | null = null;
       try {
         const stdout = this.opts.getAccumulatedRawStdout();
         const stderr = this.opts.getAccumulatedStderr();
-        const preReadSourceSignature = await this.buildPreReadSourceSignature({
+        const fallbackFailureSourceSignature = this.buildFallbackFailureSourceSignature({
           resolvedNativeSessionId: this.resolvedNativeSessionId,
           stdout,
           stderr,
         });
+        this.resetMetadataFailureIfSourceChanged(fallbackFailureSourceSignature);
+        failureSourceSignature = fallbackFailureSourceSignature;
+        if (this.shouldDeferFailedSourceRead(fallbackFailureSourceSignature)) {
+          this.logPollEvent("provider_telemetry_poll_no_new_data", {
+            nativeSessionId: this.resolvedNativeSessionId || this.opts.nativeSessionId || undefined,
+          });
+          await this.wait(this.getPollIntervalMs());
+          continue;
+        }
+        let preReadSourceSignature = await this.buildPreReadSourceSignature({
+          resolvedNativeSessionId: this.resolvedNativeSessionId,
+          stdout,
+          stderr,
+        });
+        if (preReadSourceSignature) {
+          this.resetFailureIfSourceChanged(preReadSourceSignature);
+          failureSourceSignature = preReadSourceSignature;
+        }
         if (
           preReadSourceSignature
           && this.lastTelemetrySourceSignature
-          && preReadSourceSignature === this.lastPreReadSourceSignature
+          && preReadSourceSignature === this.lastEmittedPreReadSourceSignature
         ) {
-          await this.wait(1500);
+          this.logPollEvent("provider_telemetry_poll_no_new_data", {
+            nativeSessionId: this.resolvedNativeSessionId || this.opts.nativeSessionId || undefined,
+          });
+          await this.wait(this.getPollIntervalMs());
           continue;
         }
 
-        let claudeSessionJsonl: string | null = null;
-        let codexSessionJson: string | null = null;
-        let qwenLog: { usage: QwenUsageTotals | null; conversation: ParsedConversationTurn[] } | null = null;
-        let antigravityTranscriptJsonl: string | null = null;
-        let resolvedNativeSessionId = this.resolvedNativeSessionId || this.opts.nativeSessionId;
-
-        if (this.opts.provider === "claude-code" && this.opts.nativeSessionId) {
-          claudeSessionJsonl = await this.opts.readClaudeSessionJsonl(this.opts.nativeSessionId);
-        } else if (this.opts.provider === "codex") {
-          codexSessionJson = await this.opts.readCodexLatestSessionJson();
-        } else if (this.opts.provider === "qwen-code") {
-          qwenLog = await this.opts.readQwenLogData();
-        } else if (this.opts.provider === "antigravity") {
-          if (!resolvedNativeSessionId && this.opts.antigravityLogPath) {
-            resolvedNativeSessionId = await this.opts.parseAntigravityConversationId(this.opts.antigravityLogPath);
-          }
-          if (resolvedNativeSessionId) {
-            antigravityTranscriptJsonl = await this.opts.readAntigravityTranscript(resolvedNativeSessionId);
-            if (!this.tempDbPath) {
-              const safeSession = resolvedNativeSessionId.replace(/[^A-Za-z0-9_-]/g, "_");
-              this.tempDbPath = path.join(os.tmpdir(), `agy-temp-watcher-${safeSession}-${randomUUID()}.db`);
-            }
-            await this.opts.resolveAntigravityDatabase(resolvedNativeSessionId, this.tempDbPath);
-          }
+        if (this.shouldDeferFailedSourceRead(preReadSourceSignature)) {
+          this.logPollEvent("provider_telemetry_poll_no_new_data", {
+            nativeSessionId: this.resolvedNativeSessionId || this.opts.nativeSessionId || undefined,
+          });
+          await this.wait(this.getPollIntervalMs());
+          continue;
         }
-        this.resolvedNativeSessionId = resolvedNativeSessionId;
 
-        const sourceSignature = await this.buildTelemetrySourceSignature({
+        const fullReadInputs = await this.collectFullReadInputs({
+          preReadSourceSignature,
+          stdout,
+          stderr,
+        });
+        preReadSourceSignature = fullReadInputs.preReadSourceSignature;
+        if (preReadSourceSignature) {
+          this.resetFailureIfSourceChanged(preReadSourceSignature);
+          failureSourceSignature = preReadSourceSignature;
+        }
+        if (fullReadInputs.skipped) {
+          this.logPollEvent("provider_telemetry_poll_no_new_data", {
+            nativeSessionId: fullReadInputs.inputs.resolvedNativeSessionId || this.opts.nativeSessionId || undefined,
+          });
+          await this.wait(this.getPollIntervalMs());
+          continue;
+        }
+        const {
           resolvedNativeSessionId,
+          claudeSessionJsonl,
+          codexSessionJson,
+          qwenLog,
+          antigravityTranscriptJsonl,
+        } = fullReadInputs.inputs;
+
+        const sourceSignature = await buildTelemetrySourceSignature({
+          provider: this.opts.provider,
+          model: this.opts.model,
+          resolvedNativeSessionId: resolvedNativeSessionId || this.opts.nativeSessionId,
           stdout,
           stderr,
           claudeSessionJsonl,
           codexSessionJson,
           qwenLog,
           antigravityTranscriptJsonl,
+          antigravityTempDbPath: this.tempDbPath,
         });
         if (sourceSignature === this.lastTelemetrySourceSignature) {
-          this.lastPreReadSourceSignature = preReadSourceSignature;
-          this.readFailureCount = 0;
-          await this.wait(1500);
+          this.lastEmittedPreReadSourceSignature = preReadSourceSignature;
+          this.resetReadFailures();
+          this.logPollEvent("provider_telemetry_poll_no_new_data", {
+            nativeSessionId: resolvedNativeSessionId || this.opts.nativeSessionId || undefined,
+          });
+          await this.wait(this.getPollIntervalMs());
           continue;
         }
 
@@ -152,14 +303,177 @@ export class ProviderTelemetryWatcher {
         if (this.opts.onTelemetry) {
           this.opts.onTelemetry(telemetry);
         }
+        this.logPollEvent(this.getTelemetryPollEventType(telemetry), {
+          nativeSessionId: telemetry.nativeSessionId || resolvedNativeSessionId || this.opts.nativeSessionId || undefined,
+          usageSource: telemetry.usageSource,
+          transcriptChars: telemetry.transcriptText.length,
+          conversationTurnCount: telemetry.conversation?.length ?? 0,
+          toolCallCount: telemetry.conversation?.filter((turn) => turn.kind === "tool_call").length ?? 0,
+          inputTokens: telemetry.inputTokens,
+          cachedInputTokens: telemetry.cachedInputTokens,
+          outputTokens: telemetry.outputTokens,
+          reasoningOutputTokens: telemetry.reasoningOutputTokens,
+          totalTokens: telemetry.totalTokens,
+          hasRawUsageJson: Boolean(telemetry.rawUsageJson),
+        });
         this.lastTelemetrySourceSignature = sourceSignature;
-        this.lastPreReadSourceSignature = preReadSourceSignature;
-        this.readFailureCount = 0;
+        this.lastEmittedPreReadSourceSignature = preReadSourceSignature;
+        this.resetReadFailures();
       } catch (err) {
-        this.recordReadFailure(err);
+        this.recordReadFailure(err, failureSourceSignature);
       }
-      await this.wait(1500);
+      await this.wait(this.getPollIntervalMs());
     }
+  }
+
+  private async collectFullReadInputs(args: {
+    preReadSourceSignature: string | null;
+    stdout: string;
+    stderr: string;
+  }): Promise<FullReadResult> {
+    const emptyInputs: FullReadInputs = {
+      resolvedNativeSessionId: this.resolvedNativeSessionId || this.opts.nativeSessionId,
+      claudeSessionJsonl: null,
+      codexSessionJson: null,
+      qwenLog: null,
+      antigravityTranscriptJsonl: null,
+    };
+
+    if (this.opts.provider === "claude-code" && this.opts.nativeSessionId) {
+      return {
+        skipped: false,
+        preReadSourceSignature: args.preReadSourceSignature,
+        inputs: {
+          ...emptyInputs,
+          claudeSessionJsonl: await this.opts.readClaudeSessionJsonl(this.opts.nativeSessionId),
+          resolvedNativeSessionId: this.opts.nativeSessionId,
+        },
+      };
+    }
+
+    if (this.opts.provider === "codex") {
+      return {
+        skipped: false,
+        preReadSourceSignature: args.preReadSourceSignature,
+        inputs: {
+          ...emptyInputs,
+          codexSessionJson: await this.opts.readCodexLatestSessionJson(),
+        },
+      };
+    }
+
+    if (this.opts.provider === "qwen-code") {
+      return {
+        skipped: false,
+        preReadSourceSignature: args.preReadSourceSignature,
+        inputs: {
+          ...emptyInputs,
+          qwenLog: await this.opts.readQwenLogData(),
+        },
+      };
+    }
+
+    if (this.opts.provider === "antigravity") {
+      return await this.collectAntigravityFullReadInputs(args);
+    }
+
+    return {
+      skipped: false,
+      preReadSourceSignature: args.preReadSourceSignature,
+      inputs: emptyInputs,
+    };
+  }
+
+  private async collectAntigravityFullReadInputs(args: {
+    preReadSourceSignature: string | null;
+    stdout: string;
+    stderr: string;
+  }): Promise<FullReadResult> {
+    let preReadSourceSignature = args.preReadSourceSignature;
+    const resolvedNativeSessionId = await this.resolveAntigravityNativeSessionId();
+    if (!resolvedNativeSessionId) {
+      return {
+        skipped: false,
+        preReadSourceSignature,
+        inputs: {
+          resolvedNativeSessionId,
+          claudeSessionJsonl: null,
+          codexSessionJson: null,
+          qwenLog: null,
+          antigravityTranscriptJsonl: null,
+        },
+      };
+    }
+
+    const resolvedPreReadSourceSignature = await this.buildPreReadSourceSignature({
+      resolvedNativeSessionId,
+      stdout: args.stdout,
+      stderr: args.stderr,
+    });
+    if (resolvedPreReadSourceSignature) {
+      preReadSourceSignature = resolvedPreReadSourceSignature;
+      if (
+        this.lastTelemetrySourceSignature
+        && resolvedPreReadSourceSignature === this.lastEmittedPreReadSourceSignature
+      ) {
+        return {
+          skipped: true,
+          preReadSourceSignature,
+          inputs: {
+            resolvedNativeSessionId,
+            claudeSessionJsonl: null,
+            codexSessionJson: null,
+            qwenLog: null,
+            antigravityTranscriptJsonl: null,
+          },
+        };
+      }
+    }
+
+    if (this.shouldDeferFailedSourceRead(preReadSourceSignature)) {
+      return {
+        skipped: true,
+        preReadSourceSignature,
+        inputs: {
+          resolvedNativeSessionId,
+          claudeSessionJsonl: null,
+          codexSessionJson: null,
+          qwenLog: null,
+          antigravityTranscriptJsonl: null,
+        },
+      };
+    }
+
+    const antigravityTranscriptJsonl = await this.opts.readAntigravityTranscript(resolvedNativeSessionId);
+    await this.resolveAntigravityTempDatabase(resolvedNativeSessionId);
+    return {
+      skipped: false,
+      preReadSourceSignature,
+      inputs: {
+        resolvedNativeSessionId,
+        claudeSessionJsonl: null,
+        codexSessionJson: null,
+        qwenLog: null,
+        antigravityTranscriptJsonl,
+      },
+    };
+  }
+
+  private async resolveAntigravityNativeSessionId(): Promise<string | null> {
+    let resolvedNativeSessionId = this.resolvedNativeSessionId || this.opts.nativeSessionId;
+    if (!resolvedNativeSessionId && this.opts.antigravityLogPath) {
+      resolvedNativeSessionId = await this.opts.parseAntigravityConversationId(this.opts.antigravityLogPath);
+      this.resolvedNativeSessionId = resolvedNativeSessionId;
+    }
+    return resolvedNativeSessionId;
+  }
+
+  private async resolveAntigravityTempDatabase(resolvedNativeSessionId: string): Promise<void> {
+    if (!this.tempDbPath) {
+      const safeSession = resolvedNativeSessionId.replace(/[^A-Za-z0-9_-]/g, "_");
+      this.tempDbPath = path.join(os.tmpdir(), `agy-temp-watcher-${safeSession}-${randomUUID()}.db`);
+    }
+    await this.opts.resolveAntigravityDatabase(resolvedNativeSessionId, this.tempDbPath);
   }
 
   private async buildPreReadSourceSignature(args: {
@@ -168,141 +482,170 @@ export class ProviderTelemetryWatcher {
     stderr: string;
   }): Promise<string | null> {
     const resolvedNativeSessionId = args.resolvedNativeSessionId || this.opts.nativeSessionId;
-    const parts = [
-      this.opts.provider,
-      this.opts.model,
-      resolvedNativeSessionId || "",
-      this.signatureForString(args.stdout),
-      this.signatureForString(args.stderr),
-    ];
-
     const providerMetadata = await this.readProviderMetadata(resolvedNativeSessionId);
-    if (providerMetadata === undefined) {
+    if (!providerMetadata.available) {
       return null;
     }
-    parts.push(providerMetadata || "");
-    return parts.join("|");
+    return buildMetadataSourceSignature({
+      provider: this.opts.provider,
+      model: this.opts.model,
+      resolvedNativeSessionId,
+      stdout: args.stdout,
+      stderr: args.stderr,
+      providerMetadata: providerMetadata.signature,
+    });
   }
 
-  private async readProviderMetadata(resolvedNativeSessionId: string | null): Promise<string | null | undefined> {
+  private buildFallbackFailureSourceSignature(args: {
+    resolvedNativeSessionId: string | null;
+    stdout: string;
+    stderr: string;
+  }): string {
+    return buildMetadataSourceSignature({
+      provider: this.opts.provider,
+      model: this.opts.model,
+      resolvedNativeSessionId: args.resolvedNativeSessionId || this.opts.nativeSessionId,
+      stdout: args.stdout,
+      stderr: args.stderr,
+      providerMetadata: "provider-metadata-unavailable",
+    });
+  }
+
+  private async readProviderMetadata(resolvedNativeSessionId: string | null): Promise<ProviderMetadataSignature> {
     if (this.opts.provider === "claude-code" && this.opts.nativeSessionId) {
       if (!this.opts.getClaudeSessionJsonlMetadata) {
-        return undefined;
+        return { available: false };
       }
-      return await this.opts.getClaudeSessionJsonlMetadata(this.opts.nativeSessionId);
+      return { available: true, signature: await this.opts.getClaudeSessionJsonlMetadata(this.opts.nativeSessionId) || "" };
     }
     if (this.opts.provider === "codex") {
       if (!this.opts.getCodexLatestSessionJsonMetadata) {
-        return undefined;
+        return { available: false };
       }
-      return await this.opts.getCodexLatestSessionJsonMetadata();
+      return { available: true, signature: await this.opts.getCodexLatestSessionJsonMetadata() || "" };
     }
     if (this.opts.provider === "qwen-code") {
       if (!this.opts.getQwenLogDataMetadata) {
-        return undefined;
+        return { available: false };
       }
-      return await this.opts.getQwenLogDataMetadata();
+      return { available: true, signature: await this.opts.getQwenLogDataMetadata() || "" };
     }
     if (this.opts.provider === "antigravity") {
       const parts: string[] = [];
       if (this.opts.antigravityLogPath) {
         if (!this.opts.getAntigravityLogMetadata) {
-          return undefined;
+          return { available: false };
         }
         parts.push(`log:${await this.opts.getAntigravityLogMetadata(this.opts.antigravityLogPath)}`);
       }
       if (resolvedNativeSessionId) {
-        if (!this.opts.getAntigravityTranscriptMetadata) {
-          return undefined;
+        if (!this.opts.getAntigravityTranscriptMetadata || !this.opts.getAntigravityDatabaseMetadata) {
+          return { available: false };
         }
         parts.push(`transcript:${await this.opts.getAntigravityTranscriptMetadata(resolvedNativeSessionId)}`);
+        parts.push(`database:${await this.opts.getAntigravityDatabaseMetadata(resolvedNativeSessionId)}`);
       }
-      return parts.join("|");
+      return { available: true, signature: parts.join("|") };
     }
-    return null;
+    return { available: true, signature: "" };
   }
 
-  private async buildTelemetrySourceSignature(args: {
-    resolvedNativeSessionId: string | null;
-    stdout: string;
-    stderr: string;
-    claudeSessionJsonl: string | null;
-    codexSessionJson: string | null;
-    qwenLog: { usage: QwenUsageTotals | null; conversation: ParsedConversationTurn[] } | null;
-    antigravityTranscriptJsonl: string | null;
-  }): Promise<string> {
-    const parts = [
-      this.opts.provider,
-      this.opts.model,
-      args.resolvedNativeSessionId || this.opts.nativeSessionId || "",
-      this.signatureForString(args.stdout),
-      this.signatureForString(args.stderr),
-      this.signatureForString(args.claudeSessionJsonl || ""),
-      this.signatureForString(args.codexSessionJson || ""),
-      this.signatureForString(args.antigravityTranscriptJsonl || ""),
-    ];
-
-    if (args.qwenLog) {
-      parts.push(this.signatureForString(JSON.stringify(args.qwenLog)));
-    }
-
-    if (this.tempDbPath) {
-      const stat = await fs.stat(this.tempDbPath).catch(() => null);
-      if (stat) {
-        parts.push(`${stat.size}:${Math.floor(stat.mtimeMs)}`);
-      }
-    }
-
-    return parts.join("|");
-  }
-
-  private signatureForString(value: string): string {
-    if (!value) {
-      return "0:";
-    }
-    if (value.length > 32768) {
-      return [
-        value.length,
-        this.hashString(value.slice(0, 4096)),
-        this.hashString(value.slice(Math.floor(value.length / 2), Math.floor(value.length / 2) + 4096)),
-        this.hashString(value.slice(-16384)),
-      ].join(":");
-    }
-    return `${value.length}:${this.hashString(value)}`;
-  }
-
-  private hashString(value: string): string {
-    let hash = 2166136261;
-    for (let index = 0; index < value.length; index += 1) {
-      hash ^= value.charCodeAt(index);
-      hash = Math.imul(hash, 16777619);
-    }
-    return (hash >>> 0).toString(36);
-  }
-
-  private recordReadFailure(err: unknown): void {
+  private recordReadFailure(err: unknown, sourceSignature: string | null): void {
     this.readFailureCount += 1;
+    this.failureBackoff = {
+      sourceSignature,
+      remainingSkippedPolls: this.getFailureBackoffSkippedPolls(),
+    };
     if (this.shouldLogFailureWarning()) {
       this.lastFailureWarningCount = this.readFailureCount;
-      this.opts.logger?.warn("Provider telemetry watcher read failed", {
-        logPurpose: "runtime",
+      const errorName = err instanceof Error ? err.name : "Error";
+      this.opts.logger?.warn?.("Provider telemetry watcher read failed", {
+        logPurpose: "invocation",
+        eventType: "provider_telemetry_poll_failed",
         provider: this.opts.provider,
+        purpose: this.opts.purpose || undefined,
         sessionId: this.opts.sessionId,
+        invocationId: this.opts.invocationId || undefined,
+        providerInvocationId: this.opts.providerInvocationId || undefined,
         nativeSessionId: this.resolvedNativeSessionId || this.opts.nativeSessionId || undefined,
+        correlationId: getCorrelationId(),
         failureCount: this.readFailureCount,
-        error: err instanceof Error ? err.message : String(err),
+        errorName,
       });
     }
   }
 
+  private getTelemetryPollEventType(telemetry: ProviderUsageTelemetry): string {
+    return telemetry.usageSource === "reported"
+      ? "provider_telemetry_poll_succeeded"
+      : "provider_telemetry_poll_partial";
+  }
+
+  private logPollEvent(eventType: string, metadata: Record<string, unknown>): void {
+    this.opts.logger?.debug?.("Provider telemetry watcher poll", {
+      logPurpose: "invocation",
+      eventType,
+      provider: this.opts.provider,
+      purpose: this.opts.purpose || undefined,
+      sessionId: this.opts.sessionId,
+      invocationId: this.opts.invocationId || undefined,
+      providerInvocationId: this.opts.providerInvocationId || undefined,
+      correlationId: getCorrelationId(),
+      ...metadata,
+    });
+  }
+
   private shouldLogFailureWarning(): boolean {
-    if (this.readFailureCount < 2) {
-      return false;
-    }
-    if (this.readFailureCount <= 5) {
+    if ([1, 2, 5].includes(this.readFailureCount)) {
       return this.lastFailureWarningCount !== this.readFailureCount;
     }
     return this.readFailureCount % 10 === 0 && this.lastFailureWarningCount !== this.readFailureCount;
+  }
+
+  private resetReadFailures(): void {
+    this.readFailureCount = 0;
+    this.lastFailureWarningCount = 0;
+    this.failureBackoff = null;
+  }
+
+  private resetFailureIfSourceChanged(sourceSignature: string): void {
+    if (this.failureBackoff && this.failureBackoff.sourceSignature !== sourceSignature) {
+      this.resetReadFailures();
+    }
+  }
+
+  private resetMetadataFailureIfSourceChanged(fallbackFailureSourceSignature: string): void {
+    if (
+      this.failureBackoff
+      && this.failureBackoff.sourceSignature?.endsWith("|provider-metadata-unavailable")
+      && this.failureBackoff.sourceSignature !== fallbackFailureSourceSignature
+    ) {
+      this.resetReadFailures();
+    }
+  }
+
+  private shouldDeferFailedSourceRead(sourceSignature: string | null): boolean {
+    if (!sourceSignature || !this.failureBackoff || this.failureBackoff.sourceSignature !== sourceSignature) {
+      return false;
+    }
+    if (this.failureBackoff.remainingSkippedPolls <= 0) {
+      return false;
+    }
+    this.failureBackoff.remainingSkippedPolls -= 1;
+    return true;
+  }
+
+  private getFailureBackoffSkippedPolls(): number {
+    const exponent = Math.min(Math.max(this.readFailureCount - 1, 0), 4);
+    return Math.min(2 ** exponent, FAILURE_BACKOFF_MAX_SKIPPED_POLLS);
+  }
+
+  private getInitialPollDelayMs(): number {
+    return this.opts.initialPollDelayMs ?? 1000;
+  }
+
+  private getPollIntervalMs(): number {
+    return this.opts.pollIntervalMs ?? 1500;
   }
 
   private async wait(ms: number): Promise<void> {

@@ -71,6 +71,9 @@
 
 .kanban-card__meta-slots {
   contain: layout;
+  transition:
+    opacity var(--kanban-card-list-reveal-duration, var(--interaction-list-reveal-duration)) var(--kanban-card-list-reveal-ease, var(--interaction-list-reveal-ease)),
+    border-color var(--kanban-card-control-duration, var(--interaction-control-feedback-duration)) var(--kanban-card-control-ease, var(--interaction-control-feedback-ease));
 }
 
 .kanban-card__meta-slot {
@@ -102,6 +105,8 @@
   opacity: 1;
   pointer-events: auto;
   transform: translateY(0);
+  min-height: 2.75rem;
+  contain: layout;
   transition:
     opacity var(--kanban-card-control-duration, var(--interaction-control-feedback-duration)) var(--kanban-card-control-ease, var(--interaction-control-feedback-ease)),
     transform var(--kanban-card-control-duration, var(--interaction-control-feedback-duration)) var(--kanban-card-control-ease, var(--interaction-control-feedback-ease));
@@ -109,13 +114,51 @@
 
 .kanban-card__actions button,
 .kanban-card__actions a {
-  min-width: 2.75rem;
+  min-width: 4.75rem;
   min-height: 2rem;
   white-space: nowrap;
   transition:
     color var(--kanban-card-control-duration, var(--interaction-control-feedback-duration)) var(--kanban-card-control-ease, var(--interaction-control-feedback-ease)),
     background-color var(--kanban-card-control-duration, var(--interaction-control-feedback-duration)) var(--kanban-card-control-ease, var(--interaction-control-feedback-ease)),
     transform var(--kanban-card-selection-duration, var(--interaction-selection-movement-duration)) var(--kanban-card-selection-ease, var(--interaction-selection-movement-ease));
+}
+
+.kanban-card__action-reason-summary {
+  flex: 1 1 100%;
+  max-width: 100%;
+  min-height: 1rem;
+  overflow: hidden;
+  padding: 0 0.375rem 0.125rem;
+  color: rgb(100 116 139);
+  font-size: 0.5625rem;
+  font-weight: 700;
+  line-height: 1rem;
+  text-align: right;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+:is(.dark .kanban-card__action-reason-summary) {
+  color: rgb(148 163 184);
+}
+
+.kanban-card__action {
+  justify-content: center;
+}
+
+.kanban-card__action-icon {
+  display: inline-flex;
+  width: 0.75rem;
+  min-width: 0.75rem;
+  align-items: center;
+  justify-content: center;
+}
+
+.kanban-card__action-label {
+  display: inline-block;
+  min-width: 2.25rem;
+  text-align: left;
 }
 
 .kanban-card__actions [aria-disabled="true"] {
@@ -126,7 +169,7 @@
   .kanban-card__actions {
     opacity: 0;
     pointer-events: none;
-    transform: translateY(-0.25rem);
+    transform: translateY(0.375rem);
   }
 
   .kanban-card:hover .kanban-card__actions,
@@ -140,7 +183,10 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .kanban-card__actions {
+  .kanban-card__actions,
+  .kanban-card__actions button,
+  .kanban-card__actions a,
+  .kanban-card__meta-slots {
     transition: none;
   }
 }

@@ -1,6 +1,7 @@
 import { randomUUID } from "crypto";
 import type {
   SprintPreviewHealthStatus,
+  SprintPreviewPortMapping,
   SprintPreviewSession,
   SprintPreviewSessionStatus,
   SprintPreviewStartupMode,
@@ -18,6 +19,7 @@ interface SprintPreviewSessionRow {
   status: string;
   host_port: number | string | null;
   container_app_port: number | string;
+  port_mappings_json: string | null;
   container_id: string | null;
   container_name: string | null;
   worktree_path: string | null;
@@ -44,6 +46,8 @@ export interface CreateSprintPreviewSessionInput {
   sprintId: string;
   status: SprintPreviewSessionStatus;
   containerAppPort: number;
+  hostPort?: number | null;
+  portMappings?: SprintPreviewPortMapping[];
   startupScriptPath: string;
   startupMode: SprintPreviewStartupMode;
   installCommand?: string | null;
@@ -58,6 +62,7 @@ export interface UpdateSprintPreviewSessionInput {
   status?: SprintPreviewSessionStatus;
   hostPort?: number | null;
   containerAppPort?: number;
+  portMappings?: SprintPreviewPortMapping[];
   containerId?: string | null;
   containerName?: string | null;
   worktreePath?: string | null;
@@ -126,6 +131,23 @@ export class SprintPreviewRepository {
     return row ? this.mapRow(row) : null;
   }
 
+  getSessionForProjectSprint(projectId: string, sprintId: string, id: string): SprintPreviewSession | null {
+    const row = this.storage.getDatabase().prepare(`
+      SELECT
+        sps.*,
+        p.name AS project_name,
+        sp.name AS sprint_name,
+        sp.number AS sprint_number
+      FROM sprint_preview_sessions sps
+      INNER JOIN projects p ON p.id = sps.project_id
+      INNER JOIN sprints sp ON sp.id = sps.sprint_id
+      WHERE sps.project_id = ? AND sps.sprint_id = ? AND sps.id = ?
+      LIMIT 1
+    `).get(projectId, sprintId, id) as SprintPreviewSessionRow | undefined;
+
+    return row ? this.mapRow(row) : null;
+  }
+
   getSessionByProjectSprint(projectId: string, sprintId: string): SprintPreviewSession | null {
     const row = this.storage.getDatabase().prepare(`
       SELECT
@@ -146,20 +168,28 @@ export class SprintPreviewRepository {
   createSession(input: CreateSprintPreviewSessionInput): SprintPreviewSession {
     const now = new Date().toISOString();
     const id = randomUUID();
+    const portMappings = normalizePortMappings(
+      input.portMappings,
+      input.containerAppPort,
+      input.hostPort ?? null,
+    );
+    const primaryMapping = getPrimaryPortMapping(portMappings);
     this.storage.getDatabase().prepare(`
       INSERT INTO sprint_preview_sessions (
-        id, project_id, sprint_id, status, host_port, container_app_port,
+        id, project_id, sprint_id, status, host_port, container_app_port, port_mappings_json,
         container_id, container_name, worktree_path, feature_branch,
         startup_script_path, startup_mode, install_command, build_command, run_command,
         last_completed_task_count, last_seen_sprint_status, last_known_path, health_status,
         last_error, last_build_at, last_started_at, last_stopped_at, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, NULL, ?, NULL, NULL, NULL, NULL, ?, ?, ?, ?, ?, ?, ?, ?, 'unknown', NULL, NULL, NULL, NULL, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, NULL, ?, ?, ?, ?, ?, ?, ?, ?, 'unknown', NULL, NULL, NULL, NULL, ?, ?)
     `).run(
       id,
       input.projectId,
       input.sprintId,
       input.status,
-      input.containerAppPort,
+      primaryMapping.hostPort,
+      primaryMapping.containerPort,
+      JSON.stringify(portMappings),
       input.startupScriptPath,
       input.startupMode,
       input.installCommand || null,
@@ -185,12 +215,26 @@ export class SprintPreviewRepository {
       throw new Error(`Sprint preview session not found: ${id}`);
     }
     const now = new Date().toISOString();
+    const hasPortMappingsPatch = Object.prototype.hasOwnProperty.call(patch, "portMappings");
+    const portMappings = hasPortMappingsPatch
+      ? normalizePortMappings(
+          patch.portMappings,
+          patch.containerAppPort ?? current.containerAppPort,
+          patch.hostPort === undefined ? current.hostPort : patch.hostPort,
+        )
+      : updatePrimaryPortMapping(
+          current.portMappings,
+          patch.containerAppPort ?? current.containerAppPort,
+          patch.hostPort === undefined ? current.hostPort : patch.hostPort,
+        );
+    const primaryMapping = getPrimaryPortMapping(portMappings);
 
     this.storage.getDatabase().prepare(`
       UPDATE sprint_preview_sessions
       SET status = ?,
           host_port = ?,
           container_app_port = ?,
+          port_mappings_json = ?,
           container_id = ?,
           container_name = ?,
           worktree_path = ?,
@@ -212,8 +256,9 @@ export class SprintPreviewRepository {
       WHERE id = ?
     `).run(
       patch.status ?? current.status,
-      patch.hostPort === undefined ? current.hostPort : patch.hostPort,
-      patch.containerAppPort ?? current.containerAppPort,
+      primaryMapping.hostPort,
+      primaryMapping.containerPort,
+      JSON.stringify(portMappings),
       patch.containerId === undefined ? current.containerId : patch.containerId,
       patch.containerName === undefined ? current.containerName : patch.containerName,
       patch.worktreePath === undefined ? current.worktreePath : patch.worktreePath,
@@ -250,6 +295,12 @@ export class SprintPreviewRepository {
   }
 
   private mapRow(row: SprintPreviewSessionRow): SprintPreviewSession {
+    const portMappings = parsePortMappingsJson(
+      row.port_mappings_json,
+      toNumber(row.container_app_port) || 3000,
+      toNumber(row.host_port) || null,
+    );
+    const primaryMapping = getPrimaryPortMapping(portMappings);
     return {
       id: row.id,
       projectId: row.project_id,
@@ -258,8 +309,9 @@ export class SprintPreviewRepository {
       sprintName: row.sprint_name,
       sprintNumber: toNumber(row.sprint_number) || null,
       status: row.status as SprintPreviewSessionStatus,
-      hostPort: toNumber(row.host_port) || null,
-      containerAppPort: toNumber(row.container_app_port) || 3000,
+      hostPort: primaryMapping.hostPort,
+      containerAppPort: primaryMapping.containerPort,
+      portMappings,
       containerId: row.container_id,
       containerName: row.container_name,
       worktreePath: row.worktree_path,
@@ -281,4 +333,83 @@ export class SprintPreviewRepository {
       updatedAt: row.updated_at,
     };
   }
+}
+
+function isValidPort(value: unknown): value is number {
+  return typeof value === "number" && Number.isInteger(value) && value >= 1 && value <= 65535;
+}
+
+function normalizePortMappings(
+  mappings: SprintPreviewPortMapping[] | undefined,
+  fallbackContainerPort: number,
+  fallbackHostPort: number | null,
+): SprintPreviewPortMapping[] {
+  const validMappings = Array.isArray(mappings)
+    ? mappings.filter((mapping) => isValidPort(mapping.containerPort) && (mapping.hostPort === null || isValidPort(mapping.hostPort)))
+    : [];
+
+  if (validMappings.length === 0) {
+    return [{
+      containerPort: isValidPort(fallbackContainerPort) ? fallbackContainerPort : 3000,
+      hostPort: fallbackHostPort === null || isValidPort(fallbackHostPort) ? fallbackHostPort : null,
+      isPrimary: true,
+    }];
+  }
+
+  const primaryIndex = Math.max(0, validMappings.findIndex((mapping) => mapping.isPrimary === true));
+  return validMappings.map((mapping, index) => {
+    const label = typeof mapping.label === "string" && mapping.label.trim().length > 0
+      ? mapping.label.trim()
+      : undefined;
+    return {
+      containerPort: mapping.containerPort,
+      hostPort: mapping.hostPort,
+      ...(label ? { label } : {}),
+      ...(index === primaryIndex ? { isPrimary: true } : {}),
+    };
+  });
+}
+
+function updatePrimaryPortMapping(
+  mappings: SprintPreviewPortMapping[],
+  containerPort: number,
+  hostPort: number | null,
+): SprintPreviewPortMapping[] {
+  const normalized = normalizePortMappings(mappings, containerPort, hostPort);
+  const primaryIndex = normalized.findIndex((mapping) => mapping.isPrimary === true);
+  const targetIndex = primaryIndex >= 0 ? primaryIndex : 0;
+  return normalized.map((mapping, index) => (
+    index === targetIndex
+      ? {
+          ...mapping,
+          containerPort: isValidPort(containerPort) ? containerPort : mapping.containerPort,
+          hostPort: hostPort === null || isValidPort(hostPort) ? hostPort : null,
+          isPrimary: true,
+        }
+      : mapping
+  ));
+}
+
+function parsePortMappingsJson(value: string | null, fallbackContainerPort: number, fallbackHostPort: number | null): SprintPreviewPortMapping[] {
+  if (typeof value !== "string" || value.trim().length === 0) {
+    return normalizePortMappings(undefined, fallbackContainerPort, fallbackHostPort);
+  }
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    return normalizePortMappings(
+      Array.isArray(parsed) ? parsed as SprintPreviewPortMapping[] : undefined,
+      fallbackContainerPort,
+      fallbackHostPort,
+    );
+  } catch {
+    return normalizePortMappings(undefined, fallbackContainerPort, fallbackHostPort);
+  }
+}
+
+function getPrimaryPortMapping(mappings: SprintPreviewPortMapping[]): SprintPreviewPortMapping {
+  return mappings.find((mapping) => mapping.isPrimary === true) ?? mappings[0] ?? {
+    containerPort: 3000,
+    hostPort: null,
+    isPrimary: true,
+  };
 }

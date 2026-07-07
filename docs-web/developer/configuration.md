@@ -14,11 +14,11 @@ codeux [options]
 | `--runtime-role VALUE` | string | `project_manager` | Role advertised to the MCP layer. (Currently only `project_manager` is functional; `worker-host` is reserved.) |
 | `--headless` | flag | off | Start MCP server without binding the dashboard. |
 | `--no-dashboard` | flag | off | Alias for `--headless`. |
-| `--mcp-https` / `--no-mcp-https` | flag | on | MCP HTTPS worker gateway, enabled by default; use `--no-mcp-https` to disable. |
+| `--mcp-https` / `--no-mcp-https` | flag | on | MCP Streamable HTTP gateway, enabled by default; use `--no-mcp-https` to disable. |
 | `--mcp-https-port N` | number | `dashboardPort + 1` | Port for the HTTP gateway. |
 | `--mcp-https-host H` | string | `127.0.0.1` | Host/interface for the HTTP gateway. |
 | `--mcp-https-path P` | string | `/mcp` | Path for the HTTP gateway. |
-| `--mcp-https-auth-token VALUE` | string | – | Bearer token. **Required** for non-loopback hosts. |
+| `--mcp-https-auth-token VALUE` | string | auto-generated user token | Bearer token. Overrides the generated token stored in `~/.code-ux/security.json`. |
 | `--help`, `-h` | flag | – | Show help. |
 
 Flags can be passed in any order. Anything after `--` is ignored.
@@ -37,7 +37,7 @@ Flags can be passed in any order. Anything after `--` is ignored.
 | `MCP_HTTPS_PORT` | int | – | MCP HTTP port. |
 | `MCP_HTTPS_HOST` | string | `127.0.0.1` | MCP HTTP bind. |
 | `MCP_HTTPS_PATH` | string | `/mcp` | MCP HTTP path. |
-| `MCP_HTTPS_AUTH_TOKEN` | string | – | Bearer token. |
+| `MCP_HTTPS_AUTH_TOKEN` | string | auto-generated user token | Bearer token. |
 | `GITHUB_TOKEN` / `GH_TOKEN` | string | – | GitHub PAT for `REMOTE` GitHub mode. |
 | `NODE_ENV` | string | – | Affects logging verbosity. `test` enables test mode. |
 
@@ -58,12 +58,14 @@ Files inside the directory:
 
 | File | Contents |
 | --- | --- |
-| `settings.json` | Provider keys, override settings (read-only / informational; primary settings live in the DB). |
+| `settings.json` | Provider keys, override settings (read-only / informational; primary settings live in the SQLite DB `settings.db`). |
 | `config.json` | Dashboard port and other runtime config. |
 | `agents/<id>.md` | Agent preset markdown sources. |
 | `sprints/sprint-<n>/` | Sprint markdown directory. |
 | `sprints/sprint-<n>/<task>.md` | Subtask markdown files. |
-| `sprints/sprint-<n>/preview.sh` | Preview container startup script. |
+| `sprints/sprint-<n>/preview.sh` | Preview container startup script. Default is `.code-ux/browser/start-preview.sh`. |
+
+Note: `git.defaultBranch` defaults to `main` but resolves through scoped overrides (project/sprint).
 
 ## Resolution rules
 
@@ -96,8 +98,10 @@ If the chosen port is in use, Code UX increments and retries until it finds a fr
 ```
 --mcp-https-host  >  MCP_HTTPS_HOST env  >  127.0.0.1
 --mcp-https-path  >  MCP_HTTPS_PATH env  >  /mcp
---mcp-https-auth-token  >  MCP_HTTPS_AUTH_TOKEN env  >  unset (loopback only)
+--mcp-https-auth-token  >  MCP_HTTPS_AUTH_TOKEN env  >  ~/.code-ux/security.json auto-generated token
 ```
+
+The MCP listener is authenticated HTTP. The historical `mcp-https` option names remain supported for compatibility, but TLS requires a trusted reverse proxy/certificate in front of the listener.
 
 ## External settings hints
 

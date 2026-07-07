@@ -21,6 +21,8 @@ interface IssueImportIssueCardProps {
   selectionLabel?: string;
   modeLabel?: string | null;
   icon?: ComponentChildren;
+  compact?: boolean;
+  metadataLimit?: number;
   onToggle: () => void;
   onToggleConversation: () => void;
 }
@@ -39,10 +41,16 @@ export const IssueImportIssueCard: FunctionComponent<IssueImportIssueCardProps> 
   selectionLabel,
   modeLabel,
   icon,
+  compact = false,
+  metadataLimit,
   onToggle,
   onToggleConversation,
 }) => {
   const safeUrl = getSafeUrl(url ?? "");
+  const visibleMetadataRows = typeof metadataLimit === "number"
+    ? metadataRows.slice(0, Math.max(0, Math.trunc(metadataLimit)))
+    : metadataRows;
+  const metadataOverflowCount = Math.max(0, metadataRows.length - visibleMetadataRows.length);
   const cardTone = selected
     ? provider.accent.selectedCardClassName
     : "border-black/[0.06] bg-black/[0.02] hover:-translate-y-0.5 hover:border-black/[0.12] hover:bg-white/82 dark:border-white/[0.07] dark:bg-white/[0.03] dark:hover:border-white/[0.14] dark:hover:bg-white/[0.055]";
@@ -55,9 +63,9 @@ export const IssueImportIssueCard: FunctionComponent<IssueImportIssueCardProps> 
       type="button"
       onClick={onToggle}
       aria-pressed={selected}
-      className={`group rounded-[1.35rem] border p-4 text-left transition-all focus-visible:outline-none focus-visible:ring-2 ${provider.accent.focusRingClassName} ${cardTone}`}
+      className={`group rounded-[1.25rem] border text-left transition-all focus-visible:outline-none focus-visible:ring-2 ${provider.accent.focusRingClassName} ${compact ? "p-3" : "p-4"} ${cardTone}`}
     >
-      <div className="flex items-start gap-4">
+      <div className={`flex items-start ${compact ? "gap-3" : "gap-4"}`}>
         <div className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-[0.85rem] ${iconTone}`}>
           {selected ? <Check className="h-4 w-4" strokeWidth={2.5} aria-hidden="true" /> : icon}
         </div>
@@ -72,18 +80,18 @@ export const IssueImportIssueCard: FunctionComponent<IssueImportIssueCardProps> 
             )}
           </div>
 
-          <div className="mt-1 text-sm font-black leading-snug text-slate-900 dark:text-white">
+          <div className="mt-1 text-sm font-semibold leading-snug text-slate-900 dark:text-white">
             {title}
           </div>
 
-          {bodyPreview && (
+          {bodyPreview && !compact && (
             <p className="mt-2 line-clamp-2 text-xs leading-relaxed text-slate-500 dark:text-slate-400">
               {bodyPreview}
             </p>
           )}
 
           <div className="mt-3 flex flex-wrap items-center gap-1.5">
-            {metadataRows.map((row) => (
+            {visibleMetadataRows.map((row) => (
               <span
                 key={row.id}
                 className="inline-flex max-w-full items-center gap-1 rounded-full bg-slate-100 px-2 py-1 text-[10px] font-semibold text-slate-500 ring-1 ring-black/[0.05] dark:bg-white/[0.06] dark:text-slate-300 dark:ring-white/[0.06]"
@@ -92,6 +100,7 @@ export const IssueImportIssueCard: FunctionComponent<IssueImportIssueCardProps> 
                 <span className="truncate">{row.value}</span>
               </span>
             ))}
+            {metadataOverflowCount > 0 && <OverflowPill label={`+${metadataOverflowCount} details`} />}
             {assignees.visible.map((assignee) => (
               <span
                 key={assignee}
@@ -129,7 +138,7 @@ export const IssueImportIssueCard: FunctionComponent<IssueImportIssueCardProps> 
               Append Conversation
             </label>
             <span className="inline-flex items-center gap-1 rounded-full border border-black/[0.06] bg-white px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-400 dark:border-white/[0.08] dark:bg-white/[0.05] dark:text-slate-300">
-              {selectionLabel ?? (selected ? "Selected" : "Click to select")}
+              <span aria-live="polite">{selectionLabel ?? (selected ? "Selected" : "Click to select")}</span>
             </span>
           </div>
         </div>

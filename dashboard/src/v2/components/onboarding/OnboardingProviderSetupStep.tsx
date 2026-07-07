@@ -4,6 +4,7 @@ import type { ProviderId, ProviderConfigId, OnboardingProviderCredentialStatus, 
 import { ProviderBrandIcon } from "../providers/ProviderBrandIcon.js";
 import { ProviderInstanceCard } from "../settings/ProviderInstanceCard.js";
 import { sortProviderConfigEntries } from "../../lib/settings-view-models.js";
+import { useInteractionTokens } from "../../lib/motion/tokens.js";
 
 const providerLabels: Record<ProviderId, string> = {
   jules: "Jules",
@@ -13,6 +14,7 @@ const providerLabels: Record<ProviderId, string> = {
   "qwen-code": "Qwen Code",
   opencode: "OpenCode",
   antigravity: "Antigravity",
+  "mockup-cli": "Mockup CLI",
 };
 
 const providerDescriptions: Record<ProviderId, string> = {
@@ -23,6 +25,7 @@ const providerDescriptions: Record<ProviderId, string> = {
   "qwen-code": "Qwen Code CLI with OAuth, Alibaba Coding Plan, or custom model provider config.",
   opencode: "OpenCode CLI with local auth, provider keys, or OpenAI-compatible endpoints.",
   antigravity: "Antigravity CLI (agy) for Google-powered local container execution.",
+  "mockup-cli": "Internal test-only mock provider.",
 };
 
 const getProviderWatermark = (providerId: ProviderId): string => (
@@ -56,6 +59,8 @@ export const OnboardingProviderSetupStep: FunctionComponent<OnboardingProviderSe
   removeProviderInstance,
   configureProjectProvider,
 }) => {
+  const tokens = useInteractionTokens();
+
   return (
     <div className="space-y-4">
       {selectedProviderTypes.length === 0 ? (
@@ -86,8 +91,10 @@ export const OnboardingProviderSetupStep: FunctionComponent<OnboardingProviderSe
                   </div>
                   <button
                     type="button"
+                    aria-label={`Add ${providerLabels[providerId]} provider instance`}
                     onClick={() => addProviderInstance(providerId)}
                     className="inline-flex items-center gap-2 rounded-2xl border border-signal-500/20 bg-signal-500/10 px-3 py-2 text-xs font-bold uppercase tracking-[0.14em] text-signal-700 hover:bg-signal-500/15 dark:text-signal-200"
+                    style={{ transitionDuration: tokens.controlFeedback.duration, transitionTimingFunction: tokens.controlFeedback.ease }}
                   >
                     <Plus className="h-3.5 w-3.5" />
                     <span>Add instance</span>

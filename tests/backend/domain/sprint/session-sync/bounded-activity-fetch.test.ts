@@ -1,5 +1,6 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { fetchActivitiesBounded } from "../../../../../src/domain/sprint/session-sync/bounded-activity-fetch.js";
+import { withActivityFetchTimeout } from "../../../../../src/domain/sprint/session-sync/activity-fetch-utils.js";
 import type { JulesActivity } from "../../../../../src/contracts/app-types.js";
 import type { Logger } from "../../../../../src/shared/logging/logger.js";
 
@@ -14,6 +15,10 @@ describe("fetchActivitiesBounded", () => {
       debug: vi.fn(),
       child: vi.fn(),
     } as unknown as Logger;
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it("fetches activities preserving input array order", async () => {
@@ -70,7 +75,88 @@ describe("fetchActivitiesBounded", () => {
     expect(result.get("s_fail")).toEqual([]);
     expect(result.get("s3")).toEqual([{ id: "act_s3" }]);
 
-    expect(mockLogger.warn).toHaveBeenCalledWith("Could not fetch activities for session", { sessionName: "s_fail" });
+    expect(mockLogger.warn).toHaveBeenCalledWith(
+      "Could not fetch activities for session",
+      expect.objectContaining({
+        sessionName: "s_fail",
+        pageSize: 5,
+        concurrency: 5,
+        timeoutMs: 30_000,
+        errorName: "Error",
+        errorMessage: "Fetch failed",
+      }),
+    );
+  });
+
+  it("times out a slow provider activity API with fake timers", async () => {
+    vi.useFakeTimers();
+
+    const mockFetch = vi.fn(() => new Promise<JulesActivity[]>(() => {}));
+    const resultPromise = fetchActivitiesBounded(["slow-session"], 1, 5, mockFetch, mockLogger, 2_500);
+
+    await vi.advanceTimersByTimeAsync(2_499);
+    expect(mockLogger.warn).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(1);
+    const result = await resultPromise;
+
+    expect(result.get("slow-session")).toEqual([]);
+    expect(mockLogger.warn).toHaveBeenCalledWith(
+      "Could not fetch activities for session",
+      expect.objectContaining({
+        sessionName: "slow-session",
+        pageSize: 5,
+        concurrency: 1,
+        timeoutMs: 2_500,
+        elapsedMs: 2_500,
+        errorName: "Error",
+        errorMessage: "Timed out fetching activities for slow-session after 2500ms",
+      }),
+    );
+  });
+
+  it("handles provider rejection under fake timers without retrying or waiting", async () => {
+    vi.useFakeTimers();
+
+    const mockFetch = vi.fn().mockRejectedValue(new TypeError("provider rejected"));
+    const result = await fetchActivitiesBounded(["rejected-session"], 1, 5, mockFetch, mockLogger, 1_000);
+
+    expect(result.get("rejected-session")).toEqual([]);
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    expect(mockLogger.warn).toHaveBeenCalledWith(
+      "Could not fetch activities for session",
+      expect.objectContaining({
+        sessionName: "rejected-session",
+        timeoutMs: 1_000,
+        errorName: "TypeError",
+        errorMessage: "provider rejected",
+      }),
+    );
+  });
+
+  it("preserves a real empty activity response under fake timers", async () => {
+    vi.useFakeTimers();
+
+    const mockFetch = vi.fn().mockResolvedValue([]);
+    const result = await fetchActivitiesBounded(["empty-session"], 1, 5, mockFetch, mockLogger, 1_000);
+
+    expect(result.get("empty-session")).toEqual([]);
+    expect(mockLogger.warn).not.toHaveBeenCalled();
+  });
+
+  it("passes non-positive timeout values through without scheduling timeout fallback", async () => {
+    vi.useFakeTimers();
+
+    const promise = new Promise<JulesActivity[]>((resolve) => {
+      setTimeout(() => resolve([{ id: "late-activity" }]), 5_000);
+    });
+    const resultPromise = withActivityFetchTimeout(promise, {
+      timeoutMs: 0,
+      createTimeoutError: () => new Error("should not timeout"),
+    });
+
+    await vi.advanceTimersByTimeAsync(5_000);
+    await expect(resultPromise).resolves.toEqual([{ id: "late-activity" }]);
   });
 
   it("handles empty session list without error", async () => {

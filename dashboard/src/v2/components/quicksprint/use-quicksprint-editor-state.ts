@@ -9,6 +9,8 @@ export function useQuicksprintEditorState({
   onUpdateTemplate,
   onDeleteTemplate,
   onCancel,
+  onStatus,
+  onError,
 }: {
   templates: QuicksprintTemplateRecord[];
   onCreateTemplate?: (data: {
@@ -33,6 +35,8 @@ export function useQuicksprintEditorState({
   }) => Promise<void>;
   onDeleteTemplate?: (templateId: string) => Promise<void>;
   onCancel: () => void;
+  onStatus?: (message: string) => void;
+  onError?: (message: string) => void;
 }) {
   const [editorTemplate, setEditorTemplate] = useState<QuicksprintTemplateRecord | null>(null);
   const [edName, setEdName] = useState("");
@@ -43,8 +47,38 @@ export function useQuicksprintEditorState({
   const [showColorPicker, setShowColorPicker] = useState(false);
   const [showIconPicker, setShowIconPicker] = useState(false);
 
-  const iconPickerRef = useFocusTrap(showIconPicker, { onClose: () => setShowIconPicker(false), restoreFocus: true });
-  const colorPickerRef = useFocusTrap(showColorPicker, { onClose: () => setShowColorPicker(false), restoreFocus: true });
+  const updateShowIconPicker = useCallback((open: boolean) => {
+    setShowIconPicker(open);
+    if (open) {
+      setShowColorPicker(false);
+      onStatus?.("Icon picker opened. Choose an icon or press Escape to keep the current icon.");
+    } else {
+      onStatus?.("Icon picker closed.");
+    }
+  }, [onStatus]);
+
+  const updateShowColorPicker = useCallback((open: boolean) => {
+    setShowColorPicker(open);
+    if (open) {
+      setShowIconPicker(false);
+      onStatus?.("Color picker opened. Choose a tag color or press Escape to keep the current color.");
+    } else {
+      onStatus?.("Color picker closed.");
+    }
+  }, [onStatus]);
+
+  const updateEditorIcon = useCallback((value: string) => {
+    setEdIcon(value);
+    onStatus?.(`Template icon changed to ${value}.`);
+  }, [onStatus]);
+
+  const updateEditorCategoryColor = useCallback((value: string) => {
+    setEdCategoryColor(value);
+    onStatus?.(`Template tag color changed to ${value}.`);
+  }, [onStatus]);
+
+  const iconPickerRef = useFocusTrap(showIconPicker, { onClose: () => updateShowIconPicker(false), restoreFocus: true });
+  const colorPickerRef = useFocusTrap(showColorPicker, { onClose: () => updateShowColorPicker(false), restoreFocus: true });
 
   const [pickerPos, setPickerPos] = useState<{ top: number; left: number }>({ top: 0, left: 0 });
   const [edInstruction, setEdInstruction] = useState("");
@@ -72,6 +106,7 @@ export function useQuicksprintEditorState({
   const handleEditorSave = useCallback(async () => {
     try {
       setEdSaving(true);
+      onStatus?.(editorTemplate ? `Saving changes to ${edName}.` : `Creating ${edName || "template"}.`);
       if (editorTemplate) {
         await onUpdateTemplate?.(editorTemplate.id, {
           name: edName,
@@ -95,9 +130,11 @@ export function useQuicksprintEditorState({
           agentPresetId: edAgentPresetId || undefined,
         });
       }
+      onStatus?.(editorTemplate ? `${edName} saved.` : `${edName} created.`);
       onCancel();
     } catch (err) {
       console.error("Failed to save template", err);
+      onError?.(`Could not save ${edName || "template"}. Check the required fields and try again.`);
     } finally {
       setEdSaving(false);
     }
@@ -114,34 +151,40 @@ export function useQuicksprintEditorState({
     onUpdateTemplate,
     onCreateTemplate,
     onCancel,
+    onStatus,
+    onError,
   ]);
 
   const handleEditorDelete = useCallback(async () => {
     if (!editorTemplate) return;
     if (!edConfirmDelete) {
       setEdConfirmDelete(true);
+      onStatus?.(`Confirm deletion for ${editorTemplate.name}.`);
       return;
     }
     try {
       setEdSaving(true);
+      onStatus?.(`Deleting ${editorTemplate.name}.`);
       await onDeleteTemplate?.(editorTemplate.id);
+      onStatus?.(`${editorTemplate.name} deleted.`);
       onCancel();
     } catch (err) {
       console.error("Failed to delete template", err);
+      onError?.(`Could not delete ${editorTemplate.name}. Try again or check the project template files.`);
     } finally {
       setEdSaving(false);
     }
-  }, [editorTemplate, edConfirmDelete, onDeleteTemplate, onCancel]);
+  }, [editorTemplate, edConfirmDelete, onDeleteTemplate, onCancel, onStatus, onError]);
 
   return {
     editorTemplate, setEditorTemplate,
     edName, setEdName,
     edDescription, setEdDescription,
-    edIcon, setEdIcon,
+    edIcon, setEdIcon: updateEditorIcon,
     edCategory, setEdCategory,
-    edCategoryColor, setEdCategoryColor,
-    showColorPicker, setShowColorPicker,
-    showIconPicker, setShowIconPicker,
+    edCategoryColor, setEdCategoryColor: updateEditorCategoryColor,
+    showColorPicker, setShowColorPicker: updateShowColorPicker,
+    showIconPicker, setShowIconPicker: updateShowIconPicker,
     iconPickerRef, colorPickerRef,
     pickerPos, setPickerPos,
     edInstruction, setEdInstruction,

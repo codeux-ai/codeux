@@ -1,5 +1,5 @@
 import type { FunctionComponent } from "preact";
-import { useRef, useState, useEffect } from "preact/hooks";
+import { useRef, useState } from "preact/hooks";
 import gsap from "gsap";
 import {
   Activity,
@@ -8,11 +8,9 @@ import {
   Check,
   CheckCircle2,
   Clock3,
-  Download,
-  Heart,
+  Loader2,
   Maximize2,
   MoreVertical,
-  Pencil,
   Play,
   Sparkles,
   Square,
@@ -27,8 +25,10 @@ import { SprintActionMenu } from "./SprintActionMenu.js";
 import { DropdownMenu } from "../ui/DropdownMenu.js";
 import { getSprintStatusPresentation } from "../../lib/sprint-status-presentation.js";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
-import { MOTION_TOKENS } from "../../lib/motion/tokens.js";
+import { MOTION_TOKENS, useInteractionTokens } from "../../lib/motion/tokens.js";
+import { useGsapInteractionTokens } from "../../lib/motion/constants.js";
 import { computeSprintActionMenuPosition } from "../../lib/sprint-menu-positioning.js";
+import { ORGANIC_CELL_SHADOW_CLASS } from "../ui/organic-cell-styles.js";
 
 const CARD_DATE_FORMATTER = new Intl.DateTimeFormat("en-US", {
   month: "short",
@@ -111,6 +111,8 @@ export const SprintCell: FunctionComponent<SprintCellProps> = ({
   onMarkCompleted,
 }) => {
   const reducedMotion = useReducedMotion();
+  const interactionTokens = useInteractionTokens();
+  const gsapTokens = useGsapInteractionTokens();
 
   const bubbleRef = useRef<HTMLDivElement>(null);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -157,6 +159,18 @@ export const SprintCell: FunctionComponent<SprintCellProps> = ({
   const isRunning = sprint.status === "running";
   const showInterventionBadge = Boolean(humanIntervention) && statusPresentation.showHumanInterventionBadge;
   const animationClass = isCompleted ? "" : isEven ? "animate-organic" : "animate-organic-reverse";
+  const controlFeedbackStyle = {
+    transitionDuration: interactionTokens.controlFeedback.duration,
+    transitionTimingFunction: interactionTokens.controlFeedback.ease,
+  };
+  const asyncFeedbackStyle = {
+    transitionDuration: interactionTokens.asyncFeedback.duration,
+    transitionTimingFunction: interactionTokens.asyncFeedback.ease,
+  };
+  const listReorderStyle = {
+    transitionDuration: interactionTokens.listReorder.duration,
+    transitionTimingFunction: interactionTokens.listReorder.ease,
+  };
   const interventionPulseStyle = reducedMotion
     ? undefined
     : {
@@ -171,8 +185,8 @@ export const SprintCell: FunctionComponent<SprintCellProps> = ({
     gsap.to(bubbleRef.current, {
       scale: 1.05,
       rotation: (Math.random() - 0.5) * 4,
-      duration: 0.8,
-      ease: "elastic.out(1, 0.5)",
+      duration: gsapTokens.controlFeedback.duration,
+      ease: gsapTokens.controlFeedback.ease,
       overwrite: "auto",
     });
   };
@@ -184,35 +198,42 @@ export const SprintCell: FunctionComponent<SprintCellProps> = ({
     gsap.to(bubbleRef.current, {
       scale: 1,
       rotation: 0,
-      duration: 0.95,
-      ease: "elastic.out(1, 0.5)",
+      duration: gsapTokens.controlFeedback.duration,
+      ease: gsapTokens.controlFeedback.ease,
       overwrite: "auto",
     });
   };
+
+  const primaryActionLabel = isRunning ? "Stop" : "Start";
+  const primaryAriaLabel = primaryBusy
+    ? `${primaryActionLabel} sprint ${sprint.name} is pending`
+    : `${primaryActionLabel} sprint ${sprint.name}`;
 
   return (
     <div
       ref={bubbleRef}
       onMouseEnter={handleHoverEnter}
       onMouseLeave={handleHoverLeave}
-      className={`group relative flex h-72 w-72 shrink-0 cursor-pointer items-center justify-center perspective-1000 lg:h-80 lg:w-80 transition-[box-shadow,transform] duration-150 [@media(hover:hover)]:hover:shadow-[0_4px_12px_rgba(0,0,0,0.12)] [@media(hover:hover)]:hover:-translate-y-px motion-reduce:transition-none motion-reduce:hover:transform-none`}
+      className="group relative flex h-72 w-72 shrink-0 cursor-pointer items-center justify-center perspective-1000 transition-transform duration-150 [@media(hover:hover)]:hover:-translate-y-px motion-reduce:transition-none motion-reduce:hover:transform-none lg:h-80 lg:w-80"
     >
-      <div
-        className={`pointer-events-none absolute inset-0 rounded-[1.75rem] shadow-[0_24px_48px_rgba(0,0,0,0.07)] transition-all duration-700 dark:shadow-[0_24px_48px_rgba(0,0,0,0.5)] ${animationClass} ${isCompleted ? "opacity-80" : ""}`}
-
-      />
+      <div data-organic-cell-shadow className={`pointer-events-none absolute inset-0 ${ORGANIC_CELL_SHADOW_CLASS} transition-all ${animationClass}`} style={listReorderStyle} />
 
       <div
-        className={`absolute inset-0 rounded-[1.75rem] overflow-hidden border border-white/70 backdrop-blur-md transition-all duration-700 transform-gpu dark:border-white/[0.06] ${animationClass} ${isCompleted ? "opacity-80" : ""} ${isRunning ? "bg-white/72 dark:bg-void-800/82" : "bg-white/55 dark:bg-void-800/65"}`}
-        style={{
-
-          WebkitMaskImage: "-webkit-radial-gradient(white, black)",
-          backfaceVisibility: "hidden",
-        }}
+        className={`absolute inset-0 rounded-[1.75rem] transition-opacity transform-gpu ${animationClass} ${isCompleted ? "opacity-80" : ""}`}
+        style={listReorderStyle}
       >
-        <div className={`absolute inset-0 pointer-events-none shadow-[inset_0_0_0_1px_rgba(255,255,255,0.5)] dark:shadow-[inset_0_0_0_1px_rgba(255,255,255,0.04)] ${animationClass}`} />
-        <WaveFluid accentHex={state.accentHex} />
-        <BorderTrace accentHex={state.accentHex} />
+        <div
+          className={`absolute inset-0 overflow-hidden rounded-[inherit] border border-white/70 backdrop-blur-md transition-colors dark:border-white/[0.06] ${isRunning ? "bg-white/72 dark:bg-void-800/82" : "bg-white/55 dark:bg-void-800/65"}`}
+          style={{
+            ...listReorderStyle,
+            WebkitMaskImage: "-webkit-radial-gradient(white, black)",
+            backfaceVisibility: "hidden",
+          }}
+        >
+          <div className="pointer-events-none absolute inset-0 rounded-[inherit] shadow-[inset_0_0_0_1px_rgba(255,255,255,0.5)] dark:shadow-[inset_0_0_0_1px_rgba(255,255,255,0.04)]" />
+          <WaveFluid accentHex={state.accentHex} />
+          <BorderTrace accentHex={state.accentHex} />
+        </div>
       </div>
 
       {state.ring && !isCompleted && (
@@ -231,7 +252,7 @@ export const SprintCell: FunctionComponent<SprintCellProps> = ({
           />
           {/* Breathtaking ambient breathing glow */}
           <div
-            className="absolute inset-0 rounded-[inherit] animate-[pulse_3.5s_ease-in-out_infinite]"
+            className="absolute inset-0 rounded-[inherit] animate-[pulse_3.5s_ease-in-out_infinite] motion-reduce:animate-none"
             style={{
               boxShadow: `0 0 20px ${effectiveAccentHex}40, inset 0 0 10px ${effectiveAccentHex}20`,
             }}
@@ -259,8 +280,8 @@ export const SprintCell: FunctionComponent<SprintCellProps> = ({
       )}
 
       <div className="relative z-20 flex h-full w-full flex-col items-center justify-center p-8 text-center">
-        <div className={`absolute top-5 flex items-center gap-1.5 opacity-0 transition-opacity duration-300 group-hover:opacity-100 ${effectiveTextTone}`}>
-          <StatusIcon className={`h-3.5 w-3.5 ${isRunning ? "animate-pulse" : ""}`} strokeWidth={2.5} />
+        <div className={`absolute top-5 flex items-center gap-1.5 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 motion-reduce:opacity-100 ${effectiveTextTone}`} style={controlFeedbackStyle}>
+          <StatusIcon className={`h-3.5 w-3.5 ${isRunning ? "animate-pulse motion-reduce:animate-none" : ""}`} strokeWidth={2.5} />
           <span className="text-[10px] font-bold uppercase tracking-[0.14em]">{effectiveLabel}</span>
         </div>
 
@@ -269,7 +290,7 @@ export const SprintCell: FunctionComponent<SprintCellProps> = ({
             <CalendarDays className="h-3.5 w-3.5" strokeWidth={2.1} />
             {formatCardDate(sprint.createdAt)}
           </div>
-          <div className="pl-5 opacity-0 transition-opacity duration-300 group-hover:opacity-100">
+          <div className="pl-5 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 motion-reduce:opacity-100" style={controlFeedbackStyle}>
             {formatBubbleTime(sprint.createdAt)}
           </div>
         </div>
@@ -286,56 +307,65 @@ export const SprintCell: FunctionComponent<SprintCellProps> = ({
           </div>
         )}
 
-        <div className={`inline-flex items-center gap-1.5 rounded-full border border-black/[0.06] bg-black/[0.03] px-4 py-1.5 font-mono text-[11px] font-bold tracking-[0.14em] transition-transform duration-300 group-hover:-translate-y-3 dark:border-white/[0.06] dark:bg-white/[0.03] ${accentColor}`}>
+        <div className={`inline-flex items-center gap-1.5 rounded-full border border-black/[0.06] bg-black/[0.03] px-4 py-1.5 font-mono text-[11px] font-bold tracking-[0.14em] transition-transform group-hover:-translate-y-3 group-focus-within:-translate-y-3 motion-reduce:transform-none dark:border-white/[0.06] dark:bg-white/[0.03] ${accentColor}`} style={controlFeedbackStyle}>
           <Sparkles className="h-3.5 w-3.5" strokeWidth={2.2} />
           {formatSprintKey(sprint, sprintKeyPrefix)}
         </div>
 
-        <div className="mt-4 flex w-full flex-col items-center justify-center gap-3 px-4 transition-transform duration-300 group-hover:-translate-y-3">
-          <h3 className="font-display text-2xl font-black leading-tight tracking-tight text-[var(--text-primary)]">
+        <div className="mt-4 flex w-full flex-col items-center justify-center gap-3 px-4 transition-transform group-hover:-translate-y-3 group-focus-within:-translate-y-3 motion-reduce:transform-none" style={controlFeedbackStyle}>
+          <h3 className="font-display text-xl font-semibold leading-tight tracking-tight text-[var(--text-primary)]">
             {sprint.name}
           </h3>
         </div>
 
-        <div className="mt-6 flex items-center justify-center gap-7 text-center transition-transform duration-300 group-hover:-translate-y-3">
+        <div className="mt-6 flex items-center justify-center gap-7 text-center transition-transform group-hover:-translate-y-3 group-focus-within:-translate-y-3 motion-reduce:transform-none" style={controlFeedbackStyle}>
           <div className="flex flex-col items-center">
-            <div className="font-mono text-[2rem] font-black text-[var(--text-primary)]">{sprint.tasksCount}</div>
+            <div className="font-mono text-2xl font-semibold text-[var(--text-primary)]">{sprint.tasksCount}</div>
             <div className="mt-0.5 text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">Tasks</div>
           </div>
           <div className="h-10 w-px bg-black/[0.08] dark:bg-white/[0.08]" />
           <div className="flex flex-col items-center">
-            <div className="font-mono text-[2rem] font-black text-[var(--text-primary)]">{sprint.completion}%</div>
+            <div className="font-mono text-2xl font-semibold text-[var(--text-primary)]">{sprint.completion}%</div>
             <div className="mt-0.5 text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">Done</div>
           </div>
         </div>
 
-        <div className={`absolute bottom-5 flex w-full items-center justify-center gap-3 transition-all duration-300 ${
+        <div className={`absolute bottom-5 flex w-full items-center justify-center gap-3 transition-all motion-reduce:translate-y-0 motion-reduce:opacity-100 ${
           menuOpen
             ? "translate-y-0 opacity-100"
             : "translate-y-2 opacity-0 pointer-events-none group-hover:translate-y-0 group-hover:opacity-100 group-hover:pointer-events-auto group-focus-within:translate-y-0 group-focus-within:opacity-100 group-focus-within:pointer-events-auto"
-        }`}>
+        }`} style={controlFeedbackStyle}>
           <button
             type="button"
             onClick={(event) => {
               event.stopPropagation();
+              if (primaryBusy) {
+                return;
+              }
               onPrimaryAction?.();
             }}
+            aria-label={primaryAriaLabel}
+            aria-busy={primaryBusy ? "true" : undefined}
             disabled={!onPrimaryAction || primaryBusy}
-            className={`touch-target flex h-9 w-9 items-center justify-center rounded-full text-slate-800 transition-all duration-300 dark:text-white focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2 ${
+            className={`touch-target flex h-9 w-9 items-center justify-center rounded-full text-slate-800 transition-all dark:text-white focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2 ${
               isRunning
                 ? "bg-status-red/[0.12] shadow-[0_0_18px_rgba(227,0,15,0.16)] hover:bg-status-red/[0.18]"
                 : "bg-signal-500/[0.12] shadow-[0_0_18px_rgba(0,224,160,0.16)] hover:bg-signal-500/[0.18]"
             } disabled:cursor-not-allowed disabled:opacity-60`}
-            title={isRunning ? "Stop" : "Start"}
+            style={primaryBusy ? asyncFeedbackStyle : controlFeedbackStyle}
+            title={primaryBusy ? `${primaryActionLabel} pending` : primaryActionLabel}
           >
-            {isRunning
-              ? <Square className={`h-3.5 w-3.5 ${primaryBusy ? "animate-pulse" : ""}`} fill="currentColor" />
-              : <Play className={`h-3.5 w-3.5 ${primaryBusy ? "animate-pulse" : ""}`} fill="currentColor" />}
+            {primaryBusy
+              ? <Loader2 className="h-3.5 w-3.5 animate-spin motion-reduce:animate-none" strokeWidth={2.2} />
+              : isRunning
+                ? <Square className="h-3.5 w-3.5" fill="currentColor" />
+                : <Play className="h-3.5 w-3.5" fill="currentColor" />}
           </button>
           <a
             href={`/tasks?sprintId=${encodeURIComponent(sprint.id)}`}
             onClick={(event: MouseEvent) => event.stopPropagation()}
             className="touch-target inline-flex h-9 items-center gap-1.5 rounded-full bg-slate-900 px-5 text-[10px] font-bold uppercase tracking-[0.14em] text-white shadow-[0_4px_12px_rgba(0,0,0,0.15)] transition-all hover:opacity-85 dark:bg-white dark:text-void-900 focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2"
+            style={controlFeedbackStyle}
           >
             View Tasks
             <Maximize2 className="h-2.5 w-2.5" />
@@ -381,7 +411,9 @@ export const SprintCell: FunctionComponent<SprintCellProps> = ({
               type="button"
               aria-haspopup="menu"
               aria-expanded={menuOpen}
+              aria-label={`Open actions menu for sprint ${sprint.name}`}
               className="touch-target flex h-9 w-9 items-center justify-center rounded-full bg-black/[0.06] text-slate-800 transition-colors hover:bg-black/10 dark:bg-white/[0.07] dark:text-white dark:hover:bg-white/10 focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2"
+              style={controlFeedbackStyle}
               title="Settings"
             >
               <MoreVertical className="h-3.5 w-3.5" />

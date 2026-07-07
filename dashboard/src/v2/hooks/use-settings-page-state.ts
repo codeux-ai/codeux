@@ -422,7 +422,7 @@ export const useSettingsPageState = (
         setSystemSettings(cloneSystemSettings(saved));
         setSavedSystemSettings(cloneSystemSettings(saved));
 
-        if (selectedProject) {
+        if (selectedProject && !projectDirty) {
           const effectiveProject = await fetchProjectEffectiveSettings(selectedProject.id, { cache: "reload" });
           const nextProject = dashboardSettingsToProjectSettings(effectiveProject.settings);
           setProjectSettings(cloneProjectSettings(nextProject));

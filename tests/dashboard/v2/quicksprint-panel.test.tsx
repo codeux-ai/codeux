@@ -51,6 +51,32 @@ describe("QuicksprintPanel", () => {
         dispatchEvent: vi.fn(),
       })),
     });
+    const requestAnimationFrame = (callback: FrameRequestCallback): number => {
+      callback(Date.now());
+      return 0;
+    };
+    const cancelAnimationFrame = () => undefined;
+
+    Object.defineProperty(globalThis, "requestAnimationFrame", {
+      configurable: true,
+      writable: true,
+      value: requestAnimationFrame,
+    });
+    Object.defineProperty(globalThis, "cancelAnimationFrame", {
+      configurable: true,
+      writable: true,
+      value: cancelAnimationFrame,
+    });
+    Object.defineProperty(window, "requestAnimationFrame", {
+      configurable: true,
+      writable: true,
+      value: requestAnimationFrame,
+    });
+    Object.defineProperty(window, "cancelAnimationFrame", {
+      configurable: true,
+      writable: true,
+      value: cancelAnimationFrame,
+    });
   });
 
   const fullstackPurpose = {
@@ -441,11 +467,11 @@ describe("QuicksprintPanel", () => {
     fireEvent.click(within(templateRail).getByRole("button", { name: "Delete Custom Sprint Flow template" }));
 
     expect(getByRole("dialog", { name: "Delete Custom Sprint Flow?" })).toBeInTheDocument();
-    expect(getByText("This removes the custom template from this project.")).toBeInTheDocument();
-    expect(getByRole("button", { name: "Keep Template" })).toBeInTheDocument();
+    expect(getByText("Delete Custom Sprint Flow from this project's custom templates.")).toBeInTheDocument();
+    expect(getByRole("button", { name: "Cancel" })).toBeInTheDocument();
     expect(window.confirm).not.toHaveBeenCalled();
 
-    fireEvent.click(getByRole("button", { name: "Keep Template" }));
+    fireEvent.click(getByRole("button", { name: "Cancel" }));
     await waitFor(() => {
       expect(queryByRole("dialog", { name: "Delete Custom Sprint Flow?" })).not.toBeInTheDocument();
     });
@@ -453,14 +479,18 @@ describe("QuicksprintPanel", () => {
 
     fireEvent.click(within(templateRail).getByRole("button", { name: "Delete API Tests template" }));
     expect(getByRole("dialog", { name: "Delete API Tests?" })).toBeInTheDocument();
-    expect(getByText("This hides the default template for this project. The shared bundled template remains available outside this project.")).toBeInTheDocument();
+    expect(getByText("Delete API Tests from this project by hiding the default template. The shared bundled template remains available outside this project.")).toBeInTheDocument();
 
-    const confirmButton = getByRole("button", { name: "Hold to Delete Template" });
+    const confirmButton = getByRole("button", { name: "Hold to Delete API Tests" });
     fireEvent.pointerDown(confirmButton, { button: 0, pointerId: 1 });
     vi.advanceTimersByTime(1000);
     await waitFor(() => {
       expect(onDeleteTemplate).toHaveBeenCalledWith("tpl-1");
     });
+    await waitFor(() => {
+      expect(queryByRole("dialog", { name: "Delete API Tests?" })).not.toBeInTheDocument();
+    });
+    expect(document.activeElement).toBe(within(templateRail).getByRole("button", { name: "Delete API Tests template" }));
     expect(window.confirm).not.toHaveBeenCalled();
     vi.useRealTimers();
   });
@@ -498,7 +528,8 @@ describe("QuicksprintPanel", () => {
       expect(queryByText("Quicksprint in motion")).not.toBeInTheDocument();
     });
     expect(queryByRole("button", { name: "Minimize" })).not.toBeInTheDocument();
-    expect(queryByRole("button", { name: "New Quicksprint" })).not.toBeInTheDocument();
+    expect(queryByRole("button", { name: "New Quicksprint" })).toBeInTheDocument();
+    expect(queryByRole("button", { name: "Cancel Request" })).toBeInTheDocument();
     expect(queryAllByText("Cancel Active Request")).toHaveLength(0);
 
     // We didn't cancel, so we can now resolve the execution
@@ -527,12 +558,15 @@ describe("QuicksprintPanel", () => {
     });
 
     expect(getByRole("button", { name: "Plan & Start" })).toBeDisabled();
-    expect(getByRole("button", { name: "Planning Only" })).toBeDisabled();
-    expect(getByRole("button", { name: "Planning Only" })).toHaveAttribute("aria-describedby", "quicksprint-submit-blocked-tpl-1");
+    expect(getByRole("button", { name: "Plan Only" })).toBeDisabled();
+    expect(getByRole("button", { name: "Plan Only" })).toHaveAttribute("aria-describedby", "quicksprint-submit-blocked-tpl-1");
+    expect(getByRole("button", { name: "Back to quicksprint templates" })).toHaveAttribute("aria-describedby", "quicksprint-submit-blocked-tpl-1");
     expect(getByText("A quicksprint planning request is already running. Cancel it or wait for it to finish before submitting again.")).toBeInTheDocument();
     expect(getByRole("button", { name: "Back to quicksprint templates" })).toBeDisabled();
     expect(getByRole("textbox")).toBeDisabled();
+    expect(getByRole("textbox")).toHaveAttribute("aria-describedby", "quicksprint-submit-blocked-tpl-1");
     expect(getByRole("checkbox", { name: /no limit/i })).toBeDisabled();
+    expect(getByRole("checkbox", { name: /no limit/i })).toHaveAttribute("aria-describedby", "quicksprint-submit-blocked-tpl-1");
     expect(getByText("Planning only")).toBeInTheDocument();
     expect(getByRole("button", { name: "Cancel Quicksprint Request" })).toBeInTheDocument();
 
@@ -544,6 +578,31 @@ describe("QuicksprintPanel", () => {
     expect(getByText("Cancelled plan only request for API Tests.", { selector: "p" })).toBeInTheDocument();
     expect(queryByText("Planning only")).not.toBeInTheDocument();
     expect(document.activeElement).toBe(getByRole("heading", { name: "API Tests" }));
+  });
+
+  it("shows durable editor validation before a template can be saved", async () => {
+    const { getByRole, getByPlaceholderText, getByText } = render(<QuicksprintPanel {...defaultProps} />);
+
+    fireEvent.click(getByRole("button", { name: "New Template" }));
+
+    const saveButton = await waitFor(() => getByRole("button", { name: "Create Template" }));
+    expect(saveButton).toBeDisabled();
+    expect(saveButton).toHaveAttribute("aria-describedby", "quicksprint-template-editor-validation");
+    expect(getByText("Add a template name before saving.")).toBeInTheDocument();
+
+    fireEvent.input(getByPlaceholderText("API Integration Tests"), { target: { value: "Project Audit" } });
+
+    expect(saveButton).toBeDisabled();
+    expect(getByText("Add agent instructions or choose an agent preset before saving.")).toBeInTheDocument();
+
+    fireEvent.input(getByPlaceholderText("Write detailed instructions for the planning agent. Leave empty to use only the agent preset's instructions..."), {
+      target: { value: "Inspect the project and plan focused work." },
+    });
+
+    await waitFor(() => {
+      expect(saveButton).not.toBeDisabled();
+    });
+    expect(saveButton).not.toHaveAttribute("aria-describedby");
   });
 
   it("opens tokenized reduced-motion-safe template pickers with accessible options", async () => {
@@ -564,7 +623,11 @@ describe("QuicksprintPanel", () => {
     fireEvent.click(within(templateRail).getByRole("button", { name: "Edit Custom Sprint Flow template" }));
 
     const iconTrigger = await waitFor(() => getByRole("button", { name: "Pick template icon, current icon Zap" }));
+    expect(iconTrigger).toHaveAttribute("aria-haspopup", "dialog");
+    expect(iconTrigger).toHaveAttribute("aria-expanded", "false");
     fireEvent.click(iconTrigger);
+    expect(iconTrigger).toHaveAttribute("aria-expanded", "true");
+    expect(getByRole("status")).toHaveTextContent("Icon picker opened. Choose an icon or press Escape to keep the current icon.");
 
     const iconDialog = getByRole("dialog", { name: "Icon picker" });
     expect(iconDialog).toHaveStyle({ "--qs-picker-enter-duration": "0ms" });
@@ -577,9 +640,15 @@ describe("QuicksprintPanel", () => {
     await waitFor(() => {
       expect(queryByRole("dialog", { name: "Icon picker" })).not.toBeInTheDocument();
     });
+    await waitFor(() => {
+      expect(document.activeElement).toBe(iconTrigger);
+    });
 
     const colorTrigger = getByRole("button", { name: "Pick template tag color, current color #f59e0b" });
+    expect(colorTrigger).toHaveAttribute("aria-haspopup", "dialog");
     fireEvent.click(colorTrigger);
+    expect(colorTrigger).toHaveAttribute("aria-expanded", "true");
+    expect(getByRole("status")).toHaveTextContent("Color picker opened. Choose a tag color or press Escape to keep the current color.");
 
     const colorDialog = getByRole("dialog", { name: "Color picker" });
     expect(colorDialog).toHaveStyle({ "--qs-picker-enter-duration": "0ms" });
@@ -650,7 +719,9 @@ describe("QuicksprintPanel", () => {
     const firstSignal = mockOnExecute.mock.calls[0]?.[6] as AbortSignal;
     expect(firstSignal).toBeInstanceOf(AbortSignal);
 
-    fireEvent.click(getByText("New Quicksprint"));
+    const planningDialog = getByText("Quicksprint in motion").closest("[role='dialog']");
+    expect(planningDialog).toBeInTheDocument();
+    fireEvent.click(within(planningDialog as HTMLElement).getByText("New Quicksprint"));
 
     expect(firstSignal.aborted).toBe(false);
     expect(getByText("Opened a new quicksprint while the previous plan and start request continues in the background.", { selector: "p" })).toBeInTheDocument();

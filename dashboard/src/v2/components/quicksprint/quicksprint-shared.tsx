@@ -83,7 +83,7 @@ export const TemplateCard: FunctionComponent<{
   template: QuicksprintTemplateRecord;
   onSelect: () => void;
   onEdit?: () => void;
-  onDelete?: () => void;
+  onDelete?: (trigger: HTMLElement) => void;
   selected?: boolean;
 }> = ({ template, onSelect, onEdit, onDelete, selected = false }) => {
   const Icon = IconMap[template.icon] || Zap;
@@ -120,7 +120,7 @@ export const TemplateCard: FunctionComponent<{
           <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--stats-label-color)]">
             {sourceDetail}
           </div>
-          <h3 className="mt-2 line-clamp-3 min-w-0 text-[1.2rem] font-black leading-[1.08] tracking-tight text-[color:var(--stats-value-color)]">
+          <h3 className="mt-2 line-clamp-3 min-w-0 text-base font-semibold leading-[1.08] tracking-tight text-[color:var(--stats-value-color)]">
             {template.name}
           </h3>
         </div>
@@ -176,7 +176,7 @@ export const TemplateCard: FunctionComponent<{
               {onDelete && (
                 <button
                   type="button"
-                  onClick={(e) => { e.stopPropagation(); onDelete(); }}
+                  onClick={(e) => { e.stopPropagation(); onDelete(e.currentTarget); }}
                   aria-label={`Delete ${template.name} template`}
                   className={`inline-flex min-h-8 min-w-8 items-center justify-center rounded-[calc(var(--stats-control-radius)-0.25rem)] text-[color:var(--stats-detail-color)] transition-colors hover:bg-[color:var(--stats-accent-rose-fill)] hover:text-[color:var(--stats-negative-text)] ${CONTROL_FOCUS_CLASS}`}
                   title="Delete template"

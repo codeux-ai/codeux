@@ -82,10 +82,12 @@ pnpm run ci
 
 This runs (in order):
 
-1. `pnpm run lint` — typecheck.
-2. `pnpm run test:backend:coverage` — backend tests + coverage threshold.
-3. `pnpm run test:dashboard` — dashboard tests.
-4. `pnpm run build` — server + dashboard build.
+1. `pnpm run quality:guardrails`
+2. `pnpm run audit`
+3. `pnpm run lint` — typecheck.
+4. `pnpm run test:backend:coverage` — backend tests + coverage threshold.
+5. `pnpm run test:dashboard` — dashboard tests.
+6. `pnpm run build` — server + dashboard build.
 
 If `pnpm run ci` is green, GitHub CI will be too (modulo platform-specific differences).
 
@@ -93,13 +95,12 @@ If `pnpm run ci` is green, GitHub CI will be too (modulo platform-specific diffe
 
 CI runs on Node 22 in `.github/workflows/`:
 
-1. Install with frozen lockfile.
-2. Lint (typecheck).
-3. Test with coverage and threshold enforcement.
-4. Build (server + dashboard).
-5. `pnpm audit --audit-level=high`.
-6. Coverage upload.
-7. Secret scanning on PRs.
+1. Release Version Bump
+2. Typecheck & Lint
+3. Backend Tests & Coverage
+4. Dashboard Tests
+5. Build
+6. Security Audit
 
 A PR cannot be merged with red CI.
 

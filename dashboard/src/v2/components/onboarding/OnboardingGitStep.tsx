@@ -28,12 +28,14 @@ export const OnboardingGitStep: FunctionComponent<OnboardingGitStepProps> = ({
             </div>
             <div className="mt-4">
               <PillChoiceGroup
+                aria-label="Git mode"
                 value={gitMode}
                 onChange={(value) => updateCliWorkflow({ gitMode: value as "local" | "remote" })}
                 options={[
-                  { value: "remote", label: "Remote branch generation" },
-                  { value: "local", label: "Local branch generation" },
+                  { value: "remote", label: "Remote branch generation", hint: "PRs, CI, and remote branch sync stay enabled." },
+                  { value: "local", label: "Local branch generation", hint: "Disable remote PR orchestration and stay repo-local." },
                 ]}
+                valid
               />
             </div>
           </div>

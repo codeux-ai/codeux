@@ -14,12 +14,18 @@ Settings are evaluated in cascade: **Defaults → System → Project → Sprint*
   "automationLevel": "FULL" | "SEMI_AUTO" | "ALWAYS_ASK",
   "automationInterventions": { /* auto-handle action-required states */ },
   "sprintLoopSteps": { /* watch loop tunables */ },
+  "cliWorkflow": { /* CLI workflow behavior */ },
+  "sprintPreview": { /* preview container settings */ },
   "git": { /* branches, schemes, GitHub mode */ },
   "skills": [ /* internal skill toggles */ ],
   "mcpTools": [ /* per-tool enabled flags */ ],
   "memory": { /* embedding model */ },
   "appearance": { /* theme, navigation */ },
-  "maxFailures": 5
+  "maxFailures": 5,
+  "dashboardPort": 4444,
+  "consoleLogLevel": "info",
+  "debugLogFileLevel": "error",
+  "consoleLogMode": "standard"
 }
 ```
 
@@ -39,6 +45,9 @@ Settings are evaluated in cascade: **Defaults → System → Project → Sprint*
       "apiKey": "string or ${ENV_VAR}",
       "mountAuth": false,
       "authPath": "string",
+      "authType": "apiKey" | "localAuth" | "dashboardAuth",
+      "qwenAuthMode": "LOCAL_AUTH" | "ALIBABA_CODING_PLAN" | "MODEL_PROVIDER",
+      "openCodeAuthMode": "LOCAL_AUTH" | "ENV_KEY" | "CUSTOM_PROVIDER",
       "maxConcurrentTasks": 0    // 0 = unlimited
     }
   },
@@ -66,18 +75,39 @@ Settings are evaluated in cascade: **Defaults → System → Project → Sprint*
 | `opencode` | ❌ | `anthropic/claude-sonnet-4-5` | 0 | HIGH | 0 |
 | `antigravity` | ❌ | `default` | 0 | HIGH | 0 |
 
+## `cliWorkflow`
+
+```jsonc
+{
+  "gitMode": "remote" | "local",
+  "executionMode": "DOCKER",
+  "containerImage": "node:24-bookworm",
+  "containerSetupScriptPath": "string?",
+  "containerMemoryLimitMb": 6144
+}
+```
+
+Default `gitMode`: `remote`. Default `executionMode`: `DOCKER`.
+`containerMemoryLimitMb` is a MiB ceiling for every Docker-backed CLI provider container. Positive values are passed to Docker as both `--memory` and `--memory-swap`; set it to `0` to omit Docker memory flags.
+
+## `sprintPreview`
+
+```jsonc
+{
+  "enabled": false,
+  "startupScriptPath": ".code-ux/browser/start-preview.sh"
+}
+```
+
 ## `workers`
 
 ```jsonc
 {
-  "virtualWorkerProvider": "gemini"|"codex"|"claude-code"|"qwen-code"|"opencode"|"antigravity",
-  "executionMode": "DOCKER" | "HOST",
-  "dockerImage": "node:24-bookworm",
-  "containerSetupScript": "string?"
+  "virtualWorkerProvider": "gemini"|"codex"|"claude-code"|"qwen-code"|"opencode"|"antigravity"
 }
 ```
 
-Default `virtualWorkerProvider`: `codex`. Default `executionMode`: `DOCKER`.
+Default `virtualWorkerProvider`: `codex`.
 
 ## `ciIntelligence`
 

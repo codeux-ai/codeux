@@ -124,6 +124,8 @@ It joins:
 
 This keeps the dashboard read path aligned with the same DB-native runtime records the orchestrator and workers update.
 
+For the repository-wide quality and performance invariants that protect this read path, including scoped execution caches and indexed projection slices, see [Code Quality And Performance Contracts](./code-quality-performance-contracts.md).
+
 ## Current UI Usage
 
 The v2 live page now renders an execution runtime panel showing:
@@ -142,19 +144,25 @@ That makes multi-sprint and worker execution visible without reconstructing stat
 
 To support the dashboard resource layer and page-scoped module boundaries, the backend read-model optimizations project data efficiently without altering the underlying data structures. **API routes and backend contracts remain unchanged.** The project execution snapshot path performs one coordinated pass per slice, then uses precomputed ID sets and maps for secondary enrichment:
 
-- Sprint runs are fetched as active expanded runs plus a bounded inactive tail, preserving the dashboard status/recency ordering.
-- Task dispatches are fetched as a recent-project slice plus an expanded sprint-run slice and then collapsed in memory to the latest dispatch per task.
-- Runtime events are fetched as explicit bounded slices: a project-recent task-event slice, a project-recent sprint-run-event slice, and an expanded sprint-run task-event slice with a per-run cap. Expanded task events are excluded from the project-recent task slice to avoid duplicate SQL work, then all slices are deduplicated by event ID, sorted by timestamp, and capped for realtime payload size.
-- Invocations are fetched as explicit bounded slices for project-recent invocations, expanded sprint-run invocations, and the optional selected sprint. The slices use the indexed `execution_invocations` project/recency, project/sprint-run/recency, and project/sprint/recency paths, then merge and deduplicate in memory by invocation ID using the same `started_at DESC, rowid DESC` recency rule. This preserves selected-sprint and expanded-run visibility, including inactive selected sprints, while keeping provider-usage fallback joins in the invocation rows.
+- Sprint runs are fetched as all active expanded runs (`running`, `queued`, `paused`, and `cancel_requested`) plus enough inactive runs to reach a 12-run visible tail. If no active run exists, the newest visible run is still expanded so the runtime panel has context.
+- Task dispatches are fetched as a 24-row recent-project slice plus an expanded sprint-run slice and then collapsed in memory to the latest dispatch per task. Recency uses heartbeat, start, claim, and queue timestamps with stable ID tie-breaks so stale terminal retries do not shadow newer work.
+- Runtime events are fetched as explicit bounded slices: a 240-event project-recent task-event slice, a 240-event project-recent sprint-run-event slice, a 120-event selected-sprint slice when a sprint is selected, and up to 120 task-run events per expanded sprint run. `status_sync` events are excluded from the live feed because they are internal signature bookkeeping. Expanded task events are excluded from the project-recent task slice to avoid duplicate SQL work, selected-sprint events are pinned before the final cap, and all slices are deduplicated by event ID, sorted by `created_at DESC, id DESC`, and capped at 300 events for realtime payload size. This means chatty expanded runs stay bounded by run while quieter expanded runs and older selected-sprint activity can still survive the final merge.
+- Invocations are fetched as explicit bounded slices for the 24 most recent project invocations, up to 24 invocations per expanded sprint run, and up to 24 invocations for the optional selected sprint. The hot selected-sprint and expanded-run predicates use authoritative `execution_invocations.sprint_id` and `execution_invocations.sprint_run_id` columns so SQLite can walk the project/sprint and project/sprint-run recency indexes directly. Each scoped slice also runs a small provider-context fallback query for legacy rows whose execution invocation context is legitimately missing, using provider invocation context only when the corresponding execution column is `NULL`. The slices are merged and deduplicated in memory by invocation ID using the same `started_at DESC, rowid DESC` recency rule. This preserves selected-sprint and expanded-run visibility, including inactive selected sprints, without switching live snapshots to full-history reads.
 - Usage and wall-time rollups deduplicate sprint-run IDs and task IDs before executing chunked `IN` aggregations, then map totals by ID for the final DTO mapping.
 
 The hot live snapshot reads are backed by explicit startup-safe sqlite indexes in both fresh schema initialization and migrations for existing databases:
 
 - `sprint_runs` uses `idx_sprint_runs_project_status_recency` for project/status filters and lifecycle recency ordering across heartbeat, update, and creation timestamps.
 - `task_dispatches` uses `idx_task_dispatches_project_task_recency` and `idx_task_dispatches_project_sprint_run_recency` for the latest-dispatch-per-task window and expanded sprint-run dispatch reads.
-- `sprint_run_events` uses `idx_sprint_run_events_sprint_run_created_id` so sprint-run timelines can walk `(sprint_run_id, created_at DESC, id DESC)` without sorting large event sets.
+- `task_runs` uses `idx_task_runs_project_sprint_lookup` and `idx_task_runs_project_sprint_run_lookup` to anchor selected-sprint and expanded-run runtime-event slices before joining to event rows.
+- `task_run_events` uses `idx_task_run_events_task_run_created_id` for per-task-run event walks with stable `created_at DESC, id DESC` ordering, while `idx_task_run_events_project_created` continues to support the project-recent slice.
+- `sprint_runs` uses `idx_sprint_runs_project_lookup` and `sprint_run_events` uses `idx_sprint_run_events_sprint_run_created_id` so sprint-run event slices can stay scoped to the project or selected sprint while walking `(sprint_run_id, created_at DESC, id DESC)` event timelines.
 - `project_attention_items` uses `idx_project_attention_items_project_status_updated` for active project attention reads ordered by latest update.
+- `project_attention_items` also uses `idx_project_attention_items_project_status_updated_opened` and `idx_project_attention_items_sprint_run_status_updated_opened` for active attention slices ordered by update, open time, and ID.
 - `execution_invocations` uses `idx_execution_invocations_project_started` for the bounded project-recent subquery, plus `idx_execution_invocations_project_sprint_started` and `idx_execution_invocations_project_sprint_run_started` for selected-sprint and expanded-run filters before the final `started_at DESC, rowid DESC` merge ordering.
+- `execution_invocations` uses `idx_execution_invocations_provider_invocation` so provider-context fallback slices can join back to execution invocation records without scanning the invocation table.
+- `execution_invocations` uses `idx_execution_invocations_status_started` for active and retry-recovery scans by invocation status.
+- `provider_invocations` uses `idx_provider_invocations_project_sprint_started` and `idx_provider_invocations_project_sprint_run_started` so legacy provider-linked rows can still supply sprint and sprint-run context during fallback joins while staying scoped to the selected project. The older sprint and sprint-run recency indexes remain available for non-project-scoped provider usage paths.
 
 These indexes only cover scalar identifiers, status fields, and timestamps. They intentionally avoid JSON expressions, markdown, prompts, transcripts, and other large payload columns so live dashboard polling improves read locality without increasing write amplification on volatile text content.
 

@@ -24,7 +24,7 @@ export const OnboardingJiraStep: FunctionComponent<OnboardingJiraStepProps> = ({
             <JiraIcon className="h-5 w-5" />
           </span>
           <div className="min-w-0 flex-1">
-            <h3 className="text-sm font-black text-slate-900 dark:text-white">Jira Integration (Optional)</h3>
+            <h3 className="text-sm font-semibold text-slate-900 dark:text-white">Jira Integration (Optional)</h3>
             <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
               Link Code UX to your Jira Cloud instance to automatically import sprints and create agent tasks directly from Jira tickets.
             </p>
@@ -34,24 +34,27 @@ export const OnboardingJiraStep: FunctionComponent<OnboardingJiraStepProps> = ({
       <div data-onboarding-card className="rounded-3xl border border-black/[0.06] bg-white/70 p-5 shadow-[0_16px_42px_rgba(15,23,42,0.04)] dark:border-white/[0.06] dark:bg-white/[0.04]">
         <div className="space-y-4">
           <TextInput
-            aria-label="Jira Host"
+            aria-label="Jira site URL"
             value={jiraSettings.host}
             onChange={(v) => updateJira({ host: v })}
             placeholder="e.g. company.atlassian.net"
+            valid={Boolean(jiraSettings.host.trim())}
+            helperText="Required only when Jira is configured."
           />
           <div className="grid gap-4 sm:grid-cols-2">
             <TextInput
-              aria-label="Email"
+              aria-label="Jira account email"
               value={jiraSettings.email}
               onChange={(v) => updateJira({ email: v })}
               placeholder="Your Jira email"
             />
             <TextInput
-              aria-label="API Token"
-
+              aria-label="Jira API token"
               value={jiraSettings.apiToken}
               onChange={(v) => updateJira({ apiToken: v })}
               placeholder="Jira API Token"
+              valid={Boolean(jiraSettings.apiToken.trim())}
+              helperText="Required only when Jira is configured."
             />
           </div>
         </div>

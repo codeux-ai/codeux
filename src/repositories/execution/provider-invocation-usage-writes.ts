@@ -5,6 +5,7 @@ import type {
   UpdateProviderInvocationUsageInput,
 } from "../../contracts/execution-types.js";
 import type { Logger } from "../../shared/logging/logger.js";
+import { getCorrelationId } from "../../shared/logging/correlation-id.js";
 import type { DatabaseAdapter } from "../db/database-adapter.js";
 import { RepositoryError } from "../repository-utils.js";
 import {
@@ -31,6 +32,13 @@ interface ExecutionScopedGetters {
 }
 
 type NotifyRealtime = (projectId: string, includeOverview: boolean) => void;
+
+function listDefinedUpdateFields(input: UpdateProviderInvocationUsageInput): string[] {
+  return Object.entries(input)
+    .filter(([, value]) => value !== undefined)
+    .map(([key]) => key)
+    .sort();
+}
 
 export function writeProviderInvocationUsage(
   db: DatabaseAdapter,
@@ -240,6 +248,37 @@ export function writeProviderInvocationUsageUpdate(
     );
 
     const updated = requireProviderInvocationUsage(getters.getProviderInvocationUsage, invocationId);
+    logger.info("Provider invocation usage updated", {
+      logPurpose: "invocation",
+      eventType: "provider_invocation_usage_updated",
+      correlationId: getCorrelationId(),
+      providerInvocationId: invocationId,
+      projectId: updated.projectId,
+      sprintId: updated.sprintId,
+      taskId: updated.taskId,
+      sprintRunId: updated.sprintRunId,
+      dispatchId: updated.dispatchId,
+      taskRunId: updated.taskRunId,
+      sessionId: updated.sessionId,
+      nativeSessionId: updated.nativeSessionId || undefined,
+      provider: updated.provider,
+      purpose: updated.purpose,
+      status: updated.status,
+      model: updated.model || undefined,
+      executionMode: updated.executionMode || undefined,
+      durationMs: updated.durationMs,
+      transcriptChars: updated.transcriptChars,
+      inputTokens: updated.inputTokens,
+      cachedInputTokens: updated.cachedInputTokens,
+      outputTokens: updated.outputTokens,
+      reasoningOutputTokens: updated.reasoningOutputTokens,
+      totalTokens: updated.totalTokens,
+      toolCallCount: updated.toolCallCount,
+      usageSource: updated.usageSource,
+      invocationSource: updated.invocationSource,
+      rawUsageJsonPresent: updated.rawUsageJson !== null,
+      updatedFields: listDefinedUpdateFields(input),
+    });
     notifyRealtime(updated.projectId, false);
     return updated;
   } catch (error) {

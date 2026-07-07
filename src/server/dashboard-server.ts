@@ -104,7 +104,7 @@ import { applyDashboardPreRouteMiddleware, applyDashboardPostRouteMiddleware } f
 
 
 import { bootDashboardRealtimeWebSocketServer } from "./dashboard-realtime-websocket-server.js";
-import { bootDashboardTerminalWebSocketServer } from "./terminal-routes.js";
+import { bootDashboardTerminalWebSocketServer, prewarmLoginBaseImage } from "./terminal-routes.js";
 import type { DashboardRealtimeService } from "../services/dashboard-realtime-service.js";
 import type { MemoryService } from "../services/memory-service.js";
 import type { MemoryPromotionService } from "../services/memory-promotion-service.js";
@@ -112,7 +112,14 @@ import type { EmbeddingModelManager } from "../services/embedding-model-manager.
 import type { EmbeddingService } from "../services/embedding-service.js";
 import type { KnowledgeService } from "../services/knowledge-service.js";
 import type { UpdateStatus } from "../services/update-checker-service.js";
-import { parsePreviewSessionIdFromHost, pipePreviewUpgradeRequest } from "./preview-host-utils.js";
+import type { LocalMcpCliProvider, LocalMcpInstallResult, LocalMcpSetupInfo } from "../services/local-mcp-cli-config-service.js";
+import {
+  parsePreviewSessionIdFromHost,
+  parseSelectedPreviewPortFromRequest,
+  pipePreviewUpgradeRequest,
+  resolvePreviewHostPort,
+  stripPreviewPortSelectorFromPath,
+} from "./preview-host-utils.js";
 
 export type DashboardDependencies = Omit<
   DashboardServerOptions,
@@ -123,6 +130,9 @@ export type DashboardDependencies = Omit<
   | "getUpdateStatus"
 > & {
   getUpdateStatus: () => Promise<UpdateStatus>;
+  getLocalMcpSetup: () => LocalMcpSetupInfo;
+  regenerateLocalMcpAuthToken: () => LocalMcpSetupInfo;
+  installLocalMcpProvider: (provider: LocalMcpCliProvider) => Promise<LocalMcpInstallResult> | LocalMcpInstallResult;
 };
 
 export interface DashboardServerOptions {
@@ -170,6 +180,9 @@ export interface DashboardServerOptions {
   getLiveActivities: () => Promise<Record<string, JulesActivity[]>>;
   getGitStatus: () => Promise<GitTrackingStatus>;
   getExternalSettingsHints: () => ExternalSettingsHints;
+  getLocalMcpSetup?: () => LocalMcpSetupInfo;
+  regenerateLocalMcpAuthToken?: () => LocalMcpSetupInfo;
+  installLocalMcpProvider?: (provider: LocalMcpCliProvider) => Promise<LocalMcpInstallResult> | LocalMcpInstallResult;
   getSystemSettings: () => SystemSettings;
   getUpdateStatus?: () => Promise<UpdateStatus>;
   saveSystemSettings: (settings: SystemSettings) => SystemSettings;
@@ -240,6 +253,7 @@ export interface DashboardServerOptions {
   listInvocationMessages: (invocationId: string) => ExecutionInvocationMessageRecord[];
   restartExecutionInvocation?: (invocationId: string, mode?: PlanningInvocationRestartMode) => Promise<unknown> | unknown;
   cancelExecutionInvocation?: (invocationId: string) => Promise<unknown> | unknown;
+  resetInvocationUsageLimitTimer?: (invocationId: string) => Promise<unknown> | unknown;
 
   rerunTask: (taskId: string, options?: { provider?: string; providerConfigId?: string; model?: string; clearWorktree?: boolean; resetDependents?: boolean; undoMerge?: boolean }) => Promise<unknown>;
   orchestrateSprint: (projectId: string, sprintId: string) => Promise<unknown>;
@@ -269,19 +283,33 @@ export interface DashboardServerOptions {
   resetOnboardingState?: () => OnboardingStateRecord;
   listSprintPreviewSessions?: (projectId: string) => Promise<SprintPreviewSession[]> | SprintPreviewSession[];
   getSprintPreviewSession?: (sessionId: string) => Promise<SprintPreviewSession | null> | SprintPreviewSession | null;
+  getSprintPreviewSessionForProjectSprint?: (projectId: string, sprintId: string, sessionId: string) => Promise<SprintPreviewSession> | SprintPreviewSession;
   startSprintPreviewSession?: (projectId: string, sprintId: string) => Promise<SprintPreviewSession> | SprintPreviewSession;
   rebuildSprintPreviewSession?: (sessionId: string) => Promise<SprintPreviewSession> | SprintPreviewSession;
+  rebuildSprintPreviewSessionForProjectSprint?: (projectId: string, sprintId: string, sessionId: string) => Promise<SprintPreviewSession> | SprintPreviewSession;
   stopSprintPreviewSession?: (sessionId: string) => Promise<SprintPreviewSession> | SprintPreviewSession;
+  stopSprintPreviewSessionForProjectSprint?: (projectId: string, sprintId: string, sessionId: string) => Promise<SprintPreviewSession> | SprintPreviewSession;
   removeSprintPreviewSession?: (sessionId: string) => Promise<void> | void;
+  removeSprintPreviewSessionForProjectSprint?: (projectId: string, sprintId: string, sessionId: string) => Promise<void> | void;
   getSprintPreviewScript?: (projectId: string, sprintId: string) => Promise<SprintPreviewScript> | SprintPreviewScript;
   saveSprintPreviewScript?: (projectId: string, sprintId: string, content: string) => Promise<SprintPreviewScript> | SprintPreviewScript;
   getSprintPreviewLogs?: (sessionId: string, tail?: number) => Promise<{ logs: string }> | { logs: string };
+  getSprintPreviewLogsForProjectSprint?: (projectId: string, sprintId: string, sessionId: string, tail?: number) => Promise<{ logs: string }> | { logs: string };
   proxySprintPreviewRequest?: (args: {
     sessionId: string;
     method: string;
     path: string;
     headers?: Record<string, string | undefined>;
     body?: Buffer;
+    selectedPort?: string | number | null;
+  }) => Promise<{ status: number; headers: Record<string, string>; body: Buffer }>;
+  proxySprintPreviewRequestForProjectSprint?: (projectId: string, sprintId: string, args: {
+    sessionId: string;
+    method: string;
+    path: string;
+    headers?: Record<string, string | undefined>;
+    body?: Buffer;
+    selectedPort?: string | number | null;
   }) => Promise<{ status: number; headers: Record<string, string>; body: Buffer }>;
   listFileBrowserSessions?: (projectId: string) => Promise<FileBrowserSession[]> | FileBrowserSession[];
   startFileBrowserSession?: (projectId: string, sprintId: string) => Promise<FileBrowserSession> | FileBrowserSession;
@@ -434,6 +462,9 @@ export const setupDashboardServer = async (options: DashboardServerOptions): Pro
     getSprintPreviewSession,
   } = options;
   const dashboardLogger = configureDashboardApp(options);
+  if (process.env.NODE_ENV !== "test") {
+    prewarmLoginBaseImage(dashboardLogger.child({ component: "login-base-image-prewarm" }));
+  }
   const handle = await bindDashboardServer(app, port, dashboardLogger);
 
   handle.server.on("upgrade", (req, socket, head) => {
@@ -444,7 +475,15 @@ export const setupDashboardServer = async (options: DashboardServerOptions): Pro
     void (async () => {
       try {
         const session = await getSprintPreviewSession(sessionId);
-        if (!session?.hostPort) {
+        if (!session) {
+          socket.destroy();
+          return;
+        }
+        const upstreamPort = resolvePreviewHostPort(
+          session,
+          parseSelectedPreviewPortFromRequest(req.url || "/", req.headers["x-code-ux-preview-port"]),
+        );
+        if (!upstreamPort) {
           socket.destroy();
           return;
         }
@@ -452,7 +491,8 @@ export const setupDashboardServer = async (options: DashboardServerOptions): Pro
           req,
           socket,
           head,
-          upstreamPort: session.hostPort,
+          upstreamPort,
+          targetPath: stripPreviewPortSelectorFromPath(req.url || "/"),
         });
       } catch {
         socket.destroy();

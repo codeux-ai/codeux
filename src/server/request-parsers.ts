@@ -27,6 +27,55 @@ import type {
 } from "../contracts/quicksprint-types.js";
 import { mergePromptWithLinkedIssues } from "../services/linked-issue-prompt-markdown.js";
 
+export const DASHBOARD_DEFAULT_JSON_BODY_LIMIT = "1mb";
+export const DASHBOARD_LARGE_SETTINGS_JSON_BODY_LIMIT = "25mb";
+
+export type DashboardJsonBodyLimit = "default" | "large";
+
+const JSON_MUTATION_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
+
+export function isDashboardJsonMutationMethod(method: string | undefined): boolean {
+  return JSON_MUTATION_METHODS.has((method || "").toUpperCase());
+}
+
+export function isDashboardRuntimeDataPath(pathname: string): boolean {
+  return pathname.startsWith("/api/")
+    || pathname === "/health"
+    || pathname === "/ready";
+}
+
+export function isDashboardPreviewProxyPath(pathname: string): boolean {
+  return pathname.startsWith("/api/browser/sessions/") && pathname.includes("/proxy");
+}
+
+export function isDashboardKnowledgeUploadPath(pathname: string): boolean {
+  return /^\/api\/projects\/[^/]+\/knowledge\/documents\/upload$/.test(pathname);
+}
+
+export function isDashboardLargeSettingsJsonPath(method: string | undefined, pathname: string): boolean {
+  if ((method || "").toUpperCase() !== "PUT") {
+    return false;
+  }
+  return pathname === "/api/system-settings"
+    || /^\/api\/projects\/[^/]+\/settings$/.test(pathname)
+    || /^\/api\/sprints\/[^/]+\/settings$/.test(pathname);
+}
+
+export function getDashboardJsonBodyLimit(method: string | undefined, pathname: string): DashboardJsonBodyLimit | null {
+  if (!isDashboardRuntimeDataPath(pathname)
+    || !isDashboardJsonMutationMethod(method)
+    || isDashboardPreviewProxyPath(pathname)
+    || isDashboardKnowledgeUploadPath(pathname)) {
+    return null;
+  }
+  return isDashboardLargeSettingsJsonPath(method, pathname) ? "large" : "default";
+}
+
+export function isSupportedDashboardJsonContentType(contentType: string | undefined): boolean {
+  const mediaType = (contentType || "").split(";")[0]?.trim().toLowerCase();
+  return mediaType === "application/json" || Boolean(mediaType?.endsWith("+json"));
+}
+
 // Validation Helpers
 
 function parseEnum<T extends string>(value: unknown, allowedValues: T[], fieldName: string): T | undefined {
@@ -97,6 +146,9 @@ export function parseCreateProjectInput(body: unknown): CreateProjectInput {
     initMode: parseEnum(input.initMode, ["existing", "new-local", "new-remote"], "initMode"),
     isPrivate: parseOptionalBoolean(input.isPrivate, "isPrivate"),
     remoteProvider: parseEnum(input.remoteProvider, ["github", "gitlab"], "remoteProvider"),
+    settingsOverrides: input.settingsOverrides && typeof input.settingsOverrides === "object"
+      ? input.settingsOverrides as CreateProjectInput["settingsOverrides"]
+      : undefined,
   };
 }
 

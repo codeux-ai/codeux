@@ -10,7 +10,7 @@ import { useGsapInteractionTokens } from "../../lib/motion/constants.js";
 import { useInteractionTokens } from "../../lib/motion/index.js";
 import { useComputed } from "@preact/signals";
 import { MemoryCard } from "./MemoryCard.js";
-import { clearSelectedMemoryIds, searchQuerySignal, selectVisibleMemoryIds, selectedMemoryIdsSignal, activeTierSignal, memoryMutationsSignal } from "./memoryState.js";
+import { clearSelectedMemoryIds, searchQuerySignal, selectVisibleMemoryIds, selectedMemoryIdsSignal, activeTierSignal, memoryMutationsSignal, selectedAgentPresetIdSignal, selectedSprintIdSignal } from "./memoryState.js";
 import { useConfirmDialog } from "../../hooks/use-confirm-dialog.js";
 import type { MemNode } from "../../lib/memory-graph.js";
 
@@ -40,6 +40,12 @@ export const MemoryList: FunctionComponent<{
                 return node.content.toLowerCase().includes(lower) || node.category.toLowerCase().includes(lower);
             });
     }, [committedQuery, nodes]);
+    const currentContextKey = JSON.stringify({
+        tier: activeTierSignal.value,
+        sprintId: selectedSprintIdSignal.value ?? null,
+        agentPresetId: selectedAgentPresetIdSignal.value ?? null,
+        query: committedQuery.trim(),
+    });
 
     const reducedMotion = useReducedMotion();
     const gsapTokens = useGsapInteractionTokens();
@@ -47,29 +53,43 @@ export const MemoryList: FunctionComponent<{
     const listRef = useRef<HTMLDivElement>(null);
     const selectAllRef = useRef<HTMLButtonElement>(null);
     const lastUsefulNodes = useRef(filteredNodes);
-    const lastUsefulQuery = useRef(searchQuerySignal.value.trim());
+    const lastUsefulContextKey = useRef(currentContextKey);
     const [renderedNodes, setRenderedNodes] = useState(filteredNodes);
+    const [batchDeletePending, setBatchDeletePending] = useState(false);
+    const [retryPending, setRetryPending] = useState(false);
     const prevRenderedIds = useRef<Set<string>>(new Set());
     const { isOpen: isConfirmOpen, options: confirmOptions, requestConfirm, handleConfirm, handleCancel } = useConfirmDialog();
+    const controlTransitionStyle = {
+        transitionDuration: interactionTokens.controlFeedback.duration,
+        transitionTimingFunction: interactionTokens.controlFeedback.ease,
+    };
+    const asyncTransitionStyle = {
+        transitionDuration: interactionTokens.asyncFeedback.duration,
+        transitionTimingFunction: interactionTokens.asyncFeedback.ease,
+    };
 
     useEffect(() => {
         if (filteredNodes.length > 0) {
             lastUsefulNodes.current = filteredNodes;
-            lastUsefulQuery.current = searchQuerySignal.value.trim();
+            lastUsefulContextKey.current = currentContextKey;
         }
-    }, [filteredNodes]);
+    }, [currentContextKey, filteredNodes]);
 
     useEffect(() => {
-        const currentQuery = searchQuerySignal.value.trim();
         const canShowLastUseful = (refreshing || loadError)
             && filteredNodes.length === 0
             && lastUsefulNodes.current.length > 0
-            && lastUsefulQuery.current === currentQuery;
+            && lastUsefulContextKey.current === currentContextKey;
         const nextNodes = canShowLastUseful
             ? lastUsefulNodes.current
             : filteredNodes;
 
         if (reducedMotion) {
+            setRenderedNodes(nextNodes);
+            return;
+        }
+
+        if (filteredNodes.length === 0 && lastUsefulContextKey.current !== currentContextKey) {
             setRenderedNodes(nextNodes);
             return;
         }
@@ -102,12 +122,11 @@ export const MemoryList: FunctionComponent<{
             }
         }
         setRenderedNodes(nextNodes);
-    }, [filteredNodes, refreshing, loadError, reducedMotion, renderedNodes, gsapTokens.expansionCollapse.duration, gsapTokens.expansionCollapse.ease]);
+    }, [currentContextKey, filteredNodes, refreshing, loadError, reducedMotion, renderedNodes, gsapTokens.expansionCollapse.duration, gsapTokens.expansionCollapse.ease]);
 
     useEffect(() => {
-        const currentQuery = searchQuerySignal.value.trim();
         const visibleIds = new Set(
-            (refreshing || loadError) && filteredNodes.length === 0 && lastUsefulQuery.current === currentQuery
+            (refreshing || loadError) && filteredNodes.length === 0 && lastUsefulContextKey.current === currentContextKey
                 ? lastUsefulNodes.current.map(({ node }) => node.id)
                 : filteredNodes.map(({ node }) => node.id)
         );
@@ -120,7 +139,7 @@ export const MemoryList: FunctionComponent<{
         if (nextSelectedIds.length !== selectedIds.length) {
             selectedMemoryIdsSignal.value = nextSelectedIds;
         }
-    }, [filteredNodes, refreshing, loadError]);
+    }, [currentContextKey, filteredNodes, refreshing, loadError]);
 
     useLayoutEffect(() => {
         if (!listRef.current) return;
@@ -164,13 +183,15 @@ export const MemoryList: FunctionComponent<{
     const selectedIds = selectedMemoryIdsSignal.value;
     const selectedCount = selectedIds.length;
     const activeTier = useComputed(() => activeTierSignal.value);
+    const selectedSprintId = selectedSprintIdSignal.value;
+    const selectedAgentPresetId = selectedAgentPresetIdSignal.value;
     const mutationFeedback = memoryMutationsSignal.value.feedback;
-    const isDeleting = mutationFeedback?.status === "pending" && Boolean(mutationFeedback.message?.toLowerCase().includes("deleting"));
+    const isDeleting = batchDeletePending || (mutationFeedback?.status === "pending" && Boolean(mutationFeedback.message?.toLowerCase().includes("deleting")));
     const countLabel = `${resultCount} ${resultCount === 1 ? "memory" : "memories"} shown`;
     const isShowingStaleResults = (refreshing || Boolean(loadError))
         && filteredNodes.length === 0
         && renderedNodes.length > 0
-        && lastUsefulQuery.current === searchQuerySignal.value.trim();
+        && lastUsefulContextKey.current === currentContextKey;
     const query = searchQuerySignal.value.trim();
     const totalAliveCount = Math.max(
         nodes.filter((node) => node.alive).length,
@@ -184,32 +205,66 @@ export const MemoryList: FunctionComponent<{
     const selectionLabel = selectedCount > 0
         ? `${selectedCount} ${selectedCount === 1 ? "memory" : "memories"} selected from ${visibleIds.length} visible ${visibleIds.length === 1 ? "memory" : "memories"}`
         : "No memories selected";
+    const visibleScopeParts = [
+        activeTier.value === "short_term" ? "Short Term" : "Long Term",
+        activeTier.value === "short_term"
+            ? (selectedSprintId ? `sprint ${selectedSprintId}` : "all sprints")
+            : "project memories",
+        selectedAgentPresetId ? `agent ${selectedAgentPresetId}` : "all agents",
+        query ? `search "${query}"` : "no search",
+    ];
+    const visibleScopeLabel = visibleScopeParts.join(", ");
 
     const handleVisibleSelect = () => {
+        if (allVisibleSelected || visibleIds.length === 0 || isDeleting) {
+            return;
+        }
         selectVisibleMemoryIds(visibleIds);
     };
 
+    const handleRetry = async () => {
+        if (!onRetry || retryPending) {
+            return;
+        }
+
+        setRetryPending(true);
+        try {
+            await onRetry();
+        } finally {
+            setRetryPending(false);
+        }
+    };
+
     const handleBatchDelete = async () => {
-        if (selectedCount === 0) return;
+        if (selectedCount === 0 || isDeleting) return;
 
-        if (selectedCount > 1) {
-            const confirmed = await requestConfirm({
-                title: "Delete Selected Memories",
-                body: `Delete ${selectedCount} selected memories? This action cannot be undone.`,
-                confirmLabel: "Delete Memories",
-                cancelLabel: "Cancel",
-                destructive: true,
+        const confirmed = await requestConfirm({
+            title: "Delete Selected Memories",
+            body: `Delete ${selectedCount} selected ${selectedCount === 1 ? "memory" : "memories"} from the visible scope: ${visibleScopeLabel}. This action cannot be undone.`,
+            confirmLabel: selectedCount === 1 ? "Delete Memory" : "Delete Memories",
+            cancelLabel: "Cancel",
+            destructive: true,
+        });
+
+        if (!confirmed) {
+            requestAnimationFrame(() => {
+                const target = selectAllRef.current || listRef.current?.querySelector<HTMLElement>('[role="option"]');
+                target?.focus();
             });
-
-            if (!confirmed) return;
+            return;
         }
 
         const idsToDelete = [...selectedIds];
-        await memoryMutationsSignal.value.removeMemories(idsToDelete);
-        requestAnimationFrame(() => {
-            const target = selectAllRef.current || listRef.current?.querySelector<HTMLElement>('[role="option"]');
-            target?.focus();
-        });
+        setBatchDeletePending(true);
+        try {
+            await memoryMutationsSignal.value.removeMemories(idsToDelete);
+        } finally {
+            setBatchDeletePending(false);
+            requestAnimationFrame(() => {
+                const target = selectAllRef.current || listRef.current?.querySelector<HTMLElement>('[role="option"]');
+                target?.focus();
+            });
+        }
     };
 
     if (renderedNodes.length === 0) {
@@ -245,17 +300,21 @@ export const MemoryList: FunctionComponent<{
                     {loadError && onRetry && (
                         <button
                             type="button"
-                            onClick={onRetry}
-                            className="inline-flex items-center gap-1.5 rounded-lg border border-status-red/20 bg-status-red/[0.08] px-3 py-1.5 text-[11px] font-bold text-status-red transition-colors hover:bg-status-red/[0.14] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-status-red focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-900"
+                            onClick={() => { void handleRetry(); }}
+                            disabled={retryPending}
+                            aria-busy={retryPending}
+                            style={controlTransitionStyle}
+                            className="inline-flex items-center gap-1.5 rounded-lg border border-status-red/20 bg-status-red/[0.08] px-3 py-1.5 text-[11px] font-bold text-status-red transition-colors hover:bg-status-red/[0.14] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-status-red focus-visible:ring-offset-2 disabled:cursor-wait disabled:opacity-70 dark:focus-visible:ring-offset-void-900"
                         >
-                            <RefreshCw size={13} aria-hidden="true" />
-                            Retry
+                            <RefreshCw size={13} className={retryPending ? "motion-safe:animate-spin" : ""} aria-hidden="true" />
+                            {retryPending ? "Retrying..." : "Retry"}
                         </button>
                     )}
                     {!loadError && !isEmpty && query && (
                         <button
                             type="button"
                             onClick={() => { searchQuerySignal.value = ""; }}
+                            style={controlTransitionStyle}
                             className="rounded-lg border border-black/[0.06] bg-black/[0.04] px-3 py-1.5 text-[11px] font-bold text-slate-500 transition-colors hover:bg-black/[0.08] hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-300 dark:hover:bg-white/[0.08] dark:hover:text-white dark:focus-visible:ring-offset-void-900"
                         >
                             Clear search
@@ -265,6 +324,7 @@ export const MemoryList: FunctionComponent<{
                         <button
                             type="button"
                             onClick={onAddMemory}
+                            style={controlTransitionStyle}
                             className="inline-flex items-center gap-1.5 rounded-lg border border-signal-500/20 bg-signal-500/[0.1] px-3 py-1.5 text-[11px] font-bold text-signal-600 transition-colors hover:bg-signal-500/[0.16] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:text-signal-300 dark:focus-visible:ring-offset-void-900"
                         >
                             <Plus size={13} aria-hidden="true" />
@@ -325,10 +385,13 @@ export const MemoryList: FunctionComponent<{
                         {loadError && onRetry && (
                             <button
                                 type="button"
-                                onClick={onRetry}
-                                className="ml-auto shrink-0 rounded-md border border-status-red/25 px-2 py-0.5 text-[10px] font-bold transition-colors hover:bg-status-red/[0.12] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-status-red focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-900"
+                                onClick={() => { void handleRetry(); }}
+                                disabled={retryPending}
+                                aria-busy={retryPending}
+                                style={controlTransitionStyle}
+                                className="ml-auto shrink-0 rounded-md border border-status-red/25 px-2 py-0.5 text-[10px] font-bold transition-colors hover:bg-status-red/[0.12] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-status-red focus-visible:ring-offset-2 disabled:cursor-wait disabled:opacity-70 dark:focus-visible:ring-offset-void-900"
                             >
-                                Retry
+                                {retryPending ? "Retrying..." : "Retry"}
                             </button>
                         )}
                     </div>
@@ -338,24 +401,27 @@ export const MemoryList: FunctionComponent<{
                         ref={selectAllRef}
                         type="button"
                         onClick={handleVisibleSelect}
-                        disabled={visibleIds.length === 0 || allVisibleSelected}
-                        title={allVisibleSelected ? "All currently visible memories are already selected." : undefined}
-                        className="rounded-lg border border-black/[0.06] bg-black/[0.04] px-2.5 py-1 text-[11px] font-semibold text-slate-500 transition-colors duration-150 hover:bg-black/[0.08] hover:text-slate-700 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-300 dark:hover:bg-white/[0.08] dark:hover:text-white"
+                        disabled={visibleIds.length === 0 || allVisibleSelected || isDeleting}
+                        title={isDeleting ? "Selection is locked while selected memories are deleting." : allVisibleSelected ? "All currently visible memories are already selected." : undefined}
+                        style={controlTransitionStyle}
+                        className="rounded-lg border border-black/[0.06] bg-black/[0.04] px-2.5 py-1 text-[11px] font-semibold text-slate-500 transition-colors hover:bg-black/[0.08] hover:text-slate-700 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-300 dark:hover:bg-white/[0.08] dark:hover:text-white"
                     >
                         {allVisibleSelected ? `All ${visibleIds.length} visible selected` : `Select all ${visibleIds.length} visible`}
                     </button>
                     {selectedCount > 0 && (
-                        <div className={`inline-flex max-w-full items-center gap-2 rounded-lg border px-2.5 py-1 text-xs font-semibold ${
+                        <div className={`inline-flex min-h-9 max-w-full items-center gap-2 rounded-lg border px-2.5 py-1 text-xs font-semibold transition-[background-color,border-color,color,box-shadow] ${
                             isDeleting
                                 ? "border-status-red/20 bg-status-red/[0.08] text-status-red"
                                 : "border-signal-500/20 bg-signal-500/[0.08] text-signal-500"
-                        }`}>
+                        }`} style={asyncTransitionStyle} aria-busy={isDeleting}>
                             <span>{selectedCount} selected from {visibleIds.length} visible</span>
                             <button
                                 type="button"
                                 onClick={clearSelectedMemoryIds}
                                 disabled={isDeleting}
-                                className="rounded-md px-1.5 py-0.5 text-[11px] font-semibold text-slate-500 transition-colors hover:bg-black/[0.04] hover:text-slate-700 dark:text-slate-300 dark:hover:bg-white/[0.06] dark:hover:text-white"
+                                title={isDeleting ? "Selection cannot be cleared while deletion is pending." : undefined}
+                                style={controlTransitionStyle}
+                                className="rounded-md px-1.5 py-0.5 text-[11px] font-semibold text-slate-500 transition-colors hover:bg-black/[0.04] hover:text-slate-700 disabled:cursor-not-allowed disabled:opacity-60 dark:text-slate-300 dark:hover:bg-white/[0.06] dark:hover:text-white"
                             >
                                 Clear
                             </button>
@@ -363,8 +429,11 @@ export const MemoryList: FunctionComponent<{
                                 type="button"
                                 onClick={() => { void handleBatchDelete(); }}
                                 disabled={isDeleting}
+                                aria-busy={isDeleting}
                                 aria-describedby="memory-list-selection-status"
-                                className="inline-flex items-center gap-1.5 rounded-md bg-status-red px-2 py-1 text-[11px] font-semibold text-white transition-colors hover:bg-status-red/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-status-red focus-visible:ring-offset-2 disabled:cursor-wait disabled:opacity-70 dark:focus-visible:ring-offset-void-900"
+                                title={isDeleting ? "Deleting selected memories. Wait for the result or retry if it fails." : "Deletes require confirmation before continuing."}
+                                style={controlTransitionStyle}
+                                className="inline-flex min-w-[8.5rem] items-center justify-center gap-1.5 rounded-md bg-status-red px-2 py-1 text-[11px] font-semibold text-white transition-colors hover:bg-status-red/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-status-red focus-visible:ring-offset-2 disabled:cursor-wait disabled:opacity-70 dark:focus-visible:ring-offset-void-900"
                             >
                                 {isDeleting && <Loader2 size={12} className="motion-safe:animate-spin" aria-hidden="true" />}
                                 {isDeleting ? `Deleting ${selectedCount}...` : selectedCount > 1 ? `Delete ${selectedCount} selected` : "Delete selected"}

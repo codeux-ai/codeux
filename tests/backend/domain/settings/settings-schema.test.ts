@@ -52,6 +52,42 @@ describe("validateSettingsPayload", () => {
     expect(result.data.ciIntelligence.featurePrAutoMergeMode).toBe("CREATE_PR");
   });
 
+  it("rejects invalid sprint preview container ports", () => {
+    const payload = cloneDefaults({
+      env: {},
+      settingsJson: {},
+      resolved: {},
+    });
+    payload.sprintPreview.containerAppPort = 70000;
+    payload.sprintPreview.containerAppPorts = [3000, 0, 65536];
+
+    const result = validateSettingsPayload(payload);
+
+    expect(result.success).toBe(false);
+    expect(result.issues).toEqual(expect.arrayContaining([
+      { path: "sprintPreview.containerAppPort", message: "Expected a port number between 1 and 65535" },
+      { path: "sprintPreview.containerAppPorts.1", message: "Expected a port number between 1 and 65535" },
+      { path: "sprintPreview.containerAppPorts.2", message: "Expected a port number between 1 and 65535" },
+    ]));
+  });
+
+  it("rejects Docker memory limits outside the supported MiB range", () => {
+    const payload = cloneDefaults({
+      env: {},
+      settingsJson: {},
+      resolved: {},
+    });
+    payload.cliWorkflow.containerMemoryLimitMb = 262145;
+
+    const result = validateSettingsPayload(payload);
+
+    expect(result.success).toBe(false);
+    expect(result.issues).toContainEqual({
+      path: "cliWorkflow.containerMemoryLimitMb",
+      message: "Expected an integer between 0 and 262144",
+    });
+  });
+
   it("rejects non-object payloads early", () => {
     const result = validateSettingsPayload("invalid");
 
@@ -205,11 +241,13 @@ describe("validateSettingsPayload", () => {
           taskCompletion: {
             enabled: "bad",
             agentPresetId: 1,
+            agentPresetIds: ["qa", 1],
           },
           sprintCompletion: "bad",
           completedTaskWithoutPr: {
             enabled: "bad",
             agentPresetId: 2,
+            agentPresetIds: "bad",
           },
         },
       },
@@ -244,6 +282,7 @@ describe("validateSettingsPayload", () => {
     expect(paths).toContain("cliWorkflow.executionMode");
     expect(paths).toContain("cliWorkflow.gitMode");
     expect(paths).toContain("cliWorkflow.containerMemoryLimitMb");
+    expect(paths).toContain("cliWorkflow.containerSetupScriptPath");
     expect(paths).toContain("cliWorkflow.containerCacheSetupScriptImage");
     expect(paths).toContain("cliWorkflow.containerInstallPlaywrightBrowsers");
     expect(paths).toContain("cliWorkflow.containerClaudeCodeAuthPath");
@@ -255,13 +294,58 @@ describe("validateSettingsPayload", () => {
     expect(paths).toContain("agents.qualityAssurance.maxTaskReviewRuns");
     expect(paths).toContain("agents.qualityAssurance.taskCompletion.enabled");
     expect(paths).toContain("agents.qualityAssurance.taskCompletion.agentPresetId");
+    expect(paths).toContain("agents.qualityAssurance.taskCompletion.agentPresetIds.1");
     expect(paths).toContain("agents.qualityAssurance.sprintCompletion");
     expect(paths).toContain("agents.qualityAssurance.completedTaskWithoutPr.enabled");
     expect(paths).toContain("agents.qualityAssurance.completedTaskWithoutPr.agentPresetId");
+    expect(paths).toContain("agents.qualityAssurance.completedTaskWithoutPr.agentPresetIds");
     expect(paths).toContain("skills[0]");
     expect(paths).toContain("skills[1].isInternal");
     expect(paths).toContain("mcpTools[0]");
     expect(paths).toContain("mcpTools[1].enabled");
+  });
+
+  it("accepts QA trigger agent preset arrays and legacy single preset fields", () => {
+    const payload = cloneDefaults({ env: {}, settingsJson: {}, resolved: {} });
+    payload.agents.qualityAssurance.taskCompletion.agentPresetId = "qa-legacy";
+    payload.agents.qualityAssurance.taskCompletion.agentPresetIds = ["qa-legacy"];
+    payload.agents.qualityAssurance.sprintCompletion.agentPresetId = "qa-1";
+    payload.agents.qualityAssurance.sprintCompletion.agentPresetIds = ["qa-1", "qa-2"];
+    payload.agents.qualityAssurance.completedTaskWithoutPr.agentPresetId = null;
+    payload.agents.qualityAssurance.completedTaskWithoutPr.agentPresetIds = [];
+
+    const result = validateSettingsPayload(payload);
+
+    expect(result.success).toBe(true);
+    expect(result.issues).toEqual([]);
+  });
+
+  it("accepts relative and absolute container setup script path strings", () => {
+    const relativePayload = cloneDefaults({ env: {}, settingsJson: {}, resolved: {} });
+    relativePayload.cliWorkflow.containerSetupScriptPath = "scripts/missing-container-setup.sh";
+
+    const relativeResult = validateSettingsPayload(relativePayload);
+    expect(relativeResult.success).toBe(true);
+    expect(relativeResult.issues).toEqual([]);
+
+    const absolutePayload = cloneDefaults({ env: {}, settingsJson: {}, resolved: {} });
+    absolutePayload.cliWorkflow.containerSetupScriptPath = "/tmp/code-ux/missing-container-setup.sh";
+
+    const absoluteResult = validateSettingsPayload(absolutePayload);
+    expect(absoluteResult.success).toBe(true);
+    expect(absoluteResult.issues).toEqual([]);
+  });
+
+  it("rejects non-string container setup script path values", () => {
+    const payload = cloneDefaults({ env: {}, settingsJson: {}, resolved: {} });
+    payload.cliWorkflow.containerSetupScriptPath = 42 as any;
+
+    const result = validateSettingsPayload(payload);
+
+    expect(result.success).toBe(false);
+    expect(result.issues).toEqual(expect.arrayContaining([
+      { path: "cliWorkflow.containerSetupScriptPath", message: "Expected a string" },
+    ]));
   });
 });
 

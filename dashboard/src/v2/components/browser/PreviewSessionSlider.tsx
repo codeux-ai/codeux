@@ -2,7 +2,7 @@ import type { FunctionComponent } from "preact";
 import { useRef } from "preact/hooks";
 import { ChevronLeft, ChevronRight, ExternalLink, Globe, Trash2, Loader2, CheckCircle2 } from "lucide-preact";
 import type { SprintPreviewSession } from "../../../types.js";
-import { buildPreviewOrigin } from "../../lib/preview-origin.js";
+import { buildPreviewOrigin, formatPreviewPortMappingsSummary, getPrimaryPreviewPortMapping } from "../../lib/preview-origin.js";
 import { getSafeUrl } from "../../lib/safe-url.js";
 import { buildInteractionTransition } from "../../lib/motion/tokens.js";
 
@@ -42,21 +42,6 @@ const statusLabel: Record<SprintPreviewSession["status"], string> = {
 
 const cardTransition = buildInteractionTransition("selectionMovement");
 const controlTransition = buildInteractionTransition("controlFeedback");
-
-const formatPortMapping = (session: SprintPreviewSession): string => {
-  const sourcePort = typeof session.containerAppPort === "number" ? session.containerAppPort : null;
-  const routedPort = typeof session.hostPort === "number" ? session.hostPort : null;
-  if (sourcePort && routedPort) {
-    return `:${sourcePort} -> :${routedPort}`;
-  }
-  if (sourcePort) {
-    return `:${sourcePort} -> pending`;
-  }
-  if (routedPort) {
-    return `pending -> :${routedPort}`;
-  }
-  return "port pending";
-};
 
 const getPreviewRailScrollBehavior = (): ScrollBehavior => {
   if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
@@ -137,10 +122,15 @@ export const PreviewSessionSlider: FunctionComponent<PreviewSessionSliderProps> 
         {sessions.map((session) => {
           const active = selectedSessionId === session.id;
           const origin = buildPreviewOrigin(session.id);
-          const canOpen = Boolean(session.hostPort);
+          const primaryMapping = getPrimaryPreviewPortMapping(session);
+          const canOpen = Boolean(primaryMapping?.hostPort) && session.status === "running";
           const removing = removingSessionIdSet.has(session.id);
           const linkUnavailableReason = session.status === "starting"
             ? "Preview link unavailable until the container finishes starting and receives a routed host port."
+            : session.status === "stopped"
+              ? "Preview link unavailable because the selected container is stopped. Rebuild or launch the container to open it."
+              : session.status === "error"
+                ? "Preview link unavailable because the selected container has an error. Rebuild the container to recover it."
             : "Preview link unavailable until a host port is routed.";
           const removePendingReason = `Preview session ${session.sprintName} is already being removed.`;
           const removeDescriptionId = `preview-session-${session.id}-remove-state`;
@@ -194,14 +184,14 @@ export const PreviewSessionSlider: FunctionComponent<PreviewSessionSliderProps> 
                   <span className={`font-semibold ${healthTone[session.healthStatus]}`}>
                     {healthLabel[session.healthStatus]}
                   </span>
-                  <span className="break-words">{formatPortMapping(session)}</span>
+                  <span className="break-words">{formatPreviewPortMappingsSummary(session)}</span>
                 </div>
 
                 <div className="mt-1 break-words text-[11px] text-slate-500 dark:text-slate-500">
                   {removing
                     ? "removing session"
-                    : session.hostPort
-                      ? `127.0.0.1:${session.hostPort}`
+                    : primaryMapping?.hostPort
+                      ? `127.0.0.1:${primaryMapping.hostPort}`
                       : session.status === "starting"
                         ? "starting and waiting for routed port"
                         : "waiting for routed port"}
@@ -238,7 +228,7 @@ export const PreviewSessionSlider: FunctionComponent<PreviewSessionSliderProps> 
                     : "border-status-red/15 text-status-red hover:border-status-red/30 hover:bg-status-red/8"
                   }`}
                   style={{ transition: controlTransition }}
-                  title="Remove preview container"
+                  title={removing ? removePendingReason : "Remove preview container"}
 
                   aria-label={removing ? `Removing preview session ${session.sprintName}` : `Remove preview session ${session.sprintName}`}
                   disabled={removing}

@@ -74,6 +74,17 @@ describe("SettingsActions", () => {
     expect(settingsRepository.saveSystemSettings).toHaveBeenCalledTimes(1);
   });
 
+  it("does not replay a consumed settings approval", async () => {
+    const payload = { path: "defaults.automationLevel", value: "SEMI_AUTO" };
+
+    await actions.handleSettingsAction({ domain: "settings", action: "patch_system_setting", payload });
+    await actions.handleSettingsAction({ domain: "settings", action: "patch_system_setting", payload, approval: { confirmed: true } });
+    const replay = await actions.handleSettingsAction({ domain: "settings", action: "patch_system_setting", payload, approval: { confirmed: true } });
+
+    expect(replay.approvalRequired).toBe(true);
+    expect(settingsRepository.saveSystemSettings).toHaveBeenCalledTimes(1);
+  });
+
   it("does not reuse a settings approval for a different payload", async () => {
     await actions.handleSettingsAction({
       domain: "settings",
@@ -89,6 +100,68 @@ describe("SettingsActions", () => {
 
     expect(res.approvalRequired).toBe(true);
     expect(settingsRepository.saveSystemSettings).not.toHaveBeenCalled();
+  });
+
+  it("keeps concurrent pending settings approvals independent by fingerprint", async () => {
+    const firstPayload = { path: "defaults.automationLevel", value: "SEMI_AUTO" };
+    const secondPayload = { path: "defaults.automationLevel", value: "MANUAL" };
+
+    await actions.handleSettingsAction({ domain: "settings", action: "patch_system_setting", payload: firstPayload });
+    await actions.handleSettingsAction({ domain: "settings", action: "patch_system_setting", payload: secondPayload });
+
+    const second = await actions.handleSettingsAction({
+      domain: "settings",
+      action: "patch_system_setting",
+      payload: secondPayload,
+      approval: { confirmed: true },
+    });
+    const first = await actions.handleSettingsAction({
+      domain: "settings",
+      action: "patch_system_setting",
+      payload: firstPayload,
+      approval: { confirmed: true },
+    });
+
+    expect(second.result).toEqual({ settings: { defaults: { automationLevel: "MANUAL" } } });
+    expect(first.result).toEqual({ settings: { defaults: { automationLevel: "SEMI_AUTO" } } });
+    expect(settingsRepository.saveSystemSettings).toHaveBeenCalledTimes(2);
+  });
+
+  it("requires a new approval when array value order changes", async () => {
+    const payload = { path: "defaults.enabledProviders", value: ["codex", "gemini"] };
+
+    await actions.handleSettingsAction({ domain: "settings", action: "patch_system_setting", payload });
+    const res = await actions.handleSettingsAction({
+      domain: "settings",
+      action: "patch_system_setting",
+      payload: { path: "defaults.enabledProviders", value: ["gemini", "codex"] },
+      approval: { confirmed: true },
+    });
+
+    expect(res.approvalRequired).toBe(true);
+    expect(settingsRepository.saveSystemSettings).not.toHaveBeenCalled();
+  });
+
+  it("distinguishes missing and null setting values in approval fingerprints", async () => {
+    const payload = { path: "defaults.model", value: null };
+
+    await actions.handleSettingsAction({ domain: "settings", action: "patch_system_setting", payload });
+    await expect(actions.handleSettingsAction({
+      domain: "settings",
+      action: "patch_system_setting",
+      payload: { path: "defaults.model" },
+      approval: { confirmed: true },
+    })).rejects.toThrow("value is required");
+
+    const res = await actions.handleSettingsAction({
+      domain: "settings",
+      action: "patch_system_setting",
+      payload,
+      approval: { confirmed: true },
+    });
+
+    expect(res.result).toEqual({ settings: { defaults: { automationLevel: "FULL", model: null } } });
+    expect(settingsRepository.saveSystemSettings).toHaveBeenCalledTimes(1);
   });
 
   it("expires pending settings approvals after 15 minutes", async () => {
@@ -122,6 +195,25 @@ describe("SettingsActions", () => {
       payload: { path: "defaults.automationLevel" },
     })).rejects.toThrow("value is required");
     expect(settingsRepository.saveSystemSettings).not.toHaveBeenCalled();
+  });
+
+  it("preserves explicit null patch values after confirmation", async () => {
+    const payload = { path: "defaults.automationLevel", value: null };
+
+    await actions.handleSettingsAction({
+      domain: "settings",
+      action: "patch_system_setting",
+      payload,
+    });
+    const res = await actions.handleSettingsAction({
+      domain: "settings",
+      action: "patch_system_setting",
+      payload,
+      approval: { confirmed: true },
+    });
+
+    expect(res.result).toEqual({ settings: { defaults: { automationLevel: null } } });
+    expect(settingsRepository.saveSystemSettings).toHaveBeenCalledWith({ defaults: { automationLevel: null } });
   });
 
   it("requires approval for replacing system settings", async () => {
@@ -247,6 +339,13 @@ describe("SettingsActions", () => {
       await expect(
         actions.handleSettingsAction({ domain: "settings", action: "replace_system_settings", payload: {} }),
       ).rejects.toThrow(/settings object is required/);
+    });
+
+    it("rejects replace_system_settings with an invalid settings object type", async () => {
+      await expect(
+        actions.handleSettingsAction({ domain: "settings", action: "replace_system_settings", payload: { settings: [] } }),
+      ).rejects.toThrow(/settings object is required/);
+      expect(settingsRepository.saveSystemSettings).not.toHaveBeenCalled();
     });
 
     it("rejects replace_project_settings without a settings object", async () => {

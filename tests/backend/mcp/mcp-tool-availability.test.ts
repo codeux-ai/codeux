@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { DEFAULT_DASHBOARD_SETTINGS } from "../../../src/repositories/settings-repository.js";
-import { getEnabledToolDefinitions, isToolEnabled, sanitizeCustomMcpServers, sanitizeMcpToolToggles } from "../../../src/mcp/mcp-tool-availability.js";
+import { DEFAULT_PLAYWRIGHT_MCP_SERVER_ID } from "../../../src/repositories/settings-defaults.js";
+import { getEnabledToolDefinitions, isToolEnabled, sanitizeCustomMcpServers, sanitizeCustomMcpServersWithDefaults, sanitizeMcpToolToggles } from "../../../src/mcp/mcp-tool-availability.js";
 
 describe("tool availability", () => {
   it("exposes the project-manager MCP tool surface", () => {
@@ -76,6 +77,20 @@ describe("tool availability", () => {
 });
 
 describe("sanitizeCustomMcpServers", () => {
+  it("includes the default Playwright MCP server for coding providers", () => {
+    const playwright = DEFAULT_DASHBOARD_SETTINGS.customMcpServers.find((server) => server.id === DEFAULT_PLAYWRIGHT_MCP_SERVER_ID);
+
+    expect(playwright).toMatchObject({
+      id: "playwright",
+      name: "playwright",
+      enabled: true,
+      transport: "stdio",
+      command: "npx",
+      args: ["@playwright/mcp@latest"],
+      providers: ["gemini", "codex", "claude-code", "qwen-code", "opencode", "antigravity"],
+    });
+  });
+
   it("keeps valid HTTP servers and normalizes optional fields", () => {
     const result = sanitizeCustomMcpServers([
       {
@@ -117,18 +132,46 @@ describe("sanitizeCustomMcpServers", () => {
 
   it("dedupes by id, last entry wins", () => {
     const result = sanitizeCustomMcpServers([
-      { id: "x", name: "first", url: "https://1", enabled: true },
-      { id: "x", name: "second", url: "https://2", enabled: false },
+      { id: "x", name: "first", url: "https://one.example.com", enabled: true },
+      { id: "x", name: "second", url: "https://two.example.com", enabled: false },
     ]);
 
     expect(result).toHaveLength(1);
-    expect(result[0]).toMatchObject({ name: "second", url: "https://2", enabled: false });
+    expect(result[0]).toMatchObject({ name: "second", url: "https://two.example.com", enabled: false });
   });
 
   it("returns an empty array for non-array input", () => {
     expect(sanitizeCustomMcpServers(undefined)).toEqual([]);
     expect(sanitizeCustomMcpServers(null)).toEqual([]);
     expect(sanitizeCustomMcpServers({})).toEqual([]);
+  });
+
+  it("seeds defaults without duplicating servers that match by id or name", () => {
+    const byId = sanitizeCustomMcpServersWithDefaults([
+      {
+        id: "playwright",
+        name: "playwright",
+        transport: "stdio",
+        command: "npx",
+        args: ["@playwright/mcp@latest"],
+        enabled: false,
+      },
+    ], DEFAULT_DASHBOARD_SETTINGS.customMcpServers);
+    expect(byId.filter((server) => server.name === "playwright")).toHaveLength(1);
+    expect(byId.find((server) => server.id === "playwright")?.enabled).toBe(false);
+
+    const byName = sanitizeCustomMcpServersWithDefaults([
+      {
+        id: "custom-playwright",
+        name: "playwright",
+        transport: "stdio",
+        command: "npx",
+        args: ["@playwright/mcp@latest"],
+        enabled: true,
+      },
+    ], DEFAULT_DASHBOARD_SETTINGS.customMcpServers);
+    expect(byName.filter((server) => server.name === "playwright")).toHaveLength(1);
+    expect(byName.find((server) => server.name === "playwright")?.id).toBe("custom-playwright");
   });
 
   it("accepts stdio servers and infers transport from command when unset", () => {
@@ -164,6 +207,29 @@ describe("sanitizeCustomMcpServers", () => {
     expect(result.map((s) => s.id)).toEqual(["d"]);
   });
 
+  it("drops HTTP servers targeting unsafe or ambiguous network destinations", () => {
+    const result = sanitizeCustomMcpServers([
+      { id: "metadata", name: "metadata", url: "http://169.254.169.254/latest/meta-data", transport: "http" },
+      { id: "mapped-metadata", name: "mapped_metadata", url: "http://[::ffff:169.254.169.254]/mcp", transport: "http" },
+      { id: "metadata-host", name: "metadata_host", url: "http://metadata.google.internal/computeMetadata/v1", transport: "http" },
+      { id: "link-local-v6", name: "link_local_v6", url: "http://[fe80::1]/mcp", transport: "http" },
+      { id: "multicast-v4", name: "multicast_v4", url: "http://224.0.0.1/mcp", transport: "http" },
+      { id: "multicast-v6", name: "multicast_v6", url: "http://[ff02::1]/mcp", transport: "http" },
+      { id: "broadcast", name: "broadcast", url: "http://255.255.255.255/mcp", transport: "http" },
+      { id: "single-number", name: "single_number", url: "http://2130706433/mcp", transport: "http" },
+      { id: "hex", name: "hex", url: "http://0x7f000001/mcp", transport: "http" },
+      { id: "short-ip", name: "short_ip", url: "http://127.1/mcp", transport: "http" },
+      { id: "leading-zero", name: "leading_zero", url: "http://0177.0.0.1/mcp", transport: "http" },
+      { id: "localhost", name: "localhost", url: "http://localhost:3000/mcp", transport: "http" },
+      { id: "ipv4-loopback", name: "ipv4_loopback", url: "http://127.0.0.1:3000/mcp", transport: "http" },
+      { id: "ipv6-loopback", name: "ipv6_loopback", url: "http://[::1]:3000/mcp", transport: "http" },
+      { id: "mapped-loopback", name: "mapped_loopback", url: "http://[::ffff:127.0.0.1]:3000/mcp", transport: "http" },
+      { id: "remote", name: "remote", url: "https://mcp.example.com/sse", transport: "http" },
+    ]);
+
+    expect(result.map((s) => s.id)).toEqual(["localhost", "ipv4-loopback", "ipv6-loopback", "mapped-loopback", "remote"]);
+  });
+
   it("sanitizes headers to drop invalid names and control chars in values", () => {
     const result = sanitizeCustomMcpServers([
       {
@@ -179,6 +245,31 @@ describe("sanitizeCustomMcpServers", () => {
       },
     ]);
     expect(result[0].headers).toEqual({ "Valid-Header": "ok" });
+  });
+
+  it("drops hop-by-hop and request-smuggling-sensitive custom headers", () => {
+    const result = sanitizeCustomMcpServers([
+      {
+        id: "srv",
+        name: "test",
+        url: "https://example.com",
+        headers: {
+          Authorization: "Bearer redacted",
+          Host: "attacker.example",
+          Connection: "keep-alive",
+          "Transfer-Encoding": "chunked",
+          "Content-Length": "5",
+          TE: "trailers",
+          Trailer: "X-Injected",
+          Upgrade: "websocket",
+          "Proxy-Authorization": "Basic redacted",
+          "Proxy-Connection": "keep-alive",
+          Expect: "100-continue",
+          "X-Mcp-Session": "ok",
+        },
+      },
+    ]);
+    expect(result[0].headers).toEqual({ Authorization: "Bearer redacted", "X-Mcp-Session": "ok" });
   });
 
   it("sanitizes environment variables to drop invalid names and control chars", () => {

@@ -17,6 +17,9 @@ Additional startup config:
 - `JULES_DOCKER_HOST_WORKSPACE_ROOT` (optional path mapping for Docker-in-Docker/remote-daemon setups)
 - `JULES_DOCKER_HOST_HOME_ROOT` (optional home-dir path mapping for Docker credential mounts)
 - `CODE_UX_GIT_FETCH_TIMEOUT_MS` (optional timeout for mandatory Git remote refreshes; default `120000`, clamped between 10 seconds and 10 minutes)
+- `CODE_UX_RUNTIME_LOCK_WAIT_MS` (optional; defaults to `30000`. Startup waits this long for an existing project-manager runtime lock holder to exit before rejecting the new process.)
+- `CODE_UX_ALLOW_MULTIPLE_RUNTIMES=1` (diagnostic only; bypasses the project-manager PID lock that normally prevents duplicate local runtimes from driving the same Docker/session state)
+- MCP Streamable HTTP config uses the existing `--mcp-https*` flags / `MCP_HTTPS_*` env names for compatibility. When enabled and no explicit auth token is supplied, startup creates or reuses `~/.code-ux/security.json` with `mcpHttpAuthToken`.
 
 External hint env keys used for dashboard import:
 - `JULES_API_KEY` / `JULES_KEY`
@@ -24,12 +27,20 @@ External hint env keys used for dashboard import:
 - `OPENAI_API_KEY` (Codex CLI)
 - `GH_TOKEN` / `GITHUB_TOKEN`
 
-## Settings JSON Search Paths
+## Settings Overrides and Scoped Resolution
 
-For `.code-ux/settings.json`, search roots include:
+Code UX settings resolve through a scoped cascade: `system` → `project` → `sprint`.
+
+System settings hold global state, runtime behavior (e.g., ports, `consoleLogLevel`, `debugLogFileLevel`, `consoleLogMode`), and system integration credentials (Jira tokens, GitLab/GitHub tokens).
+
+Project and sprint scopes can override execution-specific settings, such as `aiProvider` routes (which now include provider instances and `invocationRouting` as first-class citizens instead of legacy top-level keys), `cliWorkflow` settings (like `gitMode`, `executionMode`, `containerImage`, `containerSetupScriptPath`), and preview defaults (like `sprintPreview.startupScriptPath` defaulting to `.code-ux/browser/start-preview.sh`). `git.defaultBranch` fallback is resolved based on scoped overrides too. Jira and GitLab integration configurations are also scoped and can be overridden.
+
+For `.code-ux/settings.json` (used primarily for credential hints during initial onboarding), search roots include:
 - current working directory
 - project root
 - home directory
+
+Note: `.code-ux/settings.json` is not the primary configuration source; Code UX reads its execution settings from the SQLite `settings.db`.
 
 ## Scoped Settings Persistence
 
@@ -66,6 +77,7 @@ Runtime resolution:
 - In remote git mode, Code UX refreshes `origin` before sprint branch preflight and before each task start so branch resolution is based on current remote state instead of stale local refs.
 - HTTPS GitHub remotes use the configured dashboard token as a temporary Git extraheader during origin refresh, remote branch checks, and branch pushes. HTTPS origin refreshes and branch preflight network checks run with interactive credential prompts disabled and a bounded timeout so orchestration cannot remain stuck waiting on local credential helpers. Mandatory CLI task refreshes fetch the requested starting branch's remote-tracking ref when possible, avoiding a whole-origin fetch for every task dispatch. They use a 120 second default fetch timeout, configurable with `CODE_UX_GIT_FETCH_TIMEOUT_MS` for slow Git transports. If direct remote inspection is unavailable, branch preflight can use an existing `refs/remotes/origin/<branch>` ref as remote-branch evidence. Local origin-refresh failures remain strict for CLI-backed work that needs local git state, but are best-effort for branch preflight and Jules dispatch because Jules works from the remote source and starting branch. SSH remotes continue to use the local SSH agent/key setup unchanged.
 - In remote git mode, Code UX also refreshes `origin` before branch-sensitive recovery flows such as QA review, QA follow-up continuation, clarification auto-replies, CI fix runs, and merge-conflict resolution. Clarification auto-replies refresh the recorded task worker branch when available; if the task has no worker branch yet, they refresh the scoped `git.defaultBranch` so project-level default branch overrides are used instead of falling back to `main`.
+- When task finalization materializes a patch with `commit-tree` and `update-ref`, Code UX synchronizes the checkout if the project clone is currently on the worker branch and tracked files were clean before the ref update. This prevents remote-git project clones from showing staged changes solely because `HEAD` moved without the worktree/index moving with it.
 - QA review execution uses an isolated snapshot workspace in Docker so review inspection does not mutate the task workspace directly.
 - QA-requested CLI follow-up work continues in the original task workspace when that workspace is still available. Code UX resolves the worker branch from task metadata first and falls back to the preserved workspace branch when metadata is missing, then fast-forwards the preserved workspace against `origin/<worker-branch>` when possible without cleaning local QA state.
 - If neither worker-branch metadata nor a resumable workspace branch is available, QA follow-up fails with an actionable error that names both missing branch metadata and the missing/non-resolvable resume workspace session.
@@ -79,6 +91,14 @@ Runtime resolution:
 - On startup, Code UX schedules Docker asset pruning in the background so dashboard boot is not blocked by Docker cleanup. The prune path uses label-filtered Docker queries for managed workspace/runtime volumes plus helper/login containers, removes containers and volumes in batches, and applies a short per-command timeout. Helper/login container cleanup uses `docker rm -f -v` so anonymous image-declared volumes are removed with the container. Cached setup-script images are content-addressed and are intentionally preserved across dashboard restarts so provider launches can reuse them until the base image, setup script content, or setup Dockerfile changes.
 - On startup, Code UX also performs automated database maintenance, pruning old completed task runs (and their cascaded child tables), VM activities, attention items, and realtime events according to the configured retention policy. Released virtual-worker assignment history is purged during the same maintenance pass because virtual workers are ephemeral and live paths only depend on active assignments. Maintenance then runs `VACUUM` on database files to reclaim disk space. SQLite WAL auto-checkpointing is disabled on runtime connections so ordinary startup writes cannot synchronously checkpoint a large WAL on the dashboard thread; controlled maintenance checkpoints truncate WAL files on the maintenance cadence instead.
 - restart recovery treats interrupted Docker sessions without a live backing container as cancelled/retryable, so app shutdowns and restarts do not inflate invocation failure statistics while abandoned runtime callbacks are still cleared.
+- restart behavior is controlled from `Settings -> General -> Restart Behavior`:
+  - `restartSprintPolicy` defaults to `continue`, which resumes queued/running sprint runs in place after startup recovery.
+  - `restartSprintPolicy = pause` moves active sprint runs and dispatches to a paused state before watch-loop recovery starts, updates the parent sprint projection to `paused`, cancels linked provider/QA runtime rows, and leaves preserved Docker workspaces available for manual resume.
+  - `restartSprintPolicy = cancel` cancels active sprint runs on startup, releases their sprint leases, and cancels linked provider/QA runtime rows without creating a replacement run.
+  - `restartInvocationPolicy` defaults to `continue`, which keeps still-running Docker-backed CLI invocations attached when their labelled container is still alive and only requeues interrupted/no-container work.
+  - `restartInvocationPolicy = restart` stops active labelled provider containers without removing preserved workspace/runtime volumes, closes the interrupted invocation rows, and moves task-backed work back to `pending` so orchestration can dispatch a fresh attempt.
+  - `restartInvocationPolicy = cancel` stops active labelled provider containers without removing preserved workspace/runtime volumes, closes the interrupted invocation rows, and marks task-backed work as `QA_REVIEW_FAILED`/blocked so it is not retried automatically.
+- startup recovery also repairs parent sprint projection drift for paused runs: if the latest run is paused and no queued/running/cancel-pending run exists for the sprint, the parent sprint row is synced back to `paused` instead of allowing the dashboard to show a false running state.
 - restart recovery respects live sprint lease ownership: if an active run has an unexpired `sprint_orchestrator:<pid>` lease and that PID is still alive, the new process skips recovery instead of releasing the lease and starting a duplicate watch loop.
 - QA review keepalives refresh the sprint-run heartbeat only; the orchestrator heartbeat owns sprint lease renewal with its original lease token.
 - On Code UX shutdown (`SIGINT`, `SIGTERM`, `SIGHUP`, or Electron quit), the server first requests registered active dispatches to abort and then kills any still-running Docker containers with `code-ux.*` labels or deterministic `code-ux-*` runtime names. This prevents provider, preview, browser, login, and workspace-helper containers from surviving a normal app stop. Shutdown does not remove Docker workspace/runtime volumes, and startup recovery can continue from the same workspace volume when `Resume failed task in same workspace` is enabled.
@@ -105,6 +125,8 @@ Runtime resolution:
   - `dbAutoVacuumOnStartup` (default `true`; executes SQL `VACUUM` on startup to reclaim disk space)
   - `dbPruningEnabled` (default `true`; enables automatic startup pruning of old data)
   - `dbRetentionDays` (default `14`; retention threshold in days for completed runs and logs)
+  - `restartSprintPolicy` (default `continue`; one of `continue`, `pause`, `cancel`)
+  - `restartInvocationPolicy` (default `continue`; one of `continue`, `cancel`, `restart`)
 - `integrations`
   - `julesApiKey`
   - `geminiApiKey`
@@ -184,6 +206,7 @@ The effective endpoints return:
 
 Dashboard behavior:
 - project settings now render a per-setting override badge only when a control is actually overridden at project scope
+- settings UI path pickers can browse allowed local roots for custom container setup script paths. The local browser APIs are limited to the home directory, current working directory, and `CODE_UX_DIRECTORY_BROWSER_ROOTS`; `/api/local-files` returns navigation metadata plus directory and file names/absolute paths only, never file contents.
 - sprint override dialogs use the same field-level source metadata and show override badges only for sprint-local overrides
 - the v2 settings page includes a quick-find field (keyboard shortcut `/`) that filters categories without changing the scoped settings model. Smart Find uses a centralized typed settings search index spanning category metadata, provider and integration labels, invocation routes, instruction templates, and important field synonyms, so provider searches such as `claude` surface both AI model routing and Integrations matches with visible match context. The search UI announces live result counts, active-category match previews, no-match recovery suggestions, and keyboard-friendly quick category chips.
 - settings scope selection is a radiogroup with explicit selected state and disabled project-scope guidance when no project is selected. Save, project reset, dirty, saved, and error states are announced in the active settings panel while visible form values stay mounted during pending operations.
@@ -307,15 +330,18 @@ Dashboard behavior:
   - `exhaustionPolicy` (default `FINISH_TASK` for new or unset settings)
   - `taskCompletion`
     - `enabled`
+    - `agentPresetIds` (ordered list of review agent preset IDs; empty means the built-in/default QA agent fallback)
     - `agentPresetId`
   - `sprintCompletion`
     - `enabled`
+    - `agentPresetIds` (ordered list of review agent preset IDs; empty means the built-in/default QA agent fallback)
     - `agentPresetId`
   - `completedTaskWithoutPr`
     - `enabled`
+    - `agentPresetIds` (ordered list of review agent preset IDs; empty means the built-in/default QA agent fallback)
     - `agentPresetId`
 
-Quality assurance settings are project-scoped today and are edited from `Settings -> Sprint & Git`, immediately below `Merge Gates & Autofix`. When task-level QA is enabled, successful CLI task runs preserve their worktree long enough for a QA follow-up pass to resume the same session/worktree if fixes are required.
+Quality assurance settings are project-scoped today and are edited from `Settings -> Sprint & Git`, immediately below `Merge Gates & Autofix`. Each QA trigger can persist multiple review agent presets in `agentPresetIds`; Code UX still accepts the legacy single `agentPresetId` field and mirrors it to the first selected ID in sanitized and effective settings for compatibility. When task-level QA is enabled, successful CLI task runs preserve their worktree long enough for a QA follow-up pass to resume the same session/worktree if fixes are required.
 
 QA merge-gate notes:
 - task QA now runs on code-complete tasks before Code UX auto-merges their feature PRs
@@ -348,7 +374,9 @@ QA merge-gate notes:
   - `executionMode` (`HOST|DOCKER`)
 - Docker runtime config:
   - `containerImage`
-  - `containerSetupScriptPath` (optional; when set to a relative path, runtime checks both sprint repo root and current server working directory)
+  - `containerSetupScriptPath` (optional; saved as a string and not required to exist when settings are saved)
+    - the dashboard picker is a convenience for selecting local absolute paths from allowed host roots
+    - manually entered relative paths remain supported; Docker runtime resolves them later against the sprint repo root and current server working directory
     - if empty, Code UX first seeds missing bundled defaults into `~/.code-ux`, then falls back to `.code-ux/container/setup.sh` in repo root, then home directory, then the bundled Code UX default script
   - `containerMemoryLimitMb` (default `6144`): memory ceiling in MiB applied to all Docker-backed CLI provider containers. `0` disables Docker memory flags. Positive values are passed as both `--memory` and `--memory-swap`, so the configured value is a hard ceiling rather than silent swap overcommit.
   - `containerCacheSetupScriptImage` (default `true`)
@@ -454,7 +482,7 @@ Container execution notes:
   - `"CREATE_PR"`: open or reuse the feature PR, then stop before auto-merge and mark the task settled with `PR_ONLY`
   - `"WHEN_GREEN"`: auto-merge when merge gates are clear, including green or confidently-not-applicable CI
   - `"ALWAYS"`: attempt auto-merge without waiting for CI, while still respecting merge conflicts and configured review-comment blockers
-- `mainBranchAutoMergeMode` (default `"CREATE_PR"`):
+- `mainBranchAutoMergeMode` (default `"ALWAYS"`):
   - `"OFF"`: Code UX does not automatically open or merge the final `feature -> default` PR
   - `"CREATE_PR"`: when sprint work is complete, Code UX opens or resolves the main PR but does not auto-merge it; the sprint run pauses until a human merges the PR and resumes the sprint
   - `"WHEN_GREEN"`: when sprint work is complete, Code UX opens or resolves the main PR if needed, auto-merges after the main merge gate is green, and keeps the sprint active until GitHub reports the PR as merged
@@ -464,6 +492,8 @@ Container execution notes:
 - `name` (MCP tool name from `src/contracts/mcp-tool-definitions.ts`)
 - `enabled` (whether tool is visible in MCP `list_tools` and callable)
 - `isInternal` (reserved/internal metadata; currently all built-in tools are internal)
+
+`customMcpServers` contains user-configurable provider MCP servers. New and sanitized settings include a default enabled `playwright` stdio server (`npx @playwright/mcp@latest`) for local CLI providers. Settings resolution treats a user or project server with the same stable id or `playwright` name as the same seeded server, so custom edits replace the default instead of creating duplicates. Docker provider runs do not inherit arbitrary MCP servers from copied local provider config files; runtime strips local `mcpServers` / `mcp_servers.*` entries from mounted auth config and injects only the Code UX-managed MCP servers that are enabled on the MCP settings page. The Settings → MCP local setup panel can also write the current Code UX HTTP MCP URL and bearer token into local CLI config files for Claude Code, Gemini, Codex, Qwen Code, OpenCode, and Antigravity.
 
 Repository demo script:
 - `.code-ux/container/setup.sh` is included as a baseline bootstrap script.

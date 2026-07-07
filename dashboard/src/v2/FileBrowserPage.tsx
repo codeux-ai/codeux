@@ -43,6 +43,7 @@ import { ChangesList } from "./components/file-browser/ChangesList.js";
 import { DiffViewer } from "./components/file-browser/DiffViewer.js";
 
 type BrowserMode = "files" | "changes";
+type FileBrowserAction = "rebuild" | "stop";
 
 const countTreeEntries = (nodes: FileBrowserTreeType["root"], searchTerm: string): number => {
   const normalizedTerm = searchTerm.trim().toLowerCase();
@@ -77,7 +78,7 @@ export const FileBrowserPage: FunctionComponent = () => {
   const [error, setError] = useState<string | null>(null);
 
   const [launching, setLaunching] = useState(false);
-  const [actionPending, setActionPending] = useState(false);
+  const [actionPending, setActionPending] = useState<FileBrowserAction | null>(null);
 
   const [tree, setTree] = useState<FileBrowserTreeType | null>(null);
   const [treeLoading, setTreeLoading] = useState(false);
@@ -281,7 +282,7 @@ export const FileBrowserPage: FunctionComponent = () => {
 
   const handleRebuild = async () => {
     if (!selectedSession || actionPending) return;
-    setActionPending(true);
+    setActionPending("rebuild");
     setError(null);
     setActionFeedback({ tone: "pending", message: "Rebuilding file browser container…" });
     try {
@@ -292,13 +293,13 @@ export const FileBrowserPage: FunctionComponent = () => {
       setError(`Failed to rebuild: ${err instanceof Error ? err.message : String(err)}`);
       setActionFeedback(null);
     } finally {
-      setActionPending(false);
+      setActionPending(null);
     }
   };
 
   const handleStop = async () => {
     if (!runningSession || actionPending) return;
-    setActionPending(true);
+    setActionPending("stop");
     setError(null);
     setActionFeedback({ tone: "pending", message: "Stopping file browser container…" });
     try {
@@ -315,7 +316,7 @@ export const FileBrowserPage: FunctionComponent = () => {
       setError(`Failed to stop: ${err instanceof Error ? err.message : String(err)}`);
       setActionFeedback(null);
     } finally {
-      setActionPending(false);
+      setActionPending(null);
     }
   };
 
@@ -343,12 +344,16 @@ export const FileBrowserPage: FunctionComponent = () => {
     ? `Files mode. ${treeResultLabel}. ${selectedFilePath ? `Selected file ${selectedFilePath}.` : "No file selected."}`
     : `Changes mode. ${changeCount} changed ${changeCount === 1 ? "file" : "files"}. ${selectedChangePath ? `Selected change ${selectedChangePath}.` : "No change selected."}`;
   const rebuildDisabledReason = actionPending
-    ? "A file browser action is already pending."
+    ? actionPending === "rebuild"
+      ? "A rebuild is already pending. Wait for the rebuild to complete before starting another action."
+      : "A stop is already pending. Wait for the container to stop before rebuilding."
     : !selectedSession
       ? "Select or start a file browser session before rebuilding."
       : null;
   const stopDisabledReason = actionPending
-    ? "A file browser action is already pending."
+    ? actionPending === "stop"
+      ? "A stop is already pending. Wait for the container to stop before starting another action."
+      : "A rebuild is already pending. Wait for the rebuild to complete before stopping."
     : !runningSession
       ? selectedSession
         ? "The selected file browser session is not running."
@@ -415,7 +420,8 @@ export const FileBrowserPage: FunctionComponent = () => {
           {fileLoading ? " Loading selected file." : ""}
           {changesLoading ? " Loading changed files." : ""}
           {diffLoading ? " Loading selected diff." : ""}
-          {actionPending ? " File browser action is pending." : ""}
+          {actionPending === "rebuild" ? " File browser rebuild is pending." : ""}
+          {actionPending === "stop" ? " File browser stop is pending." : ""}
           {launching ? " Launching file browser container." : ""}
         </div>
         <div class="flex flex-wrap items-center gap-3">
@@ -480,14 +486,14 @@ export const FileBrowserPage: FunctionComponent = () => {
             onClick={handleRebuild}
             disabled={Boolean(rebuildDisabledReason)}
             aria-disabled={Boolean(rebuildDisabledReason)}
-            aria-busy={actionPending}
+            aria-busy={actionPending === "rebuild"}
             aria-describedby={rebuildDisabledReason ? "file-browser-rebuild-disabled-reason" : undefined}
             aria-label="Rebuild file browser container"
             title={rebuildDisabledReason ?? "Rebuild file browser container"}
             class="inline-flex h-9 items-center gap-2 rounded-xl border border-black/[0.08] bg-white/75 px-3 text-xs font-semibold text-slate-700 transition hover:-translate-y-px hover:border-black/[0.16] hover:text-slate-900 disabled:cursor-not-allowed disabled:border-black/[0.06] disabled:bg-black/[0.03] disabled:text-slate-400 disabled:opacity-100 dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-slate-200 dark:hover:border-white/[0.16] dark:hover:text-white dark:disabled:bg-white/[0.02] dark:disabled:text-slate-500"
           >
-            <RotateCcw class={`h-3.5 w-3.5 ${actionPending ? "animate-spin" : ""}`} strokeWidth={2} />
-            Rebuild
+            <RotateCcw class={`h-3.5 w-3.5 ${actionPending === "rebuild" ? "animate-spin" : ""}`} strokeWidth={2} />
+            {actionPending === "rebuild" ? "Rebuilding..." : "Rebuild"}
           </button>
           {rebuildDisabledReason && <span id="file-browser-rebuild-disabled-reason" class="sr-only">{rebuildDisabledReason}</span>}
           <button
@@ -495,14 +501,14 @@ export const FileBrowserPage: FunctionComponent = () => {
             onClick={handleStop}
             disabled={Boolean(stopDisabledReason)}
             aria-disabled={Boolean(stopDisabledReason)}
-            aria-busy={actionPending}
+            aria-busy={actionPending === "stop"}
             aria-describedby={stopDisabledReason ? "file-browser-stop-disabled-reason" : undefined}
             aria-label="Stop file browser container"
             title={stopDisabledReason ?? "Stop file browser container"}
             class="inline-flex h-9 items-center gap-2 rounded-xl border border-black/[0.08] bg-white/75 px-3 text-xs font-semibold text-slate-700 transition hover:-translate-y-px hover:border-status-red/35 hover:text-status-red disabled:cursor-not-allowed disabled:border-black/[0.06] disabled:bg-black/[0.03] disabled:text-slate-400 disabled:opacity-100 dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-slate-200 dark:disabled:bg-white/[0.02] dark:disabled:text-slate-500"
           >
             <Square class="h-3.5 w-3.5" strokeWidth={2} />
-            Stop
+            {actionPending === "stop" ? "Stopping..." : "Stop"}
           </button>
           {stopDisabledReason && <span id="file-browser-stop-disabled-reason" class="sr-only">{stopDisabledReason}</span>}
         </div>
@@ -570,6 +576,7 @@ export const FileBrowserPage: FunctionComponent = () => {
                       selectedPath={selectedFilePath}
                       onSelectFile={setSelectedFilePath}
                       searchTerm={treeSearch}
+                      loadingPath={fileLoading ? selectedFilePath : null}
                     />
                   ) : (
                     <div class="flex h-full items-center justify-center p-6 text-center text-sm text-slate-500" role="status">
@@ -615,6 +622,7 @@ export const FileBrowserPage: FunctionComponent = () => {
                       files={changes?.files ?? []}
                       selectedPath={selectedChangePath}
                       onSelect={setSelectedChangePath}
+                      loadingPath={diffLoading ? selectedChangePath : null}
                     />
                   )}
                 </div>
@@ -688,14 +696,14 @@ const LaunchPanel: FunctionComponent<LaunchPanelProps> = ({
         : null;
 
   return (
-  <div class="relative flex flex-col items-center justify-center overflow-hidden rounded-[1.75rem] border border-black/[0.06] bg-white/74 px-8 py-20 text-center shadow-[0_22px_54px_rgba(15,23,42,0.08)] backdrop-blur-xl dark:border-white/[0.07] dark:bg-void-900/46" role="region" aria-labelledby="file-browser-launch-title">
+  <div class="relative flex flex-col items-center justify-center overflow-hidden rounded-[1.75rem] border border-black/[0.06] bg-white/74 px-8 py-20 text-center shadow-[0_22px_54px_rgba(15,23,42,0.08)] backdrop-blur-xl dark:border-white/[0.07] dark:bg-void-900/46" role="region" aria-labelledby="file-browser-launch-title" aria-busy={launching}>
     <div class="relative z-10 flex max-w-md flex-col items-center gap-5">
       <div class="flex h-16 w-16 items-center justify-center rounded-3xl border border-signal-500/20 bg-signal-500/[0.12] text-signal-600 ring-1 ring-inset ring-signal-500/20 dark:text-signal-300">
-        {launching ? <Loader2 class="h-7 w-7 animate-spin" strokeWidth={2} /> : <FolderTree class="h-7 w-7" strokeWidth={1.8} />}
+        {launching ? <Loader2 class="h-7 w-7 animate-spin motion-reduce:animate-none" strokeWidth={2} /> : <FolderTree class="h-7 w-7" strokeWidth={1.8} />}
       </div>
       <div>
         <div class="text-[10px] font-bold uppercase tracking-[0.2em] text-signal-600 dark:text-signal-400">Workspace Snapshot</div>
-        <h2 id="file-browser-launch-title" class="mt-2 font-display text-3xl font-black tracking-tight text-slate-900 dark:text-white">
+        <h2 id="file-browser-launch-title" class="mt-2 font-display text-2xl font-semibold tracking-tight text-slate-900 dark:text-white">
           {launching ? "Starting file browser…" : "Launch the file browser"}
         </h2>
         <p class="mt-2 text-sm leading-6 text-slate-600 dark:text-slate-300">
@@ -710,8 +718,10 @@ const LaunchPanel: FunctionComponent<LaunchPanelProps> = ({
           {lastError}
         </div>
       )}
-      <div id="file-browser-launch-status" class="sr-only" role="status" aria-live="polite">
-        {launchDisabledReason ?? "File browser can be launched."}
+      <div id="file-browser-launch-status" class="min-h-5 text-xs font-medium text-slate-500 dark:text-slate-400" role="status" aria-live="polite">
+        {launching
+          ? "Starting file browser container. The selected sprint remains visible while the workspace is prepared."
+          : launchDisabledReason ?? "File browser can be launched for the selected sprint."}
       </div>
 
       <div class="flex w-full flex-col items-stretch gap-2 sm:flex-row">
@@ -722,6 +732,7 @@ const LaunchPanel: FunctionComponent<LaunchPanelProps> = ({
           onChange={(event) => onLaunchSprintChange((event.currentTarget as HTMLSelectElement).value)}
           disabled={launching}
           aria-describedby={launchDisabledReason ? "file-browser-launch-status" : undefined}
+          title={launching ? "The file browser container is starting." : "Choose the sprint to browse"}
           class="h-11 flex-1 rounded-2xl border border-black/[0.08] bg-white/85 px-4 text-sm font-medium text-slate-700 outline-none transition focus:border-signal-500/40 disabled:cursor-not-allowed disabled:border-black/[0.06] disabled:bg-black/[0.03] disabled:text-slate-400 disabled:opacity-100 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-200 dark:disabled:bg-white/[0.02] dark:disabled:text-slate-500"
         >
           {sprints.length === 0 && <option value="">No sprints available</option>}
@@ -739,10 +750,11 @@ const LaunchPanel: FunctionComponent<LaunchPanelProps> = ({
           aria-busy={launching}
           aria-describedby={launchDisabledReason ? "file-browser-launch-status" : undefined}
           aria-label={launching ? "Starting file browser container" : "Open file browser"}
-          class="inline-flex h-11 items-center justify-center gap-2 rounded-2xl bg-signal-500 px-6 text-sm font-bold text-void-950 shadow-[0_12px_30px_rgba(0,224,160,0.22)] transition hover:-translate-y-px hover:bg-signal-400 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-600 disabled:shadow-none disabled:opacity-100 dark:disabled:bg-slate-700 dark:disabled:text-slate-300"
+          title={launchDisabledReason ?? "Open file browser for the selected sprint"}
+          class="inline-flex h-11 items-center justify-center gap-2 rounded-2xl bg-signal-500 px-6 text-sm font-bold text-white dark:text-void-950 shadow-[0_12px_30px_rgba(0,224,160,0.22)] transition hover:-translate-y-px hover:bg-signal-400 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-600 disabled:shadow-none disabled:opacity-100 dark:disabled:bg-slate-700 dark:disabled:text-slate-300"
         >
-          <Play class="h-4 w-4" strokeWidth={2.4} />
-          Open file browser
+          {launching ? <Loader2 class="h-4 w-4 animate-spin motion-reduce:animate-none" strokeWidth={2.4} /> : <Play class="h-4 w-4" strokeWidth={2.4} />}
+          {launching ? "Starting..." : "Open file browser"}
         </button>
       </div>
     </div>

@@ -4,6 +4,16 @@ import { asyncRoute, syncRoute } from "./route-utils.js";
 import type { SystemSettings } from "../contracts/settings-scope-types.js";
 import { registerUserOnboardingRoutes } from "./routes/user/onboarding.js";
 import { getModelCatalog, getModelCatalogProviders } from "../domain/model-catalog/model-catalog-loader.js";
+import type { LocalMcpCliProvider } from "../services/local-mcp-cli-config-service.js";
+
+const LOCAL_MCP_PROVIDERS = new Set<LocalMcpCliProvider>([
+  "claude-code",
+  "gemini",
+  "codex",
+  "qwen-code",
+  "opencode",
+  "antigravity",
+]);
 
 // Note: liveActivityCacheMs is needed but excluded from DashboardDependencies,
 // so we pass it explicitly.
@@ -48,6 +58,23 @@ export function registerSettingsRoutes(router: Express, deps: DashboardDependenc
 
   router.get("/api/settings/import-sources", syncRoute((req, res) => {
     res.json(deps.getExternalSettingsHints());
+  }));
+
+  router.get("/api/settings/local-mcp", syncRoute((req, res) => {
+    res.json(deps.getLocalMcpSetup());
+  }));
+
+  router.post("/api/settings/local-mcp/regenerate-token", syncRoute((req, res) => {
+    res.json(deps.regenerateLocalMcpAuthToken());
+  }));
+
+  router.post("/api/settings/local-mcp/install", asyncRoute(async (req, res) => {
+    const provider = typeof req.body?.provider === "string" ? req.body.provider.trim() : "";
+    if (!LOCAL_MCP_PROVIDERS.has(provider as LocalMcpCliProvider)) {
+      res.status(400).json({ error: "Unsupported local MCP provider." });
+      return;
+    }
+    res.json(await deps.installLocalMcpProvider(provider as LocalMcpCliProvider));
   }));
 
   router.get("/api/model-catalog", syncRoute((req, res) => {

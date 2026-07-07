@@ -9,6 +9,7 @@ import * as matchers from "@testing-library/jest-dom/matchers";
 expect.extend(matchers);
 
 import { TasksList } from "../../../dashboard/src/v2/components/TasksList.js";
+import { TaskBoardSprintSelector } from "../../../dashboard/src/v2/components/tasks/TaskBoardSprintSelector.js";
 import { ProjectDataProvider } from "../../../dashboard/src/v2/context/project-data.js";
 import gsap from "gsap";
 import * as dashboardApi from "../../../dashboard/src/lib/api/dashboard-api.js";
@@ -104,6 +105,17 @@ describe("TasksList", () => {
         expect(screen.getByText("Test Task")).toBeInTheDocument();
     });
 
+    it("exposes loading active streams as a named busy status", () => {
+        render(
+            <ProjectDataProvider initialProject={null}>
+                <TasksList pageData={{ ...pageData, isLoading: true, tasks: [] }} />
+            </ProjectDataProvider>
+        );
+
+        expect(screen.getByRole("region", { name: "Active stream tasks" })).toHaveAttribute("aria-busy", "true");
+        expect(screen.getByRole("status", { name: "Loading active stream tasks" })).toHaveAttribute("aria-busy", "true");
+    });
+
 
     it("hides task if it does not belong to an active sprint", () => {
         const noSprintPageData = {
@@ -118,7 +130,7 @@ describe("TasksList", () => {
         );
 
         expect(screen.queryByText("Test Task")).not.toBeInTheDocument();
-        expect(screen.getByText("No Active Streams")).toBeInTheDocument();
+        expect(screen.getByRole("status", { name: /No Active Streams/i })).toHaveTextContent("There are no tasks currently matching the selected filter in active sprints.");
     });
 
     it("handles reduced motion correctly", () => {
@@ -311,5 +323,53 @@ const baseProps: any = {
         const sprintRegion = screen.getByRole("region", { name: /Sprint One active stream. Running. 42% complete./i });
         expect(sprintRegion).toBeInTheDocument();
         expect(screen.getByRole("progressbar", { name: /Sprint One progress/i })).toHaveAttribute("aria-valuenow", "42");
+    });
+
+    it("keeps the running sprint selector dot visible without raw pulse animation classes", () => {
+        const sprint = {
+            id: "sprint-running",
+            projectId: "project-1",
+            number: 7,
+            slug: "spr-7",
+            name: "Runtime Scope",
+            isGeneratedName: false,
+            originalPrompt: null,
+            goal: "Exercise reduced-motion sprint scope status",
+            status: "running",
+            showcasePinned: false,
+            startDate: null,
+            endDate: null,
+            featureBranch: null,
+            baseCommitSha: null,
+            tasksCount: 3,
+            completion: 50,
+            linkedIssues: [],
+            createdAt: "2026-07-05T00:00:00Z",
+            updatedAt: "2026-07-05T00:00:00Z",
+            date: "2026-07-05",
+        } as any;
+        const { container } = render(
+            <TaskBoardSprintSelector
+                sprints={[sprint]}
+                selectedId={null}
+                onSelect={vi.fn()}
+                sprintKeyPrefix="SPR"
+                loading={false}
+            />
+        );
+
+        fireEvent.click(screen.getByRole("button", { name: "Task sprint scope: All Sprints" }));
+
+        const runningDot = container.querySelector('[data-sprint-status-dot="running"]');
+        expect(runningDot).toBeVisible();
+        expect(screen.getByRole("option", { name: /SPR-7: Runtime Scope/i })).toBeInTheDocument();
+        expect(screen.getByText("2026-07-05")).toBeInTheDocument();
+
+        const tokens = (runningDot?.getAttribute("class") ?? "").split(/\s+/).filter(Boolean);
+        expect(tokens).toContain("bg-status-green");
+        expect(tokens).toContain("shadow-[0_0_8px_rgba(0,171,132,0.6)]");
+        expect(tokens).toContain("motion-safe:animate-pulse");
+        expect(tokens).toContain("motion-reduce:animate-none");
+        expect(tokens).not.toContain("animate-pulse");
     });
 });

@@ -46,7 +46,7 @@ const StudioMetricTile: FunctionComponent<{
       <div className={`text-[10px] font-bold uppercase tracking-[0.18em] ${toneClass}`}>{label}</div>
       {Icon ? <Icon className={`h-3.5 w-3.5 ${toneClass}`} strokeWidth={2.2} aria-hidden="true" /> : null}
     </div>
-    <div className={`mt-2 text-xl font-black ${TEXT_VALUE_CLASS}`}>{value}</div>
+    <div className={`mt-2 text-lg font-semibold ${TEXT_VALUE_CLASS}`}>{value}</div>
     <div className={`mt-1 text-[10px] font-bold uppercase tracking-[0.14em] ${TEXT_LABEL_CLASS}`}>{detail}</div>
   </div>
 );
@@ -191,11 +191,11 @@ export const CompositionStudio: FunctionComponent<{
               <div className="flex items-center justify-between gap-4">
                 <div>
                   <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--stats-detail-color)]">Active Time</div>
-                  <div className="mt-2 text-lg font-black text-[color:var(--stats-value-color)]">{formatStatsDuration(stats.usage.activeTimeMs)}</div>
+                  <div className="mt-2 text-base font-semibold text-[color:var(--stats-value-color)]">{formatStatsDuration(stats.usage.activeTimeMs)}</div>
                 </div>
                 <div className="text-right">
                   <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--stats-detail-color)]">Wall Time</div>
-                  <div className="mt-2 text-lg font-black text-[color:var(--stats-value-color)]">{formatStatsDuration(stats.usage.wallTimeMs ?? 0)}</div>
+                  <div className="mt-2 text-base font-semibold text-[color:var(--stats-value-color)]">{formatStatsDuration(stats.usage.wallTimeMs ?? 0)}</div>
                 </div>
               </div>
               <div className="mt-3 text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--stats-label-color)]">
@@ -207,7 +207,7 @@ export const CompositionStudio: FunctionComponent<{
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div>
                 <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-[color:var(--stats-label-color)]">Flight Legend</div>
-                <div className="mt-2 text-3xl font-black text-[color:var(--stats-value-color)]">{cacheRate !== null ? cacheRate.toFixed(1) : "—"}%</div>
+                <div className="mt-2 text-xl font-semibold text-[color:var(--stats-value-color)]">{cacheRate !== null ? cacheRate.toFixed(1) : "—"}%</div>
                 <div className="mt-1 text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--stats-signal-text)]">
                   {stats.usage.cachedInputTokens > 0 ? `~${formatTokens(stats.usage.cachedInputTokens)} cached input` : "No cache savings recorded"}
                 </div>
@@ -215,7 +215,7 @@ export const CompositionStudio: FunctionComponent<{
               {hasCost ? (
                 <div className="text-right">
                   <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--stats-label-color)]">Cost</div>
-                  <div className="mt-2 text-lg font-black text-[color:var(--stats-value-color)]">{formatCost(stats.usage.totalCostUsd)}</div>
+                  <div className="mt-2 text-base font-semibold text-[color:var(--stats-value-color)]">{formatCost(stats.usage.totalCostUsd)}</div>
                 </div>
               ) : null}
             </div>
@@ -292,19 +292,19 @@ export const CompositionStudio: FunctionComponent<{
                         <Icon className="h-4 w-4" strokeWidth={2.1} />
                       </div>
                       <div className="min-w-0">
-                        <div className="break-words text-base font-black text-[color:var(--stats-value-color)]" title={provider.label}>{provider.label}</div>
+                        <div className="break-words text-base font-semibold text-[color:var(--stats-value-color)]" title={provider.label}>{provider.label}</div>
                         <div className="mt-1 text-sm text-[color:var(--stats-detail-color)]">{provider.secondaryLabel ?? "No secondary label"}</div>
                       </div>
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
                       <div className={`inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.18em] ${CHIP_CLASS}`}>
-                        <span className="text-base font-black normal-case tracking-tight text-[color:var(--stats-value-color)]">
+                        <span className="text-base font-semibold normal-case tracking-tight text-[color:var(--stats-value-color)]">
                           {provider.usage.totalCostUsd > 0 ? formatCost(provider.usage.totalCostUsd) : "—"}
                         </span>
                         <span className="text-[color:var(--stats-label-color)]">cost</span>
                       </div>
                       <div className={`inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.18em] ${CHIP_CLASS}`}>
-                        <span className="text-base font-black normal-case tracking-tight text-[color:var(--stats-value-color)]">
+                        <span className="text-base font-semibold normal-case tracking-tight text-[color:var(--stats-value-color)]">
                           {formatTokens(provider.usage.totalTokens)}
                         </span>
                         <span className="text-[color:var(--stats-label-color)]">tokens</span>

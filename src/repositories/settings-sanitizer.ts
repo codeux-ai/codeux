@@ -5,10 +5,12 @@ import type {
   McpToolToggle,
   RuntimeLogLevel,
   ConsoleLogMode,
+  RestartInvocationPolicy,
+  RestartSprintPolicy,
   SkillToggle,
 } from "../contracts/app-types.js";
 import { readBoolean, readPort, readString } from "../shared/config/value-readers.js";
-import { sanitizeCustomMcpServers, sanitizeMcpToolToggles } from "../mcp/mcp-tool-availability.js";
+import { sanitizeCustomMcpServersWithDefaults, sanitizeMcpToolToggles } from "../mcp/mcp-tool-availability.js";
 import { sanitizeAiProvider } from "../domain/settings/settings-sanitizers/ai-provider-sanitizer.js";
 import { sanitizeGit } from "../domain/settings/settings-sanitizers/git-sanitizer.js";
 import { sanitizeJira } from "../domain/settings/settings-sanitizers/jira-sanitizer.js";
@@ -47,6 +49,8 @@ const enforceGitManagerSkillset = (skills: SkillToggle[], githubMode: "REMOTE" |
 };
 
 const RUNTIME_LOG_LEVEL_SET = new Set<RuntimeLogLevel>(["off", "debug", "info", "warn", "error"]);
+const RESTART_SPRINT_POLICY_SET = new Set<RestartSprintPolicy>(["continue", "pause", "cancel"]);
+const RESTART_INVOCATION_POLICY_SET = new Set<RestartInvocationPolicy>(["continue", "cancel", "restart"]);
 
 const readRuntimeLogLevel = (value: unknown, fallback: RuntimeLogLevel): RuntimeLogLevel => (
   typeof value === "string" && RUNTIME_LOG_LEVEL_SET.has(value as RuntimeLogLevel)
@@ -57,6 +61,31 @@ const readRuntimeLogLevel = (value: unknown, fallback: RuntimeLogLevel): Runtime
 const readConsoleLogMode = (value: unknown, fallback: ConsoleLogMode): ConsoleLogMode => (
   value === "full" ? "full" : fallback
 );
+
+const readRestartSprintPolicy = (value: unknown, fallback: RestartSprintPolicy): RestartSprintPolicy => (
+  typeof value === "string" && RESTART_SPRINT_POLICY_SET.has(value as RestartSprintPolicy)
+    ? value as RestartSprintPolicy
+    : fallback
+);
+
+const readRestartInvocationPolicy = (value: unknown, fallback: RestartInvocationPolicy): RestartInvocationPolicy => (
+  typeof value === "string" && RESTART_INVOCATION_POLICY_SET.has(value as RestartInvocationPolicy)
+    ? value as RestartInvocationPolicy
+    : fallback
+);
+
+const sanitizePreviewPortList = (value: unknown, primaryPort: number): number[] => {
+  const ports = [primaryPort];
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const port = readPort(item, -1);
+      if (port > 0) {
+        ports.push(port);
+      }
+    }
+  }
+  return [...new Set(ports)];
+};
 
 const sanitizeSkills = (value: unknown): SkillToggle[] => {
   if (!Array.isArray(value)) return DEFAULT_SKILLS.map((skill) => ({ ...skill }));
@@ -125,15 +154,40 @@ const sanitizeBackgroundPattern = (value: unknown): BackgroundPattern => {
     : "NONE";
 };
 
+const sanitizeAgentPresetIds = (value: unknown): string[] => {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  const ids: string[] = [];
+  const seen = new Set<string>();
+  for (const entry of value) {
+    if (typeof entry !== "string") {
+      continue;
+    }
+    const id = entry.trim();
+    if (id && !seen.has(id)) {
+      seen.add(id);
+      ids.push(id);
+    }
+  }
+  return ids;
+};
+
 const sanitizeQualityAssuranceTrigger = (
   value: unknown,
   defaults: DashboardSettings["agents"]["qualityAssurance"]["taskCompletion"],
 ): DashboardSettings["agents"]["qualityAssurance"]["taskCompletion"] => {
   const input = value && typeof value === "object" ? value as Partial<DashboardSettings["agents"]["qualityAssurance"]["taskCompletion"]> : {};
+  const legacyAgentPresetId = readString(input.agentPresetId, "").trim();
+  const agentPresetIds = Array.isArray(input.agentPresetIds)
+    ? sanitizeAgentPresetIds(input.agentPresetIds)
+    : sanitizeAgentPresetIds(legacyAgentPresetId ? [legacyAgentPresetId] : defaults.agentPresetIds);
 
   return {
     enabled: readBoolean(input.enabled, defaults.enabled),
-    agentPresetId: readString(input.agentPresetId, "").trim() || null,
+    agentPresetIds,
+    agentPresetId: agentPresetIds[0] ?? null,
   };
 };
 
@@ -215,6 +269,8 @@ export const cloneDefaults = (externalHints?: ExternalSettingsHints): DashboardS
   dbAutoVacuumOnStartup: DEFAULT_DASHBOARD_SETTINGS.dbAutoVacuumOnStartup,
   dbPruningEnabled: DEFAULT_DASHBOARD_SETTINGS.dbPruningEnabled,
   dbRetentionDays: DEFAULT_DASHBOARD_SETTINGS.dbRetentionDays,
+  restartSprintPolicy: DEFAULT_DASHBOARD_SETTINGS.restartSprintPolicy,
+  restartInvocationPolicy: DEFAULT_DASHBOARD_SETTINGS.restartInvocationPolicy,
   appearance: { ...DEFAULT_DASHBOARD_SETTINGS.appearance },
   automationLevel: DEFAULT_DASHBOARD_SETTINGS.automationLevel,
   automationInterventions: {
@@ -271,9 +327,18 @@ export const cloneDefaults = (externalHints?: ExternalSettingsHints): DashboardS
       maxTaskReviewRuns: DEFAULT_DASHBOARD_SETTINGS.agents.qualityAssurance.maxTaskReviewRuns,
       maxSprintReviewRuns: DEFAULT_DASHBOARD_SETTINGS.agents.qualityAssurance.maxSprintReviewRuns,
       exhaustionPolicy: DEFAULT_DASHBOARD_SETTINGS.agents.qualityAssurance.exhaustionPolicy,
-      taskCompletion: { ...DEFAULT_DASHBOARD_SETTINGS.agents.qualityAssurance.taskCompletion },
-      sprintCompletion: { ...DEFAULT_DASHBOARD_SETTINGS.agents.qualityAssurance.sprintCompletion },
-      completedTaskWithoutPr: { ...DEFAULT_DASHBOARD_SETTINGS.agents.qualityAssurance.completedTaskWithoutPr },
+      taskCompletion: {
+        ...DEFAULT_DASHBOARD_SETTINGS.agents.qualityAssurance.taskCompletion,
+        agentPresetIds: [...DEFAULT_DASHBOARD_SETTINGS.agents.qualityAssurance.taskCompletion.agentPresetIds],
+      },
+      sprintCompletion: {
+        ...DEFAULT_DASHBOARD_SETTINGS.agents.qualityAssurance.sprintCompletion,
+        agentPresetIds: [...DEFAULT_DASHBOARD_SETTINGS.agents.qualityAssurance.sprintCompletion.agentPresetIds],
+      },
+      completedTaskWithoutPr: {
+        ...DEFAULT_DASHBOARD_SETTINGS.agents.qualityAssurance.completedTaskWithoutPr,
+        agentPresetIds: [...DEFAULT_DASHBOARD_SETTINGS.agents.qualityAssurance.completedTaskWithoutPr.agentPresetIds],
+      },
     },
   },
   skills: DEFAULT_DASHBOARD_SETTINGS.skills.map((skill) => ({ ...skill })),
@@ -305,6 +370,8 @@ export const sanitizeSettings = (value: unknown, externalHints?: ExternalSetting
   const dbAutoVacuumOnStartup = readBoolean(input.dbAutoVacuumOnStartup, DEFAULT_DASHBOARD_SETTINGS.dbAutoVacuumOnStartup);
   const dbPruningEnabled = readBoolean(input.dbPruningEnabled, DEFAULT_DASHBOARD_SETTINGS.dbPruningEnabled);
   const dbRetentionDays = typeof input.dbRetentionDays === "number" ? input.dbRetentionDays : DEFAULT_DASHBOARD_SETTINGS.dbRetentionDays;
+  const restartSprintPolicy = readRestartSprintPolicy(input.restartSprintPolicy, DEFAULT_DASHBOARD_SETTINGS.restartSprintPolicy);
+  const restartInvocationPolicy = readRestartInvocationPolicy(input.restartInvocationPolicy, DEFAULT_DASHBOARD_SETTINGS.restartInvocationPolicy);
 
   const appearanceInput = (input.appearance && typeof input.appearance === "object"
     ? input.appearance
@@ -370,6 +437,10 @@ export const sanitizeSettings = (value: unknown, externalHints?: ExternalSetting
   const sprintPreviewInput = (input.sprintPreview && typeof input.sprintPreview === "object"
     ? input.sprintPreview
     : {}) as Partial<DashboardSettings["sprintPreview"]>;
+  const containerAppPort = readPort(
+    sprintPreviewInput.containerAppPort,
+    DEFAULT_DASHBOARD_SETTINGS.sprintPreview.containerAppPort,
+  );
   const sprintPreview = {
     enabled: readBoolean(
       sprintPreviewInput.enabled,
@@ -410,11 +481,8 @@ export const sanitizeSettings = (value: unknown, externalHints?: ExternalSetting
         ? Math.round(sprintPreviewInput.hostPortRangeEnd)
         : DEFAULT_DASHBOARD_SETTINGS.sprintPreview.hostPortRangeEnd
     )),
-    containerAppPort: Math.max(1, Math.min(65535,
-      typeof sprintPreviewInput.containerAppPort === "number" && Number.isFinite(sprintPreviewInput.containerAppPort)
-        ? Math.round(sprintPreviewInput.containerAppPort)
-        : DEFAULT_DASHBOARD_SETTINGS.sprintPreview.containerAppPort
-    )),
+    containerAppPort,
+    containerAppPorts: sanitizePreviewPortList(sprintPreviewInput.containerAppPorts, containerAppPort),
     startupScriptPath: (() => {
       const raw = readString(
         sprintPreviewInput.startupScriptPath,
@@ -454,7 +522,10 @@ export const sanitizeSettings = (value: unknown, externalHints?: ExternalSetting
 
   const normalizedSkills = enforceGitManagerSkillset(sanitizeSkills(input.skills), git.githubMode);
   const mcpTools = sanitizeMcpTools(input.mcpTools);
-  const customMcpServers = sanitizeCustomMcpServers(input.customMcpServers);
+  const customMcpServers = sanitizeCustomMcpServersWithDefaults(
+    input.customMcpServers,
+    DEFAULT_DASHBOARD_SETTINGS.customMcpServers,
+  );
   const memory = sanitizeMemory(input);
   const modelPricing = sanitizeModelPricing(input.modelPricing);
 
@@ -466,6 +537,8 @@ export const sanitizeSettings = (value: unknown, externalHints?: ExternalSetting
     dbAutoVacuumOnStartup,
     dbPruningEnabled,
     dbRetentionDays,
+    restartSprintPolicy,
+    restartInvocationPolicy,
     appearance,
     automationLevel: validAutomationLevel,
     automationInterventions,

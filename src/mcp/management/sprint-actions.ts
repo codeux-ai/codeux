@@ -160,6 +160,7 @@ interface ImportIssuesResult {
   searchedIssues: RepositoryIssueSearchResult[];
   importedContexts: IssuePromptContext[];
   linkedIssues: SprintLinkedIssueRecord[];
+  warnings: Array<{ issueId: string; issueKey: string; message: string }>;
   sprint: SprintRecord | null;
   planning: unknown | null;
 }
@@ -275,7 +276,7 @@ export class SprintActions {
       }
       case "pause": {
         const sprintRunId = readRequiredString(payload, "sprintRunId");
-        const result = this.deps.executionControlService.pauseSprintRun(sprintRunId);
+        const result = await this.deps.executionControlService.pauseSprintRun(sprintRunId);
         return { result };
       }
       case "cancel": {
@@ -329,6 +330,7 @@ export class SprintActions {
         const importedLinkedIssues = (explicitMode ? importedContexts : searchedIssues).map(toLinkedIssueInput);
 
         let linkedIssues: SprintLinkedIssueRecord[] = [];
+        let warnings: Array<{ issueId: string; issueKey: string; message: string }> = [];
         let sprint: SprintRecord | null = null;
         if (sprintId && (attachToSprint || payload.planAfterImport === true)) {
           sprint = assertSprintBelongsToProject(
@@ -339,11 +341,9 @@ export class SprintActions {
         }
 
         if (sprintId && attachToSprint) {
-          linkedIssues = this.deps.projectManagementRepository.replaceSprintLinkedIssues(
-            projectId,
-            sprintId,
-            importedLinkedIssues,
-          );
+          const importResult = await this.deps.sprintIssueService.importLinkedIssues(sprintId, projectId, importedLinkedIssues);
+          linkedIssues = importResult.linkedIssues;
+          warnings = importResult.warnings;
 
           if (importedContexts.length > 0 && sprint) {
             sprint = this.deps.projectManagementRepository.updateSprint(sprintId, {
@@ -373,6 +373,7 @@ export class SprintActions {
           searchedIssues,
           importedContexts,
           linkedIssues,
+          warnings,
           sprint,
           planning,
         };

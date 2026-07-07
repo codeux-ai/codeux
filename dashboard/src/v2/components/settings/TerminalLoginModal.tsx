@@ -4,6 +4,8 @@ import { createPortal } from "preact/compat";
 import { AlertCircle, Check, RefreshCw, Terminal, X } from "lucide-preact";
 import { useInteractiveLoginSession } from "../../hooks/useInteractiveLoginSession.js";
 import { getSafeUrl } from "../../lib/safe-url.js";
+import type { ContainerBuildProgress } from "../../../lib/activity.js";
+import { ContainerBuildStatusInfobox } from "../live-session/ContainerBuildStatusInfobox.js";
 
 interface TerminalLoginModalProps {
   providerConfigId: string;
@@ -58,6 +60,7 @@ export const TerminalLoginModal: FunctionComponent<TerminalLoginModalProps> = ({
   const [exitCode, setExitCode] = useState<number | null>(null);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
   const [detectedLoginUrl, setDetectedLoginUrl] = useState<string | null>(null);
+  const [containerBuildProgress, setContainerBuildProgress] = useState<ContainerBuildProgress | null>(null);
 
   const wsRef = useRef<WebSocket | null>(null);
   const terminalEndRef = useRef<HTMLDivElement>(null);
@@ -374,6 +377,7 @@ export const TerminalLoginModal: FunctionComponent<TerminalLoginModalProps> = ({
       setStatus("error");
       setErrorMessage(message);
     },
+    onBuildProgress: setContainerBuildProgress,
   });
 
   useEffect(() => {
@@ -456,13 +460,20 @@ export const TerminalLoginModal: FunctionComponent<TerminalLoginModalProps> = ({
 
         {/* Modal Content - The Terminal Screen */}
         <div className="relative flex flex-1 flex-col overflow-hidden bg-void-950 p-6 font-mono text-sm leading-relaxed text-slate-300">
+          <ContainerBuildStatusInfobox progress={containerBuildProgress} className="mb-4 shrink-0" />
+
           {status === "connecting" && (
-            <div role="status" aria-live="polite" className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-4 bg-void-950/80">
+            <div role="status" aria-live="polite" className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-4 bg-void-950/80 p-6">
               <RefreshCw className="h-8 w-8 animate-spin text-signal-400" />
               <div className="text-center">
                 <p className="text-sm font-semibold text-white">Starting Docker Environment</p>
-                <p className="mt-1 text-xs text-slate-500">Mounting host credential workspace...</p>
+                <p className="mt-1 text-xs text-slate-500">
+                  {containerBuildProgress ? "Preparing the login container image before opening the terminal." : "Mounting host credential workspace..."}
+                </p>
               </div>
+              {containerBuildProgress && (
+                <ContainerBuildStatusInfobox progress={containerBuildProgress} className="w-full max-w-xl text-left" />
+              )}
             </div>
           )}
 
@@ -537,7 +548,7 @@ export const TerminalLoginModal: FunctionComponent<TerminalLoginModalProps> = ({
                   href={getSafeUrl(detectedLoginUrl)}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-xl bg-signal-500 px-4 py-2.5 text-xs font-bold text-void-950 hover:bg-signal-400 transition-all duration-200 shadow-[var(--elevation-raised)] cursor-pointer"
+                  className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-xl bg-signal-500 px-4 py-2.5 text-xs font-bold text-white dark:text-void-950 hover:bg-signal-400 transition-all duration-200 shadow-[var(--elevation-raised)] cursor-pointer"
                 >
                   Authorize {providerName}
                 </a>
@@ -564,7 +575,7 @@ export const TerminalLoginModal: FunctionComponent<TerminalLoginModalProps> = ({
               <button
                 type="button"
                 onClick={onClose}
-                className="mt-3 inline-flex items-center justify-center rounded-xl bg-signal-500 px-4 py-2 text-xs font-bold text-void-950 hover:bg-signal-400 transition-colors"
+                className="mt-3 inline-flex items-center justify-center rounded-xl bg-signal-500 px-4 py-2 text-xs font-bold text-white dark:text-void-950 hover:bg-signal-400 transition-colors"
               >
                 Done
               </button>

@@ -54,6 +54,7 @@ Each `aiProvider.invocationRouting.<routeId>` entry contains:
 Provider instances are first-class routing targets:
 - the default built-in instances use ids `jules`, `gemini`, `codex`, `claude-code`, `qwen-code`, and `opencode`
 - additional instances can be added under the same provider type, such as multiple Codex credentials with different names and weights
+- the internal `mockup-cli` provider id is reserved for deterministic credential-free sprint validation and should only be configured by test and CI paths such as the [Mockup Sprint Pentest](../development/mockup-sprint-pentest.md)
 - each CLI instance also carries its own optional Docker auth-copy source (`mountAuth` + `authPath`), so routing one Codex, Qwen, or OpenCode instance vs another can change both credentials and local auth mount source
 - Qwen Code instances additionally carry auth mode metadata for local OAuth cache copying, Alibaba Cloud Coding Plan, or custom `modelProviders`-style endpoints
 - OpenCode instances additionally carry auth mode metadata for local `auth.json` cache copying, built-in provider API keys, or generated OpenAI-compatible custom provider config
@@ -104,8 +105,8 @@ To prevent conflicting generated runtime configuration and credential leakage, C
    - The `apiKey` field is cleared.
    - Any custom model provider base URL (`customBaseUrl`) or custom model slug (`customModel`) overrides are cleared and ignored.
    - Provider-instance credentials remain isolated by exact instance id. A custom endpoint configured on a separate instance such as `Codex Local` is not inherited by `Codex Primary`, and mounted-auth runs ignore stale custom model fields even if an older settings row still contains them.
-   - For **Qwen Code**, forces `qwenAuthMode` to `LOCAL_AUTH` and clears all custom API-key sub-mode fields (`qwenRegion`, `qwenBaseUrl`, `qwenEnvKey`, `qwenModelId`, `qwenProtocol`, `qwenAdditionalModelProviders`).
-   - For **OpenCode**, forces `openCodeAuthMode` to `LOCAL_AUTH` and clears all custom API-key sub-mode fields (`openCodeProviderId`, `openCodeModelId`, `openCodeBaseUrl`, `openCodeEnvKey`, `openCodePackage`).
+   - For **Qwen Code**, forces `qwenAuthMode` to `LOCAL_AUTH` (other modes: `ALIBABA_CODING_PLAN`, `MODEL_PROVIDER`) and clears all custom API-key sub-mode fields (`qwenRegion`, `qwenBaseUrl`, `qwenEnvKey`, `qwenModelId`, `qwenProtocol`, `qwenAdditionalModelProviders`).
+   - For **OpenCode**, forces `openCodeAuthMode` to `LOCAL_AUTH` (other modes: `ENV_KEY`, `CUSTOM_PROVIDER`) and clears all custom API-key sub-mode fields (`openCodeProviderId`, `openCodeModelId`, `openCodeBaseUrl`, `openCodeEnvKey`, `openCodePackage`).
    - For **Codex**, ensures that no stale API key or custom model-provider overrides are passed to the child process environment (`withProviderEnv`) or command construction arguments.
 
 ## Current Defaults
@@ -127,6 +128,8 @@ That means:
 ## Provider Capacity Deferrals
 
 Provider `maxConcurrentTasks` is enforced before a task is counted as started. When the selected provider is already at its global cap, sprint task dispatch creates or refreshes a queued dispatch/task-run record, records a `provider_concurrency_wait` event, and returns the task to a retryable `PENDING` state for the next orchestration cycle.
+
+Custom provider instances carry their own `maxConcurrentTasks` value through the selected provider-settings override. Enforcement still counts active rows by provider family globally (for example all `qwen-code` invocations share the same running-count pool), but the limit used for a new invocation comes from the exact provider instance selected by routing or agent configuration.
 
 Provider-cap queueing is not a task creation failure. It must not increment the consecutive task creation failure counter, trigger the emergency stop, or record `task_coding` guardrail usage. Real startup failures still use the normal failure path and continue to count toward `maxFailures`.
 
@@ -184,6 +187,14 @@ File:
 ## Provider Runtime Config Boundary
 
 Code UX extracts provider runtime config and MCP config assembly from `ProviderRunner` into focused typed builder modules, such as `src/infrastructure/providers/cli/provider-runtime-config.ts`. This isolates the JSON/TOML generation logic for providers like Qwen, OpenCode, and Antigravity, while keeping process execution and mount creation in the runner.
+
+## Custom MCP Server Safety
+
+Custom MCP servers saved in settings are sanitized before provider runs generate Claude, Gemini, Qwen, Codex, OpenCode, or Antigravity MCP config. HTTP / SSE custom servers must use `http://` or `https://` URLs without embedded credentials or control characters. Local developer tools on loopback remain supported with explicit `localhost`, `127.0.0.1`, or `[::1]` URLs, but link-local metadata endpoints, multicast and broadcast addresses, and ambiguous numeric IP encodings such as decimal-integer, hexadecimal, shortened, or leading-zero IPv4 forms are rejected.
+
+Custom HTTP headers keep the existing count and length limits and may carry normal auth headers such as `Authorization`. Code UX drops hop-by-hop and request-smuggling-sensitive names including `Host`, `Connection`, `Transfer-Encoding`, `Content-Length`, `TE`, `Trailer`, `Upgrade`, `Keep-Alive`, proxy auth/connection headers, and `Expect`.
+
+Stdio custom servers continue to be serialized as provider-native command, args, and env fields rather than shell command strings. Commands containing shell metacharacters are rejected; args and env values are passed as structured strings in generated config artifacts.
 
 ## Provider Override Settings Boundary
 

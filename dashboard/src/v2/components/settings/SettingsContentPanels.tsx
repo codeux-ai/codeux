@@ -1,4 +1,4 @@
-import type { FunctionComponent } from "preact";
+import type { FunctionComponent, JSX } from "preact";
 import type { SettingsPageState } from "../../hooks/use-settings-page-state.js";
 import { SettingsGeneralPanel } from "./panels/SettingsGeneralPanel.js";
 import { SettingsAppearancePanel } from "./panels/SettingsAppearancePanel.js";
@@ -15,21 +15,39 @@ import { useInteractionTokens } from "../../lib/motion/tokens.js";
 
 export const SettingsContentPanels: FunctionComponent<{
   state: SettingsPageState;
-}> = ({ state }) => {
+  stickyTop?: string;
+}> = ({ state, stickyTop = "9.5rem" }) => {
   const { activeCategory, activeDirty, activeSaving, error, saveMessage, loading, resettingProject } = state;
   const tokens = useInteractionTokens();
+  const activeCategoryLabel = state.activeCategoryConfig?.label ?? `${activeCategory.charAt(0).toUpperCase()}${activeCategory.slice(1)}`;
 
   const panelStatus = error
-    ? `Settings blocked: ${error}`
+    ? `${activeCategoryLabel} settings blocked: ${error}`
     : resettingProject
-      ? "Project override reset is pending."
+      ? `${activeCategoryLabel} project override reset is pending.`
     : activeSaving
-      ? "Settings save is pending."
+      ? `${activeCategoryLabel} settings save is pending.`
       : saveMessage
-        ? saveMessage
+        ? `${activeCategoryLabel} settings saved. ${saveMessage}`
         : activeDirty
-          ? "Settings have local unsaved changes."
-          : "Settings are saved.";
+          ? `${activeCategoryLabel} settings have local unsaved changes.`
+          : `${activeCategoryLabel} settings are saved.`;
+  const visibleSaveState = error
+    ? "Blocked"
+    : loading
+      ? "Loading"
+      : resettingProject
+        ? "Resetting"
+        : activeSaving
+          ? "Saving"
+          : activeDirty
+              ? "Unsaved changes"
+              : saveMessage
+                ? "Saved"
+                : "Saved";
+  const stickyStyle = {
+    "--settings-active-panel-top": stickyTop,
+  } as JSX.CSSProperties;
 
   const renderPanel = () => {
     switch (activeCategory) {
@@ -59,9 +77,21 @@ export const SettingsContentPanels: FunctionComponent<{
   };
 
   return (
-    <div aria-busy={activeSaving || loading ? "true" : undefined} data-reset-busy={resettingProject ? "true" : undefined} data-settings-state={error ? "error" : resettingProject ? "resetting" : activeSaving ? "saving" : activeDirty ? "dirty" : "saved"}>
+    <div aria-busy={activeSaving || loading || resettingProject ? "true" : undefined} data-reset-busy={resettingProject ? "true" : undefined} data-settings-state={error ? "error" : resettingProject ? "resetting" : activeSaving ? "saving" : activeDirty ? "dirty" : "saved"}>
       <div role={error ? "alert" : "status"} aria-live={error ? "assertive" : "polite"} aria-atomic="true" className="sr-only">
         {panelStatus}
+      </div>
+      <div
+        data-settings-sticky="active-panel"
+        style={stickyStyle}
+        className="sticky top-[var(--settings-active-panel-top)] z-20 mb-3 flex min-w-0 flex-wrap items-center gap-2 overflow-visible rounded-[1rem] border border-[color:var(--border-hairline)] bg-[var(--surface-glass)] px-3 py-2 text-xs font-semibold text-slate-500 shadow-[var(--elevation-base)] backdrop-blur-2xl dark:text-slate-300"
+      >
+        <span className="font-mono text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400 dark:text-slate-500">Active panel</span>
+        <span className="min-w-0 max-w-full break-words text-slate-800 dark:text-slate-100">{activeCategoryLabel}</span>
+        <span aria-hidden="true" className="text-slate-300 dark:text-slate-600">/</span>
+        <span className={`min-w-0 max-w-full break-words ${error ? "text-status-red" : activeSaving || loading || resettingProject ? "text-signal-700 dark:text-signal-300" : activeDirty ? "text-amber-700 dark:text-amber-200" : "text-status-green"}`}>
+          {visibleSaveState}
+        </span>
       </div>
       <ActionFeedbackRegion
         status={error ? "error" : loading || activeSaving || resettingProject ? "pending" : saveMessage ? "success" : activeDirty ? "warning" : "idle"}
@@ -71,6 +101,7 @@ export const SettingsContentPanels: FunctionComponent<{
       <div
         key={activeCategory}
         data-active-category={activeCategory}
+        data-motion-contract="enterExit"
         className="mt-3 motion-safe:animate-form-slide-down motion-reduce:animate-none"
         style={{
           transitionDuration: tokens.enterExit.duration,

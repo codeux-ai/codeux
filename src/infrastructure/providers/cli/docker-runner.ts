@@ -20,13 +20,15 @@ import {
 import { CONTAINER_SETUP_SCRIPT } from "../../../services/cli-workflow-utils.js";
 import { DockerBootstrapBuilder } from "./docker-bootstrap-builder.js";
 import { DockerCredentialMountBuilder } from "./docker-credential-mount-builder.js";
-import { DockerSetupImageCache } from "./docker-setup-image-cache.js";
+import { DockerSetupImageCache, type DockerSetupImageCacheProgress } from "./docker-setup-image-cache.js";
 import { resolveDockerRuntimeRoot } from "./docker-runtime-paths.js";
 import { buildRuntimeVolumeName, WorkspaceManager, type SnapshotCheckout } from "./workspace-manager.js";
 import { workspaceVolumeHelperPool, type WorkspaceVolumeHelperPool } from "./workspace-volume-helper.js";
 import { CONTAINER_RUNTIME_HOME, CONTAINER_WORKSPACE_ROOT } from "./provider-runtime-artifacts.js";
+import type { CliProviderId } from "./provider-command-specs.js";
 import { getHomeCodeUxPath, getRepoCodeUxPath } from "../../../shared/config/code-ux-paths.js";
 import { ensureDefaultCodeUxAssetsInstalled } from "../../../services/code-ux-default-assets-service.js";
+import { sanitizeInvocationOutputText } from "../../../services/invocation-output-sanitizer.js";
 
 
 const BUNDLED_CONTAINER_SETUP_SCRIPT = path.resolve(
@@ -51,13 +53,14 @@ export interface IDockerRunner {
     cwd: string;
     providerEnv: NodeJS.ProcessEnv;
     sessionId: string;
-    providerLabel: "gemini" | "codex" | "claude-code" | "qwen-code" | "opencode" | "antigravity";
+    providerLabel: CliProviderId;
     workflowSettings: CliWorkflowSettings;
     repoPath: string;
     providerMountAuth?: boolean;
     providerAuthPath?: string;
     signal?: AbortSignal;
     onActivity: (desc: string, originator?: string) => void;
+    onSetupImageProgress?: (progress: DockerSetupImageCacheProgress) => void;
     mcpConnection?: McpConnectionInfo | null;
     customMcpServers?: CustomMcpServer[];
   }): Promise<CommandResult>;
@@ -108,17 +111,21 @@ export class DockerRunner implements IDockerRunner {
     cwd: string;
     providerEnv: NodeJS.ProcessEnv;
     sessionId: string;
-    providerLabel: "gemini" | "codex" | "claude-code" | "qwen-code" | "opencode" | "antigravity";
+    providerLabel: CliProviderId;
     workflowSettings: CliWorkflowSettings;
     repoPath: string;
     providerMountAuth?: boolean;
     providerAuthPath?: string;
     signal?: AbortSignal;
     onActivity: (desc: string, originator?: string) => void;
+    onSetupImageProgress?: (progress: DockerSetupImageCacheProgress) => void;
     mcpConnection?: McpConnectionInfo | null;
     customMcpServers?: CustomMcpServer[];
   }): Promise<CommandResult> {
     const { command, args, cwd, providerEnv, sessionId, providerLabel, workflowSettings, repoPath, signal, onActivity } = input;
+    const emitActivity = (desc: string, originator?: string): void => {
+      onActivity(sanitizeInvocationOutputText(desc), originator);
+    };
     const workspace = this.resolveWorkspace(cwd);
     await this.workspaceManager.ensureRuntimeVolume(cwd);
     const runtimeHome = CONTAINER_RUNTIME_HOME;
@@ -127,9 +134,9 @@ export class DockerRunner implements IDockerRunner {
     const runtimeVolumeName = buildRuntimeVolumeName(workspace.volumeName);
     const installPlaywrightBrowsers = workflowSettings.containerInstallPlaywrightBrowsers !== false;
 
-    await this.maybeLogDockerPathMappingHint(sessionId, repoPath, onActivity);
+    await this.maybeLogDockerPathMappingHint(sessionId, repoPath, emitActivity);
 
-    const setupScriptPath = await this.resolveContainerSetupScriptPath(workflowSettings, repoPath, onActivity);
+    const setupScriptPath = await this.resolveContainerSetupScriptPath(workflowSettings, repoPath, emitActivity);
     const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-docker-"));
     const runtimeRoot = resolveDockerRuntimeRoot(repoPath);
     const baseImage = workflowSettings.containerImage.trim() || "node:24-bookworm";
@@ -143,17 +150,18 @@ export class DockerRunner implements IDockerRunner {
         runtimeRoot,
         repoPath,
         signal,
-        onActivity,
+        onActivity: emitActivity,
+        onProgress: input.onSetupImageProgress,
         mapSourcePathForDaemon: (sourcePath, label) =>
-          this.mapDockerSourcePathForDaemon(sourcePath, repoPath, sessionId, label, onActivity),
+          this.mapDockerSourcePathForDaemon(sourcePath, repoPath, sessionId, label, emitActivity),
       });
 
       const argvFilePath = path.join(tempRoot, "provider-argv.sh");
-      await fs.writeFile(argvFilePath, this.buildProviderArgvFile(args), "utf8");
-      const argvFileSource = this.mapDockerSourcePathForDaemon(argvFilePath, repoPath, sessionId, "provider argv", onActivity);
+      await this.writeRestrictiveFile(argvFilePath, this.buildProviderArgvFile(args));
+      const argvFileSource = this.mapDockerSourcePathForDaemon(argvFilePath, repoPath, sessionId, "provider argv", emitActivity);
       const envFilePath = path.join(tempRoot, "provider.env");
       await writeDockerEnvFile(envFilePath, pickContainerEnv(providerEnv));
-      const envFileSource = this.mapDockerSourcePathForDaemon(envFilePath, repoPath, sessionId, "provider env", onActivity);
+      const envFileSource = this.mapDockerSourcePathForDaemon(envFilePath, repoPath, sessionId, "provider env", emitActivity);
 
       const containerName = this.buildContainerName(providerLabel, sessionId);
 
@@ -212,8 +220,8 @@ export class DockerRunner implements IDockerRunner {
           `worker:x:${uid}:${gid}::${runtimeHome}:/bin/bash`,
           "",
         ].join("\n");
-        await fs.writeFile(passwdPath, passwdContent);
-        const passwdSource = this.mapDockerSourcePathForDaemon(passwdPath, repoPath, sessionId, "passwd", onActivity);
+        await fs.writeFile(passwdPath, passwdContent, "utf8");
+        const passwdSource = this.mapDockerSourcePathForDaemon(passwdPath, repoPath, sessionId, "passwd", emitActivity);
         dockerArgs.push("--mount", toDockerMountArg({ source: passwdSource, destination: "/etc/passwd", readonly: true }));
       }
 
@@ -229,14 +237,14 @@ export class DockerRunner implements IDockerRunner {
       }
 
       if (setupScriptPath && resolvedImage.runSetupScriptAtRuntime) {
-        const setupScriptSource = this.mapDockerSourcePathForDaemon(setupScriptPath, repoPath, sessionId, "setup script", onActivity);
+        const setupScriptSource = this.mapDockerSourcePathForDaemon(setupScriptPath, repoPath, sessionId, "setup script", emitActivity);
         dockerArgs.push("--mount", toDockerMountArg({ source: setupScriptSource, destination: CONTAINER_SETUP_SCRIPT, readonly: true }));
       }
 
       const credentialMounts = await new DockerCredentialMountBuilder().build(
         workflowSettings,
         repoPath,
-        onActivity,
+        emitActivity,
         {
           provider: providerLabel,
           enabled: Boolean(input.providerMountAuth),
@@ -253,7 +261,7 @@ export class DockerRunner implements IDockerRunner {
       );
 
       for (const mount of [...credentialMounts, ...providerConfigMounts]) {
-        const source = this.mapDockerSourcePathForDaemon(mount.source, repoPath, sessionId, "credentials", onActivity);
+        const source = this.mapDockerSourcePathForDaemon(mount.source, repoPath, sessionId, "credentials", emitActivity);
         dockerArgs.push("--mount", toDockerMountArg({ ...mount, source }));
       }
 
@@ -265,14 +273,14 @@ export class DockerRunner implements IDockerRunner {
 
       dockerArgs.push(resolvedImage.image, "bash", "-c", bootstrapScript, "provider-runner", command);
 
-      onActivity(`Running ${providerLabel} in Docker image ${resolvedImage.image} (workspace volume: ${workspace.volumeName}, runtime volume: ${runtimeVolumeName}).`);
+      emitActivity(`Running ${providerLabel} in Docker image ${resolvedImage.image} (workspace volume: ${workspace.volumeName}, runtime volume: ${runtimeVolumeName}).`);
 
       // The container name is deterministic per (provider, sessionId), so a retried
       // invocation for the same session (e.g. a chat turn superseded and resumed after
       // an abort) reuses it. Docker's `--rm` cleanup from a just-killed previous run is
       // asynchronous and can still be in flight, so force-remove any stale container
       // occupying the name first rather than racing `docker run --name` against it.
-      await runCommandStrict("docker", ["rm", "-f", containerName], process.cwd()).catch(() => undefined);
+      await this.removeProviderContainer(containerName);
 
       let abortKillIssued = false;
       const killContainerOnAbort = (): void => {
@@ -284,7 +292,7 @@ export class DockerRunner implements IDockerRunner {
         // not reliably stop the backing container, so kill the container directly on abort.
         void runCommandStrict("docker", ["kill", containerName], process.cwd()).catch((error: unknown) => {
           const message = error instanceof Error ? error.message : String(error);
-          onActivity(`Ignored Docker kill failure for ${containerName} after abort: ${message}`, "provider");
+          emitActivity(`Ignored Docker kill failure for ${containerName} after abort: ${message}`, "provider");
         });
       };
 
@@ -296,11 +304,19 @@ export class DockerRunner implements IDockerRunner {
       }
 
       try {
-        return await runStreamingCommand("docker", dockerArgs, process.cwd(), process.env, {
+        const runDocker = () => runStreamingCommand("docker", dockerArgs, process.cwd(), process.env, {
           signal,
-          onStdoutLine: (line) => onActivity(line, "agent"),
-          onStderrLine: (line) => onActivity(`[${providerLabel}] ${line}`, "provider"),
+          onStdoutLine: (line) => emitActivity(line, "agent"),
+          onStderrLine: (line) => emitActivity(`[${providerLabel}] ${line}`, "provider"),
         });
+        const firstResult = await runDocker();
+        if (!firstResult.ok && this.isDockerNameConflict(firstResult, containerName) && !signal?.aborted) {
+          emitActivity(`Retrying ${providerLabel} after reclaiming stale Docker container ${containerName}.`, "provider");
+          await this.removeProviderContainer(containerName);
+          await this.sleep(500);
+          return await runDocker();
+        }
+        return firstResult;
       } finally {
         if (signal) {
           signal.removeEventListener("abort", killContainerOnAbort);
@@ -320,13 +336,38 @@ export class DockerRunner implements IDockerRunner {
     ].join("\n");
   }
 
+  private async writeRestrictiveFile(filePath: string, content: string | Buffer): Promise<void> {
+    if (typeof content === "string") {
+      await fs.writeFile(filePath, content, { encoding: "utf8", mode: 0o600 });
+    } else {
+      await fs.writeFile(filePath, content, { mode: 0o600 });
+    }
+    if (process.platform !== "win32") {
+      await fs.chmod(filePath, 0o600);
+    }
+  }
+
   private buildContainerName(
-    providerLabel: "gemini" | "codex" | "claude-code" | "qwen-code" | "opencode" | "antigravity",
+    providerLabel: CliProviderId,
     sessionId: string,
   ): string {
     const safeProvider = providerLabel.replace(/[^a-zA-Z0-9_.-]+/g, "-").toLowerCase();
     const safeSessionId = sessionId.replace(/[^a-zA-Z0-9_.-]+/g, "-").toLowerCase().slice(0, 48);
     return `code-ux-${safeProvider}-${safeSessionId || "session"}`.slice(0, 120);
+  }
+
+  private async removeProviderContainer(containerName: string): Promise<void> {
+    await runCommandStrict("docker", ["rm", "-f", "-v", containerName], process.cwd()).catch(() => undefined);
+  }
+
+  private isDockerNameConflict(result: CommandResult, containerName: string): boolean {
+    const text = `${result.stderr || ""}\n${result.stdout || ""}`;
+    return text.includes("Conflict. The container name")
+      && text.includes(`/${containerName}`);
+  }
+
+  private sleep(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
   private shellSingleQuote(value: string): string {
@@ -475,7 +516,7 @@ export class DockerRunner implements IDockerRunner {
 
   private customServersForProvider(
     servers: CustomMcpServer[],
-    provider: "gemini" | "codex" | "claude-code" | "qwen-code" | "opencode" | "antigravity",
+    provider: CliProviderId,
   ): CustomMcpServer[] {
     return servers.filter((server) =>
       server.enabled
@@ -486,7 +527,7 @@ export class DockerRunner implements IDockerRunner {
 
   private async buildProviderConfigMounts(
     conn: McpConnectionInfo | null,
-    provider: "gemini" | "codex" | "claude-code" | "qwen-code" | "opencode" | "antigravity",
+    provider: CliProviderId,
     tempRoot: string,
     providerEnv: NodeJS.ProcessEnv,
     customServers: CustomMcpServer[] = [],
@@ -521,7 +562,7 @@ export class DockerRunner implements IDockerRunner {
     if (provider === "antigravity") mountFilename = "antigravity-mcp.json";
 
     const filePath = path.join(tempRoot, mountFilename);
-    await fs.writeFile(filePath, artifact.content);
+    await this.writeRestrictiveFile(filePath, artifact.content);
 
     return [{ source: filePath, destination: artifact.dockerMountDestination, readonly: true }];
   }

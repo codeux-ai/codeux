@@ -110,7 +110,6 @@ html.is-electron.is-fullscreen .app-shell {
     --status-green: #007A5E; /* WCAG AA on White (4.5:1) */
     --status-red: #D32F2F;   /* WCAG AA on White (4.5:1) */
     --status-amber: #995A00; /* WCAG AA on White (4.5:1) */
-    --signal-600: #007A5E;   /* Darker jade for text in light mode */
     --ember-600: #995A00;    /* Darker amber for text in light mode */
   }
 
@@ -118,7 +117,6 @@ html.is-electron.is-fullscreen .app-shell {
     --status-green: #00A37E; /* WCAG AA on Void 900 (4.6:1) */
     --status-red: #FF4D4D;   /* WCAG AA on Void 900 (5.2:1) */
     --status-amber: #FFB347; /* WCAG AA on Void 900 (6.1:1) */
-    --signal-600: #00E0A0;   /* Brand luminous jade for dark mode */
     --ember-600: #E0A000;    /* Default warm amber for dark mode */
   }
 
@@ -136,13 +134,13 @@ html.is-electron.is-fullscreen .app-shell {
 
   a:hover,
   a:focus {
-    color: #008F65; /* signal.700 */
+    color: var(--signal-700);
     text-decoration: none;
   }
 
   .dark a:hover,
   .dark a:focus {
-    color: #33FFB8; /* signal.400 */
+    color: var(--signal-400);
   }
 
   :where(p, li, td, dd, blockquote, article, .prose) a[href] {
@@ -180,6 +178,38 @@ html.is-electron.is-fullscreen .app-shell {
   button:hover:not(:disabled) {
     @apply brightness-110;
   }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      scroll-behavior: auto !important;
+      transition-duration: 0.01ms !important;
+    }
+
+    :where(.animate-spin, .animate-ping, .animate-pulse, .animate-bounce, .animate-skeleton-shimmer, .animate-organic, .animate-organic-reverse) {
+      animation: none !important;
+    }
+  }
+
+  :root[data-reduced-motion="true"] *,
+  :root[data-reduced-motion="true"] *::before,
+  :root[data-reduced-motion="true"] *::after,
+  :root[data-reduced-motion="REDUCE"] *,
+  :root[data-reduced-motion="REDUCE"] *::before,
+  :root[data-reduced-motion="REDUCE"] *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
+
+  :root[data-reduced-motion="true"] :where(.animate-spin, .animate-ping, .animate-pulse, .animate-bounce, .animate-skeleton-shimmer, .animate-organic, .animate-organic-reverse),
+  :root[data-reduced-motion="REDUCE"] :where(.animate-spin, .animate-ping, .animate-pulse, .animate-bounce, .animate-skeleton-shimmer, .animate-organic, .animate-organic-reverse) {
+    animation: none !important;
+  }
 }
 
 @layer utilities {
@@ -202,6 +232,12 @@ html.is-electron.is-fullscreen .app-shell {
 
   .transition-feedback {
     transition: all var(--transition-feedback);
+  }
+
+  :root[data-reduced-motion="true"] .live-duration-badge,
+  :root[data-reduced-motion="REDUCE"] .live-duration-badge {
+    background-color: var(--primitive-signal-highlight);
+    box-shadow: inset 0 0 0 1px var(--status-static-running-ring);
   }
 
   .expand-grid {
@@ -227,10 +263,10 @@ html.is-electron.is-fullscreen .app-shell {
     transition-delay: 50ms;
   }
 
-  /* Signal-tinted scrollbar — jade on warm void */
+  /* Signal-tinted scrollbar */
   .dashboard-scrollbar {
     scrollbar-width: thin;
-    scrollbar-color: rgba(0, 224, 160, 0.35) rgba(14, 12, 10, 0.3);
+    scrollbar-color: rgb(var(--signal-rgb) / 0.35) rgba(14, 12, 10, 0.3);
   }
 
   .dashboard-scrollbar::-webkit-scrollbar {
@@ -244,18 +280,18 @@ html.is-electron.is-fullscreen .app-shell {
   }
 
   .dashboard-scrollbar::-webkit-scrollbar-thumb {
-    background: linear-gradient(180deg, rgba(0, 224, 160, 0.5), rgba(0, 184, 130, 0.4));
+    background: linear-gradient(180deg, rgb(var(--signal-rgb) / 0.5), rgb(var(--signal-rgb) / 0.4));
     border: 2px solid rgba(14, 12, 10, 0.5);
     border-radius: 9999px;
   }
 
   .dashboard-scrollbar::-webkit-scrollbar-thumb:hover {
-    background: linear-gradient(180deg, rgba(0, 224, 160, 0.8), rgba(0, 184, 130, 0.7));
+    background: linear-gradient(180deg, rgb(var(--signal-rgb) / 0.8), rgb(var(--signal-rgb) / 0.7));
   }
 
   .dropdown-scrollbar {
     scrollbar-width: thin;
-    scrollbar-color: rgba(0, 224, 160, 0.35) transparent;
+    scrollbar-color: rgb(var(--signal-rgb) / 0.35) transparent;
   }
   .dropdown-scrollbar::-webkit-scrollbar {
     width: 4px;
@@ -264,11 +300,11 @@ html.is-electron.is-fullscreen .app-shell {
     background: transparent;
   }
   .dropdown-scrollbar::-webkit-scrollbar-thumb {
-    background: linear-gradient(180deg, rgba(0, 224, 160, 0.5), rgba(0, 184, 130, 0.4));
+    background: linear-gradient(180deg, rgb(var(--signal-rgb) / 0.5), rgb(var(--signal-rgb) / 0.4));
     border-radius: 9999px;
   }
   .dropdown-scrollbar::-webkit-scrollbar-thumb:hover {
-    background: linear-gradient(180deg, rgba(0, 224, 160, 0.8), rgba(0, 184, 130, 0.7));
+    background: linear-gradient(180deg, rgb(var(--signal-rgb) / 0.8), rgb(var(--signal-rgb) / 0.7));
   }
 
   .scheduler-field {
@@ -463,8 +499,8 @@ html.is-electron.is-fullscreen .app-shell {
 
   /* View toggle glow underline */
   @keyframes toggle-glow {
-    0%, 100% { box-shadow: 0 2px 8px rgba(0, 224, 160, 0.2); }
-    50%      { box-shadow: 0 2px 16px rgba(0, 224, 160, 0.4); }
+    0%, 100% { box-shadow: 0 2px 8px rgb(var(--signal-rgb) / 0.2); }
+    50%      { box-shadow: 0 2px 16px rgb(var(--signal-rgb) / 0.4); }
   }
 
   /* Collapsible section animation */
@@ -525,9 +561,9 @@ html.is-electron.is-fullscreen .app-shell {
   }
 
   .stats-delta-chip-positive {
-    border: 1px solid rgba(0, 224, 160, 0.18);
-    background: rgba(0, 224, 160, 0.12);
-    color: rgb(0, 171, 132);
+    border: 1px solid rgb(var(--signal-rgb) / 0.18);
+    background: rgb(var(--signal-rgb) / 0.12);
+    color: var(--signal-600);
   }
 
   .stats-delta-chip-negative {
@@ -608,6 +644,27 @@ html.is-electron.is-fullscreen .app-shell {
     display: none;  /* Safari and Chrome */
   }
 
+  @keyframes settings-rail-scroll-indicator {
+    0%, 100% {
+      opacity: 0.72;
+      transform: translateY(-2px);
+    }
+    50% {
+      opacity: 1;
+      transform: translateY(4px);
+    }
+  }
+
+  .settings-rail-scroll-indicator {
+    animation: settings-rail-scroll-indicator 1.55s cubic-bezier(0.45, 0, 0.2, 1) infinite;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .settings-rail-scroll-indicator {
+      animation: none;
+    }
+  }
+
   /* ── Chat Avatar & Widget Animations ───────────────────────────────────────────── */
 
   /* Jules animated J */
@@ -618,8 +675,8 @@ html.is-electron.is-fullscreen .app-shell {
   }
 
   @keyframes jules-j-glow {
-    0%, 100% { filter: drop-shadow(0 0 2px rgba(0, 224, 160, 0.4)); }
-    50%      { filter: drop-shadow(0 0 6px rgba(0, 224, 160, 0.8)); }
+    0%, 100% { filter: drop-shadow(0 0 2px rgb(var(--signal-rgb) / 0.4)); }
+    50%      { filter: drop-shadow(0 0 6px rgb(var(--signal-rgb) / 0.8)); }
   }
 
   .jules-j-glow {

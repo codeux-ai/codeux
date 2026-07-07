@@ -63,6 +63,17 @@ interface LocalCommandResult {
   stderr: string;
 }
 
+export interface LinkedIssueImportTransitionWarning {
+  issueId: string;
+  issueKey: string;
+  message: string;
+}
+
+export interface LinkedIssueImportResult {
+  linkedIssues: SprintLinkedIssueRecord[];
+  warnings: LinkedIssueImportTransitionWarning[];
+}
+
 export class SprintIssueService {
   private readonly logger: Logger;
 
@@ -91,6 +102,51 @@ export class SprintIssueService {
 
   replaceLinkedIssues(sprintId: string, projectId: string, issues: SprintLinkedIssueInput[]): SprintLinkedIssueRecord[] {
     return this.deps.projectManagementRepository.replaceSprintLinkedIssues(projectId, sprintId, issues);
+  }
+
+  async importLinkedIssues(sprintId: string, projectId: string, issues: SprintLinkedIssueInput[]): Promise<LinkedIssueImportResult> {
+    const linkedIssues = this.replaceLinkedIssues(sprintId, projectId, issues);
+    const warnings = await this.transitionLinkedJiraIssuesOnImport(projectId, sprintId, linkedIssues);
+    return { linkedIssues, warnings };
+  }
+
+  async transitionLinkedJiraIssuesOnImport(
+    projectId: string,
+    sprintId: string,
+    linkedIssues: SprintLinkedIssueRecord[],
+  ): Promise<LinkedIssueImportTransitionWarning[]> {
+    const jiraIssues = linkedIssues.filter((issue) => issue.provider === "jira");
+    if (jiraIssues.length === 0) {
+      return [];
+    }
+
+    const settings = this.deps.getDashboardSettings({ projectId, sprintId });
+    if (!settings.jira.autoTransitionLinkedIssuesOnImport) {
+      return [];
+    }
+
+    const warnings: LinkedIssueImportTransitionWarning[] = [];
+    for (const issue of jiraIssues) {
+      try {
+        await this.transitionImportedJiraIssue(issue, settings);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        warnings.push({
+          issueId: issue.id,
+          issueKey: issue.issueKey,
+          message,
+        });
+        this.logger.warn("Failed to transition imported Jira issue", {
+          projectId,
+          sprintId,
+          issueId: issue.id,
+          issueKey: issue.issueKey,
+          transitionName: settings.jira.importTransitionName?.trim() || "In Work",
+          error: message,
+        });
+      }
+    }
+    return warnings;
   }
 
   getLinkedIssues(sprintId: string): SprintLinkedIssueRecord[] {
@@ -310,6 +366,36 @@ export class SprintIssueService {
       gitlab: true,
       body: { state_event: "close" },
     });
+  }
+
+  private async transitionImportedJiraIssue(issue: SprintLinkedIssueRecord, settings: DashboardSettings): Promise<void> {
+    if (!this.deps.jiraApiClient) {
+      throw new Error("Jira API client is not injected.");
+    }
+    if (!settings.jira.host.trim() || !settings.jira.apiToken.trim()) {
+      throw new Error("Jira site URL and API token must be configured in Settings -> Integrations.");
+    }
+
+    const importTransitionName = settings.jira.importTransitionName?.trim() || "In Work";
+    const transitions = await this.deps.jiraApiClient.getTransitions(
+      settings.jira.host,
+      settings.jira.email,
+      settings.jira.apiToken,
+      issue.issueKey,
+    );
+    const importTransition = transitions.find((transition: jiraApiClient.JiraTransition) =>
+      transition.name.toLowerCase() === importTransitionName.toLowerCase()
+    );
+    if (!importTransition) {
+      throw new Error(`Transition '${importTransitionName}' not found for Jira issue ${issue.issueKey}`);
+    }
+    await this.deps.jiraApiClient.transitionIssue(
+      settings.jira.host,
+      settings.jira.email,
+      settings.jira.apiToken,
+      issue.issueKey,
+      importTransition.id,
+    );
   }
 
   private async searchGitHubIssues(args: ResolvedIssueTarget & SearchRuntimeOptions): Promise<RepositoryIssueSearchResult[]> {

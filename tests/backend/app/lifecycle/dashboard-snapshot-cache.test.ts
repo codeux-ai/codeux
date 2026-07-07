@@ -46,6 +46,23 @@ describe("DashboardSnapshotCache", () => {
       expect(DashboardSnapshotCachePolicy.isProjectStatsCacheKeyMatch(key1, "p1")).toBe(true);
       expect(DashboardSnapshotCachePolicy.isProjectStatsCacheKeyMatch(key1, "p2")).toBe(false);
     });
+
+    it("generates explicit project execution cache keys for selected sprint scope", () => {
+      const noneKey = DashboardSnapshotCachePolicy.getProjectExecutionSnapshotCacheKey("p1");
+      const nullKey = DashboardSnapshotCachePolicy.getProjectExecutionSnapshotCacheKey("p1", {
+        selectedSprintId: null,
+      });
+      const selectedKey = DashboardSnapshotCachePolicy.getProjectExecutionSnapshotCacheKey("p1", {
+        selectedSprintId: "sprint-1",
+      });
+
+      expect(noneKey).toBe("project-execution:p1:selected-sprint:none");
+      expect(nullKey).toBe(noneKey);
+      expect(selectedKey).toBe("project-execution:p1:selected-sprint:selected:sprint-1");
+      expect(selectedKey).not.toBe(noneKey);
+      expect(DashboardSnapshotCachePolicy.isProjectExecutionSnapshotCacheKeyMatch(selectedKey, "p1")).toBe(true);
+      expect(DashboardSnapshotCachePolicy.isProjectExecutionSnapshotCacheKeyMatch(selectedKey, "p2")).toBe(false);
+    });
   });
 
   describe("lean execution snapshot", () => {
@@ -77,6 +94,15 @@ describe("DashboardSnapshotCache", () => {
       const lean1 = cache.getProjectExecutionSnapshotLean("p1");
       const lean2 = cache.getProjectExecutionSnapshotLean("p1");
       expect(lean1).toBe(lean2);
+    });
+
+    it("passes selected sprint scope through lean snapshots", () => {
+      mockDeps.executionRepository.getProjectExecutionSnapshot.mockReturnValue(baseSnapshot());
+      cache.getProjectExecutionSnapshotLean("p1", { selectedSprintId: "sprint-1" });
+
+      expect(mockDeps.executionRepository.getProjectExecutionSnapshot).toHaveBeenCalledWith("p1", {
+        selectedSprintId: "sprint-1",
+      });
     });
 
     it("returns the snapshot as-is when there is no feed to strip", () => {
@@ -128,6 +154,45 @@ describe("DashboardSnapshotCache", () => {
       });
     });
 
+    it("isolates full and lean execution snapshots across selected sprint scopes", () => {
+      mockDeps.executionRepository.getProjectExecutionSnapshot.mockImplementation(
+        (projectId: string, options: { selectedSprintId?: string | null } = {}) => {
+          const selectedSprintId = options.selectedSprintId ?? "none";
+          return {
+            projectId,
+            projectName: `Project ${selectedSprintId}`,
+            sprintRuns: [{ id: `run-${selectedSprintId}`, status: "running" }],
+            taskDispatches: [],
+            recentEvents: [{ id: `event-${selectedSprintId}` }],
+            recentInvocations: [{ id: `invocation-${selectedSprintId}` }],
+          };
+        },
+      );
+
+      const leanSprint1 = cache.getProjectExecutionSnapshotLean("p1", { selectedSprintId: "sprint-1" });
+      const leanSprint2 = cache.getProjectExecutionSnapshotLean("p1", { selectedSprintId: "sprint-2" });
+      const fullSprint1 = cache.getProjectExecutionSnapshot("p1", { selectedSprintId: "sprint-1" });
+      const fullSprint2 = cache.getProjectExecutionSnapshot("p1", { selectedSprintId: "sprint-2" });
+
+      expect(leanSprint1).not.toBe(leanSprint2);
+      expect(leanSprint1.projectName).toBe("Project sprint-1");
+      expect(leanSprint2.projectName).toBe("Project sprint-2");
+      expect(leanSprint1.recentEvents).toEqual([]);
+      expect(leanSprint1.recentInvocations).toEqual([]);
+      expect(leanSprint2.recentEvents).toEqual([]);
+      expect(leanSprint2.recentInvocations).toEqual([]);
+      expect(fullSprint1.recentEvents).toEqual([{ id: "event-sprint-1" }]);
+      expect(fullSprint1.recentInvocations).toEqual([{ id: "invocation-sprint-1" }]);
+      expect(fullSprint2.recentEvents).toEqual([{ id: "event-sprint-2" }]);
+      expect(fullSprint2.recentInvocations).toEqual([{ id: "invocation-sprint-2" }]);
+      expect(mockDeps.executionRepository.getProjectExecutionSnapshot).toHaveBeenCalledTimes(2);
+      expect(mockDeps.executionRepository.getProjectExecutionSnapshot).toHaveBeenNthCalledWith(1, "p1", {
+        selectedSprintId: "sprint-1",
+      });
+      expect(mockDeps.executionRepository.getProjectExecutionSnapshot).toHaveBeenNthCalledWith(2, "p1", {
+        selectedSprintId: "sprint-2",
+      });
+    });
 
     it("caches project stats snapshots", () => {
       const snap1 = cache.getProjectStatsSnapshot("p1");
@@ -139,12 +204,21 @@ describe("DashboardSnapshotCache", () => {
 
   describe("invalidation", () => {
     it("invalidates project execution", () => {
+      mockDeps.executionRepository.getProjectExecutionSnapshot.mockReturnValue({
+        projectId: "p1",
+        sprintRuns: [],
+        taskDispatches: [],
+        recentEvents: [{ id: "event-1" }],
+        recentInvocations: [{ id: "invocation-1" }],
+      });
       cache.getProjectExecutionSnapshot("p1");
       cache.getProjectExecutionSnapshot("p1", { selectedSprintId: "sprint-1" });
+      cache.getProjectExecutionSnapshotLean("p1", { selectedSprintId: "sprint-2" });
       cache.invalidateProjectExecution("p1");
       cache.getProjectExecutionSnapshot("p1");
       cache.getProjectExecutionSnapshot("p1", { selectedSprintId: "sprint-1" });
-      expect(mockDeps.executionRepository.getProjectExecutionSnapshot).toHaveBeenCalledTimes(4);
+      cache.getProjectExecutionSnapshotLean("p1", { selectedSprintId: "sprint-2" });
+      expect(mockDeps.executionRepository.getProjectExecutionSnapshot).toHaveBeenCalledTimes(6);
     });
 
     it("invalidates project stats", () => {
@@ -152,6 +226,52 @@ describe("DashboardSnapshotCache", () => {
       cache.invalidateProjectStats("p1");
       cache.getProjectStatsSnapshot("p1", { window: "7d" });
       expect(mockDeps.executionRepository.getProjectStatsSnapshot).toHaveBeenCalledTimes(2);
+    });
+
+    it("invalidates only the indexed execution and stats keys for the requested project", () => {
+      mockDeps.executionRepository.getProjectExecutionSnapshot.mockImplementation(
+        (projectId: string, options: { selectedSprintId?: string | null } = {}) => ({
+          projectId,
+          projectName: `Project ${projectId}`,
+          selectedSprintId: options.selectedSprintId ?? null,
+          sprintRuns: [],
+          taskDispatches: [],
+          recentEvents: [{ id: `event-${projectId}-${options.selectedSprintId ?? "none"}` }],
+          recentInvocations: [{ id: `invocation-${projectId}-${options.selectedSprintId ?? "none"}` }],
+        }),
+      );
+      mockDeps.executionRepository.getProjectStatsSnapshot.mockImplementation(
+        (projectId: string, query: { window: string }) => ({ projectId, window: query.window }),
+      );
+
+      const p1Full = cache.getProjectExecutionSnapshot("p1");
+      const p1Lean = cache.getProjectExecutionSnapshotLean("p1", { selectedSprintId: "sprint-1" });
+      const p1Stats = cache.getProjectStatsSnapshot("p1", { window: "7d" });
+      const p2Full = cache.getProjectExecutionSnapshot("p2");
+      const p2Lean = cache.getProjectExecutionSnapshotLean("p2", { selectedSprintId: "sprint-2" });
+      const p2Stats = cache.getProjectStatsSnapshot("p2", { window: "30d" });
+
+      mockDeps.executionRepository.getProjectExecutionSnapshot.mockClear();
+      mockDeps.executionRepository.getProjectStatsSnapshot.mockClear();
+
+      cache.invalidateProjectExecution("p1");
+      cache.invalidateProjectStats("p1");
+
+      const p1FullAfterInvalidation = cache.getProjectExecutionSnapshot("p1");
+      const p1LeanAfterInvalidation = cache.getProjectExecutionSnapshotLean("p1", { selectedSprintId: "sprint-1" });
+      const p1StatsAfterInvalidation = cache.getProjectStatsSnapshot("p1", { window: "7d" });
+      const p2FullAfterInvalidation = cache.getProjectExecutionSnapshot("p2");
+      const p2LeanAfterInvalidation = cache.getProjectExecutionSnapshotLean("p2", { selectedSprintId: "sprint-2" });
+      const p2StatsAfterInvalidation = cache.getProjectStatsSnapshot("p2", { window: "30d" });
+
+      expect(p1FullAfterInvalidation).not.toBe(p1Full);
+      expect(p1LeanAfterInvalidation).not.toBe(p1Lean);
+      expect(p1StatsAfterInvalidation).not.toBe(p1Stats);
+      expect(p2FullAfterInvalidation).toBe(p2Full);
+      expect(p2LeanAfterInvalidation).toBe(p2Lean);
+      expect(p2StatsAfterInvalidation).toBe(p2Stats);
+      expect(mockDeps.executionRepository.getProjectExecutionSnapshot).toHaveBeenCalledTimes(2);
+      expect(mockDeps.executionRepository.getProjectStatsSnapshot).toHaveBeenCalledTimes(1);
     });
 
     it("invalidates overview", () => {

@@ -1,6 +1,5 @@
-import type { FunctionComponent } from "preact";
-import { useRef } from "preact/hooks";
-import { Layers3 } from "lucide-preact";
+import type { FunctionComponent, JSX } from "preact";
+import { useCallback, useEffect, useRef, useState } from "preact/hooks";
 import type { Category, CategoryId } from "../../hooks/use-settings-page-state.js";
 import {
   getSettingsSearchMatchPreview,
@@ -10,7 +9,7 @@ import { NoticePanel } from "./SettingsSurface.js";
 import { SHARED_INTERACTION_CLASSES } from "../ui/Button.js";
 import { useInteractionTokens } from "../../lib/motion/tokens.js";
 
-import { AlertTriangle, Bot, BrainCircuit, Compass, Cpu, Monitor, Plug, Server, Settings, SlidersHorizontal, Target } from "lucide-preact";
+import { AlertTriangle, Bot, BrainCircuit, ChevronDown, Compass, Cpu, Monitor, Plug, Server, Settings, SlidersHorizontal, Target } from "lucide-preact";
 
 export const CATEGORIES: Category[] = [
   { id: "general", num: "01", label: "General", icon: SlidersHorizontal, description: "Scope, runtime, and automation posture" },
@@ -45,14 +44,56 @@ export const SettingsCategoryRail: FunctionComponent<SettingsCategoryRailProps> 
   disabledCategoryReason = null,
 }) => {
   const normalizedSearch = settingsSearch.trim().toLowerCase();
+  const railRef = useRef<HTMLElement | null>(null);
   const buttonsRef = useRef<(HTMLButtonElement | null)[]>([]);
+  const [railAvailableHeight, setRailAvailableHeight] = useState<number | null>(null);
+  const [showScrollHint, setShowScrollHint] = useState(false);
   const tokens = useInteractionTokens();
   const disabledReasonId = "settings-category-rail-disabled-reason";
   const instructionsId = "settings-category-rail-instructions";
+  const instructionsText = normalizedSearch
+    ? filteredCategories.length > 0
+      ? `Showing ${filteredCategories.length} categories for "${settingsSearch.trim()}". Use arrow keys to move through matching categories.`
+      : `No categories match "${settingsSearch.trim()}". Clear search or try routing, provider, auth, CI, agent, or memory.`
+    : "Use arrow keys to move through settings categories.";
   const selectionTransitionStyle = {
     transitionDuration: tokens.selectionMovement.duration,
     transitionTimingFunction: tokens.selectionMovement.ease,
   };
+  const railHeightStyle = railAvailableHeight === null ? undefined : {
+    "--settings-category-rail-available-height": `${railAvailableHeight}px`,
+  } as JSX.CSSProperties;
+  const updateRailMetrics = useCallback(() => {
+    const rail = railRef.current;
+    if (!rail) {
+      return;
+    }
+    const bottomGutter = 16;
+    const topOffset = Math.max(0, rail.getBoundingClientRect().top);
+    const availableHeight = Math.max(0, Math.floor(window.innerHeight - topOffset - bottomGutter));
+    const visibleHeight = Math.min(rail.clientHeight || availableHeight, availableHeight);
+
+    setRailAvailableHeight(availableHeight);
+    setShowScrollHint(rail.scrollHeight - rail.scrollTop - visibleHeight > 2);
+  }, []);
+
+  useEffect(() => {
+    let frameId = 0;
+    const scheduleMetricsUpdate = () => {
+      window.cancelAnimationFrame(frameId);
+      frameId = window.requestAnimationFrame(updateRailMetrics);
+    };
+
+    scheduleMetricsUpdate();
+    window.addEventListener("resize", scheduleMetricsUpdate);
+    window.addEventListener("scroll", scheduleMetricsUpdate, true);
+
+    return () => {
+      window.cancelAnimationFrame(frameId);
+      window.removeEventListener("resize", scheduleMetricsUpdate);
+      window.removeEventListener("scroll", scheduleMetricsUpdate, true);
+    };
+  }, [filteredCategories.length, normalizedSearch, updateRailMetrics]);
 
   const handleKeyDown = (e: KeyboardEvent, index: number) => {
     if (filteredCategories.length === 0) {
@@ -80,36 +121,32 @@ export const SettingsCategoryRail: FunctionComponent<SettingsCategoryRailProps> 
 
   return (
     <nav
+      ref={railRef}
       aria-label="Settings categories"
-      className="lg:sticky lg:top-16 flex min-w-0 flex-col gap-3 rounded-[1.75rem] border border-[color:var(--border-hairline)] bg-[var(--surface-glass)] p-3 backdrop-blur-2xl shadow-[var(--elevation-base)]"
+      onScroll={updateRailMetrics}
+      style={railHeightStyle}
+      data-motion-contract="selectionMovement"
+      className="scrollbar-hide flex min-w-0 flex-col gap-3 rounded-[1.75rem] border border-[color:var(--border-hairline)] bg-[var(--surface-glass)] p-3 backdrop-blur-2xl shadow-[var(--elevation-base)] lg:sticky lg:top-16 lg:max-h-[var(--settings-category-rail-available-height)] lg:overflow-y-auto lg:overscroll-contain"
     >
-      <div className="rounded-[1.25rem] border border-black/[0.06] bg-black/[0.03] px-4 py-3 dark:border-white/[0.06] dark:bg-white/[0.03]">
-        <div className="flex items-center gap-2 text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400 dark:text-slate-600">
-          <Layers3 className="h-3.5 w-3.5" strokeWidth={2} />
-          Categories
-        </div>
-        <div
-          id={instructionsId}
-          role="status"
-          aria-live="polite"
-          aria-atomic="true"
-          className="mt-2 break-words text-xs leading-relaxed text-slate-500 dark:text-slate-400"
-        >
-          {normalizedSearch
-            ? filteredCategories.length > 0
-              ? `Showing ${filteredCategories.length} categories for "${settingsSearch.trim()}". Use arrow keys to move through matching categories.`
-              : `No categories match "${settingsSearch.trim()}". Clear search or try routing, provider, auth, CI, agent, or memory.`
-            : "Jump directly into the area you need without digging through the full settings tree."}
-        </div>
-        {disabledCategoryReason ? (
+      <div
+        id={instructionsId}
+        role="status"
+        aria-live="polite"
+        aria-atomic="true"
+        className="sr-only"
+      >
+        {instructionsText}
+      </div>
+      {disabledCategoryReason ? (
+        <div className="rounded-[1.25rem] border border-black/[0.06] bg-black/[0.03] px-4 py-3 dark:border-white/[0.06] dark:bg-white/[0.03]">
           <div
             id={disabledReasonId}
-            className="mt-2 rounded-xl border border-amber-500/20 bg-amber-500/[0.08] px-3 py-2 text-xs font-semibold leading-relaxed text-amber-700 dark:border-amber-300/20 dark:bg-amber-300/[0.08] dark:text-amber-200"
+            className="rounded-xl border border-amber-500/20 bg-amber-500/[0.08] px-3 py-2 text-xs font-semibold leading-relaxed text-amber-700 dark:border-amber-300/20 dark:bg-amber-300/[0.08] dark:text-amber-200"
           >
             {disabledCategoryReason}
           </div>
-        ) : null}
-      </div>
+        </div>
+      ) : null}
 
       {filteredCategories.map((category, index) => {
         const isActive = activeCategory === category.id;
@@ -132,6 +169,7 @@ export const SettingsCategoryRail: FunctionComponent<SettingsCategoryRailProps> 
             aria-disabled={disabled}
             aria-describedby={[instructionsId, disabled && disabledCategoryReason ? disabledReasonId : undefined].filter(Boolean).join(" ") || undefined}
             aria-busy={isPending ? "true" : undefined}
+            data-motion-contract="selectionMovement"
             title={disabled && disabledCategoryReason ? disabledCategoryReason : undefined}
             style={selectionTransitionStyle}
             className={`group relative flex w-full min-w-0 items-center gap-3.5 rounded-[1.1rem] px-4 py-3.5 text-left transition-[background-color,border-color,box-shadow,color,transform] motion-reduce:transition-none disabled:cursor-not-allowed disabled:opacity-60 ${SHARED_INTERACTION_CLASSES} ${isDanger ? "focus-visible:ring-status-red" : ""} ${
@@ -200,27 +238,13 @@ export const SettingsCategoryRail: FunctionComponent<SettingsCategoryRailProps> 
                   ))}
                 </div>
               ) : null}
-              <div className="mt-2 flex flex-wrap gap-1.5">
-                {isActive ? (
-                  <span className={`rounded-full border px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.12em] ${
-                    isDanger
-                      ? "border-status-red/20 bg-status-red/[0.06] text-status-red"
-                      : "border-signal-500/20 bg-signal-500/[0.08] text-signal-700 dark:text-signal-300"
-                  }`}>
-                    Selected
-                  </span>
-                ) : null}
-                {isPending ? (
-                  <span className="rounded-full border border-status-amber/25 bg-status-amber/[0.08] px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.12em] text-status-amber">
-                    Pending
-                  </span>
-                ) : null}
-                {disabled && disabledCategoryReason ? (
+              {disabled && disabledCategoryReason ? (
+                <div className="mt-2 flex flex-wrap gap-1.5">
                   <span className="rounded-full border border-black/[0.06] bg-black/[0.03] px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.12em] text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.04] dark:text-slate-400">
                     Disabled
                   </span>
-                ) : null}
-              </div>
+                </div>
+              ) : null}
             </div>
           </button>
         );
@@ -230,6 +254,18 @@ export const SettingsCategoryRail: FunctionComponent<SettingsCategoryRailProps> 
         <NoticePanel title="No matches" tone="warning">
           Keep the search field focused, clear it with Backspace, or try broader terms like `routing`, `CI`, `auth`, `agent`, or `memory`.
         </NoticePanel>
+      ) : null}
+
+      {showScrollHint ? (
+        <div
+          aria-hidden="true"
+          data-testid="settings-category-scroll-hint"
+          className="pointer-events-none sticky -bottom-4 z-20 -mx-3 -mb-4 flex justify-center bg-gradient-to-t from-[#F9F8F4]/95 via-[#F9F8F4]/75 to-transparent pb-4 pt-7 dark:from-void-800/95 dark:via-void-800/75"
+        >
+          <div className="settings-rail-scroll-indicator grid h-9 w-9 place-items-center rounded-full border border-signal-500/20 bg-white/90 text-signal-700 shadow-[0_14px_34px_rgba(0,224,160,0.18),0_0_0_1px_rgba(255,255,255,0.65)] backdrop-blur-xl dark:border-signal-400/20 dark:bg-void-700/90 dark:text-signal-300 dark:shadow-[0_16px_36px_rgba(0,224,160,0.16),0_0_0_1px_rgba(255,255,255,0.08)]">
+            <ChevronDown className="h-4 w-4" strokeWidth={2.4} />
+          </div>
+        </div>
       ) : null}
     </nav>
   );

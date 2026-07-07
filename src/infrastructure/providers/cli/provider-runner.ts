@@ -10,6 +10,7 @@ import type { IDockerRunner } from "./docker-runner.js";
 import type { SnapshotCheckout } from "./workspace-manager.js";
 import { isDockerWorkspaceMountError } from "../../../services/cli-docker-utils.js";
 import { sanitizeInvocationOutputText } from "../../../services/invocation-output-sanitizer.js";
+import { redactMetadata } from "../../../shared/security/redaction.js";
 import * as fs from "fs/promises";
 import * as os from "os";
 import * as path from "path";
@@ -37,6 +38,7 @@ import {
 import { readQwenLogData, readCodexLatestSessionJson, readClaudeSessionJsonl, parseAntigravityConversationId, readAntigravityTranscript } from "./provider-transcripts.js";
 import { parseOpenCodeJsonLines } from "./provider-logs/opencode-log-parser.js";
 import { parseAntigravityDatabase } from "./provider-logs/antigravity-log-parser.js";
+import { runMockupCliProvider } from "./mockup-cli-provider.js";
 import {
   collectProviderUsageTelemetry,
   readQwenOpenAiLogRecords,
@@ -92,6 +94,9 @@ export interface ProviderRunInput {
   signal?: AbortSignal;
   onActivity: (desc: string, originator?: string) => void;
   onTelemetry?: (telemetry: ProviderUsageTelemetry) => void;
+  invocationId?: string | null;
+  providerInvocationId?: string | null;
+  purpose?: string | null;
   /** Pass a previous nativeSessionId to continue an existing CLI session.
    *  Claude Code: uses --resume. Gemini: adds --resume. Codex: uses exec resume --last.
    *  Qwen Code uses project-scoped --continue because Code UX logical ids are not Qwen saved-session ids. */
@@ -217,6 +222,9 @@ export class ProviderRunner implements IProviderRunner {
     signal?: AbortSignal;
     onActivity: (desc: string, originator?: string) => void;
     onTelemetry?: (telemetry: ProviderUsageTelemetry) => void;
+    invocationId?: string | null;
+    providerInvocationId?: string | null;
+    purpose?: string | null;
     codexOutputPath?: string | null;
     continueSessionId?: string | null;
     openCodeBaselineUsage?: Record<string, unknown> | null;
@@ -242,6 +250,9 @@ export class ProviderRunner implements IProviderRunner {
         : resolveAntigravityHostLogPath(sessionId))
       : null;
     const providerEnv = this.withProviderEnv(provider, runModel, apiKey, workflowSettings, githubToken, providerMountAuth, input, qwenProcessLogDir, gitlabToken);
+    if (provider === "mockup-cli") {
+      providerEnv.CODE_UX_MOCKUP_SESSION_ID = sessionId;
+    }
     let nativeSessionId = provider === "opencode"
       ? isOpenCodeNativeSessionId(input.continueSessionId) ? input.continueSessionId! : null
       : provider === "qwen-code"
@@ -317,13 +328,14 @@ export class ProviderRunner implements IProviderRunner {
     // the rollout file isn't yet readable.
     let accumulatedRawStdout = "";
     const trackingOnActivity = (desc: string, originator?: string) => {
+      const sanitizedDesc = sanitizeInvocationOutputText(desc);
       if (originator === "agent") {
-        accumulatedStdout += desc + "\n";
+        accumulatedStdout += sanitizedDesc + "\n";
         accumulatedRawStdout += desc + "\n";
       } else if (originator === "provider") {
-        accumulatedStderr += desc + "\n";
+        accumulatedStderr += sanitizedDesc + "\n";
       }
-      onActivity(desc, originator);
+      onActivity(sanitizedDesc, originator);
     };
 
     const runCmd = async () => {
@@ -340,6 +352,18 @@ export class ProviderRunner implements IProviderRunner {
           try { await fs.access(cwd); trackingOnActivity(`Docker could not mount workspace path (${cwd}) even though it exists locally. Path visibility mismatch.`, "provider"); } catch { /* ignore */ }
         }
         return result;
+      }
+      if (provider === "mockup-cli") {
+        return await runMockupCliProvider({
+          prompt,
+          cwd,
+          model: runModel,
+          sessionId,
+          env: providerEnv,
+          signal,
+          onStdoutLine: (line) => trackingOnActivity(line, "agent"),
+          onStderrLine: (line) => trackingOnActivity(`[${provider}] ${line}`, "provider"),
+        });
       }
       return await runStreamingCommand(command, args, cwd, providerEnv, {
         signal,
@@ -369,6 +393,9 @@ export class ProviderRunner implements IProviderRunner {
         workflowSettings,
         signal,
         onTelemetry: input.onTelemetry,
+        invocationId: input.invocationId,
+        providerInvocationId: input.providerInvocationId,
+        purpose: input.purpose,
         getAccumulatedRawStdout: () => accumulatedRawStdout,
         getAccumulatedStderr: () => accumulatedStderr,
         nativeSessionId,
@@ -390,6 +417,9 @@ export class ProviderRunner implements IProviderRunner {
         parseAntigravityConversationId: async (logPath) => parseAntigravityConversationId(cwd, logPath, workflowSettings.executionMode, this.dockerRunner),
         ...(workflowSettings.executionMode === "HOST"
           ? { getAntigravityTranscriptMetadata: async (resolvedId: string) => this.readAntigravityTranscriptMetadata(resolvedId) }
+          : {}),
+        ...(workflowSettings.executionMode === "HOST"
+          ? { getAntigravityDatabaseMetadata: async (resolvedId: string) => this.readAntigravityDatabaseMetadata(resolvedId) }
           : {}),
         readAntigravityTranscript: async (resolvedId) => readAntigravityTranscript(cwd, resolvedId, workflowSettings.executionMode, this.dockerRunner),
         resolveAntigravityDatabase: async (resolvedId, destPath) => this.resolveAntigravityDatabase(cwd, resolvedId, workflowSettings.executionMode, destPath),
@@ -532,8 +562,8 @@ export class ProviderRunner implements IProviderRunner {
         opencodeBaselineUsage: input.openCodeBaselineUsage,
       });
       return {
-        ...result,
-        usageTelemetry,
+        ...this.sanitizeCommandResult(result),
+        usageTelemetry: this.sanitizeUsageTelemetry(usageTelemetry),
         nativeSessionId: usageTelemetry.nativeSessionId || resolvedNativeSessionId || nativeSessionId,
       };
     } finally {
@@ -550,6 +580,28 @@ export class ProviderRunner implements IProviderRunner {
       });
     }
   }
+
+  private sanitizeCommandResult(result: CommandResult): CommandResult {
+    return {
+      ...result,
+      stdout: sanitizeInvocationOutputText(result.stdout || ""),
+      stderr: sanitizeInvocationOutputText(result.stderr || ""),
+    };
+  }
+
+  private sanitizeUsageTelemetry(usageTelemetry: ProviderUsageTelemetry): ProviderUsageTelemetry {
+    const rawUsageJson = redactMetadata(usageTelemetry.rawUsageJson) as Record<string, unknown> | null;
+    return {
+      ...usageTelemetry,
+      rawUsageJson,
+      transcriptText: sanitizeInvocationOutputText(usageTelemetry.transcriptText || ""),
+      conversation: usageTelemetry.conversation.map((turn) => ({
+        ...turn,
+        text: sanitizeInvocationOutputText(turn.text || ""),
+      })),
+    };
+  }
+
   private async performCleanup(opts: {
     watcher: ProviderTelemetryWatcher | null;
     tempDbPath: string | null;
@@ -577,7 +629,7 @@ export class ProviderRunner implements IProviderRunner {
       try {
         await watcher.stop();
       } catch (err) {
-        this.logger.error("Provider cleanup task failed: watcher stop", { error: err, logPurpose: "runtime" });
+        this.logger.error("Provider cleanup task failed: watcher stop", { logPurpose: "runtime", errorName: err instanceof Error ? err.name : "Error" });
       }
     }
 
@@ -585,7 +637,7 @@ export class ProviderRunner implements IProviderRunner {
       try {
         await fs.rm(tempDbPath, { force: true });
       } catch (err) {
-        this.logger.error("Provider cleanup task failed: temp db removal", { error: err, logPurpose: "runtime" });
+        this.logger.error("Provider cleanup task failed: temp db removal", { logPurpose: "runtime", errorName: err instanceof Error ? err.name : "Error" });
       }
     }
 
@@ -597,7 +649,7 @@ export class ProviderRunner implements IProviderRunner {
           await fs.rm(entry.path, { force: true });
         }
       } catch (err) {
-        this.logger.error("Provider cleanup task failed: mcp config restore", { error: err, logPurpose: "runtime" });
+        this.logger.error("Provider cleanup task failed: mcp config restore", { logPurpose: "runtime", errorName: err instanceof Error ? err.name : "Error" });
       }
     }
 
@@ -605,7 +657,7 @@ export class ProviderRunner implements IProviderRunner {
       try {
         await fs.rm(cleanupPath, { force: true });
       } catch (err) {
-        this.logger.error("Provider cleanup task failed: runtime cleanup", { error: err, logPurpose: "runtime" });
+        this.logger.error("Provider cleanup task failed: runtime cleanup", { logPurpose: "runtime", errorName: err instanceof Error ? err.name : "Error" });
       }
     }
 
@@ -619,7 +671,7 @@ export class ProviderRunner implements IProviderRunner {
         this.dockerRunner.removeWorkspaceDir ? this.dockerRunner.removeWorkspaceDir.bind(this.dockerRunner) : undefined
       );
     } catch (err) {
-      this.logger.error("Provider cleanup task failed: artifact cleanup", { error: err, logPurpose: "runtime" });
+      this.logger.error("Provider cleanup task failed: artifact cleanup", { logPurpose: "runtime", errorName: err instanceof Error ? err.name : "Error" });
     }
   }
 
@@ -686,7 +738,10 @@ export class ProviderRunner implements IProviderRunner {
     const safeSessionId = sessionId.replace(/[^a-zA-Z0-9_.-]/g, "-");
     const configPath = path.join(getRepoCodeUxPath(repoPath, "tmp"), `opencode-config-${safeSessionId}.json`);
     await fs.mkdir(path.dirname(configPath), { recursive: true });
-    await fs.writeFile(configPath, `${content}\n`, "utf8");
+    await fs.writeFile(configPath, `${content}\n`, { encoding: "utf8", mode: 0o600 });
+    if (process.platform !== "win32") {
+      await fs.chmod(configPath, 0o600);
+    }
     return configPath;
   }
 
@@ -765,6 +820,20 @@ export class ProviderRunner implements IProviderRunner {
       path.join(os.homedir(), ".gemini", "antigravity-cli", "brain", conversationId, ".system_generated", "logs", "overview.txt"),
       path.join(os.homedir(), ".gemini", "antigravity", "brain", conversationId, ".system_generated", "logs", "transcript.jsonl"),
       path.join(os.homedir(), ".gemini", "antigravity", "brain", conversationId, ".system_generated", "logs", "overview.txt"),
+    ];
+    for (const candidate of candidates) {
+      const metadata = await this.readFileMetadata(candidate);
+      if (metadata !== "missing") {
+        return metadata;
+      }
+    }
+    return "missing";
+  }
+
+  private async readAntigravityDatabaseMetadata(conversationId: string): Promise<string | null> {
+    const candidates = [
+      path.join(os.homedir(), ".gemini", "antigravity-cli", "conversations", `${conversationId}.db`),
+      path.join(os.homedir(), ".gemini", "antigravity", "conversations", `${conversationId}.db`),
     ];
     for (const candidate of candidates) {
       const metadata = await this.readFileMetadata(candidate);
@@ -1164,6 +1233,8 @@ export class ProviderRunner implements IProviderRunner {
         env.ANTIGRAVITY_MODEL = model;
         env.AGY_MODEL = model;
       }
+    } else if (provider === "mockup-cli") {
+      env.CODE_UX_MOCKUP_MODEL = model || "default";
     }
     return env;
   }
@@ -1262,7 +1333,10 @@ export class ProviderRunner implements IProviderRunner {
     }
 
     await fs.mkdir(dirPath, { recursive: true });
-    await fs.writeFile(configPath, artifact.content);
+    await fs.writeFile(configPath, artifact.content, { encoding: "utf8", mode: 0o600 });
+    if (process.platform !== "win32") {
+      await fs.chmod(configPath, 0o600);
+    }
     return [{ path: configPath, originalContent }];
   }
 }

@@ -10,9 +10,9 @@
     --stats-card-padding-compact: 1rem;
     --stats-card-min-height: 10rem;
     --stats-card-compact-min-height: 8rem;
-    --stats-card-value-size: 2rem;
-    --stats-card-value-size-compact: 1.5rem;
-    --stats-card-title-letter-spacing: 0.12em;
+    --stats-card-value-size: 1.625rem;
+    --stats-card-value-size-compact: 1.25rem;
+    --stats-card-title-letter-spacing: 0.1em;
     
     /* Surface Tokens (Light Mode) */
     --stats-surface-panel: #fffdfa;
@@ -34,7 +34,7 @@
     --stats-border-hairline: rgba(61, 49, 37, 0.13);
     --stats-border-strong: color-mix(in srgb, var(--stats-value-color) 18%, transparent);
     --stats-control-shadow: 0 1px 2px rgba(61, 49, 37, 0.05);
-    --stats-control-shadow-active: 0 1px 2px rgba(0, 122, 94, 0.08), 0 0 0 1px color-mix(in srgb, var(--stats-accent-signal) 8%, transparent);
+    --stats-control-shadow-active: 0 1px 2px rgb(var(--signal-rgb) / 0.08), 0 0 0 1px color-mix(in srgb, var(--stats-accent-signal) 8%, transparent);
     --stats-control-border-active: color-mix(in srgb, var(--stats-accent-signal) 24%, transparent);
     --stats-quiet-track: color-mix(in srgb, var(--stats-value-color) 5%, transparent);
     --stats-scrim: color-mix(in srgb, var(--stats-value-color) 10%, transparent);
@@ -49,7 +49,7 @@
     --stats-accent-cyan: #2f6f85;
     --stats-accent-rose: var(--status-red);
     --stats-accent-emerald: var(--status-green);
-    --stats-accent-signal-fill: rgba(0, 122, 94, 0.08);
+    --stats-accent-signal-fill: rgb(var(--signal-rgb) / 0.08);
     --stats-accent-amber-fill: rgba(153, 90, 0, 0.08);
     --stats-accent-cyan-fill: rgba(47, 111, 133, 0.075);
     --stats-accent-rose-fill: rgba(211, 47, 47, 0.07);
@@ -96,13 +96,13 @@
     --stats-border-hairline: rgba(250, 244, 237, 0.09);
     --stats-border-strong: color-mix(in srgb, var(--stats-value-color) 14%, transparent);
     --stats-control-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
-    --stats-control-shadow-active: 0 1px 2px rgba(0, 224, 160, 0.08), 0 0 0 1px color-mix(in srgb, var(--stats-accent-signal) 10%, transparent);
+    --stats-control-shadow-active: 0 1px 2px rgb(var(--signal-rgb) / 0.08), 0 0 0 1px color-mix(in srgb, var(--stats-accent-signal) 10%, transparent);
     --stats-control-border-active: color-mix(in srgb, var(--stats-accent-signal) 26%, transparent);
     --stats-focus-ring-offset: #0e0c0a;
     
     /* Accent Tokens (Dark Mode) */
     --stats-accent-cyan: #7fb6c4;
-    --stats-accent-signal-fill: rgba(0, 224, 160, 0.08);
+    --stats-accent-signal-fill: rgb(var(--signal-rgb) / 0.08);
     --stats-accent-amber-fill: rgba(224, 160, 0, 0.08);
     --stats-accent-cyan-fill: rgba(127, 182, 196, 0.075);
     --stats-accent-rose-fill: rgba(255, 77, 77, 0.075);

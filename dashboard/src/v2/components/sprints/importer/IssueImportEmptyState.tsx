@@ -16,7 +16,7 @@ export const IssueImportEmptyState: FunctionComponent<IssueImportEmptyStateProps
     <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-[1rem] bg-black/[0.04] text-slate-400 dark:bg-white/[0.05] dark:text-slate-500">
       <Search className="h-5 w-5" strokeWidth={2.1} aria-hidden="true" />
     </div>
-    <h3 className="mt-4 text-sm font-black text-slate-900 dark:text-white">
+    <h3 className="mt-4 text-sm font-semibold text-slate-900 dark:text-white">
       {title}
     </h3>
     <p className="mx-auto mt-2 max-w-md text-sm leading-relaxed text-slate-500 dark:text-slate-400">

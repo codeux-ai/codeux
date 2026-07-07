@@ -83,6 +83,287 @@ afterEach(async () => {
       expect(snapshot).toBeDefined();
     });
 
+    it("logs provider invocation usage update shape without raw usage or secret-like values", async () => {
+      const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-execution-repo-"));
+      tempDirs.push(dir);
+      const storage = new AppDbStorage(path.join(dir, "app.db"));
+      const logger = {
+        debug: vi.fn(),
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+        child: vi.fn(),
+      };
+      logger.child.mockReturnValue(logger);
+      const projectRepository = new ProjectManagementRepository(storage);
+      const executionRepository = new ExecutionRepository(storage, undefined, logger as any);
+      const project = projectRepository.createProject({
+        name: "Telemetry Update Shape Project",
+        sourceType: "local",
+        sourceRef: "/workspace/telemetry-update-shape",
+      });
+      const usage = executionRepository.createProviderInvocationUsage({
+        projectId: project.id,
+        sessionId: "telemetry-session-1",
+        provider: "codex",
+        purpose: "task_coding",
+        status: "running",
+        startedAt: "2026-01-01T00:00:00.000Z",
+      });
+
+      const updated = executionRepository.updateProviderInvocationUsage(usage.id, {
+        status: "running",
+        model: "gpt-test",
+        nativeSessionId: "native-1",
+        durationMs: 1200,
+        transcriptChars: 48,
+        inputTokens: 10,
+        cachedInputTokens: 2,
+        outputTokens: 4,
+        reasoningOutputTokens: 1,
+        totalTokens: 17,
+        toolCallCount: 3,
+        usageSource: "reported",
+        rawUsageJson: { apiKey: "super-secret", transcript: "raw provider transcript" },
+      });
+
+      expect(updated.rawUsageJson).toEqual({ apiKey: "super-secret", transcript: "raw provider transcript" });
+      expect(logger.info).toHaveBeenCalledWith("Provider invocation usage updated", expect.objectContaining({
+        logPurpose: "invocation",
+        eventType: "provider_invocation_usage_updated",
+        providerInvocationId: usage.id,
+        projectId: project.id,
+        sessionId: "telemetry-session-1",
+        nativeSessionId: "native-1",
+        provider: "codex",
+        purpose: "task_coding",
+        status: "running",
+        model: "gpt-test",
+        durationMs: 1200,
+        transcriptChars: 48,
+        inputTokens: 10,
+        cachedInputTokens: 2,
+        outputTokens: 4,
+        reasoningOutputTokens: 1,
+        totalTokens: 17,
+        toolCallCount: 3,
+        usageSource: "reported",
+        rawUsageJsonPresent: true,
+        updatedFields: [
+          "cachedInputTokens",
+          "durationMs",
+          "inputTokens",
+          "model",
+          "nativeSessionId",
+          "outputTokens",
+          "rawUsageJson",
+          "reasoningOutputTokens",
+          "status",
+          "toolCallCount",
+          "totalTokens",
+          "transcriptChars",
+          "usageSource",
+        ],
+      }));
+      const loggedMetadata = JSON.stringify(logger.info.mock.calls);
+      expect(loggedMetadata).not.toContain("super-secret");
+      expect(loggedMetadata).not.toContain("raw provider transcript");
+    });
+
+    it("preserves failed provider invocation diagnostics across update and linked invocation queries", async () => {
+      const { projectRepository, executionRepository } = await createRepositories();
+      const project = projectRepository.createProject({
+        name: "Failed Provider Invocation Project",
+        sourceType: "local",
+        sourceRef: "/workspace/failed-provider-invocation",
+      });
+
+      const usage = executionRepository.createProviderInvocationUsage({
+        projectId: project.id,
+        sessionId: "provider-session-1",
+        provider: "codex",
+        purpose: "task_coding",
+        status: "running",
+        model: "gpt-test",
+        executionMode: "DOCKER",
+        nativeSessionId: "native-before-failure",
+        startedAt: "2026-01-01T00:00:00.000Z",
+        promptChars: 321,
+      });
+      const executionInvocation = executionRepository.createExecutionInvocation({
+        projectId: project.id,
+        type: "cli_provider",
+        status: "running",
+        providerInvocationId: usage.id,
+      });
+
+      const updated = executionRepository.updateProviderInvocationUsage(usage.id, {
+        status: "failed",
+        finishedAt: "2026-01-01T00:01:00.000Z",
+        durationMs: 60_000,
+        nativeSessionId: "native-after-failure",
+        transcriptChars: 128,
+        inputTokens: 10,
+        cachedInputTokens: 3,
+        outputTokens: 4,
+        reasoningOutputTokens: 2,
+        totalTokens: 19,
+        toolCallCount: 1,
+        usageSource: "reported",
+        rawUsageJson: {
+          failureCode: "provider_error",
+          retryable: false,
+          apiKey: "stored-but-not-logged",
+          transcript: "stored raw provider transcript",
+        },
+      });
+      executionRepository.updateExecutionInvocation(executionInvocation.id, {
+        status: "failed",
+        providerInvocationId: usage.id,
+      });
+
+      expect(updated).toEqual(expect.objectContaining({
+        id: usage.id,
+        projectId: project.id,
+        sessionId: "provider-session-1",
+        provider: "codex",
+        purpose: "task_coding",
+        status: "failed",
+        model: "gpt-test",
+        executionMode: "DOCKER",
+        nativeSessionId: "native-after-failure",
+        finishedAt: "2026-01-01T00:01:00.000Z",
+        durationMs: 60_000,
+        promptChars: 321,
+        transcriptChars: 128,
+        inputTokens: 10,
+        cachedInputTokens: 3,
+        outputTokens: 4,
+        reasoningOutputTokens: 2,
+        totalTokens: 19,
+        toolCallCount: 1,
+        usageSource: "reported",
+      }));
+      expect(updated.rawUsageJson).toEqual(expect.objectContaining({
+        failureCode: "provider_error",
+        retryable: false,
+        apiKey: "stored-but-not-logged",
+        transcript: "stored raw provider transcript",
+      }));
+
+      expect(executionRepository.getProviderInvocationUsage(usage.id)).toEqual(expect.objectContaining({
+        id: usage.id,
+        status: "failed",
+        nativeSessionId: "native-after-failure",
+        rawUsageJson: expect.objectContaining({ failureCode: "provider_error" }),
+      }));
+      expect(executionRepository.getLatestProviderInvocationUsageBySession("provider-session-1", "task_coding")).toEqual(expect.objectContaining({
+        id: usage.id,
+        status: "failed",
+      }));
+      expect(executionRepository.listExecutionInvocationsByProviderInvocationId(usage.id)).toEqual([
+        expect.objectContaining({
+          id: executionInvocation.id,
+          status: "failed",
+          providerInvocationId: usage.id,
+        }),
+      ]);
+    });
+
+    it("round-trips failed provider invocation observability fields with nulls and zeros", async () => {
+      const { projectRepository, executionRepository } = await createRepositories();
+      const project = projectRepository.createProject({
+        name: "Provider Invocation Round Trip Project",
+        sourceType: "local",
+        sourceRef: "/workspace/provider-invocation-round-trip",
+      });
+
+      const usage = executionRepository.createProviderInvocationUsage({
+        projectId: project.id,
+        sessionId: "round-trip-session",
+        provider: "codex",
+        purpose: "task_coding",
+        status: "running",
+        model: null,
+        executionMode: null,
+        nativeSessionId: null,
+        startedAt: "2026-01-02T03:04:05.000Z",
+        promptChars: 0,
+        julesTokens: 0,
+      });
+
+      const updated = executionRepository.updateProviderInvocationUsage(usage.id, {
+        status: "failed",
+        model: null,
+        executionMode: null,
+        nativeSessionId: null,
+        finishedAt: null,
+        durationMs: 0,
+        transcriptChars: 0,
+        inputTokens: 0,
+        cachedInputTokens: 0,
+        outputTokens: 0,
+        reasoningOutputTokens: 0,
+        totalTokens: 0,
+        toolCallCount: 0,
+        julesTokens: 0,
+        usageSource: "reported",
+        invocationSource: "internal",
+        rawUsageJson: {
+          failureCode: "provider_exit",
+          failureMessage: "provider exited before emitting telemetry",
+          exitCode: 1,
+          retryable: false,
+        },
+      });
+
+      expect(updated).toEqual(expect.objectContaining({
+        id: usage.id,
+        projectId: project.id,
+        sprintId: null,
+        sprintRunId: null,
+        taskId: null,
+        dispatchId: null,
+        taskRunId: null,
+        attentionItemId: null,
+        connectionId: null,
+        sessionId: "round-trip-session",
+        provider: "codex",
+        purpose: "task_coding",
+        status: "failed",
+        model: null,
+        executionMode: null,
+        nativeSessionId: null,
+        startedAt: "2026-01-02T03:04:05.000Z",
+        finishedAt: null,
+        durationMs: 0,
+        promptChars: 0,
+        transcriptChars: 0,
+        inputTokens: 0,
+        cachedInputTokens: 0,
+        outputTokens: 0,
+        reasoningOutputTokens: 0,
+        totalTokens: 0,
+        toolCallCount: 0,
+        julesTokens: 0,
+        usageSource: "reported",
+        invocationSource: "internal",
+        costCents: null,
+      }));
+      expect(updated.createdAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+      expect(updated.updatedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+      expect(updated.rawUsageJson).toEqual({
+        failureCode: "provider_exit",
+        failureMessage: "provider exited before emitting telemetry",
+        exitCode: 1,
+        retryable: false,
+      });
+
+      expect(executionRepository.getProviderInvocationUsage(usage.id)).toEqual(updated);
+      expect(executionRepository.getLatestProviderInvocationUsageBySession("sessions/round-trip-session", "task_coding"))
+        .toEqual(updated);
+    });
+
     it("claims provider invocation slots through the repository facade", async () => {
       const { projectRepository, executionRepository } = await createRepositories();
       const project = projectRepository.createProject({
@@ -239,7 +520,7 @@ describe("ExecutionRepository", () => {
       sourceRef: "/workspace/many-active-sprints",
     });
 
-    let oldestActiveInvocationId = "";
+    let recentActiveInvocationId = "";
     for (let index = 0; index < 15; index += 1) {
       const sprint = projectRepository.createSprint(project.id, {
         name: `Active Sprint ${index}`,
@@ -250,16 +531,16 @@ describe("ExecutionRepository", () => {
         sprintId: sprint.id,
         status: "running",
       });
-      if (index === 0) {
+      if (index === 14) {
         const invocation = executionRepository.createExecutionInvocation({
           projectId: project.id,
           sprintId: sprint.id,
           sprintRunId: sprintRun.id,
           type: "cli_task_coding",
           status: "running",
-          startedAt: "2026-01-01T00:00:00.000Z",
+          startedAt: "2026-02-01T00:30:00.000Z",
         });
-        oldestActiveInvocationId = invocation.id;
+        recentActiveInvocationId = invocation.id;
       }
     }
 
@@ -274,8 +555,8 @@ describe("ExecutionRepository", () => {
 
     const snapshot = executionRepository.getProjectExecutionSnapshot(project.id);
 
-    expect(snapshot.sprintRuns.filter((run) => run.status === "running")).toHaveLength(15);
-    expect(snapshot.recentInvocations?.some((invocation) => invocation.id === oldestActiveInvocationId)).toBe(true);
+    expect(snapshot.sprintRuns.filter((run) => run.status === "running")).toHaveLength(12);
+    expect(snapshot.recentInvocations?.some((invocation) => invocation.id === recentActiveInvocationId)).toBe(true);
   });
 
   it("projects invocation scope from linked provider usage for legacy Jules rows", async () => {
@@ -1590,7 +1871,7 @@ describe("ExecutionRepository", () => {
       return text.includes("FROM execution_invocations")
         && text.includes("WHERE execution_invocations.project_id = ?");
     });
-    expect(invocationSnapshotReads).toHaveLength(5);
+    expect(invocationSnapshotReads).toHaveLength(4);
     expect(usageTaskSpy).toHaveBeenCalledTimes(1);
     expect(usageSprintRunSpy).toHaveBeenCalledTimes(1);
     expect(wallTimeTaskSpy).toHaveBeenCalledTimes(1);
@@ -1723,7 +2004,7 @@ describe("ExecutionRepository", () => {
     expect(snapshot.recentEvents.some((event) => event.eventType === "provider_activity")).toBe(true);
   });
 
-  it("keeps full current sprint-run dispatch and event history for completed tasks", async () => {
+  it("keeps current sprint-run dispatches while bounding runtime event history", async () => {
     const { projectRepository, executionRepository } = await createRepositories();
     const project = projectRepository.createProject({
       name: "Current Sprint History Project",
@@ -1819,10 +2100,11 @@ describe("ExecutionRepository", () => {
 
     expect(snapshot.taskDispatches).toHaveLength(26);
     expect(snapshot.taskDispatches.some((dispatch) => dispatch.id === earlyDispatch.id)).toBe(true);
-    expect(snapshot.recentEvents.length).toBeGreaterThan(240);
+    expect(snapshot.recentEvents).toHaveLength(120);
     expect(snapshot.recentEvents.some((event) => (
       event.taskId === earlyTask.id && event.eventType === "cli_git_no_changes"
-    ))).toBe(true);
+    ))).toBe(false);
+    expect(snapshot.recentEvents.some((event) => event.sourceEventKey === "later-25-9")).toBe(true);
   });
 
   it("keeps full dispatch and event history for every active sprint run when sprints run in parallel", async () => {

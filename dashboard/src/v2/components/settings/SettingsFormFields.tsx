@@ -17,14 +17,26 @@ export const SelectInput: FunctionComponent<{
   onChange: (value: string) => void;
   options: Array<{ value: string; label: string; icon?: ComponentChildren | (() => ComponentChildren) }>;
   disabled?: boolean;
+  disabledReason?: string;
   "aria-label"?: string;
   "aria-labelledby"?: string;
   "aria-describedby"?: string;
-}> = ({ value, onChange, options, disabled, "aria-label": ariaLabel, "aria-labelledby": ariaLabelledby, "aria-describedby": ariaDescribedby }) => (
+}> = ({ value, onChange, options, disabled, disabledReason, "aria-label": ariaLabel, "aria-labelledby": ariaLabelledby, "aria-describedby": ariaDescribedby }) => {
+  const generatedId = useId();
+  const disabledReasonId = disabled && disabledReason ? `${generatedId}-disabled-reason` : undefined;
+  const describedBy = [ariaDescribedby, disabledReasonId].filter(Boolean).join(" ") || undefined;
+
+  return (
   <div className="min-w-0 w-full sm:min-w-[220px]">
-    <AvantgardeSelect value={value} onChange={onChange} options={options} disabled={disabled} aria-label={ariaLabel} aria-labelledby={ariaLabelledby} aria-describedby={ariaDescribedby} />
+    <AvantgardeSelect value={value} onChange={onChange} options={options} disabled={disabled} aria-label={ariaLabel} aria-labelledby={ariaLabelledby} aria-describedby={describedBy} />
+    {disabledReasonId ? (
+      <div id={disabledReasonId} className="mt-1.5 text-xs font-semibold leading-relaxed text-amber-700 dark:text-amber-200">
+        {disabledReason}
+      </div>
+    ) : null}
   </div>
-);
+  );
+};
 
 export const PillChoiceGroup: FunctionComponent<{
   value: string;
@@ -121,7 +133,7 @@ export const PillChoiceGroup: FunctionComponent<{
         })}
       </div>
       {showError ? (
-        <span id={errorId} className="text-xs font-medium text-status-red" role="alert">{errorText}</span>
+        <span id={errorId} className="text-xs font-medium text-status-red motion-safe:animate-form-slide-down motion-reduce:animate-none" role="alert" style={{ animationDuration: tokens.inlineValidation.duration, animationTimingFunction: tokens.inlineValidation.ease }}>{errorText}</span>
       ) : helperText ? (
         <span id={helperId} className="text-xs font-medium text-slate-500 dark:text-slate-400">{helperText}</span>
       ) : null}
@@ -233,7 +245,7 @@ export const SecretInput: FunctionComponent<{
         <RevealIcon className="h-3.5 w-3.5" strokeWidth={2.4} />
       </button>
       {showError ? (
-        <span id={errorId} className="text-xs font-medium text-status-red" role="alert">{errorText}</span>
+        <span id={errorId} className="text-xs font-medium text-status-red motion-safe:animate-form-slide-down motion-reduce:animate-none" role="alert">{errorText}</span>
       ) : helperText ? (
         <span id={helperId} className="text-xs font-medium text-slate-500 dark:text-slate-400">{helperText}</span>
       ) : null}
@@ -283,7 +295,7 @@ export const TextAreaInput: FunctionComponent<{
         className="min-h-[320px] w-full rounded-[1rem] border border-[var(--border-hairline)] hover:border-[var(--border-hairline)] bg-[var(--fill-muted)] px-4 py-3 text-sm leading-relaxed text-slate-700 placeholder-slate-400 shadow-[inset_0_1px_0_rgba(255,255,255,0.55)] transition-all duration-150 ease-[cubic-bezier(0.4,0,0.2,1)] focus:border-signal-500/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[var(--accent-focus-ring)] focus-visible:ring-offset-white dark:focus-visible:ring-offset-void-900 focus:ring-0 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/[0.06] dark:hover:border-white/[0.12] dark:bg-[var(--fill-muted)] dark:text-slate-200 aria-[invalid=true]:border-status-red/60 aria-[invalid=true]:bg-status-red/[0.04] aria-[invalid=true]:text-status-red aria-[invalid=true]:shadow-[0_0_0_1px_rgba(211,47,47,0.14)] data-[valid=true]:border-signal-500/50 data-[valid=true]:bg-signal-500/[0.02] data-[valid=true]:shadow-[0_0_0_1px_rgba(0,224,160,0.15)] dark:data-[valid=true]:bg-signal-500/[0.04] "
       />
       {showError ? (
-        <span id={errorId} className="text-xs font-medium text-status-red" role="alert">{errorText}</span>
+        <span id={errorId} className="text-xs font-medium text-status-red motion-safe:animate-form-slide-down motion-reduce:animate-none" role="alert">{errorText}</span>
       ) : helperText ? (
         <span id={helperId} className="text-xs font-medium text-slate-500 dark:text-slate-400">{helperText}</span>
       ) : null}
@@ -348,7 +360,7 @@ export const NumberInput: FunctionComponent<{
         className="w-32 max-w-full rounded-[1rem] border border-[var(--border-hairline)] hover:border-[var(--border-hairline)] bg-[var(--fill-muted)] px-3.5 py-2.5 text-sm font-mono text-slate-700 shadow-[inset_0_1px_0_rgba(255,255,255,0.55)] transition-all duration-150 ease-[cubic-bezier(0.4,0,0.2,1)] focus:border-signal-500/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[var(--accent-focus-ring)] focus-visible:ring-offset-white dark:focus-visible:ring-offset-void-900 focus:ring-0 disabled:cursor-not-allowed disabled:opacity-60 dark:border-white/[0.06] dark:hover:border-white/[0.12] dark:bg-[var(--fill-muted)] dark:text-slate-200 aria-[invalid=true]:border-status-red/60 aria-[invalid=true]:bg-status-red/[0.04] aria-[invalid=true]:text-status-red aria-[invalid=true]:shadow-[0_0_0_1px_rgba(211,47,47,0.14)] data-[valid=true]:border-signal-500/50 data-[valid=true]:bg-signal-500/[0.02] data-[valid=true]:shadow-[0_0_0_1px_rgba(0,224,160,0.15)] dark:data-[valid=true]:bg-signal-500/[0.04] "
       />
       {showError ? (
-        <span id={errorId} className="text-xs font-medium text-status-red" role="alert">{resolvedErrorText}</span>
+        <span id={errorId} className="text-xs font-medium text-status-red motion-safe:animate-form-slide-down motion-reduce:animate-none" role="alert">{resolvedErrorText}</span>
       ) : helperText ? (
         <span id={helperId} className="text-xs font-medium text-slate-500 dark:text-slate-400">{helperText}</span>
       ) : null}
@@ -441,7 +453,7 @@ export const Card: FunctionComponent<{ title: string; description: string; badge
   <section className="rounded-[2rem] border border-[color:var(--border-hairline)] bg-[var(--surface-glass)] p-6 shadow-[var(--elevation-base)] backdrop-blur-2xl">
     <div className="mb-5 flex flex-wrap items-start justify-between gap-3 border-b border-[color:var(--border-hairline)] pb-4">
       <div>
-        <h3 className="font-display text-2xl font-black tracking-tight text-slate-900 dark:text-white">{title}</h3>
+        <h3 className="font-display text-xl font-semibold tracking-tight text-slate-900 dark:text-white">{title}</h3>
         <p className="mt-1 max-w-2xl text-sm font-medium text-slate-500 dark:text-slate-400">{description}</p>
       </div>
       {badge ? (

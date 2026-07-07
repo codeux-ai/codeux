@@ -34,6 +34,8 @@ import { evaluatePreCiGateTransition, isCompletedTaskAwaitingMerge, isTaskCodeCo
 import type { MergeConflictDebouncer } from "./merge-conflict-debouncer.js";
 import type { TaskQaMergeGateStatus } from "../../../services/quality-assurance-service.js";
 
+const EMPTY_FEATURE_PR_CHECK_GRACE_MS = 10 * 60 * 1000;
+
 export interface CiGateContext {
   automationLevel: AutomationLevel;
   repoPath: string;
@@ -506,7 +508,18 @@ export class FeaturePrGateService {
       const ciSupport = waitForFeatureCi && checks.length === 0
         ? await detectPullRequestCiSupport(context.repoPath, pr.baseRefName || context.featureBranch)
         : null;
-      const skipCiWait = ciSupport?.status === "not_applicable";
+      const staleEmptyChecks = shouldTreatEmptyFeaturePrChecksAsSkipped({
+        pr,
+        gitStatus: context.gitStatus,
+        checks,
+        waitForFeatureCi,
+      });
+      const skipCiWait = ciSupport?.status === "not_applicable" || staleEmptyChecks;
+      const ciWaitSkipReason = ciSupport?.status === "not_applicable"
+        ? describeCiSupportSkipReason(ciSupport.reason)
+        : staleEmptyChecks
+          ? `no PR checks or tracked CI runs appeared within ${Math.round(EMPTY_FEATURE_PR_CHECK_GRACE_MS / 60_000)} minutes for this clean PR.`
+          : null;
 
       const { hasFailedChecks, hasPendingChecks, hasReviewBlockers, isMergeReady } = evaluateMergeReadiness(
         checks,
@@ -611,7 +624,7 @@ export class FeaturePrGateService {
         if (skipCiWait) {
           reportText += buildCiWaitSkippedText(
             pr.baseRefName || context.featureBranch,
-            describeCiSupportSkipReason(ciSupport.reason),
+            ciWaitSkipReason || "no applicable PR-triggered CI workflow was detected.",
           );
         }
         return { reportText, events, attentionItem };
@@ -640,7 +653,7 @@ export class FeaturePrGateService {
       if (skipCiWait) {
         reportText += buildCiWaitSkippedText(
           pr.baseRefName || context.featureBranch,
-          describeCiSupportSkipReason(ciSupport.reason),
+          ciWaitSkipReason || "no applicable PR-triggered CI workflow was detected.",
         );
       }
 
@@ -705,6 +718,32 @@ export class FeaturePrGateService {
       // Preserve in-memory merged state even if persistence fails.
     }
   }
+}
+
+function shouldTreatEmptyFeaturePrChecksAsSkipped(args: {
+  pr: GitPullRequestStatus;
+  gitStatus: GitTrackingStatus | null;
+  checks: Array<{ name: string; status: string | null; conclusion: string | null }>;
+  waitForFeatureCi: boolean;
+}): boolean {
+  if (!args.waitForFeatureCi || args.checks.length > 0 || args.pr.isDraft) {
+    return false;
+  }
+  if ((args.gitStatus?.ciRuns || []).length > 0) {
+    return false;
+  }
+
+  const mergeState = String(args.pr.mergeStateStatus || "").trim().toUpperCase();
+  if (mergeState !== "CLEAN") {
+    return false;
+  }
+
+  const updatedAtMs = args.pr.updatedAt ? Date.parse(args.pr.updatedAt) : Number.NaN;
+  if (!Number.isFinite(updatedAtMs)) {
+    return false;
+  }
+
+  return Date.now() - updatedAtMs >= EMPTY_FEATURE_PR_CHECK_GRACE_MS;
 }
 
 function describeCiSupportSkipReason(reason: PullRequestCiSupportResult["reason"]): string {

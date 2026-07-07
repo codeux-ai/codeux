@@ -9,7 +9,6 @@ Implemented in:
 - `src/mcp/management-tool-handler.ts`
 
 These cover:
-- `manage_code_ux`
 - `manage_projects`
 - `manage_sprints`
 - `manage_tasks`
@@ -40,7 +39,6 @@ These cover:
 - `generate_dashboard_reply`
 
 ### Management
-- `manage_code_ux`
 - `manage_projects`
 - `manage_sprints`
 - `manage_tasks`
@@ -71,6 +69,18 @@ Typed tool argument contracts and registry dispatch are defined in `src/api/mcp/
 
 ### Output minimization
 - `get_session` returns a compact session summary (state, provider, PR links, last activity summary) instead of full raw payload.
+
+## Per-Agent Tool Access
+
+Worker MCP clients can advertise their agent preset with the `X-Code-Ux-Agent` header on the Code UX MCP connection. When the header is absent, Code UX treats the request as a project-manager or stdio-style client and applies the system MCP tool toggles for the current runtime role.
+
+When the header is present, Code UX must resolve it to an explicit agent MCP access policy before exposing built-in Code UX management tools. Malformed HTTP header values are rejected before MCP routing; if an advertised agent identity reaches the router but is unknown or resolves to an agent without an explicit MCP access policy, `list_tools` returns no Code UX tools and `call_tool` rejects every Code UX management tool with MCP `MethodNotFound`. This fail-closed behavior prevents an unrecognized agent from inheriting broad system-level management access.
+
+For a resolved agent policy:
+- `codeUxEnabled: false` removes every built-in Code UX tool from `list_tools` and causes `call_tool` to return `MethodNotFound`, even when system-level toggles enable those tools.
+- `codeUxEnabled: true` applies the agent's per-tool overrides over the system MCP tool toggles.
+- Runtime-role filtering still applies after system and agent policy checks.
+- Custom external MCP servers remain limited to the agent's linked server ids and are not broadened by Code UX tool availability.
 
 ## Common Response Shape
 
@@ -120,13 +130,17 @@ The parsed management envelope has:
 
 Approval responses are not errors. Calls that need human confirmation still return `approvalRequired: true` and do not set `isError`.
 
+Tool arguments are validated against `src/contracts/mcp-tool-definitions.ts` before dispatch. Invalid tool payload shapes, missing required schema fields, invalid enum values, and malformed approval envelopes fail as MCP `InvalidParams` errors before management action handlers run. Management action parser failures still use the standardized management error envelope described above, with sanitized validation messages and a `field` when the helper can identify one.
+
 ### Destructive Action Approvals
 
-Destructive actions (e.g., actions starting with `delete_`, `reset_`, `replace_`) executed via the `manage_code_ux` tool follow an explicit approval flow to prevent accidental data loss:
+Destructive actions (e.g., actions starting with `delete_`, `reset_`, `replace_`) follow an explicit approval flow to prevent accidental data loss:
 1. The initial call is sent without an `approval` block, or with `approval.confirmed: false`.
 2. The server short-circuits the action, returning an early envelope with `approvalRequired: true` and an explanatory `approvalMessage`.
-3. The agent reviews the message and issues the exact same call again, but with `approval.confirmed: true` added to the payload.
-4. The server executes the operation and returns the `result` block.
+3. The server records a pending approval fingerprint for the normalized tool domain, action, scope identifiers, and payload. Scope identifiers include project, sprint, and task ids when present; settings fingerprints also include the setting path and proposed value.
+4. The agent reviews the message and issues the exact same call again, but with `approval.confirmed: true` added to the payload.
+5. The server executes the operation only when the confirmed call matches the pending fingerprint exactly and the pending approval has not expired. The approval is consumed before execution and cannot be replayed.
+6. A confirmed call with any payload substitution, changed identifier, changed setting path, changed proposed value, meaningful array-order change, or `null` versus missing-field change is rejected with another approval-required response and does not consume the original pending approval.
 
 ### Settings Human Confirmation Gate
 
@@ -142,15 +156,15 @@ All mutating settings actions require a stateful human-confirmation step. This i
 
 Runtime behavior:
 1. The first mutating settings call never changes settings, even if it includes `approval.confirmed: true`.
-2. The server records a pending approval for the exact settings action and normalized payload for 15 minutes.
+2. The server records a pending approval for the exact settings action, scope, setting path, and normalized payload for 15 minutes.
 3. The response returns `approvalRequired: true` with instructions to ask the user for confirmation.
 4. The client must not call the same endpoint again with `approval.confirmed: true` unless the user explicitly confirms the exact change.
-5. After user confirmation, the same action and same payload can be called once with `approval.confirmed: true`; the pending approval is consumed and cannot be reused.
-6. A different settings payload, even for the same setting path, creates a separate pending approval and does not execute.
+5. After user confirmation, the same action and same payload can be called once with `approval.confirmed: true` within 15 minutes; the pending approval is consumed and cannot be reused.
+6. A different settings payload, even for the same setting path, creates a separate pending approval and does not execute. Fingerprints preserve explicit `null`, explicit `undefined`, and array order, while object key order is normalized.
 
 ### Project Setup Action
 
-`manage_projects` and `manage_code_ux` support project setup:
+`manage_projects` supports project setup:
 
 ```json
 {
@@ -174,7 +188,7 @@ Dashboard calls can add `background: true` to the HTTP setup request. In that mo
 
 ### Project Creation Paths
 
-`manage_projects` and `manage_code_ux` project creation use the same initialization path as the dashboard. Git URL projects are cloned into the selected `cloneDir`, or `~/.code-ux/projects/<repo-name>` when `cloneDir` is omitted. `new-remote` project creation treats `cloneDir` as the clone parent directory and stores the project base directory as the single repository checkout root.
+`manage_projects` project creation uses the same initialization path as the dashboard. Git URL projects are cloned into the selected `cloneDir`, or `~/.code-ux/projects/<repo-name>` when `cloneDir` is omitted. `new-remote` project creation treats `cloneDir` as the clone parent directory and stores the project base directory as the single repository checkout root. `new-local` project creation resolves relative `sourceRef` values from the user's home directory and accepts absolute paths selected by the desktop picker without constraining them to the Code UX process working directory.
 
 ### Sprint, Task, and Settings Payload Normalization
 
@@ -186,10 +200,65 @@ For payload normalization in management tools, Code UX centralizes parsing behav
 - **Optional Numbers**: Extracted via `parseOptionalNumber`. Validates finiteness and optional min/max constraints.
 - **Optional Enums**: Extracted via `parseOptionalEnum`. Normalizes case and whitespace to match allowed literal types.
 - **Strict Optional Integers and Enums**: Extracted via `parseOptionalIntegerStrict` and `parseOptionalEnumStrict` when a supplied invalid value should be rejected instead of silently ignored. Omitted values still allow action-level defaults.
+- **Required Objects**: Extracted via `parseRequiredObject`. The value must be a non-null object and not an array.
+- **Required Present Values**: Extracted via `parseRequiredPresentValue` for patch-style payloads. The key must be present, but the value may explicitly be `null`; omitted and `undefined` values are distinct from `null` in approval fingerprints and patch application.
 - **Validation Errors**: Parser failures throw `ManagementValidationError`, which the management tool handler serializes as the standardized `result.status: "error"` envelope with `errorType: "validation"` and `isError: true`.
 
 
-The dedicated management tools (`manage_sprints`, `manage_tasks`, `manage_quicksprints`, `manage_scheduler`, `manage_settings`) and the legacy `manage_code_ux` dispatcher share the same action handlers.
+The dedicated management tools (`manage_sprints`, `manage_tasks`, `manage_quicksprints`, `manage_scheduler`, `manage_settings`) share the same action handlers.
+
+### `manage_memory` claim actions
+
+`manage_memory` supports durable long-term memory claim management in addition to raw memory actions. These actions are available to `project_manager` runtime roles and let project managers create canonical project claims directly without a sprint ID:
+
+```json
+{
+  "action": "create_claim",
+  "projectId": "project-123",
+  "claim": "Use dependency factory composition for service wiring.",
+  "category": "patterns",
+  "confidence": 0.9,
+  "durability": 0.85,
+  "tags": ["architecture"],
+  "appliesToPaths": ["src/services"],
+  "sourceMemoryId": "mem-123"
+}
+```
+
+`create_claim` writes the canonical `memory_claims` row and a project-scoped mirror memory whose source metadata uses `originType: "memory_claim"` and `originId` equal to the claim ID. The mirror memory content is the claim text, its category matches the claim category, and its strength is the larger of `confidence` and `durability`. This preserves compatibility with semantic claim search, which retrieves project memories first and hydrates active claims from that source metadata. When `sourceMemoryId` is provided, the action also links it as supporting evidence unless a more specific `supportType` and `weight` or `evidenceWeight` are supplied.
+
+`update_claim` keeps the mirror memories aligned by updating their content, category, and strength after the canonical row changes. Claim search hydrates only active claims from mirror memories, so deprecated claims stop appearing in claim search without deleting their evidence history.
+
+Available claim actions:
+- `create_claim`: requires `projectId` and non-blank `claim`; accepts `category`, `confidence`, `durability`, `tags`, `appliesToPaths`, `sourceMemoryId`, `supersedesClaimId`, `supportType`, `weight`, and `evidenceWeight`. `category` defaults to `context`; `confidence` and `durability` default to `0.8`; direct claims use manual source metadata.
+- `list_claims`: requires `projectId`; accepts `status`, `category`, and `limit`.
+- `get_claim`: requires `projectId` and `claimId`.
+- `update_claim`: requires `projectId` and `claimId`; accepts updated `claim`, `category`, `confidence`, `durability`, `status`, `tags`, `appliesToPaths`, and nullable `supersedesClaimId`; keeps project mirror memories in sync.
+- `add_claim_evidence`: requires `projectId`, `claimId`, and `memoryId`; accepts `supportType` (`supports`, `contradicts`, or `supersedes`) and `weight`.
+- `deprecate_claim`: requires `projectId`, `claimId`, and explicit `approval.confirmed: true`. The first unconfirmed call returns the standard `approvalRequired` envelope and does not mutate state.
+
+Claim reads and writes remain project-scoped. A claim ID or evidence memory outside the provided project is rejected instead of being linked across project boundaries.
+
+Destructive claim lifecycle example:
+
+```json
+{
+  "action": "deprecate_claim",
+  "projectId": "project-123",
+  "claimId": "claim-123"
+}
+```
+
+The first call returns `approvalRequired: true`. To execute the deprecation after explicit human approval, repeat the same request with:
+
+```json
+{
+  "action": "deprecate_claim",
+  "projectId": "project-123",
+  "claimId": "claim-123",
+  "approval": { "confirmed": true }
+}
+```
 
 For sprint create/update calls:
 - `name` is the canonical repository field.
@@ -369,6 +438,10 @@ For scheduler calls:
 - Scheduled chat messages use `bodyMarkdown`, optional `threadId`, optional `connectionId`, and optional `title`. When due, the scheduler posts through the same chat runtime used by dashboard conversations.
 - `update` supports pausing and resuming entries via the `status` field. Resuming a `paused` entry to `scheduled` recomputes the next run time to the next future occurrence, preventing immediate execution of missed runs. Pause/resume acts as automation gating and does not manually trigger the target.
 - `delete` requires approval confirmation.
+
+For preview calls:
+- `manage_preview` supports `list_sessions`, `start_session`, `rebuild_session`, `stop_session`, `remove_session`, `get_logs`, `get_url`, `get_script`, and `update_script`.
+- `remove_session` requires approval confirmation.
 
 For settings patch calls, `value` may be any JSON value, including strings, booleans, numbers, `null`, arrays, or objects.
 Settings patch and replacement calls still require the stateful human-confirmation gate described above.

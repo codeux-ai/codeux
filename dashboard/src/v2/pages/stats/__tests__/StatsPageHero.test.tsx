@@ -289,7 +289,8 @@ describe('StatsPageHero', () => {
     );
 
     let applyBtn = screen.getAllByRole('button', { name: 'Apply' })[0] as HTMLButtonElement;
-    expect(applyBtn.disabled).toBe(true);
+    expect(applyBtn.disabled).toBe(false);
+    expect(applyBtn).toHaveAttribute('aria-disabled', 'true');
 
     rerender(
       <StatsPageHero
@@ -309,6 +310,7 @@ describe('StatsPageHero', () => {
 
     applyBtn = screen.getAllByRole('button', { name: 'Apply' })[0] as HTMLButtonElement;
     expect(applyBtn.disabled).toBe(false);
+    expect(applyBtn).not.toHaveAttribute('aria-disabled');
   });
 
   it('reveals custom dates from the Custom preset without applying the range', () => {
@@ -393,11 +395,12 @@ describe('StatsPageHero', () => {
     );
 
     const applyBtn = screen.getByRole('button', { name: 'Apply' }) as HTMLButtonElement;
-    expect(applyBtn.disabled).toBe(true);
+    expect(applyBtn.disabled).toBe(false);
+    expect(applyBtn).toHaveAttribute('aria-disabled', 'true');
     expect(screen.getByRole('alert')).toHaveTextContent('End date must be after start date.');
-    expect(screen.getByLabelText('Custom start date')).toHaveAttribute('aria-invalid', 'true');
+    expect(screen.getByLabelText('Custom start date')).toHaveAttribute('aria-invalid', 'false');
     expect(screen.getByLabelText('Custom end date')).toHaveAttribute('aria-invalid', 'true');
-    expect(screen.getByLabelText('Custom start date')).toHaveAttribute('aria-errormessage', 'stats-custom-range-error');
+    expect(screen.getByLabelText('Custom start date')).not.toHaveAttribute('aria-errormessage');
     expect(screen.getByLabelText('Custom end date')).toHaveAttribute('aria-errormessage', 'stats-custom-range-error');
     expect(screen.getByLabelText('Custom start date')).toHaveAttribute('aria-describedby', expect.stringContaining('stats-custom-range-error'));
     expect(screen.getByLabelText('Custom end date')).toHaveAttribute('aria-describedby', expect.stringContaining('stats-custom-range-error'));

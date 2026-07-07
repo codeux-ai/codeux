@@ -109,6 +109,10 @@ describe("Dashboard Factory", () => {
         appendTaskRunEvent: vi.fn(),
         getTaskRunByDispatchId: vi.fn().mockReturnValue(null),
       },
+      sprintRunLifecycleService: {
+        createRun: vi.fn(),
+        markRunning: vi.fn(),
+      },
       settingsRepository: {
         getDefaultDashboardSettings: vi.fn().mockReturnValue({}),
         resolveProjectDashboardSettings: vi.fn(),
@@ -539,7 +543,7 @@ describe("Dashboard Factory", () => {
 
   it("resolveSprintRunId creates and timestamps a sprint run when none is active", async () => {
     mockCoreDeps.executionRepository.findActiveSprintRun.mockReturnValue(null);
-    mockCoreDeps.executionRepository.createSprintRun.mockReturnValue({ id: "run-created" });
+    mockCoreDeps.sprintRunLifecycleService.createRun.mockReturnValue({ id: "run-created" });
 
     createDashboardDependencies(
       mockContext as unknown as ServerContext,
@@ -551,7 +555,7 @@ describe("Dashboard Factory", () => {
     const sprintRun = await taskRerunArgs.resolveSprintRunId({ projectId: "project-1", sprintId: "sprint-1" });
 
     expect(sprintRun).toEqual({ sprintRunId: "run-created", created: true });
-    expect(mockCoreDeps.executionRepository.createSprintRun).toHaveBeenCalledWith({
+    expect(mockCoreDeps.sprintRunLifecycleService.createRun).toHaveBeenCalledWith({
       projectId: "project-1",
       sprintId: "sprint-1",
       triggerType: "dashboard",
@@ -559,10 +563,9 @@ describe("Dashboard Factory", () => {
       executorMode: "mixed",
       status: "running",
     });
-    expect(mockCoreDeps.executionRepository.updateSprintRun).toHaveBeenCalledWith(
+    expect(mockCoreDeps.sprintRunLifecycleService.markRunning).toHaveBeenCalledWith(
       "run-created",
       expect.objectContaining({
-        status: "running",
         startedAt: expect.any(String),
         lastHeartbeatAt: expect.any(String),
       }),

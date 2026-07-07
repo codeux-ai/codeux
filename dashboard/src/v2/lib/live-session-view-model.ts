@@ -1,4 +1,5 @@
 import type { TransportState } from "../../lib/realtime/dashboard-realtime-client.js";
+import type { ExecutionSnapshotSurfaceState } from "../../hooks/ExecutionTimelineContext.js";
 import type {
   DashboardStats,
   ExecutionDashboardSnapshot,
@@ -6,6 +7,7 @@ import type {
   ExecutionRuntimeEventSummary,
   ExecutionSprintRunSummary,
   ExecutionTaskDispatchSummary,
+  ProviderId,
   Subtask,
 } from "../../types.js";
 import {
@@ -15,11 +17,8 @@ import {
 } from "../../lib/task-progress.js";
 import type { LiveTaskTimingSummary } from "./live-stats.js";
 import {
-  buildIndexedExecutionHistory,
   findActiveQuotaWait,
-  getTaskEventsForLiveTask,
-  pickLatestTaskDispatch,
-  projectLiveTask,
+  findLatestTerminalTaskSignal,
 } from "./live-task-runtime.js";
 import { deriveLiveDurationDisplay } from "./live-duration-display.js";
 
@@ -45,6 +44,7 @@ export interface ScopedLiveSessionRuntime {
 export interface FilteredLiveSessionTasks {
   filteredTasks: Subtask[];
   taskCounts: Record<LiveSessionTaskFilter, number>;
+  announcement: string;
 }
 
 export interface LiveSessionTaskCardItem {
@@ -108,13 +108,61 @@ const EMPTY_LIVE_SESSION_STATS: DashboardStats = {
 
 const EMPTY_RUNTIME_EVENTS: ExecutionRuntimeEventSummary[] = [];
 
-function addToIndex<K, V>(index: Map<K, V[]>, key: K | null | undefined, value: V): void {
-  if (!key) {
-    return;
+function normalizeString(value: string | null | undefined): string | null {
+  const normalized = typeof value === "string" ? value.trim() : "";
+  return normalized.length > 0 ? normalized : null;
+}
+
+function normalizeProvider(value: string | null | undefined): ProviderId | undefined {
+  switch (normalizeString(value)) {
+    case "jules":
+    case "gemini":
+    case "codex":
+    case "claude-code":
+    case "qwen-code":
+    case "opencode":
+    case "antigravity":
+      return normalizeString(value) as ProviderId;
+    default:
+      return undefined;
   }
-  const list = index.get(key) ?? [];
-  list.push(value);
-  index.set(key, list);
+}
+
+function taskScopeMatchesRuntime(
+  task: Subtask,
+  runtime: Pick<ExecutionTaskDispatchSummary | ExecutionRuntimeEventSummary, "projectId" | "sprintId">,
+): boolean {
+  if (task.project_id && runtime.projectId !== task.project_id) {
+    return false;
+  }
+  if (task.sprint_id && runtime.sprintId !== task.sprint_id) {
+    return false;
+  }
+  return true;
+}
+
+function compareIsoAsc(left: string, right: string): number {
+  return left.localeCompare(right);
+}
+
+function getDispatchRecency(dispatch: ExecutionTaskDispatchSummary): string {
+  return (
+    dispatch.finishedAt
+    || dispatch.startedAt
+    || dispatch.claimedAt
+    || dispatch.queuedAt
+    || ""
+  );
+}
+
+function isDispatchMoreRecent(
+  candidate: ExecutionTaskDispatchSummary,
+  current: ExecutionTaskDispatchSummary | null,
+): boolean {
+  if (!current) {
+    return true;
+  }
+  return compareIsoAsc(getDispatchRecency(candidate), getDispatchRecency(current)) >= 0;
 }
 
 export function deriveScopedLiveSessionRuntime(
@@ -149,13 +197,230 @@ export function deriveScopedLiveSessionRuntime(
   };
 }
 
+interface LiveSessionTaskRuntimeBucket {
+  task: Subtask;
+  taskRuntimeId: string;
+  recordId: string | null;
+  latestDispatch: ExecutionTaskDispatchSummary | null;
+  eventsByTaskRunId: ExecutionRuntimeEventSummary[];
+  eventsByDispatchId: ExecutionRuntimeEventSummary[];
+  eventsByRecordId: ExecutionRuntimeEventSummary[];
+  eventsByTaskKey: ExecutionRuntimeEventSummary[];
+  events: ExecutionRuntimeEventSummary[];
+  currentDispatchEvents: ExecutionRuntimeEventSummary[];
+  invocations: ExecutionInvocationRecord[];
+  invocationIds: Set<string>;
+}
+
+interface LiveSessionTaskRuntimeIndex {
+  byTaskRuntimeId: Map<string, LiveSessionTaskRuntimeBucket>;
+}
+
+function createLiveSessionTaskRuntimeBucket(task: Subtask): LiveSessionTaskRuntimeBucket {
+  return {
+    task,
+    taskRuntimeId: task.record_id || task.id,
+    recordId: normalizeString(task.record_id),
+    latestDispatch: null,
+    eventsByTaskRunId: [],
+    eventsByDispatchId: [],
+    eventsByRecordId: [],
+    eventsByTaskKey: [],
+    events: [],
+    currentDispatchEvents: [],
+    invocations: [],
+    invocationIds: new Set(),
+  };
+}
+
+function addUniqueIndexEntry<K>(
+  index: Map<K, LiveSessionTaskRuntimeBucket[]>,
+  key: K | null | undefined,
+  bucket: LiveSessionTaskRuntimeBucket,
+): void {
+  if (!key) {
+    return;
+  }
+  const list = index.get(key) ?? [];
+  if (!list.includes(bucket)) {
+    list.push(bucket);
+    index.set(key, list);
+  }
+}
+
+function getScopedBuckets(
+  buckets: LiveSessionTaskRuntimeBucket[] | undefined,
+  runtime: Pick<ExecutionTaskDispatchSummary | ExecutionRuntimeEventSummary, "projectId" | "sprintId">,
+): LiveSessionTaskRuntimeBucket[] {
+  if (!buckets || buckets.length === 0) {
+    return [];
+  }
+  return buckets.filter((bucket) => taskScopeMatchesRuntime(bucket.task, runtime));
+}
+
+function sortRuntimeEvents(events: ExecutionRuntimeEventSummary[]): ExecutionRuntimeEventSummary[] {
+  const deduped = new Map<string, ExecutionRuntimeEventSummary>();
+  for (const event of events) {
+    deduped.set(event.id, event);
+  }
+  return [...deduped.values()].sort((left, right) => compareIsoAsc(left.createdAt, right.createdAt));
+}
+
+function selectTaskEvents(bucket: LiveSessionTaskRuntimeBucket): ExecutionRuntimeEventSummary[] {
+  if (bucket.latestDispatch?.taskRunId && bucket.eventsByTaskRunId.length > 0) {
+    return sortRuntimeEvents(bucket.eventsByTaskRunId);
+  }
+
+  if (bucket.latestDispatch?.id && bucket.eventsByDispatchId.length > 0) {
+    return sortRuntimeEvents(bucket.eventsByDispatchId);
+  }
+
+  if (bucket.recordId) {
+    return sortRuntimeEvents(bucket.eventsByRecordId);
+  }
+
+  return sortRuntimeEvents(bucket.eventsByTaskKey);
+}
+
+function buildLiveSessionTaskRuntimeIndex(args: {
+  tasks: Subtask[];
+  dispatches: ExecutionTaskDispatchSummary[];
+  events: ExecutionRuntimeEventSummary[];
+  invocations: ExecutionInvocationRecord[];
+}): LiveSessionTaskRuntimeIndex {
+  const byTaskRuntimeId = new Map<string, LiveSessionTaskRuntimeBucket>();
+  const buckets: LiveSessionTaskRuntimeBucket[] = args.tasks.map(createLiveSessionTaskRuntimeBucket);
+  const bucketsByRecordId = new Map<string, LiveSessionTaskRuntimeBucket[]>();
+  const bucketsByTaskKey = new Map<string, LiveSessionTaskRuntimeBucket[]>();
+  const invocationBucketsByIdentity = new Map<string, LiveSessionTaskRuntimeBucket[]>();
+
+  for (const bucket of buckets) {
+    byTaskRuntimeId.set(bucket.taskRuntimeId, bucket);
+    if (bucket.recordId) {
+      addUniqueIndexEntry(bucketsByRecordId, bucket.recordId, bucket);
+    } else {
+      addUniqueIndexEntry(bucketsByTaskKey, bucket.task.id, bucket);
+    }
+
+    addUniqueIndexEntry(invocationBucketsByIdentity, bucket.taskRuntimeId, bucket);
+    addUniqueIndexEntry(invocationBucketsByIdentity, bucket.task.id, bucket);
+    addUniqueIndexEntry(invocationBucketsByIdentity, bucket.task.record_id, bucket);
+  }
+
+  for (const dispatch of args.dispatches) {
+    const matchingBuckets = [
+      ...getScopedBuckets(bucketsByRecordId.get(dispatch.taskId ?? ""), dispatch),
+      ...getScopedBuckets(bucketsByTaskKey.get(dispatch.taskKey ?? ""), dispatch),
+    ];
+    for (const bucket of matchingBuckets) {
+      if (isDispatchMoreRecent(dispatch, bucket.latestDispatch)) {
+        bucket.latestDispatch = dispatch;
+      }
+    }
+  }
+
+  const bucketsByLatestDispatchId = new Map<string, LiveSessionTaskRuntimeBucket[]>();
+  const bucketsByLatestTaskRunId = new Map<string, LiveSessionTaskRuntimeBucket[]>();
+  for (const bucket of buckets) {
+    addUniqueIndexEntry(bucketsByLatestDispatchId, bucket.latestDispatch?.id, bucket);
+    addUniqueIndexEntry(bucketsByLatestTaskRunId, bucket.latestDispatch?.taskRunId, bucket);
+  }
+
+  for (const event of args.events) {
+    for (const bucket of getScopedBuckets(bucketsByLatestTaskRunId.get(event.taskRunId ?? ""), event)) {
+      bucket.eventsByTaskRunId.push(event);
+      bucket.currentDispatchEvents.push(event);
+    }
+    for (const bucket of getScopedBuckets(bucketsByLatestDispatchId.get(event.dispatchId ?? ""), event)) {
+      bucket.eventsByDispatchId.push(event);
+      bucket.currentDispatchEvents.push(event);
+    }
+    for (const bucket of getScopedBuckets(bucketsByRecordId.get(event.taskId ?? ""), event)) {
+      bucket.eventsByRecordId.push(event);
+    }
+    for (const bucket of getScopedBuckets(bucketsByTaskKey.get(event.taskKey ?? ""), event)) {
+      bucket.eventsByTaskKey.push(event);
+    }
+  }
+
+  const invocationBucketsByDispatchId = new Map<string, LiveSessionTaskRuntimeBucket[]>();
+  const invocationBucketsByTaskRunId = new Map<string, LiveSessionTaskRuntimeBucket[]>();
+  for (const bucket of buckets) {
+    addUniqueIndexEntry(invocationBucketsByDispatchId, bucket.latestDispatch?.id, bucket);
+    addUniqueIndexEntry(invocationBucketsByTaskRunId, bucket.latestDispatch?.taskRunId, bucket);
+  }
+
+  for (const invocation of args.invocations) {
+    const matchingBuckets = new Set<LiveSessionTaskRuntimeBucket>();
+    for (const bucket of invocationBucketsByIdentity.get(invocation.taskId ?? "") ?? []) {
+      matchingBuckets.add(bucket);
+    }
+    for (const bucket of invocationBucketsByIdentity.get(invocation.taskKey ?? "") ?? []) {
+      matchingBuckets.add(bucket);
+    }
+    for (const bucket of invocationBucketsByDispatchId.get(invocation.dispatchId ?? "") ?? []) {
+      matchingBuckets.add(bucket);
+    }
+    for (const bucket of invocationBucketsByTaskRunId.get(invocation.taskRunId ?? "") ?? []) {
+      matchingBuckets.add(bucket);
+    }
+
+    for (const bucket of matchingBuckets) {
+      if (!bucket.invocationIds.has(invocation.id)) {
+        bucket.invocationIds.add(invocation.id);
+        bucket.invocations.push(invocation);
+      }
+    }
+  }
+
+  for (const bucket of buckets) {
+    bucket.events = selectTaskEvents(bucket);
+    bucket.currentDispatchEvents = bucket.latestDispatch
+      ? sortRuntimeEvents(bucket.events.filter((event) => (
+        (bucket.latestDispatch?.taskRunId && event.taskRunId === bucket.latestDispatch.taskRunId)
+        || (bucket.latestDispatch?.id && event.dispatchId === bucket.latestDispatch.id)
+      )))
+      : [];
+  }
+
+  return { byTaskRuntimeId };
+}
+
 export function deriveProjectedLiveSessionTasks(
   tasks: Subtask[],
   dispatches: ExecutionTaskDispatchSummary[],
   events: ExecutionRuntimeEventSummary[],
 ): Subtask[] {
-  const historyIndex = buildIndexedExecutionHistory(dispatches, events);
-  return tasks.map((task) => projectLiveTask(task, dispatches, events, historyIndex));
+  const taskRuntimeIndex = buildLiveSessionTaskRuntimeIndex({
+    tasks,
+    dispatches,
+    events,
+    invocations: [],
+  });
+
+  return tasks.map((task) => {
+    const bucket = taskRuntimeIndex.byTaskRuntimeId.get(task.record_id || task.id);
+    const dispatch = bucket?.latestDispatch ?? null;
+    const taskEvents = bucket?.events ?? EMPTY_RUNTIME_EVENTS;
+    const terminalSignal = findLatestTerminalTaskSignal(taskEvents);
+
+    return {
+      ...task,
+      status: getLiveTaskProgressPhase({
+        task,
+        dispatch,
+        runtimeTerminalPhase: terminalSignal?.phase ?? null,
+        runtimeMergeSettled: terminalSignal?.mergeSettled === true,
+        events: taskEvents,
+      }) as Subtask["status"],
+      session_id: normalizeString(dispatch?.sessionId) || normalizeString(task.session_id) || undefined,
+      session_name: normalizeString(dispatch?.sessionName) || normalizeString(task.session_name) || undefined,
+      session_state: normalizeString(dispatch?.taskRunState) || normalizeString(task.session_state) || undefined,
+      provider: normalizeProvider(dispatch?.provider) || task.provider,
+      worker_branch: normalizeString(dispatch?.workerBranch) || normalizeString(task.worker_branch) || undefined,
+      pr_url: normalizeString(dispatch?.prUrl) || normalizeString(task.pr_url) || undefined,
+    };
+  });
 }
 
 export function deriveLiveSessionStats(tasks: Subtask[], hasSprintContext: boolean): DashboardStats {
@@ -259,87 +524,39 @@ export function deriveFilteredLiveSessionTasks(
       Failed: stats.failed,
       Pending: pendingCount,
     },
+    announcement: deriveLiveSessionTaskFilterAnnouncement(activeFilter, filteredTasks.length),
   };
 }
 
-function buildInvocationIndexes(invocations: ExecutionInvocationRecord[]): {
-  byTaskId: Map<string, ExecutionInvocationRecord[]>;
-  byTaskKey: Map<string, ExecutionInvocationRecord[]>;
-  byDispatchId: Map<string, ExecutionInvocationRecord[]>;
-  byTaskRunId: Map<string, ExecutionInvocationRecord[]>;
-} {
-  const indexes = {
-    byTaskId: new Map<string, ExecutionInvocationRecord[]>(),
-    byTaskKey: new Map<string, ExecutionInvocationRecord[]>(),
-    byDispatchId: new Map<string, ExecutionInvocationRecord[]>(),
-    byTaskRunId: new Map<string, ExecutionInvocationRecord[]>(),
-  };
-
-  for (const invocation of invocations) {
-    addToIndex(indexes.byTaskId, invocation.taskId, invocation);
-    addToIndex(indexes.byTaskKey, invocation.taskKey, invocation);
-    addToIndex(indexes.byDispatchId, invocation.dispatchId, invocation);
-    addToIndex(indexes.byTaskRunId, invocation.taskRunId, invocation);
-  }
-
-  return indexes;
-}
-
-function getTaskInvocations(
-  task: Subtask,
-  latestDispatch: ExecutionTaskDispatchSummary | null,
-  invocations: ExecutionInvocationRecord[],
-  indexes: ReturnType<typeof buildInvocationIndexes>,
-): ExecutionInvocationRecord[] {
-  const taskRuntimeId = task.record_id || task.id;
-  const identity = new Set([taskRuntimeId, task.id, task.record_id].filter((value): value is string => Boolean(value)));
-  const candidates = new Set<ExecutionInvocationRecord>();
-
-  for (const value of identity) {
-    for (const invocation of indexes.byTaskId.get(value) ?? []) {
-      candidates.add(invocation);
-    }
-    for (const invocation of indexes.byTaskKey.get(value) ?? []) {
-      candidates.add(invocation);
-    }
-  }
-
-  for (const invocation of indexes.byDispatchId.get(latestDispatch?.id ?? "") ?? []) {
-    candidates.add(invocation);
-  }
-  for (const invocation of indexes.byTaskRunId.get(latestDispatch?.taskRunId ?? "") ?? []) {
-    candidates.add(invocation);
-  }
-
-  if (candidates.size === 0) {
-    return [];
-  }
-
-  return invocations.filter((invocation) => candidates.has(invocation));
+export function deriveLiveSessionTaskFilterAnnouncement(
+  activeFilter: LiveSessionTaskFilter,
+  filteredTaskCount: number,
+): string {
+  return `${filteredTaskCount} ${activeFilter.toLowerCase()} task${filteredTaskCount === 1 ? "" : "s"} shown.`;
 }
 
 export function deriveLiveSessionTaskCardItems(input: LiveSessionTaskCardStateInput): LiveSessionTaskCardItem[] {
-  const historyIndex = buildIndexedExecutionHistory(input.dispatches, input.events);
-  const invocationIndexes = buildInvocationIndexes(input.invocations);
+  const taskRuntimeIndex = buildLiveSessionTaskRuntimeIndex({
+    tasks: input.filteredTasks,
+    dispatches: input.dispatches,
+    events: input.events,
+    invocations: input.invocations,
+  });
 
   return input.filteredTasks.map((task) => {
     const taskRuntimeId = task.record_id || task.id;
+    const bucket = taskRuntimeIndex.byTaskRuntimeId.get(taskRuntimeId);
     const isOptimisticallyCompleted = input.optimisticallyCompletedTaskIds.has(taskRuntimeId);
     const optimisticTask: Subtask = isOptimisticallyCompleted
       ? { ...task, status: "COMPLETED" }
       : task;
-    const latestDispatch = pickLatestTaskDispatch(task, input.dispatches, historyIndex);
-    const taskEvents = getTaskEventsForLiveTask(task, latestDispatch, input.events, historyIndex);
-    const taskInvocations = getTaskInvocations(task, latestDispatch, input.invocations, invocationIndexes);
+    const latestDispatch = bucket?.latestDispatch ?? null;
+    const taskEvents = bucket?.events ?? EMPTY_RUNTIME_EVENTS;
+    const taskInvocations = bucket?.invocations ?? [];
     const dispatchPhase = isOptimisticallyCompleted
       ? "COMPLETED"
       : getLiveTaskProgressPhase({ task: optimisticTask, dispatch: latestDispatch, events: taskEvents });
-    const currentDispatchEvents = latestDispatch
-      ? taskEvents.filter((event) => (
-        (latestDispatch.taskRunId && event.taskRunId === latestDispatch.taskRunId)
-        || (latestDispatch.id && event.dispatchId === latestDispatch.id)
-      ))
-      : EMPTY_RUNTIME_EVENTS;
+    const currentDispatchEvents = latestDispatch ? bucket?.currentDispatchEvents ?? EMPTY_RUNTIME_EVENTS : EMPTY_RUNTIME_EVENTS;
     const activeQuotaWait = ["FAILED", "BLOCKED", "QUOTA", "COMPLETED"].includes(dispatchPhase)
       ? null
       : findActiveQuotaWait(currentDispatchEvents);
@@ -463,4 +680,57 @@ export function deriveLiveTransportBannerViewModel(args: {
   }
 
   return null;
+}
+
+export function deriveLiveSessionSnapshotSurface(args: {
+  transportState: TransportState;
+  isRecovering: boolean;
+  snapshotUpdatedAt?: string | null;
+  transportBannerTitle?: LiveTransportBannerViewModel["title"] | null;
+  error?: string | null;
+}): ExecutionSnapshotSurfaceState {
+  if (args.transportState === "reconnecting" || args.transportState === "disconnected") {
+    return {
+      kind: "reconnecting",
+      label: "Reconnecting",
+      description: "Cached runtime snapshot remains visible while the live stream reconnects.",
+      isBusy: true,
+    };
+  }
+
+  if (args.error) {
+    return {
+      kind: "recovering",
+      label: "Retrying Load",
+      description: "Cached runtime snapshot remains visible while the failed live data request can be retried.",
+      isBusy: true,
+    };
+  }
+
+  if (args.isRecovering) {
+    return {
+      kind: "recovering",
+      label: args.snapshotUpdatedAt ? "Recovering" : "Awaiting Snapshot",
+      description: args.snapshotUpdatedAt
+        ? "Cached runtime snapshot remains visible while fresh live data is loading."
+        : "Waiting for the first runtime snapshot after transport recovery.",
+      isBusy: true,
+    };
+  }
+
+  if (args.transportBannerTitle === "Stale Data") {
+    return {
+      kind: "stale",
+      label: "Stale Snapshot",
+      description: "Cached runtime snapshot remains visible, but it is more than a minute old.",
+      isBusy: true,
+    };
+  }
+
+  return {
+    kind: "live",
+    label: "Live",
+    description: "Runtime data is current.",
+    isBusy: false,
+  };
 }

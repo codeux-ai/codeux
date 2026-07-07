@@ -25,6 +25,12 @@ When using shared overlay components (`Modal`, `Dialog`, `Drawer`, `Notification
 4.  **Notification Panels**:
     *   Flyout menus and notification surfaces should be collision-aware with width and max-height constraints (e.g., `max-w-[calc(100vw-2rem)] max-h-[calc(100dvh-5rem)]`) so they remain fully visible from the top nav at tablet widths without clipping.
 
+5.  **ConfirmDialog**:
+    *   On mobile screens, `ConfirmDialog` must trap focus and respond to the Escape key. Action buttons in the footer should stack vertically (e.g., `flex flex-col-reverse sm:flex-row`) to ensure touch targets are accessible and distinct.
+
+6.  **ActionFeedbackRegion**:
+    *   Must be allowed to stretch to full available width on mobile at the bottom or top of the viewport and safely wrap text to prevent horizontal overflow in toasts or feedback messages.
+
 ## Responsive Data Display
 
 When using the `Table` component for responsive data displays:
@@ -33,6 +39,7 @@ When using the `Table` component for responsive data displays:
 3. **Mobile Labels:** Supply a `mobileLabel` prop to `<TableCell>` components. This programmatic label acts as a substitute for standard column headers when the layout switches to a stacked card presentation on narrow screens.
 4. **Accessible Sort States:** Apply `ariaSort` explicitly only on the active sort column.
 5. **Handling Long Strings:** To ensure long continuous strings do not overflow the mobile cards or desktop columns, `TableCell` internals must use `min-w-0 break-words` classes. Content rendered inside the cell must support text wrapping safely without breaking the mobile layout.
+6. **FilterStrip**: Must accommodate long sets of filters on mobile by enabling horizontal scrolling with `overflow-x-auto` or gracefully wrapping its elements without clipping inner controls.
 
 ## Stats Analytics Surfaces
 
@@ -48,12 +55,13 @@ The Stats page combines fixed header-adjacent navigation, chart controls, tabbed
 ## Warm Void Responsive Consistency
 
 1. **Text Zoom & Narrow Widths:** Test narrow widths and browser text zoom with long provider names, model ids, sprint names, branch names, workflow names, file paths, command labels, and connection keys. Controls should wrap or compact without overlapping adjacent shell, rail, or card content.
-2. **Shell Navigation:** Top-nav project/sprint selectors, notification menus, theme/Docker controls, sidebar links, and the bottom `KineticDock` must keep their accessible names when the visual treatment becomes icon-only. Tooltip text may be visual-only, but the control itself needs the stable name.
+2. **Page Headers:** Shared `PageHeader` actions stack below balanced title/subtitle text until the `lg` breakpoint. Page-specific action clusters should use `w-full min-w-0`, compact labels, explicit `aria-label`s, and wrapping grids/flex rows so repeated command buttons do not crowd the heading on mobile or tablet widths.
+3. **Shell Navigation:** Top-nav project/sprint selectors, notification menus, theme/Docker controls, sidebar links, and the bottom `KineticDock` must keep their accessible names when the visual treatment becomes icon-only. Tooltip text may be visual-only, but the control itself needs the stable name.
    The `KineticDock` cannot use continuous animation as the only active-route cue. Each route link keeps `aria-current="page"` and `data-active="true"` when selected, plus a static active background and dot that remain visible with reduced motion. Nested routes should resolve to their parent destination so mobile dock state stays obvious during route transitions.
-3. **Browser Rails:** Browser Preview session rails, launch cards, address controls, script editor actions, log panels, and file-browser tree/change lists own their overflow inside the rail or panel. The iframe/workbench should remain viewport-bounded rather than forcing body-level horizontal or vertical overflow.
-4. **Task Cards:** Task board lanes and cards stack cleanly, preserve lane headings and count summaries, and keep task id/title/status/priority/dependency/session/PR/duration/QA context readable without hover. Drag treatment remains pointer-only unless a real keyboard reordering contract is implemented.
-5. **Color Discipline:** Use Signal Jade for focus, active selection, primary route accents, and running/healthy signals. Use Ember/status tones for warning, error, danger, intervention, and destructive states. Do not solve mobile emphasis by adding unrelated one-off accent colors.
-6. **Motion:** Mobile layouts follow the same motion tokens as desktop. Reduced motion snaps rail movement, chart transitions, task-card tilt, status waves, and background animation while retaining static state cues.
+4. **Browser Rails:** Browser Preview session rails, launch cards, address controls, script editor actions, log panels, and file-browser tree/change lists own their overflow inside the rail or panel. The iframe/workbench should remain viewport-bounded rather than forcing body-level horizontal or vertical overflow.
+5. **Task Cards:** Task board lanes and cards stack cleanly, preserve lane headings and count summaries, and keep task id/title/status/priority/dependency/session/PR/duration/QA context readable without hover. Drag treatment remains pointer-only unless a real keyboard reordering contract is implemented.
+6. **Color Discipline:** Use Signal Jade for focus, active selection, primary route accents, and running/healthy signals. Use Ember/status tones for warning, error, danger, intervention, and destructive states. Do not solve mobile emphasis by adding unrelated one-off accent colors.
+7. **Motion:** Mobile layouts follow the same motion tokens as desktop. Reduced motion snaps rail movement, chart transitions, task-card tilt, status waves, and background animation while retaining static state cues.
 
 ## Horizontal Dashboard Rails
 

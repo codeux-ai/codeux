@@ -12,6 +12,12 @@ export interface CancelExecutionInvocationResult {
   message?: string;
 }
 
+export interface ResetInvocationUsageLimitTimerResult {
+  reset: boolean;
+  invocationId: string;
+  message?: string;
+}
+
 interface ExecutionInvocationControlServiceDeps {
   executionRepository: ExecutionRepository;
   projectManagementRepository: ProjectManagementRepository;
@@ -21,6 +27,8 @@ interface ExecutionInvocationControlServiceDeps {
 
 const ACTIVE_INVOCATION_STATUSES = new Set(["running", "paused"]);
 const CANCEL_MESSAGE = "Invocation cancelled from Chat -> Invocations.";
+const USAGE_LIMIT_ERROR_CATEGORIES = new Set(["QUOTA_EXHAUSTED", "RATE_LIMITED"]);
+const RESET_USAGE_LIMIT_TIMER_MESSAGE = "Usage limit timer reset from Chat -> Invocations.";
 
 function calculateDurationMs(startedAt: string | null | undefined, finishedAt: string): number | null {
   if (!startedAt) {
@@ -36,6 +44,54 @@ function calculateDurationMs(startedAt: string | null | undefined, finishedAt: s
 
 export class ExecutionInvocationControlService {
   constructor(private readonly deps: ExecutionInvocationControlServiceDeps) {}
+
+  async resetUsageLimitTimer(invocationId: string): Promise<ResetInvocationUsageLimitTimerResult> {
+    const invocation = this.deps.executionRepository.getExecutionInvocation(invocationId);
+    if (!invocation) {
+      throw new Error(`Execution invocation not found: ${invocationId}`);
+    }
+
+    if (!ACTIVE_INVOCATION_STATUSES.has(invocation.status)) {
+      return {
+        reset: false,
+        invocationId,
+        message: `Invocation is already ${invocation.status}.`,
+      };
+    }
+
+    if (!invocation.lastRetryAfterIso || !USAGE_LIMIT_ERROR_CATEGORIES.has(invocation.lastErrorCategory || "")) {
+      return {
+        reset: false,
+        invocationId,
+        message: "Invocation is not waiting for a usage limit reset.",
+      };
+    }
+
+    const finishedAt = new Date().toISOString();
+    this.recordUsageLimitTimerReset(invocation, finishedAt);
+
+    this.deps.executionRepository.updateExecutionInvocation(invocation.id, {
+      errorMessage: RESET_USAGE_LIMIT_TIMER_MESSAGE,
+      lastErrorMessage: RESET_USAGE_LIMIT_TIMER_MESSAGE,
+      lastRetryAfterIso: null,
+    });
+    this.deps.executionRepository.appendExecutionInvocationMessage(invocation.id, {
+      role: "system",
+      contentMarkdown: `${RESET_USAGE_LIMIT_TIMER_MESSAGE} The active retry wait will resume immediately.`,
+      metadata: {
+        control: "dashboard_usage_limit_timer_reset",
+        previousRetryAfterIso: invocation.lastRetryAfterIso,
+        errorCategory: invocation.lastErrorCategory,
+      },
+      createdAt: finishedAt,
+    });
+
+    return {
+      reset: true,
+      invocationId,
+      message: "Usage limit timer reset.",
+    };
+  }
 
   async cancelInvocation(invocationId: string): Promise<CancelExecutionInvocationResult> {
     const invocation = this.deps.executionRepository.getExecutionInvocation(invocationId);
@@ -56,7 +112,7 @@ export class ExecutionInvocationControlService {
       ? this.deps.executionRepository.getProviderInvocationUsage(invocation.providerInvocationId)
       : null;
 
-    await this.requestActiveDispatchStop(invocation);
+    await this.requestActiveDispatchStop(invocation, CANCEL_MESSAGE);
     const stoppedContainerIds = await this.stopDockerContainers(invocation, providerInvocation);
     const finishedAt = new Date().toISOString();
 
@@ -93,6 +149,24 @@ export class ExecutionInvocationControlService {
       invocationId,
       stoppedContainerIds,
     };
+  }
+
+  private recordUsageLimitTimerReset(invocation: ExecutionInvocationRecord, finishedAt: string): void {
+    const taskRun = invocation.taskRunId
+      ? this.deps.executionRepository.getTaskRun(invocation.taskRunId)
+      : null;
+
+    if (taskRun) {
+      this.deps.executionRepository.appendTaskRunEvent(taskRun.id, "usage_limit_timer_reset", "user", {
+        dispatchId: invocation.dispatchId ?? null,
+        requestedBy: "dashboard",
+        reason: RESET_USAGE_LIMIT_TIMER_MESSAGE,
+        previousRetryAfterIso: invocation.lastRetryAfterIso,
+        errorCategory: invocation.lastErrorCategory,
+      }, {
+        sourceEventKey: `dashboard-usage-limit-reset:${invocation.id}`,
+      });
+    }
   }
 
   private closeTaskRuntimeForRetry(invocation: ExecutionInvocationRecord, finishedAt: string): void {
@@ -143,11 +217,11 @@ export class ExecutionInvocationControlService {
     }
   }
 
-  private async requestActiveDispatchStop(invocation: ExecutionInvocationRecord): Promise<void> {
+  private async requestActiveDispatchStop(invocation: ExecutionInvocationRecord, reason: string): Promise<void> {
     if (!invocation.dispatchId) {
       return;
     }
-    const result = await this.deps.activeDispatchRegistry.requestStop(invocation.dispatchId, CANCEL_MESSAGE).catch((error: unknown) => {
+    const result = await this.deps.activeDispatchRegistry.requestStop(invocation.dispatchId, reason).catch((error: unknown) => {
       this.deps.logger?.warn("Failed to request active dispatch stop for invocation cancellation", {
         invocationId: invocation.id,
         dispatchId: invocation.dispatchId,

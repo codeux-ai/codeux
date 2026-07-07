@@ -18,7 +18,7 @@ All non-Jules providers are *virtual workers* — Code UX shells out to the prov
 
 ## The models
 
-The full model catalog lives in `src/repositories/settings-defaults.ts`. The defaults below reflect the shipped 0.8.x release.
+The full model catalog lives in `src/repositories/settings-defaults.ts`. The defaults below reflect the currently shipped release.
 
 ### Gemini
 ```
@@ -94,7 +94,7 @@ gpt-oss-120b
 | Gemini | `auto` |
 | Claude Code | `default` |
 | Codex | `gpt-5.5` |
-| Qwen | `qwen3-coder-plus` |
+| Qwen Code | `qwen3-coder-plus` |
 | OpenCode | `anthropic/claude-sonnet-4-5` |
 | Antigravity | `default` |
 

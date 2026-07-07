@@ -34,6 +34,7 @@ import {
   type LedgerSortKey,
   type ExecutionStatsEntityWithDuration,
 } from "./StatsShared.js";
+import { useInteractionTokens } from "../../../lib/motion/index.js";
 
 export function getStatusChipTone(status: string): string {
   const normalized = status.toLowerCase();
@@ -64,7 +65,7 @@ export const LedgerSummaryTile: FunctionComponent<{
       <Icon className={`h-3.5 w-3.5 ${tone}`} strokeWidth={2.2} />
       {label}
     </div>
-    <div className="mt-2 text-xl font-black tracking-tight text-[color:var(--stats-value-color)]">{value}</div>
+    <div className="mt-2 text-lg font-semibold tracking-tight text-[color:var(--stats-value-color)]">{value}</div>
     <div className="mt-1 text-[10px] font-bold uppercase tracking-[0.14em] text-[color:var(--stats-label-color)]">{detail}</div>
   </div>
 );
@@ -159,6 +160,7 @@ export const TelemetryLedger: FunctionComponent<{
   emptyLabel,
   defaultSortKey = "tokens",
 }) => {
+  const interactionTokens = useInteractionTokens();
   const [query, setQuery] = useState("");
   const [sortKey, setSortKey] = useState<LedgerSortKey>(defaultSortKey);
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
@@ -269,6 +271,19 @@ export const TelemetryLedger: FunctionComponent<{
   const averageCalls = items.length > 0 ? overallTotals.invocationCount / items.length : 0;
   const filteredShare = overallTotals.totalTokens > 0 ? (totals.totalTokens / overallTotals.totalTokens) * 100 : 0;
   const singularKind = kindLabel.replace(/s$/, "");
+  const sortLabelByKey: Record<LedgerSortKey, string> = {
+    last: "Latest",
+    tokens: "Tokens",
+    active: "Active",
+    input: "Input",
+    output: "Output",
+    name: "Name",
+    p50: "p50",
+    p95: "p95",
+  };
+  const ledgerStatus = queryIsActive
+    ? `Showing ${filteredItems.length.toLocaleString()} of ${items.length.toLocaleString()} ${kindLabel} matching ${query.trim()}, sorted by ${sortLabelByKey[sortKey]} ${sortDir === "desc" ? "descending" : "ascending"}.`
+    : `Showing ${filteredItems.length.toLocaleString()} of ${items.length.toLocaleString()} ${kindLabel}, sorted by ${sortLabelByKey[sortKey]} ${sortDir === "desc" ? "descending" : "ascending"}.`;
 
   return (
     <div className={`${PANEL_CLASS} p-6 md:p-7`}>
@@ -276,7 +291,7 @@ export const TelemetryLedger: FunctionComponent<{
         <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
           <div>
             <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-[color:var(--stats-label-color)]">{eyebrow}</div>
-            <div className="mt-2 text-2xl font-black tracking-tight text-[color:var(--stats-value-color)]">{title}</div>
+            <div className="mt-2 text-xl font-semibold tracking-tight text-[color:var(--stats-value-color)]">{title}</div>
             <div className="mt-2 max-w-3xl text-sm text-[color:var(--stats-detail-color)]">
               Search, sort, and compare {kindLabel} by recency, tokens, active time, and directional token flow.
             </div>
@@ -284,6 +299,9 @@ export const TelemetryLedger: FunctionComponent<{
           <div aria-live="polite" aria-atomic="true" className={`inline-flex items-center gap-2 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.16em] ${CHIP_CLASS} ${TEXT_DETAIL_CLASS}`}>
             <Hash className="h-3.5 w-3.5 text-[color:var(--stats-signal-text)]" strokeWidth={2.2} />
             {filteredItems.length.toLocaleString()} visible / {items.length.toLocaleString()} total
+          </div>
+          <div className="sr-only" role="status" aria-live="polite" aria-atomic="true">
+            {ledgerStatus}
           </div>
         </div>
 
@@ -444,12 +462,12 @@ export const TelemetryLedger: FunctionComponent<{
                     <div className="flex flex-col gap-4">
                       <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
                         <div className="flex min-w-0 items-start gap-3">
-                          <div className="flex h-10 w-10 shrink-0 flex-col items-center justify-center rounded-xl border border-[color:var(--stats-card-border)] bg-[color:var(--stats-card-bg)] text-[10px] font-black uppercase leading-none text-[color:var(--stats-value-color)] shadow-sm backdrop-blur-xl">
+                          <div className="flex h-10 w-10 shrink-0 flex-col items-center justify-center rounded-xl border border-[color:var(--stats-card-border)] bg-[color:var(--stats-card-bg)] text-[10px] font-semibold uppercase leading-none text-[color:var(--stats-value-color)] shadow-sm backdrop-blur-xl">
                             <span className="text-[8px] tracking-[0.12em] text-[color:var(--stats-label-color)]">Rank</span>
                             <span className="mt-0.5 text-xs">{index + 1}</span>
                           </div>
                           <div className="min-w-0">
-                            <div className="break-words text-base font-black tracking-tight text-[color:var(--stats-value-color)] [overflow-wrap:anywhere]">{item.label}</div>
+                            <div className="break-words text-base font-semibold tracking-tight text-[color:var(--stats-value-color)] [overflow-wrap:anywhere]">{item.label}</div>
                             <div className="mt-0.5 text-[10px] font-bold uppercase tracking-[0.14em] text-[color:var(--stats-label-color)]">
                               {formatTokens(tokenPerCall)}/call · last {formatDateTime(item.lastActivityAt)}
                             </div>
@@ -486,27 +504,27 @@ export const TelemetryLedger: FunctionComponent<{
                         <div className="grid w-full grid-cols-2 gap-3 sm:grid-cols-3 xl:w-auto xl:min-w-[46rem] xl:grid-cols-6 xl:text-right">
                           <div>
                             <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--stats-label-color)]">Tokens</div>
-                            <div className="mt-1 text-lg font-black tracking-tight text-[color:var(--stats-value-color)]">{formatTokens(item.usage.totalTokens)}</div>
+                            <div className="mt-1 text-base font-semibold tracking-tight text-[color:var(--stats-value-color)]">{formatTokens(item.usage.totalTokens)}</div>
                           </div>
                           <div>
                             <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--stats-label-color)]">Active</div>
-                            <div className="mt-1 text-lg font-black tracking-tight text-[color:var(--stats-value-color)]">{formatStatsDuration(item.usage.activeTimeMs)}</div>
+                            <div className="mt-1 text-base font-semibold tracking-tight text-[color:var(--stats-value-color)]">{formatStatsDuration(item.usage.activeTimeMs)}</div>
                           </div>
                           <div>
                             <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--stats-label-color)]">Calls</div>
-                            <div className="mt-1 text-lg font-black tracking-tight text-[color:var(--stats-value-color)]">{item.usage.invocationCount.toLocaleString()}</div>
+                            <div className="mt-1 text-base font-semibold tracking-tight text-[color:var(--stats-value-color)]">{item.usage.invocationCount.toLocaleString()}</div>
                           </div>
                           <div>
                             <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--stats-label-color)]">Share</div>
-                            <div className="mt-1 text-lg font-black tracking-tight text-[color:var(--stats-value-color)]">{formatPercent(shareOfTotal)}</div>
+                            <div className="mt-1 text-base font-semibold tracking-tight text-[color:var(--stats-value-color)]">{formatPercent(shareOfTotal)}</div>
                           </div>
                           <div>
                             <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--stats-label-color)]">Leader</div>
-                            <div className="mt-1 text-lg font-black tracking-tight text-[color:var(--stats-value-color)]">{formatPercent(shareOfLeader)}</div>
+                            <div className="mt-1 text-base font-semibold tracking-tight text-[color:var(--stats-value-color)]">{formatPercent(shareOfLeader)}</div>
                           </div>
                           <div>
                             <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--stats-label-color)]">Cost</div>
-                            <div className="mt-1 text-lg font-black tracking-tight text-[color:var(--stats-value-color)]">{formatCost(item.usage.totalCostUsd)}</div>
+                            <div className="mt-1 text-base font-semibold tracking-tight text-[color:var(--stats-value-color)]">{formatCost(item.usage.totalCostUsd)}</div>
                           </div>
                         </div>
                       </div>
@@ -526,8 +544,8 @@ export const TelemetryLedger: FunctionComponent<{
                         >
                           <div
                             aria-hidden="true"
-                            className="h-1 rounded-full bg-[color:var(--stats-positive-text)] motion-safe:transition-all motion-safe:duration-500"
-                            style={{ width: `${Math.min(100, Math.max(shareOfLeader > 0 ? 3 : 0, shareOfLeader))}%` }}
+                            className="h-1 rounded-full bg-[color:var(--stats-positive-text)] motion-safe:transition-all"
+                            style={{ transitionDuration: interactionTokens.listReorder.duration, transitionTimingFunction: interactionTokens.listReorder.ease, width: `${Math.min(100, Math.max(shareOfLeader > 0 ? 3 : 0, shareOfLeader))}%` }}
                           />
                         </div>
                         <div className="flex flex-wrap items-center justify-between gap-3">

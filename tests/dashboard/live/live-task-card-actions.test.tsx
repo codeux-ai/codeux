@@ -1,15 +1,26 @@
 /** @jsx h */
 // @vitest-environment happy-dom
 import { h } from "preact";
-import { render, screen, cleanup, waitFor, within } from "@testing-library/preact";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/preact";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as matchers from "@testing-library/jest-dom/matchers";
 import { LiveSessionPage } from "../../../dashboard/src/v2/LiveSessionPage.js";
 
 expect.extend(matchers);
 
 const forceCompleteLiveTaskMock = vi.fn();
+
+async function holdForceCompleteConfirmation(): Promise<void> {
+  const confirmButton = await screen.findByRole("button", { name: "Hold to Force Complete" });
+  vi.useFakeTimers();
+  fireEvent.pointerDown(confirmButton, { button: 0, pointerId: 1 });
+  await act(async () => {
+    vi.advanceTimersByTime(1000);
+    await Promise.resolve();
+  });
+  vi.useRealTimers();
+}
 
 vi.mock("gsap", () => ({
   default: {
@@ -140,9 +151,14 @@ vi.mock("../../../dashboard/src/v2/hooks/use-live-session-actions.js", () => ({
 describe("live task card actions", () => {
   beforeEach(() => {
     cleanup();
+    vi.useRealTimers();
     vi.clearAllMocks();
     forceCompleteLiveTaskMock.mockResolvedValue(undefined);
     window.history.replaceState({}, "", "/live");
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it("shows edit and force-complete controls and disables force-complete for completed tasks", () => {
@@ -166,7 +182,11 @@ describe("live task card actions", () => {
   it("force-completes successfully and refreshes live data", async () => {
     render(<LiveSessionPage />);
     const buttons = screen.getAllByRole("button", { name: /Force complete task/ });
-    await userEvent.click(buttons[0]!);
+    fireEvent.click(buttons[0]!);
+
+    expect(forceCompleteLiveTaskMock).not.toHaveBeenCalled();
+    expect(screen.getByRole("dialog", { name: "Force Complete Task" })).toHaveTextContent(/Ship task controls/i);
+    await holdForceCompleteConfirmation();
 
     await waitFor(() => {
       expect(forceCompleteLiveTaskMock).toHaveBeenCalledWith("project-1", "task-record-1");
@@ -175,7 +195,7 @@ describe("live task card actions", () => {
       expect(refreshRuntimeStatusMock).toHaveBeenCalled();
       expect(refreshGitStatusMock).toHaveBeenCalled();
     });
-    expect(await screen.findByText("Task marked as completed.")).toBeInTheDocument();
+    expect(await screen.findByText('Task "Ship task controls" marked as completed.')).toBeInTheDocument();
   });
 
   it("shows inline optimistic pending feedback and suppresses duplicate force-complete activation", async () => {
@@ -188,7 +208,8 @@ describe("live task card actions", () => {
     const forceButton = screen.getAllByRole("button", { name: /Force complete task T1/ })[0]!;
     const card = forceButton.closest('[tabindex="0"]') as HTMLElement;
 
-    await userEvent.dblClick(forceButton);
+    fireEvent.click(forceButton);
+    await holdForceCompleteConfirmation();
 
     expect(forceCompleteLiveTaskMock).toHaveBeenCalledTimes(1);
     expect(within(card).getAllByText(/Marking this task complete/).length).toBeGreaterThan(0);
@@ -196,6 +217,9 @@ describe("live task card actions", () => {
     const pendingButton = within(card).getByRole("button", { name: /Force complete task T1/ });
     expect(pendingButton).toHaveAttribute("aria-busy", "true");
     expect(pendingButton).toHaveAttribute("aria-disabled", "true");
+
+    fireEvent.click(pendingButton);
+    expect(forceCompleteLiveTaskMock).toHaveBeenCalledTimes(1);
 
     resolveForceComplete?.();
     await waitFor(() => {
@@ -218,7 +242,8 @@ describe("live task card actions", () => {
     render(<LiveSessionPage />);
     const buttons = screen.getAllByRole("button", { name: /Force complete task/ });
     const card = buttons[0]!.closest('[tabindex="0"]') as HTMLElement;
-    await userEvent.click(buttons[0]!);
+    fireEvent.click(buttons[0]!);
+    await holdForceCompleteConfirmation();
     expect(await screen.findByText("force complete failed")).toBeInTheDocument();
     expect(within(card).getByText("Running")).toBeInTheDocument();
     expect(within(card).queryByText(/Marking this task complete/)).not.toBeInTheDocument();

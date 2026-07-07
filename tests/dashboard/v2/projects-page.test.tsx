@@ -100,6 +100,7 @@ const createProject = () => ({
 describe("ProjectsPage", () => {
   beforeEach(() => {
     cleanup();
+    vi.useRealTimers();
     vi.clearAllMocks();
     vi.mocked(useToast).mockReturnValue({ addToast: vi.fn() } as any);
     vi.mocked(useProjectData).mockReturnValue({
@@ -186,12 +187,77 @@ describe("ProjectsPage", () => {
     expect(screen.getByTestId("add-project-modal")).toBeInTheDocument();
   });
 
-  it("renders responsive layout classes for the page header", () => {
+  it("announces project loading with busy region semantics and stable actions", () => {
+    vi.mocked(useProjectData).mockReturnValue({
+      projects: [],
+      selectedProjectId: null,
+      loading: true,
+      error: null,
+      refreshProjects: vi.fn(),
+      selectProject: selectProjectMock,
+      createProject: createProjectMock,
+      updateProject: vi.fn(),
+      deleteProject: deleteProjectMock,
+      selectedProject: null,
+    } as any);
+
+    render(<ProjectsPage />);
+
+    expect(screen.getByRole("region", { name: "Project cards" })).toHaveAttribute("aria-busy", "true");
+    expect(screen.getByRole("status")).toHaveAttribute("aria-busy", "true");
+    expect(screen.getByRole("status")).toHaveTextContent("Loading projects.");
+    expect(screen.getByRole("button", { name: "New Project" })).toBeInTheDocument();
+  });
+
+  it("announces project load errors as alerts without removing recovery actions", () => {
+    vi.mocked(useProjectData).mockReturnValue({
+      projects: [],
+      selectedProjectId: null,
+      loading: false,
+      error: "Unable to load projects.",
+      refreshProjects: vi.fn(),
+      selectProject: selectProjectMock,
+      createProject: createProjectMock,
+      updateProject: vi.fn(),
+      deleteProject: deleteProjectMock,
+      selectedProject: null,
+    } as any);
+
+    render(<ProjectsPage />);
+
+    expect(screen.getByRole("alert")).toHaveTextContent("Unable to load projects.");
+    expect(screen.getByRole("region", { name: "Project cards" })).not.toHaveAttribute("aria-busy");
+    expect(screen.getByRole("button", { name: "New Project" })).toBeInTheDocument();
+  });
+
+  it("announces the empty project state while keeping add-project controls reachable", () => {
+    vi.mocked(useProjectData).mockReturnValue({
+      projects: [],
+      selectedProjectId: null,
+      loading: false,
+      error: null,
+      refreshProjects: vi.fn(),
+      selectProject: selectProjectMock,
+      createProject: createProjectMock,
+      updateProject: vi.fn(),
+      deleteProject: deleteProjectMock,
+      selectedProject: null,
+    } as any);
+
+    render(<ProjectsPage />);
+
+    expect(screen.getByRole("status")).toHaveTextContent("No projects connected. Add a project to start tracking work.");
+    expect(screen.getByRole("button", { name: /Add Project/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "New Project" })).toBeInTheDocument();
+  });
+
+  it("keeps page header actions stacked until large viewports", () => {
     const { container } = render(<ProjectsPage />);
     const headerContainer = container.querySelector("header");
     expect(headerContainer).toBeInTheDocument();
     expect(headerContainer?.className).toContain("flex-col");
-    expect(headerContainer?.className).toContain("sm:flex-row");
+    expect(headerContainer?.className).toContain("lg:flex-row");
+    expect(headerContainer?.className).not.toContain("sm:flex-row");
   });
 
   it("wraps filter controls and card actions on narrow screens", () => {

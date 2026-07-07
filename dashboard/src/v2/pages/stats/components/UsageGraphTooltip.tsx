@@ -68,7 +68,7 @@ export const UsageGraphTooltip: FunctionComponent<UsageGraphTooltipProps> = ({
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
           <div className="text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--stats-label-color)]">{label || stateCopy}</div>
-          <div className="mt-1 text-sm font-black text-[var(--stats-value-color)]">{dateCopy}</div>
+          <div className="mt-1 text-sm font-semibold text-[var(--stats-value-color)]">{dateCopy}</div>
           <div className="mt-1 text-xs leading-relaxed text-[var(--stats-detail-color)]">{helperCopy}</div>
         </div>
         <div className="shrink-0 text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--stats-detail-color)] sm:text-right">
@@ -90,7 +90,7 @@ export const UsageGraphTooltip: FunctionComponent<UsageGraphTooltipProps> = ({
           {detailRows.map((row) => (
             <div key={row.label} className="min-w-0 rounded-[0.85rem] border border-[var(--stats-card-border)] bg-[color:var(--fill-muted)] px-3 py-2">
               <dt className="text-[9px] font-bold uppercase tracking-[0.12em] text-[var(--stats-label-color)]">{row.label}</dt>
-              <dd className="mt-1 break-words text-sm font-black text-[var(--stats-value-color)]">{row.value}</dd>
+              <dd className="mt-1 break-words text-sm font-semibold text-[var(--stats-value-color)]">{row.value}</dd>
             </div>
           ))}
         </dl>
@@ -106,7 +106,7 @@ export const UsageGraphTooltip: FunctionComponent<UsageGraphTooltipProps> = ({
               <span className="h-2.5 w-2.5 shrink-0 rounded-full ring-2 ring-[var(--stats-card-bg)]" style={{ backgroundColor: series.accentHex }} />
               <span className="min-w-0 break-words font-medium">{series.label}</span>
             </div>
-            <div className="text-right font-black text-[var(--stats-value-color)]">{series.value}</div>
+            <div className="text-right font-semibold text-[var(--stats-value-color)]">{series.value}</div>
           </div>
         )) : (
           <div className="rounded-[0.85rem] border border-dashed border-[var(--stats-card-border)] px-3 py-4 text-sm leading-relaxed text-[var(--stats-detail-color)]">

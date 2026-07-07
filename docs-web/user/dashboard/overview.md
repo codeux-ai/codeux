@@ -48,7 +48,6 @@ Per-resource polling intervals (used as backup or for snapshot endpoints):
 
 | Resource | Cadence |
 | --- | --- |
-| `/api/live-activities` | 10 s cache TTL |
 | `/api/git-status` | 10 s cache TTL |
 | `/api/live` snapshot | 30 s background refresh |
 

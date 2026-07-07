@@ -44,6 +44,8 @@ describe("provider-runtime-config", () => {
             rewriteUrl
         ));
         expect(result.mcp.code_ux.url).toBe("http://host.docker.internal:3000");
+        expect(result.mcp.code_ux.headers.Authorization).toBe("Bearer token");
+        expect(result.mcp.code_ux.headers["X-Code-Ux-Agent"]).toBe("agent");
     });
   });
 });

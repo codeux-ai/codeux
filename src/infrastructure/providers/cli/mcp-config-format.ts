@@ -1,5 +1,6 @@
 import type { CustomMcpServer } from "../../../contracts/app-types.js";
 import type { McpConnectionInfo } from "../../../contracts/mcp-connection-types.js";
+import { sanitizeCustomMcpServers } from "../../../mcp/mcp-tool-availability.js";
 import type { CliProviderId } from "./provider-command-specs.js";
 
 export const escapeTomlString = (value: string): string => value.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
@@ -62,6 +63,62 @@ export const buildCodexMcpServerTomlLines = (tableName: string, server: CustomMc
   return lines;
 };
 
+const CODEX_MCP_TABLE_PATTERN = /^\[mcp_servers\.([A-Za-z0-9_-]+)\]\s*$/;
+
+const collectCodexMcpTableNames = (content: string): Set<string> => {
+  const names = new Set<string>();
+  for (const line of content.split(/\r?\n/)) {
+    const match = CODEX_MCP_TABLE_PATTERN.exec(line.trim());
+    if (match) {
+      names.add(match[1]);
+    }
+  }
+  return names;
+};
+
+const splitCodexMcpTableBlocks = (content: string): Array<{ name: string; lines: string[] }> => {
+  const blocks: Array<{ name: string; lines: string[] }> = [];
+  let current: { name: string; lines: string[] } | null = null;
+
+  for (const line of content.split(/\r?\n/)) {
+    const match = CODEX_MCP_TABLE_PATTERN.exec(line.trim());
+    if (match) {
+      if (current) {
+        blocks.push(current);
+      }
+      current = { name: match[1], lines: [line] };
+      continue;
+    }
+    if (current) {
+      current.lines.push(line);
+    }
+  }
+
+  if (current) {
+    blocks.push(current);
+  }
+  return blocks
+    .map((block) => ({ ...block, lines: block.lines.filter((line, index, lines) => index < lines.length - 1 || line.trim().length > 0) }))
+    .filter((block) => block.lines.length > 0);
+};
+
+export const mergeCodexMcpConfigToml = (existingContent: string | null | undefined, generatedContent: string): string => {
+  const existing = existingContent?.trimEnd() ?? "";
+  const existingNames = collectCodexMcpTableNames(existing);
+  const missingBlocks = splitCodexMcpTableBlocks(generatedContent)
+    .filter((block) => !existingNames.has(block.name))
+    .map((block) => block.lines.join("\n").trimEnd())
+    .filter(Boolean);
+
+  if (!existing) {
+    return missingBlocks.length > 0 ? `${missingBlocks.join("\n")}\n` : "";
+  }
+  if (missingBlocks.length === 0) {
+    return `${existing}\n`;
+  }
+  return `${existing}\n\n${missingBlocks.join("\n")}\n`;
+};
+
 
 export interface ProviderMcpConfigBuildOptions {
   qwenSettingsContent?: string;
@@ -92,7 +149,7 @@ export function buildProviderMcpConfigArtifact(
     options.rewriteUrl ? options.rewriteUrl(url, options.rewriteEnabled ?? false) : url;
 
   const processedConn = conn ? { ...conn, url: rewrite(conn.url) } : null;
-  const processedServers = customServers.map(server =>
+  const processedServers = sanitizeCustomMcpServers(customServers).map(server =>
     server.transport === "http" && server.url
       ? { ...server, url: rewrite(server.url) }
       : server
@@ -256,9 +313,12 @@ export function buildProviderMcpConfigArtifact(
       lines.push(...buildCodexMcpServerTomlLines(server.name, server));
     }
 
+    const generatedContent = lines.join("\n") + "\n";
     return {
       filename: "config.toml",
-      content: lines.join("\n") + "\n",
+      content: options.existingContent === undefined
+        ? generatedContent
+        : mergeCodexMcpConfigToml(options.existingContent, generatedContent),
       dockerMountDestination: CODEX_MCP_CONFIG_MOUNT,
     };
   }

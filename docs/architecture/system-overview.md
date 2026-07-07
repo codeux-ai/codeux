@@ -1,6 +1,6 @@
 # System Overview
 
-This project is a Model Context Protocol (MCP) server with an integrated dashboard and a DB-backed sprint orchestration engine.
+Code UX is a container-first multi-provider runtime with an integrated dashboard and a DB-backed sprint orchestration engine.
 
 ## Core Responsibilities
 
@@ -14,17 +14,19 @@ This project is a Model Context Protocol (MCP) server with an integrated dashboa
 ## Runtime Components
 
 ### 1. Entrypoint and runtime composition
-- Bootstrap file: `src/index.ts`
+- CLI/MCP entrypoint: `src/index.ts`
 - Responsibilities:
   - Load `.env` and startup config.
   - Construct and run `CodeUxServer`.
+- Worker entrypoint: `src/worker/index.ts` (worker-host mode)
+- Electron shell: `src/electron/main.ts` (desktop shell)
 
 - Runtime composition file: `src/server/code-ux-server.ts`
 - Responsibilities:
   - Instantiate repositories, services, handlers, orchestrator.
   - Register MCP request handlers via `src/server/mcp-request-router.ts`.
   - Start dashboard HTTP server.
-  - Start MCP stdio transport.
+  - Start MCP stdio transport only for an attached MCP pipe/socket or explicit `CODE_UX_ENABLE_MCP_STDIO=1`; daemon stdin such as `/dev/null` keeps stdio disabled.
   - Serve cached dashboard live activity and git status via `src/server/activity-cache-service.ts`.
 - Dashboard dependency composition lives in `src/app/dependency-factory/dashboard-factory.ts`. When two dashboard services must be constructed before both concrete instances exist, the factory uses `LateBoundDependency<T>` from `src/shared/late-bound-dependency.ts` and links it synchronously before returning dependencies. Consumers resolve these holders at action time so missing links fail with an explicit late-bound dependency error instead of placeholder objects or private-field mutation.
 
@@ -39,6 +41,7 @@ This project is a Model Context Protocol (MCP) server with an integrated dashboa
 - `src/domain/sprint/orchestrator/*`
 - `src/domain/sprint/ci/*`
 - Atomic step modules in `src/sprint/steps/*`
+- Git-mode behavior is split at the final merge gate. REMOTE mode waits for the hosted completion PR to be observed as merged before marking a run complete. LOCAL mode performs the final `feature -> default` merge in the host repository, restores the user's prior checkout afterward, and keeps the run active or paused with merge attention when the local merge fails.
 
 ### 4. Instruction template system
 - `src/instructions/instruction-template-service.ts`
@@ -48,15 +51,17 @@ This project is a Model Context Protocol (MCP) server with an integrated dashboa
 
 ### 5. Dashboard server and frontend
 - API host: `src/server/dashboard-server.ts`
-- Frontend app: `dashboard/src/*`
+- Frontend app: `dashboard/src/v2/*`
 - Settings view-models: `dashboard/src/v2/lib/settings-view-models.ts` is a compatibility barrel over focused helpers in `dashboard/src/v2/lib/settings/`. Provider instance/auth helpers, model option catalogs, model pricing refs, project override/source helpers, display metadata, and branch naming helpers are kept in separate typed modules so dashboard components can share behavior without changing settings API contracts or saved settings shapes.
 
 ### 6. Data and settings repositories
+- Persistence uses SQLite via `node:sqlite`.
 - Subtasks: `src/repositories/subtask-repository.ts`
 - Settings DB: `src/repositories/settings-repository.ts`
 - Settings defaults/sanitization/storage: `src/repositories/settings-defaults.ts`, `src/repositories/settings-sanitizer.ts`, `src/repositories/settings-db-storage.ts`
 
 ### 7. CLI workflow execution helpers
+- Docker and host CLI providers implementations are in `src/infrastructure/providers/cli/`.
 - `src/services/cli-workflow-service.ts`
 - `src/services/cli-process-runner.ts`
 - `src/services/cli-docker-utils.ts`
@@ -81,11 +86,13 @@ flowchart TD
   F --> H[src/instructions/instruction-template-service.ts]
   H --> I[(settings.db)]
   D --> J[src/services/task-service.ts]
-  R --> L[src/server/dashboard-server.ts]
-  L --> M[Dashboard UI dashboard/src/*]
+  R --> L[Express dashboard/API]
+  L --> M[Dashboard UI dashboard/src/v2/*]
   M -->|poll| N[/api/live + /api/git-status/]
-  L --> O[src/repositories/settings-repository.ts]
+  L --> O[SQLite repositories]
   O --> P[(~/.code-ux/settings.db)]
+  R --> Q[MCP stdio/HTTPS gateway]
+  F --> S[Docker/host CLI providers]
 ```
 
 ## High-Level Data Flow
@@ -113,6 +120,8 @@ Priority order:
 - Branch preflight can block plan/orchestrate until local and remote sprint branch exist.
 - Planning preflight can block status/orchestrate until subtask files exist.
 - CI Intelligence settings add protocol-level merge guidance for comments/check gates.
+- `pnpm run ci` starts with the local quality guardrail script, which blocks stale artifacts, unsafe dependency placeholders, realtime snapshot persistence regressions, duplicate optimistic task insertion, and substantial duplicate implementation blocks before broader validation runs.
+- Hot realtime, execution projection, provider telemetry, session sync, and dashboard rendering paths must follow the [Code Quality And Performance Contracts](./code-quality-performance-contracts.md), including bounded snapshot slices and owner-specific verification commands.
 
 ## Extensibility Model
 
@@ -121,4 +130,4 @@ The system is designed for independent edits in these layers:
 - Orchestration control layer (`src/sprint/sprint-orchestrator.ts`)
 - Step behavior layer (`src/sprint/steps/*`)
 - Human-facing protocol text layer (`agents.instructionTemplates` in settings)
-- Dashboard settings/presentation layer (`dashboard/src/*`)
+- Dashboard settings/presentation layer (`dashboard/src/v2/*`)

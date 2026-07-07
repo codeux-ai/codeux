@@ -198,7 +198,7 @@ export const StatsHeader: FunctionComponent<StatsHeaderProps> = memo(({
                                 <AlertTriangle className="w-3.5 h-3.5" strokeWidth={2.2} />
                                 {sprintStatusPresentation.title}
                             </div>
-                            <h3 className="mt-2 text-2xl font-black tracking-tight text-slate-900 dark:text-white font-display">
+                            <h3 className="mt-2 text-xl font-semibold tracking-tight text-slate-900 dark:text-white font-display">
                                 {sprintStatusPresentation.reason}
                             </h3>
                             <p className="mt-3 max-w-3xl text-sm leading-relaxed text-slate-600 dark:text-slate-300">

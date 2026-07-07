@@ -323,6 +323,43 @@ describe("FeaturePrGateService", () => {
     );
   });
 
+  it("emits a stable CI wait event key across repeated retryable observations", async () => {
+    context.ciIntelligence.featurePrAutoMergeMode = "WHEN_GREEN";
+    context.gitStatus.openPullRequests[0].checks = [
+      { name: "build", status: "queued", conclusion: null }
+    ];
+    context.autoMergeFeaturePr = vi.fn();
+    vi.mocked(context.executionRepository!.getLatestTaskRun).mockReturnValue({
+      id: "run-1",
+      state: "COMPLETED",
+    } as any);
+
+    const first = await service.evaluateCiGate(subtasks, context);
+    const second = await service.evaluateCiGate(first.subtasks, context);
+
+    expect(second.subtasks[0]).toMatchObject({
+      status: "RUNNING",
+      merge_indicator: "CI",
+    });
+    expect(second.subtasks[0].is_merged).toBeFalsy();
+    expect(context.autoMergeFeaturePr).not.toHaveBeenCalled();
+    expect(context.sendSessionMessage).not.toHaveBeenCalled();
+
+    const eventCalls = vi.mocked(context.executionRepository!.appendTaskRunEvent).mock.calls;
+    expect(eventCalls).toHaveLength(2);
+    expect(eventCalls[0][3]).toMatchObject({
+      state: "waiting_checks",
+      prNumber: 101,
+      hasPendingChecks: true,
+    });
+    expect(eventCalls[1][3]).toMatchObject({
+      state: "waiting_checks",
+      prNumber: 101,
+      hasPendingChecks: true,
+    });
+    expect(eventCalls[1][4]).toEqual(eventCalls[0][4]);
+  });
+
   it("skips CI waiting when no PR-triggered workflow matches the feature branch", async () => {
     const repoPath = await createTempRepoWithWorkflow(`
 name: CI
@@ -349,6 +386,51 @@ jobs:
       expect(result.reportText).toContain("Feature PR Ready");
       expect(result.reportText).toContain("CI wait skipped for base `feature/sprint1`");
       expect(result.reportText).toContain("no PR-triggered workflow matches this base branch");
+    } finally {
+      await rm(repoPath, { recursive: true, force: true });
+    }
+  });
+
+  it("skips stale empty CI waiting for an old clean PR with no checks or runs", async () => {
+    const repoPath = await createTempRepoWithWorkflow(`
+name: CI
+
+on:
+  pull_request:
+    branches: [feature/sprint1]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo ok
+    `);
+    context.repoPath = repoPath;
+    context.gitStatus.openPullRequests[0].checks = [];
+    context.gitStatus.openPullRequests[0].mergeStateStatus = "CLEAN";
+    context.gitStatus.openPullRequests[0].updatedAt = "2000-01-01T00:00:00Z";
+    context.gitStatus.ciRuns = [];
+    context.autoMergeFeaturePr = undefined;
+
+    try {
+      const result = await service.evaluateCiGate(subtasks, context);
+
+      expect(result.subtasks[0].status).toBe("CODING_COMPLETED");
+      expect(result.subtasks[0].merge_indicator).toBeUndefined();
+      expect(result.reportText).toContain("Feature PR Ready");
+      expect(result.reportText).toContain("CI wait skipped for base `feature/sprint1`");
+      expect(result.reportText).toContain("no PR checks or tracked CI runs appeared within 10 minutes");
+      expect(context.executionRepository?.appendTaskRunEvent).toHaveBeenCalledWith(
+        "run-1",
+        "ci_gate_status",
+        "system",
+        expect.objectContaining({
+          state: "ready_for_merge",
+          prNumber: 101,
+          ciWaitSkipped: true,
+        }),
+        expect.any(Object),
+      );
     } finally {
       await rm(repoPath, { recursive: true, force: true });
     }
@@ -537,6 +619,61 @@ jobs:
     expect(context.openCiFixAttentionItems).not.toHaveBeenCalled();
     expect(guardrail.counts.get("task-record-1:ci_fix")).toBe(1);
     expect(result.reportText).toContain("Worker CI fix already running");
+  });
+
+  it("holds a failed-check task in CI until a later green observation explicitly settles it", async () => {
+    subtasks[0].session_id = undefined;
+    subtasks[0].provider = "gemini" as any;
+    context.ciIntelligence.featurePrAutoMergeMode = "WHEN_GREEN";
+    context.gitStatus.openPullRequests[0].checks = [
+      { name: "build", status: "completed", conclusion: "failure" }
+    ];
+    context.openCiFixAttentionItems = vi.fn();
+    context.hasActiveWorkerCiFixAttempt = vi.fn().mockReturnValue(true);
+    context.autoMergeFeaturePr = vi.fn().mockResolvedValue({
+      ok: true,
+      merged: true,
+      autoMergeScheduled: false,
+    });
+
+    const failed = await service.evaluateCiGate(subtasks, context);
+
+    expect(failed.subtasks[0]).toMatchObject({
+      status: "RUNNING",
+      merge_indicator: "CI",
+    });
+    expect(failed.subtasks[0].is_merged).toBeFalsy();
+    expect(context.autoMergeFeaturePr).not.toHaveBeenCalled();
+    expect(context.openCiFixAttentionItems).not.toHaveBeenCalled();
+
+    failed.subtasks[0].status = "COMPLETED";
+    context.gitStatus.openPullRequests[0].checks = [
+      { name: "build", status: "completed", conclusion: "success" }
+    ];
+    vi.mocked(context.hasActiveWorkerCiFixAttempt!).mockReturnValue(false);
+
+    const green = await service.evaluateCiGate(failed.subtasks, context);
+
+    expect(green.subtasks[0]).toMatchObject({
+      status: "COMPLETED",
+      is_merged: true,
+      merge_indicator: "AUTOMERGE",
+    });
+    expect(context.autoMergeFeaturePr).toHaveBeenCalledTimes(1);
+    expect(context.executionRepository?.appendTaskRunEvent).toHaveBeenCalledWith(
+      "run-1",
+      "ci_gate_status",
+      "system",
+      expect.objectContaining({ state: "waiting_checks", hasFailedChecks: true, prNumber: 101 }),
+      expect.any(Object),
+    );
+    expect(context.executionRepository?.appendTaskRunEvent).toHaveBeenCalledWith(
+      "run-1",
+      "ci_gate_status",
+      "system",
+      expect.objectContaining({ state: "automerge_succeeded", prNumber: 101 }),
+      expect.any(Object),
+    );
   });
 
   it("does not block a task at the retry limit while the current worker CI fix attempt is still active", async () => {

@@ -106,7 +106,7 @@ const SprintsProjectPlaceholder: FunctionComponent<{
         <div className="text-[10px] font-bold uppercase tracking-[0.22em] text-signal-500">
           Sprint Workspace Standby
         </div>
-        <h2 className="mt-3 max-w-3xl font-display text-4xl font-black leading-[0.98] tracking-tight text-slate-900 dark:text-white md:text-5xl">
+        <h2 className="mt-3 max-w-3xl font-display text-2xl font-semibold leading-[0.98] tracking-tight text-slate-900 dark:text-white md:text-5xl">
           Project scope comes first.
         </h2>
         <p className="mt-5 max-w-2xl text-sm font-medium leading-relaxed text-slate-500 dark:text-slate-400 md:text-base">
@@ -117,7 +117,7 @@ const SprintsProjectPlaceholder: FunctionComponent<{
           <button
             type="button"
             onClick={onAddProject}
-            className="inline-flex min-h-[44px] items-center gap-2.5 rounded-full bg-signal-500 px-5 py-2.5 text-[10px] font-bold uppercase tracking-[0.14em] text-void-900 shadow-[0_10px_30px_rgba(0,224,160,0.22)] transition-all hover:-translate-y-px hover:bg-signal-400 focus-visible:ring-2 focus-visible:ring-signal-500/40"
+            className="inline-flex min-h-[44px] items-center gap-2.5 rounded-full bg-signal-500 px-5 py-2.5 text-[10px] font-bold uppercase tracking-[0.14em] text-white dark:text-void-900 shadow-[0_10px_30px_rgba(0,224,160,0.22)] transition-all hover:-translate-y-px hover:bg-signal-400 focus-visible:ring-2 focus-visible:ring-signal-500/40"
           >
             <Plus className="h-3.5 w-3.5" strokeWidth={2.3} />
             {hasProjects ? "Add Project" : "Add First Project"}
@@ -183,6 +183,7 @@ export const SprintsPage: FunctionComponent = () => {
     clearFeedback: clearImportedTaskFeedback,
     clearError: clearImportedTaskFeedbackError,
   } = useActionFeedback();
+  const previousSelectedProjectIdRef = useRef<string | null>(null);
   const [rowMenu, setRowMenu] = useState<{
     sprintId: string;
     top: number;
@@ -227,6 +228,7 @@ export const SprintsPage: FunctionComponent = () => {
     quicksprintLoading,
     agentPresets,
     handleQuicksprintExecute,
+    handleQuicksprintSchedule,
     handleCreateQuicksprintTemplate,
     handleUpdateQuicksprintTemplate,
     handleDeleteQuicksprintTemplate,
@@ -254,6 +256,16 @@ export const SprintsPage: FunctionComponent = () => {
   const activeRowMenuSprint = useMemo(() => rowMenu
     ? sortedSprints.find((sprint) => sprint.id === rowMenu.sprintId) || null
     : null, [rowMenu, sortedSprints]);
+
+  const scheduleAnchorSprintOptions = useMemo(
+    () => sortedSprints
+      .filter((sprint) => sprint.id !== editingSprint?.id)
+      .map((sprint) => ({
+        id: sprint.id,
+        label: sprint.name,
+      })),
+    [editingSprint?.id, sortedSprints],
+  );
 
   const mergeImportedTasks = useCallback((tasks: SprintImportedTaskInput[]) => {
     setPendingImportedTasks((current) => dedupeImportedTasks([...current, ...tasks]));
@@ -313,6 +325,29 @@ export const SprintsPage: FunctionComponent = () => {
   useEffect(() => {
     storeSprintGalleryVisibility(showSprintGallery);
   }, [showSprintGallery]);
+
+  useEffect(() => {
+    const currentProjectId = selectedProject?.id || null;
+    const previousProjectId = previousSelectedProjectIdRef.current;
+    previousSelectedProjectIdRef.current = currentProjectId;
+
+    if (previousProjectId === null || previousProjectId === currentProjectId) {
+      return;
+    }
+
+    setShowCreateComposer(false);
+    setEditingSprint(null);
+    setShowQuicksprint(false);
+    setRowMenu(null);
+    setLinkedIssues([]);
+    clearImportedTaskDrafts();
+  }, [
+    clearImportedTaskDrafts,
+    selectedProject?.id,
+    setEditingSprint,
+    setShowCreateComposer,
+    setShowQuicksprint,
+  ]);
 
   // A `?sprintKey=` deep-link (from global search / invocation feed links) seeds
   // the ledger search once so you land on that sprint. We read it straight from
@@ -533,94 +568,105 @@ export const SprintsPage: FunctionComponent = () => {
                 : "Select a project to manage sprint structure."
             }
             actions={
-          <div className="flex flex-wrap items-center gap-2">
-            {[
-              { label: "Total", value: sortedSprints.length, icon: Target },
-              { label: "Completed", value: completedCount, icon: CheckCircle2 },
-              { label: "In Work", value: inWorkCount, icon: Activity },
-            ].map(({ label, value, icon: Icon }) => (
-              <div
-                key={label}
-                className="inline-flex items-center gap-3 rounded-full border border-black/[0.06] bg-white/72 px-4 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-300"
-              >
-                <Icon className="h-3.5 w-3.5 text-signal-500" strokeWidth={2} />
-                {label} <span className="font-mono text-slate-700 dark:text-white">{value}</span>
+              <div className="flex w-full min-w-0 flex-col gap-2 lg:w-auto lg:items-end">
+                <div className="grid w-full grid-cols-[minmax(5.5rem,0.85fr)_repeat(3,minmax(0,1fr))] gap-1.5 sm:flex sm:w-auto sm:flex-wrap sm:items-center lg:justify-end">
+                  <button
+                    type="button"
+                    onClick={() => setShowSprintGallery((current) => !current)}
+                    disabled={!selectedProject}
+                    aria-pressed={showSprintGallery}
+                    aria-label={showSprintGallery ? "Hide Gallery" : "Show Gallery"}
+                    className="inline-flex min-w-0 items-center justify-center gap-2 rounded-full px-2 py-2 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900 focus-visible:ring-2 focus-visible:ring-signal-500/40 disabled:cursor-not-allowed disabled:opacity-50 dark:text-slate-400 dark:hover:bg-white/[0.05] dark:hover:text-white sm:px-3 sm:tracking-[0.14em]"
+                  >
+                    {showSprintGallery ? (
+                      <EyeOff className="h-3.5 w-3.5 shrink-0 text-ember-500" strokeWidth={2.2} />
+                    ) : (
+                      <Eye className="h-3.5 w-3.5 shrink-0 text-signal-500" strokeWidth={2.2} />
+                    )}
+                    <span className="hidden sm:inline">{showSprintGallery ? "Hide Gallery" : "Show Gallery"}</span>
+                    <span className="min-w-0 truncate sm:hidden">Gallery</span>
+                  </button>
+                  {[
+                    { label: "Total", value: sortedSprints.length, icon: Target },
+                    { label: "Completed", value: completedCount, icon: CheckCircle2 },
+                    { label: "In Work", value: inWorkCount, icon: Activity },
+                  ].map(({ label, value, icon: Icon }) => (
+                    <div
+                      key={label}
+                      className="inline-flex min-w-0 items-center justify-center gap-1.5 rounded-full border border-black/[0.06] bg-white/72 px-2 py-2 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-300 sm:gap-3 sm:px-4 sm:tracking-[0.14em]"
+                    >
+                      <Icon className="h-3.5 w-3.5 shrink-0 text-signal-500" strokeWidth={2} />
+                      <span className="min-w-0 truncate">{label}</span>
+                      <span className="shrink-0 font-mono text-slate-700 dark:text-white">{value}</span>
+                    </div>
+                  ))}
+                </div>
+                <div className="grid w-full grid-cols-3 gap-2 sm:flex sm:w-auto sm:flex-wrap sm:items-center lg:justify-end">
+                  <SprintImportMenu
+                    disabled={!selectedProject}
+                    onImportMarkdown={() => setShowImportModal(true)}
+                    onImportGitHubIssues={() => {
+                      setIssueImportProvider("github");
+                      setShowIssueImportModal(true);
+                    }}
+                    onImportGitLabIssues={() => {
+                      setIssueImportProvider("gitlab");
+                      setShowIssueImportModal(true);
+                    }}
+                    onImportJira={() => setIsJiraModalOpen(true)}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (showCreateComposer || editingSprint) {
+                        setShowCreateComposer(false);
+                        setEditingSprint(null);
+                      }
+                      setShowQuicksprint(!showQuicksprint);
+                    }}
+                    disabled={!selectedProject}
+                    aria-label={showQuicksprint ? "Close Quicksprint" : "Quicksprint"}
+                    className={`inline-flex min-w-0 items-center justify-center gap-2 rounded-full px-3 py-2.5 text-[10px] font-bold uppercase tracking-[0.14em] transition-all disabled:cursor-not-allowed disabled:opacity-50 sm:px-5 ${
+                      showQuicksprint
+                        ? "border border-black/[0.06] bg-white/72 text-slate-600 hover:text-slate-900 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-300 dark:hover:text-white"
+                        : "bg-ember-500 text-void-900 hover:-translate-y-px hover:bg-ember-400"
+                    }`}
+                  >
+                    {showQuicksprint ? <X className="h-3.5 w-3.5 shrink-0" strokeWidth={2.3} /> : <Zap className="h-3.5 w-3.5 shrink-0" strokeWidth={2.3} />}
+                    <span className="hidden sm:inline">{showQuicksprint ? "Close Quicksprint" : "Quicksprint"}</span>
+                    <span className="sm:hidden">{showQuicksprint ? "Close" : "Quick"}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (showQuicksprint) {
+                        setShowQuicksprint(false);
+                      }
+                      if (editingSprint || showCreateComposer) {
+                        setEditingSprint(null);
+                        setShowCreateComposer(false);
+                        setLinkedIssues([]);
+                        clearImportedTaskDrafts();
+                        return;
+                      }
+                      setLinkedIssues([]);
+                      clearImportedTaskDrafts();
+                      setShowCreateComposer(true);
+                    }}
+                    disabled={!selectedProject}
+                    aria-label={(showCreateComposer || editingSprint) ? "Close Composer" : "New Sprint"}
+                    className={`inline-flex min-w-0 items-center justify-center gap-2 rounded-full px-3 py-2.5 text-[10px] font-bold uppercase tracking-[0.14em] transition-all disabled:cursor-not-allowed disabled:opacity-50 sm:px-5 ${
+                      showCreateComposer
+                        ? "border border-black/[0.06] bg-white/72 text-slate-600 hover:text-slate-900 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-300 dark:hover:text-white"
+                        : "bg-signal-500 text-white hover:-translate-y-px hover:bg-signal-400 dark:text-void-900"
+                    }`}
+                  >
+                    {(showCreateComposer || editingSprint) ? <X className="h-3.5 w-3.5 shrink-0" strokeWidth={2.3} /> : <Plus className="h-3.5 w-3.5 shrink-0" strokeWidth={2.3} />}
+                    <span className="hidden sm:inline">{(showCreateComposer || editingSprint) ? "Close Composer" : "New Sprint"}</span>
+                    <span className="sm:hidden">{(showCreateComposer || editingSprint) ? "Close" : "New"}</span>
+                  </button>
+                </div>
               </div>
-            ))}
-            <button
-              type="button"
-              onClick={() => setShowSprintGallery((current) => !current)}
-              disabled={!selectedProject}
-              aria-pressed={showSprintGallery}
-              className="inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900 focus-visible:ring-2 focus-visible:ring-signal-500/40 disabled:cursor-not-allowed disabled:opacity-50 dark:text-slate-400 dark:hover:bg-white/[0.05] dark:hover:text-white"
-            >
-              {showSprintGallery ? (
-                <EyeOff className="h-3.5 w-3.5 text-ember-500" strokeWidth={2.2} />
-              ) : (
-                <Eye className="h-3.5 w-3.5 text-signal-500" strokeWidth={2.2} />
-              )}
-              {showSprintGallery ? "Hide Gallery" : "Show Gallery"}
-            </button>
-            <SprintImportMenu
-              disabled={!selectedProject}
-              onImportMarkdown={() => setShowImportModal(true)}
-              onImportGitHubIssues={() => {
-                setIssueImportProvider("github");
-                setShowIssueImportModal(true);
-              }}
-              onImportGitLabIssues={() => {
-                setIssueImportProvider("gitlab");
-                setShowIssueImportModal(true);
-              }}
-              onImportJira={() => setIsJiraModalOpen(true)}
-            />
-            <button
-              type="button"
-              onClick={() => {
-                if (showCreateComposer || editingSprint) {
-                  setShowCreateComposer(false);
-                  setEditingSprint(null);
-                }
-                setShowQuicksprint(!showQuicksprint);
-              }}
-              disabled={!selectedProject}
-              className={`inline-flex items-center gap-2 rounded-full px-5 py-2.5 text-[10px] font-bold uppercase tracking-[0.14em] transition-all disabled:cursor-not-allowed disabled:opacity-50 ${
-                showQuicksprint
-                  ? "border border-black/[0.06] bg-white/72 text-slate-600 hover:text-slate-900 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-300 dark:hover:text-white"
-                  : "bg-ember-500 text-void-900 hover:-translate-y-px hover:bg-ember-400"
-              }`}
-            >
-              {showQuicksprint ? <X className="h-3.5 w-3.5" strokeWidth={2.3} /> : <Zap className="h-3.5 w-3.5" strokeWidth={2.3} />}
-              {showQuicksprint ? "Close Quicksprint" : "Quicksprint"}
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                if (showQuicksprint) {
-                  setShowQuicksprint(false);
-                }
-                if (editingSprint || showCreateComposer) {
-                  setEditingSprint(null);
-                  setShowCreateComposer(false);
-                  setLinkedIssues([]);
-                  clearImportedTaskDrafts();
-                  return;
-                }
-                setLinkedIssues([]);
-                clearImportedTaskDrafts();
-                setShowCreateComposer(true);
-              }}
-              disabled={!selectedProject}
-              className={`inline-flex items-center gap-2 rounded-full px-5 py-2.5 text-[10px] font-bold uppercase tracking-[0.14em] transition-all disabled:cursor-not-allowed disabled:opacity-50 ${
-                showCreateComposer
-                  ? "border border-black/[0.06] bg-white/72 text-slate-600 hover:text-slate-900 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-300 dark:hover:text-white"
-                  : "bg-signal-500 text-void-900 hover:-translate-y-px hover:bg-signal-400"
-              }`}
-            >
-              {(showCreateComposer || editingSprint) ? <X className="h-3.5 w-3.5" strokeWidth={2.3} /> : <Plus className="h-3.5 w-3.5" strokeWidth={2.3} />}
-              {(showCreateComposer || editingSprint) ? "Close Composer" : "New Sprint"}
-            </button>
-          </div>
             }
           />
           <ActionFeedbackRegion
@@ -765,6 +811,7 @@ export const SprintsPage: FunctionComponent = () => {
                     defaultAgentRoutingMode={defaultAgentRoutingMode}
                     defaultWorkerAgentPresetId={defaultWorkerAgentPresetId}
                     planningEta={planningEta}
+                    scheduleAnchorSprintOptions={scheduleAnchorSprintOptions}
                     onClose={() => {
                       setShowCreateComposer(false);
                       setEditingSprint(null);
@@ -823,6 +870,8 @@ export const SprintsPage: FunctionComponent = () => {
                         animateLatestCell();
                       }
                     }}
+                    onSchedule={handleQuicksprintSchedule}
+                    scheduleAnchorSprintOptions={scheduleAnchorSprintOptions}
                     onCreateTemplate={handleCreateQuicksprintTemplate}
                     onUpdateTemplate={handleUpdateQuicksprintTemplate}
                     onDeleteTemplate={handleDeleteQuicksprintTemplate}

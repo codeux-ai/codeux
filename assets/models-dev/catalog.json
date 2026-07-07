@@ -17467,6 +17467,47 @@
         "temperature": true,
         "tool_call": true
       },
+      "jp.anthropic.claude-haiku-4-5-20251001-v1:0": {
+        "attachment": true,
+        "cost": {
+          "cache_read": 0.1,
+          "cache_write": 1.25,
+          "input": 1,
+          "output": 5
+        },
+        "description": "Fast Claude model for responsive assistance, classification, and lightweight agents",
+        "family": "claude-haiku",
+        "id": "jp.anthropic.claude-haiku-4-5-20251001-v1:0",
+        "knowledge": "2025-02-28",
+        "last_updated": "2025-10-15",
+        "limit": {
+          "context": 200000,
+          "output": 64000
+        },
+        "modalities": {
+          "input": [
+            "text",
+            "image",
+            "pdf"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "name": "Claude Haiku 4.5 (JP)",
+        "open_weights": false,
+        "reasoning": true,
+        "reasoning_options": [
+          {
+            "min": 1024,
+            "type": "budget_tokens"
+          }
+        ],
+        "release_date": "2025-10-15",
+        "structured_output": true,
+        "temperature": true,
+        "tool_call": true
+      },
       "jp.anthropic.claude-opus-4-7": {
         "attachment": true,
         "cost": {
@@ -19850,222 +19891,6 @@
     ],
     "id": "anthropic",
     "models": {
-      "claude-3-5-sonnet-20240620": {
-        "attachment": true,
-        "cost": {
-          "cache_read": 0.3,
-          "cache_write": 3.75,
-          "input": 3,
-          "output": 15
-        },
-        "description": "Legacy model retained for compatibility with older integrations",
-        "family": "claude-sonnet",
-        "id": "claude-3-5-sonnet-20240620",
-        "knowledge": "2024-04-30",
-        "last_updated": "2024-06-20",
-        "limit": {
-          "context": 200000,
-          "output": 8192
-        },
-        "modalities": {
-          "input": [
-            "text",
-            "image",
-            "pdf"
-          ],
-          "output": [
-            "text"
-          ]
-        },
-        "name": "Claude Sonnet 3.5",
-        "open_weights": false,
-        "reasoning": false,
-        "release_date": "2024-06-20",
-        "status": "deprecated",
-        "temperature": true,
-        "tool_call": true
-      },
-      "claude-3-5-sonnet-20241022": {
-        "attachment": true,
-        "cost": {
-          "cache_read": 0.3,
-          "cache_write": 3.75,
-          "input": 3,
-          "output": 15
-        },
-        "description": "Legacy model retained for compatibility with older integrations",
-        "family": "claude-sonnet",
-        "id": "claude-3-5-sonnet-20241022",
-        "knowledge": "2024-04-30",
-        "last_updated": "2024-10-22",
-        "limit": {
-          "context": 200000,
-          "output": 8192
-        },
-        "modalities": {
-          "input": [
-            "text",
-            "image",
-            "pdf"
-          ],
-          "output": [
-            "text"
-          ]
-        },
-        "name": "Claude Sonnet 3.5 v2",
-        "open_weights": false,
-        "reasoning": false,
-        "release_date": "2024-10-22",
-        "status": "deprecated",
-        "temperature": true,
-        "tool_call": true
-      },
-      "claude-3-7-sonnet-20250219": {
-        "attachment": true,
-        "cost": {
-          "cache_read": 0.3,
-          "cache_write": 3.75,
-          "input": 3,
-          "output": 15
-        },
-        "description": "Legacy model retained for compatibility with older integrations",
-        "family": "claude-sonnet",
-        "id": "claude-3-7-sonnet-20250219",
-        "knowledge": "2024-10-31",
-        "last_updated": "2025-02-19",
-        "limit": {
-          "context": 200000,
-          "output": 64000
-        },
-        "modalities": {
-          "input": [
-            "text",
-            "image",
-            "pdf"
-          ],
-          "output": [
-            "text"
-          ]
-        },
-        "name": "Claude Sonnet 3.7",
-        "open_weights": false,
-        "reasoning": true,
-        "reasoning_options": [
-          {
-            "min": 1024,
-            "type": "budget_tokens"
-          }
-        ],
-        "release_date": "2025-02-19",
-        "status": "deprecated",
-        "temperature": true,
-        "tool_call": true
-      },
-      "claude-3-haiku-20240307": {
-        "attachment": true,
-        "cost": {
-          "cache_read": 0.03,
-          "cache_write": 0.3,
-          "input": 0.25,
-          "output": 1.25
-        },
-        "description": "Legacy model retained for compatibility with older integrations",
-        "family": "claude-haiku",
-        "id": "claude-3-haiku-20240307",
-        "knowledge": "2023-08-31",
-        "last_updated": "2024-03-13",
-        "limit": {
-          "context": 200000,
-          "output": 4096
-        },
-        "modalities": {
-          "input": [
-            "text",
-            "image",
-            "pdf"
-          ],
-          "output": [
-            "text"
-          ]
-        },
-        "name": "Claude Haiku 3",
-        "open_weights": false,
-        "reasoning": false,
-        "release_date": "2024-03-13",
-        "status": "deprecated",
-        "temperature": true,
-        "tool_call": true
-      },
-      "claude-3-opus-20240229": {
-        "attachment": true,
-        "cost": {
-          "cache_read": 1.5,
-          "cache_write": 18.75,
-          "input": 15,
-          "output": 75
-        },
-        "description": "Legacy model retained for compatibility with older integrations",
-        "family": "claude-opus",
-        "id": "claude-3-opus-20240229",
-        "knowledge": "2023-08-31",
-        "last_updated": "2024-02-29",
-        "limit": {
-          "context": 200000,
-          "output": 4096
-        },
-        "modalities": {
-          "input": [
-            "text",
-            "image",
-            "pdf"
-          ],
-          "output": [
-            "text"
-          ]
-        },
-        "name": "Claude Opus 3",
-        "open_weights": false,
-        "reasoning": false,
-        "release_date": "2024-02-29",
-        "status": "deprecated",
-        "temperature": true,
-        "tool_call": true
-      },
-      "claude-3-sonnet-20240229": {
-        "attachment": true,
-        "cost": {
-          "cache_read": 0.3,
-          "cache_write": 0.3,
-          "input": 3,
-          "output": 15
-        },
-        "description": "Legacy model retained for compatibility with older integrations",
-        "family": "claude-sonnet",
-        "id": "claude-3-sonnet-20240229",
-        "knowledge": "2023-08-31",
-        "last_updated": "2024-03-04",
-        "limit": {
-          "context": 200000,
-          "output": 4096
-        },
-        "modalities": {
-          "input": [
-            "text",
-            "image",
-            "pdf"
-          ],
-          "output": [
-            "text"
-          ]
-        },
-        "name": "Claude Sonnet 3",
-        "open_weights": false,
-        "reasoning": false,
-        "release_date": "2024-03-04",
-        "status": "deprecated",
-        "temperature": true,
-        "tool_call": true
-      },
       "claude-fable-5": {
         "attachment": true,
         "cost": {
@@ -20107,7 +19932,8 @@
             ]
           }
         ],
-        "release_date": "2026-06-09",
+        "release_date": "2026-06-07",
+        "structured_output": true,
         "temperature": false,
         "tool_call": true
       },
@@ -20148,6 +19974,7 @@
           }
         ],
         "release_date": "2025-10-15",
+        "structured_output": true,
         "temperature": true,
         "tool_call": true
       },
@@ -20188,46 +20015,7 @@
           }
         ],
         "release_date": "2025-10-15",
-        "temperature": true,
-        "tool_call": true
-      },
-      "claude-opus-4-0": {
-        "attachment": true,
-        "cost": {
-          "cache_read": 1.5,
-          "cache_write": 18.75,
-          "input": 15,
-          "output": 75
-        },
-        "description": "Flagship Claude model for deep reasoning, coding, and long-horizon agents",
-        "family": "claude-opus",
-        "id": "claude-opus-4-0",
-        "knowledge": "2025-03-31",
-        "last_updated": "2025-05-22",
-        "limit": {
-          "context": 200000,
-          "output": 32000
-        },
-        "modalities": {
-          "input": [
-            "text",
-            "image",
-            "pdf"
-          ],
-          "output": [
-            "text"
-          ]
-        },
-        "name": "Claude Opus 4 (latest)",
-        "open_weights": false,
-        "reasoning": true,
-        "reasoning_options": [
-          {
-            "min": 1024,
-            "type": "budget_tokens"
-          }
-        ],
-        "release_date": "2025-05-22",
+        "structured_output": true,
         "temperature": true,
         "tool_call": true
       },
@@ -20268,6 +20056,8 @@
           }
         ],
         "release_date": "2025-08-05",
+        "status": "deprecated",
+        "structured_output": true,
         "temperature": true,
         "tool_call": true
       },
@@ -20308,46 +20098,8 @@
           }
         ],
         "release_date": "2025-08-05",
-        "temperature": true,
-        "tool_call": true
-      },
-      "claude-opus-4-20250514": {
-        "attachment": true,
-        "cost": {
-          "cache_read": 1.5,
-          "cache_write": 18.75,
-          "input": 15,
-          "output": 75
-        },
-        "description": "Flagship Claude model for deep reasoning, coding, and long-horizon agents",
-        "family": "claude-opus",
-        "id": "claude-opus-4-20250514",
-        "knowledge": "2025-03-31",
-        "last_updated": "2025-05-22",
-        "limit": {
-          "context": 200000,
-          "output": 32000
-        },
-        "modalities": {
-          "input": [
-            "text",
-            "image",
-            "pdf"
-          ],
-          "output": [
-            "text"
-          ]
-        },
-        "name": "Claude Opus 4",
-        "open_weights": false,
-        "reasoning": true,
-        "reasoning_options": [
-          {
-            "min": 1024,
-            "type": "budget_tokens"
-          }
-        ],
-        "release_date": "2025-05-22",
+        "status": "deprecated",
+        "structured_output": true,
         "temperature": true,
         "tool_call": true
       },
@@ -20396,6 +20148,7 @@
           }
         ],
         "release_date": "2025-11-24",
+        "structured_output": true,
         "temperature": true,
         "tool_call": true
       },
@@ -20443,7 +20196,8 @@
             "type": "budget_tokens"
           }
         ],
-        "release_date": "2025-11-01",
+        "release_date": "2025-11-24",
+        "structured_output": true,
         "temperature": true,
         "tool_call": true
       },
@@ -20512,7 +20266,8 @@
             "type": "budget_tokens"
           }
         ],
-        "release_date": "2026-02-05",
+        "release_date": "2026-02-04",
+        "structured_output": true,
         "temperature": true,
         "tool_call": true
       },
@@ -20578,7 +20333,8 @@
             ]
           }
         ],
-        "release_date": "2026-04-16",
+        "release_date": "2026-04-14",
+        "structured_output": true,
         "temperature": false,
         "tool_call": true
       },
@@ -20644,87 +20400,8 @@
           }
         ],
         "release_date": "2026-05-28",
+        "structured_output": true,
         "temperature": false,
-        "tool_call": true
-      },
-      "claude-sonnet-4-0": {
-        "attachment": true,
-        "cost": {
-          "cache_read": 0.3,
-          "cache_write": 3.75,
-          "input": 3,
-          "output": 15
-        },
-        "description": "Balanced Claude model for coding, analysis, agent workflows, and cost control",
-        "family": "claude-sonnet",
-        "id": "claude-sonnet-4-0",
-        "knowledge": "2025-03-31",
-        "last_updated": "2025-05-22",
-        "limit": {
-          "context": 200000,
-          "output": 64000
-        },
-        "modalities": {
-          "input": [
-            "text",
-            "image",
-            "pdf"
-          ],
-          "output": [
-            "text"
-          ]
-        },
-        "name": "Claude Sonnet 4 (latest)",
-        "open_weights": false,
-        "reasoning": true,
-        "reasoning_options": [
-          {
-            "min": 1024,
-            "type": "budget_tokens"
-          }
-        ],
-        "release_date": "2025-05-22",
-        "temperature": true,
-        "tool_call": true
-      },
-      "claude-sonnet-4-20250514": {
-        "attachment": true,
-        "cost": {
-          "cache_read": 0.3,
-          "cache_write": 3.75,
-          "input": 3,
-          "output": 15
-        },
-        "description": "Balanced Claude model for coding, analysis, agent workflows, and cost control",
-        "family": "claude-sonnet",
-        "id": "claude-sonnet-4-20250514",
-        "knowledge": "2025-03-31",
-        "last_updated": "2025-05-22",
-        "limit": {
-          "context": 200000,
-          "output": 64000
-        },
-        "modalities": {
-          "input": [
-            "text",
-            "image",
-            "pdf"
-          ],
-          "output": [
-            "text"
-          ]
-        },
-        "name": "Claude Sonnet 4",
-        "open_weights": false,
-        "reasoning": true,
-        "reasoning_options": [
-          {
-            "min": 1024,
-            "type": "budget_tokens"
-          }
-        ],
-        "release_date": "2025-05-22",
-        "temperature": true,
         "tool_call": true
       },
       "claude-sonnet-4-5": {
@@ -20741,7 +20418,7 @@
         "knowledge": "2025-07-31",
         "last_updated": "2025-09-29",
         "limit": {
-          "context": 200000,
+          "context": 1000000,
           "output": 64000
         },
         "modalities": {
@@ -20764,6 +20441,7 @@
           }
         ],
         "release_date": "2025-09-29",
+        "structured_output": true,
         "temperature": true,
         "tool_call": true
       },
@@ -20781,7 +20459,7 @@
         "knowledge": "2025-07-31",
         "last_updated": "2025-09-29",
         "limit": {
-          "context": 200000,
+          "context": 1000000,
           "output": 64000
         },
         "modalities": {
@@ -20804,6 +20482,7 @@
           }
         ],
         "release_date": "2025-09-29",
+        "structured_output": true,
         "temperature": true,
         "tool_call": true
       },
@@ -20822,7 +20501,7 @@
         "last_updated": "2026-03-13",
         "limit": {
           "context": 1000000,
-          "output": 64000
+          "output": 128000
         },
         "modalities": {
           "input": [
@@ -20853,6 +20532,7 @@
           }
         ],
         "release_date": "2026-02-17",
+        "structured_output": true,
         "temperature": true,
         "tool_call": true
       },
@@ -20901,7 +20581,8 @@
             ]
           }
         ],
-        "release_date": "2026-06-30",
+        "release_date": "2026-06-29",
+        "structured_output": true,
         "temperature": false,
         "tool_call": true
       }
@@ -62753,6 +62434,46 @@
           ]
         },
         "name": "GPT OSS 120B",
+        "open_weights": true,
+        "reasoning": true,
+        "reasoning_options": [
+          {
+            "type": "effort",
+            "values": [
+              "low",
+              "medium",
+              "high"
+            ]
+          }
+        ],
+        "release_date": "2025-08-05",
+        "structured_output": true,
+        "temperature": true,
+        "tool_call": true
+      },
+      "openai/gpt-oss-20b": {
+        "attachment": false,
+        "cost": {
+          "input": 0.1,
+          "output": 0.5
+        },
+        "description": "Open-weight GPT model for self-hosted reasoning and instruction-following workloads",
+        "family": "gpt-oss",
+        "id": "openai/gpt-oss-20b",
+        "last_updated": "2025-08-05",
+        "limit": {
+          "context": 131072,
+          "output": 32768
+        },
+        "modalities": {
+          "input": [
+            "text"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "name": "GPT OSS 20B",
         "open_weights": true,
         "reasoning": true,
         "reasoning_options": [
@@ -137360,8 +137081,8 @@
       "meta-llama/llama-3.2-3b-instruct": {
         "attachment": false,
         "cost": {
-          "input": 0.0509,
-          "output": 0.335
+          "input": 0.05,
+          "output": 0.33
         },
         "description": "Open Llama instruction model for multilingual chat, reasoning, and coding",
         "family": "llama",
@@ -137369,8 +137090,8 @@
         "knowledge": "2023-12-31",
         "last_updated": "2024-09-25",
         "limit": {
-          "context": 80000,
-          "output": 80000
+          "context": 131072,
+          "output": 131072
         },
         "modalities": {
           "input": [
@@ -137384,7 +137105,7 @@
         "open_weights": true,
         "reasoning": false,
         "release_date": "2024-09-25",
-        "structured_output": false,
+        "structured_output": true,
         "temperature": true,
         "tool_call": false
       },
@@ -138641,6 +138362,7 @@
       "moonshotai/kimi-k2.5": {
         "attachment": true,
         "cost": {
+          "cache_read": 0.203,
           "input": 0.375,
           "output": 2.025
         },
@@ -138804,6 +138526,39 @@
         "structured_output": true,
         "temperature": true,
         "tool_call": false
+      },
+      "nex-agi/nex-n2-mini": {
+        "attachment": true,
+        "cost": {
+          "cache_read": 0.0025,
+          "input": 0.025,
+          "output": 0.1
+        },
+        "description": "Multimodal reasoning model for visual analysis, planning, and tool use",
+        "family": "agi",
+        "id": "nex-agi/nex-n2-mini",
+        "last_updated": "2026-06-24",
+        "limit": {
+          "context": 262144,
+          "output": 262144
+        },
+        "modalities": {
+          "input": [
+            "text",
+            "image"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "name": "Nex-N2-Mini",
+        "open_weights": true,
+        "reasoning": true,
+        "reasoning_options": [],
+        "release_date": "2026-06-24",
+        "structured_output": true,
+        "temperature": true,
+        "tool_call": true
       },
       "nex-agi/nex-n2-pro": {
         "attachment": true,
@@ -141282,7 +141037,6 @@
         "description": "Open-weight GPT model for self-hosted reasoning and instruction-following workloads",
         "family": "gpt-oss",
         "id": "openai/gpt-oss-20b",
-        "knowledge": "2024-06-30",
         "last_updated": "2025-08-05",
         "limit": {
           "context": 131072,
@@ -141296,7 +141050,7 @@
             "text"
           ]
         },
-        "name": "gpt-oss-20b",
+        "name": "GPT OSS 20B",
         "open_weights": true,
         "reasoning": true,
         "reasoning_options": [
@@ -141323,7 +141077,6 @@
         "description": "Open-weight GPT model for self-hosted reasoning and instruction-following workloads",
         "family": "gpt-oss",
         "id": "openai/gpt-oss-20b:free",
-        "knowledge": "2024-06-30",
         "last_updated": "2025-08-05",
         "limit": {
           "context": 131072,
@@ -143553,6 +143306,7 @@
       "qwen/qwen3.5-397b-a17b": {
         "attachment": true,
         "cost": {
+          "cache_read": 0.111,
           "input": 0.385,
           "output": 2.45
         },
@@ -144467,6 +144221,47 @@
         "temperature": true,
         "tool_call": false
       },
+      "tencent/hy3": {
+        "attachment": false,
+        "cost": {
+          "cache_read": 0.035,
+          "input": 0.14,
+          "output": 0.58
+        },
+        "description": "Tencent Hy reasoning model for coding, instruction following, and agent tasks",
+        "family": "hy3",
+        "id": "tencent/hy3",
+        "last_updated": "2026-07-06",
+        "limit": {
+          "context": 202752,
+          "output": 131072
+        },
+        "modalities": {
+          "input": [
+            "text"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "name": "Hy3",
+        "open_weights": true,
+        "reasoning": true,
+        "reasoning_options": [
+          {
+            "type": "effort",
+            "values": [
+              "none",
+              "low",
+              "high"
+            ]
+          }
+        ],
+        "release_date": "2026-07-06",
+        "structured_output": true,
+        "temperature": true,
+        "tool_call": true
+      },
       "tencent/hy3-preview": {
         "attachment": false,
         "cost": {
@@ -144505,6 +144300,46 @@
         ],
         "release_date": "2026-04-20",
         "structured_output": false,
+        "temperature": true,
+        "tool_call": true
+      },
+      "tencent/hy3:free": {
+        "attachment": false,
+        "cost": {
+          "input": 0,
+          "output": 0
+        },
+        "description": "Tencent Hy reasoning model for coding, instruction following, and agent tasks",
+        "family": "hy3",
+        "id": "tencent/hy3:free",
+        "last_updated": "2026-07-06",
+        "limit": {
+          "context": 262144,
+          "output": 262144
+        },
+        "modalities": {
+          "input": [
+            "text"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "name": "Hy3 (free)",
+        "open_weights": true,
+        "reasoning": true,
+        "reasoning_options": [
+          {
+            "type": "effort",
+            "values": [
+              "none",
+              "low",
+              "high"
+            ]
+          }
+        ],
+        "release_date": "2026-07-06",
+        "structured_output": true,
         "temperature": true,
         "tool_call": true
       },
@@ -144896,6 +144731,7 @@
       "xiaomi/mimo-v2.5": {
         "attachment": true,
         "cost": {
+          "cache_read": 0.028,
           "input": 0.105,
           "output": 0.28
         },
@@ -145335,9 +145171,9 @@
       "z-ai/glm-5.2": {
         "attachment": false,
         "cost": {
-          "cache_read": 0.143,
-          "input": 0.77,
-          "output": 2.42
+          "cache_read": 0.16874,
+          "input": 0.9086,
+          "output": 2.8556
         },
         "description": "Open flagship GLM for long-horizon coding agents and million-token context work",
         "family": "glm",
@@ -145347,8 +145183,8 @@
         },
         "last_updated": "2026-06-13",
         "limit": {
-          "context": 1024000,
-          "output": 128000
+          "context": 1048576,
+          "output": 131072
         },
         "modalities": {
           "input": [
@@ -167272,8 +167108,8 @@
       "Qwen/Qwen3-VL-235B-A22B-Instruct-FP8": {
         "attachment": true,
         "cost": {
-          "input": 1.64,
-          "output": 1.91
+          "input": 1.76,
+          "output": 2.05
         },
         "description": "Qwen vision-language model for visual reasoning, documents, and agent tasks",
         "family": "qwen",
@@ -167281,7 +167117,7 @@
         "last_updated": "2024-11-01",
         "limit": {
           "context": 218000,
-          "output": 8192
+          "output": 16384
         },
         "modalities": {
           "input": [
@@ -167331,11 +167167,41 @@
         "temperature": false,
         "tool_call": false
       },
+      "Qwen/Qwen3.6-27B": {
+        "attachment": false,
+        "cost": {
+          "input": 0.53,
+          "output": 0.76
+        },
+        "description": "Qwen vision-language model for visual reasoning, documents, and agent tasks",
+        "family": "qwen",
+        "id": "Qwen/Qwen3.6-27B",
+        "last_updated": "2026-04-22",
+        "limit": {
+          "context": 262144,
+          "output": 16384
+        },
+        "modalities": {
+          "input": [
+            "text"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "name": "Qwen3.6 27B",
+        "open_weights": true,
+        "reasoning": false,
+        "release_date": "2026-04-22",
+        "structured_output": false,
+        "temperature": true,
+        "tool_call": true
+      },
       "cortecs/Llama-3.3-70B-Instruct-FP8-Dynamic": {
         "attachment": false,
         "cost": {
-          "input": 0.49,
-          "output": 0.71
+          "input": 0.53,
+          "output": 0.76
         },
         "description": "Open Llama instruction model for multilingual chat, reasoning, and coding",
         "family": "llama",
@@ -167343,7 +167209,7 @@
         "last_updated": "2024-12-05",
         "limit": {
           "context": 128000,
-          "output": 8192
+          "output": 4096
         },
         "modalities": {
           "input": [
@@ -167364,8 +167230,8 @@
       "google/gemma-3-27b-it": {
         "attachment": true,
         "cost": {
-          "input": 0.49,
-          "output": 0.71
+          "input": 0.53,
+          "output": 0.76
         },
         "description": "Open Gemma instruction model for efficient chat and self-hosted deployments",
         "family": "gemma",
@@ -167373,7 +167239,7 @@
         "last_updated": "2025-05-17",
         "limit": {
           "context": 37000,
-          "output": 8192
+          "output": 4096
         },
         "modalities": {
           "input": [
@@ -167422,74 +167288,14 @@
         "temperature": false,
         "tool_call": false
       },
-      "neuralmagic/Meta-Llama-3.1-8B-Instruct-FP8": {
-        "attachment": false,
-        "cost": {
-          "input": 0.16,
-          "output": 0.27
-        },
-        "description": "Open Llama instruction model for multilingual chat, reasoning, and coding",
-        "family": "llama",
-        "id": "neuralmagic/Meta-Llama-3.1-8B-Instruct-FP8",
-        "last_updated": "2024-07-23",
-        "limit": {
-          "context": 128000,
-          "output": 8192
-        },
-        "modalities": {
-          "input": [
-            "text"
-          ],
-          "output": [
-            "text"
-          ]
-        },
-        "name": "Llama 3.1 8B",
-        "open_weights": true,
-        "reasoning": false,
-        "release_date": "2024-07-23",
-        "structured_output": true,
-        "temperature": true,
-        "tool_call": true
-      },
-      "neuralmagic/Mistral-Nemo-Instruct-2407-FP8": {
-        "attachment": false,
-        "cost": {
-          "input": 0.49,
-          "output": 0.71
-        },
-        "description": "Mistral model for multilingual chat, reasoning, and tool-assisted workflows",
-        "family": "mistral",
-        "id": "neuralmagic/Mistral-Nemo-Instruct-2407-FP8",
-        "last_updated": "2024-07-01",
-        "limit": {
-          "context": 128000,
-          "output": 8192
-        },
-        "modalities": {
-          "input": [
-            "text"
-          ],
-          "output": [
-            "text"
-          ]
-        },
-        "name": "Mistral Nemo",
-        "open_weights": true,
-        "reasoning": false,
-        "release_date": "2024-07-01",
-        "structured_output": false,
-        "temperature": true,
-        "tool_call": true
-      },
       "openai/gpt-oss-120b": {
         "attachment": false,
         "cost": {
-          "input": 0.49,
-          "output": 0.71
+          "input": 0.53,
+          "output": 0.76
         },
-        "description": "Open-weight GPT model for self-hosted reasoning and instruction-following workloads",
-        "family": "gpt",
+        "description": "Open GPT reasoning model for self-hosted agents and controllable deployments",
+        "family": "gpt-oss",
         "id": "openai/gpt-oss-120b",
         "last_updated": "2025-08-05",
         "limit": {
@@ -167504,7 +167310,7 @@
             "text"
           ]
         },
-        "name": "GPT-OSS 120B",
+        "name": "GPT OSS 120B",
         "open_weights": true,
         "reasoning": true,
         "reasoning_options": [
@@ -167517,6 +167323,37 @@
             ]
           }
         ],
+        "release_date": "2025-08-05",
+        "structured_output": false,
+        "temperature": true,
+        "tool_call": true
+      },
+      "openai/gpt-oss-20b": {
+        "attachment": false,
+        "cost": {
+          "input": 0.18,
+          "output": 0.29
+        },
+        "description": "Open GPT reasoning model for self-hosted agents and controllable deployments",
+        "family": "gpt-oss",
+        "id": "openai/gpt-oss-20b",
+        "last_updated": "2025-08-05",
+        "limit": {
+          "context": 131072,
+          "output": 8192
+        },
+        "modalities": {
+          "input": [
+            "text"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "name": "GPT OSS 20B",
+        "open_weights": true,
+        "reasoning": true,
+        "reasoning_options": [],
         "release_date": "2025-08-05",
         "structured_output": false,
         "temperature": true,
@@ -168082,17 +167919,54 @@
     ],
     "id": "subconscious",
     "models": {
+      "subconscious/glm-5.2": {
+        "attachment": false,
+        "cost": {
+          "cache_read": 0.26,
+          "input": 1.4,
+          "output": 4.4
+        },
+        "description": "Open flagship GLM for long-horizon coding agents and million-token context work",
+        "family": "glm",
+        "id": "subconscious/glm-5.2",
+        "last_updated": "2026-06-13",
+        "limit": {
+          "context": 1000000,
+          "output": 131072
+        },
+        "modalities": {
+          "input": [
+            "text"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "name": "GLM-5.2",
+        "open_weights": true,
+        "reasoning": true,
+        "reasoning_options": [
+          {
+            "type": "toggle"
+          },
+          {
+            "type": "budget_tokens"
+          }
+        ],
+        "release_date": "2026-06-13",
+        "structured_output": true,
+        "temperature": true,
+        "tool_call": true
+      },
       "subconscious/tim-qwen3.6-27b": {
         "attachment": false,
         "cost": {
-          "input": 0,
-          "output": 0
+          "cache_read": 0.15,
+          "input": 0.3,
+          "output": 3
         },
         "description": "Reasoning model for deliberate analysis, multi-step problem solving, and tool use",
         "id": "subconscious/tim-qwen3.6-27b",
-        "interleaved": {
-          "field": "reasoning_content"
-        },
         "last_updated": "2026-05-11",
         "limit": {
           "context": 8192,
@@ -168113,6 +167987,9 @@
         "reasoning_options": [
           {
             "type": "toggle"
+          },
+          {
+            "type": "budget_tokens"
           }
         ],
         "release_date": "2026-05-11",
@@ -168122,7 +167999,7 @@
       }
     },
     "name": "Subconscious",
-    "npm": "@ai-sdk/openai-compatible"
+    "npm": "@ai-sdk/anthropic"
   },
   "submodel": {
     "api": "https://llm.submodel.ai/v1",
@@ -175952,6 +175829,56 @@
         "temperature": true,
         "tool_call": false
       },
+      "alibaba/wan-v2.7-r2v": {
+        "attachment": false,
+        "description": "Video model for prompt-guided generation, editing, and motion workflows",
+        "family": "o",
+        "id": "alibaba/wan-v2.7-r2v",
+        "last_updated": "2026-04-07",
+        "limit": {
+          "context": 0,
+          "output": 0
+        },
+        "modalities": {
+          "input": [
+            "text"
+          ],
+          "output": [
+            "video"
+          ]
+        },
+        "name": "Wan v2.7 Reference-to-Video",
+        "open_weights": false,
+        "reasoning": false,
+        "release_date": "2026-04-07",
+        "temperature": true,
+        "tool_call": false
+      },
+      "alibaba/wan-v2.7-t2v": {
+        "attachment": false,
+        "description": "Video model for prompt-guided generation, editing, and motion workflows",
+        "family": "o",
+        "id": "alibaba/wan-v2.7-t2v",
+        "last_updated": "2026-04-07",
+        "limit": {
+          "context": 0,
+          "output": 0
+        },
+        "modalities": {
+          "input": [
+            "text"
+          ],
+          "output": [
+            "video"
+          ]
+        },
+        "name": "Wan v2.7 Text-to-Video",
+        "open_weights": false,
+        "reasoning": false,
+        "release_date": "2026-04-07",
+        "temperature": true,
+        "tool_call": false
+      },
       "amazon/nova-2-lite": {
         "attachment": true,
         "cost": {
@@ -176140,8 +176067,7 @@
         "modalities": {
           "input": [
             "text",
-            "image",
-            "pdf"
+            "image"
           ],
           "output": [
             "text"
@@ -176151,7 +176077,6 @@
         "open_weights": false,
         "reasoning": false,
         "release_date": "2024-03-13",
-        "status": "deprecated",
         "temperature": true,
         "tool_call": true
       },
@@ -176311,12 +176236,7 @@
         "name": "Claude Opus 4",
         "open_weights": false,
         "reasoning": true,
-        "reasoning_options": [
-          {
-            "min": 1024,
-            "type": "budget_tokens"
-          }
-        ],
+        "reasoning_options": [],
         "release_date": "2025-05-22",
         "temperature": true,
         "tool_call": true
@@ -176358,6 +176278,8 @@
           }
         ],
         "release_date": "2025-08-05",
+        "status": "deprecated",
+        "structured_output": true,
         "temperature": true,
         "tool_call": true
       },
@@ -176566,7 +176488,7 @@
         "knowledge": "2025-03-31",
         "last_updated": "2025-05-22",
         "limit": {
-          "context": 200000,
+          "context": 1000000,
           "output": 64000
         },
         "modalities": {
@@ -176582,12 +176504,7 @@
         "name": "Claude Sonnet 4",
         "open_weights": false,
         "reasoning": true,
-        "reasoning_options": [
-          {
-            "min": 1024,
-            "type": "budget_tokens"
-          }
-        ],
+        "reasoning_options": [],
         "release_date": "2025-05-22",
         "temperature": true,
         "tool_call": true
@@ -176606,7 +176523,7 @@
         "knowledge": "2025-07-31",
         "last_updated": "2025-09-29",
         "limit": {
-          "context": 200000,
+          "context": 1000000,
           "output": 64000
         },
         "modalities": {
@@ -176629,6 +176546,7 @@
           }
         ],
         "release_date": "2025-09-29",
+        "structured_output": true,
         "temperature": true,
         "tool_call": true
       },
@@ -182254,6 +182172,7 @@
           }
         ],
         "release_date": "2025-08-05",
+        "structured_output": true,
         "temperature": true,
         "tool_call": true
       },

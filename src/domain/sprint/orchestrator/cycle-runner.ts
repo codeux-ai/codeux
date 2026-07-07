@@ -39,6 +39,7 @@ import {
   hasActiveCiFixAttentionAttempt,
   shouldEscalateFeatureMergeConflict,
   collectActiveHumanMergeConflictEscalationTaskIds,
+  collectActiveWorkerCiFixTaskIds,
   collectActiveWorkerMergeConflictTaskIds,
   snapshotTaskState,
   resolveCiStatusCacheTtlMs,
@@ -129,6 +130,7 @@ export class CycleRunner {
           isActionRequiredState: this.deps.isActionRequiredState,
           projectManagementRepository: this.deps.projectManagementRepository,
           executionRepository: this.deps.executionRepository,
+          sprintRunLifecycleService: this.deps.sprintRunLifecycleService,
           sprintRunId: args.sprintRunId,
           logger: this.deps.logger.child({ component: "session-sync-step", projectId: args.executionContext.project.id, sprintId: args.executionContext.sprint.id, sprintRunId: args.sprintRunId }),
           listAllActivities: this.deps.listAllActivities,
@@ -323,6 +325,7 @@ export class CycleRunner {
     }
 
     const activeWorkerMergeConflictTaskIds = collectActiveWorkerMergeConflictTaskIds(activeProjectAttentionItems);
+    const activeWorkerCiFixTaskIds = collectActiveWorkerCiFixTaskIds(activeProjectAttentionItems);
     const activeHumanMergeConflictEscalationTaskIds = collectActiveHumanMergeConflictEscalationTaskIds(activeProjectAttentionItems);
     const activeMergeConflictTaskIds = new Set([
       ...activeWorkerMergeConflictTaskIds,
@@ -356,6 +359,7 @@ export class CycleRunner {
       activeMergeConflictTaskIds,
       activeHumanMergeConflictEscalationTaskIds,
       this.mergeConflictDebouncer,
+      activeWorkerCiFixTaskIds,
     );
     const transitionState = evaluateSprintTransitionState({
       subtasks,
@@ -697,6 +701,7 @@ export class CycleRunner {
           `\nReviews used: ${qaGate.runsUsed}/${qaGate.maxRuns}. The task is held in QA_REVIEW_FAILED and will not be merged or marked complete until a human resolves it.`,
         ].filter(Boolean).join("\n"),
         payload: {
+          sourceAttentionType: "qa_review",
           taskKey: task.id,
           qaReason: qaGate.reason,
           runsUsed: qaGate.runsUsed,
@@ -897,7 +902,7 @@ export class CycleRunner {
     const qaContinuedTask = qaGate.latestRun.payload?.continued === true;
     const qaStartedAt = Date.parse(qaGate.latestRun.startedAt);
 
-    return invocations.some((invocation) => {
+    const hasFollowUpInvocation = invocations.some((invocation) => {
       if (invocation.type !== "cli_task_followup" || invocation.status !== "completed" || !invocation.finishedAt) {
         return false;
       }
@@ -910,6 +915,21 @@ export class CycleRunner {
       }
       return followUpFinishedAt > qaFinishedAt;
     });
+    if (hasFollowUpInvocation) {
+      return true;
+    }
+
+    if (!task.session_id || !taskRun?.sessionId || taskRun.sessionId !== task.session_id || taskRun.state !== "COMPLETED" || !taskRun.finishedAt) {
+      return false;
+    }
+    const taskRunFinishedAt = Date.parse(taskRun.finishedAt);
+    if (!Number.isFinite(taskRunFinishedAt)) {
+      return false;
+    }
+    if (qaContinuedTask && Number.isFinite(qaStartedAt)) {
+      return taskRunFinishedAt >= qaStartedAt;
+    }
+    return taskRunFinishedAt > qaFinishedAt;
   }
 
   private hasLatestChangesRequestedQaRun(qaGate: TaskQaMergeGateStatus): boolean {

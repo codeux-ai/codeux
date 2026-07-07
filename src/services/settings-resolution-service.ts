@@ -5,6 +5,8 @@ import type {
   DashboardSettings,
   ExternalSettingsHints,
   McpToolToggle,
+  RestartInvocationPolicy,
+  RestartSprintPolicy,
   RuntimeLogLevel,
   SkillToggle,
 } from "../contracts/app-types.js";
@@ -32,7 +34,7 @@ import {
   buildDefaultIntegrationProviders,
   normalizeSystemIntegrationProviders,
 } from "../domain/settings/provider-config-utils.js";
-import { sanitizeCustomMcpServers, sanitizeMcpToolToggles } from "../mcp/mcp-tool-availability.js";
+import { sanitizeCustomMcpServersWithDefaults, sanitizeMcpToolToggles } from "../mcp/mcp-tool-availability.js";
 import { DEFAULT_INSTRUCTION_TEMPLATES, INSTRUCTION_TEMPLATE_IDS, type InstructionTemplateId } from "../instructions/instruction-template-catalog.js";
 import { DEFAULT_DASHBOARD_SETTINGS, DEFAULT_SKILLS, INTERNAL_SKILL_NAMES, INTERNAL_SKILL_SET } from "../repositories/settings-defaults.js";
 
@@ -55,6 +57,8 @@ const BACKGROUND_PATTERNS = new Set<BackgroundPattern>([
 ]);
 
 const RUNTIME_LOG_LEVEL_SET = new Set<RuntimeLogLevel>(["off", "debug", "info", "warn", "error"]);
+const RESTART_SPRINT_POLICY_SET = new Set<RestartSprintPolicy>(["continue", "pause", "cancel"]);
+const RESTART_INVOCATION_POLICY_SET = new Set<RestartInvocationPolicy>(["continue", "cancel", "restart"]);
 
 const readRuntimeLogLevel = (value: unknown, fallback: RuntimeLogLevel): RuntimeLogLevel => (
   typeof value === "string" && RUNTIME_LOG_LEVEL_SET.has(value as RuntimeLogLevel)
@@ -64,6 +68,18 @@ const readRuntimeLogLevel = (value: unknown, fallback: RuntimeLogLevel): Runtime
 
 const readConsoleLogMode = (value: unknown, fallback: ConsoleLogMode): ConsoleLogMode => (
   value === "full" ? "full" : fallback
+);
+
+const readRestartSprintPolicy = (value: unknown, fallback: RestartSprintPolicy): RestartSprintPolicy => (
+  typeof value === "string" && RESTART_SPRINT_POLICY_SET.has(value as RestartSprintPolicy)
+    ? value as RestartSprintPolicy
+    : fallback
+);
+
+const readRestartInvocationPolicy = (value: unknown, fallback: RestartInvocationPolicy): RestartInvocationPolicy => (
+  typeof value === "string" && RESTART_INVOCATION_POLICY_SET.has(value as RestartInvocationPolicy)
+    ? value as RestartInvocationPolicy
+    : fallback
 );
 
 const sanitizeBackgroundImage = (value: unknown): string | null => {
@@ -112,22 +128,30 @@ function resolveEffectiveCustomMcpServers(
   systemServers: CustomMcpServer[],
   override?: CustomMcpServer[],
 ): CustomMcpServer[] {
-  const byId = new Map<string, CustomMcpServer>();
-  for (const server of sanitizeCustomMcpServers(systemServers)) {
-    byId.set(server.id, server);
-  }
-  if (Array.isArray(override)) {
-    for (const server of sanitizeCustomMcpServers(override)) {
-      byId.set(server.id, server);
-    }
-  }
-  return Array.from(byId.values());
+  return sanitizeCustomMcpServersWithDefaults(override, systemServers);
 }
 
 function cloneInstructionTemplates(
   templates: Record<InstructionTemplateId, string>,
 ): Record<InstructionTemplateId, string> {
   return { ...templates };
+}
+
+function cloneQualityAssuranceTrigger(
+  trigger: ProjectSettings["agents"]["qualityAssurance"]["taskCompletion"],
+): ProjectSettings["agents"]["qualityAssurance"]["taskCompletion"] {
+  const sourceIds = Array.isArray(trigger.agentPresetIds)
+    ? trigger.agentPresetIds
+    : trigger.agentPresetId
+      ? [trigger.agentPresetId]
+      : [];
+  const agentPresetIds = [...new Set(sourceIds.map((id) => id.trim()).filter(Boolean))];
+
+  return {
+    ...trigger,
+    agentPresetIds,
+    agentPresetId: agentPresetIds[0] ?? null,
+  };
 }
 
 function cloneQualityAssuranceSettings(
@@ -138,9 +162,9 @@ function cloneQualityAssuranceSettings(
     maxTaskReviewRuns: settings.maxTaskReviewRuns,
     maxSprintReviewRuns: settings.maxSprintReviewRuns,
     exhaustionPolicy: settings.exhaustionPolicy,
-    taskCompletion: { ...settings.taskCompletion },
-    sprintCompletion: { ...settings.sprintCompletion },
-    completedTaskWithoutPr: { ...settings.completedTaskWithoutPr },
+    taskCompletion: cloneQualityAssuranceTrigger(settings.taskCompletion),
+    sprintCompletion: cloneQualityAssuranceTrigger(settings.sprintCompletion),
+    completedTaskWithoutPr: cloneQualityAssuranceTrigger(settings.completedTaskWithoutPr),
   };
 }
 
@@ -325,14 +349,24 @@ function sanitizeQualityAssuranceTriggerSettings(
   defaults: ProjectSettings["agents"]["qualityAssurance"]["taskCompletion"],
 ): ProjectSettings["agents"]["qualityAssurance"]["taskCompletion"] {
   const input = toRecord(value);
+  const sourceIds = Array.isArray(input.agentPresetIds)
+    ? input.agentPresetIds
+    : typeof input.agentPresetId === "string" && input.agentPresetId.trim().length > 0
+      ? [input.agentPresetId]
+      : defaults.agentPresetIds;
+  const agentPresetIds = [...new Set(
+    sourceIds
+      .filter((id): id is string => typeof id === "string")
+      .map((id) => id.trim())
+      .filter(Boolean)
+  )];
 
   return {
     enabled: typeof input.enabled === "boolean"
       ? input.enabled
       : defaults.enabled,
-    agentPresetId: typeof input.agentPresetId === "string" && input.agentPresetId.trim().length > 0
-      ? input.agentPresetId.trim()
-      : null,
+    agentPresetIds,
+    agentPresetId: agentPresetIds[0] ?? null,
   };
 }
 
@@ -403,6 +437,18 @@ function sanitizeSprintPreviewSettings(value: unknown): ProjectSettings["sprintP
   const hostPortRangeEndCandidate = typeof input.hostPortRangeEnd === "number" && Number.isFinite(input.hostPortRangeEnd)
     ? Math.max(1, Math.min(65535, Math.round(input.hostPortRangeEnd)))
     : defaults.hostPortRangeEnd;
+  const containerAppPort = typeof input.containerAppPort === "number" && Number.isFinite(input.containerAppPort)
+    ? Math.max(1, Math.min(65535, Math.round(input.containerAppPort)))
+    : defaults.containerAppPort;
+  const containerAppPorts = [
+    containerAppPort,
+    ...(Array.isArray(input.containerAppPorts)
+      ? input.containerAppPorts
+        .filter((port): port is number => typeof port === "number" && Number.isFinite(port))
+        .map((port) => Math.round(port))
+        .filter((port) => port >= 1 && port <= 65535)
+      : []),
+  ];
 
   return {
     enabled: typeof input.enabled === "boolean"
@@ -428,9 +474,8 @@ function sanitizeSprintPreviewSettings(value: unknown): ProjectSettings["sprintP
       : defaults.maxConcurrentContainers,
     hostPortRangeStart,
     hostPortRangeEnd: Math.max(hostPortRangeStart, hostPortRangeEndCandidate),
-    containerAppPort: typeof input.containerAppPort === "number" && Number.isFinite(input.containerAppPort)
-      ? Math.max(1, Math.min(65535, Math.round(input.containerAppPort)))
-      : defaults.containerAppPort,
+    containerAppPort,
+    containerAppPorts: [...new Set(containerAppPorts)],
     startupScriptPath: (() => {
       const raw = typeof input.startupScriptPath === "string" && input.startupScriptPath.trim().length > 0
         ? input.startupScriptPath.trim()
@@ -525,6 +570,8 @@ export function buildDefaultSystemSettings(externalHints?: ExternalSettingsHints
       dbAutoVacuumOnStartup: DEFAULT_DASHBOARD_SETTINGS.dbAutoVacuumOnStartup,
       dbPruningEnabled: DEFAULT_DASHBOARD_SETTINGS.dbPruningEnabled,
       dbRetentionDays: DEFAULT_DASHBOARD_SETTINGS.dbRetentionDays,
+      restartSprintPolicy: DEFAULT_DASHBOARD_SETTINGS.restartSprintPolicy,
+      restartInvocationPolicy: DEFAULT_DASHBOARD_SETTINGS.restartInvocationPolicy,
     },
     integrations: {
       providers: buildDefaultIntegrationProviders(externalHints),
@@ -537,7 +584,10 @@ export function buildDefaultSystemSettings(externalHints?: ExternalSettingsHints
     },
     defaults: buildDefaultProjectSettings(externalHints),
     mcpTools: cloneMcpTools(DEFAULT_DASHBOARD_SETTINGS.mcpTools),
-    customMcpServers: sanitizeCustomMcpServers(DEFAULT_DASHBOARD_SETTINGS.customMcpServers),
+    customMcpServers: sanitizeCustomMcpServersWithDefaults(
+      DEFAULT_DASHBOARD_SETTINGS.customMcpServers,
+      DEFAULT_DASHBOARD_SETTINGS.customMcpServers,
+    ),
     modelPricing: { overrides: { ...DEFAULT_DASHBOARD_SETTINGS.modelPricing.overrides } },
   };
 }
@@ -657,7 +707,12 @@ export function sanitizeProjectSettings(value: unknown, externalHints?: External
     },
     skills: sanitizeSkills(input.skills, git.githubMode),
     ...(Array.isArray(input.mcpTools) ? { mcpTools: sanitizeMcpToolToggles(input.mcpTools) } : {}),
-    ...(Array.isArray(input.customMcpServers) ? { customMcpServers: sanitizeCustomMcpServers(input.customMcpServers) } : {}),
+    ...(Array.isArray(input.customMcpServers) ? {
+      customMcpServers: sanitizeCustomMcpServersWithDefaults(
+        input.customMcpServers,
+        DEFAULT_DASHBOARD_SETTINGS.customMcpServers,
+      ),
+    } : {}),
     memory: sanitizeMemory(input as Partial<DashboardSettings>),
   };
 }
@@ -693,6 +748,14 @@ export function sanitizeSystemSettings(value: unknown, externalHints?: ExternalS
   const dbRetentionDays = typeof runtime.dbRetentionDays === "number"
     ? runtime.dbRetentionDays
     : defaults.runtime.dbRetentionDays;
+  const restartSprintPolicy = readRestartSprintPolicy(
+    runtime.restartSprintPolicy,
+    defaults.runtime.restartSprintPolicy,
+  );
+  const restartInvocationPolicy = readRestartInvocationPolicy(
+    runtime.restartInvocationPolicy,
+    defaults.runtime.restartInvocationPolicy,
+  );
 
   const systemGithubToken = typeof integrationInput.githubToken === "string"
     ? integrationInput.githubToken
@@ -729,6 +792,8 @@ export function sanitizeSystemSettings(value: unknown, externalHints?: ExternalS
       dbAutoVacuumOnStartup,
       dbPruningEnabled,
       dbRetentionDays,
+      restartSprintPolicy,
+      restartInvocationPolicy,
     },
     integrations: {
       providers: integrations,
@@ -738,7 +803,10 @@ export function sanitizeSystemSettings(value: unknown, externalHints?: ExternalS
     },
     defaults: defaultsInput,
     mcpTools: sanitizeMcpToolToggles(input.mcpTools ?? defaults.mcpTools).map((tool) => ({ ...tool })),
-    customMcpServers: sanitizeCustomMcpServers(input.customMcpServers ?? defaults.customMcpServers),
+    customMcpServers: sanitizeCustomMcpServersWithDefaults(
+      input.customMcpServers,
+      defaults.customMcpServers,
+    ),
     modelPricing: sanitizeModelPricing(input.modelPricing ?? defaults.modelPricing),
   };
 }
@@ -959,6 +1027,8 @@ export function resolveDashboardSettings(args: {
     dbAutoVacuumOnStartup: args.systemSettings.runtime.dbAutoVacuumOnStartup,
     dbPruningEnabled: args.systemSettings.runtime.dbPruningEnabled,
     dbRetentionDays: args.systemSettings.runtime.dbRetentionDays,
+    restartSprintPolicy: args.systemSettings.runtime.restartSprintPolicy,
+    restartInvocationPolicy: args.systemSettings.runtime.restartInvocationPolicy,
     appearance: { ...sprintSettings.appearance },
     automationLevel: sprintSettings.automationLevel,
     automationInterventions: { ...sprintSettings.automationInterventions },
@@ -975,6 +1045,8 @@ export function resolveDashboardSettings(args: {
       host: sprintSettings.jira.host || systemJira.host,
       email: sprintSettings.jira.email || systemJira.email,
       apiToken: sprintSettings.jira.apiToken || systemJira.apiToken,
+      autoTransitionLinkedIssuesOnImport: sprintSettings.jira.autoTransitionLinkedIssuesOnImport,
+      importTransitionName: sprintSettings.jira.importTransitionName || systemJira.importTransitionName,
       defaultProject: sprintSettings.jira.defaultProject || systemJira.defaultProject,
       closeTransitionName: sprintSettings.jira.closeTransitionName || systemJira.closeTransitionName,
       autoCloseLinkedIssues: sprintSettings.jira.autoCloseLinkedIssues,

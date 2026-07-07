@@ -1,4 +1,5 @@
 import express from "express";
+import * as fs from "node:fs";
 import { createServer, type IncomingMessage, type Server as HttpServer, type ServerResponse } from "http";
 import type { AddressInfo } from "net";
 import type { Socket } from "node:net";
@@ -18,12 +19,20 @@ export interface BootMcpTransportDeps {
   logger: Logger;
 }
 
+interface StdinLike {
+  fd?: number;
+  isTTY?: boolean;
+}
+
 export interface BootMcpHttpTransportDeps {
   enabled: boolean;
   host: string;
   port: number | null;
   path: string;
   authToken: string | null;
+  getAuthToken?: () => string | null;
+  maxSessions?: number;
+  sessionTimeoutMs?: number;
   logger: Logger;
   createServer: () => McpServer;
   recoveryService: RuntimeStartupRecoveryService;
@@ -44,55 +53,97 @@ interface McpHttpSessionEntry {
   lastAccessed: number;
 }
 
-function readSessionIdHeader(req: IncomingMessage): string | null {
-  const header = req.headers["mcp-session-id"];
-  let value: string | null = null;
-  if (Array.isArray(header)) {
-    value = header[0]?.trim() || null;
-  } else if (typeof header === "string") {
-    value = header.trim() || null;
-  }
-  if (value) {
-    if (value.length > 100 || !/^[a-zA-Z0-9-]+$/.test(value)) {
-      throw new Error("Invalid mcp-session-id");
+const DEFAULT_MAX_SESSIONS = 100;
+const DEFAULT_SESSION_TIMEOUT_MS = 60 * 60 * 1000;
+const IDENTIFIER_PATTERN = /^[a-zA-Z0-9-]+$/;
+
+function isLoopbackHost(host: string): boolean {
+  const normalized = host.trim().toLowerCase();
+  return normalized === "127.0.0.1"
+    || normalized === "localhost"
+    || normalized === "::1";
+}
+
+function headerCount(req: IncomingMessage, name: string): number {
+  const normalizedName = name.toLowerCase();
+  let count = 0;
+  for (let index = 0; index < req.rawHeaders.length; index += 2) {
+    if (req.rawHeaders[index]?.toLowerCase() === normalizedName) {
+      count += 1;
     }
+  }
+  return count;
+}
+
+function readSingleHeader(req: IncomingMessage, name: string): string | null {
+  const header = req.headers[name.toLowerCase()];
+  if (typeof header === "undefined") {
+    return null;
+  }
+  if (Array.isArray(header) || headerCount(req, name) > 1) {
+    throw new Error(`Invalid ${name}`);
+  }
+  if (typeof header !== "string") {
+    throw new Error(`Invalid ${name}`);
+  }
+  const value = header.trim();
+  if (value.length === 0) {
+    throw new Error(`Invalid ${name}`);
   }
   return value;
 }
 
-function readAgentIdHeader(req: IncomingMessage): string | null {
-  const header = req.headers["x-code-ux-agent"];
-  let value: string | null = null;
-  if (Array.isArray(header)) {
-    value = header[0]?.trim() || null;
-  } else if (typeof header === "string") {
-    value = header.trim() || null;
+function readIdentifierHeader(req: IncomingMessage, name: string): string | null {
+  const value = readSingleHeader(req, name);
+  if (!value) {
+    return null;
   }
-  if (value) {
-    if (value.length > 100 || !/^[a-zA-Z0-9-]+$/.test(value)) {
-      throw new Error("Invalid x-code-ux-agent");
-    }
+  if (value.length > 100 || !IDENTIFIER_PATTERN.test(value)) {
+    throw new Error(`Invalid ${name}`);
+  }
+  return value;
+}
+
+function readSessionIdHeader(req: IncomingMessage): string | null {
+  return readIdentifierHeader(req, "mcp-session-id");
+}
+
+function readAgentIdHeader(req: IncomingMessage): string | null {
+  return readIdentifierHeader(req, "x-code-ux-agent");
+}
+
+function readAuthorizationHeader(req: IncomingMessage): string | null {
+  const value = readSingleHeader(req, "authorization");
+  if (!value) {
+    return null;
+  }
+  if (!/^Bearer [^\s]+$/.test(value)) {
+    throw new Error("Invalid authorization");
   }
   return value;
 }
 
 function isAuthorizedRequest(req: IncomingMessage, authToken: string | null): boolean {
+  const header = readAuthorizationHeader(req);
   if (!authToken) {
     return true;
   }
 
-  const header = req.headers.authorization;
-  if (typeof header !== "string") {
+  if (!header) {
     return false;
   }
 
   const expected = `Bearer ${authToken}`;
-  const actualStr = header.trim();
 
   const expectedHash = createHash("sha256").update(expected).digest();
-  const actualHash = createHash("sha256").update(actualStr).digest();
+  const actualHash = createHash("sha256").update(header).digest();
 
   return timingSafeEqual(expectedHash, actualHash);
+}
+
+interface ValidatedMcpHttpRequestHeaders {
+  sessionId: string | null;
+  agentId: string | null;
 }
 
 function respondUnauthorized(res: ServerResponse): void {
@@ -122,19 +173,47 @@ function respondBadRequest(res: ServerResponse, message: string): void {
 }
 
 export async function bootMcpTransport(deps: BootMcpTransportDeps): Promise<void> {
-  if (process.env.CODE_UX_DISABLE_MCP_STDIO === "1") {
+  const stdioMode = resolveMcpStdioMode(process.stdin, process.env);
+  if (stdioMode.enabled === false) {
     deps.logger.info(`${CODE_UX_DISPLAY_NAME} MCP stdio transport disabled by environment`);
     return;
   }
 
-  if (process.stdin.isTTY) {
-    deps.logger.info(`${CODE_UX_DISPLAY_NAME} running in standalone mode (stdin is a TTY) — MCP stdio transport disabled`);
+  if (stdioMode.enabled === null) {
+    deps.logger.info(`${CODE_UX_DISPLAY_NAME} running in standalone mode (${stdioMode.reason}) — MCP stdio transport disabled`);
     return;
   }
 
   const transport = new StdioServerTransport();
   await deps.server.connect(transport);
   deps.logger.info(`${CODE_UX_DISPLAY_NAME} MCP server running on stdio`, { version: CODE_UX_VERSION });
+}
+
+export function resolveMcpStdioMode(
+  stdin: StdinLike,
+  env: NodeJS.ProcessEnv,
+  fstat: (fd: number) => fs.Stats = fs.fstatSync,
+): { enabled: true; reason: string } | { enabled: false; reason: string } | { enabled: null; reason: string } {
+  if (env.CODE_UX_DISABLE_MCP_STDIO === "1") {
+    return { enabled: false, reason: "disabled_by_environment" };
+  }
+  if (env.CODE_UX_ENABLE_MCP_STDIO === "1") {
+    return { enabled: true, reason: "enabled_by_environment" };
+  }
+  if (stdin.isTTY) {
+    return { enabled: null, reason: "stdin is a TTY" };
+  }
+
+  const fd = typeof stdin.fd === "number" ? stdin.fd : 0;
+  try {
+    const stats = fstat(fd);
+    if (stats.isFIFO() || stats.isSocket()) {
+      return { enabled: true, reason: "stdin is a pipe/socket" };
+    }
+    return { enabled: null, reason: "stdin is not an MCP pipe" };
+  } catch {
+    return { enabled: null, reason: "stdin cannot be inspected" };
+  }
 }
 
 export async function bootMcpHttpTransport(deps: BootMcpHttpTransportDeps): Promise<McpHttpTransportHandle | null> {
@@ -152,6 +231,12 @@ export async function bootMcpHttpTransport(deps: BootMcpHttpTransportDeps): Prom
     return null;
   }
 
+  const readAuthToken = (): string | null => deps.getAuthToken?.() ?? deps.authToken;
+
+  if (!isLoopbackHost(deps.host) && !readAuthToken()?.trim()) {
+    throw new Error("MCP HTTP auth token is required when binding the MCP HTTP server to a non-loopback host.");
+  }
+
   const app = express();
   // This gateway is network-exposed (HTTPS worker transport), so rate-limit it
   // in front of the auth check to blunt token brute-forcing and request floods.
@@ -160,8 +245,8 @@ export async function bootMcpHttpTransport(deps: BootMcpHttpTransportDeps): Prom
   app.use(express.json({ limit: "1mb" }));
 
   const sessions = new Map<string, McpHttpSessionEntry>();
-  const MAX_SESSIONS = 100;
-  const SESSION_TIMEOUT_MS = 60 * 60 * 1000;
+  const maxSessions = deps.maxSessions ?? DEFAULT_MAX_SESSIONS;
+  const sessionTimeoutMs = deps.sessionTimeoutMs ?? DEFAULT_SESSION_TIMEOUT_MS;
 
   const closeSession = async (sessionId: string): Promise<void> => {
     const entry = sessions.get(sessionId);
@@ -172,30 +257,56 @@ export async function bootMcpHttpTransport(deps: BootMcpHttpTransportDeps): Prom
     await entry.transport.close().catch(() => undefined);
   };
 
+  const cleanupIdleSessions = async (): Promise<void> => {
+    const now = Date.now();
+    const staleSessionIds = [...sessions.entries()]
+      .filter(([, session]) => now - session.lastAccessed > sessionTimeoutMs)
+      .map(([id]) => id);
+    await Promise.all(staleSessionIds.map((sessionId) => closeSession(sessionId)));
+  };
+
   app.all(deps.path, async (req, res) => {
-    if (!isAuthorizedRequest(req, deps.authToken)) {
-      deps.logger.warn("Unauthorized MCP HTTPS request", { path: req.path, method: req.method });
+    let headers: ValidatedMcpHttpRequestHeaders;
+    try {
+      const authToken = readAuthToken();
+      if (!isAuthorizedRequest(req, authToken)) {
+        deps.logger.warn("Unauthorized MCP HTTP request", {
+          path: req.path,
+          method: req.method,
+          authRequired: !!authToken,
+        });
+        respondUnauthorized(res);
+        return;
+      }
+    } catch {
+      deps.logger.warn("Rejected MCP HTTP request with invalid security headers", {
+        path: req.path,
+        method: req.method,
+        authRequired: !!readAuthToken(),
+      });
       respondUnauthorized(res);
+      return;
+    }
+    try {
+      headers = {
+        sessionId: readSessionIdHeader(req),
+        agentId: readAgentIdHeader(req),
+      };
+    } catch {
+      deps.logger.warn("Rejected MCP HTTP request with invalid identifiers", {
+        path: req.path,
+        method: req.method,
+      });
+      respondBadRequest(res, "Bad Request: Invalid identifier");
       return;
     }
 
     try {
-      let sessionId: string | null = null;
-      try {
-        sessionId = readSessionIdHeader(req);
-        // Also validate agent header early to catch errors
-        readAgentIdHeader(req);
-      } catch (err: any) {
-        deps.logger.warn("Rejected request due to invalid identifier", { path: req.path, method: req.method });
-        respondBadRequest(res, "Bad Request: Invalid identifier");
-        return;
-      }
+      let entry = headers.sessionId ? sessions.get(headers.sessionId) : undefined;
 
-      let entry = sessionId ? sessions.get(sessionId) : undefined;
-
-      if (sessionId && !entry) {
-        deps.logger.warn("Unknown MCP session id", { path: req.path, method: req.method });
-        respondBadRequest(res, "Bad Request: Unknown MCP session id");
+      if (headers.sessionId && !entry) {
+        deps.logger.warn("Rejected MCP HTTP request with inactive session", { path: req.path, method: req.method });
+        respondBadRequest(res, "Bad Request: Invalid MCP session");
         return;
       }
 
@@ -205,16 +316,15 @@ export async function bootMcpHttpTransport(deps: BootMcpHttpTransportDeps): Prom
           return;
         }
 
-        // Cleanup idle sessions
-        const now = Date.now();
-        for (const [id, session] of sessions.entries()) {
-          if (now - session.lastAccessed > SESSION_TIMEOUT_MS) {
-            closeSession(id).catch(() => undefined);
-          }
-        }
+        await cleanupIdleSessions();
 
-        if (sessions.size >= MAX_SESSIONS) {
-          deps.logger.warn("MCP HTTPS session cap reached", { path: req.path, method: req.method });
+        if (sessions.size >= maxSessions) {
+          deps.logger.warn("MCP HTTP session cap reached", {
+            path: req.path,
+            method: req.method,
+            maxSessions,
+            activeSessions: sessions.size,
+          });
           respondBadRequest(res, "Bad Request: Too many active sessions");
           return;
         }
@@ -237,16 +347,15 @@ export async function bootMcpHttpTransport(deps: BootMcpHttpTransportDeps): Prom
       }
 
       entry.lastAccessed = Date.now();
-      await runWithMcpAgentContext(readAgentIdHeader(req), () => entry!.transport.handleRequest(req, res, req.body));
+      await runWithMcpAgentContext(headers.agentId, () => entry!.transport.handleRequest(req, res, req.body));
 
       if (req.method === "DELETE") {
-        const activeSessionId = readSessionIdHeader(req);
-        if (activeSessionId) {
-          await closeSession(activeSessionId);
+        if (headers.sessionId) {
+          await closeSession(headers.sessionId);
         }
       }
     } catch (error) {
-      deps.logger.error("MCP HTTPS request failed", { error, path: req.path, method: req.method });
+      deps.logger.error("MCP HTTP request failed", { error, path: req.path, method: req.method });
       if (!res.headersSent) {
         res.status(500).json({
           jsonrpc: "2.0",
@@ -289,11 +398,11 @@ export async function bootMcpHttpTransport(deps: BootMcpHttpTransportDeps): Prom
     }
   }
 
-  deps.logger.info(`${CODE_UX_DISPLAY_NAME} MCP HTTPS server running`, {
+  deps.logger.info(`${CODE_UX_DISPLAY_NAME} MCP HTTP server running`, {
     host: deps.host,
     port: resolvedPort,
     path: deps.path,
-    authRequired: !!deps.authToken,
+    authRequired: !!readAuthToken(),
   });
 
   return {

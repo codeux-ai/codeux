@@ -11,6 +11,7 @@ expect.extend(matchers);
 import gsap from "gsap";
 import { ConnectionRuntimePanel, ExecutionRuntimePanel } from "../../../../../dashboard/src/v2/components/live-session/ExecutionRuntimePanel.js";
 import { useExecutionTimeline } from "../../../../../dashboard/src/hooks/ExecutionTimelineContext.js";
+import type { ExecutionDashboardSnapshot, ExecutionRuntimeEventSummary } from "../../../../../dashboard/src/types.js";
 
 vi.mock("../../../../../dashboard/src/hooks/ExecutionTimelineContext.js", () => ({
     useExecutionTimeline: vi.fn(),
@@ -37,6 +38,52 @@ vi.mock("../../../../../dashboard/src/v2/components/ui/WaveFluid.js", () => ({
 vi.mock("../../../../../dashboard/src/v2/components/ui/BorderTrace.js", () => ({
     BorderTrace: () => null,
 }));
+
+const createRuntimeEvent = (payload: Record<string, unknown>): ExecutionRuntimeEventSummary => ({
+    id: "event-1",
+    scopeType: "task_run",
+    taskRunId: "task-run-1",
+    sprintRunId: "sprint-run-1",
+    dispatchId: "dispatch-1",
+    projectId: "project-1",
+    sprintId: "sprint-1",
+    sprintName: "Runtime Sprint",
+    sprintNumber: 1,
+    sprintRunStatus: "running",
+    taskId: "task-1",
+    taskKey: "T-1",
+    taskTitle: "Build cached image",
+    taskRunState: "RUNNING",
+    eventType: "setup_image_build_progress",
+    originator: "system",
+    sourceEventKey: null,
+    provider: "codex",
+    sessionId: "session-1",
+    sessionName: null,
+    workerBranch: null,
+    prUrl: null,
+    connectionId: null,
+    connectionDisplayName: null,
+    connectionRole: null,
+    createdAt: "2024-01-01T10:00:00.000Z",
+    payload,
+});
+
+const createExecutionSnapshot = (
+    events: ExecutionRuntimeEventSummary[] = [],
+): ExecutionDashboardSnapshot => ({
+    projectId: "project-1",
+    projectName: "Project 1",
+    sprintRuns: [],
+    taskDispatches: [],
+    connections: [],
+    primaryAssignedWorker: null,
+    overflowAssignedWorkers: [],
+    attentionItems: [],
+    recentEvents: events,
+    recentInvocations: [],
+    updatedAt: "2024-01-01T10:00:00.000Z",
+});
 
 describe("ConnectionRuntimePanel", () => {
     beforeEach(() => {
@@ -196,7 +243,7 @@ describe("ConnectionRuntimePanel", () => {
 
         render(<ExecutionRuntimePanel />);
 
-        const retry = screen.getByRole("button", { name: "Retry dispatch dispatch-1. Retrying is already in progress." });
+        const retry = screen.getByRole("button", { name: "Retry dispatch T-1: Repair runtime action feedback. Retrying is already in progress." });
         expect(retry).toHaveTextContent("Retrying");
         expect(retry).toHaveAttribute("aria-busy", "true");
         expect(retry).toHaveAttribute("aria-disabled", "true");
@@ -205,5 +252,101 @@ describe("ConnectionRuntimePanel", () => {
         expect(retry.getAttribute("aria-describedby")).toBeTruthy();
         expect(screen.getByText("Retrying in progress.")).toBeInTheDocument();
         expect(screen.getByText("Retrying is already in progress.")).toBeInTheDocument();
+    });
+
+    it("renders container build progress with accessible progress semantics", () => {
+        vi.mocked(useExecutionTimeline).mockReturnValue({
+            execution: createExecutionSnapshot([
+                createRuntimeEvent({
+                    kind: "build_step",
+                    imageTag: "code-ux-setup-cache-node-24-bookworm:abc123",
+                    baseImage: "node:24-bookworm",
+                    message: "Docker setup image build: RUN pnpm install",
+                    progressPercent: 47,
+                    stepText: "RUN pnpm install",
+                }),
+            ]),
+        } as never);
+
+        render(<ExecutionRuntimePanel />);
+
+        expect(screen.getByText("Building container image")).toBeInTheDocument();
+        expect(screen.getByText("This container needs to be built. The first build can take time; future invocations will use the cached image.")).toBeInTheDocument();
+        expect(screen.getByText("RUN pnpm install")).toBeInTheDocument();
+        expect(screen.getByText("47% complete")).toBeInTheDocument();
+        expect(screen.getByRole("progressbar", { name: "setup-cache image build progress" }))
+            .toHaveAttribute("aria-valuenow", "47");
+    });
+
+    it("updates visible progress as runtime events change", () => {
+        vi.mocked(useExecutionTimeline).mockReturnValue({
+            execution: createExecutionSnapshot([
+                createRuntimeEvent({
+                    kind: "build_step",
+                    imageTag: "code-ux-setup-cache-node-24-bookworm:abc123",
+                    baseImage: "node:24-bookworm",
+                    message: "Docker setup image build: COPY setup.sh",
+                    progressPercent: 20,
+                    stepText: "COPY setup.sh",
+                }),
+            ]),
+        } as never);
+
+        const { unmount } = render(<ExecutionRuntimePanel />);
+        expect(screen.getByText("20% complete")).toBeInTheDocument();
+        unmount();
+
+        vi.mocked(useExecutionTimeline).mockReturnValue({
+            execution: createExecutionSnapshot([
+                createRuntimeEvent({
+                    kind: "build_step",
+                    imageTag: "code-ux-setup-cache-node-24-bookworm:abc123",
+                    baseImage: "node:24-bookworm",
+                    message: "Docker setup image build: RUN bash setup.sh",
+                    progressPercent: 80,
+                    stepText: "RUN bash setup.sh",
+                }),
+            ]),
+        } as never);
+
+        render(<ExecutionRuntimePanel />);
+        expect(screen.getByText("80% complete")).toBeInTheDocument();
+        expect(screen.getByText("RUN bash setup.sh")).toBeInTheDocument();
+    });
+
+    it("renders a visible no-progress fallback without aria-valuenow", () => {
+        vi.mocked(useExecutionTimeline).mockReturnValue({
+            execution: createExecutionSnapshot([
+                createRuntimeEvent({
+                    kind: "lock_wait",
+                    imageTag: "code-ux-setup-cache-node-24-bookworm:abc123",
+                    baseImage: "node:24-bookworm",
+                    message: "Waiting for cached Docker setup image to finish building.",
+                }),
+            ]),
+        } as never);
+
+        render(<ExecutionRuntimePanel />);
+
+        expect(screen.getByText("Waiting for container image build")).toBeInTheDocument();
+        expect(screen.getByText("Progress is not available yet.")).toBeInTheDocument();
+        expect(screen.getByRole("progressbar", { name: "setup-cache image build progress" }))
+            .not.toHaveAttribute("aria-valuenow");
+    });
+
+    it("does not render a build infobox when cached images are reused", () => {
+        vi.mocked(useExecutionTimeline).mockReturnValue({
+            execution: createExecutionSnapshot([
+                createRuntimeEvent({
+                    description: "Using cached Docker setup image code-ux-setup-cache-node:abc.",
+                }),
+            ]),
+        } as never);
+
+        render(<ExecutionRuntimePanel />);
+
+        expect(screen.queryByText("Building container image")).not.toBeInTheDocument();
+        expect(screen.queryByText(/This container needs to be built/)).not.toBeInTheDocument();
+        expect(screen.queryByRole("progressbar", { name: /build progress/i })).not.toBeInTheDocument();
     });
 });

@@ -113,7 +113,7 @@ export const LinkedIssueTag: FunctionComponent<LinkedIssueTagProps> = ({
               <span className="min-w-0 break-all">{projectLabel}</span>
               <span className="shrink-0 text-signal-600 dark:text-signal-300">{issueKey}</span>
             </div>
-            <h3 className="mt-2 min-w-0 text-sm font-black leading-snug text-slate-900 dark:text-white">
+            <h3 className="mt-2 min-w-0 text-sm font-semibold leading-snug text-slate-900 dark:text-white">
               {issue.title}
             </h3>
           </div>

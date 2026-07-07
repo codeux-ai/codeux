@@ -62,6 +62,10 @@ const isRecord = (value: unknown): value is Record<string, unknown> => {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 };
 
+const isValidPort = (value: unknown): value is number => (
+  typeof value === "number" && Number.isInteger(value) && value >= 1 && value <= 65535
+);
+
 const validateProviderSettings = (
   value: unknown,
   path: string,
@@ -324,6 +328,12 @@ const validateJiraSettings = (
   if (typeof value.apiToken !== "string") {
     issues.push({ path: `${path}.apiToken`, message: "Expected a string" });
   }
+  if (typeof value.autoTransitionLinkedIssuesOnImport !== "boolean") {
+    issues.push({ path: `${path}.autoTransitionLinkedIssuesOnImport`, message: "Expected a boolean" });
+  }
+  if (typeof value.importTransitionName !== "string") {
+    issues.push({ path: `${path}.importTransitionName`, message: "Expected a string" });
+  }
   if (typeof value.autoCloseLinkedIssues !== "boolean") {
     issues.push({ path: `${path}.autoCloseLinkedIssues`, message: "Expected a boolean" });
   }
@@ -440,7 +450,14 @@ const validateCliWorkflow = (
   }
   if (typeof value.containerImage !== "string") issues.push({ path: `${path}.containerImage`, message: "Expected a string" });
   if (typeof value.containerSetupScriptPath !== "string") issues.push({ path: `${path}.containerSetupScriptPath`, message: "Expected a string" });
-  if (typeof value.containerMemoryLimitMb !== "number") issues.push({ path: `${path}.containerMemoryLimitMb`, message: "Expected a number" });
+  if (
+    typeof value.containerMemoryLimitMb !== "number"
+    || !Number.isInteger(value.containerMemoryLimitMb)
+    || value.containerMemoryLimitMb < 0
+    || value.containerMemoryLimitMb > 262144
+  ) {
+    issues.push({ path: `${path}.containerMemoryLimitMb`, message: "Expected an integer between 0 and 262144" });
+  }
   if (typeof value.containerCacheSetupScriptImage !== "boolean") issues.push({ path: `${path}.containerCacheSetupScriptImage`, message: "Expected a boolean" });
   if (typeof value.containerInstallPlaywrightBrowsers !== "boolean") issues.push({ path: `${path}.containerInstallPlaywrightBrowsers`, message: "Expected a boolean" });
   if (typeof value.containerMountGitConfig !== "boolean") issues.push({ path: `${path}.containerMountGitConfig`, message: "Expected a boolean" });
@@ -480,7 +497,16 @@ const validateSprintPreview = (
   if (typeof value.maxConcurrentContainers !== "number") issues.push({ path: `${path}.maxConcurrentContainers`, message: "Expected a number" });
   if (typeof value.hostPortRangeStart !== "number") issues.push({ path: `${path}.hostPortRangeStart`, message: "Expected a number" });
   if (typeof value.hostPortRangeEnd !== "number") issues.push({ path: `${path}.hostPortRangeEnd`, message: "Expected a number" });
-  if (typeof value.containerAppPort !== "number") issues.push({ path: `${path}.containerAppPort`, message: "Expected a number" });
+  if (!isValidPort(value.containerAppPort)) issues.push({ path: `${path}.containerAppPort`, message: "Expected a port number between 1 and 65535" });
+  if (!Array.isArray(value.containerAppPorts)) {
+    issues.push({ path: `${path}.containerAppPorts`, message: "Expected an array" });
+  } else {
+    value.containerAppPorts.forEach((port, index) => {
+      if (!isValidPort(port)) {
+        issues.push({ path: `${path}.containerAppPorts.${index}`, message: "Expected a port number between 1 and 65535" });
+      }
+    });
+  }
   if (typeof value.startupScriptPath !== "string") {
     issues.push({ path: `${path}.startupScriptPath`, message: "Expected a string" });
   } else {
@@ -599,6 +625,17 @@ const validateAgents = (
     }
     if (trigger.agentPresetId !== null && trigger.agentPresetId !== undefined && typeof trigger.agentPresetId !== "string") {
       issues.push({ path: `${path}.qualityAssurance.${triggerId}.agentPresetId`, message: "Expected null or a string" });
+    }
+    if (trigger.agentPresetIds !== undefined) {
+      if (!Array.isArray(trigger.agentPresetIds)) {
+        issues.push({ path: `${path}.qualityAssurance.${triggerId}.agentPresetIds`, message: "Expected an array of strings" });
+      } else {
+        trigger.agentPresetIds.forEach((entry, index) => {
+          if (typeof entry !== "string") {
+            issues.push({ path: `${path}.qualityAssurance.${triggerId}.agentPresetIds.${index}`, message: "Expected a string" });
+          }
+        });
+      }
     }
   }
 };

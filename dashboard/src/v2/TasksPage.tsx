@@ -1,66 +1,30 @@
 
 import type { FunctionComponent } from "preact";
 import { memo } from "preact/compat";
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, useCallback } from "preact/hooks";
+import { useLayoutEffect, useMemo, useRef } from "preact/hooks";
 import gsap from "gsap";
-import { Link, useRouterState } from "@tanstack/react-router";
+import { Link } from "@tanstack/react-router";
 import {
   ListChecks,
-  ChevronDown,
-  CheckCircle2,
-  Circle,
-  PlayCircle,
-  Clock,
   FolderGit2,
   Flame,
   Target,
-  Settings,
-  Trash2,
   Plus,
   X,
   ArrowUpRight,
   ArrowRight,
-  AlertCircle,
 } from "lucide-preact";
-import { WaveFluid } from "./components/ui/WaveFluid.js";
-import { BorderTrace } from "./components/ui/BorderTrace.js";
 import { TaskComposer } from "./components/ui/TaskComposer.js";
 import { AddProjectModal } from "./components/ui/AddProjectModal.js";
-import type { AddProjectModalSubmission } from "./components/ui/AddProjectModal.js";
-import { buildDependentTasksMap, type DependentTaskMetadata } from "./lib/task-relations.js";
-import type { Sprint, Task, TaskPriority, TaskStatus } from "./types.js";
-import { useProjectData } from "./context/project-data.js";
-import { useSprints } from "../hooks/useSprints.js";
-import { useProjectTasks } from "./hooks/use-project-tasks.js";
-import { createTask, deleteTask, updateTask } from "./lib/project-api.js";
-import { deriveTaskBoardState } from "./lib/task-board-state.js";
-import { DEFAULT_LIST_WINDOW, type ListWindowOption } from "./lib/list-window.js";
-import { ListWindowSelector } from "./components/ui/ListWindowSelector.js";
-import { SkeletonCard, SkeletonLoader } from "./components/layout/SkeletonLoader.js";
-import { FilterStrip } from "./components/ui/FilterStrip.js";
+import type { Task } from "./types.js";
 import { PageContainer } from "./components/layout/PageContainer.js";
 import { PageHeader } from "./components/layout/PageHeader.js";
-import { formatSprintDisplay } from "./lib/format-sprint.js";
-import { useProjectEffectiveSettings } from "./hooks/use-project-effective-settings.js";
-import { KanbanTaskCard } from "./components/tasks/KanbanTaskCard.js";
 import { Button } from "./components/ui/Button.js";
-import { fetchAgentPresets } from "./lib/agent-preset-api.js";
-import type { AgentPreset } from "./types.js";
-import { STATUS_CFG } from "./lib/tasks-constants.js";
-import {
-  buildTaskBoardSprintScopeState,
-  buildTaskBoardViewModel,
-  type TaskBoardViewModel,
-} from "./lib/tasks/task-board-view-model.js";
-import { getTaskDropFeedback, resolveTaskDropStatus } from "./lib/tasks/task-board-actions.js";
-import { useDashboardRuntimeData } from "../hooks/use-dashboard-runtime-data.js";
-import { useReducedMotion } from "./hooks/use-reduced-motion.js";
+import { TaskBoardFilters } from "./components/tasks/TaskBoardFilters.js";
+import { TaskBoardColumns } from "./components/tasks/TaskBoardColumns.js";
 import { useInteractionTokens } from "./lib/motion/tokens.js";
+import { useTaskBoardController } from "./hooks/use-task-board-controller.js";
 
-const STATUS_ORDER: TaskStatus[] = ["pending", "in_progress", "coding_completed", "QA_REVIEW_FAILED", "completed"];
-
-type StatusFilter = "all" | TaskStatus;
-type PriorityFilter = "all" | TaskPriority;
 type TaskScopePlaceholderMode = "project" | "sprint";
 
 const TaskScopePlaceholder: FunctionComponent<{
@@ -113,7 +77,7 @@ const TaskScopePlaceholder: FunctionComponent<{
             ) : (
               <Link
                 to="/sprints"
-                className="inline-flex min-h-[44px] items-center gap-2.5 rounded-full bg-signal-500 px-5 py-2.5 text-[10px] font-bold uppercase tracking-[0.14em] text-void-900 shadow-[0_10px_30px_rgba(0,224,160,0.22)] transition-all hover:-translate-y-px hover:bg-signal-400 focus-visible:ring-2 focus-visible:ring-signal-500/40"
+                className="inline-flex min-h-[44px] items-center gap-2.5 rounded-full bg-signal-500 px-5 py-2.5 text-[10px] font-bold uppercase tracking-[0.14em] text-white dark:text-void-900 shadow-[0_10px_30px_rgba(0,224,160,0.22)] transition-all hover:-translate-y-px hover:bg-signal-400 focus-visible:ring-2 focus-visible:ring-signal-500/40"
               >
                 <Plus className="h-3.5 w-3.5" strokeWidth={2.3} />
                 Plan Sprint
@@ -160,313 +124,6 @@ const TaskScopePlaceholder: FunctionComponent<{
   );
 };
 
-const ColumnHeader: FunctionComponent<{ status: TaskStatus; count: number }> = memo(({ status, count }) => {
-  const cfg = STATUS_CFG[status];
-  const Icon = cfg.icon;
-  const headingId = `task-lane-heading-${status}`;
-
-  return (
-    <div className="flex items-center justify-between mb-6" id={headingId}>
-      <div className="flex items-center gap-2.5">
-        <Icon className={`w-5 h-5 ${cfg.color}`} strokeWidth={2} />
-        <h2 className={`font-display text-lg font-bold tracking-tight ${cfg.color}`}>{cfg.label}</h2>
-      </div>
-      <span className={`text-[10px] font-mono font-bold px-2.5 py-1 rounded-lg bg-black/[0.03] dark:bg-white/[0.03] ${cfg.color}`}>
-        <span aria-hidden="true">{count}</span>
-        <span className="sr-only">{count} {count === 1 ? "task" : "tasks"}</span>
-      </span>
-    </div>
-  );
-});
-
-const SprintSelector: FunctionComponent<{
-  sprints: Sprint[];
-  selectedId: string | null;
-  onSelect: (id: string | null) => void;
-  sprintKeyPrefix: string;
-  loading: boolean;
-}> = memo(({ sprints, selectedId, onSelect, sprintKeyPrefix, loading }) => {
-  const [open, setOpen] = useState(false);
-  const [activeIndex, setActiveIndex] = useState(0);
-  const rootRef = useRef<HTMLDivElement>(null);
-  const triggerRef = useRef<HTMLButtonElement>(null);
-  const optionRefs = useRef<Array<HTMLButtonElement | null>>([]);
-  const interactionTokens = useInteractionTokens();
-  const listboxId = "tasks-sprint-selector-listbox";
-  const statusId = "tasks-sprint-selector-status";
-  const selected = selectedId ? sprints.find((sprint: Sprint) => sprint.id === selectedId) : null;
-  const selectedLabel = selected ? formatSprintDisplay(selected, sprintKeyPrefix) : null;
-  const scopeState = buildTaskBoardSprintScopeState({
-    sprints,
-    selectedSprintId: selectedId,
-    selectedSprintLabel: selectedLabel,
-    loading,
-  });
-  const options = useMemo(() => [
-    {
-      id: null as string | null,
-      label: "All Sprints",
-      description: "Project-wide task scope",
-      sprint: null as Sprint | null,
-    },
-    ...sprints.map((sprint) => ({
-      id: sprint.id,
-      label: formatSprintDisplay(sprint, sprintKeyPrefix),
-      description: `${sprint.date}, ${sprint.tasksCount} ${sprint.tasksCount === 1 ? "task" : "tasks"}, ${sprint.completion}% complete`,
-      sprint,
-    })),
-  ], [sprints, sprintKeyPrefix]);
-
-  const selectedIndex = Math.max(0, options.findIndex((option) => option.id === selectedId));
-
-  const closeListbox = useCallback((restoreFocus = false) => {
-    setOpen(false);
-    if (restoreFocus) {
-      requestAnimationFrame(() => triggerRef.current?.focus({ preventScroll: true }));
-    }
-  }, []);
-
-  const focusOption = useCallback((index: number) => {
-    const nextIndex = Math.max(0, Math.min(options.length - 1, index));
-    setActiveIndex(nextIndex);
-    const option = optionRefs.current[nextIndex];
-    if (option) {
-      option.focus({ preventScroll: true });
-    } else {
-      requestAnimationFrame(() => optionRefs.current[nextIndex]?.focus({ preventScroll: true }));
-    }
-  }, [options.length]);
-
-  const openListbox = useCallback((index = selectedIndex) => {
-    setOpen(true);
-    focusOption(index);
-  }, [focusOption, selectedIndex]);
-
-  const selectOption = useCallback((id: string | null) => {
-    onSelect(id);
-    closeListbox(true);
-  }, [closeListbox, onSelect]);
-
-  useEffect(() => {
-    if (!open) {
-      return;
-    }
-
-    const handlePointerDown = (event: PointerEvent) => {
-      if (!rootRef.current?.contains(event.target as Node)) {
-        closeListbox(false);
-      }
-    };
-    const handleFocusIn = (event: FocusEvent) => {
-      if (!rootRef.current?.contains(event.target as Node)) {
-        closeListbox(false);
-      }
-    };
-
-    document.addEventListener("pointerdown", handlePointerDown);
-    document.addEventListener("focusin", handleFocusIn);
-    return () => {
-      document.removeEventListener("pointerdown", handlePointerDown);
-      document.removeEventListener("focusin", handleFocusIn);
-    };
-  }, [closeListbox, open]);
-
-  useEffect(() => {
-    if (!open) {
-      setActiveIndex(selectedIndex);
-    }
-  }, [open, selectedIndex]);
-
-  useLayoutEffect(() => {
-    if (!open) {
-      return;
-    }
-    optionRefs.current[activeIndex]?.focus({ preventScroll: true });
-  }, [activeIndex, open]);
-
-  const handleTriggerKeyDown = (event: KeyboardEvent) => {
-    if (event.key === "ArrowDown") {
-      event.preventDefault();
-      openListbox(selectedIndex);
-    } else if (event.key === "ArrowUp") {
-      event.preventDefault();
-      openListbox(options.length - 1);
-    } else if (event.key === "Home") {
-      event.preventDefault();
-      openListbox(0);
-    } else if (event.key === "End") {
-      event.preventDefault();
-      openListbox(options.length - 1);
-    }
-  };
-
-  const handleOptionKeyDown = (event: KeyboardEvent, index: number, id: string | null) => {
-    if (event.key === "ArrowDown") {
-      event.preventDefault();
-      focusOption((index + 1) % options.length);
-    } else if (event.key === "ArrowUp") {
-      event.preventDefault();
-      focusOption((index - 1 + options.length) % options.length);
-    } else if (event.key === "Home") {
-      event.preventDefault();
-      focusOption(0);
-    } else if (event.key === "End") {
-      event.preventDefault();
-      focusOption(options.length - 1);
-    } else if (event.key === "Escape") {
-      event.preventDefault();
-      closeListbox(true);
-    } else if (event.key === "Enter" || event.key === " ") {
-      event.preventDefault();
-      selectOption(id);
-    } else if (event.key === "Tab") {
-      closeListbox(false);
-    }
-  };
-
-  return (
-    <div className="relative" ref={rootRef}>
-      <div id={statusId} className="sr-only" aria-live="polite" aria-atomic="true">
-        {open ? `Sprint scope list open. ${scopeState.description}` : scopeState.description}
-      </div>
-      <button
-        ref={triggerRef}
-        type="button"
-        aria-haspopup="listbox"
-        aria-expanded={open}
-        aria-controls={listboxId}
-        aria-describedby={statusId}
-        aria-busy={loading}
-        aria-label={`Task sprint scope: ${scopeState.label}`}
-        onClick={() => {
-          if (open) {
-            closeListbox(false);
-          } else {
-            openListbox(selectedIndex);
-          }
-        }}
-        onKeyDown={(event) => handleTriggerKeyDown(event as KeyboardEvent)}
-        style={{ transitionDuration: interactionTokens.controlFeedback.duration, transitionTimingFunction: interactionTokens.controlFeedback.ease }}
-        className={`group flex items-center gap-3 px-5 py-3 rounded-2xl border transition-all min-w-0 max-w-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ember-500/40 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-void-900 ${
-          selected
-            ? "bg-ember-500/[0.06] dark:bg-ember-500/[0.08] border-ember-500/20 dark:border-ember-500/25 shadow-[0_0_20px_rgba(255,184,0,0.06)]"
-            : "bg-black/[0.03] dark:bg-white/[0.03] border-black/[0.06] dark:border-white/[0.06]"
-        } hover:border-ember-500/40 dark:hover:border-ember-500/40`}
-      >
-        <Target className={`w-4 h-4 shrink-0 ${selected || open ? "text-ember-500" : "text-slate-400"} transition-colors`} strokeWidth={2} />
-        <span className={`text-sm font-bold tracking-tight truncate min-w-0 ${selected ? "text-ember-600 dark:text-ember-400" : "text-slate-600 dark:text-slate-400"}`}>
-          {scopeState.label}
-        </span>
-        <span className={`hidden rounded-full border px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.12em] sm:inline-flex ${
-          scopeState.isLoading
-            ? "border-signal-500/20 bg-signal-500/[0.08] text-signal-600 dark:text-signal-400"
-            : scopeState.isScoped
-              ? "border-ember-500/25 bg-ember-500/[0.08] text-ember-600 dark:text-ember-400"
-              : "border-black/[0.06] bg-black/[0.03] text-slate-400 dark:border-white/[0.08] dark:bg-white/[0.03]"
-        }`}>
-          {scopeState.isLoading ? "Loading" : scopeState.isScoped ? "Selected" : scopeState.isEmpty ? "Empty" : "All"}
-        </span>
-        <ChevronDown className={`w-4 h-4 shrink-0 text-slate-400 transition-transform duration-300 ${open ? "rotate-180" : ""}`} strokeWidth={2} />
-      </button>
-
-      {open && (
-        <div
-          id={listboxId}
-          role="listbox"
-          aria-label="Task sprint scope"
-          aria-activedescendant={`tasks-sprint-option-${activeIndex}`}
-          aria-busy={loading}
-          style={{ transitionDuration: interactionTokens.selectionMovement.duration, transitionTimingFunction: interactionTokens.selectionMovement.ease }}
-          className="absolute left-0 top-full mt-2 w-80 max-w-[calc(100vw-2rem)] z-50 bg-white/95 dark:bg-void-800/95 backdrop-blur-2xl border border-black/[0.06] dark:border-white/[0.08] rounded-2xl shadow-[0_20px_40px_rgba(0,0,0,0.12)] dark:shadow-[0_20px_40px_rgba(0,0,0,0.4)] overflow-hidden flex flex-col max-h-[60vh]"
-        >
-          <button
-            id="tasks-sprint-option-0"
-            ref={(node) => { optionRefs.current[0] = node; }}
-            type="button"
-            role="option"
-            aria-selected={!selectedId}
-            tabIndex={0}
-            onClick={() => selectOption(null)}
-            onKeyDown={(event) => handleOptionKeyDown(event as KeyboardEvent, 0, null)}
-            style={{ transitionDuration: interactionTokens.controlFeedback.duration, transitionTimingFunction: interactionTokens.controlFeedback.ease }}
-            className={`w-full flex items-center gap-3 px-5 py-3.5 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/40 ${
-              !selectedId ? "bg-signal-500/[0.06] dark:bg-signal-500/[0.08]" : "hover:bg-black/[0.03] dark:hover:bg-white/[0.03]"
-            }`}
-          >
-            <ListChecks className="w-4 h-4 text-signal-500" strokeWidth={2} />
-            <div className="flex-1 min-w-0">
-              <span className="text-sm font-bold text-slate-800 dark:text-white">All Sprints</span>
-              <span className="block truncate text-[9px] font-mono uppercase tracking-[0.1em] text-slate-400">Project-wide scope</span>
-            </div>
-            {!selectedId && <span className="rounded-full bg-signal-500/[0.1] px-2 py-0.5 text-[8px] font-bold uppercase tracking-[0.12em] text-signal-600 dark:text-signal-400">Selected</span>}
-          </button>
-
-          <div className="h-px bg-black/[0.04] dark:bg-white/[0.04] shrink-0" />
-
-          <div className="overflow-y-auto min-h-0">
-          {loading && (
-            <div role="status" className="px-5 py-3 text-[10px] font-bold uppercase tracking-[0.14em] text-signal-600 dark:text-signal-400">
-              Loading sprint scopes
-            </div>
-          )}
-          {!loading && sprints.length === 0 && (
-            <div role="status" className="px-5 py-3 text-xs font-medium text-slate-500 dark:text-slate-400">
-              No sprints available. All Sprints remains selected until a sprint is created.
-            </div>
-          )}
-          {sprints.map((sprint, sprintIndex) => {
-            const index = sprintIndex + 1;
-            const isActive = selectedId === sprint.id;
-            return (
-              <button
-                key={sprint.id}
-                id={`tasks-sprint-option-${index}`}
-                ref={(node) => { optionRefs.current[index] = node; }}
-                type="button"
-                role="option"
-                aria-selected={isActive}
-                tabIndex={-1}
-                onClick={() => selectOption(sprint.id)}
-                onKeyDown={(event) => handleOptionKeyDown(event as KeyboardEvent, index, sprint.id)}
-                style={{ transitionDuration: interactionTokens.controlFeedback.duration, transitionTimingFunction: interactionTokens.controlFeedback.ease }}
-                className={`w-full flex items-center gap-3 px-5 py-3.5 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ember-500/40 ${
-                  isActive ? "bg-ember-500/[0.06] dark:bg-ember-500/[0.08]" : "hover:bg-black/[0.03] dark:hover:bg-white/[0.03]"
-                }`}
-              >
-                <div className={`w-2 h-2 rounded-full shrink-0 ${
-                  sprint.status === "running" ? "bg-status-green shadow-[0_0_8px_rgba(0,171,132,0.6)] animate-pulse" :
-                  sprint.status === "paused" ? "bg-status-amber shadow-[0_0_8px_rgba(245,158,11,0.45)]" :
-                  sprint.status === "completed" ? "bg-signal-500" :
-                  sprint.status === "failed" ? "bg-status-red" :
-                  sprint.status === "cancelled" ? "bg-slate-400 dark:bg-slate-500" :
-                  "bg-slate-400 dark:bg-slate-600"
-                }`} />
-                <div className="flex-1 min-w-0 flex flex-col">
-                  <span className={`text-sm font-bold tracking-tight truncate min-w-0 ${isActive ? "text-ember-600 dark:text-ember-400" : "text-slate-800 dark:text-white"}`}>
-                    {formatSprintDisplay(sprint, sprintKeyPrefix)}
-                  </span>
-                  <div className="flex items-center gap-2 mt-0.5">
-                    <span className="text-[9px] font-mono text-slate-400 uppercase tracking-[0.1em] truncate min-w-0">{sprint.date}</span>
-                    <span className="sr-only">{options[index].description}</span>
-                  </div>
-                </div>
-                <div className="flex flex-col items-end gap-0.5 shrink-0 pl-2">
-                  {isActive && <span className="rounded-full bg-ember-500/[0.1] px-2 py-0.5 text-[8px] font-bold uppercase tracking-[0.12em] text-ember-600 dark:text-ember-400">Selected</span>}
-                  <span className="text-[10px] font-mono font-bold text-slate-500">{sprint.tasksCount}</span>
-                  <div className="w-12 h-1 rounded-full bg-black/[0.06] dark:bg-white/[0.06] overflow-hidden">
-                    <div className="h-full rounded-full bg-signal-500 transition-all duration-500" style={{ width: `${sprint.completion}%` }} />
-                  </div>
-                </div>
-              </button>
-            );
-          })}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-});
-
 const SprintProgressCard: FunctionComponent<{
   sprint: { id: string; name: string; date: string };
   tasks: Task[];
@@ -488,7 +145,7 @@ const SprintProgressCard: FunctionComponent<{
           <Target className="w-5 h-5 text-ember-500" strokeWidth={2} />
         </div>
         <div>
-          <h3 className="text-lg font-black font-display tracking-tight text-slate-900 dark:text-white">{sprint.name}</h3>
+          <h3 className="text-base font-semibold font-display tracking-tight text-slate-900 dark:text-white">{sprint.name}</h3>
           <p className="text-[10px] font-mono text-slate-400 uppercase tracking-[0.1em]">{sprint.date}</p>
         </div>
       </div>
@@ -513,7 +170,7 @@ const SprintProgressCard: FunctionComponent<{
           { label: "Queued", value: pending, color: "text-slate-400" },
         ].map(({ label, value, color }) => (
           <div key={label} className="flex flex-col items-center py-2.5 rounded-xl bg-black/[0.03] dark:bg-white/[0.03] border border-black/[0.04] dark:border-white/[0.04]">
-            <span className={`text-xl font-black font-mono leading-none ${color}`}>{value}</span>
+            <span className={`text-lg font-semibold font-mono leading-none ${color}`}>{value}</span>
             <span className="text-[8px] font-bold uppercase tracking-[0.14em] text-slate-400 mt-1">{label}</span>
           </div>
         ))}
@@ -533,108 +190,60 @@ const SprintProgressCard: FunctionComponent<{
 export const TasksPage: FunctionComponent = () => {
   const headerRef = useRef<HTMLDivElement>(null);
   const boardRef = useRef<HTMLDivElement>(null);
-  const { projects, selectedProject, createProject } = useProjectData();
-  const projectId = selectedProject?.id || null;
-  const {
-    data: sprints,
-    loading: sprintsLoading,
-    selectedSprintId,
-    selectSprint,
-    refetch: refreshSprints,
-  } = useSprints(selectedProject?.id || null);
-  const { execution, status } = useDashboardRuntimeData(
-    projectId,
-    !!selectedProject,
-    { selectedSprintId },
-  );
-  const settings = useProjectEffectiveSettings(projectId);
-  const sprintKeyPrefix = settings.data?.settings?.git?.sprintKeyPrefix || "SPR";
-  const gitSettings = settings.data?.settings?.git;
-  const taskPullRequestsEnabled = gitSettings
-    ? gitSettings.githubMode !== "LOCAL" && gitSettings.autoCreatePr === true
-    : true;
-  const [agentPresetsMap, setAgentPresetsMap] = useState<Map<string, AgentPreset>>(new Map());
-  useEffect(() => {
-    if (!projectId) return;
-    let cancelled = false;
-    fetchAgentPresets(projectId).then(presets => {
-      if (!cancelled) setAgentPresetsMap(new Map(presets.map(p => [p.id, p])));
-    }).catch(() => {});
-    return () => { cancelled = true; };
-  }, [projectId]);
-  const locationSearch = useRouterState({ select: (state) => state.location.searchStr });
-  const initialSprint = useMemo(() => {
-    const params = new URLSearchParams(locationSearch);
-    // Support both "sprint" and "sprintId"
-    return params.get("sprintId") || params.get("sprint");
-  }, [locationSearch]);
-  const routeSprintId = useMemo(() => {
-    if (!initialSprint) {
-      return null;
-    }
-    return sprints.some((sprint: Sprint) => sprint.id === initialSprint) ? initialSprint : null;
-  }, [initialSprint, sprints]);
-  const taskScopeSprintId = routeSprintId ?? selectedSprintId;
-
-  useEffect(() => {
-    if (!routeSprintId || routeSprintId === selectedSprintId) {
-      return;
-    }
-    void selectSprint(routeSprintId);
-  }, [routeSprintId, selectedSprintId, selectSprint]);
-
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
-  const [priorityFilter, setPriorityFilter] = useState<PriorityFilter>("all");
-  const [listWindow, setListWindow] = useState<ListWindowOption>(DEFAULT_LIST_WINDOW);
-  const [showComposer, setShowComposer] = useState(false);
-  const [showAddProjectModal, setShowAddProjectModal] = useState(false);
-  const [editingTask, setEditingTask] = useState<Task | null>(null);
-  const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
-  const [dropTargetContext, setDropTargetContext] = useState<{ status: TaskStatus, index: number } | null>(null);
-  const [optimisticTasks, setOptimisticTasks] = useState<Task[]>([]);
-  const [resolvedTaskId, setResolvedTaskId] = useState<string | null>(null);
-  const composerRef = useRef<HTMLDivElement>(null);
   const interactionTokens = useInteractionTokens();
-
-  const { tasks, loading, error, refresh: refreshTasks } = useProjectTasks(
-    selectedProject?.id || null,
+  const controller = useTaskBoardController();
+  const {
     projects,
+    selectedProject,
     sprints,
-    taskScopeSprintId
-  );
-
-  // Handle route taskId resolution for scroll-to-focus
-  useEffect(() => {
-    if (!loading && tasks.length > 0) {
-      const params = new URLSearchParams(locationSearch);
-      const taskId = params.get("taskId");
-      if (taskId && tasks.some(t => t.id === taskId || t.recordId === taskId)) {
-        // Find the actual recordId (in case the route passed the short ID)
-        const targetTask = tasks.find(t => t.id === taskId || t.recordId === taskId);
-        if (targetTask) {
-          setResolvedTaskId(targetTask.recordId);
-          // Clean up URL so it doesn't keep refocusing on subsequent renders
-          params.delete("taskId");
-          const nextSearch = params.toString();
-          const nextUrl = `${window.location.pathname}${nextSearch ? `?${nextSearch}` : ""}${window.location.hash}`;
-          window.history.replaceState(window.history.state, "", nextUrl);
-        }
-      }
-    }
-  }, [locationSearch, loading, tasks]);
-
-  const reducedMotion = useReducedMotion();
-  const [showSkeletons, setShowSkeletons] = useState(false);
-
-  useEffect(() => {
-    let timeoutId: number;
-    if (loading) {
-      timeoutId = window.setTimeout(() => setShowSkeletons(true), 200);
-    } else {
-      setShowSkeletons(false);
-    }
-    return () => window.clearTimeout(timeoutId);
-  }, [loading]);
+    sprintsLoading,
+    selectedSprintId,
+    taskScopeSprintId,
+    selectedSprintModel,
+    sprintKeyPrefix,
+    isTaskScopeReady,
+    tasks,
+    loading,
+    error,
+    statusFilter,
+    setStatusFilter,
+    priorityFilter,
+    setPriorityFilter,
+    listWindow,
+    setListWindow,
+    showComposer,
+    editingTask,
+    composerRef,
+    showAddProjectModal,
+    setShowAddProjectModal,
+    reducedMotion,
+    showSkeletons,
+    filterTransitionPending,
+    boardCountAnnouncement,
+    boardViewModel,
+    draggedTaskId,
+    dropTargetContext,
+    agentPresetsMap,
+    resolvedTaskId,
+    clearResolvedTaskId,
+    handleSprintScopeSelect,
+    handleComposerToggle,
+    handleComposerClose,
+    handleTaskSubmit,
+    handleDragStart,
+    handleDragEnd,
+    handleDragOver,
+    handleDrop,
+    handleDeleteTask,
+    handleEditClick,
+    handleAddProject,
+  } = controller;
+  const { boardState, taskViewModels } = boardViewModel;
+  const { filteredTasks, stats, columns } = boardState;
+  const listTransitionStyle = useMemo(() => ({
+    transitionDuration: interactionTokens.listReorder.duration,
+    transitionTimingFunction: interactionTokens.listReorder.ease,
+  }), [interactionTokens.listReorder.duration, interactionTokens.listReorder.ease]);
 
   useLayoutEffect(() => {
     if (!headerRef.current) return;
@@ -700,7 +309,7 @@ export const TasksPage: FunctionComponent = () => {
         {
           opacity: 1,
           borderWidth: "1px",
-          borderColor: "rgba(0,0,0,0.06)", // Fallback, clearProps will remove it
+          borderColor: "rgba(0,0,0,0.06)",
           borderStyle: "solid",
           duration: 0.4,
           ease: "power2.out",
@@ -709,241 +318,13 @@ export const TasksPage: FunctionComponent = () => {
       );
     });
 
-    setResolvedTaskId(null);
+    clearResolvedTaskId();
     return () => ctx.revert();
-  }, [resolvedTaskId, tasks]);
-
-  const currentBoardViewModel = useMemo(() => {
-    return buildTaskBoardViewModel({
-      tasks,
-      optimisticTasks,
-      statusFilter,
-      priorityFilter,
-      listWindow,
-      taskScopeSprintId,
-      taskDispatches: execution.taskDispatches,
-      recentEvents: execution.recentEvents,
-      subtasks: status.subtasks ?? [],
-      taskPullRequestsEnabled,
-    });
-  }, [
-    tasks,
-    optimisticTasks,
-    statusFilter,
-    priorityFilter,
-    listWindow,
-    taskScopeSprintId,
-    execution.taskDispatches,
-    execution.recentEvents,
-    status.subtasks,
-    taskPullRequestsEnabled,
-  ]);
-  const [displayBoardViewModel, setDisplayBoardViewModel] = useState<TaskBoardViewModel>(currentBoardViewModel);
-  const [filterTransitionPending, setFilterTransitionPending] = useState(false);
-  const previousFilterKeyRef = useRef(`${statusFilter}|${priorityFilter}`);
-
-  useEffect(() => {
-    const nextFilterKey = `${statusFilter}|${priorityFilter}`;
-    if (previousFilterKeyRef.current !== nextFilterKey) {
-      previousFilterKeyRef.current = nextFilterKey;
-      setFilterTransitionPending(true);
-      const timeoutId = window.setTimeout(() => {
-        setDisplayBoardViewModel(currentBoardViewModel);
-        setFilterTransitionPending(false);
-      }, reducedMotion ? 0 : 160);
-      return () => window.clearTimeout(timeoutId);
-    }
-
-    setDisplayBoardViewModel(currentBoardViewModel);
-    setFilterTransitionPending(false);
-    return undefined;
-  }, [currentBoardViewModel, priorityFilter, reducedMotion, statusFilter]);
-
-  const { boardState, taskViewModels } = displayBoardViewModel;
-  const { filteredTasks, stats, columns } = boardState;
-  const boardCountSummary = useMemo(() => (
-    columns.map(({ status, count }) => `${STATUS_CFG[status].label}: ${count}`).join(", ")
-  ), [columns]);
-  const [boardCountAnnouncement, setBoardCountAnnouncement] = useState("");
-  const previousBoardCountSummaryRef = useRef("");
-
-  useEffect(() => {
-    if (loading || showSkeletons || filterTransitionPending || previousBoardCountSummaryRef.current === boardCountSummary) {
-      return;
-    }
-    previousBoardCountSummaryRef.current = boardCountSummary;
-    const timeoutId = window.setTimeout(() => {
-      setBoardCountAnnouncement(`${displayBoardViewModel.filterAnnouncement} ${boardCountSummary}.`);
-    }, 350);
-    return () => window.clearTimeout(timeoutId);
-  }, [boardCountSummary, displayBoardViewModel.filterAnnouncement, filterTransitionPending, loading, showSkeletons]);
-
-  const selectedSprintModel = taskScopeSprintId ? sprints.find((sprint: Sprint) => sprint.id === taskScopeSprintId) || null : null;
-  const isTaskScopeReady = !!selectedProject && sprints.length > 0;
-
-  const handleSprintScopeSelect = useCallback((sprintId: string | null) => {
-    const params = new URLSearchParams(locationSearch);
-    if (sprintId) {
-      params.set("sprintId", sprintId);
-    } else {
-      params.delete("sprintId");
-    }
-    params.delete("sprint");
-    const nextSearch = params.toString();
-    const nextUrl = `${window.location.pathname}${nextSearch ? `?${nextSearch}` : ""}${window.location.hash}`;
-    window.history.replaceState(window.history.state, "", nextUrl);
-    void selectSprint(sprintId);
-  }, [locationSearch, selectSprint]);
-
-  const handleTaskSubmit = useCallback(async (draft: {
-    sprintId: string;
-    title: string;
-    description: string;
-    promptMarkdown: string;
-    status: TaskStatus;
-    priority: TaskPriority;
-    executorType: Task["executorType"];
-    dependsOnTaskIds: string[];
-  }) => {
-    if (!selectedProject) return;
-
-    const isEditing = !!editingTask;
-    const optId = `opt-${Date.now()}`;
-
-    if (!isEditing) {
-      const optimisticTask: Task = {
-        recordId: optId,
-        id: "OPT-...",
-        source: "dash",
-        sprint: sprints.find((s: Sprint) => s.id === draft.sprintId)?.name || "...",
-        sprintId: draft.sprintId,
-        title: draft.title,
-        status: draft.status,
-        priority: draft.priority,
-        executorType: draft.executorType,
-        assignee: "Pending",
-        time: "...",
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-        promptMarkdown: draft.promptMarkdown,
-        description: draft.description,
-        dependsOnTaskIds: draft.dependsOnTaskIds,
-        isIndependent: false,
-        isMerged: false,
-        mergeIndicator: null,
-        isOptimistic: true,
-      };
-      setOptimisticTasks((prev) => [optimisticTask, ...prev]);
-    }
-
-    try {
-      let createdTaskId: string | null = null;
-      if (isEditing) {
-        await updateTask(editingTask.recordId, draft);
-      } else {
-        const createdTask = await createTask(selectedProject.id, draft);
-        createdTaskId = createdTask.id;
-      }
-      await Promise.all([refreshTasks(), refreshSprints()]);
-      setEditingTask(null);
-      setShowComposer(false);
-
-      if (createdTaskId) {
-        setResolvedTaskId(createdTaskId);
-      }
-    } finally {
-      if (!isEditing) {
-        setOptimisticTasks((prev) => prev.filter((t) => t.recordId !== optId));
-      }
-    }
-  }, [selectedProject, editingTask, refreshTasks, refreshSprints, sprints]);
-
-
-  const handleDragStart = useCallback((taskId: string, e: DragEvent) => {
-    if (reducedMotion) return;
-    setDraggedTaskId(taskId);
-    if (e.dataTransfer) e.dataTransfer.effectAllowed = 'move';
-    // e.dataTransfer.setDragImage(new Image(), 0, 0); // optional: hide default ghost
-  }, [reducedMotion]);
-
-  const handleDragEnd = useCallback(() => {
-    setDraggedTaskId(null);
-    setDropTargetContext(null);
-  }, []);
-
-  const handleDragOver = useCallback((status: TaskStatus, index: number, e: any) => {
-    if (reducedMotion) return;
-    e.preventDefault();
-    if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
-    setDropTargetContext({ status, index });
-  }, [reducedMotion]);
-
-  const handleDrop = useCallback(async (status: TaskStatus, e: DragEvent) => {
-    e.preventDefault();
-    if (reducedMotion) return;
-    if (!draggedTaskId) return;
-
-    const draggedTask = tasks.find(t => t.recordId === draggedTaskId);
-    if (!draggedTask) return;
-
-    const targetStatus = resolveTaskDropStatus(draggedTask.status, status);
-    if (targetStatus) {
-      const updatedTask = { ...draggedTask, status: targetStatus };
-      setOptimisticTasks(prev => {
-        const filtered = prev.filter(t => t.recordId !== updatedTask.recordId);
-        return [updatedTask, ...filtered];
-      });
-
-      try {
-        await updateTask(draggedTask.recordId, { status: targetStatus });
-        await refreshTasks();
-      } finally {
-        setOptimisticTasks(prev => prev.filter(t => t.recordId !== updatedTask.recordId));
-      }
-    }
-    setDraggedTaskId(null);
-    setDropTargetContext(null);
-  }, [draggedTaskId, reducedMotion, tasks, refreshTasks]);
-
-  const handleDeleteTask = useCallback(async (task: Task) => {
-    await deleteTask(task.recordId);
-    await Promise.all([refreshTasks(), refreshSprints()]);
-    setEditingTask((prev) => prev?.recordId === task.recordId ? null : prev);
-  }, [refreshTasks, refreshSprints]);
-
-  const handleEditClick = useCallback((nextTask: Task) => {
-    setEditingTask(nextTask);
-    setShowComposer(true);
-    setTimeout(() => composerRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
-  }, []);
-
-  const handleAddProject = useCallback(async (project: AddProjectModalSubmission) => {
-    if (project.type === 'new_project') {
-      const sourceRef = project.initMode === 'new-local'
-        ? (project.path || project.name)
-        : (project.repoSlug || project.name);
-
-      await createProject({
-        name: project.name,
-        sourceType: project.initMode === 'new-local' ? 'local' : 'git',
-        sourceRef,
-        initMode: project.initMode,
-        remoteProvider: project.remoteProvider,
-        isPrivate: project.isPrivate,
-      });
-      return;
-    }
-
-    await createProject({
-      name: project.name,
-      sourceType: project.type,
-      sourceRef: project.path,
-      cloneDir: project.cloneDir,
-    });
-  }, [createProject]);
+  }, [clearResolvedTaskId, resolvedTaskId, tasks]);
 
   return (
     <PageContainer
+      aria-label="Task Board"
       className={isTaskScopeReady ? "gap-16" : "gap-10"}
       padding={isTaskScopeReady ? "standard" : "sprintsEmpty"}
     >
@@ -956,7 +337,7 @@ export const TasksPage: FunctionComponent = () => {
           <>
             {selectedProject
               ? taskScopeSprintId
-                ? `Task execution for ${selectedProject.name}, scoped to Sprint ${sprints.find((s: Sprint) => s.id === taskScopeSprintId)?.number ?? "..."}.`
+                ? `Task execution for ${selectedProject.name}, scoped to Sprint ${sprints.find((sprint) => sprint.id === taskScopeSprintId)?.number ?? "..."}.`
                 : `Task execution for ${selectedProject.name}. Showing all tasks across the project.`
               : "Select a project to manage sprint tasks."}
             {selectedProject && (statusFilter !== "all" || priorityFilter !== "all") && (
@@ -990,15 +371,7 @@ export const TasksPage: FunctionComponent = () => {
           </div>
 
           <Button
-            onClick={() => {
-              if (showComposer || editingTask) {
-                setShowComposer(false);
-                setEditingTask(null);
-              } else {
-                setShowComposer(true);
-                setTimeout(() => composerRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
-              }
-            }}
+            onClick={handleComposerToggle}
             variant="signal"
             icon={(showComposer || editingTask) ? X : Plus}
             disabled={!selectedProject || sprints.length === 0}
@@ -1011,38 +384,19 @@ export const TasksPage: FunctionComponent = () => {
       />
 
       {isTaskScopeReady && (
-        <div className="flex flex-wrap items-center gap-4 mt-2 sm:-mt-4">
-          <div className="min-w-0 flex-shrink">
-            <SprintSelector sprints={sprints} selectedId={taskScopeSprintId} onSelect={handleSprintScopeSelect} sprintKeyPrefix={sprintKeyPrefix} loading={sprintsLoading} />
-          </div>
-
-          <FilterStrip
-            options={[
-              { value: "all", label: "All" },
-              { value: "in_progress", label: "Running" },
-              { value: "pending", label: "Queued" },
-              { value: "completed", label: "Done" },
-            ]}
-            active={statusFilter}
-            onChange={(val) => setStatusFilter(val as StatusFilter)}
-          />
-
-          <FilterStrip
-            options={[
-              { value: "all", label: "Any Priority" },
-              { value: "critical", label: "Critical" },
-              { value: "high", label: "High" },
-              { value: "medium", label: "Medium" },
-              { value: "low", label: "Low" },
-            ]}
-            active={priorityFilter}
-            onChange={(val) => setPriorityFilter(val as PriorityFilter)}
-          />
-
-          <div className="ml-auto w-full sm:w-auto">
-            <ListWindowSelector value={listWindow} onChange={setListWindow} label="Show" />
-          </div>
-        </div>
+        <TaskBoardFilters
+          sprints={sprints}
+          selectedSprintId={taskScopeSprintId}
+          onSelectSprint={handleSprintScopeSelect}
+          sprintKeyPrefix={sprintKeyPrefix}
+          sprintsLoading={sprintsLoading}
+          statusFilter={statusFilter}
+          onStatusFilterChange={setStatusFilter}
+          priorityFilter={priorityFilter}
+          onPriorityFilterChange={setPriorityFilter}
+          listWindow={listWindow}
+          onListWindowChange={setListWindow}
+        />
       )}
 
       {isTaskScopeReady && selectedSprintModel && (
@@ -1081,10 +435,7 @@ export const TasksPage: FunctionComponent = () => {
             availableTasks={tasks}
             initialTask={editingTask}
             initialSprintId={selectedSprintId}
-            onClose={() => {
-              setShowComposer(false);
-              setEditingTask(null);
-            }}
+            onClose={handleComposerClose}
             onSubmit={handleTaskSubmit}
           />
         </div>
@@ -1101,111 +452,29 @@ export const TasksPage: FunctionComponent = () => {
           </div>
         )}
         <h2 id="task-board-heading" className="sr-only">Task board</h2>
-        <div
-          ref={boardRef}
-          aria-busy={filterTransitionPending}
-          style={{
-            transitionDuration: interactionTokens.listReorder.duration,
-            transitionTimingFunction: interactionTokens.listReorder.ease,
-          }}
-          className={`grid gap-6 transition-opacity ${filterTransitionPending ? "opacity-80" : "opacity-100"} ${
-          columns.length === 1 ? "grid-cols-1" :
-          columns.length === 2 ? "grid-cols-1 lg:grid-cols-2" :
-          "grid-cols-1 lg:grid-cols-2 xl:grid-cols-3"
-        }`}>
-          {columns.map(({ status, count, tasks: columnTasks }) => (
-            <section
-              key={status}
-              className="flex flex-col"
-              role="region"
-              aria-labelledby={`task-lane-heading-${status}`}
-              aria-describedby={`task-lane-summary-${status}`}
-              aria-busy={loading || showSkeletons || filterTransitionPending}
-            >
-              <ColumnHeader status={status} count={count} />
-              <p id={`task-lane-summary-${status}`} className="sr-only">
-                {STATUS_CFG[status].label} lane contains {count} {count === 1 ? "task" : "tasks"}.
-              </p>
-              <div
-              className={`flex-1 grid grid-cols-1 grid-rows-1 p-4 rounded-[1.5rem] min-h-[200px] bg-black/[0.015] dark:bg-white/[0.015] border relative transition-colors duration-300 ${dropTargetContext?.status === status ? "border-signal-500/50 bg-signal-500/5" : "border-black/[0.03] dark:border-white/[0.03]"} ${reducedMotion ? "border-dashed" : ""}`}
-              onDragOver={(e) => handleDragOver(status, columnTasks.length, e)}
-              onDrop={(e) => handleDrop(status, e)}
-              aria-describedby={`task-lane-summary-${status} task-lane-drop-${status}`}
-            >
-                <p id={`task-lane-drop-${status}`} className="sr-only" aria-live="polite" aria-atomic="true">
-                  {getTaskDropFeedback({
-                    isReducedMotion: reducedMotion,
-                    isDragging: draggedTaskId !== null,
-                    targetLane: status,
-                    currentStatus: draggedTaskId ? tasks.find((task) => task.recordId === draggedTaskId)?.status : undefined,
-                  })}
-                </p>
-                {showSkeletons && (
-                  <div role="status" aria-live="polite" className="sr-only">
-                    Loading {STATUS_CFG[status].label.toLowerCase()} tasks.
-                  </div>
-                )}
-                <SkeletonLoader
-                  show={showSkeletons}
-                  className="col-start-1 row-start-1"
-                  skeleton={(
-                    <div className="flex flex-col gap-4">
-                      <SkeletonCard />
-                      <SkeletonCard />
-                      <SkeletonCard />
-                    </div>
-                  )}
-                >
-                {!loading && columnTasks.length === 0 ? (
-                  <div role="status" aria-live="polite" className={`col-start-1 row-start-1 flex items-center justify-center text-center p-6 text-xs font-medium text-slate-400 dark:text-slate-500 border-2 border-dashed rounded-[1.5rem] bg-black/[0.015] dark:bg-white/[0.015] transition-colors ${dropTargetContext?.status === status ? "border-signal-500/30" : "border-black/[0.05] dark:border-white/[0.05]"}`}>
-                    No {status.replace("_", " ")} tasks
-                    <br />
-                    {statusFilter !== "all" || priorityFilter !== "all" ? "matching current filters" : taskScopeSprintId ? "in this sprint" : "in this project"}.
-                  </div>
-                ) : !loading ? (
-                  <div className="col-start-1 row-start-1 flex flex-col gap-4">
-                    {columnTasks.map((task, index) => {
-                      const isDraggedOver = dropTargetContext?.status === status && dropTargetContext?.index === index;
-                      const viewModel = taskViewModels.get(task.recordId);
-                      if (!viewModel) return null;
-
-                      return (
-                        <div key={task.recordId} className="contents">
-                          {isDraggedOver && draggedTaskId !== task.recordId && (
-                        <div className="h-24 mb-4 rounded-[1.5rem] border-2 border-dashed border-signal-500/50 bg-signal-500/10 transition-all duration-300" />
-                      )}
-                      <div
-                        key={task.recordId}
-                        className="task-card-entry"
-                        data-task-id={task.recordId}
-                        onDragOver={(e) => { e.stopPropagation(); handleDragOver(status, index, e); }}
-                        onDrop={(e) => { e.stopPropagation(); handleDrop(status, e); }}
-                      >
-                          <KanbanTaskCard
-                            viewModel={viewModel}
-                            index={index}
-                            onEdit={handleEditClick}
-                            onDelete={handleDeleteTask}
-                            agentPresetName={task.agentPresetId ? agentPresetsMap.get(task.agentPresetId)?.name ?? null : null}
-                            agentPresetAvatarConfig={task.agentPresetId ? agentPresetsMap.get(task.agentPresetId)?.avatarConfig : undefined}
-                            isDragging={draggedTaskId === task.recordId}
-                            onDragStart={(e) => handleDragStart(task.recordId, e)}
-                            onDragEnd={handleDragEnd}
-                          />
-                        </div>
-                        </div>
-                      );
-                    })}
-                    {dropTargetContext?.status === status && dropTargetContext?.index === columnTasks.length && (
-                        <div className="h-24 mt-4 rounded-[1.5rem] border-2 border-dashed border-signal-500/50 bg-signal-500/10 transition-all duration-300" />
-                      )}
-                  </div>
-                ) : null}
-                </SkeletonLoader>
-              </div>
-            </section>
-          ))}
-        </div>
+        <TaskBoardColumns
+          boardRef={boardRef}
+          columns={columns}
+          taskViewModels={taskViewModels}
+          allTasks={tasks}
+          agentPresetsMap={agentPresetsMap}
+          loading={loading}
+          showSkeletons={showSkeletons}
+          filterTransitionPending={filterTransitionPending}
+          statusFilter={statusFilter}
+          priorityFilter={priorityFilter}
+          taskScopeSprintId={taskScopeSprintId}
+          reducedMotion={reducedMotion}
+          draggedTaskId={draggedTaskId}
+          dropTargetContext={dropTargetContext}
+          listTransitionStyle={listTransitionStyle}
+          onDragOver={handleDragOver}
+          onDrop={handleDrop}
+          onDragStart={handleDragStart}
+          onDragEnd={handleDragEnd}
+          onEditTask={handleEditClick}
+          onDeleteTask={handleDeleteTask}
+        />
         </section>
       )}
 

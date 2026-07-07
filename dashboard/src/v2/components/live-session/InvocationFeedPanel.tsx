@@ -8,8 +8,10 @@ import { ChevronDown, Cpu, ExternalLink, MessageSquareText, Timer } from "lucide
 import { formatTime } from "../../../lib/time.js";
 import { useExecutionTimeline } from "../../../hooks/ExecutionTimelineContext.js";
 import type { ExecutionInvocationRecord } from "../../../types.js";
+import { findLatestContainerBuildProgressFromEvents, findLatestContainerBuildProgressFromInvocations } from "../../../lib/activity.js";
 import { formatInvocationDuration, formatInvocationPurpose, InvocationContextChips } from "../chat/invocation-display.js";
-import { RuntimeSnapshotSurfaceBadge, statusRailTone, statusTone, shortenRuntimeId } from "./ExecutionRuntimePanel.js";
+import { RuntimeSnapshotSurfaceBadge, RuntimeSnapshotSurfaceNotice, statusRailTone, statusTone, shortenRuntimeId } from "./ExecutionRuntimePanel.js";
+import { ContainerBuildStatusInfobox } from "./ContainerBuildStatusInfobox.js";
 
 const INVOCATION_STATUS_DOT: Record<string, string> = {
   running: "bg-signal-500 shadow-[0_0_8px_rgba(0,224,160,0.35)] motion-reduce:ring-2 motion-reduce:ring-signal-500/30 motion-reduce:shadow-none",
@@ -100,7 +102,7 @@ const InvocationFeedRow: FunctionComponent<{
           </div>
           <a
             href={buildInvocationHref(invocation.id)}
-            aria-label={`Open transcript for ${purposeLabel}`}
+            aria-label={`Open transcript for ${purposeLabel} invocation ${shortenRuntimeId(invocation.id) ?? invocation.id}`}
             className="mt-2 inline-flex items-center gap-1 rounded-md border border-signal-500/20 bg-signal-500/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.12em] text-signal-600 transition-colors hover:bg-signal-500/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:text-signal-400 dark:focus-visible:ring-offset-void-800"
           >
             <ExternalLink className="h-3 w-3" strokeWidth={2} aria-hidden="true" />
@@ -195,6 +197,11 @@ export const InvocationFeedPanel: FunctionComponent<{
     [invocations],
   );
   const invocationSummary = `${invocations.length} invocation${invocations.length === 1 ? "" : "s"} shown: ${newCount} new or queued, ${runningCount} running, ${completedCount} completed, ${failedCount} failed.`;
+  const containerBuildProgress = useMemo(
+    () => findLatestContainerBuildProgressFromInvocations(invocations)
+      ?? findLatestContainerBuildProgressFromEvents(snapshot?.recentEvents),
+    [invocations, snapshot?.recentEvents],
+  );
 
   if (!snapshot) {
     return (
@@ -254,7 +261,9 @@ export const InvocationFeedPanel: FunctionComponent<{
         aria-hidden={collapsible && !open ? "true" : undefined}
       >
         <div ref={contentRef} className={collapsible ? "collapsible-content overflow-hidden" : ""}>
-          <div className="relative z-10 px-5 pb-5 pt-0">
+          <div className="relative z-10 space-y-3 px-5 pb-5 pt-0">
+            <RuntimeSnapshotSurfaceNotice surface={snapshotSurface} panelLabel="Invocation feed" />
+            <ContainerBuildStatusInfobox progress={containerBuildProgress} className="mb-3" />
             <div className="mb-3 grid grid-cols-3 gap-2">
               {[
                 { label: "Running", value: runningCount, tone: "text-signal-500" },
@@ -263,7 +272,7 @@ export const InvocationFeedPanel: FunctionComponent<{
               ].map(({ label, value, tone }) => (
                 <div key={label} className="rounded-xl border border-black/[0.04] bg-white/55 px-3 py-2 dark:border-white/[0.06] dark:bg-void-900/30">
                   <div className={`text-[9px] font-bold uppercase tracking-[0.14em] ${tone}`}>{label}</div>
-                  <div className={`mt-1 font-mono text-lg font-black leading-none ${tone}`}>{value}</div>
+                  <div className={`mt-1 font-mono text-base font-semibold leading-none ${tone}`}>{value}</div>
                 </div>
               ))}
             </div>

@@ -1,9 +1,10 @@
 /**
  * @vitest-environment jsdom
  */
-import { describe, it, expect, vi, beforeEach } from "vitest";
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/preact";
-import { LiveTaskCard } from "../../../../../dashboard/src/v2/components/LiveTaskCard";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/preact";
+import { LiveTaskCard, QuotaCountdown, TaskDuration } from "../../../../../dashboard/src/v2/components/LiveTaskCard";
+import { LiveTaskInvocationRow } from "../../../../../dashboard/src/v2/components/live-session/LiveTaskInvocationRow.js";
 import type { ExecutionInvocationRecord, Subtask } from "../../../../../dashboard/src/types.js";
 
 // Mock resize observer and match media
@@ -36,6 +37,11 @@ describe("LiveTaskCard", () => {
   beforeEach(() => {
     cleanup();
     vi.clearAllMocks();
+    vi.useRealTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   const getMockTask = (status: Subtask["status"]): Subtask => ({
@@ -145,6 +151,36 @@ describe("LiveTaskCard", () => {
     expect(within(container).getByText(/resets in/i)).toBeTruthy();
   });
 
+  it("keeps quota countdown export compatible and falls back to the raw error without retry metadata", () => {
+    render(<QuotaCountdown errorMessage="Provider quota exhausted without retry metadata." />);
+    expect(screen.getByText("Provider quota exhausted without retry metadata.")).toBeTruthy();
+  });
+
+  it("ticks the live task duration while the timing display is visible", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-03-21T10:00:05.000Z"));
+
+    const { container } = render(
+      <TaskDuration
+        dispatchTiming={{
+          startedAt: "2026-03-21T10:00:00.000Z",
+          finishedAt: null,
+          status: "running",
+        }}
+      />,
+    );
+
+    expect(screen.getByText("5s")).toBeTruthy();
+
+    act(() => {
+      vi.setSystemTime(new Date("2026-03-21T10:00:06.000Z"));
+      vi.advanceTimersByTime(1000);
+    });
+
+    expect(container.textContent).not.toBe("5s");
+    expect(container.textContent).toMatch(/^[6-9]s$/);
+  });
+
   it("renders a task QA review indicator while QA is running", () => {
     const task = {
       ...getMockTask("CODING_COMPLETED"),
@@ -184,7 +220,60 @@ describe("LiveTaskCard", () => {
     expect(scoped.getByRole("log", { name: "Invocation feed for task test-task" })).toBeTruthy();
     expect(scoped.getByText("Task Invocations")).toBeTruthy();
     expect(scoped.getByText("Task Coding")).toBeTruthy();
-    expect(scoped.getByRole("link", { name: "Open transcript for Task Coding" }).getAttribute("href"))
+    expect(scoped.getByRole("link", { name: "Open transcript for Task Coding invocation xi-task-" }).getAttribute("href"))
       .toBe("/chat?mode=invocations&invocation=xi-task-1");
+  });
+
+  it("suppresses force-complete activation while pending and exposes task-specific feedback", () => {
+    const task = getMockTask("RUNNING");
+    const onForceComplete = vi.fn();
+
+    render(
+      <LiveTaskCard
+        task={task}
+        allTasks={[task]}
+        onRerun={vi.fn()}
+        onEdit={vi.fn()}
+        onForceComplete={onForceComplete}
+        isRerunning={false}
+        isForceCompleting
+      />,
+    );
+
+    const forceCompleteButton = screen.getByRole("button", { name: /Force complete task test-task/i });
+    fireEvent.click(forceCompleteButton);
+
+    expect(forceCompleteButton.getAttribute("aria-disabled")).toBe("true");
+    expect(forceCompleteButton.getAttribute("aria-busy")).toBe("true");
+    expect(forceCompleteButton.textContent).toContain("Force completing");
+    expect(screen.getAllByText(/Marking this task complete/).length).toBeGreaterThan(0);
+    expect(onForceComplete).not.toHaveBeenCalled();
+  });
+
+  it("renders invocation row labels, fallback metadata, and encoded transcript links", () => {
+    render(
+      <LiveTaskInvocationRow
+        invocation={getMockInvocation({
+          id: "xi task/with space",
+          type: "qa_review",
+          status: "failed",
+          provider: null,
+          model: null,
+          totalTokens: undefined,
+          inputTokens: 4,
+          outputTokens: 8,
+          lastErrorMessage: "Provider returned an error",
+        })}
+      />,
+    );
+
+    expect(screen.getByText("QA Review")).toBeTruthy();
+    expect(screen.getByText("failed")).toBeTruthy();
+    expect(screen.getByText("provider pending")).toBeTruthy();
+    expect(screen.getByText("model pending")).toBeTruthy();
+    expect(screen.getByText("12 tok")).toBeTruthy();
+    expect(screen.getByText("Provider returned an error")).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Open transcript for QA Review invocation xi task/" }).getAttribute("href"))
+      .toBe("/chat?mode=invocations&invocation=xi%20task%2Fwith%20space");
   });
 });

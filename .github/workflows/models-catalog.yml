@@ -14,9 +14,12 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      pull-requests: write
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v6
@@ -34,13 +37,37 @@ jobs:
         run: node scripts/fetch-models-dev.mjs
 
       - name: Commit catalogue if changed
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TARGET_BRANCH: ${{ github.ref_name }}
         run: |
           if git diff --quiet -- assets/models-dev/catalog.json; then
             echo "No catalogue changes."
             exit 0
           fi
+
+          update_branch="chore/models-catalog-${TARGET_BRANCH}"
+          git switch -c "${update_branch}"
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add assets/models-dev/catalog.json
-          git commit -m "chore: update models.dev catalogue [skip ci]"
-          git push origin HEAD:${{ github.ref_name }}
+          git commit -m "chore: update models.dev catalogue"
+          git push --force-with-lease origin "HEAD:${update_branch}"
+
+          existing_pr_url="$(gh pr list \
+            --head "${update_branch}" \
+            --base "${TARGET_BRANCH}" \
+            --state open \
+            --json url \
+            --jq '.[0].url // ""')"
+
+          if [ -n "${existing_pr_url}" ]; then
+            echo "Updated existing catalogue PR: ${existing_pr_url}"
+            exit 0
+          fi
+
+          gh pr create \
+            --base "${TARGET_BRANCH}" \
+            --head "${update_branch}" \
+            --title "chore: update models.dev catalogue" \
+            --body "Refreshes the vendored models.dev catalogue for ${TARGET_BRANCH} after the scheduled push-triggered prefetch detected upstream changes. This PR intentionally runs the normal pull request CI checks."

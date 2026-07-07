@@ -8,7 +8,40 @@ import {
   getCorrelationId,
   runWithCorrelationId,
 } from "../../../../src/shared/logging/correlation-id.js";
-import { createLogger } from "../../../../src/shared/logging/logger.js";
+import { createLogger, type LogPurpose } from "../../../../src/shared/logging/logger.js";
+
+const purposeLabels: Record<LogPurpose, string> = {
+  dashboard: "DASH",
+  general: "GEN",
+  integration: "INT",
+  invocation: "INVK",
+  lifecycle: "LIFE",
+  mcp: "MCP",
+  orchestration: "ORCH",
+  request: "HTTP",
+  runtime: "RUN",
+  settings: "CONF",
+  storage: "DATA",
+  realtime: "LIVE",
+  security: "SEC",
+};
+
+async function readFileEventually(filePath: string, timeoutMs = 500): Promise<string> {
+  const startedAt = Date.now();
+  let lastError: unknown;
+  while (Date.now() - startedAt < timeoutMs) {
+    try {
+      return await fs.readFile(filePath, "utf8");
+    } catch (error) {
+      lastError = error;
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+  }
+  if (lastError) {
+    throw lastError;
+  }
+  return await fs.readFile(filePath, "utf8");
+}
 
 describe("createLogger", () => {
   // The global test setup forces console logging to "error" via CODEUX_FORCE_LOG_LEVEL
@@ -74,6 +107,65 @@ describe("createLogger", () => {
     expect(output).toContain("INVK");
   });
 
+  it("keeps every log purpose mapped to a stable console label", () => {
+    const stderrSpy = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+    const logger = createLogger({ environment: "development", consoleLogLevel: "debug", consoleLogMode: "full" });
+
+    for (const purpose of Object.keys(purposeLabels) as LogPurpose[]) {
+      logger.info(`purpose-${purpose}`, { logPurpose: purpose });
+    }
+
+    expect(stderrSpy).toHaveBeenCalledTimes(Object.keys(purposeLabels).length);
+    for (const [index, purpose] of (Object.keys(purposeLabels) as LogPurpose[]).entries()) {
+      const output = String(stderrSpy.mock.calls[index]?.[0] || "");
+      expect(output).toContain(purposeLabels[purpose]);
+      expect(output).toContain(`purpose-${purpose}`);
+    }
+  });
+
+  it("lets explicit logPurpose take precedence over message and component inference", () => {
+    const stderrSpy = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+    const logger = createLogger({
+      environment: "production",
+      level: "debug",
+      consoleLogMode: "full",
+      bindings: { component: "provider websocket dashboard" },
+    });
+
+    logger.info("provider websocket request completed", { logPurpose: "storage" });
+
+    const payload = JSON.parse(String(stderrSpy.mock.calls[0][0]));
+    expect(payload.purpose).toBe("storage");
+  });
+
+  it("infers purpose fallbacks from stable message and metadata conventions", () => {
+    const stderrSpy = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+    const logger = createLogger({ environment: "production", level: "debug", consoleLogMode: "full" });
+
+    logger.info("HTTP request completed", { method: "GET", path: "/api/projects", statusCode: 200 });
+    logger.info("Provider invocation started");
+    logger.info("MCP request handled");
+    logger.info("Dashboard realtime websocket broadcast failed");
+    logger.info("Settings saved");
+    logger.info("Sprint orchestration started");
+    logger.info("Runtime startup complete");
+    logger.info("Dashboard server started");
+    logger.info("Unclassified background note");
+
+    const purposes = stderrSpy.mock.calls.map((call) => JSON.parse(String(call[0])).purpose);
+    expect(purposes).toEqual([
+      "request",
+      "invocation",
+      "mcp",
+      "realtime",
+      "settings",
+      "orchestration",
+      "lifecycle",
+      "dashboard",
+      "general",
+    ]);
+  });
+
   it("logs JSON output with correlation id in production", () => {
     const stderrSpy = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
     const logger = createLogger({
@@ -123,12 +215,88 @@ describe("createLogger", () => {
     logger.info("visible on console only");
     logger.error("visible everywhere");
 
-    await new Promise((resolve) => setTimeout(resolve, 20));
-
     expect(stderrSpy).toHaveBeenCalledTimes(2);
-    const fileOutput = await fs.readFile(logFilePath, "utf8");
+    const fileOutput = await readFileEventually(logFilePath);
     expect(fileOutput).not.toContain("visible on console only");
     expect(fileOutput).toContain("visible everywhere");
+    await fs.rm(dir, { recursive: true, force: true });
+  });
+
+  it("honors DEBUG_LOG_FILE_LEVEL independently of console filtering", async () => {
+    const previousDebugLogFileLevel = process.env.DEBUG_LOG_FILE_LEVEL;
+    process.env.DEBUG_LOG_FILE_LEVEL = "debug";
+    try {
+      const stderrSpy = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+      const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-logger-env-"));
+      const logFilePath = path.join(dir, "debug.log");
+      const logger = createLogger({
+        environment: "development",
+        consoleLogLevel: "error",
+        consoleLogMode: "full",
+        logFilePath,
+      });
+
+      logger.debug("file only debug record");
+      logger.info("file only info record");
+      logger.error("console and file record");
+
+      expect(stderrSpy).toHaveBeenCalledTimes(1);
+      const fileOutput = await readFileEventually(logFilePath);
+      expect(fileOutput).toContain("file only debug record");
+      expect(fileOutput).toContain("file only info record");
+      expect(fileOutput).toContain("console and file record");
+      await fs.rm(dir, { recursive: true, force: true });
+    } finally {
+      if (previousDebugLogFileLevel === undefined) {
+        delete process.env.DEBUG_LOG_FILE_LEVEL;
+      } else {
+        process.env.DEBUG_LOG_FILE_LEVEL = previousDebugLogFileLevel;
+      }
+    }
+  });
+
+  it("writes invocation and realtime debug records to the debug file independently from console filtering", async () => {
+    const stderrSpy = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-logger-purpose-file-"));
+    const logFilePath = path.join(dir, "debug.log");
+    const logger = createLogger({
+      environment: "production",
+      consoleLogLevel: "error",
+      debugLogFileLevel: "debug",
+      consoleLogMode: "standard",
+      logFilePath,
+    });
+
+    runWithCorrelationId("corr-debug-file", () => {
+      logger.debug("Provider invocation usage updated", {
+        logPurpose: "invocation",
+        eventType: "provider_invocation_usage_updated",
+        providerInvocationId: "provider-inv-1",
+      });
+      logger.debug("realtime_snapshot_published", {
+        logPurpose: "realtime",
+        type: "project.execution.updated",
+        projectId: "proj-1",
+      });
+    });
+
+    expect(stderrSpy).not.toHaveBeenCalled();
+    const fileOutput = await readFileEventually(logFilePath);
+    const records = fileOutput.trim().split("\n").map((line) => JSON.parse(line));
+    expect(records).toEqual([
+      expect.objectContaining({
+        level: "debug",
+        purpose: "invocation",
+        correlationId: "corr-debug-file",
+        message: "Provider invocation usage updated",
+      }),
+      expect.objectContaining({
+        level: "debug",
+        purpose: "realtime",
+        correlationId: "corr-debug-file",
+        message: "realtime_snapshot_published",
+      }),
+    ]);
     await fs.rm(dir, { recursive: true, force: true });
   });
 
@@ -174,6 +342,12 @@ describe("createLogger", () => {
     expect(payload.metadata.apiKey).toBe("[REDACTED]");
     expect(payload.metadata.nested.token).toBe("[REDACTED]");
     expect(payload.metadata.nested.public).toBe("ok");
+    expect(payload.metadata).toMatchObject({
+      apiKey: "[REDACTED]",
+      nested: {
+        token: "[REDACTED]",
+      },
+    });
 
     // Arrays, nested strings, and Error objects should be redacted.
     expect(payload.metadata.message).toBe("connecting to https://[REDACTED]@example.com");
@@ -186,6 +360,35 @@ describe("createLogger", () => {
     expect(originalMetadata.nested.token).toBe("secret456");
     expect(originalMetadata.message).toBe("connecting to https://user:pass@example.com");
     expect(error.message).toBe("auth failed for Authorization: Bearer token123");
+  });
+
+  it("redacts deeply nested sensitive metadata without weakening non-sensitive fields", () => {
+    const stderrSpy = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+    const logger = createLogger({
+      environment: "production",
+      level: "debug",
+    });
+
+    logger.info("nested metadata", {
+      payload: {
+        headers: {
+          authorization: "Bearer secret-token",
+          accept: "application/json",
+        },
+        attempts: [
+          {
+            password: "super-secret",
+            notes: "OPENAI_API_KEY=sk-test-value and https://user:pass@example.test/path",
+          },
+        ],
+      },
+    });
+
+    const payload = JSON.parse(String(stderrSpy.mock.calls[0][0]));
+    expect(payload.metadata.payload.headers.authorization).toBe("[REDACTED]");
+    expect(payload.metadata.payload.headers.accept).toBe("application/json");
+    expect(payload.metadata.payload.attempts[0].password).toBe("[REDACTED]");
+    expect(payload.metadata.payload.attempts[0].notes).toBe("OPENAI_API_KEY=[REDACTED] and https://[REDACTED]@example.test/path");
   });
 });
 

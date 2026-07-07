@@ -24,11 +24,10 @@ The worker gateway solves that by exposing a dedicated authenticated MCP HTTP en
 
 ## Runtime Roles
 
-Code UX now uses three MCP runtime roles internally:
+Code UX uses two MCP runtime roles internally:
 
 - `project_manager`
-- `worker_host`
-- `worker_gateway`
+- `worker-host`
 
 ### `project_manager`
 
@@ -36,7 +35,7 @@ The normal main Code UX server process.
 
 It exposes the human-facing MCP tool surface over stdio.
 
-### `worker_host`
+### `worker-host`
 
 A headless local Code UX runtime started by the worker process on the worker machine.
 
@@ -46,22 +45,13 @@ It exposes only the worker-local execution tools needed to:
 - cancel local work
 - generate a dashboard reply with local provider context
 
-### `worker_gateway`
+### HTTP Transport
 
-The MCP role exposed by the main Code UX server over Streamable HTTP.
+The MCP Streamable HTTP transport exposes the same `project_manager` tool surface.
 
-It exposes only the remote worker control-plane tools needed to:
+The gateway now enforces worker identity at the listener entrypoint:
 
-- listen for dashboard messages
-- receive worker dispatch claims
-- post dashboard replies
-- heartbeat and finalize dispatch state
-
-It does not expose the full project-manager tool surface.
-
-The gateway now also enforces worker identity at the listener entrypoint:
-
-- `listen` on `worker_gateway` is always registered as `role = worker`
+- `listen` on remote connections is always registered as `role = worker`
 - the stored connection transport is always `streamable_http`
 
 That prevents remote HTTP worker connections from masquerading as normal stdio listeners.
@@ -108,26 +98,29 @@ That metadata is surfaced in the live runtime dashboard so operators can disting
 
 The main Code UX server can expose the worker gateway with:
 
-- `--mcp-http`
-- `--mcp-http-port`
-- `--mcp-http-host`
-- `--mcp-http-path`
-- `--mcp-http-auth-token`
+- `--mcp-https`
+- `--mcp-https-port`
+- `--mcp-https-host`
+- `--mcp-https-path`
+- `--mcp-https-auth-token`
 
 Equivalent environment variables:
 
-- `MCP_HTTP_ENABLED`
-- `MCP_HTTP_PORT`
-- `MCP_HTTP_HOST`
-- `MCP_HTTP_PATH`
-- `MCP_HTTP_AUTH_TOKEN`
+- `MCP_HTTPS_ENABLED`
+- `MCP_HTTPS_PORT`
+- `MCP_HTTPS_HOST`
+- `MCP_HTTPS_PATH`
+- `MCP_HTTPS_AUTH_TOKEN`
 
 Behavior:
 
-- disabled by default
-- automatically disabled for `worker_host`
-- defaults to `dashboardPort + 1` when `--mcp-http` is set without an explicit HTTP port
-- requires an auth token when binding to a non-loopback host
+- enabled by default
+- can be disabled with `--no-mcp-https` or `MCP_HTTPS_ENABLED=false`
+- defaults to `dashboardPort + 1` when no explicit MCP HTTP port is configured
+- auto-generates a user-scoped bearer token in `~/.code-ux/security.json` on first startup when no explicit token is configured
+- requires bearer authentication for normal Code UX startup, including Docker Desktop/WSL defaults that bind the gateway to `0.0.0.0` for container reachability
+- keeps explicit `--mcp-https-auth-token` and `MCP_HTTPS_AUTH_TOKEN` values as the highest-precedence token sources
+- exposes an HTTP listener; HTTPS/TLS requires a reverse proxy or future native certificate configuration
 
 Default path:
 
@@ -145,7 +138,7 @@ Remote control-plane mode uses:
 
 ```bash
 node dist/worker/index.js \
-  --server-url http://SERVER_HOST:5555/mcp \
+  --server-url http://SERVER_HOST:4445/mcp \
   --auth-token <TOKEN> \
   --project-id <PROJECT_ID>
 ```
@@ -169,7 +162,19 @@ The worker gateway supports bearer authentication:
 
 - `Authorization: Bearer <token>`
 
-If the gateway is exposed on anything other than loopback, Code UX now requires a configured auth token at startup.
+If the gateway is exposed on anything other than loopback, Code UX requires an active bearer token at startup. If no explicit token is supplied, Code UX creates a user-scoped token in `~/.code-ux/security.json`; operators can read or regenerate it from Settings → MCP before distributing it to local CLIs or remote workers.
+
+The request preflight validates security-sensitive headers before any session lookup:
+
+- malformed or missing bearer auth for a token-protected gateway returns the same sanitized `401 Unauthorized` JSON-RPC envelope
+- malformed `mcp-session-id` or `x-code-ux-agent` headers return a sanitized `400 Bad Request` JSON-RPC envelope
+- inactive session ids return a generic invalid-session response and logs do not include the supplied session id or bearer value
+
+Session lifecycle limits are enforced at the gateway:
+
+- at most 100 active Streamable HTTP sessions are accepted at once
+- sessions idle for more than one hour are closed and removed before a new initialize request is evaluated against the active-session cap
+- active-session cap failures are logged with bounded metadata such as method, path, active count, and maximum count, not bearer tokens or session ids
 
 This is a minimal transport guard, not the final worker identity model.
 

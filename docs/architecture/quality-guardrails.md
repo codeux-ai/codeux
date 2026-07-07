@@ -8,18 +8,22 @@ Run it with:
 pnpm run quality:guardrails
 ```
 
-The script is deterministic, uses only Node built-ins, and does not read build output or require network access. It scans production TypeScript and TSX under `src/`, `dashboard/src/`, and `scripts/`, while ignoring tests, `dist/`, coverage output, lockfiles, and generated dashboard build assets.
+The script is deterministic, uses only Node built-ins, and does not read build output or require network access. It scans production TypeScript and TSX under `src/`, `dashboard/src/`, and `scripts/`, while ignoring declaration files, tests, specs, fixtures, `dist/`, coverage output, lockfiles, generated dashboard build assets, and common cache or dependency directories. Backup artifact checks also scan `docs/` so rejected patch files and editor backups do not land in documentation.
+
+`pnpm run ci` now runs `pnpm run quality:guardrails` before audit, lint, tests, and build. The GitHub CI typecheck job also runs the same guardrail command before TypeScript checks, so local failures should be fixed before opening a PR.
 
 ## What It Checks
 
 - Blocking: backup and reject artifacts such as `.orig`, `.rej`, `.bak`, and editor `~` files under source and documentation roots.
 - Blocking: placeholder dependency wiring in `src/app/dependency-factory/**/*.ts`, including empty-object casts such as `{} as any`, `{} as unknown`, double casts through `any` or `unknown`, and empty objects cast directly to service-like dependency types.
 - Blocking: replayable persistence regressions for heavy dashboard snapshot events. The realtime event repository must only insert replayable events into `dashboard_realtime_events`, and snapshot publish tasks for `project.live.updated`, `project.execution.updated`, `project.runtime_status.updated`, `projects.updated`, and `overview.telemetry.updated` must publish with `replayable: false`.
+- Blocking: unbounded live execution runtime-event reads in `src/repositories/execution/*runtime-events-query.ts`. Ordered `task_run_events` and `sprint_run_events` snapshot slices must keep an explicit SQL `LIMIT` or an expanded-run `ROW_NUMBER()` / `run_event_rank` cap.
 - Blocking: duplicate adjacent optimistic task insertion calls in `dashboard/src/v2/TasksPage.tsx` or the task board action helper. New task creation should insert one optimistic record and remove it after the confirmed refresh.
+- Blocking: substantial duplicate implementation blocks across production TypeScript and TSX. The duplicate scanner normalizes implementation lines, strips comments and string contents, ignores imports, declarations, type/interface blocks, class field declarations, punctuation-only lines, and common JSX/Tailwind class fragments, then compares same-file and cross-file windows.
 - Advisory: production TypeScript or TSX files above the configured line threshold.
 - Advisory: broad `any` patterns such as `: any`, `as any`, `Array<any>`, and `Record<..., any>`.
 
-The script exits nonzero for high-confidence stale artifacts and the blocking regression patterns above. Oversized files and existing broad `any` usage are reported as hotspots so maintainers can improve them during nearby work without breaking CI on accepted legacy debt.
+The script exits nonzero for high-confidence stale artifacts, duplicate implementation blocks, and the blocking regression patterns above. Oversized files and existing broad `any` usage are reported as hotspots so maintainers can improve them during nearby work without breaking CI on accepted legacy debt.
 
 ## Regression Rationale
 
@@ -27,11 +31,15 @@ Dependency factory wiring is allowed to use the typed `LateBoundDependency<T>` h
 
 Dashboard snapshot events are intentionally non-replayable because their payloads are large and quickly superseded by a fresh snapshot. Persisting those payloads in SQLite recreates the write-amplification problem that the realtime sequence watermark design removed.
 
+Execution runtime-event projection queries sit on the live snapshot hot path. Ordered reads from `task_run_events` and `sprint_run_events` must stay bounded per project, selected sprint, or expanded sprint run so a long-running project cannot force `/api/execution` or realtime pushes to scan and ship all historical events.
+
 The Tasks page uses optimistic records to make task creation feel immediate before the backend confirms and refreshes the board. A duplicated adjacent insertion shows the same optimistic task twice and is easy to reintroduce during local edits, so the guardrail blocks that narrow pattern without scanning unrelated state updates.
+
+Duplicate implementation scanning is intentionally conservative. It only fails when two non-overlapping normalized windows meet both the line and token thresholds, then expands the matching block to report the largest actionable duplicate. The failure output includes the duplicate path, line, normalized size, source location, and remediation. Formatting-only edits, import lists, pure type declarations, and repeated Tailwind class fragments should not hide or create a blocking duplicate by themselves.
 
 ## Manual Regression Checks
 
-There is no dedicated Vitest harness for `scripts/check-quality-guardrails.mjs` today. When changing the script, verify it directly:
+The duplicate-code detector has focused Vitest coverage under `tests/backend/scripts/quality-guardrails.test.ts`. When changing the full guardrail script, also verify it directly:
 
 ```bash
 pnpm run quality:guardrails
@@ -41,6 +49,7 @@ For targeted manual failure checks, temporarily introduce one of these local-onl
 
 - Add `const placeholder = {} as any;` to a file under `src/app/dependency-factory/`.
 - Remove `replayable: false` from the `buildPublishTask` call to `publishRawEvent` in `src/services/dashboard-realtime-service.ts`.
+- Remove the `LIMIT ?` or `run_event_rank` cap from a runtime-event read in `src/repositories/execution/execution-runtime-events-query.ts`.
 - Duplicate the adjacent `setOptimisticTasks((prev) => [optimisticTask, ...prev]);` create path call in `dashboard/src/v2/TasksPage.tsx`.
 
 ## Thresholds
@@ -51,6 +60,8 @@ Current defaults:
 | --- | ---: | --- |
 | `CODEUX_GUARDRAIL_MAX_LINES` | `800` | Maximum advisory line count for production TypeScript and scripts. |
 | `CODEUX_GUARDRAIL_DASHBOARD_MAX_LINES` | `800` | Dashboard-specific advisory line count. |
+| `CODEUX_GUARDRAIL_DUPLICATE_MIN_LINES` | `80` | Minimum normalized implementation lines before a duplicated block can fail the guardrail. |
+| `CODEUX_GUARDRAIL_DUPLICATE_MIN_TOKENS` | `700` | Minimum normalized token count before a duplicated block can fail the guardrail. |
 | `CODEUX_GUARDRAIL_REPORT_LIMIT` | `20` | Maximum entries shown per advisory section. |
 
 Tune thresholds by raising or lowering the environment variables when running the script. Do not lower expectations by hiding risky files permanently; if a threshold needs to change, keep it paired with a rationale and a plan to reduce oversized modules or broad `any` usage over time.

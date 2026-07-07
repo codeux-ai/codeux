@@ -80,7 +80,7 @@ export const ChatPageShell: FunctionComponent<{
   }, [prefersReducedMotion]);
 
   return (
-    <PageContainer padding="chat" className="min-h-0 flex-1 flex flex-col gap-6 lg:gap-8 h-full overflow-hidden">
+    <PageContainer aria-label="Chat" padding="chat" className="min-h-0 flex-1 flex flex-col gap-6 lg:gap-8 h-full overflow-hidden">
       <PageHeader
         containerRef={headerRef}
         className="shrink-0"
@@ -208,7 +208,7 @@ export const ChatPageShell: FunctionComponent<{
             }}
             className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-[10px] font-bold uppercase tracking-[0.14em] disabled:cursor-not-allowed ${
               chatMode === "threads"
-                ? "bg-signal-500 text-void-900 hover:bg-signal-400 disabled:opacity-50"
+                ? "bg-signal-500 text-white dark:text-void-900 hover:bg-signal-400 disabled:opacity-50"
                 : "bg-black/[0.06] text-slate-400 opacity-50 dark:bg-white/[0.06] dark:text-slate-500"
             }`}
           >

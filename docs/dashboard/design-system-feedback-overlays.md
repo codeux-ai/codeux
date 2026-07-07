@@ -3,6 +3,7 @@
 ## Core Principles
 
 The Code UX dashboard relies on transient overlays (modals, dialogs, drawers, popovers) and feedback mechanisms (toasts, action feedback regions) to communicate state changes without losing context.
+These components map to current Preact implementations in `dashboard/src/v2/components/ui/`, such as `Modal`, `Dialog`, `ConfirmDialog`, and `ActionFeedbackRegion`.
 
 These surfaces share unified styling rules to ensure the dashboard feels cohesive, grounded, and consistent in both light and dark modes.
 
@@ -10,7 +11,7 @@ These surfaces share unified styling rules to ensure the dashboard feels cohesiv
 
 All floating surfaces in the application share a single elevated visual language.
 
-### Standard Surface (Modals, Dialogs, Drawers, Skeletons)
+### Standard Surface (Modals, Dialogs, Drawers, Skeletons from `dashboard/src/v2/components/ui/`)
 Used for primary overlay surfaces that sit above the rest of the page layout.
 
 - **Background:** `bg-white dark:bg-void-800`
@@ -19,7 +20,7 @@ Used for primary overlay surfaces that sit above the rest of the page layout.
 - **Shadow:** `shadow-2xl`
 - **Scrolling Behavior:** For modals requiring independent scrolling of body content (like long forms), override the `Modal` default overflow by adding `!overflow-hidden flex flex-col` to its `className`. Structure the inner modal with fixed headers/footers using `shrink-0` and make the content body scrollable with `flex-1 overflow-y-auto min-h-0`. In dialog or modal footers, use `flex flex-col-reverse sm:flex-row items-stretch sm:items-center` to stack action buttons vertically on mobile.
 
-### Floating Popups (Popovers, Menus, DropdownMenus)
+### Floating Popups (Popovers, Menus, DropdownMenus from `dashboard/src/v2/components/ui/`)
 Used for transient contextual interfaces anchored to a trigger.
 
 - **Background:** `bg-white dark:bg-void-800`

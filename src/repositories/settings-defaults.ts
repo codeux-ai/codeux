@@ -62,7 +62,8 @@ export const DEFAULT_PR_DESCRIPTION_SETTINGS: PrDescriptionSettings = {
   sprintSectionOrder: [...DEFAULT_SPRINT_SECTION_ORDER],
 };
 
-export const PROVIDER_IDS: ProviderId[] = ["jules", "gemini", "codex", "claude-code", "qwen-code", "opencode", "antigravity"];
+export const PROVIDER_IDS: ProviderId[] = ["jules", "gemini", "codex", "claude-code", "qwen-code", "opencode", "antigravity", "mockup-cli"];
+export const PUBLIC_PROVIDER_IDS: ProviderId[] = ["jules", "gemini", "codex", "claude-code", "qwen-code", "opencode", "antigravity"];
 export const THINKING_MODES: ThinkingMode[] = ["SMALL", "MEDIUM", "HIGH"];
 export const PROVIDER_STRATEGIES: ProviderStrategy[] = ["MANUAL", "WEIGHTED", "AGENT"];
 export const INVOCATION_ROUTING_PROFILES: InvocationRoutingProfile[] = ["GLOBAL", "WORKER"];
@@ -79,7 +80,8 @@ export const INVOCATION_ROUTING_IDS: InvocationRoutingId[] = [
 export const CLI_EXECUTION_MODES: CliExecutionMode[] = ["DOCKER", "HOST"];
 export const FEATURE_PR_AUTOMERGE_MODES: FeaturePrAutoMergeMode[] = ["OFF", "CREATE_PR", "WHEN_GREEN", "ALWAYS"];
 export const WORKER_EXECUTION_MODES: WorkerExecutionMode[] = ["VIRTUAL"];
-export const VIRTUAL_WORKER_PROVIDERS: VirtualWorkerProvider[] = ["gemini", "codex", "claude-code", "qwen-code", "opencode", "antigravity"];
+export const VIRTUAL_WORKER_PROVIDERS: VirtualWorkerProvider[] = ["gemini", "codex", "claude-code", "qwen-code", "opencode", "antigravity", "mockup-cli"];
+export const PUBLIC_VIRTUAL_WORKER_PROVIDERS: VirtualWorkerProvider[] = ["gemini", "codex", "claude-code", "qwen-code", "opencode", "antigravity"];
 export const RUNTIME_LOG_LEVELS = ["off", "debug", "info", "warn", "error"] as const;
 export const CONSOLE_LOG_MODES = ["standard", "full"] as const;
 export const DEFAULT_PROVIDER_CONFIG_IDS: Record<ProviderId, ProviderConfigId> = {
@@ -90,7 +92,22 @@ export const DEFAULT_PROVIDER_CONFIG_IDS: Record<ProviderId, ProviderConfigId> =
   "qwen-code": "qwen-code",
   opencode: "opencode",
   antigravity: "antigravity",
+  "mockup-cli": "mockup-cli",
 };
+
+export const DEFAULT_PLAYWRIGHT_MCP_SERVER_ID = "playwright";
+
+export const DEFAULT_PLAYWRIGHT_MCP_SERVER = {
+  id: DEFAULT_PLAYWRIGHT_MCP_SERVER_ID,
+  name: "playwright",
+  label: "Playwright",
+  description: "Browser automation MCP server for coding agents.",
+  enabled: true,
+  transport: "stdio",
+  command: "npx",
+  args: ["@playwright/mcp@latest"],
+  providers: ["gemini", "codex", "claude-code", "qwen-code", "opencode", "antigravity"],
+} satisfies DashboardSettings["customMcpServers"][number];
 export const DEFAULT_PROVIDER_CONFIG_NAMES: Record<ProviderId, string> = {
   jules: "Jules Primary",
   gemini: "Gemini Primary",
@@ -99,6 +116,7 @@ export const DEFAULT_PROVIDER_CONFIG_NAMES: Record<ProviderId, string> = {
   "qwen-code": "Qwen Primary",
   opencode: "OpenCode Primary",
   antigravity: "Antigravity Primary",
+  "mockup-cli": "Mockup CLI",
 };
 export const DEFAULT_PROVIDER_AUTH_PATHS: Record<ProviderId, string> = {
   jules: "",
@@ -108,6 +126,7 @@ export const DEFAULT_PROVIDER_AUTH_PATHS: Record<ProviderId, string> = {
   "qwen-code": "~/.qwen",
   opencode: "~/.local/share/opencode",
   antigravity: "~/.antigravity",
+  "mockup-cli": "",
 };
 
 // AI Models catalog — available model identifiers per virtual worker provider
@@ -203,6 +222,7 @@ export const AI_MODEL_CATALOG: Record<string, string[]> = {
   "qwen-code": QWEN_MODELS,
   opencode: OPENCODE_MODELS,
   antigravity: ANTIGRAVITY_MODELS,
+  "mockup-cli": ["default"],
 };
 
 export const DEFAULT_VIRTUAL_WORKER_MODELS: Record<string, string> = {
@@ -212,6 +232,7 @@ export const DEFAULT_VIRTUAL_WORKER_MODELS: Record<string, string> = {
   "qwen-code": "qwen3-coder-plus",
   opencode: "anthropic/claude-sonnet-4-5",
   antigravity: "default",
+  "mockup-cli": "default",
 };
 
 export const MIN_WATCH_LOOP_INTERVAL_SECONDS = 1;
@@ -333,6 +354,18 @@ export const DEFAULT_PROVIDER_SETTINGS: Record<ProviderId, ProviderSettings> = {
     authPath: DEFAULT_PROVIDER_AUTH_PATHS.antigravity,
     maxConcurrentTasks: 0,
   },
+  "mockup-cli": {
+    provider: "mockup-cli",
+    name: DEFAULT_PROVIDER_CONFIG_NAMES["mockup-cli"],
+    enabled: false,
+    model: "default",
+    weight: 0,
+    thinkingMode: "MEDIUM",
+    apiKey: "",
+    mountAuth: false,
+    authPath: DEFAULT_PROVIDER_AUTH_PATHS["mockup-cli"],
+    maxConcurrentTasks: 0,
+  },
 };
 
 export const createDefaultProviderSettings = (
@@ -352,6 +385,7 @@ export const buildDefaultProviderSettingsMap = (): Record<ProviderConfigId, Prov
   [DEFAULT_PROVIDER_CONFIG_IDS["qwen-code"]]: createDefaultProviderSettings("qwen-code"),
   [DEFAULT_PROVIDER_CONFIG_IDS.opencode]: createDefaultProviderSettings("opencode"),
   [DEFAULT_PROVIDER_CONFIG_IDS.antigravity]: createDefaultProviderSettings("antigravity"),
+  [DEFAULT_PROVIDER_CONFIG_IDS["mockup-cli"]]: createDefaultProviderSettings("mockup-cli"),
 });
 
 export const DEFAULT_INVOCATION_ROUTING: Record<InvocationRoutingId, InvocationRoutingSettings> = {
@@ -421,6 +455,8 @@ export const DEFAULT_DASHBOARD_SETTINGS: DashboardSettings = {
   dbAutoVacuumOnStartup: true,
   dbPruningEnabled: true,
   dbRetentionDays: 14,
+  restartSprintPolicy: "continue",
+  restartInvocationPolicy: "continue",
   appearance: {
     navigationMode: "SIDEBAR",
     theme: "SYSTEM",
@@ -472,6 +508,8 @@ export const DEFAULT_DASHBOARD_SETTINGS: DashboardSettings = {
     host: "",
     email: "",
     apiToken: "",
+    autoTransitionLinkedIssuesOnImport: true,
+    importTransitionName: "In Work",
     autoCloseLinkedIssues: false,
     defaultProject: "",
     closeTransitionName: "Done",
@@ -487,7 +525,7 @@ export const DEFAULT_DASHBOARD_SETTINGS: DashboardSettings = {
     waitForJulesCiAutofix: false,
     julesCiAutofixMaxRetries: 3,
     featurePrAutoMergeMode: "ALWAYS",
-    mainBranchAutoMergeMode: "CREATE_PR",
+    mainBranchAutoMergeMode: "ALWAYS",
   },
   guardrails: {
     enabled: true,
@@ -553,8 +591,8 @@ export const DEFAULT_DASHBOARD_SETTINGS: DashboardSettings = {
     maxQuotaRetriesWithoutTimer: 5,
   },
   sprintPreview: {
-    enabled: false,
-    showInAppBrowser: false,
+    enabled: true,
+    showInAppBrowser: true,
     autoStartOnRunningSprint: false,
     rebuildOnTaskCompletion: false,
     rebuildOnSprintCompletion: false,
@@ -563,6 +601,7 @@ export const DEFAULT_DASHBOARD_SETTINGS: DashboardSettings = {
     hostPortRangeStart: 5555,
     hostPortRangeEnd: 6666,
     containerAppPort: 3000,
+    containerAppPorts: [3000],
     startupScriptPath: ".code-ux/browser/start-preview.sh",
   },
   workers: {
@@ -594,21 +633,24 @@ export const DEFAULT_DASHBOARD_SETTINGS: DashboardSettings = {
       exhaustionPolicy: "FINISH_TASK",
       taskCompletion: {
         enabled: true,
+        agentPresetIds: [],
         agentPresetId: null,
       },
       sprintCompletion: {
         enabled: true,
+        agentPresetIds: [],
         agentPresetId: null,
       },
       completedTaskWithoutPr: {
         enabled: true,
+        agentPresetIds: [],
         agentPresetId: null,
       },
     },
   },
   skills: DEFAULT_SKILLS,
   mcpTools: DEFAULT_MCP_TOOL_TOGGLES.map((tool) => ({ ...tool })),
-  customMcpServers: [],
+  customMcpServers: [{ ...DEFAULT_PLAYWRIGHT_MCP_SERVER, args: [...DEFAULT_PLAYWRIGHT_MCP_SERVER.args], providers: [...DEFAULT_PLAYWRIGHT_MCP_SERVER.providers] }],
   memory: {
     enabled: true,
     embeddingProvider: "in_app",

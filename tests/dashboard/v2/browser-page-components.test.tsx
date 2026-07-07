@@ -230,6 +230,36 @@ describe("PreviewSessionSlider", () => {
     expect(unavailableLink).toHaveAccessibleDescription("Preview link unavailable until the container finishes starting and receives a routed host port.");
     expect(screen.getByText("Preview link unavailable until the container finishes starting and receives a routed host port.")).toBeInTheDocument();
   });
+
+  it("disables stopped routed preview links with a persistent recovery reason", () => {
+    render(
+      <PreviewSessionSlider
+        sessions={[
+          {
+            id: "slider-sess-stopped",
+            projectId: "p1",
+            sprintId: "s1",
+            sprintName: "Stopped Sprint",
+            status: "stopped",
+            healthStatus: "unknown",
+            hostPort: 8088,
+            createdAt: "",
+            updatedAt: ""
+          } as any,
+        ]}
+        selectedSessionId="slider-sess-stopped"
+        onSelectSession={vi.fn()}
+        onRemoveSession={vi.fn()}
+      />
+    );
+
+    const unavailableLink = screen.getByText("Link Unavailable").closest("a");
+    expect(unavailableLink).toBeInTheDocument();
+    expect(unavailableLink).not.toHaveAttribute("href");
+    expect(unavailableLink).toHaveAttribute("aria-disabled", "true");
+    expect(unavailableLink).toHaveAccessibleDescription("Preview link unavailable because the selected container is stopped. Rebuild or launch the container to open it.");
+    expect(screen.getByText("Preview link unavailable because the selected container is stopped. Rebuild or launch the container to open it.")).toBeInTheDocument();
+  });
 });
 
 describe("PreviewWindowChrome", () => {
@@ -324,6 +354,7 @@ describe("PreviewWindowChrome", () => {
     });
 
     expect(childWrapper.classList.contains("hidden")).toBe(false);
+    expect(screen.getByLabelText("Minimize preview window")).toHaveFocus();
   });
 
   it("toggles close mode hiding iframe wrapper", async () => {
@@ -352,6 +383,7 @@ describe("PreviewWindowChrome", () => {
     });
 
     expect(childWrapper.classList.contains("hidden")).toBe(false);
+    expect(screen.getByLabelText("Close preview window")).toHaveFocus();
   });
 
   it("describes disabled and pending navigation controls", () => {
@@ -387,6 +419,60 @@ describe("PreviewWindowChrome", () => {
 
     fireEvent.click(reload);
     expect(onReload).not.toHaveBeenCalled();
+  });
+
+  it("renders accessible port tabs and supports keyboard selection", async () => {
+    const user = userEvent.setup();
+    const onSelectPort = vi.fn();
+    render(
+      <PreviewWindowChrome
+        {...defaultProps}
+        portMappings={[
+          { containerPort: 3000, hostPort: 8080, isPrimary: true },
+          { containerPort: 5173, hostPort: 8081, label: "Vite" },
+        ]}
+        selectedContainerPort={3000}
+        onSelectPort={onSelectPort}
+      >
+        <div data-testid="test-child-ports" />
+      </PreviewWindowChrome>
+    );
+
+    const tablist = screen.getByRole("tablist", { name: "Preview ports for Chrome Sprint" });
+    expect(tablist).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Select preview port :3000 routed to host port 8080" })).toHaveAttribute("aria-selected", "true");
+
+    const primaryTab = screen.getByRole("tab", { name: "Select preview port :3000 routed to host port 8080" });
+    primaryTab.focus();
+    await user.keyboard("[ArrowRight]");
+
+    expect(onSelectPort).toHaveBeenCalledWith(5173);
+    expect(screen.getByRole("tab", { name: "Select preview port Vite :5173 routed to host port 8081" })).toHaveFocus();
+    expect(screen.getByRole("tab", { name: "Select preview port Vite :5173 routed to host port 8081" })).toHaveAttribute("aria-controls", "preview-window-frame");
+
+    await user.keyboard("[Home]");
+    expect(onSelectPort).toHaveBeenLastCalledWith(3000);
+    expect(screen.getByRole("tab", { name: "Select preview port :3000 routed to host port 8080" })).toHaveFocus();
+
+    await user.keyboard("[End]");
+    expect(onSelectPort).toHaveBeenLastCalledWith(5173);
+    expect(screen.getByRole("tab", { name: "Select preview port Vite :5173 routed to host port 8081" })).toHaveFocus();
+  });
+
+  it("does not render port tab chrome for legacy single-port sessions", () => {
+    render(
+      <PreviewWindowChrome
+        {...defaultProps}
+        portMappings={[
+          { containerPort: 3000, hostPort: 8080, isPrimary: true },
+        ]}
+        selectedContainerPort={3000}
+      >
+        <div data-testid="test-child-single-port" />
+      </PreviewWindowChrome>
+    );
+
+    expect(screen.queryByRole("tablist", { name: /Preview ports/i })).not.toBeInTheDocument();
   });
 
   it("supports keyboard minimize, restore, fullscreen, and close actions", async () => {

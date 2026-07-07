@@ -1,6 +1,11 @@
 import type { FunctionComponent } from "preact";
-import { ChevronLeft, BrainCircuit, Zap, EyeOff, Eye, Rocket, ClipboardList, X } from "lucide-preact";
-import type { PlanningRouteOption } from "../../lib/sprint-composer-state.js";
+import { ChevronLeft, BrainCircuit, Zap, EyeOff, Eye, Rocket, ClipboardList, X, CalendarClock } from "lucide-preact";
+import {
+  toSprintSchedulePayload,
+  type PlanningRouteOption,
+  type SprintScheduleConfig,
+  type SprintSchedulePayload,
+} from "../../lib/sprint-composer-state.js";
 import { AvantgardeSelect } from "../ui/AvantgardeSelect.js";
 import { SubtaskSlider, getTagStyles, IconMap } from "./quicksprint-shared.js";
 import { PlanningProgressOverlay } from "../ui/PlanningProgressOverlay.js";
@@ -29,6 +34,18 @@ export const QuicksprintExecutionView: FunctionComponent<{
   elapsedMs: number;
   isOverlayDismissed: boolean; setIsOverlayDismissed: (v: boolean) => void;
   handleExecute: (mode: "plan_only" | "plan_and_start") => void;
+  onSchedule?: (input: {
+    templateId: string;
+    taskCount: number;
+    noTaskLimit: boolean;
+    submitMode: "plan_only" | "plan_and_start";
+    additionalPrompt?: string;
+    routeOverride?: PlanningRouteOption | null;
+    modelOverride?: string | null;
+    schedule: SprintSchedulePayload;
+    title?: string;
+  }) => Promise<void>;
+  scheduleAnchorSprintOptions?: Array<{ id: string; label: string }>;
   handleCancelExecute: () => void;
   handleNewQuicksprint: () => void;
   defaultRouteOptionLabel: string;
@@ -54,6 +71,8 @@ export const QuicksprintExecutionView: FunctionComponent<{
   elapsedMs,
   isOverlayDismissed, setIsOverlayDismissed,
   handleExecute,
+  onSchedule,
+  scheduleAnchorSprintOptions = [],
   handleCancelExecute,
   handleNewQuicksprint,
   defaultRouteOptionLabel,
@@ -62,10 +81,29 @@ export const QuicksprintExecutionView: FunctionComponent<{
   planningEta,
   announcePhaseStatus,
 }) => {
+  const toDateTimeLocalValue = (date: Date): string => {
+    const pad = (value: number): string => String(value).padStart(2, "0");
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+  };
+  const createDefaultScheduleConfig = (): SprintScheduleConfig => {
+    const scheduled = new Date();
+    scheduled.setHours(scheduled.getHours() + 1, 0, 0, 0);
+    return {
+      mode: "absolute",
+      scheduledFor: toDateTimeLocalValue(scheduled),
+      sourceSprintId: "",
+      offsetMinutes: 0,
+    };
+  };
   const isBusy = executingMode !== null;
   const [statusMessage, setStatusMessage] = useState("");
   const [pendingExecuteMode, setPendingExecuteMode] = useState<"plan_only" | "plan_and_start" | null>(null);
+  const [scheduleConfig, setScheduleConfig] = useState<SprintScheduleConfig>(() => createDefaultScheduleConfig());
+  const [scheduleSubmitMode, setScheduleSubmitMode] = useState<"plan_only" | "plan_and_start">("plan_and_start");
+  const [isSchedulePending, setIsSchedulePending] = useState(false);
+  const [isCancelPending, setIsCancelPending] = useState(false);
   const headingRef = useRef<HTMLHeadingElement>(null);
+  const scheduleFocusRef = useRef<HTMLElement | null>(null);
   const pendingExecuteClickRef = useRef(false);
   const promptRegionId = selectedTemplateId ? `quicksprint-combined-prompt-${selectedTemplateId}` : "quicksprint-combined-prompt";
   const busyDescriptionId = selectedTemplateId ? `quicksprint-busy-status-${selectedTemplateId}` : "quicksprint-busy-status";
@@ -84,11 +122,16 @@ export const QuicksprintExecutionView: FunctionComponent<{
   const defaultModelLabel = routeOverride?.effectiveModel
     ? `Default (${routeOverride.effectiveModel})`
     : defaultModelOptionLabel;
-  const isSubmitBlocked = isBusy || pendingExecuteMode !== null;
+  const isSubmitBlocked = isBusy || pendingExecuteMode !== null || isCancelPending || isSchedulePending;
+  const controlsDisabled = isSubmitBlocked;
   const submitBlockedReason = isBusy
     ? "A quicksprint planning request is already running. Cancel it or wait for it to finish before submitting again."
     : pendingExecuteMode
       ? "Planning is starting. Duplicate submissions are blocked until the request state is ready."
+      : isSchedulePending
+        ? "Schedule creation is in progress. Duplicate submissions are blocked until it finishes."
+      : isCancelPending
+        ? "Cancellation is already in progress. Duplicate cancellation and submit requests are blocked until the request settles."
       : "";
 
   const publishStatus = (message: string) => {
@@ -118,6 +161,7 @@ export const QuicksprintExecutionView: FunctionComponent<{
     if (!executingMode || !selectedTemplate) {
       pendingExecuteClickRef.current = false;
       setPendingExecuteMode(null);
+      setIsCancelPending(false);
       return;
     }
     const actionLabel = executingMode === "plan_and_start" ? "Plan and start" : "Plan only";
@@ -151,7 +195,12 @@ export const QuicksprintExecutionView: FunctionComponent<{
     handleExecute(mode);
   };
   const announceCancel = () => {
+    if (isCancelPending) {
+      publishStatus(`Cancellation is already in progress for ${selectedTemplate.name}.`);
+      return;
+    }
     const message = `Cancelled ${executingMode === "plan_and_start" ? "plan and start" : "plan only"} request for ${selectedTemplate.name}.`;
+    setIsCancelPending(true);
     handleCancelExecute();
     pendingExecuteClickRef.current = false;
     setPendingExecuteMode(null);
@@ -166,19 +215,62 @@ export const QuicksprintExecutionView: FunctionComponent<{
     setPendingExecuteMode(null);
     publishStatus(message);
   };
+  const handleSchedule = async () => {
+    if (!onSchedule || !selectedTemplate || isSubmitBlocked) {
+      publishStatus(submitBlockedReason || "Schedule request is already in progress. Duplicate submission blocked.");
+      return;
+    }
+    if (scheduleConfig.mode === "after_sprint_end" && !scheduleConfig.sourceSprintId) {
+      publishStatus("Choose the source sprint for the after-sprint-end schedule.");
+      return;
+    }
+    if (scheduleConfig.mode === "absolute" && !Number.isFinite(new Date(scheduleConfig.scheduledFor).getTime())) {
+      publishStatus("Choose a valid schedule date and time.");
+      return;
+    }
+
+    scheduleFocusRef.current = document.activeElement as HTMLElement | null;
+    setIsSchedulePending(true);
+    publishStatus(`Scheduling ${selectedTemplate.name}.`);
+    try {
+      await onSchedule({
+        templateId: selectedTemplate.id,
+        taskCount,
+        noTaskLimit,
+        submitMode: scheduleSubmitMode,
+        additionalPrompt: additionalPrompt.trim() || undefined,
+        routeOverride,
+        modelOverride,
+        schedule: toSprintSchedulePayload(scheduleConfig),
+        title: `Run ${selectedTemplate.name}`,
+      });
+      publishStatus(`${selectedTemplate.name} scheduled.`);
+      setTimeout(() => {
+        scheduleFocusRef.current?.focus({ preventScroll: true });
+      }, 0);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      publishStatus(`Could not schedule ${selectedTemplate.name}: ${message}`);
+      setTimeout(() => {
+        scheduleFocusRef.current?.focus({ preventScroll: true });
+      }, 0);
+    } finally {
+      setIsSchedulePending(false);
+    }
+  };
 
   return (
     <>
 {/* ─── CONFIGURE PHASE ────────────────────────────────────── */}
-        <div className="grid gap-0 xl:grid-cols-[minmax(0,1fr)_22rem]" aria-busy={isBusy ? "true" : "false"}>
+        <div className="grid gap-0 xl:grid-cols-[minmax(0,1fr)_22rem]" aria-busy={isBusy || pendingExecuteMode !== null || isCancelPending ? "true" : "false"}>
             {/* Left: Template preview */}
             <div className="border-b border-black/[0.06] p-6 dark:border-white/[0.06] sm:p-8 lg:p-10 xl:border-b-0 xl:border-r">
               <div data-qs-stagger className="flex items-center gap-3">
                 <button
                   type="button"
                   onClick={onBackToBrowse}
-                  disabled={isBusy}
-                  aria-describedby={isSubmitBlocked ? duplicateSubmitDescriptionId : undefined}
+                  disabled={controlsDisabled}
+                  aria-describedby={controlsDisabled ? duplicateSubmitDescriptionId : undefined}
                   className="inline-flex min-h-[44px] min-w-[44px] h-8 w-8 items-center justify-center rounded-full border border-black/[0.06] text-slate-400 transition-colors duration-[var(--interaction-control-feedback-duration)] ease-[var(--interaction-control-feedback-ease)] hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-45 motion-reduce:transition-none dark:border-white/[0.06] dark:hover:text-white"
                   aria-label="Back to quicksprint templates"
                 >
@@ -209,14 +301,14 @@ export const QuicksprintExecutionView: FunctionComponent<{
                   <div className="mt-2">
                     <AvantgardeSelect
                       variant="compact"
-                      disabled={isBusy}
+                      disabled={controlsDisabled}
                       value={routeOverride?.id || ""}
                       onChange={(id) => {
                         const opt = routeOptions.find((o) => o.id === id);
                         setRouteOverride(opt || null);
                         publishStatus(`Planning route changed to ${opt?.label || defaultRouteOptionLabel}.`);
                       }}
-                      aria-describedby={isSubmitBlocked ? duplicateSubmitDescriptionId : routeStatusId}
+                      aria-describedby={controlsDisabled ? duplicateSubmitDescriptionId : routeStatusId}
                       options={[
                         {
                           value: "",
@@ -249,14 +341,14 @@ export const QuicksprintExecutionView: FunctionComponent<{
                   <div className="mt-2">
                     <AvantgardeSelect
                       variant="compact"
-                      disabled={!showModelOverride || isBusy}
+                      disabled={!showModelOverride || controlsDisabled}
                       value={modelOverride || ""}
                       onChange={(val) => {
                         const opt = modelOptions.find((option) => option.value === val);
                         setModelOverride(val || null);
                         publishStatus(`Model override changed to ${opt?.label || defaultModelLabel}.`);
                       }}
-                      aria-describedby={isSubmitBlocked ? duplicateSubmitDescriptionId : routeStatusId}
+                      aria-describedby={controlsDisabled ? duplicateSubmitDescriptionId : routeStatusId}
                       options={[
                         {
                           value: "",
@@ -288,8 +380,8 @@ export const QuicksprintExecutionView: FunctionComponent<{
                     setAdditionalPrompt((e.target as HTMLTextAreaElement).value);
                     publishStatus("Additional instructions updated for this quicksprint.");
                   }}
-                  disabled={isBusy}
-                  aria-describedby={isSubmitBlocked ? duplicateSubmitDescriptionId : undefined}
+                  disabled={controlsDisabled}
+                  aria-describedby={controlsDisabled ? duplicateSubmitDescriptionId : undefined}
                   placeholder="Add extra context or requirements for this specific run — e.g. 'Focus only on the auth module' or 'Include migration scripts'..."
                   rows={4}
                   className="w-full rounded-[1.7rem] border border-black/[0.06] bg-black/[0.025] p-5 text-sm leading-relaxed text-slate-700 outline-none transition-all placeholder:text-slate-300 focus:border-ember-500/40 focus:shadow-[0_0_0_1px_rgba(255,107,0,0.16),0_0_30px_rgba(255,107,0,0.08)] dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-300 dark:placeholder:text-slate-600 resize-y"
@@ -353,7 +445,8 @@ export const QuicksprintExecutionView: FunctionComponent<{
                   <input
                     type="checkbox"
                     checked={noTaskLimit}
-                    disabled={isBusy}
+                    disabled={controlsDisabled}
+                    aria-describedby={controlsDisabled ? duplicateSubmitDescriptionId : undefined}
                     onChange={(e) => {
                       const checked = (e.target as HTMLInputElement).checked;
                       setNoTaskLimit(checked);
@@ -370,12 +463,110 @@ export const QuicksprintExecutionView: FunctionComponent<{
                       setTaskCount(value);
                       publishStatus(`Subtask count set to ${value}.`);
                     }}
-                    disabled={noTaskLimit || isBusy}
+                    disabled={noTaskLimit || controlsDisabled}
                   />
                 </div>
               </div>
 
               {/* Spacer */}
+              <div data-qs-stagger className="mt-8 rounded-[1.35rem] border border-signal-500/18 bg-signal-500/[0.045] p-4">
+                <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-700 dark:text-white">
+                  <CalendarClock className="h-3.5 w-3.5 text-signal-500" strokeWidth={2.1} />
+                  Schedule
+                </div>
+                <div className="mt-4 grid gap-3">
+                  <div className="grid grid-cols-2 gap-2" role="group" aria-label="Scheduled quicksprint submit mode">
+                    {[
+                      { value: "plan_and_start" as const, label: "Start Later" },
+                      { value: "plan_only" as const, label: "Plan Later" },
+                    ].map((option) => (
+                      <button
+                        key={option.value}
+                        type="button"
+                        disabled={controlsDisabled}
+                        aria-pressed={scheduleSubmitMode === option.value}
+                        onClick={() => {
+                          setScheduleSubmitMode(option.value);
+                          publishStatus(`Scheduled quicksprint submit mode set to ${option.label}.`);
+                        }}
+                        className={`min-h-[38px] rounded-full border px-3 text-[10px] font-bold uppercase tracking-[0.12em] transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
+                          scheduleSubmitMode === option.value
+                            ? "border-signal-500/30 bg-signal-500/[0.12] text-signal-700 dark:text-signal-300"
+                            : "border-black/[0.06] bg-white/66 text-slate-500 hover:bg-white dark:border-white/[0.06] dark:bg-white/[0.02] dark:text-slate-400"
+                        }`}
+                      >
+                        {option.label}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="grid grid-cols-2 gap-2" role="group" aria-label="Schedule timing mode">
+                    {[
+                      { value: "absolute" as const, label: "Absolute" },
+                      { value: "after_sprint_end" as const, label: "After End" },
+                    ].map((option) => (
+                      <button
+                        key={option.value}
+                        type="button"
+                        disabled={controlsDisabled}
+                        aria-pressed={scheduleConfig.mode === option.value}
+                        onClick={() => {
+                          setScheduleConfig((current) => ({ ...current, mode: option.value }));
+                          publishStatus(`Schedule timing set to ${option.label}.`);
+                        }}
+                        className={`min-h-[38px] rounded-full border px-3 text-[10px] font-bold uppercase tracking-[0.12em] transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
+                          scheduleConfig.mode === option.value
+                            ? "border-signal-500/30 bg-signal-500/[0.12] text-signal-700 dark:text-signal-300"
+                            : "border-black/[0.06] bg-white/66 text-slate-500 hover:bg-white dark:border-white/[0.06] dark:bg-white/[0.02] dark:text-slate-400"
+                        }`}
+                      >
+                        {option.label}
+                      </button>
+                    ))}
+                  </div>
+                  {scheduleConfig.mode === "absolute" ? (
+                    <label className="block">
+                      <span className="text-[9px] font-bold uppercase tracking-[0.16em] text-slate-400">Date and Time</span>
+                      <input
+                        type="datetime-local"
+                        value={scheduleConfig.scheduledFor}
+                        disabled={controlsDisabled}
+                        onInput={(event) => setScheduleConfig((current) => ({ ...current, scheduledFor: (event.currentTarget as HTMLInputElement).value }))}
+                        className="mt-2 min-h-[42px] w-full rounded-[1rem] border border-black/[0.06] bg-white/72 px-3 text-xs font-semibold text-slate-700 outline-none transition-colors focus:border-signal-500/40 focus:ring-2 focus:ring-signal-500/20 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-200"
+                      />
+                    </label>
+                  ) : (
+                    <div className="grid gap-3">
+                      <label className="block">
+                        <span className="text-[9px] font-bold uppercase tracking-[0.16em] text-slate-400">Source Sprint</span>
+                        <AvantgardeSelect
+                          variant="compact"
+                          aria-label="Quicksprint Source Sprint"
+                          disabled={controlsDisabled}
+                          value={scheduleConfig.sourceSprintId}
+                          onChange={(value) => setScheduleConfig((current) => ({ ...current, sourceSprintId: value }))}
+                          options={[
+                            { value: "", label: "Choose sprint" },
+                            ...scheduleAnchorSprintOptions.map((option) => ({ value: option.id, label: option.label })),
+                          ]}
+                          placeholder="Choose sprint"
+                        />
+                      </label>
+                      <label className="block">
+                        <span className="text-[9px] font-bold uppercase tracking-[0.16em] text-slate-400">Offset Minutes</span>
+                        <input
+                          type="number"
+                          min={0}
+                          value={scheduleConfig.offsetMinutes}
+                          disabled={controlsDisabled}
+                          onInput={(event) => setScheduleConfig((current) => ({ ...current, offsetMinutes: Number((event.currentTarget as HTMLInputElement).value) }))}
+                          className="mt-2 min-h-[42px] w-full rounded-[1rem] border border-black/[0.06] bg-white/72 px-3 text-xs font-semibold text-slate-700 outline-none transition-colors focus:border-signal-500/40 focus:ring-2 focus:ring-signal-500/20 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-200"
+                        />
+                      </label>
+                    </div>
+                  )}
+                </div>
+              </div>
+
               <div className="mt-auto pt-8" />
 
               {/* Action buttons */}
@@ -383,10 +574,13 @@ export const QuicksprintExecutionView: FunctionComponent<{
                 {isBusy && (
                   <div
                     id={busyDescriptionId}
+                    data-motion-contract="asyncFeedback"
                     className="rounded-[1.25rem] border border-ember-500/20 bg-ember-500/[0.07] p-4 text-xs leading-relaxed text-slate-600 dark:text-slate-300"
-                    role="status"
-                    aria-live="polite"
-                    aria-atomic="true"
+                    style={{
+                      transitionDuration: interactionTokens.asyncFeedback.duration,
+                      transitionTimingFunction: interactionTokens.asyncFeedback.ease,
+                    }}
+                    aria-busy={isCancelPending ? "true" : "false"}
                   >
                     <div className="flex items-center justify-between gap-3">
                       <span className="font-bold uppercase tracking-[0.14em] text-ember-600 dark:text-ember-400">
@@ -397,16 +591,33 @@ export const QuicksprintExecutionView: FunctionComponent<{
                       </span>
                     </div>
                     <p className="mt-2">
-                      {feedback?.text || "Planning is in progress."} Conflicting controls are paused until this request finishes or is cancelled.
+                      {feedback?.text || "Planning is in progress."} You can start another quicksprint while this request continues in the background.
                     </p>
-                    <button
-                      type="button"
-                      onClick={announceCancel}
-                      className="mt-3 inline-flex min-h-[44px] items-center justify-center gap-2 rounded-full border border-status-red/20 bg-status-red/[0.06] px-4 py-2 text-xs font-semibold text-status-red transition-colors duration-[var(--interaction-control-feedback-duration)] ease-[var(--interaction-control-feedback-ease)] hover:bg-status-red/[0.12] motion-reduce:transition-none"
-                    >
-                      <X className="h-3.5 w-3.5" />
-                      Cancel Request
-                    </button>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={announceNewQuicksprint}
+                        className="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-full border border-slate-900 bg-slate-900 px-4 py-2 text-xs font-semibold text-white transition-colors duration-[var(--interaction-control-feedback-duration)] ease-[var(--interaction-control-feedback-ease)] hover:bg-slate-800 motion-reduce:transition-none dark:border-white dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100"
+                      >
+                        <Zap className="h-3.5 w-3.5" />
+                        New Quicksprint
+                      </button>
+                      <button
+                        type="button"
+                        onClick={announceCancel}
+                        disabled={isCancelPending}
+                        aria-busy={isCancelPending ? "true" : "false"}
+                        className="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-full border border-status-red/20 bg-status-red/[0.06] px-4 py-2 text-xs font-semibold text-status-red transition-colors duration-[var(--interaction-control-feedback-duration)] ease-[var(--interaction-control-feedback-ease)] hover:bg-status-red/[0.12] motion-reduce:transition-none"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                        Cancel Request
+                      </button>
+                    </div>
+                    {isCancelPending && (
+                      <p className="mt-3 font-semibold text-status-amber">
+                        Cancellation requested. The planner is stopping this quicksprint request.
+                      </p>
+                    )}
                   </div>
                 )}
                 {isSubmitBlocked && (
@@ -420,13 +631,22 @@ export const QuicksprintExecutionView: FunctionComponent<{
                 <p
                   id={routeStatusId}
                   className="rounded-[1.1rem] border border-black/[0.06] bg-black/[0.025] px-4 py-3 text-xs font-semibold leading-relaxed text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-400"
-                  role="status"
-                  aria-live="polite"
-                  aria-atomic="true"
                 >
                   {statusMessage || `Ready to plan ${selectedTemplate.name}.`}
                 </p>
                 <button
+                  type="button"
+                  onClick={() => { void handleSchedule(); }}
+                  disabled={!onSchedule || isSubmitBlocked}
+                  aria-busy={isSchedulePending ? "true" : "false"}
+                  aria-describedby={isSubmitBlocked ? duplicateSubmitDescriptionId : undefined}
+                  className="flex min-h-[44px] w-full items-center justify-center gap-2.5 rounded-[1.35rem] border border-signal-500/25 bg-signal-500/[0.1] px-5 py-3.5 text-[11px] font-bold uppercase tracking-[0.14em] text-signal-700 transition-colors hover:bg-signal-500/[0.16] disabled:cursor-not-allowed disabled:opacity-50 dark:text-signal-300"
+                >
+                  <CalendarClock className={`h-4 w-4 ${isSchedulePending ? "motion-safe:animate-pulse" : ""}`} />
+                  {isSchedulePending ? "Scheduling..." : "Schedule"}
+                </button>
+                <button
+                  type="button"
                   onClick={() => handlePlanningExecute("plan_and_start")}
                   disabled={isSubmitBlocked}
                   aria-busy={executingMode === "plan_and_start" || pendingExecuteMode === "plan_and_start" ? "true" : "false"}
@@ -434,9 +654,10 @@ export const QuicksprintExecutionView: FunctionComponent<{
                   className="flex min-h-[44px] w-full items-center justify-center gap-2.5 rounded-[1.35rem] bg-ember-600 px-5 py-3.5 text-[11px] font-bold uppercase tracking-[0.14em] text-white shadow-[0_0_20px_rgba(255,107,0,0.25)] transition-all hover:bg-ember-500 hover:shadow-[0_0_28px_rgba(255,107,0,0.35)] disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <Rocket className={`h-4 w-4 ${executingMode === "plan_and_start" ? "motion-safe:animate-pulse" : ""}`} />
-                  {executingMode === "plan_and_start" || pendingExecuteMode === "plan_and_start" ? "Planning & Starting" : "Plan & Start"}
+                  Plan & Start
                 </button>
                 <button
+                  type="button"
                   onClick={() => handlePlanningExecute("plan_only")}
                   disabled={isSubmitBlocked}
                   aria-busy={executingMode === "plan_only" || pendingExecuteMode === "plan_only" ? "true" : "false"}
@@ -444,7 +665,7 @@ export const QuicksprintExecutionView: FunctionComponent<{
                   className="flex min-h-[44px] w-full items-center justify-center gap-2.5 rounded-[1.35rem] border border-black/[0.08] bg-white/66 px-5 py-3.5 text-[11px] font-bold uppercase tracking-[0.14em] text-slate-600 transition-colors hover:bg-black/[0.04] disabled:opacity-50 disabled:cursor-not-allowed dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-slate-300 dark:hover:bg-white/[0.06]"
                 >
                   <ClipboardList className={`h-4 w-4 ${executingMode === "plan_only" ? "motion-safe:animate-pulse" : ""}`} />
-                  {executingMode === "plan_only" || pendingExecuteMode === "plan_only" ? "Planning Only" : "Plan Only"}
+                  Plan Only
                 </button>
               </div>
             </div>

@@ -26,7 +26,7 @@ export const OnboardingDefaultsStep: FunctionComponent<OnboardingDefaultsStepPro
         <div className="flex items-start gap-3">
           <Layers className="mt-0.5 h-5 w-5 shrink-0 text-signal-600 dark:text-signal-300" />
           <div>
-            <h3 className="text-sm font-black text-slate-900 dark:text-white">Default Configuration</h3>
+            <h3 className="text-sm font-semibold text-slate-900 dark:text-white">Default Configuration</h3>
             <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
               Select which provider instances handle specific roles when new projects are created.
             </p>
@@ -44,7 +44,7 @@ export const OnboardingDefaultsStep: FunctionComponent<OnboardingDefaultsStepPro
             <div data-onboarding-card className="rounded-3xl border border-black/[0.06] bg-white/70 p-5 shadow-[0_16px_42px_rgba(15,23,42,0.04)] dark:border-white/[0.06] dark:bg-white/[0.04]">
               <div className="mb-3 text-xs font-bold uppercase tracking-[0.14em] text-slate-500">Default Primary Provider</div>
               <p className="mb-4 text-xs text-slate-500">The primary intelligence engine for general tasks.</p>
-              <SelectInput aria-label="Select input"
+              <SelectInput aria-label="Default primary provider"
                 /*label="Primary Provider"*/
                 value={settings.defaults.aiProvider.provider || ""}
                 onChange={(v) => updateSettings((s) => ({
@@ -58,7 +58,7 @@ export const OnboardingDefaultsStep: FunctionComponent<OnboardingDefaultsStepPro
             <div data-onboarding-card className="rounded-3xl border border-black/[0.06] bg-white/70 p-5 shadow-[0_16px_42px_rgba(15,23,42,0.04)] dark:border-white/[0.06] dark:bg-white/[0.04]">
               <div className="mb-3 text-xs font-bold uppercase tracking-[0.14em] text-slate-500">Default CLI Worker Provider</div>
               <p className="mb-4 text-xs text-slate-500">The engine running background CLI tasks (must support tool execution).</p>
-              <SelectInput aria-label="Select input"
+              <SelectInput aria-label="Default CLI worker provider"
                 /*label="Worker Provider"*/
                 value={settings.defaults.workers.virtualWorkerProvider}
                 onChange={(v) => updateSettings((s) => ({
@@ -84,7 +84,7 @@ export const OnboardingDefaultsStep: FunctionComponent<OnboardingDefaultsStepPro
                       <div className="flex min-w-0 items-center gap-3">
                         <ProviderBrandIcon id={provider.provider} />
                         <div className="min-w-0">
-                          <div className="truncate text-sm font-black text-slate-900 dark:text-white">{provider.name}</div>
+                          <div className="truncate text-sm font-semibold text-slate-900 dark:text-white">{provider.name}</div>
                           <div className="mt-0.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">{getProviderTypeLabel(provider.provider)}</div>
                         </div>
                       </div>

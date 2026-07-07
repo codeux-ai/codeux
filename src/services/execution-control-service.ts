@@ -11,6 +11,10 @@ import type { ActiveDispatchRegistry } from "./active-dispatch-registry.js";
 import type { Logger } from "../shared/logging/logger.js";
 import type { ProjectAttentionType } from "../contracts/project-attention-types.js";
 import { resolveLateBoundDependency, type LateBoundOrValue } from "../shared/late-bound-dependency.js";
+import type { SprintRunLifecycleService } from "./sprint-run-lifecycle-service.js";
+import { resolveTransientMergeAttentionHandoffs } from "../domain/workers/project-attention-cleanup.js";
+import type { QaReviewRepository } from "../repositories/qa-review-repository.js";
+import { runCommandStrict } from "./cli-process-runner.js";
 
 const RECOMPUTED_SPRINT_ATTENTION_TYPES: ProjectAttentionType[] = [
   "manual_attention",
@@ -34,6 +38,9 @@ interface ExecutionControlServiceDeps {
   sprintOrchestrator: SprintOrchestrator;
   julesApi: JulesApiClient;
   activeDispatchRegistry: ActiveDispatchRegistry;
+  sprintRunLifecycleService: SprintRunLifecycleService;
+  qaReviewRepository?: QaReviewRepository;
+  stopProviderContainers?: (sessionIds: string[]) => Promise<string[]>;
   logger?: Logger;
 }
 
@@ -68,6 +75,13 @@ export class ExecutionControlService {
 
     const blockingRun = this.resolveBlockingSprintRun(projectId, sprintId);
     if (blockingRun) {
+      if (blockingRun.status === "running" || blockingRun.status === "queued") {
+        this.deps.sprintOrchestrator.setConsecutiveFailures(0);
+        this.reapRecomputedSprintAttention(projectId, sprintId);
+        this.recoverSprintRunAfterResume(blockingRun, blockingRun.id);
+        return { ok: true };
+      }
+
       const label = blockingRun.status === "cancel_requested" ? "cancellation is still pending" : "another run is already active";
       throw new Error(
         `Sprint ${sprint.number ?? sprint.name} cannot be started because ${label} (run ${blockingRun.id}, status ${blockingRun.status}).`,
@@ -91,22 +105,77 @@ export class ExecutionControlService {
     return { ok: true };
   }
 
-  pauseSprintRun(sprintRunId: string): SprintRunRecord {
+  async pauseSprintRun(sprintRunId: string): Promise<SprintRunRecord> {
     const sprintRun = this.requireSprintRun(sprintRunId);
     if (sprintRun.status === "paused" || sprintRun.status === "cancelled" || sprintRun.status === "completed" || sprintRun.status === "failed" || sprintRun.status === "cancel_requested") {
       return sprintRun;
     }
     const now = new Date().toISOString();
-    const updated = this.deps.executionRepository.updateSprintRun(sprintRunId, {
+    await this.cancelRunningProviderInvocationsForSprintRun(sprintRun, now, "Sprint run was paused from the dashboard.");
+    await this.pauseActiveDispatchesForSprintRun(sprintRun, now, "Sprint run was paused from the dashboard.");
+    const updated = this.deps.sprintRunLifecycleService.updateRun(sprintRunId, {
       status: "paused",
       lastHeartbeatAt: now,
     });
+    this.deps.sprintRunLifecycleService.releaseSprintLease(sprintRun.sprintId);
     this.deps.executionRepository.appendSprintRunEvent(sprintRunId, "sprint_pause_requested", "user", {
       requestedBy: "dashboard",
     }, {
       sourceEventKey: `dashboard-pause:${sprintRunId}`,
     });
     return updated;
+  }
+
+  private async pauseActiveDispatchesForSprintRun(sprintRun: SprintRunRecord, now: string, message: string): Promise<void> {
+    for (const dispatch of this.deps.executionRepository.listTaskDispatches({
+      projectId: sprintRun.projectId,
+      sprintRunId: sprintRun.id,
+    })) {
+      if (!ACTIVE_DISPATCH_STATUSES.has(dispatch.status)) {
+        continue;
+      }
+
+      if ((dispatch.status === "running" || dispatch.status === "cancel_requested") && dispatch.executorType === "docker_cli") {
+        await this.deps.activeDispatchRegistry.requestStop(dispatch.id, message).catch(() => undefined);
+      }
+      if ((dispatch.status === "running" || dispatch.status === "cancel_requested") && dispatch.executorType === "jules") {
+        const taskRun = this.deps.executionRepository.getTaskRunByDispatchId(dispatch.id);
+        if (taskRun?.sessionId) {
+          await this.deps.julesApi.sendSessionMessage(
+            taskRun.sessionId,
+            "Sprint paused. Please halt this task until the sprint is resumed.",
+          ).catch(() => undefined);
+        }
+      }
+
+      this.deps.executionRepository.releaseLease("task_dispatch", dispatch.id);
+      this.deps.executionRepository.updateTaskDispatch(dispatch.id, {
+        connectionId: null,
+        status: "paused",
+        finishedAt: null,
+        lastHeartbeatAt: now,
+        errorMessage: null,
+      });
+
+      const taskRun = this.deps.executionRepository.getTaskRunByDispatchId(dispatch.id);
+      if (taskRun && taskRun.state !== "COMPLETED" && taskRun.state !== "FAILED" && taskRun.state !== "BLOCKED" && taskRun.state !== "QUOTA") {
+        this.deps.executionRepository.updateTaskRun(taskRun.id, {
+          connectionId: null,
+          state: "PAUSED",
+          finishedAt: null,
+          durationMs: taskRun.durationMs,
+        });
+        this.deps.executionRepository.appendTaskRunEvent(taskRun.id, "dispatch_paused", "user", {
+          dispatchId: dispatch.id,
+          requestedBy: "dashboard",
+          reason: message,
+        }, {
+          sourceEventKey: `dashboard-sprint-pause:${dispatch.id}`,
+        });
+      }
+
+      this.resetTaskToPending(dispatch.taskId);
+    }
   }
 
   async resumeSprintRun(sprintRunId: string): Promise<SprintRunRecord> {
@@ -130,7 +199,9 @@ export class ExecutionControlService {
     });
 
     const now = new Date().toISOString();
-    const resumedRun = this.deps.executionRepository.updateSprintRun(sprintRunId, {
+    this.deps.sprintRunLifecycleService.releaseSprintLease(sprintRun.sprintId);
+    const hadActiveOrchestrator = this.deps.sprintOrchestrator.isOrchestratingSprint?.(sprintRun.projectId, sprintRun.sprintId) ?? false;
+    const resumedRun = this.deps.sprintRunLifecycleService.updateRun(sprintRunId, {
       status: "running",
       startedAt: sprintRun.startedAt ?? now,
       finishedAt: null,
@@ -139,14 +210,12 @@ export class ExecutionControlService {
 
     this.deps.sprintOrchestrator.setConsecutiveFailures(0);
     this.reapRecomputedSprintAttention(sprintRun.projectId, sprintRun.sprintId);
-    void this.deps.sprintOrchestrator.recoverSprintRun(sprintRunId).catch((error) => {
-      this.deps.logger?.error("Dashboard-triggered sprint resume failed", {
-        projectId: sprintRun.projectId,
-        sprintId: sprintRun.sprintId,
-        sprintRunId,
-        error: error instanceof Error ? error.message : String(error),
-      });
-    });
+    this.recoverSprintRunAfterResume(sprintRun, sprintRunId);
+    if (hadActiveOrchestrator) {
+      setTimeout(() => {
+        this.recoverSprintRunAfterResume(sprintRun, sprintRunId);
+      }, 2_000).unref?.();
+    }
 
     return resumedRun;
   }
@@ -174,8 +243,9 @@ export class ExecutionControlService {
       }
     }
 
-    this.deps.executionRepository.releaseLease("sprint", sprintRun.sprintId);
-    const updated = this.deps.executionRepository.updateSprintRun(sprintRunId, {
+    this.deps.sprintRunLifecycleService.releaseSprintLease(sprintRun.sprintId);
+    await this.cancelRunningProviderInvocationsForSprintRun(sprintRun, now, "Sprint run was cancelled from the dashboard.");
+    const updated = this.deps.sprintRunLifecycleService.updateRun(sprintRunId, {
       status: "cancelled",
       finishedAt: now,
       lastHeartbeatAt: now,
@@ -204,6 +274,13 @@ export class ExecutionControlService {
         sprintRunId,
         ["merge_required", "merge_conflict", "manual_attention"],
         reason,
+      );
+      resolveTransientMergeAttentionHandoffs(
+        this.deps.projectAttentionService,
+        projectId,
+        sprintRunId,
+        reason,
+        ["merge_conflict", "ci_fix_required", "manual_attention"],
       );
     } catch {
       // Best-effort cleanup — never block cancellation on attention housekeeping.
@@ -254,8 +331,9 @@ export class ExecutionControlService {
       await this.forceCancelDispatchInternal(dispatch, now, "Sprint run was force-cancelled from the dashboard.");
     }
 
-    this.deps.executionRepository.releaseLease("sprint", sprintRun.sprintId);
-    const updated = this.deps.executionRepository.updateSprintRun(sprintRunId, {
+    this.deps.sprintRunLifecycleService.releaseSprintLease(sprintRun.sprintId);
+    await this.cancelRunningProviderInvocationsForSprintRun(sprintRun, now, "Sprint run was force-cancelled from the dashboard.");
+    const updated = this.deps.sprintRunLifecycleService.updateRun(sprintRunId, {
       status: "cancelled",
       finishedAt: now,
       lastHeartbeatAt: now,
@@ -307,10 +385,114 @@ export class ExecutionControlService {
         });
       }
 
-      this.deps.projectManagementRepository.updateTask(dispatch.taskId, {
-        status: "pending",
+      this.resetTaskToPending(dispatch.taskId);
+    }
+  }
+
+  private async cancelRunningProviderInvocationsForSprintRun(
+    sprintRun: SprintRunRecord,
+    now: string,
+    message: string,
+  ): Promise<void> {
+    const runningProviderInvocations = this.deps.executionRepository
+      .listProviderInvocationsForSprint(sprintRun.projectId, sprintRun.sprintId)
+      .filter((invocation) => invocation.sprintRunId === sprintRun.id && invocation.status === "running");
+    if (runningProviderInvocations.length === 0) {
+      this.cancelRunningQaReviewsForSprintRun(sprintRun.id, now, message);
+      return;
+    }
+
+    const sessionIds = [...new Set(
+      runningProviderInvocations
+        .map((invocation) => invocation.sessionId.trim())
+        .filter(Boolean),
+    )];
+    const stoppedContainerIds = await this.stopProviderContainers(sessionIds);
+    for (const invocation of runningProviderInvocations) {
+      this.deps.executionRepository.updateProviderInvocationUsage(invocation.id, {
+        status: "cancelled",
+        finishedAt: now,
+        durationMs: this.calculateProviderDurationMs(invocation.startedAt, now),
+      });
+      for (const executionInvocation of this.deps.executionRepository.listExecutionInvocationsByProviderInvocationId(invocation.id)) {
+        this.deps.executionRepository.updateExecutionInvocation(executionInvocation.id, {
+          status: "cancelled",
+          finishedAt: now,
+          errorMessage: message,
+        });
+        this.deps.executionRepository.appendExecutionInvocationMessage(executionInvocation.id, {
+          role: "system",
+          contentMarkdown: stoppedContainerIds.length > 0
+            ? `${message} Stopped Docker container${stoppedContainerIds.length === 1 ? "" : "s"} ${stoppedContainerIds.join(", ")}.`
+            : message,
+          metadata: {
+            cancellation: "sprint_run_cancel",
+            providerInvocationId: invocation.id,
+            stoppedContainerIds,
+          },
+          createdAt: now,
+        });
+      }
+    }
+
+    this.cancelRunningQaReviewsForSprintRun(sprintRun.id, now, message);
+  }
+
+  private cancelRunningQaReviewsForSprintRun(sprintRunId: string, now: string, message: string): void {
+    const runningQaRuns = this.deps.qaReviewRepository
+      ?.listRunningRuns()
+      .filter((run) => run.sprintRunId === sprintRunId) ?? [];
+    for (const run of runningQaRuns) {
+      this.deps.qaReviewRepository?.updateRun(run.id, {
+        status: "cancelled",
+        summaryMarkdown: message,
+        finishedAt: now,
       });
     }
+  }
+
+  private async stopProviderContainers(sessionIds: string[]): Promise<string[]> {
+    if (sessionIds.length === 0) {
+      return [];
+    }
+    if (this.deps.stopProviderContainers) {
+      return await this.deps.stopProviderContainers(sessionIds);
+    }
+
+    const stoppedContainerIds: string[] = [];
+    for (const sessionId of sessionIds) {
+      const ps = await runCommandStrict("docker", [
+        "ps",
+        "--filter",
+        `label=code-ux.session-id=${sessionId}`,
+        "-q",
+      ], process.cwd()).catch((error: unknown) => {
+        this.deps.logger?.warn("Failed to inspect Docker containers for sprint cancellation", {
+          sessionId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+        return null;
+      });
+      const containerIds = ps?.stdout
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .filter(Boolean) ?? [];
+
+      for (const containerId of containerIds) {
+        const killed = await runCommandStrict("docker", ["kill", containerId], process.cwd()).catch((error: unknown) => {
+          this.deps.logger?.warn("Failed to stop Docker container for sprint cancellation", {
+            sessionId,
+            containerId,
+            error: error instanceof Error ? error.message : String(error),
+          });
+          return null;
+        });
+        if (killed) {
+          stoppedContainerIds.push(containerId);
+        }
+      }
+    }
+    return stoppedContainerIds;
   }
 
   async cancelTaskDispatch(dispatchId: string): Promise<TaskDispatchRecord> {
@@ -394,9 +576,7 @@ export class ExecutionControlService {
       });
     }
 
-    this.deps.projectManagementRepository.updateTask(dispatch.taskId, {
-      status: "pending",
-    });
+    this.resetTaskToPending(dispatch.taskId);
 
     return updated;
   }
@@ -462,9 +642,7 @@ export class ExecutionControlService {
         sourceEventKey: `dashboard-dispatch-cancel:${dispatch.id}`,
       });
     }
-    this.deps.projectManagementRepository.updateTask(dispatch.taskId, {
-      status: "pending",
-    });
+    this.resetTaskToPending(dispatch.taskId);
     return updated;
   }
 
@@ -580,12 +758,10 @@ export class ExecutionControlService {
       });
     }
 
-    this.deps.projectManagementRepository.updateTask(dispatch.taskId, {
-      status: "pending",
-    });
+    this.resetTaskToPending(dispatch.taskId);
 
     if (dispatch.sprintRunId) {
-      this.deps.executionRepository.finalizeSprintRunCancellationIfIdle(dispatch.sprintRunId);
+      this.deps.sprintRunLifecycleService.finalizeCancellationIfIdle(dispatch.sprintRunId);
     }
 
     return updated;
@@ -632,6 +808,34 @@ export class ExecutionControlService {
     return Math.max(0, new Date(finishedAt).getTime() - new Date(taskRun.startedAt).getTime());
   }
 
+  private calculateProviderDurationMs(startedAt: string, finishedAt: string): number | null {
+    const startedAtMs = Date.parse(startedAt);
+    const finishedAtMs = Date.parse(finishedAt);
+    if (!Number.isFinite(startedAtMs) || !Number.isFinite(finishedAtMs)) {
+      return null;
+    }
+    return Math.max(0, finishedAtMs - startedAtMs);
+  }
+
+  private resetTaskToPending(taskId: string): void {
+    this.deps.projectManagementRepository.updateTask(taskId, {
+      status: "pending",
+      mergeIndicator: null,
+      isMerged: false,
+    });
+  }
+
+  private recoverSprintRunAfterResume(sprintRun: SprintRunRecord, sprintRunId: string): void {
+    void this.deps.sprintOrchestrator.recoverSprintRun(sprintRunId).catch((error) => {
+      this.deps.logger?.error("Dashboard-triggered sprint resume failed", {
+        projectId: sprintRun.projectId,
+        sprintId: sprintRun.sprintId,
+        sprintRunId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    });
+  }
+
   private resolveBlockingSprintRun(projectId: string, sprintId: string): SprintRunRecord | null {
     const activeRun = this.deps.executionRepository.findActiveSprintRun(projectId, sprintId);
     if (!activeRun) {
@@ -639,7 +843,7 @@ export class ExecutionControlService {
     }
 
     if (activeRun.status === "cancel_requested") {
-      const finalized = this.deps.executionRepository.finalizeSprintRunCancellationIfIdle(activeRun.id);
+      const finalized = this.deps.sprintRunLifecycleService.finalizeCancellationIfIdle(activeRun.id);
       if (finalized?.status === "cancelled") {
         return null;
       }

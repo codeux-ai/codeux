@@ -1,6 +1,6 @@
 import type { FunctionComponent } from "preact";
 import { useEffect, useState } from "preact/hooks";
-import { Minus, Square, Copy, X } from "lucide-preact";
+import { Copy, ExternalLink, Minus, Square, X } from "lucide-preact";
 import { RobotLogo } from "./brand/RobotLogo.js";
 import { fetchUpdateStatus } from "../lib/system-api.js";
 
@@ -21,6 +21,7 @@ type UpdateStatus = {
   currentVersion: string;
   latestVersion: string | null;
   updateAvailable: boolean;
+  releaseUrl: string;
   checkedAt: string;
   error?: string;
 };
@@ -81,6 +82,9 @@ export const TitleBar: FunctionComponent<TitleBarProps> = ({ appearanceVariant =
   if (!windowApi) return null;
 
   const isMac = platform === "darwin";
+  const updateAction = updateStatus?.updateAvailable && !updateStatus.error && updateStatus.releaseUrl
+    ? updateStatus
+    : null;
 
   const controls = isMac ? null : (
     <div className="flex items-stretch h-full titlebar-no-drag">
@@ -141,13 +145,18 @@ export const TitleBar: FunctionComponent<TitleBarProps> = ({ appearanceVariant =
           <span className="mx-2 text-slate-300 dark:text-slate-600">·</span>
           <span className="text-slate-400 dark:text-slate-500 font-medium">
             v{__APP_VERSION__}
-            {updateStatus?.updateAvailable ? (
-              <span
-                title={updateStatus.latestVersion ? `Latest version: ${updateStatus.latestVersion}` : "Latest version unavailable"}
-                className="titlebar-no-drag ml-2 inline-flex items-center rounded-full border border-amber-500/20 bg-amber-500/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-amber-600 dark:border-amber-400/20 dark:bg-amber-400/10 dark:text-amber-400"
+            {updateAction ? (
+              <a
+                href={updateAction.releaseUrl}
+                target="_blank"
+                rel="noreferrer"
+                aria-label={updateAction.latestVersion ? `Open Code UX ${updateAction.latestVersion} release` : "Open Code UX releases"}
+                title={updateAction.latestVersion ? `Open Code UX ${updateAction.latestVersion} release` : "Open Code UX releases"}
+                className="titlebar-no-drag ml-2 inline-flex h-5 items-center gap-1 rounded-full border border-amber-500/20 bg-amber-500/10 px-1.5 text-[9px] font-bold uppercase tracking-wider text-amber-600 transition-colors hover:border-amber-500/35 hover:bg-amber-500/15 hover:text-amber-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500/45 dark:border-amber-400/20 dark:bg-amber-400/10 dark:text-amber-400 dark:hover:border-amber-300/35 dark:hover:bg-amber-400/15 dark:hover:text-amber-300"
               >
+                <ExternalLink aria-hidden="true" className="h-3 w-3" strokeWidth={2} />
                 Update available
-              </span>
+              </a>
             ) : null}
           </span>
         </span>

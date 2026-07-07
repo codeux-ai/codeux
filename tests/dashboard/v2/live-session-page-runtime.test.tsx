@@ -12,12 +12,16 @@ vi.mock("gsap", () => ({
     registerPlugin: vi.fn()
   }
 }));
-import { describe, expect, it, vi, beforeEach } from "vitest";
-import { fireEvent, render, screen, cleanup } from "@testing-library/preact";
+import { afterEach, describe, expect, it, vi, beforeEach } from "vitest";
+import { act, fireEvent, render, screen, cleanup, waitFor } from "@testing-library/preact";
 import { within } from "@testing-library/preact";
 import * as matchers from "@testing-library/jest-dom/matchers";
 
 expect.extend(matchers);
+
+afterEach(() => {
+  vi.useRealTimers();
+});
 
 import { LiveSessionPage } from "../../../dashboard/src/v2/LiveSessionPage.js";
 import { useDashboardRuntimeData } from "../../../dashboard/src/hooks/use-dashboard-runtime-data.js";
@@ -39,6 +43,7 @@ const liveSessionActionMocks = vi.hoisted(() => ({
   handleResolveAttentionItem: vi.fn(),
   handleDismissAttentionItem: vi.fn(),
 }));
+const forceCompleteLiveTaskMock = vi.hoisted(() => vi.fn());
 
 
 vi.mock("gsap", () => ({
@@ -71,6 +76,9 @@ vi.mock("../../../dashboard/src/v2/hooks/use-preview-sessions.js", () => ({
 vi.mock("../../../dashboard/src/v2/hooks/use-live-session-actions.js", () => ({
   useLiveSessionActions: vi.fn(() => liveSessionActionMocks),
 }));
+vi.mock("../../../dashboard/src/v2/lib/api/live-tasks-client.js", () => ({
+  forceCompleteLiveTask: (...args: unknown[]) => forceCompleteLiveTaskMock(...args),
+}));
 
 const mockExecution = {
   projectId: "p1",
@@ -89,6 +97,7 @@ describe("LiveSessionPage Runtime Status", () => {
   beforeEach(() => {
     cleanup();
     vi.clearAllMocks();
+    vi.useRealTimers();
     liveSessionActionMocks.rerunningIds = new Set();
     liveSessionActionMocks.pendingActionIds = new Set();
     vi.mocked(useProjectData).mockReturnValue({ selectedProjectId: "p1" } as any);
@@ -215,6 +224,8 @@ describe("LiveSessionPage Runtime Status", () => {
     expect(screen.getByText("Connection Error")).toBeInTheDocument();
     expect(screen.getByText("Some network failure")).toBeInTheDocument();
     expect(screen.getByRole("alert")).toHaveTextContent("Connection Error");
+    expect(screen.getAllByText("Retrying Load").length).toBeGreaterThan(0);
+    expect(screen.getByRole("region", { name: "Execution runtime" })).toHaveAttribute("aria-busy", "true");
   });
 
   it("renders manual pause messaging and shows intervention label only once", () => {
@@ -376,6 +387,79 @@ describe("LiveSessionPage Runtime Status", () => {
     expect(pendingPause).toHaveTextContent("Pausing");
     expect(pendingPause).toHaveTextContent("Pausing in progress.");
     expect(liveSessionActionMocks.handlePauseSprintRun).not.toHaveBeenCalled();
+  });
+
+  it("gates force-complete side effects behind explicit dialog confirmation", async () => {
+    forceCompleteLiveTaskMock.mockResolvedValue(undefined);
+    const refreshRuntimeStatus = vi.fn().mockResolvedValue(undefined);
+    const refreshGitStatus = vi.fn().mockResolvedValue(undefined);
+    vi.mocked(useDashboardRuntimeData).mockReturnValue({
+      error: null,
+      gitStatus: null,
+      gitStatusError: null,
+      initialLoadComplete: true,
+      transportState: "connected",
+      isRecovering: false,
+      snapshotUpdatedAt: new Date().toISOString(),
+      refreshGitStatus,
+      refreshRuntimeStatus,
+      selectedSprintId: "s1",
+      status: {
+        project_id: "p1",
+        sprint_id: "s1",
+        sprint_number: 1,
+        timestamp: "2024-01-01T00:00:00Z",
+        subtasks: [{
+          record_id: "task-force-1",
+          sprint_id: "s1",
+          project_id: "p1",
+          id: "T_FORCE",
+          title: "Force target task",
+          prompt: "Force complete this task",
+          depends_on: [],
+          is_independent: true,
+          status: "RUNNING",
+        }],
+      },
+      execution: mockExecution,
+      stats: { total: 1, completed: 0, running: 1, failed: 0, pending: 0 } as any,
+      tasksWithLiveActivities: [{
+        record_id: "task-force-1",
+        sprint_id: "s1",
+        project_id: "p1",
+        id: "T_FORCE",
+        title: "Force target task",
+        prompt: "Force complete this task",
+        depends_on: [],
+        is_independent: true,
+        status: "RUNNING",
+      }],
+    });
+
+    render(<LiveSessionPage />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Force complete task T_FORCE" }));
+    expect(forceCompleteLiveTaskMock).not.toHaveBeenCalled();
+    expect(screen.getByRole("dialog", { name: "Force Complete Task" })).toHaveTextContent(/Force target task/i);
+
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Force Complete Task" })).not.toBeInTheDocument());
+    expect(forceCompleteLiveTaskMock).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Force complete task T_FORCE" }));
+    vi.useFakeTimers();
+    const confirmButton = screen.getByRole("button", { name: "Hold to Force Complete" });
+    fireEvent.pointerDown(confirmButton, { button: 0, pointerId: 1 });
+    await act(async () => {
+      vi.advanceTimersByTime(1000);
+      await Promise.resolve();
+    });
+    vi.useRealTimers();
+
+    await waitFor(() => {
+      expect(forceCompleteLiveTaskMock).toHaveBeenCalledWith("p1", "task-force-1");
+    });
+    expect(refreshRuntimeStatus).toHaveBeenCalled();
   });
 
   it("renders Waiting for slot (2/2) for a queued dispatch with concurrency wait event", () => {
@@ -665,7 +749,7 @@ describe("LiveSessionPage Integration Isolation", () => {
     // Since we are looking at the older sprint, the task T1 should be shown as COMPLETED.
     // Even though there is a newer sprint running a task with the same key T1.
     // Stats should show 1 completed, 0 running.
-    expect(screen.getByText("Task 1")).toBeInTheDocument();
+    expect(screen.getAllByText("Task 1").length).toBeGreaterThan(0);
     expect(screen.getByText("COMPLETED")).toBeInTheDocument();
     expect(screen.queryByText("Task 1 (New)")).not.toBeInTheDocument();
   });
@@ -806,11 +890,12 @@ describe("LiveSessionPage Integration Isolation", () => {
     });
 
     render(<LiveSessionPage />);
-    const card = screen.getByText("Restarted task").closest('[tabindex="0"]');
+    const prLink = screen.getByRole("link", { name: /View Pull Request/i });
+    const card = prLink.closest('[tabindex="0"]');
 
     expect(card).not.toBeNull();
     expect(within(card as HTMLElement).queryByText("Needs clarification before continuing")).not.toBeInTheDocument();
-    expect(within(card as HTMLElement).getByRole("link", { name: /View Pull Request/i })).toHaveAttribute("href", "https://github.com/example/repo/pull/101");
+    expect(prLink).toHaveAttribute("href", "https://github.com/example/repo/pull/101");
   });
 
   it("does not surface a previous failure banner once the latest dispatch is running", () => {
@@ -949,7 +1034,9 @@ describe("LiveSessionPage Integration Isolation", () => {
     });
 
     render(<LiveSessionPage />);
-    const card = screen.getByText("Running rerun").closest('[tabindex="0"]');
+    const card = screen.getAllByText("Running rerun")
+      .map((element) => element.closest('[tabindex="0"]'))
+      .find((element): element is HTMLElement => element instanceof HTMLElement);
 
     expect(card).not.toBeNull();
     expect(within(card as HTMLElement).queryByText("Restart failure should be hidden")).not.toBeInTheDocument();

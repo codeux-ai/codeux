@@ -7,9 +7,20 @@ function ndjson(events: Array<Record<string, unknown>>): string {
 }
 
 describe("parseOpenCodeJsonLines", () => {
-  it("returns null when there are no JSON events", () => {
-    expect(parseOpenCodeJsonLines("")).toBeNull();
-    expect(parseOpenCodeJsonLines("not json\n\n  ")).toBeNull();
+  it("returns normalized empty output when there are no JSON events", () => {
+    expect(parseOpenCodeJsonLines("")).toEqual({
+      usage: null,
+      transcriptText: "",
+      inputTokens: 0,
+      cachedInputTokens: 0,
+      outputTokens: 0,
+      reasoningOutputTokens: 0,
+      cost: 0,
+      nativeSessionId: null,
+      rawUsageJson: null,
+      conversation: [],
+    });
+    expect(parseOpenCodeJsonLines("not json\n\n  ").conversation).toEqual([]);
   });
 
   it("extracts reported usage from step-finish parts (input/output/reasoning/cache)", () => {
@@ -28,19 +39,38 @@ describe("parseOpenCodeJsonLines", () => {
     ]);
 
     const result = parseOpenCodeJsonLines(stream);
-    expect(result).not.toBeNull();
-    expect(result!.inputTokens).toBe(300);
-    expect(result!.outputTokens).toBe(42);
-    expect(result!.reasoningOutputTokens).toBe(8);
-    expect(result!.cachedInputTokens).toBe(1200);
-    expect(result!.cost).toBeCloseTo(0.0123);
-    expect(result!.nativeSessionId).toBe("ses_abc123");
-    expect(result!.transcriptText).toBe("PONG");
-    expect(result!.rawUsageJson).toEqual({
+    expect(result.inputTokens).toBe(300);
+    expect(result.outputTokens).toBe(42);
+    expect(result.reasoningOutputTokens).toBe(8);
+    expect(result.cachedInputTokens).toBe(1200);
+    expect(result.usage).toEqual({
+      inputTokens: 300,
+      cachedInputTokens: 1200,
+      outputTokens: 42,
+      reasoningOutputTokens: 8,
+      cost: 0.0123,
+    });
+    expect(result.cost).toBeCloseTo(0.0123);
+    expect(result.nativeSessionId).toBe("ses_abc123");
+    expect(result.transcriptText).toBe("PONG");
+    expect(result.rawUsageJson).toEqual({
       tokens: { input: 1500, output: 42, reasoning: 8, cache: { read: 1200, write: 300 } },
       cost: 0.0123,
     });
-    expect(result!.conversation.map((t) => t.kind)).toEqual(["reasoning", "assistant"]);
+    expect(result.conversation.map((t) => t.kind)).toEqual(["reasoning", "assistant"]);
+  });
+
+  it("skips malformed JSON lines and preserves partial records", () => {
+    const stream = [
+      "{\"type\":\"text\",",
+      JSON.stringify({ type: "text", part: { type: "text", text: "partial transcript" } }),
+    ].join("\n");
+
+    const result = parseOpenCodeJsonLines(stream);
+    expect(result.usage).toBeNull();
+    expect(result.rawUsageJson).toBeNull();
+    expect(result.conversation).toEqual([{ kind: "assistant", text: "partial transcript" }]);
+    expect(result.transcriptText).toBe("partial transcript");
   });
 
   it("extracts visible reasoning from OpenCode reasoning parts that use summary fields", () => {
@@ -105,6 +135,7 @@ describe("parseOpenCodeJsonLines", () => {
       { type: "text", part: { type: "text", text: "PONG" } },
     ]);
     const result = parseOpenCodeJsonLines(stream)!;
+    expect(result.usage).toBeNull();
     expect(result.inputTokens).toBe(0);
     expect(result.outputTokens).toBe(0);
     expect(result.rawUsageJson).toBeNull();
@@ -119,6 +150,52 @@ describe("parseOpenCodeJsonLines", () => {
     expect(result.inputTokens).toBe(7);
     expect(result.outputTokens).toBe(3);
     expect(result.nativeSessionId).toBe("ses_nested");
+  });
+
+  it("skips partial and unknown stream events while preserving recoverable terminal records", () => {
+    const stream = [
+      "{\"type\":\"step-finish\",\"part\":{\"tokens\":{\"input\":999},\"api_key\":\"sk-test-secret\"",
+      JSON.stringify({ type: "session.idle", properties: { sessionID: "session_unknown" } }),
+      JSON.stringify({ type: "text", part: { type: "text", sessionID: "ses_recover", text: "final text" } }),
+      JSON.stringify({
+        type: "tool",
+        part: {
+          type: "tool",
+          sessionID: "ses_recover",
+          tool: "bash",
+          callID: "call_partial",
+          state: { status: "failed", output: "command failed before input was logged" },
+        },
+      }),
+      JSON.stringify({
+        type: "step-finish",
+        part: {
+          type: "step-finish",
+          sessionID: "ses_recover",
+          tokens: { input: "30", output: -4, cache: { read: 5 } },
+          cost: -0.5,
+        },
+      }),
+    ].join("\n");
+
+    const result = parseOpenCodeJsonLines(stream);
+
+    expect(result.nativeSessionId).toBe("ses_recover");
+    expect(result.usage).toEqual({
+      inputTokens: 25,
+      cachedInputTokens: 5,
+      outputTokens: 0,
+      reasoningOutputTokens: 0,
+      cost: 0,
+    });
+    expect(result.transcriptText).toBe("final text");
+    expect(result.conversation.find((turn) => turn.kind === "tool_call")).toMatchObject({
+      toolName: "bash",
+      toolCallId: "call_partial",
+      toolOutput: "command failed before input was logged",
+      toolStatus: "failed",
+    });
+    expect(JSON.stringify(result)).not.toContain("sk-test-secret");
   });
 });
 
@@ -167,6 +244,11 @@ describe("parseOpenCodeExport", () => {
   it("returns null when the export carries no usable token counts", () => {
     const empty = JSON.stringify({ info: { tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } } }, messages: [] });
     expect(parseOpenCodeExport(empty)).toBeNull();
+  });
+
+  it("returns null for truncated exports without leaking raw fragments", () => {
+    const usage = parseOpenCodeExport("prefix {\"info\":{\"tokens\":{\"input\":99},\"api_key\":\"sk-test-secret\"");
+    expect(usage).toBeNull();
   });
 });
 

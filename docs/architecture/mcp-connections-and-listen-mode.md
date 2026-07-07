@@ -145,7 +145,7 @@ Operational behavior:
 Transport notes:
 
 - normal human-driven MCP clients continue to use stdio
-- remote workers can now use the dedicated Streamable HTTP worker gateway on the main Code UX server
+- remote workers can now use the authenticated MCP HTTP transport on the main Code UX server
 - local worker-host stdio still exists for worker-machine execution hooks
 
 ## Current Routing Rules

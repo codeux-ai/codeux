@@ -13,20 +13,26 @@ describe("Dashboard Security Helper", () => {
       expect(isTrustedDashboardHost("127.0.0.1")).toBe(true);
       expect(isTrustedDashboardHost("127.0.0.1:4000")).toBe(true);
       expect(isTrustedDashboardHost("[::1]")).toBe(true);
+      expect(isTrustedDashboardHost("[::1]:4444")).toBe(true);
     });
 
     it("should allow configured DASHBOARD_HOST", () => {
       const originalHost = process.env.DASHBOARD_HOST;
-      process.env.DASHBOARD_HOST = "my-custom-host";
+      try {
+        process.env.DASHBOARD_HOST = "my-custom-host";
 
-      expect(isTrustedDashboardHost("my-custom-host")).toBe(true);
-      expect(isTrustedDashboardHost("my-custom-host:8080")).toBe(true);
-
-      process.env.DASHBOARD_HOST = originalHost;
+        expect(isTrustedDashboardHost("my-custom-host")).toBe(true);
+        expect(isTrustedDashboardHost("my-custom-host:8080")).toBe(true);
+      } finally {
+        if (originalHost === undefined) {
+          delete process.env.DASHBOARD_HOST;
+        } else {
+          process.env.DASHBOARD_HOST = originalHost;
+        }
+      }
     });
 
     it("should allow preview hosts", () => {
-      expect(isTrustedDashboardHost("preview-123.my-domain.com")).toBe(true);
       expect(isTrustedDashboardHost("preview-abc.localhost:3000")).toBe(true);
     });
 
@@ -35,6 +41,27 @@ describe("Dashboard Security Helper", () => {
       expect(isTrustedDashboardHost("evil.com:80")).toBe(false);
       expect(isTrustedDashboardHost(undefined)).toBe(false);
       expect(isTrustedDashboardHost("")).toBe(false);
+    });
+
+    it("should reject malformed host values", () => {
+      expect(isTrustedDashboardHost("localhost, evil.com")).toBe(false);
+      expect(isTrustedDashboardHost("evil@localhost")).toBe(false);
+      expect(isTrustedDashboardHost("localhost/path")).toBe(false);
+      expect(isTrustedDashboardHost("local\u0000host")).toBe(false);
+    });
+
+    it("should reject non-local preview host spoofing", () => {
+      expect(isTrustedDashboardHost("preview-123.my-domain.com")).toBe(false);
+      expect(isTrustedDashboardHost("preview-123.evil.com:4444")).toBe(false);
+      expect(isTrustedDashboardHost("preview-.localhost:4444")).toBe(false);
+    });
+
+    it("should validate forwarded hosts against the actual host boundary", () => {
+      expect(isTrustedDashboardHost("127.0.0.1:4444", "localhost:4444")).toBe(true);
+      expect(isTrustedDashboardHost("localhost:4444", "127.0.0.1:4444")).toBe(true);
+      expect(isTrustedDashboardHost("localhost:4444", "localhost:4444, evil.com")).toBe(false);
+      expect(isTrustedDashboardHost("localhost:4444", "evil.com")).toBe(false);
+      expect(isTrustedDashboardHost("localhost:4444", "preview-test.localhost:4444")).toBe(false);
     });
   });
 
@@ -48,8 +75,8 @@ describe("Dashboard Security Helper", () => {
       } as Request;
     };
 
-    it("should allow non-mutation methods", () => {
-      const req = createReq({ method: "GET", headers: { "sec-fetch-site": "cross-site" } });
+    it("should allow same-origin non-mutation methods", () => {
+      const req = createReq({ method: "GET", headers: { origin: "http://localhost:3000", host: "localhost:3000" } });
       expect(isHostileBrowserOrigin(req)).toBe(false);
     });
 
@@ -68,13 +95,76 @@ describe("Dashboard Security Helper", () => {
       expect(isHostileBrowserOrigin(req)).toBe(true);
     });
 
+    it("should reject malformed Origin on sensitive mutations", () => {
+      const req = createReq({ headers: { origin: "not a valid origin", host: "localhost:3000" } });
+      expect(isHostileBrowserOrigin(req)).toBe(true);
+    });
+
     it("should reject hostile Referer when Origin is missing", () => {
       const req = createReq({ headers: { referer: "https://evil.com/page", host: "localhost:3000" } });
       expect(isHostileBrowserOrigin(req)).toBe(true);
     });
 
+    it("should reject malformed Referer when Origin is missing", () => {
+      const req = createReq({ headers: { referer: "not a valid referer", host: "localhost:3000" } });
+      expect(isHostileBrowserOrigin(req)).toBe(true);
+    });
+
+    it("should reject malformed Referer even when Origin is same-origin", () => {
+      const req = createReq({
+        headers: {
+          origin: "http://localhost:3000",
+          referer: "not a valid referer",
+          host: "localhost:3000",
+        },
+      });
+      expect(isHostileBrowserOrigin(req)).toBe(true);
+    });
+
+    it("should reject comma-separated forwarded hosts", () => {
+      const req = createReq({
+        headers: {
+          host: "localhost:3000",
+          "x-forwarded-host": "localhost:3000, evil.com",
+          origin: "http://localhost:3000",
+        },
+      });
+      expect(isHostileBrowserOrigin(req)).toBe(true);
+    });
+
+    it("should reject preview-host spoofing through forwarded hosts", () => {
+      const req = createReq({
+        headers: {
+          host: "localhost:3000",
+          "x-forwarded-host": "preview-test.localhost:3000",
+          origin: "http://preview-test.localhost:3000",
+        },
+      });
+      expect(isHostileBrowserOrigin(req)).toBe(true);
+    });
+
     it("should allow same-origin requests", () => {
       const req = createReq({ headers: { origin: "http://localhost:3000", referer: "http://localhost:3000/dashboard", host: "localhost:3000" } });
+      expect(isHostileBrowserOrigin(req)).toBe(false);
+    });
+
+    it("should allow local dashboard origins", () => {
+      expect(isHostileBrowserOrigin(createReq({
+        headers: { origin: "http://127.0.0.1:3000", host: "127.0.0.1:3000" },
+      }))).toBe(false);
+      expect(isHostileBrowserOrigin(createReq({
+        headers: { origin: "http://[::1]:3000", host: "[::1]:3000" },
+      }))).toBe(false);
+    });
+
+    it("should allow same-boundary forwarded local dashboard origins", () => {
+      const req = createReq({
+        headers: {
+          host: "127.0.0.1:4444",
+          "x-forwarded-host": "localhost:4444",
+          origin: "http://localhost:4444",
+        },
+      });
       expect(isHostileBrowserOrigin(req)).toBe(false);
     });
 

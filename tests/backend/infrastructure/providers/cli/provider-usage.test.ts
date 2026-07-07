@@ -4,6 +4,7 @@ import * as os from "os";
 import * as path from "path";
 import {
   collectProviderUsageTelemetry,
+  codexTokenEstimationCacheTestHooks,
   parseQwenOpenAiLogs,
   sumQwenOpenAiUsage,
   extractQwenUsageRecord,
@@ -24,6 +25,7 @@ describe("collectProviderUsageTelemetry", () => {
   beforeEach(() => {
     process.env.HOME = originalHome;
     process.env.USERPROFILE = originalUserProfile;
+    codexTokenEstimationCacheTestHooks.reset();
   });
 
   it("parses provider-reported Gemini token usage", async () => {
@@ -276,6 +278,114 @@ describe("collectProviderUsageTelemetry", () => {
     expect(result.outputTokens).toBeGreaterThan(0);
     expect(result.totalTokens).toBe(result.inputTokens + result.outputTokens);
     expect(result.transcriptText).toBe("Refactor complete.");
+  }, 15000);
+
+  it("reuses cached Codex token counts for repeated large texts without retaining the text in keys", async () => {
+    const largePrompt = `Refactor this module:\n${"function example() { return true; }\n".repeat(400)}`;
+    const largeOutput = `Done:\n${"updated call site\n".repeat(400)}`;
+
+    const first = await collectProviderUsageTelemetry({
+      provider: "codex",
+      model: "gpt-4o-codex",
+      prompt: largePrompt,
+      cwd: "/workspace/repo",
+      stdout: "plain output",
+      stderr: "",
+      capturedText: largeOutput,
+    });
+    const afterFirst = codexTokenEstimationCacheTestHooks.stats();
+
+    const second = await collectProviderUsageTelemetry({
+      provider: "codex",
+      model: "gpt-4o-codex",
+      prompt: largePrompt,
+      cwd: "/workspace/repo",
+      stdout: "plain output",
+      stderr: "",
+      capturedText: largeOutput,
+    });
+    const afterSecond = codexTokenEstimationCacheTestHooks.stats();
+
+    expect(second.inputTokens).toBe(first.inputTokens);
+    expect(second.outputTokens).toBe(first.outputTokens);
+    expect(afterFirst.tokenCountCacheMisses).toBe(2);
+    expect(afterSecond.tokenCountCacheHits).toBe(2);
+    expect(afterSecond.tokenCountCacheMisses).toBe(afterFirst.tokenCountCacheMisses);
+    expect(afterSecond.tokenCountCacheKeys).toHaveLength(2);
+    expect(afterSecond.tokenCountCacheKeys.join("\n")).not.toContain("function example");
+    expect(afterSecond.tokenCountCacheKeys.join("\n")).not.toContain("updated call site");
+  }, 15000);
+
+  it("evicts Codex token counts and encodings at the configured cache limits", async () => {
+    const { tokenCountCacheLimit } = codexTokenEstimationCacheTestHooks.stats();
+    let firstCacheKey: string | undefined;
+
+    for (let index = 0; index <= tokenCountCacheLimit; index += 1) {
+      await collectProviderUsageTelemetry({
+        provider: "codex",
+        model: "gpt-4o-codex",
+        prompt: `Unique prompt ${index}: ${"x".repeat(64)}`,
+        cwd: "/workspace/repo",
+        stdout: "",
+        stderr: "",
+      });
+      if (index === 0) {
+        firstCacheKey = codexTokenEstimationCacheTestHooks.stats().tokenCountCacheKeys[0];
+      }
+    }
+
+    const stats = codexTokenEstimationCacheTestHooks.stats();
+    expect(stats.tokenCountCacheSize).toBe(tokenCountCacheLimit);
+    expect(firstCacheKey).toBeDefined();
+    expect(stats.tokenCountCacheKeys).not.toContain(firstCacheKey);
+
+    codexTokenEstimationCacheTestHooks.reset();
+    const knownModels = [
+      "gpt-4o",
+      "gpt-4o-mini",
+      "gpt-4",
+      "gpt-4-turbo",
+      "gpt-3.5-turbo",
+      "text-davinci-003",
+      "text-embedding-ada-002",
+      "text-embedding-3-small",
+      "text-embedding-3-large",
+    ];
+    const { encodingCacheLimit } = codexTokenEstimationCacheTestHooks.stats();
+    expect(knownModels.length).toBeGreaterThan(encodingCacheLimit);
+
+    for (const model of knownModels) {
+      await collectProviderUsageTelemetry({
+        provider: "codex",
+        model,
+        prompt: `Estimate with ${model}.`,
+        cwd: "/workspace/repo",
+        stdout: "",
+        stderr: "",
+      });
+    }
+
+    const encodingStats = codexTokenEstimationCacheTestHooks.stats();
+    expect(encodingStats.encodingCacheSize).toBe(encodingCacheLimit);
+    expect(encodingStats.encodingCacheKeys).not.toContain(knownModels[0]);
+  }, 30000);
+
+  it("uses the fallback Codex encoding when model-specific encoding fails", async () => {
+    const result = await collectProviderUsageTelemetry({
+      provider: "codex",
+      model: "not-a-js-tiktoken-model",
+      prompt: "Estimate this with the fallback encoder.",
+      cwd: "/workspace/repo",
+      stdout: "",
+      stderr: "",
+    });
+    const stats = codexTokenEstimationCacheTestHooks.stats();
+
+    expect(result.usageSource).toBe("estimated");
+    expect(result.inputTokens).toBeGreaterThan(0);
+    expect(result.totalTokens).toBe(result.inputTokens);
+    expect(stats.encodingCacheSize).toBe(1);
+    expect(stats.tokenCountCacheSize).toBe(1);
   }, 15000);
 
   it("parses OpenCode JSON event output and captures the native session id", async () => {

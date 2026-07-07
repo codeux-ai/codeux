@@ -45,6 +45,10 @@ describe("SprintActions", () => {
       searchIssues: vi.fn(),
       getIssuePromptContextsForReferences: vi.fn(),
       replaceLinkedIssues: vi.fn(),
+      importLinkedIssues: vi.fn(async (sprintId: string, projectId: string, issues: any[]) => ({
+        linkedIssues: projectRepo.replaceSprintLinkedIssues(projectId, sprintId, issues) as any,
+        warnings: [],
+      })),
     } as unknown as SprintIssueService;
 
     sprintActions = new SprintActions({
@@ -262,6 +266,7 @@ describe("SprintActions", () => {
       searchedIssues: mockIssues,
       importedContexts: [],
       linkedIssues: [],
+      warnings: [],
       sprint: null,
       planning: null,
     });
@@ -411,6 +416,49 @@ describe("SprintActions", () => {
       searchedIssues: [],
       importedContexts: contexts,
       linkedIssues: linkedRecords,
+      warnings: [],
+    });
+  });
+
+  it("returns Jira import transition warnings without dropping linked issues", async () => {
+    const contexts = [{
+      provider: "jira",
+      hostDomain: "acme.atlassian.net",
+      repository: "OPS",
+      projectKey: "OPS",
+      issueNumber: 42,
+      issueKey: "OPS-42",
+      title: "Ship Jira import",
+      url: "https://acme.atlassian.net/browse/OPS-42",
+      issueBodyMarkdown: "",
+      issueConversationMarkdown: "",
+      includeConversation: false,
+      issueAuthor: null,
+      issueCreatedAt: null,
+      issueUpdatedAt: null,
+    }];
+    const linkedRecords = [{ id: "link-1", issueKey: "OPS-42" }];
+    vi.mocked(sprintIssueService.getIssuePromptContextsForReferences).mockResolvedValue(contexts as any);
+    vi.mocked(projectRepo.getSprint).mockReturnValue({ id: "s1", projectId: "p1", goal: "Existing goal" } as any);
+    vi.mocked(sprintIssueService.importLinkedIssues).mockResolvedValue({
+      linkedIssues: linkedRecords as any,
+      warnings: [{ issueId: "link-1", issueKey: "OPS-42", message: "Transition 'In Work' not found for Jira issue OPS-42" }],
+    });
+
+    const result = await sprintActions.handleSprintAction(makeArgs("import_issues", {
+      projectId: "p1",
+      sprintId: "s1",
+      provider: "jira",
+      issueKeys: ["OPS-42"],
+    }));
+
+    expect(sprintIssueService.importLinkedIssues).toHaveBeenCalledWith("s1", "p1", [expect.objectContaining({
+      provider: "jira",
+      issueKey: "OPS-42",
+    })]);
+    expect(result.result).toMatchObject({
+      linkedIssues: linkedRecords,
+      warnings: [{ issueId: "link-1", issueKey: "OPS-42", message: "Transition 'In Work' not found for Jira issue OPS-42" }],
     });
   });
 

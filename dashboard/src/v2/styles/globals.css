@@ -7,8 +7,14 @@
     --bg-hover-subtle: #f8fafc;
     --color-border-muted: rgba(0, 0, 0, 0.06);
     --border-muted: var(--color-border-muted);
-    --accent-primary: #007352;
-    --accent-hover: #006644;
+    --signal-300: #8fc7ff;
+    --signal-400: #2f80d7;
+    --signal-500: #005eb8;
+    --signal-600: #004b93;
+    --signal-700: #003a70;
+    --signal-rgb: 0 94 184;
+    --accent-primary: var(--signal-600);
+    --accent-hover: var(--signal-700);
     --radius-ui: 8px;
 
     /* Shared Primitives */
@@ -42,8 +48,14 @@
     --bg-hover-subtle: rgba(255, 255, 255, 0.05);
     --color-border-muted: #27272a;
     --border-muted: var(--color-border-muted);
-    --accent-primary: #00e0a0;
-    --accent-hover: #33ffb8;
+    --signal-300: #80ffd6;
+    --signal-400: #33ffb8;
+    --signal-500: #00e0a0;
+    --signal-600: #00e0a0;
+    --signal-700: #008f65;
+    --signal-rgb: 0 224 160;
+    --accent-primary: var(--signal-500);
+    --accent-hover: var(--signal-400);
 
     /* Shared Primitives — warm void surfaces (brand "Warm Void" identity) */
     --surface-glass: rgba(24, 20, 17, 0.66); /* void-800 tint, frosted panel */

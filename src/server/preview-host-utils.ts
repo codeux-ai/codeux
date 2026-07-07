@@ -5,7 +5,7 @@ import net from "net";
 import type { Duplex } from "stream";
 import path from "path";
 import escapeHtmlLib from "escape-html";
-import type { SprintPreviewSession } from "../contracts/app-types.js";
+import type { SprintPreviewPortMapping, SprintPreviewSession } from "../contracts/app-types.js";
 
 export const PREVIEW_BRIDGE_PATH = "/_code_ux/preview-bridge.js";
 export const PREVIEW_STATUS_PATH = "/_code_ux/preview-status";
@@ -59,16 +59,79 @@ export function parsePreviewSessionIdFromHost(hostHeader: string | undefined): s
   return sessionId || null;
 }
 
+export function parseSelectedPreviewPortFromRequest(
+  urlValue: string | null | undefined,
+  headerValue: string | string[] | undefined,
+): string | null {
+  const url = new URL(urlValue || "/", "http://preview.local");
+  const querySelectedPort = url.searchParams.get("previewPort")
+    ?? url.searchParams.get("containerPort")
+    ?? url.searchParams.get("hostPort");
+  const headerSelectedPort = Array.isArray(headerValue) ? headerValue[0] : headerValue;
+  return querySelectedPort ?? headerSelectedPort ?? null;
+}
+
+export function stripPreviewPortSelectorFromPath(pathValue: string | null | undefined): string {
+  const url = new URL(pathValue || "/", "http://preview.local");
+  url.searchParams.delete("previewPort");
+  url.searchParams.delete("containerPort");
+  url.searchParams.delete("hostPort");
+  const query = url.searchParams.toString();
+  return `${url.pathname}${query ? `?${query}` : ""}`;
+}
+
+export function resolvePreviewHostPort(session: SprintPreviewSession, selectedPort: string | number | null | undefined): number | null {
+  const portMappings = getEffectivePreviewPortMappings(session);
+  const primary = portMappings.find((mapping) => mapping.isPrimary === true) ?? portMappings[0];
+  if (selectedPort === undefined || selectedPort === null || selectedPort === "") {
+    return primary?.hostPort ?? session.hostPort;
+  }
+  const normalizedPort = typeof selectedPort === "string" ? selectedPort.trim() : String(selectedPort);
+  const parsedPort = Number.parseInt(normalizedPort, 10);
+  if (!/^\d+$/.test(normalizedPort) || !Number.isInteger(parsedPort) || parsedPort < 1 || parsedPort > 65535) {
+    throw new Error("Selected preview port is invalid.");
+  }
+  const mapping = portMappings.find((candidate) =>
+    candidate.containerPort === parsedPort || candidate.hostPort === parsedPort
+  );
+  if (!mapping) {
+    throw new Error("Selected preview port is not available for this session.");
+  }
+  return mapping.hostPort;
+}
+
+function getEffectivePreviewPortMappings(session: Pick<SprintPreviewSession, "containerAppPort" | "hostPort" | "portMappings">): SprintPreviewPortMapping[] {
+  if (Array.isArray(session.portMappings) && session.portMappings.length > 0) {
+    return session.portMappings;
+  }
+  return [{
+    containerPort: session.containerAppPort,
+    hostPort: session.hostPort,
+    isPrimary: true,
+  }];
+}
+
 export function isAllowedPreviewControlOrigin(req: express.Request): boolean {
-  const origin = typeof req.headers.origin === "string" ? req.headers.origin.trim() : "";
+  const origin = canonicalizeOrigin(typeof req.headers.origin === "string" ? req.headers.origin : "");
   if (!origin) {
     return true;
   }
-  const currentHost = String(req.headers.host || "").trim();
   const protocol = req.protocol || "http";
-  const currentOrigin = `${protocol}://${currentHost}`;
-  const dashboardOrigin = buildDashboardOriginForPreviewHost(req);
+  const currentOrigin = canonicalizeOrigin(`${protocol}://${String(req.headers.host || "").trim()}`);
+  const dashboardOrigin = canonicalizeOrigin(buildDashboardOriginForPreviewHost(req));
   return origin === currentOrigin || origin === dashboardOrigin;
+}
+
+function canonicalizeOrigin(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return "";
+  }
+  try {
+    return new URL(trimmed).origin;
+  } catch {
+    return "";
+  }
 }
 
 export function buildDashboardOriginForPreviewHost(req: express.Request): string {
@@ -108,7 +171,7 @@ export function buildPreviewProxyRequestHeaders(
   // forwarded: the preview iframe runs on its own origin (preview-<id>.localhost), so these
   // are the previewed app's own credentials — never the dashboard's — and stateful preview
   // apps (login/session flows) need them to reach the container.
-  const headersToStrip = ["connection", "upgrade", "transfer-encoding", "content-length", "accept-encoding"];
+  const headersToStrip = ["set-cookie", "connection", "upgrade", "transfer-encoding", "content-length", "accept-encoding"];
   for (const key of Object.keys(headers)) {
     const lower = key.toLowerCase();
     if (headersToStrip.includes(lower) || lower.startsWith("proxy-") || lower.startsWith("x-code-ux-")) {
@@ -281,8 +344,11 @@ function buildPreviewCorsHeaders(
   isControlPath?: boolean,
 ): Record<string, string> {
   let origin = typeof req.headers.origin === "string" && req.headers.origin.trim()
-    ? req.headers.origin.trim()
+    ? canonicalizeOrigin(req.headers.origin)
     : "*";
+  if (!origin) {
+    origin = "*";
+  }
 
   if (isControlPath && !isAllowedPreviewControlOrigin(req)) {
     origin = buildDashboardOriginForPreviewHost(req);
@@ -702,9 +768,10 @@ export async function pipePreviewUpgradeRequest(args: {
   socket: Duplex;
   head: Buffer;
   upstreamPort: number;
+  targetPath?: string;
 }): Promise<void> {
   const upstreamSocket = net.connect(args.upstreamPort, "127.0.0.1");
-  const requestLines = [`${args.req.method || "GET"} ${args.req.url || "/"} HTTP/${args.req.httpVersion}`];
+  const requestLines = [`${args.req.method || "GET"} ${args.targetPath || args.req.url || "/"} HTTP/${args.req.httpVersion}`];
   for (const [key, value] of Object.entries(args.req.headers)) {
     if (value === undefined) {
       continue;

@@ -34,9 +34,14 @@ Stable layouts on narrow widths (especially mobile or multi-panel layouts) must 
 - **Project & Sprint Menus:** Must remain visible on compact screens. Enforce strict text truncation using `truncate` and responsive maximum widths (e.g., `max-w-[80px] sm:max-w-[140px] md:max-w-[200px]`) rather than letting content dictate unbounded flex-growth. Compact action clusters should use `min-w-0` to allow safe text truncation without shrinking icon buttons (which should retain `shrink-0`).
 - **Search and Telemetry Layout:** Components should gracefully hide text or collapse altogether (e.g. icon-only triggers) instead of overflowing the flex container.
 
-### 5. Hover and Active Indicators
-- **Interactions:** Hover backgrounds for triggers follow `hover:bg-black/[0.05] dark:hover:bg-white/[0.05]`. Active routes in the Sidebar use the primary `signal-500` marker tone.
-- **Tooltips:** Minimized primary sidebar navigation items expose semantic `aria-label`s on their links and keep visual tooltips explicitly mapped via `aria-hidden="true"` styled to mimic standard dropdown glass panels (`shadow-2xl rounded-2xl`). Footer actions such as Settings and the sidebar collapse/expand control keep semantic `aria-label`s but do not render custom hover text labels.
+### 5. Standardized Components
+The shell relies on reusable layout components from `dashboard/src/v2/components/layout/` (such as `Sidebar` and `NavItem`) and top navigation components from `dashboard/src/v2/components/top-nav/` (such as `BrandSection`, `GlobalSearch`, and `TelemetryStats`).
+
+### 6. Hover and Active Indicators
+- **Motion Tokens:** Shell navigation must use the interaction contracts in `dashboard/src/v2/lib/motion`. Use `controlFeedback` for hover, focus, icon color, and label feedback; `selectionMovement` for active route backgrounds, vertical markers, and minimized/expanded label reveal; and `enterExit` for mobile drawer and backdrop transitions.
+- **Interactions:** Hover backgrounds for triggers follow `hover:bg-black/[0.05] dark:hover:bg-white/[0.05]`. Active routes in the Sidebar use the primary `signal-500` marker tone and must remain visibly marked by semantic `aria-current="page"`, active label weight/color, and the persistent Signal Jade indicator.
+- **Minimized Tooltips:** Minimized primary sidebar navigation items expose semantic `aria-label`s on their links and keep visual tooltips explicitly mapped via `aria-hidden="true"` styled to mimic standard dropdown glass panels (`shadow-2xl rounded-2xl`). Tooltips must appear on both hover and `focus-visible`, so keyboard users receive the same label confirmation without pointer hover. Footer actions such as Settings and the sidebar collapse/expand control follow the same minimized tooltip pattern.
+- **Unavailable Routes:** Disabled or unavailable shell destinations remain keyboard reachable as disabled link semantics (`role="link"`, `aria-disabled="true"`) and expose a concise visible or screen-reader-accessible explanation through `aria-describedby`. Do not rely on hover-only text for unavailable reasons.
 
 ## Accessibility Contracts
 
@@ -46,11 +51,24 @@ Stable layouts on narrow widths (especially mobile or multi-panel layouts) must 
 - Project and sprint selectors use a listbox contract. Triggers expose stable names, real `aria-expanded`, `aria-busy`, and `aria-controls` only while their listbox is mounted. Options use `role="option"` and update `aria-selected`; keyboard navigation supports `Enter`, `Space`, `ArrowDown`, `ArrowUp`, `Home`, `End`, and `Escape`.
 - Escape closes open selector menus and returns focus to the trigger. Disabled selector states, such as a project with no sprints, announce the empty state without opening an empty listbox.
 - Global Search uses an overlay combobox/listbox pattern. The trigger must expose a stable accessible name, opening the overlay should focus the search input and trap focus inside the surface, and closing with Escape, backdrop, or selection must restore focus to the trigger.
-- Search result focus is represented with `aria-activedescendant`, not by moving DOM focus between rows. Arrow keys move the active result, Enter selects it, Escape closes the overlay, and pointer selection must follow the same route contract as keyboard selection.
+- Search result focus is represented with `aria-activedescendant`, not by moving DOM focus between rows. The combobox input stays the DOM focus owner while Arrow keys, Home, and End move the active result. Enter selects only an available active result, Escape closes the overlay, and pointer selection must follow the same route contract as keyboard selection.
+- Search refreshes may keep previous results visible only while a background refresh is pending. During that state, the result list exposes `aria-busy`, a visible stale-results status chip, and a live-region announcement. Empty states after refresh completes must use the committed query, not an in-flight typed value.
+- Disabled or unavailable search rows stay visible so users understand why a result is present but inert. They expose `aria-disabled`, a persistent visible reason, and an `aria-describedby` explanation; keyboard movement skips unavailable rows when an available row exists, and activation remains inert when every row is unavailable.
+- Search overlays own their own result scroller. Active-row movement must scroll the bounded results container, not the document page, so route chrome and page scroll position stay stable.
 - Result rows can include sprint keys, task ids, agent names, and preview session labels. These operational values must wrap or truncate inside the row boundary without changing overlay width, and sprint result routes must use the explicit `sprintKey` payload supplied by the search item.
+- Notification and browser-session flyouts use disclosure/menu semantics with truthful `aria-expanded` and bounded `aria-busy` states. Escape, outside click, blur close, action completion, and item removal restore focus to the trigger when possible, otherwise to the page fallback.
+- Notification refresh, mark-all-read, and per-notification mark-read operations suppress duplicate activation while pending. Pending work must expose `aria-busy`, visible status text, and a polite live-region announcement; disabled controls must explain whether they are already complete or currently busy.
+- Browser session menus keep stale sessions visible during refresh and show a polite inline status when refresh fails. Session rows that cannot open a preview remain in the menu as disabled menu items with a visible unavailable reason and are skipped by arrow, Home, and End keyboard movement.
 
 ### Sidebar And Dock
 
 - Desktop and mobile sidebar landmarks must have distinct accessible names. Mobile sidebars use dialog semantics only while open, with the inner workspace navigation named separately from the outer dialog.
 - Every shell route link keeps a stable accessible name even when rendered icon-only or visually minimized. Active route links use `aria-current="page"`; hidden tooltip labels remain `aria-hidden`.
+- Mobile sidebar drawers close through the backdrop, route selection, and Escape. Closing must restore focus to the opener when it is still connected and usable, otherwise to the route page fallback.
+- Page route containers that need route-change or overlay-close focus recovery must provide a specific accessible name through `aria-label` or `aria-labelledby`. `PageContainer` only applies the named `region`, `data-focus-fallback`, and fallback `tabIndex=-1` when that name is present; unlabeled layout wrappers must stay out of the landmark list instead of exposing a generic "Page content" region.
 - Fixed bottom dock containers must stay inside their own horizontal scroll boundary, account for `env(safe-area-inset-bottom)`, and preserve visible Signal Jade focus rings at the viewport edges.
+
+### Reduced Motion
+
+- Reduced motion removes movement by resolving interaction durations to `0ms`; it must not remove active route indicators, focus rings, tooltip text, unavailable explanations, or page-region focus targets.
+- Active sidebar and dock state must remain understandable without animation. Preserve `aria-current`, active marker color, active label treatment, and visible focus rings even when transforms and animated movement are disabled.

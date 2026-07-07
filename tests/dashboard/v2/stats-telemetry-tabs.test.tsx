@@ -85,6 +85,7 @@ describe("TelemetryLedgerTabs", () => {
     expect(taskTab).toHaveAttribute("aria-selected", "true");
     expect(sprintTab).toHaveAttribute("aria-selected", "false");
     expect(screen.getByRole("tabpanel", { name: "Task Telemetry, 1 entry" })).toHaveAttribute("aria-labelledby", "tab-tasks");
+    expect(screen.getByText("Task Telemetry selected, 1 entry.")).toBeInTheDocument();
 
     taskTab.focus();
     fireEvent.keyDown(tablist, { key: "ArrowRight" });
@@ -92,6 +93,7 @@ describe("TelemetryLedgerTabs", () => {
     expect(sprintTab).toHaveFocus();
     expect(sprintTab).toHaveAttribute("aria-selected", "true");
     expect(screen.getByRole("tabpanel", { name: "Sprint Telemetry, 1 entry" })).toHaveAttribute("aria-labelledby", "tab-sprints");
+    expect(screen.getByText("Sprint Telemetry selected, 1 entry.")).toBeInTheDocument();
 
     fireEvent.keyDown(tablist, { key: "Home" });
     expect(taskTab).toHaveFocus();

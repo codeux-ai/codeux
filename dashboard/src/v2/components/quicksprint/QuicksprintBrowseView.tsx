@@ -71,8 +71,9 @@ type TemplateRailProps = {
   templates: QuicksprintTemplateRecord[];
   onSelectTemplate: (template: QuicksprintTemplateRecord) => void;
   onEditTemplate?: (template: QuicksprintTemplateRecord) => void;
-  onDeleteTemplate?: (template: QuicksprintTemplateRecord) => void;
+  onDeleteTemplate?: (template: QuicksprintTemplateRecord, trigger: HTMLElement) => void;
   selectedTemplateId?: string | null;
+  fallbackFocusRef?: { current: HTMLElement | null };
 };
 
 const TemplateRail: FunctionComponent<TemplateRailProps> = ({
@@ -83,6 +84,7 @@ const TemplateRail: FunctionComponent<TemplateRailProps> = ({
   onEditTemplate,
   onDeleteTemplate,
   selectedTemplateId = null,
+  fallbackFocusRef,
 }) => {
   const scrollRef = useRef<HTMLDivElement>(null);
   const hasPotentialOverflow = templates.length > RAIL_ROWS;
@@ -221,13 +223,19 @@ const TemplateRail: FunctionComponent<TemplateRailProps> = ({
       </div>
 
       <div
-        ref={scrollRef}
+        ref={(node) => {
+          scrollRef.current = node;
+          if (fallbackFocusRef) {
+            fallbackFocusRef.current = node;
+          }
+        }}
         id={railId}
         role="region"
         tabIndex={0}
         aria-label={ariaLabel}
         onKeyDown={onRailKeyDown}
         data-qs-template-rail={railId}
+        data-motion-contract="listReveal"
         className="dashboard-scrollbar grid max-w-full grid-flow-col grid-rows-2 gap-4 overflow-x-auto overflow-y-visible overscroll-x-contain pb-4 pr-2 outline-none scrollbar-hide touch-auto scroll-smooth auto-cols-[minmax(19rem,calc(100vw-4rem))] sm:auto-cols-[21rem] lg:auto-cols-[22rem]"
       >
         {templates.map((template) => (
@@ -236,7 +244,7 @@ const TemplateRail: FunctionComponent<TemplateRailProps> = ({
             template={template}
             onSelect={() => onSelectTemplate(template)}
             onEdit={onEditTemplate ? () => onEditTemplate(template) : undefined}
-            onDelete={onDeleteTemplate ? () => onDeleteTemplate(template) : undefined}
+            onDelete={onDeleteTemplate ? (trigger) => onDeleteTemplate(template, trigger) : undefined}
             selected={template.id === selectedTemplateId}
           />
         ))}
@@ -254,11 +262,12 @@ export const QuicksprintBrowseView: FunctionComponent<{
   phaseStatus?: string;
   handleSelectTemplate: (t: QuicksprintTemplateRecord) => void;
   openEditor: (t: QuicksprintTemplateRecord | null) => void;
-  handleDeleteTemplate?: (t: QuicksprintTemplateRecord) => void;
+  handleDeleteTemplate?: (t: QuicksprintTemplateRecord, trigger: HTMLElement) => void;
   activeBuiltinPurpose: BuiltinPurposeOption | null;
   loading: boolean;
   onClose: () => void;
   selectedTemplateId?: string | null;
+  fallbackFocusRef?: { current: HTMLElement | null };
 }> = ({
   templates,
   builtinPurposeOptions,
@@ -273,6 +282,7 @@ export const QuicksprintBrowseView: FunctionComponent<{
   handleDeleteTemplate,
   onClose,
   selectedTemplateId = null,
+  fallbackFocusRef,
 }) => {
   const hasTemplates = templates.length > 0;
   const headingRef = useRef<HTMLHeadingElement>(null);
@@ -297,7 +307,7 @@ export const QuicksprintBrowseView: FunctionComponent<{
             <h2
               ref={headingRef}
               tabIndex={-1}
-              className="font-display text-[2rem] font-black leading-none tracking-tight text-slate-900 outline-none dark:text-white sm:text-[2.35rem]"
+              className="font-display text-2xl font-semibold leading-none tracking-tight text-slate-900 outline-none dark:text-white sm:text-3xl"
             >
               Launch A Quicksprint.
             </h2>
@@ -393,6 +403,7 @@ export const QuicksprintBrowseView: FunctionComponent<{
                 onEditTemplate={openEditor}
                 onDeleteTemplate={handleDeleteTemplate}
                 selectedTemplateId={selectedTemplateId}
+                fallbackFocusRef={fallbackFocusRef}
               />
             )}
           </div>

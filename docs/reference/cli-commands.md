@@ -75,7 +75,7 @@ Use these core flags most often:
 - Scheduler: `--project` plus `--scheduled-for` for `create` and `schedule_*`; add `--sprint`, `--template`, or `--body-markdown` depending on the target type; generic `create` also needs `--target-type` or a payload with `targetType`; `--entry` for `update` and `delete`
 - Settings: `--settings-json` for replace actions; `--project` and `--sprint` when the scope is project or sprint specific; `--path` and `--value` for patch actions; `reset_project_settings` needs `--project` and `reset_sprint_settings` needs `--sprint`
 - Agents: `--project` for `list`, `create`, and `sync`; `--project` plus `--preset` for `get`, `update`, and `delete`
-- Memory: `--project` plus `--query` for `search`; `--project` plus `--content` for `create`; `--project` plus `--memory-ids` for `promote`; `--memory` for `get`, `update`, and `delete`
+- Memory: `--project` plus `--query` for `search`; `--project` plus `--content` for `create`; `--project` plus `--memory-ids` for `promote`; `--memory` for `get`, `update`, and `delete`; claim actions use `--project` plus `--claim-id` where applicable and are easiest to automate with `--payload-json` for numeric fields such as `confidence`, `durability`, and evidence `weight`
 - Preview: `--project` for `list_sessions`; `--project` plus `--sprint` for `start_session` and `get_script`; `--session` for `rebuild_session`, `stop_session`, `remove_session`, `get_logs`, and `get_url`
 - Telemetry: `--project` for `get_project_execution_snapshot`, `get_project_stats_snapshot`, and `list_execution_invocations`; `--project` plus `--sprint` for `list_sprint_runs`; add `--task` for `list_task_dispatches`; `--invocation` for `list_execution_invocation_messages`
 
@@ -150,7 +150,10 @@ codeux agents update --project proj-1 --preset qa-agent --payload-json '{"instru
 codeux memory search --project proj-1 --query "pricing page"
 codeux memory promote --project proj-1 --memory-ids '["mem-1","mem-2"]'
 codeux memory start_reembed --project proj-1
+codeux manage --payload-json '{"domain":"memory","action":"create_claim","payload":{"projectId":"proj-1","claim":"Use dependency factory composition for service wiring.","category":"patterns","confidence":0.9,"durability":0.85}}'
 ```
+
+Durable claim actions exposed through the management surface are `create_claim`, `list_claims`, `get_claim`, `update_claim`, `add_claim_evidence`, and `deprecate_claim`. `deprecate_claim` follows the destructive approval flow: the first call returns an approval request, and the confirmed retry must include `approval.confirmed: true`.
 
 ### Preview
 

@@ -121,7 +121,7 @@ export function MarkdownEditorField({
                   aria-controls={value_ === "write" ? "markdown-editor" : "markdown-preview"}
                   className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.1em] transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30 ${
                     active
-                      ? "bg-signal-500 text-void-900 shadow-[0_0_10px_rgba(0,224,160,0.22)]"
+                      ? "bg-signal-500 text-white dark:text-void-900 shadow-[0_0_10px_rgba(0,224,160,0.22)]"
                       : "text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white"
                   }`}
                 >

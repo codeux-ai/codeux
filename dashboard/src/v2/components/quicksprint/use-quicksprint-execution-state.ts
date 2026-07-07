@@ -32,6 +32,8 @@ export function useQuicksprintExecutionState({
   noTaskLimit,
   agentPresets,
   onClose,
+  onError,
+  onStatus,
 }: {
   onExecute: (templateId: string, taskCount: number, submitMode: "plan_only" | "plan_and_start", additionalPrompt?: string, routeOverride?: PlanningRouteOption | null, modelOverride?: string | null, signal?: AbortSignal, options?: QuicksprintExecutionOptions) => Promise<void>;
   virtualProviders: VirtualProviderOption[];
@@ -43,6 +45,8 @@ export function useQuicksprintExecutionState({
   noTaskLimit: boolean;
   agentPresets: AgentPreset[];
   onClose: () => void;
+  onError?: (message: string) => void;
+  onStatus?: (message: string) => void;
 }) {
   const [executingMode, setExecutingMode] = useState<"plan_only" | "plan_and_start" | null>(null);
   const [elapsedMs, setElapsedMs] = useState(0);
@@ -81,7 +85,10 @@ export function useQuicksprintExecutionState({
   const handleExecute = useCallback(
     async (mode: "plan_only" | "plan_and_start") => {
       if (!selectedTemplate) return;
-      if (executingMode || activeRequestRef.current) return;
+      if (executingMode || activeRequestRef.current) {
+        onStatus?.("A quicksprint planning request is already running. Duplicate submission blocked.");
+        return;
+      }
 
       const reqId = ++requestCounterRef.current;
       activeRequestRef.current = { id: reqId, detached: false, cancelled: false };
@@ -118,9 +125,11 @@ export function useQuicksprintExecutionState({
         if (activeRequestRef.current?.id === reqId && !activeRequestRef.current.detached && !activeRequestRef.current.cancelled) {
           onClose();
         }
-      } catch (err: any) {
-        if (err.name !== "AbortError") {
+      } catch (err: unknown) {
+        if (!(err instanceof DOMException && err.name === "AbortError")) {
           console.error("Quicksprint execute failed:", err);
+          const templateName = selectedTemplate.name;
+          onError?.(`Planning failed for ${templateName}. Review the route and try again.`);
         }
       } finally {
         clearInterval(timer);
@@ -136,10 +145,10 @@ export function useQuicksprintExecutionState({
         }
       }
     },
-    [onExecute, selectedTemplate, executingMode, taskCount, noTaskLimit, additionalPrompt, routeOverride, modelOverride, onClose],
+    [onExecute, selectedTemplate, executingMode, taskCount, noTaskLimit, additionalPrompt, routeOverride, modelOverride, onClose, onError, onStatus],
   );
 
-  const handleNewQuicksprint = useCallback(() => {
+  const detachCurrentRequest = useCallback(() => {
     if (activeRequestRef.current) {
       activeRequestRef.current.detached = true;
     }
@@ -148,6 +157,10 @@ export function useQuicksprintExecutionState({
     setExecutingMode(null);
     setIsOverlayDismissed(true);
   }, []);
+
+  const handleNewQuicksprint = useCallback(() => {
+    detachCurrentRequest();
+  }, [detachCurrentRequest]);
 
   const handleCancelExecute = useCallback(() => {
     if (abortControllerRef.current) {
@@ -164,7 +177,7 @@ export function useQuicksprintExecutionState({
     executingMode, setExecutingMode,
     elapsedMs, setElapsedMs,
     isOverlayDismissed, setIsOverlayDismissed,
-    handleExecute, handleCancelExecute, handleNewQuicksprint,
+    handleExecute, handleCancelExecute, handleNewQuicksprint, detachCurrentRequest,
     routeOptions, modelOptions, combinedPrompt,
     abortControllerRef, activeRequestRef, requestCounterRef
   };

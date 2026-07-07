@@ -6,6 +6,17 @@ import { describe, expect, it } from "vitest";
 const require = createRequire(import.meta.url);
 
 describe("electron-builder packaged defaults", () => {
+  it("keeps renderer privileges constrained in the desktop BrowserWindow", () => {
+    const mainProcessSource = fs.readFileSync(path.join(process.cwd(), "src/electron/main.ts"), "utf8");
+
+    expect(mainProcessSource).toContain("contextIsolation: true");
+    expect(mainProcessSource).toContain("nodeIntegration: false");
+    expect(mainProcessSource).toContain("sandbox: true");
+    expect(mainProcessSource).toContain("setPermissionRequestHandler");
+    expect(mainProcessSource).toContain("setWindowOpenHandler");
+    expect(mainProcessSource).toContain("will-navigate");
+  });
+
   it("packages the default agent assets required by runtime seeding", () => {
     const config = require("../../electron-builder.config.cjs") as {
       extraResources?: Array<{ from?: string; to?: string; filter?: string[] }>;
@@ -19,10 +30,19 @@ describe("electron-builder packaged defaults", () => {
       "agents/quality_assurance_agent.md",
       "agents/worker.md",
       "container/setup.sh",
+      "quicksprints/templates/*.md",
     ]));
     expect(defaultsResource?.filter).not.toContain("agents/iris.md");
 
     for (const assetPath of defaultsResource?.filter ?? []) {
+      if (assetPath.includes("*")) {
+        const wildcardIndex = assetPath.indexOf("*");
+        const directory = assetPath.slice(0, wildcardIndex);
+        const suffix = assetPath.slice(wildcardIndex + 1);
+        const absoluteDirectory = path.join(process.cwd(), ".code-ux", directory);
+        expect(fs.readdirSync(absoluteDirectory).some((entry) => entry.endsWith(suffix))).toBe(true);
+        continue;
+      }
       expect(fs.existsSync(path.join(process.cwd(), ".code-ux", assetPath))).toBe(true);
     }
   });

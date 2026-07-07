@@ -43,7 +43,7 @@ For each project that needs attention:
    └─ if no item: skip project
 ```
 
-Default reconcile cadence: `VIRTUAL_WORKER_RECONCILE_MS = 3000`. Default session poll: `VIRTUAL_WORKER_SESSION_POLL_MS = 2000`.
+Default reconcile cadence: `VIRTUAL_WORKER_RECONCILE_MS = 3000`. Default session poll: `VIRTUAL_WORKER_SESSION_POLL_MS = 2000`. Initial scheduling uses microtasks to coalesce rapid events, but follow-up cycles after `remaining_worker_work` are deferred on the reconcile cadence so stale or unchanged worker state cannot starve dashboard HTTP probes or shutdown handling.
 
 ## Worker provisioning
 

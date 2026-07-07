@@ -8,7 +8,7 @@ import {
   resolveSprintProjectSettings,
 } from "../../../src/services/settings-resolution-service.js";
 import { ScopedEffectiveSettingsResolver } from "../../../src/repositories/settings-repository.js";
-import { DEFAULT_DASHBOARD_SETTINGS, DEFAULT_SKILLS } from "../../../src/repositories/settings-defaults.js";
+import { DEFAULT_DASHBOARD_SETTINGS, DEFAULT_PLAYWRIGHT_MCP_SERVER_ID, DEFAULT_SKILLS } from "../../../src/repositories/settings-defaults.js";
 import { DEFAULT_INSTRUCTION_TEMPLATES } from "../../../src/instructions/instruction-template-catalog.js";
 import type { SystemSettings, ProjectSettingsOverride } from "../../../src/contracts/settings-scope-types.js";
 
@@ -72,7 +72,7 @@ describe("Settings Resolution Service", () => {
     it("uses the updated CI, memory, and QA defaults", () => {
       const settings = buildDefaultProjectSettings();
       expect(settings.ciIntelligence.featurePrAutoMergeMode).toBe("ALWAYS");
-      expect(settings.ciIntelligence.mainBranchAutoMergeMode).toBe("CREATE_PR");
+      expect(settings.ciIntelligence.mainBranchAutoMergeMode).toBe("ALWAYS");
       expect(settings.ciIntelligence.resolveMergeConflicts).toBe(true);
       expect(settings.ciIntelligence.resolveMainMergeConflicts).toBe(true);
       expect(settings.memory.enabled).toBe(true);
@@ -310,6 +310,32 @@ describe("Settings Resolution Service", () => {
       expect(resolved.settings.mcpTools.find((t) => t.name === "manage_tasks")?.enabled).toBe(false);
       expect(resolved.settings.mcpTools.find((t) => t.name === "manage_projects")?.enabled).toBe(true);
     });
+
+    it("retains the default Playwright MCP server without duplicating same-name overrides", () => {
+      const systemSettings = sanitizeSystemSettings({
+        customMcpServers: [
+          {
+            id: "custom-playwright",
+            name: "playwright",
+            transport: "stdio",
+            command: "npx",
+            args: ["@playwright/mcp@latest"],
+            enabled: false,
+          },
+        ],
+      } as unknown);
+
+      expect(systemSettings.customMcpServers.filter((server) => server.name === "playwright")).toHaveLength(1);
+      expect(systemSettings.customMcpServers[0]).toMatchObject({
+        id: "custom-playwright",
+        name: "playwright",
+        enabled: false,
+      });
+
+      const resolved = resolveDashboardSettings({ systemSettings });
+      expect(resolved.settings.customMcpServers.filter((server) => server.name === "playwright")).toHaveLength(1);
+      expect(resolved.settings.customMcpServers.some((server) => server.id === DEFAULT_PLAYWRIGHT_MCP_SERVER_ID)).toBe(false);
+    });
   });
 
   describe("resolveProjectSettings", () => {
@@ -345,6 +371,8 @@ describe("Settings Resolution Service", () => {
             host: "",
             email: "",
             apiToken: "",
+            autoTransitionLinkedIssuesOnImport: true,
+            importTransitionName: "In Work",
             autoCloseLinkedIssues: false,
             defaultProject: "",
             closeTransitionName: "Done",

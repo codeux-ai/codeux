@@ -9,6 +9,8 @@ import { BorderTrace } from "../ui/BorderTrace.js";
 import { WaveFluid } from "../ui/WaveFluid.js";
 import { useReducedMotion, useResolvedMotionDuration } from "../../hooks/use-reduced-motion.js";
 import { INTERACTION_TOKENS } from "../../lib/motion/tokens.js";
+import type { ExecutionSnapshotSurfaceState } from "../../../hooks/ExecutionTimelineContext.js";
+import { RuntimeSnapshotSurfaceBadge, RuntimeSnapshotSurfaceNotice } from "./ExecutionRuntimePanel.js";
 
 const CONNECTION_ROLE_LABELS: Record<string, string> = {
   listener: "Listener",
@@ -155,7 +157,8 @@ const ConnectionRow: FunctionComponent<{ connection: ExecutionDashboardSnapshot[
 
 export const LiveConnectionsCard: FunctionComponent<{
   snapshot: ExecutionDashboardSnapshot;
-}> = memo(({ snapshot }) => {
+  snapshotSurface?: ExecutionSnapshotSurfaceState;
+}> = memo(({ snapshot, snapshotSurface }) => {
   const { activeConnections, listeningConnections, workerConnections, pendingInboxTotal } = useMemo(() => {
     const active = snapshot.connections.filter((connection) => connection.status !== "offline");
     return {
@@ -180,7 +183,14 @@ export const LiveConnectionsCard: FunctionComponent<{
           <span className="rounded-full border border-black/[0.06] bg-black/[0.02] px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.14em] text-slate-500 dark:border-white/[0.08] dark:bg-white/[0.02] dark:text-slate-400">
             {snapshot.connections.length} total
           </span>
+          <RuntimeSnapshotSurfaceBadge surface={snapshotSurface} />
         </div>
+
+        {snapshotSurface && snapshotSurface.kind !== "live" && (
+          <div className="mb-4">
+            <RuntimeSnapshotSurfaceNotice surface={snapshotSurface} panelLabel="Live connections" />
+          </div>
+        )}
 
         <div className="mb-4 grid grid-cols-2 gap-2">
           {[
@@ -194,7 +204,7 @@ export const LiveConnectionsCard: FunctionComponent<{
                 <span className="text-[8px] font-bold uppercase tracking-[0.14em] text-slate-400">{tile.label}</span>
                 <span className="text-slate-400">{tile.icon}</span>
               </div>
-              <div className={`mt-1 text-lg font-black leading-none ${tile.tone}`}>{tile.value}</div>
+              <div className={`mt-1 text-base font-semibold leading-none ${tile.tone}`}>{tile.value}</div>
             </div>
           ))}
         </div>

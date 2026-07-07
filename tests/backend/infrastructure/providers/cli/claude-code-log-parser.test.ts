@@ -53,14 +53,32 @@ describe("parseClaudeCodeSessionJsonl", () => {
   it("returns empty result for empty input", () => {
     const result = parseClaudeCodeSessionJsonl("");
     expect(result.usage).toBeNull();
-    expect(result.conversation).toHaveLength(0);
+    expect(result.rawUsageJson).toBeNull();
+    expect(result.conversation).toEqual([]);
     expect(result.nativeSessionId).toBeNull();
   });
 
   it("returns empty result for whitespace-only input", () => {
     const result = parseClaudeCodeSessionJsonl("   \n  \n  ");
     expect(result.usage).toBeNull();
-    expect(result.conversation).toHaveLength(0);
+    expect(result.rawUsageJson).toBeNull();
+    expect(result.conversation).toEqual([]);
+  });
+
+  it("keeps partial user-only records as conversation turns with null usage", () => {
+    const result = parseClaudeCodeSessionJsonl(makeUserEntry({
+      content: [{ type: "text", text: "Only the prompt was logged." }],
+    }));
+
+    expect(result.usage).toBeNull();
+    expect(result.rawUsageJson).toBeNull();
+    expect(result.conversation).toEqual([
+      {
+        kind: "user",
+        text: "Only the prompt was logged.",
+        timestampMs: Date.parse("2026-06-01T10:00:00.000Z"),
+      },
+    ]);
   });
 
   it("parses nativeSessionId from any entry", () => {
@@ -420,5 +438,86 @@ describe("parseClaudeCodeSessionJsonl", () => {
 
     expect(result.usage!.inputTokens).toBe(10);
     expect(result.conversation).toHaveLength(1);
+  });
+
+  it("parses usage-only assistant records without synthesizing text turns", () => {
+    const result = parseClaudeCodeSessionJsonl(JSON.stringify({
+      type: "assistant",
+      sessionId: "usage-only",
+      timestamp: "2026-06-01T10:00:00.000Z",
+      message: {
+        id: "msg_usage_only",
+        role: "assistant",
+        content: [],
+        usage: {
+          input_tokens: 31,
+          output_tokens: 11,
+          cache_creation_input_tokens: 7,
+          cache_read_input_tokens: 5,
+        },
+      },
+    }));
+
+    expect(result.usage).toEqual({
+      inputTokens: 31,
+      outputTokens: 11,
+      cacheCreationTokens: 7,
+      cacheReadTokens: 5,
+    });
+    expect(result.rawUsageJson).toEqual({
+      input_tokens: 31,
+      output_tokens: 11,
+      cache_creation_input_tokens: 7,
+      cache_read_input_tokens: 5,
+    });
+    expect(result.conversation).toEqual([]);
+  });
+
+  it("skips partial JSON and unknown entries while preserving recoverable usage and partial tool results", () => {
+    const lines = [
+      "{\"type\":\"assistant\",\"sessionId\":\"secret-session\",\"message\":{\"usage\":{\"input_tokens\":999,\"api_key\":\"sk-test-secret\"",
+      JSON.stringify({ type: "permission-mode", sessionId: "safe-session", permissionMode: "default" }),
+      makeUserEntry({
+        sessionId: "safe-session",
+        timestamp: "2026-06-01T10:00:01.000Z",
+        content: [
+          {
+            type: "tool_result",
+            tool_use_id: "toolu_partial",
+            content: [{ type: "text", text: "truncated command output kept" }],
+            is_error: true,
+          },
+        ],
+      }),
+      makeAssistantEntry({
+        sessionId: "safe-session",
+        messageId: "msg_missing_tokens",
+        timestamp: "2026-06-01T10:00:02.000Z",
+        content: [],
+        usage: {
+          input_tokens: "21",
+          output_tokens: -4,
+          cache_read_input_tokens: undefined,
+        },
+      }),
+    ].join("\n");
+
+    const result = parseClaudeCodeSessionJsonl(lines);
+
+    expect(result.nativeSessionId).toBe("safe-session");
+    expect(result.usage).toEqual({
+      inputTokens: 21,
+      outputTokens: 0,
+      cacheCreationTokens: 0,
+      cacheReadTokens: 0,
+    });
+    expect(result.conversation).toHaveLength(1);
+    expect(result.conversation[0]).toMatchObject({
+      kind: "tool_result",
+      toolCallId: "toolu_partial",
+      toolOutput: "truncated command output kept",
+      toolStatus: "error",
+    });
+    expect(JSON.stringify(result)).not.toContain("sk-test-secret");
   });
 });

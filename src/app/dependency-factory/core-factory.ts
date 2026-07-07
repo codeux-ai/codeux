@@ -29,6 +29,7 @@ import { SprintMarkdownService } from "../../services/sprint-markdown-service.js
 import { SprintIssueService } from "../../services/sprint-issue-service.js";
 import { ActiveDispatchRegistry } from "../../services/active-dispatch-registry.js";
 import { RuntimeCleanupService } from "../../services/runtime-cleanup-service.js";
+import { SprintRunLifecycleService } from "../../services/sprint-run-lifecycle-service.js";
 import { DockerRuntimePruneService } from "../../services/docker-runtime-prune-service.js";
 import { DashboardRealtimeService } from "../../services/dashboard-realtime-service.js";
 import { MemoryRepository } from "../../repositories/memory-repository.js";
@@ -84,6 +85,7 @@ export interface CoreDependencies {
   agentPresetRepository: AgentPresetRepository;
   agentPresetSyncService: AgentPresetSyncService;
   executionRepository: ExecutionRepository;
+  sprintRunLifecycleService: SprintRunLifecycleService;
   guardrailRepository: GuardrailRepository;
   guardrailService: GuardrailService;
   dashboardRealtimeEventRepository: DashboardRealtimeEventRepository;
@@ -193,6 +195,10 @@ export function createCoreDependencies(
   );
   const agentPresetRepository = new AgentPresetRepository(appDbStorage);
   const executionRepository = new ExecutionRepository(appDbStorage, dashboardRealtimeService, undefined, settingsRepository);
+  const sprintRunLifecycleService = new SprintRunLifecycleService({
+    executionRepository,
+    projectManagementRepository,
+  });
   const guardrailRepository = new GuardrailRepository(appDbStorage);
   const guardrailService = new GuardrailService(
     guardrailRepository,
@@ -236,6 +242,7 @@ export function createCoreDependencies(
   const runtimeCleanupService = new RuntimeCleanupService(
     connectionChatRepository,
     executionRepository,
+    sprintRunLifecycleService,
     projectManagementRepository,
     projectAttentionService,
     dockerRuntimePruneService,
@@ -316,6 +323,7 @@ export function createCoreDependencies(
     agentPresetRepository,
     agentPresetSyncService,
     executionRepository,
+    sprintRunLifecycleService,
     guardrailRepository,
     guardrailService,
     dashboardRealtimeEventRepository,

@@ -4,6 +4,7 @@ import { Check, Terminal, Trash2, X } from "lucide-preact";
 import { PillChoiceGroup, ProviderLogo, Row, SecretInput, SelectInput, TextInput, Toggle } from "./SettingsFormFields.js";
 import { getProviderDefaultAuthPath, getProviderTypeLabel } from "../../lib/settings-view-models.js";
 import { TerminalLoginModal } from "./TerminalLoginModal.js";
+import { ActionFeedbackRegion } from "../ui/ActionFeedbackRegion.js";
 import { ModelCombobox } from "../ui/ModelCombobox.js";
 import { ProviderCombobox } from "../ui/ProviderCombobox.js";
 import {
@@ -30,7 +31,7 @@ export const ProviderInstanceCard: FunctionComponent<{
   providerModel: string;
   dockerExecutionEnabled: boolean;
   onUpdate: (updates: Partial<SystemProviderConfig>) => void;
-  onRemove?: () => void;
+  onRemove?: () => void | Promise<void>;
   isLast?: boolean;
   enabled?: boolean;
   onToggleEnabled?: (value: boolean) => void;
@@ -39,6 +40,7 @@ export const ProviderInstanceCard: FunctionComponent<{
 }> = ({ providerConfigId, provider, providerModel, dockerExecutionEnabled, onUpdate, onRemove, isLast = true, enabled, onToggleEnabled, index, total }) => {
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [removeArmed, setRemoveArmed] = useState(false);
+  const [removePending, setRemovePending] = useState(false);
   const [feedback, setFeedback] = useState<{ tone: "success" | "warning" | "error"; message: string } | null>(null);
   const removeButtonRef = useRef<HTMLButtonElement | null>(null);
   const cancelRemoveButtonRef = useRef<HTMLButtonElement | null>(null);
@@ -53,6 +55,7 @@ export const ProviderInstanceCard: FunctionComponent<{
 
   useEffect(() => {
     setRemoveArmed(false);
+    setRemovePending(false);
     setFeedback(null);
   }, [providerConfigId]);
 
@@ -106,33 +109,61 @@ export const ProviderInstanceCard: FunctionComponent<{
   };
 
   const armRemove = (): void => {
+    if (removePending) {
+      return;
+    }
     setRemoveArmed(true);
     setFeedback({ tone: "warning", message: `Removal is armed for ${providerInstanceLabel}. Confirm or cancel; no saved settings change happens until you save.` });
   };
 
   const cancelRemove = (): void => {
+    if (removePending) {
+      return;
+    }
     setRemoveArmed(false);
     setFeedback({ tone: "warning", message: `Removal cancelled for ${providerInstanceLabel}. Local settings are unchanged.` });
     removeButtonRef.current?.focus();
   };
 
-  const confirmRemove = (): void => {
+  const focusRemovalFallback = (): void => {
+    window.requestAnimationFrame(() => {
+      const fallback = document.querySelector<HTMLElement>("#settings-active-category-panel, [data-settings-provider-action-fallback], main, #root");
+      if (fallback) {
+        if (fallback.tabIndex < 0) {
+          fallback.tabIndex = -1;
+        }
+        fallback.focus({ preventScroll: true });
+      }
+    });
+  };
+
+  const confirmRemove = async (): Promise<void> => {
+    if (removePending) {
+      return;
+    }
+    setRemovePending(true);
+    setFeedback({ tone: "warning", message: `Removing ${providerInstanceLabel} locally. Current settings remain visible until the provider list updates.` });
     try {
-      onRemove?.();
+      await onRemove?.();
       setFeedback({ tone: "success", message: `${providerInstanceLabel} removed locally. Save changes to persist it.` });
+      focusRemovalFallback();
     } catch (removeError) {
       setFeedback({
         tone: "error",
         message: removeError instanceof Error ? removeError.message : "Provider instance could not be removed.",
       });
+      setRemovePending(false);
+      removeButtonRef.current?.focus();
     }
   };
 
-  const feedbackClass = feedback?.tone === "error"
-    ? "border-status-red/25 bg-status-red/[0.08] text-status-red"
+  const feedbackStatus = feedback?.tone === "error"
+    ? "error"
     : feedback?.tone === "success"
-      ? "border-status-green/25 bg-status-green/[0.08] text-status-green"
-      : "border-amber-500/25 bg-amber-500/[0.1] text-amber-700 dark:text-amber-200";
+      ? "success"
+      : removePending
+        ? "pending"
+        : "warning";
 
   return (
     <section
@@ -184,11 +215,13 @@ export const ProviderInstanceCard: FunctionComponent<{
             <button
               ref={removeButtonRef}
               type="button"
+              disabled={removePending}
               onClick={armRemove}
               aria-label={`Remove ${providerInstanceLabel}`}
               aria-describedby={feedback ? feedbackId : undefined}
               aria-pressed={removeArmed}
-              className="inline-flex items-center gap-2 rounded-full border border-status-red/20 bg-status-red/[0.06] px-3 py-1.5 text-[11px] font-bold uppercase tracking-[0.14em] text-status-red hover:bg-status-red/[0.1] focus:outline-none focus-visible:ring-2 focus-visible:ring-status-red/60 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-void-900"
+              aria-busy={removePending ? "true" : undefined}
+              className="inline-flex items-center gap-2 rounded-full border border-status-red/20 bg-status-red/[0.06] px-3 py-1.5 text-[11px] font-bold uppercase tracking-[0.14em] text-status-red hover:bg-status-red/[0.1] focus:outline-none focus-visible:ring-2 focus-visible:ring-status-red/60 focus-visible:ring-offset-2 focus-visible:ring-offset-white disabled:cursor-not-allowed disabled:opacity-60 dark:focus-visible:ring-offset-void-900"
             >
               <Trash2 className="h-3.5 w-3.5" />
               Remove
@@ -198,13 +231,12 @@ export const ProviderInstanceCard: FunctionComponent<{
       </div>
 
       {feedback ? (
-        <div
-          id={feedbackId}
-          role={feedback.tone === "error" ? "alert" : "status"}
-          aria-live={feedback.tone === "error" ? "assertive" : "polite"}
-          className={`rounded-xl border px-3 py-2 text-xs font-semibold ${feedbackClass}`}
-        >
-          {feedback.message}
+        <div id={feedbackId}>
+          <ActionFeedbackRegion
+            status={feedbackStatus}
+            message={feedback.message}
+            autoDismiss={false}
+          />
         </div>
       ) : null}
 
@@ -226,19 +258,22 @@ export const ProviderInstanceCard: FunctionComponent<{
               <button
                 ref={cancelRemoveButtonRef}
                 type="button"
+                disabled={removePending}
                 onClick={cancelRemove}
-                className="inline-flex items-center gap-2 rounded-xl border border-black/[0.08] bg-white px-3 py-2 text-xs font-bold text-slate-600 hover:bg-black/[0.035] focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:border-white/[0.12] dark:bg-white/[0.08] dark:text-slate-100 dark:hover:bg-white/[0.12] dark:focus-visible:ring-offset-void-900"
+                className="inline-flex items-center gap-2 rounded-xl border border-black/[0.08] bg-white px-3 py-2 text-xs font-bold text-slate-600 hover:bg-black/[0.035] focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/[0.12] dark:bg-white/[0.08] dark:text-slate-100 dark:hover:bg-white/[0.12] dark:focus-visible:ring-offset-void-900"
               >
                 <X className="h-3.5 w-3.5" />
                 Cancel
               </button>
               <button
                 type="button"
-                onClick={confirmRemove}
-                className="inline-flex items-center gap-2 rounded-xl bg-status-red px-3 py-2 text-xs font-black text-white hover:brightness-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-status-red/60 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-void-900"
+                disabled={removePending}
+                aria-busy={removePending ? "true" : undefined}
+                onClick={() => { void confirmRemove(); }}
+                className="inline-flex items-center gap-2 rounded-xl bg-status-red px-3 py-2 text-xs font-black text-white hover:brightness-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-status-red/60 focus-visible:ring-offset-2 focus-visible:ring-offset-white disabled:cursor-not-allowed disabled:opacity-70 dark:focus-visible:ring-offset-void-900"
               >
                 <Check className="h-3.5 w-3.5" />
-                Confirm remove
+                {removePending ? "Removing" : `Confirm remove ${providerInstanceLabel}`}
               </button>
             </div>
           </div>
@@ -288,7 +323,7 @@ export const ProviderInstanceCard: FunctionComponent<{
               aria-expanded={showLoginModal}
               aria-busy={showLoginModal}
               aria-describedby={feedback ? feedbackId : undefined}
-              className="group inline-flex items-center gap-2 rounded-xl bg-signal-500 px-4 py-2.5 text-xs font-bold text-void-950 hover:bg-signal-400 transition-colors shadow-lg active:scale-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-void-900"
+              className="group inline-flex items-center gap-2 rounded-xl bg-signal-500 px-4 py-2.5 text-xs font-bold text-white dark:text-void-950 hover:bg-signal-400 transition-colors shadow-lg active:scale-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-void-900"
             >
               <Terminal className="h-3.5 w-3.5" />
               Connect & Login

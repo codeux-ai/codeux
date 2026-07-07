@@ -76,6 +76,7 @@ const mocks = vi.hoisted(() => {
     data: { ...baseData } as any,
     restartExecutionInvocation: vi.fn(),
     cancelExecutionInvocation: vi.fn(),
+    resetInvocationUsageLimitTimer: vi.fn(),
     reducedMotion: { value: false },
   };
 });
@@ -94,6 +95,7 @@ vi.mock('../../../hooks/use-chat-page-data.js', () => ({
 vi.mock('../../../lib/invocation-api.js', () => ({
   restartExecutionInvocation: mocks.restartExecutionInvocation,
   cancelExecutionInvocation: mocks.cancelExecutionInvocation,
+  resetInvocationUsageLimitTimer: mocks.resetInvocationUsageLimitTimer,
 }));
 
 vi.mock('../../../hooks/use-reduced-motion.js', () => ({

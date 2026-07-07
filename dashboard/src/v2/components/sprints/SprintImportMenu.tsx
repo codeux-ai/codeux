@@ -109,7 +109,7 @@ export const SprintImportMenu = ({
   }, [isOpen, updateMenuPosition]);
 
   return (
-    <div className="relative inline-block" ref={containerRef}>
+    <div className="relative inline-block w-full sm:w-auto" ref={containerRef}>
       <button
         ref={triggerRef}
         type="button"
@@ -118,7 +118,7 @@ export const SprintImportMenu = ({
         aria-haspopup="menu"
         aria-expanded={isOpen}
         aria-controls={isOpen ? menuId : undefined}
-        className="inline-flex items-center gap-2 rounded-full border border-black/[0.06] bg-white/72 px-4 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500 transition-colors hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-400 dark:hover:text-white"
+        className="inline-flex w-full items-center justify-center gap-2 rounded-full border border-black/[0.06] bg-white/72 px-3 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500 transition-colors hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-400 dark:hover:text-white sm:w-auto sm:px-4"
       >
         <Download className="h-3.5 w-3.5" strokeWidth={2.2} />
         Import

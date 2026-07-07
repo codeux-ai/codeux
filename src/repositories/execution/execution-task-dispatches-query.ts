@@ -2,6 +2,8 @@ import type { DatabaseAdapter } from "../db/database-adapter.js";
 import type { AppDbStorage } from "../app-db-storage.js";
 import type { ExecutionTaskDispatchSummaryRow } from "./execution-repository-types.js";
 
+const EXPANDED_DISPATCHES_PER_RUN_LIMIT = 120;
+
 function executionTaskDispatchStatusRank(status: string): number {
   switch (status) {
     case "running":
@@ -74,6 +76,8 @@ export function queryExecutionTaskDispatches(
   projectId: string,
   expandedSprintRunIds: string[]
 ): ExecutionTaskDispatchSummaryRow[] {
+  const uniqueExpandedSprintRunIds = [...new Set(expandedSprintRunIds)];
+
   // Collapse to the single most-recent dispatch per task before applying the
   // status-rank ordering and cap. A task only ever has one *current* dispatch;
   // keeping older ones lets a stale terminal dispatch (e.g. a FAILED attempt that
@@ -132,9 +136,10 @@ export function queryExecutionTaskDispatches(
     LIMIT 24
   `).all(projectId) as unknown as ExecutionTaskDispatchSummaryRow[];
 
-  const expandedSprintTaskDispatches = expandedSprintRunIds.length > 0
+  const expandedSprintTaskDispatches = uniqueExpandedSprintRunIds.length > 0
     ? storage.executeChunkedInQuery<ExecutionTaskDispatchSummaryRow>({
       sqlPrefix: `
+      SELECT * FROM (
       SELECT
         td.id,
         td.project_id,
@@ -161,7 +166,15 @@ export function queryExecutionTaskDispatches(
         td.last_heartbeat_at,
         td.error_message,
         el.owner_key AS active_lease_owner_key,
-        el.expires_at AS active_lease_expires_at
+        el.expires_at AS active_lease_expires_at,
+        ROW_NUMBER() OVER (
+          PARTITION BY td.sprint_run_id
+          ORDER BY
+            CASE td.status WHEN 'running' THEN 0 WHEN 'cancel_requested' THEN 1 WHEN 'claimed' THEN 2 WHEN 'queued' THEN 3 WHEN 'blocked' THEN 4 WHEN 'failed' THEN 5 WHEN 'completed' THEN 6 ELSE 7 END,
+            td.priority DESC,
+            COALESCE(td.last_heartbeat_at, td.started_at, td.claimed_at, td.queued_at) DESC,
+            td.id DESC
+        ) AS run_dispatch_rank
       FROM task_dispatches td
       INNER JOIN sprints s ON s.id = td.sprint_id
       INNER JOIN tasks t ON t.id = td.task_id
@@ -171,8 +184,10 @@ export function queryExecutionTaskDispatches(
        AND el.scope_id = td.id
       WHERE td.project_id = ?
         AND td.sprint_run_id`,
-      sqlSuffix: "",
-      items: expandedSprintRunIds,
+      sqlSuffix: `
+      ) ranked
+      WHERE ranked.run_dispatch_rank <= ${EXPANDED_DISPATCHES_PER_RUN_LIMIT}`,
+      items: uniqueExpandedSprintRunIds,
       bindParamsBefore: [projectId],
     })
     : [];

@@ -9,6 +9,7 @@ import { fileURLToPath } from "url";
 import type {
   CliWorkflowSettings,
   SprintPreviewScript,
+  SprintPreviewPortMapping,
   SprintPreviewSession,
   SprintPreviewSettings,
 } from "../contracts/app-types.js";
@@ -16,9 +17,10 @@ import type { ExecutionRepository } from "../repositories/execution-repository.j
 import type { ProjectManagementRepository } from "../repositories/project-management-repository.js";
 import type { SettingsRepository } from "../repositories/settings-repository.js";
 import { SprintPreviewRepository } from "../repositories/sprint-preview-repository.js";
+import { EntityNotFoundError } from "../repositories/repository-utils.js";
 import { DockerBootstrapBuilder } from "../infrastructure/providers/cli/docker-bootstrap-builder.js";
 import { DockerCredentialMountBuilder } from "../infrastructure/providers/cli/docker-credential-mount-builder.js";
-import { DockerSetupImageCache } from "../infrastructure/providers/cli/docker-setup-image-cache.js";
+import { DockerSetupImageCache, type DockerSetupImageCacheProgress } from "../infrastructure/providers/cli/docker-setup-image-cache.js";
 import { resolveDockerRuntimeRoot } from "../infrastructure/providers/cli/docker-runtime-paths.js";
 import { formatSprintBranch } from "../domain/sprint/branch-name-generator.js";
 import { runCommandStrict } from "./cli-process-runner.js";
@@ -97,6 +99,11 @@ export class SprintPreviewService {
     return session ? await this.refreshRuntimeState(session) : null;
   }
 
+  async getSessionForProjectSprint(projectId: string, sprintId: string, sessionId: string): Promise<SprintPreviewSession> {
+    const session = await this.requireScopedSession(projectId, sprintId, sessionId);
+    return await this.refreshRuntimeState(session);
+  }
+
   async startSession(projectId: string, sprintId: string, options?: { rebuild?: boolean }): Promise<SprintPreviewSession> {
     return await this.lifecycle.withSessionLock(this.buildSessionLockKey(projectId, sprintId), async () => {
       const project = this.requireProject(projectId);
@@ -145,13 +152,20 @@ export class SprintPreviewService {
 
       await this.enforceMaxConcurrentContainers(projectId, settings.maxConcurrentContainers, existing?.id || null);
 
-      const hostPort = existing?.hostPort || await this.findFreePort(settings);
+      const portMappings = await this.allocatePortMappings(settings, existing);
+      const primaryPortMapping = this.getPrimaryPortMapping(portMappings);
+      const hostPort = primaryPortMapping.hostPort;
+      if (hostPort === null) {
+        throw new Error("Preview session did not receive an assigned host port.");
+      }
 
       const session = existing || this.deps.sprintPreviewRepository.createSession({
         projectId,
         sprintId,
         status: "starting",
         containerAppPort: settings.containerAppPort,
+        hostPort,
+        portMappings,
         startupScriptPath: preparedScript.scriptPath,
         startupMode: preparedScript.mode,
         installCommand: effectiveInstallCommand,
@@ -166,6 +180,7 @@ export class SprintPreviewService {
         status: "starting" as const,
         hostPort,
         containerAppPort: settings.containerAppPort,
+        portMappings,
         startupScriptPath: preparedScript.scriptPath,
         startupMode: preparedScript.mode,
         installCommand: effectiveInstallCommand,
@@ -234,6 +249,16 @@ export class SprintPreviewService {
               message,
             });
           },
+          onProgress: (progress: DockerSetupImageCacheProgress) => {
+            this.deps.logger?.info("Sprint preview setup image progress", {
+              projectId,
+              sprintId,
+              kind: progress.kind,
+              progressPercent: progress.progressPercent,
+              stepText: progress.stepText,
+              imageTag: progress.imageTag,
+            });
+          },
           mapSourcePathForDaemon: (sourcePath) => this.mapDockerSourcePathForDaemon(sourcePath, project.baseDir),
         });
         const shouldRunSetupScriptAtRuntime = false;
@@ -270,6 +295,7 @@ export class SprintPreviewService {
               containerName,
               hostPort,
               containerAppPort: settings.containerAppPort,
+              portMappings,
               containerWorkspacePath,
               containerRuntimeHome,
               volumeName,
@@ -325,6 +351,7 @@ export class SprintPreviewService {
           ...sessionBasePatch,
           status: "error",
           hostPort: null,
+          portMappings: this.clearPortMappingHostPorts(portMappings),
           containerId: null,
           containerName: null,
           healthStatus: "unreachable",
@@ -417,6 +444,9 @@ export class SprintPreviewService {
       }
       this.deps.sprintPreviewRepository.updateSession(session.id, {
         status: "stopped",
+        hostPort: session.hostPort,
+        containerAppPort: session.containerAppPort,
+        portMappings: this.getEffectivePortMappings(session),
         containerId: null,
         containerName: null,
         healthStatus: "unknown",
@@ -439,6 +469,11 @@ export class SprintPreviewService {
     return await this.startSession(session.projectId, session.sprintId, { rebuild: true });
   }
 
+  async rebuildSessionForProjectSprint(projectId: string, sprintId: string, sessionId: string): Promise<SprintPreviewSession> {
+    await this.requireScopedSession(projectId, sprintId, sessionId);
+    return await this.startSession(projectId, sprintId, { rebuild: true });
+  }
+
   async stopSession(sessionId: string): Promise<SprintPreviewSession> {
     const session = await this.requireSession(sessionId);
     return await this.lifecycle.withSessionLock(this.buildSessionLockKey(session.projectId, session.sprintId), async () => {
@@ -446,6 +481,9 @@ export class SprintPreviewService {
       await this.lifecycle.removeContainerIfPresent(containerRef, process.cwd());
       return this.deps.sprintPreviewRepository.updateSession(sessionId, {
         status: "stopped",
+        hostPort: session.hostPort,
+        containerAppPort: session.containerAppPort,
+        portMappings: this.getEffectivePortMappings(session),
         containerId: null,
         containerName: null,
         healthStatus: "unknown",
@@ -453,6 +491,11 @@ export class SprintPreviewService {
         lastStoppedAt: new Date().toISOString(),
       });
     });
+  }
+
+  async stopSessionForProjectSprint(projectId: string, sprintId: string, sessionId: string): Promise<SprintPreviewSession> {
+    await this.requireScopedSession(projectId, sprintId, sessionId);
+    return await this.stopSession(sessionId);
   }
 
   async removeSession(sessionId: string): Promise<void> {
@@ -463,6 +506,11 @@ export class SprintPreviewService {
       await this.removeSprintVolume(session.sprintId);
       this.deps.sprintPreviewRepository.deleteSession(sessionId);
     });
+  }
+
+  async removeSessionForProjectSprint(projectId: string, sprintId: string, sessionId: string): Promise<void> {
+    await this.requireScopedSession(projectId, sprintId, sessionId);
+    await this.removeSession(sessionId);
   }
 
   async getLogs(sessionId: string, tail = 200): Promise<{ logs: string }> {
@@ -483,6 +531,11 @@ export class SprintPreviewService {
       const message = error instanceof Error ? error.message : String(error);
       return { logs: message };
     }
+  }
+
+  async getLogsForProjectSprint(projectId: string, sprintId: string, sessionId: string, tail = 200): Promise<{ logs: string }> {
+    await this.requireScopedSession(projectId, sprintId, sessionId);
+    return await this.getLogs(sessionId, tail);
   }
 
   async getScript(projectId: string, sprintId: string): Promise<SprintPreviewScript> {
@@ -534,6 +587,7 @@ export class SprintPreviewService {
     path: string;
     headers?: Record<string, string | undefined>;
     body?: Buffer;
+    selectedPort?: string | number | null;
   }): Promise<SprintPreviewProxyResponse> {
     if (args.body && args.body.length > 5 * 1024 * 1024) {
       throw new Error("Request body exceeds maximum allowed size for proxied preview");
@@ -543,13 +597,17 @@ export class SprintPreviewService {
     if (!refreshed.hostPort) {
       throw new Error("Preview session does not have an active host port.");
     }
+    const selectedMapping = this.resolveSelectedPortMapping(refreshed, args.selectedPort);
+    if (!selectedMapping.hostPort) {
+      throw new Error("Selected preview port is not active for this session.");
+    }
 
-    const upstreamUrl = new URL(normalizePreviewPath(args.path), `http://127.0.0.1:${refreshed.hostPort}`);
+    const upstreamUrl = new URL(normalizePreviewPath(args.path), `http://127.0.0.1:${selectedMapping.hostPort}`);
     let response: Response;
     try {
       response = await fetch(upstreamUrl, {
         method: args.method,
-        headers: this.buildProxyHeaders(args.headers),
+        headers: this.buildProxyHeaders(args.headers, upstreamUrl.origin),
         body: args.body && args.body.length > 0 ? new Uint8Array(args.body) : undefined,
         redirect: "manual",
       });
@@ -567,7 +625,7 @@ export class SprintPreviewService {
     const rewritePrefix = `/api/browser/sessions/${refreshed.id}/proxy`;
     const responseHeaders: Record<string, string> = {};
     response.headers.forEach((value, key) => {
-      if (key.toLowerCase() === "set-cookie") {
+      if (this.shouldStripProxyResponseHeader(key)) {
         return;
       }
       if (key.toLowerCase() === "location") {
@@ -615,6 +673,18 @@ export class SprintPreviewService {
       headers: responseHeaders,
       body: rewrittenBody,
     };
+  }
+
+  async proxyRequestForProjectSprint(projectId: string, sprintId: string, args: {
+    sessionId: string;
+    method: string;
+    path: string;
+    headers?: Record<string, string | undefined>;
+    body?: Buffer;
+    selectedPort?: string | number | null;
+  }): Promise<SprintPreviewProxyResponse> {
+    await this.requireScopedSession(projectId, sprintId, args.sessionId);
+    return await this.proxyRequest(args);
   }
 
   async reconcileSessions(): Promise<void> {
@@ -766,7 +836,9 @@ export class SprintPreviewService {
       });
     }
 
-    const hostPort = session.hostPort || container.hostPort || null;
+    const portMappings = this.mergeContainerHostPort(this.getEffectivePortMappings(session), container.hostPort || null);
+    const primaryMapping = this.getPrimaryPortMapping(portMappings);
+    const hostPort = primaryMapping.hostPort;
 
     const adoptedSession = session.containerId === container.id && session.containerName === container.name && session.hostPort === hostPort
       ? session
@@ -774,6 +846,8 @@ export class SprintPreviewService {
         containerId: container.id,
         containerName: container.name,
         hostPort,
+        containerAppPort: primaryMapping.containerPort,
+        portMappings,
       });
 
     if (container.status !== "running") {
@@ -794,7 +868,7 @@ export class SprintPreviewService {
     });
   }
 
-  private buildProxyHeaders(headers: Record<string, string | undefined> = {}): Record<string, string> {
+  private buildProxyHeaders(headers: Record<string, string | undefined> = {}, upstreamOrigin: string): Record<string, string> {
     const next: Record<string, string> = {};
     const stripList = ["authorization", "cookie", "set-cookie", "connection", "upgrade", "transfer-encoding", "host", "content-length", "accept-encoding"];
     for (const [key, value] of Object.entries(headers)) {
@@ -803,9 +877,39 @@ export class SprintPreviewService {
       if (stripList.includes(normalized) || normalized.startsWith("proxy-") || normalized.startsWith("x-code-ux-")) {
         continue;
       }
+      if (normalized === "origin") {
+        next[key] = upstreamOrigin;
+        continue;
+      }
+      if (normalized === "referer") {
+        next[key] = this.normalizeProxyRefererHeader(value, upstreamOrigin);
+        continue;
+      }
+      if (normalized === "sec-fetch-site") {
+        next[key] = "same-origin";
+        continue;
+      }
       next[key] = value;
     }
     return next;
+  }
+
+  private normalizeProxyRefererHeader(value: string, upstreamOrigin: string): string {
+    try {
+      const refererUrl = new URL(value);
+      return `${upstreamOrigin}${refererUrl.pathname}${refererUrl.search}${refererUrl.hash}`;
+    } catch {
+      return upstreamOrigin;
+    }
+  }
+
+  private shouldStripProxyResponseHeader(headerName: string): boolean {
+    return [
+      "set-cookie",
+      "content-security-policy",
+      "content-security-policy-report-only",
+      "x-frame-options",
+    ].includes(headerName.toLowerCase());
   }
 
   private shouldRewriteBody(contentType: string): boolean {
@@ -1282,9 +1386,17 @@ export class SprintPreviewService {
   private async requireSession(sessionId: string): Promise<SprintPreviewSession> {
     const session = await this.getSession(sessionId);
     if (!session) {
-      throw new Error(`Sprint preview session not found: ${sessionId}`);
+      throw new EntityNotFoundError("Sprint preview session not found.");
     }
     return session;
+  }
+
+  private async requireScopedSession(projectId: string, sprintId: string, sessionId: string): Promise<SprintPreviewSession> {
+    const session = this.deps.sprintPreviewRepository.getSessionForProjectSprint(projectId, sprintId, sessionId);
+    if (!session) {
+      throw new EntityNotFoundError("Sprint preview session not found.");
+    }
+    return await this.refreshRuntimeState(session);
   }
 
   private resolveSettings(projectId: string, sprintId: string) {
@@ -1311,13 +1423,125 @@ export class SprintPreviewService {
     });
   }
 
-  private async findFreePort(settings: SprintPreviewSettings): Promise<number> {
-    const candidates: number[] = [];
-    for (let port = settings.hostPortRangeStart; port <= settings.hostPortRangeEnd; port += 1) {
-      candidates.push(port);
+  private getOrderedContainerPorts(settings: SprintPreviewSettings): number[] {
+    const ports = [
+      settings.containerAppPort,
+      ...settings.containerAppPorts,
+    ].filter((port) => Number.isInteger(port) && port >= 1 && port <= 65535);
+    return [...new Set(ports)];
+  }
+
+  private async allocatePortMappings(
+    settings: SprintPreviewSettings,
+    existing?: SprintPreviewSession | null,
+  ): Promise<SprintPreviewPortMapping[]> {
+    const containerPorts = this.getOrderedContainerPorts(settings);
+    const usedHostPorts = new Set<number>();
+    const existingByContainerPort = new Map(
+      this.getEffectivePortMappings(existing)
+        .filter((mapping) => mapping.hostPort !== null)
+        .map((mapping) => [mapping.containerPort, mapping.hostPort as number]),
+    );
+    const mappings: SprintPreviewPortMapping[] = [];
+
+    for (const [index, containerPort] of containerPorts.entries()) {
+      const preservedHostPort = existingByContainerPort.get(containerPort);
+      const validPreservedHostPort = preservedHostPort !== undefined
+        && preservedHostPort >= settings.hostPortRangeStart
+        && preservedHostPort <= settings.hostPortRangeEnd
+        && !usedHostPorts.has(preservedHostPort);
+      const preservedPortAvailable = validPreservedHostPort
+        ? await this.checkPortAvailable(preservedHostPort)
+        : false;
+      const existingContainerMayOwnPort = Boolean(existing?.containerId || existing?.containerName);
+      const canPreserve = validPreservedHostPort
+        && (preservedPortAvailable || existingContainerMayOwnPort);
+      const hostPort = canPreserve
+        ? preservedHostPort
+        : await this.findFreePort(settings, usedHostPorts);
+
+      usedHostPorts.add(hostPort);
+      mappings.push({
+        containerPort,
+        hostPort,
+        ...(index === 0 ? { isPrimary: true } : {}),
+      });
     }
-    const randomized = candidates.sort(() => Math.random() - 0.5);
-    for (const port of randomized) {
+
+    return mappings;
+  }
+
+  private clearPortMappingHostPorts(mappings: SprintPreviewPortMapping[]): SprintPreviewPortMapping[] {
+    return mappings.map((mapping) => ({
+      ...mapping,
+      hostPort: null,
+    }));
+  }
+
+  private mergeContainerHostPort(
+    mappings: SprintPreviewPortMapping[],
+    containerHostPort: number | null,
+  ): SprintPreviewPortMapping[] {
+    if (!containerHostPort || mappings.some((mapping) => mapping.isPrimary === true && mapping.hostPort)) {
+      return mappings;
+    }
+    return mappings.map((mapping, index) => index === 0
+      ? { ...mapping, hostPort: containerHostPort, isPrimary: true }
+      : mapping);
+  }
+
+  private getPrimaryPortMapping(mappings: SprintPreviewPortMapping[]): SprintPreviewPortMapping {
+    return mappings.find((mapping) => mapping.isPrimary === true) ?? mappings[0] ?? {
+      containerPort: 3000,
+      hostPort: null,
+      isPrimary: true,
+    };
+  }
+
+  private getEffectivePortMappings(session: Pick<SprintPreviewSession, "containerAppPort" | "hostPort" | "portMappings"> | null | undefined): SprintPreviewPortMapping[] {
+    if (session && Array.isArray(session.portMappings) && session.portMappings.length > 0) {
+      return session.portMappings;
+    }
+    if (!session) {
+      return [];
+    }
+    return [{
+      containerPort: session.containerAppPort,
+      hostPort: session.hostPort,
+      isPrimary: true,
+    }];
+  }
+
+  private resolveSelectedPortMapping(
+    session: SprintPreviewSession,
+    selectedPort?: string | number | null,
+  ): SprintPreviewPortMapping {
+    const portMappings = this.getEffectivePortMappings(session);
+    const primary = this.getPrimaryPortMapping(portMappings);
+    if (selectedPort === undefined || selectedPort === null || selectedPort === "") {
+      return primary;
+    }
+    const parsedPort = typeof selectedPort === "number"
+      ? selectedPort
+      : Number.parseInt(selectedPort, 10);
+    const normalizedPort = typeof selectedPort === "string" ? selectedPort.trim() : String(selectedPort);
+    if (!/^\d+$/.test(normalizedPort) || !Number.isInteger(parsedPort) || parsedPort < 1 || parsedPort > 65535) {
+      throw new Error("Selected preview port is invalid.");
+    }
+    const mapping = portMappings.find((candidate) =>
+      candidate.containerPort === parsedPort || candidate.hostPort === parsedPort
+    );
+    if (!mapping) {
+      throw new Error("Selected preview port is not available for this session.");
+    }
+    return mapping;
+  }
+
+  private async findFreePort(settings: SprintPreviewSettings, excludedPorts = new Set<number>()): Promise<number> {
+    for (let port = settings.hostPortRangeStart; port <= settings.hostPortRangeEnd; port += 1) {
+      if (excludedPorts.has(port)) {
+        continue;
+      }
       const available = await this.checkPortAvailable(port);
       if (available) {
         return port;

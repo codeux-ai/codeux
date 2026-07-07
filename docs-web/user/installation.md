@@ -1,14 +1,14 @@
 # Installation
 
-Code UX runs entirely on your machine. You can install it as a **desktop app** or as the
-**`@codeuxai/codeux` npm CLI** — both ship the same runtime, dashboard, and MCP server. You can
+Code UX runs entirely on your machine. You can install it as a **desktop app** or build it from
+**source** — both ship the same runtime, dashboard, and MCP server. You can
 install and start Code UX with **no configuration**; providers are set up later from the dashboard.
 
 ## Prerequisites
 
 | Requirement | Needed for | Notes |
 | --- | --- | --- |
-| **Node.js 22+** | npm CLI and source installs | Not required for the desktop app, which bundles its own runtime. |
+| **Node.js 22+** | Source installs | Not required for the desktop app, which bundles its own runtime. |
 | **Docker** | Containerized (default) execution and preview containers | Recommended. Without it, run providers in host mode. |
 | **Git ≥ 2.30** | All project work | Code UX manages branches, worktrees, and merges. |
 | **An agent provider** | Dispatching work | At least one of Jules, Claude Code, Codex, Gemini, Qwen Code, OpenCode, or Antigravity. See [Providers and models](./providers-and-models.md). |
@@ -31,24 +31,7 @@ Download the latest installer for your platform from
 
 The desktop app launches the runtime and opens the dashboard automatically.
 
-## Option 2 — npm CLI
-
-Install globally:
-
-```bash
-npm i -g @codeuxai/codeux
-```
-
-This installs the `codeux` command — the orchestration server, dashboard, and MCP server. Start it:
-
-```bash
-codeux
-```
-
-Then open the dashboard at **`http://localhost:4444`**. Prefer not to install globally? Run it on
-demand with `npx -y @codeuxai/codeux` (this is also how most MCP clients launch it).
-
-## Option 3 — From source
+## Option 2 — From source
 
 Use a source build to develop Code UX itself or inspect the runtime. Requires Node.js 22+ and
 pnpm 10.33+.
@@ -68,7 +51,7 @@ See [Building from source](../developer/building-from-source.md) for the full de
 When Code UX starts it:
 
 1. Serves the dashboard at `http://localhost:4444`.
-2. Exposes an **MCP server** (over stdio, plus an optional HTTPS worker gateway).
+2. Exposes an **MCP server** (over stdio, plus an authenticated Streamable HTTP gateway).
 3. Loads any settings it finds, then waits for you to add a project and configure providers.
 
 Nothing is required to reach this point — no API keys, no environment variables. Configure providers
@@ -83,11 +66,11 @@ Run `codeux --help` for the authoritative list. The current flags are:
 | `--api-key VALUE` | Set the Jules API key (overrides env and settings). |
 | `--runtime-role VALUE` | Runtime role: `project_manager` (default) or `worker-host`. |
 | `--headless` (alias `--no-dashboard`) | Start MCP-only without binding the dashboard. |
-| `--mcp-https` / `--no-mcp-https` | Enable/disable the remote MCP HTTPS worker gateway (**enabled by default**). |
-| `--mcp-https-port N` | Port for the MCP HTTPS worker gateway. |
-| `--mcp-https-host H` | Host/interface for the MCP HTTPS worker gateway. |
-| `--mcp-https-path P` | Path for the MCP HTTPS worker gateway (default `/mcp`). |
-| `--mcp-https-auth-token VALUE` | Bearer token required for MCP HTTPS requests on a non-loopback host. |
+| `--mcp-https` / `--no-mcp-https` | Enable/disable the MCP Streamable HTTP gateway (**enabled by default**; legacy flag name). |
+| `--mcp-https-port N` | Port for the MCP HTTP gateway. |
+| `--mcp-https-host H` | Host/interface for the MCP HTTP gateway. |
+| `--mcp-https-path P` | Path for the MCP HTTP gateway (default `/mcp`). |
+| `--mcp-https-auth-token VALUE` | Bearer token for MCP HTTP requests; overrides the generated user token. |
 | `--help`, `-h` | Show help. |
 
 ## Environment variables
@@ -96,11 +79,11 @@ Run `codeux --help` for the authoritative list. The current flags are:
 | --- | --- |
 | `JULES_API_KEY` | Jules API key (also accepted as `JULES_KEY`). |
 | `DASHBOARD_PORT` | Dashboard port (default `4444`). |
-| `MCP_HTTPS_ENABLED` | Enable the MCP HTTPS worker gateway (default `true`). |
-| `MCP_HTTPS_PORT` | Port for the MCP HTTPS worker gateway. |
-| `MCP_HTTPS_HOST` | Host/interface for the MCP HTTPS worker gateway. |
-| `MCP_HTTPS_PATH` | Path for the MCP HTTPS worker gateway. |
-| `MCP_HTTPS_AUTH_TOKEN` | Bearer token for MCP HTTPS requests. |
+| `MCP_HTTPS_ENABLED` | Enable the MCP HTTP gateway (default `true`). |
+| `MCP_HTTPS_PORT` | Port for the MCP HTTP gateway. |
+| `MCP_HTTPS_HOST` | Host/interface for the MCP HTTP gateway. |
+| `MCP_HTTPS_PATH` | Path for the MCP HTTP gateway. |
+| `MCP_HTTPS_AUTH_TOKEN` | Bearer token for MCP HTTP requests; if unset, Code UX creates `~/.code-ux/security.json`. |
 
 A project-local `.env` file is read on startup, so you can keep settings per repository:
 
@@ -149,8 +132,10 @@ See [Configuration](../developer/configuration.md) for the full search path and 
 ## Updating
 
 ```bash
-# npm
-npm update -g @codeuxai/codeux
+# source
+git pull
+pnpm install
+pnpm run build
 
 # desktop app
 # download and run the latest installer from GitHub Releases
@@ -159,9 +144,9 @@ npm update -g @codeuxai/codeux
 ## Uninstall
 
 ```bash
-npm uninstall -g @codeuxai/codeux
+# source
 rm -rf ~/.code-ux
 ```
 
-This removes the global CLI and home-directory settings. Project-local `.code-ux/` directories are
+This removes the home-directory settings. Project-local `.code-ux/` directories are
 left in place — remove them per project if you no longer need them.

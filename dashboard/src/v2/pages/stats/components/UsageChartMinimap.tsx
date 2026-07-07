@@ -17,8 +17,9 @@ export const UsageChartMinimap: FunctionComponent<{
   buckets: ExecutionUsageBucketSummary[];
   zoomRange: ChartZoomRange | null;
   onZoomChange: (range: ChartZoomRange | null) => void;
+  onStatusChange?: (message: string) => void;
   accentHex?: string;
-}> = ({ buckets, zoomRange, onZoomChange, accentHex = "#00E0A0" }) => {
+}> = ({ buckets, zoomRange, onZoomChange, onStatusChange, accentHex = "var(--stats-accent-signal)" }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const [dragStart, setDragStart] = useState<number | null>(null);
   const [dragCurrent, setDragCurrent] = useState<number | null>(null);
@@ -40,6 +41,12 @@ export const UsageChartMinimap: FunctionComponent<{
     lastIndex <= 0
       ? MINIMAP_PADDING
       : MINIMAP_PADDING + (index / lastIndex) * (MINIMAP_WIDTH - MINIMAP_PADDING * 2);
+
+  const describeRange = (start: number, end: number): string => {
+    const startLabel = buckets[start]?.label ?? `bucket ${start + 1}`;
+    const endLabel = buckets[end]?.label ?? `bucket ${end + 1}`;
+    return `Zoomed overview to ${startLabel} through ${endLabel}, ${end - start + 1} of ${buckets.length} buckets.`;
+  };
 
   const clientXToIndex = (clientX: number): number => {
     const rect = containerRef.current?.getBoundingClientRect();
@@ -84,9 +91,11 @@ export const UsageChartMinimap: FunctionComponent<{
     setDragCurrent(null);
     if (end - start >= 1 && !(start === 0 && end === lastIndex)) {
       onZoomChange({ start, end });
+      onStatusChange?.(describeRange(start, end));
     } else if (start === end) {
       // A simple click clears the zoom and restores the full window.
       onZoomChange(null);
+      onStatusChange?.(`Zoom reset to the full ${buckets.length}-bucket range.`);
     }
   };
 
@@ -95,6 +104,7 @@ export const UsageChartMinimap: FunctionComponent<{
       if (event.key === "Escape" || event.key === "Enter" || event.key === " ") {
         event.preventDefault();
         onZoomChange(null);
+        onStatusChange?.('Single-bucket view. Zoom is unavailable until more buckets exist.');
       }
       return;
     }
@@ -102,6 +112,7 @@ export const UsageChartMinimap: FunctionComponent<{
     if (event.key === "Escape") {
       event.preventDefault();
       onZoomChange(null);
+      onStatusChange?.(`Zoom reset to the full ${buckets.length}-bucket range.`);
       return;
     }
 
@@ -109,6 +120,7 @@ export const UsageChartMinimap: FunctionComponent<{
       if (event.key === "Enter" || event.key === " ") {
         event.preventDefault();
         onZoomChange({ start: 0, end: lastIndex });
+        onStatusChange?.(`Pinned overview to the full ${buckets.length}-bucket range.`);
       }
       return;
     }
@@ -117,6 +129,7 @@ export const UsageChartMinimap: FunctionComponent<{
     const moveRange = (delta: number) => {
       const nextStart = Math.max(0, Math.min(lastIndex - span, zoomRange.start + delta));
       onZoomChange({ start: nextStart, end: nextStart + span });
+      onStatusChange?.(describeRange(nextStart, nextStart + span));
     };
 
     if (event.key === "ArrowLeft") {
@@ -128,9 +141,11 @@ export const UsageChartMinimap: FunctionComponent<{
     } else if (event.key === "Home") {
       event.preventDefault();
       onZoomChange({ start: 0, end: Math.min(lastIndex, span) });
+      onStatusChange?.(describeRange(0, Math.min(lastIndex, span)));
     } else if (event.key === "End") {
       event.preventDefault();
       onZoomChange({ start: Math.max(0, lastIndex - span), end: lastIndex });
+      onStatusChange?.(describeRange(Math.max(0, lastIndex - span), lastIndex));
     }
   };
 
@@ -168,9 +183,9 @@ export const UsageChartMinimap: FunctionComponent<{
       >
         <div className="sr-only" aria-live="polite">
           {zoomRange
-            ? `Showing ${zoomRange.end - zoomRange.start + 1} of ${buckets.length} buckets.`
+            ? `Showing ${zoomRange.end - zoomRange.start + 1} of ${buckets.length} buckets, ${buckets[zoomRange.start]?.label ?? "start"} through ${buckets[zoomRange.end]?.label ?? "end"}.`
             : hasZoomableRange
-              ? 'Zoom reset. Use arrow keys to pan and escape to clear.'
+              ? `Full ${buckets.length}-bucket range shown. Drag to zoom or press Enter to pin the full range.`
               : 'Single-bucket view. Zoom is unavailable until more buckets exist.'}
         </div>
         <div className="sr-only">

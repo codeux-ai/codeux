@@ -41,7 +41,7 @@ export const PageHeader: FunctionComponent<PageHeaderProps> = ({
     <header
       {...rest}
       ref={containerRef as any}
-      className={`flex w-full flex-col gap-5 sm:flex-row sm:items-end sm:justify-between ${className}`.trim()}
+      className={`flex w-full flex-col gap-5 lg:flex-row lg:items-end lg:justify-between ${className}`.trim()}
     >
       <div className="flex min-w-0 flex-col gap-2.5">
         {eyebrow && (
@@ -50,17 +50,17 @@ export const PageHeader: FunctionComponent<PageHeaderProps> = ({
             {eyebrow}
           </div>
         )}
-        <TitleTag className="font-display text-2xl font-bold leading-tight tracking-tight text-slate-900 dark:text-white md:text-3xl">
+        <TitleTag className="max-w-[18rem] text-balance font-display text-2xl font-bold leading-tight tracking-tight text-slate-900 dark:text-white sm:max-w-none md:text-3xl">
           {title}
         </TitleTag>
         {subtitle && (
-          <p className="max-w-2xl text-sm leading-relaxed text-slate-500 dark:text-slate-400">
+          <p className="max-w-2xl text-balance text-sm leading-relaxed text-slate-500 dark:text-slate-400">
             {subtitle}
           </p>
         )}
       </div>
       {actions && (
-        <div className="flex shrink-0 flex-wrap items-center gap-2">
+        <div className="flex w-full min-w-0 flex-wrap items-center gap-2 lg:w-auto lg:shrink-0 lg:justify-end">
           {actions}
         </div>
       )}

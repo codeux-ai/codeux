@@ -78,7 +78,7 @@ export interface JulesActivity {
 
 export type SubtaskStatus = "PENDING" | "RUNNING" | "CODING_COMPLETED" | "COMPLETED" | "FAILED" | "BLOCKED" | "QUOTA" | "QA_REVIEW_FAILED";
 export type SubtaskMergeIndicator = "CI" | "AUTOMERGE" | "MERGED" | "MERGE_BLOCKED" | "MERGE_CONFLICT" | "PR_ONLY" | "QA_PENDING";
-export type ProviderId = "jules" | "gemini" | "codex" | "claude-code" | "qwen-code" | "opencode" | "antigravity";
+export type ProviderId = "jules" | "gemini" | "codex" | "claude-code" | "qwen-code" | "opencode" | "antigravity" | "mockup-cli";
 export type ProviderConfigId = string;
 export type ProviderStrategy = "MANUAL" | "WEIGHTED" | "AGENT";
 export type ThinkingMode = "SMALL" | "MEDIUM" | "HIGH";
@@ -160,6 +160,15 @@ export interface LocalDirectoryBrowserResponse {
   rootPath: string;
   homePath: string;
   directories: LocalDirectoryBrowserEntry[];
+}
+
+export interface LocalFileBrowserEntry {
+  name: string;
+  path: string;
+}
+
+export interface LocalFileBrowserResponse extends LocalDirectoryBrowserResponse {
+  files: LocalFileBrowserEntry[];
 }
 
 /**
@@ -769,6 +778,8 @@ export interface JiraSettings {
   host: string;               // e.g. "https://company.atlassian.net"
   email: string;              // used for Basic Auth on Jira Cloud
   apiToken: string;
+  autoTransitionLinkedIssuesOnImport: boolean;
+  importTransitionName: string; // transition name for imports, default "In Work"
   autoCloseLinkedIssues: boolean;
   defaultProject: string;     // default project key shown in import modal
   closeTransitionName: string; // transition name for closing, default "Done"
@@ -893,6 +904,7 @@ export interface SprintPreviewSettings {
   hostPortRangeStart: number;
   hostPortRangeEnd: number;
   containerAppPort: number;
+  containerAppPorts: number[];
   startupScriptPath: string;
 }
 
@@ -906,6 +918,7 @@ export interface WorkerSettings {
 
 export interface QualityAssuranceTriggerSettings {
   enabled: boolean;
+  agentPresetIds: string[];
   agentPresetId: string | null;
 }
 
@@ -1005,6 +1018,8 @@ export interface CustomMcpServer {
 
 export type RuntimeLogLevel = "off" | "debug" | "info" | "warn" | "error";
 export type ConsoleLogMode = "standard" | "full";
+export type RestartSprintPolicy = "continue" | "pause" | "cancel";
+export type RestartInvocationPolicy = "continue" | "cancel" | "restart";
 
 export interface ModelPricingSettings {
   /** Per-model user price overrides, keyed by canonical models.dev id ("<provider>/<model>"). */
@@ -1019,6 +1034,8 @@ export interface DashboardSettings {
   dbAutoVacuumOnStartup: boolean;
   dbPruningEnabled: boolean;
   dbRetentionDays: number;
+  restartSprintPolicy: RestartSprintPolicy;
+  restartInvocationPolicy: RestartInvocationPolicy;
   appearance: AppearanceSettings;
   automationLevel: AutomationLevel;
   automationInterventions: AutomationInterventionsSettings;
@@ -1260,6 +1277,13 @@ export type SprintPreviewSessionStatus = "stopped" | "starting" | "running" | "e
 export type SprintPreviewHealthStatus = "unknown" | "healthy" | "unreachable";
 export type SprintPreviewStartupMode = "auto" | "script";
 
+export interface SprintPreviewPortMapping {
+  containerPort: number;
+  hostPort: number | null;
+  label?: string;
+  isPrimary?: boolean;
+}
+
 export interface SprintPreviewSession {
   id: string;
   projectId: string;
@@ -1270,6 +1294,7 @@ export interface SprintPreviewSession {
   status: SprintPreviewSessionStatus;
   hostPort: number | null;
   containerAppPort: number;
+  portMappings: SprintPreviewPortMapping[];
   containerId: string | null;
   containerName: string | null;
   worktreePath: string | null;

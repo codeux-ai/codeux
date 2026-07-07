@@ -173,6 +173,61 @@ describe("CycleStateCoordinator", () => {
       ]));
     });
 
+    it("uses stable task identity for repeated merge-required observations", async () => {
+      const deps = {
+        projectAttentionService: {
+          openItems: vi.fn(),
+          resolveItems: vi.fn(),
+        },
+      } as any;
+
+      const coordinator = new CycleStateCoordinator(deps);
+      const subtasks = [
+        {
+          id: "task-1",
+          record_id: "rec-1",
+          title: "Task 1",
+          prompt: "Prompt 1",
+          status: "CODING_COMPLETED",
+          merge_indicator: "CI",
+          pr_url: "https://example.com/pr/1",
+        },
+      ] as any[];
+      const protocolResult = {
+        awaitingMerge: subtasks,
+        actionRequiredTasks: [] as any[],
+      };
+      const args = {
+        executionContext: { project: { id: "proj-1" }, sprint: { id: "sprint-1" } },
+        sprintRunId: "run-1",
+        defaultFeatureBranch: "feature/sprint-1",
+        defaultBranch: "main",
+        repoPath: "/repo",
+        ciIntelligence: { resolveMergeConflicts: false },
+      } as any;
+
+      await coordinator.syncProtocolAttentionItems(subtasks, protocolResult, args, null, new Set());
+      await coordinator.syncProtocolAttentionItems(subtasks, protocolResult, args, null, new Set());
+
+      expect(deps.projectAttentionService.openItems).toHaveBeenCalledTimes(2);
+      const first = deps.projectAttentionService.openItems.mock.calls[0][0][0];
+      const second = deps.projectAttentionService.openItems.mock.calls[1][0][0];
+      expect(second).toMatchObject({
+        projectId: first.projectId,
+        sprintId: first.sprintId,
+        taskId: first.taskId,
+        sprintRunId: first.sprintRunId,
+        attentionType: first.attentionType,
+        ownerType: first.ownerType,
+        title: first.title,
+      });
+      expect(second.payload).toMatchObject({
+        taskKey: first.payload.taskKey,
+        mergeIndicator: first.payload.mergeIndicator,
+        prUrl: first.payload.prUrl,
+      });
+    });
+
     it("includes the resolved session id on action_required payloads so the virtual worker can intervene", async () => {
       const deps = {
         projectAttentionService: {
@@ -217,6 +272,120 @@ describe("CycleStateCoordinator", () => {
       expect(actionItem).toBeDefined();
       // Bare id (sessions/ prefix stripped) is what julesApi.sendSessionMessage expects.
       expect(actionItem.payload.sessionId).toBe("3478292433877515748");
+    });
+
+    it("keeps active worker CI-fix attention while checks are being re-evaluated", async () => {
+      const deps = {
+        projectAttentionService: {
+          openItems: vi.fn(),
+          resolveItems: vi.fn(),
+        },
+      } as any;
+
+      const coordinator = new CycleStateCoordinator(deps);
+      const subtasks = [
+        {
+          id: "task-1",
+          record_id: "rec-1",
+          title: "Task 1",
+          status: "CODING_COMPLETED",
+          merge_indicator: null,
+        },
+      ] as any[];
+      const protocolResult = {
+        awaitingMerge: [],
+        actionRequiredTasks: [] as any[],
+      };
+      const args = {
+        executionContext: { project: { id: "proj-1" }, sprint: { id: "sprint-1" } },
+        sprintRunId: "run-1",
+        defaultFeatureBranch: "feature/sprint-1",
+        defaultBranch: "main",
+        repoPath: "/repo",
+        ciIntelligence: { resolveMergeConflicts: false },
+      } as any;
+
+      await coordinator.syncProtocolAttentionItems(
+        subtasks,
+        protocolResult,
+        args,
+        null,
+        new Set(),
+        new Set(),
+        undefined,
+        new Set(["rec-1"]),
+      );
+
+      const resolvePayload = deps.projectAttentionService.resolveItems.mock.calls[0]?.[0] || [];
+      expect(resolvePayload).toEqual(expect.arrayContaining([
+        expect.objectContaining({
+          filter: { projectId: "proj-1", taskId: "rec-1", attentionTypes: ["merge_required", "merge_conflict"] },
+        }),
+        expect.objectContaining({
+          filter: { projectId: "proj-1", taskId: "rec-1", attentionTypes: ["action_required"] },
+        }),
+      ]));
+      expect(resolvePayload).not.toEqual(expect.arrayContaining([
+        expect.objectContaining({
+          filter: { projectId: "proj-1", taskId: "rec-1", attentionTypes: ["ci_fix_required"] },
+        }),
+      ]));
+    });
+
+    it("does not clear merge attention for tasks still waiting in CI", async () => {
+      const deps = {
+        projectAttentionService: {
+          openItems: vi.fn(),
+          resolveItems: vi.fn(),
+        },
+      } as any;
+
+      const coordinator = new CycleStateCoordinator(deps);
+      const subtasks = [
+        {
+          id: "task-1",
+          record_id: "rec-1",
+          title: "Task 1",
+          status: "CODING_COMPLETED",
+          merge_indicator: "CI",
+          pr_url: "https://example.com/pr/1",
+        },
+      ] as any[];
+      const protocolResult = {
+        awaitingMerge: [],
+        actionRequiredTasks: [] as any[],
+      };
+      const args = {
+        executionContext: { project: { id: "proj-1" }, sprint: { id: "sprint-1" } },
+        sprintRunId: "run-1",
+        defaultFeatureBranch: "feature/sprint-1",
+        defaultBranch: "main",
+        repoPath: "/repo",
+        ciIntelligence: { resolveMergeConflicts: false },
+      } as any;
+
+      await coordinator.syncProtocolAttentionItems(
+        subtasks,
+        protocolResult,
+        args,
+        null,
+        new Set(),
+        new Set(),
+        undefined,
+        new Set(),
+      );
+
+      const resolvePayload = deps.projectAttentionService.resolveItems.mock.calls[0]?.[0] || [];
+      expect(resolvePayload).not.toEqual(expect.arrayContaining([
+        expect.objectContaining({
+          filter: { projectId: "proj-1", taskId: "rec-1", attentionTypes: ["merge_required", "merge_conflict"] },
+        }),
+      ]));
+      expect(resolvePayload).toEqual(expect.arrayContaining([
+        expect.objectContaining({
+          filter: { projectId: "proj-1", taskId: "rec-1", attentionTypes: ["action_required"] },
+        }),
+      ]));
     });
   });
 });

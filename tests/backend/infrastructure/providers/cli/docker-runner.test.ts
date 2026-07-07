@@ -131,6 +131,7 @@ describe("DockerRunner", () => {
   });
 
   it("runs providers inside isolated Docker volumes", async () => {
+    const onSetupImageProgress = vi.fn();
     await runner.runProviderInDocker({
       command: "gemini",
       args: ["--yolo", "--p", "hello"],
@@ -146,6 +147,7 @@ describe("DockerRunner", () => {
       } as any,
       repoPath: "/repo/project",
       onActivity: vi.fn(),
+      onSetupImageProgress,
     });
 
     expect(runStreamingCommand).toHaveBeenCalledWith(
@@ -176,7 +178,83 @@ describe("DockerRunner", () => {
     expect(cacheInstance.resolveImage).toHaveBeenCalledWith(expect.objectContaining({
       installPlaywrightBrowsers: true,
       runtimeRoot: "/runtime-root",
+      onProgress: onSetupImageProgress,
     }));
+  });
+
+  it("supports mockup-cli Docker labels, names, env files, and argv files", async () => {
+    await runner.runProviderInDocker({
+      command: "node",
+      args: ["-e", "console.log('mock')", "mockup-cli:write fixture.txt :: hello"],
+      cwd: "docker-volume://workspace-1",
+      providerEnv: {
+        CODE_UX_MOCKUP_MODEL: "default",
+        CODE_UX_MOCKUP_SESSION_ID: "mock-session-1",
+      },
+      sessionId: "mock-session-1",
+      providerLabel: "mockup-cli",
+      workflowSettings: {
+        executionMode: "DOCKER",
+        containerImage: "node:24",
+        containerSetupScriptPath: "",
+        containerCacheSetupScriptImage: false,
+      } as any,
+      repoPath: "/repo/project",
+      onActivity: vi.fn(),
+    });
+
+    const dockerArgs = vi.mocked(runStreamingCommand).mock.calls[0]?.[1] as string[];
+    expect(dockerArgs).toEqual(expect.arrayContaining([
+      "--name",
+      "code-ux-mockup-cli-mock-session-1",
+      "--label",
+      "code-ux.command=node",
+      "--label",
+      "code-ux.args-count=3",
+    ]));
+    expect(dockerArgs.slice(-2)).toEqual(["provider-runner", "node"]);
+    expect(dockerArgs).toContain("CODE_UX_PROVIDER_ARGV_FILE=/opt/code-ux/provider-argv.sh");
+
+    const envWrite = vi.mocked(fs.writeFile).mock.calls.find(([file]) => String(file).endsWith("provider.env"));
+    expect(envWrite?.[1]).toContain("CODE_UX_MOCKUP_MODEL=default");
+    expect(envWrite?.[1]).toContain("CODE_UX_MOCKUP_SESSION_ID=mock-session-1");
+
+    const argvWrite = vi.mocked(fs.writeFile).mock.calls.find(([file]) => String(file).endsWith("provider-argv.sh"));
+    expect(argvWrite?.[1]).toContain("mockup-cli:write fixture.txt :: hello");
+  });
+
+  it("keeps Docker and provider execution behind mocked command runners", async () => {
+    expect(vi.isMockFunction(runCommandStrict)).toBe(true);
+    expect(vi.isMockFunction(runStreamingCommand)).toBe(true);
+
+    await runner.runProviderInDocker({
+      command: "codex",
+      args: ["exec", "--help"],
+      cwd: "docker-volume://workspace-1",
+      providerEnv: {},
+      sessionId: "session-1",
+      providerLabel: "codex",
+      workflowSettings: {
+        executionMode: "DOCKER",
+        containerImage: "node:24",
+        containerSetupScriptPath: "",
+        containerCacheSetupScriptImage: false,
+      } as any,
+      repoPath: "/repo/project",
+      onActivity: vi.fn(),
+    });
+
+    expect(runStreamingCommand).toHaveBeenCalledOnce();
+    expect(runStreamingCommand).toHaveBeenCalledWith(
+      "docker",
+      expect.any(Array),
+      expect.any(String),
+      expect.any(Object),
+      expect.any(Object),
+    );
+    const dockerArgs = vi.mocked(runStreamingCommand).mock.calls[0]?.[1] as string[];
+    expect(dockerArgs.slice(-2)).toEqual(["provider-runner", "codex"]);
+    expect(dockerArgs).not.toContain("codex exec --help");
   });
 
   it("kills the backing container directly when an aborted run is cancelled", async () => {
@@ -218,6 +296,47 @@ describe("DockerRunner", () => {
     await runPromise;
   });
 
+  it("reclaims and retries a provider container when Docker reports a stale name conflict", async () => {
+    const conflict = [
+      "docker: Error response from daemon: Conflict.",
+      'The container name "/code-ux-qwen-code-session-1" is already in use by container "abc123".',
+    ].join(" ");
+    vi.mocked(runStreamingCommand)
+      .mockResolvedValueOnce({ ok: false, stdout: "", stderr: conflict, code: 125 } as any)
+      .mockResolvedValueOnce({ ok: true, stdout: "done", stderr: "", code: 0 } as any);
+    vi.spyOn(runner as any, "sleep").mockResolvedValue(undefined);
+    const onActivity = vi.fn();
+
+    const result = await runner.runProviderInDocker({
+      command: "qwen",
+      args: ["--prompt", "plan"],
+      cwd: "docker-volume://workspace-1",
+      providerEnv: {},
+      sessionId: "session-1",
+      providerLabel: "qwen-code",
+      workflowSettings: {
+        executionMode: "DOCKER",
+        containerImage: "node:24",
+        containerSetupScriptPath: "",
+        containerCacheSetupScriptImage: false,
+      } as any,
+      repoPath: "/repo/project",
+      onActivity,
+    });
+
+    expect(result.ok).toBe(true);
+    expect(runStreamingCommand).toHaveBeenCalledTimes(2);
+    expect(runCommandStrict).toHaveBeenCalledWith(
+      "docker",
+      ["rm", "-f", "-v", "code-ux-qwen-code-session-1"],
+      process.cwd(),
+    );
+    expect(onActivity).toHaveBeenCalledWith(
+      "Retrying qwen-code after reclaiming stale Docker container code-ux-qwen-code-session-1.",
+      "provider",
+    );
+  });
+
   it("mounts provider argv from a file so long prompts do not enter the host docker command line", async () => {
     const longPrompt = `plan ${"x".repeat(64_000)} with 'quotes'`;
 
@@ -252,6 +371,7 @@ describe("DockerRunner", () => {
     expect(argvWrite?.[1]).toContain(`plan ${"x".repeat(1024)}`);
     expect(argvWrite?.[1]).toContain(" with ");
     expect(argvWrite?.[1]).toContain("'\"'\"'quotes'\"'\"'");
+    expect(argvWrite?.[2]).toEqual(expect.objectContaining({ mode: 0o600 }));
   });
 
   it("applies configured memory limits to provider Docker runs", async () => {
@@ -306,12 +426,20 @@ describe("DockerRunner", () => {
     expect(dockerArgs).not.toContain("--memory-swap");
   });
 
-  it("passes provider environment through an env-file so API keys do not enter docker argv", async () => {
+  it("sanitizes streamed Docker provider output before activity callbacks", async () => {
+    const rawSecret = "glpat-12345678901234567890";
+    vi.mocked(runStreamingCommand).mockImplementationOnce(async (_command, _args, _cwd, _env, options: any) => {
+      options.onStdoutLine?.(`stdout ${rawSecret}`);
+      options.onStderrLine?.(`Authorization: Bearer ${rawSecret}`);
+      return { ok: true, stdout: `stdout ${rawSecret}`, stderr: "", code: 0, signal: null } as any;
+    });
+    const onActivity = vi.fn();
+
     await runner.runProviderInDocker({
       command: "gemini",
       args: ["--prompt", "plan"],
       cwd: "docker-volume://workspace-1",
-      providerEnv: { GEMINI_API_KEY: "secret-key-value", GEMINI_MODEL: "gemini-2.5-pro" },
+      providerEnv: {},
       sessionId: "session-1",
       providerLabel: "gemini",
       workflowSettings: {
@@ -321,17 +449,88 @@ describe("DockerRunner", () => {
         containerCacheSetupScriptImage: false,
       } as any,
       repoPath: "/repo/project",
-      onActivity: vi.fn(),
+      onActivity,
+    });
+
+    const activityText = JSON.stringify(onActivity.mock.calls);
+    expect(activityText).not.toContain(rawSecret);
+    expect(activityText).toContain("[REDACTED]");
+  });
+
+  it("passes provider environment through an env-file so API keys do not enter docker argv", async () => {
+    const onActivity = vi.fn();
+    await runner.runProviderInDocker({
+      command: "gemini",
+      args: ["--prompt", "plan"],
+      cwd: "docker-volume://workspace-1",
+      providerEnv: {
+        GEMINI_API_KEY: "secret-key-value",
+        GEMINI_MODEL: "gemini-2.5-pro",
+        GITHUB_TOKEN: "ghp-secret-value",
+      },
+      sessionId: "session-1",
+      providerLabel: "gemini",
+      workflowSettings: {
+        executionMode: "DOCKER",
+        containerImage: "node:24",
+        containerSetupScriptPath: "",
+        containerCacheSetupScriptImage: false,
+      } as any,
+      repoPath: "/repo/project",
+      onActivity,
     });
 
     const dockerArgs = vi.mocked(runStreamingCommand).mock.calls[0]?.[1] as string[];
     expect(dockerArgs).toContain("--env-file");
-    expect(dockerArgs.join(" ")).not.toContain("secret-key-value");
-    expect(dockerArgs.join(" ")).not.toContain("GEMINI_API_KEY=");
+    const dockerArgText = dockerArgs.join(" ");
+    expect(dockerArgText).not.toContain("secret-key-value");
+    expect(dockerArgText).not.toContain("ghp-secret-value");
+    expect(dockerArgText).not.toContain("GEMINI_API_KEY=");
+    expect(dockerArgText).not.toContain("GITHUB_TOKEN=");
 
     const envWrite = vi.mocked(fs.writeFile).mock.calls.find(([file]) => String(file).endsWith("provider.env"));
     expect(envWrite?.[1]).toContain("GEMINI_API_KEY=secret-key-value");
+    expect(envWrite?.[1]).toContain("GITHUB_TOKEN=ghp-secret-value");
     expect(envWrite?.[2]).toEqual(expect.objectContaining({ mode: 0o600 }));
+    expect(JSON.stringify(onActivity.mock.calls)).not.toContain("secret-key-value");
+    expect(JSON.stringify(onActivity.mock.calls)).not.toContain("ghp-secret-value");
+  });
+
+  it("keeps MCP authorization tokens out of Docker command labels while writing restrictive mounted config", async () => {
+    const rawMcpToken = "fixtureMcpBearerToken1234567890";
+    await runner.runProviderInDocker({
+      command: "codex",
+      args: ["exec", "--yolo", "plan"],
+      cwd: "docker-volume://workspace-1",
+      providerEnv: {},
+      sessionId: "session-1",
+      providerLabel: "codex",
+      workflowSettings: {
+        executionMode: "DOCKER",
+        containerImage: "node:24",
+        containerSetupScriptPath: "",
+        containerCacheSetupScriptImage: false,
+      } as any,
+      repoPath: "/repo/project",
+      onActivity: vi.fn(),
+      mcpConnection: {
+        url: "https://example.invalid/mcp",
+        authToken: rawMcpToken,
+      },
+    });
+
+    const dockerArgs = vi.mocked(runStreamingCommand).mock.calls[0]?.[1] as string[];
+    const dockerArgText = dockerArgs.join(" ");
+    expect(dockerArgText).not.toContain(rawMcpToken);
+    expect(dockerArgText).not.toContain("Authorization");
+    expect(dockerArgs).toEqual(expect.arrayContaining([
+      "--label",
+      "code-ux.args-count=3",
+    ]));
+
+    const configWrite = vi.mocked(fs.writeFile).mock.calls.find(([file]) => String(file).endsWith("codex-config.toml"));
+    expect(configWrite?.[1]).toContain(rawMcpToken);
+    expect(configWrite?.[2]).toEqual(expect.objectContaining({ mode: 0o600 }));
   });
 
   it("stages generated Gemini MCP config outside runtime home and copies it during bootstrap", async () => {
@@ -396,6 +595,7 @@ describe("DockerRunner custom MCP server injection", () => {
     ]);
     const json = JSON.parse(writtenFor("claude-mcp.json")!);
     expect(json.mcpServers.code_ux).toMatchObject({ type: "http", url: "http://127.0.0.1:3000/mcp" });
+    expect(json.mcpServers.code_ux.headers).toMatchObject({ Authorization: "Bearer secret" });
     expect(json.mcpServers.docs).toEqual({ type: "http", url: "https://docs.example/mcp", headers: { Authorization: "Bearer t" } });
   });
 
@@ -416,6 +616,7 @@ describe("DockerRunner custom MCP server injection", () => {
 
     const json = JSON.parse(writtenFor("claude-mcp.json")!);
     expect(json.mcpServers.code_ux.url).toBe("http://host.docker.internal:3000/mcp");
+    expect(json.mcpServers.code_ux.headers).toMatchObject({ Authorization: "Bearer secret" });
     expect(json.mcpServers.localdocs.url).toBe("http://host.docker.internal:8123/mcp");
   });
 
@@ -423,7 +624,7 @@ describe("DockerRunner custom MCP server injection", () => {
     const originalRewrite = process.env.CODE_UX_DOCKER_REWRITE_LOCALHOST;
     process.env.CODE_UX_DOCKER_REWRITE_LOCALHOST = "1";
     try {
-      await buildDocker("codex", { url: "http://0.0.0.0:3000/mcp", authToken: null }, [
+      await buildDocker("codex", { url: "http://0.0.0.0:3000/mcp", authToken: "secret" }, [
         { id: "1", name: "localdocs", transport: "http", url: "http://localhost:8123/mcp", enabled: true },
       ]);
     } finally {
@@ -436,6 +637,7 @@ describe("DockerRunner custom MCP server injection", () => {
 
     const toml = writtenFor("codex-config.toml")!;
     expect(toml).toContain('url = "http://host.docker.internal:3000/mcp"');
+    expect(toml).toContain('"Authorization" = "Bearer secret"');
     expect(toml).toContain('url = "http://host.docker.internal:8123/mcp"');
   });
 
@@ -513,6 +715,7 @@ describe("DockerRunner custom MCP server injection", () => {
     expect(json.enableOpenAILogging).toBeUndefined(); // It should strip this based on formatting logic
     expect(json.someOtherSetting).toBe("value");
     expect(json.mcpServers.code_ux).toMatchObject({ httpUrl: "http://127.0.0.1:3000/mcp" });
+    expect(json.mcpServers.code_ux.headers).toMatchObject({ Authorization: "Bearer secret" });
     expect(json.mcpServers.docs).toEqual({ httpUrl: "https://docs.example/mcp", headers: { Authorization: "Bearer t" } });
   });
 
@@ -523,6 +726,7 @@ describe("DockerRunner custom MCP server injection", () => {
     ]);
     const json = JSON.parse(writtenFor("antigravity-mcp.json")!);
     expect(json.mcpServers.code_ux).toMatchObject({ serverUrl: "http://127.0.0.1:3000/mcp" });
+    expect(json.mcpServers.code_ux.headers).toMatchObject({ Authorization: "Bearer secret" });
     expect(json.mcpServers.docs).toEqual({ serverUrl: "https://docs.example/mcp", headers: { Authorization: "Bearer t" } });
     expect(json.mcpServers.localtool).toEqual({ command: "python", args: ["script.py"] });
   });

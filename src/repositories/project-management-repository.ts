@@ -233,6 +233,10 @@ export class ProjectManagementRepository {
         if (!this.getSelectedProjectId()) {
           this.setSelectedProjectId(id);
         }
+
+        if (input.settingsOverrides) {
+          this.settingsRepository.saveProjectSettings(id, input.settingsOverrides);
+        }
       });
 
       const created = this.requireProject(id);
@@ -432,6 +436,68 @@ export class ProjectManagementRepository {
   deleteSprint(sprintId: string): void {
     try {
       const sprint = this.requireSprint(sprintId);
+      const activeRun = this.db.prepare(`
+        SELECT id, status
+        FROM sprint_runs
+        WHERE sprint_id = ?
+          AND status IN ('queued', 'running', 'cancel_requested')
+        ORDER BY created_at DESC, rowid DESC
+        LIMIT 1
+      `).get(sprintId) as { id: string; status: string } | undefined;
+      if (activeRun) {
+        throw new ValidationError(`Sprint ${sprintId} has active run ${activeRun.id} (${activeRun.status}); cancel, pause, or finish it before deleting the sprint.`);
+      }
+
+      const activeDispatch = this.db.prepare(`
+        SELECT id, status
+        FROM task_dispatches
+        WHERE sprint_id = ?
+          AND status IN ('queued', 'claimed', 'running', 'cancel_requested', 'paused')
+        ORDER BY updated_at DESC, created_at DESC
+        LIMIT 1
+      `).get(sprintId) as { id: string; status: string } | undefined;
+      if (activeDispatch) {
+        throw new ValidationError(`Sprint ${sprintId} has active task dispatch ${activeDispatch.id} (${activeDispatch.status}); cancel or let runtime cleanup finish before deleting the sprint.`);
+      }
+
+      const activeProviderInvocation = this.db.prepare(`
+        SELECT id, status
+        FROM provider_invocations
+        WHERE sprint_id = ?
+          AND status = 'running'
+        ORDER BY updated_at DESC, started_at DESC
+        LIMIT 1
+      `).get(sprintId) as { id: string; status: string } | undefined;
+      if (activeProviderInvocation) {
+        throw new ValidationError(`Sprint ${sprintId} has active provider invocation ${activeProviderInvocation.id}; cancel or let runtime cleanup finish before deleting the sprint.`);
+      }
+
+      const activeExecutionInvocation = this.db.prepare(`
+        SELECT id, status
+        FROM execution_invocations
+        WHERE sprint_id = ?
+          AND status IN ('running', 'paused')
+        ORDER BY updated_at DESC, started_at DESC
+        LIMIT 1
+      `).get(sprintId) as { id: string; status: string } | undefined;
+      if (activeExecutionInvocation) {
+        throw new ValidationError(`Sprint ${sprintId} has active execution invocation ${activeExecutionInvocation.id} (${activeExecutionInvocation.status}); cancel or let runtime cleanup finish before deleting the sprint.`);
+      }
+
+      const recentlyFinishedRun = this.db.prepare(`
+        SELECT id, status, finished_at
+        FROM sprint_runs
+        WHERE sprint_id = ?
+          AND status IN ('completed', 'failed', 'cancelled')
+          AND finished_at IS NOT NULL
+          AND datetime(finished_at) >= datetime('now', '-30 seconds')
+        ORDER BY finished_at DESC, created_at DESC
+        LIMIT 1
+      `).get(sprintId) as { id: string; status: string; finished_at: string } | undefined;
+      if (recentlyFinishedRun) {
+        throw new ValidationError(`Sprint ${sprintId} has recently finished run ${recentlyFinishedRun.id} (${recentlyFinishedRun.status}); wait for runtime cleanup to settle before deleting the sprint.`);
+      }
+
       const preservedInvocation = this.db.prepare(`
         SELECT id
         FROM execution_invocations

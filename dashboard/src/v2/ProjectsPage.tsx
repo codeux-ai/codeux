@@ -20,6 +20,7 @@ import {
 } from "lucide-preact";
 import type { Source, SourceStatus } from "./types.js";
 import { AddProjectModal, type AddProjectModalSubmission, type SourceType as AddProjectModalSourceType } from "./components/ui/AddProjectModal.js";
+import { buildGitHubModeProjectSettingsOverride } from "../lib/settings-updaters.js";
 import { StatusDot } from "./components/ui/StatusDot.js";
 import { WaveFluid } from "./components/ui/WaveFluid.js";
 import { BorderTrace } from "./components/ui/BorderTrace.js";
@@ -93,7 +94,7 @@ const MetaRow: FunctionComponent<{
 /** A big editorial stat numeral (Sprints / Open / Done). */
 const StatTile: FunctionComponent<{ label: string; value: number; accent?: boolean }> = ({ label, value, accent }) => (
     <div className="flex flex-col items-center justify-center gap-1 py-0.5">
-        <div className={`font-display text-2xl font-black tabular-nums leading-none ${accent ? "bg-gradient-to-br from-ember-500 to-signal-500 bg-clip-text text-transparent" : "text-slate-900 dark:text-white"}`}>
+        <div className={`font-display text-xl font-semibold tabular-nums leading-none ${accent ? "bg-gradient-to-br from-ember-500 to-signal-500 bg-clip-text text-transparent" : "text-slate-900 dark:text-white"}`}>
             {value}
         </div>
         <div className="text-[8px] font-bold uppercase tracking-[0.18em] text-slate-400 dark:text-slate-500">
@@ -283,13 +284,13 @@ const ProjectCard: FunctionComponent<{
                     <div className="flex items-center gap-3.5">
                         <div
                             aria-hidden="true"
-                            className="relative grid h-12 w-12 shrink-0 place-items-center overflow-hidden rounded-2xl border border-ember-500/20 bg-gradient-to-br from-ember-500/[0.16] to-ember-600/[0.08] font-display text-xl font-black text-ember-700 dark:border-ember-400/15 dark:text-ember-200"
+                            className="relative grid h-12 w-12 shrink-0 place-items-center overflow-hidden rounded-2xl border border-ember-500/20 bg-gradient-to-br from-ember-500/[0.16] to-ember-600/[0.08] font-display text-lg font-semibold text-ember-700 dark:border-ember-400/15 dark:text-ember-200"
                         >
                             <span className="absolute inset-0 bg-[linear-gradient(135deg,rgba(255,184,0,0.12)_0%,transparent_55%)]" />
                             <span className="relative">{source.name.slice(0, 1).toUpperCase()}</span>
                         </div>
                         <div className="min-w-0 flex-1">
-                            <h3 className="line-clamp-2 font-display text-lg font-black leading-tight tracking-tight text-slate-900 dark:text-white">
+                            <h3 className="line-clamp-2 font-display text-base font-semibold leading-tight tracking-tight text-slate-900 dark:text-white">
                                 {source.name}
                             </h3>
                             <div className="mt-0.5 truncate font-mono text-[10px] tracking-wide text-slate-400 dark:text-slate-500">
@@ -426,7 +427,7 @@ const AddCard: FunctionComponent<{ onClick: () => void }> = ({ onClick }) => (
         </div>
 
         <div className="relative flex flex-col items-center gap-1.5">
-            <span className="font-display text-sm font-black uppercase tracking-[0.18em]
+            <span className="font-display text-sm font-semibold uppercase tracking-[0.18em]
                              text-slate-400 dark:text-slate-500
                              group-hover:text-ember-600 dark:group-hover:text-ember-300 transition-colors duration-300">
                 Add Project
@@ -462,6 +463,7 @@ export const ProjectsPage: FunctionComponent = () => {
         projects: sources,
         selectedProjectId,
         loading,
+        error,
         createProject,
         deleteProject,
         selectProject,
@@ -601,17 +603,19 @@ export const ProjectsPage: FunctionComponent = () => {
 
     const handleAddProject = async (project: AddProjectModalSubmission) => {
         if (project.type === 'new_project') {
+            const isLocalProject = project.initMode === 'new-local';
             const sourceRef = project.initMode === 'new-local'
                 ? (project.path || project.name)
                 : (project.repoSlug || project.name);
 
             await createProject({
                 name: project.name,
-                sourceType: project.initMode === 'new-local' ? 'local' : 'git',
+                sourceType: isLocalProject ? 'local' : 'git',
                 sourceRef,
                 initMode: project.initMode,
                 remoteProvider: project.remoteProvider,
                 isPrivate: project.isPrivate,
+                ...(isLocalProject ? { settingsOverrides: buildGitHubModeProjectSettingsOverride("LOCAL") } : {}),
             });
             return;
         }
@@ -621,6 +625,7 @@ export const ProjectsPage: FunctionComponent = () => {
             sourceType: project.type,
             sourceRef: project.path,
             cloneDir: project.cloneDir,
+            ...(project.type === "local" ? { settingsOverrides: buildGitHubModeProjectSettingsOverride("LOCAL") } : {}),
         });
         if (project.setup?.enabled) {
             launchProjectSetup(createdProject.id, createdProject.name, project.setup.options);
@@ -748,7 +753,31 @@ export const ProjectsPage: FunctionComponent = () => {
                 </div>
 
                 {/* ── Cards Grid ──────────────────────────────────────── */}
-                <div ref={gridRef} className="grid grid-cols-1 grid-rows-1 relative">
+                {loading && (
+                    <div role="status" aria-live="polite" aria-busy="true" className="sr-only">
+                        Loading projects.
+                    </div>
+                )}
+
+                {error && (
+                    <div role="alert" aria-live="assertive" className="rounded-2xl border border-status-red/20 bg-status-red/[0.06] px-5 py-4 text-sm font-semibold text-status-red">
+                        {error}
+                    </div>
+                )}
+
+                {!loading && !error && sources.length === 0 && (
+                    <div role="status" aria-live="polite" className="sr-only">
+                        No projects connected. Add a project to start tracking work.
+                    </div>
+                )}
+
+                <div
+                    ref={gridRef}
+                    role="region"
+                    aria-label="Project cards"
+                    aria-busy={loading || showSkeletons ? "true" : undefined}
+                    className="grid grid-cols-1 grid-rows-1 relative"
+                >
                     <SkeletonLoader
                         show={showSkeletons}
                         className="col-start-1 row-start-1"
@@ -816,7 +845,7 @@ export const ProjectsPage: FunctionComponent = () => {
                                         <Bot className="h-4 w-4" />
                                         Project Setup Agent
                                     </div>
-                                    <h2 id="setup-project-title" className="mt-3 font-display text-3xl font-black tracking-tight text-slate-900 dark:text-white">
+                                    <h2 id="setup-project-title" className="mt-3 font-display text-2xl font-semibold tracking-tight text-slate-900 dark:text-white">
                                         Setup {activeSetupProject.name}
                                     </h2>
                                 </div>
@@ -872,7 +901,7 @@ export const ProjectsPage: FunctionComponent = () => {
                                 type="button"
                                 onClick={() => { void handleRunSetup(); }}
                                 disabled={isActiveSetupRunning}
-                                className="flex items-center justify-center gap-2 rounded-2xl bg-ember-500 px-5 py-3 text-sm font-black text-void-900 shadow-[0_4px_20px_rgba(255,184,0,0.24)] transition-all hover:bg-ember-400 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-500"
+                                className="flex items-center justify-center gap-2 rounded-2xl bg-ember-500 px-5 py-3 text-sm font-semibold text-void-900 shadow-[0_4px_20px_rgba(255,184,0,0.24)] transition-all hover:bg-ember-400 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-500"
                             >
                                 {isActiveSetupRunning ? <Loader2 className="h-4 w-4 animate-spin" /> : <Bot className="h-4 w-4" />}
                                 {isActiveSetupRunning ? "Setting up..." : "Setup Project"}

@@ -1,5 +1,5 @@
 import type { JulesActivity, JulesSession, Subtask } from "../../contracts/app-types.js";
-import type { TaskRunRecord, TaskDispatchStatus, TaskRunState } from "../../contracts/execution-types.js";
+import type { TaskRunRecord } from "../../contracts/execution-types.js";
 import type { SessionSyncDependencies } from "../sprint-types.js";
 import { buildTaskRunKey, extractTaskRunKeyFromTitle } from "../../services/task-run-key.js";
 import { planSessionActivityFetches } from "../../domain/sprint/session-sync/activity-fetch-plan.js";
@@ -15,8 +15,13 @@ import {
   isQuotaCooldownActive,
   isRetryAfterActive,
 } from "../../shared/providers/provider-error-classifier.js";
-
-
+import {
+  mapSessionStateToTaskRunState,
+  mapTaskRunStateToDispatchStatus,
+  mapTaskRunStateToPlanningStatus,
+  mergeDispatchStatus,
+  resolveDispatchErrorMessage,
+} from "../../domain/sprint/session-sync/session-state-mapping.js";
 
 const extractGitMetrics = (session: JulesSession): Record<string, unknown> | null => {
   const pullRequestOutput = Array.isArray(session.outputs)
@@ -39,29 +44,6 @@ const extractGitMetrics = (session: JulesSession): Record<string, unknown> | nul
   };
 };
 
-const mapSessionStateToTaskRunState = (
-  sessionState: string | undefined,
-  isActionRequiredState: SessionSyncDependencies["isActionRequiredState"],
-  actionRequiredReplyPending = false,
-): TaskRunState => {
-  if (sessionState === "COMPLETED") {
-    return "COMPLETED";
-  }
-  if (sessionState === "FAILED" || sessionState === "CANCELLED") {
-    return "FAILED";
-  }
-  if (sessionState === "QUOTA") {
-    return "QUOTA";
-  }
-  if (sessionState === "RATE_LIMITED") {
-    return "QUOTA";
-  }
-  if (isActionRequiredState(sessionState)) {
-    return actionRequiredReplyPending ? "RUNNING" : "BLOCKED";
-  }
-  return "RUNNING";
-};
-
 const hasSubmittedReplyForActionRequiredState = (
   task: Subtask,
   sessionState: string | undefined,
@@ -74,76 +56,6 @@ const hasSubmittedReplyForActionRequiredState = (
     ...task,
     activities: activities ?? task.activities,
   });
-};
-
-const isCancelledSessionState = (sessionState: string | undefined): boolean => sessionState === "CANCELLED";
-
-const mapTaskRunStateToDispatchStatus = (
-  state: TaskRunState,
-  sessionState?: string,
-): TaskDispatchStatus => {
-  if (state === "FAILED" && isCancelledSessionState(sessionState)) {
-    return "cancelled";
-  }
-  switch (state) {
-    case "COMPLETED":
-      return "completed";
-    case "FAILED":
-      return "failed";
-    case "QUOTA":
-      return "quota";
-    case "BLOCKED":
-      return "blocked";
-    case "RUNNING":
-    case "PENDING":
-    default:
-      return "running";
-  }
-};
-
-const mapTaskRunStateToPlanningStatus = (state: TaskRunState): "pending" | "in_progress" | "coding_completed" => {
-  switch (state) {
-    case "COMPLETED":
-      return "coding_completed";
-    case "RUNNING":
-      return "in_progress";
-    case "FAILED":
-    case "BLOCKED":
-    case "PENDING":
-    default:
-      return "pending";
-  }
-};
-
-const mergeDispatchStatus = (
-  currentStatus: TaskDispatchStatus | null,
-  nextRunState: TaskRunState,
-  sessionState?: string,
-): TaskDispatchStatus => {
-  if (currentStatus === "cancel_requested" && nextRunState === "RUNNING") {
-    return "cancel_requested";
-  }
-  return mapTaskRunStateToDispatchStatus(nextRunState, sessionState);
-};
-
-const resolveDispatchErrorMessage = (
-  currentErrorMessage: string | null | undefined,
-  nextRunState: TaskRunState,
-  sessionState: string | undefined,
-): string | null => {
-  if (nextRunState === "FAILED" && isCancelledSessionState(sessionState)) {
-    return null;
-  }
-  if (nextRunState === "FAILED") {
-    return `Provider session ${sessionState || "FAILED"}`;
-  }
-  if (nextRunState === "BLOCKED") {
-    return `Provider session requires attention: ${sessionState || "ACTION_REQUIRED"}`;
-  }
-  if (nextRunState === "QUOTA") {
-    return currentErrorMessage || `Provider session ${sessionState || "QUOTA"}`;
-  }
-  return null;
 };
 
 const getActivityPreview = (activity: JulesActivity): string => {
@@ -222,6 +134,7 @@ interface SessionMetadataLookup {
 
 const createSessionMetadataLookup = (deps: SessionSyncDependencies): SessionMetadataLookup => {
   const cache = new Map<string, SessionSyncSessionMetadata>();
+  const sessionObjectCache = new WeakMap<JulesSession, SessionSyncSessionMetadata>();
 
   const readLocalTerminalState = (sessionName: string | null): boolean => {
     return Boolean(
@@ -246,6 +159,13 @@ const createSessionMetadataLookup = (deps: SessionSyncDependencies): SessionMeta
     sessionRef: string | null,
     session?: JulesSession,
   ): SessionSyncSessionMetadata => {
+    if (session) {
+      const cachedByObject = sessionObjectCache.get(session);
+      if (cachedByObject) {
+        return cachedByObject;
+      }
+    }
+
     const sessionName = session ? deps.resolveSessionName(session) || null : null;
     const sessionId = normalizeSessionRef(
       (session ? deps.extractSessionId(session) : null)
@@ -264,12 +184,19 @@ const createSessionMetadataLookup = (deps: SessionSyncDependencies): SessionMeta
           (sessionName && cached.sessionName !== sessionName)
           || (sessionProvider && cached.provider !== sessionProvider)
         ) {
-          return cacheAliases({
+          const updatedMetadata = cacheAliases({
             ...cached,
             sessionName: cached.sessionName || sessionName,
             provider: sessionProvider || cached.provider,
             isLocallyTerminal: cached.isLocallyTerminal || readLocalTerminalState(cached.sessionName || sessionName),
           });
+          if (session) {
+            sessionObjectCache.set(session, updatedMetadata);
+          }
+          return updatedMetadata;
+        }
+        if (session) {
+          sessionObjectCache.set(session, cached);
         }
         return cached;
       }
@@ -288,13 +215,17 @@ const createSessionMetadataLookup = (deps: SessionSyncDependencies): SessionMeta
       || (sessionRef && sessionRef.startsWith("sessions/") ? sessionRef : null);
     const isLocallyTerminal = readLocalTerminalState(resolvedSessionName);
 
-    return cacheAliases({
+    const metadata = cacheAliases({
       sessionId,
       sessionName: resolvedSessionName,
       latestTaskRunBySessionId,
       provider,
       isLocallyTerminal,
     });
+    if (session) {
+      sessionObjectCache.set(session, metadata);
+    }
+    return metadata;
   };
 
   return {
@@ -425,16 +356,18 @@ const recoverMissingRecordedSession = (
 
   const providerInvocation = deps.executionRepository.getLatestProviderInvocationUsageBySession(sessionId, "task_coding");
   if (providerInvocation?.status === "running") {
-    failStaleProviderInvocation(
-      deps.executionRepository,
-      providerInvocation,
-      deps.executionRepository.listExecutionInvocationsByProviderInvocationId(providerInvocation.id),
-      {
-        reconciledAt: now,
-        recoveryReason: "session_sync_missing_recorded_session",
-        systemMessage: message,
-      },
-    );
+    if (providerInvocation.provider === "jules") {
+      failStaleProviderInvocation(
+        deps.executionRepository,
+        providerInvocation,
+        deps.executionRepository.listExecutionInvocationsByProviderInvocationId(providerInvocation.id),
+        {
+          reconciledAt: now,
+          recoveryReason: "session_sync_missing_recorded_session",
+          systemMessage: message,
+        },
+      );
+    }
   }
 
   if (taskRun && taskRun.state !== "COMPLETED" && taskRun.state !== "FAILED") {
@@ -508,7 +441,7 @@ const syncExecutionRunState = async (
       const usage = sessionId
         ? deps.executionRepository.getLatestProviderInvocationUsageBySession(sessionId, "task_coding")
         : null;
-      if (usage) {
+      if (usage && usage.provider === persistedTaskRun.provider) {
         deps.executionRepository.associateProviderInvocationRuntime(usage.id, {
           sprintRunId: deps.sprintRunId,
           dispatchId: taskRun.dispatchId,
@@ -563,8 +496,9 @@ const syncExecutionRunState = async (
     return;
   }
 
-  const sessionName = deps.resolveSessionName(session) || taskRun.sessionName;
-  const sessionId = deps.extractSessionId(session) || taskRun.sessionId;
+  const sessionMetadata = sessionMetadataLookup.getForSession(session);
+  const sessionName = sessionMetadata.sessionName || taskRun.sessionName;
+  const sessionId = sessionMetadata.sessionId || taskRun.sessionId;
   const provider = session.provider || taskRun.provider;
   const workerBranch = resolveWorkerBranch(session) || taskRun.workerBranch;
   const prUrl = resolvePrUrl(session) || taskRun.prUrl;
@@ -597,7 +531,7 @@ const syncExecutionRunState = async (
       errorMessage: resolveDispatchErrorMessage(currentDispatch?.errorMessage, nextRunState, session.state),
     });
     if (nextRunState !== "RUNNING" && taskRun.sprintRunId) {
-      deps.executionRepository.finalizeSprintRunCancellationIfIdle(taskRun.sprintRunId);
+      deps.sprintRunLifecycleService?.finalizeCancellationIfIdle(taskRun.sprintRunId);
     }
   }
 
@@ -684,7 +618,8 @@ const syncExecutionRunState = async (
         });
       }
 
-      const existingUsage = deps.executionRepository.getLatestProviderInvocationUsageBySession(sessionId || sessionName || taskRun.id, "task_coding");
+      const latestUsage = deps.executionRepository.getLatestProviderInvocationUsageBySession(sessionId || sessionName || taskRun.id, "task_coding");
+      const existingUsage = latestUsage && latestUsage.provider === provider ? latestUsage : null;
 
       if (existingUsage && existingUsage.status !== (nextRunState === "COMPLETED" ? "completed" : "failed")) {
           deps.executionRepository.updateProviderInvocationUsage(existingUsage.id, {
@@ -799,8 +734,9 @@ export const runSessionSyncStep = async (
     subtasks,
     sessionMap,
     context,
-    deps,
-    (_deps, task, session) => isForeignSessionMatch(sessionMetadataLookup, task, session),
+    sessionMetadataLookup,
+    deps.logger,
+    (task, session) => isForeignSessionMatch(sessionMetadataLookup, task, session),
     isLocallyTerminal
   );
 
@@ -809,7 +745,8 @@ export const runSessionSyncStep = async (
     5, // concurrency
     5, // pageSize
     deps.fetchRecentActivities,
-    deps.logger
+    deps.logger,
+    deps.activityFetchTimeoutMs,
   );
 
   for (const task of subtasks) {
@@ -820,28 +757,31 @@ export const runSessionSyncStep = async (
     }
 
     if (isForeignSessionMatch(sessionMetadataLookup, task, match)) {
+      const sessionMetadata = sessionMetadataLookup.getForSession(match);
       deps.logger.warn("Skipping foreign provider session matched by task run key", {
         taskId: task.record_id || task.id,
         projectId: task.project_id,
         sprintId: task.sprint_id,
-        sessionId: deps.extractSessionId(match),
-        sessionName: deps.resolveSessionName(match),
+        sessionId: sessionMetadata.sessionId,
+        sessionName: sessionMetadata.sessionName,
       });
       continue;
     }
     if (isRetiredSessionForPendingRetry(sessionMetadataLookup, task, match)) {
+      const sessionMetadata = sessionMetadataLookup.getForSession(match);
       deps.logger.warn("Skipping retired provider session for pending retry task", {
         taskId: task.record_id || task.id,
         projectId: task.project_id,
         sprintId: task.sprint_id,
-        sessionId: deps.extractSessionId(match),
-        sessionName: deps.resolveSessionName(match),
+        sessionId: sessionMetadata.sessionId,
+        sessionName: sessionMetadata.sessionName,
       });
       continue;
     }
 
-    const sessionName = deps.resolveSessionName(match);
-    const sessionId = deps.extractSessionId(match);
+    const sessionMetadata = sessionMetadataLookup.getForSession(match);
+    const sessionName = sessionMetadata.sessionName || undefined;
+    const sessionId = sessionMetadata.sessionId || undefined;
     task.session_name = sessionName;
     task.session_id = sessionId;
     task.session_state = match.state;

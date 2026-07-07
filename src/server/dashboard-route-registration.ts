@@ -26,6 +26,7 @@ import { registerGitProviderRoutes } from "./git-provider-routes.js";
 import { registerUpdateStatusRoutes } from "./update-status-routes.js";
 import { registerMemoryRoutes } from "./memory-routes.js";
 import { registerKnowledgeRoutes } from "./knowledge-routes.js";
+import { registerDocsWebRoutes } from "./docs-web-routes.js";
 
 export interface DashboardRouteRegistrationOptions {
   app: Express;
@@ -49,8 +50,24 @@ export const createDashboardRouteDependencies = (options: DashboardServerOptions
       currentVersion: CODE_UX_VERSION,
       latestVersion: null,
       updateAvailable: false,
+      releaseUrl: "https://github.com/codeux-ai/codeux/releases",
       checkedAt: new Date().toISOString(),
     })),
+    getLocalMcpSetup: routeDependencies.getLocalMcpSetup ?? (() => ({
+      enabled: false,
+      url: null,
+      authToken: null,
+      providers: [],
+    })),
+    regenerateLocalMcpAuthToken: routeDependencies.regenerateLocalMcpAuthToken ?? (() => ({
+      enabled: false,
+      url: null,
+      authToken: null,
+      providers: [],
+    })),
+    installLocalMcpProvider: routeDependencies.installLocalMcpProvider ?? (async () => {
+      throw new Error("Local MCP CLI installation is not available.");
+    }),
   };
 };
 
@@ -98,6 +115,7 @@ const registerExecutionRouteGroup = (app: Express, deps: DashboardDependencies):
 const registerSystemIntegrationRouteGroup = (app: Express, deps: DashboardDependencies): void => {
   registerGitProviderRoutes(app, deps);
   registerUpdateStatusRoutes(app, deps);
+  registerDocsWebRoutes(app);
 };
 
 const registerOptionalKnowledgeRouteGroup = (app: Express, deps: DashboardDependencies): void => {

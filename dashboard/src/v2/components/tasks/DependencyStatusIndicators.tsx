@@ -2,6 +2,7 @@ import type { FunctionComponent } from "preact";
 import { memo } from "preact/compat";
 import { ArrowRight } from "lucide-preact";
 import { getDependencyPresentation, type DependencyIndicator } from "../../lib/tasks/task-card-view-model.js";
+import { useInteractionTokens } from "../../lib/motion/tokens.js";
 
 function getDependencyStatusCopy(dep: DependencyIndicator): string {
   if (dep.stateLabel) {
@@ -73,12 +74,16 @@ function getDependencyToneClass(dep: DependencyIndicator): string {
 export const DependencyStatusIndicators: FunctionComponent<{
   indicators: DependencyIndicator[];
 }> = memo(({ indicators }) => {
+  const interactionTokens = useInteractionTokens();
   if (!indicators || indicators.length === 0) return null;
 
   const blockerCount = indicators.filter(isDependencyBlocking).length;
   const summary = blockerCount === 0
     ? `Dependencies resolved: ${indicators.length} clear`
     : `Blocked: ${blockerCount} ${blockerCount === 1 ? "dependency needs" : "dependencies need"} completion`;
+  const announcement = blockerCount === 0
+    ? `Dependency blockers resolved. ${indicators.length} ${indicators.length === 1 ? "dependency is" : "dependencies are"} clear.`
+    : `${summary}.`;
 
   return (
     <div
@@ -86,10 +91,20 @@ export const DependencyStatusIndicators: FunctionComponent<{
       role="list"
       aria-label={`${summary}. Task dependencies`}
       aria-live="polite"
+      aria-atomic="false"
+      style={{
+        "--task-dependency-control-duration": interactionTokens.controlFeedback.duration,
+        "--task-dependency-control-ease": interactionTokens.controlFeedback.ease,
+        "--task-dependency-list-reorder-duration": interactionTokens.listReorder.duration,
+        "--task-dependency-list-reorder-ease": interactionTokens.listReorder.ease,
+      }}
+      data-motion-control="controlFeedback"
+      data-motion-list-reorder="listReorder"
     >
+      <span className="sr-only" role="status" aria-live="polite" aria-atomic="true">{announcement}</span>
       <div
         role="listitem"
-        className={`flex min-h-7 max-w-full items-center gap-1.5 rounded-lg border px-2 py-1 text-[9px] font-bold uppercase tracking-[0.12em] ${
+        className={`flex min-h-7 max-w-full items-center gap-1.5 rounded-lg border px-2 py-1 text-[9px] font-bold uppercase tracking-[0.12em] transition-colors motion-reduce:transition-none ${
           blockerCount === 0
             ? "border-status-green/20 bg-status-green/[0.08] text-status-green"
             : "border-status-amber/25 bg-status-amber/[0.08] text-status-amber"
@@ -103,6 +118,7 @@ export const DependencyStatusIndicators: FunctionComponent<{
         const statusCopy = getDependencyStatusCopy(dep);
         const dependencyState = getDependencyState(dep);
         const blockingCopy = isDependencyBlocking(dep) ? "Blocking dependency" : "Resolved dependency";
+        const blockingBadge = isDependencyBlocking(dep) ? "Blocking" : "Clear";
         const stateDescription = dep.stateDescription ?? getDependencyPresentation(dep.status, dep.isKnown !== false && !dep.title.startsWith("Unknown Task")).stateDescription;
         const containerClass = getDependencyToneClass(dep);
 
@@ -110,8 +126,9 @@ export const DependencyStatusIndicators: FunctionComponent<{
           <div
             key={dep.recordId}
             role="listitem"
-            className={`flex min-h-7 max-w-full items-center gap-1.5 rounded-lg border px-2 py-1 text-[9px] font-bold uppercase tracking-[0.12em] ${containerClass}`}
+            className={`flex min-h-7 max-w-full items-center gap-1.5 rounded-lg border px-2 py-1 text-[9px] font-bold uppercase tracking-[0.12em] transition-colors motion-reduce:transition-none ${containerClass}`}
             data-dependency-state={dependencyState}
+            data-blocking={isDependencyBlocking(dep) ? "true" : "false"}
             title={`Depends on ${dep.title} (${statusCopy}; ${statusText})`}
             aria-label={`Depends on task ${dep.id}, ${statusCopy.toLowerCase()}. ${blockingCopy}. ${stateDescription}. Status: ${statusText}. Title: ${dep.title}`}
           >
@@ -119,6 +136,7 @@ export const DependencyStatusIndicators: FunctionComponent<{
             <ArrowRight className="w-2.5 h-2.5" strokeWidth={2.5} aria-hidden="true" />
             <span aria-hidden="true" className="shrink-0">{dep.id}</span>
             <span aria-hidden="true" className="rounded-full bg-current/10 px-1.5 py-0.5 text-[8px] opacity-90">{statusCopy}</span>
+            <span aria-hidden="true" className="rounded-full border border-current/15 bg-current/5 px-1.5 py-0.5 text-[8px] opacity-90">{blockingBadge}</span>
             <span aria-hidden="true" className="min-w-0 max-w-[9rem] truncate text-[8px] normal-case opacity-80">{dep.title}</span>
           </div>
         );

@@ -7,7 +7,7 @@ import { AttentionLedger } from "../AttentionLedger.js";
 import { AlertTriangle, CheckCircle2, ChevronDown } from "lucide-preact";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 import { useGsapInteractionTokens } from "../../lib/motion/constants.js";
-import { RuntimeSnapshotSurfaceBadge } from "./ExecutionRuntimePanel.js";
+import { RuntimeSnapshotSurfaceBadge, RuntimeSnapshotSurfaceNotice } from "./ExecutionRuntimePanel.js";
 
 export const AttentionQueuePanel: FunctionComponent<{
     collapsible?: boolean;
@@ -97,7 +97,7 @@ export const AttentionQueuePanel: FunctionComponent<{
                  ].map(stat => (
                      <div key={stat.label} className="rounded-xl border border-black/[0.04] bg-white/55 px-3 py-2 dark:border-white/[0.06] dark:bg-void-900/30 min-w-0">
                          <div className="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">{stat.label}</div>
-                         <div className={`mt-1 font-mono text-lg font-black leading-none ${stat.color}`}>{stat.value}</div>
+                         <div className={`mt-1 font-mono text-base font-semibold leading-none ${stat.color}`}>{stat.value}</div>
                      </div>
                  ))}
             </div>
@@ -140,6 +140,7 @@ export const AttentionQueuePanel: FunctionComponent<{
             >
                 <div ref={contentRef} className={collapsible ? "collapsible-content overflow-hidden" : ""}>
                     <div className="relative z-10 flex flex-col gap-3 px-5 pb-5 pt-0">
+                        <RuntimeSnapshotSurfaceNotice surface={snapshotSurface} panelLabel="Attention queue" />
                         {content}
                     </div>
                 </div>

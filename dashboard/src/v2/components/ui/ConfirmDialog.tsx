@@ -239,16 +239,17 @@ interface ConfirmDialogProps {
   options: ConfirmDialogOptions | null;
   onConfirm: () => void | Promise<void>;
   onCancel: () => void;
+  restoreFocus?: boolean;
 }
 
-export function ConfirmDialog({ isOpen, options, onConfirm, onCancel }: ConfirmDialogProps) {
+export function ConfirmDialog({ isOpen, options, onConfirm, onCancel, restoreFocus = true }: ConfirmDialogProps) {
   const [shouldRender, setShouldRender] = useState(isOpen);
   const [isClosing, setIsClosing] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [confirmFlash, setConfirmFlash] = useState(false);
 
   const cardRef = useRef<HTMLDivElement>(null);
-  const trapRef = useFocusTrap(shouldRender && !isClosing, { onClose: () => handleClose(onCancel), restoreFocus: true });
+  const trapRef = useFocusTrap(shouldRender && !isClosing, { onClose: () => handleClose(onCancel), restoreFocus });
   const reducedMotion = useReducedMotion();
   const gsapTokens = useGsapInteractionTokens();
   const cssTokens = useInteractionTokens();
@@ -386,7 +387,7 @@ export function ConfirmDialog({ isOpen, options, onConfirm, onCancel }: ConfirmD
             </div>
             <div className="min-w-0 flex-1">
               <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-300">Confirm Runtime Action</p>
-              <h2 id="confirm-dialog-title" className="mt-1 text-lg font-black leading-tight tracking-tight text-void-900 dark:text-slate-50">
+              <h2 id="confirm-dialog-title" className="mt-1 text-base font-semibold leading-tight tracking-tight text-void-900 dark:text-slate-50">
                 {title}
               </h2>
             </div>
@@ -421,7 +422,7 @@ export function ConfirmDialog({ isOpen, options, onConfirm, onCancel }: ConfirmD
               onConfirm={() => handleClose(onConfirm)}
               label={confirmLabel}
               isLoading={isProcessing}
-              className={`inline-flex min-h-10 items-center justify-center rounded-xl px-4 py-2 text-sm font-black transition-all duration-[var(--interaction-control-feedback-duration)] ease-[var(--interaction-control-feedback-ease)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 motion-safe:active:scale-[0.98] motion-reduce:duration-0 motion-reduce:ease-none disabled:cursor-not-allowed disabled:opacity-50 ${toneStyles.confirm}`}
+              className={`inline-flex min-h-10 items-center justify-center rounded-xl px-4 py-2 text-sm font-semibold transition-all duration-[var(--interaction-control-feedback-duration)] ease-[var(--interaction-control-feedback-ease)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 motion-safe:active:scale-[0.98] motion-reduce:duration-0 motion-reduce:ease-none disabled:cursor-not-allowed disabled:opacity-50 ${toneStyles.confirm}`}
             />
           ) : (
             <button
@@ -430,7 +431,7 @@ export function ConfirmDialog({ isOpen, options, onConfirm, onCancel }: ConfirmD
               disabled={isProcessing}
               aria-busy={isProcessing}
               style={controlTransitionStyle}
-              className={`inline-flex min-h-10 items-center justify-center gap-2 rounded-xl px-4 py-2 text-sm font-black transition-all duration-[var(--interaction-control-feedback-duration)] ease-[var(--interaction-control-feedback-ease)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 motion-safe:active:scale-[0.98] motion-reduce:duration-0 motion-reduce:ease-none disabled:cursor-not-allowed disabled:opacity-50 ${toneStyles.confirm} ${confirmFlash ? '!bg-status-green !text-white !border-transparent' : ''}`}
+              className={`inline-flex min-h-10 items-center justify-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold transition-all duration-[var(--interaction-control-feedback-duration)] ease-[var(--interaction-control-feedback-ease)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 motion-safe:active:scale-[0.98] motion-reduce:duration-0 motion-reduce:ease-none disabled:cursor-not-allowed disabled:opacity-50 ${toneStyles.confirm} ${confirmFlash ? '!bg-status-green !text-white !border-transparent' : ''}`}
             >
               {isProcessing && <><Loader2 aria-hidden="true" className="h-4 w-4 animate-spin motion-reduce:animate-none" /><span className="sr-only">Processing, please wait</span></>}
               {isProcessing ? "Processing..." : confirmLabel}

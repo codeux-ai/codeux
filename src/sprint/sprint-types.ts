@@ -2,6 +2,7 @@ import type { JulesActivity, JulesSession, Subtask } from "../contracts/app-type
 import type { ExecutionRepository } from "../repositories/execution-repository.js";
 import type { ProjectManagementRepository } from "../repositories/project-management-repository.js";
 import type { Logger } from "../shared/logging/logger.js";
+import type { SprintRunLifecycleService } from "../services/sprint-run-lifecycle-service.js";
 
 export interface SprintAgentArgs {
   sprint_number?: number;
@@ -27,11 +28,13 @@ export interface SessionSyncDependencies {
   resolveSessionName: (session: Partial<JulesSession>) => string | undefined;
   extractSessionId: (session: Partial<JulesSession>) => string | undefined;
   fetchRecentActivities: (sessionName: string, pageSize?: number) => Promise<JulesActivity[]>;
+  activityFetchTimeoutMs?: number;
   listAllActivities?: (sessionId: string) => Promise<JulesActivity[]>;
   getSession?: (sessionId: string) => Promise<JulesSession>;
   isActionRequiredState: (state?: string) => boolean;
   projectManagementRepository?: ProjectManagementRepository;
   executionRepository?: ExecutionRepository;
+  sprintRunLifecycleService?: Pick<SprintRunLifecycleService, "finalizeCancellationIfIdle">;
   sprintRunId?: string;
   logger: Logger;
   julesUsage?: {

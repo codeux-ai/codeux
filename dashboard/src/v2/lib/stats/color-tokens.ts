@@ -1,5 +1,5 @@
 export const STATS_COLORS = {
-  signal: "#00E0A0",
+  signal: "var(--stats-accent-signal)",
   amber: "#FFB800",
   ember: "#D99A12",
   clay: "#B7794B",

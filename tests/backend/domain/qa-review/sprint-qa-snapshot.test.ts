@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   buildSprintQaSnapshot,
+  evaluateSprintQaReviewCycleDecision,
   evaluateSprintQaReviewDecision,
   readSprintQaSnapshot,
   shouldRunSprintQaReview,
@@ -171,6 +172,39 @@ describe("Sprint QA Snapshot", () => {
         maxSprintReviewRuns,
         shouldRunReview,
       })).toEqual(expected);
+    });
+  });
+
+  describe("evaluateSprintQaReviewCycleDecision", () => {
+    it("allows completion only when every reviewer in the latest cycle passed", () => {
+      expect(evaluateSprintQaReviewCycleDecision({
+        latestRuns: [
+          makeRun({ status: "completed", outcome: "pass", runIndex: 1 }),
+          makeRun({ id: "run-2", status: "completed", outcome: "pass", runIndex: 1 }),
+        ],
+        maxSprintReviewRuns: 3,
+        shouldRunReview: false,
+      })).toEqual({ action: "skip_review", reason: "already_passed" });
+    });
+
+    it("blocks completion when any reviewer in the latest cycle is still running or requested changes", () => {
+      expect(evaluateSprintQaReviewCycleDecision({
+        latestRuns: [
+          makeRun({ status: "completed", outcome: "pass", runIndex: 1 }),
+          makeRun({ id: "run-2", status: "running", outcome: null, runIndex: 1 }),
+        ],
+        maxSprintReviewRuns: 3,
+        shouldRunReview: false,
+      })).toEqual({ action: "block_completion", reason: "review_running" });
+
+      expect(evaluateSprintQaReviewCycleDecision({
+        latestRuns: [
+          makeRun({ status: "completed", outcome: "pass", runIndex: 1 }),
+          makeRun({ id: "run-2", status: "completed", outcome: "changes_requested", runIndex: 1 }),
+        ],
+        maxSprintReviewRuns: 3,
+        shouldRunReview: false,
+      })).toEqual({ action: "block_completion", reason: "awaiting_follow_up" });
     });
   });
 });

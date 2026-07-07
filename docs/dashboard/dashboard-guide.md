@@ -18,6 +18,8 @@ If the requested port is busy, startup automatically retries the next port (`+1`
 ## Live Data Contracts
 All live fields rendered in the dashboard originate from the SQLite database, are assembled by the backend, and transported via HTTP/WebSockets. The browser does not reconcile competing states. See the [Live Runtime Contract](../architecture/live-runtime-contract.md) for details on ownership of fields like `projectId`, `status`, and `execution`.
 
+The v2 Live Session route keeps runtime data wiring in `LiveSessionPage.tsx`, pure projection/filter derivation in `dashboard/src/v2/lib/live-session-view-model.ts`, and repeated panel markup under `dashboard/src/v2/components/live-session/`. Keep sprint-scoped arrays such as dispatches, events, invocations, and projected task card items memoized from stabilized runtime snapshots so reconnects, stale banners, filters, and pending runtime actions do not force avoidable recomputation or change accessibility semantics.
+
 ## API Endpoints
 
 Implemented in `src/server/dashboard-server.ts`.
@@ -47,6 +49,8 @@ Project management:
   - Imports sprint/task markdown into sqlite
 - `GET /api/projects/:projectId/issues`
   - Searches GitHub/GitLab issues for the selected project using provider, repository, text, state, label, and assignee filters
+- `PUT /api/sprints/:sprintId/linked-issues`
+  - Replaces linked sprint issues and, for linked Jira imports, attempts the configured import transition. The response includes persisted `linkedIssues` plus non-fatal transition `warnings`.
 - `GET /api/projects/:projectId/sprints/:sprintId/export`
   - Exports one sprint plus its tasks back to markdown
 - `PATCH /api/sprints/:sprintId`
@@ -111,6 +115,12 @@ Project management:
   - Updates scheduler status, timing, recurrence, or target payload
 - `DELETE /api/scheduler/:entryId`
   - Deletes a scheduler entry
+- `GET /api/projects/:projectId/scheduler/memory-remediation`
+  - Evaluates memory metrics and proposes scheduled remediation tasks
+- `PUT /api/projects/:projectId/scheduler/memory-remediation`
+  - Configures the automatic memory remediation schedule
+- `POST /api/scheduler/run-due`
+  - Processes due scheduler entries manually
 
 Legacy runtime:
 - `GET /api/status`
@@ -119,6 +129,10 @@ Legacy runtime:
   - Selected-project execution control-plane snapshot (`sprintRuns`, `taskDispatches`, `recentEvents`, lease ownership)
 - `GET /api/telemetry/overview`
   - Cross-project overview telemetry snapshot for all currently active project runs
+- `GET /api/live`
+  - Unified Live runtime snapshot for the selected project
+- `PUT /api/projects/:projectId/preferred-worker`
+  - Sets the preferred worker host for the selected project
 - `GET /api/realtime`
   - websocket upgrade endpoint for dashboard realtime subscriptions (`projects`, `overview`, `project:<projectId>`, `thread:<threadId>`)
 - `GET /api/projects/:projectId/execution`
@@ -163,6 +177,24 @@ Legacy runtime:
   - Rebuilds and restarts one sprint preview session
 - `POST /api/browser/sessions/:sessionId/stop`
   - Stops one sprint preview session
+- `GET /api/projects/:projectId/file-browser/sessions`
+  - Lists persisted sprint file-browser sessions for the selected project
+- `POST /api/projects/:projectId/sprints/:sprintId/file-browser/start`
+  - Starts or reuses a file-browser session for one sprint
+- `POST /api/file-browser/sessions/:sessionId/rebuild`
+  - Rebuilds and restarts a file-browser session
+- `POST /api/file-browser/sessions/:sessionId/stop`
+  - Stops a file-browser session
+- `DELETE /api/file-browser/sessions/:sessionId`
+  - Deletes a file-browser session
+- `GET /api/file-browser/sessions/:sessionId/tree`
+  - Lists the filesystem tree for the sprint branch
+- `GET /api/file-browser/sessions/:sessionId/file`
+  - Reads a file from the file-browser session
+- `GET /api/file-browser/sessions/:sessionId/changes`
+  - Gets git status/changes for the sprint branch
+- `GET /api/file-browser/sessions/:sessionId/diff`
+  - Gets a diff for the sprint branch
 - `GET /api/projects/:projectId/sprints/:sprintId/preview/script`
   - Loads the editable preview startup script or generated fallback for one sprint
 - `PUT /api/projects/:projectId/sprints/:sprintId/preview/script`
@@ -189,6 +221,18 @@ Legacy runtime:
   - Resumes a paused sprint run
 - `POST /api/sprint-runs/:sprintRunId/cancel`
   - Stops an active sprint run
+- `GET /api/projects/:projectId/quicksprints/templates`
+  - Lists resolved quicksprint templates for the selected project
+- `GET /api/projects/:projectId/quicksprints/templates/:templateId`
+  - Gets one quicksprint template
+- `POST /api/projects/:projectId/quicksprints/templates`
+  - Creates a new custom project quicksprint template
+- `PATCH /api/projects/:projectId/quicksprints/templates/:templateId`
+  - Updates a quicksprint template
+- `DELETE /api/projects/:projectId/quicksprints/templates/:templateId`
+  - Deletes or hides a quicksprint template
+- `POST /api/projects/:projectId/quicksprints/execute`
+  - Plans and starts a quicksprint directly
 
 ## UI Sections
 
@@ -196,6 +240,7 @@ Legacy runtime:
 - Overview metric cards use the restored `StatsCard` visual system from the operational command surface: four responsive cards with ambient bottom sparklines, stable card height, and compact detail rows for cost, invocations, active sprint, queue health, and active time.
 
 ### Navigation
+- Sidebar and dock navigation expose the primary routes in guided-tour order: Chat, Overview, Sprints, Tasks, Agents, Stats, Schedule (`/scheduler`), Memory, Knowledge (`/knowledge`), Browser, Files, Live, Docs (`/docs`), and Settings/Config.
 - The top-nav workspace search trigger uses a more opaque glass surface in light and dark mode so it stays readable against page content while preserving the existing blur treatment.
 - The notification panel announces refresh, mark-read, dismiss, and action outcomes through polite live regions. Refresh and mark-all-read controls expose pending state with `aria-busy`, disabled controls include visible reasons, and every repeated row action includes the notification title in its accessible name.
 - Notification rows include textual read/unread state in addition to the severity accent rail. Initial rows use the `listReveal` motion contract, read/dismiss compaction uses `listReorder`, and reduced-motion users receive immediate static state changes without transitional movement.
@@ -227,11 +272,12 @@ Legacy runtime:
 ### V2 project management
 - Interactive dashboard controls use pointer cursors consistently: enabled buttons, links, tab controls, form toggles, menu/popover triggers, DAG nodes, cards, and dismissible overlays expose a pointer affordance, while disabled controls retain `not-allowed`.
 - V2 pages use the shared `PageContainer` atomic component for page-level layout. It renders fullscreen (`max-w-none`, no fixed cap) with a consistent horizontal/vertical padding rhythm, and is the single source of truth for page container width across overview, project, sprint, task, live, memory, knowledge, stats, settings, agents, chat, and browser routes.
-- V2 pages render their intro/heading via the shared `PageHeader` atomic component (`components/layout/PageHeader.tsx`): an optional icon + uppercase eyebrow, a unified `text-2xl md:text-3xl` title, an optional subtitle, and optional right-aligned `actions`. This keeps every page's intro section visually consistent — do not hand-roll bespoke page headings.
+- V2 pages render their intro/heading via the shared `PageHeader` atomic component (`components/layout/PageHeader.tsx`): an optional icon + uppercase eyebrow, a unified `text-2xl md:text-3xl` title, an optional subtitle, and optional actions. Header titles and subtitles use balanced wrapping, and action clusters stack/wrap below the heading until the `lg` breakpoint so mobile and tablet layouts do not squeeze controls beside long titles. Keep all non-H1 headings visually lighter than the route title with explicit Tailwind classes, generally `text-xl`/`text-2xl` with `font-semibold` for section headings and `text-base`/`text-lg` with `font-semibold` for card titles.
+- Light mode resolves the shared `signal-*` utilities to a stable blue accent for active, selected, focus, and primary controls; dark mode keeps the existing jade signal. Use the semantic signal utilities or CSS variables instead of hardcoded green values in new dashboard UI.
 - Top-nav project selector persists the active project in sqlite
 - Top-nav sprint selector persists the active sprint for the selected project
 - Top-nav search sits in the left header cluster beside the brand and lazy-loads project tasks only after the search overlay opens; the active task counter uses the same compact height as the project, sprint, and worker selectors
-- Global Search preserves previous results during its token-timed debounce to avoid layout shift, only polls for container previews when opened, and keeps arrow-key/Enter/Escape navigation wired through `aria-activedescendant` while focus remains on the combobox. Stale result refreshes keep current rows visible and activatable with `aria-busy`, a single polite refresh announcement, and a persistent updating badge; keyboard movement scrolls only the overlay results container so the page behind the search does not jump. Unavailable rows remain inspectable with a visible reason referenced by `aria-describedby`, are skipped by pointer and keyboard activation when another row can open, and stay non-navigating on Enter when every result is unavailable. Sprint results use the selected project's configured sprint key prefix, so searches for project keys such as `CODUX-32` match the same sprint key shown in the row. Selecting a sprint opens the Sprints page with `?sprintKey=<key>` so the ledger filter is seeded from the explicit route payload rather than from visible row text.
+- Global Search preserves previous results during its token-timed debounce to avoid layout shift, only polls for container previews when opened, and keeps arrow-key/Enter/Escape navigation wired through `aria-activedescendant` while focus remains on the combobox. The trigger, overlay entrance/exit, row reveal, active-row movement, and control feedback all resolve through the shared `enterExit`, `listReveal`, `selectionMovement`, and `controlFeedback` motion contracts; reduced-motion users get instant state changes with static cues such as focus rings, selected borders, disabled badges, count chips, `aria-busy`, and live copy. Stale result refreshes keep current rows visible with `aria-busy`, a single polite refresh announcement, and a persistent updating badge, while a newly committed query with no matches shows a true empty state instead of a loading placeholder. Keyboard movement scrolls only the overlay results container so the page behind the search does not jump. Unavailable rows remain inspectable with a visible reason referenced by `aria-describedby`, are marked `aria-disabled`, are skipped by pointer and keyboard activation when another row can open, and stay non-navigating on Enter when every result is unavailable. Sprint results use the selected project's configured sprint key prefix, so searches for project keys such as `CODUX-32` match the same sprint key shown in the row. Selecting a sprint opens the Sprints page with `?sprintKey=<key>` so the ledger filter is seeded from the explicit route payload rather than from visible row text.
 - Shared dropdown menus enhance nested menu items inside layout wrappers, so keyboard navigation and item entrance animation remain consistent when menu content is grouped.
 - Shared popovers own trigger open/close toggling; feature triggers such as Agent Memory avoid duplicate local toggles that can immediately close the panel after opening.
 - The Agents page now includes a Push Agents header action with an inline destination picker, so users explicitly choose between a local commit, branch push, or pull request before dispatching the backend push request.
@@ -244,12 +290,15 @@ Legacy runtime:
 - Live telemetry and runtime panels expose loading, empty, reconnecting, disconnected, pending, warning, and error states through named regions, polite status/log live regions, and assertive alerts only for blocking disconnect/error states. Dense runtime strings such as branches, PR titles, workflow names, provider/model labels, connection keys, and event snippets wrap inside their panels to avoid page-level horizontal overflow.
 - The Sprint ledger keeps sorting, filtering, list-window changes, row selection, per-row menus, and bulk actions accessible with and without motion. Filtered select-all acts on the current filtered result set, selections are pruned when filters hide rows, rows expose stable `aria-selected`/`aria-busy` states with selected and pending badges, and each ledger action emits one concise live outcome with visible and selected counts. Pending bulk controls show a visible disabled reason, reference that reason with `aria-describedby`, suppress duplicate activation, and destructive bulk delete uses the shared hold-to-confirm dialog with a target-specific title and focus restoration to the delete trigger or ledger fallback.
 - Creating a new sprint automatically updates the active sprint selection to that new sprint
+- The Sprints page closes open sprint and quicksprint composer surfaces when the active project changes, preventing stale project-scoped composer state from carrying into the newly selected project.
+- Sprint and quicksprint planning overlays can be minimized without blocking the next composer action. The minimized status surfaces expose a new sprint/quicksprint action that detaches the UI from the in-flight request while the request continues in the background; cancellation remains a separate explicit control.
 - The top-nav worker selector now always lists the built-in virtual workers even when no live MCP worker is connected
 - Selecting a virtual worker from the top nav switches the selected project into `workers.executionMode = VIRTUAL` with that provider
 - Connected MCP worker selection has been removed; the worker selector is now virtual-only
 - Projects page is DB-backed and can create/select/delete projects
 - Project cards now surface richer read-only metadata from `GET /api/projects`, including source badges, repository URL or workspace path, created/updated timestamps, last run timestamp/status, branch details, provider, host, and task-completion counts.
 - Project card quick actions are always visible and include `Open`, `Setup project`, `Project settings`, and `Delete`; the settings action first selects the project and then routes to `/config` so the existing scoped settings surface opens for the right project.
+- The overview page `Projects & Sources` grid shows up to the five most recently updated project source cells by default. It keeps as many cells as fit on one row while at least three can fit; below that threshold it switches to two compact rows and trims the visible default set to avoid leaving one project cell alone on a wrapped row.
 - Project source cells now select the clicked project before routing: the `Sprints` action loads `/sprints`, and the settings gear loads `/config`.
 - The Projects page now uses the dashed grid Add Project card as the single entry point for creating a project; the top-right header CTA was removed to keep creation affordance in one place.
 - The `Add Project` dialog now keeps keyboard focus inside the active form field while typing, and its initial focus respects the form's `autofocus` input instead of jumping to the header close button
@@ -261,7 +310,7 @@ Legacy runtime:
 - Project setup runs display immediate toast feedback, an `Initializing` project-card state, and direct `Open invocation` actions while the background setup invocation is running and after it finishes.
 - Git URL projects are cloned into a local checkout before the project record is created. When the optional clone directory is left empty, Code UX uses `~/.code-ux/projects/<repo-name>` so Docker workspaces always seed from a real repository root instead of a relative placeholder path.
 - Project selector and project cards now refresh over websocket when the project collection or selected project changes
-- Sprints page is project-scoped, creates sprint records in sqlite, and exposes a structured Import flyout with Markdown plus provider-specific GitHub, GitLab, and Jira issue import entries. The issue import modals support guided filters, quick presets, select-all and clear-selection controls, conversation appends, linked-issue composer cards, and special remediation-task routing, while markdown export remains available for sprint round-tripping. See [Sprint Imports](./sprint-imports.md).
+- Sprints page is project-scoped, creates sprint records in sqlite, and exposes a structured Import flyout with Markdown plus provider-specific GitHub, GitLab, and Jira issue import entries. The issue import modals open on a low-noise guided search surface with progressive advanced filters, active filter summaries, select-all and clear-selection controls, conversation appends, linked-issue composer cards, and special remediation-task routing, while markdown export remains available for sprint round-tripping. See [Sprint Imports](./sprint-imports.md).
 - Sprint and Quicksprint planning route controls list virtual provider instances by their settings-page names (for example, `Codex Primary`) with provider brand icons, keep connected worker routes visually distinct, and show resolved default route/model labels such as `Default Route (Codex Primary)` and `Default Model (gpt-5.5)`.
 - Sprints page now also refreshes from project-structure realtime invalidation, so sprint CRUD and status-adjacent updates propagate across open dashboard tabs
 - Sprint cells and ledger rows now surface a compact human-intervention badge when a paused sprint needs merge work, planning, or another operator action.
@@ -271,9 +320,10 @@ Legacy runtime:
 - Live sprint-run cards keep intervention reason/instruction prose collapsed behind an `Instructions` button so long attention messages do not resize the invocation feed unexpectedly.
 - Sprints page now also starts and stops sprint orchestration directly from sprint cards, with optimistic visual state updates tied to project-scoped execution data
 - The organic sprint bubble cells use the same live start/stop control path as the registry list, so the hover play/stop action is now functional instead of decorative
+- Organic sprint bubble cell shadows use the shared project-cell organic shadow underlay from `organic-cell-styles.ts`, keeping sprint and project gallery cells at the same ambient depth in light and dark themes.
 - Sprint cells now surface a QA-reviewed indicator with an expandable overlay section inside the created column, and allow marking sprints completed directly from the cell menu
 - Task rows and Live task cards now surface task-level QA review badges from the latest task QA run, including a running indicator while QA review is in progress.
-- The Tasks page sprint scope selector uses a keyboard-accessible listbox pattern with selected, open, loading, and empty option state, arrow/Home/End navigation, Escape close, outside-click close, and trigger focus restoration. Task board status and priority filters keep the current cards visible during the short filter transition, then announce the settled result count through a polite live region. Task board lanes render as named regions with count summaries, drop-target feedback, reduced-motion drag-disabled copy, and status regions for loading, empty, and error states; Kanban cards expose task id/title/status/priority, dependency blockers, optimistic saving, session, preview, PR, live runtime, rerun availability, duration, QA review context, and screen-reader drag guidance in stable accessible text while keeping drag-and-drop pointer-only.
+- The Tasks page sprint scope selector uses a keyboard-accessible listbox pattern with selected, open, loading, and empty option state, arrow/Home/End navigation, Escape close, outside-click close, and trigger focus restoration. Task board status and priority filters keep the current cards visible during the short filter transition, then announce the settled result count through a polite live region. Task board lanes render as named regions with count summaries, drop-target feedback, reduced-motion drag-disabled copy, and status regions for loading, empty, and error states; Kanban cards expose task id/title/status/priority, dependency blockers, optimistic saving, session, preview, PR, live runtime, rerun availability, duration, QA review context, and screen-reader drag guidance in stable accessible text while keeping drag-and-drop pointer-only. Card quick actions sit in the bottom footer below metadata/dependency indicators; fine-pointer layouts reserve the action tray and reveal it on hover or keyboard focus, while touch/coarse-pointer layouts keep actions visible.
 - Rendered markdown previews use near-black body, heading, list, blockquote, and table text in light mode while preserving slate/white dark-mode text and signal-colored links/code.
 - Live task cards now include `Edit` and `Force complete` actions:
   - `Edit` deep-links to `/tasks?taskId=<taskId>&sprintId=<sprintId>` so operators can open the task editor directly from the live surface.
@@ -287,8 +337,8 @@ Legacy runtime:
 - The planning feedback overlay surfaces both an ETA countdown and an elapsed runtime timer. ETA comes from `GET /api/projects/:projectId/sprints/composer/eta`, computed server-side from the latest 10 planning invocations for the selected project, with a 3:00 fallback when no usable sample exists.
 - When editing a sprint that already has planned tasks, the composer offers `Replan` (discard and regenerate subtasks), `Append Tasks` (open a task-creation modal pre-scoped to the sprint with dependency selection from existing tasks), and `Save Draft` (update name/goal only)
 - The sprint composer includes a planning-agent selector that allows operators to choose an alternate planning preset (filtered for presets with a `planning` label) for the current sprint. Leaving this on the default `Planning agent` preserves existing behavior, and any selection is honored by `Plan ahead with AI`, `Plan Only`, `Plan & Start`, and `Replan`.
-- Imported GitHub/GitLab/Jira issues render as linked issue cards directly under the Sprint Prompt field and are persisted with the sprint. Each card shows source metadata, state, labels, assignees, and whether conversation context is included. The prompt receives a linked-issues markdown section so planning sees the imported issue scope, while special remediation tasks render in a separate composer tray and are persisted through the imported-task endpoint instead of being folded into planning prose.
-- Settings -> Sprint -> Git Flow includes `Auto-close linked issues`, which closes imported GitHub/GitLab issues only after sprint completion and the main merge gate is no longer blocking. Jira auto-close is configured separately in Settings -> Integrations -> Jira and uses the configured transition name.
+- Imported GitHub/GitLab/Jira issues render as linked issue cards directly under the Sprint Prompt field and are persisted with the sprint. Each card shows source metadata, state, labels, assignees, and whether conversation context is included. The prompt receives a linked-issues markdown section so planning sees the imported issue scope. Linked Jira imports also attempt the Settings -> Integrations -> Jira import transition, enabled by default as `In Work`; transition failures are returned as warnings and do not remove the local linked issue. Special remediation tasks render in a separate composer tray and are persisted through the imported-task endpoint instead of being folded into planning prose or moved through Jira import transitions.
+- Settings -> Sprint -> Git Flow includes `Auto-close linked issues`, which closes imported GitHub/GitLab issues only after sprint completion and the main merge gate is no longer blocking. Jira auto-close is configured separately in Settings -> Integrations -> Jira and uses the close transition name, defaulting to `Done`; it is separate from the import transition.
 - The sprint composer now features a visible, animated planning feedback overlay that replaces the generic spinner during `Plan ahead with AI`, `Plan Only`, `Plan & Start`, and `Replan` actions.
 - Planning feedback is deterministic and staged, using an animated ship treatment (Wooden Ship for AI improvement, Container Ship for planning) that drifts across the composer based on elapsed time to make progress visible
 - Planning and prompt-improvement requests continue server-side if the browser tab is refreshed or closed. Request initiation immediately disables duplicate composer actions, marks the composer busy for assistive technology, keeps the current form content visible, and announces state-specific pending copy through the existing action feedback region. The overlay's `Cancel Active Request` action sends an explicit cancellation request and leaves visible recovery feedback in the composer. Form validation focuses the first invalid required field for prompt improvement or submission attempts instead of silently leaving the operator in place. The `Save Draft` and `Append Tasks` modes also have defined progressive text for planning feedback, while `New Sprint` and `New Quicksprint` detach the current planning run from the visible composer, immediately reset the form controls, and leave the old run to finish without closing or mutating the fresh composer. Reduced-motion users see the planning overlay in a static-but-informative state rather than a moving ship animation.
@@ -308,7 +358,7 @@ Legacy runtime:
 - The notification center now renders startup-check notifications from real readiness data, surfaces human-intervention alerts when a sprint needs operator attention, and persists read/dismissed notification state in browser storage.
 - GitLab support is available from Integrations with dashboard token persistence, backend GitLab host detection, `glab` support, and GitLab CI queries. `GITLAB_TOKEN` / `GLAB_TOKEN` remain supported as external fallbacks.
 - The Integrations catalog is grouped by purpose (`CLI`, `GIT`, `PM`) and keeps host hint import plus runtime auth-copy status in the panel header.
-- Jira support is available from Integrations with system-scoped site URL, account email, API token, default project key, close transition, and Jira-specific auto-close controls. The Sprints page Jira import opens directly from the Import menu and uses the same sprint composer flow as GitHub/GitLab imports, with advanced exact-key, user, label, date-window, sort, limit, and JQL override filters plus optional special-task routing for security and quality follow-ups.
+- Jira support is available from Integrations with system-scoped site URL, account email, API token, default project key, import transition controls defaulting to `In Work`, close transition controls defaulting to `Done`, and Jira-specific auto-close controls. The Sprints page Jira import opens directly from the Import menu and uses the same sprint composer flow as GitHub/GitLab imports, with exact-key lookup in the default guided search, progressive user, label, date-window, and JQL override filters, plus optional special-task routing for security and quality follow-ups.
 - Sprint data now hydrates cache-first when revisiting the page and refreshes in the background, so the showcase and ledger do not flash empty while the latest data loads. First-hydration uses skeleton placeholders while background refreshes continue, preserving existing data without reintroducing blocking loaders
 - Sprint and task list windows support selectable page size options (`10`, `20`, `50`, `100`, `All`) with a default of `20` (a frontend-only view change with no API contract change)
 - The Tasks board applies status and priority filters before list-windowing; lane headers and aggregate stats count the full filtered set, while only the visible card arrays are capped by the selected window. Filter changes preserve the previous board content until the settled result is ready to announce. `coding_completed` and `QA_REVIEW_FAILED` tasks continue to render in the `in_progress` lane.
@@ -351,9 +401,11 @@ Legacy runtime:
 - The sprint page no longer runs a full-page entrance fade on mount, which keeps initial navigation more immediate and avoids perceived flashing
 - The sprint page now uses lighter targeted motion on the heading instead of a full-page fade, keeping navigation more immediate without leaving the page static
 - Sprint composer planning-route overrides now correctly force the selected virtual provider instead of only overriding the model on the project default provider
+- Sprint composer includes a `Schedule` execution mode that saves the sprint and creates a scheduler entry without planning or starting immediately. The schedule can use an absolute date/time or run after another project sprint ends, and the saved sprint keeps key overrides, prompts, routing/model choices, agent presets, linked issues, and imported tasks.
 - Heavy WebGL-only dashboard surfaces are now lazy-loaded, including the global ocean background and the agent avatar scene, so the initial dashboard route no longer eagerly pulls those renderer modules into the first page chunk
 - Tasks page is project-scoped and uses a three-column board state (`Queued`, `In Progress`, `Completed`), where `coding_completed` acts as active work.
 - Tasks page renders create/edit inline through the new `TaskComposer` replacing the modal flow.
+- Tasks page keeps route-level state, sprint scope routing, optimistic task insertion, and task mutation handlers in `TasksPage.tsx`, while focused task-board components under `dashboard/src/v2/components/tasks/` render the sprint scope selector, filters, and Kanban lanes from the shared task-board view-model/action helpers.
 - Tasks page task-card PR affordances use resolved project settings from `GET /api/projects/:projectId/settings/effective`: `PR pending` metadata and pending PR actions are hidden when effective project git settings disable task PR creation, including `git.autoCreatePr` off or `git.githubMode` set to `LOCAL`, while runtime-enriched PR links remain visible for existing pull requests whenever a URL exists.
 - Legacy create/edit task modals still announce validation through the shared action feedback region, focus and scroll the first invalid required field into view, and expose status, priority, executor, and dependency choices with native radio or checkbox semantics. Dependency filtering reports result-count changes through a polite live region and preserves selected dependencies when the current filter hides them.
 - On a fresh installation, the Tasks page replaces the old generic project/sprint/task database message with a polished task-scope placeholder; the project action opens the shared Add Project dialog and the sprint action routes operators to the Sprints page before the kanban controls appear.
@@ -367,7 +419,7 @@ Legacy runtime:
 - Tasks page stores explicit task executor preference (`auto`, `docker_cli`, `jules`)
 - The Tasks board entrance animation now replays only for project/view/filter changes instead of every background task refresh
 - Stats page is project-scoped and visualizes tracked token, time, model/provider, source, task/sprint, Git, and system invocation telemetry for the selected project with `1h`, `24h`, `7d`, `30d`, `all time`, and custom date windows.
-- Scheduler page is project-scoped and provides a calendar plus 24-hour day view for timed sprint starts, quicksprint launches, and `/chat` messages. Recurring entries expand into every visible day in the calendar and support minute-level recurrence (`minutely` in API/MCP payloads, `Minutes` in the form) plus endless, fixed-count, and end-date/time recurrence. It also supports editing existing entries directly from scheduled entries or occurrences with full form hydration, title customization, and cancellation support. See [Scheduler](./scheduler.md).
+- Scheduler page is project-scoped and provides a calendar plus 24-hour day view for timed sprint starts, quicksprint launches, and `/chat` messages. Recurring entries expand into every visible day in the calendar and support minute-level recurrence (`minutely` in API/MCP payloads, `Minutes` in the form) plus endless, fixed-count, and end-date/time recurrence. It also supports editing existing entries directly from scheduled entries or occurrences with full form hydration, title customization, cancellation support, and the shared absolute/after-sprint-end timing contract used by sprint composer and quicksprint scheduling shortcuts. See [Scheduler](./scheduler.md).
 - Browser page is project-scoped and provides a polished in-app browser surface for sprint preview containers:
   - floating horizontal slider in its own top strip, with large-screen five-card visibility for preview selection
   - the browser window starts directly below the slider instead of sharing a stretched first-row layout with the sprint controls
@@ -412,6 +464,7 @@ Legacy runtime:
 - The Stats page uses the same project realtime invalidation channels as the rest of the v2 dashboard, then falls back to polling so usage graphs and tables stay current during active sprint execution
 - Overview widgets and headline stat cards now read project/task data from the same project-management API surface, and task streams are filtered to the currently selected active sprint only (a frontend-only view change with no API contract change)
 - Agents page features an immersive, showcase-first layout that defaults to presenting the selected agent's 3D animated avatar, details, and route-assignment tags, rather than a raw edit form.
+- Agents page route-assignment tags include every configured QA reviewer in each trigger roster: task completion reviewers show `QA Task`, sprint completion reviewers show `QA Sprint`, and completed-task-without-PR reviewers show `QA No PR`; legacy single-agent QA settings still render the same badges.
 - Agents are generated with a random persisted avatar on creation and can be fully customized in the dedicated edit mode. Server-side sync also resolves missing avatar metadata for base roles and Project Setup Agent generated specialists, then persists the result into sqlite and mirrored markdown.
 - Agent detail cards show selected-agent usage totals from execution invocations, including total cost, tokens, run count, and completion rate alongside provider/model, MCP, and instruction metadata.
 - Edit mode exposes a new toggleable Memory Template Override control, allowing operators to explicitly provide custom memory injection instructions on a per-agent basis.
@@ -423,7 +476,7 @@ Legacy runtime:
 - Project-local markdown mirroring is enabled by default through project settings, so dashboard edits create/update `.code-ux/agents/*.md` in the selected repo without touching shipped defaults
 - Markdown-backed agents now show sync state and support both manual single-agent re-import and bulk `Sync All`
 - The first built-in role is `Planning agent`, which is editable under Agents like any other DB-backed agent
-- `Settings > Sprint & Git` now includes the QA controls immediately below `Merge Gates & Autofix`, with per-trigger agent selection across all project agents, QA-labeled presets floated to the top, the same project-scope behavior preserved for local QA edits, and the persisted settings path still anchored at `agents.qualityAssurance`
+- `Settings > Sprint & Git` now includes the QA controls immediately below `Merge Gates & Autofix`, with per-trigger multi-select agent assignment across all project agents, QA-labeled presets floated to the top, the same project-scope behavior preserved for local QA edits, and the persisted settings path still anchored at `agents.qualityAssurance`. Leaving a trigger with no custom agents selected clearly uses the built-in QA fallback without saving placeholder preset ids.
 - Chat page is DB-backed and stores project conversation threads/messages in sqlite
 - Chat page now provides a `Threads / Invocations` toggle to switch between human conversation threads and read-only execution invocations.
 - Chat page UI is redesigned with animated identities, structured widgets for rich messages, and automatic worker pickup derived from active project routing.
@@ -571,6 +624,7 @@ Runtime scoping:
 - Project scope General settings expose the selected project's display name as an immediate metadata edit. Saving calls `PATCH /api/projects/:projectId` with the trimmed `name`, refreshes the project collection, and leaves the project id, settings overrides, tasks, and runtime history unchanged.
 - The `/config` page keeps the existing v2 settings shell and categories, but now binds them to real scoped settings instead of draft-only values
 - System scope only edits system-owned controls, while project scope only edits project-owned overrides for the selected project
+- The Settings scope/status row stays sticky below the app shell while scrolling, keeping the System/Project selector, selected-scope context, project availability or inheritance summary, visible-category count, and save badges visible. The active panel/save-state strip is also sticky and uses a measured top offset from the wrapped scope row so long project names and narrow layouts do not create overlapping pinned controls.
 - The integrations view now owns provider API keys plus GitHub and GitLab tokens and GitHub workflow settings, rather than splitting those across separate categories
 - The integrations view uses a registry-style list with per-integration `Add` and `Manage` actions so additional integrations can be added without turning the page into one long form
 - Provider integrations are now instance-based:
@@ -736,7 +790,7 @@ Behavior:
 - API-backed tools return setup guidance until key is configured.
 - Guidance points to:
   - `.env` (`JULES_API_KEY`)
-  - `.jules-subagents/settings.json` (`julesApiKey`)
+  - `.code-ux/settings.json` (`julesApiKey`)
   - Dashboard settings (`http://localhost:4444` by default)
 
 Runtime update:
@@ -790,7 +844,7 @@ To prevent credential and runtime config conflicts, provider configurations enfo
 - Backend read-model optimizations efficiently project data to support the resource layer while leaving API routes and backend contracts entirely unchanged.
 - Extensionless dashboard routes like `/sprints` are served by the SPA app shell on direct load or refresh. This routing behavior remains consistent even when Code UX itself is running inside a preview container.
 
-- A "Live Preview" CTA link now appears in the Live view header when the relevant sprint has an active (`running`) preview session with a resolved `hostPort`. The link securely routes directly to the iframe preview origin (`buildPreviewUrl`) at the `lastKnownPath`.
+- A "Live Preview" CTA link appears in the Live view header when the relevant sprint has an active (`running`) preview session with a resolved primary `hostPort`. The main action opens the primary preview origin at the `lastKnownPath`; sessions with multiple configured port mappings add a compact adjacent port picker whose routed options open the selected `previewPort` URL and whose pending mappings remain visibly disabled with their routing reason.
 
 
 ## Interaction Patterns
@@ -800,10 +854,11 @@ The dashboard relies on consistent interaction primitives across all v2 views. T
 - **Surface Contracts**: Quicksprint, Sprint Ledger, Live runtime, Browser Preview, Settings, Global Search, Memory, task cards, and shared async feedback surfaces use the shared motion tokens and accessibility contracts documented in Interaction Patterns.
 - **Data Views**: Ledgers, lists, rails, search results, task cards, memory lists, preview logs, and live feeds preserve useful stale content during refresh/reconnect states, announce sort/filter/selection/result changes politely, and show honest empty states for committed queries with no matches.
 - **Async Feedback & Loading**: Pending operations use visible status copy, `aria-busy` on the affected control or region, duplicate activation suppression, and stable icon/text slots. Blocking errors remain assertive and persistent until dismissed, retried, or cleared.
-- **Reduced Motion**: Components use `useInteractionTokens`, `useGsapInteractionTokens`, `INTERACTION_CSS_VARIABLES`, or `buildInteractionTransition` from `dashboard/src/v2/lib/motion`. Reduced motion snaps movement but keeps static cues such as badges, rings, count chips, progress text, disabled reasons, and live-region messages.
+- **Reduced Motion**: Components use `useInteractionTokens`, `useGsapInteractionTokens`, `INTERACTION_CSS_VARIABLES`, or `buildInteractionTransition` from `dashboard/src/v2/lib/motion`. The global CSS guard also honors the explicit dashboard setting on `html[data-reduced-motion]`. Reduced motion snaps movement but keeps static cues such as badges, rings, count chips, progress text, disabled reasons, and live-region messages.
 - **Overlays & Modals**: Dialogs, side panels, search overlays, menus, and confirmations close via explicit controls, Escape, or outside click where appropriate; they trap focus while open and restore focus to the trigger or a safe fallback when closed.
 - **Destructive Actions & Flows**: Confirmed destructive actions use the shared `useConfirmDialog`/`ConfirmDialog` pattern when confirmation is required. Immediate destructive modes must use persistent danger copy that explains confirmation will not be shown before activation.
 - **Verification**: Documentation-only interaction updates should run `pnpm run typecheck:dashboard` and link checks with `rg` as described in [Interaction Patterns](./interaction-patterns.md#verification-guidance). UI behavior changes should run focused component tests, `pnpm run test:dashboard`, and `pnpm run typecheck:dashboard`.
+- **Global Search Verification**: Search overlay changes should include `pnpm exec vitest run dashboard/src/v2/components/search/__tests__/SearchOverlay.accessibility.test.tsx tests/dashboard/v2/global-search.test.tsx` plus `pnpm run typecheck:dashboard`. These focused checks cover focus restoration, active-descendant keyboard movement, stale refresh announcements, committed-query empty states, disabled-row activation suppression, and reduced-motion static feedback.
 
 
 ## Accessibility Patterns
@@ -824,8 +879,8 @@ This dashboard enforces accessibility best practices to ensure an inclusive expe
 - **Stats & Analytics**: Analytics controls (like visual mode tabs and time windows) use semantic `role="group"` with `aria-pressed` states. Charts and sparklines include `sr-only` descriptive summaries of their data, allowing non-visual users to understand distributions and trends.
 - **Custom Date Ranges**: Date range inputs include clear `aria-label` attributes and use `aria-live="polite"` regions to announce validation errors (like end date before start date).
 - **Runtime Telemetry States**: Live timelines, Git/CI panels, invocation feeds, attention queues, notification surfaces, and overview telemetry use named `region`/`log` containers with `aria-live="polite"` for ongoing updates. Blocking connection or Git tracking failures use `role="alert"` with assertive live behavior, while non-blocking empty/success/pending states remain polite to avoid repeated announcements during refresh cycles.
-- **Responsive & Warm Void**: Narrow viewports and text zoom must keep shell selectors, Settings forms, Browser rails, task cards, tables, live telemetry, and Stats panels readable without page-level horizontal overflow. Signal Jade is reserved for focus, active, primary, and healthy/running states; Ember/status tones are reserved for warning, error, danger, and intervention.
-- **Reduced Motion**: Component animations using GSAP and Tailwind respect user preferences via the `prefers-reduced-motion` media query. Features like the Kinetic Dock immediately snap indicator positions without transition. Decorative background loops (e.g., CanvasBackground) and GSAP ticker updates (e.g., Sprint Boat Race) instantly skip interpolations, disable hover magnetism, remove visual ripples, and substitute animated motion with immediate static state reflections such as rings, halos, badges, values, and selected states to preserve functional state comprehension.
+- **Responsive & Warm Void**: Narrow viewports and text zoom must keep shell selectors, Settings forms, Browser rails, task cards, tables, live telemetry, and Stats panels readable without page-level horizontal overflow. Theme-specific signal utilities are reserved for focus, active, primary, and healthy/running states; Ember/status tones are reserved for warning, error, danger, and intervention.
+- **Reduced Motion**: Component animations using GSAP and Tailwind respect user preferences via the `prefers-reduced-motion` media query and the explicit dashboard reduced-motion root attribute. Features like the Kinetic Dock immediately snap indicator positions without transition. Decorative background loops (e.g., CanvasBackground) and GSAP ticker updates (e.g., Sprint Boat Race) instantly skip interpolations, disable hover magnetism, remove visual ripples, and substitute animated motion with immediate static state reflections such as rings, halos, badges, values, and selected states to preserve functional state comprehension.
 - **Feedback Surfaces**: Feedback surfaces (like `ToastProvider` and `ActionFeedbackRegion`) separate polite status announcements (success, warning, info) from assertive error announcements. Action buttons (Dismiss, Retry) use concise accessible names without repeating the entire dynamic message. When a focused feedback control removes itself, focus is predictably restored to a sensible fallback (e.g., `[role="main"]` or `body`). Live regions for notifications and status banners are kept in the DOM to ensure reliable screen reader announcements when their text changes.
 - **Task Board State Ownership:** To prevent lane mapping drift across views, `dashboard/src/v2/lib/task-board-state.ts` is the strict single source of truth for all task status to lane derivations (via `getTaskLane`). It correctly groups transient implementation statuses like `coding_completed` and `QA_REVIEW_FAILED` into the "in_progress" lane for consistent Kanban rendering.
 - **Task Card Affordances:** Task cards visually represent task states cleanly without expensive 3D transformations. Dependency indicators provide distinct visual styles and full screen-reader readouts for missing, blocked (`QA_REVIEW_FAILED`), running (`in_progress`, `coding_completed`), and completed dependencies. Quick actions reveal visually on hover or keyboard focus while remaining keyboard accessible. Drag actions utilize explicit `cursor-grab` interactions, omit pointer-only helper chips from visible metadata, preserve screen-reader guidance, and gracefully degrade in reduced motion or disabled states.

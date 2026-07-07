@@ -64,6 +64,9 @@ describe("WorkerTaskDispatchService", () => {
         resolveItemsForDispatch: vi.fn(),
         openItem: vi.fn(),
       },
+      sprintRunLifecycleService: {
+        finalizeCancellationIfIdle: vi.fn(),
+      },
     };
     service = new WorkerTaskDispatchService(
       deps.executionRepository,
@@ -73,6 +76,11 @@ describe("WorkerTaskDispatchService", () => {
       deps.projectWorkerAssignmentService,
       deps.projectAttentionService,
       (() => ({})) as any,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      deps.sprintRunLifecycleService,
     );
   });
 
@@ -172,7 +180,7 @@ describe("WorkerTaskDispatchService", () => {
   it("finalizes the sprint run when the updated dispatch carries a sprint run id", () => {
     deps.executionRepository.updateTaskDispatch.mockImplementation((id: string, patch: Record<string, unknown>) => ({ id, sprintRunId: "run-1", ...patch }));
     service.updateDispatch({ connectionKey: "worker-1", dispatchId: "dispatch-1", leaseToken: "lease-1", state: "FAILED" });
-    expect(deps.executionRepository.finalizeSprintRunCancellationIfIdle).toHaveBeenCalledWith("run-1");
+    expect(deps.sprintRunLifecycleService.finalizeCancellationIfIdle).toHaveBeenCalledWith("run-1");
   });
 
   it("maps QUOTA to a quota dispatch status with the task still in progress", () => {

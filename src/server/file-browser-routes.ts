@@ -2,6 +2,18 @@ import type { Express } from "express";
 import type { DashboardDependencies } from "./dashboard-server.js";
 import { asyncRoute } from "./route-utils.js";
 import { requireTrimmedString } from "./request-parsers.js";
+import { normalizeAndValidatePath } from "../services/file-browser-scan-policy.js";
+
+function requireValidatedFileBrowserPath(value: unknown): string {
+  try {
+    return normalizeAndValidatePath(requireTrimmedString(value, "path"));
+  } catch (error) {
+    if (error instanceof URIError) {
+      throw new Error("Invalid file path: malformed encoding");
+    }
+    throw error;
+  }
+}
 
 export function registerFileBrowserRoutes(app: Express, deps: DashboardDependencies): void {
   app.get("/api/projects/:projectId/file-browser/sessions", asyncRoute(async (req, res) => {
@@ -57,7 +69,7 @@ export function registerFileBrowserRoutes(app: Express, deps: DashboardDependenc
     }
     res.json(await deps.readFileBrowserFile(
       requireTrimmedString(req.params.sessionId, "sessionId"),
-      requireTrimmedString(req.query.path, "path"),
+      requireValidatedFileBrowserPath(req.query.path),
     ));
   }));
 
@@ -74,7 +86,7 @@ export function registerFileBrowserRoutes(app: Express, deps: DashboardDependenc
     }
     res.json(await deps.getFileBrowserDiff(
       requireTrimmedString(req.params.sessionId, "sessionId"),
-      requireTrimmedString(req.query.path, "path"),
+      requireValidatedFileBrowserPath(req.query.path),
     ));
   }));
 }

@@ -9,7 +9,7 @@ import {
 } from "./settings-view-models.js";
 import {
   DEFAULT_PROVIDER_CONFIG_NAMES,
-  VIRTUAL_WORKER_PROVIDERS,
+  PUBLIC_VIRTUAL_WORKER_PROVIDERS,
 } from "../../../../src/repositories/settings-defaults.js";
 
 const LIVE_WORKER_STATUSES = new Set(["connected", "listening", "idle", "paused"]);
@@ -19,7 +19,7 @@ export const VIRTUAL_WORKER_OPTIONS: Array<{
   label: string;
   subLabel: string;
 }> = [
-  ...VIRTUAL_WORKER_PROVIDERS.map((id) => ({
+  ...PUBLIC_VIRTUAL_WORKER_PROVIDERS.map((id) => ({
     id,
     label: DEFAULT_PROVIDER_CONFIG_NAMES[id],
     subLabel: "On-demand CLI",

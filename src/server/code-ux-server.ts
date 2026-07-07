@@ -3,7 +3,7 @@ import axios from "axios";
 import type { AxiosError } from "axios";
 import express from "express";
 import type { Server as HttpServer } from "node:http";
-import type { AppConfig } from "../config/app-config.js";
+import { regenerateUserMcpHttpAuthToken, type AppConfig } from "../config/app-config.js";
 import { JulesApiClient } from "../integrations/jules-api-client.js";
 import type {
   DashboardSettings,
@@ -43,6 +43,7 @@ import { ActivityCacheService } from "./activity-cache-service.js";
 import { registerMcpRequestHandlers } from "./mcp-request-router.js";
 import { TaskRerunService } from "../services/task-rerun-service.js";
 import { ExecutionControlService } from "../services/execution-control-service.js";
+import { toAgentCodeUxToolAccess } from "../services/agent-mcp-access.js";
 import { JulesSourceResolver } from "../services/jules-source-resolver.js";
 import { RuntimeCleanupService } from "../services/runtime-cleanup-service.js";
 import { RuntimeStartupRecoveryService } from "../services/runtime-startup-recovery-service.js";
@@ -81,8 +82,14 @@ import { resolveEffectiveDashboardSettings } from "../services/settings-resoluti
 import { ActiveDispatchRegistry } from "../services/active-dispatch-registry.js";
 import { ShutdownContainerService } from "../services/shutdown-container-service.js";
 import { beginRuntimeShutdown } from "../services/shutdown-state.js";
+import {
+  acquireRuntimeProcessLock,
+  type RuntimeProcessLockRelease,
+} from "../services/runtime-process-lock.js";
 import { workspaceVolumeHelperPool } from "../infrastructure/providers/cli/workspace-volume-helper.js";
-import { shutdownGitHelperPool } from "../shared/subprocess/command-runner.js";
+import { disposeCommandSpawner, shutdownGitHelperPool } from "../shared/subprocess/command-runner.js";
+import { LocalMcpCliConfigService } from "../services/local-mcp-cli-config-service.js";
+import type { McpConnectionInfo } from "../contracts/mcp-connection-types.js";
 
 function detectMergeConflictMessage(message: string | null | undefined): boolean {
   const normalized = String(message || "").trim().toLowerCase();
@@ -198,7 +205,9 @@ export class CodeUxServer {
   private isClosing = false;
   private closePromise: Promise<void> | null = null;
   private readonly mcpApprovalTracker = new McpApprovalTracker();
+  private readonly localMcpCliConfigService = new LocalMcpCliConfigService();
   private readonly signalHandler: () => void;
+  private runtimeProcessLockRelease: RuntimeProcessLockRelease | null = null;
 
   constructor(options: CodeUxServerOptions) {
     this.projectRoot = options.projectRoot;
@@ -258,6 +267,7 @@ export class CodeUxServer {
     this.runtimeStartupRecoveryService = new RuntimeStartupRecoveryService({
       sessionTracking: this.sessionTracking,
       executionRepository: this.executionRepository,
+      sprintRunLifecycleService: deps.sprintRunLifecycleService,
       qaReviewRepository: this.qaReviewRepository,
       projectManagementRepository: this.projectManagementRepository,
       projectAttentionService: this.projectAttentionService,
@@ -339,6 +349,7 @@ export class CodeUxServer {
     this.startupTaskTimers.clear();
     this.virtualWorkerService.stop();
     this.schedulerService.stop();
+    disposeCommandSpawner();
     await shutdownGitHelperPool().catch((error) => {
       this.logger.warn("Failed to stop Docker git helper containers during shutdown", {
         error: error instanceof Error ? error.message : String(error),
@@ -377,6 +388,7 @@ export class CodeUxServer {
         CodeUxServer.activeSignalHandlers.delete(signal);
       }
     }
+    await this.releaseProjectManagerRuntimeLock();
   }
 
   private async closeHttpServer(server: HttpServer): Promise<void> {
@@ -427,13 +439,14 @@ export class CodeUxServer {
       managementToolHandler: this.managementToolHandler,
       getDashboardSettings: () => this.runtimeContext.dashboardSettings || DEFAULT_DASHBOARD_SETTINGS,
       getRuntimeRole: () => runtimeRole,
-      resolveAgentMcpToolToggles: (agentId) =>
-        this.agentPresetRepository.getAgentPreset(agentId)?.mcpAccess?.codeUxToolToggles ?? null,
+      resolveAgentMcpToolAccess: (agentId) => {
+        const access = this.agentPresetRepository.getAgentPreset(agentId)?.mcpAccess;
+        return access ? toAgentCodeUxToolAccess(access) : null;
+      },
       formatError: (error: unknown) => this.formatError(error),
       logger: this.logger.child({ component: "mcp-request-router", runtimeRole }),
       withCorrelationContext: (request, operation) => this.runWithMcpCorrelationContext(request, operation),
       getMcpApprovalTracker: () => this.mcpApprovalTracker,
-      executionRepository: this.executionRepository,
     });
 
     server.onerror = (error) => {
@@ -569,14 +582,40 @@ export class CodeUxServer {
       persistTaskMergedFlag: (args) => this.persistTaskMergedFlag(args),
       normalizeName: (type, id) => this.normalizeName(type, id),
       isTrackedCliSession: (sessionId) => this.isTrackedCliSession(sessionId),
-      getMcpConnectionInfo: () => this.mcpHttpHandle
-        ? {
-            url: `http://${this.mcpHttpClientHost()}:${this.mcpHttpHandle.port}${this.mcpHttpHandle.path}`,
-            authToken: this.appConfig.mcpHttpAuthToken,
-          }
-        : null,
+      getMcpConnectionInfo: () => this.getConfiguredMcpConnectionInfo(),
       getMcpApprovalTracker: () => this.mcpApprovalTracker,
     };
+  }
+
+  private getConfiguredMcpConnectionInfo(): McpConnectionInfo | null {
+    if (!this.appConfig.mcpHttpEnabled || !this.appConfig.mcpHttpPort) {
+      return null;
+    }
+    if (this.mcpHttpHandle) {
+      return {
+        url: `http://${this.mcpHttpClientHost()}:${this.mcpHttpHandle.port}${this.mcpHttpHandle.path}`,
+        authToken: this.appConfig.mcpHttpAuthToken,
+      };
+    }
+
+    const defaultMcpHttpPort = this.appConfig.dashboardPort + 1;
+    const port = this.appConfig.mcpHttpPort === defaultMcpHttpPort
+      ? this.getDashboardPort() + 1
+      : this.appConfig.mcpHttpPort;
+    const host = this.appConfig.mcpHttpHost.trim().toLowerCase();
+    const clientHost = host === "0.0.0.0" || host === "::"
+      ? "127.0.0.1"
+      : this.appConfig.mcpHttpHost;
+    return {
+      url: `http://${clientHost}:${port}${this.appConfig.mcpHttpPath}`,
+      authToken: this.appConfig.mcpHttpAuthToken,
+    };
+  }
+
+  private regenerateMcpHttpAuthToken(): string {
+    const token = regenerateUserMcpHttpAuthToken();
+    this.appConfig.mcpHttpAuthToken = token;
+    return token;
   }
 
   private mcpHttpClientHost(): string {
@@ -1203,6 +1242,41 @@ export class CodeUxServer {
   }
 
   async run(): Promise<void> {
+    await this.acquireProjectManagerRuntimeLock();
+    try {
+      await this.runInternal();
+    } catch (error) {
+      await this.releaseProjectManagerRuntimeLock();
+      throw error;
+    }
+  }
+
+  private async acquireProjectManagerRuntimeLock(): Promise<void> {
+    if (process.env.NODE_ENV === "test" || process.env.VITEST) {
+      return;
+    }
+    if (this.runtimeProcessLockRelease) {
+      return;
+    }
+    this.runtimeProcessLockRelease = await acquireRuntimeProcessLock({
+      projectRoot: this.projectRoot,
+    });
+  }
+
+  private async releaseProjectManagerRuntimeLock(): Promise<void> {
+    const release = this.runtimeProcessLockRelease;
+    this.runtimeProcessLockRelease = null;
+    if (!release) {
+      return;
+    }
+    await release().catch((error) => {
+      this.logger.warn("Failed to release Code UX runtime process lock", {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    });
+  }
+
+  private async runInternal(): Promise<void> {
     await bootSettings({
       runtimeContext: this.runtimeContext,
       projectRoot: this.projectRoot,
@@ -1236,6 +1310,7 @@ export class CodeUxServer {
         projectWorkerAssignmentRepository: this.projectWorkerAssignmentRepository,
         projectWorkerAssignmentService: this.projectWorkerAssignmentService,
         projectAttentionRepository: this.projectAttentionRepository,
+        qaReviewRepository: this.qaReviewRepository,
         guardrailService: this.guardrailService,
         agentPresetRepository: this.agentPresetRepository,
         agentPresetSyncService: this.agentPresetSyncService,
@@ -1260,14 +1335,20 @@ export class CodeUxServer {
         listDockerContainers: () => this.dockerService.listContainers(),
         listSprintPreviewSessions: (projectId) => this.sprintPreviewService.listSessions(projectId),
         getSprintPreviewSession: (sessionId: string) => this.sprintPreviewService.getSession(sessionId),
+        getSprintPreviewSessionForProjectSprint: (projectId, sprintId, sessionId) => this.sprintPreviewService.getSessionForProjectSprint(projectId, sprintId, sessionId),
         startSprintPreviewSession: (projectId, sprintId) => this.sprintPreviewService.startSession(projectId, sprintId),
         rebuildSprintPreviewSession: (sessionId) => this.sprintPreviewService.rebuildSession(sessionId),
+        rebuildSprintPreviewSessionForProjectSprint: (projectId, sprintId, sessionId) => this.sprintPreviewService.rebuildSessionForProjectSprint(projectId, sprintId, sessionId),
         stopSprintPreviewSession: (sessionId) => this.sprintPreviewService.stopSession(sessionId),
+        stopSprintPreviewSessionForProjectSprint: (projectId, sprintId, sessionId) => this.sprintPreviewService.stopSessionForProjectSprint(projectId, sprintId, sessionId),
         removeSprintPreviewSession: (sessionId) => this.sprintPreviewService.removeSession(sessionId),
+        removeSprintPreviewSessionForProjectSprint: (projectId, sprintId, sessionId) => this.sprintPreviewService.removeSessionForProjectSprint(projectId, sprintId, sessionId),
         getSprintPreviewScript: (projectId, sprintId) => this.sprintPreviewService.getScript(projectId, sprintId),
         saveSprintPreviewScript: (projectId, sprintId, content) => this.sprintPreviewService.saveScript(projectId, sprintId, content),
         getSprintPreviewLogs: (sessionId, tail) => this.sprintPreviewService.getLogs(sessionId, tail),
+        getSprintPreviewLogsForProjectSprint: (projectId, sprintId, sessionId, tail) => this.sprintPreviewService.getLogsForProjectSprint(projectId, sprintId, sessionId, tail),
         proxySprintPreviewRequest: (args) => this.sprintPreviewService.proxyRequest(args),
+        proxySprintPreviewRequestForProjectSprint: (projectId, sprintId, args) => this.sprintPreviewService.proxyRequestForProjectSprint(projectId, sprintId, args),
         listFileBrowserSessions: (projectId) => this.sprintFileBrowserService.listSessions(projectId),
         startFileBrowserSession: (projectId, sprintId) => this.sprintFileBrowserService.startSession(projectId, sprintId),
         rebuildFileBrowserSession: (sessionId) => this.sprintFileBrowserService.rebuildSession(sessionId),
@@ -1286,6 +1367,9 @@ export class CodeUxServer {
         embeddingModelManager: this.embeddingModelManager,
         embeddingService: this.embeddingService,
         memoryRepository: this.memoryRepository,
+        localMcpCliConfigService: this.localMcpCliConfigService,
+        getLocalMcpConnectionInfo: () => this.getConfiguredMcpConnectionInfo(),
+        regenerateMcpHttpAuthToken: () => this.regenerateMcpHttpAuthToken(),
       });
     } else {
       this.logger.info("Dashboard startup skipped for headless Code UX runtime", {
@@ -1308,6 +1392,7 @@ export class CodeUxServer {
       port: mcpHttpPort,
       path: this.appConfig.mcpHttpPath,
       authToken: this.appConfig.mcpHttpAuthToken,
+      getAuthToken: () => this.appConfig.mcpHttpAuthToken,
       logger: this.logger.child({ component: "mcp-http-transport" }),
       createServer: () => this.createMcpServerInstance("project_manager"),
       recoveryService: this.runtimeStartupRecoveryService,

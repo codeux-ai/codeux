@@ -1,7 +1,7 @@
 /** @vitest-environment happy-dom */
 import { h } from "preact";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, fireEvent, screen, cleanup } from "@testing-library/preact";
+import { render, fireEvent, screen, cleanup, waitFor } from "@testing-library/preact";
 import { ProviderInstanceCard } from "../../../../../../dashboard/src/v2/components/settings/ProviderInstanceCard";
 import type { SystemProviderConfig } from "../../../../../../dashboard/src/v2/lib/provider-runtime-preview";
 import { resetModelCatalogCache } from "../../../../../../dashboard/src/v2/components/ui/ModelCombobox";
@@ -108,7 +108,7 @@ describe("ProviderInstanceCard", () => {
     expect(screen.getByLabelText("Very Long OpenCode Provider API key")).toBeDefined();
   });
 
-  it("requires cancellable confirmation before removing a provider instance and announces the local state", () => {
+  it("requires cancellable confirmation before removing a provider instance and announces the local state", async () => {
     const provider: SystemProviderConfig = {
       provider: "codex",
       name: "Codex Removable",
@@ -142,10 +142,12 @@ describe("ProviderInstanceCard", () => {
     expect(onRemove).not.toHaveBeenCalled();
     expect(screen.queryByRole("group", { name: "Confirm removal of Codex Removable" })).toBeNull();
     expect(screen.getByRole("button", { name: "Remove Codex Removable" })).toBe(document.activeElement);
-    expect(screen.getByRole("status").textContent).toContain("Removal cancelled for Codex Removable");
+    await waitFor(() => {
+      expect(screen.getByRole("status").textContent).toContain("Removal cancelled for Codex Removable. Local settings are unchanged.");
+    });
 
     fireEvent.click(screen.getByRole("button", { name: "Remove Codex Removable" }));
-    fireEvent.click(screen.getByRole("button", { name: "Confirm remove" }));
+    fireEvent.click(screen.getByRole("button", { name: "Confirm remove Codex Removable" }));
     expect(onRemove).toHaveBeenCalledTimes(1);
   });
 

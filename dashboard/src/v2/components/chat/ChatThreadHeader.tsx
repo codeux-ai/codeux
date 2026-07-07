@@ -74,7 +74,7 @@ export const ChatThreadHeader: FunctionComponent<ChatThreadHeaderProps> = ({
               </span>
             )}
           </div>
-          <h2 className="mt-2 font-display text-3xl font-black tracking-tight text-slate-900 dark:text-white break-words min-w-0 w-full">
+          <h2 className="mt-2 font-display text-2xl font-semibold tracking-tight text-slate-900 dark:text-white break-words min-w-0 w-full">
             {thread?.title || "No Thread Selected"}
           </h2>
         </div>

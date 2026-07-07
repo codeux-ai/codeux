@@ -1,5 +1,5 @@
 /** @vitest-environment jsdom */
-import { render, screen, cleanup, fireEvent } from '@testing-library/preact';
+import { render, screen, cleanup, fireEvent, waitFor } from '@testing-library/preact';
 import { expect, test, afterEach, vi } from 'vitest';
 import * as matchers from '@testing-library/jest-dom/matchers';
 import { Select } from '../Select.js';
@@ -77,6 +77,27 @@ test('error text owns invalid description and errormessage relationship', () => 
     expect(select).toHaveAttribute('aria-describedby', 'provider-select-error');
     expect(select).toHaveAttribute('aria-errormessage', 'provider-select-error');
     expect(screen.queryByText('Choose a provider.')).not.toBeInTheDocument();
+});
+
+test('focused invalid select restores helper description while the value is being corrected', async () => {
+    render(
+        <Select id="provider-select" aria-label="Provider" helperText="Choose a provider." errorText="Provider is required.">
+            <option value="">Choose</option>
+            <option value="local">Local</option>
+        </Select>
+    );
+
+    const select = screen.getByRole('combobox', { name: 'Provider' });
+    expect(select).toHaveAttribute('aria-describedby', 'provider-select-error');
+
+    fireEvent.focus(select);
+    await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument());
+    await waitFor(() => expect(select).toHaveAttribute('aria-describedby', 'provider-select-helper'));
+    expect(select).not.toHaveAttribute('aria-invalid', 'true');
+
+    fireEvent.blur(select);
+    expect(screen.getByRole('alert')).toHaveTextContent('Provider is required.');
+    expect(select).toHaveAttribute('aria-describedby', 'provider-select-error');
 });
 
 test('reduced motion keeps static validation cues without animated duration', () => {

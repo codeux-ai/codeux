@@ -44,11 +44,13 @@ describe("DependencyStatusIndicators", () => {
     const completedIndicator = getByTitle(/Depends on Test task 1 \(Resolved; completed\)/);
     expect(completedIndicator.className).toContain("text-status-green");
     expect(completedIndicator).toHaveAttribute("data-dependency-state", "resolved");
+    expect(completedIndicator).toHaveTextContent("Clear");
 
     const pendingIndicator = getByTitle(/Depends on Test task 2 \(Blocked; pending\)/);
     expect(pendingIndicator.className).toContain("text-status-amber");
     expect(pendingIndicator.className).not.toContain("border-dashed");
     expect(pendingIndicator).toHaveAttribute("data-dependency-state", "blocked");
+    expect(pendingIndicator).toHaveTextContent("Blocking");
 
     const blockedIndicator = getByTitle(/Depends on Test task 3 \(QA failed; QA REVIEW FAILED\)/i);
     expect(blockedIndicator.className).toContain("text-status-red");
@@ -62,12 +64,16 @@ describe("DependencyStatusIndicators", () => {
     const codingCompleteIndicator = getByTitle(/Depends on Test task 4B \(Ready for QA; coding completed\)/i);
     expect(codingCompleteIndicator.className).toContain("text-cyan-700");
     expect(getByText("Ready for QA")).toBeTruthy();
+    expect(codingCompleteIndicator).toHaveTextContent("Blocking");
 
     const unknownIndicator = getByTitle(/Depends on Unknown Task \(missing\) \(Unknown; pending\)/i);
     expect(unknownIndicator.className).toContain("border-dashed");
     expect(unknownIndicator).toHaveAttribute("data-dependency-state", "unknown");
+    expect(unknownIndicator).toHaveAttribute("data-blocking", "true");
     expect(getByText("Unknown")).toBeTruthy();
     expect(container.querySelector('[role="list"]')).toHaveAccessibleName("Blocked: 5 dependencies need completion. Task dependencies");
+    expect(container.querySelector('[data-motion-control="controlFeedback"]')).toBeTruthy();
+    expect(container.querySelector('[data-motion-list-reorder="listReorder"]')).toBeTruthy();
   });
 
   it("summarizes resolved dependencies without implying blockers", () => {
@@ -81,6 +87,8 @@ describe("DependencyStatusIndicators", () => {
 
     expect(getByText("Dependencies resolved: 1 clear")).toBeTruthy();
     expect(getByRole("list")).toHaveAccessibleName("Dependencies resolved: 1 clear. Task dependencies");
+    expect(getByText("Dependency blockers resolved. 1 dependency is clear.")).toHaveClass("sr-only");
+    expect(getByRole("listitem", { name: /Depends on task TASK-1/i })).toHaveAttribute("data-blocking", "false");
   });
 
   it("returns null when no indicators provided", () => {

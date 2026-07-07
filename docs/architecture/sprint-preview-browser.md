@@ -31,10 +31,10 @@ Key rules:
 - every sprint preview runs from a dedicated exported branch snapshot under the preview runtime root, not a registered git worktree
 - host runtime paths and in-container paths are kept separate for cross-platform Docker Desktop support: Windows/macOS/Linux host paths are mounted into the Linux container at `/code-ux-preview-runtime`, and preview `HOME`, `--workdir`, npm cache paths, and `SPRINT_PREVIEW_WORKSPACE` use POSIX container paths only
 - the preview container reuses the same Docker bootstrap and can reuse an already-built cached setup image, but preview startup no longer builds setup-cache images inline or runs the full worker setup script at runtime
-- the app inside the container listens on `sprintPreview.containerAppPort`
-- the host-facing port is allocated from `sprintPreview.hostPortRangeStart..hostPortRangeEnd`
+- the primary app inside the container listens on `sprintPreview.containerAppPort`; `sprintPreview.containerAppPorts` records that primary port first plus any additional container ports that a preview-aware worker may expose
+- one preview session/container can expose multiple container-to-host port mappings, and one host-facing port is allocated from `sprintPreview.hostPortRangeStart..hostPortRangeEnd` for each configured container app port
 - host ports bind to `127.0.0.1` only
-- preview startup injects `HOST`, `PORT`, `DASHBOARD_HOST`, `DASHBOARD_PORT`, and `SPRINT_PREVIEW_WORKSPACE` so containerized apps can bind to the published preview port and boot from the exported snapshot directory
+- preview startup injects `HOST`, `PORT`, `DASHBOARD_HOST`, `DASHBOARD_PORT`, and `SPRINT_PREVIEW_WORKSPACE` so containerized apps can bind to the published preview port and boot from the exported snapshot directory. The primary compatibility variables still point at the first mapping, and `SPRINT_PREVIEW_CONTAINER_PORTS`, `SPRINT_PREVIEW_HOST_PORTS`, and `SPRINT_PREVIEW_PORT_MAPPINGS` expose the full routing list.
 - preview startup is serialized per `(projectId, sprintId)` so manual starts, rebuilds, and auto-start reconciliation cannot spawn duplicate session containers
 - if the previewed app still binds a loopback-only internal port, the generated preview bootstrap keeps a dedicated in-container bridge open on the published preview proxy port and forwards requests to the live app listener
 - containers are labeled with sprint-preview metadata so runtime reconciliation can rediscover them
@@ -49,7 +49,7 @@ Preview runtime state is stored in the Code UX app database table:
 The table stores:
 - project/sprint identity
 - preview status and health
-- host/container port mapping
+- host/container port mapping, including the legacy primary compatibility fields `hostPort` and `containerAppPort` plus the canonical `portMappings` JSON list for all routed container ports
 - container id/name
 - preview workspace path and feature branch
 - resolved startup mode and detected commands
@@ -127,7 +127,7 @@ It supports:
 - auto-stop when a sprint becomes terminal
 
 Rebuild behaviors:
-- Preview start and rebuild now use the shared branch-sync rule. In `REMOTE` git mode, Code UX refreshes `origin` before exporting the preview workspace so remote changes (such as those pushed by Jules workers) are reflected in the container. In `LOCAL` git mode, preview export stays local-only.
+- Preview start and rebuild now use the shared branch-sync rule. In `REMOTE` git mode, Code UX refreshes `origin` before exporting the preview workspace so remote changes (such as those pushed by hosted provider workers) are reflected in the container. In `LOCAL` git mode, preview export stays local-only.
 - Preview workspace export no longer depends on a host `tar` executable. Code UX writes the Git archive on the host, then extracts it through a small Docker helper container so packaged Windows Electron builds use the same extraction path as Linux/macOS.
 
 These behaviors are controlled through scoped settings under `sprintPreview`.
@@ -143,7 +143,14 @@ Current preview controls include:
 - `hostPortRangeStart`
 - `hostPortRangeEnd`
 - `containerAppPort`
+- `containerAppPorts`
 - `startupScriptPath`
+
+Preview session records expose:
+- `hostPort` and `containerAppPort` as primary compatibility fields for existing dashboard and API callers
+- `portMappings`, an ordered list of `{ containerPort, hostPort, label?, isPrimary? }` entries
+
+The first mapping is the primary mapping and populates the legacy fields. Existing rows without `portMappings` are read as a single primary mapping from `hostPort` and `containerAppPort`, so older sessions keep serializing with the same single-port values. Docker startup publishes every active mapping on `127.0.0.1`; the primary mapping still targets the in-container preview bridge port, while secondary mappings publish their configured container app ports directly. Preview host-origin requests and legacy path-proxy requests default to the primary mapping and may select another persisted mapping with a validated preview-port selector.
 
 Startup hygiene:
 - Docker session lifecycle management (such as `docker ps` parsing, lock acquisition for atomic container operations, container removal, and name sanitization) has been extracted to `DockerSessionLifecycle` in `src/services/docker-session-lifecycle.ts` so both preview and file-browser share identical mechanics without diverging.
@@ -176,6 +183,8 @@ The dashboard now exposes:
 - Launch, rebuild, stop, remove, script-load, script-save, session refresh, browser navigation, and browser reload actions report pending, success, stale, or error states through `ActionFeedbackRegion` or adjacent in-place status text. Duplicate launch, rebuild, stop, remove, script-save, and navigation submissions are blocked while their matching async action is pending.
 - Browser chrome control names include the selected preview session and current path where it helps disambiguate the action, and disabled navigation reasons are shown visibly as well as through accessible descriptions. Session rail and top-nav session-menu updates use the dashboard motion interaction contracts (`selectionMovement` and `listReorder`) while retaining static selected/unavailable text for reduced-motion users.
 - Browser navigation disabled states now distinguish between no selected session, starting containers, stopped containers, error states, missing routed host ports, and pending navigation commands. Address entry, back/forward, and reload controls use the same reason text for visible recovery guidance, tooltips, and accessible descriptions.
+- Multi-port preview sessions appear as one browser window with selectable port tabs in the chrome, not as separate session rows. The primary mapping remains the default view, secondary tabs add the persisted `containerPort` selector to the preview URL, and the dashboard preserves the current path independently for each selected port.
+- The Live Preview button in the Live view header opens the primary mapping on primary click. When a session has multiple port mappings, the adjacent arrow menu lists the other routed ports so an operator can open them directly; pending mappings stay disabled until a host port is available.
 - Container logs expose a manual refresh action in addition to polling. Refresh failures preserve the last useful log output, mark it as stale, and report the failure without clearing the panel, so operators can retry while keeping prior runtime evidence visible.
 - The top-nav Browser Sessions menu is deterministic for keyboard users: it opens only through click or explicit keyboard commands, restores trigger focus on Escape or outside close, supports Home/End and arrow roving across enabled session links, and skips disabled session rows that do not have routed preview ports.
 - Preview window chrome announces open, minimized, fullscreen, closed, restored, and reopened states through stable status copy. Minimized and closed presentations keep focusable Restore/Reopen controls available, and their transitions use the shared interaction tokens with reduced-motion snapping through `motion-reduce:transition-none`.

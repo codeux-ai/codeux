@@ -1,5 +1,8 @@
 import { describe, it, expect } from "vitest";
-import { parseCodexRolloutJsonl } from "../../../../../src/infrastructure/providers/cli/provider-logs/codex-log-parser.js";
+import {
+  parseCodexExecStdout,
+  parseCodexRolloutJsonl,
+} from "../../../../../src/infrastructure/providers/cli/provider-logs/codex-log-parser.js";
 
 // ─── Test fixture helpers ────────────────────────────────────────────────────
 
@@ -36,8 +39,23 @@ describe("parseCodexRolloutJsonl", () => {
   it("returns null usage and empty conversation for empty input", () => {
     const result = parseCodexRolloutJsonl("");
     expect(result.usage).toBeNull();
+    expect(result.rawUsageJson).toBeNull();
     expect(result.conversation).toHaveLength(0);
     expect(result.nativeSessionId).toBeNull();
+  });
+
+  it("skips malformed JSON lines while preserving normalized empty/null fields", () => {
+    const result = parseCodexRolloutJsonl([
+      "not json",
+      "{\"type\":\"response_item\",",
+      userMessage("2026-06-01T10:00:00.000Z", "valid prompt"),
+    ].join("\n"));
+
+    expect(result.usage).toBeNull();
+    expect(result.rawUsageJson).toBeNull();
+    expect(result.conversation).toEqual([
+      { kind: "user", text: "valid prompt", timestampMs: Date.parse("2026-06-01T10:00:00.000Z") },
+    ]);
   });
 
   it("returns the raw cumulative usage when no sinceMs window is given (first run)", () => {
@@ -159,5 +177,87 @@ describe("parseCodexRolloutJsonl", () => {
     const jsonl = [sessionMeta("sess-abc-123"), userMessage("2026-06-01T10:00:00.000Z", "hi")].join("\n");
     const result = parseCodexRolloutJsonl(jsonl);
     expect(result.nativeSessionId).toBe("sess-abc-123");
+  });
+});
+
+describe("parseCodexExecStdout", () => {
+  it("returns null usage and empty conversation for empty stdout", () => {
+    const result = parseCodexExecStdout("");
+    expect(result).toEqual({
+      usage: null,
+      rawUsageJson: null,
+      nativeSessionId: null,
+      conversation: [],
+    });
+  });
+
+  it("parses usage-only records without synthesizing conversation turns", () => {
+    const result = parseCodexExecStdout(JSON.stringify({
+      type: "turn.completed",
+      usage: { input_tokens: 25, output_tokens: 9 },
+    }));
+
+    expect(result.usage).toEqual({
+      inputTokens: 25,
+      cachedInputTokens: 0,
+      outputTokens: 9,
+      reasoningOutputTokens: 0,
+    });
+    expect(result.rawUsageJson).toEqual({ input_tokens: 25, output_tokens: 9 });
+    expect(result.conversation).toEqual([]);
+  });
+
+  it("skips partial JSON and unknown events while preserving recoverable stream metadata", () => {
+    const stdout = [
+      "{\"type\":\"turn.completed\",\"usage\":{\"input_tokens\":99,\"api_key\":\"sk-test-secret\"",
+      JSON.stringify({ type: "thread.started", thread_id: "thread-safe-id" }),
+      JSON.stringify({ type: "provider.debug", message: "ignored event" }),
+      JSON.stringify({
+        type: "item.started",
+        timestamp: "2026-06-01T10:00:00.000Z",
+        item: { id: "cmd_1", type: "command_execution", command: "pnpm test", status: "running" },
+      }),
+      JSON.stringify({
+        type: "turn.completed",
+        usage: { input_tokens: 12, total_tokens: 20 },
+      }),
+    ].join("\n");
+
+    const result = parseCodexExecStdout(stdout);
+
+    expect(result.nativeSessionId).toBe("thread-safe-id");
+    expect(result.usage).toMatchObject({ inputTokens: 12, outputTokens: 8 });
+    expect(result.rawUsageJson).toEqual({ input_tokens: 12, total_tokens: 20 });
+    expect(result.conversation).toHaveLength(1);
+    expect(result.conversation[0]).toMatchObject({
+      kind: "tool_call",
+      toolName: "shell",
+      toolCallId: "cmd_1",
+      toolArguments: "pnpm test",
+      toolStatus: "running",
+    });
+    expect(JSON.stringify(result)).not.toContain("sk-test-secret");
+  });
+
+  it("normalizes missing and negative token fields in rollout usage records", () => {
+    const jsonl = [
+      sessionMeta("sess-missing-fields"),
+      tokenCount("2026-06-01T10:00:05.000Z", {
+        input_tokens: "30",
+        output_tokens: -10,
+        total_tokens: 45,
+        input_token_details: { cached_tokens: -3 },
+      }),
+    ].join("\n");
+
+    const result = parseCodexRolloutJsonl(jsonl);
+
+    expect(result.usage).toEqual({
+      inputTokens: 30,
+      cachedInputTokens: 0,
+      outputTokens: 15,
+      reasoningOutputTokens: 0,
+    });
+    expect(result.nativeSessionId).toBe("sess-missing-fields");
   });
 });

@@ -32,6 +32,9 @@ describe("TaskExecutionMeta", () => {
     expect(getByLabelText("Duration: 2m 30s")).toBeTruthy();
     expect(getByLabelText("Executor: Jules")).toBeTruthy();
     expect(getByLabelText("Mode: custom")).toBeTruthy();
+    expect(getByText("Runtime duration available: 2m 30s Executor Jules. Mode custom.")).toHaveClass("sr-only");
+    expect(container.firstChild as HTMLElement).toHaveAttribute("data-motion-control", "controlFeedback");
+    expect(container.firstChild as HTMLElement).toHaveAttribute("data-motion-selection", "selectionMovement");
   });
 
   it("renders gracefully with missing time", () => {
@@ -51,7 +54,7 @@ describe("TaskExecutionMeta", () => {
     const { getByText } = render(<TaskExecutionMeta />);
 
     expect(getByText("Not started")).toBeTruthy();
-    expect(getByText("Auto")).toBeTruthy();
+    expect(getByText("Auto")).toHaveClass("sr-only");
     expect(getByText("Standard")).toBeTruthy();
   });
 

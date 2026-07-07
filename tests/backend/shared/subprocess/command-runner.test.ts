@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import * as fsPromises from "fs/promises";
 import * as os from "os";
 import * as path from "path";
@@ -25,6 +25,24 @@ describe("CommandRunner", () => {
 
   it("rejects unsafe command names before spawning", async () => {
     await expect(runner.run("bad/command", [])).rejects.toThrow(/Unsafe command name/);
+  });
+
+  it("keeps provider-like command names behind validation unless a test explicitly launches them", async () => {
+    vi.resetModules();
+    const spawn = vi.fn();
+    vi.doMock("child_process", () => ({ spawn }));
+
+    try {
+      const { CommandRunner: IsolatedCommandRunner } = await import("../../../../src/shared/subprocess/command-runner.js");
+      const isolatedRunner = new IsolatedCommandRunner();
+
+      await expect(isolatedRunner.run("codex exec", ["--help"])).rejects.toThrow(/Unsafe command name/);
+      await expect(isolatedRunner.run("docker run", ["hello-world"])).rejects.toThrow(/Unsafe command name/);
+      expect(spawn).not.toHaveBeenCalled();
+    } finally {
+      vi.doUnmock("child_process");
+      vi.resetModules();
+    }
   });
 
   it("rejects null bytes in command arguments before spawning", async () => {
@@ -181,6 +199,17 @@ describe("CommandRunner", () => {
     expect(shaped.stderr).toBe("...big error\nCommand timed out after 100ms");
   });
 
+  it("disposes the command spawner host when requested", () => {
+    const isolatedRunner = new CommandRunner();
+    const dispose = vi.fn();
+    (isolatedRunner as unknown as { spawner: { dispose: () => void } | null }).spawner = { dispose };
+
+    isolatedRunner.dispose();
+
+    expect(dispose).toHaveBeenCalledOnce();
+    expect((isolatedRunner as unknown as { spawner: unknown }).spawner).toBeNull();
+  });
+
   it("should pass full lines to streaming callbacks even when stdout/stderr buffer is clipped", async () => {
     const stdoutLines: string[] = [];
     const stderrLines: string[] = [];
@@ -256,6 +285,29 @@ describe("CommandRunner", () => {
         "status",
         "--porcelain",
       ]));
+    } finally {
+      if (previous === undefined) {
+        delete process.env.CODE_UX_CONTAINERIZED_GIT;
+      } else {
+        process.env.CODE_UX_CONTAINERIZED_GIT = previous;
+      }
+    }
+  });
+
+  it("keeps git commands on the host when command env requests host git", () => {
+    const tempRoot = path.join(os.tmpdir(), "code-ux-command-runner-repo");
+    const previous = process.env.CODE_UX_CONTAINERIZED_GIT;
+    process.env.CODE_UX_CONTAINERIZED_GIT = "1";
+    try {
+      const result = (runner as unknown as {
+        resolveCommand: (command: string, args: string[], options: { cwd?: string; env?: NodeJS.ProcessEnv }) => { command: string; args: string[] };
+      }).resolveCommand("git", ["status", "--porcelain"], {
+        cwd: tempRoot,
+        env: { ...process.env, CODE_UX_GIT_CONTAINER_MODE: "host" },
+      });
+
+      expect(result.command).toBe("git");
+      expect(result.args).toEqual(["status", "--porcelain"]);
     } finally {
       if (previous === undefined) {
         delete process.env.CODE_UX_CONTAINERIZED_GIT;

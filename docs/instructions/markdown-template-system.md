@@ -30,7 +30,7 @@ Templates are stored in the `agents.instructionTemplates` settings section:
 2. system scope can override any template in sqlite
 3. project scope can override any template for a selected project
 4. runtime resolution uses the project override when `repoPath` maps to a known project
-5. no file lookup under `.code-ux/instructions` or `.jules-subagents/instructions` remains
+5. no filesystem instruction-template lookup remains; templates resolve from built-in defaults and scoped settings only
 
 ## Template IDs in Catalog
 
@@ -72,6 +72,12 @@ Examples:
 3. Keep instruction text imperative and explicit.
 4. Include command examples in fenced code blocks where action is required.
 5. Use system scope for shared defaults and project scope only when a repository truly needs custom operator guidance.
+
+## Editable Repository Instruction Files
+
+The dashboard instruction-file editor is separate from the template system above. It can edit only the static catalog of repository instruction files exposed by the backend, such as `AGENTS.md`, `CLAUDE.md`, `GEMINI.md`, `QWEN.md`, and `.github/copilot-instructions.md`.
+
+Instruction file IDs are catalog IDs, not project-relative paths. The backend resolves each ID through the catalog, canonicalizes the destination under the selected project's base directory, and rejects unknown IDs, traversal-like IDs, symlink escapes, missing projects, and content over the configured byte limit. The editor does not accept arbitrary repository paths.
 
 ## Example
 

@@ -5,25 +5,25 @@ import { ToolRegistry } from "../api/mcp/tool-registry.js";
 import type { DashboardSettings, McpToolToggle } from "../contracts/app-types.js";
 import { validateToolArguments } from "../api/mcp/validators/tool-validators.js";
 import type { ManagementToolHandler } from "../mcp/management-tool-handler.js";
-import { getEnabledToolDefinitions, isToolEnabled } from "../mcp/mcp-tool-availability.js";
+import { getEnabledToolDefinitions, isToolEnabled, type AgentCodeUxToolAccess } from "../mcp/mcp-tool-availability.js";
 import { getCurrentMcpAgentId } from "./mcp-agent-context.js";
 import type { Logger } from "../shared/logging/logger.js";
 import type { McpRuntimeRole } from "../contracts/mcp-tool-definitions.js";
 import { getCorrelationId } from "../shared/logging/correlation-id.js";
-import type { ExecutionRepository } from "../repositories/execution-repository.js";
 
 export interface McpRequestRouterArgs {
   server: Server;
   managementToolHandler: ManagementToolHandler;
   getDashboardSettings: () => DashboardSettings;
   getRuntimeRole: () => McpRuntimeRole;
-  /** Resolve per-agent code_ux tool toggles for the agent advertised on the current request, if any. */
+  /** Resolve explicit code_ux tool access for the agent advertised on the current request, if any. */
+  resolveAgentMcpToolAccess?: (agentId: string) => AgentCodeUxToolAccess | null;
+  /** @deprecated Use resolveAgentMcpToolAccess so codeUxEnabled can be enforced. */
   resolveAgentMcpToolToggles?: (agentId: string) => McpToolToggle[] | null;
   formatError: (error: unknown) => { content: Array<{ type: string; text: string }>; isError: true };
   logger?: Logger;
   withCorrelationContext?: <T>(request: unknown, operation: () => Promise<T>) => Promise<T>;
   getMcpApprovalTracker?: () => import("../services/mcp-approval-tracker.js").McpApprovalTracker;
-  executionRepository?: ExecutionRepository;
 }
 
 export const registerMcpRequestHandlers = (args: McpRequestRouterArgs): void => {
@@ -42,18 +42,29 @@ export const registerMcpRequestHandlers = (args: McpRequestRouterArgs): void => 
     .register("manage_telemetry", async (input) => (await args.managementToolHandler.handleManageTelemetry(input)) as McpToolResponse)
     .register("search_knowledge", async (input) => (await args.managementToolHandler.handleSearchKnowledge(input)) as McpToolResponse);
 
-  const resolveAgentToggles = (): McpToolToggle[] | null => {
+  const denyAllCodeUxTools: AgentCodeUxToolAccess = {
+    codeUxEnabled: false,
+    codeUxToolToggles: [],
+  };
+
+  const resolveAgentToolAccess = (): AgentCodeUxToolAccess | McpToolToggle[] | null => {
     const agentId = getCurrentMcpAgentId();
-    if (!agentId || !args.resolveAgentMcpToolToggles) {
+    if (!agentId) {
       return null;
     }
-    return args.resolveAgentMcpToolToggles(agentId);
+    if (args.resolveAgentMcpToolAccess) {
+      return args.resolveAgentMcpToolAccess(agentId) ?? denyAllCodeUxTools;
+    }
+    if (args.resolveAgentMcpToolToggles) {
+      return args.resolveAgentMcpToolToggles(agentId) ?? denyAllCodeUxTools;
+    }
+    return denyAllCodeUxTools;
   };
 
   args.server.setRequestHandler(ListToolsRequestSchema, async () => {
     logger?.debug("MCP list_tools request received");
     return {
-      tools: getEnabledToolDefinitions(args.getDashboardSettings(), args.getRuntimeRole(), resolveAgentToggles()),
+      tools: getEnabledToolDefinitions(args.getDashboardSettings(), args.getRuntimeRole(), resolveAgentToolAccess()),
     };
   });
 
@@ -70,31 +81,13 @@ export const registerMcpRequestHandlers = (args: McpRequestRouterArgs): void => 
       const { name, arguments: toolArgs } = request.params;
       logger?.debug("MCP tool request received", { toolName: name });
 
-      if (!isToolEnabled(args.getDashboardSettings(), name, args.getRuntimeRole(), resolveAgentToggles())) {
+      if (!isToolEnabled(args.getDashboardSettings(), name, args.getRuntimeRole(), resolveAgentToolAccess())) {
         logger?.warn("MCP tool request rejected because tool is disabled", { toolName: name });
         throw new McpError(ErrorCode.MethodNotFound, `Tool not found: ${name}`);
       }
 
       try {
         validateToolArguments(name, toolArgs);
-
-        const isExternalApiCall = (toolName: string, meta?: any) => {
-          if (meta && meta.isExternal !== undefined) return Boolean(meta.isExternal);
-          return ["web_fetch", "google_web_search", "web_extract"].includes(toolName);
-        };
-
-        const execInput = toolArgs as any;
-        if (args.executionRepository && execInput.projectId && execInput.sessionId && execInput.provider && execInput.purpose) {
-            args.executionRepository.createProviderInvocationUsage({
-                projectId: execInput.projectId,
-                sessionId: execInput.sessionId,
-                provider: execInput.provider,
-                purpose: execInput.purpose,
-                invocationSource: isExternalApiCall(name, toolArgs) ? "EXTERNAL_API" : "internal",
-                startedAt: new Date().toISOString(),
-                promptChars: 0,
-            });
-        }
 
         const response = await toolRegistry.dispatch(name, toolArgs);
 

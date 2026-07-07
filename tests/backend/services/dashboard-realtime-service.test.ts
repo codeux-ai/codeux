@@ -5,6 +5,7 @@ import * as path from "path";
 import { AppDbStorage } from "../../../src/repositories/app-db-storage.js";
 import { DashboardRealtimeEventRepository } from "../../../src/repositories/dashboard-realtime-event-repository.js";
 import { DashboardRealtimeService } from "../../../src/services/dashboard-realtime-service.js";
+import { runWithCorrelationId } from "../../../src/shared/logging/correlation-id.js";
 
 const tempDirs: string[] = [];
 
@@ -232,6 +233,116 @@ function buildLiveRealtimeSnapshot(
     gitStatus: null,
     gitStatusError: null,
     updatedAt: options?.updatedAt ?? "2026-03-30T09:00:00.000Z",
+  };
+}
+
+function buildRuntimeStatusSnapshot(timestamp = "2026-03-30T09:00:00.000Z") {
+  return {
+    project_id: "proj-1",
+    sprint_id: "sprint-1",
+    sprint_number: 1,
+    source_id: "source-1",
+    repo_path: "/workspace/project-1",
+    feature_branch: "feature/sprint-1",
+    subtasks: [
+      {
+        id: "task-1",
+        title: "Task 1",
+        prompt: "Do the task",
+        depends_on: [],
+        status: "RUNNING",
+        session_id: "session-1",
+        session_name: "Session 1",
+        session_state: "running",
+        provider: "codex",
+        model: "gpt-5",
+        is_independent: true,
+      },
+    ],
+    timestamp,
+  };
+}
+
+function buildProjectsSnapshot(updatedAt = "2026-03-30T09:00:00.000Z") {
+  return {
+    selectedProjectId: "proj-1",
+    projects: [
+      {
+        id: "proj-1",
+        slug: "proj-1",
+        name: "Project 1",
+        baseDir: "/workspace/project-1",
+        repoUrl: null,
+        sourceType: "local",
+        sourceRef: "/workspace/project-1",
+        gitProvider: "local",
+        gitHostDomain: null,
+        defaultBranch: "main",
+        featureBranchPrefix: "feature/",
+        status: "running",
+        sprintsCount: 1,
+        openTasks: 1,
+        completedTasks: 0,
+        isRunning: true,
+        lastRunAt: "2026-03-30T08:59:00.000Z",
+        lastRunStatus: "running",
+        updatedAt,
+      },
+    ],
+  };
+}
+
+function buildGitStatusSnapshot(lastUpdated = "2026-03-30T09:00:00.000Z") {
+  return {
+    mode: "REMOTE",
+    available: true,
+    repositoryRoot: "/workspace/project-1",
+    branch: "feature/sprint-1",
+    hasRemote: true,
+    dirty: false,
+    tracking: {
+      scope: "FEATURE_PR_CI",
+      label: "Feature PR",
+      branch: "feature/sprint-1",
+    },
+    openPullRequests: [
+      {
+        number: 12,
+        title: "Task 1",
+        url: "https://example.invalid/pr/12",
+        headRefName: "feature/task-1",
+        baseRefName: "feature/sprint-1",
+        state: "open",
+        checks: [{ name: "ci", status: "success" }],
+      },
+    ],
+    ciRuns: [],
+    mergedPullRequests: [],
+    warnings: [],
+    lastUpdated,
+  };
+}
+
+function buildOverviewSnapshot(updatedAt = "2026-03-30T09:00:00.000Z") {
+  return {
+    activeProjects: [
+      {
+        projectId: "proj-1",
+        projectName: "Project 1",
+        sprintId: "sprint-1",
+        sprintName: "Sprint 1",
+        sprintNumber: 1,
+        sprintRunId: "run-1",
+        sprintRunStatus: "running",
+        activeDispatchCount: 1,
+        runningDispatchCount: 1,
+        updatedAt,
+        humanIntervention: null,
+      },
+    ],
+    attentionProjects: [],
+    recentEvents: buildExecutionRealtimeSnapshot({ updatedAt }).recentEvents,
+    updatedAt,
   };
 }
 
@@ -698,6 +809,95 @@ describe("DashboardRealtimeService extracted publisher helper", () => {
 
   it.each([
     {
+      eventType: "project.runtime_status.updated",
+      schedule: (service: DashboardRealtimeService) => service.scheduleProjectRuntimeStatusRefresh("proj-1"),
+      advanceMs: 1_000,
+      setPayloads: (payload: ReturnType<typeof buildRuntimeStatusSnapshot>) => ({
+        getProjectStatusSnapshot: () => payload,
+        getProjectLiveSnapshot: () => ({ selectedSprintId: "sprint-1", marker: "live" } as any),
+      }),
+      firstPayload: () => buildRuntimeStatusSnapshot(),
+      timestampOnlyPayload: () => buildRuntimeStatusSnapshot("2026-03-30T09:01:00.000Z"),
+    },
+    {
+      eventType: "projects.updated",
+      schedule: (service: DashboardRealtimeService) => service.scheduleProjectsRefresh(),
+      advanceMs: 1_500,
+      setPayloads: (payload: ReturnType<typeof buildProjectsSnapshot>) => ({
+        getProjectsSnapshot: () => payload,
+      }),
+      firstPayload: () => buildProjectsSnapshot(),
+      timestampOnlyPayload: () => buildProjectsSnapshot("2026-03-30T09:01:00.000Z"),
+    },
+    {
+      eventType: "project.git.updated",
+      schedule: (service: DashboardRealtimeService) => service.scheduleProjectGitRefresh("proj-1"),
+      advanceMs: 6_000,
+      setPayloads: (payload: ReturnType<typeof buildGitStatusSnapshot>) => ({
+        getProjectGitStatus: () => payload,
+      }),
+      firstPayload: () => buildGitStatusSnapshot(),
+      timestampOnlyPayload: () => buildGitStatusSnapshot("2026-03-30T09:01:00.000Z"),
+    },
+    {
+      eventType: "overview.telemetry.updated",
+      schedule: (service: DashboardRealtimeService) => service.scheduleOverviewRefresh(),
+      advanceMs: 1_500,
+      setPayloads: (payload: ReturnType<typeof buildOverviewSnapshot>) => ({
+        getOverviewTelemetrySnapshot: () => payload,
+      }),
+      firstPayload: () => buildOverviewSnapshot(),
+      timestampOnlyPayload: () => buildOverviewSnapshot("2026-03-30T09:01:00.000Z"),
+    },
+  ])("skips duplicate $eventType when only ignored timestamps change", async ({
+    eventType,
+    schedule,
+    advanceMs,
+    setPayloads,
+    firstPayload,
+    timestampOnlyPayload,
+  }) => {
+    const loggerMock = { warn: vi.fn(), info: vi.fn(), debug: vi.fn(), error: vi.fn(), child: vi.fn() };
+    const eventRepoMock = {
+      getLatestSequence: () => 1,
+      appendEvent: vi.fn().mockImplementation((event) => ({ sequence: 2, ...event })),
+    };
+    const service = new DashboardRealtimeService(eventRepoMock as any, loggerMock as any);
+    let payload = firstPayload() as any;
+
+    service.setSnapshotLoaders({
+      getProjectLiveSnapshot: () => ({} as any),
+      getProjectsSnapshot: () => ({} as any),
+      getProjectExecutionSnapshot: () => ({} as any),
+      getProjectStatusSnapshot: () => ({} as any),
+      getOverviewTelemetrySnapshot: () => ({} as any),
+      ...setPayloads(payload),
+    });
+
+    schedule(service);
+    await vi.advanceTimersByTimeAsync(100);
+
+    payload = timestampOnlyPayload();
+    service.setSnapshotLoaders({
+      getProjectLiveSnapshot: () => ({} as any),
+      getProjectsSnapshot: () => ({} as any),
+      getProjectExecutionSnapshot: () => ({} as any),
+      getProjectStatusSnapshot: () => ({} as any),
+      getOverviewTelemetrySnapshot: () => ({} as any),
+      ...setPayloads(payload),
+    });
+
+    schedule(service);
+    await vi.advanceTimersByTimeAsync(advanceMs);
+
+    const eventTypes = eventRepoMock.appendEvent.mock.calls.map((call) => call[0].eventType);
+    expect(eventTypes.filter((type) => type === eventType)).toHaveLength(1);
+    expect(service.getMetrics(eventType).published).toBe(1);
+    expect(service.getMetrics(eventType).unchanged).toBe(1);
+  });
+
+  it.each([
+    {
       name: "sprint run status",
       mutate: (snapshot: ReturnType<typeof buildExecutionRealtimeSnapshot>) => {
         snapshot.sprintRuns[0] = { ...snapshot.sprintRuns[0], status: "completed" };
@@ -760,6 +960,66 @@ describe("DashboardRealtimeService extracted publisher helper", () => {
 
     const eventTypes = eventRepoMock.appendEvent.mock.calls.map((call) => call[0].eventType);
     expect(eventTypes.filter((type) => type === "project.execution.updated")).toHaveLength(2);
+  });
+
+  it("publishes when a project list item changes", async () => {
+    const loggerMock = { warn: vi.fn(), info: vi.fn(), debug: vi.fn(), error: vi.fn(), child: vi.fn() };
+    const eventRepoMock = {
+      getLatestSequence: () => 1,
+      appendEvent: vi.fn().mockImplementation((event) => ({ sequence: 2, ...event })),
+    };
+    const service = new DashboardRealtimeService(eventRepoMock as any, loggerMock as any);
+    let projects = buildProjectsSnapshot();
+
+    service.setSnapshotLoaders({
+      getProjectLiveSnapshot: () => ({} as any),
+      getProjectsSnapshot: () => projects,
+      getProjectExecutionSnapshot: () => ({} as any),
+      getProjectStatusSnapshot: () => ({} as any),
+      getOverviewTelemetrySnapshot: () => ({} as any),
+    });
+
+    service.scheduleProjectsRefresh();
+    await vi.advanceTimersByTimeAsync(100);
+
+    projects = buildProjectsSnapshot("2026-03-30T09:01:00.000Z");
+    projects.projects[0] = { ...projects.projects[0], openTasks: 2 };
+    service.scheduleProjectsRefresh();
+    await vi.advanceTimersByTimeAsync(1_500);
+
+    const eventTypes = eventRepoMock.appendEvent.mock.calls.map((call) => call[0].eventType);
+    expect(eventTypes.filter((type) => type === "projects.updated")).toHaveLength(2);
+    expect(service.getMetrics("projects.updated").published).toBe(2);
+  });
+
+  it("publishes when git status changes", async () => {
+    const loggerMock = { warn: vi.fn(), info: vi.fn(), debug: vi.fn(), error: vi.fn(), child: vi.fn() };
+    const eventRepoMock = {
+      getLatestSequence: () => 1,
+      appendEvent: vi.fn().mockImplementation((event) => ({ sequence: 2, ...event })),
+    };
+    const service = new DashboardRealtimeService(eventRepoMock as any, loggerMock as any);
+    let gitStatus = buildGitStatusSnapshot();
+
+    service.setSnapshotLoaders({
+      getProjectLiveSnapshot: () => ({} as any),
+      getProjectsSnapshot: () => ({} as any),
+      getProjectExecutionSnapshot: () => ({} as any),
+      getProjectStatusSnapshot: () => ({} as any),
+      getProjectGitStatus: () => gitStatus,
+      getOverviewTelemetrySnapshot: () => ({} as any),
+    });
+
+    service.scheduleProjectGitRefresh("proj-1");
+    await vi.advanceTimersByTimeAsync(100);
+
+    gitStatus = { ...buildGitStatusSnapshot("2026-03-30T09:01:00.000Z"), dirty: true };
+    service.scheduleProjectGitRefresh("proj-1");
+    await vi.advanceTimersByTimeAsync(6_000);
+
+    const eventTypes = eventRepoMock.appendEvent.mock.calls.map((call) => call[0].eventType);
+    expect(eventTypes.filter((type) => type === "project.git.updated")).toHaveLength(2);
+    expect(service.getMetrics("project.git.updated").published).toBe(2);
   });
 
   it("expediteProjectLiveRefresh bypasses the live throttle for an immediate publish", async () => {
@@ -1027,9 +1287,10 @@ describe("DashboardRealtimeService backpressure and metrics", () => {
       "dashboard_realtime_event_write_failed",
       expect.objectContaining({
         eventType: "project.live.updated",
+        logPurpose: "realtime",
         projectId: "proj-1",
         correlationId: null,
-        error: expect.any(Error),
+        errorName: "Error",
       }),
     );
     expect(service.getMetrics("project.live.updated").failures).toBe(1);
@@ -1057,5 +1318,73 @@ describe("DashboardRealtimeService backpressure and metrics", () => {
 
     expect(eventRepoMock.appendEvent).toHaveBeenCalledWith(expect.objectContaining({ eventType: "execution_refresh" }));
     expect(eventRepoMock.appendEvent).toHaveBeenCalledWith(expect.objectContaining({ eventType: "projects.updated" }));
+  });
+
+  it("publishes provider invocation usage/status refreshes with stable event names, counters, and correlation ids", async () => {
+    const loggerMock = { warn: vi.fn(), info: vi.fn(), debug: vi.fn(), error: vi.fn(), child: vi.fn() };
+    let sequence = 10;
+    const eventRepoMock = {
+      getLatestSequence: () => sequence,
+      appendEvent: vi.fn().mockImplementation((event) => ({
+        sequence: ++sequence,
+        emittedAt: "2026-03-30T09:00:00.000Z",
+        scope: event.scopeType === "overview" ? "overview" : `${event.scopeType}:${event.scopeId}`,
+        ...event,
+      })),
+    };
+    const service = new DashboardRealtimeService(eventRepoMock as any, loggerMock as any);
+    service.setSnapshotLoaders({
+      getProjectLiveSnapshot: () => ({
+        projectId: "proj-1",
+        selectedSprintId: "sprint-1",
+        execution: {
+          recentInvocations: [
+            {
+              id: "exec-inv-1",
+              providerInvocationId: "provider-inv-1",
+              status: "running",
+              messageCount: 2,
+            },
+          ],
+        },
+      } as any),
+      getProjectsSnapshot: () => ({} as any),
+      getProjectExecutionSnapshot: () => ({
+        projectId: "proj-1",
+        recentInvocations: [
+          {
+            id: "exec-inv-1",
+            providerInvocationId: "provider-inv-1",
+            status: "running",
+            messageCount: 2,
+          },
+        ],
+      } as any),
+      getProjectStatusSnapshot: () => ({} as any),
+      getOverviewTelemetrySnapshot: () => ({} as any),
+    });
+
+    await runWithCorrelationId("corr-realtime-provider-usage", async () => {
+      service.scheduleProjectExecutionRefresh("proj-1", { includeOverview: false });
+      await service.drain();
+    });
+
+    const eventInputs = eventRepoMock.appendEvent.mock.calls.map((call) => call[0]);
+    expect(eventInputs.map((event) => event.eventType)).toEqual([
+      "execution_refresh",
+      "project.live.updated",
+      "project.execution.updated",
+    ]);
+    expect(eventInputs.map((event) => event.correlationId)).toEqual([
+      "corr-realtime-provider-usage",
+      "corr-realtime-provider-usage",
+      "corr-realtime-provider-usage",
+    ]);
+    expect(service.getMetrics("execution_refresh").published).toBe(1);
+    expect(service.getMetrics("project.live.updated").published).toBe(1);
+    expect(service.getMetrics("project.execution.updated").published).toBe(1);
+    expect(service.getLatestSequence()).toBe(13);
+    expect(JSON.stringify(eventInputs)).not.toContain("rawUsageJson");
+    expect(JSON.stringify(eventInputs)).not.toContain("transcript");
   });
 });

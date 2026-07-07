@@ -10,6 +10,7 @@ import { GlobalSearch } from "./top-nav/GlobalSearch.js";
 import { TelemetryStats } from "./top-nav/TelemetryStats.js";
 
 import { AddProjectModal, type AddProjectModalSubmission } from "./ui/AddProjectModal.js";
+import { buildGitHubModeProjectSettingsOverride } from "../../lib/settings-updaters.js";
 import { useProjectData } from "../context/project-data.js";
 import { useSprints } from "../../hooks/useSprints.js";
 import { formatSprintDisplay } from "../lib/format-sprint.js";
@@ -181,6 +182,27 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
     const isNotificationMenuVisible = notificationInteractionState !== 'closed';
     const notificationHoverTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
     const notificationContainerRef = useRef<HTMLDivElement>(null);
+    const notificationTriggerRef = useRef<HTMLButtonElement>(null);
+    const suppressNotificationFocusOpenRef = useRef(false);
+
+    const restoreNotificationFocus = useCallback(() => {
+        const trigger = notificationTriggerRef.current;
+        if (trigger && !trigger.disabled && trigger.isConnected) {
+            suppressNotificationFocusOpenRef.current = true;
+            trigger.focus({ preventScroll: true });
+            return;
+        }
+        const fallback = document.querySelector<HTMLElement>('[data-overlay-focus-fallback], [data-focus-fallback], main, [role="main"], #root') || document.body;
+        fallback.focus?.({ preventScroll: true });
+    }, []);
+
+    const closeNotificationMenu = useCallback((restoreFocus = true) => {
+        if (notificationHoverTimeout.current) clearTimeout(notificationHoverTimeout.current);
+        setNotificationInteractionState('closed');
+        if (restoreFocus) {
+            queueMicrotask(restoreNotificationFocus);
+        }
+    }, [restoreNotificationFocus]);
 
     const handleNotificationMouseEnter = () => {
         if (notificationHoverTimeout.current) clearTimeout(notificationHoverTimeout.current);
@@ -198,13 +220,17 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
     };
 
     const handleNotificationFocus = () => {
+        if (suppressNotificationFocusOpenRef.current) {
+            suppressNotificationFocusOpenRef.current = false;
+            return;
+        }
         if (notificationHoverTimeout.current) clearTimeout(notificationHoverTimeout.current);
         setNotificationInteractionState('open');
     };
 
     const handleNotificationBlur = (e: FocusEvent) => {
         if (!notificationContainerRef.current?.contains(e.relatedTarget as Node)) {
-            setNotificationInteractionState('closed');
+            closeNotificationMenu();
         }
     };
 
@@ -216,24 +242,23 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
             if (e.key === 'Escape' && isNotificationMenuVisible) {
-                setNotificationInteractionState('closed');
-                const triggerBtn = notificationContainerRef.current?.querySelector('button');
-                setTimeout(() => triggerBtn?.focus(), 0);
+                e.preventDefault();
+                closeNotificationMenu();
             }
         };
         document.addEventListener('keydown', handleKeyDown);
         return () => document.removeEventListener('keydown', handleKeyDown);
-    }, [isNotificationMenuVisible]);
+    }, [closeNotificationMenu, isNotificationMenuVisible]);
 
     useEffect(() => {
         const handleClickOutside = (e: MouseEvent) => {
             if (isNotificationMenuVisible && notificationContainerRef.current && !notificationContainerRef.current.contains(e.target as Node)) {
-                setNotificationInteractionState('closed');
+                closeNotificationMenu();
             }
         };
         document.addEventListener('mousedown', handleClickOutside);
         return () => document.removeEventListener('mousedown', handleClickOutside);
-    }, [isNotificationMenuVisible]);
+    }, [closeNotificationMenu, isNotificationMenuVisible]);
     const [sprintFilter, setSprintFilter] = useState('');
     const [sprintDropdownOpen, setSprintDropdownOpen] = useState(false);
     const sprintDropdownRef = useRef<HTMLDivElement>(null);
@@ -325,17 +350,19 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
 
     const handleCreateProject = async (project: AddProjectModalSubmission) => {
         if (project.type === 'new_project') {
+            const isLocalProject = project.initMode === 'new-local';
             const sourceRef = project.initMode === 'new-local'
                 ? (project.path || project.name)
                 : (project.repoSlug || project.name);
 
             await createProject({
                 name: project.name,
-                sourceType: project.initMode === 'new-local' ? 'local' : 'git',
+                sourceType: isLocalProject ? 'local' : 'git',
                 sourceRef,
                 initMode: project.initMode,
                 remoteProvider: project.remoteProvider,
                 isPrivate: project.isPrivate,
+                ...(isLocalProject ? { settingsOverrides: buildGitHubModeProjectSettingsOverride("LOCAL") } : {}),
             });
             return;
         }
@@ -345,6 +372,7 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
             sourceType: project.type,
             sourceRef: project.path,
             cloneDir: project.cloneDir,
+            ...(project.type === "local" ? { settingsOverrides: buildGitHubModeProjectSettingsOverride("LOCAL") } : {}),
         });
     };
 
@@ -620,6 +648,7 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
                 >
                     <Tooltip content="Notifications">
                         <button
+                            ref={notificationTriggerRef}
                             type="button"
                             onClick={toggleNotificationMenu}
                             onFocus={handleNotificationFocus}

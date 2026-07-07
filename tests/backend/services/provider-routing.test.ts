@@ -19,6 +19,8 @@ const buildProviders = (
   "claude-code": { enabled: enabledProviders["claude-code"] ?? true, weight: 0, thinkingMode: "HIGH", model: "default", apiKey: "c-key" },
   "qwen-code": { enabled: enabledProviders["qwen-code"] ?? false, weight: 0, thinkingMode: "HIGH", model: "qwen3-coder-plus", apiKey: "q-key" },
   opencode: { enabled: enabledProviders.opencode ?? false, weight: 0, thinkingMode: "HIGH", model: "anthropic/claude-sonnet-4-5", apiKey: "opencode-key" },
+  antigravity: { enabled: enabledProviders.antigravity ?? false, weight: 0, thinkingMode: "HIGH", model: "default", apiKey: "" },
+  "mockup-cli": { enabled: enabledProviders["mockup-cli"] ?? false, weight: 0, thinkingMode: "MEDIUM", model: "default", apiKey: "" },
 });
 
 const mockSettings = (
@@ -354,6 +356,49 @@ describe("Provider Routing Logic", () => {
       expect(result.provider).toBe("gemini");
       expect(result.enabledProviders).not.toContain("opencode");
     });
+
+    it.each([
+      "task_coding",
+      "ci_fix",
+      "merge_conflict",
+    ] as const)("resolves explicit mockup-cli route selection for %s", (invocation) => {
+      const settings = mockSettings("MANUAL", "jules", { "mockup-cli": false });
+      settings.aiProvider.providers["mockup-cli"] = {
+        provider: "mockup-cli",
+        name: "Mockup CLI",
+        enabled: false,
+        model: "default",
+        weight: 0,
+        thinkingMode: "MEDIUM",
+        apiKey: "",
+        mountAuth: false,
+        authPath: "",
+        maxConcurrentTasks: 0,
+      };
+      settings.aiProvider.invocationRouting[invocation] = {
+        ...settings.aiProvider.invocationRouting[invocation],
+        profile: "WORKER",
+        strategy: "MANUAL",
+        provider: "mockup-cli",
+        allowedProviders: ["mockup-cli"],
+        providers: {
+          "mockup-cli": {
+            enabled: true,
+            model: "default",
+          },
+        },
+      };
+
+      const result = resolveProviderForInvocation(settings, {
+        invocation,
+        task: mockTask({ prompt: `Run ${invocation} with the mock provider` }),
+      });
+
+      expect(result.provider).toBe("mockup-cli");
+      expect(result.providerConfigId).toBe("mockup-cli");
+      expect(result.enabledProviders).toContain("mockup-cli");
+      expect(result.providers["mockup-cli"].model).toBe("default");
+    });
   });
 
   describe("chooseProviderForTask", () => {
@@ -439,6 +484,11 @@ describe("Provider Routing Logic", () => {
 
     it("ignores an incompatible worker override", () => {
       expect(resolveWorkerModelForProvider("claude-code", "gpt-5.3-codex", "opus")).toBe("opus");
+    });
+
+    it("keeps the mockup-cli default model", () => {
+      expect(resolveWorkerModelForProvider("mockup-cli", "unknown-model", "default")).toBe("default");
+      expect(resolveWorkerModelForProvider("mockup-cli", "default", "default")).toBe("default");
     });
   });
 });

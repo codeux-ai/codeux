@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { h } from "preact";
-import { cleanup, render, screen } from "@testing-library/preact";
+import { useState } from "preact/hooks";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/preact";
 import { afterEach, describe, it, expect, vi } from "vitest";
 import { ActionFeedbackRegion } from "../ActionFeedbackRegion.js";
 import * as matchers from '@testing-library/jest-dom/matchers';
@@ -91,5 +92,34 @@ describe("ActionFeedbackRegion", () => {
 
     render(<ActionFeedbackRegion status="pending" message="Pending msg" progress={40} />);
     expect(document.querySelector(".absolute.bottom-0")).toBeInTheDocument();
+  });
+
+  it("moves focus to fallback when retry removes the focused feedback control", async () => {
+    function RetryHarness() {
+      const [status, setStatus] = useState<"error" | "idle">("error");
+      return (
+        <div>
+          <main data-feedback-focus-fallback tabIndex={-1}>Workbench</main>
+          <ActionFeedbackRegion
+            status={status}
+            message={status === "error" ? "Save failed" : null}
+            retryAction={() => {
+              setStatus("idle");
+            }}
+          />
+        </div>
+      );
+    }
+
+    render(<RetryHarness />);
+
+    const retry = screen.getByRole("button", { name: "Retry" });
+    retry.focus();
+    expect(document.activeElement).toBe(retry);
+
+    fireEvent.click(retry);
+
+    await waitFor(() => expect(screen.queryByRole("button", { name: "Retry" })).not.toBeInTheDocument());
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByText("Workbench")));
   });
 });

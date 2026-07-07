@@ -20,9 +20,9 @@ If you are looking for narrative explanations, the [User Guide](../user/index.md
 
 ## Versioning
 
-This reference tracks the **0.8.x** release line. Breaking changes follow semver — minor versions add tools / fields without removing them, major versions may remove or restructure.
+This reference tracks the current release line. Breaking changes follow semver — minor versions add tools / fields without removing them, major versions may remove or restructure.
 
-The MCP server name is `code-ux` and version is `0.8.x`. Capabilities advertised at `initialize`: `tools`, `resources`, `prompts`.
+The MCP server name is `code-ux` and the version matches the installed package. Capabilities advertised at `initialize`: `tools`, `resources`, `prompts`.
 
 ## Stable vs experimental
 
@@ -31,6 +31,3 @@ Unless explicitly marked `experimental` or `deprecated`, every contract document
 - The `preview` management domain (interface may evolve as Docker tooling matures).
 - The `WORKER` invocation routing profile.
 
-Deprecated surfaces:
-
-- The unified `manage_code_ux` tool — use the per-domain `manage_*` tools instead.
