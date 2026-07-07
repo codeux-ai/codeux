@@ -1217,6 +1217,7 @@ export function resolveDashboardSettings(args: {
   const baseProject = args.systemSettings.defaults;
   const projectSettings = resolveProjectSettings(args.systemSettings, args.projectOverride);
   const sprintSettings = resolveSprintProjectSettings(args.systemSettings, args.projectOverride, args.sprintOverride);
+  const techstackCatalog = args.systemSettings.techstackCatalog ?? DEFAULT_DASHBOARD_SETTINGS.techstackCatalog;
   // Provider concurrency caps: the system-level cap is a hard ceiling. Resolve the scoped
   // (project/sprint) caps, then clamp each provider to the system cap so an override can
   // only lower a cap, never raise it above the system value.
@@ -1240,7 +1241,7 @@ export function resolveDashboardSettings(args: {
     automationLevel: sprintSettings.automationLevel,
     automationInterventions: { ...sprintSettings.automationInterventions },
     aiProvider: resolvedAiProvider,
-    techstackCatalog: cloneTechstackCatalog(args.systemSettings.techstackCatalog),
+    techstackCatalog: cloneTechstackCatalog(techstackCatalog),
     techstack: cloneTechstackSelection(sprintSettings.techstack),
     // GitHub/GitLab/Jira resolve through the scoped project/sprint settings, which
     // inherit the system integration values unless a project or sprint overrides
