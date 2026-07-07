@@ -470,8 +470,9 @@ function extractDashboardLinkCandidates(markdown: string): string[] {
 
 function parseDashboardUrl(href: string): URL | null {
   try {
+    const isOriginQualified = /^[A-Za-z][A-Za-z\d+.-]*:\/\//.test(href) || href.startsWith("//");
     const url = new URL(href, DASHBOARD_LINK_BASE);
-    if (url.origin !== DASHBOARD_LINK_BASE && url.pathname !== "/sprints" && url.pathname !== "/tasks") {
+    if (isOriginQualified && url.origin !== DASHBOARD_LINK_BASE) {
       return null;
     }
     return url.pathname === "/sprints" || url.pathname === "/tasks" ? url : null;
