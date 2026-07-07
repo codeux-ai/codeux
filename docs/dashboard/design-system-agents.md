@@ -31,6 +31,8 @@ Use explicit badging inside `.code-ux/agents` lists:
 - The editor shows an explicit retrieval toggle plus checkboxes for storage attachment. The toggle is disabled when no storage is attached, and saving must persist both `persistentSkillStorageIds` and `persistentSkillStorage.enabled`.
 - The detail panel summarizes attached storages and the opt-in state. Empty state copy should say no storage is attached rather than implying memory is unavailable.
 - All add/remove/attach controls need visible labels, keyboard focus rings, and non-hover-only state. Storage chips may truncate long names, but the visible section title and status must remain readable on mobile.
+- Settings > Agents owns the project storage management and per-agent attachment controls. The regression in `tests/dashboard/v2/settings-agents-persistent-skills.test.tsx` verifies that attachment edits generate `updateAgentPreset` payloads containing both `persistentSkillStorageIds` and `persistentSkillStorage.enabled`, while self-reflection criteria edits remain in the project settings save payload.
+- Backend ownership and MCP/runtime behavior are documented in [Agent Preset Foundation](../architecture/agent-preset-foundation.md#data-model) and [MCP Tools and Contracts](../mcp/tools-and-contracts.md#search_skills-retrieval-tool).
 
 ## Empty States
 For empty states on the Agents page, avoid generic `<EmptyState />` implementations. Instead, use tailored rounded containers (`rounded-[1.9rem]`), dashed borders (`border-dashed border-black/[0.08]`), and a highly blured backdrop (`backdrop-blur-2xl`) that houses an oversized icon container (`h-16 w-16 bg-signal-500/10 text-signal-600 shadow-sm ring-1 ring-slate-900/5`).
