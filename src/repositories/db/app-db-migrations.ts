@@ -371,6 +371,8 @@ export function runMigrations(db: DatabaseAdapter): void {
       source_ref TEXT,
       content_hash TEXT NOT NULL,
       tags_json TEXT NOT NULL DEFAULT '[]',
+      applies_to_json TEXT NOT NULL DEFAULT '[]',
+      version TEXT,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL,
       FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
@@ -378,6 +380,8 @@ export function runMigrations(db: DatabaseAdapter): void {
       UNIQUE (storage_id, name)
     )
   `);
+  ensureColumn(db, "skills", "applies_to_json", "TEXT NOT NULL DEFAULT '[]'");
+  ensureColumn(db, "skills", "version", "TEXT");
   db.exec(`
     CREATE TABLE IF NOT EXISTS skill_embeddings (
       id TEXT PRIMARY KEY,

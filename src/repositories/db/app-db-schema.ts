@@ -397,6 +397,8 @@ CREATE TABLE IF NOT EXISTS skills (
         source_ref TEXT,
         content_hash TEXT NOT NULL,
         tags_json TEXT NOT NULL DEFAULT '[]',
+        applies_to_json TEXT NOT NULL DEFAULT '[]',
+        version TEXT,
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL,
         FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,

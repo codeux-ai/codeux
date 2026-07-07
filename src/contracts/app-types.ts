@@ -1057,6 +1057,8 @@ export interface SkillRecord {
   sourceRef: string | null;
   contentHash: string;
   tags: string[];
+  appliesTo: string[];
+  version: string | null;
   createdAt: string;
   updatedAt: string;
 }

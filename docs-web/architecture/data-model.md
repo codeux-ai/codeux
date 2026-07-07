@@ -157,11 +157,11 @@ Persistent skills are stored separately from project workspaces, memories, knowl
 | Table | Purpose |
 | --- | --- |
 | `skill_storages` | Named, project-owned storage containers that multiple agents can attach to. |
-| `skills` | Individual reusable skill records under a storage container. |
-| `skill_embeddings` | Embedding metadata and optional vectors for skill search. |
+| `skills` | Individual reusable skill records under a storage container, with markdown body, tags, applies-to paths, version, source identity, and content hash. |
+| `skill_embeddings` | Embedding model, dimension, chunk index, content hash, and optional vector blob for skill search. |
 | `agent_skill_storage_bindings` | Normalized agent-to-storage attachments keyed by `(agent_preset_id, storage_id)`. |
 
-The current slice defines contracts and persistence only. Runtime provider mounts, prompt injection, MCP tools, and dashboard controls are not wired yet.
+Skill markdown is imported from YAML-like frontmatter plus a body. Frontmatter maps to metadata; the body remains the authoritative agent instruction. Backend retrieval can search all project storages, one storage, or the storages attached to an agent preset. Runtime provider mounts, prompt injection, MCP tools, and dashboard controls are not wired yet.
 
 ## Memory
 
