@@ -94,6 +94,8 @@ Project management:
   - Lists project conversation threads
 - `POST /api/projects/:projectId/conversations/threads`
   - Creates a new project conversation thread
+- `PATCH /api/conversations/threads/:threadId`
+  - Updates a conversation thread's connection, runtime state, or non-empty title. Title changes also mirror to `.code-ux/conversations/<thread-id>/session-title.md` in the project checkout.
 - `POST /api/conversations/threads/:threadId/compact`
   - Compacts a thread's conversation history into a stored handoff summary
 - `POST /api/conversations/threads/:threadId/cancel`
@@ -478,6 +480,7 @@ Legacy runtime:
 - The first built-in role is `Planning agent`, which is editable under Agents like any other DB-backed agent
 - `Settings > Sprint & Git` now includes the QA controls immediately below `Merge Gates & Autofix`, with per-trigger multi-select agent assignment across all project agents, QA-labeled presets floated to the top, the same project-scope behavior preserved for local QA edits, and the persisted settings path still anchored at `agents.qualityAssurance`. Leaving a trigger with no custom agents selected clearly uses the built-in QA fallback without saving placeholder preset ids.
 - Chat page is DB-backed and stores project conversation threads/messages in sqlite
+- New dashboard chat threads derive an 8-word-or-less title from the first visible user message and mirror that title to `.code-ux/conversations/<thread-id>/session-title.md`; hidden/internal messages do not drive user-facing titles.
 - Chat page now provides a `Threads / Invocations` toggle to switch between human conversation threads and read-only execution invocations.
 - Chat page UI is redesigned with animated identities, structured widgets for rich messages, and automatic worker pickup derived from active project routing.
 - Chat page logs invocation activity explicitly in the background, providing observable execution artifacts directly in the chat view.
