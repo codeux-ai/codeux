@@ -29,7 +29,7 @@ In 3D Chat, idle quick actions send project-scoped prompts directly through the 
 
 Planning messages can include a rich sprint status card. When Code UX can match the message to loaded live project data, the card is backed by the current task records and execution snapshot, so it updates as tasks move from queued to running, completed, failed, blocked, or quota-waiting. It shows the sprint key/name, request/task/run materialization, overall progress such as `0/7 · 0%`, queued task count, and a compact task list. If either task records or the execution snapshot are still loading, the chat keeps the generic planning status card until both live records are available for the active project.
 
-Messages can also render external work references as rich cards without changing the stored transcript. The dashboard recognizes Jira issues, GitHub issues and pull requests, and GitLab issues and merge requests from explicit message metadata first, then from JSON-looking message bodies with the same fields. Recognized cards show the provider, key or number, title, status, safe external link, repository or project path, labels, assignee or author, and a short preview. Malformed JSON or unsupported providers remain ordinary markdown instead of being dropped.
+Normal thread messages can also render external work references as rich cards without changing the stored transcript. The dashboard recognizes Jira issues, GitHub issues and pull requests, and GitLab issues and merge requests from explicit message metadata first, then from JSON-looking message bodies with the same fields. Recognized cards show the provider, key or number, title, status, safe external link, repository or project path, labels, assignee or author, and a short preview. Malformed JSON or unsupported providers remain ordinary markdown instead of being dropped.
 
 ## Compacting a thread
 
@@ -52,7 +52,7 @@ Use this for debugging your MCP client integrations — for example to see exact
 
 Invocation transcripts use the same live sprint status card as thread messages when planning metadata links them to a sprint. This means a planning invocation and its related chat message should show consistent task progress without a separate refresh control.
 
-Invocation transcripts use the same external-reference cards as thread messages for recognized Jira, GitHub, and GitLab payloads. This keeps linked work readable while preserving the original backend metadata and message content.
+Invocation transcripts use the same external-reference cards as thread messages for recognized Jira, GitHub, and GitLab payloads, including JSON payloads that would otherwise appear as raw punctuation-heavy output. This keeps linked work readable while preserving the original backend metadata and message content.
 
 Planning and QA self-reflection messages appear as structured cards instead of raw system text. Each card shows whether the reflection passed, needed improvement, or hit an error; the final decision; the attempt number; and each criterion's 5-star rating, numeric score, threshold, rationale, and improvement instructions when available.
 

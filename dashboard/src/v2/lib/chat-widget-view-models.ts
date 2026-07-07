@@ -706,6 +706,14 @@ const extractExternalReferenceWidgetState = (
   return null;
 };
 
+const hasExternalReferenceJsonBody = (bodyMarkdown?: string): boolean => {
+  const bodyRecord = parseJsonLookingRecord(bodyMarkdown);
+  if (!bodyRecord) {
+    return false;
+  }
+  return collectExternalReferenceCandidates(bodyRecord).some((candidate) => Boolean(buildExternalReferenceState(candidate)));
+};
+
 const normalizeReflectionPurpose = (value: unknown): SelfReflectionPurpose => {
   const normalized = readString(value)?.toLowerCase().replace(/[\s-]+/g, "_") ?? "";
   if (normalized === "planning" || normalized === "plan") {
@@ -961,7 +969,7 @@ const extractWidgetStateFromMetadata = (
 
   const externalReference = extractExternalReferenceWidgetState(metadata, bodyMarkdown);
   if (externalReference) {
-    const hasJsonBody = externalReference.fromJsonBody || Boolean(parseJsonLookingRecord(bodyMarkdown));
+    const hasJsonBody = externalReference.fromJsonBody || hasExternalReferenceJsonBody(bodyMarkdown);
     return {
       type: "external_reference",
       status: externalReference.status,
