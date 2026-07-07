@@ -2,9 +2,13 @@ import type { FunctionComponent } from "preact";
 import { useState } from "preact/hooks";
 import type { SettingsPageState } from "../../../hooks/use-settings-page-state.js";
 import { PillChoiceGroup, SelectInput } from "../SettingsFormFields.js";
+import { NoticePanel } from "../SettingsSurface.js";
 import { SectionCard, Row, getFieldBadge } from "./SharedPanelComponents.js";
 import { Image, Monitor } from "lucide-preact";
 import { applyAppearanceSettings } from "../../../lib/apply-appearance.js";
+import { dashboardExperienceModeOptions } from "../../../lib/experience-mode.js";
+import { isEasySettingsExperience } from "../../../lib/settings-experience-mode.js";
+import type { DashboardExperienceMode } from "../../../../types.js";
 import type { BackgroundPattern } from "../../../../types.js";
 import { useThemeSetting } from "../../../hooks/useThemeSetting.js";
 
@@ -18,6 +22,7 @@ export const SettingsAppearancePanel: FunctionComponent<{
 
   const { activeScope, projectSources } = state;
   const appearance = settings.appearance;
+  const experienceMode = state.experienceMode;
   const { theme: persistedTheme, setTheme } = useThemeSetting();
   const [showSizeWarning, setShowSizeWarning] = useState(false);
   const supportsNativeZoom = typeof window !== "undefined" && Boolean(window.codeUxDesktop?.setZoom);
@@ -25,6 +30,31 @@ export const SettingsAppearancePanel: FunctionComponent<{
   return (
     <div className="flex flex-col gap-5">
       <SectionCard title="Display Settings" watermark="UI" icon={<Monitor strokeWidth={2.4} />}>
+        <Row
+          label="Experience Mode"
+          description="Choose how much of Settings is shown in this dashboard scope."
+          badge={getFieldBadge(activeScope, projectSources, "appearance.experienceMode")}
+        >
+          <PillChoiceGroup
+            value={experienceMode}
+            aria-label="Experience mode"
+            onChange={(val) => {
+              state.updateEditableSettings((current) => ({
+                ...current,
+                appearance: {
+                  ...current.appearance,
+                  experienceMode: val as DashboardExperienceMode,
+                },
+              }));
+            }}
+            options={dashboardExperienceModeOptions.map((option) => ({
+              value: option.value,
+              label: option.label,
+              hint: option.description,
+            }))}
+          />
+        </Row>
+
         <Row
           label="Navigation Mode"
           description="Choose between a floating dock or a traditional sidebar."
@@ -140,6 +170,12 @@ export const SettingsAppearancePanel: FunctionComponent<{
           </Row>
         )}
       </SectionCard>
+
+      {isEasySettingsExperience(experienceMode) ? (
+        <NoticePanel title="Easy mode">
+          Advanced runtime, MCP, model pricing, guardrail, and worker controls remain saved and are available by switching Experience Mode to Expert.
+        </NoticePanel>
+      ) : null}
 
       <SectionCard title="Background" watermark="BG" icon={<Image strokeWidth={2.4} />}>
         <Row

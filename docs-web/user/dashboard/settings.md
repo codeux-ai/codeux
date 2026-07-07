@@ -43,6 +43,8 @@ The category rail on the left includes:
 
 Each category opens one or more **content panels** with grouped fields. Inputs are typed (text, number with min/max, toggle, multi-select) and validate inline.
 
+Experience Mode in Appearance controls how much of this surface is visible. Easy keeps the rail focused on General, Appearance, Integrations, and Danger Zone. Standard keeps common project and productivity categories while hiding specialist areas such as MCP and advanced pricing/runtime controls. Expert shows every category and field. Switching modes only changes visibility; hidden settings values remain saved and return when Expert mode is selected.
+
 ## Agents settings
 
 The **Agents** category includes project markdown mirroring, agent routing, persistent skill storage, and self-reflection controls.
@@ -238,11 +240,11 @@ Related docs:
 
 Controls the dashboard shell layout, experience mode, theme, motion preference, and desktop zoom when available.
 
-**What it controls:** Experience mode stores one persisted Easy, Standard, or Expert dashboard preference. Navigation mode switches dock/sidebar, theme sets color mode, reduced motion limits animation, and zoom scales Electron windows.
+**What it controls:** Experience mode stores one persisted Easy, Standard, or Expert dashboard preference. Easy shows only user-essential Settings categories; Standard keeps common project and productivity settings while hiding specialist controls such as MCP, model pricing, guardrails, Docker/runtime internals, database maintenance, and worker concurrency limits; Expert shows the full settings surface. Navigation mode switches dock/sidebar, theme sets color mode, reduced motion limits animation, and zoom scales Electron windows.
 
-**Recommended defaults:** New installs default to Expert experience mode. Use System theme and Auto reduced motion unless you need a fixed accessibility preference.
+**Recommended defaults:** New installs default to Expert experience mode. Use Easy for day-to-day operation, Standard for routine project administration, and Expert when editing low-level runtime, MCP, pricing, guardrail, or worker controls. Use System theme and Auto reduced motion unless you need a fixed accessibility preference.
 
-**Risks and gotchas:** High zoom or dense sidebars can reduce visible workspace on small screens.
+**Risks and gotchas:** Switching out of Expert mode only hides advanced controls from the current UI; it does not change provider routing, backend settings resolution, or saved hidden values. High zoom or dense sidebars can reduce visible workspace on small screens.
 
 Related docs:
 

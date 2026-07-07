@@ -3,6 +3,7 @@ import type { ProjectSettings } from "../../../../types.js";
 import { SelectInput, NumberInput } from "../SettingsFormFields.js";
 import { Row } from "./SharedPanelComponents.js";
 import { getProviderModelOptions } from "../../../lib/settings-view-models.js";
+import { shouldShowExpertSettings } from "../../../lib/settings-experience-mode.js";
 
 export const WorkerPanel: FunctionComponent<{
   settings: ProjectSettings;
@@ -13,6 +14,7 @@ export const WorkerPanel: FunctionComponent<{
   const workerProviderType = workerProvider?.provider || "codex";
   const workerProviderEntries = Object.entries(settings.aiProvider.providers)
     .filter(([, provider]) => provider.provider !== "jules");
+  const showExpertSettings = shouldShowExpertSettings(settings.appearance?.experienceMode);
 
   return (
         <div className="grid gap-4 lg:grid-cols-2 mb-4">
@@ -42,7 +44,7 @@ export const WorkerPanel: FunctionComponent<{
             </Row>
           }
           {
-            <Row label="Worker model" description="Override the global model for virtual workers. If set to 'Default', the global model for the selected CLI provider is used." badge={getBadge("workers.model")}>
+            <Row label="Worker model" description="Override the global model for virtual workers. If set to 'Default', the global model for the selected CLI provider is used." badge={getBadge("workers.model")} last={!showExpertSettings}>
               <SelectInput aria-label="Worker model" aria-description="Override the global model for virtual workers. If set to 'Default', the global model for the selected CLI provider is used."
                 value={settings.workers.model || "default"}
                 onChange={(value) => update({
@@ -58,32 +60,36 @@ export const WorkerPanel: FunctionComponent<{
               />
             </Row>
           }
-          <Row label="Max concurrency" description="Maximum number of parallel tasks a worker can handle simultaneously." badge={getBadge("workers.maxConcurrency")}>
-            <NumberInput aria-label="Max concurrency" aria-description="Maximum number of parallel tasks a worker can handle simultaneously."
-              value={settings.workers.maxConcurrency}
-              min={1}
-              max={100}
-              onChange={(value) => update({
-                workers: {
-                  ...settings.workers,
-                  maxConcurrency: value,
-                },
-              })}
-            />
-          </Row>
-          <Row label="Dispatch timeout" description="Seconds to wait for a worker to finish a single task dispatch before timing out." badge={getBadge("workers.timeoutSeconds")}>
-            <NumberInput aria-label="Dispatch timeout" aria-description="Seconds to wait for a worker to finish a single task dispatch before timing out."
-              value={settings.workers.timeoutSeconds}
-              min={60}
-              max={3600}
-              onChange={(value) => update({
-                workers: {
-                  ...settings.workers,
-                  timeoutSeconds: value,
-                },
-              })}
-            />
-          </Row>
+          {showExpertSettings ? (
+            <>
+              <Row label="Max concurrency" description="Maximum number of parallel tasks a worker can handle simultaneously." badge={getBadge("workers.maxConcurrency")}>
+                <NumberInput aria-label="Max concurrency" aria-description="Maximum number of parallel tasks a worker can handle simultaneously."
+                  value={settings.workers.maxConcurrency}
+                  min={1}
+                  max={100}
+                  onChange={(value) => update({
+                    workers: {
+                      ...settings.workers,
+                      maxConcurrency: value,
+                    },
+                  })}
+                />
+              </Row>
+              <Row label="Dispatch timeout" description="Seconds to wait for a worker to finish a single task dispatch before timing out." badge={getBadge("workers.timeoutSeconds")}>
+                <NumberInput aria-label="Dispatch timeout" aria-description="Seconds to wait for a worker to finish a single task dispatch before timing out."
+                  value={settings.workers.timeoutSeconds}
+                  min={60}
+                  max={3600}
+                  onChange={(value) => update({
+                    workers: {
+                      ...settings.workers,
+                      timeoutSeconds: value,
+                    },
+                  })}
+                />
+              </Row>
+            </>
+          ) : null}
         </div>
   );
 };
