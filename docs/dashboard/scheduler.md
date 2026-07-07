@@ -1,6 +1,6 @@
 # Scheduler
 
-The Scheduler page provides project-scoped automation for future sprint starts, quicksprint launches, and timed chat-agent messages.
+The Scheduler page provides project-scoped automation for future sprint starts, quicksprint launches, timed chat-agent messages, and long-term memory remediation. The backend contract also supports agent-created wakeups and scheduled task reruns for agent-facing surfaces that are not exposed in the dashboard form yet.
 
 ## Dashboard Behavior
 
@@ -18,6 +18,12 @@ Operators can create entries for:
 - Built-in or custom quicksprint templates available to the selected project.
 - Messages sent into `/chat` at the selected date and time.
 - Long-term memory remediation, either deterministic or AI-routed through the Remediation route.
+
+The runtime contract additionally accepts:
+- `agent_wakeup` targets, which post a scheduled wakeup message back into a chat thread with `bodyMarkdown`, optional `threadId`, optional `connectionId`, optional `title`, and agent-scheduler metadata.
+- `task` targets, which rerun an existing task by `taskId` and optional `provider`.
+
+Those agent-created target types are intentionally backend-only in this task. They provide the storage and execution model that later MCP security and dashboard notification surfaces can consume without changing the dashboard target picker.
 
 The Sprint Composer also exposes a `Schedule` execution mode. That path saves the sprint definition first, including the sprint key override, name, goal, original prompt, planning route/model overrides, agent preset selections, linked issues, and imported tasks, then creates a scheduler entry targeting the saved sprint. It does not call planning or execution immediately.
 
@@ -56,7 +62,17 @@ Entries support two scheduling modes:
 
 Composer and quicksprint shortcut scheduling both use this same contract. Absolute shortcut submissions send `scheduledFor`; after-sprint-end shortcut submissions send `scheduleAnchor`.
 
-Anchors are persisted inside the existing `target_json` payload instead of a new column. This keeps existing `scheduler_entries` rows compatible and avoids a destructive migration; older absolute entries simply hydrate with no `scheduleAnchor`.
+Anchors and target-specific payloads are persisted inside the existing `target_json` payload instead of new columns. This keeps existing `scheduler_entries` rows compatible and avoids a destructive migration; older absolute entries simply hydrate with no `scheduleAnchor`.
+
+The target payload keys are:
+- `sprintTarget`: `{ sprintId }`
+- `quicksprintTarget`: `{ templateId, taskCount, noTaskLimit?, submitMode, additionalPrompt?, agentPresetId?, planningOverrides? }`
+- `chatTarget`: `{ bodyMarkdown, threadId?, title?, connectionId? }`
+- `memoryRemediationTarget`: `{ mode, source? }`
+- `agentWakeupTarget`: `{ bodyMarkdown, threadId?, title?, connectionId?, origin: "agent_scheduler", source: "agent_scheduler", createdByAgentId? }`
+- `taskTarget`: `{ taskId, provider?, origin: "agent_scheduler", source: "agent_scheduler", createdByAgentId? }`
+
+`agent_wakeup` and `task` entries always normalize `origin` and `source` to `agent_scheduler` in `target_json`. When the creator supplies `createdByAgentId`, it is preserved with the target payload for later authorization, audit, and notification work. Existing sprint, quicksprint, chat, memory remediation, recurrence, pause/resume, and `after_sprint_end` anchor rows continue to hydrate from the same JSON payload without a schema migration.
 
 The shared TypeScript contract lives in:
 - `src/contracts/scheduler-types.ts`
@@ -111,6 +127,8 @@ Due entries execute through existing production paths:
 - quicksprint entries call `QuicksprintService.executeQuicksprint`
 - chat entries call `ChatThreadRuntimeService.postMessage`
 - memory remediation entries call `MemoryRemediationService.remediateLongTermMemories`
+- agent wakeup entries call `ChatThreadRuntimeService.postMessage` with `metadata.source = "agent_scheduler"`, `metadata.origin = "agent_scheduler"`, `metadata.schedulerEntryId`, and `metadata.createdByAgentId` when present
+- task entries call `TaskRerunService.rerunTask`, passing the stored provider override when one was scheduled
 
 AI memory remediation entries create a `remediation` invocation record even when no cleanup candidates are found; in that case the invocation is completed with a skipped reason instead of dispatching an empty provider request.
 
@@ -122,6 +140,7 @@ Anchored entries are evaluated separately from absolute `nextRunAt` polling:
 - The optional offset is applied after that terminal timestamp.
 - Anchored entries are one-time entries. Recurrence is rejected for `after_sprint_end` because repeated execution would be ambiguous without a new recurrence anchor model.
 - When the scheduled target is also a sprint, the target sprint cannot be the same sprint used as the source anchor.
-- Project isolation is strict: source sprints from another project are rejected.
+- Project isolation is strict: source sprints from another project are rejected, sprint targets must belong to the selected project, and task targets must reference a task in the selected project.
+- Agent wakeups require non-empty `bodyMarkdown`.
 
 The MCP `manage_scheduler` tool accepts the same model. Use `scheduleMode: "after_sprint_end"` or `anchorMode: "after_sprint_end"` with `sourceSprintId`/`anchorSourceSprintId` and optional `offsetMinutes`/`anchorOffsetMinutes`, or pass the nested `scheduleAnchor` object directly. Absolute schedules continue to use `scheduledFor`; `scheduleMode: "absolute"` on update clears an existing anchor.
