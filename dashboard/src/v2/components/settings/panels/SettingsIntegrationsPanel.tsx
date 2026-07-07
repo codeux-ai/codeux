@@ -238,6 +238,23 @@ const getRoutingHintValue = (binding: ChatProviderChannelBindingRecord, key: str
   return typeof value === "string" ? value : "";
 };
 
+const EMPTY_CHAT_PROVIDER_STATE = {
+  definitions: [],
+  connections: [],
+  bindings: [],
+  deliveriesByConnection: {},
+  loading: false,
+  savingId: null,
+  error: null,
+  load: async () => undefined,
+  createConnection: async () => null,
+  updateConnection: async () => null,
+  deleteConnection: async () => undefined,
+  createBinding: async () => null,
+  updateBinding: async () => null,
+  deleteBinding: async () => undefined,
+};
+
 const createConnectionDraft = (
   connection: DashboardChatProviderConnectionRecord,
   definition: DashboardChatProviderSetupDefinition,
@@ -349,25 +366,26 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
   const [bindingDrafts, setBindingDrafts] = useState<Record<string, ChatProviderBindingDraft>>({});
   const [newBindingDrafts, setNewBindingDrafts] = useState<Record<string, ChatProviderBindingDraft>>({});
   const isInitialMount = useRef(true);
-  const chatProviderDefinitionsLength = state.chatProviders.definitions.length;
-  const chatProvidersLoading = state.chatProviders.loading;
-  const loadChatProviderSettings = state.chatProviders.load;
+  const chatProviders = state.chatProviders ?? EMPTY_CHAT_PROVIDER_STATE;
+  const chatProviderDefinitionsLength = chatProviders.definitions.length;
+  const chatProvidersLoading = chatProviders.loading;
+  const loadChatProviderSettings = chatProviders.load;
   const projectOptions = (state.projects ?? (state.selectedProject ? [state.selectedProject] : []))
     .map((project) => ({ value: project.id, label: project.name || project.id }));
   const agentPresetOptions = [
     { value: "", label: "Built-in project manager" },
-    ...state.projectAgentPresetOptions.map((option) => ({ value: option.value, label: option.label })),
+    ...(state.projectAgentPresetOptions ?? []).map((option) => ({ value: option.value, label: option.label })),
   ];
   const chatProviderCards = useMemo(() => buildChatProviderCatalogViewModel({
-    definitions: state.chatProviders.definitions,
-    connections: state.chatProviders.connections,
-    bindings: state.chatProviders.bindings,
-    deliveriesByConnection: state.chatProviders.deliveriesByConnection,
+    definitions: chatProviders.definitions,
+    connections: chatProviders.connections,
+    bindings: chatProviders.bindings,
+    deliveriesByConnection: chatProviders.deliveriesByConnection,
   }), [
-    state.chatProviders.bindings,
-    state.chatProviders.connections,
-    state.chatProviders.definitions,
-    state.chatProviders.deliveriesByConnection,
+    chatProviders.bindings,
+    chatProviders.connections,
+    chatProviders.definitions,
+    chatProviders.deliveriesByConnection,
   ]);
 
   useEffect(() => {
@@ -551,8 +569,8 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
   };
 
   const addChatProviderConnection = async (definition: DashboardChatProviderSetupDefinition): Promise<void> => {
-    const count = state.chatProviders.connections.filter((connection) => connection.providerKind === definition.kind).length + 1;
-    await state.chatProviders.createConnection({
+    const count = chatProviders.connections.filter((connection) => connection.providerKind === definition.kind).length + 1;
+    await chatProviders.createConnection({
       providerKind: definition.kind,
       displayName: `${definition.label} Bridge ${count}`,
       bridgeMode: definition.defaultBridgeMode,
@@ -591,7 +609,7 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
     const draft = connectionDrafts[connection.id] ?? createConnectionDraft(connection, definition);
     const secretUpdate = buildSecretUpdate(draft, definition);
     const bridgeModeChanged = draft.bridgeMode !== connection.bridgeMode;
-    const updated = await state.chatProviders.updateConnection(connection.id, {
+    const updated = await chatProviders.updateConnection(connection.id, {
       displayName: draft.displayName,
       bridgeMode: draft.bridgeMode,
       status: draft.status,
@@ -610,7 +628,7 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
 
   const saveChatProviderBinding = async (binding: ChatProviderChannelBindingRecord): Promise<void> => {
     const draft = bindingDrafts[binding.id] ?? createBindingDraft(binding);
-    const updated = await state.chatProviders.updateBinding(binding.id, {
+    const updated = await chatProviders.updateBinding(binding.id, {
       externalChannelName: draft.externalChannelName,
       projectId: draft.projectId,
       agentPresetId: draft.agentPresetId || null,
@@ -635,7 +653,7 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
     if (!draft.externalChannelId.trim() || !draft.projectId.trim()) {
       return;
     }
-    const created = await state.chatProviders.createBinding({
+    const created = await chatProviders.createBinding({
       providerConnectionId: connection.id,
       externalChannelId: draft.externalChannelId,
       externalChannelName: draft.externalChannelName || draft.externalChannelId,
@@ -708,7 +726,7 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
     binding: ChatProviderChannelBindingRecord,
   ) => {
     const draft = bindingDrafts[binding.id] ?? createBindingDraft(binding);
-    const saving = state.chatProviders.savingId === `binding:${binding.id}`;
+    const saving = chatProviders.savingId === `binding:${binding.id}`;
     return (
       <div key={binding.id} className="rounded-[1.25rem] border border-black/[0.06] bg-white/58 p-4 dark:border-white/[0.06] dark:bg-white/[0.025]">
         <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
@@ -721,7 +739,7 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <CatalogActionButton label={saving ? "Saving" : "Save"} icon={Save} disabled={saving} tone="primary" onClick={() => void saveChatProviderBinding(binding)} />
-            <CatalogActionButton label="Delete" icon={Trash2} disabled={Boolean(state.chatProviders.savingId)} onClick={() => void state.chatProviders.deleteBinding(binding.id)} />
+            <CatalogActionButton label="Delete" icon={Trash2} disabled={Boolean(chatProviders.savingId)} onClick={() => void chatProviders.deleteBinding(binding.id)} />
           </div>
         </div>
         <div className="grid gap-3 lg:grid-cols-2">
@@ -780,7 +798,7 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
             label="Create binding"
             icon={Link2}
             tone="primary"
-            disabled={Boolean(disabledReason) || !draft.externalChannelId.trim() || !draft.projectId.trim() || Boolean(state.chatProviders.savingId)}
+            disabled={Boolean(disabledReason) || !draft.externalChannelId.trim() || !draft.projectId.trim() || Boolean(chatProviders.savingId)}
             onClick={() => void createChatProviderBinding(connection)}
           />
         </div>
@@ -867,11 +885,11 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
   ) => {
     const draft = connectionDrafts[connection.id] ?? createConnectionDraft(connection, definition);
     const bridge = findBridgeSchema(definition, draft.bridgeMode);
-    const bindings = state.chatProviders.bindings.filter((binding) => binding.providerConnectionId === connection.id);
+    const bindings = chatProviders.bindings.filter((binding) => binding.providerConnectionId === connection.id);
     const connectionVm = chatProviderCards
       .find((card) => card.providerKind === definition.kind)
       ?.connections.find((entry) => entry.id === connection.id);
-    const saving = state.chatProviders.savingId === `connection:${connection.id}`;
+    const saving = chatProviders.savingId === `connection:${connection.id}`;
     const deliveryMetrics: Array<[typeof Hash, string, string]> = [
       [Hash, `${connectionVm?.configuredChannelCount ?? 0} channels`, "Configured channels"],
       [Link2, `${connectionVm?.boundProjectCount ?? 0} projects`, "Bound projects"],
@@ -897,7 +915,7 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <CatalogActionButton label={saving ? "Saving" : "Save"} icon={Save} disabled={saving} tone="primary" onClick={() => void saveChatProviderConnection(connection, definition)} />
-            <CatalogActionButton label="Delete" icon={Trash2} disabled={Boolean(state.chatProviders.savingId)} onClick={() => void state.chatProviders.deleteConnection(connection.id)} />
+            <CatalogActionButton label="Delete" icon={Trash2} disabled={Boolean(chatProviders.savingId)} onClick={() => void chatProviders.deleteConnection(connection.id)} />
           </div>
         </div>
 
@@ -1033,9 +1051,9 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
   };
 
   const renderChatProviderDetail = (providerKind: ChatProviderKind) => {
-    const definition = state.chatProviders.definitions.find((entry) => entry.kind === providerKind);
+    const definition = chatProviders.definitions.find((entry) => entry.kind === providerKind);
     const providerCard = chatProviderCards.find((card) => card.providerKind === providerKind);
-    const providerConnections = state.chatProviders.connections.filter((connection) => connection.providerKind === providerKind);
+    const providerConnections = chatProviders.connections.filter((connection) => connection.providerKind === providerKind);
     const label = definition?.label ?? providerKind;
     return (
       <>
@@ -1051,16 +1069,16 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
             <>
               <IntegrationPill label={`${providerCard?.connectionCount ?? providerConnections.length} connections`} />
               <IntegrationPill label={`${providerCard?.failedOutboundCount ?? 0} failed outbound`} tone={(providerCard?.failedOutboundCount ?? 0) > 0 ? "muted" : "neutral"} />
-              <CatalogActionButton label="Refresh" icon={RefreshCw} disabled={state.chatProviders.loading} onClick={() => void state.chatProviders.load()} />
-              {definition ? <CatalogActionButton label="Add connection" icon={Plus} tone="primary" disabled={Boolean(state.chatProviders.savingId)} onClick={() => void addChatProviderConnection(definition)} /> : null}
+              <CatalogActionButton label="Refresh" icon={RefreshCw} disabled={chatProviders.loading} onClick={() => void chatProviders.load()} />
+              {definition ? <CatalogActionButton label="Add connection" icon={Plus} tone="primary" disabled={Boolean(chatProviders.savingId)} onClick={() => void addChatProviderConnection(definition)} /> : null}
             </>
           }
         >
-          {state.chatProviders.loading ? (
+          {chatProviders.loading ? (
             <NoticePanel tone="pending" title="Loading chat providers">Loading provider setup definitions, connections, bindings, and delivery health.</NoticePanel>
           ) : null}
-          {state.chatProviders.error ? (
-            <NoticePanel tone="error" title="Chat provider settings unavailable">{state.chatProviders.error}</NoticePanel>
+          {chatProviders.error ? (
+            <NoticePanel tone="error" title="Chat provider settings unavailable">{chatProviders.error}</NoticePanel>
           ) : null}
           {definition ? (
             <NoticePanel title={`${definition.label} setup guidance`}>
