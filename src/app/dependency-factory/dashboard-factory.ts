@@ -440,6 +440,7 @@ export function createDashboardDependencies(
     },
   );
   quicksprintServiceRef.set(quicksprintService);
+  chatThreadRuntimeService.setQuicksprintLauncher(quicksprintService);
 
   const projectSetupService = new ProjectSetupService({
     projectManagementRepository,

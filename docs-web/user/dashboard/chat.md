@@ -41,6 +41,23 @@ To start a new thread, click **+ New thread**. To change the responding agent, o
 
 Each post is a runtime operation that honors the explicit route chosen (worker route, virtual provider route, automatic live-worker pickup, or fallback). The dashboard exposes in-flight state locally, allowing you to cancel active thread turns or invocations. Failed invocation restarts preserve the failed invocation transcript and expose the existing sanitized error message with a retry action.
 
+## Create app quickactions
+
+Use **Create Web App** or **Create Desktop App** when you want Code UX to start an app-building sprint in the selected project from chat. In Threads mode, the buttons sit beside the composer and are also available in an empty thread. In 3D Chat, the idle Web App and Desktop App quickactions send the same kind of request through the active thread.
+
+Clicking either quickaction starts immediately. You do not need to type composer text first, and Code UX does not show a confirmation step. If there is no active thread yet, the dashboard creates one, posts a short visible message such as `Create a web app`, and starts the matching quicksprint in detached `Plan & Start` mode while you stay in Chat.
+
+The quickaction carries the active project's effective techstack into planning: the selected catalog entry when assigned, or the catalog default when the project is unassigned. Stack item labels become suggestion tags, so the progress widget and planner begin from the same stack context visible in the dashboard.
+
+The transcript then shows an app progress widget instead of raw status data. The widget reports:
+
+- whether the sprint is for a web app or desktop app
+- the app sprint name
+- selected stack details such as framework, runtime, package manager, styling, and tests when available
+- planning stages from Planning through Plan, Showing each Task, Start, and Finish
+- suggestion tags that can guide your next message
+
+You can keep sending messages in the same thread while planning runs. If the planner has not created tasks yet, Code UX queues those follow-ups and applies them to the sprint when planning finishes. Once tasks exist, follow-ups update the sprint direction immediately and the thread confirms the update. The added direction appears on the sprint goal under `Additional direction from chat`; generated task prompts are not rewritten by those follow-ups. Non-app quickactions still use the normal routed chat reply path.
 After you send a message, the thread transcript updates from the server's returned chat message. The **Invocations** rail updates separately from persisted server invocation records and realtime refreshes, so it shows only backend-confirmed invocation rows. The dashboard no longer inserts a frontend-only optimistic invocation placeholder while the backend is still creating the real row.
 
 In 3D Chat, idle quick actions send project-scoped prompts directly through the active thread. **Web App** and **Desktop App** set up the currently selected project using its current techstack setting; an unassigned existing project stays `None`. They do not create or import a new Code UX project.

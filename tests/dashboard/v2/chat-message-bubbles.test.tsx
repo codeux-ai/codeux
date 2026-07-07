@@ -330,6 +330,149 @@ describe("Chat Message Bubbles", () => {
       expect(getByText("Navigating solutions...")).toBeInTheDocument();
     });
 
+    it("renders planning_request widget metadata through the existing planning widget", () => {
+      const message: ChatMessageRecord = {
+        id: "msg_planning_request",
+        threadId: "thread_1",
+        direction: "connection_to_dashboard",
+        authorType: "system",
+        authorConnectionId: null,
+        bodyMarkdown: "Planning started",
+        deliveryStatus: "delivered",
+        createdAt: new Date().toISOString(),
+        metadata: {
+          widget_metadata: {
+            type: "planning_request",
+            status: "running",
+            route_path: "Existing Plan",
+          },
+        },
+      };
+
+      const { container } = render(<ChatMessageBubble message={message} />);
+      const view = within(container);
+
+      expect(view.getByText("Existing Plan")).toBeInTheDocument();
+      expect(view.getByText("Navigating solutions...")).toBeInTheDocument();
+      expect(view.queryByText("Showing each Task")).not.toBeInTheDocument();
+    });
+
+    it("renders a running app creation progress widget with stack and suggestion tags", () => {
+      const message: ChatMessageRecord = {
+        id: "msg_app_progress_running",
+        threadId: "thread_1",
+        direction: "connection_to_dashboard",
+        authorType: "system",
+        authorConnectionId: null,
+        bodyMarkdown: "Started a web app sprint.",
+        deliveryStatus: "delivered",
+        createdAt: new Date().toISOString(),
+        metadata: {
+          widget_metadata: {
+            type: "app_progress",
+            status: "running",
+            appKind: "web_app",
+            sprintName: "Create Web App",
+            stackSummary: {
+              techstackName: "Preact Fullstack",
+              framework: "Preact",
+              packageManager: "pnpm",
+            },
+            planningStages: [
+              { id: "planning", label: "Planning", status: "completed" },
+              { id: "plan", label: "Plan", status: "running" },
+              { id: "finish", label: "Finish", status: "pending" },
+            ],
+            suggestionTags: ["auth", "dashboard"],
+          },
+        },
+      };
+
+      const { container } = render(<ChatMessageBubble message={message} />);
+      const view = within(container);
+
+      expect(view.getByText("Web app sprint is being planned.")).toBeInTheDocument();
+      expect(view.getByText("Create Web App")).toBeInTheDocument();
+      expect(view.getByText("Preact Fullstack")).toBeInTheDocument();
+      expect(view.getByText("Preact")).toBeInTheDocument();
+      expect(view.getByText("pnpm")).toBeInTheDocument();
+      expect(view.getByText("Showing each Task")).toBeInTheDocument();
+      expect(view.getByText("auth")).toBeInTheDocument();
+      expect(view.getByText("dashboard")).toBeInTheDocument();
+      expect(container.textContent).not.toContain("appKind");
+      expect(container.textContent).not.toContain("stackSummary");
+    });
+
+    it("renders completed app creation progress without inventing raw metadata", () => {
+      const message: ChatMessageRecord = {
+        id: "msg_app_progress_completed",
+        threadId: "thread_1",
+        direction: "connection_to_dashboard",
+        authorType: "system",
+        authorConnectionId: null,
+        bodyMarkdown: "Completed desktop app sprint.",
+        deliveryStatus: "delivered",
+        createdAt: new Date().toISOString(),
+        metadata: {
+          widget_metadata: {
+            type: "app_progress",
+            status: "completed",
+            appKind: "desktop_app",
+            sprintName: "Create Desktop App",
+            planningStages: [
+              { id: "planning", label: "Planning", status: "completed" },
+              { id: "plan", label: "Plan", status: "completed" },
+              { id: "showing_tasks", label: "Showing each Task", status: "completed" },
+              { id: "start", label: "Start", status: "completed" },
+              { id: "finish", label: "Finish", status: "completed" },
+            ],
+            suggestionTags: [],
+          },
+        },
+      };
+
+      const { container } = render(<ChatMessageBubble message={message} />);
+      const view = within(container);
+
+      expect(view.getByText("Desktop app sprint is ready.")).toBeInTheDocument();
+      expect(view.getAllByText("Completed").length).toBeGreaterThanOrEqual(5);
+      expect(view.queryByLabelText("Suggested follow-up directions")).not.toBeInTheDocument();
+      expect(container.textContent).not.toContain("planningStages");
+    });
+
+    it("renders failed app creation progress with the failed backend-provided stage", () => {
+      const message: ChatMessageRecord = {
+        id: "msg_app_progress_failed",
+        threadId: "thread_1",
+        direction: "connection_to_dashboard",
+        authorType: "system",
+        authorConnectionId: null,
+        bodyMarkdown: "Create app quickaction failed.",
+        deliveryStatus: "delivered",
+        createdAt: new Date().toISOString(),
+        metadata: {
+          widget_metadata: {
+            type: "app_progress",
+            status: "failed",
+            appKind: "web_app",
+            sprintName: "Create Web App",
+            planningStages: [
+              { id: "planning", label: "Planning", status: "completed" },
+              { id: "plan", label: "Plan", status: "failed" },
+            ],
+            suggestionTags: ["retry-plan"],
+          },
+        },
+      };
+
+      const { container } = render(<ChatMessageBubble message={message} />);
+      const view = within(container);
+
+      expect(view.getByText("Web app sprint setup needs attention.")).toBeInTheDocument();
+      expect(view.getAllByText("Failed").length).toBeGreaterThan(0);
+      expect(view.getByText("retry-plan")).toBeInTheDocument();
+    });
+
     it("renders prompt suggestions alongside the planning widget for agent replies", () => {
       const message: ChatMessageRecord = {
         id: "msg_planning_suggestions",

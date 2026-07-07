@@ -17,6 +17,7 @@ import { NoProjectAssistantPanel } from "./components/chat/NoProjectAssistantPan
 import { EmptyState } from "./components/ui/EmptyState.js";
 import { MessageCircle } from "lucide-preact";
 import { ChatMessageBubble } from "./components/chat/ChatMessageBubble.js";
+import { ChatCreateAppQuickActions } from "./components/chat/ChatCreateAppQuickActions.js";
 import { useChatPageData } from "./hooks/use-chat-page-data.js";
 import { formatInvocationPurpose, formatInvocationDuration, InvocationContextChips } from "./components/chat/invocation-display.js";
 import { InvocationMessageBubble } from "./components/chat/InvocationMessageBubble.js";
@@ -116,6 +117,7 @@ export const ChatPage: FunctionComponent = () => {
     handleCancelActiveTurn,
     isCancelling,
     handleSend,
+    handleCreateAppQuickaction,
     navigateHistory,
     handleDeleteThread,
     handleRenameThread,
@@ -514,6 +516,13 @@ export const ChatPage: FunctionComponent = () => {
           </div>
 
           <div className="shrink-0 border-t border-black/[0.05] p-5 dark:border-white/[0.05]">
+            <div className="mb-3">
+              <ChatCreateAppQuickActions
+                hasProject={Boolean(selectedProject)}
+                sending={sending}
+                onSelect={(kind) => void handleCreateAppQuickaction(kind)}
+              />
+            </div>
             <div className={`rounded-2xl border bg-black/[0.03] p-3 focus-within:border-signal-500/30 dark:bg-white/[0.03] ${error ? 'border-status-red/50 dark:border-status-red/50' : 'border-black/[0.06] dark:border-white/[0.06]'}`}>
               <label htmlFor="message-composer" className="sr-only">Message</label>
               <textarea

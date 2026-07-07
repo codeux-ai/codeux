@@ -7,6 +7,7 @@ import { renderMarkdown } from "../../../lib/markdown.js";
 import { getChatWidgetData } from "../../lib/chat-widget-view-models.js";
 import { formatChatTime } from "../../lib/chat-time.js";
 import { PlanningRequestWidget } from "./widgets/PlanningRequestWidget.js";
+import { AppCreationProgressWidget } from "./widgets/AppCreationProgressWidget.js";
 import { ExternalReferenceWidget } from "./widgets/ExternalReferenceWidget.js";
 import { ChatAvatar, type AvatarRole } from "./ChatAvatar.js";
 import { PromptSuggestionTags } from "./PromptSuggestionTags.js";
@@ -131,6 +132,12 @@ export const ChatMessageBubble: FunctionComponent<ChatMessageBubbleProps> = ({
           {widgetData.type === "external_reference" && widgetData.externalReference && (
             <div className={widgetData.suppressBodyMarkdown ? "mt-0" : "mt-4 border-t border-white/5 pt-4"}>
               <ExternalReferenceWidget status={widgetData.status} reference={widgetData.externalReference} />
+            </div>
+          )}
+
+          {widgetData.type === "app_creation_progress" && widgetData.appCreationProgress && (
+            <div className="mt-4 border-t border-white/5 pt-4">
+              <AppCreationProgressWidget progress={widgetData.appCreationProgress} />
             </div>
           )}
 
