@@ -22,6 +22,8 @@ The editor manages the draft graph in the dashboard before saving:
 
 Editable node-canvas work that has not yet been persisted through the node-flow API should use the pure state helpers in `dashboard/src/v2/lib/nodes-canvas-state.ts`. That module defines typed canvas nodes, input and output ports, port-connected edges, config fields, selection state, reducer actions, deterministic layout, JSON serialization recovery, and the starter trigger -> agent -> task -> condition -> output graph. It is UI-free so canvas, inspector, and import surfaces can share one deterministic graph foundation.
 
+Autonomous graph editing should use `dashboard/src/v2/lib/nodes-agent-surface.ts` instead of driving the UI. The agent surface accepts structured JSON commands for `add_node`, `patch_node`, `connect_ports`, `delete_entities`, `select_entities`, and `replace_graph`; applies them through the reducer; returns graph validation issues; and exposes deterministic summary and diff helpers for review loops.
+
 The `/nodes` side-panel components use that same state contract without owning global state. `NodePalette`
 emits typed `add_node` actions for trigger, agent, task, condition, and output templates. `NodeInspector`
 renders node and edge selection details, controlled edits for label, description, metadata intents, config
