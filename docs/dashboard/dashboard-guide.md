@@ -82,7 +82,7 @@ Project management:
 - `POST /api/agent-presets/:agentPresetId/export-markdown`
   - Pushes one sqlite agent preset to the selected project `.code-ux/agents` directory, links the preset to that project source, and refuses to overwrite a markdown file linked to a different agent
 - `POST /api/projects/:projectId/agent-presets/sync-markdown`
-  - Backward-compatible project markdown pull; discovers `.code-ux/agents/*.md`, imports new files, and re-imports out-of-sync linked agents
+  - Legacy/backward-compatible alias for the current **Pull from files** workflow; discovers `.code-ux/agents/*.md`, imports new files, and re-imports out-of-sync linked agents
 - `POST /api/projects/:projectId/agent-presets/pull-markdown`
   - Explicitly pulls project markdown files into sqlite using the same precedence and default-agent discovery rules as normal agent sync
 - `POST /api/projects/:projectId/agent-presets/push-markdown`
@@ -492,7 +492,7 @@ Legacy runtime:
 - Agents page is DB-backed and manages project-scoped agents (`name`, `short routing description`, `instruction markdown`, `memory template markdown`)
 - Agents are auto-imported from project and home `.code-ux/agents/*.md` when first discovered
 - Project-local markdown mirroring is enabled by default through project settings, so dashboard edits create/update `.code-ux/agents/*.md` in the selected repo without touching shipped defaults
-- Markdown-backed agents now show sync state and support both manual single-agent re-import and bulk `Sync All`
+- Markdown-backed agents now show sync state and support single-agent `Import`, roster-level `Pull from files`, roster-level `Push to files`, and single-agent `Push to file`; sqlite remains the live authority, pull copies file content into sqlite, and push exports sqlite presets to project files
 - The first built-in role is `Planning agent`, which is editable under Agents like any other DB-backed agent
 - `Settings > Sprint & Git` now includes the QA controls immediately below `Merge Gates & Autofix`, with per-trigger multi-select agent assignment across all project agents, QA-labeled presets floated to the top, the same project-scope behavior preserved for local QA edits, and the persisted settings path still anchored at `agents.qualityAssurance`. Leaving a trigger with no custom agents selected clearly uses the built-in QA fallback without saving placeholder preset ids.
 - Chat page is DB-backed and stores project conversation threads/messages in sqlite

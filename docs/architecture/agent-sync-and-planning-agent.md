@@ -284,7 +284,9 @@ The Agents page now shows:
 - whether an agent is DB-only or markdown-backed
 - out-of-sync state for changed markdown
 - `Import` action for linked markdown agents
-- `Sync All` action for pulling all out-of-sync local markdown back into sqlite
+- `Pull from files` action for copying project markdown into sqlite
+- `Push to files` action for exporting sqlite-backed agents to project markdown
+- `Push to file` action for exporting one sqlite-backed agent to project markdown
 - agent preset management only; QA execution settings live under `Settings -> Sprint & Git`
 
 ### Sprints page

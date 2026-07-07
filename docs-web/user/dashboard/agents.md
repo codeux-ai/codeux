@@ -63,6 +63,8 @@ To explicitly push sqlite presets back to project files, use **Push to files** i
 
 To push one sqlite preset to its project file, open the detail panel and click **Push to file**. This is useful when a single database-backed agent should become or refresh a repository-reviewed markdown file without exporting the whole roster.
 
+Older API clients may still call the legacy `sync-markdown` endpoint as a backward-compatible alias for pull, but the current dashboard action is **Pull from files**.
+
 This makes agent presets first-class repository content — you can check them in, code-review them, and share them across teammates.
 
 ## Deleting an agent
