@@ -8,7 +8,7 @@ System scope owns the catalog: stack ids, stack names, technology items, and the
 
 ## Recommended Defaults
 
-Keep imported projects unassigned until setup detection or an operator chooses a stack. Use the built-in Code UX internal stack only for Code UX-style Preact dashboards; create custom stacks for other project families.
+Keep imported projects unassigned until setup detection or an operator chooses a stack. Use the built-in Code UX Stack only for Code UX-style Preact dashboards; create custom stacks for other project families.
 
 ## Risks And Gotchas
 

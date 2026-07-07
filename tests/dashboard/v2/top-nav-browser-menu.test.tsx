@@ -126,7 +126,7 @@ vi.mock("../../../dashboard/src/v2/lib/settings-api.js", () => ({
             entries: [
                 {
                     id: "code-ux-internal",
-                    label: "Code UX Internal",
+                    label: "Code UX Stack",
                     items: [{ id: "preact", label: "Preact" }],
                 },
             ],

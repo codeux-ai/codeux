@@ -260,7 +260,7 @@ const SystemTechstacks: FunctionComponent<{
 
                 {builtin ? (
                   <NoticePanel title="Built-in stack protected" tone="success">
-                    The Code UX internal stack is restored by settings normalization and cannot be edited or removed.
+                    The Code UX Stack is restored by settings normalization and cannot be edited or removed.
                   </NoticePanel>
                 ) : (
                   <>

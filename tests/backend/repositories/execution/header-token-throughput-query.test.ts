@@ -19,6 +19,7 @@ describe("header-token-throughput-query", () => {
         id TEXT PRIMARY KEY,
         project_id TEXT NOT NULL,
         started_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
         duration_ms INTEGER,
         input_tokens INTEGER NOT NULL DEFAULT 0,
         cached_input_tokens INTEGER NOT NULL DEFAULT 0,
@@ -136,6 +137,89 @@ describe("header-token-throughput-query", () => {
     expect(snapshot.project).toBeNull();
   });
 
+  it("calculates the live 20-second header rate from recently updated invocation active time", () => {
+    insertInvocation({
+      id: "recent-a",
+      projectId: "project-a",
+      startedAt: "2026-01-02T12:10:20.000Z",
+      updatedAt: "2026-01-02T12:17:20.000Z",
+      durationMs: 60_000,
+      inputTokens: 200,
+      cachedInputTokens: 0,
+      outputTokens: 100,
+      reasoningTokens: 0,
+      totalTokens: 300,
+    });
+    insertInvocation({
+      id: "recent-b",
+      projectId: "project-b",
+      startedAt: "2026-01-02T12:05:31.000Z",
+      updatedAt: "2026-01-02T12:17:31.000Z",
+      durationMs: 60_000,
+      inputTokens: 200,
+      cachedInputTokens: 0,
+      outputTokens: 100,
+      reasoningTokens: 0,
+      totalTokens: 300,
+    });
+    insertInvocation({
+      id: "outside",
+      projectId: "project-a",
+      startedAt: "2026-01-02T12:17:31.000Z",
+      updatedAt: "2026-01-02T12:17:14.999Z",
+      durationMs: 1_000,
+      inputTokens: 999,
+      cachedInputTokens: 0,
+      outputTokens: 0,
+      reasoningTokens: 0,
+      totalTokens: 999,
+    });
+
+    const snapshot = queryHeaderTokenThroughputSnapshot(db, { window: "20s" });
+
+    expect(snapshot.window).toBe("20s");
+    expect(snapshot.range).toMatchObject({
+      window: "20s",
+      label: "Last 20 seconds",
+      resolution: "5sec",
+      resolutionLabel: "5-second telemetry buckets",
+      from: "2026-01-02T12:17:15.000Z",
+      to: "2026-01-02T12:17:35.000Z",
+      bucketCount: 4,
+      isCustom: false,
+    });
+    expect(snapshot.app).toMatchObject({
+      totalTokens: 600,
+      invocationCount: 2,
+      activeTimeMs: 120_000,
+      tokensPerMinute: 300,
+    });
+  });
+
+  it("does not multiply cumulative long-running usage by the 20-second window", () => {
+    insertInvocation({
+      id: "long-running",
+      projectId: "project-a",
+      startedAt: "2026-01-02T11:57:31.000Z",
+      updatedAt: "2026-01-02T12:17:31.000Z",
+      durationMs: 1_200_000,
+      inputTokens: 1_500_000,
+      cachedInputTokens: 0,
+      outputTokens: 500_000,
+      reasoningTokens: 0,
+      totalTokens: 2_000_000,
+    });
+
+    const snapshot = queryHeaderTokenThroughputSnapshot(db, { window: "20s" });
+
+    expect(snapshot.app).toMatchObject({
+      totalTokens: 2_000_000,
+      invocationCount: 1,
+      activeTimeMs: 1_200_000,
+      tokensPerMinute: 100_000,
+    });
+  });
+
   it("returns numeric zeroes for empty aggregates", () => {
     const snapshot = queryHeaderTokenThroughputSnapshot(db, { window: "24h", projectId: "project-a" });
 
@@ -171,7 +255,7 @@ describe("header-token-throughput-query", () => {
   });
 
   it("supports all required preset windows", () => {
-    for (const window of ["1h", "24h", "7d", "30d", "all"] as const) {
+    for (const window of ["20s", "1h", "24h", "7d", "30d", "all"] as const) {
       expect(queryHeaderTokenThroughputSnapshot(db, { window }).window).toBe(window);
     }
   });
@@ -180,6 +264,7 @@ describe("header-token-throughput-query", () => {
     id: string;
     projectId: string;
     startedAt: string;
+    updatedAt?: string;
     durationMs: number;
     inputTokens: number;
     cachedInputTokens: number;
@@ -192,6 +277,7 @@ describe("header-token-throughput-query", () => {
         id,
         project_id,
         started_at,
+        updated_at,
         duration_ms,
         input_tokens,
         cached_input_tokens,
@@ -199,11 +285,12 @@ describe("header-token-throughput-query", () => {
         reasoning_output_tokens,
         total_tokens
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       input.id,
       input.projectId,
       input.startedAt,
+      input.updatedAt ?? input.startedAt,
       input.durationMs,
       input.inputTokens,
       input.cachedInputTokens,

@@ -44,7 +44,7 @@ export const BUILTIN_CODE_UX_TECHSTACK_ID = "code-ux-internal";
 
 export const BUILTIN_CODE_UX_TECHSTACK: TechstackCatalogEntrySettings = {
   id: BUILTIN_CODE_UX_TECHSTACK_ID,
-  label: "Code UX Internal",
+  label: "Code UX Stack",
   items: [
     { id: "preact", label: "Preact" },
     { id: "tanstack-router", label: "TanStack Router" },

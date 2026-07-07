@@ -8,7 +8,7 @@ import { useRealtimeResource } from "../../hooks/use-realtime-resource.js";
 import { isDeepEqual } from "../lib/resource-equality.js";
 import { fetchHeaderTokenThroughput } from "../lib/project-api.js";
 
-const DEFAULT_HEADER_THROUGHPUT_POLL_MS = 10_000;
+const DEFAULT_HEADER_THROUGHPUT_POLL_MS = 1_000;
 
 const throughputCache = new Map<string, HeaderTokenThroughputSnapshot>();
 const throughputInflightRequests = new Map<string, Promise<HeaderTokenThroughputSnapshot>>();
@@ -24,7 +24,7 @@ function getThroughputKey(projectId: string | null, window: HeaderTokenThroughpu
 
 export function useHeaderTokenThroughput(
   projectId: string | null,
-  window: HeaderTokenThroughputWindow = "1h",
+  window: HeaderTokenThroughputWindow = "20s",
   pollIntervalMs: number = DEFAULT_HEADER_THROUGHPUT_POLL_MS,
 ): {
   snapshot: HeaderTokenThroughputSnapshot | null;

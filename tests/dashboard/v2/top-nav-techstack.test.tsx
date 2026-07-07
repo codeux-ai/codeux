@@ -101,7 +101,7 @@ const catalog = {
   entries: [
     {
       id: "code-ux-internal",
-      label: "Code UX Internal",
+      label: "Code UX Stack",
       items: [{ id: "preact", label: "Preact" }],
     },
     {
@@ -197,24 +197,25 @@ describe("TopNav techstack selector", () => {
     const trigger = await waitForTechstackTrigger();
     expect(trigger).toHaveAccessibleName("Techstack selector, active techstack: React SaaS");
     expect(trigger).toHaveTextContent("React SaaS");
-    expect(trigger).toHaveTextContent("Assigned");
+    expect(trigger).not.toHaveTextContent("Assigned");
   });
 
-  it("shows the catalog default as the display fallback while keeping the project unassigned", async () => {
+  it("shows None while keeping an existing project unassigned", async () => {
     mockTopNavData({ selectedTechstackId: null });
 
     render(<TopNav />);
 
     const trigger = await waitForTechstackTrigger();
-    expect(trigger).toHaveAccessibleName("Techstack selector, active techstack: Code UX Internal (unassigned, using default)");
-    expect(trigger).toHaveTextContent("Unassigned; using Code UX Internal");
+    expect(trigger).toHaveAccessibleName("Techstack selector, active techstack: None");
+    expect(trigger).toHaveTextContent("None");
+    expect(trigger).not.toHaveTextContent("Code UX Stack");
 
     fireEvent.click(trigger);
 
     const listbox = await screen.findByRole("listbox", { name: "Techstack list" });
     expect(listbox).toBeInTheDocument();
-    expect(screen.getByRole("option", { name: /Unassigned/i })).toHaveAttribute("aria-selected", "true");
-    expect(screen.getByRole("option", { name: /Code UX Internal/i })).toHaveAttribute("aria-selected", "false");
+    expect(screen.getByRole("option", { name: "None" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("option", { name: /Code UX Stack/i })).toHaveAttribute("aria-selected", "false");
     expect(saveProjectTechstackSettings).not.toHaveBeenCalled();
   });
 
@@ -250,14 +251,14 @@ describe("TopNav techstack selector", () => {
     expect(screen.getByRole("status")).toHaveTextContent("Techstack switched to React SaaS");
   });
 
-  it("persists Unassigned as null without assigning the built-in default", async () => {
+  it("persists None as null without assigning the built-in default", async () => {
     mockTopNavData({ selectedTechstackId: "react-saas", applicationKind: "web" });
 
     render(<TopNav />);
 
     const trigger = await waitForTechstackTrigger();
     fireEvent.click(trigger);
-    fireEvent.click(await screen.findByRole("option", { name: /Unassigned/i }));
+    fireEvent.click(await screen.findByRole("option", { name: "None" }));
 
     await waitFor(() => {
       expect(saveProjectTechstackSettings).toHaveBeenCalledWith("proj-1", {
@@ -268,7 +269,7 @@ describe("TopNav techstack selector", () => {
     expect(saveProjectTechstackSettings).not.toHaveBeenCalledWith("proj-1", expect.objectContaining({
       selectedTechstackId: "code-ux-internal",
     }));
-    expect(screen.getByRole("status")).toHaveTextContent("Code UX Internal remains the display fallback");
+    expect(screen.getByRole("status")).toHaveTextContent("Techstack set to None");
   });
 
   it("keeps the selector disabled with helper copy when no project is active or settings are loading", async () => {
@@ -284,64 +285,20 @@ describe("TopNav techstack selector", () => {
 
     trigger = screen.getByRole("button", { name: /Techstack selector/i });
     expect(trigger).toBeDisabled();
-    expect(trigger).toHaveTextContent("Loading settings");
+    expect(trigger).toHaveTextContent("Loading...");
   });
 
-  it("opens Create Web App with the selected project techstack and submits explicit overrides", async () => {
+  it("does not render app setup quick actions in the top navigation", async () => {
     const createProject = vi.fn().mockResolvedValue({});
     mockTopNavData({ selectedTechstackId: "react-saas", createProject });
 
     render(<TopNav />);
 
-    fireEvent.click(await screen.findByRole("button", { name: "Create Web App" }));
-
-    expect(await screen.findByRole("heading", { name: /Create Web App/i })).toBeInTheDocument();
-    const nameInput = screen.getByLabelText(/Project Name/i);
-    fireEvent.input(nameInput, { target: { value: "Web Portal" } });
-    await waitFor(() => expect(nameInput).toHaveValue("Web Portal"));
-    fireEvent.submit(nameInput.closest("form")!);
-
     await waitFor(() => {
-      expect(createProject).toHaveBeenCalledWith(expect.objectContaining({
-        name: "Web Portal",
-        sourceType: "local",
-        sourceRef: "Web Portal",
-        initMode: "new-local",
-        settingsOverrides: expect.objectContaining({
-          git: { githubMode: "LOCAL" },
-          techstack: {
-            selectedTechstackId: "react-saas",
-            applicationKind: "web",
-          },
-        }),
-      }));
+      expect(screen.getByRole("button", { name: /Techstack selector/i })).toBeInTheDocument();
     });
-  });
-
-  it("opens Create Desktop App with the catalog default techstack when the project is unassigned", async () => {
-    const createProject = vi.fn().mockResolvedValue({});
-    mockTopNavData({ selectedTechstackId: null, createProject });
-
-    render(<TopNav />);
-
-    fireEvent.click(await screen.findByRole("button", { name: "Create Desktop App" }));
-
-    expect(await screen.findByRole("heading", { name: /Create Desktop App/i })).toBeInTheDocument();
-    const nameInput = screen.getByLabelText(/Project Name/i);
-    fireEvent.input(nameInput, { target: { value: "Desktop Shell" } });
-    await waitFor(() => expect(nameInput).toHaveValue("Desktop Shell"));
-    fireEvent.submit(nameInput.closest("form")!);
-
-    await waitFor(() => {
-      expect(createProject).toHaveBeenCalledWith(expect.objectContaining({
-        name: "Desktop Shell",
-        settingsOverrides: expect.objectContaining({
-          techstack: {
-            selectedTechstackId: "code-ux-internal",
-            applicationKind: "desktop",
-          },
-        }),
-      }));
-    });
+    expect(screen.queryByRole("button", { name: "Create Web App" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Create Desktop App" })).not.toBeInTheDocument();
+    expect(createProject).not.toHaveBeenCalled();
   });
 });
