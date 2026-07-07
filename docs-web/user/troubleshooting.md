@@ -128,7 +128,7 @@ The CLI is installed but not logged in.
 
 The Docker daemon is unreachable, or the worker image cannot be pulled.
 
-**Fix:** verify `docker ps` works. Pre-pull the image: `docker pull node:24-bookworm`. For preview/file-browser issues specifically, triage routes through preview host middleware (`src/server/preview-host-middleware.ts`) and cleanup/rebuild/restart steps. Ensure any commands used are safe and avoid exposing local DB contents, tokens, hostnames, or private paths.
+**Fix:** verify `docker ps` works. Pre-pull the image: `docker pull node:24-bookworm`. If a setup script is used, setup image caches might be waiting on a concurrent build. For preview/file-browser issues specifically, triage routes through preview host middleware (`src/server/preview-host-middleware.ts`) and cleanup/rebuild/restart steps. Note that preview containers are structurally distinct from ephemeral provider execution containers (the latter use isolated workspace/runtime volumes and cleanup lifecycles). Ensure any commands used are safe and avoid exposing local DB contents, tokens, hostnames, or private paths.
 
 For packaged Windows builds, Docker errors that show `C:\...` as a container `--workdir`, `HOME`, or mount target indicate an outdated build. Current preview containers mount Windows/macOS/Linux host runtime storage at Linux container paths under `/code-ux-preview-runtime`.
 
