@@ -72,6 +72,7 @@
 - [Mobile Responsiveness](./dashboard/mobile-responsiveness.md)
 - [Configuration and Storage](./settings/configuration-and-storage.md)
 - [Provider Routing](./settings/provider-routing.md)
+- [Chat Provider Integrations](./settings/chat-provider-integrations.md)
 - [Settings Subcategory Reference](./settings/subcategories/index.md)
 - [Qwen Code Integration](./settings/qwen-code-integration.md)
 - [OpenCode Integration](./settings/opencode-integration.md)
