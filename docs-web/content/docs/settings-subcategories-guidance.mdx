@@ -8,6 +8,8 @@ Both system and project scopes edit the `designGuidance` block for that scope. T
 
 Styleguides also include `hideDefaultStyleguides`, which removes built-in styleguides from the dashboard selector while preserving `None` and custom styleguides. The saved selection is not deleted when defaults are hidden.
 
+The top navigation mirrors the active project's effective tech stack guidance and styleguide selectors beside global search. Changing either selector saves the project-level `designGuidance` override immediately and refreshes the effective settings cache; choosing `None` persists the stable `none` selection. Each dropdown includes Add and Manage actions that open the Guidance settings area for custom entry management.
+
 ## Recommended Defaults
 
 Keep both selections at `None` until a project needs explicit guidance beyond its repository instructions. Add custom entries when a team has stable implementation or product-design guidance that should be reused across project or sprint work.
