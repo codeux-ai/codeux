@@ -88,7 +88,7 @@ Composition explains where usage comes from.
 
 Models compares model activity, latency, reliability, and efficiency.
 
-- The overview balances model-share distribution, efficiency highlights, total window volume, and low-data states.
+- The overview uses the flat Stats panel language to balance model-share distribution, efficiency highlights, total window volume, and low-data states without decorative depth.
 - The leaderboard ranks by `usage.totalTokens` descending with label tie-breaks.
 - Rows surface success tone, p50/p95 latency, tokens per call, output velocity, cache-hit rate, reasoning share, provider identity, pricing stats, and token-flow anatomy when those fields are present.
 - Model pricing stats use `usage.totalCostUsd` and should show total cost, cost per invocation, and blended cost per million tokens only when a positive cost signal exists.
