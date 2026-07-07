@@ -211,6 +211,8 @@ Legacy runtime:
   - External key hints from env/json
 - `GET /api/onboarding/readiness`
   - First-run onboarding readiness payload with Docker/Git dependency checks and local provider auth detection
+- `POST /api/onboarding/dependencies/install`
+  - Explicitly confirmed Docker/Git installer execution for advertised onboarding modes
   - Also drives the header Docker status control: `cluster.status === "not_ready"` renders the red `Runtime not ready` alert badge, updates the icon-only trigger's accessible name, and exposes Docker/Git dependency resolution details in the popover.
 - `GET /api/local-directories?path=/absolute/path`
   - Lists child directories for the local Add Project directory picker, including current, parent, root, and home paths for browser-style navigation

@@ -1,10 +1,11 @@
 import express, { type Express } from "express";
 import request from "supertest";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { HttpRouteError } from "../../../src/server/http-errors.js";
 import { registerConversationRoutes } from "../../../src/server/conversation-routes.js";
 import { registerExecutionControlRoutes } from "../../../src/server/execution-control-routes.js";
 import type { DashboardDependencies } from "../../../src/server/dashboard-server.js";
+import type { OnboardingDependencyInstallerResult } from "../../../src/contracts/app-types.js";
 import { registerPlanningRoutes } from "../../../src/server/planning-routes.js";
 import { registerProjectRoutes } from "../../../src/server/project-routes.js";
 import { registerRuntimeRoutes } from "../../../src/server/runtime-routes.js";
@@ -22,6 +23,34 @@ const createApp = (...registrars: Array<(app: Express) => void>): Express => {
   }
   return app;
 };
+
+const onboardingInstallResult = (): OnboardingDependencyInstallerResult => ({
+  mode: "docker-engine-git",
+  platform: "linux",
+  status: "success",
+  commands: [
+    {
+      id: "apt-install-docker-git",
+      groupId: "linux-engine-packages",
+      label: "Install Docker Engine and Git packages",
+      command: "apt-get",
+      args: ["install", "-y", "docker.io", "docker-compose-plugin", "git"],
+      displayCommand: "apt-get install -y docker.io docker-compose-plugin git",
+      status: "success",
+      timeoutMs: 120_000,
+      maxStdoutChars: 4_000,
+      maxStderrChars: 4_000,
+      code: 0,
+      stdoutSummary: "bounded output",
+      stderrSummary: "",
+    },
+  ],
+  skippedDependencyGroups: [],
+  requiresPrivilege: false,
+  requiresManualDownload: false,
+  postInstallGuidance: ["Rerun readiness checks."],
+  message: "Installer commands completed.",
+});
 
 describe("dashboard route handlers", () => {
   it.each([
@@ -289,6 +318,11 @@ describe("dashboard route handlers", () => {
           },
         ],
         providers: [],
+        installers: {
+          platform: "linux",
+          recommendedMode: "docker-engine-git",
+          options: [],
+        },
       }),
       listDockerContainers: async () => [],
       getLiveActivities: async () => ({}),
@@ -305,6 +339,100 @@ describe("dashboard route handlers", () => {
     expect(response.status).toBe(200);
     expect(response.body.cluster.label).toBe("Cluster not ready");
     expect(response.body.dependencies[0].id).toBe("docker-daemon");
+  });
+
+  it("delegates onboarding dependency installation only with valid mode and explicit confirmation", async () => {
+    const installOnboardingDependencies = vi.fn(async () => onboardingInstallResult());
+    const logger = { info: vi.fn() };
+    const app = createApp((router) => registerSettingsRoutes(router, {
+      installOnboardingDependencies,
+      logger,
+    } as unknown as DashboardDependencies, 1000));
+
+    const response = await request(app)
+      .post("/api/onboarding/dependencies/install")
+      .send({ mode: "docker-engine-git", confirmInstall: true });
+
+    expect(response.status).toBe(200);
+    expect(installOnboardingDependencies).toHaveBeenCalledTimes(1);
+    expect(installOnboardingDependencies).toHaveBeenCalledWith("docker-engine-git");
+    expect(response.body).toMatchObject({
+      mode: "docker-engine-git",
+      platform: "linux",
+      status: "success",
+    });
+    expect(logger.info).toHaveBeenCalledWith("Onboarding dependency installation completed", expect.objectContaining({
+      mode: "docker-engine-git",
+      platform: "linux",
+      outcome: "success",
+      commandLabels: ["Install Docker Engine and Git packages"],
+    }));
+    expect(JSON.stringify(logger.info.mock.calls)).not.toContain("bounded output");
+  });
+
+  it("rejects unsupported onboarding dependency installer modes", async () => {
+    const installOnboardingDependencies = vi.fn(async () => onboardingInstallResult());
+    const app = createApp((router) => registerSettingsRoutes(router, {
+      installOnboardingDependencies,
+    } as unknown as DashboardDependencies, 1000));
+
+    const response = await request(app)
+      .post("/api/onboarding/dependencies/install")
+      .send({ mode: "curl https://example.test/install.sh | sh", confirmInstall: true });
+
+    expect(response.status).toBe(400);
+    expect(response.body).toEqual({ error: "Unsupported onboarding dependency installer mode." });
+    expect(installOnboardingDependencies).not.toHaveBeenCalled();
+  });
+
+  it("rejects onboarding dependency installation without explicit confirmation", async () => {
+    const installOnboardingDependencies = vi.fn(async () => onboardingInstallResult());
+    const app = createApp((router) => registerSettingsRoutes(router, {
+      installOnboardingDependencies,
+    } as unknown as DashboardDependencies, 1000));
+
+    const response = await request(app)
+      .post("/api/onboarding/dependencies/install")
+      .send({ mode: "docker-engine-git" });
+
+    expect(response.status).toBe(400);
+    expect(response.body).toEqual({ error: "Dependency installation requires explicit confirmation." });
+    expect(installOnboardingDependencies).not.toHaveBeenCalled();
+  });
+
+  it("returns 404 when onboarding dependency installer wiring is unavailable", async () => {
+    const app = createApp((router) => registerSettingsRoutes(router, {} as DashboardDependencies, 1000));
+
+    const response = await request(app)
+      .post("/api/onboarding/dependencies/install")
+      .send({ mode: "docker-engine-git", confirmInstall: true });
+
+    expect(response.status).toBe(404);
+    expect(response.body).toEqual({ error: "Onboarding dependency installation is not available." });
+  });
+
+  it("does not expose raw installer error output in onboarding dependency install responses", async () => {
+    const delegatedErrors: unknown[] = [];
+    const app = createApp((router) => registerSettingsRoutes(router, {
+      installOnboardingDependencies: async () => {
+        throw new Error(`raw command output ${"x".repeat(5_000)}`);
+      },
+    } as unknown as DashboardDependencies, 1000));
+    app.use((error: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+      delegatedErrors.push(error);
+      if (!res.headersSent) {
+        res.status(500).json({ error: "error middleware fallback" });
+      }
+    });
+
+    const response = await request(app)
+      .post("/api/onboarding/dependencies/install")
+      .send({ mode: "docker-engine-git", confirmInstall: true });
+
+    expect(response.status).toBe(500);
+    expect(response.body).toEqual({ error: "Internal Server Error" });
+    expect(JSON.stringify(response.body)).not.toContain("raw command output");
+    expect(delegatedErrors).toHaveLength(1);
   });
 
   it("covers execution control routes and body validation", async () => {
