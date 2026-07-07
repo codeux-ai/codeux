@@ -18,6 +18,12 @@ The Agents management surface leans into a premium "Workshop" feel. We use a lot
 - **Focus Rings:** Ensure all buttons have explicit `focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30`.
 - **Header Actions:** Keep agent-management actions compact, pill-shaped, and visually consistent; secondary actions such as sync and push should share the same muted glass button treatment so the header reads as one control cluster.
 
+## Avatar Scene Motion
+- The 3D agent avatar includes a lightweight pseudo-raytraced flashlight effect built from standard Three.js materials and lights. It uses a translucent beam mesh, a target glow, accent-aware point lighting, and subtle shell/screen emissive boosts rather than render targets, post-processing, shadows, or pixel readbacks.
+- Pointer hover should steer the flashlight toward the cursor while idle state gently scans the scene. Reduced-motion and fallback SVG paths must avoid the scanning/flicker behavior and continue to render the static avatar without requiring WebGL.
+- Rare low-battery flickers may show a short `battery` humor message inside the avatar scene. Keep this overlay absolute, non-interactive, `aria-live="polite"`, and bounded to the avatar frame so it does not affect surrounding layouts.
+- New avatar scene geometries, materials, textures, and lights must follow the existing `AgentAvatarScene` WebGL lifecycle split: renderer and persistent scene resources are created once, avatar/config resources rebuild independently, animation reads refs per frame, and all reachable Three.js resources are disposed on unmount.
+
 ## Badges and Sync States
 Use explicit badging inside `.code-ux/agents` lists:
 - **Active / Primary Label:** `border-signal-500/30 bg-signal-500/10 text-signal-600 shadow-sm`.
