@@ -3,6 +3,7 @@ import type {
   ConsoleLogMode,
   CustomMcpServer,
   DashboardSettings,
+  DashboardExperienceMode,
   ExternalSettingsHints,
   McpToolToggle,
   RestartInvocationPolicy,
@@ -46,8 +47,10 @@ import {
   BUILTIN_CODE_UX_TECHSTACK_ID,
   DEFAULT_AGENT_SELF_REFLECTION,
   DEFAULT_DASHBOARD_SETTINGS,
+  DEFAULT_DASHBOARD_EXPERIENCE_MODE,
   DEFAULT_PROJECT_TECHSTACK,
   DEFAULT_SKILLS,
+  DASHBOARD_EXPERIENCE_MODES,
   INTERNAL_SKILL_NAMES,
   INTERNAL_SKILL_SET,
 } from "../repositories/settings-defaults.js";
@@ -69,6 +72,7 @@ const BACKGROUND_PATTERNS = new Set<BackgroundPattern>([
   "WAVES",
   "NOISE",
 ]);
+const DASHBOARD_EXPERIENCE_MODE_SET = new Set<DashboardExperienceMode>(DASHBOARD_EXPERIENCE_MODES);
 
 const RUNTIME_LOG_LEVEL_SET = new Set<RuntimeLogLevel>(["off", "debug", "info", "warn", "error"]);
 const RESTART_SPRINT_POLICY_SET = new Set<RestartSprintPolicy>(["continue", "pause", "cancel"]);
@@ -114,6 +118,12 @@ const sanitizeBackgroundPattern = (value: unknown): BackgroundPattern => {
     ? value as BackgroundPattern
     : "NONE";
 };
+
+const sanitizeDashboardExperienceMode = (value: unknown): DashboardExperienceMode => (
+  typeof value === "string" && DASHBOARD_EXPERIENCE_MODE_SET.has(value as DashboardExperienceMode)
+    ? value as DashboardExperienceMode
+    : DEFAULT_DASHBOARD_EXPERIENCE_MODE
+);
 
 function cloneMcpTools(tools: McpToolToggle[]): McpToolToggle[] {
   return tools.map((tool) => ({ ...tool }));
@@ -852,6 +862,7 @@ export function sanitizeProjectSettings(value: unknown, externalHints?: External
   return {
     appearance: {
       navigationMode: appearanceInput.navigationMode === "DOCK" ? "DOCK" : "SIDEBAR",
+      experienceMode: sanitizeDashboardExperienceMode(appearanceInput.experienceMode),
       theme: appearanceInput.theme === "LIGHT" || appearanceInput.theme === "DARK" ? appearanceInput.theme : "SYSTEM",
       reducedMotion: appearanceInput.reducedMotion === "REDUCE" || appearanceInput.reducedMotion === "NONE" ? appearanceInput.reducedMotion : "AUTO",
       backgroundMode: appearanceInput.backgroundMode === "STATIC" ? "STATIC" : "ANIMATED",

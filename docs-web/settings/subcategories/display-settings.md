@@ -1,14 +1,14 @@
 # Display Settings
 
-Controls the dashboard shell layout, theme, motion preference, and desktop zoom when available.
+Controls the dashboard shell layout, experience mode, theme, motion preference, and desktop zoom when available.
 
 ## What It Controls
 
-Navigation mode switches dock/sidebar, theme sets color mode, reduced motion limits animation, and zoom scales Electron windows.
+Experience mode stores one persisted Easy, Standard, or Expert dashboard preference. Navigation mode switches dock/sidebar, theme sets color mode, reduced motion limits animation, and zoom scales Electron windows.
 
 ## Recommended Defaults
 
-Use System theme and Auto reduced motion unless you need a fixed accessibility preference.
+New installs default to Expert experience mode. Use System theme and Auto reduced motion unless you need a fixed accessibility preference.
 
 ## Risks And Gotchas
 
