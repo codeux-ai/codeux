@@ -241,11 +241,11 @@ function runNativeCommand(
   cwd: string,
   env: NodeJS.ProcessEnv,
 ): Promise<NativeCommandResult> {
+  const [spawnCommand, ...spawnArgs] = splitCommandLine(command);
   return new Promise((resolve, reject) => {
-    const child = spawn(command, {
+    const child = spawn(spawnCommand, spawnArgs, {
       cwd,
       env,
-      shell: true,
       stdio: ["pipe", "pipe", "pipe"],
     });
     let stdout = "";
@@ -273,4 +273,57 @@ function runNativeCommand(
     });
     child.stdin.end(stdin);
   });
+}
+
+function splitCommandLine(command: string): string[] {
+  const argv: string[] = [];
+  let current = "";
+  let quote: "'" | '"' | null = null;
+  let escaped = false;
+
+  for (const char of command.trim()) {
+    if (escaped) {
+      current += char;
+      escaped = false;
+      continue;
+    }
+    if (char === "\\") {
+      escaped = true;
+      continue;
+    }
+    if (quote) {
+      if (char === quote) {
+        quote = null;
+      } else {
+        current += char;
+      }
+      continue;
+    }
+    if (char === "'" || char === '"') {
+      quote = char;
+      continue;
+    }
+    if (/\s/.test(char)) {
+      if (current.length > 0) {
+        argv.push(current);
+        current = "";
+      }
+      continue;
+    }
+    current += char;
+  }
+
+  if (escaped) {
+    current += "\\";
+  }
+  if (quote) {
+    throw new ChatProviderOutboundAdapterError("Native bridge command has an unterminated quote.", false);
+  }
+  if (current.length > 0) {
+    argv.push(current);
+  }
+  if (argv.length === 0) {
+    throw new ChatProviderOutboundAdapterError("Native bridge command is not configured.", false);
+  }
+  return argv;
 }

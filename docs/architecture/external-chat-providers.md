@@ -87,7 +87,7 @@ Bridge execution is isolated behind `src/services/chat-provider-adapters.ts`:
 
 - `openclaw`: HTTP `POST` to a configured OpenClaw bridge URL such as `openclawBridgeUrl`, using bridge credentials as transport headers.
 - `webhook`: HTTP `POST` to configured generic bridge URLs such as `webhookUrl`, `eventsUrl`, `botEndpointUrl`, or `gatewayUrl`.
-- `native_bridge`: local command execution for macOS/iMessage-style bridge scripts. The payload is written as JSON on stdin and optional bridge tokens are supplied through environment variables.
+- `native_bridge`: local command execution for macOS/iMessage-style bridge scripts. The payload is written as JSON on stdin, commands are parsed into executable plus arguments without shell interpretation, and optional bridge tokens are supplied through environment variables.
 
 The runtime never calls WhatsApp, iMessage, Telegram, Slack, Microsoft Teams, or Discord APIs directly. Provider-specific SDKs are not required.
 
