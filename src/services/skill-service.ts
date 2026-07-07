@@ -1,4 +1,9 @@
 import { SkillRepository } from "../repositories/skill-repository.js";
+import * as fs from "fs/promises";
+import {
+  buildPersistentSkillStorageContainerPath,
+  buildPersistentSkillStorageHostPath,
+} from "../infrastructure/providers/cli/workspace-manager.js";
 import { bufferToFloat32, cosineSimilarity, float32ToBuffer } from "./embedding-vector-utils.js";
 import { parseSkillMarkdown, renderSkillMarkdown } from "./skill-markdown-parser.js";
 import { createLogger, type Logger } from "../shared/logging/logger.js";
@@ -23,6 +28,20 @@ export interface WriteSkillMarkdownOptions {
   skillId?: string;
   sourceType?: SkillSourceType;
   sourceRef?: string | null;
+}
+
+export interface PersistentSkillStorageRuntimeMount {
+  storageId: string;
+  storageName: string;
+  hostPath: string;
+  containerPath: string;
+}
+
+export interface PersistentSkillStorageRuntime {
+  projectId: string;
+  agentPresetId: string;
+  mounts: PersistentSkillStorageRuntimeMount[];
+  instructionMarkdown: string;
 }
 
 const MAX_SEARCH_CANDIDATES = 10000;
@@ -64,6 +83,42 @@ export class SkillService {
 
   listAttachmentsForAgent(projectId: string, agentPresetId: string): AgentSkillStorageAttachment[] {
     return this.skillRepository.listAttachmentsForAgent(projectId, agentPresetId);
+  }
+
+  async resolvePersistentSkillStorageRuntime(args: {
+    projectId: string;
+    agentPresetId: string;
+    enabled: boolean;
+  }): Promise<PersistentSkillStorageRuntime | null> {
+    if (!args.enabled || !args.projectId.trim() || !args.agentPresetId.trim()) {
+      return null;
+    }
+
+    const attachments = this.skillRepository
+      .listStoragesForAgent(args.projectId, args.agentPresetId)
+      .filter((storage) => Boolean(storage.id.trim()));
+    if (attachments.length === 0) {
+      return null;
+    }
+
+    const mounts: PersistentSkillStorageRuntimeMount[] = [];
+    for (const storage of attachments) {
+      const hostPath = buildPersistentSkillStorageHostPath(args.projectId, args.agentPresetId, storage.id);
+      await fs.mkdir(hostPath, { recursive: true, mode: 0o700 });
+      mounts.push({
+        storageId: storage.id,
+        storageName: storage.name,
+        hostPath,
+        containerPath: buildPersistentSkillStorageContainerPath(storage.id),
+      });
+    }
+
+    return {
+      projectId: args.projectId,
+      agentPresetId: args.agentPresetId,
+      mounts,
+      instructionMarkdown: this.buildPersistentSkillStorageInstruction(args.projectId, args.agentPresetId, mounts),
+    };
   }
 
   async writeSkillFromMarkdown(
@@ -223,6 +278,31 @@ export class SkillService {
     } catch (error) {
       this.logger.warn(`Failed to embed skill ${skill.id}: ${error instanceof Error ? error.message : String(error)}`);
     }
+  }
+
+  private buildPersistentSkillStorageInstruction(
+    projectId: string,
+    agentPresetId: string,
+    mounts: PersistentSkillStorageRuntimeMount[],
+  ): string {
+    const storageLines = mounts.map((mount) =>
+      `- ${mount.storageName} (\`${mount.storageId}\`): mounted at \`${mount.containerPath}\` in Docker and \`${mount.hostPath}\` on host runs.`,
+    );
+
+    return [
+      "## PERSISTENT SKILL STORAGE (Opt-in)",
+      "This agent has persistent skill storage enabled. Use it only for reusable skills that should survive this invocation; do not treat it as project workspace state.",
+      "",
+      "Before creating a new skill, search existing attached skills with the `search_skills` MCP tool using:",
+      `- \`projectId: ${projectId}\``,
+      `- \`agentPresetId: ${agentPresetId}\``,
+      "- a natural-language query for the guidance you need",
+      "",
+      "Attached writable storage paths:",
+      ...storageLines,
+      "",
+      "When you create a durable new skill, prefer MCP storage APIs if `manage_skills` is available, for example `manage_skills import_markdown` with the target storage id. If MCP write access is not available, save a markdown skill file under the matching mounted storage path. Keep skill markdown concise, include searchable frontmatter, and do not duplicate an existing skill found by search.",
+    ].join("\n");
   }
 }
 

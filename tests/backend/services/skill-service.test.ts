@@ -189,4 +189,45 @@ Review another project content.
     });
     expect(results.map((result) => result.skill.id)).toEqual([attached.id]);
   });
+
+  it("resolves persistent skill runtime only for enabled agents with attached storage", async () => {
+    const { projectId, agentPresetRepository, skillService } = await createFixture();
+    const storage = skillService.createStorage(projectId, { id: "attached-storage", name: "Attached Runtime Skills" });
+    const disabledAgent = agentPresetRepository.createAgentPreset(projectId, {
+      id: "disabled-agent",
+      name: "Disabled Agent",
+      persistentSkillStorage: { enabled: false },
+      persistentSkillStorageIds: [storage.id],
+    });
+    const enabledAgent = agentPresetRepository.createAgentPreset(projectId, {
+      id: "enabled-agent",
+      name: "Enabled Agent",
+      persistentSkillStorage: { enabled: true },
+      persistentSkillStorageIds: [storage.id],
+    });
+
+    await expect(skillService.resolvePersistentSkillStorageRuntime({
+      projectId,
+      agentPresetId: disabledAgent.id,
+      enabled: false,
+    })).resolves.toBeNull();
+
+    const runtime = await skillService.resolvePersistentSkillStorageRuntime({
+      projectId,
+      agentPresetId: enabledAgent.id,
+      enabled: true,
+    });
+
+    expect(runtime?.instructionMarkdown).toContain("search_skills");
+    expect(runtime?.instructionMarkdown).toContain("manage_skills import_markdown");
+    expect(runtime?.mounts).toHaveLength(1);
+    expect(runtime?.mounts[0]).toMatchObject({
+      storageId: storage.id,
+      storageName: "Attached Runtime Skills",
+      containerPath: "/code-ux/persistent-skills/attached-storage",
+    });
+    expect(runtime?.mounts[0]!.hostPath).toContain(path.join(".code-ux", "persistent-skill-storages"));
+    const stats = await fs.stat(runtime!.mounts[0]!.hostPath);
+    expect(stats.isDirectory()).toBe(true);
+  });
 });

@@ -1,6 +1,7 @@
 import { randomUUID } from "crypto";
 import type { AgentSelfReflectionLoopSettings, DashboardSettings, ProviderId, QwenModelProviderSettings, VirtualWorkerProvider } from "../contracts/app-types.js";
 import type { ProviderInvocationPurpose } from "../contracts/execution-types.js";
+import type { AgentMcpAccessConfig } from "../contracts/agent-preset-types.js";
 import type { Logger } from "../shared/logging/logger.js";
 import type { ExecutionRepository } from "../repositories/execution-repository.js";
 import { StructuredProviderResponseService, type StructuredExecutionArgs, type StructuredProviderResult } from "./structured-provider-response-service.js";
@@ -53,6 +54,8 @@ export interface StructuredRequestArgs<T> {
   githubToken?: string;
   signal?: AbortSignal;
   onActivity?: (description: string, originator?: string) => void;
+  agentMcpAccess?: AgentMcpAccessConfig | null;
+  mcpAgentId?: string | null;
 }
 
 export interface StructuredAgentRequestResult<T> extends StructuredProviderResult<T> {
@@ -183,6 +186,8 @@ export class StructuredAgentRequestService {
       continueSessionId: args.continueSessionId,
       openCodeBaselineRawUsageJson: args.openCodeBaselineRawUsageJson,
       onActivity: args.onActivity,
+      agentMcpAccess: args.agentMcpAccess,
+      mcpAgentId: args.mcpAgentId,
       settings: args.settings,
       maxRetries,
       maxProviderAttempts,

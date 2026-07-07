@@ -49,6 +49,9 @@ import type { MemoryService } from "./memory-service.js";
 import type { ProviderConcurrencyService } from "./provider-concurrency-service.js";
 import { ProviderQuotaError } from "../shared/providers/provider-error-classifier.js";
 import type { SprintRunLifecycleService } from "./sprint-run-lifecycle-service.js";
+import type { SkillService } from "./skill-service.js";
+import type { AgentPresetRepository } from "../repositories/agent-preset-repository.js";
+import type { McpConnectionInfo } from "../contracts/mcp-connection-types.js";
 
 interface CliWorkflowServiceDependencies {
   sessionTracking: SessionTrackingRepository;
@@ -56,11 +59,14 @@ interface CliWorkflowServiceDependencies {
   projectManagementRepository?: ProjectManagementRepository;
   activeDispatchRegistry?: ActiveDispatchRegistry;
   memoryService?: MemoryService;
+  skillService?: SkillService;
+  agentPresetRepository?: AgentPresetRepository;
   providerConcurrencyService?: ProviderConcurrencyService;
   sprintRunLifecycleService?: Pick<SprintRunLifecycleService, "finalizeCancellationIfIdle">;
   getDashboardSettings: (scope?: DashboardSettingsScope) => DashboardSettings;
   agentPresetSyncService: AgentPresetSyncService;
   getGithubToken: () => string | undefined;
+  getMcpConnectionInfo?: () => McpConnectionInfo | null;
   logger?: Logger;
 }
 

@@ -48,6 +48,7 @@ import {
   type ParsedConversationTurn,
 } from "./provider-usage.js";
 import { buildQwenRuntimeConfig, buildOpenCodeRuntimeConfig, type QwenRuntimeSettings, type OpenCodeRuntimeSettings } from "./provider-runtime-config.js";
+import type { PersistentSkillStorageRuntimeMount } from "../../../services/skill-service.js";
 
 export interface ProviderRunResult extends CommandResult {
   usageTelemetry: ProviderUsageTelemetry;
@@ -109,6 +110,8 @@ export interface ProviderRunInput {
   mcpConnection?: McpConnectionInfo | null;
   /** User-defined custom MCP servers injected into the CLI provider alongside code_ux. */
   customMcpServers?: CustomMcpServer[];
+  /** Writable persistent skill storage mounts available outside the project workspace. */
+  persistentSkillStorageMounts?: PersistentSkillStorageRuntimeMount[];
 }
 
 export interface IProviderRunner {
@@ -229,6 +232,7 @@ export class ProviderRunner implements IProviderRunner {
     openCodeBaselineUsage?: Record<string, unknown> | null;
     mcpConnection?: McpConnectionInfo | null;
     customMcpServers?: CustomMcpServer[];
+    persistentSkillStorageMounts?: PersistentSkillStorageRuntimeMount[];
   }): Promise<ProviderRunResult> {
     const { provider, prompt, cwd, model, apiKey, providerMountAuth, providerAuthPath, sessionId, workflowSettings, repoPath, githubToken, gitlabToken, signal, onActivity, onTelemetry } = input;
     const startedMs = Date.now();
@@ -343,6 +347,7 @@ export class ProviderRunner implements IProviderRunner {
           providerAuthPath,
           mcpConnection: input.mcpConnection,
           customMcpServers: input.customMcpServers,
+          persistentSkillStorageMounts: input.persistentSkillStorageMounts,
         });
         if (!result.ok && isDockerWorkspaceMountError(result)) {
           try { await fs.access(cwd); trackingOnActivity(`Docker could not mount workspace path (${cwd}) even though it exists locally. Path visibility mismatch.`, "provider"); } catch { /* ignore */ }
