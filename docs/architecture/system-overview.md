@@ -25,7 +25,7 @@ Code UX is a container-first multi-provider runtime with an integrated dashboard
 - Responsibilities:
   - Instantiate repositories, services, handlers, orchestrator.
   - Register MCP request handlers via `src/server/mcp-request-router.ts`.
-  - Start dashboard HTTP server.
+  - Start dashboard HTTP server (defaults to port 4444).
   - Start MCP stdio transport only for an attached MCP pipe/socket or explicit `CODE_UX_ENABLE_MCP_STDIO=1`; daemon stdin such as `/dev/null` keeps stdio disabled.
   - Serve cached dashboard live activity and git status via `src/server/activity-cache-service.ts`.
 - Dashboard dependency composition lives in `src/app/dependency-factory/dashboard-factory.ts`. When two dashboard services must be constructed before both concrete instances exist, the factory uses `LateBoundDependency<T>` from `src/shared/late-bound-dependency.ts` and links it synchronously before returning dependencies. Consumers resolve these holders at action time so missing links fail with an explicit late-bound dependency error instead of placeholder objects or private-field mutation.
@@ -76,7 +76,7 @@ Code UX is a container-first multi-provider runtime with an integrated dashboard
 
 ```mermaid
 flowchart TD
-  A[MCP Client] -->|stdio tool call| B[src/index.ts]
+  A[CLI/MCP Client] -->|launch / stdio| B[src/index.ts]
   B --> R[src/server/code-ux-server.ts]
   R --> C[src/mcp/core-tool-handler.ts]
   R --> D[src/mcp/agent-tool-handler.ts]

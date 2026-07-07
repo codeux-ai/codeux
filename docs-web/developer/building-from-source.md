@@ -100,6 +100,7 @@ codeux --help
 ```
 src/
 ├── index.ts                  # CLI entry
+├── electron/                 # desktop shell entrypoint and policies (does not own orchestration)
 ├── app/                      # lifecycle, dependency factory
 ├── config/                   # CLI flag + env parsing
 ├── contracts/                # shared types, MCP tool definitions
@@ -110,11 +111,11 @@ src/
 ├── integrations/             # Jules API client
 ├── mcp/                      # MCP server, request router, tool handlers
 ├── repositories/             # settings, agents, memory, project
-├── server/                   # Express dashboard server, routes, websocket
+├── server/                   # Express dashboard server (default port 4444), routes, websocket
 ├── services/                 # virtual-worker-service, sprint-markdown-service, etc.
 ├── shared/                   # config search paths, common utils
 ├── sprint/                   # cycle steps (start-ready-tasks, etc.)
-└── worker/                   # worker-mode entry (reserved)
+└── worker/                   # worker-host mode entrypoint (separate from main server)
 
 dashboard/
 ├── index.html
