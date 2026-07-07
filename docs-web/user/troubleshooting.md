@@ -126,9 +126,9 @@ The CLI is installed but not logged in.
 
 ### Preview/file-browser failures or Docker mode fails to start a container
 
-The Docker daemon is unreachable, or the worker image cannot be pulled.
+The Docker daemon is unreachable, or the worker image cannot be pulled. Preview containers may also crash due to failing scripts.
 
-**Fix:** verify `docker ps` works. Pre-pull the image: `docker pull node:24-bookworm`. If a setup script is used, setup image caches might be waiting on a concurrent build. For preview/file-browser issues specifically, triage routes through preview host middleware (`src/server/preview-host-middleware.ts`) and cleanup/rebuild/restart steps. Note that preview containers are structurally distinct from ephemeral provider execution containers (the latter use isolated workspace/runtime volumes and cleanup lifecycles). Ensure any commands used are safe and avoid exposing local DB contents, tokens, hostnames, or private paths.
+**Fix:** verify `docker ps` works. Pre-pull the image: `docker pull node:24-bookworm`. If a setup script is used, setup image caches might still be waiting on a concurrent build. For preview/file-browser issues specifically, triage through preview host middleware (`src/server/preview-host-middleware.ts`) and the normal cleanup, rebuild, and start steps. Preview containers are structurally distinct from ephemeral provider execution containers, which use isolated workspace/runtime volumes and their own cleanup lifecycle. Check the dashboard **Browser** page logs or use `get_logs` in the MCP/CLI surface to read the container output. If the state is broken, use the Dashboard Rebuild or Remove controls (or `rebuild_session` / `remove_session` programmatically) to cleanly reset the sprint session. Avoid generic `docker rm` commands when the dashboard can manage the cleanup.
 
 For packaged Windows builds, Docker errors that show `C:\...` as a container `--workdir`, `HOME`, or mount target indicate an outdated build. Current preview containers mount Windows/macOS/Linux host runtime storage at Linux container paths under `/code-ux-preview-runtime`.
 
