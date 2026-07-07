@@ -461,7 +461,10 @@ export function createDashboardDependencies(
     sprintIssueService: coreDeps.sprintIssueService,
     schedulerService,
     searchJiraIssues: coreDeps.sprintIssueService.searchJiraIssues.bind(coreDeps.sprintIssueService),
-    searchJiraProjectStatuses: coreDeps.sprintIssueService.searchJiraProjectStatuses.bind(coreDeps.sprintIssueService),
+    searchJiraProjectStatuses: coreDeps.sprintIssueService.searchJiraProjectStatuses?.bind(coreDeps.sprintIssueService)
+      ?? (() => {
+        throw new Error("Jira project status search is not available.");
+      }),
     replaceSprintLinkedIssues: projectManagementRepository.replaceSprintLinkedIssues.bind(projectManagementRepository),
     listSprintLinkedIssues: projectManagementRepository.listSprintLinkedIssues.bind(projectManagementRepository),
     closeSprintLinkedIssues: coreDeps.sprintIssueService.closeLinkedIssues.bind(coreDeps.sprintIssueService),
