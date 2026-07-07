@@ -137,7 +137,7 @@ export const ChatPage: FunctionComponent = () => {
   const projectThreads = useMemo(() => threads.filter((thread) => thread.scope === "project"), [threads]);
   const displayedInvocationTotal = invocationTotalCount ?? invocations.length;
   const runningInvocationCount = useMemo(
-    () => invocations.filter((invocation) => invocation.status === "running" || invocation.id.startsWith("optimistic:")).length,
+    () => invocations.filter((invocation) => invocation.status === "running").length,
     [invocations],
   );
   const widgetLiveData = useMemo(() => ({
