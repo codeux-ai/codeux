@@ -56,6 +56,9 @@ export const UsageGraphHeader: FunctionComponent<{
           >
             <Filter className={`h-3.5 w-3.5 transition-colors motion-reduce:transition-none ${isFiltersOpen ? 'text-[color:var(--stats-signal-text)]' : 'text-[var(--stats-detail-color)] group-hover:text-[color:var(--stats-signal-text)]'}`} strokeWidth={2.2} />
             Filters
+            <span aria-hidden="true" className="rounded-full border border-current/20 px-1.5 py-0.5 text-[9px] leading-none">
+              {activeSeriesCount}
+            </span>
           </button>
           {isZoomed ? (
             <button

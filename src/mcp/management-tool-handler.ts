@@ -8,10 +8,12 @@ import type {
   ManageSchedulerArgs,
   ManageAgentsArgs,
   ManageMemoryArgs,
+  ManageSkillsArgs,
   ManageSettingsArgs,
   ManagePreviewArgs,
   ManageTelemetryArgs,
-  SearchKnowledgeArgs
+  SearchKnowledgeArgs,
+  SearchSkillsArgs
 } from "../contracts/internal-management-types.js";
 import type { KnowledgeService } from "../services/knowledge-service.js";
 import { getCurrentMcpAgentId } from "../server/mcp-agent-context.js";
@@ -26,6 +28,7 @@ import type { AgentPresetSyncService } from "../services/agent-preset-sync-servi
 import type { MemoryService } from "../services/memory-service.js";
 import type { MemoryPromotionService } from "../services/memory-promotion-service.js";
 import type { EmbeddingModelManager } from "../services/embedding-model-manager.js";
+import type { SkillService } from "../services/skill-service.js";
 
 import type { PlanningAgentService } from "../services/planning-agent-service.js";
 import type { ProjectSetupService } from "../services/project-setup-service.js";
@@ -46,6 +49,7 @@ import { SchedulerActions } from "./management/scheduler-actions.js";
 import { SettingsActions } from "./management/settings-actions.js";
 import { AgentActions } from "./management/agent-actions.js";
 import { MemoryActions } from "./management/memory-actions.js";
+import { SkillActions } from "./management/skill-actions.js";
 import { buildMcpApprovalFingerprint, formatManagementErrorEnvelope } from "./management/payload-parsers.js";
 import { resolveLateBoundDependency, type LateBoundOrValue } from "../shared/late-bound-dependency.js";
 
@@ -61,6 +65,7 @@ export interface ManagementToolHandlerDeps {
   memoryService: MemoryService;
   memoryPromotionService: MemoryPromotionService;
   embeddingModelManager: EmbeddingModelManager;
+  skillService: SkillService;
   knowledgeService: KnowledgeService;
   planningAgentService: LateBoundOrValue<PlanningAgentService>;
   projectSetupService?: LateBoundOrValue<ProjectSetupService>;
@@ -78,12 +83,14 @@ export class ManagementToolHandler {
   private readonly settingsActions: SettingsActions;
   private readonly agentActions: AgentActions;
   private readonly memoryActions: MemoryActions;
+  private readonly skillActions: SkillActions;
   private readonly previewActions: PreviewActions;
 
   constructor(private readonly deps: ManagementToolHandlerDeps) {
     this.settingsActions = new SettingsActions(deps.settingsRepository);
     this.agentActions = new AgentActions(deps.agentPresetSyncService);
     this.memoryActions = new MemoryActions(deps.memoryService, deps.memoryPromotionService, deps.embeddingModelManager);
+    this.skillActions = new SkillActions(deps.skillService);
     this.previewActions = new PreviewActions(deps.sprintPreviewService);
   }
 
@@ -249,6 +256,8 @@ export class ManagementToolHandler {
       return this.agentActions.handleAgentAction(args);
     } else if (args.domain === "memory") {
       return this.memoryActions.handleMemoryAction(args);
+    } else if (args.domain === "skills") {
+      return this.skillActions.handleSkillAction(args);
     } else if (args.domain === "preview") {
       const currentHost = null; // serverHost is not available on DashboardSettings, we'll fall back to localhost in preview-origin
       return this.previewActions.handlePreviewAction(args, currentHost);
@@ -376,6 +385,18 @@ export class ManagementToolHandler {
     }
   }
 
+  async handleManageSkills(args: ManageSkillsArgs): Promise<{ content: Array<{ type: string; text: string }> }> {
+    try {
+      const managementArgs = { domain: "skills", action: args.action, payload: args as unknown as Record<string, unknown>, approval: args.approval };
+      const dispatch = (approval = args.approval) => this.skillActions.handleSkillAction({ ...managementArgs, approval });
+      const approvalGate = await this.requireStatefulApproval(managementArgs, () => dispatch({ confirmed: false }));
+      const envelope = approvalGate ?? this.recordStatefulApprovalRequirement(managementArgs, await dispatch());
+      return { content: [{ type: "text", text: JSON.stringify(envelope, null, 2) }] };
+    } catch (error) {
+      return this.formatError("skills", args.action, error);
+    }
+  }
+
   async handleManageSettings(args: ManageSettingsArgs): Promise<{ content: Array<{ type: string; text: string }> }> {
     try {
       const envelope = await this.settingsActions.handleSettingsAction({ domain: "settings", action: args.action, payload: args as unknown as Record<string, unknown>, approval: args.approval });
@@ -436,6 +457,15 @@ export class ManagementToolHandler {
       return { content: [{ type: "text", text: `${header}\n\n${formatted}` }] };
     } catch (error) {
       return this.formatError("knowledge", "search", error);
+    }
+  }
+
+  async handleSearchSkills(args: SearchSkillsArgs): Promise<{ content: Array<{ type: string; text: string }> }> {
+    try {
+      const envelope = await this.skillActions.handleSearchSkills(args);
+      return { content: [{ type: "text", text: JSON.stringify(envelope, null, 2) }] };
+    } catch (error) {
+      return this.formatError("skills", "search", error);
     }
   }
 }

@@ -47,11 +47,10 @@ export function normalizeProjectStatsQuery(
   }
 
   if (query.window === "1h") {
-    const alignedEnd = new Date(now);
-    alignedEnd.setMinutes(0, 0, 0);
     const bucketSizeMs = 5 * 60 * 1000;
     const bucketCount = 12;
-    const start = new Date(alignedEnd.getTime() - (bucketCount - 1) * bucketSizeMs);
+    const bucketStart = startOfUtcBucket(now, bucketSizeMs);
+    const start = new Date(bucketStart.getTime() - (bucketCount - 1) * bucketSizeMs);
     return buildStatsRange({
       query,
       window: "1h",
@@ -65,11 +64,10 @@ export function normalizeProjectStatsQuery(
   }
 
   if (query.window === "24h") {
-    const alignedEnd = new Date(now);
-    alignedEnd.setMinutes(0, 0, 0);
     const bucketSizeMs = 60 * 60 * 1000;
     const bucketCount = 24;
-    const start = new Date(alignedEnd.getTime() - (bucketCount - 1) * bucketSizeMs);
+    const bucketStart = startOfHour(now);
+    const start = new Date(bucketStart.getTime() - (bucketCount - 1) * bucketSizeMs);
     return buildStatsRange({
       query,
       window: "24h",
@@ -83,10 +81,10 @@ export function normalizeProjectStatsQuery(
   }
 
   if (query.window === "7d" || query.window === "30d") {
-    const alignedEnd = startOfUtcDay(now);
     const bucketSizeMs = 24 * 60 * 60 * 1000;
     const bucketCount = query.window === "7d" ? 7 : 30;
-    const start = new Date(alignedEnd.getTime() - (bucketCount - 1) * bucketSizeMs);
+    const bucketStart = startOfUtcDay(now);
+    const start = new Date(bucketStart.getTime() - (bucketCount - 1) * bucketSizeMs);
     return buildStatsRange({
       query,
       window: query.window,
@@ -122,7 +120,7 @@ function buildStatsRangeFromBounds(
   if (spanHours <= 48) {
     const bucketSizeMs = 60 * 60 * 1000;
     const start = startOfHour(fromDate);
-    const end = startOfHour(new Date(toDate.getTime() + bucketSizeMs));
+    const end = new Date(startOfHour(toDate).getTime() + bucketSizeMs);
     const bucketCount = Math.max(1, Math.ceil((end.getTime() - start.getTime()) / bucketSizeMs));
     return buildStatsRange({
       query,
@@ -139,7 +137,7 @@ function buildStatsRangeFromBounds(
   if (spanDays <= 90) {
     const bucketSizeMs = 24 * 60 * 60 * 1000;
     const start = startOfUtcDay(fromDate);
-    const end = startOfUtcDay(new Date(toDate.getTime() + bucketSizeMs));
+    const end = new Date(startOfUtcDay(toDate).getTime() + bucketSizeMs);
     const bucketCount = Math.max(1, Math.ceil((end.getTime() - start.getTime()) / bucketSizeMs));
     return buildStatsRange({
       query,
@@ -155,7 +153,7 @@ function buildStatsRangeFromBounds(
 
   const bucketSizeMs = 7 * 24 * 60 * 60 * 1000;
   const start = startOfUtcWeek(fromDate);
-  const end = startOfUtcWeek(new Date(toDate.getTime() + (24 * 60 * 60 * 1000)));
+  const end = new Date(startOfUtcWeek(toDate).getTime() + bucketSizeMs);
   const bucketCount = Math.max(1, Math.ceil((end.getTime() - start.getTime()) / bucketSizeMs));
   return buildStatsRange({
     query,
@@ -222,10 +220,14 @@ export function startOfUtcDay(date: Date): Date {
   return next;
 }
 
-function startOfHour(date: Date): Date {
+export function startOfHour(date: Date): Date {
   const next = new Date(date);
-  next.setMinutes(0, 0, 0);
+  next.setUTCMinutes(0, 0, 0);
   return next;
+}
+
+function startOfUtcBucket(date: Date, bucketSizeMs: number): Date {
+  return new Date(Math.floor(date.getTime() / bucketSizeMs) * bucketSizeMs);
 }
 
 function startOfUtcWeek(date: Date): Date {

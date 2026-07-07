@@ -10,6 +10,7 @@ import { extractPathHints } from "../../../services/cli-workflow-text-utils.js";
 import { workspaceVolumeHelperPool } from "./workspace-volume-helper.js";
 import { releaseGitHelperForCwd } from "../../../shared/subprocess/command-runner.js";
 import { CONTAINER_RUNTIME_HOME } from "./provider-runtime-artifacts.js";
+import { getHomeCodeUxPath } from "../../../shared/config/code-ux-paths.js";
 import {
   buildGitHttpAuthEnvForRepoWithFallbacks,
   buildNonInteractiveGitEnv,
@@ -23,6 +24,7 @@ const WORKSPACE_HELPER_IMAGE = "alpine/git";
 const WORKSPACE_VOLUME_LABEL = "code-ux.workspace=true";
 const RUNTIME_VOLUME_LABEL = "code-ux.workspace-runtime=true";
 const WORKSPACE_SESSION_LABEL_PREFIX = "code-ux.workspace-session=";
+export const CONTAINER_PERSISTENT_SKILL_STORAGE_ROOT = "/code-ux/persistent-skills";
 
 export interface WorkspaceCommandOptions {
   env?: NodeJS.ProcessEnv;
@@ -76,6 +78,25 @@ export interface IWorkspaceManager {
 const shellQuote = (value: string): string => `'${value.replace(/'/g, `'\\''`)}'`;
 
 const isWorkspaceHandle = (value: string): boolean => value.startsWith(WORKSPACE_HANDLE_PREFIX);
+
+const sanitizePersistentStorageSegment = (value: string, fallback: string): string => {
+  const safe = sanitizeToken(value).replace(/^[._-]+/, "").replace(/[._-]+$/, "");
+  return safe || fallback;
+};
+
+export const buildPersistentSkillStorageHostPath = (
+  projectId: string,
+  agentPresetId: string,
+  storageId: string,
+): string => path.join(
+  getHomeCodeUxPath("persistent-skill-storages"),
+  sanitizePersistentStorageSegment(projectId, "project"),
+  sanitizePersistentStorageSegment(agentPresetId, "agent"),
+  sanitizePersistentStorageSegment(storageId, "storage"),
+);
+
+export const buildPersistentSkillStorageContainerPath = (storageId: string): string =>
+  pathPosix.join(CONTAINER_PERSISTENT_SKILL_STORAGE_ROOT, sanitizePersistentStorageSegment(storageId, "storage"));
 
 type RefLookup = (ref: string) => Promise<boolean>;
 

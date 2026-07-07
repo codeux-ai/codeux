@@ -1,7 +1,7 @@
 /** @vitest-environment happy-dom */
 import { describe, it, expect, beforeEach } from "vitest";
 import { renderHook, act } from "@testing-library/preact";
-import { useUsageChartState, parseEnabledSeries, reconcileSeries } from "../use-usage-chart-state.js";
+import { useUsageChartState, parseEnabledSeries, reconcileSeries, getDefaultEnabledSeries } from "../use-usage-chart-state.js";
 import type { ProjectExecutionStatsSnapshot } from "../../../types.js";
 
 const seriesKey = (projectId: string) => `codeux_stats_enabled_series_${projectId}`;
@@ -45,6 +45,16 @@ describe("reconcileSeries", () => {
     expect(next).toEqual({ tokens: true, active: false });
   });
 
+  it("adds newly introduced series without changing existing selections", () => {
+    const current = { tokens: false, active: true };
+    const next = reconcileSeries(current, [
+      ...series,
+      { id: "cost", defaultEnabled: true },
+      { id: "git_files", defaultEnabled: false },
+    ]);
+    expect(next).toEqual({ tokens: false, active: true, cost: true, git_files: false });
+  });
+
   it("prunes stale series", () => {
     const current = { tokens: true, active: true, stale: true };
     const next = reconcileSeries(current, series);
@@ -57,6 +67,33 @@ describe("reconcileSeries", () => {
     const next = reconcileSeries(current, series);
     expect(next).not.toBe(current);
     expect(next).toEqual({ tokens: true, active: false });
+  });
+
+  it("resets all-disabled stored state to snapshot defaults", () => {
+    const current = { tokens: false, active: false, cost: false };
+    const next = reconcileSeries(current, [
+      { id: "tokens", defaultEnabled: false },
+      { id: "active", defaultEnabled: true },
+      { id: "cost", defaultEnabled: true },
+    ]);
+    expect(next).toEqual({ tokens: false, active: true, cost: true });
+  });
+});
+
+describe("getDefaultEnabledSeries", () => {
+  it("returns snapshot defaults", () => {
+    expect(getDefaultEnabledSeries([
+      { id: "tokens", defaultEnabled: true },
+      { id: "active", defaultEnabled: false },
+      { id: "cost", defaultEnabled: true },
+    ])).toEqual({ tokens: true, active: false, cost: true });
+  });
+
+  it("enables the first series when snapshot defaults are all disabled", () => {
+    expect(getDefaultEnabledSeries([
+      { id: "tokens", defaultEnabled: false },
+      { id: "active", defaultEnabled: false },
+    ])).toEqual({ tokens: true, active: false });
   });
 });
 
@@ -116,6 +153,31 @@ describe("useUsageChartState", () => {
     localStorage.setItem(seriesKey("proj-1"), JSON.stringify({ tokens: false, active: false }));
     const { result } = renderHook(() => useUsageChartState("proj-1", baseStats as any));
     expect(result.current.enabledSeries.tokens).toBe(true);
+  });
+
+  it("exposes grouped series view-model counts and reset helper", () => {
+    localStorage.setItem(seriesKey("proj-1"), JSON.stringify({ tokens: false, active: true }));
+    const { result } = renderHook(() => useUsageChartState("proj-1", {
+      ...baseStats,
+      chartSeries: [
+        { id: "tokens", label: "Tokens", grouping: "usage", defaultEnabled: true },
+        { id: "active", label: "Active", grouping: "usage", defaultEnabled: false },
+        { id: "git_files", label: "Files Changed", grouping: "git", defaultEnabled: false },
+      ],
+    } as any));
+
+    expect(result.current.activeSeriesCount).toBe(1);
+    expect(result.current.seriesGroups).toEqual([
+      expect.objectContaining({ label: "Usage", activeCount: 1, totalCount: 2, defaultEnabledCount: 1 }),
+      expect.objectContaining({ label: "Git", activeCount: 0, totalCount: 1, defaultEnabledCount: 0 }),
+    ]);
+
+    act(() => {
+      result.current.resetEnabledSeries();
+    });
+
+    expect(result.current.enabledSeries).toEqual({ tokens: true, active: false, git_files: false });
+    expect(localStorage.getItem(seriesKey("proj-1"))).toBe(JSON.stringify({ tokens: true, active: false, git_files: false }));
   });
 
   it("migrates legacy series storage into the codeux key and persists visual mode per project", () => {

@@ -103,6 +103,14 @@ export interface TooltipState {
   xPositions: number[];
 }
 
+export interface GroupedChartSeriesSection {
+  label: string;
+  activeCount: number;
+  totalCount: number;
+  defaultEnabledCount: number;
+  series: ProjectExecutionStatsChartSeries[];
+}
+
 export function getVisibleBuckets(
   buckets: ExecutionUsageBucketSummary[],
   viewStart: number,
@@ -151,8 +159,9 @@ export function normalizeChartSeries(
 }
 
 export function groupChartSeries(
-  chartSeries: ProjectExecutionStatsChartSeries[]
-): Record<string, ProjectExecutionStatsChartSeries[]> {
+  chartSeries: ProjectExecutionStatsChartSeries[],
+  enabledSeries: Record<string, boolean> = {}
+): GroupedChartSeriesSection[] {
   const grouped = chartSeries.reduce((acc, series) => {
     const grouping = normalizeSeriesGroupLabel(series.grouping);
     (acc[grouping] ??= []).push(series);
@@ -161,13 +170,20 @@ export function groupChartSeries(
 
   return Object.keys(grouped)
     .sort(compareSeriesGroups)
-    .reduce((acc, grouping) => {
-      acc[grouping] = [...grouped[grouping]!].sort((left, right) => (
+    .map((grouping) => {
+      const series = [...grouped[grouping]!].sort((left, right) => (
         (left.label ?? left.id).localeCompare(right.label ?? right.id, undefined, { sensitivity: "base" })
           || left.id.localeCompare(right.id)
       ));
-      return acc;
-    }, {} as Record<string, ProjectExecutionStatsChartSeries[]>);
+
+      return {
+        label: grouping,
+        activeCount: series.filter((item) => enabledSeries[item.id]).length,
+        totalCount: series.length,
+        defaultEnabledCount: series.filter((item) => item.defaultEnabled).length,
+        series,
+      };
+    });
 }
 
 export function calculateChartMetrics(visibleBuckets: ExecutionUsageBucketSummary[]): ChartMetrics {

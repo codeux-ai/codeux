@@ -1,7 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import * as fs from "fs/promises";
 import * as path from "path";
-import { WorkspaceManager } from "../../../../../src/infrastructure/providers/cli/workspace-manager.js";
+import * as os from "os";
+import {
+  buildPersistentSkillStorageContainerPath,
+  buildPersistentSkillStorageHostPath,
+  CONTAINER_PERSISTENT_SKILL_STORAGE_ROOT,
+  WorkspaceManager,
+} from "../../../../../src/infrastructure/providers/cli/workspace-manager.js";
 
 vi.mock("fs/promises");
 vi.mock("../../../../../src/services/cli-workflow-text-utils.js", () => ({
@@ -32,6 +38,17 @@ describe("WorkspaceManager", () => {
   it("builds host worktree paths when host execution mode is selected", () => {
     const result = manager.buildWorktreePath("/repo/project", "session-1", "HOST");
     expect(result).toBe(path.join(path.resolve("/repo/project"), ".worktrees", "session-1"));
+  });
+
+  it("derives persistent skill storage roots outside project workspaces with safe path segments", () => {
+    const hostPath = buildPersistentSkillStorageHostPath("Project One", "Agent/One", "../Storage One");
+    const containerPath = buildPersistentSkillStorageContainerPath("../Storage One");
+
+    expect(hostPath).toBe(path.join(os.homedir(), ".code-ux", "persistent-skill-storages", "project-one", "agent-one", "storage-one"));
+    expect(hostPath).not.toContain(`${path.sep}workspace${path.sep}`);
+    expect(hostPath).not.toContain(`${path.sep}.worktrees${path.sep}`);
+    expect(containerPath).toBe(`${CONTAINER_PERSISTENT_SKILL_STORAGE_ROOT}/storage-one`);
+    expect(containerPath.startsWith("/workspace")).toBe(false);
   });
 
   it("resolves a resumable workspace when the Docker volume exists", async () => {

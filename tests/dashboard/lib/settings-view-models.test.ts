@@ -849,6 +849,22 @@ describe("settings cloning helpers", () => {
       },
       instructionTemplates: {},
       qualityAssurance: createMockQualityAssurance(),
+      selfReflection: {
+        planning: {
+          enabled: false,
+          criteria: [
+            { id: "correctness", label: "Correctness", prompt: "Check correctness.", threshold: 0.8 },
+          ],
+          maxImprovementAttempts: 1,
+        },
+        qualityAssurance: {
+          enabled: false,
+          criteria: [
+            { id: "security", label: "Security", prompt: "Check security.", threshold: 0.85 },
+          ],
+          maxImprovementAttempts: 1,
+        },
+      },
     },
     skills: [{ id: "skill1", enabled: true }],
     mcpTools: [{ serverName: "s1", toolName: "t1", enabled: true }],
@@ -876,6 +892,7 @@ describe("settings cloning helpers", () => {
     clone.agents.qualityAssurance.enabled = false;
     clone.agents.qualityAssurance.taskCompletion.strategy = "NEVER";
     clone.agents.qualityAssurance.sprintCompletion.agentPresetIds.push("qa-extra");
+    clone.agents.selfReflection.planning.criteria[0]!.threshold = 0.1;
     clone.agents.routing.taskCoding.orchestratorAgentPresetIds.push("c");
     clone.customMcpServers![0].headers!["X-New"] = "123";
     clone.customMcpServers![0].env!["BAZ"] = "qux";
@@ -889,6 +906,7 @@ describe("settings cloning helpers", () => {
     expect(original.agents.qualityAssurance.enabled).toBe(true);
     expect(original.agents.qualityAssurance.taskCompletion.strategy).toBe("ALWAYS");
     expect(original.agents.qualityAssurance.sprintCompletion.agentPresetIds).toEqual(["qa-sprint", "qa-peer"]);
+    expect(original.agents.selfReflection.planning.criteria[0]!.threshold).toBe(0.8);
     expect(original.agents.routing.taskCoding.orchestratorAgentPresetIds).toEqual(["a", "b"]);
     expect(original.customMcpServers![0].headers!["X-New"]).toBeUndefined();
     expect(original.customMcpServers![0].env!["BAZ"]).toBeUndefined();
@@ -907,6 +925,7 @@ describe("settings cloning helpers", () => {
     clone.jira.host = "new-host";
     clone.agents.qualityAssurance.enabled = false;
     clone.agents.qualityAssurance.sprintCompletion.agentPresetIds.push("qa-extra");
+    clone.agents.selfReflection.qualityAssurance.criteria.push({ id: "scope_control", label: "Scope control", prompt: "Stay scoped.", threshold: 0.8 });
     clone.agents.routing.taskCoding.orchestratorAgentPresetIds.push("c");
     clone.customMcpServers![0].headers!["X-New"] = "123";
 
@@ -915,6 +934,7 @@ describe("settings cloning helpers", () => {
     expect(original.jira.host).toBe("h");
     expect(original.agents.qualityAssurance.enabled).toBe(true);
     expect(original.agents.qualityAssurance.sprintCompletion.agentPresetIds).toEqual(["qa-sprint", "qa-peer"]);
+    expect(original.agents.selfReflection.qualityAssurance.criteria).toHaveLength(1);
     expect(original.agents.routing.taskCoding.orchestratorAgentPresetIds).toEqual(["a", "b"]);
     expect(original.customMcpServers![0].headers!["X-New"]).toBeUndefined();
   });

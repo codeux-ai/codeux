@@ -56,6 +56,9 @@ export async function executeProviderStage(ctx: PipelineContext, providerPrompt:
     providerRunner: ctx.providerRunner,
     providerConcurrencyService: ctx.deps.providerConcurrencyService,
     getGithubToken: ctx.deps.getGithubToken,
+    getMcpConnectionInfo: ctx.deps.getMcpConnectionInfo,
+    skillService: ctx.deps.skillService,
+    agentPresetRepository: ctx.deps.agentPresetRepository,
   });
 
   // The provider concurrency cap is a provider-level setting (already clamped to the system

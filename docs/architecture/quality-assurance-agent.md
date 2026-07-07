@@ -23,6 +23,7 @@ The QA agent is designed to:
 Project-scoped settings live under:
 
 - `agents.qualityAssurance`
+- `agents.selfReflection.qualityAssurance`
 
 The current settings are:
 
@@ -42,6 +43,14 @@ The current settings are:
   - `enabled`
   - `agentPresetIds`
   - `agentPresetId` legacy compatibility mirror
+
+QA self-reflection is configured separately under `agents.selfReflection.qualityAssurance`:
+
+- `enabled`: defaults to `false`; when false, QA output is accepted exactly as it was before this loop existed
+- `criteria`: ordered `{ id, label, prompt, threshold }` records, where `threshold` is stored on the 0-1 settings scale and compared against the reviewer self-rating converted from 1-10
+- `maxImprovementAttempts`: maximum number of same-session improvement prompts after a below-threshold rating
+
+When enabled, Code UX asks the same QA provider session to return JSON-only self-ratings for the normalized QA result. If every criterion meets its threshold, the original normalized result is used. If any criterion is below threshold and attempts remain, Code UX asks for an improved QA JSON payload and re-runs the normal QA schema normalization. Invalid reflection JSON, provider failures, or invalid improved QA JSON are fail-open for this optional loop: Code UX logs the issue and keeps the last valid normalized QA result.
 
 Each QA trigger owns an ordered reviewer roster in `agentPresetIds`:
 
@@ -82,6 +91,7 @@ Persistence:
 
 - `src/repositories/qa-review-repository.ts`
 - `qa_review_runs` table in `src/repositories/db/app-db-schema.ts`
+- optional self-reflection ratings are recorded as `execution_invocation_messages.metadata_json` on the QA invocation, including criteria ids, labels, thresholds, scores, pass/fail state, attempt count, and final decision. Raw provider credentials are not stored in these metadata records.
 
 Provider routing:
 

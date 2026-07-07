@@ -87,6 +87,16 @@ export const cloneDefaultSettings = (): DashboardSettings => ({
         agentPresetIds: [...DEFAULT_DASHBOARD_SETTINGS.agents.qualityAssurance.completedTaskWithoutPr.agentPresetIds],
       },
     },
+    selfReflection: {
+      planning: {
+        ...DEFAULT_DASHBOARD_SETTINGS.agents.selfReflection.planning,
+        criteria: DEFAULT_DASHBOARD_SETTINGS.agents.selfReflection.planning.criteria.map((criterion) => ({ ...criterion })),
+      },
+      qualityAssurance: {
+        ...DEFAULT_DASHBOARD_SETTINGS.agents.selfReflection.qualityAssurance,
+        criteria: DEFAULT_DASHBOARD_SETTINGS.agents.selfReflection.qualityAssurance.criteria.map((criterion) => ({ ...criterion })),
+      },
+    },
   },
   skills: DEFAULT_DASHBOARD_SETTINGS.skills.map((skill) => ({ ...skill })),
   mcpTools: DEFAULT_DASHBOARD_SETTINGS.mcpTools.map((tool) => ({ ...tool })),

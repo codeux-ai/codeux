@@ -61,6 +61,12 @@ describe("settings search index", () => {
     ["branch", ["sprint", "agents"]],
     ["browser", ["browser"]],
     ["memory", ["memory"]],
+    ["persistent skills", ["agents"]],
+    ["skill storage", ["agents"]],
+    ["self-reflection", ["agents"]],
+    ["criteria", ["agents"]],
+    ["planning rating", ["agents"]],
+    ["qa rating", ["agents"]],
   ] as const)("resolves %s to the expected settings categories", (query, expectedCategoryIds) => {
     const matches = searchSettingsCategories(index, query);
 

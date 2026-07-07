@@ -54,6 +54,11 @@ export interface AgentMemoryConfig {
   maxLongTerm: number;
 }
 
+export interface AgentPersistentSkillStorageConfig {
+  /** Default-off runtime flag reserved for future skill retrieval wiring. */
+  enabled: boolean;
+}
+
 export interface AgentPresetRecord {
   id: string;
   projectId: string;
@@ -75,6 +80,8 @@ export interface AgentPresetRecord {
   memoryConfig?: AgentMemoryConfig;
   /** Per-agent MCP access config. Undefined for agents that have never been configured. */
   mcpAccess?: AgentMcpAccessConfig;
+  persistentSkillStorageIds?: string[];
+  persistentSkillStorage?: AgentPersistentSkillStorageConfig;
   createdAt: string;
   updatedAt: string;
 }
@@ -92,6 +99,8 @@ export interface CreateAgentPresetInput {
   memoryTemplateMarkdown?: string;
   memoryConfig?: AgentMemoryConfig;
   mcpAccess?: AgentMcpAccessConfig;
+  persistentSkillStorageIds?: string[];
+  persistentSkillStorage?: AgentPersistentSkillStorageConfig;
 }
 
 export interface UpdateAgentPresetInput {
@@ -106,4 +115,6 @@ export interface UpdateAgentPresetInput {
   memoryTemplateMarkdown?: string;
   memoryConfig?: AgentMemoryConfig;
   mcpAccess?: AgentMcpAccessConfig;
+  persistentSkillStorageIds?: string[];
+  persistentSkillStorage?: AgentPersistentSkillStorageConfig;
 }

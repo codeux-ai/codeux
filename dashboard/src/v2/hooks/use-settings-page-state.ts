@@ -34,7 +34,7 @@ import type {
   SystemSettings,
   ThinkingMode,
 } from "../../types.js";
-import type { AgentAvatarConfig } from "../types.js";
+import type { AgentAvatarConfig, AgentPreset } from "../types.js";
 import { AlertTriangle, Bot, BrainCircuit, Cpu, Plug, Settings, SlidersHorizontal, Target } from "lucide-preact";
 
 type SettingsScope = "system" | "project";
@@ -204,6 +204,7 @@ export const useSettingsPageState = (
   const [memoryClearBusy, setMemoryClearBusy] = useState<string | null>(null);
   const [importingHints, setImportingHints] = useState(false);
   const [externalHints, setExternalHints] = useState<import("../../types.js").ExternalSettingsHints | null>(null);
+  const [projectAgentPresets, setProjectAgentPresets] = useState<AgentPreset[]>([]);
   const [projectAgentPresetOptions, setProjectAgentPresetOptions] = useState<Array<{ value: string; label: string; avatarConfig?: AgentAvatarConfig }>>([]);
   const previousCategoryRef = useRef<CategoryId>("general");
 
@@ -230,7 +231,7 @@ export const useSettingsPageState = (
       setExternalHints(hints);
 
       if (selectedProjectId) {
-        const [effectiveProject, projectAgentPresets] = await Promise.all([
+        const [effectiveProject, nextProjectAgentPresets] = await Promise.all([
           fetchProjectEffectiveSettings(selectedProjectId, { cache: "reload" }),
           fetchAgentPresets(selectedProjectId).catch(() => []),
         ]);
@@ -243,11 +244,13 @@ export const useSettingsPageState = (
 
         setSavedProjectSettings(cloneProjectSettings(nextProject));
         setProjectSources(effectiveProject.sources);
-        setProjectAgentPresetOptions(sortAgentPresetOptions(projectAgentPresets));
+        setProjectAgentPresets(nextProjectAgentPresets);
+        setProjectAgentPresetOptions(sortAgentPresetOptions(nextProjectAgentPresets));
       } else {
         setProjectSettings(null);
         setSavedProjectSettings(null);
         setProjectSources({});
+        setProjectAgentPresets([]);
         setProjectAgentPresetOptions([]);
       }
       setError(null);
@@ -725,6 +728,7 @@ export const useSettingsPageState = (
     routingProfileOptions,
     integrations: INTEGRATIONS,
     agentInstructionTemplateOptions: AGENT_INSTRUCTION_TEMPLATE_OPTIONS,
+    projectAgentPresets,
     projectAgentPresetOptions,
     selectedProject,
     updateSystem, updateProject, updateEditableSettings,

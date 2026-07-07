@@ -47,6 +47,40 @@ describe("QaReviewRunner", () => {
     });
   });
 
+  it("routes QA review requests with the provided self-reflection settings", async () => {
+    const settings = {
+      agents: {
+        selfReflection: {
+          qualityAssurance: {
+            enabled: true,
+            criteria: [
+              {
+                id: "correctness",
+                label: "Correctness",
+                prompt: "The review is correct.",
+                threshold: 0.8,
+              },
+            ],
+            maxImprovementAttempts: 1,
+          },
+        },
+      },
+    };
+    structuredAgentRequestService.executeRequest.mockResolvedValueOnce({
+      parsed: { verdict: "pass", summary: "Looks good" },
+    } as any);
+
+    await runner.runQaReview({
+      ...defaultArgs,
+      settings,
+    });
+
+    expect(structuredAgentRequestService.executeRequest).toHaveBeenCalledWith(expect.objectContaining({
+      purpose: "qa_review",
+      settings,
+    }));
+  });
+
   it("should return explicit errored outcome with parse_failure when parse fails", async () => {
     structuredAgentRequestService.executeRequest.mockRejectedValueOnce(new Error("Invalid JSON format: Failed to extract valid JSON from text."));
 

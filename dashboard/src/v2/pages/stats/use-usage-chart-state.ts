@@ -1,7 +1,8 @@
-import { useEffect, useState } from "preact/hooks";
-import type { ProjectExecutionStatsSnapshot } from "../../types.js";
+import { useEffect, useMemo, useState } from "preact/hooks";
+import type { ProjectExecutionStatsChartSeries, ProjectExecutionStatsSnapshot } from "../../types.js";
 import type { ChartZoomRange, StatsVisualMode } from "./components/StatsShared.js";
-import { calculateChartMetrics } from "./chart-view-models.js";
+import { calculateChartMetrics, groupChartSeries } from "./chart-view-models.js";
+import type { GroupedChartSeriesSection } from "./chart-view-models.js";
 
 const DEFAULT_STORAGE_SCOPE = "default";
 const SERIES_STORAGE_PREFIX = "codeux_stats_enabled_series";
@@ -35,9 +36,26 @@ export function parseEnabledSeries(stored: string | null): Record<string, boolea
   }
 }
 
+type ReconcileChartSeries = Pick<ProjectExecutionStatsChartSeries, "id" | "defaultEnabled">;
+
+export function getDefaultEnabledSeries(
+  chartSeries: ReconcileChartSeries[]
+): Record<string, boolean> {
+  const defaults = chartSeries.reduce((acc, series) => {
+    acc[series.id] = series.defaultEnabled;
+    return acc;
+  }, {} as Record<string, boolean>);
+
+  if (chartSeries.length > 0 && Object.values(defaults).every((enabled) => !enabled)) {
+    defaults[chartSeries[0]!.id] = true;
+  }
+
+  return defaults;
+}
+
 export function reconcileSeries(
   current: Record<string, boolean>,
-  chartSeries: { id: string; defaultEnabled: boolean }[]
+  chartSeries: ReconcileChartSeries[]
 ): Record<string, boolean> {
   let changed = false;
   const next = { ...current };
@@ -62,8 +80,7 @@ export function reconcileSeries(
   }
 
   if (enabledCount === 0 && chartSeries.length > 0) {
-    next[chartSeries[0]!.id] = true;
-    changed = true;
+    return getDefaultEnabledSeries(chartSeries);
   }
 
   return changed ? next : current;
@@ -133,6 +150,9 @@ export interface UsageChartState {
   setDragCurrentIndex: (index: number | null) => void;
   enabledSeries: Record<string, boolean>;
   setEnabledSeries: (val: Record<string, boolean> | ((curr: Record<string, boolean>) => Record<string, boolean>)) => void;
+  resetEnabledSeries: () => void;
+  activeSeriesCount: number;
+  seriesGroups: GroupedChartSeriesSection[];
   metrics: ReturnType<typeof calculateChartMetrics> | null;
 }
 
@@ -158,6 +178,11 @@ export function useUsageChartState(
       writeStorageValue(getStorageKey(SERIES_STORAGE_PREFIX, projectId), JSON.stringify(next));
       return next;
     });
+  };
+
+  const resetEnabledSeries = () => {
+    if (!stats) return;
+    setEnabledSeries(getDefaultEnabledSeries(stats.chartSeries));
   };
 
   useEffect(() => {
@@ -202,6 +227,11 @@ export function useUsageChartState(
         )
       )
     : null;
+  const seriesGroups = useMemo(
+    () => groupChartSeries(stats?.chartSeries ?? [], enabledSeriesState),
+    [enabledSeriesState, stats?.chartSeries]
+  );
+  const activeSeriesCount = seriesGroups.reduce((count, group) => count + group.activeCount, 0);
 
   return {
     visualMode,
@@ -216,6 +246,9 @@ export function useUsageChartState(
     setDragCurrentIndex,
     enabledSeries: enabledSeriesState,
     setEnabledSeries,
+    resetEnabledSeries,
+    activeSeriesCount,
+    seriesGroups,
     metrics,
   };
 }

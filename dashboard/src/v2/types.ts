@@ -58,6 +58,9 @@ import type {
   CustomMcpServer,
   CustomMcpTransport,
   McpToolToggle,
+  SkillStorageKind,
+  SkillStorageRecord,
+  AgentSkillStorageAttachment,
 } from "../../../src/contracts/app-types.js";
 import type {
   CreateProjectInput,
@@ -286,6 +289,9 @@ export type {
   CustomMcpServer,
   CustomMcpTransport,
   McpToolToggle,
+  SkillStorageKind,
+  SkillStorageRecord,
+  AgentSkillStorageAttachment,
   CreateSchedulerEntryInput,
   MemoryRemediationScheduleResponse,
   MemoryRemediationScheduleSettings,
