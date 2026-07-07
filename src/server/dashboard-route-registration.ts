@@ -30,6 +30,7 @@ import { registerKnowledgeRoutes } from "./knowledge-routes.js";
 import { registerDocsWebRoutes } from "./docs-web-routes.js";
 import { registerChatProviderRoutes } from "./chat-provider-routes.js";
 import { registerChatProviderIngressRoutes } from "./chat-provider-ingress-routes.js";
+import { registerSpeechRoutes } from "./speech-routes.js";
 
 export interface DashboardRouteRegistrationOptions {
   app: Express;
@@ -124,6 +125,12 @@ const registerSystemIntegrationRouteGroup = (app: Express, deps: DashboardDepend
   registerDocsWebRoutes(app);
 };
 
+const registerSpeechRouteGroup = (app: Express, deps: DashboardDependencies): void => {
+  if (deps.speechTranscriptionService) {
+    registerSpeechRoutes(app, { speechTranscriptionService: deps.speechTranscriptionService });
+  }
+};
+
 const registerOptionalKnowledgeRouteGroup = (app: Express, deps: DashboardDependencies): void => {
   if (
     deps.memoryService &&
@@ -168,5 +175,6 @@ export const registerDashboardRoutes = ({
   registerProjectConfigurationRouteGroup(app, deps);
   registerExecutionRouteGroup(app, deps);
   registerSystemIntegrationRouteGroup(app, deps);
+  registerSpeechRouteGroup(app, deps);
   registerOptionalKnowledgeRouteGroup(app, deps);
 };

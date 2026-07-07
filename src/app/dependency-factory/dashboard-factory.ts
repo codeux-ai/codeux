@@ -20,12 +20,14 @@ import { ExecutionInvocationControlService } from "../../services/execution-invo
 import { createLateBoundDependency } from "../../shared/late-bound-dependency.js";
 import { ChatProviderIngressService } from "../../services/chat-provider-ingress-service.js";
 import { ChatProviderOutboundService } from "../../services/chat-provider-outbound-service.js";
+import { SpeechTranscriptionService } from "../../services/speech-transcription-service.js";
 
 export interface DashboardDependencies {
   chatThreadRuntimeService: ChatThreadRuntimeService;
   chatProviderRepository: CoreDependencies["chatProviderRepository"];
   chatProviderIngressService: ChatProviderIngressService;
   chatProviderOutboundService: ChatProviderOutboundService;
+  speechTranscriptionService: SpeechTranscriptionService;
   activityCacheService: ActivityCacheService;
   taskRerunService: TaskRerunService;
   executionControlService: ExecutionControlService;
@@ -161,6 +163,10 @@ export function createDashboardDependencies(
     chatProviderRepository,
     chatThreadRuntimeService,
     logger: logger.child({ component: "chat-provider-ingress-service" }),
+  });
+  const speechTranscriptionService = new SpeechTranscriptionService({
+    settingsRepository,
+    logger: logger.child({ component: "speech-transcription-service" }),
   });
 
   const activityCacheService = new ActivityCacheService(
@@ -474,6 +480,7 @@ export function createDashboardDependencies(
     chatThreadRuntimeService,
     chatProviderIngressService,
     chatProviderOutboundService,
+    speechTranscriptionService,
     activityCacheService,
     taskRerunService,
     executionControlService,

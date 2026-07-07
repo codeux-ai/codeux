@@ -189,6 +189,7 @@ export class CodeUxServer {
   private schedulerService: import("../services/scheduler-service.js").SchedulerService;
   private chatThreadRuntimeService: import("../services/chat-thread-runtime-service.js").ChatThreadRuntimeService;
   private chatProviderIngressService: ChatProviderIngressService;
+  private speechTranscriptionService: import("../services/speech-transcription-service.js").SpeechTranscriptionService;
   private runtimeCleanupService: RuntimeCleanupService;
   private runtimeStartupRecoveryService: RuntimeStartupRecoveryService;
   private dashboardRealtimeService: DashboardRealtimeService;
@@ -269,6 +270,7 @@ export class CodeUxServer {
     this.schedulerService = deps.schedulerService;
     this.chatThreadRuntimeService = deps.chatThreadRuntimeService;
     this.chatProviderIngressService = deps.chatProviderIngressService;
+    this.speechTranscriptionService = deps.speechTranscriptionService;
     this.runtimeCleanupService = deps.runtimeCleanupService;
     this.runtimeStartupRecoveryService = new RuntimeStartupRecoveryService({
       sessionTracking: this.sessionTracking,
@@ -1329,6 +1331,7 @@ export class CodeUxServer {
         schedulerService: this.schedulerService,
         chatThreadRuntimeService: this.chatThreadRuntimeService,
         chatProviderIngressService: this.chatProviderIngressService,
+        speechTranscriptionService: this.speechTranscriptionService,
         dashboardRealtimeService: this.dashboardRealtimeService,
         logger: this.logger,
         getLiveActivitiesForActiveTasks: () => this.getLiveActivitiesForActiveTasks(),

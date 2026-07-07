@@ -20,6 +20,7 @@ export interface SpeechSettings {
 
 export type SpeechTranscriptionErrorCode =
   | "unsupported_audio"
+  | "missing_local_model"
   | "missing_model"
   | "permission_denied"
   | "client_error"
@@ -44,6 +45,12 @@ export interface SpeechTranscriptionError {
   retryable: boolean;
 }
 
+export interface SpeechTranscriptionFallbackMetadata {
+  attemptedProvider: SpeechTranscriptionProvider;
+  reason: SpeechTranscriptionErrorCode;
+  message: string;
+}
+
 export type SpeechTranscriptionResult =
   | {
       ok: true;
@@ -52,6 +59,7 @@ export type SpeechTranscriptionResult =
       model: string;
       language: string | null;
       durationSeconds: number | null;
+      fallback?: SpeechTranscriptionFallbackMetadata | null;
     }
   | {
       ok: false;
