@@ -50,6 +50,7 @@ export type DocsSlug =
   | 'architecture-configuration-resolution'
   | 'architecture-security'
   | 'settings-subcategories-display-settings'
+  | 'settings-subcategories-guidance'
   | 'settings-subcategories-onboarding'
 
 export interface DocsRegistryEntry extends Partial<Omit<PageMeta, 'title' | 'description'>> {
@@ -390,6 +391,13 @@ export const docsRegistry: Record<DocsSlug, DocsRegistryEntry> = {
     title: "Display Settings",
     description: "Controls the dashboard shell layout, experience mode, theme, motion preference, and desktop zoom when available.",
   },
+  'settings-subcategories-guidance': {
+    id: 'settings-subcategories-guidance',
+    path: '/docs/settings-subcategories-guidance',
+    section: 'User Guide',
+    title: "Guidance",
+    description: "Manages active tech-stack guidance, active styleguide guidance, and custom instruction entries for the current settings scope.",
+  },
   'settings-subcategories-onboarding': {
     id: 'settings-subcategories-onboarding',
     path: '/docs/settings-subcategories-onboarding',
@@ -447,6 +455,7 @@ export const orderedDocs: DocsRegistryEntry[] = [
   docsRegistry['architecture-configuration-resolution'],
   docsRegistry['architecture-security'],
   docsRegistry['settings-subcategories-display-settings'],
+  docsRegistry['settings-subcategories-guidance'],
   docsRegistry['settings-subcategories-onboarding'],
 ]
 
