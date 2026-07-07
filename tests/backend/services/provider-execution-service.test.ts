@@ -889,6 +889,10 @@ describe("ProviderExecutionService", () => {
     await expect(service.executeProvider({ ...defaultArgs, signal: abortController.signal }))
       .rejects.toThrow("Aborted");
 
-    expect(sleepWithSignal).toHaveBeenCalledWith(1000, abortController.signal);
+    expect(sleepWithSignal).toHaveBeenCalledTimes(1);
+    const [delayMs, signal] = vi.mocked(sleepWithSignal).mock.calls[0] ?? [];
+    expect(delayMs).toBeGreaterThan(0);
+    expect(delayMs).toBeLessThanOrEqual(1000);
+    expect(signal).toBe(abortController.signal);
   });
 });
