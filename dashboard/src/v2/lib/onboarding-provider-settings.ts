@@ -1,4 +1,5 @@
 import type {
+  DashboardExperienceMode,
   OnboardingProviderCredentialStatus,
   OnboardingRuntimeReadiness,
   ProviderConfigId,
@@ -9,6 +10,8 @@ import type {
 import {
   cloneSystemSettings,
   createProjectProviderDraft,
+  createSystemProviderDraft,
+  getProviderTypeLabel,
   sortProviderConfigEntries,
 } from "./settings-view-models.js";
 
@@ -33,6 +36,8 @@ export const providerLabels: Record<ProviderId, string> = {
 };
 
 export const PROVIDER_TYPES: ProviderId[] = ["jules", "gemini", "antigravity", "codex", "claude-code", "qwen-code", "opencode"];
+
+const EASY_PROVIDER_PRIORITY: ProviderId[] = ["codex", "gemini", "claude-code", "qwen-code", "opencode", "antigravity"];
 
 export const providerDescriptions: Record<ProviderId, string> = {
   jules: "Google Jules API service for agent session and workspace orchestration.",
@@ -86,6 +91,25 @@ export const getProviderInitialSelection = (
     .filter((provider) => provider.enabled)
     .map((provider) => provider.provider);
   return Array.from(new Set<ProviderId>(["jules", ...enabled, ...detected]));
+};
+
+export const getEasyRecommendedProvider = (
+  providers: OnboardingProviderCredentialStatus[],
+  settings?: SystemSettings | null,
+): ProviderId => {
+  const availableProvider = EASY_PROVIDER_PRIORITY.find((providerId) => (
+    providers.some((provider) => provider.provider === providerId && (provider.available || provider.mountEnabled))
+  ));
+  if (availableProvider) {
+    return availableProvider;
+  }
+
+  const enabledProvider = EASY_PROVIDER_PRIORITY.find((providerId) => (
+    Object.values(settings?.defaults.aiProvider.providers ?? {}).some((provider) => (
+      provider.provider === providerId && provider.enabled
+    ))
+  ));
+  return enabledProvider ?? "codex";
 };
 
 export const cloneSettings = (settings: SystemSettings): SystemSettings => cloneSystemSettings(settings);
@@ -153,4 +177,119 @@ export const syncProjectProvidersToIntegrationCatalog = (
       virtualWorkerProvider: fallbackWorkerProvider,
     },
   };
+};
+
+export const applyOnboardingExperienceModeDefaults = (
+  settings: SystemSettings,
+  mode: DashboardExperienceMode,
+  options: {
+    recommendedProvider?: ProviderId;
+    useGithub?: boolean;
+    manageGithubPrWorkflow?: boolean;
+  } = {},
+): SystemSettings => {
+  const nextSettings = cloneSettings(settings);
+  nextSettings.defaults.appearance = {
+    ...nextSettings.defaults.appearance,
+    experienceMode: mode,
+  };
+
+  if (mode !== "EASY") {
+    return nextSettings;
+  }
+
+  const recommendedProvider = options.recommendedProvider ?? "codex";
+  const useGithub = options.useGithub ?? nextSettings.defaults.cliWorkflow.gitMode !== "local";
+  const manageGithubPrWorkflow = options.manageGithubPrWorkflow ?? nextSettings.defaults.git.autoCreatePr;
+  const providerConfigId = Object.entries(nextSettings.integrations.providers)
+    .find(([, provider]) => provider.provider === recommendedProvider)?.[0] as ProviderConfigId | undefined
+    ?? recommendedProvider;
+
+  if (!nextSettings.integrations.providers[providerConfigId]) {
+    nextSettings.integrations.providers[providerConfigId] = createSystemProviderDraft(
+      recommendedProvider,
+      getProviderTypeLabel(recommendedProvider),
+    );
+  }
+
+  nextSettings.defaults = syncProjectProvidersToIntegrationCatalog(nextSettings, nextSettings.integrations.providers);
+
+  for (const [configId, projectProvider] of Object.entries(nextSettings.defaults.aiProvider.providers)) {
+    nextSettings.defaults.aiProvider.providers[configId] = {
+      ...projectProvider,
+      enabled: configId === providerConfigId,
+      maxConcurrentTasks: Math.min(projectProvider.maxConcurrentTasks || 1, 1),
+    };
+  }
+
+  nextSettings.defaults.aiProvider = {
+    ...nextSettings.defaults.aiProvider,
+    provider: providerConfigId,
+    strategy: "MANUAL",
+    invocationRouting: Object.fromEntries(
+      Object.entries(nextSettings.defaults.aiProvider.invocationRouting).map(([routeId, route]) => [
+        routeId,
+        {
+          ...route,
+          provider: providerConfigId,
+          allowedProviders: [providerConfigId],
+          providers: {
+            [providerConfigId]: route.providers[providerConfigId] ?? { enabled: true, weight: 1 },
+          },
+        },
+      ]),
+    ) as ProjectSettings["aiProvider"]["invocationRouting"],
+  };
+
+  nextSettings.defaults.workers = {
+    ...nextSettings.defaults.workers,
+    executionMode: "VIRTUAL",
+    virtualWorkerProvider: providerConfigId,
+    maxConcurrency: Math.min(nextSettings.defaults.workers.maxConcurrency || 1, 3),
+  };
+
+  nextSettings.defaults.automationLevel = "SEMI_AUTO";
+  nextSettings.defaults.automationInterventions = {
+    ...nextSettings.defaults.automationInterventions,
+    autoApprovePlan: true,
+    autoAnswerClarification: false,
+    autoResumePaused: false,
+  };
+  nextSettings.defaults.memory = {
+    ...nextSettings.defaults.memory,
+    enabled: true,
+  };
+  nextSettings.defaults.appearance = {
+    ...nextSettings.defaults.appearance,
+    experienceMode: "EASY",
+    navigationMode: "SIDEBAR",
+    theme: "SYSTEM",
+    reducedMotion: "AUTO",
+    backgroundMode: "ANIMATED",
+    backgroundPattern: "NONE",
+  };
+  nextSettings.defaults.cliWorkflow = {
+    ...nextSettings.defaults.cliWorkflow,
+    executionMode: "DOCKER",
+    gitMode: useGithub ? "remote" : "local",
+    containerMountGithubAuth: useGithub && nextSettings.defaults.cliWorkflow.containerMountGithubAuth,
+  };
+  nextSettings.defaults.git = {
+    ...nextSettings.defaults.git,
+    githubMode: useGithub ? "REMOTE" : "LOCAL",
+    autoCreatePr: useGithub && manageGithubPrWorkflow,
+  };
+  nextSettings.defaults.ciIntelligence = {
+    ...nextSettings.defaults.ciIntelligence,
+    enableLivePrMonitoring: useGithub && manageGithubPrWorkflow,
+    resolveAllCommentsBeforeMainMerge: useGithub && manageGithubPrWorkflow,
+    resolveMainMergeConflicts: useGithub && manageGithubPrWorkflow,
+    resolveMainMergeFailedChecks: useGithub && manageGithubPrWorkflow,
+    resolveAllCommentsBeforeFeatureMerge: useGithub && manageGithubPrWorkflow,
+    resolveMergeConflicts: useGithub && manageGithubPrWorkflow,
+    featurePrAutoMergeMode: useGithub && manageGithubPrWorkflow ? "CREATE_PR" : "OFF",
+    mainBranchAutoMergeMode: useGithub && manageGithubPrWorkflow ? "CREATE_PR" : "OFF",
+  };
+
+  return nextSettings;
 };
