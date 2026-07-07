@@ -105,7 +105,7 @@ The main Code UX server can also expose an authenticated MCP HTTP endpoint.
 
 That endpoint:
 
-- is configured through `MCP_HTTPS_*` env vars or `--mcp-https*` flags
+- is configured through `MCP_HTTP_*` env vars or `--mcp-http*` flags
 - exposes the same project-manager tool surface as stdio
 - no longer exposes a separate worker-control-plane runtime
 
@@ -114,7 +114,7 @@ That endpoint:
 The Settings > MCP panel explains both runtime connection modes in place:
 
 - Code UX exposes the built-in MCP server over stdio by default.
-- Authenticated Streamable HTTP for external MCP clients is enabled at startup with `MCP_HTTPS_*` environment variables or `--mcp-https*` flags.
+- Authenticated Streamable HTTP for external MCP clients is enabled at startup with `MCP_HTTP_*` environment variables or `--mcp-http*` flags.
 - Custom remote MCP servers are added from system scope by choosing `HTTP / SSE`, pasting the server URL, and optionally entering auth headers as a JSON object of header names to string values.
 - HTTP custom server previews use `{ type: "http", url, headers }`; stdio custom server previews use command, args, and env.
 - Custom server changes are injected into MCP-capable CLI containers on the next CLI run. Project scope can enable, disable, or override inherited system servers, but new custom servers are created at system scope.
