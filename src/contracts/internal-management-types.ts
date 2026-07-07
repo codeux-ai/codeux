@@ -1,3 +1,4 @@
+import type { ProviderId } from "./app-types.js";
 import type { CreateProjectInput } from "./project-management-types.js";
 
 export interface ManagementApproval {
@@ -128,6 +129,24 @@ export interface ManageSchedulerArgs {
   connectionId?: string | null;
   now?: string;
   approval?: ManagementApproval;
+}
+
+export interface SchedulerArgs {
+  action: "list" | "schedule_wakeup" | "schedule_task" | "cancel";
+  projectId?: string;
+  entryId?: string;
+  from?: string;
+  to?: string;
+  scheduledFor?: string;
+  delaySeconds?: number | string;
+  delayMinutes?: number | string;
+  title?: string;
+  timezone?: string;
+  bodyMarkdown?: string;
+  threadId?: string | null;
+  connectionId?: string | null;
+  taskId?: string;
+  provider?: ProviderId;
 }
 
 export interface ManageAgentsArgs {

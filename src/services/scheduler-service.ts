@@ -87,6 +87,10 @@ export class SchedulerService {
     return this.deps.schedulerRepository.createEntry(projectId, input);
   }
 
+  getEntry(entryId: string): SchedulerEntryRecord | null {
+    return this.deps.schedulerRepository.getEntry(entryId);
+  }
+
   getMemoryRemediationSchedule(projectId: string): MemoryRemediationScheduleResponse {
     const entry = this.findSettingsManagedMemoryRemediationEntry(projectId);
     return {
