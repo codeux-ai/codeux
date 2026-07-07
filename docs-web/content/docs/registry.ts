@@ -28,6 +28,7 @@ export type DocsSlug =
   | 'user-dashboard-browser-preview'
   | 'user-dashboard-stats'
   | 'user-dashboard-settings'
+  | 'user-dashboard-styleguides-and-tech-stacks'
   | 'developer-overview'
   | 'developer-mcp-tools'
   | 'developer-management-actions'
@@ -237,6 +238,13 @@ export const docsRegistry: Record<DocsSlug, DocsRegistryEntry> = {
     title: "Settings",
     description: "The Settings page (/config) is the unified configuration surface. It exposes every tunable in the engine, organised into a category rail and content panels.",
   },
+  'user-dashboard-styleguides-and-tech-stacks': {
+    id: 'user-dashboard-styleguides-and-tech-stacks',
+    path: '/docs/user-dashboard-styleguides-and-tech-stacks',
+    section: 'User Guide',
+    title: "Styleguides and Tech Stacks",
+    description: "Code UX uses guidance selections to tell workers what implementation stack and product style they should respect.",
+  },
   'developer-overview': {
     id: 'developer-overview',
     path: '/docs/developer-overview',
@@ -433,6 +441,7 @@ export const orderedDocs: DocsRegistryEntry[] = [
   docsRegistry['user-dashboard-browser-preview'],
   docsRegistry['user-dashboard-stats'],
   docsRegistry['user-dashboard-settings'],
+  docsRegistry['user-dashboard-styleguides-and-tech-stacks'],
   docsRegistry['developer-overview'],
   docsRegistry['developer-mcp-tools'],
   docsRegistry['developer-management-actions'],
