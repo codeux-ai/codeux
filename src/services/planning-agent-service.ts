@@ -695,6 +695,8 @@ export class PlanningAgentService {
         openCodePackage: providerSettings.openCodePackage,
         providerMountAuth: providerSettings.mountAuth,
         providerAuthPath: providerSettings.authPath,
+        providerConfigMode: providerSettings.providerConfigMode,
+        providerConfigPath: providerSettings.providerConfigPath,
         customBaseUrl: providerSettings.customBaseUrl,
         customModel: providerSettings.customModel,
         providerPrompt: args.rawPrompt,

@@ -827,6 +827,8 @@ export class VirtualWorkerService {
         openCodePackage: providerSettings.openCodePackage,
           providerMountAuth: providerSettings.mountAuth,
           providerAuthPath: providerSettings.authPath,
+          providerConfigMode: providerSettings.providerConfigMode,
+          providerConfigPath: providerSettings.providerConfigPath,
           customBaseUrl: providerSettings.customBaseUrl,
           customModel: providerSettings.customModel,
           githubToken: settings.git.githubToken,
@@ -1201,6 +1203,8 @@ export class VirtualWorkerService {
         openCodePackage: providerSettings.openCodePackage,
         providerMountAuth: providerSettings.mountAuth,
         providerAuthPath: providerSettings.authPath,
+        providerConfigMode: providerSettings.providerConfigMode,
+        providerConfigPath: providerSettings.providerConfigPath,
         customBaseUrl: providerSettings.customBaseUrl,
         customModel: providerSettings.customModel,
         githubToken: settings.git.githubToken,
@@ -1461,6 +1465,8 @@ export class VirtualWorkerService {
   openCodePackage?: string;
     providerMountAuth?: boolean;
     providerAuthPath?: string;
+    providerConfigMode?: import("../contracts/app-types.js").ProviderConfigMode;
+    providerConfigPath?: string;
     customBaseUrl?: string;
     customModel?: string;
     githubToken: string;
@@ -1509,6 +1515,8 @@ export class VirtualWorkerService {
         openCodePackage: args.openCodePackage,
       providerMountAuth: args.providerMountAuth,
       providerAuthPath: args.providerAuthPath,
+      providerConfigMode: args.providerConfigMode,
+      providerConfigPath: args.providerConfigPath,
       customBaseUrl: args.customBaseUrl,
       customModel: args.customModel,
       sessionId: args.sessionId,

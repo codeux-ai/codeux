@@ -102,6 +102,17 @@ const validateProviderSettings = (
   if (typeof value.authPath !== "string") {
     issues.push({ path: `${path}.authPath`, message: "Expected a string" });
   }
+  if (
+    value.providerConfigMode !== undefined
+    && value.providerConfigMode !== "none"
+    && value.providerConfigMode !== "copyHost"
+    && value.providerConfigMode !== "file"
+  ) {
+    issues.push({ path: `${path}.providerConfigMode`, message: "Expected one of: none, copyHost, file" });
+  }
+  if (value.providerConfigPath !== undefined && typeof value.providerConfigPath !== "string") {
+    issues.push({ path: `${path}.providerConfigPath`, message: "Expected a string" });
+  }
   if (value.lastLoginAt !== undefined && typeof value.lastLoginAt !== "number") {
     issues.push({ path: `${path}.lastLoginAt`, message: "Expected a number" });
   }

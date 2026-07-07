@@ -14,6 +14,7 @@ import type {
 } from "../../contracts/settings-scope-types.js";
 import {
   DEFAULT_PROVIDER_AUTH_PATHS,
+  DEFAULT_PROVIDER_CONFIG_FILE_PATHS,
   DEFAULT_PROVIDER_CONFIG_IDS,
   DEFAULT_PROVIDER_CONFIG_NAMES,
   DEFAULT_PROVIDER_SETTINGS,
@@ -63,6 +64,8 @@ export const buildDefaultIntegrationProviders = (
     apiKey: getHintApiKeyForProvider("jules", externalHints),
     mountAuth: false,
     authPath: DEFAULT_PROVIDER_AUTH_PATHS.jules,
+    providerConfigMode: "none",
+    providerConfigPath: "",
     authType: "apiKey",
   },
   [DEFAULT_PROVIDER_CONFIG_IDS.gemini]: {
@@ -71,6 +74,8 @@ export const buildDefaultIntegrationProviders = (
     apiKey: getHintApiKeyForProvider("gemini", externalHints),
     mountAuth: false,
     authPath: DEFAULT_PROVIDER_AUTH_PATHS.gemini,
+    providerConfigMode: "copyHost",
+    providerConfigPath: DEFAULT_PROVIDER_CONFIG_FILE_PATHS.gemini,
     authType: "apiKey",
   },
   [DEFAULT_PROVIDER_CONFIG_IDS.codex]: {
@@ -79,6 +84,8 @@ export const buildDefaultIntegrationProviders = (
     apiKey: getHintApiKeyForProvider("codex", externalHints),
     mountAuth: false,
     authPath: DEFAULT_PROVIDER_AUTH_PATHS.codex,
+    providerConfigMode: "copyHost",
+    providerConfigPath: DEFAULT_PROVIDER_CONFIG_FILE_PATHS.codex,
     authType: "apiKey",
   },
   [DEFAULT_PROVIDER_CONFIG_IDS["claude-code"]]: {
@@ -87,6 +94,8 @@ export const buildDefaultIntegrationProviders = (
     apiKey: getHintApiKeyForProvider("claude-code", externalHints),
     mountAuth: false,
     authPath: DEFAULT_PROVIDER_AUTH_PATHS["claude-code"],
+    providerConfigMode: "copyHost",
+    providerConfigPath: DEFAULT_PROVIDER_CONFIG_FILE_PATHS["claude-code"],
     authType: "apiKey",
   },
   [DEFAULT_PROVIDER_CONFIG_IDS["qwen-code"]]: {
@@ -95,6 +104,8 @@ export const buildDefaultIntegrationProviders = (
     apiKey: getHintApiKeyForProvider("qwen-code", externalHints),
     mountAuth: false,
     authPath: DEFAULT_PROVIDER_AUTH_PATHS["qwen-code"],
+    providerConfigMode: "copyHost",
+    providerConfigPath: DEFAULT_PROVIDER_CONFIG_FILE_PATHS["qwen-code"],
     authType: "apiKey",
     qwenAuthMode: "LOCAL_AUTH",
     qwenRegion: "international",
@@ -110,6 +121,8 @@ export const buildDefaultIntegrationProviders = (
     apiKey: getHintApiKeyForProvider("opencode", externalHints),
     mountAuth: false,
     authPath: DEFAULT_PROVIDER_AUTH_PATHS.opencode,
+    providerConfigMode: "copyHost",
+    providerConfigPath: DEFAULT_PROVIDER_CONFIG_FILE_PATHS.opencode,
     authType: "apiKey",
     openCodeAuthMode: "LOCAL_AUTH",
     openCodeProviderId: "ollama",
@@ -124,6 +137,8 @@ export const buildDefaultIntegrationProviders = (
     apiKey: getHintApiKeyForProvider("antigravity", externalHints),
     mountAuth: false,
     authPath: DEFAULT_PROVIDER_AUTH_PATHS.antigravity,
+    providerConfigMode: "copyHost",
+    providerConfigPath: DEFAULT_PROVIDER_CONFIG_FILE_PATHS.antigravity,
     authType: "apiKey",
   },
   [DEFAULT_PROVIDER_CONFIG_IDS["mockup-cli"]]: {
@@ -132,6 +147,8 @@ export const buildDefaultIntegrationProviders = (
     apiKey: "",
     mountAuth: false,
     authPath: DEFAULT_PROVIDER_AUTH_PATHS["mockup-cli"],
+    providerConfigMode: "none",
+    providerConfigPath: "",
     authType: "apiKey",
   },
 });
@@ -161,6 +178,39 @@ const normalizeProviderAuthPath = (providerId: ProviderId, value: unknown): stri
     return value.trim();
   }
   return DEFAULT_PROVIDER_AUTH_PATHS[providerId];
+};
+
+const supportsProviderConfigFile = (providerId: ProviderId): boolean => (
+  providerId !== "jules" && providerId !== "mockup-cli"
+);
+
+const normalizeProviderConfig = (
+  providerId: ProviderId,
+  modeValue: unknown,
+  pathValue: unknown,
+): Pick<SystemProviderCredentialSettings, "providerConfigMode" | "providerConfigPath"> => {
+  if (!supportsProviderConfigFile(providerId)) {
+    return { providerConfigMode: "none", providerConfigPath: "" };
+  }
+
+  const standardPath = DEFAULT_PROVIDER_CONFIG_FILE_PATHS[providerId];
+  const requestedMode = modeValue === "none" || modeValue === "copyHost" || modeValue === "file"
+    ? modeValue
+    : "copyHost";
+
+  if (requestedMode === "none") {
+    return { providerConfigMode: "none", providerConfigPath: "" };
+  }
+
+  if (requestedMode === "file") {
+    const customPath = typeof pathValue === "string" ? pathValue.trim() : "";
+    if (customPath) {
+      return { providerConfigMode: "file", providerConfigPath: customPath };
+    }
+    return { providerConfigMode: "copyHost", providerConfigPath: standardPath };
+  }
+
+  return { providerConfigMode: "copyHost", providerConfigPath: standardPath };
 };
 
 const normalizeQwenAuthMode = (value: unknown): SystemProviderCredentialSettings["qwenAuthMode"] => (
@@ -240,6 +290,7 @@ export const normalizeSystemIntegrationProviders = (
       authPath: authType === "dashboardAuth"
         ? `~/.code-ux/credentials/${providerConfigId}`
         : normalizeProviderAuthPath(providerId, rawValue.authPath),
+      ...normalizeProviderConfig(providerId, rawValue.providerConfigMode, rawValue.providerConfigPath),
       authType,
       ...(typeof rawValue.lastLoginAt === "number" ? { lastLoginAt: rawValue.lastLoginAt } : {}),
       ...(usesApiKeyAuth && typeof rawValue.customBaseUrl === "string" && rawValue.customBaseUrl.trim().length > 0
@@ -316,6 +367,8 @@ export const normalizeSystemIntegrationProviders = (
       apiKey: legacyApiKey,
       mountAuth: result[defaultId]?.mountAuth ?? false,
       authPath: result[defaultId]?.authPath || DEFAULT_PROVIDER_AUTH_PATHS[providerId],
+      providerConfigMode: result[defaultId]?.providerConfigMode || (supportsProviderConfigFile(providerId) ? "copyHost" : "none"),
+      providerConfigPath: result[defaultId]?.providerConfigPath || DEFAULT_PROVIDER_CONFIG_FILE_PATHS[providerId],
       authType: result[defaultId]?.authType || (result[defaultId]?.mountAuth ? "localAuth" : "apiKey"),
     };
   }
@@ -403,6 +456,10 @@ export const buildDashboardProviderSettings = (
             || false,
           authPath: integrationProviders[providerConfigId]?.authPath
             || DEFAULT_PROVIDER_AUTH_PATHS[providerId],
+          providerConfigMode: integrationProviders[providerConfigId]?.providerConfigMode
+            || (supportsProviderConfigFile(providerId) ? "copyHost" : "none"),
+          providerConfigPath: integrationProviders[providerConfigId]?.providerConfigPath
+            || DEFAULT_PROVIDER_CONFIG_FILE_PATHS[providerId],
           ...(integrationProviders[providerConfigId]?.customBaseUrl
             ? { customBaseUrl: integrationProviders[providerConfigId].customBaseUrl }
             : {}),

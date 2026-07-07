@@ -176,6 +176,39 @@ describe("sanitizeAiProvider", () => {
     expect(result.invocationRouting.dashboard_reply.provider).toBe("codex");
   });
 
+  it("preserves selectable Codex catalog models in provider and route settings", () => {
+    const result = sanitizeAiProvider({
+      aiProvider: {
+        provider: "codex",
+        providers: {
+          codex: {
+            provider: "codex",
+            enabled: true,
+            model: "gpt-5.6-sol",
+            weight: 20,
+            thinkingMode: "HIGH",
+          },
+        },
+        invocationRouting: {
+          task_coding: {
+            profile: "GLOBAL",
+            strategy: "MANUAL",
+            provider: "codex",
+            allowedProviders: ["codex"],
+            providers: {
+              codex: {
+                model: "gpt-5.6-terra",
+              },
+            },
+          },
+        },
+      },
+    } as any);
+
+    expect(result.providers.codex.model).toBe("gpt-5.6-sol");
+    expect(result.invocationRouting.task_coding.providers.codex?.model).toBe("gpt-5.6-terra");
+  });
+
   describe("normalizeSystemIntegrationProviders", () => {
     it("should preserve explicitly defined mountAuth boolean values", () => {
       const input = {
@@ -332,7 +365,79 @@ describe("sanitizeAiProvider", () => {
         mountAuth: false,
         authPath: "",
         authType: "apiKey",
+        providerConfigMode: "none",
+        providerConfigPath: "",
       }));
+    });
+
+    it("defaults missing CLI provider config fields to copyHost standard paths", () => {
+      const result = normalizeSystemIntegrationProviders({
+        providers: {
+          codex: {
+            provider: "codex",
+            name: "Codex Primary",
+          },
+        },
+      });
+
+      expect(result.codex.providerConfigMode).toBe("copyHost");
+      expect(result.codex.providerConfigPath).toBe("~/.codex/config.toml");
+    });
+
+    it("clears custom provider config paths when config mode is none", () => {
+      const result = normalizeSystemIntegrationProviders({
+        providers: {
+          gemini: {
+            provider: "gemini",
+            name: "Gemini Primary",
+            providerConfigMode: "none",
+            providerConfigPath: "/tmp/gemini-settings.json",
+          },
+        },
+      });
+
+      expect(result.gemini.providerConfigMode).toBe("none");
+      expect(result.gemini.providerConfigPath).toBe("");
+    });
+
+    it("requires a non-empty custom provider config path for file mode", () => {
+      const result = normalizeSystemIntegrationProviders({
+        providers: {
+          "qwen-code": {
+            provider: "qwen-code",
+            name: "Qwen Primary",
+            providerConfigMode: "file",
+            providerConfigPath: "  ",
+          },
+          "qwen-custom": {
+            provider: "qwen-code",
+            name: "Qwen Custom",
+            providerConfigMode: "file",
+            providerConfigPath: " ~/configs/qwen.json ",
+          },
+        },
+      });
+
+      expect(result["qwen-code"].providerConfigMode).toBe("copyHost");
+      expect(result["qwen-code"].providerConfigPath).toBe("~/.qwen/settings.json");
+      expect(result["qwen-custom"].providerConfigMode).toBe("file");
+      expect(result["qwen-custom"].providerConfigPath).toBe("~/configs/qwen.json");
+    });
+
+    it("ignores provider config file settings for non-CLI providers", () => {
+      const result = normalizeSystemIntegrationProviders({
+        providers: {
+          jules: {
+            provider: "jules",
+            name: "Jules Primary",
+            providerConfigMode: "file",
+            providerConfigPath: "/tmp/jules.json",
+          },
+        },
+      });
+
+      expect(result.jules.providerConfigMode).toBe("none");
+      expect(result.jules.providerConfigPath).toBe("");
     });
   });
 });

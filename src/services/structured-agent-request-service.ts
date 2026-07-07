@@ -1,5 +1,5 @@
 import { randomUUID } from "crypto";
-import type { AgentSelfReflectionLoopSettings, DashboardSettings, ProviderId, QwenModelProviderSettings, VirtualWorkerProvider } from "../contracts/app-types.js";
+import type { AgentSelfReflectionLoopSettings, DashboardSettings, ProviderConfigMode, ProviderId, QwenModelProviderSettings, VirtualWorkerProvider } from "../contracts/app-types.js";
 import type { ProviderInvocationPurpose } from "../contracts/execution-types.js";
 import type { AgentMcpAccessConfig } from "../contracts/agent-preset-types.js";
 import type { Logger } from "../shared/logging/logger.js";
@@ -34,6 +34,8 @@ export interface StructuredRequestArgs<T> {
   openCodePackage?: string;
   providerMountAuth?: boolean;
   providerAuthPath?: string;
+  providerConfigMode?: ProviderConfigMode;
+  providerConfigPath?: string;
   customBaseUrl?: string;
   customModel?: string;
   providerPrompt: string;
@@ -174,6 +176,8 @@ export class StructuredAgentRequestService {
         openCodePackage: args.openCodePackage,
       providerMountAuth: args.providerMountAuth,
       providerAuthPath: args.providerAuthPath,
+      providerConfigMode: args.providerConfigMode,
+      providerConfigPath: args.providerConfigPath,
       customBaseUrl: args.customBaseUrl,
       customModel: args.customModel,
       sessionId,

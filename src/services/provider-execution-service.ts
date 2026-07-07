@@ -1,5 +1,5 @@
 import type { CustomMcpServer, DashboardSettings } from "../contracts/app-types.js";
-import type { QwenModelProviderSettings } from "../contracts/app-types.js";
+import type { ProviderConfigMode, QwenModelProviderSettings } from "../contracts/app-types.js";
 import type { McpConnectionInfo } from "../contracts/mcp-connection-types.js";
 import type { AgentMcpAccessConfig } from "../contracts/agent-preset-types.js";
 import { resolveAgentMcpRuntime } from "./agent-mcp-access.js";
@@ -156,6 +156,8 @@ export interface ExecutionProviderRunArgs {
   openCodePackage?: string;
   providerMountAuth?: boolean;
   providerAuthPath?: string;
+  providerConfigMode?: ProviderConfigMode;
+  providerConfigPath?: string;
   customBaseUrl?: string;
   customModel?: string;
   sessionId: string;
@@ -366,6 +368,8 @@ export class ProviderExecutionService {
         openCodePackage: args.openCodePackage,
         providerMountAuth: args.providerMountAuth,
         providerAuthPath: args.providerAuthPath,
+        providerConfigMode: args.providerConfigMode,
+        providerConfigPath: args.providerConfigPath,
         customBaseUrl: args.customBaseUrl,
         customModel: args.customModel,
         sessionId: args.sessionId,

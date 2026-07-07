@@ -1,6 +1,6 @@
 import { createLogger, type Logger } from "../../../shared/logging/logger.js";
 import { ProviderTelemetryWatcher } from "./provider-telemetry-watcher.js";
-import { CliWorkflowSettings, ProviderId } from "../../../contracts/app-types.js";
+import { CliWorkflowSettings, ProviderId, type ProviderConfigMode } from "../../../contracts/app-types.js";
 import type { CustomMcpServer, QwenModelProviderSettings } from "../../../contracts/app-types.js";
 import { buildProviderMcpConfigArtifact, buildClaudeMcpServerEntry, buildCodexMcpServerTomlLines, buildGeminiMcpServerEntry, escapeTomlString } from "./mcp-config-format.js";
 import type { McpConnectionInfo } from "../../../contracts/mcp-connection-types.js";
@@ -78,6 +78,8 @@ export interface ProviderRunInput {
   openCodePackage?: string;
   providerMountAuth?: boolean;
   providerAuthPath?: string;
+  providerConfigMode?: ProviderConfigMode;
+  providerConfigPath?: string;
   /** Override the default API endpoint for providers that support it.
    *  Sets ANTHROPIC_BASE_URL (claude-code) or OPENAI_BASE_URL (codex). */
   customBaseUrl?: string;
@@ -215,6 +217,8 @@ export class ProviderRunner implements IProviderRunner {
     openCodePackage?: string;
     providerMountAuth?: boolean;
     providerAuthPath?: string;
+    providerConfigMode?: ProviderConfigMode;
+    providerConfigPath?: string;
     customBaseUrl?: string;
     customModel?: string;
     sessionId: string;
@@ -349,6 +353,8 @@ export class ProviderRunner implements IProviderRunner {
           providerLabel: provider, workflowSettings, repoPath, signal, onActivity: trackingOnActivity,
           providerMountAuth,
           providerAuthPath,
+          providerConfigMode: input.providerConfigMode,
+          providerConfigPath: input.providerConfigPath,
           mcpConnection: input.mcpConnection,
           customMcpServers: input.customMcpServers,
           persistentSkillStorageMounts: input.persistentSkillStorageMounts,
@@ -528,7 +534,15 @@ export class ProviderRunner implements IProviderRunner {
             sessionId,
             workflowSettings,
             repoPath,
-            { providerMountAuth, providerAuthPath, mcpConnection: input.mcpConnection, customMcpServers: input.customMcpServers, signal },
+            {
+              providerMountAuth,
+              providerAuthPath,
+              providerConfigMode: input.providerConfigMode,
+              providerConfigPath: input.providerConfigPath,
+              mcpConnection: input.mcpConnection,
+              customMcpServers: input.customMcpServers,
+              signal,
+            },
           );
         }
       }
@@ -699,6 +713,8 @@ export class ProviderRunner implements IProviderRunner {
     opts: {
       providerMountAuth?: boolean;
       providerAuthPath?: string;
+      providerConfigMode?: ProviderConfigMode;
+      providerConfigPath?: string;
       mcpConnection?: McpConnectionInfo | null;
       customMcpServers?: CustomMcpServer[];
       signal?: AbortSignal;
@@ -720,6 +736,8 @@ export class ProviderRunner implements IProviderRunner {
           onActivity: () => undefined,
           providerMountAuth: opts.providerMountAuth,
           providerAuthPath: opts.providerAuthPath,
+          providerConfigMode: opts.providerConfigMode,
+          providerConfigPath: opts.providerConfigPath,
           mcpConnection: opts.mcpConnection,
           customMcpServers: opts.customMcpServers,
         });

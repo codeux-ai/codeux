@@ -9,6 +9,7 @@ import type {
 } from "../../../types.js";
 import { sanitizeSystemProviderConfig } from "../provider-runtime-preview.js";
 import {
+  DEFAULT_PROVIDER_CONFIG_FILE_PATHS,
   DEFAULT_PROVIDER_WEIGHT,
 } from "../../../../../src/repositories/settings-defaults.js";
 
@@ -44,6 +45,16 @@ export const getProviderDefaultAuthPath = (providerId: ProviderId): string => {
   }
 };
 
+const getProviderDefaultConfigMode = (providerId: ProviderId): SystemProviderCredentialSettings["providerConfigMode"] => (
+  providerId === "jules" || providerId === "mockup-cli" ? "none" : "copyHost"
+);
+
+const getProviderDefaultConfigPath = (providerId: ProviderId): string => (
+  providerId === "jules" || providerId === "mockup-cli"
+    ? ""
+    : DEFAULT_PROVIDER_CONFIG_FILE_PATHS[providerId]
+);
+
 export const createProjectProviderDraft = (
   providerId: ProviderId,
   name: string,
@@ -74,6 +85,8 @@ export const createSystemProviderDraft = (
     authType: "apiKey",
     mountAuth: false,
     authPath: getProviderDefaultAuthPath(providerId),
+    providerConfigMode: getProviderDefaultConfigMode(providerId),
+    providerConfigPath: getProviderDefaultConfigPath(providerId),
   };
 
   if (providerId === "qwen-code") {

@@ -4,6 +4,7 @@ import * as os from "os";
 import * as path from "path";
 import { DatabaseSync } from "node:sqlite";
 import { SettingsRepository } from "../../../src/repositories/settings-repository.js";
+import { CODEX_MODELS, DEFAULT_VIRTUAL_WORKER_MODELS } from "../../../src/repositories/settings-defaults.js";
 
 const tempDirs: string[] = [];
 const openRepos: SettingsRepository[] = [];
@@ -47,6 +48,13 @@ describe("SettingsRepository", () => {
     expect(system.defaults.automationLevel).toBe("SEMI_AUTO");
     expect(system.defaults.aiProvider.provider).toBe("jules");
     expect(system.defaults.aiProvider.providers.codex.model).toBe("gpt-5.5");
+    expect(DEFAULT_VIRTUAL_WORKER_MODELS.codex).toBe("gpt-5.5");
+    expect(CODEX_MODELS.slice(0, 4)).toEqual([
+      "gpt-5.5",
+      "gpt-5.6-sol",
+      "gpt-5.6-terra",
+      "gpt-5.6-luna",
+    ]);
     expect(system.defaults.git.defaultBranch).toBe("main");
     expect(system.defaults.cliWorkflow.containerMountGithubAuth).toBe(false);
     expect(system.defaults.cliWorkflow.containerMountGeminiAuth).toBe(false);

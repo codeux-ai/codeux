@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "preact/hooks";
 import { Check, Terminal, Trash2, X } from "lucide-preact";
 import { PillChoiceGroup, ProviderLogo, Row, SecretInput, SelectInput, TextInput, Toggle } from "./SettingsFormFields.js";
 import { getProviderDefaultAuthPath, getProviderTypeLabel } from "../../lib/settings-view-models.js";
+import { LocalFilePickerField } from "./LocalFilePickerField.js";
 import { TerminalLoginModal } from "./TerminalLoginModal.js";
 import { ActionFeedbackRegion } from "../ui/ActionFeedbackRegion.js";
 import { ModelCombobox } from "../ui/ModelCombobox.js";
@@ -15,10 +16,33 @@ import {
   qwenAuthModeOptions,
   qwenProtocolOptions,
   qwenRegionOptions,
+  getProviderStandardConfigPath,
+  normalizeProviderConfigSelection,
   splitOpenCodeModel,
   type SystemProviderConfig,
+  type ProviderConfigMode,
   sanitizeSystemProviderConfig,
+  supportsProviderConfigFile,
 } from "../../lib/provider-runtime-preview.js";
+
+const getProviderConfigHelperText = (providerType: SystemProviderConfig["provider"]): string => {
+  switch (providerType) {
+    case "codex":
+      return "Select the Codex config.toml file to copy into the provider runtime.";
+    case "gemini":
+      return "Select the Gemini settings.json file to copy into the provider runtime.";
+    case "claude-code":
+      return "Select the Claude Code JSON config file to copy into the provider runtime.";
+    case "qwen-code":
+      return "Select the Qwen Code settings.json file to copy into the provider runtime.";
+    case "opencode":
+      return "Select the OpenCode opencode.json file to copy into the provider runtime.";
+    case "antigravity":
+      return "Select the Antigravity MCP config file to copy into the provider runtime.";
+    default:
+      return "Select the provider config file to copy into the provider runtime.";
+  }
+};
 
 /**
  * Renders the full credential/auth configuration for a single named provider instance.
@@ -52,6 +76,14 @@ export const ProviderInstanceCard: FunctionComponent<{
   const customEndpointDisabledReasonId = `${headingId}-custom-endpoint-disabled`;
   const enabledValue = enabled ?? true;
   const customEndpointDisabled = currentAuthType !== "apiKey";
+  const providerConfigSupported = supportsProviderConfigFile(provider.provider);
+  const standardProviderConfigPath = getProviderStandardConfigPath(provider.provider);
+  const normalizedProviderConfig = normalizeProviderConfigSelection(
+    provider.provider,
+    provider.providerConfigMode,
+    provider.providerConfigPath,
+  );
+  const currentProviderConfigMode = normalizedProviderConfig.providerConfigMode;
 
   useEffect(() => {
     setRemoveArmed(false);
@@ -106,6 +138,22 @@ export const ProviderInstanceCard: FunctionComponent<{
       }
     }
     applySanitizedUpdate(updates, `${providerInstanceLabel} authentication mode changed locally. Save changes to persist it.`);
+  };
+
+  const updateProviderConfigMode = (value: string): void => {
+    const providerConfigMode = value as ProviderConfigMode;
+    const providerConfigPath = providerConfigMode === "file"
+      ? (provider.providerConfigPath?.trim() || standardProviderConfigPath)
+      : undefined;
+    const updates = normalizeProviderConfigSelection(provider.provider, providerConfigMode, providerConfigPath);
+    applySanitizedUpdate(updates, `${providerInstanceLabel} provider config mode changed locally. Save changes to persist it.`);
+  };
+
+  const updateProviderConfigPath = (value: string): void => {
+    applySanitizedUpdate({
+      providerConfigMode: "file",
+      providerConfigPath: value,
+    }, `${providerInstanceLabel} provider config file changed locally. Save changes to persist it.`);
   };
 
   const armRemove = (): void => {
@@ -302,6 +350,43 @@ export const ProviderInstanceCard: FunctionComponent<{
             ]}
           />
         </Row>
+      ) : null}
+
+      {providerConfigSupported ? (
+        <>
+          <Row label="Provider Config" description="Choose whether Docker should copy a provider config file separately from API keys and auth state.">
+            <PillChoiceGroup
+              aria-label={`${providerInstanceLabel} provider config mode`}
+              value={currentProviderConfigMode}
+              onChange={updateProviderConfigMode}
+              options={[
+                { value: "none", label: "None", hint: "No config file" },
+                { value: "copyHost", label: "Copy Host", hint: "Use standard path" },
+                { value: "file", label: "File", hint: "Pick a file" },
+              ]}
+            />
+          </Row>
+
+          {currentProviderConfigMode === "copyHost" ? (
+            <Row label="Host config path" description="Read-only standard config file path copied from your host when it exists.">
+              <div className="max-w-full overflow-x-auto rounded-lg border border-black/[0.06] bg-black/[0.02] px-3 py-2 text-[11px] font-mono text-slate-600 dark:text-slate-300">
+                {standardProviderConfigPath}
+              </div>
+            </Row>
+          ) : null}
+
+          {currentProviderConfigMode === "file" ? (
+            <Row label="Config file" description="Select an explicit local provider config file.">
+              <LocalFilePickerField
+                value={normalizedProviderConfig.providerConfigPath}
+                onChange={updateProviderConfigPath}
+                label={`${providerInstanceLabel} provider config file`}
+                helperText={getProviderConfigHelperText(provider.provider)}
+                placeholder={standardProviderConfigPath}
+              />
+            </Row>
+          ) : null}
+        </>
       ) : null}
 
       {/* API Key Panel */}

@@ -154,4 +154,39 @@ describe("dashboard settings updater helpers", () => {
     expect(apikey.aiProvider.providers.codex.authPath).toBe("");
     expect(apikey.aiProvider.providers.codex.apiKey).toBe("valid-key");
   });
+
+  it("updates provider config fields without mutating authentication fields", () => {
+    const settings = cloneDefaultSettings();
+    const localAuth = updateProviderConfig(settings, "codex", {
+      authType: "localAuth",
+      mountAuth: true,
+      authPath: "~/.codex",
+    });
+    const next = updateProviderConfig(localAuth, "codex", {
+      providerConfigMode: "file",
+      providerConfigPath: "~/configs/codex.toml",
+    });
+
+    expect(next.aiProvider.providers.codex).toMatchObject({
+      authType: "localAuth",
+      mountAuth: true,
+      authPath: "~/.codex",
+      apiKey: "",
+      providerConfigMode: "file",
+      providerConfigPath: "~/configs/codex.toml",
+    });
+    expect(localAuth.aiProvider.providers.codex.providerConfigMode).toBe("copyHost");
+  });
+
+  it("normalizes invalid provider config file mode to copy host", () => {
+    const settings = cloneDefaultSettings();
+
+    const next = updateProviderConfig(settings, "codex", {
+      providerConfigMode: "file",
+      providerConfigPath: " ",
+    });
+
+    expect(next.aiProvider.providers.codex.providerConfigMode).toBe("copyHost");
+    expect(next.aiProvider.providers.codex.providerConfigPath).toBe("~/.codex/config.toml");
+  });
 });

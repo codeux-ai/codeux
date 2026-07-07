@@ -200,6 +200,8 @@ export class WorkerInboxReplyService {
         openCodePackage: providerSettings.openCodePackage,
         providerMountAuth: providerSettings.mountAuth,
         providerAuthPath: providerSettings.authPath,
+        providerConfigMode: providerSettings.providerConfigMode,
+        providerConfigPath: providerSettings.providerConfigPath,
         customBaseUrl: providerSettings.customBaseUrl,
         customModel: providerSettings.customModel,
         githubToken: this.deps.getGithubToken(),
@@ -391,6 +393,8 @@ export class WorkerInboxReplyService {
         openCodePackage: providerSettings.openCodePackage,
         providerMountAuth: providerSettings.mountAuth,
         providerAuthPath: providerSettings.authPath,
+        providerConfigMode: providerSettings.providerConfigMode,
+        providerConfigPath: providerSettings.providerConfigPath,
         customBaseUrl: providerSettings.customBaseUrl,
         customModel: providerSettings.customModel,
         githubToken: this.deps.getGithubToken(),
@@ -595,6 +599,8 @@ export class WorkerInboxReplyService {
   openCodePackage?: string;
     providerMountAuth?: boolean;
     providerAuthPath?: string;
+    providerConfigMode?: import("../contracts/app-types.js").ProviderConfigMode;
+    providerConfigPath?: string;
     customBaseUrl?: string;
     customModel?: string;
     githubToken?: string;
@@ -648,6 +654,8 @@ export class WorkerInboxReplyService {
         openCodePackage: input.openCodePackage,
       providerMountAuth: input.providerMountAuth,
       providerAuthPath: input.providerAuthPath,
+      providerConfigMode: input.providerConfigMode,
+      providerConfigPath: input.providerConfigPath,
       customBaseUrl: input.customBaseUrl,
       customModel: input.customModel,
       sessionId: "worker-reply-" + randomUUID(),
