@@ -1,0 +1,31 @@
+# Node Flow Foundation
+
+Node flows are project-scoped, repeatable workflow graphs. This backend foundation adds typed contracts, validation, SQLite persistence, agent-skill attachment records, and dashboard HTTP routes. It does not execute nodes.
+
+## Backend Surface
+
+- Contracts live in `src/contracts/node-flow-types.ts`.
+- Validation lives in `src/domain/node-flows/node-flow-validation.ts`.
+- Persistence lives in `src/repositories/node-flow-repository.ts`.
+- Service behavior lives in `src/services/node-flow-service.ts`.
+- Dashboard routes live in `src/server/node-flow-routes.ts`.
+
+## Validation
+
+Graphs are normalized before persistence. Validation checks unique node ids, valid edge endpoints, acyclic execution order, required widget metadata, and JSON-safe default values. Widget fields support `text`, `textarea`, `number`, `boolean`, `select`, `json`, `secretRef`, and `keyValue`.
+
+## Persistence
+
+The app database stores:
+
+- `node_flows`
+- `node_flow_versions`
+- `node_flow_agent_skills`
+- `node_flow_runs`
+- `node_flow_node_runs`
+
+Graphs, widget schemas, run inputs, run outputs, and trigger payloads are stored as JSON text. Flow and attachment mutations publish project structure refreshes for realtime dashboard clients.
+
+## HTTP Routes
+
+The dashboard exposes project-scoped CRUD, validation, agent attachment, and run-read endpoints under `/api/projects/:projectId/node-flows`, `/api/node-flows/:flowId`, and `/api/node-flow-runs/:runId`.

@@ -26,6 +26,7 @@ export interface DashboardDependencies {
   chatProviderRepository: CoreDependencies["chatProviderRepository"];
   chatProviderIngressService: ChatProviderIngressService;
   chatProviderOutboundService: ChatProviderOutboundService;
+  nodeFlowService: CoreDependencies["nodeFlowService"];
   activityCacheService: ActivityCacheService;
   taskRerunService: TaskRerunService;
   executionControlService: ExecutionControlService;
@@ -473,6 +474,7 @@ export function createDashboardDependencies(
     chatThreadRuntimeService,
     chatProviderIngressService,
     chatProviderOutboundService,
+    nodeFlowService: coreDeps.nodeFlowService,
     activityCacheService,
     taskRerunService,
     executionControlService,

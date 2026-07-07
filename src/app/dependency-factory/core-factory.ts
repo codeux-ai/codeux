@@ -36,6 +36,7 @@ import { DashboardRealtimeService } from "../../services/dashboard-realtime-serv
 import { MemoryRepository } from "../../repositories/memory-repository.js";
 import { SchedulerRepository } from "../../repositories/scheduler-repository.js";
 import { SkillRepository } from "../../repositories/skill-repository.js";
+import { NodeFlowRepository } from "../../repositories/node-flow-repository.js";
 import { EmbeddingService } from "../../services/embedding-service.js";
 import { EmbeddingModelManager } from "../../services/embedding-model-manager.js";
 import { MemoryService } from "../../services/memory-service.js";
@@ -44,6 +45,7 @@ import { SkillService } from "../../services/skill-service.js";
 import { KnowledgeRepository } from "../../repositories/knowledge-repository.js";
 import { KnowledgeIngestionService } from "../../services/knowledge-ingestion-service.js";
 import { KnowledgeService } from "../../services/knowledge-service.js";
+import { NodeFlowService } from "../../services/node-flow-service.js";
 import { ProviderConcurrencyService } from "../../services/provider-concurrency-service.js";
 import { DashboardSettings, ExternalSettingsHints } from "../../contracts/app-types.js";
 import { loadExternalSettingsHints } from "../../config/external-settings.js";
@@ -103,6 +105,8 @@ export interface CoreDependencies {
   memoryRepository: MemoryRepository;
   schedulerRepository: SchedulerRepository;
   skillRepository: SkillRepository;
+  nodeFlowRepository: NodeFlowRepository;
+  nodeFlowService: NodeFlowService;
   embeddingService: EmbeddingService;
   embeddingModelManager: EmbeddingModelManager;
   memoryService: MemoryService;
@@ -266,6 +270,8 @@ export function createCoreDependencies(
   const memoryRepository = new MemoryRepository(appDbStorage);
   const schedulerRepository = new SchedulerRepository(appDbStorage, dashboardRealtimeService);
   const skillRepository = new SkillRepository(appDbStorage);
+  const nodeFlowRepository = new NodeFlowRepository(appDbStorage, dashboardRealtimeService);
+  const nodeFlowService = new NodeFlowService(nodeFlowRepository);
   const embeddingService = new EmbeddingService();
   const embeddingModelManager = new EmbeddingModelManager(
     embeddingService,
@@ -351,6 +357,8 @@ export function createCoreDependencies(
     memoryRepository,
     schedulerRepository,
     skillRepository,
+    nodeFlowRepository,
+    nodeFlowService,
     embeddingService,
     embeddingModelManager,
     memoryService,
