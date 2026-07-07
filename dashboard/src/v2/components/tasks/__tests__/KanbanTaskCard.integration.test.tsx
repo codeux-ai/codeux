@@ -195,12 +195,23 @@ describe("KanbanTaskCard Integration", () => {
 
     fireEvent.focus(badge);
     const overlay = await findByRole("tooltip");
-    expect(within(overlay).getByText("Implementation")).toBeInTheDocument();
-    expect(within(overlay).getByText("4.5/5")).toBeInTheDocument();
-    expect(within(overlay).getByText("Covered edge cases.")).toBeInTheDocument();
-    expect(within(overlay).getByText("Scope control")).toBeInTheDocument();
-    expect(within(overlay).getByText("4/5")).toBeInTheDocument();
-    expect(within(overlay).getByText("Stayed focused.")).toBeInTheDocument();
+    const overlayQueries = within(overlay);
+    expect(overlayQueries.getByText("Self-reflection rating")).toBeInTheDocument();
+    expect(overlayQueries.getAllByText("4.5/5")).toHaveLength(2);
+
+    const implementationRow = overlayQueries
+      .getByText("Implementation")
+      .closest('[data-self-reflection-section="true"]');
+    expect(implementationRow).not.toBeNull();
+    expect(within(implementationRow as HTMLElement).getByText("4.5/5")).toBeInTheDocument();
+    expect(within(implementationRow as HTMLElement).getByText("Covered edge cases.")).toBeInTheDocument();
+
+    const scopeControlRow = overlayQueries
+      .getByText("Scope control")
+      .closest('[data-self-reflection-section="true"]');
+    expect(scopeControlRow).not.toBeNull();
+    expect(within(scopeControlRow as HTMLElement).getByText("4/5")).toBeInTheDocument();
+    expect(within(scopeControlRow as HTMLElement).getByText("Stayed focused.")).toBeInTheDocument();
   });
 
   it("does not render a self-reflection placeholder when no rating exists", () => {
