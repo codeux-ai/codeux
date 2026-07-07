@@ -77,14 +77,32 @@ describe("Electron dashboard network policy", () => {
     expect(isSafeExternalUrl("data:text/html,hello")).toBe(false);
   });
 
-  it("denies Electron permission requests by default for dashboard and preview pages", () => {
+  it("allows only microphone capture from the trusted dashboard origin", () => {
     const origin = "http://127.0.0.1:4444";
 
-    for (const permission of ["camera", "microphone", "geolocation", "notifications", "media"]) {
+    expect(shouldAllowPermissionRequest("http://127.0.0.1:4444/", origin, "microphone")).toBe(true);
+    expect(shouldAllowPermissionRequest("http://localhost:4444/", origin, "microphone")).toBe(true);
+    expect(shouldAllowPermissionRequest("http://127.0.0.1:4444/", origin, "media", {
+      mediaTypes: ["audio"],
+    })).toBe(true);
+
+    for (const permission of ["camera", "geolocation", "notifications", "fullscreen"]) {
       expect(shouldAllowPermissionRequest("http://127.0.0.1:4444/", origin, permission)).toBe(false);
-      expect(shouldAllowPermissionRequest("http://preview-session.localhost:4444/", origin, permission)).toBe(false);
     }
-    expect(shouldAllowPermissionRequest("https://example.test/", origin, "notifications")).toBe(false);
+    expect(shouldAllowPermissionRequest("http://127.0.0.1:4444/", origin, "media")).toBe(false);
+    expect(shouldAllowPermissionRequest("http://127.0.0.1:4444/", origin, "media", {
+      mediaTypes: ["video"],
+    })).toBe(false);
+    expect(shouldAllowPermissionRequest("http://127.0.0.1:4444/", origin, "media", {
+      mediaTypes: ["audio", "video"],
+    })).toBe(false);
+    expect(shouldAllowPermissionRequest("http://preview-session.localhost:4444/", origin, "microphone")).toBe(false);
+    expect(shouldAllowPermissionRequest("http://preview-session.localhost:4444/", origin, "media", {
+      mediaTypes: ["audio"],
+    })).toBe(false);
+    expect(shouldAllowPermissionRequest("https://example.test/", origin, "microphone")).toBe(false);
+    expect(shouldAllowPermissionRequest("http://127.0.0.1:4445/", origin, "microphone")).toBe(false);
+    expect(shouldAllowPermissionRequest("not a url", origin, "microphone")).toBe(false);
   });
 
   it("normalizes valid IPC zoom factors and rejects invalid zoom input", () => {

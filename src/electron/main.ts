@@ -111,8 +111,10 @@ async function configureDashboardNetworkSession(): Promise<void> {
   });
 
   desktopSession.setPermissionRequestHandler((webContents, permission, callback, details) => {
-    const requestingUrl = details.requestingUrl || webContents.getURL();
-    callback(shouldAllowPermissionRequest(requestingUrl, dashboardOrigin, permission));
+    const permissionDetails = details as { mediaTypes?: readonly string[]; securityOrigin?: string };
+    const requestingUrl = permissionDetails.securityOrigin || details.requestingUrl || webContents.getURL();
+    const mediaTypes = permissionDetails.mediaTypes;
+    callback(shouldAllowPermissionRequest(requestingUrl, dashboardOrigin, permission, { mediaTypes }));
   });
 
   desktopSession.setPermissionCheckHandler((_webContents, permission, requestingOrigin) => {
