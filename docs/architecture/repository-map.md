@@ -64,7 +64,7 @@ backup files appear there.
   - `project-runtime/run-event-writes.ts`
   - Focused write module for legacy runtime status-sync task runs and task-run events, including candidate run matching, status-sync event signatures, denormalized `task_run_events.project_id`, and source event key deduplication.
   - `chat-provider-repository.ts`
-  - External chat provider connections, channel bindings, inbound message idempotency, and outbound delivery state.
+  - External chat connector connections, channel bindings, inbound message idempotency, and outbound delivery state.
   - `settings-repository.ts`
   - `settings-defaults.ts`
   - `settings-sanitizer.ts`

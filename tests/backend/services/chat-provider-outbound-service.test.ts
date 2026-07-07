@@ -122,17 +122,17 @@ describe("ChatProviderOutboundService", () => {
     expect(JSON.stringify(delivery?.payload)).not.toContain("response-secret-token");
   });
 
-  it("uses OpenClaw bridge URLs without provider SDK dependencies", async () => {
+  it("uses Managed bridge URLs without provider SDK dependencies", async () => {
     const context = await createContext();
     const bridge = await startJsonBridge((_req, res) => {
       res.writeHead(200, { "content-type": "application/json" });
-      res.end(JSON.stringify({ messageId: "telegram-openclaw-1" }));
+      res.end(JSON.stringify({ messageId: "telegram-managed_bridge-1" }));
     });
     const fixture = await createOutboundFixture(context, {
-      bridgeMode: "openclaw",
+      bridgeMode: "managed_bridge",
       providerKind: "telegram",
-      setup: { openclawBridgeUrl: bridge.url },
-      secrets: { openclawApiKey: "openclaw-secret" },
+      setup: { bridgeUrl: bridge.url },
+      secrets: { bridgeApiKey: "managed_bridge-secret" },
     });
     const service = new ChatProviderOutboundService({ chatProviderRepository: context.providerRepository });
 
@@ -140,7 +140,7 @@ describe("ChatProviderOutboundService", () => {
 
     expect(delivery).toMatchObject({
       status: "delivered",
-      externalMessageId: "telegram-openclaw-1",
+      externalMessageId: "telegram-managed_bridge-1",
     });
   });
 
@@ -289,7 +289,7 @@ async function createContext(): Promise<{
 async function createOutboundFixture(
   context: Awaited<ReturnType<typeof createContext>>,
   options: {
-    bridgeMode: "openclaw" | "webhook" | "native_bridge";
+    bridgeMode: "managed_bridge" | "webhook" | "native_bridge";
     providerKind: "telegram" | "discord" | "imessage";
     setup: Record<string, unknown>;
     secrets: Record<string, unknown>;

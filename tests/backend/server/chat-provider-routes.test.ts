@@ -54,9 +54,9 @@ describe("chat provider dashboard routes", () => {
     ]));
     const slack = body.providers.find((provider: any) => provider.kind === "slack");
     expect(slack.bridgeModes[0].setupHints).toMatchObject({
-      integration: "openclaw_plugin",
+      integration: "managed_plugin",
       requiredSetupFields: ["pluginName"],
-      requiredSecretFields: ["openclawApiKey"],
+      requiredSecretFields: ["bridgeApiKey"],
     });
   });
 
@@ -69,9 +69,9 @@ describe("chat provider dashboard routes", () => {
       body: JSON.stringify({
         providerKind: "slack",
         displayName: "Operations Slack",
-        bridgeMode: "openclaw",
+        bridgeMode: "managed_bridge",
         setup: { pluginName: "slack" },
-        secrets: { openclawApiKey: "raw-secret-token" },
+        secrets: { bridgeApiKey: "raw-secret-token" },
       }),
     });
 
@@ -81,17 +81,17 @@ describe("chat provider dashboard routes", () => {
     expect(created).toMatchObject({
       providerKind: "slack",
       displayName: "Operations Slack",
-      bridgeMode: "openclaw",
+      bridgeMode: "managed_bridge",
       ingressUrl: `${context.baseUrl}/api/chat-providers/ingress/${created.id}`,
       credentials: [
         expect.objectContaining({
-          key: "openclawApiKey",
+          key: "bridgeApiKey",
           configured: true,
           redactedValue: "********",
         }),
       ],
       setupHints: expect.objectContaining({
-        requiredSecretFields: ["openclawApiKey"],
+        requiredSecretFields: ["bridgeApiKey"],
       }),
     });
 
@@ -111,7 +111,7 @@ describe("chat provider dashboard routes", () => {
       body: JSON.stringify({
         displayName: "Support Slack",
         enabled: false,
-        secrets: { openclawApiKey: "new-raw-secret" },
+        secrets: { bridgeApiKey: "new-raw-secret" },
       }),
     });
     expect(updateResponse.status).toBe(200);
@@ -141,21 +141,21 @@ describe("chat provider dashboard routes", () => {
     await expectValidationFailure(context, {
       providerKind: "discord",
       displayName: "Bad bridge",
-      bridgeMode: "openclaw",
+      bridgeMode: "managed_bridge",
     }, "unsupported_bridge_mode");
 
     await expectValidationFailure(context, {
       providerKind: "slack",
       displayName: "Bad setup",
-      bridgeMode: "openclaw",
+      bridgeMode: "managed_bridge",
       setup: { unsupported: "value" },
     }, "unsupported_setup_field");
 
     await expectValidationFailure(context, {
       providerKind: "slack",
       displayName: "Bad secret",
-      bridgeMode: "openclaw",
-      secrets: { openclawApiKey: 123 },
+      bridgeMode: "managed_bridge",
+      secrets: { bridgeApiKey: 123 },
     }, "invalid_secret");
   });
 
@@ -164,7 +164,7 @@ describe("chat provider dashboard routes", () => {
     const connection = context.chatProviderRepository.createConnection({
       providerKind: "slack",
       displayName: "Team Slack",
-      bridgeMode: "openclaw",
+      bridgeMode: "managed_bridge",
       setup: { pluginName: "slack" },
     });
     const projectA = createProject(context, "project-a");
@@ -231,7 +231,7 @@ describe("chat provider dashboard routes", () => {
     const connection = context.chatProviderRepository.createConnection({
       providerKind: "slack",
       displayName: "Team Slack",
-      bridgeMode: "openclaw",
+      bridgeMode: "managed_bridge",
     });
 
     const missingProject = await createBinding(context, {
@@ -276,7 +276,7 @@ describe("chat provider dashboard routes", () => {
     const connection = context.chatProviderRepository.createConnection({
       providerKind: "slack",
       displayName: "Delivery Slack",
-      bridgeMode: "openclaw",
+      bridgeMode: "managed_bridge",
     });
     const binding = context.chatProviderRepository.createChannelBinding({
       providerConnectionId: connection.id,

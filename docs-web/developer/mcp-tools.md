@@ -2,7 +2,7 @@
 
 Code UX is also an MCP server. When connected, it advertises a set of **management tools** that an
 MCP client (or another agent) can call to drive projects, sprints, tasks, agents, memory, persistent
-skills, settings, previews, chat providers, and telemetry. This page is the exact contract: the tool list, each
+skills, settings, previews, chat connectors, and telemetry. This page is the exact contract: the tool list, each
 tool's `action` enum, input shape, approval rules, and the error model.
 
 > **Server identity:** the server identifies as `code-ux`, with the version matching the installed
@@ -139,8 +139,8 @@ channel bindings, and outbound delivery inspection. It does not process inbound 
 outbound sends; those are runtime services behind authenticated ingress and delivery adapters.
 
 Supported provider kinds are `whatsapp`, `imessage`, `telegram`, `slack`, `microsoft-teams`, and
-`discord`. Supported bridge modes are `openclaw`, `webhook`, and `native_bridge`. Code UX does not
-call those providers' official APIs directly; it talks to the configured OpenClaw bridge, webhook
+`discord`. Supported bridge modes are `managed_bridge`, `webhook`, and `native_bridge`. Code UX does not
+call those providers' official APIs directly; it talks to the configured managed bridge, webhook
 gateway, or native bridge command.
 
 Common actions:
