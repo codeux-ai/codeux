@@ -10,7 +10,6 @@ import {
 import type { IWorkspaceManager } from "./workspace-manager.js";
 
 const TEMP_EXPORT_PATHSPEC = ":(exclude).code-ux-export-*";
-const MAX_INTENT_TO_ADD_PATHS_PER_BATCH = 250;
 
 export interface AppliedWorkspacePatchResult {
   hasChanges: boolean;
@@ -27,12 +26,7 @@ export interface GitCommitIdentity {
   email: string;
 }
 
-function parseNullDelimitedPaths(output: string): string[] {
-  if (!output) {
-    return [];
-  }
-  return output.split("\0").filter((entry) => entry.length > 0);
-}
+const shellQuote = (value: string): string => `'${value.replace(/'/g, `'\\''`)}'`;
 
 const buildCommitIdentityEnv = (
   identity: GitCommitIdentity | undefined,
@@ -74,54 +68,31 @@ export class WorkspaceArtifactService {
       ":(exclude,glob)**/logs/openai/**",
       ":(exclude,glob)logs/openai/**",
     ];
-    const diffArgs = ["diff", "--binary", baseRef, "--", ".", ...excludePathspecs];
-
     const tempIndexPath = `.code-ux-export-${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}.index`;
+    const tempPathListPath = `${tempIndexPath}.paths`;
     const tempIndexEnv = {
       ...process.env,
       GIT_INDEX_FILE: tempIndexPath,
     };
 
-    try {
-      await this.workspaceManager.runWorkspaceCommand(
-        workspaceRef,
-        "git",
-        ["read-tree", "HEAD"],
-        { env: tempIndexEnv },
-      );
-      const untrackedResult = await this.workspaceManager.runWorkspaceCommand(
-        workspaceRef,
-        "git",
-        ["ls-files", "--others", "--exclude-standard", "-z", "--", ".", ...excludePathspecs],
-        { env: tempIndexEnv, trimOutput: false },
-      );
-      const untrackedPaths = parseNullDelimitedPaths(untrackedResult.stdout);
-      for (let index = 0; index < untrackedPaths.length; index += MAX_INTENT_TO_ADD_PATHS_PER_BATCH) {
-        const batch = untrackedPaths.slice(index, index + MAX_INTENT_TO_ADD_PATHS_PER_BATCH);
-        if (batch.length === 0) {
-          continue;
-        }
-        await this.workspaceManager.runWorkspaceCommand(
-          workspaceRef,
-          "git",
-          ["add", "--intent-to-add", "--", ...batch],
-          { env: tempIndexEnv },
-        );
-      }
-      const result = await this.workspaceManager.runWorkspaceCommand(
-        workspaceRef,
-        "git",
-        diffArgs,
-        { env: tempIndexEnv, trimOutput: false },
-      );
-      return result.stdout;
-    } finally {
-      await this.workspaceManager.runWorkspaceCommand(
-        workspaceRef,
-        "rm",
-        ["-f", tempIndexPath],
-      ).catch(() => undefined);
-    }
+    const exportScript = [
+      "set -e",
+      `paths=${shellQuote(tempPathListPath)}`,
+      "cleanup() { rm -f \"$GIT_INDEX_FILE\" \"$paths\"; }",
+      "trap cleanup EXIT",
+      "git read-tree HEAD",
+      `git ls-files --others --exclude-standard -z -- ${[".", ...excludePathspecs].map(shellQuote).join(" ")} > "$paths"`,
+      "if [ -s \"$paths\" ]; then xargs -0 git add --intent-to-add -- < \"$paths\"; fi",
+      `git diff --binary ${shellQuote(baseRef)} -- ${[".", ...excludePathspecs].map(shellQuote).join(" ")}`,
+    ].join("\n");
+
+    const result = await this.workspaceManager.runWorkspaceCommand(
+      workspaceRef,
+      "sh",
+      ["-lc", exportScript],
+      { env: tempIndexEnv, trimOutput: false },
+    );
+    return result.stdout;
   }
 
   async applyPatchToBranch(args: {

@@ -115,7 +115,9 @@ For `status` and `orchestrate`, each cycle follows the strict execution order de
 5. **Start ready tasks** (`orchestrate` only):
    - Filters `PENDING` tasks, skips quota cooldowns, applies coding guardrails, and respects provider concurrency deferrals.
    - Evaluates the readiness gate: a task must be `PENDING`, dependencies completed and merged, provider concurrency available, and emergency stop inactive.
+   - Provider concurrency admission uses global provider load from both running provider invocations and running task runs. This matters for CLI/Docker providers because a task run can reserve orchestration capacity before its provider invocation row starts.
    - Task dispatch creates DB task dispatch and task-run records, selects the provider based on settings (uses hosted provider for `jules` and CLI/Docker or host workflows for local providers).
+   - Capacity deferral is never a task failure. If a lower provider stage reports the cap after dispatch rows were created, the dispatch returns to `queued`, the task run returns to `PENDING`, and the project task returns to `pending` for a later cycle.
    - Marks tasks `RUNNING`, records session id/name/provider, and resets consecutive failure count on success. Triggers emergency stop after repeated real dispatch failures.
 6. **Apply protocol step**:
    - Provider-agnostic handling of plan approval, clarification replies (via Project manager preset), and paused sessions, utilizing cooldown/dedupe rules and escalating attention items when necessary.
@@ -148,6 +150,10 @@ When `action=orchestrate`, `wait` is true, and `watchLoop` is enabled:
 - Provider telemetry watchers are best-effort and never fail the provider run. Repeated watcher read or parse failures are logged as throttled runtime warnings with provider, Code UX session id, native session id when known, and failure count, without including prompts, transcripts, raw streams, or credentials.
 - Dashboard live snapshots are optimized for high sprint concurrency: selected-sprint checks use targeted project/sprint lookups instead of hydrating every sprint, recent provider activities are cached until the project's latest provider activity event changes, and provider activity event reads use partial sqlite indexes for the activity-only paths.
 - Preview reconciliation also avoids full project execution snapshots in the common running-session path. It queries running sprint runs directly and memoizes that result while reconciling preview sessions and auto-starting previews.
+- Docker CLI task workspaces prepare independently. The prepare path locks only the specific workspace being created or resumed, deduplicates in-flight exact remote-branch fetches per repo and branch, and reserves the repo-wide lock for host `git worktree` metadata operations. This keeps wide DAGs from serializing every Docker volume seed behind one project-level lock.
+- Docker workspace seed also checks out the worker branch and initializes the paired runtime-volume ownership in the same helper container, so prepare avoids separate checkout and runtime-chown helper startups.
+- Docker workspace patch export runs as one workspace shell command: it builds a temporary index, asks Git to stream untracked paths with `ls-files -z`, stages them with `xargs -0 git add --intent-to-add --`, emits `git diff --binary`, and removes the temporary files with a shell trap. This avoids several helper-container startups per completed task and keeps large untracked file sets out of Docker argv.
+- CLI task runs release provider capacity as soon as the worker branch has been materialized and `cli_git_pushed` is recorded. PR finalization then updates PR metadata on the completed run instead of keeping the provider slot occupied.
 - Loop exits when:
   - all tasks reach their terminal state (e.g., `COMPLETED` + merged, or `FAILED`) and the final merge is settled: remote-git mode requires GitHub to report the completion PR as merged, while local-git mode requires the sprint feature branch to merge into the configured local default branch, or
   - no runnable tasks remain, or

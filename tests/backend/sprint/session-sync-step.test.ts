@@ -812,7 +812,7 @@ describe("runSessionSyncStep", () => {
       { id: "task-2", title: "Task Two", prompt: "", depends_on: [], is_independent: true, status: "PENDING" },
     ];
 
-    const logger = { warn: vi.fn() };
+    const logger = { debug: vi.fn(), warn: vi.fn() };
     const healthyActivities = [
       {
         id: "activity-healthy",
@@ -882,7 +882,7 @@ describe("runSessionSyncStep", () => {
       { id: "task-2", title: "Task Two", prompt: "", depends_on: [], is_independent: true, status: "PENDING" },
     ];
 
-    const logger = { warn: vi.fn() };
+    const logger = { debug: vi.fn(), warn: vi.fn() };
     const healthyActivities = [
       {
         id: "activity-2",
@@ -2510,7 +2510,7 @@ describe("runSessionSyncStep", () => {
 
     const fetchRecentActivities = vi.fn().mockResolvedValue([]);
     const getLatestTaskRun = vi.fn().mockReturnValue({ state: "COMPLETED" });
-    const logger = { warn: vi.fn() };
+    const logger = { debug: vi.fn(), warn: vi.fn() };
 
     const deps = {
       listSessions: vi.fn().mockResolvedValue({

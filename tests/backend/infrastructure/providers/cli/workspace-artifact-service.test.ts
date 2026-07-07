@@ -382,9 +382,9 @@ describe("WorkspaceArtifactService", () => {
       .rejects.toThrow();
   });
 
-  it("batches git-discovered untracked export paths instead of passing them all through one argv", async () => {
+  it("lets git stream discovered untracked export paths inside one workspace command", async () => {
     const untrackedPaths = Array.from({ length: 1_201 }, (_, index) => `src/generated/file-${index}.ts`);
-    const gitCalls: string[][] = [];
+    const workspaceCalls: Array<{ command: string; args: string[] }> = [];
 
     const workspaceManager = {
       runWorkspaceCommand: async (
@@ -392,18 +392,8 @@ describe("WorkspaceArtifactService", () => {
         command: string,
         args: string[],
       ) => {
-        if (command === "git") {
-          gitCalls.push(args);
-        }
-        if (command === "git" && args[0] === "ls-files") {
-          return {
-            ok: true,
-            code: 0,
-            stdout: `${untrackedPaths.join("\0")}\0`,
-            stderr: "",
-          };
-        }
-        if (command === "git" && args[0] === "diff") {
+        workspaceCalls.push({ command, args });
+        if (command === "sh") {
           return {
             ok: true,
             code: 0,
@@ -424,17 +414,15 @@ describe("WorkspaceArtifactService", () => {
     const patchText = await service.exportBinaryPatch("workspace", "HEAD");
 
     expect(patchText).toContain("diff --git");
-    const lsFilesCall = gitCalls.find((args) => args[0] === "ls-files");
-    expect(lsFilesCall).toEqual(expect.arrayContaining(["ls-files", "--others", "--exclude-standard", "-z", "--", "."]));
-    const addCalls = gitCalls.filter((args) => args[0] === "add");
-    expect(addCalls).toHaveLength(5);
-    for (const addCall of addCalls) {
-      expect(addCall).toEqual(expect.arrayContaining(["add", "--intent-to-add", "--"]));
-      expect(addCall.length).toBeLessThanOrEqual(253);
-      expect(addCall).not.toContain(".");
-    }
+    expect(workspaceCalls).toHaveLength(1);
+    expect(workspaceCalls[0].command).toBe("sh");
+    const exportScript = workspaceCalls[0].args.at(-1) || "";
+    expect(exportScript).toContain("git ls-files --others --exclude-standard -z -- '.'");
+    expect(exportScript).toContain("xargs -0 git add --intent-to-add --");
+    expect(exportScript).toContain("git diff --binary 'HEAD' -- '.'");
     for (const untrackedPath of untrackedPaths) {
-      expect(addCalls.some((args) => args.includes(untrackedPath))).toBe(true);
+      expect(workspaceCalls[0].args).not.toContain(untrackedPath);
+      expect(exportScript).not.toContain(untrackedPath);
     }
   });
 
@@ -531,8 +519,7 @@ describe("WorkspaceArtifactService", () => {
 
     await fs.writeFile(path.join(workspaceRepoPath, "new-component.tsx"), "export const value = 1;\n", "utf8");
 
-    const addArgs: string[][] = [];
-    const lsFilesArgs: string[][] = [];
+    const shellScripts: string[] = [];
     const workspaceManager = {
       runWorkspaceCommand: async (
         _worktreePath: string,
@@ -540,11 +527,8 @@ describe("WorkspaceArtifactService", () => {
         args: string[],
         options: WorkspaceCommandOptions = {},
       ) => {
-        if (command === "git" && args[0] === "ls-files") {
-          lsFilesArgs.push(args);
-        }
-        if (command === "git" && args[0] === "add") {
-          addArgs.push(args);
+        if (command === "sh") {
+          shellScripts.push(args.at(-1) || "");
         }
         return await runCommandStrict(command, args, workspaceRepoPath, options.env ?? process.env, {
           trimOutput: options.trimOutput,
@@ -556,12 +540,10 @@ describe("WorkspaceArtifactService", () => {
     const service = new WorkspaceArtifactService(workspaceManager);
     const patchText = await service.exportBinaryPatch("workspace", baseRef);
 
-    expect(lsFilesArgs).toHaveLength(1);
-    expect(lsFilesArgs[0]).toContain(":(exclude).code-ux-home");
-    expect(lsFilesArgs[0]).toContain(":(exclude).code-ux-home/**");
-    expect(addArgs).toHaveLength(1);
-    expect(addArgs[0]).not.toContain(":(exclude).code-ux-home");
-    expect(addArgs[0]).not.toContain(":(exclude).code-ux-home/**");
+    expect(shellScripts).toHaveLength(1);
+    expect(shellScripts[0]).toContain("':(exclude).code-ux-home'");
+    expect(shellScripts[0]).toContain("':(exclude).code-ux-home/**'");
+    expect(shellScripts[0]).toContain("xargs -0 git add --intent-to-add --");
 
     expect(patchText).toContain("diff --git a/new-component.tsx b/new-component.tsx");
     expect(patchText).not.toContain(".code-ux-home");

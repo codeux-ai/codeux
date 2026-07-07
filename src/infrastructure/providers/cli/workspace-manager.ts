@@ -172,6 +172,9 @@ const buildWorkspaceDockerEnvArgs = (env: NodeJS.ProcessEnv): string[] => {
 
 export class WorkspaceManager implements IWorkspaceManager {
   private readonly repoLocks = new Map<string, Promise<void>>();
+  private readonly workspaceLocks = new Map<string, Promise<void>>();
+  private readonly remoteFetches = new Map<string, Promise<void>>();
+  private readonly runtimeVolumesWithInitializedOwnership = new Set<string>();
 
   buildWorktreePath(repoPath: string, sessionId: string, executionMode: CliWorkflowSettings["executionMode"]): string {
     return this.buildWorkspaceRef(repoPath, sessionId, executionMode);
@@ -335,25 +338,20 @@ export class WorkspaceManager implements IWorkspaceManager {
     let resumed = false;
     const workspaceRef = worktreePath;
 
-    await this.withRepoLock(repoPath, async () => {
+    await this.assertExactGitWorktreeRoot(repoPath);
+    // Only the worker and feature branch tips matter for resolving the start ref, so fetch just
+    // those instead of every ref. A bare `git fetch origin` pulls all refs, which on repos that
+    // have run many sprints means thousands of branches on every task prep. In-flight fetches are
+    // deduplicated per repo+branch so a wide DAG does not stampede the same origin ref, but the
+    // expensive workspace seeding path is not serialized behind a repo-wide lock.
+    const fetchEnv = await buildGitHttpAuthEnvForRepoWithFallbacks(repoPath, gitAuth ?? {});
+    const fetchRefs = Array.from(new Set([workerBranch, featureBranch].filter((branch) => Boolean(branch))));
+    await Promise.all(fetchRefs.map((branch) => this.fetchRemoteBranchBestEffort(repoPath, branch, fetchEnv ?? process.env)));
+
+    const refLookup = this.createRefLookup(repoPath);
+
+    await this.withWorkspaceLock(workspaceRef, async () => {
       await this.assertExactGitWorktreeRoot(repoPath);
-      // Only the worker and feature branch tips matter for resolving the start ref, so fetch just
-      // those instead of every ref. A bare `git fetch origin` pulls all refs, which on repos that
-      // have run many sprints means thousands of branches on every task prep. Each branch is fetched
-      // independently so a branch not yet on origin (e.g. the worker branch for a fresh task) does
-      // not abort the others; on any failure we simply fall back to local refs.
-      const fetchEnv = await buildGitHttpAuthEnvForRepoWithFallbacks(repoPath, gitAuth ?? {});
-      const fetchRefs = Array.from(new Set([workerBranch, featureBranch].filter((branch) => Boolean(branch))));
-      for (const branch of fetchRefs) {
-        await runCommandStrict(
-          "git",
-          ["fetch", "origin", `+refs/heads/${branch}:refs/remotes/origin/${branch}`],
-          repoPath,
-          fetchEnv ?? process.env,
-        )
-          .catch(() => undefined);
-      }
-      const refLookup = this.createRefLookup(repoPath);
 
       if (resumeSessionId && await this.workspaceExists(workspaceRef) && await this.canResumeExistingWorkspace(workspaceRef, workerBranch)) {
         // Re-point the resumed workspace at the already-pushed worker-branch tip so a
@@ -366,23 +364,24 @@ export class WorkspaceManager implements IWorkspaceManager {
       }
 
       const startRef = await this.resolveWorktreeStartRef(repoPath, workerBranch, featureBranch, refLookup);
-      await this.removeWorktree(repoPath, workspaceRef).catch(() => undefined);
       if (isWorkspaceHandle(workspaceRef)) {
+        await this.removeWorktree(repoPath, workspaceRef).catch(() => undefined);
         await this.createVolume(workspaceRef);
         // Coding tasks only need the worker and feature branches to resolve the start ref; seed just
         // those instead of every accumulated branch (falls back to the full seed if a ref is missing).
-        await this.seedAndCheckoutVolume(repoPath, workspaceRef, [workerBranch, featureBranch], async () => {
-          await this.runWorkspaceCommand(workspaceRef, "git", ["checkout", "-B", workerBranch, startRef]);
-        }, refLookup);
+        await this.seedAndCheckoutBranchVolume(repoPath, workspaceRef, [workerBranch, featureBranch], workerBranch, startRef, refLookup);
       } else {
-        await fs.mkdir(path.dirname(workspaceRef), { recursive: true });
-        try {
-          await runCommandStrict("git", ["worktree", "add", "--force", "-B", workerBranch, workspaceRef, startRef], repoPath);
-        } catch {
-          await runCommandStrict("git", ["worktree", "prune"], repoPath).catch(() => undefined);
-          await fs.rm(workspaceRef, { recursive: true, force: true }).catch(() => undefined);
-          await runCommandStrict("git", ["worktree", "add", "--force", "-B", workerBranch, workspaceRef, startRef], repoPath);
-        }
+        await this.withRepoLock(repoPath, async () => {
+          await this.removeWorktree(repoPath, workspaceRef).catch(() => undefined);
+          await fs.mkdir(path.dirname(workspaceRef), { recursive: true });
+          try {
+            await runCommandStrict("git", ["worktree", "add", "--force", "-B", workerBranch, workspaceRef, startRef], repoPath);
+          } catch {
+            await runCommandStrict("git", ["worktree", "prune"], repoPath).catch(() => undefined);
+            await fs.rm(workspaceRef, { recursive: true, force: true }).catch(() => undefined);
+            await runCommandStrict("git", ["worktree", "add", "--force", "-B", workerBranch, workspaceRef, startRef], repoPath);
+          }
+        });
       }
     });
 
@@ -639,10 +638,10 @@ export class WorkspaceManager implements IWorkspaceManager {
   private async createVolume(worktreePath: string): Promise<void> {
     const { volumeName } = parseWorkspaceHandle(worktreePath);
     await this.createManagedWorkspaceVolume(volumeName);
-    await this.ensureRuntimeVolume(worktreePath);
+    await this.ensureRuntimeVolume(worktreePath, { initializeOwnership: false });
   }
 
-  async ensureRuntimeVolume(worktreePath: string): Promise<void> {
+  async ensureRuntimeVolume(worktreePath: string, options: { initializeOwnership?: boolean } = {}): Promise<void> {
     const { volumeName } = parseWorkspaceHandle(worktreePath);
     const runtimeVolumeName = buildRuntimeVolumeName(volumeName);
     const sessionKey = volumeName.match(/^code-ux-.+-([a-f0-9]{12})-(.+)$/)?.[2] || volumeName;
@@ -659,7 +658,11 @@ export class WorkspaceManager implements IWorkspaceManager {
       ],
       process.cwd(),
     );
+    if (options.initializeOwnership === false || this.runtimeVolumesWithInitializedOwnership.has(runtimeVolumeName)) {
+      return;
+    }
     await this.initializeRuntimeVolumeOwnership(runtimeVolumeName);
+    this.runtimeVolumesWithInitializedOwnership.add(runtimeVolumeName);
   }
 
   private async createManagedWorkspaceVolume(volumeName: string): Promise<void> {
@@ -760,6 +763,7 @@ export class WorkspaceManager implements IWorkspaceManager {
     }
 
     const { volumeName } = parseWorkspaceHandle(worktreePath);
+    const runtimeVolumeName = buildRuntimeVolumeName(volumeName);
     const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-sbbundle-"));
     const bundlePath = path.join(tempDir, "repo.bundle");
     const originUrl = await this.resolveOriginUrl(repoPath);
@@ -786,7 +790,7 @@ export class WorkspaceManager implements IWorkspaceManager {
         "git -C /workspace config user.email \"${CODE_UX_GIT_USER_EMAIL:-agents@codeux.ai}\"",
         // Check out the seeded branch in the same container, removing the separate checkout run.
         `git -C /workspace checkout -B ${shellQuote(resolvedBranch)} ${shellQuote(resolvedStartRef)} >/dev/null`,
-        ownerSpec ? `chown -R ${shellQuote(ownerSpec)} /workspace` : null,
+        ownerSpec ? `chown -R ${shellQuote(ownerSpec)} /workspace ${shellQuote(CONTAINER_RUNTIME_HOME)}` : null,
       ].filter((step): step is string => Boolean(step)).join(" && ");
 
       await runCommandStrict(
@@ -797,6 +801,8 @@ export class WorkspaceManager implements IWorkspaceManager {
           "-i",
           "--mount",
           `type=volume,source=${volumeName},target=${CONTAINER_WORKSPACE_ROOT}`,
+          "--mount",
+          `type=volume,source=${runtimeVolumeName},target=${CONTAINER_RUNTIME_HOME}`,
           "--entrypoint",
           "sh",
           WORKSPACE_HELPER_IMAGE,
@@ -807,6 +813,7 @@ export class WorkspaceManager implements IWorkspaceManager {
         process.env,
         { stdinFile: bundlePath },
       );
+      this.runtimeVolumesWithInitializedOwnership.add(runtimeVolumeName);
       return true;
     } finally {
       await fs.rm(tempDir, { recursive: true, force: true }).catch(() => undefined);
@@ -865,6 +872,27 @@ export class WorkspaceManager implements IWorkspaceManager {
     }
   }
 
+  private async seedAndCheckoutBranchVolume(
+    repoPath: string,
+    worktreePath: string,
+    branches: Array<string | null | undefined>,
+    checkoutBranch: string,
+    startRef: string,
+    refLookup: RefLookup = this.createRefLookup(repoPath),
+  ): Promise<void> {
+    const checkout = { branch: checkoutBranch, startRef };
+    const seedRefs = await this.resolveExistingSeedRefs(repoPath, branches, refLookup);
+    if (seedRefs.length === 0) {
+      await this.seedWorkspaceFromBundle(repoPath, worktreePath, undefined, branches, checkout);
+      return;
+    }
+    try {
+      await this.seedWorkspaceFromBundle(repoPath, worktreePath, seedRefs, branches, checkout);
+    } catch {
+      await this.seedWorkspaceFromBundle(repoPath, worktreePath, undefined, branches, checkout);
+    }
+  }
+
   /**
    * Seeds the workspace volume from a host git bundle. By default it bundles every ref (`--all`),
    * which on repos that have run many sprints copies thousands of accumulated branches the consumer
@@ -878,8 +906,10 @@ export class WorkspaceManager implements IWorkspaceManager {
     worktreePath: string,
     seedRefs?: string[],
     localBranchAliases?: Array<string | null | undefined>,
+    checkout?: { branch: string; startRef: string },
   ): Promise<void> {
     const { volumeName } = parseWorkspaceHandle(worktreePath);
+    const runtimeVolumeName = buildRuntimeVolumeName(volumeName);
     const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-bundle-"));
     const bundlePath = path.join(tempDir, "repo.bundle");
     const originUrl = await this.resolveOriginUrl(repoPath);
@@ -905,7 +935,10 @@ export class WorkspaceManager implements IWorkspaceManager {
         ...this.buildLocalBranchAliasCommands(localBranchAliases),
         "git -C /workspace config user.name \"${CODE_UX_GIT_USER_NAME:-Code UX}\"",
         "git -C /workspace config user.email \"${CODE_UX_GIT_USER_EMAIL:-agents@codeux.ai}\"",
-        ownerSpec ? `chown -R ${shellQuote(ownerSpec)} /workspace` : null,
+        checkout
+          ? `git -C /workspace checkout -B ${shellQuote(checkout.branch)} ${shellQuote(checkout.startRef)} >/dev/null`
+          : null,
+        ownerSpec ? `chown -R ${shellQuote(ownerSpec)} /workspace ${shellQuote(CONTAINER_RUNTIME_HOME)}` : null,
       ].filter((step): step is string => Boolean(step)).join(" && ");
 
       await runCommandStrict(
@@ -916,6 +949,8 @@ export class WorkspaceManager implements IWorkspaceManager {
           "-i",
           "--mount",
           `type=volume,source=${volumeName},target=${CONTAINER_WORKSPACE_ROOT}`,
+          "--mount",
+          `type=volume,source=${runtimeVolumeName},target=${CONTAINER_RUNTIME_HOME}`,
           "--entrypoint",
           "sh",
           WORKSPACE_HELPER_IMAGE,
@@ -926,6 +961,7 @@ export class WorkspaceManager implements IWorkspaceManager {
         process.env,
         { stdinFile: bundlePath },
       );
+      this.runtimeVolumesWithInitializedOwnership.add(runtimeVolumeName);
     } finally {
       await fs.rm(tempDir, { recursive: true, force: true }).catch(() => undefined);
     }
@@ -1040,6 +1076,36 @@ export class WorkspaceManager implements IWorkspaceManager {
     }
   }
 
+  private async fetchRemoteBranchBestEffort(repoPath: string, branch: string, env: NodeJS.ProcessEnv): Promise<void> {
+    const branchName = branch.trim();
+    if (!branchName) {
+      return;
+    }
+
+    const key = `${path.resolve(repoPath)}\0${branchName}`;
+    const existing = this.remoteFetches.get(key);
+    if (existing) {
+      await existing;
+      return;
+    }
+
+    const fetch = runCommandStrict(
+      "git",
+      ["fetch", "origin", `+refs/heads/${branchName}:refs/remotes/origin/${branchName}`],
+      repoPath,
+      env,
+    )
+      .then(() => undefined)
+      .catch(() => undefined)
+      .finally(() => {
+        if (this.remoteFetches.get(key) === fetch) {
+          this.remoteFetches.delete(key);
+        }
+      });
+    this.remoteFetches.set(key, fetch);
+    await fetch;
+  }
+
   private async resolveOriginUrl(repoPath: string): Promise<string | null> {
     try {
       const result = await runCommandStrict("git", ["remote", "get-url", "origin"], repoPath);
@@ -1068,19 +1134,27 @@ export class WorkspaceManager implements IWorkspaceManager {
 
   private async withRepoLock<T>(repoPath: string, operation: () => Promise<T>): Promise<T> {
     const key = path.resolve(repoPath);
-    const previous = this.repoLocks.get(key) || Promise.resolve();
+    return await this.withKeyedLock(this.repoLocks, key, operation);
+  }
+
+  private async withWorkspaceLock<T>(workspaceRef: string, operation: () => Promise<T>): Promise<T> {
+    return await this.withKeyedLock(this.workspaceLocks, workspaceRef, operation);
+  }
+
+  private async withKeyedLock<T>(locks: Map<string, Promise<void>>, key: string, operation: () => Promise<T>): Promise<T> {
+    const previous = locks.get(key) || Promise.resolve();
     let release!: () => void;
     const next = new Promise<void>((resolve) => {
       release = resolve;
     });
-    this.repoLocks.set(key, previous.then(() => next));
+    locks.set(key, previous.then(() => next));
     try {
       await previous;
       return await operation();
     } finally {
       release();
-      if (this.repoLocks.get(key) === next) {
-        this.repoLocks.delete(key);
+      if (locks.get(key) === next) {
+        locks.delete(key);
       }
     }
   }

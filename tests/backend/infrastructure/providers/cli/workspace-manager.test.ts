@@ -425,18 +425,13 @@ describe("WorkspaceManager", () => {
       ],
       "/repo/project",
     );
-    const checkoutCall = vi.mocked(runCommandStrict).mock.calls.find((call) =>
+    const seedCall = vi.mocked(runCommandStrict).mock.calls.find((call) =>
       call[0] === "docker"
       && call[1].includes("--entrypoint")
-      && call[1].includes("git")
-      && call[1].includes("checkout")
+      && call[1].includes("sh")
+      && call[1].some((arg) => typeof arg === "string" && arg.includes("git -C /workspace checkout -B 'feature/task-1' 'origin/feature/task-1'"))
     );
-    expect(checkoutCall?.[1].slice(-4)).toEqual([
-      "checkout",
-      "-B",
-      "feature/task-1",
-      "origin/feature/task-1",
-    ]);
+    expect(seedCall).toBeDefined();
     expect(vi.mocked(runCommandStrict).mock.calls).not.toContainEqual([
       "git",
       expect.arrayContaining(["branch"]),
@@ -459,6 +454,75 @@ describe("WorkspaceManager", () => {
       "refs/remotes/origin/feature/sprint-1",
       "refs/heads/feature/sprint-1",
     ]);
+  });
+
+  it("prepares different Docker workspaces concurrently instead of serializing the whole repo", async () => {
+    let firstSeedStarted!: () => void;
+    const firstSeedStartedPromise = new Promise<void>((resolve) => { firstSeedStarted = resolve; });
+    let releaseFirstSeed!: () => void;
+    const releaseFirstSeedPromise = new Promise<void>((resolve) => { releaseFirstSeed = resolve; });
+    let secondSeedStarted!: () => void;
+    const secondSeedStartedPromise = new Promise<void>((resolve) => { secondSeedStarted = resolve; });
+
+    vi.mocked(runCommandStrict).mockImplementation(async (command, args) => {
+      if (command === "git" && args[0] === "rev-parse" && args[1] === "--show-toplevel") {
+        return { ok: true, stdout: "/repo/project\n", stderr: "" } as any;
+      }
+      if (command === "git" && args[0] === "remote" && args[1] === "get-url") {
+        return { ok: true, stdout: "https://github.com/example/project.git\n", stderr: "" } as any;
+      }
+      if (command === "git" && args[0] === "fetch") {
+        return { ok: true, stdout: "", stderr: "" } as any;
+      }
+      if (command === "git" && args[0] === "show-ref") {
+        if (args.includes("refs/remotes/origin/feature/task-1")
+          || args.includes("refs/remotes/origin/feature/task-2")
+          || args.includes("refs/remotes/origin/feature/sprint-1")) {
+          return { ok: true, stdout: "", stderr: "" } as any;
+        }
+        throw new Error("missing ref");
+      }
+      if (command === "docker" && args[0] === "volume" && args[1] === "inspect") {
+        throw new Error("missing");
+      }
+      if (command === "docker" && args.includes("--entrypoint") && args.includes("sh")) {
+        const mount = args.find((arg) => typeof arg === "string" && arg.startsWith("type=volume,source=")) || "";
+        if (!String(mount).includes("target=/workspace")) {
+          return { ok: true, stdout: "", stderr: "", code: 0, signal: null } as any;
+        }
+        if (String(mount).includes("session-1")) {
+          firstSeedStarted();
+          await releaseFirstSeedPromise;
+        }
+        if (String(mount).includes("session-2")) {
+          secondSeedStarted();
+        }
+      }
+      return { ok: true, stdout: "", stderr: "", code: 0, signal: null } as any;
+    });
+
+    const firstPrepare = manager.prepareWorktree(
+      "/repo/project",
+      "docker-volume://code-ux-project-abcd1234ef56-session-1",
+      "feature/task-1",
+      "feature/sprint-1",
+    );
+    await firstSeedStartedPromise;
+
+    const secondPrepare = manager.prepareWorktree(
+      "/repo/project",
+      "docker-volume://code-ux-project-abcd1234ef56-session-2",
+      "feature/task-2",
+      "feature/sprint-1",
+    );
+
+    await expect(Promise.race([
+      secondSeedStartedPromise.then(() => "started"),
+      new Promise((resolve) => setTimeout(() => resolve("blocked"), 1000)),
+    ])).resolves.toBe("started");
+
+    releaseFirstSeed();
+    await Promise.all([firstPrepare, secondPrepare]);
   });
 
   it("creates local branch aliases in Docker prepare worktrees for requested remote-only refs", async () => {
@@ -532,18 +596,13 @@ describe("WorkspaceManager", () => {
       "feature/sprint-1",
     );
 
-    const checkoutCall = vi.mocked(runCommandStrict).mock.calls.find((call) =>
+    const seedCall = vi.mocked(runCommandStrict).mock.calls.find((call) =>
       call[0] === "docker"
       && call[1].includes("--entrypoint")
-      && call[1].includes("git")
-      && call[1].includes("checkout")
+      && call[1].includes("sh")
+      && call[1].some((arg) => typeof arg === "string" && arg.includes("git -C /workspace checkout -B 'feature/task-1' 'origin/feature/task-1'"))
     );
-    expect(checkoutCall?.[1].slice(-4)).toEqual([
-      "checkout",
-      "-B",
-      "feature/task-1",
-      "origin/feature/task-1",
-    ]);
+    expect(seedCall).toBeDefined();
   });
 
   it("falls back to local worker refs when the remote worker ref is missing", async () => {
