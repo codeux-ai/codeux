@@ -116,6 +116,61 @@ Store this without embedding.
     expect(storage.getDatabase().prepare("SELECT COUNT(*) AS count FROM skill_embeddings WHERE skill_id = ?").get(skill.id)).toEqual({ count: 0 });
   });
 
+  it("preserves imported skill provenance when updating markdown without overrides", async () => {
+    const { projectId, skillService } = await createFixture(new FakeEmbeddingProvider(false));
+    const storage = skillService.createStorage(projectId, { id: "provenance-storage", name: "Provenance" });
+    const skill = await skillService.writeSkillFromMarkdown(projectId, storage.id, `---
+title: Imported Skill
+---
+
+Original imported instructions.
+`, {
+      sourceType: "imported",
+      sourceRef: "external://skills/imported-skill.md",
+    });
+
+    const updated = await skillService.writeSkillFromMarkdown(projectId, storage.id, `---
+title: Imported Skill
+version: 1.1.0
+---
+
+Updated imported instructions.
+`, { skillId: skill.id });
+
+    expect(updated).toMatchObject({
+      id: skill.id,
+      storageId: storage.id,
+      sourceType: "imported",
+      sourceRef: "external://skills/imported-skill.md",
+      version: "1.1.0",
+      contentMarkdown: "Updated imported instructions.",
+    });
+  });
+
+  it("rejects updating a skill through a mismatched storage id", async () => {
+    const { projectId, skillService } = await createFixture(new FakeEmbeddingProvider(false));
+    const originalStorage = skillService.createStorage(projectId, { id: "original-storage", name: "Original" });
+    const otherStorage = skillService.createStorage(projectId, { id: "other-storage", name: "Other" });
+    const skill = await skillService.writeSkillFromMarkdown(projectId, originalStorage.id, `---
+title: Stored Skill
+---
+
+Keep this in the original storage.
+`);
+
+    await expect(skillService.writeSkillFromMarkdown(projectId, otherStorage.id, `---
+title: Stored Skill
+---
+
+Attempt to update through a different storage.
+`, { skillId: skill.id })).rejects.toThrow("moving skills between storages is not supported");
+
+    expect(skillService.getSkill(projectId, skill.id)).toMatchObject({
+      storageId: originalStorage.id,
+      contentMarkdown: "Keep this in the original storage.",
+    });
+  });
+
   it("ranks embedded skill search deterministically and filters mismatched dimensions", async () => {
     const { projectId, skillRepository, skillService } = await createFixture();
     const storage = skillService.createStorage(projectId, { id: "search-storage", name: "Search" });
