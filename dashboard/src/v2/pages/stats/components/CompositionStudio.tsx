@@ -34,6 +34,10 @@ import {
   getProviderIcon,
 } from "./stats-ui-primitives.js";
 
+const FLAT_BADGE_CLASS = `inline-flex items-center gap-2 rounded-[var(--stats-chip-radius)] px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--stats-detail-color)] ${CHIP_CLASS}`;
+const SECTION_TITLE_CLASS = "text-[10px] font-bold uppercase tracking-[0.2em] text-[color:var(--stats-label-color)]";
+const SECTION_COPY_CLASS = "mt-2 text-sm leading-relaxed text-[color:var(--stats-detail-color)]";
+
 const StudioMetricTile: FunctionComponent<{
   label: string;
   value: string;
@@ -89,34 +93,29 @@ export const CompositionStudio: FunctionComponent<{
           label="Provider Share"
           value={topProvider ? topProvider.label : "No providers"}
           detail={topProvider && topProviderShare !== null ? `${formatPercent(topProviderShare)} of token volume` : "Nothing reported yet"}
-          toneClass="text-[color:var(--stats-signal-text)]"
         />
         <StudioMetricTile
           label="Token Mix"
           value={formatTokens(stats.usage.totalTokens)}
           detail={inputShare !== null ? `${formatPercent(inputShare)} input footprint` : "No token volume"}
-          toneClass="text-[color:var(--stats-warning-text)]"
           icon={PieChart}
         />
         <StudioMetricTile
           label="Cache Rate"
           value={cacheRate !== null ? `${cacheRate.toFixed(1)}%` : "—"}
           detail={cacheRate !== null ? `~${formatTokens(stats.usage.cachedInputTokens)} tokens saved` : "No cacheable input yet"}
-          toneClass="text-[color:var(--stats-accent-cyan)]"
           icon={Database}
         />
         <StudioMetricTile
           label="Output Ratio"
           value={formatPercentOrFallback(outputShare, "—")}
           detail={stats.usage.totalTokens > 0 ? `${formatTokens(stats.usage.outputTokens)} generated` : "No output tokens"}
-          toneClass="text-[color:var(--stats-warning-text)]"
           icon={ArrowUpRight}
         />
         <StudioMetricTile
           label="Reasoning Share"
           value={formatPercentOrFallback(reasoningShare, "—")}
           detail={stats.usage.reasoningOutputTokens > 0 ? `${formatTokens(stats.usage.reasoningOutputTokens)} reasoning` : "No reasoning tokens"}
-          toneClass="text-[color:var(--stats-negative-text)]"
           icon={Brain}
         />
       </div>
@@ -143,39 +142,35 @@ export const CompositionStudio: FunctionComponent<{
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1.05fr_0.95fr]">
         <div className={`${PANEL_CLASS} p-6`}>
           <div className="flex items-center gap-3">
-            <TimerReset className="h-4 w-4 text-[color:var(--stats-warning-text)]" strokeWidth={2} />
-            <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-[color:var(--stats-label-color)]">Token Flight</div>
+            <TimerReset className="h-4 w-4 text-[color:var(--stats-detail-color)]" strokeWidth={2} />
+            <div className={SECTION_TITLE_CLASS}>Token Flight</div>
           </div>
-          <div className="mt-2 text-sm leading-relaxed text-[color:var(--stats-detail-color)]">
+          <div className={SECTION_COPY_CLASS}>
             End-to-end token movement across input, cached input, output, reasoning, and cost signals from the selected snapshot.
           </div>
-          <div className="mt-4 grid grid-cols-2 gap-4">
+          <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
             <StudioMetricTile
               label="Input"
               value={formatTokens(stats.usage.inputTokens)}
               detail={stats.usage.totalTokens > 0 ? `${formatPercent((stats.usage.inputTokens / stats.usage.totalTokens) * 100)} of total` : "No total volume"}
-              toneClass="text-[color:var(--stats-signal-text)]"
               icon={ArrowDownRight}
             />
             <StudioMetricTile
               label="Cached Input"
               value={formatTokens(stats.usage.cachedInputTokens)}
               detail={cacheRate !== null ? `${cacheRate.toFixed(1)}% cache-hit rate` : "No cache signal"}
-              toneClass="text-[color:var(--stats-accent-cyan)]"
               icon={Database}
             />
             <StudioMetricTile
               label="Output"
               value={formatTokens(stats.usage.outputTokens)}
               detail={outputShare !== null ? `${formatPercent(outputShare)} output ratio` : "No total volume"}
-              toneClass="text-[color:var(--stats-warning-text)]"
               icon={ArrowUpRight}
             />
             <StudioMetricTile
               label="Reasoning"
               value={formatTokens(stats.usage.reasoningOutputTokens)}
               detail={reasoningShare !== null ? `${formatPercent(reasoningShare)} of total` : "No total volume"}
-              toneClass="text-[color:var(--stats-negative-text)]"
               icon={Brain}
             />
             {hasCost ? (
@@ -183,11 +178,10 @@ export const CompositionStudio: FunctionComponent<{
                 label="Total Cost"
                 value={formatCost(stats.usage.totalCostUsd)}
                 detail="Snapshot cost rollup"
-                toneClass="text-[color:var(--stats-positive-text)]"
                 icon={DollarSign}
               />
             ) : null}
-            <div className={`${SUBPANEL_CLASS} col-span-2 p-4`}>
+            <div className={`${SUBPANEL_CLASS} sm:col-span-2 p-4`}>
               <div className="flex items-center justify-between gap-4">
                 <div>
                   <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--stats-detail-color)]">Active Time</div>
@@ -206,9 +200,9 @@ export const CompositionStudio: FunctionComponent<{
           <div className={`${SUBPANEL_CLASS} mt-4 p-5`}>
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div>
-                <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-[color:var(--stats-label-color)]">Flight Legend</div>
+                <div className={SECTION_TITLE_CLASS}>Cache Efficiency</div>
                 <div className="mt-2 text-xl font-semibold text-[color:var(--stats-value-color)]">{cacheRate !== null ? cacheRate.toFixed(1) : "—"}%</div>
-                <div className="mt-1 text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--stats-signal-text)]">
+                <div className="mt-1 text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--stats-label-color)]">
                   {stats.usage.cachedInputTokens > 0 ? `~${formatTokens(stats.usage.cachedInputTokens)} cached input` : "No cache savings recorded"}
                 </div>
               </div>
@@ -241,8 +235,8 @@ export const CompositionStudio: FunctionComponent<{
         </div>
         <div className="space-y-4">
           <div>
-            <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-[color:var(--stats-label-color)]">Purpose Lanes</div>
-            <div className="mt-2 text-sm leading-relaxed text-[color:var(--stats-detail-color)]">
+            <div className={SECTION_TITLE_CLASS}>Purpose Lanes</div>
+            <div className={SECTION_COPY_CLASS}>
               Invocation count, active time, and token share by purpose over the selected window.
             </div>
           </div>
@@ -257,12 +251,12 @@ export const CompositionStudio: FunctionComponent<{
       <div className="space-y-4">
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
-            <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-[color:var(--stats-label-color)]">Provider Activity</div>
-            <div className="mt-2 text-sm leading-relaxed text-[color:var(--stats-detail-color)]">
+            <div className={SECTION_TITLE_CLASS}>Provider Activity</div>
+            <div className={SECTION_COPY_CLASS}>
               Token output, invocations, active time, and wall-time efficiency per provider over the selected window.
             </div>
           </div>
-          <div className={`px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--stats-detail-color)] ${CHIP_CLASS}`}>
+          <div className={FLAT_BADGE_CLASS}>
             {providers.length} providers
           </div>
         </div>
@@ -271,7 +265,7 @@ export const CompositionStudio: FunctionComponent<{
             No provider data for this window.
           </div>
         ) : (
-          <div className="space-y-4">
+          <div className="space-y-4" data-testid="composition-provider-activity">
             {providers.map((provider) => {
               const { icon: Icon, bg, text } = getProviderIcon(provider.provider);
               const providerCacheDenominator = provider.usage.inputTokens + provider.usage.cachedInputTokens;
@@ -297,13 +291,13 @@ export const CompositionStudio: FunctionComponent<{
                       </div>
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
-                      <div className={`inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.18em] ${CHIP_CLASS}`}>
+                      <div className={FLAT_BADGE_CLASS}>
                         <span className="text-base font-semibold normal-case tracking-tight text-[color:var(--stats-value-color)]">
                           {provider.usage.totalCostUsd > 0 ? formatCost(provider.usage.totalCostUsd) : "—"}
                         </span>
                         <span className="text-[color:var(--stats-label-color)]">cost</span>
                       </div>
-                      <div className={`inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.18em] ${CHIP_CLASS}`}>
+                      <div className={FLAT_BADGE_CLASS}>
                         <span className="text-base font-semibold normal-case tracking-tight text-[color:var(--stats-value-color)]">
                           {formatTokens(provider.usage.totalTokens)}
                         </span>
@@ -323,21 +317,18 @@ export const CompositionStudio: FunctionComponent<{
                       label="Active Time"
                       value={formatStatsDuration(provider.usage.activeTimeMs)}
                       detail={provider.usage.wallTimeMs > 0 ? `${formatPercent((provider.usage.activeTimeMs / provider.usage.wallTimeMs) * 100)} active` : "Wall time not tracked"}
-                      toneClass="text-[color:var(--stats-warning-text)]"
                       icon={TimerReset}
                     />
                     <StudioMetricTile
                       label="Cache Hit Rate"
                       value={providerCacheRate !== null ? `${providerCacheRate}%` : "—"}
                       detail={providerCacheRate !== null ? `${formatTokens(provider.usage.cachedInputTokens)} cached` : "No cache signal"}
-                      toneClass="text-[color:var(--stats-accent-cyan)]"
                       icon={Database}
                     />
                     <StudioMetricTile
                       label="Tokens / Call"
                       value={providerTokensPerCall !== null ? formatTokens(providerTokensPerCall) : "—"}
                       detail={provider.usage.invocationCount > 0 ? "Average per invocation" : "No calls yet"}
-                      toneClass="text-[color:var(--stats-negative-text)]"
                     />
                   </div>
 

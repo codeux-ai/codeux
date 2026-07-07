@@ -42,7 +42,7 @@ const SystemMetricCard: FunctionComponent<{
 }> = ({ icon: Icon, label, value, detail, circleClassName, valueClassName }) => (
   <div className={`${SUBPANEL_CLASS} flex min-h-[7.5rem] flex-col justify-between p-4`}>
     <div className="flex items-start justify-between gap-3">
-      <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl ${circleClassName}`}>
+      <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-[var(--stats-chip-radius)] ${circleClassName}`}>
         <Icon className="h-4 w-4" strokeWidth={2.25} />
       </div>
       <div className="text-right text-[10px] font-bold uppercase tracking-[0.18em] text-[color:var(--stats-label-color)]">
@@ -98,7 +98,7 @@ const StatusDistributionBar: FunctionComponent<{ metrics: SystemSummaryMetrics }
           return (
             <div
               key={segment.key}
-              className={`h-full ${segment.barClassName} transition-all duration-500`}
+              className={`h-full ${segment.barClassName} transition-[width] duration-500`}
               style={{ width: `${(count / total) * 100}%` }}
               title={`${segment.label}: ${count}`}
             />
@@ -315,7 +315,7 @@ export const SystemStudio: FunctionComponent<{ projectId: string }> = ({ project
 
   return (
     <div className="space-y-6">
-      <section className={`${PANEL_CLASS} rounded-[2.2rem] p-6 md:p-7`}>
+      <section className={`${PANEL_CLASS} p-6 md:p-7`}>
         <StudioHeader
           icon={Terminal}
           eyebrow="System Telemetry"
@@ -491,7 +491,7 @@ export const SystemStudio: FunctionComponent<{ projectId: string }> = ({ project
                 const label = formatErrorCategoryLabel(category);
                 const tone = getErrorCategoryTone(category);
                 return (
-                  <div key={category} className={`${SUBPANEL_CLASS} flex items-center justify-between p-4 transition-colors hover:bg-[color:var(--fill-muted-hover)]`}>
+                  <div key={category} className={`${SUBPANEL_CLASS} flex items-center justify-between p-4 transition-colors hover:bg-[color:var(--stats-surface-subpanel-hover)]`}>
                     <div className="flex items-center gap-3">
                       <div className={`h-2.5 w-2.5 rounded-full ${tone}`} />
                       <div className="text-sm font-bold text-[color:var(--stats-value-color)]">{label}</div>
@@ -544,7 +544,7 @@ export const SystemStudio: FunctionComponent<{ projectId: string }> = ({ project
                       onClick={() => setActiveTab(tab)}
                       aria-pressed={activeTab === tab}
                       aria-label={`${tabLabel} invocation records, ${tabCount.toLocaleString()} ${tabCount === 1 ? "record" : "records"}`}
-                      className={`inline-flex min-h-10 min-w-0 items-center justify-center gap-2 px-3 py-2 text-[11px] font-bold uppercase tracking-[0.14em] transition-[background-color,border-color,box-shadow,color] duration-200 motion-reduce:transition-none sm:min-w-[10rem] ${CONTROL_FOCUS_CLASS} ${
+                      className={`inline-flex min-h-10 min-w-0 items-center justify-center gap-2 px-3 py-2 text-[11px] font-bold uppercase tracking-[0.14em] transition-[background-color,border-color,color] duration-200 motion-reduce:transition-none sm:min-w-[10rem] ${CONTROL_FOCUS_CLASS} ${
                         activeTab === tab ? TAB_ACTIVE_CLASS : `border-transparent bg-[color:var(--stats-surface-subpanel)] ${TAB_IDLE_CLASS}`
                       }`}
                     >

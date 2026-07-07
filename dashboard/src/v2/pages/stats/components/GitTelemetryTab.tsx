@@ -235,7 +235,7 @@ export const GitTelemetryLedger: FunctionComponent<{
                     <div className="flex flex-col gap-4">
                       <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
                         <div className="flex min-w-0 items-start gap-3">
-                          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-[color:var(--stats-card-border)] bg-[color:var(--stats-card-bg)] text-xs font-semibold text-[color:var(--stats-value-color)] shadow-[var(--stats-subpanel-shadow)] backdrop-blur-xl">
+                          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[var(--stats-chip-radius)] border border-[color:var(--stats-card-border)] bg-[color:var(--stats-surface-subpanel)] text-xs font-semibold text-[color:var(--stats-value-color)]">
                             {index + 1}
                           </div>
                           <div className="min-w-0">
@@ -296,7 +296,7 @@ export const GitTelemetryLedger: FunctionComponent<{
                         />
                         <div className={`h-1 rounded-full ${TRACK_CLASS}`}>
                           <div
-                            className="h-1 rounded-full bg-[color:var(--stats-positive-text)] transition-all duration-500"
+                            className="h-1 rounded-full bg-[color:var(--stats-positive-text)] transition-[width] duration-500"
                             style={{ width: `${Math.min(100, Math.max(shareOfLeader > 0 ? 3 : 0, shareOfLeader))}%` }}
                           />
                         </div>
@@ -340,7 +340,7 @@ const GitStatCard: FunctionComponent<{
 }> = ({ icon: Icon, label, value, detail, tone }) => (
   <div className={`${SUBPANEL_CLASS} p-4`}>
     <div className="flex items-center gap-3">
-      <div className={`flex h-10 w-10 items-center justify-center rounded-2xl ${tone}`}>
+      <div className={`flex h-10 w-10 items-center justify-center rounded-[var(--stats-chip-radius)] ${tone}`}>
         <Icon className="h-4 w-4" strokeWidth={2.25} />
       </div>
       <div>
@@ -451,7 +451,7 @@ export const GitTelemetryTab: FunctionComponent<{ gitStats: ExecutionGitStatsSum
 
   if (!gitStats.totals.insertions && !gitStats.totals.deletions && !gitStats.totals.filesChanged && !gitStats.totals.prCount && !gitStats.totals.mergedCount && !gitStats.tasks.length && !gitStats.sprints.length) {
     return (
-      <div className={`${DASHED_EMPTY_CLASS} rounded-[2rem] px-8 py-16`}>
+      <div className={`${DASHED_EMPTY_CLASS} rounded-[var(--stats-panel-radius)] px-8 py-16`}>
         No git telemetry available in this window.
       </div>
     );
@@ -555,7 +555,7 @@ export const GitTelemetryTab: FunctionComponent<{ gitStats: ExecutionGitStatsSum
       <div
         role="tablist"
         aria-label="Git telemetry leaderboards"
-        className="sticky top-3 z-20 grid max-w-full grid-cols-1 gap-1 rounded-[var(--stats-subpanel-radius)] border border-[color:var(--stats-border-hairline)] bg-[color:var(--stats-surface-subpanel)] p-1 shadow-[var(--stats-subpanel-shadow)] backdrop-blur-xl sm:grid-cols-2"
+        className={`${SUBPANEL_CLASS} sticky top-3 z-20 grid max-w-full grid-cols-1 gap-1 !p-1 sm:grid-cols-2`}
         onKeyDown={(event) => {
           if (event.key !== "ArrowRight" && event.key !== "ArrowDown" && event.key !== "ArrowLeft" && event.key !== "ArrowUp" && event.key !== "Home" && event.key !== "End") {
             return;
@@ -592,7 +592,7 @@ export const GitTelemetryTab: FunctionComponent<{ gitStats: ExecutionGitStatsSum
               tabIndex={isActive ? 0 : -1}
               onClick={() => setActiveTab(tab.id)}
               aria-label={tab.label}
-              className={`grid min-h-12 min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 rounded-[calc(var(--stats-subpanel-radius)-0.35rem)] px-3 py-2 text-left text-[11px] font-bold uppercase tracking-[0.18em] transition-all motion-safe:duration-200 ${CONTROL_FOCUS_CLASS} ${
+              className={`grid min-h-12 min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 rounded-[var(--stats-control-radius)] px-3 py-2 text-left text-[11px] font-bold uppercase tracking-[0.18em] transition-[background-color,border-color,color] motion-safe:duration-200 ${CONTROL_FOCUS_CLASS} ${
                 isActive ? TAB_ACTIVE_CLASS : TAB_IDLE_CLASS
               }`}
             >
@@ -611,7 +611,7 @@ export const GitTelemetryTab: FunctionComponent<{ gitStats: ExecutionGitStatsSum
         id={`git-panel-${activeTab}`}
         aria-labelledby={`git-tab-${activeTab}`}
         tabIndex={0}
-        className={`${CONTROL_FOCUS_CLASS} rounded-2xl`}
+        className={`${CONTROL_FOCUS_CLASS} rounded-[var(--stats-control-radius)]`}
       >
         {activeTab === "tasks" ? (
           <GitTelemetryLedger
