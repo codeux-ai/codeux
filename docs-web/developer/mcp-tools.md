@@ -122,6 +122,6 @@ Client → CallTool(name, args)
   Server → return the wrapped result
 ```
 
-The tool set is identical across the stdio and HTTPS transports. For client setup, see
+The tool set is identical across the stdio and HTTP transports. For client setup, see
 [MCP clients](../user/mcp-clients.md); for transport internals, see
 [Architecture → MCP server](../architecture/mcp-server.md).

@@ -14,11 +14,11 @@ codeux [options]
 | `--runtime-role VALUE` | string | `project_manager` | Role advertised to the MCP layer. (Currently only `project_manager` is functional; `worker-host` is reserved.) |
 | `--headless` | flag | off | Start MCP server without binding the dashboard. |
 | `--no-dashboard` | flag | off | Alias for `--headless`. |
-| `--mcp-https` / `--no-mcp-https` | flag | on | MCP HTTPS worker gateway, enabled by default; use `--no-mcp-https` to disable. |
-| `--mcp-https-port N` | number | `dashboardPort + 1` | Port for the HTTP gateway. |
-| `--mcp-https-host H` | string | `127.0.0.1` | Host/interface for the HTTP gateway. |
-| `--mcp-https-path P` | string | `/mcp` | Path for the HTTP gateway. |
-| `--mcp-https-auth-token VALUE` | string | – | Bearer token. **Required** for non-loopback hosts. |
+| `--mcp-http` / `--no-mcp-http` | flag | on | MCP HTTP worker gateway, enabled by default; use `--no-mcp-http` to disable. |
+| `--mcp-http-port N` | number | `dashboardPort + 1` | Port for the HTTP gateway. |
+| `--mcp-http-host H` | string | `127.0.0.1` | Host/interface for the HTTP gateway. |
+| `--mcp-http-path P` | string | `/mcp` | Path for the HTTP gateway. |
+| `--mcp-http-auth-token VALUE` | string | – | Bearer token. **Required** for non-loopback hosts. |
 | `--help`, `-h` | flag | – | Show help. |
 
 Flags can be passed in any order. Anything after `--` is ignored.
@@ -33,11 +33,11 @@ Flags can be passed in any order. Anything after `--` is ignored.
 | `JULES_API_MAX_FAILS` | int | `5` | Emergency-stop threshold (`maxFailures`). |
 | `DASHBOARD_PORT` | int | `4444` | Dashboard HTTP port. |
 | `DASHBOARD_HOST` | string | `127.0.0.1` | Dashboard bind address. |
-| `MCP_HTTPS_ENABLED` | bool | `false` | Enable the MCP HTTP gateway. |
-| `MCP_HTTPS_PORT` | int | – | MCP HTTP port. |
-| `MCP_HTTPS_HOST` | string | `127.0.0.1` | MCP HTTP bind. |
-| `MCP_HTTPS_PATH` | string | `/mcp` | MCP HTTP path. |
-| `MCP_HTTPS_AUTH_TOKEN` | string | – | Bearer token. |
+| `MCP_HTTP_ENABLED` | bool | `false` | Enable the MCP HTTP gateway. |
+| `MCP_HTTP_PORT` | int | – | MCP HTTP port. |
+| `MCP_HTTP_HOST` | string | `127.0.0.1` | MCP HTTP bind. |
+| `MCP_HTTP_PATH` | string | `/mcp` | MCP HTTP path. |
+| `MCP_HTTP_AUTH_TOKEN` | string | – | Bearer token. |
 | `GITHUB_TOKEN` / `GH_TOKEN` | string | – | GitHub PAT for `REMOTE` GitHub mode. |
 | `NODE_ENV` | string | – | Affects logging verbosity. `test` enables test mode. |
 
@@ -89,16 +89,16 @@ If the chosen port is in use, Code UX increments and retries until it finds a fr
 ### MCP HTTP port
 
 ```
---mcp-https-port  >  MCP_HTTPS_PORT env  >  config.json (mcpHttpPort, MCP_HTTPS_PORT, mcpHttp.port)
+--mcp-http-port  >  MCP_HTTP_PORT env  >  config.json (mcpHttpPort, MCP_HTTP_PORT, mcpHttp.port)
                  >  dashboardPort + 1
 ```
 
 ### MCP HTTP host / path / auth
 
 ```
---mcp-https-host  >  MCP_HTTPS_HOST env  >  127.0.0.1
---mcp-https-path  >  MCP_HTTPS_PATH env  >  /mcp
---mcp-https-auth-token  >  MCP_HTTPS_AUTH_TOKEN env  >  unset (loopback only)
+--mcp-http-host  >  MCP_HTTP_HOST env  >  127.0.0.1
+--mcp-http-path  >  MCP_HTTP_PATH env  >  /mcp
+--mcp-http-auth-token  >  MCP_HTTP_AUTH_TOKEN env  >  unset (loopback only)
 ```
 
 ## External settings hints

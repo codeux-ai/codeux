@@ -1,14 +1,14 @@
 # Connecting MCP clients
 
-Besides its dashboard, Code UX is also a Model Context Protocol (MCP) server. Any MCP-compatible client can connect to it and call its tools — so you can drive projects and sprints from the Gemini CLI, Codex, Claude Code, or your own client. This page shows the canonical setup for the clients we test against, and how to use the **MCP HTTPS transport** for remote workers.
+Besides its dashboard, Code UX is also a Model Context Protocol (MCP) server. Any MCP-compatible client can connect to it and call its tools — so you can drive projects and sprints from the Gemini CLI, Codex, Claude Code, or your own client. This page shows the canonical setup for the clients we test against, and how to use the **MCP HTTP transport** for remote workers.
 
 ## How the connection works
 
 By default, Code UX speaks MCP over **stdio**: the client launches the `codeux` process and exchanges JSON-RPC messages on its stdin/stdout. The server detects stdio mode automatically when stdin is not a TTY.
 
-Code UX also runs an **MCP HTTPS transport** (enabled by default; disable with `--no-mcp-https`). It listens on its own host/port/path — configurable via `--mcp-https-host`, `--mcp-https-port`, and `--mcp-https-path` (default path `/mcp`) — and is used by remote workers and clients that prefer an HTTP transport. On a non-loopback host it requires a bearer token (`--mcp-https-auth-token` or `MCP_HTTPS_AUTH_TOKEN`).
+Code UX also runs an **MCP HTTP transport** (enabled by default; disable with `--no-mcp-http`). It listens on its own host/port/path — configurable via `--mcp-http-host`, `--mcp-http-port`, and `--mcp-http-path` (default path `/mcp`) — and is used by remote workers and clients that prefer an HTTP transport. On a non-loopback host it requires a bearer token (`--mcp-http-auth-token` or `MCP_HTTP_AUTH_TOKEN`).
 
-> The dashboard server (port `4444` by default) is **separate** from the MCP HTTPS gateway. The dashboard hosts the UI and REST API; the gateway hosts JSON-RPC. They run as two distinct listeners.
+> The dashboard server (port `4444` by default) is **separate** from the MCP HTTP gateway. The dashboard hosts the UI and REST API; the gateway hosts JSON-RPC. They run as two distinct listeners.
 
 ## Gemini CLI
 
@@ -124,15 +124,15 @@ per-action payloads, see [Developer → Management actions](../developer/managem
 
 ## Remote MCP HTTP transport
 
-If you want external worker hosts to connect to Code UX over the network, use the MCP HTTPS transport:
+If you want external worker hosts to connect to Code UX over the network, use the MCP HTTP transport:
 
 ```bash
 codeux \
-  --mcp-https \
-  --mcp-https-host 0.0.0.0 \
-  --mcp-https-port 4445 \
-  --mcp-https-path /mcp \
-  --mcp-https-auth-token "$(openssl rand -hex 32)"
+  --mcp-http \
+  --mcp-http-host 0.0.0.0 \
+  --mcp-http-port 4445 \
+  --mcp-http-path /mcp \
+  --mcp-http-auth-token "$(openssl rand -hex 32)"
 ```
 
 Then point your MCP client at:
@@ -145,7 +145,7 @@ http://<host>:4445/mcp
 
 A `GET /health` endpoint returns `{ "status": "UP" }` and is the recommended liveness check.
 
-> **Security:** When `--mcp-https-host` is *not* loopback, an auth token is **required**. Loopback (`127.0.0.1`/`localhost`/`::1`) hosts may run unauthenticated for development. Always use HTTPS in production via a reverse proxy.
+> **Security:** When `--mcp-http-host` is *not* loopback, an auth token is **required**. Loopback (`127.0.0.1`/`localhost`/`::1`) hosts may run unauthenticated for development. Always use HTTPS in production via a reverse proxy.
 
 For the wire protocol, see [Architecture → MCP server](../architecture/mcp-server.md).
 
@@ -155,7 +155,7 @@ A connected client appears under the active project on the **Settings → Connec
 
 - Connection key
 - Display name
-- Role (`project_manager`, `worker`, `listener`)
+- Role (`project_manager`, `worker-host`)
 - Transport (`stdio`, `http`, `internal`)
 - Capabilities
 
