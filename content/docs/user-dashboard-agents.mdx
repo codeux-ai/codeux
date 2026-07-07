@@ -37,21 +37,25 @@ Save creates the preset and broadcasts a real-time event so connected clients re
 
 Open the detail panel and click **Edit**. All fields are editable; saving creates a new revision (older revisions are discarded — agent presets are mutable, not versioned).
 
-## Importing / syncing from markdown
+## Importing, pulling, and pushing markdown
 
-Agent presets can be defined as markdown files inside `<repo>/.code-ux/agents/<preset_name>.md` with YAML frontmatter (the filename stem is normalized to become the preset's display name):
+Agent presets can be defined as markdown files inside `<repo>/.code-ux/agents/<preset_name>.md` with JSON frontmatter (the filename stem is normalized to become the preset's display name):
 
 ```markdown
----
-name: Planner
-labels: [planner]
+---json
+{
+  "description": "Plans implementation work",
+  "model": "gpt-5-codex"
+}
 ---
 You are a planner agent. Decompose user requests into ...
 ```
 
 To import a single file: open the agent detail panel and click **Import markdown**.
 
-To bulk-sync all agent files in `.code-ux/agents/`: click **Sync from markdown** in the page header. Conflicts (a markdown file that matches an existing agent by name) prompt for resolution.
+To explicitly pull project markdown into sqlite, use **Sync from markdown** in the page header. The backend discovers `.code-ux/agents/*.md`, applies the existing project/default/home precedence rules, imports new files, and refreshes out-of-sync linked agents.
+
+To explicitly push sqlite presets back to project files, use the markdown push action. Push writes only under the selected project’s `.code-ux/agents/` directory, exports manual, missing-source, out-of-sync, home-backed, and default-backed presets as project markdown overrides, and refuses to overwrite a file already linked to a different agent. Project markdown mirroring (`agents.saveToProjectDirectory`) must be enabled.
 
 This makes agent presets first-class repository content — you can check them in, code-review them, and share them across teammates.
 

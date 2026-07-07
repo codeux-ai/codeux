@@ -118,3 +118,7 @@ export interface UpdateAgentPresetInput {
   persistentSkillStorageIds?: string[];
   persistentSkillStorage?: AgentPersistentSkillStorageConfig;
 }
+
+export interface PushAgentPresetsToMarkdownOptions {
+  agentPresetIds?: string[];
+}
