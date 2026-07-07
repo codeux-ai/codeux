@@ -27,7 +27,7 @@ This site is the public publication and reference mirror for installing, operati
 - **Git, CI & issue imports** — branch prep, PR/MR discovery, CI polling and merge gates, automated CI repair, and issue import from GitHub, GitLab, and Jira.
 - **Scoped memory** — short-term sprint memory and long-term project memory keep prompts focused and token-efficient.
 - **Live dashboard** — a real-time Preact UI at `http://localhost:4444` for projects, sprints, tasks, live sessions, agents, chat, memory, stats, and browser previews.
-- **MCP server** — Code UX also speaks Model Context Protocol over stdio and an optional HTTPS gateway, so MCP clients can drive the runtime directly.
+- **MCP server** — Code UX also speaks Model Context Protocol over stdio and authenticated Streamable HTTP, so MCP clients can drive the runtime directly.
 
 ---
 

@@ -91,7 +91,7 @@ flowchart TD
   M -->|poll| N[/api/live + /api/git-status/]
   L --> O[SQLite repositories]
   O --> P[(~/.code-ux/settings.db)]
-  R --> Q[MCP stdio/HTTPS gateway]
+  R --> Q[MCP stdio/HTTP gateway]
   F --> S[Docker/host CLI providers]
 ```
 

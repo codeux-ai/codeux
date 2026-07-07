@@ -34,7 +34,7 @@ Code UX exposes these MCP runtime roles:
 - `project_manager`: The default human-facing and remote-client surface.
 - `worker-host`: A headless execution role used by the local worker client.
 
-The legacy `worker_gateway` and `code-ux-worker` roles have been removed.
+The legacy `worker_gateway` runtime role has been removed. `codeux-worker` is a shipped worker process entrypoint, not a separate MCP runtime role advertised by the main server.
 
 ## Worker Enrollment And Dispatch
 
@@ -55,6 +55,8 @@ Startup mode is separate from runtime role:
 - Dashboard mode is the default. It binds the dashboard plus the MCP HTTP gateway.
 - Headless mode (`--headless` or `--no-dashboard`) skips the dashboard while preserving the existing local-development MCP behavior, including unauthenticated loopback when the gateway is explicitly started without a token.
 - Server mode (`--server-mode` or `CODE_UX_SERVER_MODE=true`) is the explicit remote MCP startup contract. It skips dashboard, dashboard realtime, terminal websocket, and static route registration; starts MCP HTTP by default; and requires a non-empty explicit bearer token from `MCP_HTTPS_AUTH_TOKEN`, `MCP_HTTP_AUTH_TOKEN`, `--mcp-https-auth-token`, or `--mcp-http-auth-token`, even on loopback. The MCP HTTP listener serves `/health` and `/ready` without the dashboard server.
+
+For operator startup commands, client connection checks, settings synchronization, cluster worker enrollment, and troubleshooting, see [Secure Headless Server Mode](../operations/server-mode.md).
 
 ## MCP Request Handlers
 
@@ -125,10 +127,11 @@ The main Code UX server can also expose an authenticated MCP HTTP endpoint.
 
 That endpoint:
 
-- is configured through `MCP_HTTPS_*` env vars or `--mcp-https*` flags
+- is configured through `MCP_HTTP_*` / `MCP_HTTPS_*` env vars or `--mcp-http*` / `--mcp-https*` flags
 - exposes the same project-manager tool surface as stdio
-- no longer exposes a separate worker-control-plane runtime
+- uses the project-manager tool surface for worker control-plane calls instead of a separate worker-control-plane runtime role
 - uses a generated user bearer token from `~/.code-ux/security.json` when no explicit token is supplied
+- requires an explicit bearer token in server mode and rejects the generated user token fallback
 - is HTTP at the Node listener; deploy TLS with a trusted reverse proxy/certificate when remote HTTPS is required
 
 ## Dashboard Settings Path
