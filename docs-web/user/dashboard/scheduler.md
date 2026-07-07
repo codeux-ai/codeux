@@ -46,9 +46,11 @@ weekly). The page previews the next occurrences so you can confirm the cadence b
 
 For node-flow schedules, recurrence uses the same model as other targets. Due runs call the node-flow
 runtime with `triggerType = "scheduler"` and trigger metadata containing the scheduler entry id,
-scheduled occurrence time, target type, and stored flow version when present. Node-flow schedules
-advance only when the returned run status is `succeeded`; returned `failed` or `cancelled` runs move
-the entry to `failed`, record the attempted occurrence, and show the run error in the list.
+scheduled occurrence time, target type, and stored flow version when present. The due occurrence is
+claimed in SQLite before the runtime is awaited so a restart does not dispatch the same occurrence
+again. Node-flow schedules are then finalized from the returned run status: `succeeded` advances or
+completes the schedule, while returned `failed` or `cancelled` runs move the entry to `failed`,
+record the attempted occurrence, and show the run error in the list.
 
 ## Managing entries
 

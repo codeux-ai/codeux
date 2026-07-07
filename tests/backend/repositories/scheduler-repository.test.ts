@@ -310,6 +310,38 @@ describe("SchedulerRepository", () => {
     expect(updated.runCount).toBe(1);
   });
 
+  it("claims due occurrences without incrementing run accounting", async () => {
+    const { dir, projectRepository, schedulerRepository } = await createRepositories();
+    const project = projectRepository.createProject({
+      name: "Scheduler Project",
+      sourceType: "local",
+      sourceRef: dir,
+    });
+
+    const entry = schedulerRepository.createEntry(project.id, {
+      targetType: "node_flow",
+      scheduledFor: "2026-05-18T09:00:00.000Z",
+      recurrence: { frequency: "daily", interval: 1, endMode: "after_count", count: 2 },
+      nodeFlowTarget: { flowId: "flow-1" },
+    });
+
+    const claimed = schedulerRepository.claimDueOccurrence(
+      entry.id,
+      "2026-05-18T09:00:00.000Z",
+      "2026-05-19T09:00:00.000Z",
+    );
+    const duplicateClaim = schedulerRepository.claimDueOccurrence(
+      entry.id,
+      "2026-05-18T09:00:00.000Z",
+      "2026-05-19T09:00:00.000Z",
+    );
+
+    expect(claimed?.nextRunAt).toBe("2026-05-19T09:00:00.000Z");
+    expect(claimed?.lastRunAt).toBeNull();
+    expect(claimed?.runCount).toBe(0);
+    expect(duplicateClaim).toBeNull();
+  });
+
   it("persists settings-managed memory remediation targets", async () => {
     const { dir, projectRepository, schedulerRepository } = await createRepositories();
     const project = projectRepository.createProject({

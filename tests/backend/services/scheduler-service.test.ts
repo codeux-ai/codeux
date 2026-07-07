@@ -1,7 +1,19 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import * as fs from "fs/promises";
+import * as os from "os";
+import * as path from "path";
 import { SchedulerService } from "../../../src/services/scheduler-service.js";
 import { normalizeRecurrenceRule } from "../../../src/domain/scheduler/schedule-time.js";
 import type { SchedulerEntryRecord } from "../../../src/contracts/scheduler-types.js";
+import { AppDbStorage } from "../../../src/repositories/app-db-storage.js";
+import { ProjectManagementRepository } from "../../../src/repositories/project-management-repository.js";
+import { SchedulerRepository } from "../../../src/repositories/scheduler-repository.js";
+
+const tempDirs: string[] = [];
+
+afterEach(async () => {
+  await Promise.all(tempDirs.splice(0).map((dir) => fs.rm(dir, { recursive: true, force: true })));
+});
 
 const createLogger = () => ({
   error: vi.fn(),
@@ -335,6 +347,61 @@ describe("SchedulerService", () => {
       },
     });
     expect(repo.markRunSucceeded).toHaveBeenCalledWith("entry-1", "2026-05-18T09:00:00.000Z", null);
+  });
+
+  it("durably claims a due node flow occurrence before a long-running runtime resolves", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "scheduler-service-"));
+    tempDirs.push(dir);
+    const storage = new AppDbStorage(path.join(dir, "app.db"));
+    const projectManagementRepository = new ProjectManagementRepository(storage);
+    const schedulerRepository = new SchedulerRepository(storage);
+    const project = projectManagementRepository.createProject({
+      name: "Scheduler Project",
+      sourceType: "local",
+      sourceRef: dir,
+    });
+    const entry = schedulerRepository.createEntry(project.id, {
+      targetType: "node_flow",
+      scheduledFor: "2026-05-18T09:00:00.000Z",
+      nodeFlowTarget: { flowId: "flow-1" },
+    });
+    let resolveRun: (value: { run: { status: "succeeded" }; nodeRuns: []; output: Record<string, never> }) => void = () => {};
+    const nodeFlowRuntimeService = {
+      runFlow: vi.fn(() => new Promise((resolve) => {
+        resolveRun = resolve;
+      })),
+    };
+    const nodeFlowRepository = {
+      getFlow: vi.fn(() => ({ id: "flow-1", projectId: project.id })),
+    };
+    const firstScheduler = buildService(schedulerRepository, {
+      projectManagementRepository,
+      nodeFlowRuntimeService,
+      nodeFlowRepository,
+    });
+    const restartedScheduler = buildService(schedulerRepository, {
+      projectManagementRepository,
+      nodeFlowRuntimeService,
+      nodeFlowRepository,
+    });
+    const now = new Date("2026-05-18T09:00:01.000Z");
+
+    await firstScheduler.runDueEntries(now);
+
+    expect(nodeFlowRuntimeService.runFlow).toHaveBeenCalledTimes(1);
+    expect(schedulerRepository.listDueEntries(now.toISOString()).find((due) => due.id === entry.id)).toBeUndefined();
+
+    await restartedScheduler.runDueEntries(now);
+
+    expect(nodeFlowRuntimeService.runFlow).toHaveBeenCalledTimes(1);
+
+    resolveRun({ run: { status: "succeeded" }, nodeRuns: [], output: {} });
+    await flush();
+
+    const finalized = schedulerRepository.getEntry(entry.id);
+    expect(finalized?.status).toBe("completed");
+    expect(finalized?.lastRunAt).toBe("2026-05-18T09:00:00.000Z");
+    expect(finalized?.runCount).toBe(1);
   });
 
   it("marks node flow schedules failed when the runtime resolves a failed run", async () => {

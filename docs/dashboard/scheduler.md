@@ -141,7 +141,7 @@ Due entries execute through existing production paths:
 
 AI memory remediation entries create a `remediation` invocation record even when no cleanup candidates are found; in that case the invocation is completed with a skipped reason instead of dispatching an empty provider request.
 
-After a successful run, the service advances `nextRunAt` from the scheduled occurrence time. One-time entries move to `completed`; recurring entries stay `scheduled` until their count or end date/time is exhausted. Failed entries move to `failed` with `lastError` for operator visibility. Node-flow entries advance only after `runFlow` returns, so a runtime startup failure does not mark the schedule succeeded.
+After a successful run, the service advances `nextRunAt` from the scheduled occurrence time. One-time entries move to `completed`; recurring entries stay `scheduled` until their count or end date/time is exhausted. Failed entries move to `failed` with `lastError` for operator visibility. Node-flow entries are durably claimed before `runFlow` is awaited so the same due occurrence is not dispatched again after a restart, then the scheduler entry is finalized from the returned node-flow run status.
 
 ### Node-Flow Schedules
 
@@ -156,8 +156,9 @@ Behavior:
 - Resume recomputes `nextRunAt` to the first future occurrence so missed runs are not replayed immediately.
 - Due execution calls `NodeFlowRuntimeService.runFlow(projectId, flowId, input, { triggerType: "scheduler", triggerPayload })`.
 - The trigger payload includes scheduler entry id, scheduled occurrence time, target type, and `flowVersion` when the schedule stored one.
+- Before the runtime is awaited, the due occurrence is claimed in SQLite. Absolute entries move `nextRunAt` off the claimed occurrence, and anchored entries record the claimed anchor occurrence so restart due checks skip it.
 - On success, one-time entries complete and recurring entries advance to the next occurrence.
-- On failure, the schedule moves to `failed` with `lastError`; for node flows, `nextRunAt` is not advanced before runtime startup succeeds.
+- On returned `failed` or `cancelled` runtime status, the schedule moves to `failed` with `lastError`, `lastRunAt`, and `runCount` recording the attempted occurrence.
 
 Anchored entries are evaluated separately from absolute `nextRunAt` polling:
 - An `after_sprint_end` entry is due only after the source sprint reaches `completed`, `failed`, or `cancelled`.
