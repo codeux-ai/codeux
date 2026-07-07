@@ -1,0 +1,58 @@
+# Styleguides and Tech Stacks
+
+Code UX uses guidance selections to tell workers what implementation stack and product style they should respect.
+
+There are two related settings areas:
+
+- **Techstacks** classify the project stack and whether the app is web or desktop.
+- **Guidance** selects reusable tech-stack instructions and visual styleguides that can be injected into planning and setup prompts.
+
+Use this page for the Guidance workflow. For the full settings schema, see the [Settings reference](../../developer/settings-reference.md).
+
+## Catalogs
+
+Guidance has two catalogs:
+
+- **Tech Stack Guidance** for implementation expectations such as framework, typing, testing, and module boundaries.
+- **Styleguides** for layout, accessibility, interaction, and visual quality expectations.
+
+Each catalog includes built-in entries and any custom entries you add. Built-in entries are protected. Custom entries can be added, edited, deleted, and selected from Settings -> Guidance.
+
+Both catalogs include **None**. Choosing **None** saves the stable `none` selection and keeps that catalog out of worker prompt guidance.
+
+## Header Selectors
+
+When a project is selected, the top bar shows tech-stack guidance and styleguide selectors beside global search. Changing either selector saves the project guidance override immediately.
+
+Each dropdown also includes actions:
+
+- **Add Tech Stack** opens Settings -> Guidance so you can create a custom tech-stack guidance entry.
+- **Add Styleguide** opens Settings -> Guidance so you can create a custom styleguide.
+- **Manage Guidance** opens Settings -> Guidance for editing custom entries, changing selections, or hiding default styleguides.
+
+## Hiding Defaults
+
+Settings -> Guidance includes **Hide default styleguides**. Turning it on removes built-in styleguides from dashboard selectors while keeping **None** and custom styleguides visible.
+
+This does not delete built-in styleguides or clear the saved selection. If a hidden built-in styleguide is already active, the settings panel preserves it and shows a warning until you choose **None**, choose a custom styleguide, or show defaults again.
+
+## Project Defaults
+
+Existing projects and imported local or Git projects default both guidance selections to **None**. They do not inherit the Code UX visual styleguide automatically.
+
+New local and new remote projects get an explicit project override selecting the generic Code UX styleguide. Tech-stack guidance remains **None** unless the project creation flow or an operator selects one.
+
+## Sprint Selector Actions
+
+The sprint selector in the top bar stays useful even when a project has no sprints yet. Its footer includes:
+
+- **Add Sprint** to create an idle sprint from the header.
+- **Manage Sprints** to open the full [Sprints](./sprints.md) page.
+
+The header creation flow collects only the sprint name and goal, then selects the created sprint after refresh. Use the full Sprints page for planning, imports, bulk actions, and sprint detail editing.
+
+## Related Docs
+
+- [Dashboard overview](./overview.md)
+- [Settings](./settings.md#guidance)
+- [Sprints](./sprints.md)

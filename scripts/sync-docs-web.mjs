@@ -34,6 +34,7 @@ const pinnedOrder = new Map([
   ["user-dashboard-browser-preview", 220],
   ["user-dashboard-stats", 230],
   ["user-dashboard-settings", 240],
+  ["user-dashboard-styleguides-and-tech-stacks", 245],
   ["developer-overview", 300],
   ["developer-mcp-tools", 310],
   ["developer-management-actions", 320],

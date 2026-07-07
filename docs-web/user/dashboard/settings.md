@@ -32,7 +32,7 @@ The category rail on the left includes these Expert-mode categories:
 | **Sprint & Git** | Git flow, PR behavior, merge gates, QA, guardrails, branch naming, and execution runtime controls. |
 | **Browser Preview** | Preview runtime, in-app browser visibility, container limits, port allocation, and startup scripts. |
 | **Techstacks** | System catalog management, protected built-in stack, project stack assignment, and web/desktop application kind. |
-| **Guidance** | Tech stack guidance, styleguides, and custom worker instructions surfaced in the top navigation. |
+| **Guidance** | Tech stack guidance, styleguides, custom worker instructions, and header selector defaults. |
 | **Agents** | Agent routing, markdown mirroring, persistent skill storage, storage attachments, and self-reflection criteria. |
 | **Memory** | Embedding model selection, memory capture, promotion, and remediation policy. |
 | **Integrations** | Provider credentials, Git hosts, Jira, and read-only PM/canvas importers. |
@@ -528,7 +528,7 @@ Manages active tech-stack guidance, active styleguide guidance, and custom instr
 
 **What it controls:** System scope edits default design guidance; project scope edits the active project override. Each section has a selector with `None`, a custom-entry list, and add/edit/delete controls for custom entries. Built-in entries are selectable but protected.
 
-The top navigation shows the active project's effective tech stack guidance and styleguide selectors beside global search. Header selections save the project override immediately, and each dropdown links to the Guidance settings area for adding or managing custom entries.
+The top navigation shows the active project's effective tech stack guidance and styleguide selectors beside global search. Header selections save the project override immediately. **Add Tech Stack**, **Add Styleguide**, and **Manage Guidance** in the dropdown footers all open the Guidance settings area for custom entries and visibility controls.
 
 **Recommended defaults:** Keep both selections at `None` until a project needs explicit guidance beyond its repository instructions. Add custom entries for stable team or product guidance that should be reused.
 
@@ -538,6 +538,7 @@ Related docs:
 
 - [Configuration and Storage](../../developer/settings-reference.md)
 - [Settings Reference](../../developer/settings-reference.md)
+- [Styleguides and Tech Stacks](./styleguides-and-tech-stacks.md)
 
 ### Project Markdown Mirror
 

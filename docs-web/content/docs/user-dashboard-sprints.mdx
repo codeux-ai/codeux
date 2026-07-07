@@ -15,6 +15,12 @@ Sprints can be **showcase-pinned** to surface them on the Overview page; toggle 
 
 ## Creating a sprint
 
+You can create a sprint from the Sprints page or directly from the top-bar sprint selector.
+
+From the top bar, open the sprint selector and click **Add Sprint**. This compact flow asks only for a name and goal, creates an idle sprint, refreshes the sprint collection, and selects the new sprint. The selector stays enabled even when the project has no sprints so this action remains available for first-sprint creation. Click **Manage Sprints** in the same selector to open the full Sprints page.
+
+From the Sprints page:
+
 1. Click **+ New sprint**.
 2. Enter:
    - **Name** (required)
