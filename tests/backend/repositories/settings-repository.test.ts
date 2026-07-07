@@ -56,7 +56,7 @@ describe("SettingsRepository", () => {
     expect(system.techstackCatalog.entries).toEqual([
       {
         id: BUILTIN_CODE_UX_TECHSTACK_ID,
-        label: "Code UX Internal",
+        label: "Code UX Stack",
         items: [
           { id: "preact", label: "Preact" },
           { id: "tanstack-router", label: "TanStack Router" },
@@ -505,7 +505,7 @@ describe("SettingsRepository", () => {
     expect(system.techstackCatalog.entries).toEqual([
       {
         id: BUILTIN_CODE_UX_TECHSTACK_ID,
-        label: "Code UX Internal",
+        label: "Code UX Stack",
         items: [
           { id: "preact", label: "Preact" },
           { id: "tanstack-router", label: "TanStack Router" },

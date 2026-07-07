@@ -755,7 +755,8 @@ export function parseHeaderTokenThroughputQuery(query: Record<string, unknown>):
 
 function parseHeaderTokenThroughputWindow(window: string): HeaderTokenThroughputWindow {
   if (
-    window === "1h"
+    window === "20s"
+    || window === "1h"
     || window === "24h"
     || window === "7d"
     || window === "30d"
@@ -763,5 +764,5 @@ function parseHeaderTokenThroughputWindow(window: string): HeaderTokenThroughput
   ) {
     return window;
   }
-  throw new Error("Invalid header throughput window. Expected one of: 1h, 24h, 7d, 30d, all.");
+  throw new Error("Invalid header throughput window. Expected one of: 20s, 1h, 24h, 7d, 30d, all.");
 }

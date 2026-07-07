@@ -752,6 +752,9 @@ CREATE TABLE IF NOT EXISTS scheduler_entries (
       );
 
 CREATE INDEX IF NOT EXISTS idx_provider_invocations_provider_status ON provider_invocations (provider, status);
+CREATE INDEX IF NOT EXISTS idx_provider_invocations_started ON provider_invocations (started_at DESC);
+CREATE INDEX IF NOT EXISTS idx_provider_invocations_updated ON provider_invocations (updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_provider_invocations_project_started ON provider_invocations (project_id, started_at DESC);
 CREATE INDEX IF NOT EXISTS idx_provider_invocations_project_sprint_started ON provider_invocations (project_id, sprint_id, started_at DESC);
 CREATE INDEX IF NOT EXISTS idx_provider_invocations_project_sprint_run_started ON provider_invocations (project_id, sprint_run_id, started_at DESC);
 CREATE INDEX IF NOT EXISTS idx_provider_invocations_sprint_started ON provider_invocations (sprint_id, started_at DESC);

@@ -49,7 +49,7 @@ describe("dashboard settings helpers", () => {
     expect(second.mural.boardId).toBe("");
     expect(second.mcpTools[0].enabled).toBe(true);
     expect(second.techstackCatalog.defaultTechstackId).toBe("code-ux-internal");
-    expect(second.techstackCatalog.entries[0]!.label).toBe("Code UX Internal");
+    expect(second.techstackCatalog.entries[0]!.label).toBe("Code UX Stack");
     expect(second.techstackCatalog.entries[0]!.items[0]!.label).toBe("Preact");
     expect(second.techstack.selectedTechstackId).toBe(null);
     expect(second.techstack.applicationKind).toBe(null);

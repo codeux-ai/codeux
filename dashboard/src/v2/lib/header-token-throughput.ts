@@ -8,6 +8,10 @@ import type {
 export interface HeaderTokenThroughputScopeViewModel {
   scope: "app" | "project";
   label: string;
+  tokensPerMinute: number;
+  totalTokens: number;
+  invocationCount: number;
+  activeTimeMs: number;
   rateValueLabel: string;
   rateUnitLabel: "tok/min";
   rateLabel: string;
@@ -130,6 +134,10 @@ function buildScopeViewModel(input: {
   return {
     scope: input.scope,
     label: input.label,
+    tokensPerMinute: totals.tokensPerMinute,
+    totalTokens: totals.totalTokens,
+    invocationCount: totals.invocationCount,
+    activeTimeMs: totals.activeTimeMs,
     rateValueLabel,
     rateUnitLabel: "tok/min",
     rateLabel,
@@ -197,6 +205,7 @@ export function buildHeaderTokenThroughputViewModel(input: {
 
 export function getFallbackWindowLabel(window: HeaderTokenThroughputWindow): string {
   switch (window) {
+    case "20s": return "Last 20 seconds";
     case "1h": return "Last 1 hour";
     case "24h": return "Last 24 hours";
     case "7d": return "Last 7 days";

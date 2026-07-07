@@ -1,5 +1,5 @@
 import type { FunctionComponent } from "preact";
-import { useMemo } from "preact/hooks";
+import { useEffect, useMemo, useRef, useState } from "preact/hooks";
 import type { HeaderTokenThroughputScopeViewModel } from "../../lib/header-token-throughput.js";
 import { buildHeaderTokenThroughputViewModel } from "../../lib/header-token-throughput.js";
 import { useHeaderTokenThroughput } from "../../hooks/use-header-token-throughput.js";
@@ -12,45 +12,215 @@ interface TelemetryStatsProps {
     sprints: Sprint[];
 }
 
-const intensityClasses: Record<HeaderTokenThroughputScopeViewModel["intensity"], string> = {
-    idle: "bg-slate-300 dark:bg-slate-600",
-    low: "bg-signal-400 shadow-[0_0_10px_rgba(0,224,160,0.25)]",
-    medium: "bg-signal-500 shadow-[0_0_14px_rgba(0,224,160,0.36)]",
-    high: "bg-ember-400 shadow-[0_0_16px_rgba(255,184,0,0.4)]",
-};
-
 const countDotClasses = {
     running: "bg-emerald-500",
     queued: "bg-amber-400",
     idle: "bg-slate-300 dark:bg-slate-600",
 };
 
-const ThroughputBars: FunctionComponent<{ metric: HeaderTokenThroughputScopeViewModel }> = ({ metric }) => {
-    const heightClass = metric.intensity === "high"
-        ? ["h-2", "h-3", "h-4"]
-        : metric.intensity === "medium"
-            ? ["h-1.5", "h-2.5", "h-3.5"]
-            : metric.intensity === "low"
-                ? ["h-1", "h-2", "h-2.5"]
-                : ["h-1", "h-1", "h-1"];
+type ThroughputDirection = "up" | "down" | "flat";
+
+interface ThroughputSample {
+    key: string;
+    value: number;
+}
+
+interface ThroughputTrend {
+    direction: ThroughputDirection;
+    samples: ThroughputSample[];
+    deltaLabel: string;
+    linePoints: number[];
+    revision: number;
+}
+
+const THROUGHPUT_POINT_COUNT = 20;
+
+function formatRateDelta(value: number): string {
+    const abs = Math.abs(Math.round(value));
+    if (abs >= 1_000_000) return `${Math.round(abs / 1_000_000)}M`;
+    if (abs >= 1_000) return `${Math.round(abs / 1_000)}K`;
+    return String(abs);
+}
+
+function useThroughputTrend(metric: HeaderTokenThroughputScopeViewModel, sampleKey: string | null): ThroughputTrend {
+    const initialPoint = metric.tokensPerMinute > 0 ? 90 : 0;
+    const [trend, setTrend] = useState<ThroughputTrend>(() => ({
+        direction: "flat",
+        samples: [{ key: "initial", value: metric.tokensPerMinute }],
+        deltaLabel: "0",
+        linePoints: Array.from({ length: THROUGHPUT_POINT_COUNT }, () => initialPoint),
+        revision: 0,
+    }));
+
+    useEffect(() => {
+        if (!sampleKey) return;
+        setTrend((current) => {
+            const lastSample = current.samples[current.samples.length - 1];
+            if (lastSample?.key === sampleKey) {
+                return current;
+            }
+            const nextValue = metric.tokensPerMinute;
+            const previousValue = lastSample?.value ?? nextValue;
+            const delta = nextValue - previousValue;
+            const direction: ThroughputDirection = delta > 0 ? "up" : delta < 0 ? "down" : "flat";
+            const nextPoint = nextValue <= 0
+                ? 0
+                : direction === "up"
+                    ? 98
+                    : direction === "down"
+                        ? 72
+                        : 90;
+            const historicalPoints = current.linePoints.slice(1, -1);
+            const previousTail = current.linePoints[current.linePoints.length - 1] ?? (nextValue > 0 ? 90 : 0);
+            const settledTail = nextValue <= 0
+                ? Math.max(0, previousTail - 24)
+                : previousTail + (90 - previousTail) * 0.58;
+            const linePoints = [...historicalPoints, settledTail, nextPoint].slice(-THROUGHPUT_POINT_COUNT);
+            return {
+                direction,
+                samples: [...current.samples, { key: sampleKey, value: nextValue }].slice(-THROUGHPUT_POINT_COUNT),
+                deltaLabel: direction === "flat" ? "0" : formatRateDelta(delta),
+                linePoints,
+                revision: current.revision + 1,
+            };
+        });
+    }, [metric.tokensPerMinute, sampleKey]);
+
+    return trend;
+}
+
+const directionTone: Record<ThroughputDirection, string> = {
+    up: "text-emerald-500",
+    down: "text-amber-500",
+    flat: "text-slate-400 dark:text-slate-500",
+};
+
+const ACTIVE_SPARKLINE_COLOR = "#00E0A0";
+const IDLE_SPARKLINE_COLOR = "#94A3B8";
+
+function buildThroughputPath(points: number[]): string {
+    if (points.length === 0) return "";
+    return points.map((point, index) => {
+        const x = points.length === 1 ? 50 : (index / (points.length - 1)) * 100;
+        const y = 100 - Math.max(0, Math.min(100, point));
+        if (index === 0) return `M ${x} ${y}`;
+        const prevX = points.length === 1 ? 50 : ((index - 1) / (points.length - 1)) * 100;
+        const prevY = 100 - Math.max(0, Math.min(100, points[index - 1]));
+        const dx = x - prevX;
+        return `C ${prevX + dx * 0.35} ${prevY} ${x - dx * 0.35} ${y} ${x} ${y}`;
+    }).join(" ");
+}
+
+function easeOutCubic(value: number): number {
+    return 1 - Math.pow(1 - value, 3);
+}
+
+function interpolatePoints(from: number[], to: number[], progress: number): number[] {
+    const size = Math.max(from.length, to.length);
+    return Array.from({ length: size }, (_, index) => {
+        const start = from[index] ?? from[from.length - 1] ?? 0;
+        const end = to[index] ?? to[to.length - 1] ?? 0;
+        return start + (end - start) * progress;
+    });
+}
+
+function getAnimationNow(): number {
+    return typeof performance !== "undefined" && typeof performance.now === "function"
+        ? performance.now()
+        : Date.now();
+}
+
+function useAnimatedThroughputLine(targetPoints: number[], revision: number): string {
+    const [animatedPoints, setAnimatedPoints] = useState(targetPoints);
+    const lastPointsRef = useRef(targetPoints);
+
+    useEffect(() => {
+        if (typeof window === "undefined" || typeof window.requestAnimationFrame !== "function") {
+            lastPointsRef.current = targetPoints;
+            setAnimatedPoints(targetPoints);
+            return;
+        }
+
+        const fromPoints = lastPointsRef.current;
+        const startedAt = getAnimationNow();
+        const durationMs = 860;
+        let frame = 0;
+
+        const tick = () => {
+            const elapsed = getAnimationNow() - startedAt;
+            const progress = Math.min(1, elapsed / durationMs);
+            const eased = easeOutCubic(progress);
+            setAnimatedPoints(interpolatePoints(fromPoints, targetPoints, eased));
+
+            if (progress < 1) {
+                frame = window.requestAnimationFrame(tick);
+                return;
+            }
+
+            lastPointsRef.current = targetPoints;
+        };
+
+        frame = window.requestAnimationFrame(tick);
+        return () => {
+            window.cancelAnimationFrame(frame);
+        };
+    }, [revision, targetPoints]);
+
+    return buildThroughputPath(animatedPoints);
+}
+
+const ThroughputSparkline: FunctionComponent<{
+    metric: HeaderTokenThroughputScopeViewModel;
+    trend: ThroughputTrend;
+}> = ({ metric, trend }) => {
+    const path = useAnimatedThroughputLine(trend.linePoints, trend.revision);
+    const color = metric.hasActivity ? ACTIVE_SPARKLINE_COLOR : IDLE_SPARKLINE_COLOR;
+    const gradientId = `header-throughput-${metric.scope}`;
 
     return (
-        <span aria-hidden="true" className="flex h-4 w-5 shrink-0 items-end justify-center gap-0.5">
-            {heightClass.map((height, index) => (
-                <span
-                    key={`${metric.scope}-${index}`}
-                    className={`w-1 rounded-full ${height} ${intensityClasses[metric.intensity]} ${
-                        metric.hasActivity ? "motion-safe:animate-pulse motion-reduce:animate-none" : ""
-                    }`}
-                />
-            ))}
-        </span>
+        <svg
+            aria-hidden="true"
+            data-testid={`throughput-flux-${metric.scope}`}
+            data-direction={trend.direction}
+            className="h-6 w-20 shrink-0 overflow-visible"
+            viewBox="0 0 100 100"
+            preserveAspectRatio="none"
+        >
+            <defs>
+                <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor={color} stopOpacity="0.42" />
+                    <stop offset="100%" stopColor={color} stopOpacity="0" />
+                </linearGradient>
+            </defs>
+            <path
+                d={`${path} L 100 100 L 0 100 Z`}
+                fill={`url(#${gradientId})`}
+                opacity="0.9"
+            />
+            <path
+                data-testid={`throughput-line-${metric.scope}`}
+                d={path}
+                fill="none"
+                stroke={color}
+                strokeWidth="6"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                pathLength={100}
+                strokeDasharray="100"
+                strokeDashoffset="0"
+                className="drop-shadow-[0_0_8px_rgba(0,224,160,0.45)] transition-[stroke] duration-700"
+            />
+        </svg>
     );
 };
 
-const ThroughputMetric: FunctionComponent<{ metric: HeaderTokenThroughputScopeViewModel; compact?: boolean }> = ({ metric, compact }) => (
-    <div className={`flex min-w-0 items-center gap-2 px-2 ${compact ? "max-w-[5.5rem]" : "max-w-[8.5rem] xl:max-w-[10rem]"}`}>
-        <ThroughputBars metric={metric} />
+const ThroughputMetric: FunctionComponent<{
+    metric: HeaderTokenThroughputScopeViewModel;
+    trend: ThroughputTrend;
+    compact?: boolean;
+}> = ({ metric, trend, compact }) => (
+    <div className={`flex min-w-0 items-center gap-2 px-2 ${compact ? "max-w-[7rem]" : "max-w-[13rem] xl:max-w-[14.5rem]"}`}>
+        <ThroughputSparkline metric={metric} trend={trend} />
         <div className="grid min-w-0 grid-rows-[auto_auto] gap-0.5">
             <div className="flex min-w-0 items-baseline gap-1">
                 <span className="min-w-0 truncate font-mono text-[13px] font-black leading-none text-slate-800 tabular-nums dark:text-slate-100">
@@ -62,7 +232,13 @@ const ThroughputMetric: FunctionComponent<{ metric: HeaderTokenThroughputScopeVi
             </div>
             <div className="flex min-w-0 items-center gap-1 text-[9px] font-bold uppercase leading-none text-slate-400 dark:text-slate-500">
                 <span className="min-w-0 truncate">{metric.label}</span>
-                <span className="hidden min-w-0 truncate 2xl:inline">{metric.hasActivity ? metric.totalLabel : metric.emptyLabel}</span>
+                <span
+                    aria-hidden="true"
+                    className={`hidden shrink-0 font-mono text-[9px] font-black leading-none tabular-nums 2xl:inline ${directionTone[trend.direction]}`}
+                >
+                    {trend.direction === "up" ? "+" : trend.direction === "down" ? "-" : ""}
+                    {trend.deltaLabel}
+                </span>
             </div>
         </div>
     </div>
@@ -94,7 +270,7 @@ export const TelemetryStats: FunctionComponent<TelemetryStatsProps> = ({ project
         () => new Set((sprints || []).filter((s) => s.status === "running").map((s) => s.id)),
         [sprints],
     );
-    const throughput = useHeaderTokenThroughput(projectId, "1h");
+    const throughput = useHeaderTokenThroughput(null, "20s", 1_000);
     const { tasks } = useProjectTasks(projectId, [], sprints, null, {
         enabled: activeSprintIds.size > 0,
     });
@@ -104,26 +280,34 @@ export const TelemetryStats: FunctionComponent<TelemetryStatsProps> = ({ project
     const queuedCount = allTasks.filter((t: Task) => t.status === "pending" && activeSprintIds.has(t.sprintId)).length;
     const tokenView = useMemo(() => buildHeaderTokenThroughputViewModel({
         snapshot: throughput.snapshot,
-        projectId,
-        window: "1h",
+        projectId: null,
+        window: "20s",
         loading: throughput.loading,
         error: throughput.error,
-    }), [projectId, throughput.error, throughput.loading, throughput.snapshot]);
+    }), [throughput.error, throughput.loading, throughput.snapshot]);
+    const sampleKey = throughput.snapshot?.generatedAt ?? null;
+    const appTrend = useThroughputTrend(tokenView.app, sampleKey ? `${sampleKey}:app` : null);
+    const headerStatusLabel = tokenView.isError
+        ? "Token telemetry unavailable"
+        : tokenView.isLoading
+            ? "Loading token telemetry"
+            : tokenView.app.hasActivity
+                ? `${tokenView.app.rateLabel} app throughput`
+                : "No app token telemetry in this window";
+    const headerAriaLabel = `${headerStatusLabel}. ${tokenView.app.ariaLabel}`;
 
     return (
         <div
             role="group"
-            aria-label={tokenView.ariaLabel}
+            aria-label={headerAriaLabel}
             aria-busy={tokenView.isLoading ? "true" : "false"}
-            className="hidden h-9 min-w-0 max-w-[min(48vw,29rem)] items-center gap-0.5 overflow-hidden rounded-xl border border-black/[0.06] bg-black/[0.025] px-1 dark:border-white/[0.06] dark:bg-white/[0.025] lg:flex 2xl:max-w-none"
+            className="hidden h-9 min-w-0 max-w-[min(40vw,24rem)] items-center gap-0.5 overflow-hidden rounded-xl border border-black/[0.06] bg-black/[0.025] px-1 dark:border-white/[0.06] dark:bg-white/[0.025] lg:flex 2xl:max-w-none"
         >
             <span className="sr-only" role="status" aria-live="polite" aria-atomic="true">
-                {tokenView.statusLabel}
+                {headerStatusLabel}
             </span>
-            <ThroughputMetric metric={tokenView.app} />
+            <ThroughputMetric metric={tokenView.app} trend={appTrend} />
             <div className="h-4 w-px shrink-0 bg-black/[0.06] dark:bg-white/[0.06]" />
-            <ThroughputMetric metric={tokenView.project} compact />
-            <div className="hidden h-4 w-px shrink-0 bg-black/[0.06] dark:bg-white/[0.06] xl:block" />
             <TaskCountMetric label="running" value={runningCount} />
             <div className="h-4 w-px shrink-0 bg-black/[0.06] dark:bg-white/[0.06]" />
             <TaskCountMetric label="queued" value={queuedCount} />

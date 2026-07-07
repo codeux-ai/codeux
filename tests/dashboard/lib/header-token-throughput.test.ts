@@ -22,15 +22,15 @@ const makeTotals = (overrides: Partial<HeaderTokenThroughputTotals> = {}): Heade
 
 const makeSnapshot = (overrides: Partial<HeaderTokenThroughputSnapshot> = {}): HeaderTokenThroughputSnapshot => ({
   generatedAt: "2026-07-07T12:00:00.000Z",
-  window: "1h",
+  window: "20s",
   range: {
-    window: "1h",
-    label: "Last 1 hour",
-    resolution: "5min",
-    resolutionLabel: "5-minute telemetry buckets",
-    from: "2026-07-07T11:00:00.000Z",
+    window: "20s",
+    label: "Last 20 seconds",
+    resolution: "5sec",
+    resolutionLabel: "5-second telemetry buckets",
+    from: "2026-07-07T11:59:40.000Z",
     to: "2026-07-07T12:00:00.000Z",
-    bucketCount: 12,
+    bucketCount: 4,
     isCustom: false,
   },
   app: makeTotals(),
@@ -91,6 +91,9 @@ describe("header token throughput helpers", () => {
     });
 
     expect(view.app.rateLabel).toBe("1.6K tok/min");
+    expect(view.app.tokensPerMinute).toBe(1600);
+    expect(view.app.totalTokens).toBe(32000);
+    expect(view.app.invocationCount).toBe(8);
     expect(view.app.totalLabel).toBe("32K tokens");
     expect(view.project.label).toBe("Selected Project");
     expect(view.project.rateLabel).toBe("750 tok/min");

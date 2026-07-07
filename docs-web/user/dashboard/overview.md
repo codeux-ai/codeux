@@ -14,7 +14,7 @@ The dashboard uses a **dock-based navigation** by default:
 
 A choice of theme (Light / Dark / System) is in the top bar; navigation mode override is in **Settings → Appearance**.
 
-When a project is active, the top bar also shows its techstack. Projects imported before classification can remain **Unassigned**; in that state the selector displays the catalog default (the built-in Code UX Internal stack unless changed in system settings) as the working fallback without assigning it to the project. Choosing a stack from the dropdown saves only the project techstack selection.
+When a project is active, the top bar also shows its techstack. Projects imported before classification can remain unassigned; in that state the selector displays **None**. Choosing a stack from the dropdown saves only the project techstack selection.
 
 The background is an animated Three.js scene ("Deep Ocean") that lazy-loads after the main UI is interactive, so it never blocks first paint.
 

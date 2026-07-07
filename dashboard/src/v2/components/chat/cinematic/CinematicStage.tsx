@@ -1,7 +1,7 @@
 import type { FunctionComponent, RefObject } from "preact";
 import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
 import gsap from "gsap";
-import { AlertTriangle, ArrowUp, History, ListTodo, Radar, RefreshCw, Rocket, Sparkles, Wrench } from "lucide-preact";
+import { AlertTriangle, ArrowUp, Globe, History, ListTodo, Monitor, Radar, RefreshCw, Rocket, Sparkles, Wrench } from "lucide-preact";
 import type { AgentPresetRecord, ChatMessageRecord, ChatThread, Source } from "../../../types.js";
 import { renderMarkdown } from "../../../../lib/markdown.js";
 import { formatChatTime } from "../../../lib/chat-time.js";
@@ -68,32 +68,46 @@ const TOOL_SWAP_MS = 7_000;
  *  left uses max() so chips never escape the viewport on narrow stages. */
 const QUICK_ACTIONS = [
   {
+    icon: Globe,
+    label: "Web App",
+    prompt: "Set up this existing project as a web app using the project's current techstack setting. Inspect the repository first, then propose and run the needed project-scoped commands or sprint work. Do not create or import a new Code UX project.",
+    position: "top-[6%] left-[max(1rem,calc(50%-350px))]",
+    delay: "0s",
+  },
+  {
+    icon: Monitor,
+    label: "Desktop App",
+    prompt: "Set up this existing project as a desktop app using the project's current techstack setting. Inspect the repository first, then propose and run the needed project-scoped commands or sprint work. Do not create or import a new Code UX project.",
+    position: "top-[19%] left-[max(0.75rem,calc(50%-420px))]",
+    delay: "0.8s",
+  },
+  {
     icon: Radar,
     label: "Status report",
     prompt: "Give me a concise status report for this project — CI health, running work, and anything blocked.",
-    position: "top-[12%] left-[max(1rem,calc(50%-360px))]",
-    delay: "0s",
+    position: "top-[32%] left-[max(0.5rem,calc(50%-440px))]",
+    delay: "1.6s",
   },
   {
     icon: Rocket,
     label: "Sprint progress",
     prompt: "How is the current sprint progressing? Summarize task completion and what is next.",
-    position: "top-[31%] left-[max(0.5rem,calc(50%-430px))]",
-    delay: "1.4s",
+    position: "top-[45%] left-[max(0.5rem,calc(50%-440px))]",
+    delay: "2.4s",
   },
   {
     icon: AlertTriangle,
     label: "What's failing?",
     prompt: "What is currently failing or blocked in this project, and what do you recommend we do about it?",
-    position: "top-[50%] left-[max(0.5rem,calc(50%-440px))]",
-    delay: "2.6s",
+    position: "top-[58%] left-[max(0.75rem,calc(50%-420px))]",
+    delay: "3.2s",
   },
   {
     icon: ListTodo,
     label: "Plan next steps",
     prompt: "Propose the next steps for this project as a short prioritized task list.",
-    position: "top-[68%] left-[max(1rem,calc(50%-380px))]",
-    delay: "3.8s",
+    position: "top-[71%] left-[max(1rem,calc(50%-350px))]",
+    delay: "4s",
   },
 ] as const;
 

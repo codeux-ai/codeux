@@ -476,7 +476,8 @@ export interface ExecutionStatsEntitySummary {
 }
 
 export type ProjectStatsWindow = "1h" | "24h" | "7d" | "30d" | "all" | "custom";
-export type ProjectStatsResolution = "5min" | "hour" | "day" | "week";
+export type ProjectStatsRangeWindow = ProjectStatsWindow | "20s";
+export type ProjectStatsResolution = "5sec" | "5min" | "hour" | "day" | "week";
 
 export interface ProjectStatsQuery {
   window: ProjectStatsWindow;
@@ -486,7 +487,7 @@ export interface ProjectStatsQuery {
 }
 
 export interface ProjectStatsRangeSummary {
-  window: ProjectStatsWindow;
+  window: ProjectStatsRangeWindow;
   label: string;
   resolution: ProjectStatsResolution;
   resolutionLabel: string;
@@ -537,7 +538,7 @@ export interface ProjectExecutionStatsSnapshot {
   chartSeries: ProjectExecutionStatsChartSeries[];
 }
 
-export type HeaderTokenThroughputWindow = Exclude<ProjectStatsWindow, "custom">;
+export type HeaderTokenThroughputWindow = "20s" | Exclude<ProjectStatsWindow, "custom">;
 
 export interface HeaderTokenThroughputQuery {
   window: HeaderTokenThroughputWindow;
