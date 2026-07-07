@@ -104,11 +104,12 @@ Project management:
 - `GET /api/conversations/threads/:threadId/messages`
   - Lists stored messages for one thread
 - `POST /api/projects/:projectId/conversations/messages`
-- Stores a dashboard-authored message and queues it for a listener
-- Threads now remain explicitly `unassigned` until the dashboard targets a connection or a real listener claims them
-- The active thread header now supports explicit assignment and reassignment to a project-bound connection
-- Reassigning a thread re-queues any unprocessed dashboard messages so the newly assigned listener can receive them
-- Connection badges now reflect heartbeat-derived `stale` and `offline` states instead of keeping dead listeners permanently `connected`
+  - Stores a dashboard-authored message and queues it for a listener
+  - Create-app quickactions use the same endpoint with `metadata.quickaction.type = "create_app"`, `kind` (`web_app` or `desktop_app`), `requestId`, `templateId`, stack summary, and suggestion tags. The server persists the dashboard message, bypasses normal provider reply routing, launches the matching detached quicksprint in `Plan & Start` mode, posts an `app_progress` widget, and tracks follow-up handling in thread `runtimeState.createAppQuickaction`.
+  - Threads now remain explicitly `unassigned` until the dashboard targets a connection or a real listener claims them
+  - The active thread header now supports explicit assignment and reassignment to a project-bound connection
+  - Reassigning a thread re-queues any unprocessed dashboard messages so the newly assigned listener can receive them
+  - Connection badges now reflect heartbeat-derived `stale` and `offline` states instead of keeping dead listeners permanently `connected`
 - `GET /api/projects/:projectId/scheduler?from=<iso>&to=<iso>`
   - Lists persisted scheduler entries plus expanded calendar occurrences for the requested window
 - `POST /api/projects/:projectId/scheduler`
@@ -497,6 +498,7 @@ Legacy runtime:
 - Active chat titles wrap or truncate inside the bounded header area, while thread rail titles clamp to two stable lines with long-word wrapping so manual renames remain readable without causing rail layout churn.
 - Chat page now provides a `Threads / Invocations` toggle to switch between human conversation threads and read-only execution invocations.
 - Chat page UI is redesigned with animated identities, structured widgets for rich messages, and automatic worker pickup derived from active project routing.
+- Chat Threads mode exposes **Create Desktop App** and **Create Web App** quickactions beside the composer, including empty threads. Clicking either control posts the short visible chat message immediately, creates a thread first when needed, and does not open a confirmation dialog or switch to Invocations. The backend launches the matching detached quicksprint with `Plan & Start`, then the transcript shows an app progress widget with app kind, sprint name, stack fields, metadata-driven stages, and suggestion tags. Users can keep typing in the same thread while planning runs; follow-up messages are queued until tasks exist, then appended to the sprint-level goal under `Additional direction from chat`.
 - Chat page logs invocation activity explicitly in the background, providing observable execution artifacts directly in the chat view.
 - Chat page filters the "Threads" mode to show user-facing conversation threads (`scope === "project"`).
 - Chat page "Invocations" mode provides a read-only list with metadata for active/completed execution invocations without cluttering the main thread rail.
