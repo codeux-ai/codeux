@@ -8,7 +8,9 @@ export type NativeSessionOperationProvider = Exclude<CliProviderId, "mockup-cli"
 
 export type ProviderCommandSpec = (model: string, prompt: string) => { command: string; args: string[] };
 
-export const providerSpecs: Record<CliProviderId, ProviderCommandSpec> = {
+export const E2E_PROVIDER_CLI_SHIM_ENV = "CODEUX_E2E_PROVIDER_CLI_SHIM";
+
+const realProviderSpecs: Record<CliProviderId, ProviderCommandSpec> = {
   "gemini": (model: string, prompt: string) => ({
     command: "gemini",
     args: ["--yolo", "--output-format", "json", "--p", prompt]
@@ -50,6 +52,44 @@ export const providerSpecs: Record<CliProviderId, ProviderCommandSpec> = {
       prompt,
     ],
   }),
+};
+
+function resolveE2eProviderCliShim(): string | null {
+  const shimPath = process.env[E2E_PROVIDER_CLI_SHIM_ENV]?.trim();
+  return shimPath ? shimPath : null;
+}
+
+function withE2eProviderCliShim(provider: CliProviderId, spec: ProviderCommandSpec): ProviderCommandSpec {
+  if (provider === "mockup-cli") {
+    return spec;
+  }
+
+  return (model: string, prompt: string) => {
+    const shimPath = resolveE2eProviderCliShim();
+    if (!shimPath) {
+      return spec(model, prompt);
+    }
+
+    return {
+      command: process.execPath,
+      args: [
+        shimPath,
+        "--provider", provider,
+        "--model", model || "default",
+        "--prompt", prompt,
+      ],
+    };
+  };
+}
+
+export const providerSpecs: Record<CliProviderId, ProviderCommandSpec> = {
+  "gemini": withE2eProviderCliShim("gemini", realProviderSpecs["gemini"]),
+  "claude-code": withE2eProviderCliShim("claude-code", realProviderSpecs["claude-code"]),
+  "codex": withE2eProviderCliShim("codex", realProviderSpecs["codex"]),
+  "qwen-code": withE2eProviderCliShim("qwen-code", realProviderSpecs["qwen-code"]),
+  opencode: withE2eProviderCliShim("opencode", realProviderSpecs.opencode),
+  antigravity: withE2eProviderCliShim("antigravity", realProviderSpecs.antigravity),
+  "mockup-cli": withE2eProviderCliShim("mockup-cli", realProviderSpecs["mockup-cli"]),
 };
 
 export const enabledCustomServersFor = (servers: CustomMcpServer[] | undefined, provider: ProviderId): CustomMcpServer[] =>

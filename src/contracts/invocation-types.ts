@@ -1,4 +1,5 @@
 import type { ProviderErrorCategory } from "../shared/providers/provider-error-classifier.js";
+import type { CliExecutionMode } from "./app-types.js";
 
 export type ExecutionInvocationStatus = "running" | "completed" | "failed" | "cancelled" | "paused";
 
@@ -74,6 +75,7 @@ export interface ExecutionInvocationRecord {
   status: ExecutionInvocationStatus;
   provider: string | null;
   model: string | null;
+  executionMode?: CliExecutionMode | null;
   systemPrompt: string | null;
   startedAt: string;
   finishedAt: string | null;
@@ -90,6 +92,8 @@ export interface ExecutionInvocationRecord {
   cachedInputTokens?: number;
   outputTokens?: number;
   totalTokens?: number;
+  promptChars?: number;
+  transcriptChars?: number;
   costCents?: number | null;
   // Joined sprint/task context for display + deep-linking on the dashboard.
   sprintNumber?: number | null;

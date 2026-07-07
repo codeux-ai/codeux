@@ -206,6 +206,7 @@ export class CodeUxServer {
   private mcpHttpHandle: McpHttpTransportHandle | null = null;
   private dashboardHandle: DashboardServerHandle | null = null;
   private mcpServiceBound = false;
+  private startupRecoveryCompleted = false;
   private isClosing = false;
   private closePromise: Promise<void> | null = null;
   private readonly mcpApprovalTracker = new McpApprovalTracker();
@@ -812,8 +813,9 @@ export class CodeUxServer {
     const settingsDbUp = this.runtimeContext.settings !== undefined;
     const dashboardBindUp = !this.isDashboardEnabled() || this.runtimeContext.dashboardRuntimePort !== null;
     const mcpServiceUp = this.mcpServiceBound;
+    const startupRecoveryUp = this.startupRecoveryCompleted;
 
-    const isReady = settingsDbUp && dashboardBindUp && mcpServiceUp;
+    const isReady = settingsDbUp && dashboardBindUp && mcpServiceUp && startupRecoveryUp;
 
     return {
       status: isReady ? "READY" : "NOT_READY",
@@ -821,6 +823,7 @@ export class CodeUxServer {
         settingsDb: settingsDbUp ? "UP" : "DOWN",
         dashboardBind: dashboardBindUp ? "UP" : "DOWN",
         mcpService: mcpServiceUp ? "UP" : "DOWN",
+        startupRecovery: startupRecoveryUp ? "UP" : "DOWN",
       }
     };
   }
@@ -1181,6 +1184,8 @@ export class CodeUxServer {
       }
     } catch (error) {
       this.logger.error("Failed to recover runtime state on startup", { error });
+    } finally {
+      this.startupRecoveryCompleted = true;
     }
   }
 

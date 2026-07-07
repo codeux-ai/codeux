@@ -465,8 +465,9 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<DashboardS
         };
     },
     getOverviewTelemetrySnapshot: cache.getOverviewTelemetrySnapshot,
-    // `/api/projects/:id/execution` (sprints/overview/chat) — feed-less.
-    getProjectExecutionSnapshot: cache.getProjectExecutionSnapshotLean,
+    // `/api/projects/:id/execution` is the public REST snapshot and includes
+    // recent events/invocations; realtime execution pushes stay feed-less above.
+    getProjectExecutionSnapshot: cache.getProjectExecutionSnapshot,
     getProjectStatsSnapshot: cache.getProjectStatsSnapshot,
     getHeaderTokenThroughputSnapshot: cache.getHeaderTokenThroughputSnapshot,
     setPreferredWorker: (projectId, input) => {
