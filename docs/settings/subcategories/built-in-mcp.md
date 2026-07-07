@@ -4,15 +4,15 @@ Controls which built-in Code UX MCP tool categories are available to containeriz
 
 ## What It Controls
 
-Tool-category and individual-tool toggles decide what providers may call on their next run.
+Tool-category and individual-tool toggles decide what trusted provider and project-manager clients may call on their next run. Agent presets add a separate access layer in the Agents editor.
 
 ## Recommended Defaults
 
-Disable only categories you know a provider should not access.
+Keep the global surface aligned with project-manager workflows. For individual agents, start with Code UX disabled and enable scheduler-only access only when the preset needs agent-owned wakeups or task reruns.
 
 ## Risks And Gotchas
 
-Disabling required tools can make provider workflows fail; enabling broad tools increases capability exposure.
+Disabling required tools can make provider workflows fail; enabling broad tools increases capability exposure. The restricted `scheduler` tool is narrower than `manage_scheduler`, but it can still create runtime work, so non-chat agents should receive it only through an intentional per-agent opt-in.
 
 ## Dashboard Link
 

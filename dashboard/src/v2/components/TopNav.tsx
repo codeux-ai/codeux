@@ -1,7 +1,7 @@
 import type { FunctionComponent, RefObject } from "preact";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "preact/hooks";
 import gsap from "gsap";
-import { Bell, Moon, Sun, ChevronDown, FolderOpen, ArrowRight, Layers, Globe, Monitor } from "lucide-preact";
+import { Bell, CalendarClock, Moon, Sun, ChevronDown, FolderOpen, ArrowRight, Layers, Globe, Monitor } from "lucide-preact";
 import { Link, useRouterState } from "@tanstack/react-router";
 import { StatusDot } from "./ui/StatusDot.js";
 import type { ApplicationKind, TechstackCatalogSettings } from "../../types.js";
@@ -26,6 +26,7 @@ import { Tooltip } from "./ui/Tooltip.js";
 import { useNotifications } from "../hooks/use-notifications.js";
 import { useThemeSetting } from "../hooks/useThemeSetting.js";
 import { useIsDark } from "../hooks/use-is-dark.js";
+import type { AgentSchedulerSummaryEntry } from "../lib/scheduler-api.js";
 
 export function useDropdownKeyboard(
     isOpen: boolean,
@@ -167,6 +168,88 @@ type AddProjectQuickActionDefaults = {
     selectedTechstackId: string;
 };
 
+const ScheduledAgentIndicator: FunctionComponent<{ entries: AgentSchedulerSummaryEntry[] }> = ({ entries }) => {
+    const [detailsVisible, setDetailsVisible] = useState(false);
+    const containerRef = useRef<HTMLDivElement>(null);
+    const detailsId = "scheduled-agent-details";
+
+    if (entries.length === 0) {
+        return null;
+    }
+
+    const countLabel = `${entries.length} active scheduled agent ${entries.length === 1 ? "entry" : "entries"}`;
+
+    return (
+        <div
+            ref={containerRef}
+            className="relative inline-block"
+            onMouseEnter={() => setDetailsVisible(true)}
+            onMouseLeave={() => setDetailsVisible(false)}
+            onFocus={() => setDetailsVisible(true)}
+            onBlur={(event) => {
+                if (!containerRef.current?.contains(event.relatedTarget as Node)) {
+                    setDetailsVisible(false);
+                }
+            }}
+            onKeyDown={(event) => {
+                if (event.key === "Escape") {
+                    event.preventDefault();
+                    setDetailsVisible(false);
+                    (event.currentTarget.querySelector("button") as HTMLButtonElement | null)?.focus({ preventScroll: true });
+                }
+            }}
+        >
+            <button
+                type="button"
+                aria-label={`Scheduled agent work: ${countLabel}`}
+                aria-describedby={detailsVisible ? detailsId : undefined}
+                className="relative flex h-9 min-w-9 shrink-0 items-center justify-center gap-1.5 rounded-xl border border-signal-500/20 bg-signal-500/10 px-2.5 text-signal-700 transition-colors hover:bg-signal-500/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 dark:text-signal-300 dark:hover:bg-signal-500/20"
+            >
+                <CalendarClock className="h-3.5 w-3.5" strokeWidth={2.1} aria-hidden="true" />
+                <span className="min-w-4 text-center text-[11px] font-black tabular-nums leading-none">
+                    {entries.length > 9 ? "9+" : entries.length}
+                </span>
+            </button>
+            {detailsVisible ? (
+                <div
+                    id={detailsId}
+                    role="tooltip"
+                    className="absolute right-0 top-full z-50 mt-2 w-80 max-w-[calc(100vw-2rem)] rounded-2xl border border-black/[0.08] bg-white/95 p-3 text-left shadow-2xl backdrop-blur-2xl dark:border-white/[0.08] dark:bg-void-800/95"
+                >
+                    <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">
+                        Scheduled agent work
+                    </div>
+                    <div className="mt-1 text-xs font-semibold text-slate-600 dark:text-slate-300">
+                        {countLabel}
+                    </div>
+                    <ul className="mt-2 max-h-72 space-y-2 overflow-y-auto pr-1">
+                        {entries.map((entry) => (
+                            <li key={entry.id} className="rounded-xl border border-black/[0.05] bg-black/[0.025] p-2.5 dark:border-white/[0.06] dark:bg-white/[0.04]">
+                                <div className="flex items-start justify-between gap-2">
+                                    <div className="min-w-0">
+                                        <div className="text-[10px] font-black uppercase tracking-[0.12em] text-signal-700 dark:text-signal-300">
+                                            {entry.label}
+                                        </div>
+                                        <div className="mt-1 break-words text-xs font-bold text-slate-800 dark:text-slate-100">
+                                            {entry.title}
+                                        </div>
+                                    </div>
+                                    <span className="shrink-0 rounded-full bg-black/[0.04] px-1.5 py-0.5 text-[9px] font-black uppercase tracking-[0.12em] text-slate-500 dark:bg-white/[0.06] dark:text-slate-400">
+                                        {entry.statusLabel}
+                                    </span>
+                                </div>
+                                <div className="mt-1.5 text-[11px] leading-relaxed text-slate-500 dark:text-slate-400">
+                                    {entry.targetSummary} · {entry.timingSummary}
+                                </div>
+                            </li>
+                        ))}
+                    </ul>
+                </div>
+            ) : null}
+        </div>
+    );
+};
+
 export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile, hideLogo, isMobileMenuOpen }) => {
     const navRef = useRef<HTMLElement>(null);
 
@@ -175,7 +258,6 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
     const [dropdownOpen, setDropdownOpen] = useState(false);
     const [showAddProject, setShowAddProject] = useState(false);
     const [addProjectQuickActionDefaults, setAddProjectQuickActionDefaults] = useState<AddProjectQuickActionDefaults | undefined>(undefined);
-    const notifications = useNotifications();
     const isDark = useIsDark();
     const { setTheme } = useThemeSetting();
 
@@ -288,6 +370,7 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
     } = useProjectData();
     const projectId = selectedProject?.id || null;
     const { data: effectiveSettings, loading: effectiveSettingsLoading, refresh: refreshEffectiveSettings } = useProjectEffectiveSettings(projectId);
+    const notifications = useNotifications(projectId);
     const sprintKeyPrefix = effectiveSettings?.settings?.git?.sprintKeyPrefix || "SPR";
 
     const { data: sprints, selectedSprintId, selectedSprint, selectSprint, loading: sprintsLoading } = useSprints(selectedProject?.id || null);
@@ -827,6 +910,8 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
                 <DockerStatusMenu />
 
                 <BrowserSessionsMenu enabled={browserVisible} />
+
+                <ScheduledAgentIndicator entries={notifications.agentSchedules ?? []} />
 
                 {/* Notifications */}
                 <div

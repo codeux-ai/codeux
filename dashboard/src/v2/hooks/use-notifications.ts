@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from "preact/hooks";
-import { AlertTriangle, CheckCircle, HelpCircle, Info, KeyRound, type LucideIcon } from "lucide-preact";
+import { AlertTriangle, CalendarClock, CheckCircle, HelpCircle, Info, KeyRound, type LucideIcon } from "lucide-preact";
 import { fetchOnboardingReadiness } from "../../lib/api/dashboard-api.js";
 import type { OnboardingRuntimeReadiness } from "../../types.js";
 import { openOnboarding } from "../lib/onboarding-control.js";
+import { subscribeToDashboardRealtime } from "../../lib/realtime/dashboard-realtime-client.js";
+import { fetchActiveAgentSchedulerEntries, type AgentSchedulerSummaryEntry } from "../lib/scheduler-api.js";
 
 const NOTIFICATION_STATE_KEY = "codeux:notification-state:v1";
 
@@ -156,21 +158,46 @@ const deriveStartupNotifications = (
   return notifications;
 };
 
-export const useNotifications = (): {
+const deriveAgentSchedulerNotifications = (
+  entries: AgentSchedulerSummaryEntry[],
+): Array<Omit<DashboardNotification, "unread">> => (
+  entries.map((entry) => ({
+    id: `scheduler-agent-${entry.id}`,
+    severity: "info",
+    title: `${entry.label} scheduled`,
+    body: `${entry.title}. ${entry.targetSummary}. ${entry.timingSummary}. Status: ${entry.statusLabel}.`,
+    time: "Scheduled",
+    dismissible: true,
+    icon: CalendarClock,
+  }))
+);
+
+export const useNotifications = (projectId?: string | null): {
   notifications: DashboardNotification[];
   unreadCount: number;
+  agentSchedules: AgentSchedulerSummaryEntry[];
   refresh: () => Promise<void>;
   markAllRead: () => void;
   markRead: (id: string) => void;
   dismiss: (id: string) => void;
 } => {
   const [readiness, setReadiness] = useState<OnboardingRuntimeReadiness | null>(null);
+  const [agentSchedules, setAgentSchedules] = useState<AgentSchedulerSummaryEntry[]>([]);
   const [storedState, setStoredState] = useState<StoredNotificationState>(() => readStoredState());
 
   const refresh = useCallback(async (): Promise<void> => {
     const nextReadiness = await fetchOnboardingReadiness();
     setReadiness(nextReadiness);
-  }, []);
+    if (!projectId) {
+      setAgentSchedules([]);
+      return;
+    }
+    try {
+      setAgentSchedules(await fetchActiveAgentSchedulerEntries(projectId));
+    } catch {
+      setAgentSchedules([]);
+    }
+  }, [projectId]);
 
   useEffect(() => {
     void refresh().catch(() => undefined);
@@ -178,6 +205,20 @@ export const useNotifications = (): {
     window.addEventListener("codeux:settings-updated", handler);
     return () => window.removeEventListener("codeux:settings-updated", handler);
   }, [refresh]);
+
+  useEffect(() => {
+    if (!projectId) {
+      return;
+    }
+    return subscribeToDashboardRealtime([`project:${projectId}`], (message) => {
+      if (
+        message.type === "snapshot_required"
+        || (message.type === "event" && message.event.eventType === "project.structure.updated")
+      ) {
+        void refresh().catch(() => undefined);
+      }
+    });
+  }, [projectId, refresh]);
 
   const updateStoredState = useCallback((recipe: (current: StoredNotificationState) => StoredNotificationState): void => {
     setStoredState((current) => {
@@ -188,14 +229,17 @@ export const useNotifications = (): {
   }, []);
 
   const notifications = useMemo(() => {
-    const base = deriveStartupNotifications(readiness, openOnboarding);
+    const base = [
+      ...deriveStartupNotifications(readiness, openOnboarding),
+      ...deriveAgentSchedulerNotifications(agentSchedules),
+    ];
     return base
       .filter((notification) => !storedState.dismissedIds.includes(notification.id))
       .map((notification) => ({
         ...notification,
         unread: !storedState.readIds.includes(notification.id),
       }));
-  }, [readiness, storedState.dismissedIds, storedState.readIds]);
+  }, [agentSchedules, readiness, storedState.dismissedIds, storedState.readIds]);
 
   const markRead = useCallback((id: string): void => {
     updateStoredState((current) => ({
@@ -221,6 +265,7 @@ export const useNotifications = (): {
   return {
     notifications,
     unreadCount: notifications.filter((notification) => notification.unread).length,
+    agentSchedules,
     refresh,
     markAllRead,
     markRead,

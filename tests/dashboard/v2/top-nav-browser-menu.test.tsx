@@ -41,6 +41,7 @@ vi.mock("../../../dashboard/src/v2/hooks/use-notifications.js", () => ({
     useNotifications: vi.fn(() => ({
         notifications: [],
         unreadCount: 0,
+        agentSchedules: [],
         markAllRead: vi.fn(),
         markRead: vi.fn(),
         dismiss: vi.fn(),
@@ -162,6 +163,19 @@ const makeSprint = (id: string, name: string) => ({
     sprintKey: id.toUpperCase(),
     createdAt: "2026-01-01T00:00:00.000Z",
     updatedAt: "2026-01-01T00:00:00.000Z",
+});
+
+const makeAgentSchedule = (id: string, overrides: Record<string, unknown> = {}) => ({
+    id,
+    targetType: "agent_wakeup",
+    label: "Agent wakeup",
+    title: "Morning queue check",
+    status: "scheduled",
+    statusLabel: "scheduled",
+    timingSummary: "Scheduled for Jul 7, 09:00 AM",
+    targetSummary: "Thread thread-123",
+    scheduledAt: "2026-07-07T09:00:00.000Z",
+    ...overrides,
 });
 
 const mockTopNavData = ({
@@ -774,6 +788,7 @@ describe("TopNav shell accessibility", () => {
         vi.mocked(useNotifications).mockReturnValue({
             notifications: [],
             unreadCount: 1,
+            agentSchedules: [],
             markAllRead: vi.fn(),
             markRead: vi.fn(),
             dismiss: vi.fn(),
@@ -798,6 +813,90 @@ describe("TopNav shell accessibility", () => {
 
         await waitFor(() => {
             expect(screen.queryByRole("dialog", { name: "Notifications Panel" })).not.toBeInTheDocument();
+            expect(document.activeElement).toBe(trigger);
+        });
+    });
+
+    it("does not render the scheduled-agent indicator when there are no active agent schedules", () => {
+        mockTopNavData();
+        vi.mocked(useNotifications).mockReturnValue({
+            notifications: [],
+            unreadCount: 0,
+            agentSchedules: [],
+            markAllRead: vi.fn(),
+            markRead: vi.fn(),
+            dismiss: vi.fn(),
+            refresh: vi.fn(),
+        } as any);
+
+        render(<TopNav />);
+
+        expect(screen.queryByRole("button", { name: /Scheduled agent work/i })).not.toBeInTheDocument();
+    });
+
+    it("renders scheduled-agent count and reveals details on hover", async () => {
+        mockTopNavData();
+        vi.mocked(useNotifications).mockReturnValue({
+            notifications: [],
+            unreadCount: 0,
+            agentSchedules: [
+                makeAgentSchedule("entry-wakeup"),
+                makeAgentSchedule("entry-task", {
+                    targetType: "task",
+                    label: "Task run",
+                    title: "Retry blocked task",
+                    timingSummary: "After source sprint sprint-1 ends + 5 minutes",
+                    targetSummary: "Task task-42 · codex",
+                    scheduledAt: null,
+                }),
+            ],
+            markAllRead: vi.fn(),
+            markRead: vi.fn(),
+            dismiss: vi.fn(),
+            refresh: vi.fn(),
+        } as any);
+
+        render(<TopNav />);
+
+        const trigger = screen.getByRole("button", { name: /Scheduled agent work: 2 active scheduled agent entries/i });
+        expect(trigger).toHaveTextContent("2");
+        expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
+
+        fireEvent.mouseEnter(trigger.closest("div") as Element);
+
+        await waitFor(() => {
+            expect(screen.getByRole("tooltip")).toHaveTextContent("Morning queue check");
+            expect(screen.getByRole("tooltip")).toHaveTextContent("Retry blocked task");
+            expect(screen.getByRole("tooltip")).toHaveTextContent("Task task-42 · codex · After source sprint sprint-1 ends + 5 minutes");
+        });
+    });
+
+    it("reveals scheduled-agent details from keyboard focus with a stable accessible description", async () => {
+        mockTopNavData();
+        vi.mocked(useNotifications).mockReturnValue({
+            notifications: [],
+            unreadCount: 0,
+            agentSchedules: [makeAgentSchedule("entry-wakeup")],
+            markAllRead: vi.fn(),
+            markRead: vi.fn(),
+            dismiss: vi.fn(),
+            refresh: vi.fn(),
+        } as any);
+
+        render(<TopNav />);
+
+        const trigger = screen.getByRole("button", { name: /Scheduled agent work: 1 active scheduled agent entry/i });
+        trigger.focus();
+
+        await waitFor(() => {
+            expect(trigger).toHaveAttribute("aria-describedby", "scheduled-agent-details");
+            expect(screen.getByRole("tooltip")).toHaveTextContent("Thread thread-123 · Scheduled for Jul 7, 09:00 AM");
+        });
+
+        fireEvent.keyDown(trigger.closest("div") as Element, { key: "Escape" });
+
+        await waitFor(() => {
+            expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
             expect(document.activeElement).toBe(trigger);
         });
     });

@@ -93,6 +93,7 @@ router
   .register("manage_tasks",       h.handleManageTasks)
   .register("manage_quicksprints", h.handleManageQuicksprints)
   .register("manage_scheduler",   h.handleManageScheduler)
+  .register("scheduler",          h.handleScheduler)
   .register("manage_agents",      h.handleManageAgents)
   .register("manage_memory",      h.handleManageMemory)
   .register("manage_skills",      h.handleManageSkills)
@@ -120,6 +121,11 @@ Server returns getEnabledToolDefinitions(settings, runtimeRole)
 
 Advertised agent identities fail closed when malformed, unknown, or missing an explicit MCP access
 policy. This prevents an unknown worker agent from inheriting broad project-manager tools.
+Agent-scoped provider runs use the same default-deny posture for built-in Code UX tools. Default
+custom MCP links such as `playwright` are stored separately and do not imply `code_ux` access.
+Dashboard chat replies are the only route-local default exception: unconfigured reply agents receive
+the restricted `scheduler` tool only, with broad tools such as `manage_scheduler`, `manage_tasks`,
+`manage_sprints`, `manage_settings`, and `manage_code_ux` disabled.
 
 ### `CallTool`
 
@@ -148,6 +154,7 @@ Each tool has an entry in `settings.mcpTools` (`McpToolToggle[]`). Defaults:
   { "name": "manage_tasks",        "enabled": true, "isInternal": true },
   { "name": "manage_quicksprints", "enabled": true, "isInternal": true },
   { "name": "manage_scheduler",    "enabled": true, "isInternal": true },
+  { "name": "scheduler",           "enabled": true, "isInternal": true },
   { "name": "manage_agents",       "enabled": true, "isInternal": true },
   { "name": "manage_memory",       "enabled": true, "isInternal": true },
   { "name": "manage_skills",       "enabled": true, "isInternal": true },

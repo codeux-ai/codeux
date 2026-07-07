@@ -8,6 +8,8 @@ import { AgentPresetEditorPanel } from "../AgentPresetEditorPanel.js";
 import { DEFAULT_AGENT_MEMORY_CONFIG, type AgentMemoryConfig } from "../../../memory-types.js";
 import type { AgentPreset } from "../../../types.js";
 import * as knowledgeApi from "../../../lib/knowledge-api.js";
+import { TOOL_DEFINITIONS } from "../../../../../../src/contracts/mcp-tool-definitions.js";
+import { schedulerOnlyAgentMcpAccess } from "../../../lib/agent-mcp-display.js";
 
 expect.extend(matchers);
 
@@ -44,7 +46,11 @@ vi.mock("../AgentAvatarCustomizer.js", () => ({
 }));
 
 vi.mock("../AgentMcpManageModal.js", () => ({
-  AgentMcpManagePanel: () => <div data-testid="mcp-manage-panel" />,
+  AgentMcpManagePanel: ({ isDashboardReplyAgent }: { isDashboardReplyAgent?: boolean }) => (
+    <div data-testid="mcp-manage-panel">
+      {isDashboardReplyAgent ? "Dashboard reply scheduler-only recommendation" : "Non-chat Code UX risk gate"}
+    </div>
+  ),
 }));
 
 vi.mock("../../providers/ProviderBrandIcon.js", () => ({
@@ -340,5 +346,64 @@ describe("AgentPresetEditorPanel", () => {
     await waitFor(() => {
       expect(knowledgeApi.setAgentKnowledgeSubscriptions).toHaveBeenCalledWith("preset_1", ["doc_runbook"]);
     });
+  });
+
+  it("shows missing MCP access as default-deny and opens the risk-gated manager before enabling Code UX", async () => {
+    render(
+      <AgentPresetEditorPanel
+        preset={makePreset({ mcpAccess: undefined })}
+        saving={false}
+        onSave={vi.fn()}
+        onCancel={vi.fn()}
+      />
+    );
+
+    const codeUxChip = screen.getByRole("button", { name: /Code UX Disabled/i });
+    expect(codeUxChip).toHaveAttribute("aria-pressed", "false");
+
+    fireEvent.click(codeUxChip);
+
+    expect(await screen.findByText("Code UX access is risk-gated for non-chat agents. Review the MCP manager warning before enabling it.")).toBeInTheDocument();
+    expect(await screen.findByTestId("mcp-manage-panel")).toHaveTextContent("Non-chat Code UX risk gate");
+  });
+
+  it("passes dashboard reply route context into the MCP manager", async () => {
+    render(
+      <AgentPresetEditorPanel
+        preset={makePreset({ mcpAccess: undefined })}
+        saving={false}
+        isDashboardReplyAgent
+        onSave={vi.fn()}
+        onCancel={vi.fn()}
+      />
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /Code UX Disabled/i }));
+
+    expect(await screen.findByText("Review scheduler-only Code UX access before enabling it for the dashboard reply agent.")).toBeInTheDocument();
+    expect(await screen.findByTestId("mcp-manage-panel")).toHaveTextContent("Dashboard reply scheduler-only recommendation");
+  });
+
+  it("persists scheduler-only MCP access without dropping the explicit scheduler toggle", async () => {
+    const onSave = vi.fn();
+    render(
+      <AgentPresetEditorPanel
+        preset={makePreset({ mcpAccess: schedulerOnlyAgentMcpAccess(["playwright"]) })}
+        saving={false}
+        onSave={onSave}
+        onCancel={vi.fn()}
+      />
+    );
+
+    fireEvent.input(screen.getByLabelText(/Agent Name/), { target: { value: "Planning Lead" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save Agent" }));
+
+    expect(onSave).toHaveBeenCalledTimes(1);
+    const payload = onSave.mock.calls[0]?.[1] as Partial<AgentPreset>;
+    expect(payload.mcpAccess?.codeUxEnabled).toBe(true);
+    expect(payload.mcpAccess?.linkedServerIds).toEqual(["playwright"]);
+    expect(payload.mcpAccess?.codeUxToolToggles).toHaveLength(TOOL_DEFINITIONS.length);
+    expect(payload.mcpAccess?.codeUxToolToggles.find((toggle) => toggle.name === "scheduler")).toMatchObject({ enabled: true });
+    expect(payload.mcpAccess?.codeUxToolToggles.filter((toggle) => toggle.enabled).map((toggle) => toggle.name)).toEqual(["scheduler"]);
   });
 });

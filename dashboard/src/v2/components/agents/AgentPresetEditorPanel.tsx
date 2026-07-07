@@ -218,9 +218,10 @@ export const AgentPresetEditorPanel: FunctionComponent<{
   providerOptions?: AgentProviderOption[];
   availableMcpServers?: CustomMcpServer[];
   availableSkillStorages?: SkillStorageRecord[];
+  isDashboardReplyAgent?: boolean;
   onSave: (id: string, updates: Partial<AgentPreset>) => void;
   onCancel: () => void;
-}> = ({ preset, saving, defaultMemoryInstruction = "", providerOptions = [], availableMcpServers = [], availableSkillStorages = [], onSave, onCancel }) => {
+}> = ({ preset, saving, defaultMemoryInstruction = "", providerOptions = [], availableMcpServers = [], availableSkillStorages = [], isDashboardReplyAgent = false, onSave, onCancel }) => {
   const panelRef = useRef<HTMLFormElement>(null);
   const nameRef = useRef<HTMLInputElement>(null);
   const descriptionRef = useRef<HTMLTextAreaElement>(null);
@@ -451,6 +452,16 @@ export const AgentPresetEditorPanel: FunctionComponent<{
   const persistentSkillsActive = persistentSkillsEnabled && persistentSkillStorageIds.length > 0;
 
   const toggleMcpItem = (item: (typeof mcpItems)[number]): void => {
+    if (item.kind === "code_ux" && !item.active) {
+      setMcpModalOpen(true);
+      setActionStatus({
+        tone: isDashboardReplyAgent ? "neutral" : "error",
+        message: isDashboardReplyAgent
+          ? "Review scheduler-only Code UX access before enabling it for the dashboard reply agent."
+          : "Code UX access is risk-gated for non-chat agents. Review the MCP manager warning before enabling it.",
+      });
+      return;
+    }
     setActionStatus({
       tone: "success",
       message: `${item.label} ${item.active ? "disabled" : "enabled"} for this agent. Save Agent to persist MCP access.`,
@@ -1008,6 +1019,7 @@ export const AgentPresetEditorPanel: FunctionComponent<{
                               setActionStatus({ tone: "success", message: "MCP access updated. Save Agent to persist tool access." });
                             }}
                             availableServers={availableMcpServers}
+                            isDashboardReplyAgent={isDashboardReplyAgent}
                             onClose={() => setMcpModalOpen(false)}
                           />
                         )}

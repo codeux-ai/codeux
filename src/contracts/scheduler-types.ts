@@ -1,10 +1,12 @@
 import type { QuicksprintExecutionInput } from "./quicksprint-types.js";
+import type { ProviderId } from "./app-types.js";
 
-export type ScheduleTargetType = "sprint" | "quicksprint" | "chat" | "memory_remediation";
+export type ScheduleTargetType = "sprint" | "quicksprint" | "chat" | "memory_remediation" | "agent_wakeup" | "task";
 export type ScheduleStatus = "scheduled" | "paused" | "completed" | "failed" | "cancelled";
 export type ScheduleRecurrenceFrequency = "none" | "minutely" | "hourly" | "daily" | "weekly" | "monthly";
 export type ScheduleRecurrenceEndMode = "never" | "after_count" | "on_date";
 export type ScheduleAnchorMode = "after_sprint_end";
+export type ScheduleAgentSchedulerSource = "agent_scheduler";
 
 export interface ScheduleRecurrenceRule {
   frequency: ScheduleRecurrenceFrequency;
@@ -43,6 +45,24 @@ export interface ScheduleChatTarget {
   connectionId?: string | null;
 }
 
+export interface ScheduleAgentSchedulerMetadata {
+  origin: ScheduleAgentSchedulerSource;
+  source: ScheduleAgentSchedulerSource;
+  createdByAgentId?: string | null;
+}
+
+export interface ScheduleAgentWakeupTarget extends ScheduleAgentSchedulerMetadata {
+  bodyMarkdown: string;
+  threadId?: string | null;
+  title?: string;
+  connectionId?: string | null;
+}
+
+export interface ScheduleTaskTarget extends ScheduleAgentSchedulerMetadata {
+  taskId: string;
+  provider?: ProviderId;
+}
+
 export interface ScheduleMemoryRemediationTarget {
   mode: "deterministic" | "ai";
   source?: "scheduler" | "memory_settings";
@@ -65,6 +85,8 @@ export interface SchedulerEntryRecord {
   sprintTarget?: ScheduleSprintTarget;
   quicksprintTarget?: ScheduleQuicksprintTarget;
   chatTarget?: ScheduleChatTarget;
+  agentWakeupTarget?: ScheduleAgentWakeupTarget;
+  taskTarget?: ScheduleTaskTarget;
   memoryRemediationTarget?: ScheduleMemoryRemediationTarget;
   createdAt: string;
   updatedAt: string;
@@ -100,6 +122,8 @@ export interface CreateSchedulerEntryInput {
   sprintTarget?: ScheduleSprintTarget;
   quicksprintTarget?: ScheduleQuicksprintTarget;
   chatTarget?: ScheduleChatTarget;
+  agentWakeupTarget?: ScheduleAgentWakeupTarget;
+  taskTarget?: ScheduleTaskTarget;
   memoryRemediationTarget?: ScheduleMemoryRemediationTarget;
 }
 
@@ -114,6 +138,8 @@ export interface UpdateSchedulerEntryInput {
   sprintTarget?: ScheduleSprintTarget;
   quicksprintTarget?: ScheduleQuicksprintTarget;
   chatTarget?: ScheduleChatTarget;
+  agentWakeupTarget?: ScheduleAgentWakeupTarget;
+  taskTarget?: ScheduleTaskTarget;
   memoryRemediationTarget?: ScheduleMemoryRemediationTarget;
 }
 

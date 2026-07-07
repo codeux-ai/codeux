@@ -179,6 +179,22 @@ describe("chat-reply-prompt", () => {
       expect(prompt).not.toContain("You must return STRICT JSON format");
     });
 
+    it("uses scheduler-only MCP instructions without advertising management tools", () => {
+      const prompt = buildChatReplayPrompt({
+        projectId: "p1",
+        repoPath: "/repo",
+        projectName: "Proj",
+        thread,
+        messages: [{ authorType: "dashboard_user", bodyMarkdown: "Remind yourself later" } as any],
+        workerInstructions: "",
+        mcpAvailable: true,
+        mcpAccessMode: "scheduler_only",
+      });
+      expect(prompt).toContain("You have the `scheduler` MCP tool available");
+      expect(prompt).not.toContain("You have the `manage_code_ux` MCP tool available");
+      expect(prompt).not.toContain("You must return STRICT JSON format");
+    });
+
     it("defaults to JSON output instructions when mcpAvailable is omitted", () => {
       const prompt = buildChatReplayPrompt({
         projectId: "p1",

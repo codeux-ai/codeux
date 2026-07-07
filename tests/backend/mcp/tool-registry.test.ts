@@ -12,6 +12,7 @@ const createRouterHarness = (resolveAgentMcpToolAccess?: (agentId: string) => Ag
   const handlers = {} as RouterHandlers;
   const managementToolHandler = {
     handleManageProjects: vi.fn(async () => ({ content: [{ type: "text", text: "ok" }] })),
+    handleScheduler: vi.fn(async () => ({ content: [{ type: "text", text: "scheduled" }] })),
   };
 
   registerMcpRequestHandlers({
@@ -45,6 +46,14 @@ const callManageProjects = async (handlers: RouterHandlers): Promise<unknown> =>
     params: {
       name: "manage_projects",
       arguments: { action: "list" },
+    },
+  });
+
+const callScheduler = async (handlers: RouterHandlers): Promise<unknown> =>
+  handlers.callTool({
+    params: {
+      name: "scheduler",
+      arguments: { action: "list", projectId: "project-1" },
     },
   });
 
@@ -113,6 +122,27 @@ describe("ToolRegistry", () => {
       action: "list",
     });
   });
+
+  it("can register and dispatch scheduler", async () => {
+    const registry = new ToolRegistry<McpToolArgsByName, string>();
+    const handler = vi.fn(async (args: McpToolArgsByName["scheduler"]) => `scheduler:${args.action}`);
+
+    registry.register("scheduler", handler);
+
+    const result = await registry.dispatch("scheduler", {
+      action: "schedule_wakeup",
+      projectId: "proj-1",
+      delaySeconds: 30,
+      bodyMarkdown: "Resume the review.",
+    });
+    expect(result).toBe("scheduler:schedule_wakeup");
+    expect(handler).toHaveBeenCalledWith({
+      action: "schedule_wakeup",
+      projectId: "proj-1",
+      delaySeconds: 30,
+      bodyMarkdown: "Resume the review.",
+    });
+  });
 });
 
 describe("MCP router per-agent Code UX access", () => {
@@ -143,6 +173,42 @@ describe("MCP router per-agent Code UX access", () => {
     });
 
     expect(managementToolHandler.handleManageProjects).not.toHaveBeenCalled();
+  });
+
+  it("lists and dispatches scheduler only when enabled by tool availability", async () => {
+    const { handlers, managementToolHandler } = createRouterHarness((agentId) =>
+      agentId === "agent-scheduler"
+        ? {
+            codeUxEnabled: true,
+            codeUxToolToggles: [{ name: "scheduler", enabled: true, isInternal: true }],
+          }
+        : null,
+    );
+
+    await runWithMcpAgentContext("agent-scheduler", async () => {
+      await expect(listToolNames(handlers)).resolves.toContain("scheduler");
+      await expect(callScheduler(handlers)).resolves.toEqual({ content: [{ type: "text", text: "scheduled" }] });
+    });
+
+    expect(managementToolHandler.handleScheduler).toHaveBeenCalledTimes(1);
+  });
+
+  it("rejects scheduler calls when the tool is disabled", async () => {
+    const { handlers, managementToolHandler } = createRouterHarness((agentId) =>
+      agentId === "agent-no-scheduler"
+        ? {
+            codeUxEnabled: true,
+            codeUxToolToggles: [{ name: "scheduler", enabled: false, isInternal: true }],
+          }
+        : null,
+    );
+
+    await runWithMcpAgentContext("agent-no-scheduler", async () => {
+      await expect(listToolNames(handlers)).resolves.not.toContain("scheduler");
+      await expect(callScheduler(handlers)).rejects.toMatchObject({ code: ErrorCode.MethodNotFound });
+    });
+
+    expect(managementToolHandler.handleScheduler).not.toHaveBeenCalled();
   });
 
   it("omits and rejects every Code UX tool when a known agent disables Code UX", async () => {

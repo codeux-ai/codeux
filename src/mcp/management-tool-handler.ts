@@ -6,6 +6,7 @@ import type {
   ManageTasksArgs,
   ManageQuicksprintsArgs,
   ManageSchedulerArgs,
+  SchedulerArgs,
   ManageAgentsArgs,
   ManageMemoryArgs,
   ManageSkillsArgs,
@@ -52,6 +53,7 @@ import { SprintActions } from "./management/sprint-actions.js";
 import { TaskActions } from "./management/task-actions.js";
 import { QuicksprintActions } from "./management/quicksprint-actions.js";
 import { SchedulerActions } from "./management/scheduler-actions.js";
+import { AgentSchedulerActions } from "./management/agent-scheduler-actions.js";
 import { SettingsActions } from "./management/settings-actions.js";
 import { AgentActions } from "./management/agent-actions.js";
 import { MemoryActions } from "./management/memory-actions.js";
@@ -86,6 +88,7 @@ const MANAGEMENT_APPROVAL_TTL_MS = 15 * 60 * 1000;
 export class ManagementToolHandler {
   private sprintActions: SprintActions | null = null;
   private taskActions: TaskActions | null = null;
+  private agentSchedulerActions: AgentSchedulerActions | null = null;
   private readonly pendingDestructiveApprovals = new Map<string, number>();
   private readonly settingsActions: SettingsActions;
   private readonly agentActions: AgentActions;
@@ -135,6 +138,16 @@ export class ManagementToolHandler {
       throw new Error("Scheduler service is not enabled.");
     }
     return new SchedulerActions(resolveLateBoundDependency(this.deps.schedulerService));
+  }
+
+  private getAgentSchedulerActions(): AgentSchedulerActions {
+    if (!this.agentSchedulerActions) {
+      if (!this.deps.schedulerService) {
+        throw new Error("Scheduler service is not enabled.");
+      }
+      this.agentSchedulerActions = new AgentSchedulerActions(resolveLateBoundDependency(this.deps.schedulerService));
+    }
+    return this.agentSchedulerActions;
   }
 
   private resolveGithubToken(): string | undefined {
@@ -362,6 +375,15 @@ export class ManagementToolHandler {
       const dispatch = (approval = args.approval) => this.getSchedulerActions().handleSchedulerAction({ ...managementArgs, approval });
       const approvalGate = await this.requireStatefulApproval(managementArgs, () => dispatch({ confirmed: false }));
       const envelope = approvalGate ?? this.recordStatefulApprovalRequirement(managementArgs, await dispatch());
+      return { content: [{ type: "text", text: JSON.stringify(envelope, null, 2) }] };
+    } catch (error) {
+      return this.formatError("scheduler", args.action, error);
+    }
+  }
+
+  async handleScheduler(args: SchedulerArgs): Promise<{ content: Array<{ type: string; text: string }> }> {
+    try {
+      const envelope = this.getAgentSchedulerActions().handleSchedulerAction(args, getCurrentMcpAgentId());
       return { content: [{ type: "text", text: JSON.stringify(envelope, null, 2) }] };
     } catch (error) {
       return this.formatError("scheduler", args.action, error);
