@@ -14,7 +14,7 @@ Qwen Code can be selected anywhere a virtual CLI provider is accepted: task codi
 
 ## Authentication Modes
 
-The system integration entry for each named Qwen instance stores a `qwenAuthMode` (`LOCAL_AUTH`, `ALIBABA_CODING_PLAN`, or `MODEL_PROVIDER`).
+The system integration entry for each named Qwen instance stores a `qwenAuthMode` (`LOCAL_AUTH`, `ALIBABA_CODING_PLAN`, or `MODEL_PROVIDER`). Non-local API-key mode can use either `ALIBABA_CODING_PLAN` or `MODEL_PROVIDER`, but if `authType` is local or dashboard auth, runtime forces `qwenAuthMode` to `LOCAL_AUTH`.
 
 ### Local Auth
 
@@ -47,6 +47,8 @@ The Qwen runner launches with `--auth-type openai` and sets `OPENAI_BASE_URL` to
 - base URL
 - API key
 - model id registered in Qwen Code `modelProviders`
+
+Placeholder models like `custom/model` or `local-model` resolve to `qwenModelId`.
 
 For OpenAI-compatible providers, Code UX also forwards `OPENAI_API_KEY` and `OPENAI_BASE_URL` to the Qwen process. This covers DashScope compatible mode, OpenRouter, Ollama, vLLM, LM Studio, and similar endpoints.
 
