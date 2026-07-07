@@ -39,7 +39,11 @@ Persistent agent skill storage is modeled separately from memories, knowledge do
 - `skill_embeddings` stores embedding metadata and optional embedding blobs for skill search.
 - `agent_skill_storage_bindings` attaches agent presets to one or more storage containers through a normalized `(agent_preset_id, storage_id)` binding.
 
-The shared preset contract exposes `persistentSkillStorageIds?: string[]` plus optional `persistentSkillStorage` enablement metadata. The repository round-trips those IDs through `agent_skill_storage_bindings`; it does not use a workspace path field for skill attachment state. Runtime mounting, provider prompt injection, MCP tools, and dashboard controls are intentionally not implemented in this foundation slice.
+The shared preset contract exposes `persistentSkillStorageIds?: string[]` plus optional `persistentSkillStorage` enablement metadata. The repository round-trips those IDs through `agent_skill_storage_bindings`; it does not use a workspace path field for skill attachment state. Backend persistence, markdown import/export, and vector retrieval are implemented by `SkillRepository`, `SkillMarkdownParser`, and `SkillService`. Runtime mounting, provider prompt injection, MCP tools, and dashboard controls are intentionally not implemented in this slice.
+
+Skill records are project-bound at every access point. `SkillRepository` validates the owning project for storages, skills, agent attachments, embedding loads, and deletes. Deleting a storage explicitly removes agent bindings, skill embeddings, and skill rows before deleting the container, matching the cascade contract even in tests or adapters where foreign-key behavior is not the only guardrail.
+
+Skill markdown is stored in the database rather than in project worktrees. Frontmatter fields (`title`, `description`, `tags`, `appliesTo`, `version`) become skill metadata, while the markdown body remains the authoritative instruction content. `skill_embeddings` stores model id, dimension, chunk index, content hash, and vector blob so retrieval can skip stale or dimension-mismatched rows after model changes.
 
 The current markdown-sync and Planning agent extensions are documented in:
 
@@ -48,7 +52,11 @@ The current markdown-sync and Planning agent extensions are documented in:
 Implementation files:
 
 - `src/contracts/agent-preset-types.ts`
+- `src/contracts/skill-types.ts`
 - `src/repositories/agent-preset-repository.ts`
+- `src/repositories/skill-repository.ts`
+- `src/services/skill-markdown-parser.ts`
+- `src/services/skill-service.ts`
 - `src/server/dashboard-server.ts`
 
 ## API Surface
@@ -78,7 +86,7 @@ Foundation-supported fields:
 - optional provider instance preference
 - optional model override
 - optional per-agent memory injection configuration
-- optional persistent skill storage attachments (contract and storage only; no dashboard controls or runtime retrieval yet)
+- optional persistent skill storage attachments (backend persistence and retrieval only; no dashboard controls or runtime prompt injection yet)
 
 The memory injection configuration is stored in sqlite as `memory_config_json` and parsed back into `AgentMemoryConfig` on reads, matching the existing JSON-column pattern used by `mcp_access_json`.
 The dashboard editor now initializes that config from the preset, exposes it through a dedicated `Manage Memory` popover, and persists the chosen filters alongside the rest of the preset payload.
