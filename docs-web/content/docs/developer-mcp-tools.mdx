@@ -49,7 +49,7 @@ action-specific fields, and an optional `approval` object for destructive action
 | `manage_sprints` | orchestration | Plan, start, pause, cancel, inspect, import issues into, and edit sprints. |
 | `manage_tasks` | orchestration | Create, edit, start, stop, pause, and inspect tasks. |
 | `manage_quicksprints` | orchestration | Manage quicksprint templates and execute them. |
-| `manage_scheduler` | orchestration | Create and run scheduled sprints, quicksprints, and messages. |
+| `manage_scheduler` | orchestration | Create and run scheduled sprints, quicksprints, messages, and wakeups. |
 | `scheduler_code_ux` | orchestration | Agent-owned wakeups and task reruns with restricted list/schedule/cancel actions. |
 | `manage_agents` | agents & memory | Manage agent presets and sync them to project markdown. |
 | `manage_memory` | agents & memory | Inspect, search, promote, and re-embed short/long-term memory. |
@@ -71,7 +71,7 @@ Every tool requires `runtimeRoles: ["project_manager"]` and is enabled by defaul
 | `manage_sprints` | `list`, `get`, `create`, `update`, `delete`, `start`, `pause`, `cancel`, `force_cancel`, `inspect_run`, `import_issues`, `plan` |
 | `manage_tasks` | `list`, `get`, `create`, `update`, `delete`, `start`, `stop`, `force_stop`, `pause`, `inspect_run` |
 | `manage_quicksprints` | `list_templates`, `get_template`, `create_template`, `update_template`, `delete_template`, `execute`, `start` |
-| `manage_scheduler` | `list`, `create`, `update`, `delete`, `run_due`, `schedule_sprint`, `schedule_quicksprint`, `schedule_chat` |
+| `manage_scheduler` | `list`, `create`, `update`, `delete`, `run_due`, `schedule_sprint`, `schedule_quicksprint`, `schedule_chat`, `schedule_wakeup` |
 | `scheduler_code_ux` | `list`, `schedule_wakeup`, `schedule_task`, `cancel` |
 | `manage_agents` | `list`, `get`, `create`, `update`, `delete`, `sync` |
 | `manage_memory` | `list`, `get`, `count`, `create`, `update`, `delete`, `search`, `promote`, `get_map`, `model_status`, `start_reembed` |

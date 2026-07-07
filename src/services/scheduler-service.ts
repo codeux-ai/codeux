@@ -159,6 +159,7 @@ export class SchedulerService {
       sprintTarget: input.sprintTarget ?? current.sprintTarget,
       quicksprintTarget: input.quicksprintTarget ?? current.quicksprintTarget,
       chatTarget: input.chatTarget ?? current.chatTarget,
+      wakeupTarget: input.wakeupTarget ?? current.wakeupTarget,
       agentWakeupTarget: input.agentWakeupTarget ?? current.agentWakeupTarget,
       taskTarget: input.taskTarget ?? current.taskTarget,
       memoryRemediationTarget: input.memoryRemediationTarget ?? current.memoryRemediationTarget,
@@ -170,6 +171,7 @@ export class SchedulerService {
       sprintTarget: input.sprintTarget ?? current.sprintTarget,
       quicksprintTarget: input.quicksprintTarget ?? current.quicksprintTarget,
       chatTarget: input.chatTarget ?? current.chatTarget,
+      wakeupTarget: input.wakeupTarget ?? current.wakeupTarget,
       agentWakeupTarget: input.agentWakeupTarget ?? current.agentWakeupTarget,
       taskTarget: input.taskTarget ?? current.taskTarget,
       memoryRemediationTarget: input.memoryRemediationTarget ?? current.memoryRemediationTarget,
@@ -299,6 +301,34 @@ export class SchedulerService {
       return;
     }
 
+    if (entry.targetType === "wakeup") {
+      const target = entry.wakeupTarget;
+      if (!target) {
+        throw new Error("Scheduled wakeup target is missing.");
+      }
+      const metadata: ConversationMessageMetadata = {
+        source: "scheduler",
+        targetType: "wakeup",
+        schedulerEntryId: entry.id,
+        scheduledFor: entry.nextRunAt ?? entry.scheduledFor,
+      };
+      if (target.sourceInvocationId) {
+        metadata.sourceInvocationId = target.sourceInvocationId;
+      }
+      if (typeof target.resumeAfterInvocationCompletion === "boolean") {
+        metadata.resumeAfterInvocationCompletion = target.resumeAfterInvocationCompletion;
+      }
+      const input: CreateDashboardConversationMessageInput = {
+        threadId: target.threadId || undefined,
+        title: target.title || entry.title,
+        connectionId: target.connectionId || undefined,
+        bodyMarkdown: target.bodyMarkdown,
+        metadata,
+      };
+      await this.deps.chatThreadRuntimeService.postMessage(entry.projectId, input);
+      return;
+    }
+
     const target = entry.chatTarget;
     if (!target) {
       throw new Error("Scheduled chat target is missing.");
@@ -318,6 +348,14 @@ export class SchedulerService {
   }
 
   private validateInputTarget(projectId: string, input: CreateSchedulerEntryInput | UpdateSchedulerEntryInput): void {
+    if (input.targetType === "wakeup") {
+      const bodyMarkdown = input.wakeupTarget?.bodyMarkdown?.trim();
+      if (!bodyMarkdown) {
+        throw new Error("wakeupTarget.bodyMarkdown is required.");
+      }
+      return;
+    }
+
     if (input.targetType === "agent_wakeup") {
       const bodyMarkdown = input.agentWakeupTarget?.bodyMarkdown?.trim();
       if (!bodyMarkdown) {

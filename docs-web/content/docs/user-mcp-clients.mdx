@@ -123,7 +123,7 @@ domain**, plus `search_knowledge`:
 | `manage_sprints` | Plan, start, pause, cancel, inspect, import issues, and edit sprints. |
 | `manage_tasks` | Create, edit, start, stop, pause, and inspect tasks. |
 | `manage_quicksprints` | Manage quicksprint templates and execute them. |
-| `manage_scheduler` | Create and run scheduled sprints, quicksprints, and messages. |
+| `manage_scheduler` | Create and run scheduled sprints, quicksprints, messages, and wakeups. |
 | `manage_agents` | Manage agent presets and sync them to project markdown. |
 | `manage_memory` | Inspect, search, promote, and re-embed memory. |
 | `search_knowledge` | Semantic search over the caller's subscribed knowledge base. |

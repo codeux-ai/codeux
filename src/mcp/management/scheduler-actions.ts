@@ -8,12 +8,14 @@ import type {
   ScheduleSprintTarget,
   ScheduleStatus,
   ScheduleTargetType,
+  ScheduleWakeupTarget,
   UpdateSchedulerEntryInput,
 } from "../../contracts/scheduler-types.js";
 import { normalizeRecurrenceRule } from "../../domain/scheduler/schedule-time.js";
+import { getCurrentMcpInvocationId } from "../../server/mcp-agent-context.js";
 import type { SchedulerService } from "../../services/scheduler-service.js";
 
-const VALID_TARGET_TYPES: ScheduleTargetType[] = ["sprint", "quicksprint", "chat"];
+const VALID_TARGET_TYPES: ScheduleTargetType[] = ["sprint", "quicksprint", "chat", "wakeup"];
 const VALID_STATUSES: ScheduleStatus[] = ["scheduled", "paused", "completed", "failed", "cancelled"];
 
 function readString(payload: Record<string, unknown>, key: string): string | undefined {
@@ -47,11 +49,12 @@ function readTargetType(payload: Record<string, unknown>, action: string): Sched
   if (action === "schedule_sprint") return "sprint";
   if (action === "schedule_quicksprint") return "quicksprint";
   if (action === "schedule_chat") return "chat";
+  if (action === "schedule_wakeup") return "wakeup";
   const targetType = payload.targetType;
   if (typeof targetType === "string" && VALID_TARGET_TYPES.includes(targetType as ScheduleTargetType)) {
     return targetType as ScheduleTargetType;
   }
-  throw new Error("targetType is required and must be sprint, quicksprint, or chat");
+  throw new Error("targetType is required and must be sprint, quicksprint, chat, or wakeup");
 }
 
 function readStatus(value: unknown): ScheduleStatus | undefined {
@@ -84,6 +87,21 @@ function parseNonNegativeInteger(value: unknown): number | undefined {
     }
   }
   return undefined;
+}
+
+function parsePositiveDelaySeconds(value: unknown): number | undefined {
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+  const parsed = typeof value === "number"
+    ? value
+    : typeof value === "string" && value.trim()
+      ? Number(value.trim())
+      : Number.NaN;
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    throw new Error("delaySeconds must be a positive number");
+  }
+  return parsed;
 }
 
 function readPositiveInteger(payload: Record<string, unknown>, key: string, fallback: number): number {
@@ -186,14 +204,67 @@ function normalizeChatTarget(payload: Record<string, unknown>): ScheduleChatTarg
   return target;
 }
 
+function readBoolean(payload: Record<string, unknown>, key: string): boolean | undefined {
+  return typeof payload[key] === "boolean" ? payload[key] : undefined;
+}
+
+function normalizeWakeupTarget(payload: Record<string, unknown>): ScheduleWakeupTarget {
+  const nested = readObject(payload, "wakeupTarget");
+  const source = nested ?? payload;
+  const bodyMarkdown = readString(source, "bodyMarkdown");
+  if (!bodyMarkdown) {
+    throw new Error("bodyMarkdown or wakeupTarget.bodyMarkdown is required");
+  }
+  const target: ScheduleWakeupTarget = { bodyMarkdown };
+  const title = readString(source, "title");
+  const threadId = readNullableString(source, "threadId");
+  const connectionId = readNullableString(source, "connectionId");
+  const explicitSourceInvocationId = readNullableString(source, "sourceInvocationId");
+  const resumeAfterInvocationCompletion = readBoolean(source, "resumeAfterInvocationCompletion");
+  if (title) target.title = title;
+  if (threadId !== undefined) target.threadId = threadId;
+  if (connectionId !== undefined) target.connectionId = connectionId;
+  if (explicitSourceInvocationId !== undefined) {
+    target.sourceInvocationId = explicitSourceInvocationId;
+  } else if (resumeAfterInvocationCompletion !== false) {
+    const currentInvocationId = getCurrentMcpInvocationId();
+    if (currentInvocationId) {
+      target.sourceInvocationId = currentInvocationId;
+    }
+  }
+  if (resumeAfterInvocationCompletion !== undefined) {
+    target.resumeAfterInvocationCompletion = resumeAfterInvocationCompletion;
+  }
+  return target;
+}
+
 function assignTarget(input: CreateSchedulerEntryInput | UpdateSchedulerEntryInput, targetType: ScheduleTargetType, payload: Record<string, unknown>): void {
   if (targetType === "sprint") {
     input.sprintTarget = normalizeSprintTarget(payload);
   } else if (targetType === "quicksprint") {
     input.quicksprintTarget = normalizeQuicksprintTarget(payload);
-  } else {
+  } else if (targetType === "chat") {
     input.chatTarget = normalizeChatTarget(payload);
+  } else if (targetType === "wakeup") {
+    input.wakeupTarget = normalizeWakeupTarget(payload);
+  } else {
+    throw new Error("targetType is not supported by manage_scheduler");
   }
+}
+
+function normalizeWakeupScheduledFor(payload: Record<string, unknown>): string {
+  const scheduledFor = readString(payload, "scheduledFor");
+  const delaySeconds = parsePositiveDelaySeconds(payload.delaySeconds);
+  if (scheduledFor && delaySeconds !== undefined) {
+    throw new Error("Provide scheduledFor or delaySeconds, not both");
+  }
+  if (scheduledFor) {
+    return scheduledFor;
+  }
+  if (delaySeconds !== undefined) {
+    return new Date(Date.now() + delaySeconds * 1000).toISOString();
+  }
+  throw new Error("scheduledFor or delaySeconds is required");
 }
 
 function normalizeCreateInput(payload: Record<string, unknown>, action: string): CreateSchedulerEntryInput {
@@ -202,7 +273,12 @@ function normalizeCreateInput(payload: Record<string, unknown>, action: string):
   const input: CreateSchedulerEntryInput = {
     targetType,
   };
-  if (scheduleAnchor) {
+  if (targetType === "wakeup" && action === "schedule_wakeup") {
+    if (scheduleAnchor) {
+      throw new Error("schedule_wakeup requires scheduledFor or delaySeconds, not scheduleAnchor");
+    }
+    input.scheduledFor = normalizeWakeupScheduledFor(payload);
+  } else if (scheduleAnchor) {
     input.scheduleAnchor = scheduleAnchor;
   } else {
     input.scheduledFor = readRequiredString(payload, "scheduledFor");
@@ -242,6 +318,9 @@ function normalizeUpdateInput(payload: Record<string, unknown>): UpdateScheduler
   if ("chatTarget" in payload || "bodyMarkdown" in payload || "threadId" in payload || "connectionId" in payload) {
     input.chatTarget = normalizeChatTarget(payload);
   }
+  if ("wakeupTarget" in payload || "sourceInvocationId" in payload || "resumeAfterInvocationCompletion" in payload) {
+    input.wakeupTarget = normalizeWakeupTarget(payload);
+  }
 
   return input;
 }
@@ -277,7 +356,8 @@ export class SchedulerActions {
       case "create":
       case "schedule_sprint":
       case "schedule_quicksprint":
-      case "schedule_chat": {
+      case "schedule_chat":
+      case "schedule_wakeup": {
         const projectId = readRequiredString(payload, "projectId");
         const entry = this.schedulerService.createEntry(projectId, normalizeCreateInput(payload, args.action));
         return { result: { entry } };
