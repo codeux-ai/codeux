@@ -32,17 +32,17 @@ A full-width interactive **Usage Graph** displays usage over time for the series
 - Hourly views reduce visible axis labels while preserving individual bucket inspection.
 
 ### Composition
-Visualizes structural breakdowns using interactive donut charts that slice by:
+Visualizes structural breakdowns in flat neutral cards using interactive donut charts that slice by:
 - Token anatomy
 - Provider distribution
 - Telemetry source mix
-Charts feature hover emphasis, center-detail readouts, and are layered above cache efficiency and token-flight timing data, keeping the overall provider picture readable without tab switching.
+Charts keep data accent colors inside segments and token bars while compact badges remain neutral. Hover emphasis updates center-detail readouts without adding glow or lift, and the charts sit above cache efficiency, token-flight timing, purpose lanes, and provider activity.
 
 ### Models
 Tracks specific model performance, invocation volume, and token throughput for each model used during the active timeframe.
 
 ### Providers / Reliability
-Focuses on provider usage, telemetry confidence, failure pressure, latency signals, and cost details when the selected snapshot includes those fields.
+Focuses on provider usage, telemetry confidence, failure pressure, latency signals, and cost details when the selected snapshot includes those fields. Telemetry Source Mix, Provider Share, Confidence Board, Provider Breakdown, and Audit Notes use the same flat hierarchy and neutral metadata chips as Composition.
 
 ### Ledgers
 Provides tabbed telemetry tables containing raw Task and Sprint data.

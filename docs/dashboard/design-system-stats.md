@@ -80,6 +80,7 @@ Composition explains where usage comes from.
 - Lead with provider share, token mix, cache rate, output/reasoning proportions, source mix, purpose lanes, and available Git-blocker context.
 - Token anatomy can show input, cached input, output, reasoning, cache-hit rate, output ratio, and total cost when `totalCostUsd` is greater than zero.
 - Provider and purpose donuts rank visible segments, handle long labels with wrapping, and render explicit empty states when segment data is absent.
+- Provider share, token anatomy, purpose lanes, token flight, cache efficiency, and provider activity use the same flat panel/subpanel grammar with compact neutral badges. Keep semantic data colors inside donut segments, token bars, and source-quality tracks rather than on decorative mode tags.
 - Purpose lanes show invocation count, active time, token share, and dominant purpose without creating a second conflicting purpose summary.
 - Source-confidence cards distinguish reported, estimated, unavailable, unsupported, and defensive unknown buckets without inventing alternate totals.
 - Donuts, ribbons, and flow bars need nearby text or `role="img"` labels so color is never the only signal.
@@ -102,6 +103,7 @@ Providers is the reliability studio.
 - The visible mode label is `Providers`; the studio title may describe reliability.
 - Start with confidence, fallback usage, failure pressure, and provider coverage before detailed rows.
 - Source mix explicitly shows reported, estimated, unavailable, unsupported, and unknown invocation-source counts. Estimated data is usable but lower precision.
+- Telemetry Source Mix, Provider Share, Confidence Board, Provider Breakdown, and Audit Notes follow the same flat hierarchy as Composition: neutral compact metadata chips, small radii, hairline borders, and no hover lift or glow treatments.
 - Provider cards sort by computed risk first and token volume second, then show failure count, success-rate tone, token volume, pricing stats, active time, duration coverage, and source confidence.
 - Provider pricing stats use `usage.totalCostUsd` and should show total cost, cost per invocation, and blended cost per million tokens only when a positive cost signal exists.
 - Provider status and latency details may be derived from matching model summaries, but health must not be fabricated when model/status telemetry is absent.
