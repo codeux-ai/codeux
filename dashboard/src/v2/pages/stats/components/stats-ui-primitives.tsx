@@ -67,13 +67,13 @@ export interface ChartZoomRange {
   end: number;
 }
 
-export const PANEL_CLASS = "stats-surface-panel relative overflow-hidden rounded-[var(--stats-panel-radius)] p-6 transition-[background-color,border-color,box-shadow] duration-200 motion-reduce:transition-none";
-export const SUBPANEL_CLASS = "stats-surface-subpanel rounded-[var(--stats-subpanel-radius)] p-4 transition-[background-color,border-color,box-shadow] duration-200 motion-reduce:transition-none";
-export const CHIP_CLASS = "stats-surface-chip rounded-[var(--stats-chip-radius)] transition-[background-color,border-color,color,box-shadow] duration-200 motion-reduce:transition-none";
+export const PANEL_CLASS = "stats-surface-panel relative overflow-hidden rounded-[var(--stats-panel-radius)] p-6 transition-[background-color,border-color] duration-150 motion-reduce:transition-none";
+export const SUBPANEL_CLASS = "stats-surface-subpanel rounded-[var(--stats-subpanel-radius)] p-4 transition-[background-color,border-color] duration-150 motion-reduce:transition-none";
+export const CHIP_CLASS = "stats-surface-chip rounded-[var(--stats-chip-radius)] transition-[background-color,border-color,color] duration-150 motion-reduce:transition-none";
 export const CONTROL_FOCUS_CLASS = "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--stats-focus-ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-[color:var(--stats-focus-ring-offset)]";
-export const INPUT_CLASS = `stats-surface-input h-11 rounded-[var(--stats-control-radius)] px-4 text-sm text-[color:var(--stats-value-color)] outline-none transition-[background-color,border-color,box-shadow,color] duration-200 placeholder:text-[color:var(--stats-detail-color)] focus:border-[color:var(--stats-focus-ring)] disabled:cursor-not-allowed disabled:opacity-60 motion-reduce:transition-none ${CONTROL_FOCUS_CLASS}`;
-export const LEDGER_ROW_CLASS = "stats-surface-subpanel group rounded-[var(--stats-subpanel-radius)] p-4 transition-[transform,background-color,border-color,box-shadow] duration-200 hover:border-[color:var(--stats-border-strong)] hover:bg-[color:var(--stats-surface-subpanel-hover)] hover:shadow-[var(--stats-card-shadow-hover)] motion-safe:hover:-translate-y-0.5 motion-reduce:transition-none";
-export const LEDGER_ROW_MODERN_CLASS = "stats-surface-panel group relative overflow-hidden rounded-[var(--stats-panel-radius)] p-6 transition-[transform,background-color,border-color,box-shadow] duration-200 hover:border-[color:var(--stats-border-strong)] hover:bg-[color:var(--stats-surface-panel-hover)] hover:shadow-[var(--stats-card-shadow-hover)] motion-safe:hover:-translate-y-0.5 motion-reduce:transition-none";
+export const INPUT_CLASS = `stats-surface-input h-11 rounded-[var(--stats-control-radius)] px-4 text-sm text-[color:var(--stats-value-color)] outline-none transition-[background-color,border-color,color] duration-150 placeholder:text-[color:var(--stats-detail-color)] focus:border-[color:var(--stats-focus-ring)] disabled:cursor-not-allowed disabled:opacity-60 motion-reduce:transition-none ${CONTROL_FOCUS_CLASS}`;
+export const LEDGER_ROW_CLASS = "stats-surface-subpanel group rounded-[var(--stats-subpanel-radius)] p-4 transition-[background-color,border-color] duration-150 hover:border-[color:var(--stats-border-strong)] hover:bg-[color:var(--stats-surface-subpanel-hover)] motion-reduce:transition-none";
+export const LEDGER_ROW_MODERN_CLASS = "stats-surface-panel group relative overflow-hidden rounded-[var(--stats-panel-radius)] p-6 transition-[background-color,border-color] duration-150 hover:border-[color:var(--stats-border-strong)] hover:bg-[color:var(--stats-surface-panel-hover)] motion-reduce:transition-none";
 export const TEXT_LABEL_CLASS = "text-[color:var(--stats-label-color)]";
 export const TEXT_DETAIL_CLASS = "text-[color:var(--stats-detail-color)]";
 export const TEXT_VALUE_CLASS = "text-[color:var(--stats-value-color)]";
@@ -87,14 +87,14 @@ export const STATUS_TONE_CLASS = {
   cyan: "border-[color:var(--stats-control-border-active)] bg-[color:var(--stats-accent-cyan-fill)] text-[color:var(--stats-accent-cyan)]",
   neutral: "border-[color:var(--stats-card-border)] bg-[color:var(--stats-surface-chip)] text-[color:var(--stats-detail-color)]",
 } as const;
-export const TAB_ACTIVE_CLASS = "border-[color:var(--stats-control-border-active)] bg-[color:var(--stats-surface-control-active)] text-[color:var(--stats-control-text-active)] shadow-[var(--stats-control-shadow-active)]";
+export const TAB_ACTIVE_CLASS = "border-[color:var(--stats-control-border-active)] bg-[color:var(--stats-surface-control-active)] text-[color:var(--stats-control-text-active)]";
 export const TAB_IDLE_CLASS = "text-[color:var(--stats-detail-color)] hover:bg-[color:var(--stats-surface-chip-hover)] hover:text-[color:var(--stats-value-color)]";
 export const TAB_COUNT_ACTIVE_CLASS = "bg-[color:var(--stats-surface-control-active-strong)] text-[color:var(--stats-control-text-active-strong)]";
 export const TAB_COUNT_IDLE_CLASS = "text-[color:var(--stats-detail-color)]";
-const CONTROL_BASE_CLASS = `inline-flex min-w-0 items-center justify-center rounded-[var(--stats-chip-radius)] border px-3 text-[11px] font-bold uppercase tracking-[0.14em] transition-[background-color,border-color,box-shadow,color] duration-200 motion-reduce:transition-none ${CONTROL_FOCUS_CLASS}`;
+const CONTROL_BASE_CLASS = `inline-flex min-w-0 items-center justify-center rounded-[var(--stats-control-radius)] border px-3 text-[11px] font-bold uppercase tracking-[0.12em] transition-[background-color,border-color,color] duration-150 motion-reduce:transition-none ${CONTROL_FOCUS_CLASS}`;
 const CONTROL_IDLE_CLASS = "border-transparent text-[color:var(--stats-control-text)] hover:bg-[color:var(--stats-surface-chip-hover)] hover:text-[color:var(--stats-control-text-hover)]";
-const CONTROL_ACTIVE_CLASS = "border-[color:var(--stats-control-border-active)] bg-[color:var(--stats-surface-control-active)] text-[color:var(--stats-control-text-active)] shadow-[var(--stats-control-shadow-active)]";
-const CONTROL_ACTIVE_STRONG_CLASS = "border-[color:var(--stats-control-border-active)] bg-[color:var(--stats-surface-control-active-strong)] text-[color:var(--stats-control-text-active-strong)] shadow-[var(--stats-control-shadow-active)]";
+const CONTROL_ACTIVE_CLASS = "border-[color:var(--stats-control-border-active)] bg-[color:var(--stats-surface-control-active)] text-[color:var(--stats-control-text-active)]";
+const CONTROL_ACTIVE_STRONG_CLASS = "border-[color:var(--stats-control-border-active)] bg-[color:var(--stats-surface-control-active-strong)] text-[color:var(--stats-control-text-active-strong)]";
 
 export const CHART_SERIES: ChartSeriesDefinition[] = [
   {
@@ -186,7 +186,7 @@ export const RangeToggle: FunctionComponent<{
       <button
         type="button"
         onClick={onApplyCustom}
-        className={`inline-flex h-11 items-center justify-center rounded-[var(--stats-control-radius)] border border-[color:var(--stats-border-hairline)] bg-[color:var(--stats-surface-control-active)] px-4 text-[11px] font-bold uppercase tracking-[0.16em] text-[color:var(--stats-control-text-active)] shadow-[var(--stats-control-shadow)] transition-[background-color,border-color,box-shadow,transform] duration-200 hover:border-[color:var(--stats-border-strong)] hover:shadow-[var(--stats-control-shadow-active)] motion-safe:hover:-translate-y-0.5 motion-reduce:transition-none ${CONTROL_FOCUS_CLASS}`}
+        className={`inline-flex h-11 items-center justify-center rounded-[var(--stats-control-radius)] border border-[color:var(--stats-border-hairline)] bg-[color:var(--stats-surface-control-active)] px-4 text-[11px] font-bold uppercase tracking-[0.12em] text-[color:var(--stats-control-text-active)] transition-[background-color,border-color,color] duration-150 hover:border-[color:var(--stats-border-strong)] hover:bg-[color:var(--stats-surface-control-active-strong)] motion-reduce:transition-none ${CONTROL_FOCUS_CLASS}`}
       >
         Apply
       </button>
@@ -325,7 +325,7 @@ export const TokenChip: FunctionComponent<{
   value: number | string;
   tone: string;
 }> = ({ icon: Icon, label, value, tone }) => (
-  <div className={`relative inline-flex min-w-0 items-center gap-2 overflow-hidden rounded-[var(--stats-chip-radius)] border px-3 py-1.5 shadow-[var(--stats-subpanel-shadow)] transition-[background-color,border-color,color,box-shadow] duration-200 motion-reduce:transition-none ${tone}`}>
+  <div className={`relative inline-flex min-w-0 items-center gap-2 overflow-hidden rounded-[var(--stats-chip-radius)] border px-3 py-1.5 transition-[background-color,border-color,color] duration-150 motion-reduce:transition-none ${tone}`}>
     <div className="relative flex min-w-0 items-center gap-1.5 opacity-85">
       <Icon className="h-3.5 w-3.5" strokeWidth={2.5} aria-hidden="true" />
       <span className="truncate text-[10px] font-bold uppercase tracking-[0.14em]">{label}</span>
@@ -408,10 +408,10 @@ export const SeriesLegendButton: FunctionComponent<{
     onClick={onToggle}
     disabled={disabled}
     aria-pressed={active}
-    className={`rounded-[1.25rem] border px-4 py-3 text-left transition-[background-color,border-color,box-shadow,opacity] duration-200 motion-reduce:transition-none ${CONTROL_FOCUS_CLASS} ${
+    className={`rounded-[var(--stats-subpanel-radius)] border px-4 py-3 text-left transition-[background-color,border-color,opacity] duration-150 motion-reduce:transition-none ${CONTROL_FOCUS_CLASS} ${
       active
         ? `${SUBPANEL_CLASS} border-[color:var(--stats-control-border-active)]`
-        : "border-[color:var(--stats-border-hairline)] bg-[color:var(--stats-surface-subpanel)] opacity-75 shadow-[var(--stats-subpanel-shadow)] hover:border-[color:var(--stats-border-strong)] hover:bg-[color:var(--stats-surface-subpanel-hover)] hover:opacity-100"
+        : "border-[color:var(--stats-border-hairline)] bg-[color:var(--stats-surface-subpanel)] opacity-75 hover:border-[color:var(--stats-border-strong)] hover:bg-[color:var(--stats-surface-subpanel-hover)] hover:opacity-100"
     } ${disabled ? "cursor-not-allowed opacity-60" : ""}`}
   >
     <div className="flex items-center gap-3">
@@ -545,7 +545,7 @@ export const DonutCard: FunctionComponent<{
                   );
                 })}
               </svg>
-              <div className="pointer-events-none absolute inset-[24%] rounded-full border border-[color:var(--stats-card-border)] bg-[color:var(--stats-surface-panel)] shadow-[var(--stats-subpanel-shadow)]" />
+              <div className="pointer-events-none absolute inset-[24%] rounded-full border border-[color:var(--stats-card-border)] bg-[color:var(--stats-surface-panel)]" />
               <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
                 <div className="text-xl font-semibold tracking-tight text-[color:var(--stats-value-color)]">
                   {activeSegment ? formatTokens(activeSegment.value) : centerValue}

@@ -2,6 +2,8 @@
 
 The **Stats** page (`/stats`) is the analytics surface for the active project. It shows project execution, usage, cost, Git, and invocation telemetry in one workspace with visual-mode navigation, responsive layouts, and light/dark mode support.
 
+Stats metric cards, chips, filters, and ledger rows use flat neutral surfaces with hairline borders and compact spacing so the analytics modes share one readable hierarchy.
+
 The top dashboard header also shows a compact app-wide token-throughput summary alongside running and queued task counts near the runtime controls. It uses a rolling 20-second live activity window, updates once per second, and renders a 20-point stats-card-style sparkline that rises on increases, slopes down on decreases, stabilizes near the 90% band while throughput remains nonzero, and drops to baseline when throughput reaches zero. Use it for a live pulse check; use the Stats page for detailed analysis.
 
 ## Time windows
