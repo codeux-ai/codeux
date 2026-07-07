@@ -129,6 +129,7 @@ domain**, plus `search_knowledge`:
 | `search_knowledge` | Semantic search over the caller's subscribed knowledge base. |
 | `manage_settings` | Get/resolve/patch/replace/reset system, project, and sprint settings. |
 | `manage_preview` | Manage sprint preview containers. |
+| `manage_chat_providers` | Manage external chat provider configuration and delivery state. |
 | `manage_telemetry` | Read execution snapshots, invocations, sprint runs, and dispatches. |
 | `manage_code_ux` | **Deprecated** unified dispatcher; prefer the dedicated tools above. |
 

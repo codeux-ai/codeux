@@ -91,6 +91,7 @@ export function createDashboardDependencies(
     executionControlService,
     taskRerunService: taskRerunServiceRef,
     settingsRepository: coreDeps.settingsRepository,
+    chatProviderRepository: coreDeps.chatProviderRepository,
     agentPresetSyncService: coreDeps.agentPresetSyncService,
     memoryService: coreDeps.memoryService,
     memoryPromotionService: coreDeps.memoryPromotionService,

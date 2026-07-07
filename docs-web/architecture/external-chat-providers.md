@@ -26,6 +26,24 @@ Supported bridge modes are `openclaw`, `webhook`, and `native_bridge`. Provider 
 
 Public records expose redacted credential metadata only. Runtime code that needs secrets must call the explicit internal repository read path.
 
+## MCP management
+
+The `manage_chat_providers` MCP tool exposes provider configuration management without routing inbound messages or sending outbound messages.
+
+Supported actions:
+
+- Provider setup definitions: `list_provider_definitions`.
+- Provider connections: `list_connections`, `get_connection`, `create_connection`, `update_connection`, `delete_connection`.
+- Channel bindings: `list_channel_bindings`, `create_channel_binding`, `update_channel_binding`, `delete_channel_binding`.
+- Delivery inspection: `list_outbound_deliveries` for outbound records, optionally filtered by delivery status.
+
+Connection and binding responses include stable IDs plus generated ingress URL guidance under `ingressUrls`. Connection responses expose `credentials` with redacted configured-state metadata only; raw `secrets` are never returned.
+
+Approval rules:
+
+- `delete_connection` and `delete_channel_binding` require the standard destructive-action approval handshake.
+- `update_connection` requires a one-use approval handshake before replacing a non-empty `secrets` payload. The approval response is bound to the redacted action payload and does not echo secret values.
+
 ## Storage
 
 SQLite tables are created for fresh databases and during startup migrations for existing databases.
@@ -48,8 +66,7 @@ Bindings allow many projects to point at the same external channel and one proje
 - Channel binding create/update/list/get/delete.
 - Inbound duplicate lookup by `(providerConnectionId, externalMessageId)`.
 - Outbound delivery upsert and state transitions.
-- Outbound delivery listing scoped to a provider connection or channel binding for dashboard status views.
-- Pending outbound delivery listing for future send workers.
+- Outbound delivery listing scoped to a provider connection or channel binding for dashboard status views, plus pending outbound delivery listing for future send workers.
 
 Indexes cover provider kind, enabled status, project lookup, provider/channel lookup, inbound dedupe, and pending outbound delivery scans.
 
