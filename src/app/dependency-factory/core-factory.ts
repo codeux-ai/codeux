@@ -22,6 +22,7 @@ import { ProjectAttentionRepository } from "../../repositories/project-attention
 import { ProjectAttentionService } from "../../domain/workers/project-attention-service.js";
 import { WorkerAttentionOutcomeService } from "../../domain/workers/worker-attention-outcome-service.js";
 import { AgentPresetSyncService } from "../../services/agent-preset-sync-service.js";
+import { ClusterSettingsSyncService } from "../../services/cluster-settings-sync-service.js";
 import { ActivitySummaryService } from "../../domain/sessions/activity-summary.js";
 import { JulesSourceResolver } from "../../services/jules-source-resolver.js";
 import { JulesUsageService } from "../../domain/jules/jules-usage-service.js";
@@ -84,6 +85,7 @@ export interface CoreDependencies {
   workerAttentionOutcomeService: WorkerAttentionOutcomeService;
   agentPresetRepository: AgentPresetRepository;
   agentPresetSyncService: AgentPresetSyncService;
+  clusterSettingsSyncService: ClusterSettingsSyncService;
   executionRepository: ExecutionRepository;
   sprintRunLifecycleService: SprintRunLifecycleService;
   guardrailRepository: GuardrailRepository;
@@ -292,6 +294,10 @@ export function createCoreDependencies(
     logger: logger.child({ component: "agent-preset-sync-service" }),
     knowledgeService,
   });
+  const clusterSettingsSyncService = new ClusterSettingsSyncService({
+    settingsRepository,
+    logger: logger.child({ component: "cluster-settings-sync-service" }),
+  });
   const instructionService = new InstructionService({
     settingsRepository,
     projectManagementRepository,
@@ -322,6 +328,7 @@ export function createCoreDependencies(
     workerAttentionOutcomeService,
     agentPresetRepository,
     agentPresetSyncService,
+    clusterSettingsSyncService,
     executionRepository,
     sprintRunLifecycleService,
     guardrailRepository,
