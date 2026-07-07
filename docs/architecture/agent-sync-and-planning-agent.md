@@ -237,7 +237,7 @@ When a retryable provider error occurs, Code UX appends an explicit system event
 - whether Code UX is waiting on quota reset or rate-limit backoff
 - which virtual model the planning agent actually used
 
-If `autoStart` is enabled, Code UX starts orchestration after the tasks are created.
+If `autoStart` is enabled, Code UX starts orchestration after the tasks are created unless planning self-reflection is enabled and the final reflection decision does not pass. In that case the valid planned tasks stay saved, and the operator can start the sprint manually after review.
 
 Provider slot recovery also runs before every provider claim, including providers configured with `maxConcurrentTasks = 0` (unlimited). If a Docker-backed planning invocation is still marked `running` but the container with its `code-ux.session-id` label has disappeared and the linked execution invocation has been idle long enough, Code UX marks the provider and execution invocation failed so the next planning request is not blocked by an orphaned runtime row. Startup recovery also closes stale `running` planning invocation audit rows that never linked to provider runtime or whose provider invocation is already terminal, keeping the dashboard invocation ledger from showing historical planning work as active.
 

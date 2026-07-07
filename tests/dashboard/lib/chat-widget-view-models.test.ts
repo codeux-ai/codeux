@@ -3,6 +3,7 @@ import {
   getChatWidgetData,
   getInvocationWidgetData,
   getReasoningWidgetData,
+  getSelfReflectionWidgetData,
   getWorkingBubbleData,
   sanitizeInvocationOutputText,
 } from "../../../dashboard/src/v2/lib/chat-widget-view-models.js";
@@ -363,6 +364,113 @@ describe("Chat Widget View Models", () => {
       expect(result.ariaLabel).toContain("anthropic");
       expect(result.ariaLabel).toContain("claude-3.7-sonnet");
       expect(result.ariaLabel).toContain("17 tokens");
+    });
+  });
+
+  describe("getSelfReflectionWidgetData", () => {
+    it("normalizes passing planning reflection metadata", () => {
+      const message = {
+        metadata: {
+          reflection: {
+            event: "reflection_evaluated",
+            purpose: "planning",
+            attempt: 0,
+            criteria: [{ id: "coverage", label: "Coverage", threshold: 0.8 }],
+            scores: [{
+              id: "coverage",
+              score: 9,
+              passed: true,
+              rationale: "The plan covers the required contract.",
+              improvementInstructions: "",
+            }],
+            passed: true,
+            finalDecision: "passed",
+          },
+        },
+      } as unknown as ExecutionInvocationMessageRecord;
+
+      const result = getSelfReflectionWidgetData(message);
+
+      expect(result?.purposeLabel).toBe("Planning self-reflection");
+      expect(result?.attemptLabel).toBe("Attempt 1");
+      expect(result?.stateLabel).toBe("Passed");
+      expect(result?.finalDecisionLabel).toBe("Passed");
+      expect(result?.criteria[0]).toEqual(expect.objectContaining({
+        id: "coverage",
+        label: "Coverage",
+        score: 9,
+        scoreLabel: "9/10",
+        starRating: 5,
+        threshold: 8,
+        thresholdLabel: "Threshold 8/10",
+        passed: true,
+        stateLabel: "Passed",
+        rationale: "The plan covers the required contract.",
+        improvementInstructions: null,
+      }));
+    });
+
+    it("normalizes failing QA reflection metadata with improvement instructions", () => {
+      const message = {
+        metadata: {
+          reflection: {
+            purpose: "qa_review",
+            attempt: 1,
+            criteria: [{ id: "correctness", label: "Correctness", threshold: 0.85 }],
+            scores: [{
+              id: "correctness",
+              score: 6,
+              rationale: "The review missed a blocking defect.",
+              improvementInstructions: "Add the missing regression finding.",
+            }],
+            passed: false,
+            finalDecision: "improvement_requested",
+          },
+        },
+      } as unknown as ExecutionInvocationMessageRecord;
+
+      const result = getSelfReflectionWidgetData(message);
+
+      expect(result?.purposeLabel).toBe("QA self-reflection");
+      expect(result?.attemptLabel).toBe("Attempt 2");
+      expect(result?.stateLabel).toBe("Needs improvement");
+      expect(result?.finalDecisionLabel).toBe("Improvement Requested");
+      expect(result?.criteria[0]).toEqual(expect.objectContaining({
+        label: "Correctness",
+        scoreLabel: "6/10",
+        starRating: 3,
+        thresholdLabel: "Threshold 8.5/10",
+        passed: false,
+        stateLabel: "Needs improvement",
+        rationale: "The review missed a blocking defect.",
+        improvementInstructions: "Add the missing regression finding.",
+      }));
+    });
+
+    it("tolerates partial legacy and error reflection metadata without throwing", () => {
+      const message = {
+        metadata: {
+          reflection: {
+            purpose: "planning",
+            criteria: [{ id: "scope_control", label: "Scope control", score: 7, threshold: 8 }],
+            final_decision: "reflection_failed",
+            error_message: "Reflection JSON could not be parsed.",
+          },
+        },
+      } as unknown as ExecutionInvocationMessageRecord;
+
+      const result = getSelfReflectionWidgetData(message);
+
+      expect(result?.stateLabel).toBe("Reflection error");
+      expect(result?.errorMessage).toBe("Reflection JSON could not be parsed.");
+      expect(result?.finalDecisionLabel).toBe("Reflection Failed");
+      expect(result?.criteria[0]).toEqual(expect.objectContaining({
+        id: "scope_control",
+        label: "Scope control",
+        scoreLabel: "7/10",
+        thresholdLabel: "Threshold 8/10",
+        passed: false,
+      }));
     });
   });
 

@@ -92,6 +92,38 @@ export interface ReasoningWidgetState {
   ariaLabel: string;
 }
 
+export type SelfReflectionPurpose = "planning" | "qa" | "unknown";
+
+export interface SelfReflectionCriterionState {
+  id: string;
+  label: string;
+  score: number | null;
+  scoreLabel: string;
+  starRating: number | null;
+  starLabel: string;
+  threshold: number | null;
+  thresholdLabel: string;
+  passed: boolean | null;
+  stateLabel: string;
+  rationale: string | null;
+  improvementInstructions: string | null;
+}
+
+export interface SelfReflectionWidgetState {
+  event: string | null;
+  purpose: SelfReflectionPurpose;
+  purposeLabel: string;
+  attempt: number | null;
+  attemptLabel: string | null;
+  criteria: SelfReflectionCriterionState[];
+  passed: boolean | null;
+  stateLabel: string;
+  finalDecision: string | null;
+  finalDecisionLabel: string | null;
+  errorMessage: string | null;
+  ariaLabel: string;
+}
+
 const BOOTSTRAP_BRANCH_FATAL_LINE_PATTERN =
   /^fatal:\s+your current branch 'code-ux-bootstrap-[^']+' does not have any commits yet\s*$/i;
 const TOKEN_COUNT_FORMATTER = new Intl.NumberFormat("en-US");
@@ -115,6 +147,18 @@ const readString = (value: unknown): string | null => {
 
 const readNumber = (value: unknown): number | null => (
   typeof value === "number" && Number.isFinite(value) ? value : null
+);
+
+const readBoolean = (value: unknown): boolean | null => (
+  typeof value === "boolean" ? value : null
+);
+
+const readRecord = (value: unknown): Record<string, unknown> | null => (
+  value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null
+);
+
+const readArray = (value: unknown): unknown[] => (
+  Array.isArray(value) ? value : []
 );
 
 const getWidgetMetadata = (metadata: Record<string, unknown> | null | undefined): Record<string, unknown> | null => {
@@ -241,6 +285,141 @@ const formatStatusLabel = (value: string | null | undefined): string => {
     .replace(/_/g, " ")
     .toLowerCase()
     .replace(/\b\w/g, (letter) => letter.toUpperCase());
+};
+
+const normalizeReflectionPurpose = (value: unknown): SelfReflectionPurpose => {
+  const normalized = readString(value)?.toLowerCase().replace(/[\s-]+/g, "_") ?? "";
+  if (normalized === "planning" || normalized === "plan") {
+    return "planning";
+  }
+  if (
+    normalized === "qa"
+    || normalized === "quality_assurance"
+    || normalized === "qualityassurance"
+    || normalized === "qa_review"
+    || normalized === "review"
+  ) {
+    return "qa";
+  }
+  return "unknown";
+};
+
+const formatReflectionPurposeLabel = (purpose: SelfReflectionPurpose): string => {
+  switch (purpose) {
+    case "planning":
+      return "Planning self-reflection";
+    case "qa":
+      return "QA self-reflection";
+    case "unknown":
+    default:
+      return "Self-reflection";
+  }
+};
+
+const formatReflectionDecisionLabel = (value: string | null): string | null => {
+  if (!value) {
+    return null;
+  }
+  return formatStatusLabel(value)
+    .replace(/\bQa\b/g, "QA")
+    .replace(/\bJson\b/g, "JSON");
+};
+
+const normalizeReflectionThreshold = (value: unknown): number | null => {
+  const numeric = readNumber(value);
+  if (numeric === null) {
+    return null;
+  }
+  if (numeric <= 1) {
+    return Math.max(0, Math.min(10, numeric * 10));
+  }
+  return Math.max(0, Math.min(10, numeric));
+};
+
+const normalizeReflectionScore = (value: unknown): number | null => {
+  const numeric = readNumber(value);
+  if (numeric === null) {
+    return null;
+  }
+  return Math.max(0, Math.min(10, numeric));
+};
+
+const formatScoreLabel = (score: number | null): string => (
+  score === null ? "No score" : `${score.toFixed(score % 1 === 0 ? 0 : 1)}/10`
+);
+
+const formatThresholdLabel = (threshold: number | null): string => (
+  threshold === null ? "Threshold not set" : `Threshold ${threshold.toFixed(threshold % 1 === 0 ? 0 : 1)}/10`
+);
+
+const buildReflectionCriterionKey = (entry: Record<string, unknown>, index: number): string => (
+  readString(entry.id) || readString(entry.key) || readString(entry.label) || `criterion-${index + 1}`
+);
+
+const buildReflectionCriterionState = (
+  base: Record<string, unknown>,
+  scoreEntry: Record<string, unknown> | null,
+  index: number,
+): SelfReflectionCriterionState => {
+  const id = buildReflectionCriterionKey(scoreEntry ?? base, index);
+  const label = readString(scoreEntry?.label) || readString(base.label) || readString(base.name) || formatStatusLabel(id);
+  const score = normalizeReflectionScore(scoreEntry?.score ?? base.score ?? scoreEntry?.rating ?? base.rating);
+  const threshold = normalizeReflectionThreshold(scoreEntry?.threshold ?? base.threshold);
+  const explicitPassed = readBoolean(scoreEntry?.passed ?? base.passed);
+  const passed = explicitPassed ?? (score !== null && threshold !== null ? score >= threshold : null);
+  const starRating = score === null ? null : Math.max(0, Math.min(5, Math.round(score / 2)));
+  const scoreLabel = formatScoreLabel(score);
+
+  return {
+    id,
+    label,
+    score,
+    scoreLabel,
+    starRating,
+    starLabel: starRating === null ? `Rating unavailable for ${label}` : `Rating ${starRating} of 5 stars for ${label}; score ${scoreLabel}`,
+    threshold,
+    thresholdLabel: formatThresholdLabel(threshold),
+    passed,
+    stateLabel: passed === null ? "Not evaluated" : passed ? "Passed" : "Needs improvement",
+    rationale: readString(scoreEntry?.rationale) || readString(base.rationale),
+    improvementInstructions: readString(scoreEntry?.improvementInstructions)
+      || readString(scoreEntry?.improvement_instructions)
+      || readString(base.improvementInstructions)
+      || readString(base.improvement_instructions),
+  };
+};
+
+const mergeReflectionCriteria = (
+  criteria: unknown[],
+  scores: unknown[],
+): SelfReflectionCriterionState[] => {
+  const baseEntries = criteria
+    .map(readRecord)
+    .filter((entry): entry is Record<string, unknown> => Boolean(entry));
+  const scoreEntries = scores
+    .map(readRecord)
+    .filter((entry): entry is Record<string, unknown> => Boolean(entry));
+  const effectiveScores = scoreEntries.length > 0
+    ? scoreEntries
+    : baseEntries.filter((entry) => readNumber(entry.score) !== null || readNumber(entry.rating) !== null);
+  const baseById = new Map(baseEntries.map((entry, index) => [buildReflectionCriterionKey(entry, index), entry]));
+  const seen = new Set<string>();
+  const result: SelfReflectionCriterionState[] = [];
+
+  effectiveScores.forEach((scoreEntry, index) => {
+    const key = buildReflectionCriterionKey(scoreEntry, index);
+    seen.add(key);
+    result.push(buildReflectionCriterionState(baseById.get(key) ?? {}, scoreEntry, index));
+  });
+
+  baseEntries.forEach((base, index) => {
+    const key = buildReflectionCriterionKey(base, index);
+    if (!seen.has(key)) {
+      result.push(buildReflectionCriterionState(base, null, result.length));
+    }
+  });
+
+  return result;
 };
 
 const resolveTaskStatus = (phase: string | undefined): Pick<LivePlanningTaskState, "statusKind" | "statusLabel" | "detailLabel"> => {
@@ -458,6 +637,62 @@ export const getReasoningWidgetData = (message: ExecutionInvocationMessageRecord
     tokens,
     createdAtLabel,
     ariaLabel: buildReasoningAriaLabel(providerLabel, modelLabel, tokens, createdAtLabel),
+  };
+};
+
+export const getSelfReflectionWidgetData = (
+  message: ExecutionInvocationMessageRecord,
+): SelfReflectionWidgetState | null => {
+  const reflection = readRecord(message.metadata?.reflection);
+  if (!reflection) {
+    return null;
+  }
+
+  const purpose = normalizeReflectionPurpose(reflection.purpose);
+  const purposeLabel = formatReflectionPurposeLabel(purpose);
+  const attempt = readNumber(reflection.attempt);
+  const criteria = mergeReflectionCriteria(
+    readArray(reflection.criteria),
+    readArray(reflection.scores),
+  );
+  const explicitPassed = readBoolean(reflection.passed);
+  const passed = explicitPassed ?? (criteria.length > 0 && criteria.every((criterion) => criterion.passed === true)
+    ? true
+    : criteria.some((criterion) => criterion.passed === false)
+      ? false
+      : null);
+  const errorMessage = readString(reflection.errorMessage) || readString(reflection.error_message);
+  const stateLabel = errorMessage
+    ? "Reflection error"
+    : passed === null
+      ? "Not evaluated"
+      : passed
+        ? "Passed"
+        : "Needs improvement";
+  const finalDecision = readString(reflection.finalDecision) || readString(reflection.final_decision);
+  const finalDecisionLabel = formatReflectionDecisionLabel(finalDecision);
+  const attemptLabel = attempt === null ? null : `Attempt ${attempt + 1}`;
+  const ariaParts = [purposeLabel, stateLabel];
+  if (finalDecisionLabel) {
+    ariaParts.push(`Decision ${finalDecisionLabel}`);
+  }
+  if (attemptLabel) {
+    ariaParts.push(attemptLabel);
+  }
+
+  return {
+    event: readString(reflection.event),
+    purpose,
+    purposeLabel,
+    attempt,
+    attemptLabel,
+    criteria,
+    passed,
+    stateLabel,
+    finalDecision,
+    finalDecisionLabel,
+    errorMessage,
+    ariaLabel: ariaParts.join(". "),
   };
 };
 

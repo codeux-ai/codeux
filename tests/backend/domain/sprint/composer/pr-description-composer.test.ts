@@ -388,6 +388,32 @@ describe("composeSprintPrBody", () => {
     expect(body).toContain("**Included usage estimate (subscription/local login):** $0.35");
     expect(body).toContain("**Reference total (metered + included estimate):** $2.15");
   });
+
+  it("renders sprint timing from a fallback finished timestamp without NaN or negative duration output", () => {
+    const body = composeSprintPrBody({
+      ...baseSprintInput,
+      startedAt: "2026-07-03T02:18:16.000Z",
+      finishedAt: "2026-07-03T02:31:30.000Z",
+    });
+
+    expect(body).toContain("| Started | 2026-07-03 02:18:16 UTC |");
+    expect(body).toContain("| Finished | 2026-07-03 02:31:30 UTC |");
+    expect(body).toContain("| Duration | 13m 14s |");
+    expect(body).not.toContain("NaN");
+    expect(body).not.toContain("| Duration | — |");
+  });
+
+  it("clamps sprint timing duration to zero when a bad finished timestamp precedes startedAt", () => {
+    const body = composeSprintPrBody({
+      ...baseSprintInput,
+      startedAt: "2026-07-03T02:31:30.000Z",
+      finishedAt: "2026-07-03T02:18:16.000Z",
+    });
+
+    expect(body).toContain("| Duration | 0s |");
+    expect(body).not.toContain("NaN");
+    expect(body).not.toContain("-794s");
+  });
 });
 
 describe("composeTaskPrTitle", () => {

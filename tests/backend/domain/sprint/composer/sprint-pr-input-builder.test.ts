@@ -25,6 +25,119 @@ function createExecutionRepository(): ExecutionRepository {
 }
 
 describe("buildSprintPrComposerInput", () => {
+  it("uses the supplied completion timestamp when the sprint run is not persisted as finished yet", () => {
+    const executionRepository = createExecutionRepository();
+    vi.mocked(executionRepository.getSprintRun).mockReturnValue({
+      id: "sprint-run-1",
+      projectId: "project-1",
+      sprintId: "sprint-1",
+      status: "running",
+      triggerType: "mcp",
+      triggeredBy: "worker",
+      executorMode: "mixed",
+      startedAt: "2026-07-03T02:18:16.000Z",
+      finishedAt: null,
+      lastHeartbeatAt: "2026-07-03T02:20:00.000Z",
+      createdAt: "2026-07-03T02:18:16.000Z",
+      updatedAt: "2026-07-03T02:20:00.000Z",
+    });
+
+    const input = buildSprintPrComposerInput({
+      sprint: {
+        id: "sprint-1",
+        projectId: "project-1",
+        number: 1,
+        slug: "sprint-1",
+        name: "Sprint 1",
+        originalPrompt: "Complete sprint.",
+        goal: "Complete sprint.",
+        status: "running",
+        showcasePinned: false,
+        startDate: null,
+        endDate: null,
+        featureBranch: "sprint/1",
+        baseCommitSha: null,
+        tasksCount: 0,
+        completion: 0,
+        linkedIssues: [],
+        createdAt: "2026-07-03T02:18:16.000Z",
+        updatedAt: "2026-07-03T02:20:00.000Z",
+      } as SprintRecord,
+      sprintRunId: "sprint-run-1",
+      subtasks: [] as Subtask[],
+      featureBranch: "sprint/1",
+      defaultBranch: "dev",
+      aiProviderSettings: {
+        provider: "codex",
+        strategy: "SINGLE",
+        providers: {},
+        invocationRouting: {},
+      } as unknown as AiProviderSettings,
+      sections: allSections,
+      completionTimestamp: "2026-07-03T02:31:30.000Z",
+      executionRepository,
+    });
+
+    expect(input.startedAt).toBe("2026-07-03T02:18:16.000Z");
+    expect(input.finishedAt).toBe("2026-07-03T02:31:30.000Z");
+  });
+
+  it("keeps persisted sprint run finishedAt authoritative over the completion timestamp", () => {
+    const executionRepository = createExecutionRepository();
+    vi.mocked(executionRepository.getSprintRun).mockReturnValue({
+      id: "sprint-run-1",
+      projectId: "project-1",
+      sprintId: "sprint-1",
+      status: "completed",
+      triggerType: "mcp",
+      triggeredBy: "worker",
+      executorMode: "mixed",
+      startedAt: "2026-07-03T02:18:16.000Z",
+      finishedAt: "2026-07-03T02:45:00.000Z",
+      lastHeartbeatAt: "2026-07-03T02:45:00.000Z",
+      createdAt: "2026-07-03T02:18:16.000Z",
+      updatedAt: "2026-07-03T02:45:00.000Z",
+    });
+
+    const input = buildSprintPrComposerInput({
+      sprint: {
+        id: "sprint-1",
+        projectId: "project-1",
+        number: 1,
+        slug: "sprint-1",
+        name: "Sprint 1",
+        originalPrompt: "Complete sprint.",
+        goal: "Complete sprint.",
+        status: "completed",
+        showcasePinned: false,
+        startDate: null,
+        endDate: null,
+        featureBranch: "sprint/1",
+        baseCommitSha: null,
+        tasksCount: 0,
+        completion: 100,
+        linkedIssues: [],
+        createdAt: "2026-07-03T02:18:16.000Z",
+        updatedAt: "2026-07-03T02:45:00.000Z",
+      } as SprintRecord,
+      sprintRunId: "sprint-run-1",
+      subtasks: [] as Subtask[],
+      featureBranch: "sprint/1",
+      defaultBranch: "dev",
+      aiProviderSettings: {
+        provider: "codex",
+        strategy: "SINGLE",
+        providers: {},
+        invocationRouting: {},
+      } as unknown as AiProviderSettings,
+      sections: allSections,
+      completionTimestamp: "2026-07-03T02:31:30.000Z",
+      executionRepository,
+    });
+
+    expect(input.finishedAt).toBe("2026-07-03T02:45:00.000Z");
+  });
+
   it("maps linked sprint issues into sprint PR composer input", () => {
     const sprint: SprintRecord = {
       id: "sprint-issue-links",

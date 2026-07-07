@@ -133,6 +133,20 @@ describe("self-reflection loop integration", () => {
     });
 
     expect(result.parsed.tasks[0]?.title).toBe("Accepted integration plan");
+    expect(result.selfReflection).toMatchObject({
+      enabled: true,
+      finalDecision: "passed",
+      attemptCount: 1,
+      passed: true,
+    });
+    expect(result.selfReflection.scores).toEqual([
+      expect.objectContaining({
+        id: "coverage",
+        score: 9,
+        threshold: 0.8,
+        passed: true,
+      }),
+    ]);
     expect(vi.mocked(providerExecutionService.executeProvider)).toHaveBeenCalledTimes(4);
     const calls = vi.mocked(providerExecutionService.executeProvider).mock.calls;
     expect(calls[1]?.[0].continueSessionId).toBe("native-plan-1");
@@ -181,6 +195,13 @@ describe("self-reflection loop integration", () => {
 
     expect(result.parsed.verdict).toBe("pass");
     expect(result.parsed.summary).toBe("No blocking issues.");
+    expect(result.selfReflection).toEqual({
+      enabled: false,
+      finalDecision: "disabled",
+      attemptCount: 0,
+      passed: true,
+      scores: [],
+    });
     expect(vi.mocked(providerExecutionService.executeProvider)).toHaveBeenCalledTimes(1);
   });
 });

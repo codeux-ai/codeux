@@ -73,6 +73,7 @@ Automatically created PRs must provide sufficient human context:
 - **Worker Feature PRs** (`worker-branch -> sprint-feature-branch`): Must include both the current task description (from the prompt) and the sprint goal/description in the PR body.
 - Worker feature PR timing is rendered with the same completion timestamp later persisted to the task run, so PR bodies show `Finished` and `Duration` even though the PR is opened just before task-run finalization.
 - **Main Merge PRs** (`sprint-feature-branch -> default-branch`): Must include the sprint description alongside branch and sprint numbering metadata.
+- Main merge PR timing uses the sprint run's persisted `startedAt` plus the finalization timestamp captured at PR creation time until the sprint run completion row is persisted. Once `finishedAt` exists on the sprint run, that stored value remains authoritative for historical PR rendering.
 - If task or sprint descriptions are missing/empty, PR bodies will use a compact fallback text instead of omitting sections.
 - The `default-branch` target is the resolved scoped `git.defaultBranch` value (`system -> project -> sprint` settings). Legacy project metadata cannot override it during sprint completion, so inherited system defaults such as `dev` remain the final merge target.
 
@@ -100,6 +101,8 @@ If `action=plan`:
 - Planning may apply a provider-suggested sprint title only when the sprint was explicitly stored as generated/auto-named at creation time. Placeholder-looking custom titles such as `Untitled sprint 1` are treated as user titles and are not writable by planning.
 - Planning self-reflection is available under `agents.selfReflection.planning` and defaults to `enabled: false`. When enabled, the planning provider rates its parsed JSON output against configured `{ id, label, prompt, threshold }` criteria using JSON-only 1-10 scores. Below-threshold ratings can trigger same-session improvement prompts up to `maxImprovementAttempts`, but every improved plan is parsed through the existing planning JSON extractor and `PlanningPayloadValidator`, so DAG order, task keys, dependency references, and required prompt sections remain mandatory.
 - Planning reflection is optional and fail-open. Malformed reflection JSON, provider failures, or invalid improved planning JSON are logged and leave the last valid parsed plan in place rather than bypassing validation or corrupting the accepted output.
+- Planning reflection gates planning autostart when it is enabled. A request with `autoStart: true` starts orchestration only after the final planning reflection decision passes; if reflection fails, reaches the improvement-attempt limit without passing, or cannot parse an improvement, Code UX persists the valid planned tasks and leaves the sprint planned but not running.
+- Operators can manually start a planned sprint after reviewing or editing the tasks when planning reflection does not pass. When planning reflection is disabled, `autoStart: true` keeps the existing behavior and starts immediately after valid tasks are persisted.
 - Reflection audit records are appended to the planning execution invocation as message metadata. The metadata stores criteria, thresholds, scores, pass/fail state, attempt count, and final decision; it does not duplicate provider credentials.
 
 ### 4. Orchestration cycle

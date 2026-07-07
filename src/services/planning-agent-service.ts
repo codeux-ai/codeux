@@ -385,6 +385,7 @@ export class PlanningAgentService {
 
     let payload: PlannedSprintPayload;
     let cleanupWorkspace: (() => Promise<void>) | undefined;
+    let planningSelfReflection: StructuredAgentRequestResult<PlannedSprintPayload>["selfReflection"] | undefined;
     try {
       const virtualResult = await this.runVirtualPlanningRequest({
         projectId,
@@ -409,6 +410,7 @@ export class PlanningAgentService {
       });
       payload = virtualResult.parsed;
       cleanupWorkspace = virtualResult.cleanupWorkspace;
+      planningSelfReflection = virtualResult.selfReflection;
 
       if (invocation && isExecutionInvocationActiveForFinalize(this.deps.executionRepository, invocation.id)) {
         this.deps.executionRepository?.updateExecutionInvocation(invocation.id, {
@@ -474,7 +476,8 @@ export class PlanningAgentService {
       0.8,
     );
 
-    if (options.autoStart) {
+    const shouldAutoStart = this.shouldAutoStartPlannedSprint(options.autoStart === true, planningSelfReflection);
+    if (shouldAutoStart) {
       await this.deps.executionControlService.orchestrateSprint(projectId, sprintId);
     }
     await cleanupWorkspace?.().catch(() => undefined);
@@ -484,8 +487,21 @@ export class PlanningAgentService {
       invocationId: invocation?.id || "",
       agentId: planningAgent.id,
       createdTaskIds,
-      started: options.autoStart,
+      started: shouldAutoStart,
     };
+  }
+
+  private shouldAutoStartPlannedSprint(
+    requested: boolean,
+    selfReflection: StructuredAgentRequestResult<unknown>["selfReflection"] | undefined,
+  ): boolean {
+    if (!requested) {
+      return false;
+    }
+    if (!selfReflection || !selfReflection.enabled) {
+      return true;
+    }
+    return selfReflection.finalDecision === "passed";
   }
 
   private buildPlanningContinuationPrompt(fullPlanningPrompt: string): string {

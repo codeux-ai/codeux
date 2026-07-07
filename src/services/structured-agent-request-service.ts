@@ -1,5 +1,15 @@
 import { randomUUID } from "crypto";
-import type { AgentSelfReflectionLoopSettings, DashboardSettings, ProviderConfigMode, ProviderId, QwenModelProviderSettings, VirtualWorkerProvider } from "../contracts/app-types.js";
+import type {
+  AgentSelfReflectionCriterionResult,
+  AgentSelfReflectionFinalDecision,
+  AgentSelfReflectionLoopSettings,
+  AgentSelfReflectionOutcome,
+  DashboardSettings,
+  ProviderConfigMode,
+  ProviderId,
+  QwenModelProviderSettings,
+  VirtualWorkerProvider,
+} from "../contracts/app-types.js";
 import type { ProviderInvocationPurpose } from "../contracts/execution-types.js";
 import type { AgentMcpAccessConfig } from "../contracts/agent-preset-types.js";
 import type { Logger } from "../shared/logging/logger.js";
@@ -63,20 +73,11 @@ export interface StructuredRequestArgs<T> {
 export interface StructuredAgentRequestResult<T> extends StructuredProviderResult<T> {
   sessionId: string;
   invocationId: string;
-}
-
-interface ReflectionCriterionResult {
-  id: string;
-  label: string;
-  score: number;
-  rationale: string;
-  improvementInstructions: string;
-  threshold: number;
-  passed: boolean;
+  selfReflection: AgentSelfReflectionOutcome;
 }
 
 interface ReflectionEvaluation {
-  criteria: ReflectionCriterionResult[];
+  criteria: AgentSelfReflectionCriterionResult[];
   passed: boolean;
 }
 
@@ -87,7 +88,10 @@ interface ReflectionRunState {
   continueSessionId: string | null;
   openCodeBaselineRawUsageJson: Record<string, unknown> | null;
   attemptCount: number;
-  finalDecision: "passed" | "max_attempts_reached" | "reflection_failed" | "improvement_failed";
+  finalDecision: AgentSelfReflectionFinalDecision;
+  reflectionEnabled: boolean;
+  reflectionPassed: boolean;
+  scores: AgentSelfReflectionCriterionResult[];
 }
 
 export interface StructuredAgentRequestServiceDeps {
@@ -208,7 +212,10 @@ export class StructuredAgentRequestService {
       continueSessionId: result.nativeSessionId || sessionId,
       openCodeBaselineRawUsageJson: result.openCodeBaselineRawUsageJson || args.openCodeBaselineRawUsageJson || null,
       attemptCount: 0,
-      finalDecision: "passed",
+      finalDecision: "disabled",
+      reflectionEnabled: false,
+      reflectionPassed: true,
+      scores: [],
     }, sessionId, invocationId, maxRetries);
 
     return {
@@ -217,6 +224,7 @@ export class StructuredAgentRequestService {
       nativeSessionId: reflected.nativeSessionId,
       sessionId,
       invocationId: invocationId || "",
+      selfReflection: this.buildReflectionOutcome(reflected),
     };
   }
 
@@ -232,7 +240,12 @@ export class StructuredAgentRequestService {
       return initial;
     }
 
-    let state = initial;
+    let state: ReflectionRunState = {
+      ...initial,
+      reflectionEnabled: true,
+      reflectionPassed: false,
+      finalDecision: "max_attempts_reached",
+    };
     let evaluation: ReflectionEvaluation | null = null;
     const maxImprovementAttempts = Math.max(0, Math.floor(settings.maxImprovementAttempts));
 
@@ -261,6 +274,8 @@ export class StructuredAgentRequestService {
           ...state,
           attemptCount: attempt,
           finalDecision: "reflection_failed",
+          reflectionPassed: false,
+          scores: state.scores,
         };
       }
 
@@ -279,6 +294,8 @@ export class StructuredAgentRequestService {
           ...state,
           attemptCount: attempt,
           finalDecision: "passed",
+          reflectionPassed: true,
+          scores: evaluation.criteria,
         };
       }
 
@@ -287,6 +304,8 @@ export class StructuredAgentRequestService {
           ...state,
           attemptCount: attempt,
           finalDecision: "max_attempts_reached",
+          reflectionPassed: false,
+          scores: evaluation.criteria,
         };
       }
 
@@ -300,6 +319,9 @@ export class StructuredAgentRequestService {
           openCodeBaselineRawUsageJson: improved.openCodeBaselineRawUsageJson || state.openCodeBaselineRawUsageJson,
           attemptCount: attempt + 1,
           finalDecision: "passed",
+          reflectionEnabled: true,
+          reflectionPassed: false,
+          scores: evaluation.criteria,
         };
         this.persistReflectionMetadata(invocationId, {
           event: "reflection_improved",
@@ -332,6 +354,8 @@ export class StructuredAgentRequestService {
           ...state,
           attemptCount: attempt + 1,
           finalDecision: "improvement_failed",
+          reflectionPassed: false,
+          scores: evaluation.criteria,
         };
       }
     }
@@ -525,7 +549,7 @@ export class StructuredAgentRequestService {
     }
 
     const byId = new Map(settings.criteria.map((criterion) => [criterion.id, criterion]));
-    const results: ReflectionCriterionResult[] = [];
+    const results: AgentSelfReflectionCriterionResult[] = [];
     for (const entry of criteriaPayload) {
       if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
         continue;
@@ -571,7 +595,7 @@ export class StructuredAgentRequestService {
       purpose: ProviderInvocationPurpose;
       attempt: number;
       criteria: AgentSelfReflectionLoopSettings["criteria"];
-      scores?: ReflectionCriterionResult[];
+      scores?: AgentSelfReflectionCriterionResult[];
       passed: boolean;
       finalDecision: string;
       errorMessage?: string;
@@ -620,6 +644,16 @@ export class StructuredAgentRequestService {
         ?? 3;
     }
     return args.settings.cliWorkflow?.maxParsingRetries ?? 3;
+  }
+
+  private buildReflectionOutcome(state: ReflectionRunState): AgentSelfReflectionOutcome {
+    return {
+      enabled: state.reflectionEnabled,
+      finalDecision: state.finalDecision,
+      attemptCount: state.attemptCount,
+      passed: state.reflectionPassed,
+      scores: state.scores.map((score) => ({ ...score })),
+    };
   }
 
   private resolveMaxProviderAttempts<T>(args: StructuredRequestArgs<T>, maxRetries: number): number | undefined {

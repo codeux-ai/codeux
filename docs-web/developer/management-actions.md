@@ -54,7 +54,7 @@ Domain for project CRUD and selection.
 | `force_cancel` | – | `sprintRunId` | Force-cancel (immediate). |
 | `inspect_run` | – | `projectId`, `sprintId`, `sprintRunId?` | Inspect run(s). |
 | `import_issues` | – | `projectId`, optional `sprintId`, filters | Search provider issues, and optionally replace sprint linked issues. |
-| `plan` | – | `projectId`, `sprintId` | Run the planning agent. Optional `autoStart`, `replan`, `planningAgentPresetId`, and `overrides`. |
+| `plan` | – | `projectId`, `sprintId` | Run the planning agent. Optional `autoStart`, `replan`, `planningAgentPresetId`, and `overrides`. Planning self-reflection gates `autoStart` when enabled; non-passing reflection saves the plan without starting the sprint. |
 
 `title` and `goalMarkdown` are MCP-friendly aliases. The repository stores sprint `name` and `goal`.
 
