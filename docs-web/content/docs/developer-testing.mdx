@@ -39,7 +39,7 @@ pnpm run test:e2e -- tests/e2e/product-smoke.spec.ts
 
 Use `tests/e2e/helpers/e2e-fixtures.ts` for deterministic browser tests that need temporary git repositories, selected Code UX projects, public-API sprint/task seeding, local-git HOST execution, QA-disabled project settings, API polling, or onboarding/tour suppression. The fake provider supports prompt markers such as `[mock-provider:sleep=250]`, `[mock-provider:fail]`, `[mock-provider:exit=2]`, `[mock-provider:no-op]`, and `[mock-provider:write=relative/path.txt]`.
 
-`tests/e2e/dashboard-workflows.spec.ts` covers the pre-orchestration product path: isolated local-git project selection, UI draft sprint creation, UI task creation with dependencies, core route landmarks, collection API visibility, and unhandled browser error capture without starting planning or provider execution.
+`tests/e2e/filesystem-persistence.spec.ts` covers host filesystem persistence for instruction-file saves, local-directory browsing, sanitized traversal rejection, and Settings Appearance background-image uploads. The Playwright server exposes the OS temp directory through `CODE_UX_DIRECTORY_BROWSER_ROOTS` so temporary git fixtures can be browsed without Docker-backed file-browser sessions. `tests/e2e/dashboard-workflows.spec.ts` covers the pre-orchestration product path: isolated local-git project selection, UI draft sprint creation, UI task creation with dependencies, core route landmarks, collection API visibility, and unhandled browser error capture without starting planning or provider execution.
 
 ## Coverage thresholds
 

@@ -227,6 +227,8 @@ describe("GitHub workflow health", () => {
     expect(config).toContain("command: 'node dist/index.js'");
     expect(config).toContain("process.env.CODEUX_E2E_DASHBOARD_PORT || process.env.DASHBOARD_PORT || '4464'");
     expect(config).toContain("url: `${dashboardBaseUrl}/health`");
+    expect(config).toContain("const chromiumExecutablePath = (() => {");
+    expect(config).toContain("launchOptions: chromiumExecutablePath ? { executablePath: chromiumExecutablePath } : undefined,");
     expect(config).toContain("DASHBOARD_PORT: String(resolvedDashboardPort)");
     expect(config).toContain("CODEUX_E2E_DASHBOARD_PORT");
     expect(config).toContain("CODEUX_E2E_PROVIDER_CLI_SHIM: mockProviderCliPath");
