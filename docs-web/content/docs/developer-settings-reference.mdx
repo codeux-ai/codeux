@@ -89,12 +89,14 @@ Settings are evaluated in cascade: **Defaults → System → Project → Sprint*
   "executionMode": "DOCKER",
   "containerImage": "node:24-bookworm",
   "containerSetupScriptPath": "string?",
-  "containerMemoryLimitMb": 6144
+  "containerMemoryLimitMb": 6144,
+  "containerRunAsRoot": false
 }
 ```
 
 Default `gitMode`: `remote`. Default `executionMode`: `DOCKER`.
 `containerMemoryLimitMb` is a MiB ceiling for every Docker-backed CLI provider container. Positive values are passed to Docker as both `--memory` and `--memory-swap`; set it to `0` to omit Docker memory flags.
+`containerRunAsRoot` is an opt-in persisted contract for Docker provider containers that must run as root. It defaults to `false`, and invalid or missing settings sanitize back to `false`.
 
 `containerInstallPlaywrightBrowsers` defaults to `true` for provider coding containers. When `containerCacheSetupScriptImage` is also enabled, Code UX installs Playwright Chromium and OS dependencies during the setup-cache image build, stores the browser under `/ms-playwright`, and exposes `PLAYWRIGHT_BROWSERS_PATH=/ms-playwright` so non-root provider runs can reuse the baked browser without rerunning setup.
 

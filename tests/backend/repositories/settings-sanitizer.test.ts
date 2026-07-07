@@ -98,6 +98,7 @@ describe("settings-sanitizer", () => {
         containerSetupScriptPath: 7,
         containerMemoryLimitMb: "bad",
         containerCacheSetupScriptImage: "bad",
+        containerRunAsRoot: "bad",
         containerMountGeminiAuth: "bad",
       },
       agents: {
@@ -149,6 +150,7 @@ describe("settings-sanitizer", () => {
     expect(settings.cliWorkflow.containerImage).toBe("node:24-bookworm");
     expect(settings.cliWorkflow.containerMemoryLimitMb).toBe(6144);
     expect(settings.cliWorkflow.containerCacheSetupScriptImage).toBe(true);
+    expect(settings.cliWorkflow.containerRunAsRoot).toBe(false);
     expect(settings.cliWorkflow.containerMountGeminiAuth).toBe(false);
     expect(settings.agents.saveToProjectDirectory).toBe(true);
     expect(settings.agents.instructionTemplates.planningMissing).toContain("Sprint Planning Missing");
