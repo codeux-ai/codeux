@@ -10,6 +10,10 @@ New editable canvas surfaces use a pure dashboard state module for typed nodes, 
 
 Agent-driven graph edits use a separate UI-free helper that accepts structured JSON commands for adding nodes, patching node fields, connecting ports, deleting graph entities, selecting entities, and replacing a graph from serialized JSON. The helper applies commands through the canvas reducer and returns deterministic summaries, diffs, and validation blockers.
 
+Side panels stay controlled by the page shell: the palette emits typed create-node actions, the inspector
+emits field/config/metadata changes for the selected node, edge details are read-only, and validation
+issues expose select/focus callbacks for the affected node or edge.
+
 ## Dynamic Widgets
 
 The inspector renders widget schemas attached to the selected node. Supported field types are text, textarea, number, boolean, select, JSON, secret reference, and key-value entries. Graph-level input widgets describe manual or scheduled run input.
