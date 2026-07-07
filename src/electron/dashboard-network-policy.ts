@@ -10,6 +10,12 @@ export interface PermissionRequestOptions {
   mediaTypes?: readonly string[];
 }
 
+export interface PermissionCheckOptions {
+  mediaType?: string;
+  requestingUrl?: string;
+  securityOrigin?: string;
+}
+
 export function isDashboardRuntimeDataUrl(rawUrl: string, dashboardOrigin: string | null): boolean {
   if (!dashboardOrigin) {
     return false;
@@ -106,6 +112,28 @@ export function shouldAllowPermissionRequest(
 
   const mediaTypes = options.mediaTypes ?? [];
   return mediaTypes.includes("audio") && !mediaTypes.includes("video");
+}
+
+export function shouldAllowPermissionCheck(
+  rawRequestingOrigin: string,
+  dashboardOrigin: string | null,
+  permission: string,
+  options: PermissionCheckOptions = {},
+): boolean {
+  const requestingUrl = options.securityOrigin || options.requestingUrl || rawRequestingOrigin;
+  if (!isTrustedDashboardOriginUrl(requestingUrl, dashboardOrigin)) {
+    return false;
+  }
+
+  if (permission === "microphone") {
+    return true;
+  }
+
+  if (permission !== "media") {
+    return false;
+  }
+
+  return options.mediaType === "audio";
 }
 
 export function resolveDirectoryPickerDefaultPath(

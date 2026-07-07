@@ -10,6 +10,7 @@ import {
   normalizeZoomFactor,
   resolveDirectoryPickerDefaultPath,
   shouldAddRuntimeNoCacheRequestHeaders,
+  shouldAllowPermissionCheck,
   shouldAllowPermissionRequest,
 } from "./dashboard-network-policy.js";
 import { createDebouncedSaver, loadWindowState, saveWindowState } from "./window-state.js";
@@ -117,8 +118,12 @@ async function configureDashboardNetworkSession(): Promise<void> {
     callback(shouldAllowPermissionRequest(requestingUrl, dashboardOrigin, permission, { mediaTypes }));
   });
 
-  desktopSession.setPermissionCheckHandler((_webContents, permission, requestingOrigin) => {
-    return shouldAllowPermissionRequest(requestingOrigin, dashboardOrigin, permission);
+  desktopSession.setPermissionCheckHandler((_webContents, permission, requestingOrigin, details) => {
+    return shouldAllowPermissionCheck(requestingOrigin, dashboardOrigin, permission, {
+      mediaType: details.mediaType,
+      requestingUrl: details.requestingUrl,
+      securityOrigin: details.securityOrigin,
+    });
   });
 }
 
