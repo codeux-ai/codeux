@@ -61,6 +61,7 @@ Trend is the chart-first workspace for time-series telemetry.
 - Do not render a second Trend KPI band inside the studio. The mode metric deck owns total tokens, invocations, active time, cost, and cache-rate summaries; the Trend studio starts with compact secondary signal cards and then the chart.
 - Keep chart state centralized through `use-usage-chart-state.ts`; chart filters change series visibility, not the selected time window.
 - The chart header keeps filter access and zoom reset visible near the graph title. The toolbar summarizes selected range, bucket count, resolution, and active zoom.
+- The graph frame, filter flyout, focused-bucket panel, tooltip, minimap, and series controls use the shared flat panel, subpanel, chip, and focus primitives. Keep semantic series colors on chart lines, swatches, and bucket markers rather than on selected control chrome.
 - The primary plot should use a tall, viewport-bounded canvas area so the graph remains the dominant element in Trend mode.
 - Avoid visible chart-summary card decks above the plot. Keep chart summary text in the screen-reader summary and expose exact values through focused-bucket inspection.
 - Short daily windows show compact bucket labels under the overview strip so the minimap carries its own context without relying only on the main x-axis labels.

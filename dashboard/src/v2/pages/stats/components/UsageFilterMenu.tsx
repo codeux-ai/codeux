@@ -9,6 +9,7 @@ import type {
 import styles from './UsageFilterMenu.module.css';
 import { UsageGraphLegend } from './UsageGraphLegend.js';
 import type { GroupedChartSeriesSection } from '../chart-view-models.js';
+import { CHIP_CLASS, CONTROL_FOCUS_CLASS } from './stats-ui-primitives.js';
 
 interface UsageFilterMenuProps {
   isOpen: boolean;
@@ -157,7 +158,7 @@ export const UsageFilterMenu: FunctionComponent<UsageFilterMenuProps> = ({
                 data-usage-filter-reset
                 aria-label="Reset filters"
                 onClick={handleResetFilters}
-                className="rounded-full border border-[var(--stats-card-border)] bg-[color:var(--fill-muted)] px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.1em] text-[var(--stats-detail-color)] transition-colors hover:text-[var(--stats-value-color)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--accent-focus-ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--stats-card-bg)] motion-reduce:transition-none"
+                className={`${CHIP_CLASS} px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.1em] text-[var(--stats-detail-color)] hover:border-[color:var(--stats-border-strong)] hover:bg-[color:var(--stats-surface-chip-hover)] hover:text-[var(--stats-value-color)] ${CONTROL_FOCUS_CLASS}`}
               >
                 Reset defaults
               </button>
@@ -165,7 +166,7 @@ export const UsageFilterMenu: FunctionComponent<UsageFilterMenuProps> = ({
                 <button
                   type="button"
                   onClick={handleEnableDefaultSeries}
-                  className="rounded-full border border-[var(--stats-card-border)] bg-[color:var(--fill-muted)] px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.1em] text-[var(--stats-detail-color)] transition-colors hover:text-[var(--stats-value-color)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--accent-focus-ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--stats-card-bg)] motion-reduce:transition-none"
+                  className={`${CHIP_CLASS} px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.1em] text-[var(--stats-detail-color)] hover:border-[color:var(--stats-border-strong)] hover:bg-[color:var(--stats-surface-chip-hover)] hover:text-[var(--stats-value-color)] ${CONTROL_FOCUS_CLASS}`}
                 >
                   Enable defaults
                 </button>
@@ -177,7 +178,7 @@ export const UsageFilterMenu: FunctionComponent<UsageFilterMenuProps> = ({
             type="button"
             onClick={closeAndRestoreFocus}
             aria-label="Close graph filters"
-            className="rounded-full p-1 text-[var(--stats-detail-color)] transition-colors hover:bg-[color:var(--fill-muted-hover)] hover:text-[var(--stats-value-color)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--accent-focus-ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--stats-card-bg)] motion-reduce:transition-none"
+            className={`rounded-[var(--stats-control-radius)] p-1 text-[var(--stats-detail-color)] transition-colors hover:bg-[color:var(--stats-surface-chip-hover)] hover:text-[var(--stats-value-color)] motion-reduce:transition-none ${CONTROL_FOCUS_CLASS}`}
           >
             <X className="h-4 w-4" />
           </button>
