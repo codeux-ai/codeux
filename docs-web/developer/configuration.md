@@ -14,7 +14,7 @@ codeux [options]
 | `--runtime-role VALUE` | string | `project_manager` | Role advertised to the MCP layer. `project_manager` is the main server role; `worker-host` is used by the local execution runtime started by `codeux-worker`. |
 | `--headless` | flag | off | Start MCP server without binding the dashboard. |
 | `--no-dashboard` | flag | off | Alias for `--headless`. |
-| `--server-mode` | flag | off | Start authenticated MCP HTTP server mode without binding dashboard routes or websockets. Requires an explicit bearer token. |
+| `--server-mode` | flag | off | Start authenticated MCP HTTP server mode without binding dashboard routes or websockets. Requires an explicit bearer token with at least 32 bearer-safe characters. |
 | `--no-mcp-http` | flag | off | Preferred flag for disabling the MCP Streamable HTTP gateway outside server mode. |
 | `--mcp-https` / `--no-mcp-https` | flag | on | MCP Streamable HTTP gateway, enabled by default; use `--no-mcp-https` to disable. |
 | `--mcp-http-port N` | number | `dashboardPort + 1` | Preferred HTTP gateway port flag. |
@@ -26,7 +26,9 @@ codeux [options]
 | `--mcp-http-auth-token VALUE` | string | auto-generated user token | Preferred bearer token flag. |
 | `--mcp-https-auth-token VALUE` | string | auto-generated user token | Bearer token. Overrides the generated token stored in `~/.code-ux/security.json`. |
 | `--mcp-http-max-sessions N` | number | `100` | Preferred active Streamable HTTP session cap flag. |
+| `--mcp-https-max-sessions N` | number | `100` | Legacy-compatible active Streamable HTTP session cap flag. |
 | `--mcp-http-session-timeout-ms N` | number | `3600000` | Preferred idle Streamable HTTP session timeout flag. |
+| `--mcp-https-session-timeout-ms N` | number | `3600000` | Legacy-compatible idle Streamable HTTP session timeout flag. |
 | `--help`, `-h` | flag | – | Show help. |
 
 Flags can be passed in any order. Anything after `--` is ignored.
@@ -53,7 +55,9 @@ Flags can be passed in any order. Anything after `--` is ignored.
 | `MCP_HTTP_AUTH_TOKEN` | string | auto-generated user token | Preferred bearer token variable. |
 | `MCP_HTTPS_AUTH_TOKEN` | string | auto-generated user token | Bearer token. |
 | `MCP_HTTP_MAX_SESSIONS` | int | `100` | Preferred active Streamable HTTP session cap variable. |
+| `MCP_HTTPS_MAX_SESSIONS` | int | `100` | Legacy-compatible active Streamable HTTP session cap variable. |
 | `MCP_HTTP_SESSION_TIMEOUT_MS` | int | `3600000` | Preferred idle Streamable HTTP session timeout variable. |
+| `MCP_HTTPS_SESSION_TIMEOUT_MS` | int | `3600000` | Legacy-compatible idle Streamable HTTP session timeout variable. |
 | `CODE_UX_WORKER_SERVER_URL` | URL | – | Server-mode MCP URL consumed by `codeux-worker`. |
 | `CODE_UX_WORKER_AUTH_TOKEN` | string | – | Worker bearer token, preferred over legacy MCP token env names for `codeux-worker`. |
 | `GITHUB_TOKEN` / `GH_TOKEN` | string | – | GitHub PAT for `REMOTE` GitHub mode. |
@@ -121,7 +125,7 @@ If the chosen port is in use, Code UX increments and retries until it finds a fr
                                                  >  ~/.code-ux/security.json auto-generated token
 ```
 
-Server mode requires the token to come from the explicit CLI/env sources and rejects startup when the token is empty.
+Server mode requires the token to come from the explicit CLI/env sources and rejects startup when the token is missing, shorter than 32 characters, or contains characters outside the bearer-safe set.
 
 The MCP listener is authenticated HTTP. The historical `mcp-https` option names remain supported for compatibility, but TLS requires a trusted reverse proxy/certificate in front of the listener.
 

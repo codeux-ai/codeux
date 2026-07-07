@@ -1,6 +1,6 @@
 # Troubleshooting
 
-Solutions to the most common issues. If your problem is not covered here, see the [Operations runbook](../architecture/system-overview.md) or open an issue.
+Solutions to the most common issues. If your problem is not covered here, see the [system overview](../architecture/system-overview.md), the [MCP client guide](./mcp-clients.md), or open an issue.
 
 ## Code UX won't start
 
@@ -60,17 +60,41 @@ This is normal. `listen` is a long-poll: it blocks until a message is available 
 
 **Fix:** call `listen` in a loop. The call returns immediately when a dashboard user posts to the connection.
 
+### Server mode fails on startup
+
+`--server-mode` or `CODE_UX_SERVER_MODE=true` is set without a valid explicit bearer token.
+
+**Fix:** set `MCP_HTTP_AUTH_TOKEN` or `MCP_HTTPS_AUTH_TOKEN`, or pass `--mcp-http-auth-token` / `--mcp-https-auth-token`. Use at least 32 bearer-safe characters. Server mode does not use the generated local user token.
+
 ### HTTP gateway returns 401
 
-You enabled `--mcp-https-auth-token` but the client did not send `Authorization: Bearer <token>`, or the token mismatches.
+The client did not send `Authorization: Bearer <token>`, sent the wrong token, sent duplicate authorization headers, or is still using the old token after rotation.
 
-**Fix:** include the header. Tokens are case-sensitive.
+**Fix:** update the client secret, reconnect, and avoid diagnostics that print authorization headers. Tokens are case-sensitive.
 
 ### HTTP gateway returns 400 "must be initialize"
 
 You called the endpoint without an `mcp-session-id` header, but with a non-`initialize` JSON-RPC method.
 
 **Fix:** the *first* call on a new session must be `{"method": "initialize"}`. The response carries the session ID via `mcp-session-id` header — include it on subsequent calls.
+
+### `/health` passes but `/ready` fails
+
+The MCP HTTP listener is alive, but runtime readiness has not completed or the server is degraded.
+
+**Fix:** wait for startup recovery to finish, then inspect structured logs. Use `/ready` for load balancer readiness gates.
+
+### Worker connects but does not claim work
+
+The worker may not have an active project assignment, the project may be missing from `--project-id` / `--active-project-id`, the endpoint may be stale, the queued task may use a different executor, or the server may not have returned a lease token.
+
+**Fix:** confirm the worker status and project assignment, verify queued dispatches, and do not start local execution without a lease token.
+
+### Settings bundle import requires approval
+
+Secret-bearing `manage_settings` bundle exports and imports use a one-use approval flow tied to the exact payload.
+
+**Fix:** review the bundle, then repeat the same request with `approval.confirmed: true` within the approval window. Keep redacted bundles in review channels and secret-bearing bundles only in approved secret storage.
 
 ## Sprint orchestration
 
