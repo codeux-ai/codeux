@@ -34,6 +34,9 @@ import type {
 import type {
   ExecutionAssignedWorkerSummary,
   ExecutionDashboardSnapshot,
+  HeaderTokenThroughputQuery,
+  HeaderTokenThroughputSnapshot,
+  HeaderTokenThroughputWindow,
   ProjectExecutionStatsSnapshot,
   ProjectStatsQuery,
   ProjectStatsWindow,
@@ -284,6 +287,19 @@ export const fetchProjectStats = async (
     url.searchParams.set("to", query.to);
   }
   return fetchJson<ProjectExecutionStatsSnapshot>(`${url.pathname}${url.search}`, { signal });
+};
+
+export const fetchHeaderTokenThroughput = async (
+  query: Partial<HeaderTokenThroughputQuery> & { window?: HeaderTokenThroughputWindow } = {},
+  signal?: AbortSignal,
+): Promise<HeaderTokenThroughputSnapshot> => {
+  const url = new URL("/api/stats/header-throughput", window.location.origin);
+  url.searchParams.set("window", query.window || "1h");
+  const projectId = query.projectId?.trim();
+  if (projectId) {
+    url.searchParams.set("projectId", projectId);
+  }
+  return fetchJson<HeaderTokenThroughputSnapshot>(`${url.pathname}${url.search}`, { signal });
 };
 
 export const createSprint = async (projectId: string, input: CreateSprintInput): Promise<SprintRecord> => {
