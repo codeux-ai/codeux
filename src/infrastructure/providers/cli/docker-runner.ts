@@ -221,7 +221,11 @@ export class DockerRunner implements IDockerRunner {
         }),
       ];
 
-      if (this.shouldAddDockerHostGateway(workflowSettings)) {
+      const applicableCustomMcpServers = this.customServersForProvider(input.customMcpServers || [], providerLabel);
+      if (
+        this.shouldAddDockerHostGateway(workflowSettings, input.mcpConnection || null, applicableCustomMcpServers)
+        || this.providerEnvUsesDockerHostGateway(workflowSettings, providerEnv)
+      ) {
         dockerArgs.push(...DOCKER_HOST_GATEWAY_ARGS);
       }
 
@@ -278,8 +282,9 @@ export class DockerRunner implements IDockerRunner {
         providerLabel,
         tempRoot,
         providerEnv,
-        input.customMcpServers || [],
+        applicableCustomMcpServers,
         workflowSettings,
+        true,
       );
 
       for (const mount of [...credentialMounts, ...providerConfigMounts]) {
@@ -563,16 +568,18 @@ export class DockerRunner implements IDockerRunner {
     providerEnv: NodeJS.ProcessEnv,
     customServers: CustomMcpServer[] = [],
     workflowSettings?: CliWorkflowSettings,
+    customServersPreFiltered = false,
   ): Promise<ContainerMount[]> {
     if (provider === "opencode") {
       return [];
     }
 
+    const applicableCustomServers = customServersPreFiltered
+      ? customServers
+      : this.customServersForProvider(customServers, provider);
     const rewriteLoopbackUrls = workflowSettings
-      ? this.shouldRewriteDockerLoopbackUrls(workflowSettings)
+      ? this.shouldRewriteDockerLoopbackUrls(workflowSettings, conn, applicableCustomServers)
       : false;
-
-    const applicableCustomServers = this.customServersForProvider(customServers, provider);
 
     const artifact = buildProviderMcpConfigArtifact(provider, conn, applicableCustomServers, {
       qwenSettingsContent: providerEnv.QWEN_SETTINGS_CONTENT,
@@ -598,7 +605,11 @@ export class DockerRunner implements IDockerRunner {
     return [{ source: filePath, destination: artifact.dockerMountDestination, readonly: true }];
   }
 
-  private shouldRewriteDockerLoopbackUrls(workflowSettings: CliWorkflowSettings): boolean {
+  private shouldRewriteDockerLoopbackUrls(
+    workflowSettings: CliWorkflowSettings,
+    conn: McpConnectionInfo | null = null,
+    customServers: CustomMcpServer[] = [],
+  ): boolean {
     if (workflowSettings.executionMode !== "DOCKER") {
       return false;
     }
@@ -611,11 +622,32 @@ export class DockerRunner implements IDockerRunner {
     }
     return process.platform === "darwin"
       || process.platform === "win32"
-      || os.release().toLowerCase().includes("microsoft");
+      || os.release().toLowerCase().includes("microsoft")
+      || this.hasLoopbackMcpEndpoint(conn, customServers);
   }
 
-  private shouldAddDockerHostGateway(workflowSettings: CliWorkflowSettings): boolean {
-    return this.shouldRewriteDockerLoopbackUrls(workflowSettings) && process.platform === "linux";
+  private shouldAddDockerHostGateway(
+    workflowSettings: CliWorkflowSettings,
+    conn: McpConnectionInfo | null,
+    customServers: CustomMcpServer[],
+  ): boolean {
+    return this.shouldRewriteDockerLoopbackUrls(workflowSettings, conn, customServers) && process.platform === "linux";
+  }
+
+  private providerEnvUsesDockerHostGateway(
+    workflowSettings: CliWorkflowSettings,
+    providerEnv: NodeJS.ProcessEnv,
+  ): boolean {
+    if (workflowSettings.executionMode !== "DOCKER" || process.platform !== "linux") {
+      return false;
+    }
+    const hostReachabilityEnvKeys = [
+      "ANTHROPIC_BASE_URL",
+      "OPENAI_BASE_URL",
+      "OPENCODE_CONFIG_CONTENT",
+      "QWEN_SETTINGS_CONTENT",
+    ];
+    return hostReachabilityEnvKeys.some((key) => providerEnv[key]?.includes("host.docker.internal"));
   }
 
   private rewriteLoopbackUrlForDocker(rawUrl: string, enabled: boolean): string {
@@ -640,14 +672,30 @@ export class DockerRunner implements IDockerRunner {
     return rawUrl;
   }
 
-  private rewriteCustomMcpServerForDocker(server: CustomMcpServer, enabled: boolean): CustomMcpServer {
-    if (server.transport === "stdio" || !server.url) {
-      return server;
+  private hasLoopbackMcpEndpoint(conn: McpConnectionInfo | null, customServers: CustomMcpServer[]): boolean {
+    if (conn && this.isLoopbackUrl(conn.url)) {
+      return true;
     }
-    return {
-      ...server,
-      url: this.rewriteLoopbackUrlForDocker(server.url, enabled),
-    };
+    return customServers.some((server) =>
+      server.transport !== "stdio"
+      && typeof server.url === "string"
+      && this.isLoopbackUrl(server.url)
+    );
+  }
+
+  private isLoopbackUrl(rawUrl: string): boolean {
+    try {
+      const url = new URL(rawUrl);
+      return url.hostname === "127.0.0.1"
+        || url.hostname === "localhost"
+        || url.hostname === "::1"
+        || url.hostname === "[::1]"
+        || url.hostname === "0.0.0.0"
+        || url.hostname === "::"
+        || url.hostname === "[::]";
+    } catch {
+      return false;
+    }
   }
 
   private resolveWorkspace(cwd: string): { volumeName: string } {

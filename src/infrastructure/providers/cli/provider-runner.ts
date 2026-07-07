@@ -970,9 +970,10 @@ export class ProviderRunner implements IProviderRunner {
       return [];
     }
     const providerId = "custom_gateway";
+    const customBaseUrl = config.customBaseUrl.trim();
     const baseUrl = this.rewriteLoopbackUrlForDocker(
-      config.customBaseUrl.trim(),
-      this.shouldRewriteDockerLoopbackUrls(workflowSettings),
+      customBaseUrl,
+      this.shouldRewriteDockerLoopbackUrls(workflowSettings, [customBaseUrl]),
     );
     return [
       "-c", `model_provider="${providerId}"`,
@@ -1133,7 +1134,7 @@ export class ProviderRunner implements IProviderRunner {
         const normalizedBaseUrl = providerConfig.customBaseUrl.trim().replace(/\/v1\/?$/, "");
         env.ANTHROPIC_BASE_URL = this.rewriteLoopbackUrlForDocker(
           normalizedBaseUrl,
-          this.shouldRewriteDockerLoopbackUrls(workflowSettings),
+          this.shouldRewriteDockerLoopbackUrls(workflowSettings, [normalizedBaseUrl]),
         );
         // Gateways (OpenRouter, LiteLLM, etc.) authenticate with `Authorization: Bearer`,
         // which Claude Code only sends via ANTHROPIC_AUTH_TOKEN. ANTHROPIC_API_KEY would be
@@ -1164,7 +1165,7 @@ export class ProviderRunner implements IProviderRunner {
       if (isApiKeyMode && providerConfig?.customBaseUrl) {
         env.OPENAI_BASE_URL = this.rewriteLoopbackUrlForDocker(
           providerConfig.customBaseUrl,
-          this.shouldRewriteDockerLoopbackUrls(workflowSettings),
+          this.shouldRewriteDockerLoopbackUrls(workflowSettings, [providerConfig.customBaseUrl]),
         );
       }
     } else if (provider === "qwen-code") {
@@ -1194,7 +1195,7 @@ export class ProviderRunner implements IProviderRunner {
           ? providerConfig.qwenBaseUrl || "http://127.0.0.1:11434/v1"
           : undefined;
       if (baseUrl) {
-        env.OPENAI_BASE_URL = this.rewriteLoopbackUrlForDocker(baseUrl, this.shouldRewriteDockerLoopbackUrls(workflowSettings));
+        env.OPENAI_BASE_URL = this.rewriteLoopbackUrlForDocker(baseUrl, this.shouldRewriteDockerLoopbackUrls(workflowSettings, [baseUrl]));
       }
       if (isApiKeyMode) {
         for (const entry of providerConfig?.qwenAdditionalModelProviders || []) {
@@ -1216,7 +1217,14 @@ export class ProviderRunner implements IProviderRunner {
           qwenAuthMode: !isApiKeyMode ? "LOCAL_AUTH" : providerConfig?.qwenAuthMode,
         },
         providerConfig?.mcpConnection || null,
-        this.shouldRewriteDockerLoopbackUrls(workflowSettings),
+        this.shouldRewriteDockerLoopbackUrls(
+          workflowSettings,
+          this.collectDockerReachabilityUrls(
+            providerConfig?.mcpConnection || null,
+            providerConfig?.customMcpServers || [],
+            baseUrl ? [baseUrl] : [],
+          ),
+        ),
         (url, enabled) => this.rewriteLoopbackUrlForDocker(url, enabled),
         qwenProcessLogDir,
       );
@@ -1245,7 +1253,14 @@ export class ProviderRunner implements IProviderRunner {
           openCodeAuthMode: !isApiKeyMode ? "LOCAL_AUTH" : providerConfig?.openCodeAuthMode,
         },
         providerConfig?.mcpConnection || null,
-        this.shouldRewriteDockerLoopbackUrls(workflowSettings),
+        this.shouldRewriteDockerLoopbackUrls(
+          workflowSettings,
+          this.collectDockerReachabilityUrls(
+            providerConfig?.mcpConnection || null,
+            providerConfig?.customMcpServers || [],
+            providerConfig?.openCodeBaseUrl ? [providerConfig.openCodeBaseUrl] : [],
+          ),
+        ),
         (url, enabled) => this.rewriteLoopbackUrlForDocker(url, enabled),
       );
     } else if (provider === "antigravity") {
@@ -1262,7 +1277,7 @@ export class ProviderRunner implements IProviderRunner {
     return env;
   }
 
-  private shouldRewriteDockerLoopbackUrls(workflowSettings: CliWorkflowSettings): boolean {
+  private shouldRewriteDockerLoopbackUrls(workflowSettings: CliWorkflowSettings, candidateUrls: string[] = []): boolean {
     if (workflowSettings.executionMode !== "DOCKER") {
       return false;
     }
@@ -1275,7 +1290,8 @@ export class ProviderRunner implements IProviderRunner {
     }
     return process.platform === "darwin"
       || process.platform === "win32"
-      || os.release().toLowerCase().includes("microsoft");
+      || os.release().toLowerCase().includes("microsoft")
+      || candidateUrls.some((url) => this.isLoopbackUrl(url));
   }
 
   private rewriteLoopbackUrlForDocker(rawUrl: string, enabled: boolean): string {
@@ -1284,7 +1300,15 @@ export class ProviderRunner implements IProviderRunner {
     }
     try {
       const url = new URL(rawUrl);
-      if (url.hostname === "127.0.0.1" || url.hostname === "localhost" || url.hostname === "::1") {
+      if (
+        url.hostname === "127.0.0.1"
+        || url.hostname === "localhost"
+        || url.hostname === "::1"
+        || url.hostname === "[::1]"
+        || url.hostname === "0.0.0.0"
+        || url.hostname === "::"
+        || url.hostname === "[::]"
+      ) {
         url.hostname = "host.docker.internal";
         return url.toString();
       }
@@ -1292,6 +1316,38 @@ export class ProviderRunner implements IProviderRunner {
       return rawUrl;
     }
     return rawUrl;
+  }
+
+  private collectDockerReachabilityUrls(
+    conn: McpConnectionInfo | null,
+    customServers: CustomMcpServer[],
+    extraUrls: string[] = [],
+  ): string[] {
+    const urls = [...extraUrls];
+    if (conn) {
+      urls.push(conn.url);
+    }
+    for (const server of customServers) {
+      if (server.enabled && server.transport !== "stdio" && server.url) {
+        urls.push(server.url);
+      }
+    }
+    return urls;
+  }
+
+  private isLoopbackUrl(rawUrl: string): boolean {
+    try {
+      const url = new URL(rawUrl);
+      return url.hostname === "127.0.0.1"
+        || url.hostname === "localhost"
+        || url.hostname === "::1"
+        || url.hostname === "[::1]"
+        || url.hostname === "0.0.0.0"
+        || url.hostname === "::"
+        || url.hostname === "[::]";
+    } catch {
+      return false;
+    }
   }
 
 

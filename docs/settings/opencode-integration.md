@@ -107,7 +107,7 @@ Docker execution prepares OpenCode in the shared CLI bootstrap path:
 - writes `OPENCODE_CONFIG_CONTENT` to `$HOME/.config/opencode/opencode.json` and exports `OPENCODE_CONFIG` before running `opencode`
 - invokes OpenCode with `--dir /workspace`; generated config permissions allow headless task runs to edit the isolated workspace instead of stopping on tool approval
 - keeps OpenCode's database and internal snapshot Git store under `/code-ux-runtime-home/.local/share/opencode`, outside the worktree OpenCode snapshots
-- rewrites loopback URLs in generated OpenCode config from `127.0.0.1` or `localhost` to `host.docker.internal` on Docker Desktop, WSL, macOS, and Windows so local endpoints such as Ollama remain reachable from the provider container
+- rewrites loopback URLs in generated OpenCode config from `127.0.0.1` or `localhost` to `host.docker.internal` on Docker Desktop, WSL, macOS, Windows, and Linux Docker runs with loopback MCP or model endpoints so local endpoints such as Ollama remain reachable from the provider container
 - installs OpenCode if `opencode` is missing and fallback installs are enabled
 
 Host execution writes the generated config to `.code-ux/tmp/opencode-config-<session>.json` for the duration of the run and sets `OPENCODE_CONFIG` to that path. Host runs also pass `--dir <worktree>`. The generated config is never written into a permanent host OpenCode config file. This keeps one named Code UX provider instance from overwriting another instance's OpenCode settings.

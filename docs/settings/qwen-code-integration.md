@@ -72,7 +72,7 @@ Docker execution prepares Qwen in the same bootstrap path as other CLI providers
 - copies mounted local auth from `/opt/credentials/qwen-code`
 - merges generated MCP/settings fragments from `/opt/provider-config/qwen-settings.json`
 - writes generated `modelProviders`, selected model, and MCP settings into the mounted settings fragment for custom endpoint and Coding Plan runs
-- rewrites loopback URLs in generated Qwen settings from `127.0.0.1` or `localhost` to `host.docker.internal` on Docker Desktop, WSL, macOS, and Windows so local endpoints such as Ollama remain reachable from the provider container
+- rewrites loopback URLs in generated Qwen settings from `127.0.0.1` or `localhost` to `host.docker.internal` on Docker Desktop, WSL, macOS, Windows, and Linux Docker runs with loopback MCP or model endpoints so local endpoints such as Ollama remain reachable from the provider container
 - installs Qwen Code if `qwen` is missing and fallback installs are enabled
 
 The bootstrap merge is additive and preserves existing `mcpServers` entries.
