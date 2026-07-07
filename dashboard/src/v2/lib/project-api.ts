@@ -165,6 +165,7 @@ export const searchJiraIssues = async (
   if (input.search?.trim()) url.searchParams.set("search", input.search.trim());
   if (input.issueKey?.trim()) url.searchParams.set("issueKey", input.issueKey.trim());
   if (input.status) url.searchParams.set("status", input.status);
+  if (input.inProgressStatusName?.trim()) url.searchParams.set("inProgressStatusName", input.inProgressStatusName.trim());
   for (const statusName of input.statusNames ?? []) {
     if (statusName.trim()) url.searchParams.append("statusNames", statusName.trim());
   }

@@ -43,7 +43,7 @@ function toggleValue<T extends string>(values: T[], value: T): T[] {
 function buildChipClass(active: boolean, activeClass: string): string {
   return [
     CHIP_CLASS,
-    `inline-flex min-h-9 max-w-full min-w-0 items-center justify-center gap-2 px-3 py-1.5 text-center text-[10px] font-bold uppercase leading-tight tracking-[0.14em] transition-all motion-safe:active:scale-[0.98] ${CONTROL_FOCUS_CLASS}`,
+    `inline-flex min-h-9 max-w-full min-w-0 items-center justify-center gap-2 px-3 py-1.5 text-center text-[10px] font-bold uppercase leading-tight tracking-[0.14em] transition-[background-color,border-color,color] ${CONTROL_FOCUS_CLASS}`,
     active ? activeClass : "text-[color:var(--stats-detail-color)] hover:border-[color:var(--stats-border-strong)] hover:bg-[color:var(--stats-surface-chip-hover)] hover:text-[color:var(--stats-value-color)]",
   ].join(" ");
 }
@@ -207,14 +207,14 @@ export const SystemFilterBar: FunctionComponent<SystemFilterBarProps> = ({
               Clear all
             </button>
           ) : null}
-          <div className="rounded-full border border-[color:var(--stats-card-border)] px-3 py-1.5">
+          <div className="rounded-[var(--stats-chip-radius)] border border-[color:var(--stats-card-border)] px-3 py-1.5">
             Showing {shownCount} of {totalShown}
           </div>
-          <div className="rounded-full border border-[color:var(--stats-card-border)] px-3 py-1.5">
+          <div className="rounded-[var(--stats-chip-radius)] border border-[color:var(--stats-card-border)] px-3 py-1.5">
             {activeFilterCount.toLocaleString()} active filters
           </div>
           {page !== undefined ? (
-            <div className="rounded-full border border-[color:var(--stats-card-border)] px-3 py-1.5">
+            <div className="rounded-[var(--stats-chip-radius)] border border-[color:var(--stats-card-border)] px-3 py-1.5">
               Page {page + 1}{hasMore ? " · more available" : ""}
             </div>
           ) : null}
@@ -226,7 +226,7 @@ export const SystemFilterBar: FunctionComponent<SystemFilterBarProps> = ({
               type="button"
               disabled={page === 0}
               onClick={() => onPageChange(page - 1)}
-              className={`inline-flex min-h-9 min-w-0 items-center justify-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-bold text-[color:var(--stats-detail-color)] transition-colors hover:text-[color:var(--stats-value-color)] disabled:cursor-not-allowed disabled:opacity-50 ${CHIP_CLASS} ${CONTROL_FOCUS_CLASS}`}
+              className={`inline-flex min-h-9 min-w-0 items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-bold text-[color:var(--stats-detail-color)] transition-colors hover:text-[color:var(--stats-value-color)] disabled:cursor-not-allowed disabled:opacity-50 ${CHIP_CLASS} ${CONTROL_FOCUS_CLASS}`}
             >
               <ChevronLeft className="h-3.5 w-3.5" />
               <span className="truncate">Prev</span>
@@ -235,7 +235,7 @@ export const SystemFilterBar: FunctionComponent<SystemFilterBarProps> = ({
               type="button"
               disabled={!hasMore}
               onClick={() => onPageChange(page + 1)}
-              className={`inline-flex min-h-9 min-w-0 items-center justify-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-bold text-[color:var(--stats-detail-color)] transition-colors hover:text-[color:var(--stats-value-color)] disabled:cursor-not-allowed disabled:opacity-50 ${CHIP_CLASS} ${CONTROL_FOCUS_CLASS}`}
+              className={`inline-flex min-h-9 min-w-0 items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-bold text-[color:var(--stats-detail-color)] transition-colors hover:text-[color:var(--stats-value-color)] disabled:cursor-not-allowed disabled:opacity-50 ${CHIP_CLASS} ${CONTROL_FOCUS_CLASS}`}
             >
               <span className="truncate">Next</span>
               <ChevronRight className="h-3.5 w-3.5" />

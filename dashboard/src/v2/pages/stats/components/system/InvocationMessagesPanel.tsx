@@ -354,7 +354,7 @@ export const InvocationMessagesPanel: FunctionComponent<InvocationMessagesPanelP
               >
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="flex min-w-0 items-center gap-2">
-                    <span className={`inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full border ${ROLE_ICON_CLASS[message.role]}`} aria-hidden="true">
+                    <span className={`inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-[var(--stats-chip-radius)] border ${ROLE_ICON_CLASS[message.role]}`} aria-hidden="true">
                       {message.role === "system" ? <Settings className="h-3.5 w-3.5" /> : null}
                       {message.role === "user" ? <User className="h-3.5 w-3.5" /> : null}
                       {message.role === "assistant" ? <Bot className="h-3.5 w-3.5" /> : null}

@@ -1,5 +1,6 @@
 import type { AgentRoutingMode, VirtualWorkerProvider } from "./app-types.js";
 import type { ProjectSettingsOverride } from "./settings-scope-types.js";
+import type { TaskSelfReflectionRating } from "./task-self-reflection-types.js";
 import type { ProjectWorkerAssignmentRecord } from "./worker-types.js";
 
 export type ProjectStatus = "running" | "failed" | "intervention" | "idle";
@@ -205,6 +206,7 @@ export interface JiraIssueSearchInput {
   search?: string;
   issueKey?: string;
   status?: JiraIssueSearchStatus;
+  inProgressStatusName?: string;
   statusNames?: string[];
   assignee?: JiraIssueSearchAssignee;
   assigneeText?: string;
@@ -285,6 +287,7 @@ export interface TaskRecord {
     [key: string]: any;
   };
   latestReview?: SprintReviewSummary;
+  selfReflectionRating?: TaskSelfReflectionRating;
   mergeIndicator: string | null;
   sourceType: string | null;
   sourcePath: string | null;

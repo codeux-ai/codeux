@@ -36,6 +36,7 @@ describe("sanitizeAgentMcpAccess", () => {
       linkedServerIds: ["a", "a", " b ", "", "b"],
       codeUxToolToggles: [
         { name: "manage_tasks", enabled: false },
+        { name: "manage_node_flows", enabled: true },
         { name: "bogus_tool", enabled: false },
         { name: "manage_projects", enabled: true },
       ],
@@ -43,6 +44,7 @@ describe("sanitizeAgentMcpAccess", () => {
     expect(result.linkedServerIds).toEqual(["a", "b"]);
     expect(result.codeUxToolToggles).toEqual([
       { name: "manage_tasks", enabled: false, isInternal: true },
+      { name: "manage_node_flows", enabled: true, isInternal: true },
       { name: "manage_projects", enabled: true, isInternal: true },
     ]);
   });

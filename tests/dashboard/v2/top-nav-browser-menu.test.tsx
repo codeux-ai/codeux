@@ -133,6 +133,7 @@ vi.mock("../../../dashboard/src/v2/lib/settings-api.js", () => ({
         },
     })),
     saveProjectTechstackSettings: vi.fn(() => Promise.resolve()),
+    saveProjectDesignGuidanceSettings: vi.fn(() => Promise.resolve()),
 }));
 
 vi.mock("@tanstack/react-router", () => ({
@@ -754,21 +755,22 @@ describe("TopNav shell accessibility", () => {
         });
     });
 
-    it("announces selector empty states without opening a disabled sprint listbox", async () => {
+    it("opens the sprint selector empty state with Add Sprint available", async () => {
         mockTopNavData({ sprints: [], selectedSprintId: null });
 
         render(<TopNav />);
 
         const sprintTrigger = screen.getByRole("button", { name: /Sprint selector, selected sprint: All Sprints/i });
-        expect(sprintTrigger).toHaveAttribute("aria-disabled", "true");
+        expect(sprintTrigger).toHaveAttribute("aria-disabled", "false");
         expect(sprintTrigger).not.toHaveAttribute("aria-controls");
 
         fireEvent.click(sprintTrigger);
 
         await waitFor(() => {
-            expect(screen.getByRole("status")).toHaveTextContent("No sprints available for Alpha");
+            expect(screen.getByRole("listbox", { name: "Sprint list" })).toBeInTheDocument();
         });
-        expect(screen.queryByRole("listbox", { name: "Sprint list" })).not.toBeInTheDocument();
+        expect(screen.getByText("No sprints yet.")).toBeInTheDocument();
+        expect(screen.getByRole("button", { name: "Add Sprint" })).toBeEnabled();
     });
 
     it("announces route changes through the persistent nav status region", async () => {

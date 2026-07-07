@@ -6,6 +6,7 @@ import {
   buildTaskCardViewModel,
 } from "../../../../../dashboard/src/v2/lib/tasks/task-card-view-model.js";
 import type { Task } from "../../../../../dashboard/src/v2/types.js";
+import type { TaskSelfReflectionRating } from "../../../../../src/contracts/task-self-reflection-types.js";
 
 describe("task-card-view-model", () => {
   describe("formatTimeAgo", () => {
@@ -81,6 +82,33 @@ describe("task-card-view-model", () => {
       ...overrides,
     });
 
+    const createRating = (overrides: Partial<TaskSelfReflectionRating> = {}): TaskSelfReflectionRating => ({
+      id: "rating-1",
+      projectId: "project-1",
+      sprintId: "sprint-1",
+      taskId: "rec-1",
+      sourceTaskRunId: "run-1",
+      overallRating: 4.5,
+      sections: [
+        {
+          label: "Implementation",
+          normalizedLabel: "implementation",
+          rating: 4.5,
+          note: "Covered edge cases.",
+        },
+        {
+          label: "Scope control",
+          normalizedLabel: "scope_control",
+          rating: 4,
+          note: "Stayed focused.",
+        },
+      ],
+      capturedAt: "2026-07-07T00:00:00.000Z",
+      createdAt: "2026-07-07T00:00:00.000Z",
+      updatedAt: "2026-07-07T00:00:00.000Z",
+      ...overrides,
+    });
+
     it("builds a basic view model with empty dependencies", () => {
       const task = createMockTask();
       const lookup = new Map<string, Task>();
@@ -91,6 +119,17 @@ describe("task-card-view-model", () => {
       expect(vm.humanizedCreatedAt).toBe("1h ago");
       expect(vm.executorLabel).toBe("Auto");
       expect(vm.dependencyIndicators).toEqual([]);
+    });
+
+    it("passes self-reflection ratings through the task card view model", () => {
+      const rating = createRating();
+      const task = createMockTask({ selfReflectionRating: rating });
+      const lookup = new Map<string, Task>();
+
+      const vm = buildTaskCardViewModel(task, lookup);
+
+      expect(vm.selfReflectionRating).toBe(rating);
+      expect(vm.task.selfReflectionRating).toBe(rating);
     });
 
     it("resolves dependencies from the lookup map", () => {

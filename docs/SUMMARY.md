@@ -35,6 +35,8 @@
 - [Agent Sync And Planning Agent](./architecture/agent-sync-and-planning-agent.md)
 - [Agent Routing](./architecture/agent-routing.md)
 - [Agent Knowledge Base](./architecture/agent-knowledge-base.md)
+- [Node Flow Foundation](./architecture/node-flow-foundation.md)
+- [Node Flows](./architecture/node-flows.md)
 - [Memory Claims and Evidence](./architecture/memory-claims.md)
 - [Speech Input Architecture](./architecture/speech-input.md)
 - [Quality Assurance Agent](./architecture/quality-assurance-agent.md)
@@ -65,8 +67,11 @@
 - [Stats & Analytics Design System](./dashboard/design-system-stats.md) - Warm Void analytics surfaces and System administration
 - [Dashboard Onboarding](./dashboard/onboarding.md)
 - [Project Initialization](./dashboard/project-initialization.md)
+- [Styleguides and Tech Stacks](./dashboard/styleguides-and-tech-stacks.md)
 - [Sprint Imports](./dashboard/sprint-imports.md)
 - [Quicksprint Templates](./dashboard/quicksprint-templates.md)
+- [Nodes](./dashboard/nodes.md)
+- [Node Flows Dashboard](./dashboard/node-flows.md)
 - [Scheduler](./dashboard/scheduler.md)
 - [Memory Architecture and Search](./dashboard/memory.md)
 - [Browser Preview](./dashboard/browser-preview.md)
@@ -75,6 +80,7 @@
 - [Provider Routing](./settings/provider-routing.md)
 - [Chat Provider Integrations](./settings/chat-provider-integrations.md)
 - [Settings Subcategory Reference](./settings/subcategories/index.md)
+  - [Guidance](./settings/subcategories/guidance.md)
 - [Qwen Code Integration](./settings/qwen-code-integration.md)
 - [OpenCode Integration](./settings/opencode-integration.md)
 - Development and validation

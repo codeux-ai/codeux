@@ -6,6 +6,7 @@ import type {
   CiIntelligenceSettings,
   CliWorkflowSettings,
   CustomMcpServer,
+  DesignGuidanceSettings,
   GuardrailSettings,
   ProviderConfigId,
   ProviderConfigMode,
@@ -82,6 +83,7 @@ export interface ProjectSettings {
   automationInterventions: AutomationInterventionsSettings;
   aiProvider: ProjectAiProviderSettings;
   techstack: TechstackSelectionSettings;
+  designGuidance: DesignGuidanceSettings;
   git: ProjectGitSettings;
   jira: JiraSettings;
   notion: ExternalImporterSettings;
@@ -188,7 +190,7 @@ export interface SystemSettings {
 export type SettingsOverride<T> = {
   [K in keyof T]?: T[K] extends Array<infer U>
     ? U[]
-    : T[K] extends Record<string, unknown>
+    : T[K] extends object
       ? SettingsOverride<T[K]>
       : T[K];
 };

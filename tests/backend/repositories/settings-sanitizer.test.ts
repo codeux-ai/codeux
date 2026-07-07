@@ -6,6 +6,7 @@ import {
   resolveDashboardSettings,
   sanitizeProjectSettings,
 } from "../../../src/services/settings-resolution-service.js";
+import { DESIGN_GUIDANCE_NONE_ID } from "../../../src/domain/settings/design-guidance-catalog.js";
 
 describe("settings-sanitizer", () => {
   it("clones defaults using resolved external hints", () => {
@@ -61,6 +62,13 @@ describe("settings-sanitizer", () => {
     });
     expect(settings.agents.saveToProjectDirectory).toBe(true);
     expect(settings.agents.instructionTemplates.planningMissing).toContain("Sprint Planning Missing");
+    expect(settings.designGuidance).toEqual({
+      selectedTechStackId: DESIGN_GUIDANCE_NONE_ID,
+      selectedStyleguideId: DESIGN_GUIDANCE_NONE_ID,
+      hideDefaultStyleguides: false,
+      customTechStacks: [],
+      customStyleguides: [],
+    });
   });
 
   it("sanitizes malformed input back to safe defaults", () => {
@@ -177,10 +185,59 @@ describe("settings-sanitizer", () => {
     expect(settings.skills.find((skill) => skill.name === "custom-skill")?.isInternal).toBe(false);
     expect(settings.mcpTools.find((tool) => tool.name === "manage_tasks")?.enabled).toBe(false);
     expect(settings.memory.enabled).toBe(true);
+    expect(settings.designGuidance.selectedTechStackId).toBe(DESIGN_GUIDANCE_NONE_ID);
+    expect(settings.designGuidance.selectedStyleguideId).toBe(DESIGN_GUIDANCE_NONE_ID);
     expect(settings.notion).toMatchObject({
       enabled: false,
       apiToken: "",
       defaultSearchLimit: 25,
+    });
+  });
+
+  it("sanitizes design guidance selections and custom entries", () => {
+    const settings = sanitizeSettings({
+      designGuidance: {
+        selectedTechStackId: " custom-stack ",
+        selectedStyleguideId: "missing-style",
+        hideDefaultStyleguides: true,
+        customTechStacks: [
+          {
+            id: " custom-stack ",
+            name: " Custom Stack ",
+            summary: " Stack summary ",
+            instructionMarkdown: " Use TypeScript boundaries. ",
+          },
+          {
+            id: "custom-stack",
+            name: "Duplicate",
+            summary: "Duplicate.",
+            instructionMarkdown: "Ignore.",
+          },
+        ],
+        customStyleguides: [
+          {
+            id: "custom-style",
+            name: "",
+            summary: "Missing name.",
+            instructionMarkdown: "Invalid.",
+          },
+        ],
+      },
+    });
+
+    expect(settings.designGuidance).toEqual({
+      selectedTechStackId: "custom-stack",
+      selectedStyleguideId: DESIGN_GUIDANCE_NONE_ID,
+      hideDefaultStyleguides: true,
+      customTechStacks: [
+        {
+          id: "custom-stack",
+          name: "Custom Stack",
+          summary: "Stack summary",
+          instructionMarkdown: "Use TypeScript boundaries.",
+        },
+      ],
+      customStyleguides: [],
     });
   });
 

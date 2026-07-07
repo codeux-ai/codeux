@@ -21,6 +21,8 @@ export type DocsSlug =
   | 'user-dashboard-live-session'
   | 'user-dashboard-chat'
   | 'user-dashboard-agents'
+  | 'user-dashboard-nodes'
+  | 'user-dashboard-node-flows'
   | 'user-dashboard-scheduler'
   | 'user-dashboard-memory'
   | 'user-dashboard-knowledge'
@@ -28,6 +30,7 @@ export type DocsSlug =
   | 'user-dashboard-browser-preview'
   | 'user-dashboard-stats'
   | 'user-dashboard-settings'
+  | 'user-dashboard-styleguides-and-tech-stacks'
   | 'developer-overview'
   | 'developer-mcp-tools'
   | 'developer-management-actions'
@@ -50,6 +53,7 @@ export type DocsSlug =
   | 'architecture-configuration-resolution'
   | 'architecture-security'
   | 'settings-subcategories-display-settings'
+  | 'settings-subcategories-guidance'
   | 'settings-subcategories-onboarding'
   | 'architecture-speech-input'
 
@@ -188,6 +192,20 @@ export const docsRegistry: Record<DocsSlug, DocsRegistryEntry> = {
     title: "Agents",
     description: "The Agents page (/agents) manages the agent presets available to the active project.",
   },
+  'user-dashboard-nodes': {
+    id: 'user-dashboard-nodes',
+    path: '/docs/user-dashboard-nodes',
+    section: 'User Guide',
+    title: "Nodes",
+    description: "The Nodes page (/nodes) manages project-scoped workflow graphs for editing, widget configuration, agent attachments, validation, and persisted run inspection.",
+  },
+  'user-dashboard-node-flows': {
+    id: 'user-dashboard-node-flows',
+    path: '/docs/user-dashboard-node-flows',
+    section: 'User Guide',
+    title: "Node Flows",
+    description: "Create and operate saved node-flow workflows for the active project, including dynamic widgets, validation, manual runs, scheduling, run inspection, and agent skill attachments.",
+  },
   'user-dashboard-scheduler': {
     id: 'user-dashboard-scheduler',
     path: '/docs/user-dashboard-scheduler',
@@ -237,6 +255,13 @@ export const docsRegistry: Record<DocsSlug, DocsRegistryEntry> = {
     title: "Settings",
     description: "The Settings page (/config) is the unified configuration surface. It exposes every tunable in the engine, organised into a category rail and content panels.",
   },
+  'user-dashboard-styleguides-and-tech-stacks': {
+    id: 'user-dashboard-styleguides-and-tech-stacks',
+    path: '/docs/user-dashboard-styleguides-and-tech-stacks',
+    section: 'User Guide',
+    title: "Styleguides and Tech Stacks",
+    description: "Code UX uses guidance selections to tell workers what implementation stack and product style they should respect.",
+  },
   'developer-overview': {
     id: 'developer-overview',
     path: '/docs/developer-overview',
@@ -249,14 +274,14 @@ export const docsRegistry: Record<DocsSlug, DocsRegistryEntry> = {
     path: '/docs/developer-mcp-tools',
     section: 'Developer Reference',
     title: "MCP tools",
-    description: "Code UX is also an MCP server. When connected, it advertises a set of management tools that an MCP client (or another agent) can call to drive projects, sprints, tasks, agents, memory, persistent skills, settings, pre...",
+    description: "Code UX is also an MCP server. When connected, it advertises a set of management tools that an MCP client (or another agent) can call to drive projects, sprints, tasks, agents, node flows, memory, persistent skills...",
   },
   'developer-management-actions': {
     id: 'developer-management-actions',
     path: '/docs/developer-management-actions',
     section: 'Developer Reference',
     title: "Management actions",
-    description: "Code UX exposes one MCP tool per management domain — manage_projects, manage_sprints, manage_tasks, manage_quicksprints, manage_scheduler, manage_agents, manage_memory, manage_settings, manage_preview, manage_chat_pro...",
+    description: "Code UX exposes one MCP tool per management domain — manage_projects, manage_sprints, manage_tasks, manage_quicksprints, manage_scheduler, manage_agents, manage_node_flows, manage_memory, manage_settings, manage_preview...",
   },
   'developer-http-api': {
     id: 'developer-http-api',
@@ -391,6 +416,13 @@ export const docsRegistry: Record<DocsSlug, DocsRegistryEntry> = {
     title: "Display Settings",
     description: "Controls the dashboard shell layout, experience mode, theme, motion preference, and desktop zoom when available.",
   },
+  'settings-subcategories-guidance': {
+    id: 'settings-subcategories-guidance',
+    path: '/docs/settings-subcategories-guidance',
+    section: 'User Guide',
+    title: "Guidance",
+    description: "Manages active tech-stack guidance, active styleguide guidance, and custom instruction entries for the current settings scope.",
+  },
   'settings-subcategories-onboarding': {
     id: 'settings-subcategories-onboarding',
     path: '/docs/settings-subcategories-onboarding',
@@ -426,6 +458,8 @@ export const orderedDocs: DocsRegistryEntry[] = [
   docsRegistry['user-dashboard-live-session'],
   docsRegistry['user-dashboard-chat'],
   docsRegistry['user-dashboard-agents'],
+  docsRegistry['user-dashboard-nodes'],
+  docsRegistry['user-dashboard-node-flows'],
   docsRegistry['user-dashboard-scheduler'],
   docsRegistry['user-dashboard-memory'],
   docsRegistry['user-dashboard-knowledge'],
@@ -433,6 +467,7 @@ export const orderedDocs: DocsRegistryEntry[] = [
   docsRegistry['user-dashboard-browser-preview'],
   docsRegistry['user-dashboard-stats'],
   docsRegistry['user-dashboard-settings'],
+  docsRegistry['user-dashboard-styleguides-and-tech-stacks'],
   docsRegistry['developer-overview'],
   docsRegistry['developer-mcp-tools'],
   docsRegistry['developer-management-actions'],
@@ -455,6 +490,7 @@ export const orderedDocs: DocsRegistryEntry[] = [
   docsRegistry['architecture-configuration-resolution'],
   docsRegistry['architecture-security'],
   docsRegistry['settings-subcategories-display-settings'],
+  docsRegistry['settings-subcategories-guidance'],
   docsRegistry['settings-subcategories-onboarding'],
   docsRegistry['architecture-speech-input'],
 ]

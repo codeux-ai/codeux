@@ -1,5 +1,10 @@
 import type { AgentPresetRecord } from "../contracts/agent-preset-types.js";
+import type { DesignGuidanceEntrySettings, DesignGuidanceSettings } from "../contracts/app-types.js";
 import type { MemoryRecord } from "../contracts/memory-types.js";
+import {
+  DESIGN_GUIDANCE_NONE_ID,
+  getDesignGuidanceCatalog,
+} from "../domain/settings/design-guidance-catalog.js";
 
 /**
  * Input for improving a sprint prompt.
@@ -9,6 +14,7 @@ export interface ImprovePromptArgs {
   planningAgent: AgentPresetRecord;
   sprintName: string;
   goal: string;
+  designGuidance?: DesignGuidanceSettings;
   memoryContext?: string;
   learningsInstruction?: string;
 }
@@ -24,20 +30,98 @@ export interface PlanPromptArgs {
   sprintName: string;
   canSetSprintTitle?: boolean;
   goal: string;
+  designGuidance?: DesignGuidanceSettings;
   memoryContext?: string;
   learningsInstruction?: string;
+}
+
+export interface ProjectGuidanceSectionOptions {
+  includeStyleguideInvestigationNotice?: boolean;
+}
+
+function resolveSelectedDesignGuidanceEntry(
+  entries: DesignGuidanceEntrySettings[],
+  selectedId: string,
+): DesignGuidanceEntrySettings | null {
+  if (selectedId === DESIGN_GUIDANCE_NONE_ID) {
+    return null;
+  }
+  return entries.find((entry) => entry.id === selectedId) ?? null;
+}
+
+function formatSelectedDesignGuidanceEntry(
+  heading: string,
+  entry: DesignGuidanceEntrySettings,
+): string[] {
+  return [
+    `### ${heading}`,
+    `Name: ${entry.name}`,
+    `Summary: ${entry.summary}`,
+    "Instructions:",
+    entry.instructionMarkdown,
+  ];
+}
+
+export function buildProjectGuidanceSection(
+  designGuidance: DesignGuidanceSettings | undefined,
+  options: ProjectGuidanceSectionOptions = {},
+): string[] {
+  if (!designGuidance) {
+    return [];
+  }
+
+  const catalog = getDesignGuidanceCatalog(designGuidance);
+  const selectedTechStack = resolveSelectedDesignGuidanceEntry(
+    catalog.techStacks,
+    designGuidance.selectedTechStackId,
+  );
+  const selectedStyleguide = resolveSelectedDesignGuidanceEntry(
+    catalog.styleguides,
+    designGuidance.selectedStyleguideId,
+  );
+  const section: string[] = [];
+
+  if (selectedTechStack) {
+    section.push(...formatSelectedDesignGuidanceEntry("Selected Tech Stack", selectedTechStack), "");
+  }
+
+  if (selectedStyleguide) {
+    section.push(...formatSelectedDesignGuidanceEntry("Selected Styleguide", selectedStyleguide), "");
+  } else if (
+    options.includeStyleguideInvestigationNotice
+    && designGuidance.selectedStyleguideId === DESIGN_GUIDANCE_NONE_ID
+  ) {
+    section.push(
+      "### Styleguide Selection",
+      "No active styleguide guidance is selected. Before proposing or replacing it with a repository-specific styleguide, investigate the repository's existing styling, brand assets, design tokens, components, layouts, and user-facing interaction patterns.",
+      "",
+    );
+  }
+
+  if (section.length === 0) {
+    return [];
+  }
+
+  return [
+    "## Project Guidance",
+    "",
+    ...section.slice(0, -1),
+  ];
 }
 
 /**
  * Builds a prompt for the planning agent to refine a sprint goal.
  */
 export function buildImprovePrompt(args: ImprovePromptArgs): string {
+  const projectGuidanceSection = buildProjectGuidanceSection(args.designGuidance);
   const parts = [
     "You are Code UX's Planning agent.",
     "",
     "## Planning Agent Instructions",
     args.planningAgent.instructionMarkdown.trim() || "Refine sprint prompts into crisp, implementation-ready scopes.",
     "",
+    ...projectGuidanceSection,
+    ...(projectGuidanceSection.length > 0 ? [""] : []),
     "## Task",
     "Scan the repository to understand the context, then improve the sprint prompt. Do not break it into tasks yet.",
     `Project: ${args.projectName}`,
@@ -76,12 +160,15 @@ export function buildImprovePrompt(args: ImprovePromptArgs): string {
 export function buildPlanPrompt(args: PlanPromptArgs): string {
   const memorySection = args.memoryContext ? `\n${args.memoryContext}\n` : "";
   const codingAgents = args.codingAgentRoster || [];
+  const projectGuidanceSection = buildProjectGuidanceSection(args.designGuidance);
   const parts = [
     "You are Code UX's Planning agent.",
     "",
     "## Planning Agent Instructions",
     args.planningAgent.instructionMarkdown.trim() || "Break sprint goals into actionable subtasks.",
     "",
+    ...projectGuidanceSection,
+    ...(projectGuidanceSection.length > 0 ? [""] : []),
     "## Task",
     "Plan the sprint into implementation-ready subtasks.",
     `Project: ${args.projectName}`,

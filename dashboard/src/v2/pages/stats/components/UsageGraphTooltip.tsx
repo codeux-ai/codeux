@@ -1,6 +1,7 @@
 import type { FunctionComponent } from 'preact';
 import type { ExecutionUsageBucketSummary } from '../../../types.js';
 import { formatCost, formatStatsDuration, formatTokens } from '../stats-utils.js';
+import { DASHED_EMPTY_CLASS, SUBPANEL_CLASS } from './stats-ui-primitives.js';
 
 export type UsageGraphInspectionState = 'idle' | 'focused' | 'pinned';
 
@@ -63,7 +64,7 @@ export const UsageGraphTooltip: FunctionComponent<UsageGraphTooltipProps> = ({
       id="usage-chart-tooltip"
       aria-live="polite"
       aria-atomic="true"
-      className="mt-4 w-full max-w-[calc(100vw-2rem)] rounded-[1.1rem] border border-[var(--stats-card-border)] bg-[var(--stats-card-bg)]/82 px-4 py-3 text-wrap break-words backdrop-blur-xl"
+      className={`${SUBPANEL_CLASS} mt-4 w-full max-w-[calc(100vw-2rem)] p-4 text-wrap break-words`}
     >
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
@@ -88,28 +89,28 @@ export const UsageGraphTooltip: FunctionComponent<UsageGraphTooltipProps> = ({
       {visible && detailRows.length > 0 ? (
         <dl className="mt-3 grid grid-cols-2 gap-2">
           {detailRows.map((row) => (
-            <div key={row.label} className="min-w-0 rounded-[0.85rem] border border-[var(--stats-card-border)] bg-[color:var(--fill-muted)] px-3 py-2">
+            <div key={row.label} className={`${SUBPANEL_CLASS} min-w-0 p-3`}>
               <dt className="text-[9px] font-bold uppercase tracking-[0.12em] text-[var(--stats-label-color)]">{row.label}</dt>
               <dd className="mt-1 break-words text-sm font-semibold text-[var(--stats-value-color)]">{row.value}</dd>
             </div>
           ))}
         </dl>
       ) : visible ? (
-        <div className="mt-3 rounded-[0.85rem] border border-dashed border-[var(--stats-card-border)] px-3 py-4 text-sm leading-relaxed text-[var(--stats-detail-color)]">
+          <div className={`${DASHED_EMPTY_CLASS} mt-3 text-sm leading-relaxed text-[var(--stats-detail-color)]`}>
           This bucket has no usage totals available for the active series.
         </div>
       ) : null}
       <div className="mt-3 grid gap-2">
         {visible && activeSeries.length > 0 ? activeSeries.map((series) => (
-          <div key={`tooltip-${series.id}`} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded-[0.85rem] border border-[var(--stats-card-border)] bg-[color:var(--fill-muted)] px-3 py-2 text-sm">
+          <div key={`tooltip-${series.id}`} className={`${SUBPANEL_CLASS} grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 p-3 text-sm`}>
             <div className="inline-flex min-w-0 items-center gap-2.5 text-[var(--stats-detail-color)]">
-              <span className="h-2.5 w-2.5 shrink-0 rounded-full ring-2 ring-[var(--stats-card-bg)]" style={{ backgroundColor: series.accentHex }} />
+              <span className="h-2.5 w-2.5 shrink-0 rounded-full ring-2 ring-[color:var(--stats-surface-subpanel)]" style={{ backgroundColor: series.accentHex }} />
               <span className="min-w-0 break-words font-medium">{series.label}</span>
             </div>
             <div className="text-right font-semibold text-[var(--stats-value-color)]">{series.value}</div>
           </div>
         )) : (
-          <div className="rounded-[0.85rem] border border-dashed border-[var(--stats-card-border)] px-3 py-4 text-sm leading-relaxed text-[var(--stats-detail-color)]">
+          <div className={`${DASHED_EMPTY_CLASS} text-sm leading-relaxed text-[var(--stats-detail-color)]`}>
             Move the pointer, focus a bucket, or use the range slider to pin exact values here.
           </div>
         )}

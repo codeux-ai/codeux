@@ -1,16 +1,16 @@
 import type { FunctionComponent } from "preact";
 import { X } from "lucide-preact";
-import { useRef, useLayoutEffect, useEffect } from "preact/hooks";
+import { useRef, useLayoutEffect, useEffect, useState } from "preact/hooks";
 import gsap from "gsap";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
-import { ContainerShip, WoodenShip } from "./PlanningShip.js";
-import { type PlanningActionType, PLANNING_ACTION_LABELS } from "../../lib/sprint-planning-feedback.js";
+import { CoffeeCup, ContainerShip, WoodenShip } from "./PlanningShip.js";
+import { type PlanningActionType, type PlanningFeedback, PLANNING_ACTION_LABELS } from "../../lib/sprint-planning-feedback.js";
 import { MODAL_MOTION } from "../../lib/motion/modal-motion.js";
 
 interface PlanningProgressOverlayProps {
   isBusy: boolean;
   isDismissed?: boolean;
-  feedback: { shipType: "container" | "wooden"; shipProgress: number; text: string } | null;
+  feedback: PlanningFeedback | null;
   planningEta: number;
   elapsedMs: number;
   isDark: boolean;
@@ -38,7 +38,19 @@ export const PlanningProgressOverlay: FunctionComponent<PlanningProgressOverlayP
 }) => {
   const textContainerRef = useRef<HTMLDivElement>(null);
   const prevTextRef = useRef(feedback?.text);
+  const prevBusyStateRef = useRef<{ isBusy: boolean; actionType: PlanningProgressOverlayProps["actionType"] }>({ isBusy, actionType });
+  const [isCoffeeBreak, setIsCoffeeBreak] = useState(false);
   const reducedMotion = useReducedMotion();
+
+  useEffect(() => {
+    const previous = prevBusyStateRef.current;
+    if (!isBusy) {
+      setIsCoffeeBreak(false);
+    } else if (!previous.isBusy || previous.actionType !== actionType) {
+      setIsCoffeeBreak(false);
+    }
+    prevBusyStateRef.current = { isBusy, actionType };
+  }, [actionType, isBusy]);
 
   useEffect(() => {
     if (!isBusy || isDismissed) {
@@ -79,6 +91,10 @@ export const PlanningProgressOverlay: FunctionComponent<PlanningProgressOverlayP
       badgeText: "text-signal-600 dark:text-signal-300",
       pingBg1: "bg-signal-400",
       pingBg2: "bg-signal-500",
+      coffeeFocusRing: "focus-visible:ring-signal-400 dark:focus-visible:ring-signal-300",
+      coffeeReminderBorder: "border-signal-500/20 dark:border-signal-400/20",
+      coffeeReminderBg: "bg-signal-500/[0.08] dark:bg-signal-400/[0.09]",
+      coffeeReminderShadow: "shadow-[0_10px_24px_rgba(0,224,160,0.08)]",
     },
     ember: {
       shipContainer: "#FF6B00",
@@ -88,11 +104,23 @@ export const PlanningProgressOverlay: FunctionComponent<PlanningProgressOverlayP
       badgeText: "text-ember-600 dark:text-ember-400",
       pingBg1: "bg-ember-400",
       pingBg2: "bg-ember-500",
+      coffeeFocusRing: "focus-visible:ring-ember-400 dark:focus-visible:ring-ember-400",
+      coffeeReminderBorder: "border-ember-500/20 dark:border-ember-400/20",
+      coffeeReminderBg: "bg-ember-500/[0.08] dark:bg-ember-400/[0.09]",
+      coffeeReminderShadow: "shadow-[0_10px_24px_rgba(255,107,0,0.08)]",
     },
   };
 
   const theme = accentColors[themeAccent];
-  const displayedShipProgress = reducedMotion ? 0.5 : feedback.shipProgress;
+  const shipVisual = reducedMotion
+    ? {
+        trackXPercent: 50,
+        opacity: 1,
+        visible: true,
+        phase: "crossing" as const,
+      }
+    : feedback.shipVisual;
+  const displayedProgress = Math.round(Math.min(0.99, Math.max(0, feedback.progress)) * 100);
 
   const getBadgeText = () => {
     if (actionType === "quicksprint") return "Quicksprint in motion";
@@ -143,31 +171,85 @@ export const PlanningProgressOverlay: FunctionComponent<PlanningProgressOverlayP
         <X className="h-4 w-4" />
       </button>
 
-      <div 
-        className="relative mb-12 flex h-32 w-full max-w-md items-center justify-center overflow-hidden pointer-events-none"
+      <div
+        className="relative mb-12 h-36 w-full max-w-md overflow-hidden rounded-[1.5rem] border border-black/[0.06] bg-[linear-gradient(180deg,rgba(248,250,252,0.9),rgba(226,232,240,0.68)_52%,rgba(203,213,225,0.55))] shadow-[inset_0_1px_0_rgba(255,255,255,0.75),0_18px_44px_rgba(15,23,42,0.08)] pointer-events-none dark:border-white/[0.08] dark:bg-[linear-gradient(180deg,rgba(24,20,17,0.92),rgba(15,29,51,0.72)_48%,rgba(8,16,28,0.82))] dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.08),0_20px_48px_rgba(0,0,0,0.3)]"
         role="progressbar"
         aria-live="polite"
-        aria-valuenow={Math.round(displayedShipProgress * 100)}
+        aria-valuenow={displayedProgress}
         aria-valuemin={0}
         aria-valuemax={100}
         aria-label={feedback.text}
+        data-testid="planning-ship-course"
+        data-reduced-motion={reducedMotion ? "true" : "false"}
       >
-        <div className="absolute inset-x-0 bottom-8 h-px bg-gradient-to-r from-transparent via-slate-200 to-transparent dark:via-white/10" />
+        <div className="absolute inset-x-0 top-0 h-1/2 bg-[radial-gradient(circle_at_18%_18%,rgba(255,255,255,0.9),transparent_18%),radial-gradient(circle_at_82%_8%,rgba(0,224,160,0.14),transparent_24%)] dark:bg-[radial-gradient(circle_at_18%_18%,rgba(255,255,255,0.12),transparent_18%),radial-gradient(circle_at_82%_8%,rgba(0,224,160,0.18),transparent_24%)]" />
+        <div className="absolute inset-x-5 bottom-10 h-12 rounded-full bg-[radial-gradient(ellipse_at_center,rgba(255,255,255,0.78),rgba(125,211,252,0.2)_42%,transparent_72%)] blur-xl dark:bg-[radial-gradient(ellipse_at_center,rgba(128,255,214,0.16),rgba(59,130,246,0.12)_44%,transparent_72%)]" />
+        <div className="absolute inset-x-8 bottom-[2.25rem] h-px bg-gradient-to-r from-transparent via-slate-500/28 to-transparent dark:via-white/18" />
+        <div className="absolute left-7 bottom-5 h-12 w-10 rounded-t-[1rem] border border-black/[0.08] bg-white/65 shadow-[8px_10px_22px_rgba(15,23,42,0.08)] dark:border-white/[0.08] dark:bg-white/[0.06]" />
+        <div className="absolute right-7 bottom-5 h-12 w-10 rounded-t-[1rem] border border-black/[0.08] bg-white/65 shadow-[-8px_10px_22px_rgba(15,23,42,0.08)] dark:border-white/[0.08] dark:bg-white/[0.06]" />
+        <div className="absolute inset-x-12 bottom-[3.05rem] flex items-center justify-between" aria-hidden="true">
+          <span className="h-1.5 w-1.5 rounded-full bg-slate-400/55 shadow-[0_0_12px_rgba(100,116,139,0.35)] dark:bg-signal-300/45 dark:shadow-[0_0_14px_rgba(128,255,214,0.3)]" />
+          <span className="h-1.5 w-1.5 rounded-full bg-slate-400/35 shadow-[0_0_12px_rgba(100,116,139,0.25)] dark:bg-white/25 dark:shadow-[0_0_14px_rgba(255,255,255,0.18)]" />
+        </div>
+        <svg
+          aria-hidden="true"
+          className="absolute inset-x-8 bottom-8 h-10 w-[calc(100%-4rem)] overflow-visible text-slate-300/70 dark:text-white/[0.12]"
+          viewBox="0 0 360 42"
+          preserveAspectRatio="none"
+        >
+          <path d="M2 26 C62 6 98 40 154 22 S250 8 358 23" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeDasharray="2 10" />
+          <path d="M8 34 C70 20 105 46 164 31 S258 18 350 32" fill="none" stroke="currentColor" strokeWidth="1" strokeLinecap="round" opacity="0.45" />
+        </svg>
         <div
-          className="absolute transition-[left] ease-linear motion-reduce:transition-none"
+          className="absolute inset-y-8 left-0 w-full transform-gpu transition-[transform,opacity,visibility] ease-linear motion-reduce:transition-none"
+          data-testid="planning-ship-traveler"
+          data-coffee-break={isCoffeeBreak ? "true" : "false"}
+          data-ship-phase={shipVisual.phase}
+          data-ship-visible={shipVisual.visible ? "true" : "false"}
           style={{
-            left: `${displayedShipProgress * 100}%`,
-            transform: "translateX(-50%)",
+            opacity: shipVisual.opacity,
+            visibility: shipVisual.visible ? "visible" : "hidden",
+            transform: `translate3d(${shipVisual.trackXPercent}%, 0, 0)`,
             transitionDuration: `${MODAL_MOTION.overlay.exit}s`,
           }}
         >
-          <svg width="120" height="60" viewBox="-60 -30 120 60">
-            {feedback.shipType === "container" ? (
-              <ContainerShip accentColor={theme.shipContainer} isMoving={!reducedMotion} isDark={isDark} />
-            ) : (
-              <WoodenShip accentColor={theme.shipWooden} isMoving={!reducedMotion} isDark={isDark} />
-            )}
-          </svg>
+          <div className="absolute left-0 top-1/2 -translate-x-1/2 -translate-y-1/2">
+            <button
+              type="button"
+              aria-label={isCoffeeBreak ? "Coffee break reminder is visible" : "Turn planning vessel into a coffee break reminder"}
+              aria-pressed={isCoffeeBreak ? "true" : "false"}
+              data-testid="planning-vessel-button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setIsCoffeeBreak(true);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " " || e.key === "Spacebar" || e.code === "Space") {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setIsCoffeeBreak(true);
+                }
+              }}
+              className={`pointer-events-auto relative block h-[72px] w-[132px] cursor-pointer rounded-[1.5rem] border-0 bg-transparent p-0 text-left outline-none transition-transform hover:scale-[1.03] focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-white active:scale-[0.99] motion-reduce:transition-none dark:focus-visible:ring-offset-void-800 ${theme.coffeeFocusRing}`}
+            >
+              <span className="absolute left-[-74px] top-[30px] h-3 w-24 rounded-full bg-gradient-to-l from-transparent via-white/55 to-transparent blur-[2px] motion-safe:animate-pulse motion-reduce:animate-none dark:via-signal-300/22" aria-hidden="true" />
+              <svg
+                width="132"
+                height="72"
+                viewBox="-66 -38 132 72"
+                aria-hidden="true"
+                className="drop-shadow-[0_12px_16px_rgba(15,23,42,0.18)] dark:drop-shadow-[0_14px_18px_rgba(0,0,0,0.45)]"
+              >
+                {isCoffeeBreak ? (
+                  <CoffeeCup accentColor={theme.shipContainer} isMoving={!reducedMotion} isDark={isDark} />
+                ) : feedback.shipType === "container" ? (
+                  <ContainerShip accentColor={theme.shipContainer} isMoving={!reducedMotion} isDark={isDark} />
+                ) : (
+                  <WoodenShip accentColor={theme.shipWooden} isMoving={!reducedMotion} isDark={isDark} />
+                )}
+              </svg>
+            </button>
+          </div>
         </div>
       </div>
 
@@ -211,6 +293,15 @@ export const PlanningProgressOverlay: FunctionComponent<PlanningProgressOverlayP
         <p className="mx-auto max-w-xs text-sm leading-relaxed text-slate-500 dark:text-slate-400">
           {getDescriptionText()}
         </p>
+        {isCoffeeBreak && (
+          <p
+            className={`mx-auto max-w-sm rounded-full border px-4 py-2 text-sm font-medium leading-relaxed text-slate-600 dark:text-slate-200 ${theme.coffeeReminderBorder} ${theme.coffeeReminderBg} ${theme.coffeeReminderShadow}`}
+            role="status"
+            aria-live="polite"
+          >
+            Coffee break unlocked. Grab a fresh cup while planning keeps moving.
+          </p>
+        )}
         <p className="mx-auto max-w-sm text-xs leading-relaxed text-slate-400 dark:text-slate-500">
           You can minimize this panel and keep the request running, or cancel it from here.
         </p>

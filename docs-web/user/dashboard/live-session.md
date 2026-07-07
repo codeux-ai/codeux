@@ -4,6 +4,8 @@ The **Live Session** page (`/live`) is the real-time control room for an active 
 
 You'll automatically be redirected here when you click **Orchestrate** on a sprint. You can also reach it any time from the dock to view the most recent sprint run for the active project.
 
+Sprint links can open Live directly with `/live?projectId=<projectId>&sprintId=<sprintId>`. Live applies the route project before selecting the route sprint, keeping the top-nav sprint selector and runtime filters aligned with the sprint you opened.
+
 ## Layout
 
 The page is composed of stacked panels:
@@ -13,6 +15,7 @@ The page is composed of stacked panels:
    - Title, dependency badges, current provider.
    - Live activity preview (the latest line of agent output).
    - Duration and ETA.
+   - Optional self-reflection rating badge once a worker has captured one, with the overall 5-star score and a hover/focus details panel for per-section ratings and notes.
    - Buttons to stop, retry, or open the detail panel.
 3. **Live Session Runtime Sidebar** — Contains the following collapsible panels:
    - **Invocation feed panel** — A real-time log of individual provider invocations with restart and cancel controls.
@@ -26,6 +29,10 @@ The page is composed of stacked panels:
 All panels update via the WebSocket connection to `/api/realtime`. Update latency is typically sub-second.
 
 If the WebSocket disconnects (network blip, page sleep), the client automatically reconnects with exponential backoff and replays missed events using the sequence number.
+
+## Self-reflection ratings
+
+Live task cards can show a compact 5-star self-reflection badge when the task snapshot includes `selfReflectionRating`. The badge uses the task's overall rating for the visible score, and hover or keyboard focus opens a viewport-positioned panel with the individual section ratings and any notes the worker recorded. Live tasks without a captured rating do not show a placeholder badge.
 
 ## Idle state
 

@@ -2,6 +2,7 @@ import type {
   BackgroundPattern,
   DashboardSettings,
   DashboardExperienceMode,
+  DesignGuidanceSettings,
   ExternalSettingsHints,
   McpToolToggle,
   RuntimeLogLevel,
@@ -46,6 +47,10 @@ import {
   INTERNAL_SKILL_SET,
   QA_EXHAUSTION_POLICIES,
 } from "./settings-defaults.js";
+import {
+  cloneDesignGuidanceSettings,
+  sanitizeDesignGuidanceSettings,
+} from "../domain/settings/design-guidance-catalog.js";
 
 const enforceGitManagerSkillset = (skills: SkillToggle[], githubMode: "REMOTE" | "LOCAL"): SkillToggle[] => {
   return skills.map((skill) => {
@@ -239,6 +244,10 @@ const sanitizeTechstackSelection = (value: unknown): TechstackSelectionSettings 
       : DEFAULT_PROJECT_TECHSTACK.applicationKind,
   };
 };
+
+const cloneDesignGuidance = (settings: DesignGuidanceSettings): DesignGuidanceSettings => (
+  cloneDesignGuidanceSettings(settings)
+);
 
 const BACKGROUND_PATTERNS = new Set<BackgroundPattern>([
   "NONE",
@@ -478,6 +487,7 @@ export const cloneDefaults = (externalHints?: ExternalSettingsHints): DashboardS
   },
   techstackCatalog: cloneTechstackCatalog(DEFAULT_DASHBOARD_SETTINGS.techstackCatalog),
   techstack: { ...DEFAULT_DASHBOARD_SETTINGS.techstack },
+  designGuidance: cloneDesignGuidance(DEFAULT_DASHBOARD_SETTINGS.designGuidance),
   git: {
     ...DEFAULT_DASHBOARD_SETTINGS.git,
     githubToken: externalHints?.resolved.githubToken || DEFAULT_DASHBOARD_SETTINGS.git.githubToken,
@@ -639,6 +649,7 @@ export const sanitizeSettings = (value: unknown, externalHints?: ExternalSetting
   const aiProvider = sanitizeAiProvider(input, { externalHints });
   const techstackCatalog = sanitizeTechstackCatalog(input.techstackCatalog ?? DEFAULT_DASHBOARD_SETTINGS.techstackCatalog);
   const techstack = sanitizeTechstackSelection(input.techstack);
+  const designGuidance = sanitizeDesignGuidanceSettings(input.designGuidance);
   const git = sanitizeGit(input, externalHints);
   const jira = sanitizeJira(input.jira, DEFAULT_DASHBOARD_SETTINGS.jira);
   if (externalHints?.resolved?.jiraToken) {
@@ -776,6 +787,7 @@ export const sanitizeSettings = (value: unknown, externalHints?: ExternalSetting
     },
     techstackCatalog,
     techstack,
+    designGuidance,
     git,
     jira,
     notion,

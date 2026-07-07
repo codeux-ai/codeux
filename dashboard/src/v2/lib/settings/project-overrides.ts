@@ -11,6 +11,7 @@ import type {
 } from "../../../types.js";
 import { cloneGuardrails, cloneTechstackCatalog, DEFAULT_DASHBOARD_SETTINGS } from "../../../lib/settings.js";
 import { getHintApiKey } from "./provider-instances.js";
+import { cloneDesignGuidanceSettings } from "../../../../../src/domain/settings/design-guidance-catalog.js";
 
 const cloneMemorySettings = (memory: ProjectSettings["memory"]): ProjectSettings["memory"] => ({
   ...memory,
@@ -84,6 +85,12 @@ const cloneTechstackSelection = (
   techstack: ProjectSettings["techstack"] | undefined,
 ): ProjectSettings["techstack"] | undefined => (
   techstack ? { ...techstack } : undefined
+);
+
+const cloneDesignGuidance = (
+  designGuidance: ProjectSettings["designGuidance"] | undefined,
+): ProjectSettings["designGuidance"] => (
+  cloneDesignGuidanceSettings(designGuidance ?? DEFAULT_DASHBOARD_SETTINGS.designGuidance)
 );
 
 export const cloneProjectProviders = (
@@ -161,6 +168,7 @@ export const dashboardSettingsToProjectSettings = (settings: DashboardSettings):
   },
   aiProvider: cloneProjectAiProviderSettings(settings.aiProvider),
   techstack: cloneTechstackSelection(settings.techstack) ?? { ...DEFAULT_DASHBOARD_SETTINGS.techstack },
+  designGuidance: cloneDesignGuidance(settings.designGuidance),
   git: {
     githubMode: settings.git.githubMode,
     githubToken: settings.git.githubToken,
@@ -221,6 +229,7 @@ export const cloneProjectSettings = (settings: ProjectSettings): ProjectSettings
   },
   aiProvider: cloneProjectAiProviderSettings(settings.aiProvider),
   techstack: cloneTechstackSelection(settings.techstack) ?? { ...DEFAULT_DASHBOARD_SETTINGS.techstack },
+  designGuidance: cloneDesignGuidance(settings.designGuidance),
   git: {
     ...settings.git,
   },

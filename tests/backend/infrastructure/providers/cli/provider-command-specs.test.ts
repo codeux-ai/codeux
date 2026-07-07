@@ -1,5 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import {
+  E2E_PROVIDER_CLI_SHIM_ENV,
   providerSpecs,
   enabledCustomServersFor,
   getNativeSessionOperationPrompt,
@@ -8,6 +9,10 @@ import {
 import type { CustomMcpServer } from "../../../../../src/contracts/app-types.js";
 
 describe("Provider Command Specs", () => {
+  afterEach(() => {
+    delete process.env[E2E_PROVIDER_CLI_SHIM_ENV];
+  });
+
   describe("providerSpecs", () => {
     it("generates correct command for gemini", () => {
       const spec = providerSpecs["gemini"]("default", "hello");
@@ -35,6 +40,12 @@ describe("Provider Command Specs", () => {
         command: "claude",
         args: ["--dangerously-skip-permissions", "--model", "claude-3-7-sonnet", "-p", "hello"]
       });
+
+      const thinkingSpec = providerSpecs["claude-code"]("default", "hello", "max");
+      expect(thinkingSpec).toEqual({
+        command: "claude",
+        args: ["--dangerously-skip-permissions", "--effort", "max", "-p", "hello"]
+      });
     });
 
     it("generates correct command for codex", () => {
@@ -48,6 +59,12 @@ describe("Provider Command Specs", () => {
       expect(explicitSpec).toEqual({
         command: "codex",
         args: ["exec", "--yolo", "--json", "--output-last-message", "codex-last-message.txt", "--model", "gpt-4o", "hello"]
+      });
+
+      const thinkingSpec = providerSpecs["codex"]("gpt-4o", "hello", "xhigh");
+      expect(thinkingSpec).toEqual({
+        command: "codex",
+        args: ["exec", "--yolo", "--json", "--output-last-message", "codex-last-message.txt", "-c", "model_reasoning_effort=\"xhigh\"", "--model", "gpt-4o", "hello"]
       });
     });
 
@@ -77,6 +94,12 @@ describe("Provider Command Specs", () => {
         command: "opencode",
         args: ["run", "--format", "json", "--model", "deepseek-coder", "hello"]
       });
+
+      const thinkingSpec = providerSpecs["opencode"]("deepseek-coder", "hello", "minimal");
+      expect(thinkingSpec).toEqual({
+        command: "opencode",
+        args: ["run", "--format", "json", "--model", "deepseek-coder", "--variant", "minimal", "hello"]
+      });
     });
 
     it("generates correct command for antigravity", () => {
@@ -100,6 +123,73 @@ describe("Provider Command Specs", () => {
       expect(spec.args[1]).toContain("provider: \"mockup-cli\"");
       expect(spec.args[1]).toContain("resolveWorkspacePath");
       expect(spec.args[2]).toBe("mockup-cli:write fixture.txt :: hello");
+    });
+
+    it("preserves real provider commands when the E2E provider shim is absent", () => {
+      delete process.env[E2E_PROVIDER_CLI_SHIM_ENV];
+
+      expect(providerSpecs["gemini"]("default", "hello")).toEqual({
+        command: "gemini",
+        args: ["--yolo", "--output-format", "json", "--p", "hello"]
+      });
+      expect(providerSpecs["codex"]("gpt-4o", "hello")).toEqual({
+        command: "codex",
+        args: ["exec", "--yolo", "--json", "--output-last-message", "codex-last-message.txt", "--model", "gpt-4o", "hello"]
+      });
+      expect(providerSpecs["claude-code"]("default", "hello")).toEqual({
+        command: "claude",
+        args: ["--dangerously-skip-permissions", "-p", "hello"]
+      });
+      expect(providerSpecs["qwen-code"]("qwen-max", "hello")).toEqual({
+        command: "qwen",
+        args: ["--yolo", "--model", "qwen-max", "-p", "hello"]
+      });
+      expect(providerSpecs.opencode("default", "hello")).toEqual({
+        command: "opencode",
+        args: ["run", "--format", "json", "hello"]
+      });
+      expect(providerSpecs.antigravity("default", "hello")).toEqual({
+        command: "agy",
+        args: ["--dangerously-skip-permissions", "-p", "hello"]
+      });
+    });
+
+    it("uses the guarded E2E provider shim for external CLI providers only when explicitly configured", () => {
+      process.env[E2E_PROVIDER_CLI_SHIM_ENV] = "/tmp/codeux/mock-provider-cli.mjs";
+
+      expect(providerSpecs["codex"]("gpt-4o", "hello")).toEqual({
+        command: process.execPath,
+        args: [
+          "/tmp/codeux/mock-provider-cli.mjs",
+          "--provider", "codex",
+          "--model", "gpt-4o",
+          "--prompt", "hello",
+        ],
+      });
+      expect(providerSpecs["gemini"]("default", "hello")).toEqual({
+        command: process.execPath,
+        args: [
+          "/tmp/codeux/mock-provider-cli.mjs",
+          "--provider", "gemini",
+          "--model", "default",
+          "--prompt", "hello",
+        ],
+      });
+
+      expect(providerSpecs["claude-code"]("default", "hello", "xhigh")).toEqual({
+        command: process.execPath,
+        args: [
+          "/tmp/codeux/mock-provider-cli.mjs",
+          "--provider", "claude-code",
+          "--model", "default",
+          "--prompt", "hello",
+          "--thinking-mode", "xhigh",
+        ],
+      });
+
+      const mockupSpec = providerSpecs["mockup-cli"]("default", "mockup-cli:write fixture.txt :: hello");
+      expect(mockupSpec.command).toBe("node");
+      expect(mockupSpec.args[0]).toBe("-e");
     });
   });
 

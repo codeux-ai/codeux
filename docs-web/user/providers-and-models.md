@@ -119,11 +119,18 @@ Set per-provider model in **Settings → AI providers**.
 
 ## Thinking modes
 
-Each provider has a **thinking mode** governing reasoning depth:
+CLI providers expose provider-specific **thinking** or **reasoning** selections. Jules is hosted/managed and does not expose a thinking control in Code UX.
 
-- `SMALL` — fastest, lowest cost.
-- `MEDIUM` — balanced (default for most providers).
-- `HIGH` — deepest reasoning; recommended for `task_coding` on Codex and Claude.
+| Provider | Thinking selections |
+| --- | --- |
+| Gemini | `minimal`, `low`, `medium`, `high` |
+| Codex | `low`, `medium`, `high`, `xhigh` |
+| Claude Code | `low`, `medium`, `high`, `xhigh`, `max` |
+| Qwen Code | `low`, `medium`, `high`, `xhigh`, `max` |
+| OpenCode | `none`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max` |
+| Antigravity | `low`, `high` |
+
+Older saved values `SMALL`, `MEDIUM`, and `HIGH` continue to load and are migrated to the closest supported value for the selected provider.
 
 ## Provider weights and strategies
 

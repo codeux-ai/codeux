@@ -57,6 +57,7 @@ import type { ProjectSetupService } from "../../services/project-setup-service.j
 import type { SchedulerService } from "../../services/scheduler-service.js";
 import type { ChatProviderIngressService } from "../../services/chat-provider-ingress-service.js";
 import type { SpeechTranscriptionService } from "../../services/speech-transcription-service.js";
+import type { NodeFlowService } from "../../services/node-flow-service.js";
 import type { MemoryService } from "../../services/memory-service.js";
 import type { KnowledgeService } from "../../services/knowledge-service.js";
 import type { MemoryPromotionService } from "../../services/memory-promotion-service.js";
@@ -124,6 +125,7 @@ export interface BootDashboardDeps {
   chatProviderIngressService: ChatProviderIngressService;
   speechTranscriptionService: SpeechTranscriptionService;
   chatProviderOutboundService?: ChatProviderOutboundService;
+  nodeFlowService?: NodeFlowService;
   dashboardRealtimeService: DashboardRealtimeService;
   logger: Logger;
   getLiveActivitiesForActiveTasks: () => Promise<Record<string, JulesActivity[]>>;
@@ -441,6 +443,7 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<DashboardS
     chatProviderRepository: deps.chatProviderRepository,
     chatProviderIngressService: deps.chatProviderIngressService,
     speechTranscriptionService: deps.speechTranscriptionService,
+    nodeFlowService: deps.nodeFlowService,
     projectManagementRepository: deps.projectManagementRepository,
     executionRepository: deps.executionRepository,
     getLiveSnapshot: (projectIdHint) => getProjectLiveSnapshot({
@@ -468,8 +471,9 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<DashboardS
         };
     },
     getOverviewTelemetrySnapshot: cache.getOverviewTelemetrySnapshot,
-    // `/api/projects/:id/execution` (sprints/overview/chat) — feed-less.
-    getProjectExecutionSnapshot: cache.getProjectExecutionSnapshotLean,
+    // `/api/projects/:id/execution` is the public REST snapshot and includes
+    // recent events/invocations; realtime execution pushes stay feed-less above.
+    getProjectExecutionSnapshot: cache.getProjectExecutionSnapshot,
     getProjectStatsSnapshot: cache.getProjectStatsSnapshot,
     getHeaderTokenThroughputSnapshot: cache.getHeaderTokenThroughputSnapshot,
     setPreferredWorker: (projectId, input) => {
@@ -686,6 +690,7 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<DashboardS
         settings.settings.jira.apiToken,
         input,
         settings.settings.jira.defaultProject,
+        settings.settings.jira.importTransitionName?.trim() || "In Work",
       );
     },
     searchJiraProjectStatuses: (projectId, projectKey) => deps.sprintIssueService.searchJiraProjectStatuses(projectId, projectKey),

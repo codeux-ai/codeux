@@ -1,5 +1,6 @@
 import type {
   EffectiveSettingsResponse,
+  DesignGuidanceSettings,
   ProjectSettings,
   SystemSettings,
   TechstackSelectionSettings,
@@ -123,6 +124,30 @@ export const saveProjectTechstackSettings = async (
     body: JSON.stringify({
       ...currentOverride,
       techstack,
+    }),
+  });
+  clearEffectiveSettingsRequests(projectId);
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent("codeux:settings-updated", {
+      detail: { scope: "project", projectId },
+    }));
+  }
+};
+
+export const saveProjectDesignGuidanceSettings = async (
+  projectId: string,
+  designGuidance: DesignGuidanceSettings,
+): Promise<void> => {
+  const currentOverride = await fetchJson<Partial<ProjectSettings>>(
+    `/api/projects/${encodeURIComponent(projectId)}/settings`,
+    { cache: "reload" },
+  );
+  await fetchJson(`/api/projects/${encodeURIComponent(projectId)}/settings`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      ...currentOverride,
+      designGuidance,
     }),
   });
   clearEffectiveSettingsRequests(projectId);

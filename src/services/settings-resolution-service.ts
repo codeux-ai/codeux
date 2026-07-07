@@ -4,6 +4,7 @@ import type {
   CustomMcpServer,
   DashboardSettings,
   DashboardExperienceMode,
+  DesignGuidanceSettings,
   ExternalSettingsHints,
   McpToolToggle,
   RestartInvocationPolicy,
@@ -55,6 +56,10 @@ import {
   INTERNAL_SKILL_NAMES,
   INTERNAL_SKILL_SET,
 } from "../repositories/settings-defaults.js";
+import {
+  cloneDesignGuidanceSettings,
+  sanitizeDesignGuidanceSettings,
+} from "../domain/settings/design-guidance-catalog.js";
 
 function cloneSkills(skills: SkillToggle[]): SkillToggle[] {
   return skills.map((skill) => ({ ...skill }));
@@ -162,6 +167,10 @@ function cloneTechstackCatalog(catalog: TechstackCatalogSettings): TechstackCata
 
 function cloneTechstackSelection(selection: TechstackSelectionSettings): TechstackSelectionSettings {
   return { ...selection };
+}
+
+function cloneDesignGuidance(settings: DesignGuidanceSettings): DesignGuidanceSettings {
+  return cloneDesignGuidanceSettings(settings);
 }
 
 function resolveEffectiveMcpTools(
@@ -735,6 +744,7 @@ export function buildDefaultProjectSettings(externalHints?: ExternalSettingsHint
       invocationRouting: cloneInvocationRouting(aiProvider.invocationRouting),
     },
     techstack: cloneTechstackSelection(DEFAULT_PROJECT_TECHSTACK),
+    designGuidance: cloneDesignGuidance(DEFAULT_DASHBOARD_SETTINGS.designGuidance),
     git: {
       githubMode: git.githubMode,
       githubToken: git.githubToken,
@@ -911,6 +921,7 @@ export function sanitizeProjectSettings(value: unknown, externalHints?: External
       invocationRouting: cloneInvocationRouting(aiProvider.invocationRouting),
     },
     techstack: sanitizeTechstackSelection(input.techstack),
+    designGuidance: sanitizeDesignGuidanceSettings(input.designGuidance),
     git: {
       githubMode: git.githubMode,
       githubToken: git.githubToken,
@@ -1316,6 +1327,7 @@ export function resolveDashboardSettings(args: {
     aiProvider: resolvedAiProvider,
     techstackCatalog: cloneTechstackCatalog(techstackCatalog),
     techstack: cloneTechstackSelection(sprintSettings.techstack),
+    designGuidance: cloneDesignGuidance(sprintSettings.designGuidance),
     // GitHub/GitLab/Jira resolve through the scoped project/sprint settings, which
     // inherit the system integration values unless a project or sprint overrides
     // them. A blank scoped value falls back to the system integration value.

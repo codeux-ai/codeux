@@ -12,7 +12,7 @@ import { type RefObject } from "preact";
 import { useChatThreadData, isWorkingMessage } from "./use-chat-thread-data.js";
 import { useInvocationPaneData } from "./use-invocation-pane-data.js";
 import { useChatPageResources } from "./use-chat-page-resources.js";
-import type { AgentPresetRecord, ExecutionInvocationRecord } from "../types.js";
+import type { AgentPresetRecord, ExecutionInvocationRecord, Sprint, Task } from "../types.js";
 import { useSprints } from "../../hooks/useSprints.js";
 import { useProjectTasks } from "./use-project-tasks.js";
 import { clearChatDraftFromUrl, readChatDraftFromLocation } from "../lib/no-project-chat-assistant.js";
@@ -21,6 +21,15 @@ import { clearChatDraftFromUrl, readChatDraftFromLocation } from "../lib/no-proj
 export type ChatMode = "stage" | "threads" | "invocations";
 
 const CHAT_MODE_STORAGE_KEY = "codeux.chat.mode";
+
+export interface ChatLiveEntityContext {
+  sprints: readonly Sprint[];
+  tasks: readonly Task[];
+  loading: boolean;
+  loaded: boolean;
+  error: string | null;
+  sprintKeyPrefix: string;
+}
 
 const isChatMode = (value: unknown): value is ChatMode =>
   value === "stage" || value === "threads" || value === "invocations";
@@ -45,14 +54,19 @@ const readStoredChatMode = (): ChatMode => {
 
 export const useChatPageData = (options?: { composerRef?: RefObject<HTMLTextAreaElement>; messagesRef?: RefObject<HTMLDivElement> }) => {
   const cache = useMessageCache();
-  const { selectedProject } = useProjectData();
+  const { projects, selectedProject } = useProjectData();
 
   const { data: execution, loading: executionLoading } = useExecutions(selectedProject?.id || null);
   const { data: effectiveSettings, loading: effectiveSettingsLoading } = useProjectEffectiveSettings(selectedProject?.id || null);
-  const { data: sprints } = useSprints(selectedProject?.id || null);
-  const { tasks: projectTasks, loading: projectTasksLoading, loaded: projectTasksLoaded } = useProjectTasks(
+  const { data: sprints, loading: sprintsLoading, error: sprintsError } = useSprints(selectedProject?.id || null);
+  const {
+    tasks: projectTasks,
+    loading: projectTasksLoading,
+    loaded: projectTasksLoaded,
+    error: projectTasksError,
+  } = useProjectTasks(
     selectedProject?.id || null,
-    selectedProject ? [selectedProject] : [],
+    projects,
     sprints,
     null,
     { enabled: Boolean(selectedProject) },
@@ -212,6 +226,26 @@ export const useChatPageData = (options?: { composerRef?: RefObject<HTMLTextArea
   )).length;
 
   const hasWorkingReply = useMemo(() => threadData.messages.some((message) => isWorkingMessage(message, threadData.messages)), [threadData.messages]);
+  const sprintKeyPrefix = effectiveSettings?.settings?.git?.sprintKeyPrefix || "SPR";
+  const liveEntityContext = useMemo<ChatLiveEntityContext>(() => ({
+    sprints,
+    tasks: projectTasks,
+    loading: sprintsLoading || projectTasksLoading || effectiveSettingsLoading,
+    loaded: Boolean(selectedProject && projectTasksLoaded && !sprintsLoading && !effectiveSettingsLoading),
+    error: sprintsError || projectTasksError,
+    sprintKeyPrefix,
+  }), [
+    effectiveSettingsLoading,
+    projectTasks,
+    projectTasksError,
+    projectTasksLoaded,
+    selectedProject,
+    sprintKeyPrefix,
+    sprints,
+    sprintsError,
+    sprintsLoading,
+    projectTasksLoading,
+  ]);
 
   const hasProjectSnapshot = Boolean(selectedProject && cache.hasThreads(selectedProject.id));
   const hasThreadSnapshot = Boolean(
@@ -286,7 +320,8 @@ export const useChatPageData = (options?: { composerRef?: RefObject<HTMLTextArea
     projectTasks,
     projectTasksLoading,
     projectTasksLoaded: Boolean(selectedProject && projectTasksLoaded),
-    sprintKeyPrefix: effectiveSettings?.settings?.git?.sprintKeyPrefix || "SPR",
+    sprintKeyPrefix,
+    liveEntityContext,
     feedback: threadData.feedback,
     clearFeedback: threadData.clearFeedback,
     isConfirmOpen: threadData.isConfirmOpen,

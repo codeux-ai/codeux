@@ -32,6 +32,7 @@ The category rail on the left includes these Expert-mode categories:
 | **Sprint & Git** | Git flow, PR behavior, merge gates, QA, guardrails, branch naming, and execution runtime controls. |
 | **Browser Preview** | Preview runtime, in-app browser visibility, container limits, port allocation, and startup scripts. |
 | **Techstacks** | System catalog management, protected built-in stack, project stack assignment, and web/desktop application kind. |
+| **Guidance** | Tech stack guidance, styleguides, custom worker instructions, and header selector defaults. |
 | **Agents** | Agent routing, markdown mirroring, persistent skill storage, storage attachments, and self-reflection criteria. |
 | **Memory** | Embedding model selection, memory capture, promotion, and remediation policy. |
 | **Integrations** | Provider credentials, Git hosts, Jira, and read-only PM/canvas importers. |
@@ -518,6 +519,26 @@ Related docs:
 
 - [Configuration and Storage](/docs/developer-settings-reference)
 - [Settings Reference](/docs/developer-settings-reference)
+
+### Guidance
+
+<a id="guidance"></a>
+
+Manages active tech-stack guidance, active styleguide guidance, and custom instruction entries for the current scope.
+
+**What it controls:** System scope edits default design guidance; project scope edits the active project override. Each section has a selector with `None`, a custom-entry list, and add/edit/delete controls for custom entries. Built-in entries are selectable but protected.
+
+The top navigation shows the active project's effective tech stack guidance and styleguide selectors beside global search. Header selections save the project override immediately. **Add Tech Stack**, **Add Styleguide**, and **Manage Guidance** in the dropdown footers all open the Guidance settings area for custom entries and visibility controls.
+
+**Recommended defaults:** Keep both selections at `None` until a project needs explicit guidance beyond its repository instructions. Add custom entries for stable team or product guidance that should be reused.
+
+**Risks and gotchas:** `hideDefaultStyleguides` hides built-in styleguides from the dashboard selector while preserving `None`, custom styleguides, and the saved selected id. Deleting a selected custom entry clears that selection back to `None`. Design guidance also feeds the Planning and Project Setup prompts, which resolve selected entries from effective project settings. `None` catalog entries are not injected, but Project Setup still includes a setup-only styling investigation notice whenever the styleguide selection is `None`.
+
+Related docs:
+
+- [Configuration and Storage](/docs/developer-settings-reference)
+- [Settings Reference](/docs/developer-settings-reference)
+- [Styleguides and Tech Stacks](/docs/user-dashboard-styleguides-and-tech-stacks)
 
 ### Project Markdown Mirror
 

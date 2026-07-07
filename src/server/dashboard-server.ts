@@ -123,6 +123,7 @@ import type { LocalMcpCliProvider, LocalMcpInstallResult, LocalMcpSetupInfo } fr
 import { resolveDashboardBindHost } from "../config/app-config.js";
 import type { ChatProviderIngressService } from "../services/chat-provider-ingress-service.js";
 import type { SpeechTranscriptionService } from "../services/speech-transcription-service.js";
+import type { NodeFlowService } from "../services/node-flow-service.js";
 import {
   parsePreviewSessionIdFromHost,
   parseSelectedPreviewPortFromRequest,
@@ -161,6 +162,7 @@ export interface DashboardServerOptions {
   chatProviderRepository?: ChatProviderRepository;
   chatProviderIngressService?: ChatProviderIngressService;
   speechTranscriptionService?: SpeechTranscriptionService;
+  nodeFlowService?: NodeFlowService;
   projectManagementRepository?: ProjectManagementRepository;
   executionRepository?: ExecutionRepository;
   getStatus: () => unknown;

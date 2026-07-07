@@ -279,7 +279,7 @@ describe("TopNav Selectors Accessibility", () => {
         expect(projectBtn).toHaveAttribute("aria-expanded", "false");
     });
 
-    it("announces sprint disabled state appropriately when no sprints", async () => {
+    it("keeps the sprint selector openable when no sprints exist", async () => {
         mockSprintsData.data = [];
         mockSprintsData.selectedSprintId = null;
         mockSprintsData.selectedSprint = null;
@@ -287,9 +287,10 @@ describe("TopNav Selectors Accessibility", () => {
         renderNav();
         const sprintBtn = document.getElementById("sprint-selector-button") as HTMLButtonElement;
 
-        expect(sprintBtn).toHaveAttribute("aria-disabled", "true");
+        expect(sprintBtn).toHaveAttribute("aria-disabled", "false");
         await user.click(sprintBtn);
-        expect(sprintBtn).toHaveAttribute("aria-expanded", "false");
+        expect(sprintBtn).toHaveAttribute("aria-expanded", "true");
+        expect(screen.getByRole("button", { name: "Add Sprint" })).toBeInTheDocument();
     });
 
 

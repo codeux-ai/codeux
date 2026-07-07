@@ -1,5 +1,6 @@
 import type { DashboardSettings, ExternalSettingsHints, GuardrailSettings, TechstackCatalogSettings } from "../types.js";
 import { DEFAULT_DASHBOARD_SETTINGS } from "../../../src/repositories/settings-defaults.js";
+import { cloneDesignGuidanceSettings } from "../../../src/domain/settings/design-guidance-catalog.js";
 
 export { DEFAULT_DASHBOARD_SETTINGS };
 
@@ -57,6 +58,7 @@ export const cloneDefaultSettings = (): DashboardSettings => ({
   },
   techstackCatalog: cloneTechstackCatalog(DEFAULT_DASHBOARD_SETTINGS.techstackCatalog),
   techstack: { ...DEFAULT_DASHBOARD_SETTINGS.techstack },
+  designGuidance: cloneDesignGuidanceSettings(DEFAULT_DASHBOARD_SETTINGS.designGuidance),
   git: { ...DEFAULT_DASHBOARD_SETTINGS.git },
   jira: { ...DEFAULT_DASHBOARD_SETTINGS.jira },
   notion: { ...DEFAULT_DASHBOARD_SETTINGS.notion },

@@ -87,6 +87,7 @@ const knownDockLabels = new Set([
   "Sprints",
   "Tasks",
   "Agents",
+  "Nodes",
   "Stats",
   "Schedule",
   "Memory",
@@ -104,6 +105,7 @@ const knownSidebarLabels = new Set([
   "Sprints",
   "Tasks",
   "Agents",
+  "Nodes",
   "Stats",
   "Schedule",
   "Memory",
@@ -127,13 +129,13 @@ const modeExpectations: Array<{
   },
   {
     mode: "STANDARD",
-    dock: ["Chat", "Overview", "Sprints", "Tasks", "Agents", "Stats", "Browser", "Docs", "Config"],
-    sidebar: ["Chat", "Overview", "Sprints", "Tasks", "Agents", "Stats", "Browser", "Docs", "Settings"],
+    dock: ["Chat", "Overview", "Sprints", "Tasks", "Agents", "Nodes", "Stats", "Browser", "Docs", "Config"],
+    sidebar: ["Chat", "Overview", "Sprints", "Tasks", "Agents", "Nodes", "Stats", "Browser", "Docs", "Settings"],
   },
   {
     mode: "EXPERT",
-    dock: ["Chat", "Overview", "Sprints", "Tasks", "Agents", "Stats", "Schedule", "Memory", "Knowledge", "Browser", "Files", "Live", "Docs", "Config"],
-    sidebar: ["Chat", "Overview", "Sprints", "Tasks", "Agents", "Stats", "Schedule", "Memory", "Knowledge", "Browser", "Files", "Live", "Docs", "Settings"],
+    dock: ["Chat", "Overview", "Sprints", "Tasks", "Agents", "Nodes", "Stats", "Schedule", "Memory", "Knowledge", "Browser", "Files", "Live", "Docs", "Config"],
+    sidebar: ["Chat", "Overview", "Sprints", "Tasks", "Agents", "Nodes", "Stats", "Schedule", "Memory", "Knowledge", "Browser", "Files", "Live", "Docs", "Settings"],
   },
 ];
 

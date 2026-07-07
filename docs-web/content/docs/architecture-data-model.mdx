@@ -17,7 +17,13 @@ Project
 │   │   └── ExecutionInvocation
 │   └── PreviewSession
 ├── AgentPreset
-│   └── SkillStorageBinding
+│   ├── SkillStorageBinding
+│   └── NodeFlowSkillAttachment
+├── NodeFlow
+│   ├── NodeFlowVersion
+│   ├── NodeFlowRun
+│   │   └── NodeFlowNodeRun
+│   └── NodeFlowSkillAttachment
 ├── SkillStorage
 │   ├── Skill
 │   └── SkillEmbedding
@@ -163,6 +169,20 @@ Persistent skills are stored separately from project workspaces, memories, knowl
 | `agent_skill_storage_bindings` | Normalized agent-to-storage attachments keyed by `(agent_preset_id, storage_id)`. |
 
 Skill markdown is imported from YAML-like frontmatter plus a body. Frontmatter maps to metadata; the body remains the authoritative agent instruction. Backend retrieval can search all project storages, one storage, or the storages attached to an agent preset. Enabled attached agents receive provider prompt guidance, retrieval-only `search_skills` MCP access where eligible, and writable persistent-skill mounts outside the project workspace.
+
+## NodeFlow
+
+Node flows are project-scoped repeatable workflow graphs managed from the Nodes dashboard and the `manage_node_flows` MCP tool.
+
+| Table | Purpose |
+| --- | --- |
+| `node_flows` | Current flow title, description, normalized graph JSON, project id, version, and timestamps. |
+| `node_flow_versions` | Immutable graph snapshots written on create and each update. |
+| `node_flow_agent_skills` | Attachments that expose a flow as a repeatable skill for an agent preset. |
+| `node_flow_runs` | Parent run rows with status, version, trigger type, redacted trigger payload, redacted input/output, error message, timestamps, and optional execution invocation link. |
+| `node_flow_node_runs` | Per-node run rows with status, node id, redacted input/output, error message, timestamps, and optional execution invocation link. |
+
+`node_flow_runs.execution_invocation_id` points at the parent `execution_invocations` row with `type = "node_flow"`. Provider and HTTP node rows may also set `node_flow_node_runs.execution_invocation_id` to invocation rows with `type = "node_flow_node"`. Deleting a node flow cascades its versions, attachments, run rows, and node-run rows.
 
 ## Memory
 
