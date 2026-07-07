@@ -105,9 +105,11 @@ Task create/update fields include `title`, `name`, `promptMarkdown`, `descriptio
 | `schedule_chat` | – | `projectId`, `scheduledFor`, `bodyMarkdown` | Schedule a chat message. Optional `threadId`, `connectionId`, `title`, `timezone`, `recurrence`. |
 | `update` | – | `entryId`, update fields | Update scheduler title, status, time, recurrence, or target payload. |
 | `delete` | ✅ | `entryId` | Delete a scheduler entry. |
-| `run_due` | – | optional `now` | Evaluate due entries immediately, mostly for operational verification. |
+| `run_due` | – | optional `now` ISO date override | Evaluate due entries immediately, mostly for operational verification. |
 
 `create` accepts nested targets (`sprintTarget`, `quicksprintTarget`, `chatTarget`) or the flattened fields used by the `schedule_*` aliases. Scheduled chat entries post through the dashboard chat runtime when due, so they can target an existing thread with `threadId` or create/use a titled thread with `title`.
+
+Memory remediation schedules use `targetType: "memory_remediation"` but have their own dedicated `/api/projects/:projectId/scheduler/memory-remediation` HTTP routes separate from the normal scheduler entries.
 
 ---
 
