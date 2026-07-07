@@ -144,6 +144,8 @@ Project and sprint settings own design guidance:
 
 The backend catalog always includes `none`, the generic Code UX award-winning styleguide, additional default styleguides, and a small tech-stack guidance catalog. Saved selections resolve to a known default or custom id; invalid ids fall back to `none`. `hideDefaultStyleguides` only affects presentation and does not remove backend defaults. Existing and imported projects inherit `none`; new local and new remote project initialization writes an explicit project override for the Code UX styleguide. Planning and Project Setup prompts resolve selected entries from effective project settings and omit inactive `none` entries.
 
+The dashboard Guidance panel manages this block through the normal settings save flows. System scope edits `system.defaults.designGuidance`; project scope edits the active project override. Built-in catalog entries can be selected but cannot be edited or deleted. Custom entries can be added, edited, and deleted; deleting a selected custom entry clears that selector back to `none`.
+
 ## `cliWorkflow`
 
 ```jsonc

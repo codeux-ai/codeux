@@ -514,7 +514,22 @@ Manages the system techstack catalog and per-project techstack/application-kind 
 
 **Risks and gotchas:** The built-in `code-ux-internal` stack cannot be removed. Removing a custom stack also clears system-default references to it; project assignments should be reviewed before deleting stacks that are in active use.
 
-Design guidance now complements techstack assignment with project-scoped tech-stack guidance, styleguide guidance, and custom instruction entries. Existing and imported projects default both selections to `None`; new local and new remote project creation explicitly selects the generic Code UX styleguide. Hiding default styleguides only changes what the UI presents and does not delete backend defaults. Selected non-`None` guidance is included in Planning and Project Setup prompts so generated sprint tasks and setup artifacts can follow the active project direction without copying inactive guidance.
+Related docs:
+
+- [Configuration and Storage](/docs/developer-settings-reference)
+- [Settings Reference](/docs/developer-settings-reference)
+
+### Guidance
+
+<a id="guidance"></a>
+
+Manages active tech-stack guidance, active styleguide guidance, and custom instruction entries for the current scope.
+
+**What it controls:** System scope edits default design guidance; project scope edits the active project override. Each section has a selector with `None`, a custom-entry list, and add/edit/delete controls for custom entries. Built-in entries are selectable but protected.
+
+**Recommended defaults:** Keep both selections at `None` until a project needs explicit guidance beyond its repository instructions. Add custom entries for stable team or product guidance that should be reused.
+
+**Risks and gotchas:** `hideDefaultStyleguides` hides built-in styleguides from the dashboard selector while preserving `None`, custom styleguides, and the saved selected id. Deleting a selected custom entry clears that selection back to `None`. Design guidance also feeds the Planning and Project Setup prompts, which resolve the selected entries from effective project settings and omit `None` selections from guidance text.
 
 Related docs:
 

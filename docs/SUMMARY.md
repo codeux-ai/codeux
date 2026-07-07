@@ -74,6 +74,7 @@
 - [Provider Routing](./settings/provider-routing.md)
 - [Chat Provider Integrations](./settings/chat-provider-integrations.md)
 - [Settings Subcategory Reference](./settings/subcategories/index.md)
+  - [Guidance](./settings/subcategories/guidance.md)
 - [Qwen Code Integration](./settings/qwen-code-integration.md)
 - [OpenCode Integration](./settings/opencode-integration.md)
 - Development and validation

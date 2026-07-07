@@ -1,0 +1,26 @@
+# Guidance
+
+Manages active tech-stack guidance, active styleguide guidance, and custom instruction entries for the current settings scope.
+
+## What It Controls
+
+Both system and project scopes edit the `designGuidance` block for that scope. The Tech Stack and Styleguide sections each expose a selector with a `None` option, a custom-entry list, and add/edit/delete controls for custom entries. Built-in entries are selectable but protected from edits and deletion.
+
+Styleguides also include `hideDefaultStyleguides`, which removes built-in styleguides from the dashboard selector while preserving `None` and custom styleguides. The saved selection is not deleted when defaults are hidden.
+
+## Recommended Defaults
+
+Keep both selections at `None` until a project needs explicit guidance beyond its repository instructions. Add custom entries when a team has stable implementation or product-design guidance that should be reused across project or sprint work.
+
+## Risks And Gotchas
+
+Custom ids should stay stable once selected by projects or sprints. Deleting a selected custom entry clears that selection back to `None` for the edited scope. Duplicate custom ids or names are invalid because they make selections ambiguous.
+
+## Dashboard Link
+
+Open this subcategory from the dashboard docs route at `/docs/user/dashboard/settings#guidance`. The Settings card header links to the matching published docs anchor.
+
+## Related Docs
+
+- [Configuration and Storage](../configuration-and-storage.md)
+- [Settings Reference](../../developer/settings-reference.md)
