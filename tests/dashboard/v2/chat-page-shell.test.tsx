@@ -1,6 +1,6 @@
 /** @vitest-environment happy-dom */
 import { describe, expect, it, vi } from "vitest";
-import { render } from "@testing-library/preact";
+import { fireEvent, render } from "@testing-library/preact";
 import { h } from "preact";
 import * as matchers from "@testing-library/jest-dom/matchers";
 /** @jsx h */
@@ -20,6 +20,7 @@ vi.mock("gsap", () => ({
 import { ChatPageShell } from "../../../dashboard/src/v2/components/chat/ChatPageShell.js";
 import { ChatRail } from "../../../dashboard/src/v2/components/chat/ChatRail.js";
 import { EmptyChat } from "../../../dashboard/src/v2/components/chat/ChatEmptyState.js";
+import { ChatCreateAppQuickActions } from "../../../dashboard/src/v2/components/chat/ChatCreateAppQuickActions.js";
 
 const mockProject = {
   id: "proj-1",
@@ -143,5 +144,37 @@ describe("ChatPageShell", () => {
     );
 
     expect(getByText("Network failure")).toBeInTheDocument();
+  });
+
+  it("renders create-app quickactions with accessible labels and disabled status text", () => {
+    const onSelect = vi.fn();
+    const { getByRole, getByText, rerender } = render(
+      <ChatCreateAppQuickActions
+        hasProject={true}
+        sending={false}
+        onSelect={onSelect}
+      />
+    );
+
+    const desktopAction = getByRole("button", { name: "Create Desktop App" });
+    const webAction = getByRole("button", { name: "Create Web App" });
+
+    expect(desktopAction).toBeEnabled();
+    expect(webAction).toBeEnabled();
+    expect(getByText("Create app quick actions are available.")).toHaveAttribute("aria-live", "polite");
+
+    fireEvent.click(desktopAction);
+    expect(onSelect).toHaveBeenCalledWith("desktop_app");
+
+    rerender(
+      <ChatCreateAppQuickActions
+        hasProject={false}
+        sending={false}
+        onSelect={onSelect}
+      />
+    );
+
+    expect(getByRole("button", { name: "Create Desktop App" })).toBeDisabled();
+    expect(getByText("Create app quick actions are unavailable until a project is selected.")).toBeInTheDocument();
   });
 });

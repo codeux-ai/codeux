@@ -16,7 +16,7 @@ Click **Add Project** to import an existing local checkout or Git URL. Imported 
 
 Click **New Project** on the Projects page to initialize a new repository through the same modal. New project initialization does not scaffold application source files in the dashboard; it sends `new-local` or `new-remote` initialization data to the backend repository creation flow.
 
-New project creation always writes an explicit project techstack override. New local projects additionally receive `git.githubMode: LOCAL`; new remote projects do not. To set up a web or desktop app inside an existing project, use the **Web App** or **Desktop App** idle quick action in 3D Chat; those prompts operate in the selected project and use its current techstack setting, leaving an unassigned existing project as `None`.
+New project creation always writes an explicit project techstack override. New local projects additionally receive `git.githubMode: LOCAL`; new remote projects do not. To set up a web or desktop app inside an existing project, use **Create Web App** or **Create Desktop App** in Chat Threads beside the composer. Those quickactions operate in the selected project, create a chat thread when needed, and launch the matching detached quicksprint without opening the new-project modal.
 
 The form collects:
 

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "preact/hooks";
 import type { ChatMessageRecord, ChatThread } from "../types.js";
+import type { DashboardCreateAppQuickactionKind, DashboardCreateAppQuickactionMetadata } from "../types.js";
 import { useMessageCache } from "./useMessageCache.js";
 import {
   createConversationThread,
@@ -114,6 +115,34 @@ export const resolveDisplayDeliveryStatus = (
   return status;
 };
 
+const CREATE_APP_QUICKACTION_TEMPLATE_IDS: Record<DashboardCreateAppQuickactionKind, string> = {
+  web_app: "qs-create-web-app",
+  desktop_app: "qs-create-desktop-app",
+};
+
+const CREATE_APP_QUICKACTION_BODIES: Record<DashboardCreateAppQuickactionKind, string> = {
+  web_app: "Create a web app",
+  desktop_app: "Create a desktop app",
+};
+
+const createQuickactionRequestId = (kind: DashboardCreateAppQuickactionKind): string => {
+  const randomId = typeof globalThis.crypto?.randomUUID === "function"
+    ? globalThis.crypto.randomUUID()
+    : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+  return `dashboard-create-app-${kind}-${randomId}`;
+};
+
+const buildCreateAppQuickactionMetadata = (
+  kind: DashboardCreateAppQuickactionKind,
+): DashboardCreateAppQuickactionMetadata => ({
+  quickaction: {
+    type: "create_app",
+    kind,
+    requestId: createQuickactionRequestId(kind),
+    templateId: CREATE_APP_QUICKACTION_TEMPLATE_IDS[kind],
+  },
+});
+
 export const useChatThreadData = (options: {
   selectedProject: { id: string } | null;
   cache: ReturnType<typeof useMessageCache>;
@@ -217,6 +246,7 @@ export const useChatThreadData = (options: {
     const targetThread = activateOptions?.preferredThread || threadsRef.current.find((thread) => thread.id === threadId) || null;
     const cachedMessages = cache.getMessages(threadId);
     if (cachedMessages) {
+      selectedThreadIdRef.current = threadId;
       setSelectedThreadId(threadId);
       setMessagesSnapshot(cachedMessages);
       setMessagesLoading(false);
@@ -225,6 +255,7 @@ export const useChatThreadData = (options: {
 
     if ((targetThread?.messageCount || 0) === 0) {
       cache.setMessages(threadId, []);
+      selectedThreadIdRef.current = threadId;
       setSelectedThreadId(threadId);
       setMessagesSnapshot([]);
       setMessagesLoading(false);
@@ -232,6 +263,7 @@ export const useChatThreadData = (options: {
     }
 
     if (activateOptions?.foreground) {
+      selectedThreadIdRef.current = threadId;
       setSelectedThreadId(threadId);
       setMessagesSnapshot([]);
       setMessagesLoading(true);
@@ -242,6 +274,7 @@ export const useChatThreadData = (options: {
       if (activationToken !== activationTokenRef.current) {
         return;
       }
+      selectedThreadIdRef.current = threadId;
       setSelectedThreadId(threadId);
       setMessagesSnapshot(nextMessages);
       setError(null);
@@ -474,6 +507,37 @@ export const useChatThreadData = (options: {
     }
   }, [cache, composerRef, createThreadForCompose, execution, input, onMessageSendFailed, onMessageSending, onMessageSent, recordSentMessage, selectedProject, selectedThread, setMessagesSnapshot]);
 
+  const handleCreateAppQuickaction = useCallback(async (kind: DashboardCreateAppQuickactionKind): Promise<void> => {
+    if (!selectedProject || sending) {
+      return;
+    }
+
+    const bodyMarkdown = CREATE_APP_QUICKACTION_BODIES[kind];
+    setSending(true);
+    try {
+      const thread = selectedThread || await createThreadForCompose();
+      const created = await postConversationMessage(selectedProject.id, {
+        threadId: thread.id,
+        bodyMarkdown,
+        metadata: buildCreateAppQuickactionMetadata(kind),
+      });
+      onMessageSent?.({ message: created, optimisticInvocationId: null });
+      const nextMessages = upsertMessage(cache.getMessages(thread.id) || [], created);
+      cache.setMessages(thread.id, nextMessages);
+      if (thread.id === selectedThreadIdRef.current) {
+        setMessagesSnapshot(nextMessages);
+      }
+      setError(null);
+    } catch (sendError) {
+      setError(sendError instanceof Error ? sendError.message : String(sendError));
+      if (composerRef?.current) {
+        composerRef.current.focus();
+      }
+    } finally {
+      setSending(false);
+    }
+  }, [cache, composerRef, createThreadForCompose, onMessageSent, selectedProject, selectedThread, sending, setMessagesSnapshot]);
+
   const handleDeleteThread = useCallback(async (threadId: string): Promise<void> => {
     const nextThreads = removeThread(cache.getThreads(selectedProject?.id || "") || threadsRef.current, threadId);
     const userNextThreads = nextThreads.filter((t) => t.scope === "project");
@@ -526,6 +590,7 @@ export const useChatThreadData = (options: {
     createThreadForCompose,
     handleCompactThread,
     handleSend,
+    handleCreateAppQuickaction,
     navigateHistory,
     handleDeleteThread,
     handleRenameThread,
