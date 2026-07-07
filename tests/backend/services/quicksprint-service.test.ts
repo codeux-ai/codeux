@@ -14,6 +14,7 @@ describe("QuicksprintService", () => {
   let service: QuicksprintService;
   let createSprintMock: ReturnType<typeof vi.fn>;
   let planSprintMock: ReturnType<typeof vi.fn>;
+  let loggerWarnMock: ReturnType<typeof vi.fn>;
 
   const projectId = "test-project-id";
   const projectBaseDirResolver = (id: string) => `/mocked/base/dir/${id}`;
@@ -56,8 +57,15 @@ describe("QuicksprintService", () => {
     } as SprintRecord));
 
     planSprintMock = vi.fn().mockResolvedValue({ status: "accepted" });
+    loggerWarnMock = vi.fn();
 
-    service = new QuicksprintService(projectBaseDirResolver, createSprintMock, planSprintMock);
+    service = new QuicksprintService(
+      projectBaseDirResolver,
+      createSprintMock,
+      planSprintMock,
+      undefined,
+      { logger: { info: vi.fn(), warn: loggerWarnMock } },
+    );
   });
 
   describe("listTemplates", () => {
@@ -273,6 +281,29 @@ describe("QuicksprintService", () => {
       }, undefined);
     });
 
+    it("should still wait for planning before returning", async () => {
+      let resolvePlanning: (() => void) | undefined;
+      planSprintMock.mockReturnValueOnce(new Promise((resolve) => {
+        resolvePlanning = () => resolve({ status: "accepted" });
+      }));
+
+      let returned = false;
+      const promise = service.executeQuicksprint(projectId, {
+        templateId: BUILTIN_QUICKSPRINT_TEMPLATES[0].id,
+        taskCount: 3,
+        submitMode: "plan_only",
+      }).then(() => {
+        returned = true;
+      });
+
+      await vi.waitFor(() => expect(planSprintMock).toHaveBeenCalledTimes(1));
+      expect(returned).toBe(false);
+
+      resolvePlanning?.();
+      await promise;
+      expect(returned).toBe(true);
+    });
+
     it("should let the planner choose the number of subtasks when noTaskLimit is set", async () => {
       const templateId = BUILTIN_QUICKSPRINT_TEMPLATES[0].id;
 
@@ -299,6 +330,135 @@ describe("QuicksprintService", () => {
           submitMode: "plan_only",
         })
       ).rejects.toThrowError(/not found/);
+    });
+  });
+
+  describe("launchDetachedQuicksprint", () => {
+    it("should return the created sprint before planning finishes", async () => {
+      planSprintMock.mockReturnValueOnce(new Promise(() => undefined));
+
+      const result = await service.launchDetachedQuicksprint(projectId, {
+        templateId: BUILTIN_QUICKSPRINT_TEMPLATES[0].id,
+        taskCount: 2,
+        submitMode: "plan_only",
+      });
+
+      expect(result.sprint.id).toBe("mocked-sprint-id");
+      expect(result.planningRequest).toEqual({
+        projectId,
+        sprintId: "mocked-sprint-id",
+        templateId: BUILTIN_QUICKSPRINT_TEMPLATES[0].id,
+        submitMode: "plan_only",
+        clientRequestId: "quicksprint:mocked-sprint-id:planning",
+        planOptions: {
+          autoStart: false,
+          replan: false,
+          clientRequestId: "quicksprint:mocked-sprint-id:planning",
+          overrides: undefined,
+        },
+      });
+      expect(planSprintMock).toHaveBeenCalledWith(projectId, "mocked-sprint-id", {
+        autoStart: false,
+        replan: false,
+        clientRequestId: "quicksprint:mocked-sprint-id:planning",
+        overrides: undefined,
+      });
+    });
+
+    it("should set autoStart for plan_and_start launches", async () => {
+      await service.launchDetachedQuicksprint(projectId, {
+        templateId: BUILTIN_QUICKSPRINT_TEMPLATES[0].id,
+        taskCount: 2,
+        submitMode: "plan_and_start",
+        clientRequestId: "request-123",
+      });
+
+      expect(planSprintMock).toHaveBeenCalledWith(projectId, "mocked-sprint-id", {
+        autoStart: true,
+        replan: false,
+        clientRequestId: "request-123",
+        overrides: undefined,
+      });
+    });
+
+    it("should compose additionalPrompt into the same sprint goal used by awaited execution", async () => {
+      const templateId = BUILTIN_QUICKSPRINT_TEMPLATES[0].id;
+      const additionalPrompt = "Focus on API reliability.";
+
+      await service.launchDetachedQuicksprint(projectId, {
+        templateId,
+        taskCount: 4,
+        submitMode: "plan_only",
+        additionalPrompt,
+      });
+
+      expect(createSprintMock).toHaveBeenCalledWith(projectId, {
+        name: `QS: ${BUILTIN_QUICKSPRINT_TEMPLATES[0].name}`,
+        goal: `${BUILTIN_QUICKSPRINT_TEMPLATES[0].agentInstructionMarkdown}\n\n## Additional Instructions\n\n${additionalPrompt}\n\nProduce exactly 4 subtasks.`,
+        showcasePinned: true,
+      });
+    });
+
+    it("should preserve planningOverrides and modelOverride precedence for detached planning", async () => {
+      const planningOverrides = {
+        virtualProvider: "codex",
+        virtualModel: "gpt-5",
+      } as const;
+
+      await service.launchDetachedQuicksprint(projectId, {
+        templateId: BUILTIN_QUICKSPRINT_TEMPLATES[0].id,
+        taskCount: 2,
+        submitMode: "plan_only",
+        modelOverride: "ignored-model",
+        planningOverrides,
+      });
+
+      expect(planSprintMock).toHaveBeenCalledWith(projectId, "mocked-sprint-id", {
+        autoStart: false,
+        replan: false,
+        clientRequestId: "quicksprint:mocked-sprint-id:planning",
+        overrides: planningOverrides,
+      });
+    });
+
+    it("should use modelOverride for detached planning when planningOverrides are absent", async () => {
+      await service.launchDetachedQuicksprint(projectId, {
+        templateId: BUILTIN_QUICKSPRINT_TEMPLATES[0].id,
+        taskCount: 2,
+        submitMode: "plan_only",
+        modelOverride: "gpt-4.1",
+      });
+
+      expect(planSprintMock).toHaveBeenCalledWith(projectId, "mocked-sprint-id", {
+        autoStart: false,
+        replan: false,
+        clientRequestId: "quicksprint:mocked-sprint-id:planning",
+        overrides: {
+          virtualModel: "gpt-4.1",
+        },
+      });
+    });
+
+    it("should log detached planning failures without rejecting the launch", async () => {
+      const planningError = new Error("Planning failed");
+      planSprintMock.mockRejectedValueOnce(planningError);
+
+      await expect(service.launchDetachedQuicksprint(projectId, {
+        templateId: BUILTIN_QUICKSPRINT_TEMPLATES[0].id,
+        taskCount: 2,
+        submitMode: "plan_only",
+      })).resolves.toMatchObject({
+        sprint: { id: "mocked-sprint-id" },
+      });
+
+      await Promise.resolve();
+      expect(loggerWarnMock).toHaveBeenCalledWith("Detached quicksprint planning failed", {
+        error: planningError,
+        projectId,
+        sprintId: "mocked-sprint-id",
+        templateId: BUILTIN_QUICKSPRINT_TEMPLATES[0].id,
+        clientRequestId: "quicksprint:mocked-sprint-id:planning",
+      });
     });
   });
 
