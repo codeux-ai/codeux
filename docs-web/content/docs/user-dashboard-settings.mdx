@@ -610,13 +610,13 @@ Related docs:
 
 <a id="integrations"></a>
 
-Lists provider, git-host, and issue-tracker integrations and exposes manage/add actions.
+Lists provider, git-host, issue-tracker, and read-only importer integrations and exposes manage/add actions.
 
-**What it controls:** Cards show connection state, auth hints, and management entry points; host hints can import detected local settings.
+**What it controls:** Cards show connection state, active/configured status, auth hints, and management entry points; host hints can import detected local settings. Notion, Asana, and Linear live in PM, while Miro, Lucid/Lucidspark, Figma/FigJam, and Mural live in CANVAS.
 
-**Recommended defaults:** Configure provider credentials at system scope and use project overrides only for repository-specific git hosts.
+**Recommended defaults:** Configure provider and importer credentials at system scope and use project overrides only for repository-specific git hosts or project-specific importer defaults.
 
-**Risks and gotchas:** Imported hints can reveal local auth paths; verify before saving shared configuration.
+**Risks and gotchas:** Imported hints can reveal local auth paths; broad importer tokens can expose external workspaces to search, so verify before saving shared configuration.
 
 Related docs:
 
@@ -668,6 +668,23 @@ Connects Jira issue search, import transitions, and completion transitions.
 **Recommended defaults:** Use a dedicated API token and test transition names against the target Jira workflow.
 
 **Risks and gotchas:** Wrong transition names prevent issue movement; broad tokens expose more Jira scope than needed.
+
+Related docs:
+
+- [Sprint Imports](/docs/user-dashboard-sprints)
+- [Security Hardening](/docs/user-troubleshooting)
+
+### Importer Configuration
+
+<a id="importer-configuration"></a>
+
+Configures read-only external work imports for Notion, Asana, Linear, Miro, Lucid/Lucidspark, Figma/FigJam, and Mural.
+
+**What it controls:** Enablement, API token, optional secret, base URL, provider-specific default workspace/team/project/database/board/document/file identifiers, and search limit decide when each importer is active.
+
+**Recommended defaults:** Store shared credentials at system scope. Use project overrides only when one project needs different default IDs or a different read-only token.
+
+**Risks and gotchas:** These importers attach external context to sprints but do not write back to the provider. Use read-only or least-privilege tokens where the provider supports them.
 
 Related docs:
 
