@@ -112,6 +112,7 @@ Providers is the reliability studio.
 Ledgers contains operational records for tasks, sprints, and Git.
 
 - Task Telemetry, Sprint Telemetry, and Git Telemetry are real tabs with accessible tab semantics, stable labels, and count badges.
+- Ledger tablists, summary tiles, search/sort controls, progressive sentinels, empty states, task/sprint rows, and Git leaderboard rows use the flat Stats panel, subpanel, chip, input, and ledger-row primitives. Do not reintroduce backdrop blur, heavy shadows, hover lift, or oversized rounded shells in these dense scanning areas.
 - Task and sprint rows expose status, provider, purpose, calls, active time, cost, recency, visible-total share, leader share, token-flow anatomy, and p50/p95 chips when percentile fields are present.
 - Git rows keep churn separate from token flow. Use `ChurnFlowBar` for insertions and deletions, and keep pull requests, merges, files, conflicts, visible share, and leader share readable.
 - Search, sort, and progressive rendering preserve the `useProgressiveList` flow: visible items, scroll container, and sentinel stay wired together.
@@ -126,6 +127,7 @@ System is the administrative invocation workbench. It is the place to inspect sp
 
 - `useSystemViewData(projectId)` owns filters, sorting, summaries, pagination, request cancellation, and the legacy array fallback used by older tests.
 - Summary sections are named administrative regions: `Sprint State`, `Health Snapshot`, `External API Activity`, and `Error Categories`. Each region uses the same panel frame, compact eyebrow, section-level count, and subpanel metric cards so operators can scan state before entering the ledger.
+- System summary cards, filters, invocation table rows, sticky headers, loading rows, and transcript panels share the same flat Stats primitives as Ledgers. Keep the workbench compact and bordered, with semantic status fills only where the data state requires them.
 - Sprint State separates active sprint/task state from invocation health. Zero active sprint is neutral information, while running, blocked, failed, and completed signals use semantic status fills rather than decorative color.
 - Invocation Health owns invocation volume, token flow, success rate, average and p95 duration, cache-hit rate, running count, and status distribution. Empty or reduced health data is a polite status state and must not imply universal success.
 - External API Activity isolates classified Git, Code UX Agent, Jira, and other integration calls from model invocation records. Empty copy should say that no external API activity was classified, not that integrations never ran.
