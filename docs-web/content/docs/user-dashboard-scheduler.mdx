@@ -27,6 +27,11 @@ entries are stored in the existing target JSON payload with `origin` and `source
 through the chat runtime with scheduler metadata, and task reruns reuse the normal task rerun
 service so workspaces, telemetry, and cancellation behavior stay consistent.
 
+Active agent-created wakeups and task runs also appear outside the Scheduler page: the top bar shows
+a scheduled-agent count for the selected project, and focusing or hovering it reveals the target
+type, title, scheduled time or anchor, target summary, and status. The same entries are projected
+into Notifications with stable scheduler-entry IDs, so read and dismissed state survives refreshes.
+
 ## Recurrence
 
 An entry can run once at a specific time or repeat on a **recurrence rule** (for example daily or
