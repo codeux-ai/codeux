@@ -11,6 +11,7 @@ export interface AppConfig {
   dashboardPort: number;
   apiKeyArg: string | null;
   runtimeRole: "project_manager";
+  serverMode: boolean;
   dashboardEnabled: boolean;
   mcpHttpEnabled: boolean;
   mcpHttpHost: string;
@@ -108,6 +109,11 @@ export const hasHeadlessArg = (argv: string[]): boolean => {
   return args.includes("--headless") || args.includes("--no-dashboard");
 };
 
+export const hasServerModeArg = (argv: string[]): boolean => {
+  const args = argv.slice(2);
+  return args.includes("--server-mode") || args.includes("--server");
+};
+
 /**
  * Resolves the API key from environment variables or settings files.
  * Precedence: Env > .code-ux/settings.json
@@ -178,6 +184,16 @@ export const dashboardPortLoader = (projectRoot: string): number => {
 };
 
 const mcpHttpPortLoader = (argv: string[], projectRoot: string, dashboardPort: number): number | null => {
+  const explicitDisable = hasFlag(argv, "--no-mcp") ||
+    hasFlag(argv, "--no-mcp-https") ||
+    hasFlag(argv, "--no-mcp-http") ||
+    parseBooleanEnv(process.env.MCP_HTTPS_ENABLED) === false ||
+    parseBooleanEnv(process.env.MCP_HTTP_ENABLED) === false;
+
+  if (explicitDisable) {
+    return null;
+  }
+
   const cliPort = readPort(parseStringFlag(argv, "--mcp-https-port") ?? parseStringFlag(argv, "--mcp-http-port"), -1);
   if (cliPort !== -1) {
     return cliPort;
@@ -214,13 +230,7 @@ const mcpHttpPortLoader = (argv: string[], projectRoot: string, dashboardPort: n
     }
   }
 
-  const explicitDisable = hasFlag(argv, "--no-mcp") ||
-    hasFlag(argv, "--no-mcp-https") ||
-    hasFlag(argv, "--no-mcp-http") ||
-    parseBooleanEnv(process.env.MCP_HTTPS_ENABLED) === false ||
-    parseBooleanEnv(process.env.MCP_HTTP_ENABLED) === false;
-
-  return explicitDisable ? null : dashboardPort + 1;
+  return dashboardPort + 1;
 };
 
 /**
@@ -232,7 +242,8 @@ export const loadAppConfig = (argv: string[], projectRoot: string): AppConfig =>
   const baseUrl = process.env.JULES_API_BASE_URL || "https://jules.googleapis.com/v1alpha";
   const dashboardPort = dashboardPortLoader(projectRoot);
   const runtimeRole = parseRuntimeRoleArg(argv);
-  const dashboardEnabled = !hasHeadlessArg(argv);
+  const serverMode = hasServerModeArg(argv) || parseBooleanEnv(process.env.CODE_UX_SERVER_MODE) === true;
+  const dashboardEnabled = !serverMode && !hasHeadlessArg(argv);
   const explicitMcpHttpHost = parseStringFlag(argv, "--mcp-https-host")?.trim()
     || parseStringFlag(argv, "--mcp-http-host")?.trim()
     || process.env.MCP_HTTPS_HOST?.trim()
@@ -255,6 +266,14 @@ export const loadAppConfig = (argv: string[], projectRoot: string): AppConfig =>
     || null;
   const mcpHttpAuthToken = explicitMcpHttpAuthToken;
 
+  if (serverMode && !mcpHttpEnabled) {
+    throw new Error("Server mode requires the MCP HTTPS transport to be enabled. Remove --no-mcp-https or set MCP_HTTPS_ENABLED=true.");
+  }
+
+  if (serverMode && !mcpHttpAuthToken) {
+    throw new Error("Server mode requires an MCP HTTPS auth token. Set --mcp-https-auth-token or MCP_HTTPS_AUTH_TOKEN.");
+  }
+
   if (mcpHttpEnabled && !isLoopbackHost(mcpHttpHost) && !mcpHttpAuthToken) {
     throw new Error("MCP HTTPS auth token is required when binding the MCP HTTPS server to a non-loopback host.");
   }
@@ -265,6 +284,7 @@ export const loadAppConfig = (argv: string[], projectRoot: string): AppConfig =>
     dashboardPort,
     apiKeyArg,
     runtimeRole,
+    serverMode,
     dashboardEnabled,
     mcpHttpEnabled,
     mcpHttpHost,

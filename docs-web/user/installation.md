@@ -64,14 +64,19 @@ Run `codeux --help` for the authoritative list. The current flags are:
 | Flag | Description |
 | --- | --- |
 | `--api-key VALUE` | Set the Jules API key (overrides env and settings). |
-| `--runtime-role VALUE` | Runtime role: `project_manager` (default) or `worker-host`. |
+| `--runtime-role VALUE` | Runtime role: `project_manager` (default). |
 | `--headless` (alias `--no-dashboard`) | Start MCP-only without binding the dashboard. |
+| `--server-mode` (alias `--server`) | Start a dashboard-free server instance with authenticated MCP HTTPS. |
 | `--mcp-https` / `--no-mcp-https` | Enable/disable the remote MCP HTTPS worker gateway (**enabled by default**). |
 | `--mcp-https-port N` | Port for the MCP HTTPS worker gateway. |
 | `--mcp-https-host H` | Host/interface for the MCP HTTPS worker gateway. |
 | `--mcp-https-path P` | Path for the MCP HTTPS worker gateway (default `/mcp`). |
-| `--mcp-https-auth-token VALUE` | Bearer token required for MCP HTTPS requests on a non-loopback host. |
+| `--mcp-https-auth-token VALUE` | Bearer token for MCP HTTPS requests; required for server mode and for non-loopback hosts. |
 | `--help`, `-h` | Show help. |
+
+`--server-mode` implies `--headless`, requires MCP HTTPS to remain enabled, and requires a bearer
+token for every bind host including loopback. Plain `--headless` outside server mode keeps the
+existing local-development behavior, including unauthenticated loopback MCP HTTPS when configured.
 
 ## Environment variables
 
@@ -79,6 +84,7 @@ Run `codeux --help` for the authoritative list. The current flags are:
 | --- | --- |
 | `JULES_API_KEY` | Jules API key (also accepted as `JULES_KEY`). |
 | `DASHBOARD_PORT` | Dashboard port (default `4444`). |
+| `CODE_UX_SERVER_MODE` | Set `true` to start dashboard-free authenticated server mode. |
 | `MCP_HTTPS_ENABLED` | Enable the MCP HTTPS worker gateway (default `true`). |
 | `MCP_HTTPS_PORT` | Port for the MCP HTTPS worker gateway. |
 | `MCP_HTTPS_HOST` | Host/interface for the MCP HTTPS worker gateway. |

@@ -853,6 +853,42 @@ describe("CodeUxServer", () => {
       refreshJulesApiKeySpy.mockRestore();
     }, 30000);
 
+    it("does not bind the dashboard in authenticated server mode", async () => {
+      await runServer.close();
+      const serverModeConfig = loadAppConfig([
+        "node",
+        "index.js",
+        "--server-mode",
+        "--mcp-https-port",
+        "5555",
+        "--mcp-https-host",
+        "127.0.0.1",
+        "--mcp-https-auth-token",
+        "present",
+      ], projectRoot);
+      runServer = new CodeUxServer({ projectRoot, appConfig: serverModeConfig });
+
+      const { bootSettings } = await import("../../../src/app/lifecycle/settings-lifecycle-service.js");
+      const { bootDashboard } = await import("../../../src/app/lifecycle/dashboard-lifecycle-service.js");
+      const { bootMcpTransport, bootMcpHttpTransport } = await import("../../../src/app/lifecycle/mcp-lifecycle-service.js");
+
+      vi.spyOn(runServer as any, "refreshJulesApiKey").mockImplementation(() => {});
+
+      await runServer.run();
+
+      expect(bootSettings).toHaveBeenCalled();
+      expect(bootDashboard).not.toHaveBeenCalled();
+      expect(bootMcpTransport).toHaveBeenCalled();
+      expect(bootMcpHttpTransport).toHaveBeenCalledWith(expect.objectContaining({
+        enabled: true,
+        host: "127.0.0.1",
+        port: 5555,
+        path: "/mcp",
+        authToken: "present",
+      }));
+      expect((runServer as any).isDashboardEnabled()).toBe(false);
+    }, 30000);
+
 
 
 

@@ -28,7 +28,12 @@ Loaded by `loadAppConfig` (`src/config/app-config.ts`) given `process.argv` and 
 | `mcpHttp.path` | `--mcp-https-path` CLI → `MCP_HTTPS_PATH` env → `/mcp` |
 | `mcpHttp.authToken` | `--mcp-https-auth-token` CLI → `MCP_HTTPS_AUTH_TOKEN` env → unset |
 | `runtimeRole` | `--runtime-role` CLI → `project_manager` |
-| `headless` | `--headless` or `--no-dashboard` CLI → `false` |
+| `serverMode` | `--server-mode` / `--server` CLI → `CODE_UX_SERVER_MODE=true` env → `false` |
+| `dashboardEnabled` | `serverMode` forces `false`; otherwise `--headless` / `--no-dashboard` forces `false`; default `true` |
+
+Server mode is a startup contract for dashboard-free remote MCP operation. It rejects disabled MCP
+HTTP and rejects missing bearer tokens for every bind host, including loopback. Outside server mode,
+the existing loopback MCP HTTP development allowance remains available.
 
 ### Config search path
 
