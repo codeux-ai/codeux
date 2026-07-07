@@ -25,19 +25,27 @@ argument arrays with bounded output capture. Onboarding invokes installation thr
 
 | Platform | Recommended mode | Automated behavior | Manual or degraded behavior |
 | --- | --- | --- | --- |
-| **macOS** | `docker-desktop-git` | Uses Homebrew to install Docker Desktop and Git when Homebrew is available. | `docker-engine-git` is degraded because standalone Docker Engine needs a Linux VM; use Docker Desktop unless you manage that VM yourself. |
-| **Windows** | `docker-desktop-git` | Uses winget exact package installs for Docker Desktop and Git. | `docker-engine-git` is degraded with WSL/Docker Desktop guidance. |
-| **Linux** | `docker-engine-git` | Uses a supported package manager (`apt`, `dnf`, `yum`, `zypper`, or `pacman`) to install Docker Engine packages and Git, then attempts to start Docker with `systemctl` when available. | `docker-desktop-git` only automates Git and points to Docker's official distro-specific Desktop downloads. |
+| **macOS** | `docker-desktop-git` | Uses Homebrew to install Docker Desktop and Git when Homebrew is available. | `docker-engine-git` is degraded because standalone Docker Engine requires a Linux VM; use Docker Desktop unless you manage that VM yourself. |
+| **Windows** | `docker-desktop-git` | Uses winget exact package installs for Docker Desktop and Git, including package/source agreement flags. | `docker-engine-git` is degraded because Docker Engine is not installed directly on Windows desktops; use Docker Desktop or WSL guidance instead. |
+| **Linux** | `docker-engine-git` | Uses `apt`, `dnf`, `yum`, `zypper`, or `pacman` to install Docker Engine packages and Git, then attempts to start Docker with `systemctl` when available. | Linux Docker Desktop artifacts are distro-specific, so `docker-desktop-git` automates Git when possible and points to Docker's official Desktop download guidance. |
 
 Linux privilege handling is noninteractive. Root runs package commands directly; non-root runs use
 `sudo -n`. If passwordless sudo is unavailable, Code UX returns the display commands and privilege
 guidance instead of prompting for a password.
 
 In onboarding, missing Docker/Git checks show an explicit **Auto Install dependencies** action when
-the recommended installer is available. Clicking it lets Code UX run the detected OS package manager
-for Docker and Git. The same step also keeps advanced **Docker Desktop + Git** and **Docker Engine +
-Git** choices visible with platform availability, degraded/manual-download guidance, privilege notes,
-live progress, command summaries, retry, recheck, and manual Docker/Git links for fallback.
+the recommended installer is available. Clicking it sends the recommended confirmed installer mode and
+lets Code UX run the detected OS package manager for Docker and Git. The same step also keeps advanced
+**Docker Desktop + Git** and **Docker Engine + Git** choices visible with platform availability,
+degraded/manual-download guidance, privilege notes, live progress, command summaries, retry, recheck,
+and manual Docker/Git links for fallback.
+
+Installer attempts do not mark onboarding complete. After any completed installer response, including
+permission-limited or manual-download outcomes, onboarding shows the structured result and rechecks
+readiness so Docker CLI, Docker daemon, and Git status refresh. You may still need to refresh your
+terminal PATH, start Docker Desktop or the Docker Engine daemon, add your user to the Docker group, or
+rerun from an elevated shell. Permission failures are shown as guidance with bounded command summaries,
+not as raw full command output.
 
 ## Option 1 — Desktop app (recommended)
 
