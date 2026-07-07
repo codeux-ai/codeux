@@ -2,6 +2,7 @@
  * @vitest-environment jsdom
  */
 import { h } from "preact";
+import { useRef, useState } from "preact/hooks";
 import { readFileSync } from "node:fs";
 import { describe, it, expect, afterEach, vi } from "vitest";
 import { render, screen, cleanup, fireEvent, waitFor } from "@testing-library/preact";
@@ -11,7 +12,7 @@ import { SprintKeyEditor } from "../SprintKeyEditor";
 import { TextInput, SecretInput, NumberInput, TextAreaInput, PillChoiceGroup, SelectInput } from "../SettingsFormFields";
 
 
-import { SettingsCategoryRail } from "../SettingsCategoryRail";
+import { SettingsCategoryRail, CATEGORIES } from "../SettingsCategoryRail";
 import { SettingsScopeControls } from "../SettingsScopeControls";
 import { ActionButton, NoticePanel } from "../SettingsSurface";
 import { OverrideBadge } from "../panels/SharedPanelComponents";
@@ -23,6 +24,7 @@ import { SettingsActivePanelStatus } from "../SettingsActivePanelStatus";
 import { SettingsContentPanels } from "../SettingsContentPanels";
 import { UnsavedChangesModal } from "../../ui/UnsavedChangesModal";
 import { ProviderInstanceCard } from "../ProviderInstanceCard";
+import { SettingsSmartFindSearch } from "../../../SettingsPage";
 
 const defaultInnerHeight = window.innerHeight;
 const interactionStyle = { transitionDuration: "200ms", transitionTimingFunction: "ease" };
@@ -48,6 +50,22 @@ const renderSettingsScopeControls = (overrides: Partial<Parameters<typeof Settin
     {...overrides}
   />,
 );
+
+const renderSettingsSmartFindSearch = (overrides: Partial<Parameters<typeof SettingsSmartFindSearch>[0]> = {}) => {
+  const defaultProps: Parameters<typeof SettingsSmartFindSearch>[0] = {
+    settingsSearch: "",
+    setSettingsSearch: () => {},
+    searchInputRef: { current: null },
+    filteredCategories: CATEGORIES,
+    settingsSearchMatches: {},
+    activeCategory: "general",
+    activeCategoryConfig: CATEGORIES[0],
+    onSwitchCategory: () => {},
+    interactionStyle,
+  };
+
+  return render(<SettingsSmartFindSearch {...defaultProps} {...overrides} />);
+};
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -209,6 +227,112 @@ vi.mock("../panels/SettingsGeneralPanel", () => ({
 
     expect(screen.getByText(/No categories match "zzzz"/)).toBeInTheDocument();
     expect(screen.getByText(/Keep the search field focused/)).toBeInTheDocument();
+  });
+
+  it("SettingsSmartFindSearch keeps idle status quiet while preserving the category count for assistive technology", () => {
+    renderSettingsSmartFindSearch();
+
+    expect(screen.getByText("Press slash to search settings.")).toBeInTheDocument();
+    expect(screen.getByText("10 settings categories available.")).toHaveClass("sr-only");
+    expect(screen.queryByText("10 settings categories available. Press slash to search.")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Clear settings search" })).not.toBeInTheDocument();
+    expect(screen.getByText("/")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Appearance" })).toBeInTheDocument();
+  });
+
+  it("SettingsSmartFindSearch announces active matches with counts, active category, and previews", () => {
+    const modelsCategory = CATEGORIES.find((category) => category.id === "models")!;
+    const integrationsCategory = CATEGORIES.find((category) => category.id === "integrations")!;
+    const settingsSearchMatches: SettingsSearchMatches = {
+      models: {
+        categoryId: "models",
+        matchedLabels: ["Claude Code"],
+        matchedDescriptions: [],
+        matchedTerms: ["routing"],
+      },
+      integrations: {
+        categoryId: "integrations",
+        matchedLabels: [],
+        matchedDescriptions: ["API keys"],
+        matchedTerms: [],
+      },
+    };
+
+    renderSettingsSmartFindSearch({
+      settingsSearch: "claude",
+      filteredCategories: [modelsCategory, integrationsCategory],
+      settingsSearchMatches,
+      activeCategory: "models",
+      activeCategoryConfig: modelsCategory,
+    });
+
+    expect(screen.getByRole("status")).toHaveTextContent(
+      '3 results across 2 matching categories for "claude". Active category: AI Models. Active matches: Claude Code, routing. Match previews: Claude Code, routing, API keys.',
+    );
+    expect(screen.getByLabelText("Smart Find match previews")).toHaveTextContent("Claude Code");
+    expect(screen.getByRole("button", { name: "Integrations" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Appearance" })).not.toBeInTheDocument();
+  });
+
+  it("SettingsSmartFindSearch announces active no-match searches without hiding recovery context", () => {
+    renderSettingsSmartFindSearch({
+      settingsSearch: "zzzz",
+      filteredCategories: [],
+      settingsSearchMatches: {},
+    });
+
+    expect(screen.getByRole("status")).toHaveTextContent(
+      '0 results across 0 matching categories for "zzzz". Active category: General. Match previews: none. Clear the search or try routing, provider, auth, CI, agent, or memory.',
+    );
+    expect(screen.queryByLabelText("Smart Find match previews")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Appearance" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Clear settings search" })).toBeInTheDocument();
+  });
+
+  it("SettingsSmartFindSearch clear button restores focus and removes search-only chips", async () => {
+    const user = userEvent.setup();
+    const integrationsCategory = CATEGORIES.find((category) => category.id === "integrations")!;
+    const settingsSearchMatches: SettingsSearchMatches = {
+      integrations: {
+        categoryId: "integrations",
+        matchedLabels: ["Claude Code"],
+        matchedDescriptions: [],
+        matchedTerms: [],
+      },
+    };
+
+    const SmartFindHarness = () => {
+      const [settingsSearch, setSettingsSearch] = useState("claude");
+      const searchInputRef = useRef<HTMLInputElement>(null);
+      const searchActive = settingsSearch.trim().length > 0;
+
+      return (
+        <SettingsSmartFindSearch
+          settingsSearch={settingsSearch}
+          setSettingsSearch={setSettingsSearch}
+          searchInputRef={searchInputRef}
+          filteredCategories={searchActive ? [integrationsCategory] : CATEGORIES}
+          settingsSearchMatches={searchActive ? settingsSearchMatches : {}}
+          activeCategory="general"
+          activeCategoryConfig={CATEGORIES[0]}
+          onSwitchCategory={() => {}}
+          interactionStyle={interactionStyle}
+        />
+      );
+    };
+
+    render(<SmartFindHarness />);
+
+    const searchInput = screen.getByRole("textbox", { name: "Search settings categories" });
+    await user.click(screen.getByRole("button", { name: "Clear settings search" }));
+
+    expect(searchInput).toHaveFocus();
+    expect(searchInput).toHaveValue("");
+    expect(screen.queryByRole("button", { name: "Clear settings search" })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Smart Find match previews")).not.toBeInTheDocument();
+    expect(screen.queryByText("Claude Code")).not.toBeInTheDocument();
+    expect(screen.getByText("Press slash to search settings.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Appearance" })).toBeInTheDocument();
   });
 
   it("SettingsCategoryRail exposes pending and disabled category states without selected or pending badges", () => {
