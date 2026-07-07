@@ -1,6 +1,6 @@
 import type { FunctionComponent } from "preact";
 import { useCallback, useEffect, useMemo, useState } from "preact/hooks";
-import { AlertTriangle, LayoutDashboard, RefreshCw, Save } from "lucide-preact";
+import { AlertTriangle, ExternalLink, LayoutDashboard, RefreshCw, Save } from "lucide-preact";
 import { PageContainer } from "./components/layout/PageContainer.js";
 import { PageHeader } from "./components/layout/PageHeader.js";
 import { Button } from "./components/ui/Button.js";
@@ -38,6 +38,7 @@ import {
   type CustomDashboardEditorTab,
 } from "./components/custom-dashboards/CustomDashboardEditorPanel.js";
 import { CustomDashboardValidationPanel } from "./components/custom-dashboards/CustomDashboardValidationPanel.js";
+import { CustomDashboardViewer } from "./components/custom-dashboards/CustomDashboardViewer.js";
 import type {
   CreateCustomDashboardRevisionInput,
   CustomDashboardDataSourceNodeGraph,
@@ -51,6 +52,19 @@ import type {
 } from "./types.js";
 
 const terminalValidationStatuses = new Set(["passed", "failed", "cancelled"]);
+
+type CustomDashboardPageMode = "editor" | "viewer";
+
+function getInitialDashboardPageState(): { dashboardId: string | null; mode: CustomDashboardPageMode } {
+  if (typeof window === "undefined") {
+    return { dashboardId: null, mode: "editor" };
+  }
+  const params = new URLSearchParams(window.location.search);
+  return {
+    dashboardId: params.get("dashboard"),
+    mode: params.get("mode") === "viewer" ? "viewer" : "editor",
+  };
+}
 
 function dashboardToDraft(dashboard: CustomDashboardRecord): CustomDashboardDraftState {
   return {
@@ -66,8 +80,10 @@ function dashboardToDraft(dashboard: CustomDashboardRecord): CustomDashboardDraf
 export const CustomDashboardsPage: FunctionComponent = () => {
   const { selectedProject, loading: projectLoading } = useProjectData();
   const projectId = selectedProject?.id ?? null;
+  const initialPageState = useMemo(() => getInitialDashboardPageState(), []);
   const [dashboards, setDashboards] = useState<CustomDashboardRecord[]>([]);
-  const [selectedDashboardId, setSelectedDashboardId] = useState<string | null>(null);
+  const [selectedDashboardId, setSelectedDashboardId] = useState<string | null>(initialPageState.dashboardId);
+  const [pageMode, setPageMode] = useState<CustomDashboardPageMode>(initialPageState.mode);
   const [selectedDashboard, setSelectedDashboard] = useState<CustomDashboardRecord | null>(null);
   const [revisions, setRevisions] = useState<CustomDashboardRevisionRecord[]>([]);
   const [selectedRevisionId, setSelectedRevisionId] = useState<string | null>(null);
@@ -115,6 +131,8 @@ export const CustomDashboardsPage: FunctionComponent = () => {
       setSelectedDashboardId((current) => (
         current && listResponse.dashboards.some((dashboard) => dashboard.id === current)
           ? current
+          : initialPageState.dashboardId && listResponse.dashboards.some((dashboard) => dashboard.id === initialPageState.dashboardId)
+            ? initialPageState.dashboardId
           : listResponse.dashboards[0]?.id ?? null
       ));
       if (listResponse.dashboards.length === 0) {
@@ -132,7 +150,7 @@ export const CustomDashboardsPage: FunctionComponent = () => {
         setLoading(false);
       }
     }
-  }, [setError]);
+  }, [initialPageState.dashboardId, setError]);
 
   const loadDashboardDetail = useCallback(async (dashboardId: string, signal?: AbortSignal): Promise<void> => {
     try {
@@ -417,6 +435,14 @@ export const CustomDashboardsPage: FunctionComponent = () => {
             <Button icon={RefreshCw} onClick={() => projectId && void loadProjectDashboards(projectId)} disabled={!projectId} pending={loading}>
               Refresh
             </Button>
+            <Button
+              icon={ExternalLink}
+              onClick={() => setPageMode("viewer")}
+              disabled={!selectedDashboard}
+              disabledReason="Select a dashboard with a published validated revision to open it."
+            >
+              Open Published
+            </Button>
             <Button icon={Save} variant="signal" onClick={() => void handleSaveDraft()} disabled={!selectedDashboard || !dirty || selectedDashboard.status === "archived"} pending={saving}>
               Save Draft
             </Button>
@@ -459,50 +485,67 @@ export const CustomDashboardsPage: FunctionComponent = () => {
       ) : null}
 
       {projectId && dashboards.length > 0 && selectedDashboard && draft ? (
-        <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(14rem,0.42fr)_minmax(0,1fr)_minmax(18rem,0.5fr)]">
+        <div className={`grid min-w-0 gap-4 ${
+          pageMode === "viewer"
+            ? "xl:grid-cols-[minmax(14rem,0.32fr)_minmax(0,1fr)]"
+            : "xl:grid-cols-[minmax(14rem,0.42fr)_minmax(0,1fr)_minmax(18rem,0.5fr)]"
+        }`}>
           <CustomDashboardList
             dashboards={dashboards}
             selectedDashboardId={selectedDashboardId}
             onSelect={(dashboardId) => {
               setSelectedDashboardId(dashboardId);
+              setPageMode("editor");
               setValidationSession(null);
               setLogs("");
             }}
             onCreate={() => void handleCreateDashboard()}
             creating={creating}
           />
-          <CustomDashboardEditorPanel
-            draft={draft}
-            onDraftChange={setDraft}
-            activeTab={activeTab}
-            onActiveTabChange={setActiveTab}
-            selectedFilePath={selectedFilePath}
-            onSelectedFilePathChange={setSelectedFilePath}
-            catalog={catalog}
-          />
-          <CustomDashboardValidationPanel
-            dashboard={selectedDashboard}
-            revisions={revisions}
-            selectedRevision={selectedRevision}
-            selectedRevisionId={selectedRevisionId}
-            onSelectedRevisionIdChange={(revisionId) => {
-              setSelectedRevisionId(revisionId);
-              setValidationSession(null);
-              setLogs("");
-            }}
-            validationSession={validationSession}
-            logs={logs}
-            creatingRevision={creatingRevision}
-            validating={validating}
-            refreshingLogs={refreshingLogs}
-            publishing={publishing}
-            archiving={archiving}
-            onCreateRevision={() => void handleCreateRevision()}
-            onStartValidation={() => void handleStartValidation()}
-            onRefreshLogs={() => void handleRefreshLogs()}
-            onPublish={() => void handlePublish()}
-            onArchive={() => void handleArchive()}
-          />
+          {pageMode === "viewer" ? (
+            <CustomDashboardViewer
+              dashboard={selectedDashboard}
+              revisions={revisions}
+              onRefresh={() => void refreshSelectedDashboard()}
+              onReturnToEditor={() => setPageMode("editor")}
+              refreshing={loading}
+            />
+          ) : (
+            <>
+              <CustomDashboardEditorPanel
+                draft={draft}
+                onDraftChange={setDraft}
+                activeTab={activeTab}
+                onActiveTabChange={setActiveTab}
+                selectedFilePath={selectedFilePath}
+                onSelectedFilePathChange={setSelectedFilePath}
+                catalog={catalog}
+              />
+              <CustomDashboardValidationPanel
+                dashboard={selectedDashboard}
+                revisions={revisions}
+                selectedRevision={selectedRevision}
+                selectedRevisionId={selectedRevisionId}
+                onSelectedRevisionIdChange={(revisionId) => {
+                  setSelectedRevisionId(revisionId);
+                  setValidationSession(null);
+                  setLogs("");
+                }}
+                validationSession={validationSession}
+                logs={logs}
+                creatingRevision={creatingRevision}
+                validating={validating}
+                refreshingLogs={refreshingLogs}
+                publishing={publishing}
+                archiving={archiving}
+                onCreateRevision={() => void handleCreateRevision()}
+                onStartValidation={() => void handleStartValidation()}
+                onRefreshLogs={() => void handleRefreshLogs()}
+                onPublish={() => void handlePublish()}
+                onArchive={() => void handleArchive()}
+              />
+            </>
+          )}
         </div>
       ) : null}
 
