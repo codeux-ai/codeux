@@ -61,10 +61,16 @@ export type JiraIssueSearchSortDirection = "asc" | "desc";
 export interface RepositoryIssueSearchInput {
   provider?: LinkedIssueProvider;
   externalId?: string | null;
+  externalIds?: string[];
   sourceKind?: LinkedIssueSourceKind;
   sourceProvider?: LinkedIssueProvider;
   repository?: string;
   hostDomain?: string;
+  workspaceId?: string;
+  projectId?: string;
+  teamId?: string;
+  teamKey?: string;
+  databaseId?: string;
   projectKey?: string;
   search?: string;
   state?: RepositoryIssueSearchState;
@@ -149,6 +155,7 @@ export interface SprintLinkedIssueInput {
   issueAuthor?: string | null;
   issueCreatedAt?: string | null;
   issueUpdatedAt?: string | null;
+  metadata?: Record<string, unknown>;
 }
 
 export interface SprintImportedTaskInput {

@@ -68,6 +68,9 @@ function normalizeLinkedIssues(value: unknown): CreateSprintInput["linkedIssues"
 function toLinkedIssueInput(issue: SprintLinkedIssueInput): SprintLinkedIssueInput {
   return {
     provider: issue.provider,
+    sourceProvider: issue.sourceProvider,
+    sourceKind: issue.sourceKind,
+    externalId: issue.externalId,
     hostDomain: issue.hostDomain,
     projectKey: issue.projectKey,
     repository: issue.repository,
@@ -90,6 +93,11 @@ function hasSearchFilters(input: IssueSearchInput): boolean {
     input.search
       || input.repository
       || input.hostDomain
+      || input.workspaceId
+      || input.providerProjectId
+      || input.teamId
+      || input.teamKey
+      || input.databaseId
       || input.projectKey
       || input.state
       || input.status
@@ -110,18 +118,23 @@ function hasSearchFilters(input: IssueSearchInput): boolean {
 }
 
 function hasExplicitIssueReferences(input: IssueSearchInput): boolean {
-  return Boolean(input.issueKeys?.length || input.issueNumbers?.length || input.issueRefs?.length);
+  return Boolean(input.issueKeys?.length || input.issueNumbers?.length || input.issueRefs?.length || input.externalIds?.length);
 }
 
 function buildImportIssueSearchInput(payload: Record<string, unknown>): IssueSearchInput {
   const input: IssueSearchInput = {
     search: readString(payload, "search"),
-    provider: parseOptionalEnumStrict(payload, "provider", ["github", "gitlab", "jira"] as const),
+    provider: parseOptionalEnumStrict(payload, "provider", ["github", "gitlab", "jira", "notion", "asana", "linear"] as const),
     repository: readString(payload, "repository"),
     hostDomain: readString(payload, "hostDomain"),
+    workspaceId: readString(payload, "workspaceId"),
+    providerProjectId: readString(payload, "providerProjectId") || readString(payload, "externalProjectId") || readString(payload, "asanaProjectId") || readString(payload, "linearProjectId"),
+    teamId: readString(payload, "teamId"),
+    teamKey: readString(payload, "teamKey"),
+    databaseId: readString(payload, "databaseId"),
     projectKey: readString(payload, "projectKey"),
-    state: parseOptionalEnumStrict(payload, "state", ["open", "closed", "all"] as const),
-    status: parseOptionalEnumStrict(payload, "status", ["open", "in_progress", "done", "all"] as const),
+    state: parseImportState(payload),
+    status: parseImportStatus(payload),
     labels: readStringArray(payload, "labels"),
     assignee: readString(payload, "assignee"),
     assigneeText: readString(payload, "assigneeText"),
@@ -132,6 +145,7 @@ function buildImportIssueSearchInput(payload: Record<string, unknown>): IssueSea
     issueKeys: readStringArray(payload, "issueKeys"),
     issueNumbers: readNumberArray(payload, "issueNumbers"),
     issueRefs: readStringArray(payload, "issueRefs"),
+    externalIds: readStringArray(payload, "externalIds"),
     includeConversation: payload.includeConversation === false ? false : undefined,
     createdAfter: readString(payload, "createdAfter"),
     createdBefore: readString(payload, "createdBefore"),
@@ -142,6 +156,22 @@ function buildImportIssueSearchInput(payload: Record<string, unknown>): IssueSea
     limit: clampImportLimit(parseOptionalIntegerStrict(payload, "limit")),
   };
   return input;
+}
+
+function parseImportState(payload: Record<string, unknown>): IssueSearchInput["state"] {
+  const provider = typeof payload.provider === "string" ? payload.provider.trim().toLowerCase() : "";
+  if (provider === "linear" || provider === "asana" || provider === "notion") {
+    return readString(payload, "state");
+  }
+  return parseOptionalEnumStrict(payload, "state", ["open", "closed", "all"] as const);
+}
+
+function parseImportStatus(payload: Record<string, unknown>): IssueSearchInput["status"] {
+  const provider = typeof payload.provider === "string" ? payload.provider.trim().toLowerCase() : "";
+  if (provider === "linear" || provider === "asana" || provider === "notion") {
+    return readString(payload, "status");
+  }
+  return parseOptionalEnumStrict(payload, "status", ["open", "in_progress", "done", "all"] as const);
 }
 
 function assertSprintBelongsToProject(sprint: SprintRecord | null | undefined, sprintId: string, projectId: string): SprintRecord {
@@ -345,9 +375,12 @@ export class SprintActions {
           linkedIssues = importResult.linkedIssues;
           warnings = importResult.warnings;
 
-          if (importedContexts.length > 0 && sprint) {
+          const promptIssues = explicitMode
+            ? importedContexts
+            : searchedIssues.filter((issue) => Boolean(issue.issueBodyMarkdown?.trim() || issue.issueConversationMarkdown?.trim()));
+          if (promptIssues.length > 0 && sprint) {
             sprint = this.deps.projectManagementRepository.updateSprint(sprintId, {
-              goal: mergePromptWithLinkedIssues(sprint.goal, importedContexts),
+              goal: mergePromptWithLinkedIssues(sprint.goal, promptIssues),
             });
           }
         }

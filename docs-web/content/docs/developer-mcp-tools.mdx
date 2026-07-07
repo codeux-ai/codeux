@@ -65,6 +65,20 @@ Every tool requires `runtimeRoles: ["project_manager"]` and is enabled by defaul
 | `manage_preview` | `list_sessions`, `start_session`, `stop_session`, `rebuild_session`, `remove_session`, `get_logs`, `get_url`, `get_script`, `update_script` |
 | `manage_telemetry` | `get_project_stats_snapshot`, `get_project_execution_snapshot`, `list_execution_invocations`, `list_execution_invocation_messages`, `list_sprint_runs`, `list_task_dispatches` |
 
+### Sprint issue imports
+
+`manage_sprints` action `import_issues` accepts `provider` values `github`, `gitlab`, `jira`, `notion`, `asana`, and `linear`.
+
+- GitHub and GitLab require saved effective `git.githubToken` / `git.gitlabToken` settings.
+- Jira requires saved Jira host, email, API token, and usually a default project key.
+- Notion requires `notion.apiToken`; optional `databaseId` narrows page/database imports.
+- Asana requires `asana.apiToken` plus `workspaceId` for workspace search or `providerProjectId` for project task fallback.
+- Linear requires `linear.apiToken`; optional `teamId`, `teamKey`, and `providerProjectId` narrow issue search.
+
+Common import fields include `search`, `state`, `status`, `labels`, `assignee`, `issueKeys`, `issueNumbers`, `issueRefs`, `externalIds`, `includeConversation`, `limit`, `sprintId`, `attachToSprint`, and `planAfterImport`. Use `externalIds` for explicit Notion page/database ids, Asana task gids, and Linear issue ids or identifiers.
+
+Notion, Asana, and Linear imports are read-only: Code UX searches, fetches prompt context, attaches linked-source records, and can plan from imported scope, but it does not close, complete, archive, or transition those provider items.
+
 For the full per-action payloads and return shapes, see [Management actions](/docs/developer-management-actions).
 
 ## Approval handshake (destructive actions)
