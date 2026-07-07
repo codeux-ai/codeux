@@ -1,8 +1,8 @@
 // @vitest-environment happy-dom
 /** @jsx h */
-import { describe, it, expect, vi } from "vitest";
+import { afterEach, describe, it, expect, vi } from "vitest";
 import { h } from "preact";
-import { render, screen, fireEvent } from "@testing-library/preact";
+import { cleanup, render, screen, fireEvent } from "@testing-library/preact";
 import userEvent from "@testing-library/user-event";
 import * as matchers from '@testing-library/jest-dom/matchers';
 import { ChatThreadHeader } from "../../../dashboard/src/v2/components/chat/ChatThreadHeader.js";
@@ -11,6 +11,11 @@ import { buildMockChatThread } from "../factories/chat-fixture-factory.js";
 expect.extend(matchers);
 
 describe("ChatThreadHeader", () => {
+  afterEach(() => {
+    cleanup();
+  });
+
+  const noopRename = vi.fn(() => Promise.resolve());
   const baseThread = buildMockChatThread({
     id: "t1",
     projectId: "p1",
@@ -32,6 +37,7 @@ describe("ChatThreadHeader", () => {
         thread={baseThread}
         onCompact={() => {}}
         onCancelActiveTurn={() => {}}
+        onRename={noopRename}
         isCompacting={false}
         isCancelling={false}
       />
@@ -47,6 +53,7 @@ describe("ChatThreadHeader", () => {
         thread={thread}
         onCompact={() => {}}
         onCancelActiveTurn={() => {}}
+        onRename={noopRename}
         isCompacting={false}
         isCancelling={false}
       />
@@ -61,6 +68,7 @@ describe("ChatThreadHeader", () => {
         thread={threadActive}
         onCompact={() => {}}
         onCancelActiveTurn={() => {}}
+        onRename={noopRename}
         isCompacting={false}
         isCancelling={false}
       />
@@ -73,6 +81,7 @@ describe("ChatThreadHeader", () => {
         thread={threadReplay}
         onCompact={() => {}}
         onCancelActiveTurn={() => {}}
+        onRename={noopRename}
         isCompacting={false}
         isCancelling={false}
       />
@@ -87,6 +96,7 @@ describe("ChatThreadHeader", () => {
         thread={baseThread}
         onCompact={() => {}}
         onCancelActiveTurn={() => {}}
+        onRename={noopRename}
         isCompacting={true}
         isCancelling={false}
       />
@@ -104,6 +114,7 @@ describe("ChatThreadHeader", () => {
         thread={baseThread}
         onCompact={onCompact}
         onCancelActiveTurn={() => {}}
+        onRename={noopRename}
         isCompacting={false}
         isCancelling={false}
       />
@@ -129,6 +140,7 @@ describe("ChatThreadHeader", () => {
         thread={thread}
         onCompact={() => {}}
         onCancelActiveTurn={() => {}}
+        onRename={noopRename}
         isCompacting={false}
         isCancelling={false}
       />
@@ -144,6 +156,7 @@ describe("ChatThreadHeader", () => {
         thread={thread}
         onCompact={() => {}}
         onCancelActiveTurn={() => {}}
+        onRename={noopRename}
         isCompacting={false}
         isCancelling={false}
       />
@@ -160,6 +173,7 @@ describe("ChatThreadHeader", () => {
         thread={baseThread}
         onCompact={() => {}}
         onCancelActiveTurn={onCancelActiveTurn}
+        onRename={noopRename}
         isCompacting={false}
         isCancelling={false}
       />
@@ -172,6 +186,7 @@ describe("ChatThreadHeader", () => {
         thread={{ ...baseThread, pendingMessageCount: 1 }}
         onCompact={() => {}}
         onCancelActiveTurn={onCancelActiveTurn}
+        onRename={noopRename}
         isCompacting={false}
         isCancelling={false}
       />
@@ -187,6 +202,7 @@ describe("ChatThreadHeader", () => {
         thread={{ ...baseThread, pendingMessageCount: 1 }}
         onCompact={() => {}}
         onCancelActiveTurn={onCancelActiveTurn}
+        onRename={noopRename}
         isCompacting={false}
         isCancelling={true}
       />
@@ -195,5 +211,75 @@ describe("ChatThreadHeader", () => {
     const cancellingButton = screen.getByRole("button", { name: "Cancelling..." });
     expect(cancellingButton).toBeDisabled();
     expect(cancellingButton).toHaveAttribute("aria-busy", "true");
+  });
+
+  it("saves a renamed title from the keyboard", async () => {
+    const user = userEvent.setup();
+    const onRename = vi.fn(() => Promise.resolve());
+    render(
+      <ChatThreadHeader
+        thread={baseThread}
+        onCompact={() => {}}
+        onCancelActiveTurn={() => {}}
+        onRename={onRename}
+        isCompacting={false}
+        isCancelling={false}
+      />
+    );
+
+    await user.click(screen.getByRole("button", { name: "Rename Test Thread" }));
+    const input = screen.getByRole("textbox", { name: "Thread title" });
+    await user.clear(input);
+    await user.type(input, "Renamed Thread{Enter}");
+
+    expect(onRename).toHaveBeenCalledWith("Renamed Thread");
+  });
+
+  it("rejects empty renamed titles before calling the API", async () => {
+    const user = userEvent.setup();
+    const onRename = vi.fn(() => Promise.resolve());
+    render(
+      <ChatThreadHeader
+        thread={baseThread}
+        onCompact={() => {}}
+        onCancelActiveTurn={() => {}}
+        onRename={onRename}
+        isCompacting={false}
+        isCancelling={false}
+      />
+    );
+
+    await user.click(screen.getByRole("button", { name: "Rename Test Thread" }));
+    const input = screen.getByRole("textbox", { name: "Thread title" });
+    await user.clear(input);
+    fireEvent.keyDown(input, { key: "Enter" });
+
+    expect(onRename).not.toHaveBeenCalled();
+    expect(screen.getByRole("alert")).toHaveTextContent("Thread title is required.");
+  });
+
+  it("cancels rename edits with Escape", async () => {
+    const user = userEvent.setup();
+    const onRename = vi.fn(() => Promise.resolve());
+    render(
+      <ChatThreadHeader
+        thread={baseThread}
+        onCompact={() => {}}
+        onCancelActiveTurn={() => {}}
+        onRename={onRename}
+        isCompacting={false}
+        isCancelling={false}
+      />
+    );
+
+    await user.click(screen.getByRole("button", { name: "Rename Test Thread" }));
+    const input = screen.getByRole("textbox", { name: "Thread title" });
+    await user.clear(input);
+    await user.type(input, "Draft");
+    fireEvent.keyDown(input, { key: "Escape" });
+
+    expect(onRename).not.toHaveBeenCalled();
+    expect(screen.queryByRole("textbox", { name: "Thread title" })).not.toBeInTheDocument();
+    expect(screen.getByText("Test Thread")).toBeInTheDocument();
   });
 });
