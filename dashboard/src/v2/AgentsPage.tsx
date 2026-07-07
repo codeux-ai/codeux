@@ -9,11 +9,13 @@ import { useProjectData } from "./context/project-data.js";
 import {
   createAgentPreset,
   deleteAgentPreset,
+  exportAgentPresetToMarkdown,
   fetchAgentPresets,
   fetchSkillStorages,
   importAgentPresetFromMarkdown,
+  pullAgentPresetsFromMarkdown,
+  pushAgentPresetsToMarkdown,
   pushAgentPresetsToRepository,
-  syncAllAgentPresetsFromMarkdown,
   updateAgentPreset,
 } from "./lib/agent-preset-api.js";
 import { useProjectEffectiveSettings } from "./hooks/use-project-effective-settings.js";
@@ -102,7 +104,9 @@ export const AgentsPage: FunctionComponent = () => {
   const [savingId, setSavingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [importingId, setImportingId] = useState<string | null>(null);
-  const [syncingAll, setSyncingAll] = useState(false);
+  const [exportingId, setExportingId] = useState<string | null>(null);
+  const [pullingFromFiles, setPullingFromFiles] = useState(false);
+  const [pushingToFiles, setPushingToFiles] = useState(false);
   const [pushing, setPushing] = useState(false);
   const [pushPickerOpen, setPushPickerOpen] = useState(false);
   const [pushMode, setPushMode] = useState<PushAgentMode>("commit_only");
@@ -137,7 +141,7 @@ export const AgentsPage: FunctionComponent = () => {
     setPushBranchName("");
   }, [selectedProject?.id]);
 
-  const refreshPresets = async (): Promise<void> => {
+  const refreshPresets = async (preferredSelectedPresetId = selectedPresetId): Promise<void> => {
     if (!selectedProject) {
       setPresets([]);
       setError(null);
@@ -147,9 +151,9 @@ export const AgentsPage: FunctionComponent = () => {
     try {
       const nextPresets = await fetchAgentPresets(selectedProject.id);
       setPresets(nextPresets);
-      if (!selectedPresetId && nextPresets.length > 0) {
+      if (!preferredSelectedPresetId && nextPresets.length > 0) {
         setSelectedPresetId(nextPresets[0].id);
-      } else if (selectedPresetId && !nextPresets.find((p) => p.id === selectedPresetId)) {
+      } else if (preferredSelectedPresetId && !nextPresets.find((p) => p.id === preferredSelectedPresetId)) {
         setSelectedPresetId(nextPresets.length > 0 ? nextPresets[0].id : null);
         setIsEditing(false);
       }
@@ -285,20 +289,60 @@ export const AgentsPage: FunctionComponent = () => {
     }
   };
 
-  const handleSyncAll = async (): Promise<void> => {
-    if (!selectedProject) return;
-    setSyncingAll(true);
-    setActionFeedback({ tone: "pending", message: "Syncing all agent presets from markdown..." });
+  const handlePullFromFiles = async (): Promise<void> => {
+    if (!selectedProject || !projectFileSavingEnabled) return;
+    const preferredPresetId = selectedPresetId;
+    setPullingFromFiles(true);
+    setActionFeedback({ tone: "pending", message: "Pulling agent presets from project files..." });
     try {
-      setPresets(await syncAllAgentPresetsFromMarkdown(selectedProject.id));
+      await pullAgentPresetsFromMarkdown(selectedProject.id);
+      await refreshPresets(preferredPresetId);
       setError(null);
-      setActionFeedback({ tone: "success", message: "Agent presets synced from markdown." });
+      setActionFeedback({ tone: "success", message: "Agent presets pulled from project files." });
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);
       setError(message);
-      setActionFeedback({ tone: "error", message: `Sync failed: ${message}`, retry: () => void handleSyncAll() });
+      setActionFeedback({ tone: "error", message: `Pull failed: ${message}`, retry: () => void handlePullFromFiles() });
     } finally {
-      setSyncingAll(false);
+      setPullingFromFiles(false);
+    }
+  };
+
+  const handlePushToFiles = async (): Promise<void> => {
+    if (!selectedProject || !projectFileSavingEnabled) return;
+    const preferredPresetId = selectedPresetId;
+    setPushingToFiles(true);
+    setActionFeedback({ tone: "pending", message: "Pushing agent presets to project files..." });
+    try {
+      await pushAgentPresetsToMarkdown(selectedProject.id);
+      await refreshPresets(preferredPresetId);
+      setError(null);
+      setActionFeedback({ tone: "success", message: "Agent presets pushed to project files." });
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e);
+      setError(message);
+      setActionFeedback({ tone: "error", message: `Push failed: ${message}`, retry: () => void handlePushToFiles() });
+    } finally {
+      setPushingToFiles(false);
+    }
+  };
+
+  const handlePushPresetToFile = async (presetId: string): Promise<void> => {
+    if (!projectFileSavingEnabled) return;
+    const preferredPresetId = selectedPresetId;
+    setExportingId(presetId);
+    setActionFeedback({ tone: "pending", message: "Pushing agent preset to project file..." });
+    try {
+      await exportAgentPresetToMarkdown(presetId);
+      await refreshPresets(preferredPresetId);
+      setError(null);
+      setActionFeedback({ tone: "success", message: "Agent preset pushed to project file." });
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e);
+      setError(message);
+      setActionFeedback({ tone: "error", message: `Push failed: ${message}`, retry: () => void handlePushPresetToFile(presetId) });
+    } finally {
+      setExportingId(null);
     }
   };
 
@@ -578,7 +622,9 @@ export const AgentsPage: FunctionComponent = () => {
         selectedProject={selectedProject}
         projectLoading={projectLoading}
         loading={loading}
-        syncingAll={syncingAll}
+        pullingFromFiles={pullingFromFiles}
+        pushingToFiles={pushingToFiles}
+        fileSyncDisabled={!projectFileSavingEnabled}
         presets={presets}
         extraActions={
           <div className="relative">
@@ -695,7 +741,8 @@ export const AgentsPage: FunctionComponent = () => {
             )}
           </div>
         }
-        onSyncAll={() => void handleSyncAll()}
+        onPullFromFiles={() => void handlePullFromFiles()}
+        onPushToFiles={() => void handlePushToFiles()}
         onCreate={() => void handleCreate()}
       />
 
@@ -892,8 +939,11 @@ export const AgentsPage: FunctionComponent = () => {
                   onEdit={() => setIsEditing(true)}
                   onDelete={handleDelete}
                   onImport={handleImport}
+                  onPushToFile={handlePushPresetToFile}
                   deleting={deletingId === selectedPreset.id}
                   importing={importingId === selectedPreset.id}
+                  pushingToFile={exportingId === selectedPreset.id}
+                  canPushToFile={projectFileSavingEnabled}
                 />
               )
             ) : (

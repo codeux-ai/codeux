@@ -70,23 +70,23 @@ Project management:
 - `PATCH /api/connections/:connectionId`
   - Updates connection metadata such as role/status/instruction payload
 - `GET /api/projects/:projectId/agent-presets`
-  - Lists DB-backed project agents and auto-imports unseen markdown agents from `.code-ux/agents`
+  - Lists sqlite-backed project agents and auto-imports unseen markdown agents from `.code-ux/agents`
 - `POST /api/projects/:projectId/agent-presets`
-  - Creates a DB-backed agent and, when project markdown mirroring is enabled, also writes `.code-ux/agents/<name>.md`
+  - Creates a sqlite-backed agent and, when project markdown mirroring is enabled, also writes `.code-ux/agents/<name>.md`
 - `PATCH /api/agent-presets/:agentPresetId`
   - Updates agent metadata and instruction markdown, mirroring the markdown back into the project agent directory when enabled
 - `DELETE /api/agent-presets/:agentPresetId`
   - Deletes an agent record
 - `POST /api/agent-presets/:agentPresetId/import-markdown`
-  - Re-imports a linked markdown agent into sqlite
+  - Pulls one linked markdown source into sqlite
 - `POST /api/agent-presets/:agentPresetId/export-markdown`
-  - Exports one sqlite agent preset to the selected project `.code-ux/agents` directory, links the preset to that project source, and refuses to overwrite a markdown file linked to a different agent
+  - Pushes one sqlite agent preset to the selected project `.code-ux/agents` directory, links the preset to that project source, and refuses to overwrite a markdown file linked to a different agent
 - `POST /api/projects/:projectId/agent-presets/sync-markdown`
   - Backward-compatible project markdown pull; discovers `.code-ux/agents/*.md`, imports new files, and re-imports out-of-sync linked agents
 - `POST /api/projects/:projectId/agent-presets/pull-markdown`
-  - Explicitly pulls project markdown into sqlite using the same precedence and default-agent discovery rules as normal agent sync
+  - Explicitly pulls project markdown files into sqlite using the same precedence and default-agent discovery rules as normal agent sync
 - `POST /api/projects/:projectId/agent-presets/push-markdown`
-  - Exports manual, missing-source, out-of-sync, home-backed, and default-backed sqlite presets to project markdown when `agents.saveToProjectDirectory` is enabled
+  - Pushes sqlite presets to project markdown files when `agents.saveToProjectDirectory` is enabled, exporting manual, missing-source, out-of-sync, home-backed, and default-backed agents as project-local files
 - `POST /api/projects/:projectId/agent-presets/push`
   - Commits `.code-ux/agents/*.md` changes from the selected project, optionally pushes the branch, and can open a pull request against the default branch when repository remotes are available
 - `POST /api/projects/:projectId/planning/improve-sprint-prompt`
