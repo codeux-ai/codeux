@@ -4,7 +4,7 @@ Controls the dashboard shell layout, experience mode, theme, motion preference, 
 
 ## What It Controls
 
-Experience mode stores one persisted Easy, Standard, or Expert dashboard preference. Navigation mode switches dock/sidebar, theme sets color mode, reduced motion limits animation, and zoom scales Electron windows.
+Experience mode stores one persisted Easy, Standard, or Expert dashboard preference and filters primary dock/sidebar navigation. Easy shows Chat, Browser, Stats, Settings/Config, and external Docs; Standard hides the specialized Schedule, Memory, Knowledge, Files, and Live pages; Expert shows the full primary navigation. Navigation mode switches dock/sidebar, theme sets color mode, reduced motion limits animation, and zoom scales Electron windows.
 
 ## Recommended Defaults
 
@@ -12,7 +12,7 @@ New installs default to Expert experience mode. Use System theme and Auto reduce
 
 ## Risks And Gotchas
 
-High zoom or dense sidebars can reduce visible workspace on small screens.
+Experience mode only hides primary navigation links; the underlying dashboard routes remain available. Browser navigation still depends on sprint preview and in-app browser visibility settings. High zoom or dense sidebars can reduce visible workspace on small screens.
 
 ## Dashboard Link
 

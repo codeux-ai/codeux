@@ -1,9 +1,8 @@
 import type { FunctionComponent, JSX } from "preact";
 import { useEffect, useRef, useState } from "preact/hooks";
-import { Link, useRouterState } from "@tanstack/react-router";
-import { prefetchRoute } from "../../router/route-prefetch.js";
+import { useRouterState } from "@tanstack/react-router";
 import gsap from "gsap";
-import { BookOpen, Hexagon, Layers, ListChecks, Zap, Settings, Inbox, Cpu, BarChart3, Compass, MessageCircle, ChevronLeft, ChevronRight, CalendarDays, FolderTree, Library } from "lucide-preact";
+import { ChevronLeft, ChevronRight } from "lucide-preact";
 import { useProjectData } from "../../context/project-data.js";
 import { useProjectEffectiveSettings } from "../../hooks/use-project-effective-settings.js";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
@@ -12,33 +11,17 @@ import { useAnimatedActiveIndicator, useGsapInteractionTokens, useInteractionTok
 import { useLayoutEffect } from "preact/hooks";
 import { RobotLogo } from "../brand/RobotLogo.js";
 import { useFocusTrap } from "../../hooks/use-focus-trap.js";
-
-const ALL_NAV_ITEMS = [
-    { icon: MessageCircle, label: "Chat",     path: "/chat" },
-    { icon: Hexagon,    label: "Overview", path: "/" },
-    { icon: Layers,     label: "Sprints",  path: "/sprints" },
-    { icon: ListChecks, label: "Tasks",    path: "/tasks" },
-    { icon: Cpu,        label: "Agents",   path: "/agents" },
-    { icon: BarChart3,  label: "Stats",    path: "/stats" },
-    { icon: CalendarDays, label: "Schedule", path: "/scheduler" },
-    { icon: Inbox,    label: "Memory",   path: "/memory" },
-    { icon: Library,  label: "Knowledge", path: "/knowledge" },
-    { icon: Compass,  label: "Browser",  path: "/browser" },
-    { icon: FolderTree, label: "Files",  path: "/files" },
-    { icon: Zap,      label: "Live",     path: "/live" },
-];
-
-type SidebarNavItem = (typeof ALL_NAV_ITEMS)[number] & {
-    unavailableReason?: string;
-};
+import type { DashboardExperienceMode } from "../../../types.js";
+import { getPrimaryNavigationItems, isRouteNavigationItem } from "../../lib/navigation-items.js";
 
 interface SidebarProps {
     isMobile?: boolean;
     isOpen?: boolean;
     onClose?: () => void;
+    experienceMode?: DashboardExperienceMode | null;
 }
 
-export const Sidebar: FunctionComponent<SidebarProps> = ({ isMobile, isOpen, onClose }) => {
+export const Sidebar: FunctionComponent<SidebarProps> = ({ isMobile, isOpen, onClose, experienceMode }) => {
     const sidebarRef = useRef<HTMLElement>(null);
     const navRef = useRef<HTMLDivElement>(null);
     const [brandActive, setBrandActive] = useState(false);
@@ -62,10 +45,12 @@ export const Sidebar: FunctionComponent<SidebarProps> = ({ isMobile, isOpen, onC
         && (effectiveSettings?.settings.sprintPreview.showInAppBrowser ?? true)
     );
 
-    const navItems: SidebarNavItem[] = ALL_NAV_ITEMS.map((item) => item.path === "/browser" && !browserVisible
-        ? { ...item, unavailableReason: "Enable sprint preview and the in-app browser for this project" }
-        : item
-    );
+    const navigationItems = getPrimaryNavigationItems(experienceMode ?? effectiveSettings?.settings.appearance?.experienceMode, {
+        browserVisible,
+        unavailableBrowserReason: "Enable sprint preview and the in-app browser for this project",
+    });
+    const navItems = navigationItems.filter((item) => item.group === "workspace");
+    const utilityItems = navigationItems.filter((item) => item.group === "utility");
 
     const prefersReducedMotion = useReducedMotion();
     const interactionTokens = useInteractionTokens();
@@ -85,21 +70,27 @@ export const Sidebar: FunctionComponent<SidebarProps> = ({ isMobile, isOpen, onC
 
     const matches = useRouterState({ select: (s) => s.matches });
     const currentPath = (matches && matches.length > 0) ? (matches[matches.length - 1]?.pathname || "/") : "/";
-    const activeIndex = navItems.findIndex(i => (i.path === currentPath || (i.path !== "/" && currentPath.startsWith(`${i.path}/`))) && !i.unavailableReason);
+    const activeIndex = navItems.findIndex(i => isRouteNavigationItem(i) && (i.path === currentPath || (i.path !== "/" && currentPath.startsWith(`${i.path}/`))) && !i.unavailableReason);
 
     useLayoutEffect(() => {
         const activeElement = navItemRefs.current[activeIndex];
+        if (indicatorRef.current && !activeElement) {
+            gsap.set(indicatorRef.current, { opacity: 0 });
+            delete indicatorRef.current.dataset.initialized;
+            return;
+        }
         if (indicatorRef.current && activeElement) {
             const offsetTop = activeElement.offsetTop;
             const offsetHeight = activeElement.offsetHeight;
             const y = offsetTop + (offsetHeight / 2) - 12;
             if (!indicatorRef.current.dataset.initialized) {
-                gsap.set(indicatorRef.current, { y, height: 24 });
+                gsap.set(indicatorRef.current, { y, height: 24, opacity: 1 });
                 indicatorRef.current.dataset.initialized = "true";
             } else {
                 gsap.to(indicatorRef.current, {
                     y,
                     height: 24,
+                    opacity: 1,
                     duration: gsapTokens.selectionMovement.duration,
                     ease: gsapTokens.selectionMovement.ease
                 });
@@ -217,7 +208,7 @@ export const Sidebar: FunctionComponent<SidebarProps> = ({ isMobile, isOpen, onC
 
                 {navItems.map((item, idx) => (
                     <NavItem
-                        key={item.label}
+                        key={item.id}
                         elementRef={(el) => { navItemRefs.current[idx] = el as HTMLElement | null; }}
                         item={item}
                         isActive={activeIndex === idx}
@@ -230,61 +221,16 @@ export const Sidebar: FunctionComponent<SidebarProps> = ({ isMobile, isOpen, onC
 
             {/* Settings & Toggle */}
             <div className="relative z-10 flex flex-col">
-                <Link
-                    to="/docs"
-                    onClick={isMobile ? onClose : undefined}
-                    onMouseEnter={() => prefetchRoute("/docs")}
-                    onPointerDown={() => prefetchRoute("/docs")}
-                    onFocus={() => prefetchRoute("/docs")}
-                    aria-label="Docs"
-                    aria-describedby={isMinimized && !isMobile ? "nav-tooltip-docs" : undefined}
-                    aria-current={currentPath === "/docs" || currentPath.startsWith("/docs/") ? "page" : undefined}
-                    data-tour-id="nav-docs"
-                    className={`relative flex items-center ${isMinimized && !isMobile ? 'justify-center mx-4' : 'gap-3.5 px-5 mx-4'} py-2 min-h-[40px] rounded-2xl transition-[background-color,border-color,box-shadow,color,opacity,transform] motion-reduce:transition-none group mb-0.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 focus-visible:rounded-2xl focus-visible:z-10 no-underline decoration-transparent`}
-                    style={controlTransitionStyle}
-                >
-                    <div className="absolute inset-0 rounded-2xl bg-black/[0.05] dark:bg-white/[0.05] transition-[opacity,transform,background-color] motion-reduce:transition-none pointer-events-none origin-left opacity-0 -translate-x-full group-hover:translate-x-0 group-hover:opacity-100 group-focus-visible:translate-x-0 group-focus-visible:opacity-100" style={controlTransitionStyle} />
-                    <BookOpen aria-hidden="true" className={`relative z-10 w-4 h-4 shrink-0 transition-[color,transform] motion-reduce:transition-none ${currentPath === "/docs" || currentPath.startsWith("/docs/") ? 'text-signal-600 dark:text-signal-400 drop-shadow-[0_0_8px_rgba(0,224,160,0.5)]' : 'text-slate-400 dark:text-slate-500 group-hover:text-slate-700 dark:group-hover:text-slate-300'}`} strokeWidth={currentPath === "/docs" || currentPath.startsWith("/docs/") ? 2 : 1.5} style={selectionTransitionStyle} />
-                    <div className={`relative z-10 overflow-hidden transition-[width,opacity] motion-reduce:transition-none ${isMinimized && !isMobile ? 'w-0 opacity-0' : 'opacity-100'}`} style={selectionTransitionStyle}>
-                        <span className={`font-medium text-sm tracking-wide transition-colors whitespace-nowrap ${currentPath === "/docs" || currentPath.startsWith("/docs/") ? 'text-slate-900 dark:text-white font-semibold' : 'text-slate-500 dark:text-slate-500 group-hover:text-slate-700 dark:group-hover:text-slate-300'}`} style={controlTransitionStyle}>
-                            Docs
-                        </span>
-                    </div>
-                    {isMinimized && !isMobile && (
-                        <div id="nav-tooltip-docs" aria-hidden="true" className="absolute left-[calc(100%+16px)] top-1/2 -translate-y-1/2 px-3 py-1.5 bg-white/95 dark:bg-void-800/95 backdrop-blur-xl border border-black/[0.08] dark:border-white/[0.08] text-slate-800 dark:text-slate-100 text-xs font-bold tracking-wide rounded-2xl opacity-0 -translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 group-focus-visible:opacity-100 group-focus-visible:translate-x-0 transition-[opacity,transform] motion-reduce:transition-none pointer-events-none shadow-2xl z-[100] w-max max-w-[18rem] whitespace-nowrap flex items-center gap-2" style={controlTransitionStyle}>
-                            <span className="w-1.5 h-1.5 rounded-full bg-signal-500/80 shadow-[0_0_6px_rgba(0,224,160,0.6)] shrink-0"></span>
-                            Docs
-                        </div>
-                    )}
-                </Link>
-
-                <Link
-                    to="/config"
-                    onClick={isMobile ? onClose : undefined}
-                    onMouseEnter={() => prefetchRoute("/config")}
-                    onPointerDown={() => prefetchRoute("/config")}
-                    onFocus={() => prefetchRoute("/config")}
-                    aria-label="Settings"
-                    aria-describedby={isMinimized && !isMobile ? "nav-tooltip-settings" : undefined}
-                    aria-current={currentPath === "/config" ? "page" : undefined}
-                    data-tour-id="nav-config" 
-                    className={`relative flex items-center ${isMinimized && !isMobile ? 'justify-center mx-4' : 'gap-3.5 px-5 mx-4'} py-2 min-h-[40px] rounded-2xl transition-[background-color,border-color,box-shadow,color,opacity,transform] motion-reduce:transition-none group mb-0.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 focus-visible:rounded-2xl focus-visible:z-10 no-underline decoration-transparent`}
-                    style={controlTransitionStyle}
-                >
-                    <div className="absolute inset-0 rounded-2xl bg-black/[0.05] dark:bg-white/[0.05] transition-[opacity,transform,background-color] motion-reduce:transition-none pointer-events-none origin-left opacity-0 -translate-x-full group-hover:translate-x-0 group-hover:opacity-100 group-focus-visible:translate-x-0 group-focus-visible:opacity-100" style={controlTransitionStyle} />
-                    <Settings aria-hidden="true" className={`relative z-10 w-4 h-4 shrink-0 group-hover:rotate-90 transition-[color,transform] motion-reduce:transition-none ${currentPath === "/config" ? 'text-signal-600 dark:text-signal-400 drop-shadow-[0_0_8px_rgba(0,224,160,0.5)]' : 'text-slate-400 dark:text-slate-500 group-hover:text-slate-700 dark:group-hover:text-slate-300'}`} strokeWidth={currentPath === "/config" ? 2 : 1.5} style={selectionTransitionStyle} />
-                    <div className={`relative z-10 overflow-hidden transition-[width,opacity] motion-reduce:transition-none ${isMinimized && !isMobile ? 'w-0 opacity-0' : 'opacity-100'}`} style={selectionTransitionStyle}>
-                        <span className={`font-medium text-sm tracking-wide transition-colors whitespace-nowrap ${currentPath === "/config" ? 'text-slate-900 dark:text-white font-semibold' : 'text-slate-500 dark:text-slate-500 group-hover:text-slate-700 dark:group-hover:text-slate-300'}`} style={controlTransitionStyle}>
-                            Settings
-                        </span>
-                    </div>
-                    {isMinimized && !isMobile && (
-                        <div id="nav-tooltip-settings" aria-hidden="true" className="absolute left-[calc(100%+16px)] top-1/2 -translate-y-1/2 px-3 py-1.5 bg-white/95 dark:bg-void-800/95 backdrop-blur-xl border border-black/[0.08] dark:border-white/[0.08] text-slate-800 dark:text-slate-100 text-xs font-bold tracking-wide rounded-2xl opacity-0 -translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 group-focus-visible:opacity-100 group-focus-visible:translate-x-0 transition-[opacity,transform] motion-reduce:transition-none pointer-events-none shadow-2xl z-[100] w-max max-w-[18rem] whitespace-nowrap flex items-center gap-2" style={controlTransitionStyle}>
-                            <span className="w-1.5 h-1.5 rounded-full bg-signal-500/80 shadow-[0_0_6px_rgba(0,224,160,0.6)] shrink-0"></span>
-                            Settings
-                        </div>
-                    )}
-                </Link>
+                {utilityItems.map((item) => (
+                    <NavItem
+                        key={item.id}
+                        item={item}
+                        isActive={isRouteNavigationItem(item) && item.path === currentPath}
+                        isMinimized={isMinimized}
+                        isMobile={isMobile}
+                        onClose={onClose}
+                    />
+                ))}
 
                 {!isMobile && (
                     <button
