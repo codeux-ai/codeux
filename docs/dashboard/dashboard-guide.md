@@ -79,8 +79,14 @@ Project management:
   - Deletes an agent record
 - `POST /api/agent-presets/:agentPresetId/import-markdown`
   - Re-imports a linked markdown agent into sqlite
+- `POST /api/agent-presets/:agentPresetId/export-markdown`
+  - Exports one sqlite agent preset to the selected project `.code-ux/agents` directory, links the preset to that project source, and refuses to overwrite a markdown file linked to a different agent
 - `POST /api/projects/:projectId/agent-presets/sync-markdown`
-  - Re-imports every out-of-sync linked markdown agent for the selected project
+  - Backward-compatible project markdown pull; discovers `.code-ux/agents/*.md`, imports new files, and re-imports out-of-sync linked agents
+- `POST /api/projects/:projectId/agent-presets/pull-markdown`
+  - Explicitly pulls project markdown into sqlite using the same precedence and default-agent discovery rules as normal agent sync
+- `POST /api/projects/:projectId/agent-presets/push-markdown`
+  - Exports manual, missing-source, out-of-sync, home-backed, and default-backed sqlite presets to project markdown when `agents.saveToProjectDirectory` is enabled
 - `POST /api/projects/:projectId/agent-presets/push`
   - Commits `.code-ux/agents/*.md` changes from the selected project, optionally pushes the branch, and can open a pull request against the default branch when repository remotes are available
 - `POST /api/projects/:projectId/planning/improve-sprint-prompt`
