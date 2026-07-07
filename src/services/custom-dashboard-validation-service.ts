@@ -25,6 +25,7 @@ import {
   CUSTOM_DASHBOARD_VALIDATION_CONTAINER_NPM_PREFIX,
   CUSTOM_DASHBOARD_VALIDATION_CONTAINER_PORT,
 } from "./custom-dashboard-docker-plan.js";
+import { normalizePreviewPath } from "./sprint-preview-utils.js";
 import {
   appendValidationLog,
   buildBridgeConfig,
@@ -42,7 +43,7 @@ const BUNDLED_CONTAINER_SETUP_SCRIPT = path.resolve(
 );
 const VALIDATION_READINESS_TIMEOUT_MS = 300_000;
 const VALIDATION_READINESS_POLL_MS = 1000;
-const VALIDATION_URL_PREFIX = "/api/custom-dashboards/validation-sessions";
+const VALIDATION_URL_PREFIX = "/api/custom-dashboard-validations";
 const INSTALL_AND_BUILD_COMMAND = "npm install --no-audit --no-fund && npm run build";
 const START_COMMAND = `npm run start -- --host 0.0.0.0 --port ${CUSTOM_DASHBOARD_VALIDATION_CONTAINER_PORT}`;
 
@@ -64,6 +65,12 @@ interface ValidationContainerSummary {
   status: string | null;
   hostPort: number | null;
   labels: Record<string, string>;
+}
+
+export interface CustomDashboardValidationProxyResponse {
+  status: number;
+  headers: Record<string, string>;
+  body: Buffer;
 }
 
 export class CustomDashboardValidationService {
@@ -312,6 +319,76 @@ export class CustomDashboardValidationService {
       const message = error instanceof Error ? error.message : String(error);
       return { logs: [fileLogs, message].filter((output) => output.trim().length > 0).join("\n") };
     }
+  }
+
+  async proxyValidationRequest(args: {
+    sessionId: string;
+    method: string;
+    path: string;
+    headers?: Record<string, string | undefined>;
+    body?: Buffer;
+    rewritePrefix?: string;
+  }): Promise<CustomDashboardValidationProxyResponse> {
+    if (args.body && args.body.length > 5 * 1024 * 1024) {
+      throw new Error("Request body exceeds maximum allowed size for proxied custom dashboard validation");
+    }
+    const session = await this.requireValidationSession(args.sessionId);
+    const refreshed = await this.refreshRuntimeState(session);
+    const metadata = this.getValidationMetadata(refreshed);
+    const hostPort = typeof metadata.hostPort === "number" ? metadata.hostPort : null;
+    if (!hostPort) {
+      throw new Error("Custom dashboard validation session does not have an active host port.");
+    }
+
+    const upstreamUrl = new URL(normalizePreviewPath(args.path), `http://127.0.0.1:${hostPort}`);
+    const response = await this.fetchImpl(upstreamUrl, {
+      method: args.method,
+      headers: this.buildProxyHeaders(args.headers, upstreamUrl.origin),
+      body: args.body && args.body.length > 0 ? new Uint8Array(args.body) : undefined,
+      redirect: "manual",
+    });
+    const rewritePrefix = args.rewritePrefix || `${VALIDATION_URL_PREFIX}/${refreshed.id}/proxy`;
+    const contentType = response.headers.get("content-type") || "";
+    const responseHeaders: Record<string, string> = {};
+    response.headers.forEach((value, key) => {
+      if (this.shouldStripProxyResponseHeader(key)) {
+        return;
+      }
+      responseHeaders[key] = key.toLowerCase() === "location"
+        ? this.rewriteLocationHeader(value, rewritePrefix, upstreamUrl.origin)
+        : value;
+    });
+
+    const chunks: Buffer[] = [];
+    let totalSize = 0;
+    if (response.body) {
+      for await (const chunk of response.body as any) {
+        totalSize += chunk.length;
+        if (totalSize > 5 * 1024 * 1024) {
+          throw new Error("Response body exceeds maximum allowed size for proxied custom dashboard validation");
+        }
+        chunks.push(Buffer.from(chunk));
+      }
+    } else {
+      const arrayBuffer = await response.arrayBuffer();
+      if (arrayBuffer.byteLength > 5 * 1024 * 1024) {
+        throw new Error("Response body exceeds maximum allowed size for proxied custom dashboard validation");
+      }
+      chunks.push(Buffer.from(arrayBuffer));
+    }
+
+    const bodyBuffer = Buffer.concat(chunks);
+    const rewrittenBody = this.shouldRewriteBody(contentType)
+      ? Buffer.from(this.rewriteProxyBody(bodyBuffer.toString("utf8"), rewritePrefix))
+      : bodyBuffer;
+    if (this.shouldRewriteBody(contentType)) {
+      responseHeaders["content-length"] = String(rewrittenBody.byteLength);
+    }
+    return {
+      status: response.status,
+      headers: responseHeaders,
+      body: rewrittenBody,
+    };
   }
 
   async stopValidation(sessionId: string): Promise<CustomDashboardValidationSessionRecord> {
@@ -658,6 +735,78 @@ export class CustomDashboardValidationService {
     }
     const containerName = typeof metadata.containerName === "string" ? metadata.containerName.trim() : "";
     return containerName || null;
+  }
+
+  private buildProxyHeaders(headers: Record<string, string | undefined> = {}, upstreamOrigin: string): Record<string, string> {
+    const next: Record<string, string> = {};
+    const stripList = ["authorization", "cookie", "set-cookie", "connection", "upgrade", "transfer-encoding", "host", "content-length", "accept-encoding"];
+    for (const [key, value] of Object.entries(headers)) {
+      if (!value) continue;
+      const normalized = key.toLowerCase();
+      if (stripList.includes(normalized) || normalized.startsWith("proxy-") || normalized.startsWith("x-code-ux-")) {
+        continue;
+      }
+      if (normalized === "origin") {
+        next[key] = upstreamOrigin;
+        continue;
+      }
+      if (normalized === "referer") {
+        next[key] = this.normalizeProxyRefererHeader(value, upstreamOrigin);
+        continue;
+      }
+      if (normalized === "sec-fetch-site") {
+        next[key] = "same-origin";
+        continue;
+      }
+      next[key] = value;
+    }
+    return next;
+  }
+
+  private normalizeProxyRefererHeader(value: string, upstreamOrigin: string): string {
+    try {
+      const refererUrl = new URL(value);
+      return `${upstreamOrigin}${refererUrl.pathname}${refererUrl.search}${refererUrl.hash}`;
+    } catch {
+      return upstreamOrigin;
+    }
+  }
+
+  private shouldStripProxyResponseHeader(headerName: string): boolean {
+    return [
+      "set-cookie",
+      "content-security-policy",
+      "content-security-policy-report-only",
+      "x-frame-options",
+    ].includes(headerName.toLowerCase());
+  }
+
+  private shouldRewriteBody(contentType: string): boolean {
+    const normalized = contentType.toLowerCase();
+    return normalized.includes("text/html")
+      || normalized.includes("text/css")
+      || normalized.includes("javascript")
+      || normalized.includes("application/xhtml+xml");
+  }
+
+  private rewriteLocationHeader(location: string, rewritePrefix: string, upstreamOrigin: string): string {
+    if (!location) return location;
+    if (location.startsWith("/")) {
+      return `${rewritePrefix}${location}`;
+    }
+    if (location.startsWith(upstreamOrigin)) {
+      return `${rewritePrefix}${location.slice(upstreamOrigin.length)}`;
+    }
+    return location;
+  }
+
+  private rewriteProxyBody(body: string, rewritePrefix: string): string {
+    return body
+      .replace(/(href|src|action)=("|')\/(?!\/)/g, `$1=$2${rewritePrefix}/`)
+      .replace(/url\((['"]?)\/(?!\/)/g, `url($1${rewritePrefix}/`)
+      .replace(/fetch\((['"])\/(?!\/)/g, `fetch($1${rewritePrefix}/`)
+      .replace(/import\((['"])\/(?!\/)/g, `import($1${rewritePrefix}/`)
+      .replace(/XMLHttpRequest\(\)\.open\((['"][A-Z]+['"]\s*,\s*['"])\/(?!\/)/g, `XMLHttpRequest().open($1${rewritePrefix}/`);
   }
 
   private buildPassedReport(

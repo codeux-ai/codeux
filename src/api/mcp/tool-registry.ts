@@ -1,5 +1,5 @@
 import type { ToolName as ContractToolName } from "../../contracts/mcp-tool-definitions.js";
-import type { ManageCodeUxArgs, ManageProjectsArgs, ManageSprintsArgs, ManageTasksArgs, ManageQuicksprintsArgs, ManageSchedulerArgs, SchedulerArgs, ManageAgentsArgs, ManageNodeFlowsArgs, ManageMemoryArgs, ManageSkillsArgs, ManageSettingsArgs, ManagePreviewArgs, ManageChatProvidersArgs, ManageTelemetryArgs, SearchKnowledgeArgs, SearchSkillsArgs } from "../../contracts/internal-management-types.js";
+import type { ManageCodeUxArgs, ManageProjectsArgs, ManageSprintsArgs, ManageTasksArgs, ManageQuicksprintsArgs, ManageSchedulerArgs, SchedulerArgs, ManageAgentsArgs, ManageNodeFlowsArgs, ManageMemoryArgs, ManageSkillsArgs, ManageSettingsArgs, ManagePreviewArgs, ManageCustomDashboardsArgs, ManageChatProvidersArgs, ManageTelemetryArgs, SearchKnowledgeArgs, SearchSkillsArgs } from "../../contracts/internal-management-types.js";
 import type { PullWorkerTaskDispatchArgs, RegisterExternalWorkerEndpointArgs, UpdateWorkerTaskDispatchArgs } from "../../services/worker-task-dispatch-service.js";
 
 export interface McpToolArgsByName {
@@ -16,6 +16,7 @@ export interface McpToolArgsByName {
   manage_skills: ManageSkillsArgs;
   manage_settings: ManageSettingsArgs;
   manage_preview: ManagePreviewArgs;
+  manage_custom_dashboards: ManageCustomDashboardsArgs;
   manage_chat_providers: ManageChatProvidersArgs;
   manage_telemetry: ManageTelemetryArgs;
   search_knowledge: SearchKnowledgeArgs;
