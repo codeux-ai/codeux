@@ -798,7 +798,7 @@ describe("SettingsControls Accessibility", () => {
     expect(activePanelStrip).not.toHaveStyle("--settings-active-panel-top: 9.5rem");
   });
 
-  it("SettingsContentPanels renders dirty-to-saving-to-saved feedback while keeping values mounted", async () => {
+  it("SettingsContentPanels renders its standalone sticky active-panel strip while keeping values mounted", async () => {
     const { rerender } = render(
       <SettingsContentPanels
         state={{
@@ -881,16 +881,24 @@ describe("SettingsControls Accessibility", () => {
     expect(screen.getByText("General panel values stay mounted")).toBeInTheDocument();
   });
 
-  it("SettingsPage keeps scope controls and active panel status in one sticky wrapping bar", () => {
+  it("SettingsPage keeps scope controls and active panel status in one unified sticky wrapping bar", () => {
     const source = readFileSync("dashboard/src/v2/SettingsPage.tsx", "utf8");
+    const commandStatusBarSource = source.match(
+      /<div\s+data-settings-sticky="settings-command-status"[\s\S]*?<SettingsCategoryRail/,
+    )?.[0] ?? "";
 
+    expect(source).toContain('import { SettingsScopeControls } from "./components/settings/SettingsScopeControls.js";');
+    expect(source).toContain('import { SettingsActivePanelStatus } from "./components/settings/SettingsActivePanelStatus.js";');
     expect(source).toContain('data-settings-sticky="settings-command-status"');
-    expect(source).toContain("sticky top-16 z-30");
-    expect(source).toContain("flex min-w-0 max-w-full flex-wrap");
-    expect(source).toContain("<SettingsScopeControls");
-    expect(source).toContain("<SettingsActivePanelStatus");
-    expect(source).toContain("sticky={false}");
-    expect(source).toContain("<SettingsContentPanels state={state} showActivePanelStatus={false} />");
+    expect(commandStatusBarSource).toContain("sticky top-16 z-30");
+    expect(commandStatusBarSource).toContain("flex min-w-0 max-w-full flex-wrap");
+    expect(commandStatusBarSource).toContain("<SettingsScopeControls");
+    expect(commandStatusBarSource).toContain("<SettingsActivePanelStatus");
+    expect(commandStatusBarSource).toContain("sticky={false}");
+    expect(commandStatusBarSource).not.toContain("rounded-[");
+    expect(commandStatusBarSource).not.toContain("bg-[var(--surface-glass)]");
+    expect(source.match(/<SettingsContentPanels/g) ?? []).toHaveLength(1);
+    expect(source).toMatch(/<SettingsContentPanels\s+state=\{state\}\s+showActivePanelStatus=\{false\}\s+\/>/);
     expect(source).not.toContain("scopeSticky.getBoundingClientRect()");
     expect(source).not.toContain("panelStickyTop");
   });

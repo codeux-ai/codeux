@@ -18,7 +18,7 @@ Switch scope with the selector at the top:
 - **Project** — applies to the active project.
 - **Sprint** — applies to the selected sprint within the active project.
 
-The sticky command/status row keeps the System/Project selector, project availability or inheritance context, active panel, and save state visible together while you scroll. It shows the visible-category count only while Smart Find is active; when search is inactive, the visible status stays to a quiet search prompt while the exact category total remains available to assistive technology.
+The sticky command/status bar keeps the System/Project selector, project availability or inheritance context, active panel, and save state visible together while you scroll. It shows the visible-category count only while Smart Find is active; when search is inactive, the visible status stays to a quiet search prompt while the exact category total remains available to assistive technology. The bar uses compact controls and chips instead of one long background card, so focus rings, contrast, wrapping, and saved/dirty cues stay clear on narrow screens.
 
 ## Categories
 
