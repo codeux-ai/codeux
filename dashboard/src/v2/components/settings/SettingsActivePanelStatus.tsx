@@ -52,8 +52,8 @@ export const SettingsActivePanelStatus: FunctionComponent<{
     } as JSX.CSSProperties)
     : style;
   const statusClassName = [
-    sticky ? "sticky top-[var(--settings-active-panel-top)] z-20" : null,
-    "mb-3 flex min-w-0 flex-wrap items-center gap-2 overflow-visible rounded-[1rem] border border-[color:var(--border-hairline)] bg-[var(--surface-glass)] px-3 py-2 text-xs font-semibold text-slate-500 shadow-[var(--elevation-base)] backdrop-blur-2xl dark:text-slate-300",
+    sticky ? "sticky top-[var(--settings-active-panel-top)] z-20 mb-3" : null,
+    "flex min-w-0 flex-wrap items-center gap-2 overflow-visible rounded-[1rem] border border-[color:var(--border-hairline)] bg-[var(--surface-glass)] px-3 py-2 text-xs font-semibold text-slate-500 shadow-[var(--elevation-base)] backdrop-blur-2xl dark:text-slate-300",
     className,
   ].filter(Boolean).join(" ");
 

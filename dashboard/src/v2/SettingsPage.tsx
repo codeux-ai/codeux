@@ -7,6 +7,7 @@ import { ActionFeedbackRegion } from "./components/ui/ActionFeedbackRegion.js";
 import { useSettingsPageState } from "./hooks/use-settings-page-state.js";
 import { SettingsCategoryRail, CATEGORIES } from "./components/settings/SettingsCategoryRail.js";
 import { SettingsContentPanels } from "./components/settings/SettingsContentPanels.js";
+import { SettingsActivePanelStatus } from "./components/settings/SettingsActivePanelStatus.js";
 import { SettingsScopeControls } from "./components/settings/SettingsScopeControls.js";
 import { useReducedMotion } from "./hooks/use-reduced-motion.js";
 import { useGsapInteractionTokens } from "./lib/motion/constants.js";
@@ -79,7 +80,6 @@ export function focusFirstInvalidSettingsControl(root: ParentNode): string | nul
 export const SettingsPage: FunctionComponent = () => {
   const headerRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
-  const scopeStickyRef = useRef<HTMLDivElement>(null);
   const contentTweenRef = useRef<ReturnType<typeof gsap.to> | null>(null);
   const mountedRef = useRef(true);
   const prefersReducedMotion = useReducedMotion();
@@ -87,7 +87,6 @@ export const SettingsPage: FunctionComponent = () => {
   const interactionTokens = useInteractionTokens();
   const [pendingCategory, setPendingCategory] = useState<typeof CATEGORIES[number]["id"] | null>(null);
   const [validationMessage, setValidationMessage] = useState<string | null>(null);
-  const [panelStickyTop, setPanelStickyTop] = useState("9.5rem");
   const resetProjectConfirm = useConfirmDialog();
   const saveDisabledReasonId = "settings-save-disabled-reason";
 
@@ -190,35 +189,6 @@ export const SettingsPage: FunctionComponent = () => {
     });
     return () => ctx.revert();
   }, [prefersReducedMotion]);
-
-  useLayoutEffect(() => {
-    const scopeSticky = scopeStickyRef.current;
-    if (!scopeSticky) {
-      return;
-    }
-
-    const appShellOffset = 64;
-    const stickyGap = 12;
-    let frameId = 0;
-    const updateStickyOffset = () => {
-      window.cancelAnimationFrame(frameId);
-      frameId = window.requestAnimationFrame(() => {
-        const nextOffset = `${Math.ceil(scopeSticky.getBoundingClientRect().height + appShellOffset + stickyGap)}px`;
-        setPanelStickyTop((currentOffset) => currentOffset === nextOffset ? currentOffset : nextOffset);
-      });
-    };
-
-    updateStickyOffset();
-    window.addEventListener("resize", updateStickyOffset);
-    const resizeObserver = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(updateStickyOffset);
-    resizeObserver?.observe(scopeSticky);
-
-    return () => {
-      window.cancelAnimationFrame(frameId);
-      window.removeEventListener("resize", updateStickyOffset);
-      resizeObserver?.disconnect();
-    };
-  }, []);
 
   const switchCategory = useCallback((categoryId: typeof activeCategory): void => {
     if (!contentRef.current || categoryId === activeCategory) {
@@ -331,27 +301,6 @@ export const SettingsPage: FunctionComponent = () => {
             title="Settings & Integration"
             subtitle="Tune the system baseline, then shape project-level behavior with faster wayfinding, denser controls, and focused routing workspaces."
           />
-
-          <div
-            ref={scopeStickyRef}
-            data-settings-sticky="scope"
-            className="sticky top-16 z-30 -mx-1 flex min-w-0 flex-wrap items-center gap-3 overflow-visible rounded-[1.5rem] border border-[color:var(--border-hairline)] bg-[var(--surface-glass)] px-1 py-2 shadow-[var(--elevation-base)] backdrop-blur-2xl"
-          >
-            <SettingsScopeControls
-              activeScope={activeScope}
-              setActiveScope={setActiveScope}
-              selectedProject={selectedProject}
-              scopeStatusText={scopeStatusText}
-              projectSourceSummary={projectSourceSummary}
-              filteredCategoryCount={filteredCategories.length}
-              isSearchActive={Boolean(normalizedSearch)}
-              activeDirty={activeDirty}
-              activeSaving={activeSaving}
-              saveMessage={saveMessage}
-              error={error}
-              interactionStyle={scopeControlStyle}
-            />
-          </div>
         </div>
 
         <div className="rounded-[1.75rem] border border-[color:var(--border-hairline)] bg-[var(--surface-glass)] p-4 backdrop-blur-2xl shadow-[var(--elevation-base)]">
@@ -486,7 +435,32 @@ export const SettingsPage: FunctionComponent = () => {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 items-start gap-8 lg:grid-cols-[280px_minmax(0,1fr)]">
+      <div className="grid grid-cols-1 items-start gap-x-8 gap-y-6 lg:grid-cols-[280px_minmax(0,1fr)]">
+        <div
+          data-settings-sticky="settings-command-status"
+          className="sticky top-16 z-30 -mx-1 flex min-w-0 max-w-full flex-wrap items-center gap-3 overflow-visible px-1 py-2 lg:col-start-2 lg:row-start-1"
+        >
+          <SettingsScopeControls
+            activeScope={activeScope}
+            setActiveScope={setActiveScope}
+            selectedProject={selectedProject}
+            scopeStatusText={scopeStatusText}
+            projectSourceSummary={projectSourceSummary}
+            filteredCategoryCount={filteredCategories.length}
+            isSearchActive={Boolean(normalizedSearch)}
+            activeDirty={activeDirty}
+            activeSaving={activeSaving}
+            saveMessage={saveMessage}
+            error={error}
+            interactionStyle={scopeControlStyle}
+          />
+          <SettingsActivePanelStatus
+            state={state}
+            sticky={false}
+            className="mb-0"
+          />
+        </div>
+
         <SettingsCategoryRail
           activeCategory={activeCategory}
           filteredCategories={filteredCategories}
@@ -494,6 +468,7 @@ export const SettingsPage: FunctionComponent = () => {
           settingsSearchMatches={settingsSearchMatches}
           onSwitchCategory={switchCategory}
           pendingCategory={pendingCategory}
+          className="lg:col-start-1 lg:row-span-2 lg:row-start-1"
         />
 
         <div
@@ -503,7 +478,7 @@ export const SettingsPage: FunctionComponent = () => {
           aria-label="Settings category panel"
           aria-busy={activeSaving || loading || resettingProject ? "true" : undefined}
           data-motion-contract="enterExit"
-          className="flex min-w-0 flex-col gap-5"
+          className="flex min-w-0 flex-col gap-5 lg:col-start-2 lg:row-start-2"
         >
           <div className="mb-1 flex flex-wrap items-center gap-3">
             <activeCategoryConfig.icon
@@ -538,7 +513,7 @@ export const SettingsPage: FunctionComponent = () => {
             />
           </div>
 
-          <SettingsContentPanels state={state} stickyTop={panelStickyTop} />
+          <SettingsContentPanels state={state} showActivePanelStatus={false} />
         </div>
       </div>
 

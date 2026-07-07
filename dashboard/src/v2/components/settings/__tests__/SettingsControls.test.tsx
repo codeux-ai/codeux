@@ -737,10 +737,10 @@ describe("SettingsControls Accessibility", () => {
     expect(screen.getByText("General panel values stay mounted")).toBeInTheDocument();
   });
 
-  it("SettingsContentPanels accepts the measured sticky offset from the settings scope strip", () => {
+  it("SettingsContentPanels can suppress the active panel strip for a shared command/status bar", () => {
     render(
       <SettingsContentPanels
-        stickyTop="148px"
+        showActivePanelStatus={false}
         state={{
           activeCategory: "general",
           activeDirty: false,
@@ -753,17 +753,22 @@ describe("SettingsControls Accessibility", () => {
       />
     );
 
-    expect(screen.getByText("Active panel").parentElement).toHaveStyle("--settings-active-panel-top: 148px");
+    expect(screen.queryByText("Active panel")).not.toBeInTheDocument();
+    expect(screen.getByText("General panel values stay mounted")).toBeInTheDocument();
   });
 
-  it("SettingsPage keeps the scope controls in a sticky wrapping strip and passes its measured offset to the panel strip", () => {
+  it("SettingsPage keeps scope controls and active panel status in one sticky wrapping bar", () => {
     const source = readFileSync("dashboard/src/v2/SettingsPage.tsx", "utf8");
 
-    expect(source).toContain('data-settings-sticky="scope"');
+    expect(source).toContain('data-settings-sticky="settings-command-status"');
     expect(source).toContain("sticky top-16 z-30");
-    expect(source).toContain("flex min-w-0 flex-wrap");
-    expect(source).toContain("scopeSticky.getBoundingClientRect().height + appShellOffset + stickyGap");
-    expect(source).toContain("<SettingsContentPanels state={state} stickyTop={panelStickyTop} />");
+    expect(source).toContain("flex min-w-0 max-w-full flex-wrap");
+    expect(source).toContain("<SettingsScopeControls");
+    expect(source).toContain("<SettingsActivePanelStatus");
+    expect(source).toContain("sticky={false}");
+    expect(source).toContain("<SettingsContentPanels state={state} showActivePanelStatus={false} />");
+    expect(source).not.toContain("scopeSticky.getBoundingClientRect()");
+    expect(source).not.toContain("panelStickyTop");
   });
 
   it("SettingsContentPanels renders reset pending feedback while keeping values mounted", () => {
