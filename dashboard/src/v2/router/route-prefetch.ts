@@ -16,6 +16,7 @@ const componentImporters: Record<string, ModuleImporter> = {
   "/tasks": () => import("../TasksPage.js"),
   "/agents": () => import("../AgentsPage.js"),
   "/nodes": () => import("../NodesPage.js"),
+  "/custom-dashboards": () => import("../CustomDashboardsPage.js"),
   "/stats": () => import("../StatsPage.js"),
   "/scheduler": () => import("../SchedulerPage.js"),
   "/config": () => import("../SettingsPage.js"),
