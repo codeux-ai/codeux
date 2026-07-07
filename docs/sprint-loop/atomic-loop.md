@@ -73,6 +73,7 @@ Automatically created PRs must provide sufficient human context:
 - **Worker Feature PRs** (`worker-branch -> sprint-feature-branch`): Must include both the current task description (from the prompt) and the sprint goal/description in the PR body.
 - Worker feature PR timing is rendered with the same completion timestamp later persisted to the task run, so PR bodies show `Finished` and `Duration` even though the PR is opened just before task-run finalization.
 - **Main Merge PRs** (`sprint-feature-branch -> default-branch`): Must include the sprint description alongside branch and sprint numbering metadata.
+- Main merge PR timing uses the sprint run's persisted `startedAt` plus the finalization timestamp captured at PR creation time until the sprint run completion row is persisted. Once `finishedAt` exists on the sprint run, that stored value remains authoritative for historical PR rendering.
 - If task or sprint descriptions are missing/empty, PR bodies will use a compact fallback text instead of omitting sections.
 - The `default-branch` target is the resolved scoped `git.defaultBranch` value (`system -> project -> sprint` settings). Legacy project metadata cannot override it during sprint completion, so inherited system defaults such as `dev` remain the final merge target.
 
