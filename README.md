@@ -343,9 +343,11 @@ pnpm start
 ### Validate locally
 
 ```bash
+pnpm run quality:guardrails
+pnpm run audit
 pnpm run lint
-pnpm run typecheck
-pnpm run test
+pnpm run test:backend:coverage
+pnpm run test:dashboard
 pnpm run build
 ```
 

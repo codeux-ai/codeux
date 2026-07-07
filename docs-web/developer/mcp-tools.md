@@ -23,9 +23,10 @@ failures return `InvalidParams` with the failing JSON path.
 
 ## The tools
 
-Code UX exposes **one tool per management domain**, plus `search_knowledge`. Each `manage_*` tool
-takes an `action` (from a fixed enum) plus action-specific fields, and an optional `approval` object
-for destructive actions.
+Code UX exposes grouped management tools per domain, plus `search_knowledge`. The deprecated
+`manage_code_ux` tool remains registered for compatibility, but the grouped tools are the primary
+surface. Each `manage_*` tool takes an `action` (from a fixed enum) plus action-specific fields,
+and an optional `approval` object for destructive actions.
 
 | Tool | Category | Purpose |
 | --- | --- | --- |
@@ -35,11 +36,12 @@ for destructive actions.
 | `manage_quicksprints` | orchestration | Manage quicksprint templates and execute them. |
 | `manage_scheduler` | orchestration | Create and run scheduled sprints, quicksprints, and messages. |
 | `manage_agents` | agents & memory | Manage agent presets and sync them to project markdown. |
-| `manage_memory` | agents & memory | Inspect, search, promote, and re-embed short/long-term memory. |
+| `manage_memory` | agents & memory | Inspect, search, promote, re-embed, and manage durable claims. |
 | `search_knowledge` | agents & memory | Semantic search over the knowledge base subscribed to the caller. |
 | `manage_settings` | platform | Get/resolve/patch/replace/reset system, project, and sprint settings. |
 | `manage_preview` | platform | Manage sprint preview containers (start/stop/rebuild, logs, scripts). |
 | `manage_telemetry` | platform | Read execution snapshots, invocations, sprint runs, and dispatches. |
+| `manage_code_ux` | advanced | (Deprecated) Manage internal Code UX state for compatibility. |
 
 Every tool requires `runtimeRoles: ["project_manager"]` and is enabled by default.
 
@@ -51,12 +53,13 @@ Every tool requires `runtimeRoles: ["project_manager"]` and is enabled by defaul
 | `manage_sprints` | `list`, `get`, `create`, `update`, `delete`, `start`, `pause`, `cancel`, `force_cancel`, `inspect_run`, `import_issues`, `plan` |
 | `manage_tasks` | `list`, `get`, `create`, `update`, `delete`, `start`, `stop`, `force_stop`, `pause`, `inspect_run` |
 | `manage_quicksprints` | `list_templates`, `get_template`, `create_template`, `update_template`, `delete_template`, `execute`, `start` |
-| `manage_scheduler` | `list`, `create`, `update`, `delete`, `run_due`, `schedule_sprint`, `schedule_quicksprint`, `schedule_chat` |
-| `manage_agents` | `list`, `get`, `create`, `update`, `delete`, `sync` |
-| `manage_memory` | `list`, `get`, `count`, `create`, `update`, `delete`, `search`, `promote`, `get_map`, `model_status`, `start_reembed` |
+| `manage_scheduler` | `list`, `create`, `schedule_sprint`, `schedule_quicksprint`, `schedule_chat`, `update`, `delete`, `run_due` |
+| `manage_agents` | `list`, `get`, `sync`, `create`, `update`, `delete` |
+| `manage_memory` | `search`, `list`, `get`, `create`, `update`, `delete`, `promote`, `start_reembed`, `get_map`, `count`, `model_status`, `create_claim`, `list_claims`, `get_claim`, `update_claim`, `add_claim_evidence`, `deprecate_claim` |
 | `manage_settings` | `get_system`, `get_project_override`, `resolve_project_effective`, `get_sprint_override`, `resolve_sprint_effective`, `replace_system_settings`, `patch_system_setting`, `replace_project_settings`, `patch_project_setting`, `reset_project_settings`, `replace_sprint_settings`, `patch_sprint_setting`, `reset_sprint_settings` |
-| `manage_preview` | `list_sessions`, `start_session`, `stop_session`, `rebuild_session`, `remove_session`, `get_logs`, `get_url`, `get_script`, `update_script` |
-| `manage_telemetry` | `get_project_stats_snapshot`, `get_project_execution_snapshot`, `list_execution_invocations`, `list_execution_invocation_messages`, `list_sprint_runs`, `list_task_dispatches` |
+| `manage_preview` | `list_sessions`, `start_session`, `rebuild_session`, `stop_session`, `remove_session`, `get_logs`, `get_url`, `get_script`, `update_script` |
+| `manage_telemetry` | `get_project_execution_snapshot`, `get_project_stats_snapshot`, `list_sprint_runs`, `list_task_dispatches`, `list_execution_invocations`, `list_execution_invocation_messages` |
+| `manage_code_ux` | Domain/action specific (Deprecated) |
 
 For the full per-action payloads and return shapes, see [Management actions](./management-actions.md).
 
@@ -122,6 +125,6 @@ Client → CallTool(name, args)
   Server → return the wrapped result
 ```
 
-The tool set is identical across the stdio and HTTPS transports. For client setup, see
+The tool set is identical across the stdio and HTTP transports. For client setup, see
 [MCP clients](../user/mcp-clients.md); for transport internals, see
 [Architecture → MCP server](../architecture/mcp-server.md).

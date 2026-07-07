@@ -17,7 +17,7 @@ Planning routes use the same named OpenCode provider instance settings as chat a
 
 ## Authentication Modes
 
-Each named OpenCode provider instance stores an `openCodeAuthMode` (`LOCAL_AUTH`, `ENV_KEY`, or `CUSTOM_PROVIDER`).
+Each named OpenCode provider instance stores an `openCodeAuthMode` (`LOCAL_AUTH`, `ENV_KEY`, or `CUSTOM_PROVIDER`). API-key mode can use `ENV_KEY` or `CUSTOM_PROVIDER`; local/dashboard auth forces `openCodeAuthMode` to `LOCAL_AUTH`.
 
 ### Local Auth
 
@@ -42,7 +42,7 @@ The generated config sets `permission` to `"allow"` for headless Code UX runs so
 
 ### Custom Provider
 
-`CUSTOM_PROVIDER` generates an OpenCode provider entry for OpenAI-compatible endpoints:
+`CUSTOM_PROVIDER` generates an OpenCode provider entry for OpenAI-compatible endpoints. The selected model becomes `<openCodeProviderId>/<openCodeModelId>`, not the placeholder `custom/model`.
 
 ```json
 {

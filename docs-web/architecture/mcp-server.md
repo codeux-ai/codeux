@@ -30,7 +30,7 @@ Source: `src/app/lifecycle/mcp-lifecycle-service.ts:92-106`.
 
 ### Streamable HTTP
 
-By default (disable with `--no-mcp-https` or `MCP_HTTPS_ENABLED=false`), Code UX also binds an HTTP listener using `StreamableHTTPServerTransport` for the MCP HTTPS transport.
+By default (disable with `--no-mcp-http` or `MCP_HTTP_ENABLED=false`), Code UX also binds an HTTP listener using `StreamableHTTPServerTransport` for the MCP HTTP transport.
 
 | Default | Value |
 | --- | --- |
@@ -172,7 +172,7 @@ Connections are pruned during the runtime cleanup loop. The dashboard's
 
 ## Runtime role
 
-`--runtime-role` (or default `project_manager`) determines which tools are advertised. Currently all built-in tools declare `runtimeRoles: ["project_manager"]`. The framework supports `worker` and `listener` roles for future expansion (e.g. dedicated worker hosts that expose only worker tools).
+`--runtime-role` (or default `project_manager`) determines which tools are advertised. Currently all built-in tools declare `runtimeRoles: ["project_manager"]`. The framework supports a `worker-host` role for the local worker client execution bridge.
 
 ## Recovery
 

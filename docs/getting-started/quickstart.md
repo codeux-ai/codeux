@@ -51,7 +51,15 @@ JULES_API_KEY=YOUR_KEY
 pnpm run dev
 ```
 
-This starts the server directly from TypeScript source through Node's `ts-node` ESM register hook, so local development uses the same `.js` import specifiers as the production build without requiring a precompile step.
+This boots the server and Vite dashboard in watch mode side-by-side using `scripts/dev.mjs`.
+
+To boot just the server from source without the dashboard watcher:
+
+```bash
+pnpm run dev:server-only
+```
+
+`dev:server-only` starts the server directly from TypeScript source using `src/index.ts` through Node's `ts-node` ESM register hook (`scripts/tsnode-register.mjs`). Local development uses the same `.js` import specifiers as the production build without requiring a precompile step.
 
 ## Run Compiled Server
 

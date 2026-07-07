@@ -20,8 +20,9 @@ These cover:
 - `manage_settings`
 - `manage_preview`
 - `manage_telemetry`
+- `manage_code_ux` (Deprecated compatibility surface)
 
-The same management domains are also exposed through the direct `codeux` CLI management surface. See [CLI Commands Reference](../reference/cli-commands.md) for the command syntax, aliases, interactive prompting behavior, and approval handling.
+The grouped management domains are the primary surface. `manage_code_ux` remains registered for compatibility, but it is deprecated. The same management domains are also exposed through the direct `codeux` CLI management surface. See [CLI Commands Reference](../reference/cli-commands.md) for the command syntax, aliases, interactive prompting behavior, and approval handling.
 
 ### Core tools
 Implemented in:
@@ -50,6 +51,7 @@ These cover:
 - `manage_settings`
 - `manage_preview`
 - `manage_telemetry`
+- `manage_code_ux` (Deprecated)
 
 ## Registered Tools
 
@@ -57,7 +59,6 @@ Defined in `src/contracts/mcp-tool-definitions.ts`.
 
 Typed tool argument contracts and registry dispatch are defined in `src/api/mcp/tool-registry.ts`.
 
-- `get_session`
 ### Listen mode
 - `listen`
 - `start_listen`
@@ -155,12 +156,11 @@ All mutating settings actions require a stateful human-confirmation step. This i
 - `reset_sprint_settings`
 
 Runtime behavior:
-1. The first mutating settings call never changes settings, even if it includes `approval.confirmed: true`.
-2. The server records a pending approval for the exact settings action, scope, setting path, and normalized payload for 15 minutes.
-3. The response returns `approvalRequired: true` with instructions to ask the user for confirmation.
-4. The client must not call the same endpoint again with `approval.confirmed: true` unless the user explicitly confirms the exact change.
-5. After user confirmation, the same action and same payload can be called once with `approval.confirmed: true` within 15 minutes; the pending approval is consumed and cannot be reused.
-6. A different settings payload, even for the same setting path, creates a separate pending approval and does not execute. Fingerprints preserve explicit `null`, explicit `undefined`, and array order, while object key order is normalized.
+1. Mutating settings actions first return an approval-required response; only the exact same action and payload may execute once with `approval.confirmed: true` within 15 minutes.
+2. Allowed actions: get/resolve actions (`get_system`, `get_project_override`, `resolve_project_effective`, `get_sprint_override`, `resolve_sprint_effective`) are read-only and execute immediately.
+3. Replace, patch, and reset actions (`replace_system_settings`, `patch_system_setting`, `replace_project_settings`, `patch_project_setting`, `reset_project_settings`, `replace_sprint_settings`, `patch_sprint_setting`, `reset_sprint_settings`) require confirmation.
+4. The first mutating call returns `approvalRequired: true` with instructions to ask the user for confirmation, even if it includes `approval.confirmed: true`.
+5. A different settings payload, even for the same setting path, creates a separate pending approval and does not execute. Fingerprints preserve explicit `null`, explicit `undefined`, and array order, while object key order is normalized.
 
 ### Project Setup Action
 
@@ -205,7 +205,7 @@ For payload normalization in management tools, Code UX centralizes parsing behav
 - **Validation Errors**: Parser failures throw `ManagementValidationError`, which the management tool handler serializes as the standardized `result.status: "error"` envelope with `errorType: "validation"` and `isError: true`.
 
 
-The dedicated management tools (`manage_sprints`, `manage_tasks`, `manage_quicksprints`, `manage_scheduler`, `manage_settings`) share the same action handlers.
+The dedicated management tools (`manage_projects`, `manage_sprints`, `manage_tasks`, `manage_quicksprints`, `manage_scheduler`, `manage_agents`, `manage_memory`, `search_knowledge`, `manage_settings`, `manage_preview`, and `manage_telemetry`) share the same action handlers. `manage_code_ux` remains as a deprecated compatibility entry point.
 
 ### `manage_memory` claim actions
 
@@ -418,20 +418,25 @@ Persistence and prompt behavior:
 For task create/update calls:
 - `title` is canonical; `name` is accepted as an alias.
 - `projectId` is required for list/create, and `sprintId` is required for create. List can omit `sprintId` to return all project tasks.
-- Supported edit fields include `promptMarkdown`, `description`, `status`, `priority`, `executorType`, `agentPresetId`, `model`, `sortOrder`, `dependsOnTaskIds`, `isIndependent`, and `isMerged`.
+- Supported edit fields include `promptMarkdown`, `description`, `status`, `priority`, `executorType`, `agentPresetId` (`model` is accepted as an alias), `sortOrder`, `dependsOnTaskIds`, `isIndependent`, and `isMerged`.
 
 For quicksprint calls:
 - `manage_quicksprints` supports `list_templates`, `get_template`, `create_template`, `update_template`, `delete_template`, `execute`, and `start`.
+- `create_template` requires `name`, `description`, `icon`, `category`, and `agentInstructionMarkdown`. Optional fields include `categoryColor`, and `defaultTaskCount`.
+- `update_template` supports partial updates to the same fields as `create_template`.
 - `start` is an MCP-friendly alias for execution with `submitMode: "plan_and_start"`.
-- `execute` defaults to `submitMode: "plan_only"` when no submit mode is supplied.
+- `execute` defaults to `submitMode: "plan_only"` when no submit mode is supplied. Both `execute` and `start` accept optional execution modifiers: `routeOverride`, and `modelOverride`.
 - `taskCount` is the canonical task-number field for execution. MCP accepts it as a number or numeric string.
 - `noTaskLimit: true` lets the planner choose the number of subtasks and disables the fixed-count prompt.
+- Flattened target fields (like `promptMarkdown`, `modelOverride`, etc.) are also accepted when scheduling or executing templates.
 - `delete_template` requires approval confirmation. Custom templates are removed from the project template directory; built-in/default templates are hidden for the project by writing a local tombstone marker instead of deleting shared bundled assets.
 
 For scheduler calls:
 - `manage_scheduler` supports `list`, `create`, `schedule_sprint`, `schedule_quicksprint`, `schedule_chat`, `update`, `delete`, and `run_due`.
-- Generic `create` requires `targetType: "sprint" | "quicksprint" | "chat"`.
-- The `schedule_*` aliases infer the target type and accept flattened target fields.
+- `run_due` accepts an optional `now` ISO date override.
+- Generic `create` requires `targetType: "sprint" | "quicksprint" | "chat" | "memory_remediation"`. Memory remediation targets are also managed via their dedicated `/api/projects/:projectId/scheduler/memory-remediation` routes.
+- The `schedule_*` aliases infer the target type and accept flattened target fields. `create` accepts nested targets (`sprintTarget`, `quicksprintTarget`, `chatTarget`).
+- Scheduling supports an absolute date/time (`scheduledFor`) or an `after_sprint_end` anchor using `scheduleMode: "after_sprint_end"` or `anchorMode: "after_sprint_end"` with `sourceSprintId` / `anchorSourceSprintId` and an optional `offsetMinutes` / `anchorOffsetMinutes`.
 - Recurrence `frequency` accepts `minutely`, `hourly`, `daily`, `weekly`, and `monthly`; the dashboard renders `minutely` as `Minutes` and the matching recurrence summaries use labels such as `Every minute` and `Every 15 minutes`.
 - Minute recurrence uses the same UTC scheduler math as longer intervals, so the normalized rule advances `nextRunAt` and expands occurrences exactly like other frequencies once the minute literal has been parsed.
 - Scheduled quicksprints use the same `taskCount` number or numeric-string normalization as direct quicksprints.
