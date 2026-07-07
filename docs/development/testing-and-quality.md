@@ -88,6 +88,7 @@ pnpm run test:backend:coverage
 ```bash
 pnpm run test:e2e
 ```
+`pnpm run test:e2e` is a wrapper around `pnpm exec playwright test` so the repo keeps one documented entrypoint while Playwright still runs directly.
 Build first when running E2E from a clean checkout:
 ```bash
 pnpm run build
