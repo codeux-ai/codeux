@@ -1,5 +1,6 @@
 import type { TaskPrTemplateSections, SprintPrTemplateSections, TaskPrSectionKey, SprintPrSectionKey } from "../../../contracts/app-types.js";
 import type { LinkedIssueProvider } from "../../../contracts/project-management-types.js";
+import { formatTaskPrTitle } from "../../git/task-pr-title-template.js";
 import { formatCostUsd, formatDurationMs, formatIsoTimestamp, formatTokenCount, providerDisplayName } from "./pr-description-format-utils.js";
 
 export type { TaskPrTemplateSections, SprintPrTemplateSections, TaskPrSectionKey, SprintPrSectionKey };
@@ -59,13 +60,17 @@ export interface PrQaFinding {
 
 export interface TaskPrComposerInput {
   taskId: string;
+  taskKey?: string | null;
   taskTitle: string;
   taskPrompt: string;
   provider: string;
   model: string | null;
+  sprintId?: string | null;
+  sprintSlug?: string | null;
   sprintGoal?: string | null;
   sprintNumber?: number | null;
   sprintName?: string | null;
+  linkedIssues?: Array<{ issueKey?: string | null }> | null;
   featureBranch: string;
   workerBranch: string;
   startedAt: string | null;
@@ -114,6 +119,20 @@ export interface SprintPrComposerInput {
   sections: SprintPrTemplateSections;
   /** Display order for enabled sections. Unknown/duplicate keys are dropped; missing known keys are appended. */
   sectionOrder?: SprintPrSectionKey[];
+}
+
+export interface TaskPrTitleComposerInput {
+  taskId?: string | null;
+  taskKey?: string | null;
+  taskTitle: string;
+  provider?: string | null;
+  sprintId?: string | null;
+  sprintSlug?: string | null;
+  sprintNumber?: number | null;
+  sprintName?: string | null;
+  linkedIssues?: Array<{ issueKey?: string | null }> | null;
+  titleScheme?: string | null;
+  sprintKeyPrefix?: string | null;
 }
 
 function sprintLabel(sprintNumber?: number | null, sprintName?: string | null): string {
@@ -331,8 +350,24 @@ const SPRINT_SECTION_RENDERERS: Record<SprintPrSectionKey, (input: SprintPrCompo
   branchInfo: (input) => `<details>\n<summary>🌿 Branch Info</summary>\n\nBase: \`${input.defaultBranch}\`\nHead: \`${input.featureBranch}\`\n</details>`,
 };
 
-export function composeTaskPrTitle(input: Pick<TaskPrComposerInput, "taskTitle" | "provider">): string {
-  return `${input.taskTitle} (${input.provider})`;
+export function composeTaskPrTitle(input: TaskPrTitleComposerInput): string {
+  return formatTaskPrTitle({
+    scheme: input.titleScheme,
+    sprintKeyPrefix: input.sprintKeyPrefix || "SPR",
+    sprint: {
+      id: input.sprintId,
+      slug: input.sprintSlug,
+      number: input.sprintNumber,
+      name: input.sprintName,
+      linkedIssues: input.linkedIssues,
+    },
+    task: {
+      id: input.taskId,
+      taskKey: input.taskKey,
+      title: input.taskTitle,
+    },
+    provider: input.provider,
+  });
 }
 
 export function composeSprintPrTitle(

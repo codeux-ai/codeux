@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
+import { DEFAULT_TASK_PR_TITLE_SCHEME } from "../../../../src/domain/git/task-pr-title-template.js";
 import { validateSettingsPayload } from "../../../../src/domain/settings/settings-schema.js";
+import { sanitizeGit } from "../../../../src/domain/settings/settings-sanitizers/git-sanitizer.js";
 import { cloneDefaults } from "../../../../src/repositories/settings-sanitizer.js";
 
 describe("validateSettingsPayload", () => {
@@ -50,6 +52,43 @@ describe("validateSettingsPayload", () => {
     expect(result.success).toBe(true);
     expect(result.issues).toEqual([]);
     expect(result.data.ciIntelligence.featurePrAutoMergeMode).toBe("CREATE_PR");
+  });
+
+  it("accepts taskPrTitleScheme in git settings", () => {
+    const payload = cloneDefaults({
+      env: {},
+      settingsJson: {},
+      resolved: {},
+    });
+    payload.git.taskPrTitleScheme = "({sprint_tag}) {task_key}: {task_title} [{provider}]";
+
+    const result = validateSettingsPayload(payload);
+
+    expect(result.success).toBe(true);
+    expect(result.issues).toEqual([]);
+    expect(result.data?.git.taskPrTitleScheme).toBe("({sprint_tag}) {task_key}: {task_title} [{provider}]");
+  });
+
+  it("rejects non-string taskPrTitleScheme values", () => {
+    const payload = cloneDefaults({
+      env: {},
+      settingsJson: {},
+      resolved: {},
+    });
+    payload.git.taskPrTitleScheme = 42 as any;
+
+    const result = validateSettingsPayload(payload);
+
+    expect(result.success).toBe(false);
+    expect(result.issues).toEqual(expect.arrayContaining([
+      { path: "git.taskPrTitleScheme", message: "Expected a string" },
+    ]));
+  });
+
+  it("defaults missing taskPrTitleScheme through the git sanitizer", () => {
+    const result = sanitizeGit({ git: { defaultBranch: "dev" } });
+
+    expect(result.taskPrTitleScheme).toBe(DEFAULT_TASK_PR_TITLE_SCHEME);
   });
 
   it("rejects invalid sprint preview container ports", () => {
