@@ -3170,6 +3170,11 @@ describe("ExecutionRepository", () => {
       expect(claimed).not.toBeNull();
       expect(claimed?.id).toBe(dispatchHigh.id);
       expect(claimed?.status).toBe("claimed");
+      expect(claimed?.leaseToken).toEqual(expect.any(String));
+      expect(executionRepository.getLease("task_dispatch", dispatchHigh.id)).toMatchObject({
+        scopeId: dispatchHigh.id,
+        leaseToken: claimed?.leaseToken,
+      });
     });
 
     it("scopes claim by sprint and sprint run filters", async () => {
@@ -3273,6 +3278,68 @@ describe("ExecutionRepository", () => {
         executorType: "mcp_worker",
       });
       expect(claim2).toBeNull();
+    });
+
+    it("skips queued dispatches with active leases and reclaims after the lease is stale", async () => {
+      const { projectRepository, executionRepository } = await createRepositories();
+      const project = projectRepository.createProject({
+        name: "Stale Lease Claim Project",
+        sourceType: "local",
+        sourceRef: "/workspace/stale-lease-claim",
+      });
+      const sprint = projectRepository.createSprint(project.id, {
+        name: "Sprint",
+        goalMarkdown: "Goal",
+      });
+      const sprintRun = executionRepository.createSprintRun({
+        projectId: project.id,
+        sprintId: sprint.id,
+      });
+      const task = projectRepository.createTask(project.id, {
+        title: "Task",
+        sprintId: sprint.id,
+      });
+      const dispatch = executionRepository.createTaskDispatch({
+        projectId: project.id,
+        sprintId: sprint.id,
+        taskId: task.id,
+        sprintRunId: sprintRun.id,
+        executorType: "mcp_worker",
+      });
+
+      executionRepository.acquireLease({
+        scopeType: "task_dispatch",
+        scopeId: dispatch.id,
+        ownerKey: "worker:a",
+        leaseToken: "active-lease",
+        expiresAt: new Date(Date.now() + 60_000).toISOString(),
+      });
+
+      expect(executionRepository.claimNextTaskDispatch({
+        projectId: project.id,
+        executorType: "mcp_worker",
+        ownerKey: "worker:b",
+      })).toBeNull();
+
+      executionRepository.renewLease({
+        scopeType: "task_dispatch",
+        scopeId: dispatch.id,
+        leaseToken: "active-lease",
+        expiresAt: new Date(Date.now() - 1_000).toISOString(),
+      });
+
+      const claimed = executionRepository.claimNextTaskDispatch({
+        projectId: project.id,
+        executorType: "mcp_worker",
+        ownerKey: "worker:b",
+        leaseToken: "fresh-lease",
+      });
+
+      expect(claimed?.id).toBe(dispatch.id);
+      expect(executionRepository.getLease("task_dispatch", dispatch.id)).toMatchObject({
+        ownerKey: "worker:b",
+        leaseToken: "fresh-lease",
+      });
     });
 
     it("returns null if no queued tasks exist for executor type", async () => {

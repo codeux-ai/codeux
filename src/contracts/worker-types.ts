@@ -112,3 +112,12 @@ export interface ProjectWorkerAssignmentRecord {
   createdAt: string;
   updatedAt: string;
 }
+
+export interface UpsertExternalWorkerEndpointInput {
+  connectionKey: string;
+  displayName: string;
+  transport: string;
+  projectIds?: string[];
+  activeProjectIds?: string[];
+  capabilities?: Partial<WorkerEndpointCapabilities>;
+}

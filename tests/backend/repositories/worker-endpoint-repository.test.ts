@@ -63,6 +63,7 @@ describe("WorkerEndpointRepository", () => {
     const endpoint = workerEndpointRepository.getWorkerEndpointByConnectionId(worker.id);
     expect(endpoint).toMatchObject({
       endpointType: "mcp_connection",
+      endpointKey: "mcp:worker-endpoint-1",
       displayName: "Worker Endpoint 1",
       status: "connected",
       connectionId: worker.id,
@@ -73,6 +74,48 @@ describe("WorkerEndpointRepository", () => {
         canExecuteTasks: false,
       },
     });
+  });
+
+  it("upserts external worker endpoints by stable connection key", async () => {
+    const { workerEndpointRepository } = await createRepositories();
+
+    const first = workerEndpointRepository.upsertExternalWorkerEndpoint({
+      connectionKey: "cluster-worker-1",
+      displayName: "Cluster Worker 1",
+      transport: "streamable-http",
+      projectIds: ["project-a", "project-b"],
+      activeProjectIds: ["project-b"],
+      capabilities: {
+        canExecuteTasks: true,
+        canSuperviseProjects: false,
+      },
+    });
+    const second = workerEndpointRepository.upsertExternalWorkerEndpoint({
+      connectionKey: "cluster-worker-1",
+      displayName: "Cluster Worker 1B",
+      transport: "streamable-http",
+      projectIds: ["project-a"],
+      activeProjectIds: ["project-a"],
+      capabilities: {
+        canExecuteTasks: false,
+      },
+    });
+
+    expect(second.id).toBe(first.id);
+    expect(second).toMatchObject({
+      endpointKey: "mcp:cluster-worker-1",
+      endpointType: "mcp_connection",
+      displayName: "Cluster Worker 1B",
+      status: "connected",
+      connectionId: null,
+      connectionKey: "cluster-worker-1",
+      transport: "streamable-http",
+      capabilities: {
+        canExecuteTasks: false,
+        canSuperviseProjects: true,
+      },
+    });
+    expect(workerEndpointRepository.listWorkerEndpoints()).toHaveLength(1);
   });
 
   it("removes synced worker endpoints when the connection stops being a worker", async () => {

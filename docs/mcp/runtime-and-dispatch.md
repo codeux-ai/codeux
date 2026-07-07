@@ -36,6 +36,20 @@ Code UX exposes these MCP runtime roles:
 
 The legacy `worker_gateway` and `code-ux-worker` roles have been removed.
 
+## Worker Enrollment And Dispatch
+
+External worker hosts enroll as database-backed worker endpoints instead of using a separate cluster schema. Each endpoint is keyed by a stable MCP connection key (`mcp:<connectionKey>`) and records display name, transport, heartbeat-derived status, and execution/supervision capabilities in `worker_endpoints`.
+
+Project eligibility is represented by `project_worker_assignments`. A project can have one primary worker plus any number of overflow workers; this assignment model does not cap the number of registered endpoints. Live MCP connections and enrolled external endpoints both use the same assignment records, and stale or offline endpoints are excluded from new task claims.
+
+Worker task pickup is lease-backed:
+
+- queued `task_dispatches` are claimed in priority order, filtered by project, sprint, sprint run, and executor type
+- the claim transaction marks the dispatch `claimed`, binds its connection when available, and creates a `task_dispatch` row in `execution_leases`
+- active leases prevent duplicate claims; expired leases can be replaced by a new worker claim
+- worker heartbeats renew the task-dispatch lease while running
+- cancellation and pause requests remain visible through the dispatch status and are returned to workers on update
+
 Startup mode is separate from runtime role:
 
 - Dashboard mode is the default. It binds the dashboard plus the MCP HTTP gateway.
