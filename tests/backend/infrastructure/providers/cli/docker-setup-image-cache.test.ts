@@ -102,7 +102,7 @@ describe("DockerSetupImageCache", () => {
     const dockerfileWrite = vi.mocked(fs.writeFile).mock.calls.find(([file]) => String(file).endsWith("Dockerfile"));
     expect(dockerfileWrite?.[1]).toContain('LABEL org.opencontainers.image.title="Code UX setup cache"');
     expect(dockerfileWrite?.[1]).toContain('LABEL ai.codeux.base-image="node:24-bookworm"');
-    expect(dockerfileWrite?.[1]).not.toContain("PLAYWRIGHT_BROWSERS_PATH");
+    expect(dockerfileWrite?.[1]).not.toContain("ENV PLAYWRIGHT_BROWSERS_PATH");
     const progressEvents = onProgress.mock.calls.map(([event]) => event as DockerSetupImageCacheProgress);
     expect(progressEvents.map((event) => event.kind)).toEqual(expect.arrayContaining([
       "cache_miss",
@@ -134,7 +134,39 @@ describe("DockerSetupImageCache", () => {
     const dockerfileWrite = vi.mocked(fs.writeFile).mock.calls.find(([file]) => String(file).endsWith("Dockerfile"));
     expect(dockerfileWrite?.[1]).toContain("ENV CODE_UX_INSTALL_PLAYWRIGHT=1");
     expect(dockerfileWrite?.[1]).toContain("ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright");
-    expect(dockerfileWrite?.[1]).toContain("chmod -R a+rX /ms-playwright");
+    expect(dockerfileWrite?.[1]).toContain("npx -y playwright@latest install --with-deps chromium");
+    expect(dockerfileWrite?.[1]).toContain("chmod -R a+rX \"$PLAYWRIGHT_BROWSERS_PATH\"");
+    expect(dockerfileWrite?.[1]).toContain("rm -rf /var/lib/apt/lists/*");
+  });
+
+  it("changes the cache key when setup script or Dockerfile behavior changes", async () => {
+    vi.mocked(runStreamingCommand).mockReset();
+    vi.mocked(runStreamingCommand).mockResolvedValue({ ok: true, code: 0, stdout: "exists", stderr: "" });
+    vi.mocked(fs.readFile)
+      .mockResolvedValueOnce("#!/usr/bin/env bash\necho setup-a\n")
+      .mockResolvedValueOnce("#!/usr/bin/env bash\necho setup-b\n")
+      .mockResolvedValueOnce("#!/usr/bin/env bash\necho setup-b\n");
+
+    const cache = new DockerSetupImageCache();
+    const commonInput = {
+      baseImage: "node:24-bookworm",
+      setupScriptPath: "/repo/.code-ux/container/setup.sh",
+      cacheEnabled: true,
+      runtimeRoot: "/runtime",
+      repoPath: "/repo",
+      onActivity: vi.fn(),
+      mapSourcePathForDaemon: (sourcePath: string) => `/mapped${sourcePath}`,
+    };
+
+    const first = await cache.resolveImage(commonInput);
+    const scriptChanged = await cache.resolveImage(commonInput);
+    const dockerfileChanged = await cache.resolveImage({
+      ...commonInput,
+      installPlaywrightBrowsers: true,
+    });
+
+    expect(first.image).not.toBe(scriptChanged.image);
+    expect(scriptChanged.image).not.toBe(dockerfileChanged.image);
   });
 
   it("falls back to runtime setup when the build fails", async () => {

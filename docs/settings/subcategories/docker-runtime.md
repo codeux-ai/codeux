@@ -10,6 +10,8 @@ Image, setup script, memory limit, setup image caching, and Playwright browser p
 
 Keep the default image unless your repo needs a custom toolchain; enable Playwright preinstall for browser-heavy QA.
 
+When setup-image caching is enabled, Playwright preinstall is baked into the derived setup image at `/ms-playwright` with readable permissions for non-root runtime users. Cache hits reuse that browser path and skip the setup script, avoiding repeated Chromium downloads on every provider launch.
+
 ## Risks And Gotchas
 
 Broken setup scripts or overly tight memory limits can fail every provider invocation in the scope.

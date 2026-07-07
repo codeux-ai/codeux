@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Force rebuild version: 2026-05-31-002
+# Force rebuild version: 2026-07-07-001
 set -euo pipefail
 
 echo "[setup] Starting container bootstrap..."
@@ -155,10 +155,14 @@ if [ "${CODE_UX_INSTALL_PLAYWRIGHT:-0}" = "1" ]; then
     echo "[setup] Installing Playwright Chromium + dependencies..."
     if command -v apt-get >/dev/null 2>&1 && [ "$(id -u)" -eq 0 ]; then
       npx -y playwright@latest install --with-deps chromium
+      rm -rf /var/lib/apt/lists/* || true
     else
       npx -y playwright@latest install chromium
       echo "[setup] NOTE: Skipped OS dependency install (no root/apt-get)."
     fi
+  fi
+  if [ "$(id -u)" -eq 0 ]; then
+    chmod -R a+rX "${PLAYWRIGHT_BROWSERS_PATH}" || true
   fi
 else
   echo "[setup] Playwright browser bootstrap skipped (enable Docker Runtime preinstall to install Chromium)."
