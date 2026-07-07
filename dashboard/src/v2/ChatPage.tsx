@@ -31,7 +31,7 @@ import { ProviderLogo } from "./components/ui/ProviderLogo.js";
 import { AgentAvatarSvg } from "./components/agents/AgentAvatarSvg.js";
 import { generateRandomAgentAvatar } from "./lib/agent-avatar.js";
 import { formatInvocationRetryAt } from "./lib/invocation-retry-time.js";
-import type { ExecutionInvocationRecord } from "./types.js";
+import type { ExecutionInvocationRecord, Sprint, Task } from "./types.js";
 import { cancelExecutionInvocation, resetInvocationUsageLimitTimer, restartExecutionInvocation, type InvocationRestartMode } from "./lib/invocation-api.js";
 import { useActionFeedback } from "./hooks/use-action-feedback.js";
 import {
@@ -39,7 +39,12 @@ import {
   mergeInvocationToolMessages
 } from "./lib/chat-widget-view-models.js";
 import { clearChatDraftFromUrl, readChatDraftFromLocation } from "./lib/no-project-chat-assistant.js";
+import { resolveChatLiveEntities, type ChatLiveEntityWidget } from "./lib/chat-live-entities.js";
 
+
+const EMPTY_LIVE_ENTITIES: readonly ChatLiveEntityWidget[] = [];
+const EMPTY_LIVE_SPRINTS: readonly Sprint[] = [];
+const EMPTY_LIVE_TASKS: readonly Task[] = [];
 
 const formatInvocationErrorCategory = (value: ExecutionInvocationRecord["lastErrorCategory"]): string | null => {
   switch (value) {
@@ -137,6 +142,7 @@ export const ChatPage: FunctionComponent = () => {
     projectTasksLoading,
     projectTasksLoaded,
     sprintKeyPrefix,
+    liveEntityContext,
   } = useChatPageData({ composerRef, messagesRef });
 
   useEffect(() => {
@@ -170,6 +176,50 @@ export const ChatPage: FunctionComponent = () => {
     projectTasksLoading,
     selectedProject?.id,
     sprintKeyPrefix,
+  ]);
+  const liveEntitySprints = liveEntityContext?.sprints ?? EMPTY_LIVE_SPRINTS;
+  const liveEntityTasks = liveEntityContext?.tasks ?? EMPTY_LIVE_TASKS;
+  const liveEntitySprintKeyPrefix = liveEntityContext?.sprintKeyPrefix ?? sprintKeyPrefix;
+  const threadLiveEntitiesByMessageId = useMemo(() => {
+    const entitiesByMessageId = new Map<string, readonly ChatLiveEntityWidget[]>();
+    if (liveEntitySprints.length === 0 && liveEntityTasks.length === 0) {
+      return entitiesByMessageId;
+    }
+    for (const message of messages) {
+      entitiesByMessageId.set(message.id, resolveChatLiveEntities({
+        sprints: liveEntitySprints,
+        tasks: liveEntityTasks,
+        sprintKeyPrefix: liveEntitySprintKeyPrefix,
+        message,
+      }));
+    }
+    return entitiesByMessageId;
+  }, [liveEntitySprints, liveEntitySprintKeyPrefix, liveEntityTasks, messages]);
+  const visibleInvocationMessages = useMemo(
+    () => mergeInvocationToolMessages(invocationMessages),
+    [invocationMessages],
+  );
+  const invocationLiveEntitiesByMessageId = useMemo(() => {
+    const entitiesByMessageId = new Map<string, readonly ChatLiveEntityWidget[]>();
+    if (liveEntitySprints.length === 0 && liveEntityTasks.length === 0) {
+      return entitiesByMessageId;
+    }
+    for (const message of visibleInvocationMessages) {
+      entitiesByMessageId.set(message.id, resolveChatLiveEntities({
+        sprints: liveEntitySprints,
+        tasks: liveEntityTasks,
+        sprintKeyPrefix: liveEntitySprintKeyPrefix,
+        message,
+        invocation: selectedInvocation,
+      }));
+    }
+    return entitiesByMessageId;
+  }, [
+    liveEntitySprints,
+    liveEntitySprintKeyPrefix,
+    liveEntityTasks,
+    selectedInvocation,
+    visibleInvocationMessages,
   ]);
 
   const handlePromptSuggestionSelect = useCallback((prompt: string) => {
@@ -495,6 +545,7 @@ export const ChatPage: FunctionComponent = () => {
                       agentAvatarConfig={preset?.avatarConfig}
                       agentName={preset?.name}
                       widgetLiveData={widgetLiveData}
+                      liveEntities={threadLiveEntitiesByMessageId.get(message.id) ?? EMPTY_LIVE_ENTITIES}
                       onPromptSuggestionSelect={handlePromptSuggestionSelect}
                     />
                   );
@@ -847,7 +898,7 @@ export const ChatPage: FunctionComponent = () => {
                   message="This invocation has no stored messages yet. New provider activity will appear here as the runtime records it."
                 />
               ) : (
-                mergeInvocationToolMessages(invocationMessages).map((message) => {
+                visibleInvocationMessages.map((message) => {
                   if (message.role === "system") {
                     return <TruncatedSystemBubble key={message.id} content={message.contentMarkdown || ""} />;
                   }
@@ -858,6 +909,7 @@ export const ChatPage: FunctionComponent = () => {
                       agentAvatarConfig={message.role === "assistant" ? (selectedAgentPreset?.avatarConfig ?? null) : null}
                       agentName={message.role === "assistant" ? (selectedAgentPreset?.name ?? null) : null}
                       widgetLiveData={widgetLiveData}
+                      liveEntities={invocationLiveEntitiesByMessageId.get(message.id) ?? EMPTY_LIVE_ENTITIES}
                     />
                   );
                 })
