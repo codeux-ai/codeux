@@ -46,6 +46,7 @@ export type DocsSlug =
   | 'architecture-ci-integration'
   | 'architecture-dashboard-architecture'
   | 'architecture-data-model'
+  | 'architecture-external-chat-providers'
   | 'architecture-configuration-resolution'
   | 'architecture-security'
 
@@ -252,7 +253,7 @@ export const docsRegistry: Record<DocsSlug, DocsRegistryEntry> = {
     path: '/docs/developer-management-actions',
     section: 'Developer Reference',
     title: "Management actions",
-    description: "Code UX exposes one MCP tool per management domain — manage_projects, manage_sprints, manage_tasks, manage_quicksprints, manage_scheduler, manage_agents, manage_memory, manage_settings, manage_preview, and manage_tele...",
+    description: "Code UX exposes one MCP tool per management domain — manage_projects, manage_sprints, manage_tasks, manage_quicksprints, manage_scheduler, manage_agents, manage_memory, manage_settings, manage_preview, manage_chat_pro...",
   },
   'developer-http-api': {
     id: 'developer-http-api',
@@ -359,6 +360,13 @@ export const docsRegistry: Record<DocsSlug, DocsRegistryEntry> = {
     title: "Data model",
     description: "This page describes the entities Code UX persists and how they relate. The default backend is SQLite; a Postgres migration is planned but not yet shipped.",
   },
+  'architecture-external-chat-providers': {
+    id: 'architecture-external-chat-providers',
+    path: '/docs/architecture-external-chat-providers',
+    section: 'Architecture',
+    title: "External chat providers",
+    description: "Code UX persists external chat provider configuration separately from MCP listener connections and dashboard conversation messages. The runtime stays adapter-neutral: it records provider setup, bridge mode, channel ro...",
+  },
   'architecture-configuration-resolution': {
     id: 'architecture-configuration-resolution',
     path: '/docs/architecture-configuration-resolution',
@@ -419,6 +427,7 @@ export const orderedDocs: DocsRegistryEntry[] = [
   docsRegistry['architecture-ci-integration'],
   docsRegistry['architecture-dashboard-architecture'],
   docsRegistry['architecture-data-model'],
+  docsRegistry['architecture-external-chat-providers'],
   docsRegistry['architecture-configuration-resolution'],
   docsRegistry['architecture-security'],
 ]

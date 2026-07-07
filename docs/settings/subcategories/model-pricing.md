@@ -16,7 +16,7 @@ Outdated prices affect estimates only; they do not change provider billing.
 
 ## Dashboard Link
 
-Open this subcategory from the dashboard docs route at `/docs/settings-subcategories-model-pricing`. The Settings card header links directly to this published subpage.
+Open this subcategory from the dashboard docs route at `/docs/user/dashboard/settings#model-pricing`. The Settings card header links to the matching published docs anchor.
 
 ## Related Docs
 

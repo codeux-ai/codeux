@@ -16,7 +16,7 @@ Weighted pools with unavailable providers can spread failures across multiple ta
 
 ## Dashboard Link
 
-Open this subcategory from the dashboard docs route at `/docs/settings-subcategories-route-mapping`. The Settings card header links directly to this published subpage.
+Open this subcategory from the dashboard docs route at `/docs/user/dashboard/settings#route-mapping`. The Settings card header links to the matching published docs anchor.
 
 ## Related Docs
 

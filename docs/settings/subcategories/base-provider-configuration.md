@@ -16,7 +16,7 @@ Incompatible model choices or high concurrency can cause repeated provider failu
 
 ## Dashboard Link
 
-Open this subcategory from the dashboard docs route at `/docs/settings-subcategories-base-provider-configuration`. The Settings card header links directly to this published subpage.
+Open this subcategory from the dashboard docs route at `/docs/user/dashboard/settings#base-provider-configuration`. The Settings card header links to the matching published docs anchor.
 
 ## Related Docs
 

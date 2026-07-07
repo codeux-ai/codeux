@@ -107,4 +107,43 @@ describe("tool argument validators", () => {
       approval: { confirmed: "true" },
     })).toThrow("'/approval/confirmed' must be boolean");
   });
+
+  it("accepts manage_chat_providers schema actions and nullable secret envelopes", async () => {
+    const { validateToolArguments } = await import("../../../src/api/mcp/validators/tool-validators.js");
+
+    expect(() => validateToolArguments("manage_chat_providers", {
+      action: "create_connection",
+      providerKind: "slack",
+      displayName: "Slack bridge",
+      bridgeMode: "webhook",
+      setup: { eventsUrl: "https://example.test/slack/events" },
+      secrets: { signingSecret: "secret-value" },
+    })).not.toThrow();
+
+    expect(() => validateToolArguments("manage_chat_providers", {
+      action: "update_connection",
+      providerConnectionId: "connection-1",
+      secrets: null,
+      approval: { confirmed: true },
+    })).not.toThrow();
+  });
+
+  it("rejects invalid manage_chat_providers arguments without echoing secrets", async () => {
+    const { validateToolArguments } = await import("../../../src/api/mcp/validators/tool-validators.js");
+    const secret = "chat-provider-secret-value";
+
+    try {
+      validateToolArguments("manage_chat_providers", {
+        action: "create_connection",
+        providerKind: "not-a-provider",
+        displayName: "Slack bridge",
+        secrets: { signingSecret: secret },
+      });
+      throw new Error("expected validation to fail");
+    } catch (error) {
+      expect(error).toBeInstanceOf(McpError);
+      expect((error as Error).message).toContain("Invalid arguments for tool manage_chat_providers");
+      expect((error as Error).message).not.toContain(secret);
+    }
+  });
 });

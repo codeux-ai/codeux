@@ -1,14 +1,26 @@
 import type { FunctionComponent } from "preact";
-import { useLayoutEffect, useRef, useState } from "preact/hooks";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "preact/hooks";
 import gsap from "gsap";
-import { ArrowLeft, Key, Plug, Plus, Settings2 } from "lucide-preact";
+import { Activity, AlertCircle, ArrowLeft, Hash, Key, Link2, MessageCircle, Plug, Plus, RefreshCw, Save, Send, Settings2, ShieldCheck, Trash2 } from "lucide-preact";
 import type { SettingsPageState, IntegrationId } from "../../../hooks/use-settings-page-state.js";
 import { NoticePanel, ActionButton } from "../SettingsSurface.js";
-import { NumberInput, PillChoiceGroup, ProviderLogo, Row, SecretInput, TextInput, Toggle } from "../SettingsFormFields.js";
+import { NumberInput, PillChoiceGroup, ProviderLogo, Row, SecretInput, SelectInput, TextInput, Toggle } from "../SettingsFormFields.js";
 import { ProviderBrandIcon } from "../../providers/ProviderBrandIcon.js";
 import { ProviderInstanceCard } from "../ProviderInstanceCard.js";
 import { JiraIcon } from "../../icons/JiraIcon.js";
-import type { ProjectSettings, ProviderConfigId, ProviderId, SystemSettings } from "../../../../types.js";
+import type {
+  ChatProviderBridgeMode,
+  ChatProviderChannelBindingRecord,
+  ChatProviderConnectionStatus,
+  ChatProviderKind,
+  ChatProviderSecretConfig,
+  ChatProviderSetupConfig,
+  ChatProviderSetupFieldSchema,
+  ProjectSettings,
+  ProviderConfigId,
+  ProviderId,
+  SystemSettings,
+} from "../../../../types.js";
 import {
   countConnectedProviders,
   createProjectProviderDraft,
@@ -23,6 +35,18 @@ import {
 } from "../../../lib/settings-view-models.js";
 import { SectionCard, getBadge as getBadgeHelper, getFieldBadge as getFieldBadgeHelper } from "./SharedPanelComponents.js";
 import { sanitizeSystemProviderConfig } from "../../../lib/provider-runtime-preview.js";
+import {
+  buildChatProviderCatalogViewModel,
+  createDefaultSetupForBridge,
+  findBridgeSchema,
+  getBridgeModeLabel,
+  getChatProviderSetupNotes,
+  isChatProviderKind,
+} from "../../../lib/chat-provider-view-models.js";
+import type {
+  DashboardChatProviderConnectionRecord,
+  DashboardChatProviderSetupDefinition,
+} from "../../../lib/chat-provider-api.js";
 
 type PublicProviderId = Exclude<ProviderId, "mockup-cli">;
 
@@ -30,6 +54,7 @@ const PROVIDER_TYPES: PublicProviderId[] = ["jules", "gemini", "antigravity", "c
 const isPublicProviderId = (value: unknown): value is PublicProviderId => (
   typeof value === "string" && (PROVIDER_TYPES as readonly string[]).includes(value)
 );
+const isChatProviderIntegrationId = (value: unknown): value is ChatProviderKind => isChatProviderKind(value);
 
 const DEFAULT_JIRA_SETTINGS: SystemSettings["integrations"]["jira"] = {
   host: "",
@@ -308,6 +333,143 @@ const IntegrationPill: FunctionComponent<{
   </span>
 );
 
+interface ChatProviderConnectionDraft {
+  displayName: string;
+  bridgeMode: ChatProviderBridgeMode;
+  status: ChatProviderConnectionStatus;
+  enabled: boolean;
+  setup: ChatProviderSetupConfig;
+  secrets: Record<string, string>;
+}
+
+interface ChatProviderBindingDraft {
+  externalChannelId: string;
+  externalChannelName: string;
+  projectId: string;
+  agentPresetId: string;
+  projectSelectorPrefix: string;
+  projectSelector: string;
+  enabled: boolean;
+  inboundEnabled: boolean;
+  outboundEnabled: boolean;
+  suppressRichWidgets: boolean;
+}
+
+const getTextSetupValue = (setup: ChatProviderSetupConfig, key: string): string => {
+  const value = setup[key];
+  return typeof value === "string" ? value : "";
+};
+
+const getBooleanSetupValue = (setup: ChatProviderSetupConfig, key: string): boolean => {
+  const value = setup[key];
+  return typeof value === "boolean" ? value : false;
+};
+
+const getRoutingHintValue = (binding: ChatProviderChannelBindingRecord, key: string): string => {
+  const value = binding.routingHints?.[key];
+  return typeof value === "string" ? value : "";
+};
+
+const EMPTY_CHAT_PROVIDER_STATE = {
+  definitions: [],
+  connections: [],
+  bindings: [],
+  deliveriesByConnection: {},
+  loading: false,
+  savingId: null,
+  error: null,
+  load: async () => undefined,
+  createConnection: async () => null,
+  updateConnection: async () => null,
+  deleteConnection: async () => undefined,
+  createBinding: async () => null,
+  updateBinding: async () => null,
+  deleteBinding: async () => undefined,
+};
+
+const createConnectionDraft = (
+  connection: DashboardChatProviderConnectionRecord,
+  definition: DashboardChatProviderSetupDefinition,
+): ChatProviderConnectionDraft => ({
+  displayName: connection.displayName,
+  bridgeMode: connection.bridgeMode,
+  status: connection.status,
+  enabled: connection.enabled,
+  setup: {
+    ...createDefaultSetupForBridge(definition, connection.bridgeMode),
+    ...connection.setup,
+  },
+  secrets: {},
+});
+
+const createBindingDraft = (binding: ChatProviderChannelBindingRecord): ChatProviderBindingDraft => ({
+  externalChannelId: binding.externalChannelId,
+  externalChannelName: binding.externalChannelName,
+  projectId: binding.projectId,
+  agentPresetId: binding.agentPresetId ?? "",
+  projectSelectorPrefix: getRoutingHintValue(binding, "projectSelectorPrefix"),
+  projectSelector: getRoutingHintValue(binding, "projectSelector"),
+  enabled: binding.enabled,
+  inboundEnabled: binding.inboundEnabled,
+  outboundEnabled: binding.outboundEnabled,
+  suppressRichWidgets: binding.suppressRichWidgets,
+});
+
+const createNewBindingDraft = (projectId: string): ChatProviderBindingDraft => ({
+  externalChannelId: "",
+  externalChannelName: "",
+  projectId,
+  agentPresetId: "",
+  projectSelectorPrefix: "",
+  projectSelector: "",
+  enabled: true,
+  inboundEnabled: true,
+  outboundEnabled: false,
+  suppressRichWidgets: true,
+});
+
+const buildRoutingHints = (draft: ChatProviderBindingDraft): Record<string, string> | null => {
+  const routingHints: Record<string, string> = {};
+  if (draft.projectSelectorPrefix.trim()) {
+    routingHints.projectSelectorPrefix = draft.projectSelectorPrefix.trim();
+  }
+  if (draft.projectSelector.trim()) {
+    routingHints.projectSelector = draft.projectSelector.trim();
+  }
+  return Object.keys(routingHints).length > 0 ? routingHints : null;
+};
+
+const buildSecretUpdate = (
+  draft: ChatProviderConnectionDraft,
+  definition: DashboardChatProviderSetupDefinition,
+): ChatProviderSecretConfig | undefined => {
+  const bridge = findBridgeSchema(definition, draft.bridgeMode);
+  const allowedKeys = new Set(bridge.secretFields.map((field) => field.key));
+  const secrets = Object.fromEntries(
+    Object.entries(draft.secrets)
+      .filter(([key, value]) => allowedKeys.has(key) && value.trim().length > 0)
+      .map(([key, value]) => [key, value.trim()]),
+  );
+  return Object.keys(secrets).length > 0 ? secrets : undefined;
+};
+
+const ChatProviderLogo: FunctionComponent<{ providerKind: ChatProviderKind; disabled?: boolean }> = ({ providerKind, disabled = false }) => {
+  const label = providerKind === "microsoft-teams" ? "Teams" : providerKind.charAt(0).toUpperCase() + providerKind.slice(1);
+  return (
+    <span
+      className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-[1rem] border text-[11px] font-black uppercase tracking-[0.08em] ${
+        disabled
+          ? "border-black/[0.06] bg-black/[0.035] text-slate-400 dark:border-white/[0.06] dark:bg-white/[0.04] dark:text-slate-500"
+          : "border-signal-500/20 bg-signal-500/[0.1] text-signal-700 dark:border-signal-400/20 dark:bg-signal-400/[0.12] dark:text-signal-200"
+      }`}
+      aria-hidden
+      title={label}
+    >
+      {providerKind === "microsoft-teams" ? "MT" : providerKind === "whatsapp" ? "WA" : providerKind === "imessage" ? "IM" : providerKind.slice(0, 2)}
+    </span>
+  );
+};
+
 export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageState }> = ({ state }) => {
   const {
     activeScope,
@@ -332,7 +494,37 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
   const listRef = useRef<HTMLDivElement>(null);
   const detailRef = useRef<HTMLDivElement>(null);
   const [activeIntegrationDetail, setActiveIntegrationDetail] = useState<IntegrationId | null>(selectedIntegration);
+  const [connectionDrafts, setConnectionDrafts] = useState<Record<string, ChatProviderConnectionDraft>>({});
+  const [bindingDrafts, setBindingDrafts] = useState<Record<string, ChatProviderBindingDraft>>({});
+  const [newBindingDrafts, setNewBindingDrafts] = useState<Record<string, ChatProviderBindingDraft>>({});
   const isInitialMount = useRef(true);
+  const chatProviders = state.chatProviders ?? EMPTY_CHAT_PROVIDER_STATE;
+  const chatProviderDefinitionsLength = chatProviders.definitions.length;
+  const chatProvidersLoading = chatProviders.loading;
+  const loadChatProviderSettings = chatProviders.load;
+  const projectOptions = (state.projects ?? (state.selectedProject ? [state.selectedProject] : []))
+    .map((project) => ({ value: project.id, label: project.name || project.id }));
+  const agentPresetOptions = [
+    { value: "", label: "Built-in project manager" },
+    ...(state.projectAgentPresetOptions ?? []).map((option) => ({ value: option.value, label: option.label })),
+  ];
+  const chatProviderCards = useMemo(() => buildChatProviderCatalogViewModel({
+    definitions: chatProviders.definitions,
+    connections: chatProviders.connections,
+    bindings: chatProviders.bindings,
+    deliveriesByConnection: chatProviders.deliveriesByConnection,
+  }), [
+    chatProviders.bindings,
+    chatProviders.connections,
+    chatProviders.definitions,
+    chatProviders.deliveriesByConnection,
+  ]);
+
+  useEffect(() => {
+    if (selectedIntegration && isChatProviderIntegrationId(selectedIntegration) && chatProviderDefinitionsLength === 0 && !chatProvidersLoading) {
+      void loadChatProviderSettings();
+    }
+  }, [chatProviderDefinitionsLength, chatProvidersLoading, loadChatProviderSettings, selectedIntegration]);
 
   useLayoutEffect(() => {
     if (!containerRef.current || !listRef.current || !detailRef.current) return;
@@ -413,6 +605,12 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
       label: "CLI",
       purpose: "Provider credentials and local auth-copy settings",
       items: integrations.filter((integration) => isPublicProviderId(integration.id) && integration.id !== "jules"),
+    },
+    {
+      id: "chat",
+      label: "PROVIDERS",
+      purpose: "Chat bridges, delivery health, and project/channel bindings",
+      items: integrations.filter((integration) => isChatProviderIntegrationId(integration.id)),
     },
     {
       id: "git",
@@ -506,6 +704,539 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
       delete nextProviders[providerConfigId];
       return nextProviders;
     });
+  };
+
+  const addChatProviderConnection = async (definition: DashboardChatProviderSetupDefinition): Promise<void> => {
+    const count = chatProviders.connections.filter((connection) => connection.providerKind === definition.kind).length + 1;
+    await chatProviders.createConnection({
+      providerKind: definition.kind,
+      displayName: `${definition.label} Bridge ${count}`,
+      bridgeMode: definition.defaultBridgeMode,
+      status: "draft",
+      enabled: false,
+      setup: createDefaultSetupForBridge(definition, definition.defaultBridgeMode),
+      secrets: {},
+    });
+  };
+
+  const updateConnectionDraft = (
+    connection: DashboardChatProviderConnectionRecord,
+    definition: DashboardChatProviderSetupDefinition,
+    transform: (draft: ChatProviderConnectionDraft) => ChatProviderConnectionDraft,
+  ): void => {
+    setConnectionDrafts((current) => ({
+      ...current,
+      [connection.id]: transform(current[connection.id] ?? createConnectionDraft(connection, definition)),
+    }));
+  };
+
+  const updateBindingDraft = (
+    binding: ChatProviderChannelBindingRecord,
+    transform: (draft: ChatProviderBindingDraft) => ChatProviderBindingDraft,
+  ): void => {
+    setBindingDrafts((current) => ({
+      ...current,
+      [binding.id]: transform(current[binding.id] ?? createBindingDraft(binding)),
+    }));
+  };
+
+  const saveChatProviderConnection = async (
+    connection: DashboardChatProviderConnectionRecord,
+    definition: DashboardChatProviderSetupDefinition,
+  ): Promise<void> => {
+    const draft = connectionDrafts[connection.id] ?? createConnectionDraft(connection, definition);
+    const secretUpdate = buildSecretUpdate(draft, definition);
+    const bridgeModeChanged = draft.bridgeMode !== connection.bridgeMode;
+    const updated = await chatProviders.updateConnection(connection.id, {
+      displayName: draft.displayName,
+      bridgeMode: draft.bridgeMode,
+      status: draft.status,
+      enabled: draft.enabled,
+      setup: draft.setup,
+      ...(secretUpdate || bridgeModeChanged ? { secrets: secretUpdate ?? {} } : {}),
+    });
+    if (updated) {
+      setConnectionDrafts((current) => {
+        const next = { ...current };
+        delete next[connection.id];
+        return next;
+      });
+    }
+  };
+
+  const saveChatProviderBinding = async (binding: ChatProviderChannelBindingRecord): Promise<void> => {
+    const draft = bindingDrafts[binding.id] ?? createBindingDraft(binding);
+    const updated = await chatProviders.updateBinding(binding.id, {
+      externalChannelName: draft.externalChannelName,
+      projectId: draft.projectId,
+      agentPresetId: draft.agentPresetId || null,
+      routingHints: buildRoutingHints(draft),
+      enabled: draft.enabled,
+      inboundEnabled: draft.inboundEnabled,
+      outboundEnabled: draft.outboundEnabled,
+      suppressRichWidgets: draft.suppressRichWidgets,
+    });
+    if (updated) {
+      setBindingDrafts((current) => {
+        const next = { ...current };
+        delete next[binding.id];
+        return next;
+      });
+    }
+  };
+
+  const createChatProviderBinding = async (connection: DashboardChatProviderConnectionRecord): Promise<void> => {
+    const fallbackProjectId = projectOptions[0]?.value ?? "";
+    const draft = newBindingDrafts[connection.id] ?? createNewBindingDraft(fallbackProjectId);
+    if (!draft.externalChannelId.trim() || !draft.projectId.trim()) {
+      return;
+    }
+    const created = await chatProviders.createBinding({
+      providerConnectionId: connection.id,
+      externalChannelId: draft.externalChannelId,
+      externalChannelName: draft.externalChannelName || draft.externalChannelId,
+      projectId: draft.projectId,
+      agentPresetId: draft.agentPresetId || null,
+      routingHints: buildRoutingHints(draft),
+      enabled: draft.enabled,
+      inboundEnabled: draft.inboundEnabled,
+      outboundEnabled: draft.outboundEnabled,
+      suppressRichWidgets: draft.suppressRichWidgets,
+    });
+    if (created) {
+      setNewBindingDrafts((current) => {
+        const next = { ...current };
+        delete next[connection.id];
+        return next;
+      });
+    }
+  };
+
+  const renderSetupField = (
+    field: ChatProviderSetupFieldSchema,
+    connection: DashboardChatProviderConnectionRecord,
+    definition: DashboardChatProviderSetupDefinition,
+    draft: ChatProviderConnectionDraft,
+  ) => {
+    if (field.type === "boolean") {
+      return (
+        <Toggle
+          aria-label={`${connection.displayName} ${field.label}`}
+          value={getBooleanSetupValue(draft.setup, field.key)}
+          onChange={() => updateConnectionDraft(connection, definition, (current) => ({
+            ...current,
+            setup: {
+              ...current.setup,
+              [field.key]: !getBooleanSetupValue(current.setup, field.key),
+            },
+          }))}
+        />
+      );
+    }
+    if (field.type === "select") {
+      return (
+        <SelectInput
+          value={getTextSetupValue(draft.setup, field.key)}
+          onChange={(value) => updateConnectionDraft(connection, definition, (current) => ({
+            ...current,
+            setup: { ...current.setup, [field.key]: value },
+          }))}
+          options={(field.options ?? []).map((option) => ({ value: option, label: option }))}
+          aria-label={`${connection.displayName} ${field.label}`}
+        />
+      );
+    }
+    return (
+      <TextInput
+        value={getTextSetupValue(draft.setup, field.key)}
+        onChange={(value) => updateConnectionDraft(connection, definition, (current) => ({
+          ...current,
+          setup: { ...current.setup, [field.key]: value },
+        }))}
+        placeholder={field.required ? "Required" : "Optional"}
+        mono={field.type === "url" || field.type === "command"}
+        aria-label={`${connection.displayName} ${field.label}`}
+      />
+    );
+  };
+
+  const renderChatProviderBindingEditor = (
+    binding: ChatProviderChannelBindingRecord,
+  ) => {
+    const draft = bindingDrafts[binding.id] ?? createBindingDraft(binding);
+    const saving = chatProviders.savingId === `binding:${binding.id}`;
+    return (
+      <div key={binding.id} className="rounded-[1.25rem] border border-black/[0.06] bg-white/58 p-4 dark:border-white/[0.06] dark:bg-white/[0.025]">
+        <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <IntegrationPill label={draft.enabled ? "Binding enabled" : "Binding disabled"} tone={draft.enabled ? "active" : "muted"} />
+              <IntegrationPill label={draft.outboundEnabled ? "Outbound replies on" : "Outbound replies off"} tone={draft.outboundEnabled ? "active" : "muted"} />
+            </div>
+            <div className="mt-2 font-mono text-xs font-semibold text-slate-500 dark:text-slate-400">{binding.externalChannelId}</div>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <CatalogActionButton label={saving ? "Saving" : "Save"} icon={Save} disabled={saving} tone="primary" onClick={() => void saveChatProviderBinding(binding)} />
+            <CatalogActionButton label="Delete" icon={Trash2} disabled={Boolean(chatProviders.savingId)} onClick={() => void chatProviders.deleteBinding(binding.id)} />
+          </div>
+        </div>
+        <div className="grid gap-3 lg:grid-cols-2">
+          <label className="flex min-w-0 flex-col gap-1.5">
+            <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">Channel name</span>
+            <TextInput value={draft.externalChannelName} onChange={(value) => updateBindingDraft(binding, (current) => ({ ...current, externalChannelName: value }))} aria-label={`${binding.externalChannelId} channel name`} />
+          </label>
+          <label className="flex min-w-0 flex-col gap-1.5">
+            <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">Project</span>
+            <SelectInput value={draft.projectId} onChange={(value) => updateBindingDraft(binding, (current) => ({ ...current, projectId: value }))} options={projectOptions} aria-label={`${binding.externalChannelId} bound project`} />
+          </label>
+          <label className="flex min-w-0 flex-col gap-1.5">
+            <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">Project-manager preset</span>
+            <SelectInput value={draft.agentPresetId} onChange={(value) => updateBindingDraft(binding, (current) => ({ ...current, agentPresetId: value }))} options={agentPresetOptions} aria-label={`${binding.externalChannelId} project-manager preset`} />
+          </label>
+          <label className="flex min-w-0 flex-col gap-1.5">
+            <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">Project selector prefix</span>
+            <TextInput value={draft.projectSelectorPrefix} onChange={(value) => updateBindingDraft(binding, (current) => ({ ...current, projectSelectorPrefix: value }))} placeholder="/project" mono aria-label={`${binding.externalChannelId} project selector prefix`} />
+          </label>
+          <label className="flex min-w-0 flex-col gap-1.5 lg:col-span-2">
+            <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">Routing hint or project selector</span>
+            <TextInput value={draft.projectSelector} onChange={(value) => updateBindingDraft(binding, (current) => ({ ...current, projectSelector: value }))} placeholder="payments, mobile, infra" aria-label={`${binding.externalChannelId} routing hint`} />
+          </label>
+        </div>
+        <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          {([
+            ["enabled", "Enabled"],
+            ["inboundEnabled", "Inbound"],
+            ["outboundEnabled", "Outbound replies"],
+            ["suppressRichWidgets", "Suppress rich widgets"],
+          ] as const).map(([key, label]) => (
+            <div key={key} className="flex items-center justify-between gap-3 rounded-xl border border-black/[0.05] bg-black/[0.02] px-3 py-2 dark:border-white/[0.06] dark:bg-white/[0.025]">
+              <span className="text-[11px] font-bold text-slate-600 dark:text-slate-300">{label}</span>
+              <Toggle aria-label={`${binding.externalChannelId} ${label}`} value={draft[key]} onChange={() => updateBindingDraft(binding, (current) => ({ ...current, [key]: !current[key] }))} />
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  };
+
+  const renderNewChatProviderBindingEditor = (
+    connection: DashboardChatProviderConnectionRecord,
+  ) => {
+    const fallbackProjectId = projectOptions[0]?.value ?? "";
+    const draft = newBindingDrafts[connection.id] ?? createNewBindingDraft(fallbackProjectId);
+    const disabledReason = projectOptions.length === 0 ? "Create or select a project before binding chat channels." : undefined;
+    return (
+      <div className="rounded-[1.25rem] border border-dashed border-signal-500/22 bg-signal-500/[0.045] p-4 dark:border-signal-400/22 dark:bg-signal-400/[0.055]">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <div className="text-sm font-semibold text-slate-800 dark:text-slate-100">Add channel binding</div>
+            <div className="mt-1 text-xs leading-relaxed text-slate-500 dark:text-slate-400">Create a project/channel link. The same channel id can be added again for another project with a selector or hint.</div>
+          </div>
+          <CatalogActionButton
+            label="Create binding"
+            icon={Link2}
+            tone="primary"
+            disabled={Boolean(disabledReason) || !draft.externalChannelId.trim() || !draft.projectId.trim() || Boolean(chatProviders.savingId)}
+            onClick={() => void createChatProviderBinding(connection)}
+          />
+        </div>
+        {disabledReason ? <NoticePanel tone="warning" title="Project required">{disabledReason}</NoticePanel> : null}
+        <div className="grid gap-3 lg:grid-cols-2">
+          <label className="flex min-w-0 flex-col gap-1.5">
+            <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">External channel ID</span>
+            <TextInput
+              value={draft.externalChannelId}
+              onChange={(value) => setNewBindingDrafts((current) => ({ ...current, [connection.id]: { ...draft, externalChannelId: value } }))}
+              placeholder="C0123456789 or chat-id"
+              mono
+              aria-label={`${connection.displayName} new binding channel id`}
+            />
+          </label>
+          <label className="flex min-w-0 flex-col gap-1.5">
+            <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">Channel name</span>
+            <TextInput
+              value={draft.externalChannelName}
+              onChange={(value) => setNewBindingDrafts((current) => ({ ...current, [connection.id]: { ...draft, externalChannelName: value } }))}
+              placeholder="Team channel"
+              aria-label={`${connection.displayName} new binding channel name`}
+            />
+          </label>
+          <label className="flex min-w-0 flex-col gap-1.5">
+            <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">Project</span>
+            <SelectInput
+              value={draft.projectId}
+              onChange={(value) => setNewBindingDrafts((current) => ({ ...current, [connection.id]: { ...draft, projectId: value } }))}
+              options={projectOptions}
+              disabled={projectOptions.length === 0}
+              aria-label={`${connection.displayName} new binding project`}
+            />
+          </label>
+          <label className="flex min-w-0 flex-col gap-1.5">
+            <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">Project-manager preset</span>
+            <SelectInput
+              value={draft.agentPresetId}
+              onChange={(value) => setNewBindingDrafts((current) => ({ ...current, [connection.id]: { ...draft, agentPresetId: value } }))}
+              options={agentPresetOptions}
+              aria-label={`${connection.displayName} new binding project-manager preset`}
+            />
+          </label>
+          <label className="flex min-w-0 flex-col gap-1.5">
+            <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">Project selector prefix</span>
+            <TextInput
+              value={draft.projectSelectorPrefix}
+              onChange={(value) => setNewBindingDrafts((current) => ({ ...current, [connection.id]: { ...draft, projectSelectorPrefix: value } }))}
+              placeholder="/project"
+              mono
+              aria-label={`${connection.displayName} new binding selector prefix`}
+            />
+          </label>
+          <label className="flex min-w-0 flex-col gap-1.5">
+            <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">Routing hint or project selector</span>
+            <TextInput
+              value={draft.projectSelector}
+              onChange={(value) => setNewBindingDrafts((current) => ({ ...current, [connection.id]: { ...draft, projectSelector: value } }))}
+              placeholder="mobile"
+              aria-label={`${connection.displayName} new binding routing hint`}
+            />
+          </label>
+        </div>
+        <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          {([
+            ["enabled", "Enabled"],
+            ["inboundEnabled", "Inbound"],
+            ["outboundEnabled", "Outbound replies"],
+            ["suppressRichWidgets", "Suppress rich widgets"],
+          ] as const).map(([key, label]) => (
+            <div key={key} className="flex items-center justify-between gap-3 rounded-xl border border-black/[0.05] bg-white/60 px-3 py-2 dark:border-white/[0.06] dark:bg-void-900/40">
+              <span className="text-[11px] font-bold text-slate-600 dark:text-slate-300">{label}</span>
+              <Toggle aria-label={`${connection.displayName} new binding ${label}`} value={draft[key]} onChange={() => setNewBindingDrafts((current) => ({ ...current, [connection.id]: { ...draft, [key]: !draft[key] } }))} />
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  };
+
+  const renderChatProviderConnectionEditor = (
+    connection: DashboardChatProviderConnectionRecord,
+    definition: DashboardChatProviderSetupDefinition,
+  ) => {
+    const draft = connectionDrafts[connection.id] ?? createConnectionDraft(connection, definition);
+    const bridge = findBridgeSchema(definition, draft.bridgeMode);
+    const bindings = chatProviders.bindings.filter((binding) => binding.providerConnectionId === connection.id);
+    const connectionVm = chatProviderCards
+      .find((card) => card.providerKind === definition.kind)
+      ?.connections.find((entry) => entry.id === connection.id);
+    const saving = chatProviders.savingId === `connection:${connection.id}`;
+    const deliveryMetrics: Array<[typeof Hash, string, string]> = [
+      [Hash, `${connectionVm?.configuredChannelCount ?? 0} channels`, "Configured channels"],
+      [Link2, `${connectionVm?.boundProjectCount ?? 0} projects`, "Bound projects"],
+      [Send, connectionVm?.outboundRepliesEnabled ? "Outbound on" : "Outbound off", "Reply delivery"],
+      [Activity, `${connectionVm?.pendingOutboundCount ?? 0} pending`, "Outbound queue"],
+      [AlertCircle, `${connectionVm?.failedOutboundCount ?? 0} failed`, "Outbound failures"],
+    ];
+    return (
+      <div key={connection.id} className="rounded-[1.45rem] border border-black/[0.06] bg-white/72 p-5 shadow-[0_14px_34px_rgba(15,23,42,0.045)] dark:border-white/[0.07] dark:bg-void-900/46">
+        <div className="mb-4 flex flex-wrap items-start justify-between gap-4">
+          <div className="flex min-w-0 items-start gap-3">
+            <ChatProviderLogo providerKind={connection.providerKind} disabled={!connection.enabled} />
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="text-sm font-semibold text-slate-900 dark:text-white">{connection.displayName}</div>
+                <IntegrationPill label={connectionVm?.statusLabel ?? connection.status} tone={connection.enabled ? "active" : "muted"} />
+                <IntegrationPill label={connectionVm?.authStatusLabel ?? "Credential state unknown"} />
+              </div>
+              <div className="mt-1 max-w-3xl text-xs leading-relaxed text-slate-500 dark:text-slate-400">
+                {bridge.label}. Ingress URL and saved credentials are connection-specific; raw secrets are never returned after save.
+              </div>
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <CatalogActionButton label={saving ? "Saving" : "Save"} icon={Save} disabled={saving} tone="primary" onClick={() => void saveChatProviderConnection(connection, definition)} />
+            <CatalogActionButton label="Delete" icon={Trash2} disabled={Boolean(chatProviders.savingId)} onClick={() => void chatProviders.deleteConnection(connection.id)} />
+          </div>
+        </div>
+
+        <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
+          <div className="space-y-4">
+            <div className="grid gap-3 lg:grid-cols-2">
+              <label className="flex min-w-0 flex-col gap-1.5">
+                <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">Display name</span>
+                <TextInput value={draft.displayName} onChange={(value) => updateConnectionDraft(connection, definition, (current) => ({ ...current, displayName: value }))} aria-label={`${connection.displayName} display name`} />
+              </label>
+              <label className="flex min-w-0 flex-col gap-1.5">
+                <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">Connection status</span>
+                <SelectInput
+                  value={draft.status}
+                  onChange={(value) => updateConnectionDraft(connection, definition, (current) => ({ ...current, status: value as ChatProviderConnectionStatus }))}
+                  options={["draft", "active", "disabled", "error"].map((status) => ({ value: status, label: status.split("_").join(" ") }))}
+                  aria-label={`${connection.displayName} connection status`}
+                />
+              </label>
+            </div>
+            <Row label="Bridge mode" description="Choose the bridge shape that will deliver inbound provider events to this connection.">
+              <PillChoiceGroup
+                value={draft.bridgeMode}
+                onChange={(value) => updateConnectionDraft(connection, definition, (current) => ({
+                  ...current,
+                  bridgeMode: value as ChatProviderBridgeMode,
+                  setup: createDefaultSetupForBridge(definition, value as ChatProviderBridgeMode),
+                  secrets: {},
+                }))}
+                options={definition.bridgeModes.map((mode) => ({ value: mode.mode, label: getBridgeModeLabel(mode.mode), hint: mode.label }))}
+                aria-label={`${connection.displayName} bridge mode`}
+              />
+            </Row>
+            <Row label="Enabled" description="Disabled connections keep configuration but reject runtime use until enabled.">
+              <Toggle aria-label={`${connection.displayName} enabled`} value={draft.enabled} onChange={() => updateConnectionDraft(connection, definition, (current) => ({ ...current, enabled: !current.enabled }))} />
+            </Row>
+            <Row label="Ingress URL" description="Configure your bridge, webhook, or OpenClaw connection to send inbound provider events to this URL.">
+              <TextInput value={connection.ingressUrl} onChange={() => undefined} disabled mono aria-label={`${connection.displayName} ingress URL`} />
+            </Row>
+
+            <div className="rounded-[1.25rem] border border-black/[0.06] bg-black/[0.02] p-4 dark:border-white/[0.06] dark:bg-white/[0.025]">
+              <div className="mb-3 flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">
+                <Settings2 className="h-3.5 w-3.5" />
+                Setup fields
+              </div>
+              <div className="grid gap-3 lg:grid-cols-2">
+                {bridge.setupFields.map((field) => (
+                  <label key={field.key} className="flex min-w-0 flex-col gap-1.5">
+                    <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">{field.label}{field.required ? " *" : ""}</span>
+                    {renderSetupField(field, connection, definition, draft)}
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            <div className="rounded-[1.25rem] border border-black/[0.06] bg-black/[0.02] p-4 dark:border-white/[0.06] dark:bg-white/[0.025]">
+              <div className="mb-3 flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">
+                <ShieldCheck className="h-3.5 w-3.5" />
+                Credential controls
+              </div>
+              <div className="grid gap-3 lg:grid-cols-2">
+                {bridge.secretFields.map((field) => {
+                  const credential = connection.credentials.find((entry) => entry.key === field.key);
+                  return (
+                    <label key={field.key} className="flex min-w-0 flex-col gap-1.5">
+                      <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">{field.label}{field.required ? " *" : ""}</span>
+                      <SecretInput
+                        value={draft.secrets[field.key] ?? ""}
+                        onChange={(value) => updateConnectionDraft(connection, definition, (current) => ({ ...current, secrets: { ...current.secrets, [field.key]: value } }))}
+                        placeholder={credential?.configured ? "Stored secret remains unchanged" : "Paste secret"}
+                        helperText={credential?.configured ? `${credential.redactedValue ?? "Stored secret"} configured. Enter a replacement only when rotating it.` : "Saved secrets are returned only as redacted configured-state metadata."}
+                        mono
+                        aria-label={`${connection.displayName} ${field.label}`}
+                      />
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            <div className="grid gap-2">
+              {deliveryMetrics.map(([Icon, value, label]) => (
+                <div key={label} className="flex items-center justify-between gap-3 rounded-xl border border-black/[0.06] bg-white/60 px-3 py-2 dark:border-white/[0.06] dark:bg-white/[0.03]">
+                  <div className="flex items-center gap-2 text-[11px] font-semibold text-slate-500 dark:text-slate-400">
+                    <Icon className="h-3.5 w-3.5" />
+                    {label}
+                  </div>
+                  <div className="text-[11px] font-bold text-slate-800 dark:text-slate-100">{value}</div>
+                </div>
+              ))}
+            </div>
+
+            <NoticePanel title="Delivery state">
+              {connectionVm && connectionVm.recentFailedDeliveries.length > 0 ? (
+                <div className="space-y-2">
+                  {connectionVm.recentFailedDeliveries.map((delivery) => (
+                    <div key={delivery.id} className="rounded-xl border border-status-red/20 bg-status-red/[0.06] px-3 py-2 text-status-red">
+                      <div className="flex flex-wrap items-center gap-2 text-[10px] font-bold uppercase tracking-[0.12em]">
+                        <span>{delivery.statusLabel}</span>
+                        <span>{delivery.retryLabel}</span>
+                        <span>{delivery.attemptLabel}</span>
+                      </div>
+                      <div className="mt-1 break-words text-xs leading-relaxed">{delivery.redactedError}</div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                "No recent failed outbound messages for this connection."
+              )}
+            </NoticePanel>
+          </div>
+        </div>
+
+        <div className="mt-5 space-y-4">
+          <NoticePanel title="Shared-channel routing">
+            One external channel can bind to multiple projects, and one project can bind to multiple channels. When a channel is shared, Code UX uses project selector prefixes or routing hints first; if no binding is selected unambiguously, inbound handling asks for disambiguation instead of guessing.
+          </NoticePanel>
+          {renderNewChatProviderBindingEditor(connection)}
+          {bindings.length > 0 ? (
+            <div className="space-y-3">
+              {bindings.map((binding) => renderChatProviderBindingEditor(binding))}
+            </div>
+          ) : (
+            <NoticePanel title="No channel bindings">
+              Add a binding before enabling inbound routing or outbound replies for this provider connection.
+            </NoticePanel>
+          )}
+        </div>
+      </div>
+    );
+  };
+
+  const renderChatProviderDetail = (providerKind: ChatProviderKind) => {
+    const definition = chatProviders.definitions.find((entry) => entry.kind === providerKind);
+    const providerCard = chatProviderCards.find((card) => card.providerKind === providerKind);
+    const providerConnections = chatProviders.connections.filter((connection) => connection.providerKind === providerKind);
+    const label = definition?.label ?? providerKind;
+    return (
+      <>
+        <button className="mb-4 flex items-center gap-2 text-sm text-neutral-400 transition-colors hover:text-white" onClick={() => setSelectedIntegration(null)}>
+          <ArrowLeft className="h-4 w-4" />
+          Back to Integrations
+        </button>
+        <SectionCard
+          title={`${label} Provider`}
+          watermark={providerKind === "microsoft-teams" ? "TMS" : providerKind.slice(0, 3).toUpperCase()}
+          icon={<MessageCircle strokeWidth={2.4} />}
+          actions={
+            <>
+              <IntegrationPill label={`${providerCard?.connectionCount ?? providerConnections.length} connections`} />
+              <IntegrationPill label={`${providerCard?.failedOutboundCount ?? 0} failed outbound`} tone={(providerCard?.failedOutboundCount ?? 0) > 0 ? "muted" : "neutral"} />
+              <CatalogActionButton label="Refresh" icon={RefreshCw} disabled={chatProviders.loading} onClick={() => void chatProviders.load()} />
+              {definition ? <CatalogActionButton label="Add connection" icon={Plus} tone="primary" disabled={Boolean(chatProviders.savingId)} onClick={() => void addChatProviderConnection(definition)} /> : null}
+            </>
+          }
+        >
+          {chatProviders.loading ? (
+            <NoticePanel tone="pending" title="Loading chat providers">Loading provider setup definitions, connections, bindings, and delivery health.</NoticePanel>
+          ) : null}
+          {chatProviders.error ? (
+            <NoticePanel tone="error" title="Chat provider settings unavailable">{chatProviders.error}</NoticePanel>
+          ) : null}
+          {definition ? (
+            <NoticePanel title={`${definition.label} setup guidance`}>
+              <ul className="list-disc space-y-1 pl-4">
+                {getChatProviderSetupNotes(definition.kind).map((note) => <li key={note}>{note}</li>)}
+              </ul>
+            </NoticePanel>
+          ) : (
+            <NoticePanel tone="warning" title="Setup definition unavailable">Refresh chat provider settings to load setup fields for this provider.</NoticePanel>
+          )}
+          {definition && providerConnections.length > 0 ? (
+            <div className="space-y-5">
+              {providerConnections.map((connection) => renderChatProviderConnectionEditor(connection, definition))}
+            </div>
+          ) : definition ? (
+            <NoticePanel title="No connections yet">Add a connection to configure bridge setup fields, secrets, ingress, and channel bindings for {definition.label}.</NoticePanel>
+          ) : null}
+        </SectionCard>
+      </>
+    );
   };
 
   const renderJulesAutomationSettings = () => {
@@ -602,6 +1333,10 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
         Back to Integrations
       </button>
     );
+
+    if (isChatProviderIntegrationId(integrationId)) {
+      return renderChatProviderDetail(integrationId);
+    }
 
     if (integrationId === "github" || integrationId === "gitlab") {
       const isGitLab = integrationId === "gitlab";
@@ -1020,6 +1755,45 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
                   </div>
                   <div className="grid gap-3 xl:grid-cols-2">
                     {group.items.map((integration) => {
+                  if (isChatProviderIntegrationId(integration.id)) {
+                    const providerKind = integration.id;
+                    const providerCard = chatProviderCards.find((card) => card.providerKind === providerKind);
+                    const active = (providerCard?.activeConnectionCount ?? 0) > 0;
+                    return (
+                      <div key={integration.id} className={`group relative min-h-[176px] overflow-hidden rounded-[1.35rem] border p-5 shadow-[0_12px_30px_rgba(15,23,42,0.035)] transition-[border-color,background-color,transform,box-shadow] duration-200 hover:-translate-y-0.5 hover:shadow-[0_18px_42px_rgba(15,23,42,0.07)] ${
+                        active
+                          ? "border-signal-500/24 bg-white/90 hover:border-signal-500/34 dark:border-signal-400/24 dark:bg-void-800/82"
+                          : "border-black/[0.06] bg-white/88 hover:border-black/[0.12] hover:bg-white dark:border-white/[0.08] dark:bg-void-800/78"
+                      }`}>
+                        <div aria-hidden className={`absolute left-0 top-5 bottom-5 w-1 rounded-r-full transition-opacity ${active ? "bg-signal-500 opacity-100 dark:bg-signal-400" : "bg-slate-300 opacity-0 group-hover:opacity-100 dark:bg-slate-600"}`} />
+                        <div aria-hidden className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-black/[0.08] to-transparent dark:via-white/[0.12]" />
+                        <div className="flex h-full flex-col gap-4">
+                          <div className="flex items-start gap-3">
+                            <ChatProviderLogo providerKind={providerKind} disabled={!active} />
+                            <div className="min-w-0">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <div className="text-sm font-semibold text-slate-900 dark:text-white">{integration.label}</div>
+                                {active ? <IntegrationPill label="Active" tone="active" /> : null}
+                              </div>
+                              <div className="mt-1 text-xs leading-relaxed text-slate-500 dark:text-slate-400">{providerCard?.description ?? integration.description}</div>
+                            </div>
+                          </div>
+                          <div className="mt-auto flex flex-wrap items-center justify-between gap-3 pl-14">
+                            <div className="flex flex-wrap gap-2">
+                              <IntegrationPill label={`${providerCard?.connectionCount ?? 0} connections`} tone={(providerCard?.connectionCount ?? 0) > 0 ? "neutral" : "muted"} />
+                              <IntegrationPill label={`${providerCard?.configuredChannelCount ?? 0} channels`} />
+                              <IntegrationPill label={`${providerCard?.boundProjectCount ?? 0} projects`} />
+                              <IntegrationPill label={(providerCard?.outboundRepliesEnabled ?? false) ? "Replies on" : "Replies off"} tone={(providerCard?.outboundRepliesEnabled ?? false) ? "active" : "muted"} />
+                              {(providerCard?.failedOutboundCount ?? 0) > 0 ? <IntegrationPill label={`${providerCard?.failedOutboundCount} failed`} tone="muted" /> : null}
+                              {(providerCard?.pendingOutboundCount ?? 0) > 0 ? <IntegrationPill label={`${providerCard?.pendingOutboundCount} pending`} /> : null}
+                            </div>
+                            <CatalogActionButton label="Manage" icon={Settings2} onClick={() => setSelectedIntegration(integration.id)} />
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  }
+
                   if (integration.id === "github" || integration.id === "gitlab" || integration.id === "jira") {
                     const isGitLab = integration.id === "gitlab";
                     const isJira = integration.id === "jira";

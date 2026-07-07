@@ -62,6 +62,25 @@ A thread's conversation history is independent of the provider processing it. If
 
 On the next message, the orchestration engine intercepts the request, concatenates all prior messages into a unified prompt history, and delivers it to the newly assigned worker. This mechanism prevents the new worker from losing context, even though it possesses a fresh, blank provider session.
 
+### External Chat Provider Metadata
+
+External chat provider messages enter the same thread runtime only after authenticated ingress succeeds. The ingress route verifies the provider connection, bridge credential, timestamp freshness, and replay window before `ChatProviderIngressService` normalizes the payload and resolves a channel binding.
+
+Inbound deliveries are recorded before chat posting so the external message id becomes the idempotency boundary. Provider retries with the same external message id return the existing delivery record instead of creating another conversation message. When channel routing succeeds, `ChatThreadRuntimeService.postMessage` stores the user message with metadata such as:
+
+- `source: "chat_provider"`
+- provider kind
+- external channel id
+- external sender id/name
+- inbound delivery id
+- `suppressRichWidgets: true`
+
+If raw payload metadata or routing hints include a conversation thread id, the existing thread is reused. Otherwise the runtime follows the normal project chat path and persists the resulting conversation thread and message ids back onto the delivery record.
+
+Outbound replies are also delivery records. When a system or assistant reply is persisted in a thread whose triggering message has an inbound delivery id, `ChatProviderOutboundService` creates an outbound `chat_provider_message_deliveries` row linked to the reply conversation message. The adapter updates that row through `pending`, `sending`, `delivered`, `retryable_failure`, or `failed`, with attempts, redacted errors, bridge response metadata, and retry timing visible through dashboard and MCP inspection.
+
+Dashboard-only rich widgets are suppressed for external channels because chat bridges receive plain markdown, not dashboard component instructions. Chat-provider-sourced prompts omit the `codeux:*` widget instruction block, replay/compaction inputs use the same suppression rules, and outbound delivery strips or downgrades any remaining dashboard-only widget fences before sending externally.
+
 ### Compact Conversation Behavior
 
 Long-running conversations accumulate large prompt histories, risking context window exhaustion or unbounded token costs. The chat runtime introduces a compact-conversation action (`compactThreadSession`).

@@ -16,7 +16,7 @@ High zoom or dense sidebars can reduce visible workspace on small screens.
 
 ## Dashboard Link
 
-Open this subcategory from the dashboard docs route at `/docs/settings-subcategories-display-settings`. The Settings card header links directly to this published subpage.
+Open this subcategory from the dashboard docs route at `/docs/user/dashboard/settings#display-settings`. The Settings card header links to the matching published docs anchor.
 
 ## Related Docs
 

@@ -22,12 +22,9 @@ interface DocsWebState {
   error: string | null;
 }
 
-export function docIdFromPath(pathname: string): string | null {
+function docIdFromPath(pathname: string): string | null {
   if (pathname === "/docs" || pathname === "/docs/") {
     return null;
-  }
-  if (pathname === "/docs/user/dashboard/settings" || pathname === "/docs/user/dashboard/settings/") {
-    return "user-dashboard-settings";
   }
   if (!pathname.startsWith("/docs/")) {
     return null;
@@ -81,9 +78,7 @@ function Pagination({ collection, currentDocId }: { collection: DocsWebCollectio
 }
 
 export const DocsWebPage: FunctionComponent = () => {
-  const location = useRouterState({ select: (state) => state.location });
-  const pathname = location.pathname;
-  const locationHash = typeof location.hash === "string" ? location.hash : "";
+  const pathname = useRouterState({ select: (state) => state.location.pathname });
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [state, setState] = useState<DocsWebState>({
     collection: null,
@@ -125,23 +120,6 @@ export const DocsWebPage: FunctionComponent = () => {
   useEffect(() => {
     setIsSidebarOpen(false);
   }, [pathname]);
-
-  useEffect(() => {
-    if (state.loading || state.error || !state.doc || !locationHash) {
-      return;
-    }
-
-    const anchor = decodeURIComponent(locationHash.replace(/^#/, ""));
-    if (!anchor) {
-      return;
-    }
-
-    const frame = window.requestAnimationFrame(() => {
-      document.getElementById(anchor)?.scrollIntoView({ block: "start" });
-    });
-
-    return () => window.cancelAnimationFrame(frame);
-  }, [locationHash, state.doc, state.error, state.loading]);
 
   const renderedHtml = useMemo(() => {
     if (!state.collection || !state.doc) {

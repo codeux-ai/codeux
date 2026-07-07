@@ -1,11 +1,10 @@
 # Management actions
 
-Code UX exposes grouped MCP tools per management domain — `manage_projects`, `manage_sprints`,
+Code UX exposes **one MCP tool per management domain** — `manage_projects`, `manage_sprints`,
 `manage_tasks`, `manage_quicksprints`, `manage_scheduler`, `manage_agents`, `manage_memory`,
-`search_knowledge`, `manage_settings`, `manage_preview`, and `manage_telemetry`. The deprecated
-`manage_code_ux` tool remains available for compatibility, but the grouped tools are the primary
-surface. Each domain has a set of **actions**. This page is the complete matrix. (See
-[MCP tools](./mcp-tools.md) for the tool list and schemas.)
+`manage_settings`, `manage_preview`, `manage_chat_providers`, and `manage_telemetry` — each with a set of
+**actions**. This page is the complete matrix. (See [MCP tools](/docs/developer-mcp-tools) for the tool list and
+schemas.)
 
 A dedicated-tool call takes the `action` plus action-specific fields:
 
@@ -207,6 +206,28 @@ Sprint preview browser sessions.
 | `get_url` | – | `sessionId` | Get the session's proxied preview URL. |
 | `get_script` | – | `projectId`, `sprintId` | Get the preview startup script content. |
 | `update_script` | – | `projectId`, `sprintId`, script body | Update the per-sprint preview startup script. |
+
+---
+
+## `chat_providers`
+
+External chat provider configuration and delivery-state inspection.
+
+| Action | Destructive | Required payload | Description |
+| --- | --- | --- | --- |
+| `list_provider_definitions` | – | optional `providerKind` | List supported provider setup schemas, bridge modes, secret fields, and ingress URL guidance. |
+| `list_connections` | – | optional `providerKind`, `enabledOnly` | List provider connections with redacted credential metadata and generated ingress URLs. |
+| `get_connection` | – | `providerConnectionId` or `connectionId` | Get one provider connection. |
+| `create_connection` | – | `providerKind`, `displayName`; optional `bridgeMode`, `status`, `enabled`, `setup`, `secrets` | Create a provider connection. Responses redact credentials. |
+| `update_connection` | – | `providerConnectionId` or `connectionId`, update fields | Update connection metadata, setup, enabled state, or secrets. Replacing a non-empty `secrets` payload requires one-use approval. |
+| `delete_connection` | ✅ | `providerConnectionId` or `connectionId` | Delete the provider connection and cascade bindings/delivery rows. |
+| `list_channel_bindings` | – | optional `providerConnectionId`, `projectId`, `projectIds`, `externalChannelId`, `enabledOnly` | List channel/project bindings. Multiple projects can bind to the same external channel. |
+| `create_channel_binding` | – | `providerConnectionId`, `externalChannelId`, `externalChannelName`, `projectId` | Bind an external channel to a project with optional routing hints and enablement flags. |
+| `update_channel_binding` | – | `channelBindingId` or `bindingId`, update fields | Update channel metadata, routing hints, project, agent preset, and enablement flags. |
+| `delete_channel_binding` | ✅ | `channelBindingId` or `bindingId` | Delete one channel/project binding. |
+| `list_outbound_deliveries` | – | optional filters | Inspect outbound delivery rows by provider, channel, or delivery status. Does not send messages. |
+
+Raw `secrets` are never returned by MCP responses or validation errors. `list_outbound_deliveries` is an inspection surface only; inbound routing and outbound sending are outside this management contract.
 
 ---
 

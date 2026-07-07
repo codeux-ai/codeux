@@ -121,6 +121,27 @@ import type {
   ExecutionInvocationRecord,
   ExecutionInvocationMessageRecord,
 } from "../../src/contracts/invocation-types.js";
+import type {
+  ChatProviderBridgeMode,
+  ChatProviderBridgeSetupSchema,
+  ChatProviderChannelBindingRecord,
+  ChatProviderConnectionRecord,
+  ChatProviderConnectionStatus,
+  ChatProviderDeliveryDirection,
+  ChatProviderDeliveryStatus,
+  ChatProviderKind,
+  ChatProviderMessageDeliveryRecord,
+  ChatProviderSecretConfig,
+  ChatProviderSecretFieldSchema,
+  ChatProviderSetupConfig,
+  ChatProviderSetupFieldSchema,
+  ChatProviderSetupSchema,
+  CreateChatProviderChannelBindingInput,
+  CreateChatProviderConnectionInput,
+  RedactedCredentialField,
+  UpdateChatProviderChannelBindingInput,
+  UpdateChatProviderConnectionInput,
+} from "../../src/contracts/chat-provider-types.js";
 
 export type {
   JulesActivity,
@@ -243,6 +264,25 @@ export type {
 export type {
   ExecutionInvocationRecord,
   ExecutionInvocationMessageRecord,
+  ChatProviderBridgeMode,
+  ChatProviderBridgeSetupSchema,
+  ChatProviderChannelBindingRecord,
+  ChatProviderConnectionRecord,
+  ChatProviderConnectionStatus,
+  ChatProviderDeliveryDirection,
+  ChatProviderDeliveryStatus,
+  ChatProviderKind,
+  ChatProviderMessageDeliveryRecord,
+  ChatProviderSecretConfig,
+  ChatProviderSecretFieldSchema,
+  ChatProviderSetupConfig,
+  ChatProviderSetupFieldSchema,
+  ChatProviderSetupSchema,
+  CreateChatProviderChannelBindingInput,
+  CreateChatProviderConnectionInput,
+  RedactedCredentialField,
+  UpdateChatProviderChannelBindingInput,
+  UpdateChatProviderConnectionInput,
 };
 
 /**

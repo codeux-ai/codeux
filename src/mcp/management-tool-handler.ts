@@ -13,6 +13,7 @@ import type {
   ManageSettingsArgs,
   ManagePreviewArgs,
   ManageTelemetryArgs,
+  ManageChatProvidersArgs,
   SearchKnowledgeArgs,
   SearchSkillsArgs
 } from "../contracts/internal-management-types.js";
@@ -25,6 +26,7 @@ import type { ProjectManagementRepository } from "../repositories/project-manage
 import type { ExecutionControlService } from "../services/execution-control-service.js";
 import type { TaskRerunService } from "../services/task-rerun-service.js";
 import type { SettingsRepository } from "../repositories/settings-repository.js";
+import type { ChatProviderRepository } from "../repositories/chat-provider-repository.js";
 import type { AgentPresetSyncService } from "../services/agent-preset-sync-service.js";
 import type { MemoryService } from "../services/memory-service.js";
 import type { MemoryPromotionService } from "../services/memory-promotion-service.js";
@@ -58,6 +60,7 @@ import { SettingsActions } from "./management/settings-actions.js";
 import { AgentActions } from "./management/agent-actions.js";
 import { MemoryActions } from "./management/memory-actions.js";
 import { SkillActions } from "./management/skill-actions.js";
+import { ChatProviderActions } from "./management/chat-provider-actions.js";
 import { buildMcpApprovalFingerprint, formatManagementErrorEnvelope } from "./management/payload-parsers.js";
 import { resolveLateBoundDependency, type LateBoundOrValue } from "../shared/late-bound-dependency.js";
 
@@ -69,6 +72,7 @@ export interface ManagementToolHandlerDeps {
   executionControlService: ExecutionControlService;
   taskRerunService: LateBoundOrValue<TaskRerunService>;
   settingsRepository: SettingsRepository;
+  chatProviderRepository: ChatProviderRepository;
   agentPresetSyncService: AgentPresetSyncService;
   memoryService: MemoryService;
   memoryPromotionService: MemoryPromotionService;
@@ -95,6 +99,7 @@ export class ManagementToolHandler {
   private readonly memoryActions: MemoryActions;
   private readonly skillActions: SkillActions;
   private readonly previewActions: PreviewActions;
+  private readonly chatProviderActions: ChatProviderActions;
 
   constructor(private readonly deps: ManagementToolHandlerDeps) {
     this.settingsActions = new SettingsActions(deps.settingsRepository);
@@ -102,6 +107,7 @@ export class ManagementToolHandler {
     this.memoryActions = new MemoryActions(deps.memoryService, deps.memoryPromotionService, deps.embeddingModelManager);
     this.skillActions = new SkillActions(deps.skillService);
     this.previewActions = new PreviewActions(deps.sprintPreviewService);
+    this.chatProviderActions = new ChatProviderActions(deps.chatProviderRepository);
   }
 
   private getSprintActions(): SprintActions {
@@ -281,6 +287,8 @@ export class ManagementToolHandler {
     } else if (args.domain === "preview") {
       const currentHost = null; // serverHost is not available on DashboardSettings, we'll fall back to localhost in preview-origin
       return this.previewActions.handlePreviewAction(args, currentHost);
+    } else if (args.domain === "chat_providers") {
+      return this.chatProviderActions.handleChatProviderAction(args);
     } else if (args.domain === "telemetry") {
       return handleTelemetryActions(args, this.deps.executionRepository);
     }
@@ -450,6 +458,18 @@ export class ManagementToolHandler {
       return { content: [{ type: "text", text: JSON.stringify(envelope, null, 2) }] };
     } catch (error) {
       return this.formatError("preview", args.action, error);
+    }
+  }
+
+  async handleManageChatProviders(args: ManageChatProvidersArgs): Promise<{ content: Array<{ type: string; text: string }> }> {
+    try {
+      const managementArgs = { domain: "chat_providers", action: args.action, payload: args as unknown as Record<string, unknown>, approval: args.approval };
+      const dispatch = (approval = args.approval) => this.chatProviderActions.handleChatProviderAction({ ...managementArgs, approval });
+      const approvalGate = await this.requireStatefulApproval(managementArgs, () => dispatch({ confirmed: false }));
+      const envelope = approvalGate ?? this.recordStatefulApprovalRequirement(managementArgs, await dispatch());
+      return { content: [{ type: "text", text: JSON.stringify(envelope, null, 2) }] };
+    } catch (error) {
+      return this.formatError("chat_providers", args.action, error);
     }
   }
 

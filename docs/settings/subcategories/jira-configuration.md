@@ -16,7 +16,7 @@ Wrong transition names prevent issue movement; broad tokens expose more Jira sco
 
 ## Dashboard Link
 
-Open this subcategory from the dashboard docs route at `/docs/settings-subcategories-jira-configuration`. The Settings card header links directly to this published subpage.
+Open this subcategory from the dashboard docs route at `/docs/user/dashboard/settings#jira-configuration`. The Settings card header links to the matching published docs anchor.
 
 ## Related Docs
 

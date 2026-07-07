@@ -16,7 +16,7 @@ Renaming is cosmetic, but an unexpected base directory usually means the project
 
 ## Dashboard Link
 
-Open this subcategory from the dashboard docs route at `/docs/settings-subcategories-project-context`. The Settings card header links directly to this published subpage.
+Open this subcategory from the dashboard docs route at `/docs/user/dashboard/settings#project-context`. The Settings card header links to the matching published docs anchor.
 
 ## Related Docs
 

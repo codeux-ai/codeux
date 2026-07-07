@@ -21,6 +21,7 @@ import {
 } from "./chat-reply-prompt.js";
 import type { ChatManagementActionService } from "./chat-management-action-service.js";
 import type { KnowledgeService } from "./knowledge-service.js";
+import type { ChatProviderOutboundService } from "./chat-provider-outbound-service.js";
 import type { McpConnectionInfo } from "../contracts/mcp-connection-types.js";
 import type { McpApprovalTracker } from "./mcp-approval-tracker.js";
 import { getCorrelationId } from "../shared/logging/correlation-id.js";
@@ -41,6 +42,7 @@ interface ChatThreadRuntimeServiceDependencies {
   projectManagementRepository: ProjectManagementRepository;
   providerRunner: IProviderRunner;
   chatManagementActionService: ChatManagementActionService;
+  chatProviderOutboundService?: ChatProviderOutboundService;
   knowledgeService: KnowledgeService;
   getMcpConnectionInfo?: () => McpConnectionInfo | null;
   getMcpApprovalTracker?: () => McpApprovalTracker;
@@ -99,6 +101,22 @@ function getThreadSessionTitlePath(repoPath: string, threadId: string): string {
   }
 
   return titlePath;
+}
+
+function isChatProviderSourcedMessage(message: Pick<ConversationMessageRecord, "metadata"> | null | undefined): boolean {
+  return message?.metadata?.source === "chat_provider" || message?.metadata?.suppressRichWidgets === true;
+}
+
+function isChatProviderSourcedThread(
+  thread: ConversationThreadRecord,
+  messages: ConversationMessageRecord[],
+  latestMessage: ConversationMessageRecord,
+): boolean {
+  const runtimeState = thread.runtimeState as (ConversationRuntimeState & { source?: unknown; suppressRichWidgets?: unknown }) | null | undefined;
+  return runtimeState?.source === "chat_provider"
+    || runtimeState?.suppressRichWidgets === true
+    || isChatProviderSourcedMessage(latestMessage)
+    || messages.some((message) => isChatProviderSourcedMessage(message));
 }
 
 async function writeThreadSessionTitleFile(repoPath: string, threadId: string, title: string): Promise<void> {
@@ -356,10 +374,11 @@ export class ChatThreadRuntimeService {
       this.deps.connectionChatRepository.markDashboardMessagesFailed(thread.id, {
         upToMessageId: turnHandle.latestMessage.id,
       });
-      this.deps.connectionChatRepository.postSystemMessage(projectId, {
+      const failureReply = this.deps.connectionChatRepository.postSystemMessage(projectId, {
         threadId: thread.id,
         bodyMarkdown: `Worker execution failed: ${message}`,
       });
+      await this.deliverChatProviderReplyIfNeeded(projectId, thread, turnHandle.latestMessage, failureReply);
       return {
         ...userMessage,
         deliveryStatus: "failed",
@@ -419,10 +438,11 @@ export class ChatThreadRuntimeService {
         });
 
         if (isRejection) {
-          this.deps.connectionChatRepository.postSystemMessage(projectId, {
+          const replyMessage = this.deps.connectionChatRepository.postSystemMessage(projectId, {
             threadId: thread.id,
             bodyMarkdown: "_Management action canceled by user._",
           });
+          await this.deliverChatProviderReplyIfNeeded(projectId, thread, latestMessage, replyMessage);
           const newRuntimeState: ConversationRuntimeState = { ...runtimeState };
           delete newRuntimeState.pendingManagementAction;
           this.deps.connectionChatRepository.updateThread(thread.id, { runtimeState: newRuntimeState });
@@ -443,10 +463,11 @@ export class ChatThreadRuntimeService {
             systemReply += `\n\n_Action completed successfully._\n\`\`\`json\n${stringifiedResult}\n\`\`\``;
           }
 
-          this.deps.connectionChatRepository.postSystemMessage(projectId, {
+          const replyMessage = this.deps.connectionChatRepository.postSystemMessage(projectId, {
             threadId: thread.id,
             bodyMarkdown: systemReply.trim(),
           });
+          await this.deliverChatProviderReplyIfNeeded(projectId, thread, latestMessage, replyMessage);
 
           const newRuntimeState: ConversationRuntimeState = { ...runtimeState };
           delete newRuntimeState.pendingManagementAction;
@@ -454,10 +475,11 @@ export class ChatThreadRuntimeService {
           return;
 
         } catch (err: any) {
-          this.deps.connectionChatRepository.postSystemMessage(projectId, {
+          const replyMessage = this.deps.connectionChatRepository.postSystemMessage(projectId, {
             threadId: thread.id,
             bodyMarkdown: `Execution failed: ${err.message}`,
           });
+          await this.deliverChatProviderReplyIfNeeded(projectId, thread, latestMessage, replyMessage);
           const newRuntimeState: ConversationRuntimeState = { ...runtimeState };
           delete newRuntimeState.pendingManagementAction;
           this.deps.connectionChatRepository.updateThread(thread.id, { runtimeState: newRuntimeState });
@@ -473,7 +495,8 @@ export class ChatThreadRuntimeService {
     let continueSessionId: string | null = null;
     const mcpConnection = this.deps.getMcpConnectionInfo?.() ?? null;
 
-    const allMessages = this.deps.connectionChatRepository.listMessages(thread.id);
+    const allMessages = this.deps.connectionChatRepository.listMessages(thread.id) ?? [];
+    const suppressRichWidgets = isChatProviderSourcedThread(thread, allMessages, latestMessage);
 
     const respondingAgent = typeof this.deps.agentPresetSyncService.resolveDashboardReplyAgent === "function"
       ? await this.deps.agentPresetSyncService.resolveDashboardReplyAgent(
@@ -502,9 +525,10 @@ export class ChatThreadRuntimeService {
         mcpAvailable,
         mcpAccessMode: mcpAvailable && isSchedulerOnlyAgentMcpAccess(agentMcpAccess) ? "scheduler_only" : undefined,
         knowledgeManifest,
+        suppressRichWidgets,
       });
     } else {
-      promptContent = buildChatContinuationPrompt(latestMessage, pendingAction, mcpAvailable, thread.title);
+      promptContent = buildChatContinuationPrompt(latestMessage, pendingAction, mcpAvailable, thread.title, suppressRichWidgets);
       continueSessionId = runtimeState.sessionIds![0];
     }
 
@@ -591,10 +615,11 @@ export class ChatThreadRuntimeService {
       }
     }
 
-    this.deps.connectionChatRepository.postSystemMessage(projectId, {
+    const replyMessage = this.deps.connectionChatRepository.postSystemMessage(projectId, {
       threadId: thread.id,
       bodyMarkdown: systemReply.trim(),
     });
+    await this.deliverChatProviderReplyIfNeeded(projectId, thread, latestMessage, replyMessage);
 
     const newRuntimeState: ConversationRuntimeState = {
       ...runtimeState,
@@ -625,6 +650,34 @@ export class ChatThreadRuntimeService {
       return access;
     }
     return schedulerOnlyAgentMcpAccess(access?.linkedServerIds ?? []);
+  }
+
+  private async deliverChatProviderReplyIfNeeded(
+    projectId: string,
+    thread: ConversationThreadRecord,
+    triggeringMessage: ConversationMessageRecord,
+    replyMessage: ConversationMessageRecord,
+  ): Promise<void> {
+    if (!this.deps.chatProviderOutboundService || !isChatProviderSourcedMessage(triggeringMessage)) {
+      return;
+    }
+    try {
+      await this.deps.chatProviderOutboundService.deliverReply({
+        projectId,
+        thread,
+        triggeringMessage,
+        replyMessage,
+      });
+    } catch (error) {
+      this.deps.logger?.error("Failed to enqueue chat provider outbound reply", {
+        logPurpose: "integration",
+        projectId,
+        threadId: thread.id,
+        triggeringMessageId: triggeringMessage.id,
+        replyMessageId: replyMessage.id,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
   }
 
   private async generateThreadCompaction(

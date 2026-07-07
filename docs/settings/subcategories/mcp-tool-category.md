@@ -16,7 +16,7 @@ Fine-grained disablement can be hard to diagnose when a provider expects a missi
 
 ## Dashboard Link
 
-Open this subcategory from the dashboard docs route at `/docs/settings-subcategories-mcp-tool-category`. The Settings card header links directly to this published subpage.
+Open this subcategory from the dashboard docs route at `/docs/user/dashboard/settings#mcp-tool-category`. The Settings card header links to the matching published docs anchor.
 
 ## Related Docs
 

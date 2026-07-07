@@ -34,6 +34,7 @@ import type { SettingsRepository } from "../../repositories/settings-repository.
 import type { ProjectManagementRepository } from "../../repositories/project-management-repository.js";
 import type { ProjectRuntimeRepository } from "../../repositories/project-runtime-repository.js";
 import type { ConnectionChatRepository } from "../../repositories/connection-chat-repository.js";
+import type { ChatProviderRepository } from "../../repositories/chat-provider-repository.js";
 import type { ProjectWorkerAssignmentRepository } from "../../repositories/project-worker-assignment-repository.js";
 import type { ProjectWorkerAssignmentService } from "../../domain/workers/project-worker-assignment-service.js";
 import type { ProjectAttentionRepository } from "../../repositories/project-attention-repository.js";
@@ -50,9 +51,11 @@ import type { DashboardRealtimeService } from "../../services/dashboard-realtime
 import type { PlanningAgentService } from "../../services/planning-agent-service.js";
 import type { ExecutionInvocationControlService } from "../../services/execution-invocation-control-service.js";
 import type { ChatThreadRuntimeService } from "../../services/chat-thread-runtime-service.js";
+import type { ChatProviderOutboundService } from "../../services/chat-provider-outbound-service.js";
 import type { QuicksprintService } from "../../services/quicksprint-service.js";
 import type { ProjectSetupService } from "../../services/project-setup-service.js";
 import type { SchedulerService } from "../../services/scheduler-service.js";
+import type { ChatProviderIngressService } from "../../services/chat-provider-ingress-service.js";
 import type { MemoryService } from "../../services/memory-service.js";
 import type { KnowledgeService } from "../../services/knowledge-service.js";
 import type { MemoryPromotionService } from "../../services/memory-promotion-service.js";
@@ -98,6 +101,7 @@ export interface BootDashboardDeps {
   projectRuntimeRepository: ProjectRuntimeRepository;
   executionRepository: ExecutionRepository;
   connectionChatRepository: ConnectionChatRepository;
+  chatProviderRepository: ChatProviderRepository;
   projectWorkerAssignmentRepository: ProjectWorkerAssignmentRepository;
   projectWorkerAssignmentService: ProjectWorkerAssignmentService;
   projectAttentionRepository: ProjectAttentionRepository;
@@ -116,6 +120,8 @@ export interface BootDashboardDeps {
   schedulerService: SchedulerService;
   sprintIssueService: SprintIssueService;
   chatThreadRuntimeService: ChatThreadRuntimeService;
+  chatProviderIngressService: ChatProviderIngressService;
+  chatProviderOutboundService?: ChatProviderOutboundService;
   dashboardRealtimeService: DashboardRealtimeService;
   logger: Logger;
   getLiveActivitiesForActiveTasks: () => Promise<Record<string, JulesActivity[]>>;
@@ -402,6 +408,7 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<DashboardS
     deps.logger.warn(`Embedding model auto-restore failed: ${error}`);
   });
   deps.schedulerService?.start();
+  deps.chatProviderOutboundService?.start();
 
   const instructionFileService = new InstructionFileService({
     projectManagementRepository: deps.projectManagementRepository,
@@ -428,6 +435,8 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<DashboardS
     settingsRepository: deps.settingsRepository,
     knowledgeService: deps.knowledgeService,
     agentPresetRepository: deps.agentPresetRepository,
+    chatProviderRepository: deps.chatProviderRepository,
+    chatProviderIngressService: deps.chatProviderIngressService,
     projectManagementRepository: deps.projectManagementRepository,
     executionRepository: deps.executionRepository,
     getLiveSnapshot: (projectIdHint) => getProjectLiveSnapshot({
@@ -824,5 +833,11 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<DashboardS
       error: error instanceof Error ? error.message : String(error),
     });
   });
-  return handle;
+  return {
+    ...handle,
+    close: async () => {
+      deps.chatProviderOutboundService?.stop();
+      await handle.close?.();
+    },
+  };
 }

@@ -16,7 +16,7 @@ Restarting interrupted work can duplicate provider effort if the previous CLI ru
 
 ## Dashboard Link
 
-Open this subcategory from the dashboard docs route at `/docs/settings-subcategories-restart-behavior`. The Settings card header links directly to this published subpage.
+Open this subcategory from the dashboard docs route at `/docs/user/dashboard/settings#restart-behavior`. The Settings card header links to the matching published docs anchor.
 
 ## Related Docs
 

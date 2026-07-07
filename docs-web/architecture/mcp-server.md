@@ -99,6 +99,7 @@ router
   .register("manage_skills",      h.handleManageSkills)
   .register("manage_settings",    h.handleManageSettings)
   .register("manage_preview",     h.handleManagePreview)
+  .register("manage_chat_providers", h.handleManageChatProviders)
   .register("manage_telemetry",   h.handleManageTelemetry)
   .register("search_knowledge",   h.handleSearchKnowledge)
   .register("search_skills",      h.handleSearchSkills);
@@ -162,6 +163,7 @@ Each tool has an entry in `settings.mcpTools` (`McpToolToggle[]`). Defaults:
   { "name": "search_skills",       "enabled": true, "isInternal": true },
   { "name": "manage_settings",     "enabled": true, "isInternal": true },
   { "name": "manage_preview",      "enabled": true, "isInternal": true },
+  { "name": "manage_chat_providers", "enabled": true, "isInternal": true },
   { "name": "manage_telemetry",    "enabled": true, "isInternal": true },
   { "name": "manage_code_ux",      "enabled": true, "isInternal": true }   // deprecated
 ]
