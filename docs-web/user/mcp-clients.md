@@ -140,12 +140,13 @@ per-action payloads, see [Developer → Management actions](../developer/managem
 If you want external worker hosts to connect to Code UX over the network, use the authenticated MCP Streamable HTTP transport:
 
 ```bash
+export MCP_HTTP_AUTH_TOKEN="$(openssl rand -base64 48 | tr -d '\n')"
+
 codeux \
-  --mcp-https \
-  --mcp-https-host 0.0.0.0 \
-  --mcp-https-port 4445 \
-  --mcp-https-path /mcp \
-  --mcp-https-auth-token "$(openssl rand -hex 32)"
+  --server-mode \
+  --mcp-http-host 0.0.0.0 \
+  --mcp-http-port 4445 \
+  --mcp-http-path /mcp
 ```
 
 Then point your MCP client at:
@@ -163,6 +164,62 @@ External workers are enrolled as normal worker endpoints in the Code UX database
 > **Security:** Normal Code UX startup always has a bearer token for the MCP HTTP gateway, either explicit or generated in `~/.code-ux/security.json`. Server mode (`--server-mode` or `CODE_UX_SERVER_MODE=true`) requires an explicit non-empty token and does not use the generated fallback. Always use HTTPS in production via a reverse proxy or another trusted TLS termination layer.
 
 For the wire protocol, see [Architecture → MCP server](../architecture/mcp-server.md).
+
+## Secure headless server mode
+
+Use server mode when Code UX should run as an authenticated MCP HTTP control plane without the dashboard listener:
+
+```bash
+export CODE_UX_SERVER_MODE=true
+export MCP_HTTP_AUTH_TOKEN="$(openssl rand -base64 48 | tr -d '\n')"
+export MCP_HTTP_HOST=127.0.0.1
+export MCP_HTTP_PORT=4445
+export MCP_HTTP_PATH=/mcp
+
+codeux
+```
+
+Server mode guarantees that the dashboard UI, dashboard REST routes, dashboard websocket, terminal websocket, and static dashboard assets are not bound by that process. The MCP listener still serves `/health` and `/ready`.
+
+To verify a connection without exposing the bearer token:
+
+```bash
+curl --fail http://127.0.0.1:4445/health
+curl --fail http://127.0.0.1:4445/ready
+```
+
+Then use your MCP client to list tools or run a read-only action. Avoid `curl -v`, shell tracing, or client logs that print the `Authorization` header.
+
+Safe token rotation is a planned reconnect: generate a new token, update client and worker secret references, restart the server-mode process with the new token, reconnect clients, confirm `/ready`, then revoke the old token from your secret manager.
+
+## Settings synchronization
+
+Server-mode instances synchronize settings through `manage_settings` bundle actions:
+
+- `export_settings_bundle` exports system, project, and/or sprint settings. Secret-bearing fields are redacted by default.
+- `apply_settings_bundle` imports the bundle through the same settings repository APIs used by dashboard saves.
+- `includeSecrets: true` on export, or applying a bundle that contains secrets, requires the one-use approval flow for the exact same payload.
+- Partial rollout or rollback uses the `scopes` field to apply only `system`, `projects`, or `sprints`.
+
+Keep redacted bundles in normal review channels. Keep secret-bearing bundles only in approved secret storage, and export a known-good bundle before applying changes so rollback is another approved apply.
+
+## Cluster workers
+
+External workers use the shipped `codeux-worker` bin:
+
+```bash
+export CODE_UX_WORKER_SERVER_URL=http://SERVER_HOST:4445/mcp
+export CODE_UX_WORKER_AUTH_TOKEN="$MCP_HTTP_AUTH_TOKEN"
+
+codeux-worker \
+  --connection-key worker:build-node-01 \
+  --display-name "Build node 01" \
+  --project-id project-id
+```
+
+Repeat `--project-id` for multi-project workers. Use a stable `--connection-key` so reconnects update the same registered endpoint. Worker registration is not license-capped; the MCP HTTP active-session cap defaults to 100 and can be raised with `MCP_HTTP_MAX_SESSIONS` for large clusters.
+
+Workers claim only assigned eligible project work. Stale or offline heartbeats exclude workers from new claims, and dispatch execution is protected by `task_dispatches` plus `execution_leases`; a worker should not start local execution unless the server returns a lease token.
 
 ## Verifying a client connection
 
@@ -184,6 +241,11 @@ You can rename connections, view their pending message backlog, and (for stale e
 | A management action returns `approvalRequired` | Expected for destructive/mutating actions. Retry the same call with `approval: { "confirmed": true }`. |
 | HTTP gateway returns 401 | Missing `Authorization: Bearer <token>` header, or token mismatch. |
 | HTTP gateway returns 400 with "must be initialize" | First request on a new session must be a JSON-RPC `initialize` call. |
+| Server mode fails on startup | Missing, short, or invalid explicit bearer token. Set `MCP_HTTP_AUTH_TOKEN` or `MCP_HTTPS_AUTH_TOKEN`. |
+| Non-loopback bind fails | MCP HTTP would be reachable beyond loopback without an active token. Set a token and put TLS/auth in front of it. |
+| `/health` passes but `/ready` fails | Listener is alive but runtime readiness has not completed. Gate traffic on `/ready`. |
+| Session cap errors | Too many active Streamable HTTP sessions. Stop stale clients or raise `MCP_HTTP_MAX_SESSIONS`. |
+| Worker is stale | Heartbeats stopped, the worker process changed connection keys, or network access failed. Restart with the same `--connection-key`. |
 | "Tool not enabled" on `CallTool` | The tool is disabled in `Settings → MCP tools`. Re-enable it. |
 
 See the full [Troubleshooting](./troubleshooting.md) page for more.

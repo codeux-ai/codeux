@@ -38,9 +38,10 @@ Two listeners:
 ### MCP HTTP gateway
 
 - Loopback-only by default.
-- Bearer token via `--mcp-https-auth-token` (or `MCP_HTTPS_AUTH_TOKEN`), falling back to an auto-generated user token in `~/.code-ux/security.json`.
+- Bearer token via `--mcp-http-auth-token` / `--mcp-https-auth-token` or `MCP_HTTP_AUTH_TOKEN` / `MCP_HTTPS_AUTH_TOKEN`, falling back to an auto-generated user token in `~/.code-ux/security.json` during normal dashboard startup.
 - Server mode (`--server-mode` or `CODE_UX_SERVER_MODE=true`) requires an explicit non-empty bearer token even on loopback and does not bind dashboard routes or websockets.
 - Code UX normal startup always supplies a token; unauthenticated requests are rejected with HTTP 401 + JSON-RPC error `-32001`.
+- The gateway defaults to 100 active Streamable HTTP sessions and a one-hour idle timeout. Operators can raise the cap for large worker clusters; this is transport protection, not a worker license limit.
 - Does not perform TLS itself — front with a reverse proxy (nginx, Caddy, Traefik) for HTTPS in production.
 
 ### Stdio transport
@@ -111,12 +112,13 @@ Run on `127.0.0.1`. No further hardening needed.
 ### Team / shared server
 
 1. Run Code UX inside a dedicated user (`useradd codeux`) with limited shell access.
-2. Bind the dashboard to `127.0.0.1` only.
-3. Front the dashboard with a reverse proxy (nginx + auth basic / OAuth) on a public port if needed.
-4. Front the MCP HTTP gateway with TLS termination, restrict by client certificate or IP allowlist if exposed.
-5. Use OS-level disk encryption.
-6. Rotate API keys quarterly.
-7. Set `automationLevel: "ALWAYS_ASK"` for untrusted teammates' projects.
+2. Prefer server mode for headless MCP control planes, with an explicit bearer token from a secret manager.
+3. Bind the dashboard to `127.0.0.1` only when a dashboard-mode process is required.
+4. Front the dashboard with a reverse proxy (nginx + auth basic / OAuth) on a public port if needed.
+5. Front the MCP HTTP gateway with TLS termination, restrict by client certificate or IP allowlist if exposed.
+6. Use OS-level disk encryption.
+7. Rotate API keys and MCP HTTP bearer tokens on a planned cadence.
+8. Set `automationLevel: "ALWAYS_ASK"` for untrusted teammates' projects.
 
 ### CI / scripted
 
@@ -125,8 +127,10 @@ Avoid storing API keys in the settings DB if the runner is ephemeral; use `JULES
 ## Known limitations
 
 - **Cross-Origin Protections**: Dashboard REST routes and WebSocket connections enforce strict `Origin` and `Sec-Fetch-Site` validation. External untrusted origins are actively blocked from performing mutations, mitigating standard CSRF vectors. Still, if exposing remotely, ensure your reverse proxy enforces strong authentication.
-- **No rate limiting** at the application layer (other than `express.json({ limit: "1mb" })` for body size). Reverse proxy if needed.
+- **Bounded but not per-user rate limiting**: MCP HTTP has gateway-level rate/session protections, but Code UX still has no per-user quota model. Use a reverse proxy for tenant, IP, or organization-level policy.
 - **No structured RBAC.** Add it at a layer above Code UX (proxy, separate service mesh).
+
+For secure headless startup, health checks, settings synchronization, worker enrollment, stale-worker handling, and token rotation, see [User Guide → Connecting MCP clients](../user/mcp-clients.md#secure-headless-server-mode).
 
 ## Reporting vulnerabilities
 

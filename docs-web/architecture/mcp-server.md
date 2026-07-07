@@ -30,7 +30,7 @@ Source: `src/app/lifecycle/mcp-lifecycle-service.ts:92-106`.
 
 ### Streamable HTTP
 
-By default (disable with `--no-mcp-https` or `MCP_HTTPS_ENABLED=false`), Code UX also binds an HTTP listener using `StreamableHTTPServerTransport`. The `mcp-https` flag/env names are retained for compatibility, but the Node listener itself is HTTP.
+By default (disable with `--no-mcp-http`, `--no-mcp-https`, `MCP_HTTP_ENABLED=false`, or `MCP_HTTPS_ENABLED=false`), Code UX also binds an HTTP listener using `StreamableHTTPServerTransport`. The `mcp-https` flag/env names are retained for compatibility, but the Node listener itself is HTTP.
 
 | Default | Value |
 | --- | --- |
@@ -51,11 +51,12 @@ By default (disable with `--no-mcp-https` or `MCP_HTTPS_ENABLED=false`), Code UX
 
 Bearer token via `Authorization: Bearer <token>` header.
 
-Server mode requires an explicit bearer token from CLI or environment even when binding to loopback.
+Server mode requires an explicit bearer token from CLI or environment even when binding to loopback. It also disables dashboard routes and websockets while preserving `/health` and `/ready` on the MCP HTTP listener.
 
 | Host class | Token required? |
 | --- | --- |
 | Normal Code UX startup | Generated user token from `~/.code-ux/security.json` unless an explicit token is configured |
+| Server mode | Explicit `MCP_HTTP_AUTH_TOKEN`, `MCP_HTTPS_AUTH_TOKEN`, `--mcp-http-auth-token`, or `--mcp-https-auth-token`; generated fallback is rejected |
 | Embedded/low-level transport use | Loopback may be unauthenticated; non-loopback requires a token |
 
 Invalid or missing bearer credentials are rejected with HTTP 401 + JSON-RPC error `-32001`.
@@ -63,6 +64,10 @@ Invalid or missing bearer credentials are rejected with HTTP 401 + JSON-RPC erro
 The Express middleware uses `express.json({ limit: "1mb" })`. Larger payloads return HTTP 400.
 
 Source: `src/app/lifecycle/mcp-lifecycle-service.ts:108-240`.
+
+#### Session limits
+
+The listener defaults to 100 active Streamable HTTP sessions and a one-hour idle timeout. Operators can raise the cap with `MCP_HTTP_MAX_SESSIONS` / `MCP_HTTPS_MAX_SESSIONS` or the matching CLI flags for large worker clusters. These are transport protections for runaway clients and stale workers, not a license limit on registered workers.
 
 #### Session model
 
@@ -177,7 +182,11 @@ Connections are pruned during the runtime cleanup loop. The dashboard's
 
 ## Runtime role
 
-`--runtime-role` (or default `project_manager`) determines which tools are advertised. Currently all built-in tools declare `runtimeRoles: ["project_manager"]`. The framework supports `worker` and `listener` roles for future expansion (e.g. dedicated worker hosts that expose only worker tools).
+`--runtime-role` (or default `project_manager`) determines which tools are advertised. The main server uses `project_manager`. External workers connect to that server over Streamable HTTP for the control plane and start a local `worker-host` runtime over stdio for execution tools such as worker dispatch execution and local cancellation.
+
+Worker endpoint registration and project assignment are database-backed. Registered workers are unlimited; active HTTP sessions are bounded by the session cap. Dispatch claims update `task_dispatches` and create `execution_leases` in the same safety path, and a worker must not execute a claimed dispatch unless the server returns a lease token.
+
+For operator procedures, see [User Guide → Connecting MCP clients](../user/mcp-clients.md#secure-headless-server-mode).
 
 ## Recovery
 
