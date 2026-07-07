@@ -7,6 +7,13 @@ describe("renderMarkdown", () => {
     expect(rendered).toContain("<strong>hello</strong>");
   });
 
+  it("adds stable safe ids to markdown headings", () => {
+    const rendered = renderMarkdown("### Project Context\n\n### Project Context\n\n### Merge Gates & Autofix");
+    expect(rendered).toContain('<h3 id="project-context">Project Context</h3>');
+    expect(rendered).toContain('<h3 id="project-context-2">Project Context</h3>');
+    expect(rendered).toContain('<h3 id="merge-gates-autofix">Merge Gates &amp; Autofix</h3>');
+  });
+
   it("drops inline html blocks", () => {
     const rendered = renderMarkdown("before <script>alert(1)</script> after");
     expect(rendered).not.toContain("<script>");
