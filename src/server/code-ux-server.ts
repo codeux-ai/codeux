@@ -1382,8 +1382,8 @@ export class CodeUxServer {
         regenerateMcpHttpAuthToken: () => this.regenerateMcpHttpAuthToken(),
       });
     } else {
-      this.logger.info("Dashboard startup skipped for headless Code UX runtime", {
-        runtimeRole: this.appConfig.runtimeRole,
+      this.logger.info("Dashboard startup skipped for Code UX runtime", {
+        mode: this.appConfig.serverMode ? "server" : "headless",
       });
     }
 
@@ -1403,6 +1403,10 @@ export class CodeUxServer {
       path: this.appConfig.mcpHttpPath,
       authToken: this.appConfig.mcpHttpAuthToken,
       getAuthToken: () => this.appConfig.mcpHttpAuthToken,
+      requireAuth: this.appConfig.serverMode,
+      maxSessions: this.appConfig.mcpHttpMaxSessions,
+      sessionTimeoutMs: this.appConfig.mcpHttpSessionTimeoutMs,
+      getReady: () => this.isReady(),
       logger: this.logger.child({ component: "mcp-http-transport" }),
       createServer: () => this.createMcpServerInstance("project_manager"),
       recoveryService: this.runtimeStartupRecoveryService,

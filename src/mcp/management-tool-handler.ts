@@ -28,6 +28,12 @@ import type { AgentPresetSyncService } from "../services/agent-preset-sync-servi
 import type { MemoryService } from "../services/memory-service.js";
 import type { MemoryPromotionService } from "../services/memory-promotion-service.js";
 import type { EmbeddingModelManager } from "../services/embedding-model-manager.js";
+import type {
+  PullWorkerTaskDispatchArgs,
+  RegisterExternalWorkerEndpointArgs,
+  UpdateWorkerTaskDispatchArgs,
+  WorkerTaskDispatchService,
+} from "../services/worker-task-dispatch-service.js";
 import type { SkillService } from "../services/skill-service.js";
 
 import type { PlanningAgentService } from "../services/planning-agent-service.js";
@@ -72,6 +78,7 @@ export interface ManagementToolHandlerDeps {
   sprintIssueService: SprintIssueService;
   quicksprintService?: LateBoundOrValue<QuicksprintService>;
   schedulerService?: LateBoundOrValue<SchedulerService>;
+  workerTaskDispatchService?: WorkerTaskDispatchService;
 }
 
 const MANAGEMENT_APPROVAL_TTL_MS = 15 * 60 * 1000;
@@ -399,7 +406,12 @@ export class ManagementToolHandler {
 
   async handleManageSettings(args: ManageSettingsArgs): Promise<{ content: Array<{ type: string; text: string }> }> {
     try {
-      const envelope = await this.settingsActions.handleSettingsAction({ domain: "settings", action: args.action, payload: args as unknown as Record<string, unknown>, approval: args.approval });
+      const rawArgs = args as unknown as Record<string, unknown>;
+      const nestedPayload = rawArgs.payload && typeof rawArgs.payload === "object" && !Array.isArray(rawArgs.payload)
+        ? rawArgs.payload as Record<string, unknown>
+        : null;
+      const payload = nestedPayload ? { ...nestedPayload, action: args.action } : rawArgs;
+      const envelope = await this.settingsActions.handleSettingsAction({ domain: "settings", action: args.action, payload, approval: args.approval });
       return { content: [{ type: "text", text: JSON.stringify(envelope, null, 2) }] };
     } catch (error) {
       return this.formatError("settings", args.action, error);
@@ -457,6 +469,42 @@ export class ManagementToolHandler {
       return { content: [{ type: "text", text: `${header}\n\n${formatted}` }] };
     } catch (error) {
       return this.formatError("knowledge", "search", error);
+    }
+  }
+
+  async handleRegisterWorkerEndpoint(args: RegisterExternalWorkerEndpointArgs): Promise<{ content: Array<{ type: string; text: string }> }> {
+    try {
+      if (!this.deps.workerTaskDispatchService) {
+        throw new Error("Worker dispatch service is not enabled.");
+      }
+      const endpoint = this.deps.workerTaskDispatchService.registerExternalWorkerEndpoint(args);
+      return { content: [{ type: "text", text: JSON.stringify({ endpoint }, null, 2) }] };
+    } catch (error) {
+      return this.formatError("workers", "register_worker_endpoint", error);
+    }
+  }
+
+  async handlePullTaskDispatch(args: PullWorkerTaskDispatchArgs): Promise<{ content: Array<{ type: string; text: string }> }> {
+    try {
+      if (!this.deps.workerTaskDispatchService) {
+        throw new Error("Worker dispatch service is not enabled.");
+      }
+      const claim = this.deps.workerTaskDispatchService.pullNextDispatch(args);
+      return { content: [{ type: "text", text: JSON.stringify(claim, null, 2) }] };
+    } catch (error) {
+      return this.formatError("workers", "pull_task_dispatch", error);
+    }
+  }
+
+  async handleUpdateTaskDispatch(args: UpdateWorkerTaskDispatchArgs): Promise<{ content: Array<{ type: string; text: string }> }> {
+    try {
+      if (!this.deps.workerTaskDispatchService) {
+        throw new Error("Worker dispatch service is not enabled.");
+      }
+      const result = this.deps.workerTaskDispatchService.updateDispatch(args);
+      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+    } catch (error) {
+      return this.formatError("workers", "update_task_dispatch", error);
     }
   }
 

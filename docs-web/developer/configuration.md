@@ -11,14 +11,24 @@ codeux [options]
 | Flag | Type | Default | Description |
 | --- | --- | --- | --- |
 | `--api-key VALUE` | string | – | Jules API key. Highest precedence. |
-| `--runtime-role VALUE` | string | `project_manager` | Role advertised to the MCP layer. (Currently only `project_manager` is functional; `worker-host` is reserved.) |
+| `--runtime-role VALUE` | string | `project_manager` | Role advertised to the MCP layer. `project_manager` is the main server role; `worker-host` is used by the local execution runtime started by `codeux-worker`. |
 | `--headless` | flag | off | Start MCP server without binding the dashboard. |
 | `--no-dashboard` | flag | off | Alias for `--headless`. |
+| `--server-mode` | flag | off | Start authenticated MCP HTTP server mode without binding dashboard routes or websockets. Requires an explicit bearer token with at least 32 bearer-safe characters. |
+| `--no-mcp-http` | flag | off | Preferred flag for disabling the MCP Streamable HTTP gateway outside server mode. |
 | `--mcp-https` / `--no-mcp-https` | flag | on | MCP Streamable HTTP gateway, enabled by default; use `--no-mcp-https` to disable. |
+| `--mcp-http-port N` | number | `dashboardPort + 1` | Preferred HTTP gateway port flag. |
 | `--mcp-https-port N` | number | `dashboardPort + 1` | Port for the HTTP gateway. |
+| `--mcp-http-host H` | string | platform dependent | Preferred HTTP gateway host/interface flag. |
 | `--mcp-https-host H` | string | `127.0.0.1` | Host/interface for the HTTP gateway. |
+| `--mcp-http-path P` | string | `/mcp` | Preferred HTTP gateway path flag. |
 | `--mcp-https-path P` | string | `/mcp` | Path for the HTTP gateway. |
+| `--mcp-http-auth-token VALUE` | string | auto-generated user token | Preferred bearer token flag. |
 | `--mcp-https-auth-token VALUE` | string | auto-generated user token | Bearer token. Overrides the generated token stored in `~/.code-ux/security.json`. |
+| `--mcp-http-max-sessions N` | number | `100` | Preferred active Streamable HTTP session cap flag. |
+| `--mcp-https-max-sessions N` | number | `100` | Legacy-compatible active Streamable HTTP session cap flag. |
+| `--mcp-http-session-timeout-ms N` | number | `3600000` | Preferred idle Streamable HTTP session timeout flag. |
+| `--mcp-https-session-timeout-ms N` | number | `3600000` | Legacy-compatible idle Streamable HTTP session timeout flag. |
 | `--help`, `-h` | flag | – | Show help. |
 
 Flags can be passed in any order. Anything after `--` is ignored.
@@ -33,11 +43,23 @@ Flags can be passed in any order. Anything after `--` is ignored.
 | `JULES_API_MAX_FAILS` | int | `5` | Emergency-stop threshold (`maxFailures`). |
 | `DASHBOARD_PORT` | int | `4444` | Dashboard HTTP port. |
 | `DASHBOARD_HOST` | string | `127.0.0.1` | Dashboard bind address. |
-| `MCP_HTTPS_ENABLED` | bool | `false` | Enable the MCP HTTP gateway. |
+| `CODE_UX_SERVER_MODE` | bool | `false` | Enable authenticated MCP HTTP server mode and disable dashboard binding. |
+| `MCP_HTTP_ENABLED` | bool | `true` | Preferred MCP HTTP gateway enablement variable. |
+| `MCP_HTTPS_ENABLED` | bool | `true` | Enable the MCP HTTP gateway. |
+| `MCP_HTTP_PORT` | int | – | Preferred MCP HTTP port variable. |
 | `MCP_HTTPS_PORT` | int | – | MCP HTTP port. |
+| `MCP_HTTP_HOST` | string | platform dependent | Preferred MCP HTTP bind variable. |
 | `MCP_HTTPS_HOST` | string | `127.0.0.1` | MCP HTTP bind. |
+| `MCP_HTTP_PATH` | string | `/mcp` | Preferred MCP HTTP path variable. |
 | `MCP_HTTPS_PATH` | string | `/mcp` | MCP HTTP path. |
+| `MCP_HTTP_AUTH_TOKEN` | string | auto-generated user token | Preferred bearer token variable. |
 | `MCP_HTTPS_AUTH_TOKEN` | string | auto-generated user token | Bearer token. |
+| `MCP_HTTP_MAX_SESSIONS` | int | `100` | Preferred active Streamable HTTP session cap variable. |
+| `MCP_HTTPS_MAX_SESSIONS` | int | `100` | Legacy-compatible active Streamable HTTP session cap variable. |
+| `MCP_HTTP_SESSION_TIMEOUT_MS` | int | `3600000` | Preferred idle Streamable HTTP session timeout variable. |
+| `MCP_HTTPS_SESSION_TIMEOUT_MS` | int | `3600000` | Legacy-compatible idle Streamable HTTP session timeout variable. |
+| `CODE_UX_WORKER_SERVER_URL` | URL | – | Server-mode MCP URL consumed by `codeux-worker`. |
+| `CODE_UX_WORKER_AUTH_TOKEN` | string | – | Worker bearer token, preferred over legacy MCP token env names for `codeux-worker`. |
 | `GITHUB_TOKEN` / `GH_TOKEN` | string | – | GitHub PAT for `REMOTE` GitHub mode. |
 | `NODE_ENV` | string | – | Affects logging verbosity. `test` enables test mode. |
 
@@ -89,19 +111,31 @@ If the chosen port is in use, Code UX increments and retries until it finds a fr
 ### MCP HTTP port
 
 ```
---mcp-https-port  >  MCP_HTTPS_PORT env  >  config.json (mcpHttpPort, MCP_HTTPS_PORT, mcpHttp.port)
+--mcp-http-port / --mcp-https-port  >  MCP_HTTP_PORT / MCP_HTTPS_PORT env
+                                       >  config.json (mcpHttpPort, MCP_HTTP_PORT, mcpHttp.port, mcpHttps.port)
                  >  dashboardPort + 1
 ```
 
 ### MCP HTTP host / path / auth
 
 ```
---mcp-https-host  >  MCP_HTTPS_HOST env  >  127.0.0.1
---mcp-https-path  >  MCP_HTTPS_PATH env  >  /mcp
---mcp-https-auth-token  >  MCP_HTTPS_AUTH_TOKEN env  >  ~/.code-ux/security.json auto-generated token
+--mcp-http-host / --mcp-https-host  >  MCP_HTTP_HOST / MCP_HTTPS_HOST env  >  platform default
+--mcp-http-path / --mcp-https-path  >  MCP_HTTP_PATH / MCP_HTTPS_PATH env  >  /mcp
+--mcp-http-auth-token / --mcp-https-auth-token  >  MCP_HTTP_AUTH_TOKEN / MCP_HTTPS_AUTH_TOKEN env
+                                                 >  ~/.code-ux/security.json auto-generated token
 ```
 
+Server mode requires the token to come from the explicit CLI/env sources and rejects startup when the token is missing, shorter than 32 characters, or contains characters outside the bearer-safe set.
+
 The MCP listener is authenticated HTTP. The historical `mcp-https` option names remain supported for compatibility, but TLS requires a trusted reverse proxy/certificate in front of the listener.
+
+## Server mode and worker configuration
+
+`--server-mode` and `CODE_UX_SERVER_MODE=true` disable the dashboard listener and force authenticated MCP HTTP to remain available. The process serves `/health` and `/ready` on the MCP listener and requires an explicit bearer token with at least 32 bearer-safe characters.
+
+`codeux-worker` reads `--server-url` and `--auth-token`, then falls back to `CODE_UX_WORKER_SERVER_URL` and `CODE_UX_WORKER_AUTH_TOKEN`. Legacy `MCP_HTTP_AUTH_TOKEN` and `MCP_HTTPS_AUTH_TOKEN` are also accepted for worker auth token fallback. Repeat `--project-id` for multi-project workers and use a stable `--connection-key` to update the same registered endpoint across reconnects.
+
+See [User Guide → Connecting MCP clients](../user/mcp-clients.md#secure-headless-server-mode) for startup commands, client verification, settings synchronization, token rotation, and cluster troubleshooting.
 
 ## External settings hints
 

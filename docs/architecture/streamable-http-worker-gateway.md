@@ -1,7 +1,7 @@
 # Streamable HTTP Worker Gateway
 
 ## Status
-Implemented foundation
+Implemented
 
 ## Purpose
 
@@ -20,7 +20,7 @@ Code UX was previously stdio-only.
 
 That worked for local MCP clients, but it blocked the real worker architecture because a worker on another machine could not attach to the main Code UX server over stdio.
 
-The worker gateway solves that by exposing a dedicated authenticated MCP HTTP endpoint on the main Code UX server.
+The worker gateway solves that by exposing an authenticated MCP HTTP endpoint on the main Code UX server. In server mode, this endpoint is the primary control-plane surface and the dashboard is intentionally not bound.
 
 ## Runtime Roles
 
@@ -47,14 +47,7 @@ It exposes only the worker-local execution tools needed to:
 
 ### HTTP Transport
 
-The MCP Streamable HTTP transport exposes the same `project_manager` tool surface.
-
-The gateway now enforces worker identity at the listener entrypoint:
-
-- `listen` on remote connections is always registered as `role = worker`
-- the stored connection transport is always `streamable_http`
-
-That prevents remote HTTP worker connections from masquerading as normal stdio listeners.
+The MCP Streamable HTTP transport exposes the same `project_manager` tool surface. Worker identity, assignment, heartbeat state, and dispatch claims are modeled by the worker endpoint and project assignment services instead of by a separate worker-only MCP runtime.
 
 ## Transport Model
 
@@ -66,8 +59,8 @@ The worker connects to the main Code UX server over Streamable HTTP.
 
 That connection is used for:
 
-- `listen`
-- `post_listen_reply`
+- `register_worker_endpoint`
+- `pull_task_dispatch`
 - `update_task_dispatch`
 
 This is the remote, project-scoped control plane.
@@ -98,6 +91,14 @@ That metadata is surfaced in the live runtime dashboard so operators can disting
 
 The main Code UX server can expose the worker gateway with:
 
+- `--server-mode`
+- `--mcp-http-port`
+- `--mcp-http-host`
+- `--mcp-http-path`
+- `--mcp-http-auth-token`
+
+Legacy-compatible names are still accepted:
+
 - `--mcp-https`
 - `--mcp-https-port`
 - `--mcp-https-host`
@@ -106,11 +107,24 @@ The main Code UX server can expose the worker gateway with:
 
 Equivalent environment variables:
 
+- `CODE_UX_SERVER_MODE`
+- `MCP_HTTP_ENABLED`
+- `MCP_HTTP_PORT`
+- `MCP_HTTP_HOST`
+- `MCP_HTTP_PATH`
+- `MCP_HTTP_AUTH_TOKEN`
+- `MCP_HTTP_MAX_SESSIONS`
+- `MCP_HTTP_SESSION_TIMEOUT_MS`
+
+Legacy-compatible names are still accepted:
+
 - `MCP_HTTPS_ENABLED`
 - `MCP_HTTPS_PORT`
 - `MCP_HTTPS_HOST`
 - `MCP_HTTPS_PATH`
 - `MCP_HTTPS_AUTH_TOKEN`
+- `MCP_HTTPS_MAX_SESSIONS`
+- `MCP_HTTPS_SESSION_TIMEOUT_MS`
 
 Behavior:
 
@@ -119,6 +133,7 @@ Behavior:
 - defaults to `dashboardPort + 1` when no explicit MCP HTTP port is configured
 - auto-generates a user-scoped bearer token in `~/.code-ux/security.json` on first startup when no explicit token is configured
 - requires bearer authentication for normal Code UX startup, including Docker Desktop/WSL defaults that bind the gateway to `0.0.0.0` for container reachability
+- requires an explicit bearer token in server mode and does not use the generated user token fallback
 - keeps explicit `--mcp-https-auth-token` and `MCP_HTTPS_AUTH_TOKEN` values as the highest-precedence token sources
 - exposes an HTTP listener; HTTPS/TLS requires a reverse proxy or future native certificate configuration
 
@@ -131,13 +146,13 @@ Default path:
 Local-only worker behavior still works:
 
 ```bash
-node dist/worker/index.js --project-id <PROJECT_ID>
+codeux-worker --project-id <PROJECT_ID>
 ```
 
 Remote control-plane mode uses:
 
 ```bash
-node dist/worker/index.js \
+codeux-worker \
   --server-url http://SERVER_HOST:4445/mcp \
   --auth-token <TOKEN> \
   --project-id <PROJECT_ID>
@@ -147,6 +162,9 @@ Important detail:
 
 - `--server-url` points at the main Code UX worker gateway
 - the worker still starts its own local `worker_host` runtime unless explicitly customized
+- repeat `--project-id` to enroll a multi-project worker
+- repeat `--active-project-id` to narrow the current polling focus while preserving full enrollment for every `--project-id`
+- use a stable `--connection-key` so reconnects update the same endpoint
 
 The local worker-host runtime is configured with:
 
@@ -156,13 +174,19 @@ The local worker-host runtime is configured with:
 
 Those flags configure the worker machine's local execution process, not the remote control plane.
 
+## Cluster Operation
+
+External worker endpoints are registered in `worker_endpoints` with heartbeat-derived status. Project eligibility lives in both the connection binding table and `project_worker_assignments`: `projectIds` is the full eligible set, while `activeProjectIds` is only the current polling/focus subset on the connection. A project can have one primary worker and any number of overflow workers. There is no product cap on registered workers; the Streamable HTTP active-session cap is a transport protection default that operators can raise for large clusters.
+
+Task pickup is protected by both `task_dispatches` and `execution_leases`. A claim must return a lease token before the worker starts local execution. Worker heartbeats renew the lease while work runs, and stale or offline endpoints are excluded from new claims. If a primary worker goes stale, eligible overflow workers can claim new work for the project.
+
 ## Security Model
 
 The worker gateway supports bearer authentication:
 
 - `Authorization: Bearer <token>`
 
-If the gateway is exposed on anything other than loopback, Code UX requires an active bearer token at startup. If no explicit token is supplied, Code UX creates a user-scoped token in `~/.code-ux/security.json`; operators can read or regenerate it from Settings → MCP before distributing it to local CLIs or remote workers.
+If the gateway is exposed on anything other than loopback, Code UX requires an active bearer token at startup. If no explicit token is supplied during normal dashboard startup, Code UX creates a user-scoped token in `~/.code-ux/security.json`; operators can read or regenerate it from Settings → MCP before distributing it to local CLIs or remote workers. In server mode, the token must be supplied explicitly through CLI or environment and must be treated as a full-control secret.
 
 The request preflight validates security-sensitive headers before any session lookup:
 
@@ -176,10 +200,6 @@ Session lifecycle limits are enforced at the gateway:
 - sessions idle for more than one hour are closed and removed before a new initialize request is evaluated against the active-session cap
 - active-session cap failures are logged with bounded metadata such as method, path, active count, and maximum count, not bearer tokens or session ids
 
-This is a minimal transport guard, not the final worker identity model.
-
-Later phases should add stronger worker registration and per-worker auth semantics.
-
 ## What This Solves
 
 This implementation fixes the most important transport gap:
@@ -188,13 +208,4 @@ This implementation fixes the most important transport gap:
 - remote workers no longer depend on sharing the same local stdio server process
 - worker execution still reuses the same DB-native dispatch and event model
 
-## What Is Still Transitional
-
-This is not yet the final worker architecture.
-
-Remaining follow-up work includes:
-
-- richer worker authentication and registration
-- explicit remote worker lifecycle management
-- stronger connection cleanup and archival
-- possibly reducing or replacing the local `worker_host` helper once execution hooks are factored differently
+For operator procedures, token rotation, health checks, settings synchronization, and troubleshooting, see [Secure Headless Server Mode](../operations/server-mode.md).

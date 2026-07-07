@@ -57,6 +57,8 @@ When Code UX starts it:
 Nothing is required to reach this point — no API keys, no environment variables. Configure providers
 when you are ready to dispatch work (see [Configuring providers](#configuring-providers)).
 
+For headless server deployments, use `--server-mode` with an explicit MCP HTTP bearer token. Server mode does not bind dashboard routes or websockets; operators connect through authenticated MCP HTTP and probe `/health` and `/ready` on the MCP listener.
+
 ## CLI flags
 
 Run `codeux --help` for the authoritative list. The current flags are:
@@ -66,11 +68,19 @@ Run `codeux --help` for the authoritative list. The current flags are:
 | `--api-key VALUE` | Set the Jules API key (overrides env and settings). |
 | `--runtime-role VALUE` | Runtime role: `project_manager` (default) or `worker-host`. |
 | `--headless` (alias `--no-dashboard`) | Start MCP-only without binding the dashboard. |
+| `--server-mode` | Start authenticated MCP HTTP server mode without binding dashboard routes or websockets. Requires an explicit bearer token with at least 32 bearer-safe characters. |
+| `--no-mcp-http` | Preferred alias for disabling the MCP Streamable HTTP gateway outside server mode. |
 | `--mcp-https` / `--no-mcp-https` | Enable/disable the MCP Streamable HTTP gateway (**enabled by default**; legacy flag name). |
+| `--mcp-http-port N` | Preferred alias for the MCP HTTP gateway port. |
 | `--mcp-https-port N` | Port for the MCP HTTP gateway. |
+| `--mcp-http-host H` | Preferred alias for the MCP HTTP gateway host/interface. |
 | `--mcp-https-host H` | Host/interface for the MCP HTTP gateway. |
+| `--mcp-http-path P` | Preferred alias for the MCP HTTP gateway path. |
 | `--mcp-https-path P` | Path for the MCP HTTP gateway (default `/mcp`). |
+| `--mcp-http-auth-token VALUE` | Preferred alias for the MCP HTTP bearer token. |
 | `--mcp-https-auth-token VALUE` | Bearer token for MCP HTTP requests; overrides the generated user token. |
+| `--mcp-http-max-sessions N` | Preferred alias for the active Streamable HTTP session cap. |
+| `--mcp-http-session-timeout-ms N` | Preferred alias for the idle Streamable HTTP session timeout. |
 | `--help`, `-h` | Show help. |
 
 ## Environment variables
@@ -79,11 +89,23 @@ Run `codeux --help` for the authoritative list. The current flags are:
 | --- | --- |
 | `JULES_API_KEY` | Jules API key (also accepted as `JULES_KEY`). |
 | `DASHBOARD_PORT` | Dashboard port (default `4444`). |
+| `CODE_UX_SERVER_MODE` | Set to `true` for authenticated MCP HTTP server mode without dashboard binding. Requires an explicit bearer token with at least 32 bearer-safe characters. |
+| `MCP_HTTP_ENABLED` | Preferred alias to enable the MCP HTTP gateway. |
 | `MCP_HTTPS_ENABLED` | Enable the MCP HTTP gateway (default `true`). |
+| `MCP_HTTP_PORT` | Preferred alias for the MCP HTTP gateway port. |
 | `MCP_HTTPS_PORT` | Port for the MCP HTTP gateway. |
+| `MCP_HTTP_HOST` | Preferred alias for the MCP HTTP gateway host/interface. |
 | `MCP_HTTPS_HOST` | Host/interface for the MCP HTTP gateway. |
+| `MCP_HTTP_PATH` | Preferred alias for the MCP HTTP gateway path. |
 | `MCP_HTTPS_PATH` | Path for the MCP HTTP gateway. |
+| `MCP_HTTP_AUTH_TOKEN` | Preferred alias for the MCP HTTP bearer token. |
 | `MCP_HTTPS_AUTH_TOKEN` | Bearer token for MCP HTTP requests; if unset, Code UX creates `~/.code-ux/security.json`. |
+| `MCP_HTTP_MAX_SESSIONS` | Preferred alias for the active Streamable HTTP session cap. |
+| `MCP_HTTP_SESSION_TIMEOUT_MS` | Preferred alias for the idle Streamable HTTP session timeout. |
+
+In server mode, `MCP_HTTPS_AUTH_TOKEN`, `MCP_HTTP_AUTH_TOKEN`, `--mcp-https-auth-token`, or `--mcp-http-auth-token` must provide an explicit token with at least 32 bearer-safe characters. Server mode does not fall back to the generated user token.
+
+For server-mode startup commands, token handling, worker enrollment, settings synchronization, and troubleshooting, see [Connecting MCP clients](./mcp-clients.md#secure-headless-server-mode).
 
 A project-local `.env` file is read on startup, so you can keep settings per repository:
 

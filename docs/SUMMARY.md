@@ -81,6 +81,7 @@
   - [Mockup Sprint Pentest Scenarios](./development/mockup-sprint-pentest-scenarios.md)
   - [Documentation Standards](./development/documentation-standards.md)
 - [Operations Runbook](./operations/runbook.md)
+- [Secure Headless Server Mode](./operations/server-mode.md)
 - [Security Hardening](./operations/security-hardening.md)
 - [Logging and Correlation IDs](./operations/logging-and-correlation.md)
 - [CLI Commands Reference](./reference/cli-commands.md) - `codeux` management syntax, aliases, prompting, JSON payloads, and approvals

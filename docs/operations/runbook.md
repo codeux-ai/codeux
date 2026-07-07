@@ -18,8 +18,12 @@ Database maintenance (`DatabaseMaintenanceService`) runs automatically during no
 3. Open dashboard and verify settings.
 4. Confirm `/api/status` and `/api/git-status` (via `GitStatusService`) are responding.
 5. Confirm `/health` and `/ready` probes:
-   - `/health`: Liveness probe. A success (`{"status": "UP"}`) means the dashboard server process is reachable and can answer basic HTTP requests.
-   - `/ready`: Readiness probe from `src/server/dashboard-server.ts`. A success (`{"status": "READY"}` or `{"status": "UP"}`) means the server considers required startup/runtime dependencies ready enough to serve normal traffic. It does not validate every provider, project, Docker workspace, or external service.
+   - `/health`: Liveness probe. In dashboard mode it is served by the dashboard server; in server mode it is served by the MCP HTTP listener.
+   - `/ready`: Readiness probe from the dashboard server or MCP HTTP listener. A success (`{"status":"READY"}` or `{"status":"UP"}`) means the server considers required startup/runtime dependencies ready enough to serve normal traffic. It does not validate every provider, project, Docker workspace, or external service.
+
+### Headless Server Mode
+
+Use `--server-mode` or `CODE_UX_SERVER_MODE=true` for an MCP-only process intended for authenticated remote clients. Server mode disables the dashboard listener, dashboard websocket, terminal websocket, and static dashboard assets; starts MCP HTTP by default; and requires an explicit non-empty bearer token via `MCP_HTTPS_AUTH_TOKEN`, `MCP_HTTP_AUTH_TOKEN`, `--mcp-https-auth-token`, or `--mcp-http-auth-token`.
 
 If started without key:
 - Configure `JULES_API_KEY` in `.env`, or `julesApiKey` in `.code-ux/settings.json`, or set it in dashboard settings.

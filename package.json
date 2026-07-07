@@ -16,7 +16,8 @@
   "type": "module",
   "main": "dist/index.js",
   "bin": {
-    "codeux": "dist/index.js"
+    "codeux": "dist/index.js",
+    "codeux-worker": "dist/worker/index.js"
   },
   "files": [
     "dist",

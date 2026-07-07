@@ -7,12 +7,14 @@ import {
   apiKeyLoader, 
   dashboardPortLoader, 
   hasHeadlessArg,
+  hasServerModeArg,
   parseApiKeyArg,
   parseRuntimeRoleArg,
 } from "../../../src/config/app-config.js";
 
 const originalEnv = { ...process.env };
 const originalCwd = process.cwd();
+const STRONG_TOKEN = "cux_test_abcdefghijklmnopqrstuvwxyz123456";
 let tempDir: string;
 let tempHome: string;
 
@@ -26,11 +28,16 @@ beforeEach(async () => {
   delete process.env.MCP_HTTP_HOST;
   delete process.env.MCP_HTTP_PATH;
   delete process.env.MCP_HTTP_AUTH_TOKEN;
+  delete process.env.MCP_HTTP_MAX_SESSIONS;
+  delete process.env.MCP_HTTP_SESSION_TIMEOUT_MS;
   delete process.env.MCP_HTTPS_ENABLED;
   delete process.env.MCP_HTTPS_PORT;
   delete process.env.MCP_HTTPS_HOST;
   delete process.env.MCP_HTTPS_PATH;
   delete process.env.MCP_HTTPS_AUTH_TOKEN;
+  delete process.env.MCP_HTTPS_MAX_SESSIONS;
+  delete process.env.MCP_HTTPS_SESSION_TIMEOUT_MS;
+  delete process.env.CODE_UX_SERVER_MODE;
   tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "jules-app-config-"));
   tempHome = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-home-"));
   process.env.HOME = tempHome;
@@ -83,6 +90,11 @@ describe("runtime flags", () => {
     expect(hasHeadlessArg(["node", "index.js", "--headless"])).toBe(true);
     expect(hasHeadlessArg(["node", "index.js", "--no-dashboard"])).toBe(true);
     expect(hasHeadlessArg(["node", "index.js"])).toBe(false);
+  });
+
+  it("detects server mode flag", () => {
+    expect(hasServerModeArg(["node", "index.js", "--server-mode"])).toBe(true);
+    expect(hasServerModeArg(["node", "index.js"])).toBe(false);
   });
 });
 
@@ -154,10 +166,13 @@ describe("loadAppConfig", () => {
     expect(config.apiKeyArg).toBe("cli-key");
     expect(config.dashboardPort).toBe(4444);
     expect(config.runtimeRole).toBe("project_manager");
+    expect(config.serverMode).toBe(false);
     expect(config.dashboardEnabled).toBe(true);
     expect(config.mcpHttpEnabled).toBe(false);
     expect(config.mcpHttpPort).toBeNull();
     expect(config.mcpHttpPath).toBe("/mcp");
+    expect(config.mcpHttpMaxSessions).toBe(100);
+    expect(config.mcpHttpSessionTimeoutMs).toBe(3_600_000);
   });
 
   it("assembles full config from env when CLI arg is missing", () => {
@@ -239,7 +254,102 @@ describe("loadAppConfig", () => {
   it("supports explicit headless project-manager mode", () => {
     const config = loadAppConfig(["node", "index.js", "--headless", "--no-mcp-https"], tempDir);
     expect(config.runtimeRole).toBe("project_manager");
+    expect(config.serverMode).toBe(false);
     expect(config.dashboardEnabled).toBe(false);
+  });
+
+  it("enables authenticated server mode from CLI and forces MCP HTTP while skipping dashboard", () => {
+    const config = loadAppConfig([
+      "node",
+      "index.js",
+      "--server-mode",
+      "--no-mcp-https",
+      "--mcp-https-auth-token",
+      STRONG_TOKEN,
+    ], tempDir);
+
+    expect(config.serverMode).toBe(true);
+    expect(config.dashboardEnabled).toBe(false);
+    expect(config.mcpHttpEnabled).toBe(true);
+    expect(config.mcpHttpPort).toBe(4445);
+    expect(config.mcpHttpAuthToken).toBe(STRONG_TOKEN);
+  });
+
+  it("enables authenticated server mode from env", () => {
+    process.env.CODE_UX_SERVER_MODE = "true";
+    process.env.MCP_HTTPS_AUTH_TOKEN = STRONG_TOKEN;
+
+    const config = loadAppConfig(["node", "index.js", "--no-dashboard"], tempDir);
+
+    expect(config.serverMode).toBe(true);
+    expect(config.dashboardEnabled).toBe(false);
+    expect(config.mcpHttpEnabled).toBe(true);
+    expect(config.mcpHttpAuthToken).toBe(STRONG_TOKEN);
+  });
+
+  it("rejects server mode without an explicit MCP HTTP bearer token", async () => {
+    expect(() => loadAppConfig(["node", "index.js", "--server-mode"], tempDir))
+      .toThrow("CODE_UX_SERVER_MODE requires a non-empty MCP HTTP auth token");
+    await expect(fs.stat(path.join(tempHome, ".code-ux", "security.json"))).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it("rejects weak server mode MCP HTTP bearer tokens", () => {
+    expect(() => loadAppConfig([
+      "node",
+      "index.js",
+      "--server-mode",
+      "--mcp-https-auth-token",
+      "short-token",
+    ], tempDir)).toThrow("at least 32 bearer-safe characters");
+  });
+
+  it("uses default MCP HTTP active-session protection settings", () => {
+    const config = loadAppConfig(["node", "index.js", "--no-mcp-https"], tempDir);
+    expect(config.mcpHttpMaxSessions).toBe(100);
+    expect(config.mcpHttpSessionTimeoutMs).toBe(3_600_000);
+  });
+
+  it("loads MCP HTTP active-session protection settings from CLI", () => {
+    const config = loadAppConfig([
+      "node",
+      "index.js",
+      "--no-mcp-https",
+      "--mcp-http-max-sessions",
+      "250",
+      "--mcp-http-session-timeout-ms",
+      "120000",
+    ], tempDir);
+    expect(config.mcpHttpMaxSessions).toBe(250);
+    expect(config.mcpHttpSessionTimeoutMs).toBe(120_000);
+  });
+
+  it("loads MCP HTTP active-session protection settings from env", () => {
+    process.env.MCP_HTTPS_MAX_SESSIONS = "300";
+    process.env.MCP_HTTPS_SESSION_TIMEOUT_MS = "180000";
+
+    const config = loadAppConfig(["node", "index.js", "--no-mcp-https"], tempDir);
+    expect(config.mcpHttpMaxSessions).toBe(300);
+    expect(config.mcpHttpSessionTimeoutMs).toBe(180_000);
+  });
+
+  it("loads MCP HTTP active-session protection settings from config.json", async () => {
+    await fs.writeFile(
+      path.join(tempDir, "config.json"),
+      JSON.stringify({ mcpHttp: { maxSessions: 400, sessionTimeoutMs: 240000 } }),
+    );
+
+    const config = loadAppConfig(["node", "index.js", "--no-mcp-https"], tempDir);
+    expect(config.mcpHttpMaxSessions).toBe(400);
+    expect(config.mcpHttpSessionTimeoutMs).toBe(240_000);
+  });
+
+  it("falls back to secure MCP HTTP protection defaults for invalid bounds", () => {
+    process.env.MCP_HTTPS_MAX_SESSIONS = "0";
+    process.env.MCP_HTTPS_SESSION_TIMEOUT_MS = "999";
+
+    const config = loadAppConfig(["node", "index.js", "--no-mcp-https"], tempDir);
+    expect(config.mcpHttpMaxSessions).toBe(100);
+    expect(config.mcpHttpSessionTimeoutMs).toBe(3_600_000);
   });
 
   it("enables MCP HTTP worker gateway from CLI flags", () => {

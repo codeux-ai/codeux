@@ -976,7 +976,10 @@ describe("ProviderExecutionService", () => {
       .rejects.toThrow("Aborted");
 
     expect(sleepWithSignal).toHaveBeenCalledWith(expect.any(Number), abortController.signal);
-    expect(sleepWithSignal.mock.calls[0]?.[0]).toBeGreaterThan(0);
-    expect(sleepWithSignal.mock.calls[0]?.[0]).toBeLessThanOrEqual(1000);
+    expect(sleepWithSignal).toHaveBeenCalledTimes(1);
+    const [delayMs, signal] = vi.mocked(sleepWithSignal).mock.calls[0] ?? [];
+    expect(delayMs).toBeGreaterThan(0);
+    expect(delayMs).toBeLessThanOrEqual(1000);
+    expect(signal).toBe(abortController.signal);
   });
 });

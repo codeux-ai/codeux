@@ -85,11 +85,12 @@ Use this page as the main entrypoint.
 2. [MCP Tools and Contracts](./mcp/tools-and-contracts.md)
 3. [MCP Issue Importer Contract](./mcp/tools-and-contracts.md#manage_sprints-import_issues)
 4. [MCP Runtime and Dispatch](./mcp/runtime-and-dispatch.md)
-5. [Operations Runbook](./operations/runbook.md)
-6. [Security Hardening](./operations/security-hardening.md)
-7. [Logging and Correlation IDs](./operations/logging-and-correlation.md)
-8. [CLI Commands Reference](./reference/cli-commands.md) - `codeux` management syntax, aliases, prompting, JSON payloads, and approvals
-9. [CLI Management Surface](./operations/management-cli.md)
+5. [Secure Headless Server Mode](./operations/server-mode.md)
+6. [Operations Runbook](./operations/runbook.md)
+7. [Security Hardening](./operations/security-hardening.md)
+8. [Logging and Correlation IDs](./operations/logging-and-correlation.md)
+9. [CLI Commands Reference](./reference/cli-commands.md) - `codeux` management syntax, aliases, prompting, JSON payloads, and approvals
+10. [CLI Management Surface](./operations/management-cli.md)
 
 ### Path 4: Development and validation
 1. [Repository Map](./architecture/repository-map.md)
@@ -175,6 +176,7 @@ Use this page as the main entrypoint.
 - [Qwen Code Integration](./settings/qwen-code-integration.md)
 - [OpenCode Integration](./settings/opencode-integration.md)
 - [Operations Runbook](./operations/runbook.md)
+- [Secure Headless Server Mode](./operations/server-mode.md)
 - [Security Hardening](./operations/security-hardening.md)
 - [Logging and Correlation IDs](./operations/logging-and-correlation.md)
 - [CLI Commands Reference](./reference/cli-commands.md) - `codeux` management syntax, aliases, prompting, JSON payloads, and approvals

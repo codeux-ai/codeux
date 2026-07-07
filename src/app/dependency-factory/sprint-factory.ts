@@ -27,6 +27,7 @@ export interface SprintDependencies {
   taskService: TaskService;
   sprintExecutionStateService: SprintExecutionStateService;
   sprintTaskDispatchService: SprintTaskDispatchService;
+  workerTaskDispatchService: WorkerTaskDispatchService;
   virtualWorkerService: VirtualWorkerService;
   workerInboxReplyService: WorkerInboxReplyService;
   qualityAssuranceService: QualityAssuranceService;
@@ -171,6 +172,30 @@ export function createSprintDependencies(
     sprintRunLifecycleService: coreDeps.sprintRunLifecycleService,
   });
 
+  const workerTaskDispatchService = new WorkerTaskDispatchService(
+    executionRepository,
+    projectManagementRepository,
+    coreDeps.connectionChatRepository,
+    coreDeps.workerEndpointRepository,
+    coreDeps.projectWorkerAssignmentService,
+    projectAttentionService,
+    resolveDashboardSettings,
+    (projectId, sprintId) => (
+      resolveEffectiveDashboardSettings(coreDeps.settingsRepository, projectId, sprintId).settings.workers.executionMode
+    ),
+    logger.child({ component: "worker-task-dispatch-service" }),
+    coreDeps.memoryService,
+    async (projectId: string) => {
+      try {
+        const agent = await agentPresetSyncService.getWorkerAgent(projectId);
+        return agent.id;
+      } catch {
+        return undefined;
+      }
+    },
+    coreDeps.sprintRunLifecycleService,
+  );
+
   const memoryRemediationService = new MemoryRemediationService({
     memoryPromotionService: coreDeps.memoryPromotionService,
     memoryService: coreDeps.memoryService,
@@ -193,29 +218,7 @@ export function createSprintDependencies(
     projectWorkerAssignmentService: coreDeps.projectWorkerAssignmentService,
     projectAttentionService,
     guardrailService: coreDeps.guardrailService,
-    workerTaskDispatchService: new WorkerTaskDispatchService(
-      executionRepository,
-      projectManagementRepository,
-      coreDeps.connectionChatRepository,
-      coreDeps.workerEndpointRepository,
-      coreDeps.projectWorkerAssignmentService,
-      projectAttentionService,
-      resolveDashboardSettings,
-      (projectId, sprintId) => (
-        resolveEffectiveDashboardSettings(coreDeps.settingsRepository, projectId, sprintId).settings.workers.executionMode
-      ),
-      logger.child({ component: "virtual-worker-task-dispatch-service" }),
-      coreDeps.memoryService,
-      async (projectId: string) => {
-        try {
-          const agent = await agentPresetSyncService.getWorkerAgent(projectId);
-          return agent.id;
-        } catch {
-          return undefined;
-        }
-      },
-      coreDeps.sprintRunLifecycleService,
-    ),
+    workerTaskDispatchService,
     cliWorkflowService,
     sprintExecutionStateService,
     workerInboxReplyService,
@@ -321,6 +324,7 @@ export function createSprintDependencies(
     taskService,
     sprintExecutionStateService,
     sprintTaskDispatchService,
+    workerTaskDispatchService,
     virtualWorkerService,
     workerInboxReplyService,
     qualityAssuranceService,
