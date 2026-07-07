@@ -8,8 +8,8 @@ Custom dashboards are project-scoped dashboard apps generated and revised by age
 2. Review the draft at `/custom-dashboards`. Drafts expose manifest JSON, generated file bundle content, source-node graph JSON, styleguide JSON, and data catalog selections.
 3. Ask for changes or edit the draft before creating a revision. Draft edits do not change previous revisions or the currently published dashboard.
 4. Create a revision when the draft is ready. A revision snapshots the current manifest, files, source graph, styleguide, and runtime metadata.
-5. Run detached validation. Code UX builds the revision in Docker, starts a detached preview container, and health-checks the root URL.
-6. Inspect validation status, logs, and the proxied preview link. Validation passes only after install, build, container start, and root health checks succeed.
+5. Run detached validation. Code UX builds the revision in Docker, captures the browser-ready Vite artifact, starts a detached preview container, and health-checks the root URL.
+6. Inspect validation status, logs, and the proxied preview link. Validation passes only after install, build, artifact capture, container start, and root health checks succeed.
 7. Publish the validated revision. Publication is blocked unless the revision has a passed validation report.
 8. Roll back by publishing an earlier passed revision, or archive the dashboard to clear its active publication while preserving history.
 
@@ -47,4 +47,4 @@ The same workflow is available through the dashboard REST API:
 - `DELETE /api/custom-dashboard-validations/:sessionId`
 - `ALL /api/custom-dashboard-validations/:sessionId/proxy{*rest}`
 
-Published dashboards render inside a sandboxed iframe. The frame can request only declared source nodes through the Code UX bridge, and the parent dashboard returns data through same-origin API calls.
+Published dashboards render inside a sandboxed iframe. For TSX/Preact drafts such as the default `src/dashboard.tsx` bundle, the viewer uses the persisted validation artifact instead of the source entry file, so it can open after publication even when the detached validation preview is gone. The frame can request only declared source nodes through the Code UX bridge, and the parent dashboard returns data through same-origin API calls.

@@ -101,6 +101,7 @@ function mockSuccessfulDocker(): void {
     }
     const action = args[0];
     if (action === "run") {
+      await writeFakeViewerDist(args);
       return commandResult("install ok\nbuild ok\n");
     }
     if (action === "create") {
@@ -117,6 +118,33 @@ function mockSuccessfulDocker(): void {
     }
     return commandResult();
   });
+}
+
+async function writeFakeViewerDist(args: string[]): Promise<void> {
+  const workspaceMount = args.find((arg) => arg.includes("target=/code-ux-custom-dashboard/workspace"));
+  const source = workspaceMount
+    ?.split(",")
+    .find((part) => part.startsWith("source="))
+    ?.slice("source=".length);
+  if (!source) {
+    return;
+  }
+  const assetsDir = path.join(source, "dist", "assets");
+  await fs.mkdir(assetsDir, { recursive: true });
+  await fs.writeFile(
+    path.join(source, "dist", "index.html"),
+    [
+      "<!doctype html>",
+      "<html>",
+      "<head><link rel=\"stylesheet\" href=\"/assets/index.css\"></head>",
+      "<body><div id=\"app\"></div><script type=\"module\" src=\"/assets/index.js\"></script></body>",
+      "</html>",
+      "",
+    ].join("\n"),
+    "utf8",
+  );
+  await fs.writeFile(path.join(assetsDir, "index.css"), "main{color:#0f172a;}", "utf8");
+  await fs.writeFile(path.join(assetsDir, "index.js"), "document.body.textContent = 'Custom dashboard revision';", "utf8");
 }
 
 beforeEach(() => {
@@ -143,6 +171,19 @@ describe("CustomDashboardValidationService", () => {
     const revision = dashboards.getRevisionById(revisionId);
     expect(revision?.validationStatus).toBe("passed");
     expect(revision?.validationReport?.valid).toBe(true);
+    expect(revision?.runtimeMetadata).toMatchObject({
+      integrations: { incidents: { readonly: true } },
+      validation: {
+        viewerArtifact: {
+          kind: "vite-dist",
+          entryFile: "index.html",
+          files: expect.arrayContaining([
+            expect.objectContaining({ path: "index.html", contentType: "text/html" }),
+            expect.objectContaining({ path: "assets/index.js", content: expect.stringContaining("Custom dashboard revision") }),
+          ]),
+        },
+      },
+    });
     expect(dashboards.getDashboardById(dashboardId)?.status).toBe("validated");
 
     const workspacePath = path.join(dir, ".code-ux", "runtime", "custom-dashboards", dashboardId, revisionId, "workspace");

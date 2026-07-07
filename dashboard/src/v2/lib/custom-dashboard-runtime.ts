@@ -44,6 +44,18 @@ export interface CustomDashboardRuntimeMessage {
   message?: string;
 }
 
+interface CustomDashboardViewerArtifactFile {
+  path: string;
+  content: string;
+  contentType: string;
+}
+
+interface CustomDashboardViewerArtifact {
+  kind: "vite-dist";
+  entryFile: string;
+  files: CustomDashboardViewerArtifactFile[];
+}
+
 export const CUSTOM_DASHBOARD_SOURCE_RESPONSE_TYPE = "codeux-custom-dashboard:source-response";
 
 const supportedSourceTypes = new Set<string>([
@@ -122,6 +134,11 @@ export function buildCustomDashboardFrameDocument(
   };
   const bootstrap = buildBridgeBootstrapScript(bridgeConfig);
   const title = escapeHtml(revision.manifest.title || dashboard.title);
+  const viewerArtifact = getViewerArtifact(revision.runtimeMetadata);
+
+  if (viewerArtifact) {
+    return buildViewerArtifactDocument(viewerArtifact, bootstrap, title);
+  }
 
   if (entryFile && isHtmlEntry(entryFile.path, entryFile.contentType)) {
     return injectBootstrapIntoHtml(entryFile.content, bootstrap, title);
@@ -366,6 +383,126 @@ function injectBootstrapIntoHtml(html: string, bootstrap: string, title: string)
   return `${script}\n${html}`;
 }
 
+function buildViewerArtifactDocument(
+  artifact: CustomDashboardViewerArtifact,
+  bootstrap: string,
+  title: string,
+): string {
+  const entryFile = artifact.files.find((file) => file.path === artifact.entryFile) ?? null;
+  if (entryFile && isHtmlEntry(entryFile.path, entryFile.contentType)) {
+    return injectBootstrapIntoHtml(inlineViewerArtifactAssets(entryFile.content, artifact), bootstrap, title);
+  }
+  if (entryFile && isJavaScriptEntry(entryFile.path, entryFile.contentType)) {
+    return [
+      "<!doctype html>",
+      "<html lang=\"en\">",
+      "<head>",
+      "<meta charset=\"utf-8\" />",
+      "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />",
+      `<title>${title}</title>`,
+      baseFrameStyle(),
+      "</head>",
+      "<body>",
+      "<main id=\"codeux-custom-dashboard-root\" aria-label=\"Published custom dashboard\"></main>",
+      `<script>${bootstrap}</script>`,
+      `<script type=\"module\">${escapeScript(entryFile.content)}</script>`,
+      "</body>",
+      "</html>",
+    ].join("\n");
+  }
+  return [
+    "<!doctype html>",
+    "<html lang=\"en\">",
+    "<head>",
+    "<meta charset=\"utf-8\" />",
+    "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />",
+    `<title>${title}</title>`,
+    baseFrameStyle(),
+    "</head>",
+    "<body>",
+    "<main class=\"runtime-empty\" role=\"status\">",
+    `<h1>${title}</h1>`,
+    "<p>The published revision has a viewer artifact, but its artifact entry file is missing or unsupported.</p>",
+    "</main>",
+    `<script>${bootstrap}</script>`,
+    "</body>",
+    "</html>",
+  ].join("\n");
+}
+
+function inlineViewerArtifactAssets(html: string, artifact: CustomDashboardViewerArtifact): string {
+  const withInlineScripts = html.replace(
+    /<script\b[^>]*\bsrc=(["'])([^"']+)\1[^>]*>\s*<\/script>/gi,
+    (tag, _quote: string, assetPath: string) => {
+      const asset = findViewerArtifactFile(artifact, assetPath);
+      return asset && isJavaScriptEntry(asset.path, asset.contentType)
+        ? `<script type="module">${escapeScript(asset.content)}</script>`
+        : tag;
+    },
+  );
+  return withInlineScripts.replace(
+    /<link\b[^>]*\bhref=(["'])([^"']+)\1[^>]*>/gi,
+    (tag, _quote: string, assetPath: string) => {
+      if (!/\brel=(["'])stylesheet\1/i.test(tag)) {
+        return /\brel=(["'])modulepreload\1/i.test(tag) ? "" : tag;
+      }
+      const asset = findViewerArtifactFile(artifact, assetPath);
+      return asset && asset.contentType.includes("css")
+        ? `<style>${escapeStyle(asset.content)}</style>`
+        : tag;
+    },
+  );
+}
+
+function findViewerArtifactFile(
+  artifact: CustomDashboardViewerArtifact,
+  assetPath: string,
+): CustomDashboardViewerArtifactFile | null {
+  const normalized = normalizeViewerArtifactPath(assetPath);
+  return artifact.files.find((file) => file.path === normalized) ?? null;
+}
+
+function normalizeViewerArtifactPath(assetPath: string): string {
+  const withoutFragment = assetPath.split("#")[0]?.split("?")[0] ?? "";
+  const trimmed = withoutFragment.replace(/^\/+/, "").replace(/^\.\//, "");
+  try {
+    return decodeURIComponent(trimmed);
+  } catch {
+    return trimmed;
+  }
+}
+
+function getViewerArtifact(
+  runtimeMetadata: CustomDashboardRevisionRecord["runtimeMetadata"],
+): CustomDashboardViewerArtifact | null {
+  const validation = runtimeMetadata.validation;
+  if (!validation || typeof validation !== "object" || Array.isArray(validation)) {
+    return null;
+  }
+  const artifact = (validation as Record<string, unknown>).viewerArtifact;
+  if (!artifact || typeof artifact !== "object" || Array.isArray(artifact)) {
+    return null;
+  }
+  const candidate = artifact as Record<string, unknown>;
+  if (candidate.kind !== "vite-dist" || typeof candidate.entryFile !== "string" || !Array.isArray(candidate.files)) {
+    return null;
+  }
+  const files = candidate.files.flatMap((file): CustomDashboardViewerArtifactFile[] => {
+    if (!file || typeof file !== "object" || Array.isArray(file)) {
+      return [];
+    }
+    const entry = file as Record<string, unknown>;
+    return typeof entry.path === "string" && typeof entry.content === "string"
+      ? [{
+          path: entry.path,
+          content: entry.content,
+          contentType: typeof entry.contentType === "string" ? entry.contentType : "text/plain",
+        }]
+      : [];
+  });
+  return files.length > 0 ? { kind: "vite-dist", entryFile: candidate.entryFile, files } : null;
+}
+
 function isHtmlEntry(path: string, contentType?: string): boolean {
   return path.endsWith(".html") || contentType?.includes("html") === true;
 }
@@ -395,4 +532,8 @@ function escapeHtml(value: string): string {
 
 function escapeScript(value: string): string {
   return value.replace(/<\/script/gi, "<\\/script").replace(/<!--/g, "<\\!--");
+}
+
+function escapeStyle(value: string): string {
+  return value.replace(/<\/style/gi, "<\\/style").replace(/<!--/g, "<\\!--");
 }

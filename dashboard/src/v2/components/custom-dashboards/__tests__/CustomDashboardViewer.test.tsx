@@ -6,6 +6,7 @@ import "@testing-library/jest-dom/vitest";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CustomDashboardViewer } from "../CustomDashboardViewer.js";
 import type { CustomDashboardRecord, CustomDashboardRevisionRecord } from "../../../types.js";
+import { createDefaultCustomDashboardDraft } from "../../../lib/custom-dashboard-view-models.js";
 
 vi.mock("../../../lib/motion/tokens.js", () => ({
   useInteractionTokens: vi.fn(() => ({
@@ -114,6 +115,71 @@ describe("CustomDashboardViewer", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Return to editor" }));
     expect(onReturnToEditor).toHaveBeenCalledTimes(1);
+  });
+
+  it("opens a published dashboard created from the default TSX draft with its validated viewer artifact", () => {
+    const defaultDraft = createDefaultCustomDashboardDraft("Untitled Dashboard");
+    const defaultDashboard: CustomDashboardRecord = {
+      ...dashboard,
+      id: "dashboard-default",
+      title: defaultDraft.title,
+      description: defaultDraft.description ?? "",
+      manifest: defaultDraft.manifest,
+      fileBundle: defaultDraft.fileBundle,
+      sourceNodeGraph: defaultDraft.sourceNodeGraph ?? { nodes: [], edges: [] },
+      styleguide: defaultDraft.styleguide ?? {},
+      publishedRevisionId: "revision-default",
+    };
+    const defaultRevision: CustomDashboardRevisionRecord = {
+      ...revision,
+      id: "revision-default",
+      dashboardId: defaultDashboard.id,
+      manifest: defaultDraft.manifest,
+      fileBundle: defaultDraft.fileBundle,
+      sourceNodeGraph: defaultDashboard.sourceNodeGraph,
+      styleguide: defaultDashboard.styleguide,
+      runtimeMetadata: {
+        validation: {
+          viewerArtifact: {
+            kind: "vite-dist",
+            entryFile: "index.html",
+            files: [
+              {
+                path: "index.html",
+                content: [
+                  "<!doctype html>",
+                  "<html>",
+                  "<head><link rel=\"stylesheet\" href=\"/assets/index.css\"></head>",
+                  "<body><div id=\"app\"></div><script type=\"module\" src=\"/assets/index.js\"></script></body>",
+                  "</html>",
+                ].join("\n"),
+                contentType: "text/html",
+              },
+              { path: "assets/index.css", content: "main{color:#0f172a;}", contentType: "text/css" },
+              {
+                path: "assets/index.js",
+                content: "document.getElementById('app').textContent = 'Custom dashboard revision';",
+                contentType: "text/javascript",
+              },
+            ],
+          },
+        },
+      },
+    };
+
+    render(
+      <CustomDashboardViewer
+        dashboard={defaultDashboard}
+        revisions={[defaultRevision]}
+        onRefresh={onRefresh}
+        onReturnToEditor={onReturnToEditor}
+      />,
+    );
+
+    const iframe = screen.getByTitle("Published custom dashboard: Untitled Dashboard");
+    expect(iframe).toHaveAttribute("srcdoc", expect.stringContaining("Custom dashboard revision"));
+    expect(iframe).toHaveAttribute("srcdoc", expect.stringContaining("codeUxDataBridge"));
+    expect(iframe).not.toHaveAttribute("srcdoc", expect.stringContaining("not directly executable"));
   });
 
   it("blocks drafts and shows the validation report with a validate/publish action", () => {

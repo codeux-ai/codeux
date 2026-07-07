@@ -46,6 +46,8 @@ const VALIDATION_READINESS_POLL_MS = 1000;
 const VALIDATION_URL_PREFIX = "/api/custom-dashboard-validations";
 const INSTALL_AND_BUILD_COMMAND = "npm install --no-audit --no-fund && npm run build";
 const START_COMMAND = `npm run start -- --host 0.0.0.0 --port ${CUSTOM_DASHBOARD_VALIDATION_CONTAINER_PORT}`;
+const VIEWER_ARTIFACT_MAX_FILE_BYTES = 2 * 1024 * 1024;
+const VIEWER_ARTIFACT_MAX_TOTAL_BYTES = 8 * 1024 * 1024;
 
 export interface CustomDashboardValidationServiceDeps {
   customDashboardRepository: CustomDashboardRepository;
@@ -65,6 +67,12 @@ interface ValidationContainerSummary {
   status: string | null;
   hostPort: number | null;
   labels: Record<string, string>;
+}
+
+interface ViewerArtifactFile {
+  path: string;
+  content: string;
+  contentType: string;
 }
 
 export interface CustomDashboardValidationProxyResponse {
@@ -179,6 +187,7 @@ export class CustomDashboardValidationService {
         );
         await appendValidationLog(logPath, "install-build stdout", buildResult.stdout);
         await appendValidationLog(logPath, "install-build stderr", buildResult.stderr);
+        const viewerArtifact = await this.readViewerArtifact(workspacePath, revision);
 
         const hostPort = await this.findFreePort(
           settings.sprintPreview.hostPortRangeStart,
@@ -250,6 +259,7 @@ export class CustomDashboardValidationService {
             image: resolvedImage,
             installCommand: INSTALL_AND_BUILD_COMMAND,
             startCommand: START_COMMAND,
+            viewerArtifact,
             logExcerpt: tailLogLines(logs.logs, CUSTOM_DASHBOARD_VALIDATION_LOG_TAIL_LINES),
           }),
         });
@@ -642,6 +652,67 @@ export class CustomDashboardValidationService {
       });
       server.listen(port, "127.0.0.1");
     });
+  }
+
+  private async readViewerArtifact(
+    workspacePath: string,
+    revision: CustomDashboardRevisionRecord,
+  ): Promise<CustomDashboardJsonObject> {
+    const distPath = path.join(workspacePath, "dist");
+    const files = await this.collectViewerArtifactFiles(distPath);
+    if (!files.some((file) => file.path === "index.html")) {
+      throw new Error("Custom dashboard build did not produce dist/index.html for the published viewer.");
+    }
+    return {
+      kind: "vite-dist",
+      entryFile: "index.html",
+      sourceEntryFile: revision.manifest.entryFile,
+      generatedAt: new Date().toISOString(),
+      files: files.map((file) => ({ ...file })),
+    };
+  }
+
+  private async collectViewerArtifactFiles(rootPath: string): Promise<ViewerArtifactFile[]> {
+    let totalBytes = 0;
+    const files: ViewerArtifactFile[] = [];
+    const visit = async (currentPath: string): Promise<void> => {
+      const entries = await fs.readdir(currentPath, { withFileTypes: true });
+      for (const entry of entries) {
+        const absolutePath = path.join(currentPath, entry.name);
+        if (entry.isDirectory()) {
+          await visit(absolutePath);
+          continue;
+        }
+        if (!entry.isFile()) {
+          continue;
+        }
+        const stat = await fs.stat(absolutePath);
+        if (stat.size > VIEWER_ARTIFACT_MAX_FILE_BYTES) {
+          throw new Error(`Custom dashboard viewer artifact file is too large: ${path.relative(rootPath, absolutePath)}`);
+        }
+        totalBytes += stat.size;
+        if (totalBytes > VIEWER_ARTIFACT_MAX_TOTAL_BYTES) {
+          throw new Error("Custom dashboard viewer artifact exceeds the maximum persisted size.");
+        }
+        const relativePath = path.relative(rootPath, absolutePath).split(path.sep).join("/");
+        files.push({
+          path: relativePath,
+          content: await fs.readFile(absolutePath, "utf8"),
+          contentType: this.inferViewerArtifactContentType(relativePath),
+        });
+      }
+    };
+    await visit(rootPath);
+    return files.sort((left, right) => left.path.localeCompare(right.path));
+  }
+
+  private inferViewerArtifactContentType(filePath: string): string {
+    if (filePath.endsWith(".html")) return "text/html";
+    if (filePath.endsWith(".js") || filePath.endsWith(".mjs")) return "text/javascript";
+    if (filePath.endsWith(".css")) return "text/css";
+    if (filePath.endsWith(".json")) return "application/json";
+    if (filePath.endsWith(".svg")) return "image/svg+xml";
+    return "text/plain";
   }
 
   private requireProject(projectId: string) {
