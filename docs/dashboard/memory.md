@@ -66,6 +66,14 @@ Memory records encapsulate the base `content` string alongside its vectorized by
 
 Knowledge document object access is project-scoped. Document read, delete, re-embed, and project-import operations must prove the document belongs to the route or request project before returning content or mutating rows. Legacy unscoped document endpoints require an explicit `projectId` value and treat missing documents and cross-project mismatches as the same not-found response.
 
+## Persistent Skills vs Memory
+
+Persistent skills are reusable agent instructions, not observations learned during sprint execution. They live in project-owned `skill_storages`, are attached to agent presets through `agent_skill_storage_bindings`, and never write markdown files into the project workspace or `.code-ux/` sprint directories.
+
+Skill markdown import uses frontmatter fields for `title`, `description`, `tags`, `appliesTo`, and `version`; the body is stored as the authoritative instruction content. Rendering a skill back to markdown reconstructs that metadata from the database and emits the stored body unchanged except for trailing whitespace normalization.
+
+Skill search uses the same local embedding infrastructure as memory search but reads from `skill_embeddings`. Ordinary skill CRUD does not require an embedding provider: when no model is loaded, skills remain persisted and unembedded. When a provider is available, `SkillService` embeds the rendered skill markdown and stores the model id, vector dimension, chunk index, content hash, and blob. Search loads at most 10,000 candidate vectors from the requested storage set, skips candidates whose stored dimension differs from the query vector, ranks by cosine similarity, and breaks ties by skill id for deterministic top-K results.
+
 ## Long-Term Claims and Evidence
 
 Sprint-scoped memories are treated as observations. Durable project knowledge is stored as canonical claims:

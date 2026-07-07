@@ -45,9 +45,13 @@ Registered schemas:
 ### Tool list handler
 Returns enabled tool definitions from `src/contracts/mcp-tool-definitions.ts`, filtered by dashboard `mcpTools` settings.
 
+When a worker MCP client advertises an agent preset, Code UX resolves that agent's explicit MCP access policy before listing tools. Unknown or malformed agent identities fail closed: `list_tools` returns no built-in Code UX tools, and `call_tool` returns MCP `MethodNotFound`.
+
 ### Tool call handler
 - Resolves tool name.
 - Verifies tool is enabled in `mcpTools`.
+- Applies the same per-agent Code UX access policy used by `list_tools`.
+- Validates tool arguments against the registered JSON schema before dispatch.
 - Dispatches through typed `ToolRegistry` registration in `src/api/mcp/tool-registry.ts`.
 - Wraps unknown tool as MCP `MethodNotFound`.
 - Normalizes runtime/API errors into `isError` response.
@@ -68,10 +72,26 @@ This allows all log lines emitted during a tool call to share a single `correlat
 - Typed registry layer: `src/api/mcp/tool-registry.ts`
   - Defines strict argument interfaces for every MCP tool.
   - Provides `register` and `dispatch` APIs with compile-time tool/argument matching.
+- Management dispatch target: `ManagementToolHandler`
+  - Routes dedicated management tools such as `manage_projects`, `manage_memory`, and `manage_skills` to domain action classes.
+  - Routes retrieval tools such as `search_knowledge` and `search_skills` separately, so agents can receive retrieval without broader management authority.
+  - Applies stateful approval fingerprints to destructive management actions before mutation.
 - Core dispatch target: `CoreToolHandler`
 - Agent dispatch target: `AgentToolHandler`
 
 This split keeps tool contracts stable while allowing orchestration internals to evolve independently.
+
+## Persistent Skill Tools
+
+Persistent skills use `SkillService` as the backend boundary. The MCP layer does not write markdown files into project workspaces and does not duplicate persistence logic; it validates payloads, formats concise responses, and calls the service.
+
+Runtime behavior:
+
+- `manage_skills` is a Code UX management tool in the `agents_memory` category. It supports storage CRUD, skill markdown import/export, agent storage attachment management, and the skill-authoring prompt.
+- `delete_storage`, `reset_storage`, and `delete_skill` return approval-required envelopes on first call and only mutate on the matching confirmed call.
+- `search_skills` is registered as a distinct retrieval tool in the same category. Per-agent MCP policy can disable `manage_skills` while leaving `search_skills` enabled.
+- Search scoping is project-owned. `storageId` limits retrieval to one storage; otherwise `agentPresetId` limits retrieval to the agent's attached storages; otherwise all project storages are eligible.
+- Search results return ranked summaries with IDs and metadata. Full markdown retrieval remains behind `manage_skills` (`export_markdown` or `get_skill` with `includeContent: true`).
 
 ## Custom MCP Defaults
 

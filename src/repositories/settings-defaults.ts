@@ -264,6 +264,70 @@ export const QA_EXHAUSTION_POLICIES: QaExhaustionPolicy[] = [
   "FAIL_TASK",
   "FINISH_TASK",
 ];
+
+const DEFAULT_SELF_REFLECTION_CRITERIA: DashboardSettings["agents"]["selfReflection"]["planning"]["criteria"] = [
+  {
+    id: "correctness",
+    label: "Correctness",
+    prompt: "The plan or review accurately addresses the requested behavior and repository facts.",
+    threshold: 0.85,
+  },
+  {
+    id: "completeness",
+    label: "Completeness",
+    prompt: "The response covers all required deliverables, edge cases, and verification expectations.",
+    threshold: 0.85,
+  },
+  {
+    id: "decomposition_quality",
+    label: "Decomposition quality",
+    prompt: "Work is broken into coherent, dependency-aware steps with clear ownership boundaries.",
+    threshold: 0.8,
+  },
+  {
+    id: "risk_handling",
+    label: "Risk handling",
+    prompt: "Important technical, operational, and rollback risks are identified and handled.",
+    threshold: 0.8,
+  },
+  {
+    id: "testability",
+    label: "Testability",
+    prompt: "The proposed work can be validated with focused deterministic checks.",
+    threshold: 0.8,
+  },
+  {
+    id: "maintainability",
+    label: "Maintainability",
+    prompt: "The approach preserves local architecture and avoids unnecessary complexity.",
+    threshold: 0.8,
+  },
+  {
+    id: "security",
+    label: "Security",
+    prompt: "The approach avoids weakening validation, secrets handling, permissions, and auditability.",
+    threshold: 0.85,
+  },
+  {
+    id: "scope_control",
+    label: "Scope control",
+    prompt: "The work stays within the task contract and avoids unrelated behavior changes.",
+    threshold: 0.85,
+  },
+];
+
+export const DEFAULT_AGENT_SELF_REFLECTION: DashboardSettings["agents"]["selfReflection"] = {
+  planning: {
+    enabled: false,
+    criteria: DEFAULT_SELF_REFLECTION_CRITERIA.map((criterion) => ({ ...criterion })),
+    maxImprovementAttempts: 1,
+  },
+  qualityAssurance: {
+    enabled: false,
+    criteria: DEFAULT_SELF_REFLECTION_CRITERIA.map((criterion) => ({ ...criterion })),
+    maxImprovementAttempts: 1,
+  },
+};
 /** Fallback cap used when migrating the legacy hardcoded clarification auto-answer limit. */
 export const LEGACY_CLARIFICATION_RETRY_CAP = 3;
 
@@ -645,6 +709,18 @@ export const DEFAULT_DASHBOARD_SETTINGS: DashboardSettings = {
         enabled: true,
         agentPresetIds: [],
         agentPresetId: null,
+      },
+    },
+    selfReflection: {
+      planning: {
+        enabled: DEFAULT_AGENT_SELF_REFLECTION.planning.enabled,
+        criteria: DEFAULT_AGENT_SELF_REFLECTION.planning.criteria.map((criterion) => ({ ...criterion })),
+        maxImprovementAttempts: DEFAULT_AGENT_SELF_REFLECTION.planning.maxImprovementAttempts,
+      },
+      qualityAssurance: {
+        enabled: DEFAULT_AGENT_SELF_REFLECTION.qualityAssurance.enabled,
+        criteria: DEFAULT_AGENT_SELF_REFLECTION.qualityAssurance.criteria.map((criterion) => ({ ...criterion })),
+        maxImprovementAttempts: DEFAULT_AGENT_SELF_REFLECTION.qualityAssurance.maxImprovementAttempts,
       },
     },
   },

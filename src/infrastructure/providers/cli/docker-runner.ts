@@ -29,6 +29,7 @@ import type { CliProviderId } from "./provider-command-specs.js";
 import { getHomeCodeUxPath, getRepoCodeUxPath } from "../../../shared/config/code-ux-paths.js";
 import { ensureDefaultCodeUxAssetsInstalled } from "../../../services/code-ux-default-assets-service.js";
 import { sanitizeInvocationOutputText } from "../../../services/invocation-output-sanitizer.js";
+import type { PersistentSkillStorageRuntimeMount } from "../../../services/skill-service.js";
 
 
 const BUNDLED_CONTAINER_SETUP_SCRIPT = path.resolve(
@@ -63,6 +64,7 @@ export interface IDockerRunner {
     onSetupImageProgress?: (progress: DockerSetupImageCacheProgress) => void;
     mcpConnection?: McpConnectionInfo | null;
     customMcpServers?: CustomMcpServer[];
+    persistentSkillStorageMounts?: PersistentSkillStorageRuntimeMount[];
   }): Promise<CommandResult>;
   readWorkspaceFile?(cwd: string, targetPath: string): Promise<string | null>;
   readWorkspaceFileBase64?(cwd: string, targetPath: string): Promise<string | null>;
@@ -121,6 +123,7 @@ export class DockerRunner implements IDockerRunner {
     onSetupImageProgress?: (progress: DockerSetupImageCacheProgress) => void;
     mcpConnection?: McpConnectionInfo | null;
     customMcpServers?: CustomMcpServer[];
+    persistentSkillStorageMounts?: PersistentSkillStorageRuntimeMount[];
   }): Promise<CommandResult> {
     const { command, args, cwd, providerEnv, sessionId, providerLabel, workflowSettings, repoPath, signal, onActivity } = input;
     const emitActivity = (desc: string, originator?: string): void => {
@@ -263,6 +266,15 @@ export class DockerRunner implements IDockerRunner {
       for (const mount of [...credentialMounts, ...providerConfigMounts]) {
         const source = this.mapDockerSourcePathForDaemon(mount.source, repoPath, sessionId, "credentials", emitActivity);
         dockerArgs.push("--mount", toDockerMountArg({ ...mount, source }));
+      }
+
+      for (const mount of input.persistentSkillStorageMounts || []) {
+        const source = this.mapDockerSourcePathForDaemon(mount.hostPath, repoPath, sessionId, "persistent skill storage", emitActivity);
+        dockerArgs.push("--mount", toDockerMountArg({
+          source,
+          destination: mount.containerPath,
+          readonly: false,
+        }));
       }
 
       const bootstrapScript = new DockerBootstrapBuilder().build({

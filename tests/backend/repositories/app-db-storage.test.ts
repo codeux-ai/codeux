@@ -76,6 +76,10 @@ describe("AppDbStorage", () => {
     expect(storage.hasTable("conversation_threads")).toBe(true);
     expect(storage.hasTable("conversation_messages")).toBe(true);
     expect(storage.hasTable("agent_presets")).toBe(true);
+    expect(storage.hasTable("skill_storages")).toBe(true);
+    expect(storage.hasTable("skills")).toBe(true);
+    expect(storage.hasTable("skill_embeddings")).toBe(true);
+    expect(storage.hasTable("agent_skill_storage_bindings")).toBe(true);
 
     const db = storage.getDatabase();
     const taskDispatchesIndexes = db.prepare("PRAGMA index_list('task_dispatches')").all() as Array<{ name: string }>;
@@ -107,6 +111,11 @@ describe("AppDbStorage", () => {
     expect(providerInvocationIndexes.some((idx) => idx.name === "idx_provider_invocations_sprint_run_started")).toBe(true);
     expect(getIndexColumns(db, "idx_provider_invocations_sprint_started")).toEqual(["sprint_id", "started_at"]);
     expect(getIndexColumns(db, "idx_provider_invocations_sprint_run_started")).toEqual(["sprint_run_id", "started_at"]);
+
+    const skillStorageIndexes = db.prepare("PRAGMA index_list('skill_storages')").all() as Array<{ name: string }>;
+    expect(skillStorageIndexes.some((idx) => idx.name === "idx_skill_storages_project")).toBe(true);
+    expect(getIndexColumns(db, "idx_agent_skill_storage_bindings_agent")).toEqual(["agent_preset_id"]);
+    expect(getIndexColumns(db, "idx_agent_skill_storage_bindings_storage")).toEqual(["project_id", "storage_id"]);
 
     const taskRunEventIndexes = db.prepare("PRAGMA index_list('task_run_events')").all() as Array<{ name: string }>;
     expect(taskRunEventIndexes.some((idx) => idx.name === "idx_task_run_events_project_created")).toBe(true);

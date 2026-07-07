@@ -714,6 +714,8 @@ export class PlanningAgentService {
         openCodeBaselineRawUsageJson: args.continuation?.openCodeBaselineRawUsageJson,
         invocationId: args.invocationId,
         systemRoutingMessage,
+        agentMcpAccess: planningAgent?.mcpAccess ?? null,
+        mcpAgentId: planningAgent?.id ?? null,
         githubToken: args.settings.git.githubToken,
         signal: args.signal,
         onActivity: (description, originator) => {
