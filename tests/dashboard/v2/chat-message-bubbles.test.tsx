@@ -156,7 +156,11 @@ describe("Chat Message Bubbles", () => {
               createWidgetTask({ recordId: "task-1", id: "TASK-1", title: "Create first file" }),
               createWidgetTask({ recordId: "task-2", id: "TASK-2", title: "Create second file" }),
             ],
+            projectTasksLoading: false,
+            projectTasksLoaded: true,
             execution: createWidgetExecution(),
+            executionLoading: false,
+            executionLoaded: true,
             sprintKeyPrefix: "SPR",
           }}
         />
@@ -168,6 +172,93 @@ describe("Chat Message Bubbles", () => {
       expect(view.getByRole("progressbar", { name: "Sprint progress for Sprint Alpha" })).toHaveAttribute("aria-valuenow", "0");
       expect(view.getByText("Create first file")).toBeInTheDocument();
       expect(view.getAllByText("Queued").length).toBeGreaterThan(0);
+    });
+
+    it("keeps the generic planning widget during live data hydration and switches after both sources load", () => {
+      const message: ChatMessageRecord = {
+        id: "msg_live_loading",
+        threadId: "thread_1",
+        direction: "dashboard_to_connection",
+        authorType: "dashboard_user",
+        authorConnectionId: null,
+        bodyMarkdown: "Start the sprint",
+        deliveryStatus: "delivered",
+        createdAt: new Date().toISOString(),
+        metadata: {
+          type: "planning",
+          status: "queued",
+          planName: "Sprint request",
+          sprintId: "sprint-1",
+        },
+      };
+      const projectTasks = [
+        createWidgetTask({ recordId: "task-1", id: "TASK-1", title: "Prepare runtime" }),
+        createWidgetTask({ recordId: "task-2", id: "TASK-2", title: "Run validation" }),
+      ];
+      const execution = createWidgetExecution();
+
+      const { container, rerender } = render(
+        <ChatMessageBubble
+          message={message}
+          widgetLiveData={{
+            projectId: "project-1",
+            projectTasks,
+            projectTasksLoading: true,
+            projectTasksLoaded: false,
+            execution,
+            executionLoading: true,
+            executionLoaded: false,
+            sprintKeyPrefix: "SPR",
+          }}
+        />
+      );
+      let view = within(container);
+
+      expect(view.getByText("Sprint request")).toBeInTheDocument();
+      expect(view.getByText("Preparing to plan...")).toBeInTheDocument();
+      expect(view.queryByText("SPR-12")).not.toBeInTheDocument();
+      expect(view.queryByText("0/2 · 0%")).not.toBeInTheDocument();
+
+      rerender(
+        <ChatMessageBubble
+          message={message}
+          widgetLiveData={{
+            projectId: "project-1",
+            projectTasks,
+            projectTasksLoading: false,
+            projectTasksLoaded: true,
+            execution,
+            executionLoading: true,
+            executionLoaded: false,
+            sprintKeyPrefix: "SPR",
+          }}
+        />
+      );
+      view = within(container);
+
+      expect(view.getByText("Preparing to plan...")).toBeInTheDocument();
+      expect(view.queryByText("SPR-12")).not.toBeInTheDocument();
+
+      rerender(
+        <ChatMessageBubble
+          message={message}
+          widgetLiveData={{
+            projectId: "project-1",
+            projectTasks,
+            projectTasksLoading: false,
+            projectTasksLoaded: true,
+            execution,
+            executionLoading: false,
+            executionLoaded: true,
+            sprintKeyPrefix: "SPR",
+          }}
+        />
+      );
+      view = within(container);
+
+      expect(view.getByText("SPR-12")).toBeInTheDocument();
+      expect(view.getByText("0/2 · 0%")).toBeInTheDocument();
+      expect(view.queryByText("Preparing to plan...")).not.toBeInTheDocument();
     });
 
     it("resolves dashboard message initially showing Queued to Processed when a later agent reply is present", () => {
@@ -440,7 +531,11 @@ describe("Chat Message Bubbles", () => {
               createWidgetTask({ recordId: "task-1", id: "TASK-1", title: "Prepare runtime" }),
               createWidgetTask({ recordId: "task-2", id: "TASK-2", title: "Run validation" }),
             ],
+            projectTasksLoading: false,
+            projectTasksLoaded: true,
             execution: createWidgetExecution(),
+            executionLoading: false,
+            executionLoaded: true,
             sprintKeyPrefix: "SPR",
           }}
         />
@@ -451,6 +546,68 @@ describe("Chat Message Bubbles", () => {
       expect(view.getByText("0/2 · 0%")).toBeInTheDocument();
       expect(view.getByRole("progressbar", { name: "Sprint progress for Sprint Alpha" })).toBeInTheDocument();
       expect(view.getByText("Prepare runtime")).toBeInTheDocument();
+    });
+
+    it("keeps invocation planning messages generic until task and execution data are loaded", () => {
+      const message: ExecutionInvocationMessageRecord = {
+        id: "msg_inv_live_loading",
+        invocationId: "inv_1",
+        role: "assistant",
+        contentMarkdown: "Sprint is queued",
+        toolCallsJson: null,
+        createdAt: new Date().toISOString(),
+        metadata: {
+          routeKind: "virtual",
+          status: "queued",
+          sprintId: "sprint-1",
+        },
+      };
+      const projectTasks = [
+        createWidgetTask({ recordId: "task-1", id: "TASK-1", title: "Prepare runtime" }),
+        createWidgetTask({ recordId: "task-2", id: "TASK-2", title: "Run validation" }),
+      ];
+      const execution = createWidgetExecution();
+
+      const { container, rerender } = render(
+        <InvocationMessageBubble
+          message={message}
+          widgetLiveData={{
+            projectId: "project-1",
+            projectTasks,
+            projectTasksLoading: false,
+            projectTasksLoaded: true,
+            execution,
+            executionLoading: true,
+            executionLoaded: false,
+            sprintKeyPrefix: "SPR",
+          }}
+        />
+      );
+      let view = within(container);
+
+      expect(view.getByText("Preparing to plan...")).toBeInTheDocument();
+      expect(view.queryByText("SPR-12")).not.toBeInTheDocument();
+
+      rerender(
+        <InvocationMessageBubble
+          message={message}
+          widgetLiveData={{
+            projectId: "project-1",
+            projectTasks,
+            projectTasksLoading: false,
+            projectTasksLoaded: true,
+            execution,
+            executionLoading: false,
+            executionLoaded: true,
+            sprintKeyPrefix: "SPR",
+          }}
+        />
+      );
+      view = within(container);
+
+      expect(view.getByText("SPR-12")).toBeInTheDocument();
+      expect(view.getByText("0/2 · 0%")).toBeInTheDocument();
+      expect(view.queryByText("Preparing to plan...")).not.toBeInTheDocument();
     });
 
     it("renders a classified error badge when invocation metadata includes an error category", () => {

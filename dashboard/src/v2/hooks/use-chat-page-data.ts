@@ -41,7 +41,7 @@ export const useChatPageData = (options?: { composerRef?: RefObject<HTMLTextArea
   const { data: execution, loading: executionLoading } = useExecutions(selectedProject?.id || null);
   const { data: effectiveSettings, loading: effectiveSettingsLoading } = useProjectEffectiveSettings(selectedProject?.id || null);
   const { data: sprints } = useSprints(selectedProject?.id || null);
-  const { tasks: projectTasks } = useProjectTasks(
+  const { tasks: projectTasks, loading: projectTasksLoading, loaded: projectTasksLoaded } = useProjectTasks(
     selectedProject?.id || null,
     selectedProject ? [selectedProject] : [],
     sprints,
@@ -273,7 +273,11 @@ export const useChatPageData = (options?: { composerRef?: RefObject<HTMLTextArea
     invocationIndex: invocationData.invocationIndex,
     selectedProject,
     execution,
+    executionLoading,
+    executionLoaded: Boolean(selectedProject && !executionLoading && execution.projectId === selectedProject.id),
     projectTasks,
+    projectTasksLoading,
+    projectTasksLoaded: Boolean(selectedProject && projectTasksLoaded),
     sprintKeyPrefix: effectiveSettings?.settings?.git?.sprintKeyPrefix || "SPR",
     feedback: threadData.feedback,
     clearFeedback: threadData.clearFeedback,

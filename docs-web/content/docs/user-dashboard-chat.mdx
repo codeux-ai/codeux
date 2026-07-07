@@ -25,7 +25,7 @@ To start a new thread, click **+ New thread**. To change the responding agent, o
 
 Each post triggers a routed invocation: the dashboard records the request, dispatches it to the chosen provider via the worker assignment service (routed through the `dashboard_reply` invocation type), and streams the reply back into the thread.
 
-Planning messages can include a rich sprint status card. When Code UX can match the message to live project data, the card is backed by the current task records and execution snapshot, so it updates as tasks move from queued to running, completed, failed, blocked, or quota-waiting. It shows the sprint key/name, request/task/run materialization, overall progress such as `0/7 · 0%`, queued task count, and a compact task list. If task or execution data has not materialized yet, the chat keeps the generic planning status card until live records are available.
+Planning messages can include a rich sprint status card. When Code UX can match the message to loaded live project data, the card is backed by the current task records and execution snapshot, so it updates as tasks move from queued to running, completed, failed, blocked, or quota-waiting. It shows the sprint key/name, request/task/run materialization, overall progress such as `0/7 · 0%`, queued task count, and a compact task list. If either task records or the execution snapshot are still loading, the chat keeps the generic planning status card until both live records are available for the active project.
 
 ## Compacting a thread
 

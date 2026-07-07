@@ -126,7 +126,11 @@ export const ChatPage: FunctionComponent = () => {
     handleConfirm,
     handleCancel,
     execution,
+    executionLoading,
+    executionLoaded,
     projectTasks,
+    projectTasksLoading,
+    projectTasksLoaded,
     sprintKeyPrefix,
   } = useChatPageData({ composerRef, messagesRef });
 
@@ -139,9 +143,22 @@ export const ChatPage: FunctionComponent = () => {
   const widgetLiveData = useMemo(() => ({
     projectId: selectedProject?.id ?? null,
     projectTasks,
+    projectTasksLoading,
+    projectTasksLoaded,
     execution,
+    executionLoading,
+    executionLoaded,
     sprintKeyPrefix,
-  }), [execution, projectTasks, selectedProject?.id, sprintKeyPrefix]);
+  }), [
+    execution,
+    executionLoaded,
+    executionLoading,
+    projectTasks,
+    projectTasksLoaded,
+    projectTasksLoading,
+    selectedProject?.id,
+    sprintKeyPrefix,
+  ]);
 
   const handleRestartInvocation = useCallback(async (mode: InvocationRestartMode = "retry_full_prompt") => {
     if (!selectedInvocation || selectedInvocation.status !== "failed" || restartingInvocation || cancellingInvocationId || resettingUsageLimitInvocationId) {
