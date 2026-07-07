@@ -114,6 +114,7 @@ export const ChatPage: FunctionComponent = () => {
     handleSend,
     navigateHistory,
     handleDeleteThread,
+    handleRenameThread,
     createThreadForCompose,
     threadIndex,
     invocationIndex,
@@ -412,6 +413,7 @@ export const ChatPage: FunctionComponent = () => {
             thread={selectedThread}
             onCompact={() => void handleCompactThread()}
             onCancelActiveTurn={() => void handleCancelActiveTurn()}
+            onRename={handleRenameThread}
             isCompacting={compacting}
             isCancelling={isCancelling}
           />

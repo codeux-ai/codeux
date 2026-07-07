@@ -39,9 +39,31 @@ export const DEFAULT_CONVERSATION_THREAD_LIST_LIMIT = 500;
 export const MAX_CONVERSATION_THREAD_LIST_LIMIT = 500;
 export const DEFAULT_CONVERSATION_MESSAGE_LIST_LIMIT = 5000;
 export const MAX_CONVERSATION_MESSAGE_LIST_LIMIT = 5000;
+export const MAX_CONVERSATION_THREAD_TITLE_WORDS = 8;
 
 export function visibleConversationMessageFilter(alias: string): string {
   return `(COALESCE(json_extract(${alias}.metadata_json, '$.internalVisibility'), '') != '${HIDDEN_INTERNAL_VISIBILITY}')`;
+}
+
+export function deriveConversationThreadTitleFromFirstMessage(bodyMarkdown: string, fallbackTitle: string): string {
+  const normalized = bodyMarkdown
+    .replace(/```[\s\S]*?```/g, " ")
+    .replace(/`([^`]*)`/g, "$1")
+    .replace(/!\[[^\]]*]\([^)]*\)/g, " ")
+    .replace(/\[([^\]]+)]\([^)]*\)/g, "$1")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/^[ \t]*(#{1,6}|[-*+]|\d+[.)]|>\s?|\[[ xX]])[ \t]*/gm, " ")
+    .replace(/[*_~|[\](){}#>\\]/g, " ")
+    .replace(/[\u0000-\u001F\u007F]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  const words = normalized.match(/[A-Za-z0-9][A-Za-z0-9'_-]*/g) || [];
+  if (words.length === 0) {
+    return fallbackTitle;
+  }
+
+  return words.slice(0, MAX_CONVERSATION_THREAD_TITLE_WORDS).join(" ");
 }
 
 export function mapThreadRow(row: ThreadRow): ConversationThreadRecord {

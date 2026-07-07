@@ -37,6 +37,8 @@ export interface QaReviewRunnerArgs {
   openCodePackage?: string;
   providerMountAuth?: boolean;
   providerAuthPath?: string;
+  providerConfigMode?: import("../../contracts/app-types.js").ProviderConfigMode;
+  providerConfigPath?: string;
   customBaseUrl?: string;
   customModel?: string;
   providerPrompt: string;
@@ -81,6 +83,8 @@ export class QaReviewRunner {
         openCodePackage: args.openCodePackage,
         providerMountAuth: args.providerMountAuth as any,
         providerAuthPath: args.providerAuthPath,
+        providerConfigMode: args.providerConfigMode,
+        providerConfigPath: args.providerConfigPath,
         customBaseUrl: args.customBaseUrl,
         customModel: args.customModel,
         providerPrompt: args.providerPrompt,

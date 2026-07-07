@@ -865,11 +865,14 @@ describe("ConnectionChatRepository", () => {
 
       const updatedState = { ...runtimeState, replayRequired: false };
       const updatedThread = connectionRepository.updateThread(thread.id, {
+        title: "Updated Test Thread",
         runtimeState: updatedState,
       });
 
+      expect(updatedThread.title).toBe("Updated Test Thread");
       expect(updatedThread.runtimeState).toEqual(updatedState);
       const rehydratedThreads = connectionRepository.listThreads(project.id);
+      expect(rehydratedThreads[0].title).toBe("Updated Test Thread");
       expect(rehydratedThreads[0].runtimeState).toEqual(updatedState);
 
       const messageMetadata = { testKey: "testValue", numericKey: 123 };
@@ -885,6 +888,38 @@ describe("ConnectionChatRepository", () => {
       expect(messages[0].metadata).toEqual(messageMetadata);
     });
 
+    it("derives a concise thread title from the first visible dashboard message", async () => {
+      const { projectRepository, connectionRepository } = await createRepositories();
+      const project = projectRepository.createProject({
+        name: "Title Project",
+        sourceType: "local",
+        sourceRef: "/tmp/title-project",
+      });
+
+      const message = connectionRepository.postDashboardMessage(project.id, {
+        bodyMarkdown: "### Fix **critical** dashboard routing bug with worker retry state after compaction",
+      });
+
+      const thread = connectionRepository.getThread(message.threadId);
+      expect(thread.title).toBe("Fix critical dashboard routing bug with worker retry");
+      expect(thread.title.split(/\s+/)).toHaveLength(8);
+    });
+
+    it("falls back to the timestamp title when the first dashboard message has no useful words", async () => {
+      const { projectRepository, connectionRepository } = await createRepositories();
+      const project = projectRepository.createProject({
+        name: "Fallback Title Project",
+        sourceType: "local",
+        sourceRef: "/tmp/fallback-title-project",
+      });
+
+      const message = connectionRepository.postDashboardMessage(project.id, {
+        bodyMarkdown: "```ts\n!!!\n```\n---",
+      });
+
+      const thread = connectionRepository.getThread(message.threadId);
+      expect(thread.title).toMatch(/^Project Chat \d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/);
+    });
   describe("Repository single entity operations", () => {
     beforeEach(() => {
       vi.useFakeTimers();

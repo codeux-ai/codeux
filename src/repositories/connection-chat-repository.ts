@@ -22,6 +22,7 @@ import type { DashboardRealtimeService } from "../services/dashboard-realtime-se
 import { WorkerEndpointRepository } from "./worker-endpoint-repository.js";
 import {
   HIDDEN_INTERNAL_VISIBILITY,
+  deriveConversationThreadTitleFromFirstMessage,
   visibleConversationMessageFilter,
 } from "./connection-chat/conversation-query-utils.js";
 import {
@@ -440,6 +441,10 @@ export class ConnectionChatRepository {
       : input.connectionId === null
         ? null
         : input.connectionId.trim();
+    const normalizedTitle = input.title === undefined ? thread.title : input.title.trim();
+    if (!normalizedTitle) {
+      throw new Error("Thread title must be a non-empty string.");
+    }
 
     if (normalizedConnectionId) {
       const connection = this.requireConnection(normalizedConnectionId);
@@ -452,10 +457,11 @@ export class ConnectionChatRepository {
     this.runInTransaction(() => {
       this.db.prepare(`
         UPDATE conversation_threads
-        SET connection_id = ?, runtime_state_json = ?, updated_at = ?
+        SET connection_id = ?, title = ?, runtime_state_json = ?, updated_at = ?
         WHERE id = ?
       `).run(
         normalizedConnectionId || null,
+        normalizedTitle,
         input.runtimeState !== undefined ? (input.runtimeState ? JSON.stringify(input.runtimeState) : null) : (thread.runtimeState ? JSON.stringify(thread.runtimeState) : null),
         now,
         thread.id
@@ -492,10 +498,17 @@ export class ConnectionChatRepository {
 
   postDashboardMessage(projectId: string, input: CreateDashboardConversationMessageInput): ConversationMessageRecord {
     requireRecord(this.db.prepare('SELECT id FROM projects WHERE id = ?').get(projectId), "Project", projectId);
+    const fallbackTitle = input.title?.trim() || `Project Chat ${new Date().toISOString().slice(0, 16)}`;
+    const hiddenMessage = isHiddenConversationMessage(input.metadata);
+    const generatedTitle = input.title?.trim()
+      ? fallbackTitle
+      : hiddenMessage
+      ? fallbackTitle
+      : deriveConversationThreadTitleFromFirstMessage(input.bodyMarkdown, fallbackTitle);
     const thread = input.threadId
       ? requireConversationThreadQuery(this.db, input.threadId)
       : this.createThread(projectId, {
-        title: input.title?.trim() || `Project Chat ${new Date().toISOString().slice(0, 16)}`,
+        title: generatedTitle,
         connectionId: input.connectionId ?? undefined,
       });
 
@@ -506,7 +519,6 @@ export class ConnectionChatRepository {
     const preferredConnectionId = thread.connectionId || input.connectionId || null;
     const now = new Date().toISOString();
     const messageId = randomUUID();
-    const hiddenMessage = isHiddenConversationMessage(input.metadata);
 
     this.runInTransaction(() => {
       if (!thread.connectionId && preferredConnectionId) {

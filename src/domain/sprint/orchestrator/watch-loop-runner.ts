@@ -753,6 +753,11 @@ export class WatchLoopRunner {
               targetBranch: defaultBranch,
               sourceBranch: defaultFeatureBranch,
               commitMessage: `Merge branch '${defaultFeatureBranch}' into ${defaultBranch}`,
+              fallbackTargetBranches: [
+                scopedExecutionContext.project.defaultBranch || "",
+                "main",
+                "master",
+              ],
             });
           } catch (err) {
             mainMerge = {
@@ -765,8 +770,8 @@ export class WatchLoopRunner {
           if (mainMerge.ok) {
             report += `- ✅ **Merged locally:** Sprint feature branch \`${defaultFeatureBranch}\` merged into default branch \`${defaultBranch}\`.\n`;
             // The sprint's work is now on the default branch; drop the feature branch so finished
-            // sprints don't leave dead branches behind (HEAD was already restored above, so this
-            // never deletes the branch the user is on).
+            // sprints don't leave dead branches behind. Temporary-worktree merges leave the visible
+            // checkout untouched, and git refuses to delete the currently checked-out branch anyway.
             const deleteMergedBranches = this.deps.getDashboardSettings({
               projectId: scopedExecutionContext.project.id,
               sprintId: scopedExecutionContext.sprint.id,

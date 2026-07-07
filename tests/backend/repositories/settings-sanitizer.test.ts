@@ -79,6 +79,7 @@ describe("settings-sanitizer", () => {
         executionMode: "invalid",
         containerImage: 42,
         containerSetupScriptPath: 7,
+        containerMemoryLimitMb: "bad",
         containerCacheSetupScriptImage: "bad",
         containerMountGeminiAuth: "bad",
       },
@@ -129,6 +130,7 @@ describe("settings-sanitizer", () => {
     expect(settings.sprintLoopSteps.watchLoopOutputIntervalSeconds).toBe(300);
     expect(settings.cliWorkflow.executionMode).toBe("DOCKER");
     expect(settings.cliWorkflow.containerImage).toBe("node:24-bookworm");
+    expect(settings.cliWorkflow.containerMemoryLimitMb).toBe(6144);
     expect(settings.cliWorkflow.containerCacheSetupScriptImage).toBe(true);
     expect(settings.cliWorkflow.containerMountGeminiAuth).toBe(false);
     expect(settings.agents.saveToProjectDirectory).toBe(true);

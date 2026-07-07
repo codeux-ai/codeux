@@ -3,7 +3,7 @@ import * as os from "os";
 import * as path from "path";
 import * as pathPosix from "path/posix";
 import { fileURLToPath } from "url";
-import { CliWorkflowSettings, type CustomMcpServer } from "../../../contracts/app-types.js";
+import { CliWorkflowSettings, type CustomMcpServer, type ProviderConfigMode } from "../../../contracts/app-types.js";
 import { isUsableCustomMcpServer } from "../../../mcp/mcp-tool-availability.js";
 import { buildProviderMcpConfigArtifact } from "./mcp-config-format.js";
 import type { McpConnectionInfo } from "../../../contracts/mcp-connection-types.js";
@@ -25,9 +25,11 @@ import { resolveDockerRuntimeRoot } from "./docker-runtime-paths.js";
 import { buildRuntimeVolumeName, WorkspaceManager, type SnapshotCheckout } from "./workspace-manager.js";
 import { workspaceVolumeHelperPool, type WorkspaceVolumeHelperPool } from "./workspace-volume-helper.js";
 import { CONTAINER_RUNTIME_HOME, CONTAINER_WORKSPACE_ROOT } from "./provider-runtime-artifacts.js";
+import type { CliProviderId } from "./provider-command-specs.js";
 import { getHomeCodeUxPath, getRepoCodeUxPath } from "../../../shared/config/code-ux-paths.js";
 import { ensureDefaultCodeUxAssetsInstalled } from "../../../services/code-ux-default-assets-service.js";
 import { sanitizeInvocationOutputText } from "../../../services/invocation-output-sanitizer.js";
+import type { PersistentSkillStorageRuntimeMount } from "../../../services/skill-service.js";
 
 
 const BUNDLED_CONTAINER_SETUP_SCRIPT = path.resolve(
@@ -52,16 +54,19 @@ export interface IDockerRunner {
     cwd: string;
     providerEnv: NodeJS.ProcessEnv;
     sessionId: string;
-    providerLabel: "gemini" | "codex" | "claude-code" | "qwen-code" | "opencode" | "antigravity";
+    providerLabel: CliProviderId;
     workflowSettings: CliWorkflowSettings;
     repoPath: string;
     providerMountAuth?: boolean;
     providerAuthPath?: string;
+    providerConfigMode?: ProviderConfigMode;
+    providerConfigPath?: string;
     signal?: AbortSignal;
     onActivity: (desc: string, originator?: string) => void;
     onSetupImageProgress?: (progress: DockerSetupImageCacheProgress) => void;
     mcpConnection?: McpConnectionInfo | null;
     customMcpServers?: CustomMcpServer[];
+    persistentSkillStorageMounts?: PersistentSkillStorageRuntimeMount[];
   }): Promise<CommandResult>;
   readWorkspaceFile?(cwd: string, targetPath: string): Promise<string | null>;
   readWorkspaceFileBase64?(cwd: string, targetPath: string): Promise<string | null>;
@@ -110,16 +115,19 @@ export class DockerRunner implements IDockerRunner {
     cwd: string;
     providerEnv: NodeJS.ProcessEnv;
     sessionId: string;
-    providerLabel: "gemini" | "codex" | "claude-code" | "qwen-code" | "opencode" | "antigravity";
+    providerLabel: CliProviderId;
     workflowSettings: CliWorkflowSettings;
     repoPath: string;
     providerMountAuth?: boolean;
     providerAuthPath?: string;
+    providerConfigMode?: ProviderConfigMode;
+    providerConfigPath?: string;
     signal?: AbortSignal;
     onActivity: (desc: string, originator?: string) => void;
     onSetupImageProgress?: (progress: DockerSetupImageCacheProgress) => void;
     mcpConnection?: McpConnectionInfo | null;
     customMcpServers?: CustomMcpServer[];
+    persistentSkillStorageMounts?: PersistentSkillStorageRuntimeMount[];
   }): Promise<CommandResult> {
     const { command, args, cwd, providerEnv, sessionId, providerLabel, workflowSettings, repoPath, signal, onActivity } = input;
     const emitActivity = (desc: string, originator?: string): void => {
@@ -230,6 +238,11 @@ export class DockerRunner implements IDockerRunner {
         "-e", `CODE_UX_INSTALL_PLAYWRIGHT=${installPlaywrightBrowsers ? "1" : "0"}`,
       );
 
+      const memoryLimitMb = this.resolveContainerMemoryLimitMb(workflowSettings.containerMemoryLimitMb);
+      if (memoryLimitMb > 0) {
+        dockerArgs.push("--memory", `${memoryLimitMb}m`, "--memory-swap", `${memoryLimitMb}m`);
+      }
+
       if (setupScriptPath && resolvedImage.runSetupScriptAtRuntime) {
         const setupScriptSource = this.mapDockerSourcePathForDaemon(setupScriptPath, repoPath, sessionId, "setup script", emitActivity);
         dockerArgs.push("--mount", toDockerMountArg({ source: setupScriptSource, destination: CONTAINER_SETUP_SCRIPT, readonly: true }));
@@ -244,6 +257,11 @@ export class DockerRunner implements IDockerRunner {
           enabled: Boolean(input.providerMountAuth),
           path: input.providerAuthPath || "",
         },
+        {
+          provider: providerLabel,
+          mode: input.providerConfigMode || "copyHost",
+          path: input.providerConfigPath || "",
+        },
       );
       const providerConfigMounts = await this.buildProviderConfigMounts(
         input.mcpConnection || null,
@@ -257,6 +275,15 @@ export class DockerRunner implements IDockerRunner {
       for (const mount of [...credentialMounts, ...providerConfigMounts]) {
         const source = this.mapDockerSourcePathForDaemon(mount.source, repoPath, sessionId, "credentials", emitActivity);
         dockerArgs.push("--mount", toDockerMountArg({ ...mount, source }));
+      }
+
+      for (const mount of input.persistentSkillStorageMounts || []) {
+        const source = this.mapDockerSourcePathForDaemon(mount.hostPath, repoPath, sessionId, "persistent skill storage", emitActivity);
+        dockerArgs.push("--mount", toDockerMountArg({
+          source,
+          destination: mount.containerPath,
+          readonly: false,
+        }));
       }
 
       const bootstrapScript = new DockerBootstrapBuilder().build({
@@ -342,7 +369,7 @@ export class DockerRunner implements IDockerRunner {
   }
 
   private buildContainerName(
-    providerLabel: "gemini" | "codex" | "claude-code" | "qwen-code" | "opencode" | "antigravity",
+    providerLabel: CliProviderId,
     sessionId: string,
   ): string {
     const safeProvider = providerLabel.replace(/[^a-zA-Z0-9_.-]+/g, "-").toLowerCase();
@@ -366,6 +393,13 @@ export class DockerRunner implements IDockerRunner {
 
   private shellSingleQuote(value: string): string {
     return `'${value.replaceAll("'", "'\"'\"'")}'`;
+  }
+
+  private resolveContainerMemoryLimitMb(value: unknown): number {
+    if (typeof value !== "number" || !Number.isFinite(value)) {
+      return 0;
+    }
+    return Math.max(0, Math.round(value));
   }
 
   async readWorkspaceFile(cwd: string, targetPath: string): Promise<string | null> {
@@ -503,7 +537,7 @@ export class DockerRunner implements IDockerRunner {
 
   private customServersForProvider(
     servers: CustomMcpServer[],
-    provider: "gemini" | "codex" | "claude-code" | "qwen-code" | "opencode" | "antigravity",
+    provider: CliProviderId,
   ): CustomMcpServer[] {
     return servers.filter((server) =>
       server.enabled
@@ -514,7 +548,7 @@ export class DockerRunner implements IDockerRunner {
 
   private async buildProviderConfigMounts(
     conn: McpConnectionInfo | null,
-    provider: "gemini" | "codex" | "claude-code" | "qwen-code" | "opencode" | "antigravity",
+    provider: CliProviderId,
     tempRoot: string,
     providerEnv: NodeJS.ProcessEnv,
     customServers: CustomMcpServer[] = [],

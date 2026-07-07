@@ -82,6 +82,9 @@ describe("ManagementToolHandler", () => {
       embeddingModelManager: {
         getModelStatus: vi.fn(),
       },
+      skillService: {
+        listStorages: vi.fn(),
+      },
       planningAgentService: {
         planSprint: vi.fn(),
       },

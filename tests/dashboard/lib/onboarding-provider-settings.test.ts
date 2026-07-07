@@ -81,7 +81,19 @@ describe("onboarding-provider-settings", () => {
             taskCompletion: { strategy: "ALWAYS", agentPresetIds: [], agentPresetId: null },
             sprintCompletion: { strategy: "ALWAYS", agentPresetIds: [], agentPresetId: null },
             completedTaskWithoutPr: { strategy: "CREATE_PR", agentPresetIds: [], agentPresetId: null },
-          }
+          },
+          selfReflection: {
+            planning: {
+              enabled: false,
+              criteria: [{ id: "correctness", label: "Correctness", prompt: "Check correctness.", threshold: 0.8 }],
+              maxImprovementAttempts: 1,
+            },
+            qualityAssurance: {
+              enabled: false,
+              criteria: [{ id: "security", label: "Security", prompt: "Check security.", threshold: 0.85 }],
+              maxImprovementAttempts: 1,
+            },
+          },
         },
         guardrails: { onLimitAction: "WARN", defaultLimitOverrides: [], limitOverrides: [], jobConfigOverrides: [], jobs: { task_coding: {}, ci_fix: {}, merge_conflict: {}, clarification_reply: {}, planning: {}, remediation: {} } },
         skills: [],

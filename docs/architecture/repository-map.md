@@ -118,6 +118,8 @@ backup files appear there.
   - project/home/default agent markdown mirrors such as `planning_agent.md` and `worker.md`
 - `sprints/`
   - Runtime sprint plans and generated subtask markdown files.
+- `conversations/<thread-id>/session-title.md`
+  - Project-local dashboard chat session title mirror. New dashboard chat threads derive a concise title from the first visible user message, and manual title edits update this file alongside the sqlite thread record.
 
 ## Documentation (`docs/`)
 

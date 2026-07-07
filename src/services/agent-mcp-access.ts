@@ -61,6 +61,31 @@ export interface ResolvedAgentMcpRuntime {
   mcpConnection: McpConnectionInfo | null;
 }
 
+const retrievalOnlySkillToolAccess = (): AgentCodeUxToolAccess => ({
+  codeUxEnabled: true,
+  codeUxToolToggles: TOOL_DEFINITIONS.map((tool) => ({
+    name: tool.name,
+    enabled: tool.name === "search_skills",
+    isInternal: true,
+  })),
+});
+
+const withSkillRetrievalEnabled = (access: AgentMcpAccessConfig): AgentMcpAccessConfig => {
+  if (!access.codeUxEnabled) {
+    return {
+      ...access,
+      codeUxEnabled: true,
+      codeUxToolToggles: retrievalOnlySkillToolAccess().codeUxToolToggles,
+    };
+  }
+  const byName = new Map(access.codeUxToolToggles.map((toggle) => [toggle.name, toggle]));
+  byName.set("search_skills", { name: "search_skills", enabled: true, isInternal: true });
+  return {
+    ...access,
+    codeUxToolToggles: Array.from(byName.values()),
+  };
+};
+
 /**
  * Apply per-agent MCP access to a base set of custom servers + code_ux connection.
  * When `access` is missing, the run inherits provider-wide MCP servers unchanged.
@@ -72,6 +97,7 @@ export const resolveAgentMcpRuntime = (args: {
   agentId: string | null | undefined;
   customMcpServers: CustomMcpServer[];
   mcpConnection: McpConnectionInfo | null;
+  persistentSkillRetrievalEnabled?: boolean;
 }): ResolvedAgentMcpRuntime => {
   if (args.access == null) {
     const mcpConnection = args.mcpConnection && args.agentId
@@ -83,7 +109,9 @@ export const resolveAgentMcpRuntime = (args: {
     };
   }
 
-  const access = args.access;
+  const access = args.persistentSkillRetrievalEnabled
+    ? withSkillRetrievalEnabled(args.access)
+    : args.access;
   const linked = new Set(access.linkedServerIds);
   const customMcpServers = sanitizeCustomMcpServers(args.customMcpServers).filter((server) => linked.has(server.id));
   const baseConnection = access.codeUxEnabled ? args.mcpConnection : null;
@@ -96,9 +124,23 @@ export const resolveAgentMcpRuntime = (args: {
 
 export const toAgentCodeUxToolAccess = (
   access: Pick<AgentMcpAccessConfig, "codeUxEnabled" | "codeUxToolToggles">,
+  persistentSkillRetrievalEnabled = false,
 ): AgentCodeUxToolAccess => ({
-  codeUxEnabled: access.codeUxEnabled,
-  codeUxToolToggles: access.codeUxToolToggles,
+  ...(persistentSkillRetrievalEnabled
+    ? (access.codeUxEnabled
+      ? {
+        codeUxEnabled: true,
+        codeUxToolToggles: withSkillRetrievalEnabled({
+          codeUxEnabled: access.codeUxEnabled,
+          codeUxToolToggles: access.codeUxToolToggles,
+          linkedServerIds: [],
+        }).codeUxToolToggles,
+      }
+      : retrievalOnlySkillToolAccess())
+    : {
+      codeUxEnabled: access.codeUxEnabled,
+      codeUxToolToggles: access.codeUxToolToggles,
+    }),
 });
 
 /** Merge per-agent code_ux tool toggles over the system-level toggles. */

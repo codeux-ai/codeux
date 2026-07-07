@@ -79,6 +79,66 @@ describe("sanitizeAiProvider", () => {
     expect(result.invocationRouting.planning.profile).toBeDefined();
   });
 
+  it("preserves explicit mockup-cli integration and project provider settings", () => {
+    const integrationProviders = normalizeSystemIntegrationProviders({
+      providers: {
+        "mockup-cli": {
+          provider: "mockup-cli",
+          name: "Mockup Test Provider",
+        },
+      },
+    });
+
+    const result = sanitizeAiProvider({
+      aiProvider: {
+        provider: "mockup-cli",
+        providers: {
+          "mockup-cli": {
+            provider: "mockup-cli",
+            name: "Mockup Test Provider",
+            enabled: true,
+            model: "default",
+            weight: 1,
+            thinkingMode: "SMALL",
+            maxConcurrentTasks: 1,
+          },
+        },
+        invocationRouting: {
+          task_coding: {
+            profile: "GLOBAL",
+            strategy: "MANUAL",
+            provider: "mockup-cli",
+            allowedProviders: ["mockup-cli"],
+            providers: {
+              "mockup-cli": {
+                enabled: true,
+                model: "default",
+              },
+            },
+          },
+        },
+      },
+    } as any, { integrationProviders });
+
+    expect(integrationProviders["mockup-cli"]).toEqual(expect.objectContaining({
+      provider: "mockup-cli",
+      name: "Mockup Test Provider",
+      apiKey: "",
+      mountAuth: false,
+      authPath: "",
+    }));
+    expect(result.provider).toBe("mockup-cli");
+    expect(result.providers["mockup-cli"]).toEqual(expect.objectContaining({
+      provider: "mockup-cli",
+      enabled: true,
+      model: "default",
+      maxConcurrentTasks: 1,
+    }));
+    expect(result.invocationRouting.task_coding.provider).toBe("mockup-cli");
+    expect(result.invocationRouting.task_coding.allowedProviders).toEqual(["mockup-cli"]);
+    expect(result.invocationRouting.task_coding.providers["mockup-cli"]?.enabled).toBe(true);
+  });
+
   it("migrates untouched legacy dashboard reply routes to worker profile defaults", () => {
     const result = sanitizeAiProvider({
       aiProvider: {
@@ -114,6 +174,39 @@ describe("sanitizeAiProvider", () => {
 
     expect(result.invocationRouting.dashboard_reply.profile).toBe("GLOBAL");
     expect(result.invocationRouting.dashboard_reply.provider).toBe("codex");
+  });
+
+  it("preserves selectable Codex catalog models in provider and route settings", () => {
+    const result = sanitizeAiProvider({
+      aiProvider: {
+        provider: "codex",
+        providers: {
+          codex: {
+            provider: "codex",
+            enabled: true,
+            model: "gpt-5.6-sol",
+            weight: 20,
+            thinkingMode: "HIGH",
+          },
+        },
+        invocationRouting: {
+          task_coding: {
+            profile: "GLOBAL",
+            strategy: "MANUAL",
+            provider: "codex",
+            allowedProviders: ["codex"],
+            providers: {
+              codex: {
+                model: "gpt-5.6-terra",
+              },
+            },
+          },
+        },
+      },
+    } as any);
+
+    expect(result.providers.codex.model).toBe("gpt-5.6-sol");
+    expect(result.invocationRouting.task_coding.providers.codex?.model).toBe("gpt-5.6-terra");
   });
 
   describe("normalizeSystemIntegrationProviders", () => {
@@ -253,6 +346,98 @@ describe("sanitizeAiProvider", () => {
       expect(result.codex).toBeDefined();
       expect(result.gemini).toBeUndefined();
       expect(result.jules).toBeUndefined();
+    });
+
+    it("keeps mockup-cli modern provider payloads without requiring credentials", () => {
+      const result = normalizeSystemIntegrationProviders({
+        providers: {
+          "mockup-cli": {
+            provider: "mockup-cli",
+            name: "Mockup CLI",
+          },
+        },
+      });
+
+      expect(result["mockup-cli"]).toEqual(expect.objectContaining({
+        provider: "mockup-cli",
+        name: "Mockup CLI",
+        apiKey: "",
+        mountAuth: false,
+        authPath: "",
+        authType: "apiKey",
+        providerConfigMode: "none",
+        providerConfigPath: "",
+      }));
+    });
+
+    it("defaults missing CLI provider config fields to copyHost standard paths", () => {
+      const result = normalizeSystemIntegrationProviders({
+        providers: {
+          codex: {
+            provider: "codex",
+            name: "Codex Primary",
+          },
+        },
+      });
+
+      expect(result.codex.providerConfigMode).toBe("copyHost");
+      expect(result.codex.providerConfigPath).toBe("~/.codex/config.toml");
+    });
+
+    it("clears custom provider config paths when config mode is none", () => {
+      const result = normalizeSystemIntegrationProviders({
+        providers: {
+          gemini: {
+            provider: "gemini",
+            name: "Gemini Primary",
+            providerConfigMode: "none",
+            providerConfigPath: "/tmp/gemini-settings.json",
+          },
+        },
+      });
+
+      expect(result.gemini.providerConfigMode).toBe("none");
+      expect(result.gemini.providerConfigPath).toBe("");
+    });
+
+    it("requires a non-empty custom provider config path for file mode", () => {
+      const result = normalizeSystemIntegrationProviders({
+        providers: {
+          "qwen-code": {
+            provider: "qwen-code",
+            name: "Qwen Primary",
+            providerConfigMode: "file",
+            providerConfigPath: "  ",
+          },
+          "qwen-custom": {
+            provider: "qwen-code",
+            name: "Qwen Custom",
+            providerConfigMode: "file",
+            providerConfigPath: " ~/configs/qwen.json ",
+          },
+        },
+      });
+
+      expect(result["qwen-code"].providerConfigMode).toBe("copyHost");
+      expect(result["qwen-code"].providerConfigPath).toBe("~/.qwen/settings.json");
+      expect(result["qwen-custom"].providerConfigMode).toBe("file");
+      expect(result["qwen-custom"].providerConfigPath).toBe("~/configs/qwen.json");
+    });
+
+    it("ignores provider config file settings for non-CLI providers", () => {
+      const result = normalizeSystemIntegrationProviders({
+        providers: {
+          jules: {
+            provider: "jules",
+            name: "Jules Primary",
+            providerConfigMode: "file",
+            providerConfigPath: "/tmp/jules.json",
+          },
+        },
+      });
+
+      expect(result.jules.providerConfigMode).toBe("none");
+      expect(result.jules.providerConfigPath).toBe("");
     });
   });
 });

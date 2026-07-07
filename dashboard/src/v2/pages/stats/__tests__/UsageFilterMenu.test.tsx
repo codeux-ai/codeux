@@ -5,6 +5,7 @@ import { afterEach, describe, it, expect, vi } from 'vitest';
 import { render, fireEvent, cleanup, screen } from '@testing-library/preact';
 import { useState } from 'preact/hooks';
 import gsap from 'gsap';
+import { groupChartSeries } from '../chart-view-models.js';
 
 vi.mock('gsap', () => ({
   default: {
@@ -36,7 +37,13 @@ describe('UsageFilterMenu', () => {
       ]
     } as any,
     enabledSeries: { tokens: true, active: true },
-    setEnabledSeries: vi.fn()
+    setEnabledSeries: vi.fn(),
+    resetEnabledSeries: vi.fn(),
+    activeSeriesCount: 2,
+    seriesGroups: groupChartSeries([
+      { id: 'tokens', label: 'Tokens', grouping: 'Usage', color: '#00E0A0', defaultEnabled: true, data: [] },
+      { id: 'active', label: 'Active Time', grouping: 'Usage', color: '#FFB800', defaultEnabled: true, data: [] }
+    ], { tokens: true, active: true })
   };
 
   it('should render when open', () => {
@@ -45,6 +52,8 @@ describe('UsageFilterMenu', () => {
     expect(getByText('Graph Filters')).toBeTruthy();
     expect(getByText('Showing 2 filters')).toBeTruthy();
     expect(getByText('Metric Series')).toBeTruthy();
+    expect(getByText('2 of 2 series active')).toBeTruthy();
+    expect(getByText('2/2 active')).toBeTruthy();
   });
 
   it('should call onClose when close button is clicked', () => {
@@ -56,7 +65,7 @@ describe('UsageFilterMenu', () => {
 
   it('should call setEnabledSeries when a metric button is clicked', () => {
     const { getByRole } = render(<UsageFilterMenu {...mockProps} />);
-    const metricButton = getByRole('switch', { name: 'Tokens series, enabled' });
+    const metricButton = getByRole('switch', { name: /Tokens Metric series, enabled/i });
     expect(metricButton.getAttribute('aria-checked')).toBe('true');
     fireEvent.click(metricButton);
     expect(mockProps.setEnabledSeries).toHaveBeenCalled();
@@ -73,19 +82,49 @@ describe('UsageFilterMenu', () => {
         ]
       } as any,
       setEnabledSeries: setEnabledSeriesSpy,
+      resetEnabledSeries: setEnabledSeriesSpy,
+      activeSeriesCount: 2,
+      seriesGroups: groupChartSeries([
+        { id: 'tokens', label: 'Tokens', grouping: 'Usage', color: '#00E0A0', defaultEnabled: false, data: [] },
+        { id: 'active', label: 'Active Time', grouping: 'Usage', color: '#FFB800', defaultEnabled: false, data: [] }
+      ], { tokens: false, active: false }),
     };
 
     const { getByRole } = render(<UsageFilterMenu {...props} />);
     fireEvent.click(getByRole('button', { name: 'Reset filters' }));
 
-    expect(setEnabledSeriesSpy).toHaveBeenCalledWith({ tokens: true, active: false });
+    expect(setEnabledSeriesSpy).toHaveBeenCalled();
+  });
+
+  it('enables all default series without disabling existing custom selections', () => {
+    const setEnabledSeriesSpy = vi.fn();
+    const props = {
+      ...mockProps,
+      enabledSeries: { tokens: false, active: true },
+      setEnabledSeries: setEnabledSeriesSpy,
+      activeSeriesCount: 1,
+      seriesGroups: groupChartSeries([
+        { id: 'tokens', label: 'Tokens', grouping: 'Usage', color: '#00E0A0', defaultEnabled: true, data: [] },
+        { id: 'active', label: 'Active Time', grouping: 'Usage', color: '#FFB800', defaultEnabled: false, data: [] }
+      ], { tokens: false, active: true })
+    };
+
+    render(<UsageFilterMenu {...props} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Enable defaults' }));
+
+    expect(setEnabledSeriesSpy).toHaveBeenCalled();
+    const updater = setEnabledSeriesSpy.mock.calls[0]?.[0] as (curr: Record<string, boolean>) => Record<string, boolean>;
+    expect(updater({ tokens: false, active: true })).toEqual({ tokens: true, active: true });
   });
 
   it('should not allow disabling the last enabled series', () => {
     const setEnabledSeriesSpy = vi.fn();
     const singleSeriesProps = {
       ...mockProps,
-      enabledSeries: { tokens: true, active: false }, setEnabledSeries: setEnabledSeriesSpy
+      enabledSeries: { tokens: true, active: false },
+      setEnabledSeries: setEnabledSeriesSpy,
+      activeSeriesCount: 1,
+      seriesGroups: groupChartSeries(mockProps.stats.chartSeries, { tokens: true, active: false })
     };
     const { getByRole, getByText } = render(<UsageFilterMenu {...singleSeriesProps} />);
     setEnabledSeriesSpy.mockClear();
@@ -140,5 +179,24 @@ describe('UsageFilterMenu', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Reset filters' }));
 
     expect(onStatusChange).toHaveBeenCalledWith('Graph filters reset. 2 series active.');
+  });
+
+  it('announces last-series guard feedback from aria-disabled switches', () => {
+    const onStatusChange = vi.fn();
+    const setEnabledSeriesSpy = vi.fn();
+    const singleSeriesProps = {
+      ...mockProps,
+      enabledSeries: { tokens: true, active: false },
+      setEnabledSeries: setEnabledSeriesSpy,
+      activeSeriesCount: 1,
+      seriesGroups: groupChartSeries(mockProps.stats.chartSeries, { tokens: true, active: false }),
+      onStatusChange,
+    };
+
+    render(<UsageFilterMenu {...singleSeriesProps} />);
+    fireEvent.click(screen.getByRole('switch', { name: /Tokens/i }));
+
+    expect(setEnabledSeriesSpy).not.toHaveBeenCalled();
+    expect(onStatusChange).toHaveBeenCalledWith('Keep at least one series enabled. The last active series cannot be turned off.');
   });
 });

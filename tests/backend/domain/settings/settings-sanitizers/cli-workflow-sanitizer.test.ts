@@ -47,6 +47,7 @@ describe("sanitizeCliWorkflow", () => {
     expect(defaults.rateLimitRetryDelaySeconds).toBe(10);
     expect(defaults.maxRateLimitRetries).toBe(5);
     expect(defaults.containerMountGitConfig).toBe(false);
+    expect(defaults.containerMemoryLimitMb).toBe(6144);
     expect(defaults.containerInstallPlaywrightBrowsers).toBe(true);
     expect(defaults.containerGitUserName).toBe("Code UX");
     expect(defaults.containerGitUserEmail).toBe("agents@codeux.ai");
@@ -63,6 +64,29 @@ describe("sanitizeCliWorkflow", () => {
     });
     expect(clamped.rateLimitRetryDelaySeconds).toBe(1);
     expect(clamped.maxRateLimitRetries).toBe(1);
+  });
+
+  it("sanitizes the Docker provider container memory limit", () => {
+    const disabled = sanitizeCliWorkflow({
+      cliWorkflow: {
+        containerMemoryLimitMb: 0,
+      },
+    });
+    expect(disabled.containerMemoryLimitMb).toBe(0);
+
+    const clamped = sanitizeCliWorkflow({
+      cliWorkflow: {
+        containerMemoryLimitMb: 300000,
+      },
+    });
+    expect(clamped.containerMemoryLimitMb).toBe(262144);
+
+    const invalid = sanitizeCliWorkflow({
+      cliWorkflow: {
+        containerMemoryLimitMb: "bad" as any,
+      },
+    });
+    expect(invalid.containerMemoryLimitMb).toBe(6144);
   });
 
   it("sanitizes the Playwright browser install toggle", () => {

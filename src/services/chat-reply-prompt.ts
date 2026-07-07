@@ -134,6 +134,14 @@ export function buildStageWidgetInstructions(): string {
   ].join("\n");
 }
 
+function buildSessionTitleInstructions(threadTitle: string | undefined): string {
+  return [
+    "Session Title File: `.code-ux/conversations/<thread-id>/session-title.md`",
+    threadTitle ? `Current Session Title: ${threadTitle}` : "",
+    "Keep this file updated with an 8-word maximum descriptive title on the first user message and every 20 chat invocations.",
+  ].filter((line) => line.trim().length > 0).join("\n");
+}
+
 export function buildChatReplayPrompt(args: {
   projectId: string;
   repoPath: string;
@@ -193,6 +201,7 @@ export function buildChatReplayPrompt(args: {
   const knowledgeSection = args.knowledgeManifest && args.knowledgeManifest.trim()
     ? `## KNOWLEDGE BASE\n\n${args.knowledgeManifest.trim()}`
     : "";
+  const currentThreadTitle = args.threadTitle || args.thread.title;
 
   return [
     args.workerInstructions ? `## WORKER INSTRUCTIONS\n\n${args.workerInstructions}` : "",
@@ -203,7 +212,8 @@ export function buildChatReplayPrompt(args: {
     `Project: ${args.projectName}`,
     `Repo Path: ${args.repoPath}`,
     `Thread ID: ${args.thread.id}`,
-    args.threadTitle || args.thread.title ? `Thread Title: ${args.threadTitle || args.thread.title}` : "",
+    currentThreadTitle ? `Thread Title: ${currentThreadTitle}` : "",
+    buildSessionTitleInstructions(currentThreadTitle),
     "",
     knowledgeSection,
     "",
@@ -227,7 +237,12 @@ export function buildChatReplayPrompt(args: {
   ].filter((part) => part.trim().length > 0).join("\n");
 }
 
-export function buildChatContinuationPrompt(message: ConversationMessageRecord, pendingAction?: ConversationRuntimeState["pendingManagementAction"], mcpAvailable?: boolean): string {
+export function buildChatContinuationPrompt(
+  message: ConversationMessageRecord,
+  pendingAction?: ConversationRuntimeState["pendingManagementAction"],
+  mcpAvailable?: boolean,
+  threadTitle?: string,
+): string {
   const pendingActionContext = pendingAction ? [
     "## PENDING ACTION CONTEXT",
     "You previously proposed the following management action which requires user approval:",
@@ -241,6 +256,7 @@ export function buildChatContinuationPrompt(message: ConversationMessageRecord, 
   return [
     pendingActionContext,
     "## DASHBOARD CHAT CONTINUATION",
+    buildSessionTitleInstructions(threadTitle),
     "The dashboard user's latest message is below.",
     "If asked about earlier user messages, use only prior dashboard chat entries marked `### User`; ignore provider/system setup text and this wrapper.",
     "Remember: the dashboard renders ```codeux:status / codeux:tasks / codeux:sprint / codeux:metrics / codeux:actions fenced JSON blocks in your reply as rich UI widgets — use them for status, summaries, and next steps.",

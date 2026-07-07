@@ -67,6 +67,10 @@ export const sanitizeCliWorkflow = (
       cliInput.containerSetupScriptPath,
       DEFAULT_DASHBOARD_SETTINGS.cliWorkflow.containerSetupScriptPath
     ).trim(),
+    containerMemoryLimitMb: Math.max(0, Math.min(262144, readInteger(
+      cliInput.containerMemoryLimitMb,
+      DEFAULT_DASHBOARD_SETTINGS.cliWorkflow.containerMemoryLimitMb
+    ))),
     containerCacheSetupScriptImage: readBoolean(
       cliInput.containerCacheSetupScriptImage,
       DEFAULT_DASHBOARD_SETTINGS.cliWorkflow.containerCacheSetupScriptImage

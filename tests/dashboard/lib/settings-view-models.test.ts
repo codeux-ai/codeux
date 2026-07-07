@@ -138,6 +138,17 @@ describe("settings view model source helpers", () => {
     ]));
   });
 
+  it("includes new Codex models while keeping gpt-5.5 as the first option", () => {
+    const options = getProviderModelOptions("codex");
+
+    expect(options[0]).toEqual({ value: "gpt-5.5", label: "gpt-5.5" });
+    expect(options).toEqual(expect.arrayContaining([
+      { value: "gpt-5.6-sol", label: "gpt-5.6-sol" },
+      { value: "gpt-5.6-terra", label: "gpt-5.6-terra" },
+      { value: "gpt-5.6-luna", label: "gpt-5.6-luna" },
+    ]));
+  });
+
   it("adds configured OpenCode custom endpoint models to instance model options", () => {
     const systemSettings = {
       integrations: {
@@ -250,6 +261,8 @@ describe("settings view model source helpers", () => {
   it("prefills new Qwen and OpenCode custom endpoint settings for local Ollama", () => {
     expect(createSystemProviderDraft("qwen-code", "Qwen Ollama")).toMatchObject({
       apiKey: "",
+      providerConfigMode: "copyHost",
+      providerConfigPath: "~/.qwen/settings.json",
       qwenBaseUrl: "http://127.0.0.1:11434/v1",
       qwenEnvKey: "OLLAMA_API_KEY",
       qwenModelId: "glm-4.7-flash",
@@ -257,10 +270,27 @@ describe("settings view model source helpers", () => {
     });
     expect(createSystemProviderDraft("opencode", "OpenCode Ollama")).toMatchObject({
       apiKey: "",
+      providerConfigMode: "copyHost",
+      providerConfigPath: "~/.config/opencode/opencode.json",
       openCodeProviderId: "ollama",
       openCodeModelId: "glm-4.7-flash",
       openCodeBaseUrl: "http://127.0.0.1:11434/v1",
       openCodeEnvKey: "OLLAMA_API_KEY",
+    });
+  });
+
+  it("defaults provider config files only for CLI providers that support them", () => {
+    expect(createSystemProviderDraft("codex", "Codex Primary")).toMatchObject({
+      providerConfigMode: "copyHost",
+      providerConfigPath: "~/.codex/config.toml",
+    });
+    expect(createSystemProviderDraft("jules", "Jules Primary")).toMatchObject({
+      providerConfigMode: "none",
+      providerConfigPath: "",
+    });
+    expect(createSystemProviderDraft("mockup-cli", "Mockup CLI")).toMatchObject({
+      providerConfigMode: "none",
+      providerConfigPath: "",
     });
   });
 });
@@ -469,6 +499,74 @@ describe("provider settings sanitization", () => {
     expect(codex.customBaseUrl).toBe("");
     expect(codex.customModel).toBe("");
     expect(codex.mountAuth).toBe(true);
+  });
+
+  it("normalizes provider config mode/path combinations like the backend", () => {
+    const systemSettings = {
+      integrations: {
+        providers: {
+          "codex-empty-file": {
+            provider: "codex",
+            name: "Codex Empty File",
+            apiKey: "",
+            authType: "apiKey",
+            mountAuth: false,
+            authPath: "",
+            providerConfigMode: "file",
+            providerConfigPath: "   ",
+          },
+          "codex-custom-file": {
+            provider: "codex",
+            name: "Codex Custom File",
+            apiKey: "",
+            authType: "apiKey",
+            mountAuth: false,
+            authPath: "",
+            providerConfigMode: "file",
+            providerConfigPath: "~/configs/codex.toml",
+          },
+          "gemini-none": {
+            provider: "gemini",
+            name: "Gemini No Config",
+            apiKey: "",
+            authType: "apiKey",
+            mountAuth: false,
+            authPath: "",
+            providerConfigMode: "none",
+            providerConfigPath: "~/.gemini/settings.json",
+          },
+          "mockup-cli": {
+            provider: "mockup-cli",
+            name: "Mockup CLI",
+            apiKey: "",
+            authType: "apiKey",
+            mountAuth: false,
+            authPath: "",
+            providerConfigMode: "copyHost",
+            providerConfigPath: "~/.mockup/config.json",
+          },
+        },
+      },
+    } as any;
+
+    const providers = getSystemIntegrationProviders(systemSettings);
+
+    expect(providers["codex-empty-file"]).toMatchObject({
+      providerConfigMode: "copyHost",
+      providerConfigPath: "~/.codex/config.toml",
+    });
+    expect(providers["codex-custom-file"]).toMatchObject({
+      providerConfigMode: "file",
+      providerConfigPath: "~/configs/codex.toml",
+    });
+    expect(providers["gemini-none"]).toMatchObject({
+      providerConfigMode: "none",
+      providerConfigPath: "",
+    });
+    expect(providers["mockup-cli"]).toMatchObject({
+      providerConfigMode: "none",
+      providerConfigPath: "",
+    });
   });
 });
 
@@ -751,6 +849,22 @@ describe("settings cloning helpers", () => {
       },
       instructionTemplates: {},
       qualityAssurance: createMockQualityAssurance(),
+      selfReflection: {
+        planning: {
+          enabled: false,
+          criteria: [
+            { id: "correctness", label: "Correctness", prompt: "Check correctness.", threshold: 0.8 },
+          ],
+          maxImprovementAttempts: 1,
+        },
+        qualityAssurance: {
+          enabled: false,
+          criteria: [
+            { id: "security", label: "Security", prompt: "Check security.", threshold: 0.85 },
+          ],
+          maxImprovementAttempts: 1,
+        },
+      },
     },
     skills: [{ id: "skill1", enabled: true }],
     mcpTools: [{ serverName: "s1", toolName: "t1", enabled: true }],
@@ -778,6 +892,7 @@ describe("settings cloning helpers", () => {
     clone.agents.qualityAssurance.enabled = false;
     clone.agents.qualityAssurance.taskCompletion.strategy = "NEVER";
     clone.agents.qualityAssurance.sprintCompletion.agentPresetIds.push("qa-extra");
+    clone.agents.selfReflection.planning.criteria[0]!.threshold = 0.1;
     clone.agents.routing.taskCoding.orchestratorAgentPresetIds.push("c");
     clone.customMcpServers![0].headers!["X-New"] = "123";
     clone.customMcpServers![0].env!["BAZ"] = "qux";
@@ -791,6 +906,7 @@ describe("settings cloning helpers", () => {
     expect(original.agents.qualityAssurance.enabled).toBe(true);
     expect(original.agents.qualityAssurance.taskCompletion.strategy).toBe("ALWAYS");
     expect(original.agents.qualityAssurance.sprintCompletion.agentPresetIds).toEqual(["qa-sprint", "qa-peer"]);
+    expect(original.agents.selfReflection.planning.criteria[0]!.threshold).toBe(0.8);
     expect(original.agents.routing.taskCoding.orchestratorAgentPresetIds).toEqual(["a", "b"]);
     expect(original.customMcpServers![0].headers!["X-New"]).toBeUndefined();
     expect(original.customMcpServers![0].env!["BAZ"]).toBeUndefined();
@@ -809,6 +925,7 @@ describe("settings cloning helpers", () => {
     clone.jira.host = "new-host";
     clone.agents.qualityAssurance.enabled = false;
     clone.agents.qualityAssurance.sprintCompletion.agentPresetIds.push("qa-extra");
+    clone.agents.selfReflection.qualityAssurance.criteria.push({ id: "scope_control", label: "Scope control", prompt: "Stay scoped.", threshold: 0.8 });
     clone.agents.routing.taskCoding.orchestratorAgentPresetIds.push("c");
     clone.customMcpServers![0].headers!["X-New"] = "123";
 
@@ -817,6 +934,7 @@ describe("settings cloning helpers", () => {
     expect(original.jira.host).toBe("h");
     expect(original.agents.qualityAssurance.enabled).toBe(true);
     expect(original.agents.qualityAssurance.sprintCompletion.agentPresetIds).toEqual(["qa-sprint", "qa-peer"]);
+    expect(original.agents.selfReflection.qualityAssurance.criteria).toHaveLength(1);
     expect(original.agents.routing.taskCoding.orchestratorAgentPresetIds).toEqual(["a", "b"]);
     expect(original.customMcpServers![0].headers!["X-New"]).toBeUndefined();
   });

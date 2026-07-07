@@ -31,6 +31,7 @@ can read on demand.
 - **Worker** — the execution context that runs a provider for a task, in Docker (default) or on the host.
 - **Agent preset** — a reusable persona (instructions, routing hints) a worker adopts for an invocation type.
 - **Memory** — short-term sprint memory and long-term project memory, scoped into prompts.
+- **Persistent skill storage** — optional per-agent reusable skill storage. Enabled agents should search existing skills before creating a new one; storage mounts live outside the project workspace.
 - **Attention item** — anything needing a human decision: a merge conflict, a CI failure, a plan to approve.
 - **Watch loop** — the continuous loop that advances dependencies, syncs worker state, and runs the merge protocol.
 

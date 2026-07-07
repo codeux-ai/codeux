@@ -12,6 +12,7 @@ const VALID_PROVIDER_IDS = new Set<ProviderId>([
   "qwen-code",
   "opencode",
   "antigravity",
+  "mockup-cli",
 ]);
 
 function normalizeProviderId(value: string | undefined): ProviderId | undefined {

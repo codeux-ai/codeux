@@ -45,9 +45,13 @@ Registered schemas:
 ### Tool list handler
 Returns enabled tool definitions from `src/contracts/mcp-tool-definitions.ts`, filtered by dashboard `mcpTools` settings.
 
+When a worker MCP client advertises an agent preset, Code UX resolves that agent's explicit MCP access policy before listing tools. Unknown or malformed agent identities fail closed: `list_tools` returns no built-in Code UX tools, and `call_tool` returns MCP `MethodNotFound`.
+
 ### Tool call handler
 - Resolves tool name.
 - Verifies tool is enabled in `mcpTools`.
+- Applies the same per-agent Code UX access policy used by `list_tools`.
+- Validates tool arguments against the registered JSON schema before dispatch.
 - Dispatches through typed `ToolRegistry` registration in `src/api/mcp/tool-registry.ts`.
 - Wraps unknown tool as MCP `MethodNotFound`.
 - Normalizes runtime/API errors into `isError` response.
@@ -68,10 +72,26 @@ This allows all log lines emitted during a tool call to share a single `correlat
 - Typed registry layer: `src/api/mcp/tool-registry.ts`
   - Defines strict argument interfaces for every MCP tool.
   - Provides `register` and `dispatch` APIs with compile-time tool/argument matching.
+- Management dispatch target: `ManagementToolHandler`
+  - Routes dedicated management tools such as `manage_projects`, `manage_memory`, and `manage_skills` to domain action classes.
+  - Routes retrieval tools such as `search_knowledge` and `search_skills` separately, so agents can receive retrieval without broader management authority.
+  - Applies stateful approval fingerprints to destructive management actions before mutation.
 - Core dispatch target: `CoreToolHandler`
 - Agent dispatch target: `AgentToolHandler`
 
 This split keeps tool contracts stable while allowing orchestration internals to evolve independently.
+
+## Persistent Skill Tools
+
+Persistent skills use `SkillService` as the backend boundary. The MCP layer does not write markdown files into project workspaces and does not duplicate persistence logic; it validates payloads, formats concise responses, and calls the service.
+
+Runtime behavior:
+
+- `manage_skills` is a Code UX management tool in the `agents_memory` category. It supports storage CRUD, skill markdown import/export, agent storage attachment management, and the skill-authoring prompt.
+- `delete_storage`, `reset_storage`, and `delete_skill` return approval-required envelopes on first call and only mutate on the matching confirmed call.
+- `search_skills` is registered as a distinct retrieval tool in the same category. Per-agent MCP policy can disable `manage_skills` while leaving `search_skills` enabled.
+- Search scoping is project-owned. `storageId` limits retrieval to one storage; otherwise `agentPresetId` limits retrieval to the agent's attached storages; otherwise all project storages are eligible.
+- Search results return ranked summaries with IDs and metadata. Full markdown retrieval remains behind `manage_skills` (`export_markdown` or `get_skill` with `includeContent: true`).
 
 ## Custom MCP Defaults
 
@@ -87,6 +107,16 @@ Code UX seeds Playwright MCP as a default custom MCP server:
 The built-in `code_ux` MCP tool surface is controlled separately from custom MCP servers. Agent presets store MCP access in `mcp_access_json`: `codeUxEnabled` controls the built-in Code UX tools, while `linkedServerIds` selects custom MCP servers such as `playwright`.
 
 By default, the built-in `Worker` and `Project manager` agents link the `playwright` server and keep `code_ux` enabled. Generated task-coding roster agents created by Project Setup use the same default link when they are first created. Existing agents keep user-edited MCP access selections, so setup and sync do not overwrite custom server choices after creation.
+
+## Internal Test Provider
+
+`mockup-cli` is an internal test-only CLI provider. Settings sanitization, provider defaults, and invocation routing preserve it when an explicit system or project settings payload includes it, so tests can route task coding, CI fixes, and merge-conflict repair through a deterministic mock provider. It has no credential or auth-mount requirement, uses the `default` model, and is disabled by default.
+
+The mock runtime executes in both host and Docker workspaces through a self-contained Node command, so it does not install packages or call a provider API. Prompts can include deterministic directives such as `mockup-cli:write <path> :: <content>`, `mockup-cli:append <path> :: <content>`, `mockup-cli:replace <path> :: <old> => <new>`, `mockup-cli:run <command>`, and `mockup-cli:fail`. Validation commands are parsed into explicit argv values and executed without shell interpretation. File paths are resolved inside the prepared provider workspace; attempts to write outside that workspace fail. Merge-conflict test prompts can use `mockup-cli:conflict <path> :: <content>` or mention a merge-conflict task to produce deterministic conflict markers.
+
+Mock usage telemetry is reported as zero-token, `unsupported` mock telemetry with a stable native session id and a sanitized assistant transcript.
+
+Normal dashboard onboarding and provider selection surfaces use public provider lists and do not advertise `mockup-cli`. The default Playwright MCP server also remains linked only to public local CLI providers unless a settings payload explicitly opts into a different provider list.
 
 ## Transport Model
 
