@@ -57,7 +57,7 @@ const pinnedOrder = new Map([
 
 function parseArgs(argv) {
   const result = {
-    marketingSrc: process.env.CODEUX_MARKETING_SRC || "/home/pierre/codeuxweb/src",
+    marketingSrc: process.env.CODEUX_MARKETING_SRC || docsRoot,
     check: false,
     dryRun: false,
   };
@@ -88,7 +88,7 @@ Generates the marketing site's docs registry, MDX files, and TanStack route file
 from this repo's docs-web/ tree.
 
 Defaults:
-  --marketing-src /home/pierre/codeuxweb/src
+  --marketing-src docs-web
 `);
 }
 
