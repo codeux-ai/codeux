@@ -512,32 +512,20 @@ export const DonutCard: FunctionComponent<{
                 className="h-full w-full overflow-visible"
                 aria-hidden="true"
               >
-                <defs>
-                  <filter id="stats-donut-glow" x="-40%" y="-40%" width="180%" height="180%">
-                    <feGaussianBlur stdDeviation="8" result="blur" />
-                    <feColorMatrix in="blur" type="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 0.28 0" />
-                    <feBlend in="SourceGraphic" />
-                  </filter>
-                </defs>
-                <circle cx="120" cy="120" r="103" fill="rgba(255,255,255,0.035)" stroke="rgba(255,255,255,0.08)" />
+                <circle cx="120" cy="120" r="103" fill="var(--stats-surface-subpanel)" stroke="var(--stats-border-hairline)" />
                 {slices.map((slice, index) => {
-                  const radians = ((slice.midAngle - 90) * Math.PI) / 180;
-                  const offsetX = hoveredIndex === index ? Math.cos(radians) * 7 : 0;
-                  const offsetY = hoveredIndex === index ? Math.sin(radians) * 7 : 0;
                   return (
                     <path
                       data-donut-slice
                       key={slice.label}
                       d={slice.path}
                       fill={slice.color}
-                      stroke="rgba(255,255,255,0.12)"
-                      strokeWidth={hoveredIndex === index ? 2.2 : 1.1}
-                      filter={hoveredIndex === index ? "url(#stats-donut-glow)" : undefined}
+                      stroke="var(--stats-surface-panel)"
+                      strokeWidth={hoveredIndex === index ? 2 : 1}
                       style={{
-                        transform: `translate(${offsetX}px, ${offsetY}px)`,
                         transformOrigin: "120px 120px",
-                        opacity: hoveredIndex === null || hoveredIndex === index ? 0.86 : 0.38,
-                        transition: prefersReducedMotion ? "none" : "transform 220ms ease, opacity 220ms ease, stroke-width 220ms ease",
+                        opacity: hoveredIndex === null || hoveredIndex === index ? 0.9 : 0.38,
+                        transition: prefersReducedMotion ? "none" : "opacity 180ms ease, stroke-width 180ms ease",
                       }}
                       onMouseEnter={() => setHoveredIndex(index)}
                       onMouseLeave={() => setHoveredIndex(null)}
@@ -569,7 +557,7 @@ export const DonutCard: FunctionComponent<{
                 <div
                   key={segment.label}
                   data-donut-item
-                  className={`${SUBPANEL_CLASS} transition-[border-color,background-color,transform] duration-200 ${hoveredIndex === index ? "translate-x-1 border-[color:var(--stats-border-strong)] bg-[color:var(--stats-surface-subpanel-hover)]" : ""}`}
+                  className={`${SUBPANEL_CLASS} transition-[border-color,background-color] duration-150 ${hoveredIndex === index ? "border-[color:var(--stats-border-strong)] bg-[color:var(--stats-surface-subpanel-hover)]" : ""}`}
                   onMouseEnter={() => setHoveredIndex(index)}
                   onMouseLeave={() => setHoveredIndex(null)}
                 >
@@ -666,7 +654,7 @@ export const PurposeRibbon: FunctionComponent<{
                   </div>
                 </div>
                 {isDominant ? (
-                  <div className={`px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-[color:var(--stats-signal-text)] ${CHIP_CLASS}`}>
+                  <div className={`px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-[color:var(--stats-detail-color)] ${CHIP_CLASS}`}>
                     Dominant
                   </div>
                 ) : null}
