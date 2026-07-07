@@ -829,6 +829,7 @@ export interface GitSettings {
   featureBranchPrefix: string;
   sprintBranchScheme: string;
   sprintKeyPrefix: string;
+  taskPrTitleScheme: string;
   prDescription: PrDescriptionSettings;
 }
 
@@ -1092,9 +1093,11 @@ export interface AgentSettings {
 }
 
 export type BackgroundPattern = "NONE" | "DIAGONAL_LINES" | "HORIZONTAL_LINES" | "VERTICAL_LINES" | "CROSSHATCH" | "DOTS" | "DIAMONDS" | "HEXAGONS" | "TRIANGLES" | "WAVES" | "NOISE";
+export type DashboardExperienceMode = "EASY" | "STANDARD" | "EXPERT";
 
 export interface AppearanceSettings {
   navigationMode: "DOCK" | "SIDEBAR";
+  experienceMode: DashboardExperienceMode;
   theme: "LIGHT" | "DARK" | "SYSTEM";
   reducedMotion: "AUTO" | "REDUCE" | "NONE";
   backgroundMode: "ANIMATED" | "STATIC";

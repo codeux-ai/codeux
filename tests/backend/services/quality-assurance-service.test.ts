@@ -3264,7 +3264,14 @@ describe("QualityAssuranceService", () => {
     const service = new QualityAssuranceService({
       projectManagementRepository: {
         updateTask,
-        getSprint: vi.fn().mockReturnValue(null),
+        getSprint: vi.fn().mockReturnValue({
+          id: "sprint-40",
+          number: 40,
+          slug: "title-formatting",
+          name: "Title formatting",
+          goal: "Keep PR titles consistent",
+          linkedIssues: [{ issueKey: "CODUX-40" }],
+        }),
       } as any,
       executionRepository: {
         getLatestProviderInvocationUsageBySession: vi.fn().mockReturnValue(null),
@@ -3298,6 +3305,7 @@ describe("QualityAssuranceService", () => {
           ...DEFAULT_DASHBOARD_SETTINGS.git,
           autoCreatePr: true,
           githubMode: "REMOTE",
+          taskPrTitleScheme: "({sprint_tag}) {task_key}: {task_title}",
         },
         memory: {
           ...DEFAULT_DASHBOARD_SETTINGS.memory,
@@ -3320,7 +3328,7 @@ describe("QualityAssuranceService", () => {
       .mockResolvedValue("https://github.com/org/repo/pull/1911");
 
     const taskShape = {
-      id: "T1",
+      id: "Task 1",
       record_id: "task-record-1",
       project_id: "project-1",
       sprint_id: "sprint-1",
@@ -3359,6 +3367,8 @@ describe("QualityAssuranceService", () => {
 
     expect((service as any).prService.resolveOrCreateFeaturePr).toHaveBeenCalledWith(
       expect.objectContaining({
+        taskId: "Task 1",
+        title: "(CODUX-40) Task 1: Fix thing",
         featureBranch: "feature/sprint-1",
         workerBranch: "task/feature-sprint-1-t1-codex",
       }),

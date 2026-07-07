@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { cloneDefaults, sanitizeSettings } from "../../../src/repositories/settings-sanitizer.js";
 import { cloneSystemSettings } from "../../../dashboard/src/v2/lib/settings/project-overrides.js";
-import { buildDefaultSystemSettings } from "../../../src/services/settings-resolution-service.js";
+import {
+  buildDefaultSystemSettings,
+  resolveDashboardSettings,
+  sanitizeProjectSettings,
+} from "../../../src/services/settings-resolution-service.js";
 
 describe("settings-sanitizer", () => {
   it("clones defaults using resolved external hints", () => {
@@ -136,6 +140,7 @@ describe("settings-sanitizer", () => {
     expect(settings.automationLevel).toBe("SEMI_AUTO");
     expect(settings.automationInterventions.autoApprovePlan).toBe(true);
     expect(settings.appearance.navigationMode).toBe("SIDEBAR");
+    expect(settings.appearance.experienceMode).toBe("EXPERT");
     expect(settings.aiProvider.provider).toBe("jules");
     expect(settings.git.githubMode).toBe("REMOTE");
     expect(settings.ciIntelligence.waitForJulesCiAutofix).toBe(false);
@@ -283,6 +288,7 @@ describe("settings-sanitizer", () => {
     const settings = sanitizeSettings({
       appearance: {
         navigationMode: "DOCK",
+        experienceMode: "STANDARD",
         backgroundMode: "STATIC",
         animatedBackground: "neon-dreams",
         staticBackgroundColor: "#123456",
@@ -292,11 +298,32 @@ describe("settings-sanitizer", () => {
     });
 
     expect(settings.appearance.navigationMode).toBe("DOCK");
+    expect(settings.appearance.experienceMode).toBe("STANDARD");
     expect(settings.appearance.backgroundMode).toBe("STATIC");
     expect(settings.appearance.animatedBackground).toBe("neon-dreams");
     expect(settings.appearance.staticBackgroundColor).toBe("#123456");
     expect(settings.appearance.backgroundImage).toBe("data:image/png;base64,abc123");
     expect(settings.appearance.backgroundPattern).toBe("DIAGONAL_LINES");
+  });
+
+  it("preserves dashboard experience mode through project and effective settings", () => {
+    expect(sanitizeProjectSettings({}).appearance.experienceMode).toBe("EXPERT");
+    expect(sanitizeProjectSettings({ appearance: { experienceMode: "invalid" } }).appearance.experienceMode).toBe("EXPERT");
+
+    const systemSettings = buildDefaultSystemSettings({ env: {}, settingsJson: {}, resolved: {} });
+    systemSettings.defaults.appearance.experienceMode = "STANDARD";
+
+    const resolved = resolveDashboardSettings({
+      systemSettings,
+      projectOverride: {
+        appearance: {
+          experienceMode: "EASY",
+        },
+      },
+    });
+
+    expect(resolved.settings.appearance.experienceMode).toBe("EASY");
+    expect(resolved.sources["appearance.experienceMode"]).toBe("project");
   });
 
   it("normalizes legacy orchestrator provider routing to agent routing", () => {
@@ -318,11 +345,13 @@ describe("settings-sanitizer", () => {
   it("drops unsafe appearance background image and unknown pattern values", () => {
     const settings = sanitizeSettings({
       appearance: {
+        experienceMode: "standart",
         backgroundImage: "javascript:alert(1)",
         backgroundPattern: "SPIRAL",
       },
     });
 
+    expect(settings.appearance.experienceMode).toBe("EXPERT");
     expect(settings.appearance.backgroundImage).toBe(null);
     expect(settings.appearance.backgroundPattern).toBe("NONE");
   });

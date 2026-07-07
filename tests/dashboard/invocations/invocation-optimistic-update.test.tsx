@@ -1,6 +1,7 @@
 /** @vitest-environment happy-dom */
 import { describe, it, expect } from "vitest";
-import { renderHook, act, waitFor } from "@testing-library/preact";
+import { renderHook, act } from "@testing-library/preact";
+import { getActiveInvocationPollingKey } from "../../../dashboard/src/v2/hooks/use-chat-page-data.js";
 import { useInvocationPaneData } from "../../../dashboard/src/v2/hooks/use-invocation-pane-data.js";
 import { useMessageCache } from "../../../dashboard/src/v2/hooks/useMessageCache.js";
 import type { ExecutionInvocationRecord } from "../../../dashboard/src/v2/types.js";
@@ -38,8 +39,8 @@ const buildServerInvocation = (createdAt: string): ExecutionInvocationRecord => 
   updatedAt: createdAt,
 });
 
-describe("invocation optimistic updates", () => {
-  it("shows optimistic invocation immediately and reconciles when server record arrives", async () => {
+describe("invocation server snapshots", () => {
+  it("exposes only invocation records from server snapshots", () => {
     const { result } = renderHook(() => {
       const cache = useMessageCache();
       return useInvocationPaneData({
@@ -48,21 +49,31 @@ describe("invocation optimistic updates", () => {
       });
     });
 
+    expect(result.current.invocations).toEqual([]);
+    expect(Object.keys(result.current).some((key) => key.toLowerCase().includes("optimistic"))).toBe(false);
+
     const sentAt = new Date().toISOString();
-    act(() => {
-      result.current.addOptimisticInvocation({ projectId: "project-1", createdAt: sentAt });
-    });
-
-    await waitFor(() => {
-      expect(result.current.invocations).toHaveLength(1);
-    });
-    expect(result.current.invocations[0].id.startsWith("optimistic:")).toBe(true);
+    const invocation = buildServerInvocation(sentAt);
 
     act(() => {
-      result.current.setInvocationsSnapshot([buildServerInvocation(sentAt)]);
+      result.current.setInvocationsSnapshot([invocation], 2);
     });
 
-    expect(result.current.invocations).toHaveLength(1);
-    expect(result.current.invocations[0].id).toBe("invocation-1");
+    expect(result.current.invocations).toEqual([invocation]);
+    expect(result.current.serverInvocationCount).toBe(1);
+    expect(result.current.invocationTotalCount).toBe(2);
+    expect(result.current.hasMoreInvocations).toBe(true);
+    expect(result.current.invocationIndex.get("invocation-1")).toEqual(invocation);
+  });
+
+  it("polls only running invocation records", () => {
+    const invocations: Pick<ExecutionInvocationRecord, "id" | "status">[] = [
+      { id: "inv-completed", status: "completed" },
+      { id: "inv-running-b", status: "running" },
+      { id: "inv-queued", status: "queued" },
+      { id: "inv-running-a", status: "running" },
+    ];
+
+    expect(getActiveInvocationPollingKey(invocations)).toBe("inv-running-a,inv-running-b");
   });
 });

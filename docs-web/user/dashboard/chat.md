@@ -1,13 +1,29 @@
 # Chat
 
-The **Chat** page (`/chat`) is a thread-based conversation surface that lets you talk to agents — both for free-form Q&A and to inspect MCP tool invocations.
+The **Chat** page (`/chat`) is a thread-based conversation surface that lets you talk to agents for project-backed Q&A, inspect execution invocation transcripts and MCP tool invocations, and get local onboarding help before any project exists.
 
 ## Layout
 
-- **Left rail** — Two tabs:
+- **No-project assistant** — When no project is selected, `/chat` shows a local onboarding assistant instead of a project-required empty state. It presents the Code UX assistant avatar, five quick bubbles, local replies, and explicit buttons for Add Project, Projects, Settings, onboarding, and docs. It does not create conversation threads, persist messages, or call project-scoped chat APIs.
+- **Floating assistant widget** — Every dashboard subpage except `/chat` has a compact assistant entry point in the corner. Submitting text opens `/chat` with that text as a draft. If a project is selected, the draft appears in the normal composer; if no project is selected, it becomes a local no-project assistant turn. Nothing is sent automatically.
+- **Left rail** — In project chat, two tabs:
   - **Threads** — Conversation threads scoped to the active project.
-  - **Invocations** — A historical log of MCP `CallTool` invocations, useful for debugging integrations.
+  - **Invocations** — A historical log of server-created execution invocations, including provider-backed agent runs and MCP `CallTool` activity.
 - **Main panel** — The active thread (or invocation), rendered as a chat transcript with user, assistant, and tool messages. Markdown is rendered with `marked`, including code blocks.
+
+The floating widget uses the configured Dashboard Reply agent avatar when a selected project has one. If no Dashboard Reply preset or project is available, it falls back to the generated Code UX avatar.
+
+## No-project assistant
+
+The no-project assistant is local onboarding guidance for the browser page. Its five quick bubbles are:
+
+- Add my first project.
+- Build a desktop app.
+- Build a web app.
+- Explain Code UX.
+- Change settings.
+
+Quick bubbles only add local user/assistant turns. Actions such as creating a project, opening settings, restarting onboarding, or reading docs remain explicit buttons and continue through the existing dashboard flows. Provider-backed chat is project-scoped; it starts only after a project exists and a persistent thread can be created or selected.
 
 ## Threads
 
@@ -25,9 +41,29 @@ To start a new thread, click **+ New thread**. To change the responding agent, o
 
 Each post is a runtime operation that honors the explicit route chosen (worker route, virtual provider route, automatic live-worker pickup, or fallback). The dashboard exposes in-flight state locally, allowing you to cancel active thread turns or invocations. Failed invocation restarts preserve the failed invocation transcript and expose the existing sanitized error message with a retry action.
 
+After you send a message, the thread transcript updates from the server's returned chat message. The **Invocations** rail updates separately from persisted server invocation records and realtime refreshes, so it shows only backend-confirmed invocation rows. The dashboard no longer inserts a frontend-only optimistic invocation placeholder while the backend is still creating the real row.
+
 In 3D Chat, idle quick actions send project-scoped prompts directly through the active thread. **Web App** and **Desktop App** set up the currently selected project using its current techstack setting; an unassigned existing project stays `None`. They do not create or import a new Code UX project.
 
 Planning messages can include a rich sprint status card. When Code UX can match the message to loaded live project data, the card is backed by the current task records and execution snapshot, so it updates as tasks move from queued to running, completed, failed, blocked, or quota-waiting. It shows the sprint key/name, request/task/run materialization, overall progress such as `0/7 · 0%`, queued task count, and a compact task list. If either task records or the execution snapshot are still loading, the chat keeps the generic planning status card until both live records are available for the active project.
+
+Virtual chat replies can persist structured prompt suggestions for quick next steps. JSON-mode providers may return optional `suggestions` alongside `replyMarkdown` and `action`; Code UX stores valid entries on the assistant/system message as `metadata.promptSuggestions` after trimming strings, dropping malformed entries, and capping the list at six. Suggestions appear as clickable tags below the normal markdown reply, so the transcript remains visible. Clicking a tag fills and focuses the composer with that prompt for review or editing; it does not auto-send. Invocation transcripts remain read-only and do not become composer actions.
+
+For integrators, the stored metadata uses `metadata.promptSuggestions` with `label`, `prompt`, and optional `icon` fields:
+
+```json
+{
+  "promptSuggestions": [
+    {
+      "label": "Inspect worker logs",
+      "prompt": "Inspect the latest worker logs and summarize any failing step.",
+      "icon": "terminal"
+    }
+  ]
+}
+```
+
+Supported generic icon identifiers are `sparkles`, `search`, `edit`, `code`, `terminal`, `bug`, `check`, `play`, `refresh`, `settings`, `file`, `folder`, `git-branch`, `git-pull-request`, `database`, `shield`, `book-open`, `message-circle`, `list-checks`, `rocket`, `zap`, `lightbulb`, `clipboard`, `download`, `upload`, `eye`, `package`, `server`, `clock`, and `help-circle`.
 
 Normal thread messages can also render external work references as rich cards without changing the stored transcript. The dashboard recognizes Jira issues, GitHub issues and pull requests, and GitLab issues and merge requests from explicit message metadata first, then from JSON-looking message bodies with the same fields. Recognized cards show the provider, key or number, title, status, safe external link, repository or project path, labels, assignee or author, and a short preview. Malformed JSON or unsupported providers remain ordinary markdown instead of being dropped.
 
@@ -35,22 +71,25 @@ Normal thread messages can also render external work references as rich cards wi
 
 Long threads accumulate context cost. Click **Compact** to:
 
-1. Summarise the thread transcript via the assigned provider.
-2. Replace the prior session memory with the compacted summary.
-3. Continue the conversation from a smaller starting point.
+1. Ask the assigned non-Jules CLI provider to run its native compact command inside the current provider session.
+2. Store the provider's compaction output on the thread for audit and recovery.
+3. Continue the conversation in the same compacted provider session with a smaller context, preserving that native session id on the thread when the provider returns one.
+
+Code UX does not create a separate `:compaction` chat session for CLI providers. If a thread has no saved active session, providers with a logical continue/resume fallback can still compact through that same thread session; providers that require a concrete native session ask you to send a message in the thread before compacting.
 
 ## Invocations
 
-The **Invocations** tab is a structured log of every `CallTool` MCP invocation routed through this project:
+The **Invocations** tab is a structured log of server-created execution invocations routed through this project:
 
-- **Request** — tool name, arguments (truncated for readability), invoking connection.
-- **Response** — output payload or error.
+- **Summary** — provider/model, purpose, status, and token usage when available.
+- **Transcript** — prompt, assistant, reasoning, and tool messages captured for that invocation.
+- **MCP activity** — tool name, arguments, response payload, invoking connection, or error when the invocation came from MCP.
 - **Timing** — start, end, duration.
 - **Linked task / sprint** — when an invocation arose from sprint orchestration.
 
-Use this for debugging your MCP client integrations — for example to see exactly what arguments your LLM is passing to tools like `manage_memory` or `manage_settings`.
+Use this for debugging provider runs and MCP client integrations, for example to inspect agent transcripts or see exactly what arguments your LLM is passing to tools like `manage_memory` or `manage_settings`.
 
-Invocation transcripts use the same live sprint status card as thread messages when planning metadata links them to a sprint. This means a planning invocation and its related chat message should show consistent task progress without a separate refresh control.
+Invocation transcripts use the same live sprint status card as thread messages when planning metadata links them to a sprint. This means a planning invocation and its related chat message should show consistent task progress without a separate refresh control. Parsed provider conversation turns stream into running invocation transcripts for provider-backed planning, QA review, dashboard/chat replies, CI repair, merge-conflict repair, memory remediation, setup, and task coding; text-only provider output is appended when the run completes.
 
 Invocation transcripts use the same external-reference cards as thread messages for recognized Jira, GitHub, and GitLab payloads, including JSON payloads that would otherwise appear as raw punctuation-heavy output. This keeps linked work readable while preserving the original backend metadata and message content.
 

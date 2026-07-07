@@ -56,18 +56,18 @@ const providerDefinitions: DashboardChatProviderSetupDefinition[] = [
 ].map((kind) => ({
   kind: kind as ChatProviderKind,
   label: kind === "microsoft-teams" ? "Microsoft Teams" : kind === "imessage" ? "iMessage" : kind.charAt(0).toUpperCase() + kind.slice(1),
-  defaultBridgeMode: kind === "discord" ? "webhook" : "openclaw",
+  defaultBridgeMode: kind === "discord" ? "webhook" : "managed_bridge",
   ingressUrlTemplate: "http://localhost/api/chat-providers/ingress/{connectionId}",
   bridgeModes: [
     {
-      mode: "openclaw",
-      label: "OpenClaw bridge",
-      integration: "openclaw_core",
+      mode: "managed_bridge",
+      label: "Managed bridge",
+      integration: "managed_core",
       setupFields: [
-        { key: "workspaceId", label: "OpenClaw workspace", type: "string", required: false },
+        { key: "workspaceId", label: "Connector workspace", type: "string", required: false },
       ],
       secretFields: [
-        { key: "openclawApiKey", label: "OpenClaw API key", required: true },
+        { key: "bridgeApiKey", label: "Bridge API key", required: true },
       ],
     },
     {
@@ -88,19 +88,19 @@ const slackConnection: DashboardChatProviderConnectionRecord = {
   id: "conn-slack",
   providerKind: "slack",
   displayName: "Slack Bridge",
-  bridgeMode: "openclaw",
+  bridgeMode: "managed_bridge",
   status: "active",
   enabled: true,
   setup: { workspaceId: "workspace-1" },
   credentials: [
-    { key: "openclawApiKey", label: "OpenClaw API key", configured: true, redactedValue: "••••••••" },
+    { key: "bridgeApiKey", label: "Bridge API key", configured: true, redactedValue: "••••••••" },
   ],
   ingressUrl: "http://localhost/api/chat-providers/ingress/conn-slack",
   setupHints: {
-    bridgeModeLabel: "OpenClaw bridge",
-    integration: "openclaw_core",
+    bridgeModeLabel: "Managed bridge",
+    integration: "managed_core",
     requiredSetupFields: [],
-    requiredSecretFields: ["openclawApiKey"],
+    requiredSecretFields: ["bridgeApiKey"],
   },
   createdAt: "2026-01-01T00:00:00.000Z",
   updatedAt: "2026-01-01T00:00:00.000Z",
@@ -209,16 +209,16 @@ const createState = (selectedIntegration: string | null) => ({
   },
 });
 
-describe("SettingsIntegrationsPanel chat providers", () => {
+describe("SettingsIntegrationsPanel chat connectors", () => {
   afterEach(() => {
     cleanup();
   });
 
-  it("surfaces all chat providers in the Providers integration group", async () => {
+  it("surfaces all chat connectors in the Chat Connectors integration group", async () => {
     const state = createState(null);
     render(<SettingsIntegrationsPanel state={state as any} />);
 
-    await waitFor(() => expect(screen.getByText("PROVIDERS")).not.toBeNull());
+    await waitFor(() => expect(screen.getByText("CHAT CONNECTORS")).not.toBeNull());
     for (const label of ["WhatsApp", "iMessage", "Telegram", "Slack", "Microsoft Teams", "Discord"]) {
       expect(screen.getByText(label)).not.toBeNull();
     }
@@ -231,12 +231,12 @@ describe("SettingsIntegrationsPanel chat providers", () => {
     const state = createState("slack");
     render(<SettingsIntegrationsPanel state={state as any} />);
 
-    await waitFor(() => expect(screen.getByText("Slack Provider")).not.toBeNull());
+    await waitFor(() => expect(screen.getByText("Slack Connector")).not.toBeNull());
     expect(screen.getByText("Slack setup guidance")).not.toBeNull();
     expect((screen.getByLabelText("Slack Bridge display name") as HTMLInputElement).value).toBe("Slack Bridge");
     expect(screen.getByRole("radiogroup", { name: "Slack Bridge bridge mode" })).not.toBeNull();
     expect((screen.getByLabelText("Slack Bridge ingress URL") as HTMLInputElement).value).toBe("http://localhost/api/chat-providers/ingress/conn-slack");
-    expect((screen.getByLabelText("Slack Bridge OpenClaw API key") as HTMLInputElement).value).toBe("");
+    expect((screen.getByLabelText("Slack Bridge Bridge API key") as HTMLInputElement).value).toBe("");
     expect(screen.getByText(/configured\. Enter a replacement only when rotating it\./i)).not.toBeNull();
 
     expect(screen.getByText("Shared-channel routing")).not.toBeNull();

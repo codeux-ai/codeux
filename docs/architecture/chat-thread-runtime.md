@@ -56,6 +56,8 @@ Virtual chat failures are terminal for that dashboard turn:
 
 Structured dashboard replies parse provider output defensively. Some CLI providers emit bootstrap logs around a JSON envelope and place the requested strict JSON inside an envelope field such as `response`. The chat runtime extracts fenced JSON, bare JSON, and nested provider-envelope `response` payloads before deciding a parse retry is required. While structured parsing is still pending, provider execution does not mark the parent execution invocation completed; the chat management layer finalizes it only after the structured reply is accepted or the retry flow has failed.
 
+JSON-mode dashboard replies may also include prompt suggestions for quick next steps. The accepted reply envelope remains backward compatible with `{ replyMarkdown, action }` and optionally accepts either `suggestions` or `promptSuggestions`, where each suggestion has `label`, `prompt`, and optional stable string `icon`/`id` fields. The management parser trims string fields, drops entries without non-empty labels and prompts, caps the stored list to six, and persists valid suggestions on the visible assistant/system message as `metadata.promptSuggestions`. Plain markdown MCP-native replies are not parsed for suggestions.
+
 ### First-Message Replay & Worker Switching
 
 A thread's conversation history is independent of the provider processing it. If a user switches the active worker mid-conversation (e.g., from a Claude CLI to a connected Gemini MCP worker), the `ChatThreadRuntimeService` marks the `runtimeState.replayRequired` flag as `true`.
@@ -85,16 +87,20 @@ Dashboard-only rich widgets are suppressed for external channels because chat br
 
 Long-running conversations accumulate large prompt histories, risking context window exhaustion or unbounded token costs. The chat runtime introduces a compact-conversation action (`compactThreadSession`).
 
-When triggered on a virtual chat route, the system runs a dedicated execution invocation against the selected virtual chat worker and asks it to produce a compacted markdown handoff of the full thread history.
+When triggered on a virtual CLI chat route for non-Jules providers, the system runs a `chat_compaction` execution invocation against the selected provider's active native session. The provider runner keeps the Code UX logical session id as the thread id, passes the saved native session id as `continueSessionId` when one exists, and sends the CLI's native compact command through the normal resume/continue path (`/compact` or `/compress`, depending on provider). It does not create a separate `<thread-id>:compaction` summarization session or replay the full transcript for compaction.
+
+If persisted runtime state has no saved native session id, only providers with a documented logical continuation fallback use the thread id as the continuation handle. Providers that require a concrete native session id fail the compact action with an actionable error instead of starting an unrelated fresh compaction session.
 
 When triggered on a connected MCP chat route, the dashboard now sends a hidden control message to the selected live worker, waits for that worker to answer with a hidden compaction result, and then stores the returned markdown as the thread handoff summary. Those internal control messages are excluded from visible thread history, badge counts, previews, and sidebar pending totals.
 
 The compact action then:
-- stores that generated handoff in `runtimeState.compactionSummary`
-- resets the native provider `sessionIds` to empty
-- sets `replayRequired` to `true`
+- stores the provider's compaction output in `runtimeState.compactionSummary`
+- preserves the resolved native provider `sessionIds` for virtual CLI routes after native compaction, including the active native session id when one exists and the logical continuation fallback session id when the provider resumes through the thread id
+- refreshes virtual route metadata (`routeKind`, `virtualProvider`, and `modelLabel`) to match the provider that performed compaction
+- leaves `sessionIds` empty and keeps `replayRequired` enabled only when no compacted provider session can be continued
+- sets `replayRequired` only when a route needs to restart from a stored handoff
 
-The original visible `ConversationMessageRecord` history remains intact in the dashboard, but the next fresh session, whether virtual or connected, replays from the compacted summary plus only the messages created after that summary was generated.
+The original visible `ConversationMessageRecord` history remains intact in the dashboard. Virtual CLI routes continue from the compacted provider-native session, while any route that must start fresh can replay from the compacted summary plus only the messages created after that summary was generated.
 
 
 ### Repository Read Optimizations
@@ -114,7 +120,7 @@ Thread and message list queries use explicit bounded pagination even when caller
 
 ### Virtual Provider Management Actions
 
-When operating in virtual provider mode, management actions follow a structured execution path. The `ChatManagementActionService` leverages `StructuredProviderResponseService` to prompt the virtual provider for a strict JSON payload containing `{ replyMarkdown, action }`.
+When operating in virtual provider mode, management actions follow a structured execution path. The `ChatManagementActionService` leverages `StructuredProviderResponseService` to prompt the virtual provider for a strict JSON payload containing `{ replyMarkdown, action }` plus optional prompt suggestions.
 
 If an action is proposed, it is evaluated through the shared `ManagementToolHandler`, aligning the virtual chat's business logic exactly with the connected MCP workers. If the action is approval-gated (e.g., destructive actions), the service returns a non-mutating confirmation result alongside the serialized payload, awaiting user confirmation without altering project state. All exchanges—prompts, JSON parsing results, and execution envelopes—are durably recorded in the invocation history.
 

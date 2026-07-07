@@ -229,7 +229,7 @@ const BASE_CATEGORY_TERMS: Record<CategoryId, string[]> = {
     "microsoft teams",
     "discord",
     "imessage",
-    "openclaw",
+    "managed_bridge",
     "webhook",
     "native bridge",
     "bridge token",

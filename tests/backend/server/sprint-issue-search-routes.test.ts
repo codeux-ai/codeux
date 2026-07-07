@@ -54,7 +54,7 @@ describe("sprint issue search routes", () => {
     } as unknown as DashboardDependencies);
 
     const response = await request(app).get(
-      "/api/projects/project-1/jira/search?projectKey=OPS&search=login%20failure&issueKey=OPS-42&status=in_progress&assignee=me&assigneeText=alice&reporterText=bob&issueType=Bug&priority=High&labels=triage,backend&updatedAfter=2026-05-01&updatedBefore=2026-05-31&sortField=priority&sortDirection=asc&limit=250"
+      "/api/projects/project-1/jira/search?projectKey=OPS&search=login%20failure&issueKey=OPS-42&status=in_progress&statusNames=Ready%20for%20QA,Blocked&assignee=me&assigneeText=alice&reporterText=bob&issueType=Bug&priority=High&labels=triage,backend&updatedAfter=2026-05-01&updatedBefore=2026-05-31&sortField=priority&sortDirection=asc&limit=250"
     );
 
     expect(response.status).toBe(200);
@@ -63,6 +63,7 @@ describe("sprint issue search routes", () => {
       search: "login failure",
       issueKey: "OPS-42",
       status: "in_progress",
+      statusNames: ["Ready for QA", "Blocked"],
       assignee: "me",
       assigneeText: "alice",
       reporterText: "bob",
@@ -75,6 +76,20 @@ describe("sprint issue search routes", () => {
       sortDirection: "asc",
       limit: 100,
     }));
+  });
+
+  it("parses Jira project status endpoint query parameters", async () => {
+    const searchJiraProjectStatuses = vi.fn(async () => []);
+    const app = createApp({
+      searchJiraProjectStatuses,
+    } as unknown as DashboardDependencies);
+
+    const response = await request(app).get(
+      "/api/projects/project-1/jira/statuses?projectKey=%20OPS%20"
+    );
+
+    expect(response.status).toBe(200);
+    expect(searchJiraProjectStatuses).toHaveBeenCalledWith("project-1", "OPS");
   });
 
   it("parses external provider issue search filters", async () => {

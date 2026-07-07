@@ -1321,6 +1321,7 @@ describe("SprintIssueService", () => {
     const issues = await service.searchIssues(project.id, {
       provider: "jira",
       search: "OPS-42",
+      statusNames: ["Ready for QA", "Blocked"],
       assigneeText: "me",
       labels: ["backend"],
       limit: 500,
@@ -1333,6 +1334,7 @@ describe("SprintIssueService", () => {
       expect.objectContaining({
         projectKey: "OPS",
         search: "OPS-42",
+        statusNames: ["Ready for QA", "Blocked"],
         assigneeText: "me",
         labels: ["backend"],
         limit: 100,
@@ -1383,6 +1385,45 @@ describe("SprintIssueService", () => {
         maxResults: 100,
       }),
     );
+  });
+
+  it("lists Jira project statuses from effective settings and requires a project key", async () => {
+    const jiraApiClient = {
+      listProjectStatuses: vi.fn(async () => [
+        { id: "1", name: "To Do", issueTypes: ["Story"] },
+      ]),
+    };
+
+    const service = new SprintIssueService({
+      projectManagementRepository: {
+        getProject: () => project,
+      } as any,
+      getDashboardSettings: () => ({
+        ...DEFAULT_DASHBOARD_SETTINGS,
+        jira: {
+          ...DEFAULT_DASHBOARD_SETTINGS.jira,
+          host: "https://acme.atlassian.net/",
+          email: "",
+          apiToken: "jira-token",
+          defaultProject: "",
+        },
+      }),
+      jiraApiClient: jiraApiClient as any,
+    });
+
+    await expect(service.searchJiraProjectStatuses(project.id, "  OPS  ")).resolves.toEqual([
+      { id: "1", name: "To Do", issueTypes: ["Story"] },
+    ]);
+    expect(jiraApiClient.listProjectStatuses).toHaveBeenCalledWith(
+      "https://acme.atlassian.net/",
+      "",
+      "jira-token",
+      "OPS",
+    );
+
+    await expect(service.searchJiraProjectStatuses(project.id, "  "))
+      .rejects.toThrow("Jira project key is required.");
+    expect(jiraApiClient.listProjectStatuses).toHaveBeenCalledTimes(1);
   });
 
   it("resolves explicit Jira keys into full prompt contexts with deduplication", async () => {

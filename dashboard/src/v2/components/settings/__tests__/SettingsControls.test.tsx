@@ -7,9 +7,9 @@ import { readFileSync } from "node:fs";
 import { describe, it, expect, afterEach, vi } from "vitest";
 import { render, screen, cleanup, fireEvent, waitFor } from "@testing-library/preact";
 import "@testing-library/jest-dom/vitest";
-import { BranchNameSchemeEditor } from "../BranchNameSchemeEditor";
+import { BranchNameSchemeEditor, TaskPrTitleSchemeEditor } from "../BranchNameSchemeEditor";
 import { SprintKeyEditor } from "../SprintKeyEditor";
-import { TextInput, SecretInput, NumberInput, TextAreaInput, PillChoiceGroup, SelectInput } from "../SettingsFormFields";
+import { TextInput, SecretInput, NumberInput, TextAreaInput, PillChoiceGroup, SelectInput, OptionCardChoiceGroup, ToggleLinkedControlRow } from "../SettingsFormFields";
 
 
 import { SettingsCategoryRail, CATEGORIES } from "../SettingsCategoryRail";
@@ -23,6 +23,7 @@ import type { Source } from "../../../types";
 import userEvent from "@testing-library/user-event";
 import { SettingsActivePanelStatus } from "../SettingsActivePanelStatus";
 import { SettingsContentPanels } from "../SettingsContentPanels";
+import { SettingsSprintPanel } from "../panels/SettingsSprintPanel";
 import { UnsavedChangesModal } from "../../ui/UnsavedChangesModal";
 import { ProviderInstanceCard } from "../ProviderInstanceCard";
 import { DEFAULT_DASHBOARD_SETTINGS } from "../../../../lib/settings";
@@ -299,7 +300,25 @@ const createSystemSettings = (projectSettings: ProjectSettings): SystemSettings 
     expect(screen.queryByText("11 settings categories available. Press slash to search.")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Clear settings search" })).not.toBeInTheDocument();
     expect(screen.getByText("/")).toBeInTheDocument();
+    expect(screen.getByLabelText("Settings context")).toHaveTextContent("System scope");
+    expect(screen.getByLabelText("Settings context")).toHaveTextContent("General");
+    expect(screen.getByLabelText("Settings context")).toHaveTextContent("No edits");
+    expect(screen.getByText("Quick actions")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Appearance" })).toBeInTheDocument();
+  });
+
+  it("SettingsSmartFindSearch surfaces project scope and dirty feedback in the command card", () => {
+    renderSettingsSmartFindSearch({
+      activeScope: "project",
+      activeDirty: true,
+      activeCategory: "agents",
+      activeCategoryConfig: CATEGORIES.find((category) => category.id === "agents")!,
+    });
+
+    const context = screen.getByLabelText("Settings context");
+    expect(context).toHaveTextContent("Project scope");
+    expect(context).toHaveTextContent("Agents");
+    expect(context).toHaveTextContent("Unsaved edits");
   });
 
   it("SettingsSmartFindSearch announces active matches with counts, active category, and previews", () => {
@@ -463,6 +482,79 @@ const createSystemSettings = (projectSettings: ProjectSettings): SystemSettings 
     expect(screen.getByRole("radio", { name: "Project" })).toHaveAttribute("aria-checked", "false");
   });
 
+  it("OptionCardChoiceGroup exposes selected option display and keyboard radio semantics", () => {
+    const onChange = vi.fn();
+    render(
+      <OptionCardChoiceGroup
+        value="manual"
+        onChange={onChange}
+        aria-label="Agent routing mode"
+        options={[
+          {
+            value: "manual",
+            label: "Manual",
+            description: "Pin every coding task to one preset.",
+            countLabel: "1 preset",
+            icon: <SlidersHorizontal className="h-4 w-4" />,
+          },
+          {
+            value: "orchestrator",
+            label: "Orchestrator with a very long option label that must wrap",
+            description: "Planning assigns the best specialist for each task.",
+            countLabel: "4 presets",
+          },
+        ]}
+      />
+    );
+
+    expect(screen.getByRole("radiogroup", { name: "Agent routing mode" })).toBeInTheDocument();
+    expect(screen.getByText("Selected: Manual")).toBeInTheDocument();
+    expect(screen.getByText("1 preset")).toBeInTheDocument();
+    const manual = screen.getByRole("radio", { name: "Manual" });
+    expect(manual).toHaveAttribute("aria-checked", "true");
+    expect(manual).toHaveAccessibleDescription("Pin every coding task to one preset.");
+
+    fireEvent.keyDown(manual, { key: "ArrowRight" });
+    expect(onChange).toHaveBeenCalledWith("orchestrator");
+  });
+
+  it("OptionCardChoiceGroup supports multi-select counts and disabled option descriptions", async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    render(
+      <OptionCardChoiceGroup
+        selectionMode="multiple"
+        value={["task"]}
+        onChange={onChange}
+        aria-label="QA review triggers"
+        options={[
+          {
+            value: "task",
+            label: "Task completion",
+            description: "Run QA after every completed task.",
+          },
+          {
+            value: "project-agent",
+            label: "Project QA agent",
+            description: "Use a project-specific QA preset.",
+            disabled: true,
+            disabledReason: "Select a project before assigning QA presets.",
+          },
+        ]}
+      />
+    );
+
+    expect(screen.getByRole("group", { name: "QA review triggers" })).toBeInTheDocument();
+    expect(screen.getByText("1 selected")).toBeInTheDocument();
+    expect(screen.getByRole("checkbox", { name: "Task completion" })).toHaveAttribute("aria-checked", "true");
+    const disabledOption = screen.getByRole("checkbox", { name: "Project QA agent" });
+    expect(disabledOption).toBeDisabled();
+    expect(disabledOption).toHaveAccessibleDescription("Use a project-specific QA preset. Select a project before assigning QA presets.");
+
+    await user.click(disabledOption);
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
   it("SettingsScopeControls renders system scope without duplicated visible system context", () => {
     renderSettingsScopeControls();
 
@@ -567,6 +659,39 @@ const createSystemSettings = (projectSettings: ProjectSettings): SystemSettings 
     expect(trigger).toHaveAccessibleDescription("Switch GitHub mode to Remote to use this policy.");
   });
 
+  it("ToggleLinkedControlRow invokes toggle and nested select callbacks", async () => {
+    const user = userEvent.setup();
+    const onToggle = vi.fn();
+    const onSelect = vi.fn();
+    render(
+      <ToggleLinkedControlRow
+        enabled={false}
+        onEnabledChange={onToggle}
+        toggleLabel="Review completed tasks"
+        description="Runs QA after task completion."
+      >
+        <SelectInput
+          value="builtin"
+          onChange={onSelect}
+          aria-label="QA provider"
+          options={[
+            { value: "builtin", label: "Built-in QA" },
+            { value: "project", label: "Project QA" },
+          ]}
+        />
+      </ToggleLinkedControlRow>
+    );
+
+    const toggle = screen.getByRole("switch", { name: "Review completed tasks" });
+    expect(toggle).toHaveAccessibleDescription("Runs QA after task completion.");
+    await user.click(toggle);
+    expect(onToggle).toHaveBeenCalledWith(true);
+
+    await user.click(screen.getByRole("button", { name: "QA provider" }));
+    await user.click(await screen.findByRole("option", { name: "Project QA" }));
+    expect(onSelect).toHaveBeenCalledWith("project");
+  });
+
   it("ActionButton provides busy state feedback", () => {
     render(
       <ActionButton label="Save" onClick={() => {}} busy={true} />
@@ -619,6 +744,65 @@ describe("SettingsControls Accessibility", () => {
     const input = screen.getByRole("textbox");
     expect(input).toHaveAttribute("aria-label", "Sprint branch scheme");
     expect(input).toHaveAttribute("aria-description", "Template used when naming sprint branches.");
+  });
+
+  it("TaskPrTitleSchemeEditor renders accessible task PR title placeholders", () => {
+    render(
+      <TaskPrTitleSchemeEditor
+        value="({sprint_tag}) {task_title}"
+        onChange={() => {}}
+      />
+    );
+
+    const input = screen.getByRole("textbox", { name: "Task PR title scheme" });
+    expect(input).toHaveAttribute("aria-description", "Template used when naming automatically-created task pull requests.");
+    expect(input).toHaveAttribute("placeholder", "e.g. ({sprint_tag}) {task_title}");
+    expect(screen.getByText("{sprint_tag}")).toBeInTheDocument();
+    expect(screen.getByText("{sprint_key}")).toBeInTheDocument();
+    expect(screen.getByText("{sprint_number}")).toBeInTheDocument();
+    expect(screen.getByText("{sprint_title}")).toBeInTheDocument();
+    expect(screen.getByText("{task_key}")).toBeInTheDocument();
+    expect(screen.getByText("{task_title}")).toBeInTheDocument();
+    expect(screen.getByText("{provider}")).toBeInTheDocument();
+  });
+
+  it("SettingsSprintPanel renders and updates the task PR title scheme row", () => {
+    const updateEditableSettings = vi.fn();
+
+    const Harness = () => {
+      const [settings, setSettings] = useState(() => createProjectSettings());
+      updateEditableSettings.mockImplementation((recipe: (current: ProjectSettings) => ProjectSettings) => {
+        setSettings((current) => recipe(current));
+      });
+
+      return (
+        <SettingsSprintPanel
+          state={{
+            activeScope: "project",
+            setActiveScope: () => {},
+            selectedProject: null,
+            editableSettings: settings,
+            projectSettings: null,
+            projectSources: { "git.taskPrTitleScheme": "project" },
+            projectAgentPresetOptions: [],
+            updateProject: () => {},
+            updateEditableSettings,
+          } as any}
+        />
+      );
+    };
+
+    render(<Harness />);
+
+    expect(screen.getByText("Task PR title scheme")).toBeInTheDocument();
+    expect(screen.getByText("Template used when naming automatically-created task pull requests.")).toBeInTheDocument();
+    expect(screen.getByText("Project override")).toBeInTheDocument();
+
+    const input = screen.getByRole("textbox", { name: "Task PR title scheme" });
+    fireEvent.input(input, { target: { value: "{task_key}: {task_title} - {provider}" } });
+
+    expect(updateEditableSettings).toHaveBeenCalled();
+    expect(screen.getByRole("textbox", { name: "Task PR title scheme" })).toHaveValue("{task_key}: {task_title} - {provider}");
   });
 
   it("SprintKeyEditor passes aria-label and aria-description", () => {

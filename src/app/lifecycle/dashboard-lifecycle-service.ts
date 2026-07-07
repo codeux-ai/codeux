@@ -684,6 +684,7 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<DashboardS
         settings.settings.jira.defaultProject,
       );
     },
+    searchJiraProjectStatuses: (projectId, projectKey) => deps.sprintIssueService.searchJiraProjectStatuses(projectId, projectKey),
     listSprintLinkedIssues: (sprintId) => deps.sprintIssueService.getLinkedIssues(sprintId),
     replaceSprintLinkedIssues: (sprintId, projectId, issues) => deps.sprintIssueService.replaceLinkedIssues(sprintId, projectId, issues),
     listConnections: (projectId) => deps.connectionChatRepository.listConnections(projectId),
