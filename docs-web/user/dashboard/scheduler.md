@@ -21,8 +21,11 @@ Each scheduler entry has a **target** — the thing that runs when it fires:
 | **Message** | Posts a project message (for example, a recurring planning or status prompt). |
 | **Memory remediation** | Runs the long-term memory cleanup workflow on a schedule. |
 
-The backend scheduler contract also supports agent-created wakeups and scheduled task reruns. Those
-entries are stored in the existing target JSON payload with `origin` and `source` set to
+The backend scheduler contract also supports scheduled node flows, agent-created wakeups, and
+scheduled task reruns. Node-flow entries store `nodeFlowTarget = { flowId, input?, flowVersion? }`
+inside the existing target JSON payload, validate that the flow belongs to the selected project,
+and run through the node-flow runtime with scheduler trigger metadata when due. Agent wakeups and
+task reruns are stored in the same target JSON payload with `origin` and `source` set to
 `agent_scheduler`, plus `createdByAgentId` when the creating agent provides it. Agent wakeups post
 through the chat runtime with scheduler metadata, and task reruns reuse the normal task rerun
 service so workspaces, telemetry, and cancellation behavior stay consistent.
@@ -31,7 +34,8 @@ Agent wakeups and task reruns may appear in the Scheduler calendar, day view, st
 entry list after they are created by the secured MCP scheduler tool. They use their own target
 labels and compact summaries instead of appearing as chat messages. The dashboard create/edit form
 remains limited to Sprint, Quicksprint, Message, and Memory remediation entries; MCP-created
-agent wakeups and task reruns can still be paused, resumed, or deleted from the list.
+node-flow schedules, agent wakeups, and task reruns can still be paused, resumed, or deleted from
+the list.
 
 ## Recurrence
 

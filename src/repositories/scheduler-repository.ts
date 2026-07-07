@@ -9,6 +9,7 @@ import type {
   ScheduleAnchor,
   ScheduleChatTarget,
   ScheduleMemoryRemediationTarget,
+  ScheduleNodeFlowTarget,
   ScheduleQuicksprintTarget,
   ScheduleRecurrenceRule,
   SchedulerEntryRecord,
@@ -61,6 +62,7 @@ interface PersistedTargetPayload {
   agentWakeupTarget?: ScheduleAgentWakeupTarget;
   taskTarget?: ScheduleTaskTarget;
   memoryRemediationTarget?: ScheduleMemoryRemediationTarget;
+  nodeFlowTarget?: ScheduleNodeFlowTarget;
 }
 
 export class SchedulerRepository {
@@ -178,6 +180,7 @@ export class SchedulerRepository {
       agentWakeupTarget: isTargetTypeChanged ? input.agentWakeupTarget : (input.agentWakeupTarget ?? current.agentWakeupTarget),
       taskTarget: isTargetTypeChanged ? input.taskTarget : (input.taskTarget ?? current.taskTarget),
       memoryRemediationTarget: isTargetTypeChanged ? input.memoryRemediationTarget : (input.memoryRemediationTarget ?? current.memoryRemediationTarget),
+      nodeFlowTarget: isTargetTypeChanged ? input.nodeFlowTarget : (input.nodeFlowTarget ?? current.nodeFlowTarget),
       scheduledFor: input.scheduledFor ?? current.scheduledFor,
     });
     if (nextScheduleAnchor) {
@@ -312,6 +315,23 @@ export class SchedulerRepository {
       };
     }
 
+    if (targetType === "node_flow") {
+      const flowId = input.nodeFlowTarget?.flowId?.trim();
+      if (!flowId) {
+        throw new ValidationError("nodeFlowTarget.flowId is required.");
+      }
+      const target: ScheduleNodeFlowTarget = { flowId };
+      const normalizedInput = this.normalizeJsonObject(input.nodeFlowTarget?.input, "nodeFlowTarget.input");
+      if (normalizedInput) {
+        target.input = normalizedInput;
+      }
+      const flowVersion = this.normalizeOptionalPositiveInteger(input.nodeFlowTarget?.flowVersion, "nodeFlowTarget.flowVersion");
+      if (flowVersion !== undefined) {
+        target.flowVersion = flowVersion;
+      }
+      return { nodeFlowTarget: target };
+    }
+
     if (targetType === "agent_wakeup") {
       const bodyMarkdown = input.agentWakeupTarget?.bodyMarkdown?.trim();
       if (!bodyMarkdown) {
@@ -376,6 +396,9 @@ export class SchedulerRepository {
     if (targetType === "task") {
       return "Scheduled task rerun";
     }
+    if (targetType === "node_flow") {
+      return "Scheduled node flow";
+    }
     return target.chatTarget?.title || "Scheduled chat message";
   }
 
@@ -397,6 +420,46 @@ export class SchedulerRepository {
       throw new ValidationError("taskTarget.provider must be a supported provider.");
     }
     return { provider };
+  }
+
+  private normalizeJsonObject(value: unknown, fieldName: string): ScheduleNodeFlowTarget["input"] | undefined {
+    if (value === undefined) {
+      return undefined;
+    }
+    if (!value || typeof value !== "object" || Array.isArray(value) || !this.isJsonValue(value)) {
+      throw new ValidationError(`${fieldName} must be a JSON object.`);
+    }
+    return value as ScheduleNodeFlowTarget["input"];
+  }
+
+  private normalizeOptionalPositiveInteger(value: unknown, fieldName: string): number | undefined {
+    if (value === undefined || value === null) {
+      return undefined;
+    }
+    const parsed = typeof value === "string" && value.trim()
+      ? Number(value.trim())
+      : Number(value);
+    if (!Number.isFinite(parsed) || parsed < 1) {
+      throw new ValidationError(`${fieldName} must be a positive integer.`);
+    }
+    return Math.floor(parsed);
+  }
+
+  private isJsonValue(value: unknown): boolean {
+    if (value === null) {
+      return true;
+    }
+    if (typeof value === "string" || typeof value === "boolean") {
+      return true;
+    }
+    if (typeof value === "number") {
+      return Number.isFinite(value);
+    }
+    if (Array.isArray(value)) {
+      return value.every((entry) => this.isJsonValue(entry));
+    }
+    return typeof value === "object"
+      && Object.values(value as Record<string, unknown>).every((entry) => this.isJsonValue(entry));
   }
 
   private normalizeDate(value: string, fieldName: string): string {
@@ -466,6 +529,7 @@ export class SchedulerRepository {
       agentWakeupTarget: target.agentWakeupTarget,
       taskTarget: target.taskTarget,
       memoryRemediationTarget: target.memoryRemediationTarget,
+      nodeFlowTarget: target.nodeFlowTarget,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     };
