@@ -35,6 +35,7 @@ Every visible Settings subcategory card has card-level help and a documentation 
 - [Jules Automation](./jules-automation.md)
 - [Git Host Configuration](./git-host-configuration.md)
 - [Jira Configuration](./jira-configuration.md)
+- [Importer Configuration](./importer-configuration.md)
 - [Provider Integration](./provider-integration.md)
 - [Provider Credentials](./provider-credentials.md)
 - [MCP Servers](./mcp-servers.md)
