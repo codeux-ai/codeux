@@ -1,4 +1,6 @@
 import type { DashboardSettings, DashboardSettingsScope, ProviderId, QwenModelProviderSettings, Subtask } from "../contracts/app-types.js";
+import * as fs from "fs/promises";
+import * as path from "path";
 import type { ConnectionChatRepository } from "../repositories/connection-chat-repository.js";
 import type { ProjectWorkerAssignmentRepository } from "../repositories/project-worker-assignment-repository.js";
 import type { ExecutionRepository } from "../repositories/execution-repository.js";
@@ -7,9 +9,10 @@ import type { AgentPresetSyncService } from "./agent-preset-sync-service.js";
 import type { ProjectManagementRepository } from "../repositories/project-management-repository.js";
 import type { IProviderRunner } from "../infrastructure/providers/cli/provider-runner.js";
 import type { Logger } from "../shared/logging/logger.js";
-import type { ConversationCompactionSummary, CreateDashboardConversationMessageInput, ConversationThreadRecord, ConversationMessageRecord, ConversationRuntimeState, UpdateConversationThreadRouteInput } from "../contracts/connection-chat-types.js";
+import type { ConversationCompactionSummary, CreateDashboardConversationMessageInput, ConversationThreadRecord, ConversationMessageRecord, ConversationRuntimeState, UpdateConversationThreadInput, UpdateConversationThreadRouteInput } from "../contracts/connection-chat-types.js";
 import { buildProviderPrompt } from "./cli-workflow-utils.js";
 import { resolveEffectiveModel } from "./provider-execution-service.js";
+import { getRepoCodeUxDir, getRepoCodeUxPath } from "../shared/config/code-ux-paths.js";
 import {
   buildChatCompactionPrompt,
   buildChatContinuationPrompt,
@@ -77,6 +80,28 @@ const resolveEffectiveDefaultBranch = (
   || settings.git?.defaultBranch?.trim()
   || "main"
 );
+
+function getThreadSessionTitlePath(repoPath: string, threadId: string): string {
+  const safeThreadId = threadId.replace(/[^A-Za-z0-9_.-]/g, "-");
+  const codeUxDir = path.resolve(getRepoCodeUxDir(repoPath));
+  const titlePath = path.resolve(getRepoCodeUxPath(repoPath, "conversations", safeThreadId, "session-title.md"));
+  const relativeTitlePath = path.relative(codeUxDir, titlePath);
+
+  if (relativeTitlePath.startsWith("..") || path.isAbsolute(relativeTitlePath)) {
+    throw new Error("Refusing to write session title outside the project .code-ux directory.");
+  }
+
+  return titlePath;
+}
+
+async function writeThreadSessionTitleFile(repoPath: string, threadId: string, title: string): Promise<void> {
+  if (!title.trim()) {
+    throw new Error("Thread title must be a non-empty string.");
+  }
+  const titlePath = getThreadSessionTitlePath(repoPath, threadId);
+  await fs.mkdir(path.dirname(titlePath), { recursive: true });
+  await fs.writeFile(titlePath, `${title.trim()}\n`, { encoding: "utf8" });
+}
 
 export class ChatThreadRuntimeService {
   private readonly inFlightTurns = new Map<string, InFlightChatTurn>();
@@ -193,6 +218,18 @@ export class ChatThreadRuntimeService {
     });
   }
 
+  public async updateConversationThread(threadId: string, input: UpdateConversationThreadInput): Promise<ConversationThreadRecord> {
+    const updatedThread = this.deps.connectionChatRepository.updateThread(threadId, input);
+    if (input.title !== undefined) {
+      const project = this.deps.projectManagementRepository.getProject(updatedThread.projectId);
+      if (!project) {
+        throw new Error(`Project not found: ${updatedThread.projectId}`);
+      }
+      await writeThreadSessionTitleFile(project.baseDir, updatedThread.id, updatedThread.title);
+    }
+    return updatedThread;
+  }
+
   public async compactThreadSession(threadId: string): Promise<ConversationThreadRecord> {
     const thread = this.deps.connectionChatRepository.getThread(threadId);
     const project = this.deps.projectManagementRepository.getProject(thread.projectId);
@@ -245,6 +282,12 @@ export class ChatThreadRuntimeService {
     const userMessage = this.deps.connectionChatRepository.postDashboardMessage(projectId, input);
     const thread = this.deps.connectionChatRepository.getThread(userMessage.threadId);
     if (!thread) throw new Error("Thread not found");
+    if (!input.threadId && typeof thread.title === "string" && thread.title.trim()) {
+      const project = this.deps.projectManagementRepository.getProject(projectId);
+      if (project) {
+        await writeThreadSessionTitleFile(project.baseDir, thread.id, thread.title);
+      }
+    }
 
     const existingTurn = this.inFlightTurns.get(thread.id);
     if (existingTurn) {
@@ -446,7 +489,7 @@ export class ChatThreadRuntimeService {
         knowledgeManifest,
       });
     } else {
-      promptContent = buildChatContinuationPrompt(latestMessage, pendingAction, mcpAvailable);
+      promptContent = buildChatContinuationPrompt(latestMessage, pendingAction, mcpAvailable, thread.title);
       continueSessionId = runtimeState.sessionIds![0];
     }
 
