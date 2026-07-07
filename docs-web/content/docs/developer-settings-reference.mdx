@@ -96,6 +96,8 @@ Settings are evaluated in cascade: **Defaults → System → Project → Sprint*
 Default `gitMode`: `remote`. Default `executionMode`: `DOCKER`.
 `containerMemoryLimitMb` is a MiB ceiling for every Docker-backed CLI provider container. Positive values are passed to Docker as both `--memory` and `--memory-swap`; set it to `0` to omit Docker memory flags.
 
+`containerInstallPlaywrightBrowsers` defaults to `true` for provider coding containers. When `containerCacheSetupScriptImage` is also enabled, Code UX installs Playwright Chromium and OS dependencies during the setup-cache image build, stores the browser under `/ms-playwright`, and exposes `PLAYWRIGHT_BROWSERS_PATH=/ms-playwright` so non-root provider runs can reuse the baked browser without rerunning setup.
+
 ## `sprintPreview`
 
 ```jsonc

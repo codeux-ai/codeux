@@ -43,6 +43,7 @@ export interface DockerSetupImageCacheInput {
 
 const BUILD_LOCK_STALE_MS = 30 * 60 * 1000;
 const BUILD_LOCK_WAIT_MS = 1_000;
+const PLAYWRIGHT_CACHED_BROWSERS_PATH = "/ms-playwright";
 
 interface InProcessBuild {
   promise: Promise<DockerSetupImageCacheResult>;
@@ -219,10 +220,10 @@ export class DockerSetupImageCache {
       `LABEL ai.codeux.base-image="${this.escapeDockerfileLabelValue(baseImage)}"`,
       "USER root",
       `ENV CODE_UX_INSTALL_PLAYWRIGHT=${installPlaywrightBrowsers ? "1" : "0"}`,
-      ...(installPlaywrightBrowsers ? ["ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright"] : []),
+      ...(installPlaywrightBrowsers ? [`ENV PLAYWRIGHT_BROWSERS_PATH=${PLAYWRIGHT_CACHED_BROWSERS_PATH}`] : []),
       "RUN if command -v apt-get >/dev/null 2>&1; then apt-get update -qy && apt-get install -qy --no-install-recommends curl ca-certificates && rm -rf /var/lib/apt/lists/*; fi",
       "COPY setup.sh /tmp/code-ux-setup.sh",
-      "RUN sed -i 's/\\r//' /tmp/code-ux-setup.sh && bash /tmp/code-ux-setup.sh && rm -f /tmp/code-ux-setup.sh && if [ \"$CODE_UX_INSTALL_PLAYWRIGHT\" = \"1\" ] && [ -d /ms-playwright ]; then chmod -R a+rX /ms-playwright; fi",
+      "RUN sed -i 's/\\r//' /tmp/code-ux-setup.sh && bash /tmp/code-ux-setup.sh && rm -f /tmp/code-ux-setup.sh && if [ \"$CODE_UX_INSTALL_PLAYWRIGHT\" = \"1\" ]; then mkdir -p \"$PLAYWRIGHT_BROWSERS_PATH\" && if ! ls -d \"$PLAYWRIGHT_BROWSERS_PATH\"/chromium-* >/dev/null 2>&1; then npx -y playwright@latest install --with-deps chromium; fi && chmod -R a+rX \"$PLAYWRIGHT_BROWSERS_PATH\"; fi && rm -rf /var/lib/apt/lists/*",
     ].join("\n");
   }
 
