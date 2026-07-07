@@ -25,10 +25,7 @@ import type { McpConnectionInfo } from "../contracts/mcp-connection-types.js";
 import type { McpApprovalTracker } from "./mcp-approval-tracker.js";
 import { getCorrelationId } from "../shared/logging/correlation-id.js";
 import type { AgentMcpAccessConfig } from "../contracts/agent-preset-types.js";
-import {
-  isSchedulerOnlyAgentMcpAccess,
-  schedulerOnlyAgentMcpAccess,
-} from "./agent-mcp-access.js";
+import { codeUxAgentMcpAccess } from "./agent-mcp-access.js";
 
 interface ChatThreadRuntimeServiceDependencies {
   connectionChatRepository: ConnectionChatRepository;
@@ -548,7 +545,6 @@ export class ChatThreadRuntimeService {
         workerInstructions,
         isDashboardReply: false,
         mcpAvailable,
-        mcpAccessMode: mcpAvailable && isSchedulerOnlyAgentMcpAccess(agentMcpAccess) ? "scheduler_only" : undefined,
         knowledgeManifest,
         suppressRichWidgets,
       });
@@ -601,7 +597,7 @@ export class ChatThreadRuntimeService {
       snapshotCheckout,
       mcpConnection,
       agentMcpAccess,
-      mcpAgentId: respondingAgent.id,
+      mcpAgentId: null,
       signal,
     });
 
@@ -669,12 +665,9 @@ export class ChatThreadRuntimeService {
 
   private resolveDashboardReplyMcpAccess(
     access: AgentMcpAccessConfig | undefined,
-    dashboardReplyAgentPresetId: string | null,
+    _dashboardReplyAgentPresetId: string | null,
   ): AgentMcpAccessConfig {
-    if (dashboardReplyAgentPresetId && access) {
-      return access;
-    }
-    return schedulerOnlyAgentMcpAccess(access?.linkedServerIds ?? []);
+    return codeUxAgentMcpAccess(access?.linkedServerIds ?? []);
   }
 
   private async deliverChatProviderReplyIfNeeded(

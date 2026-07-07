@@ -3,7 +3,7 @@ import * as fs from "fs/promises";
 import * as os from "os";
 import * as path from "path";
 import { ChatThreadRuntimeService } from "../../../src/services/chat-thread-runtime-service.js";
-import { schedulerOnlyAgentMcpAccess } from "../../../src/services/agent-mcp-access.js";
+import { codeUxAgentMcpAccess } from "../../../src/services/agent-mcp-access.js";
 
 describe("ChatThreadRuntimeService", () => {
   let deps: any;
@@ -207,7 +207,7 @@ describe("ChatThreadRuntimeService", () => {
     });
   });
 
-  it("uses scheduler-only Code UX access for the default dashboard reply agent", async () => {
+  it("uses Code UX MCP with scheduler for the default dashboard reply agent", async () => {
     deps.getDashboardSettings.mockReturnValue({
       agents: { routing: { dashboardReply: { agentPresetId: null } } },
       cliWorkflow: {},
@@ -239,19 +239,19 @@ describe("ChatThreadRuntimeService", () => {
     expect(deps.chatManagementActionService.processManagementAction).toHaveBeenCalledWith(
       expect.objectContaining({
         mcpConnection: { url: "http://127.0.0.1:3000/mcp", authToken: "token" },
-        mcpAgentId: "reply-agent",
-        agentMcpAccess: schedulerOnlyAgentMcpAccess(),
-        prompt: expect.stringContaining("You have the `scheduler` MCP tool available"),
+        mcpAgentId: null,
+        agentMcpAccess: codeUxAgentMcpAccess(),
+        prompt: expect.stringContaining("You have the `manage_code_ux` MCP tool available"),
       }),
     );
     expect(deps.chatManagementActionService.processManagementAction).toHaveBeenCalledWith(
       expect.objectContaining({
-        prompt: expect.not.stringContaining("You have the `manage_code_ux` MCP tool available"),
+        prompt: expect.stringContaining("You also have the `scheduler_code_ux` MCP tool available"),
       }),
     );
   });
 
-  it("preserves explicit MCP access for a configured dashboard reply preset", async () => {
+  it("uses full Code UX MCP access for a configured dashboard reply preset", async () => {
     const explicitAccess = {
       codeUxEnabled: true,
       codeUxToolToggles: [{ name: "manage_tasks", enabled: false, isInternal: true }],
@@ -288,8 +288,8 @@ describe("ChatThreadRuntimeService", () => {
 
     expect(deps.chatManagementActionService.processManagementAction).toHaveBeenCalledWith(
       expect.objectContaining({
-        mcpAgentId: "custom-reply",
-        agentMcpAccess: explicitAccess,
+        mcpAgentId: null,
+        agentMcpAccess: codeUxAgentMcpAccess(["custom-docs"]),
         prompt: expect.stringContaining("You have the `manage_code_ux` MCP tool available"),
       }),
     );

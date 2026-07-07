@@ -57,7 +57,7 @@ describe("tool argument validators", () => {
   it("accepts the restricted scheduler actions and relative delay fields", async () => {
     const { validateToolArguments } = await import("../../../src/api/mcp/validators/tool-validators.js");
 
-    expect(() => validateToolArguments("scheduler", {
+    expect(() => validateToolArguments("scheduler_code_ux", {
       action: "schedule_wakeup",
       projectId: "project-1",
       delaySeconds: "30",
@@ -65,7 +65,7 @@ describe("tool argument validators", () => {
       threadId: null,
     })).not.toThrow();
 
-    expect(() => validateToolArguments("scheduler", {
+    expect(() => validateToolArguments("scheduler_code_ux", {
       action: "schedule_task",
       projectId: "project-1",
       delayMinutes: 5,
@@ -77,18 +77,18 @@ describe("tool argument validators", () => {
   it("rejects scheduler actions and fields reserved for manage_scheduler", async () => {
     const { validateToolArguments } = await import("../../../src/api/mcp/validators/tool-validators.js");
 
-    expect(() => validateToolArguments("scheduler", {
+    expect(() => validateToolArguments("scheduler_code_ux", {
       action: "run_due",
       now: "2026-06-09T12:00:00.000Z",
-    })).toThrow("Invalid arguments for tool scheduler");
+    })).toThrow("Invalid arguments for tool scheduler_code_ux");
 
-    expect(() => validateToolArguments("scheduler", {
+    expect(() => validateToolArguments("scheduler_code_ux", {
       action: "schedule_wakeup",
       projectId: "project-1",
       scheduledFor: "2026-06-09T12:00:00.000Z",
       bodyMarkdown: "Resume the review.",
       recurrence: { frequency: "daily" },
-    })).toThrow("Invalid arguments for tool scheduler");
+    })).toThrow("Invalid arguments for tool scheduler_code_ux");
   });
 
   it("rejects unexpected management payload and approval envelope shapes", async () => {

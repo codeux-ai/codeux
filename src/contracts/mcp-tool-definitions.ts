@@ -237,7 +237,7 @@ export const TOOL_DEFINITIONS = [
     },
   },
   {
-    name: "scheduler",
+    name: "scheduler_code_ux",
     runtimeRoles: ["project_manager"],
     category: "orchestration",
     description: "Schedule agent-owned wakeups and task reruns. Supports list, schedule_wakeup, schedule_task, and cancel only. Cancellation is limited to agent_scheduler entries created by the calling agent.",

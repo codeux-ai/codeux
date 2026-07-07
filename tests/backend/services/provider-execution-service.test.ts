@@ -225,6 +225,27 @@ describe("ProviderExecutionService", () => {
     expect(providerRunner.runProvider.mock.calls[0]![0].prompt).toContain("## PERSISTENT SKILL STORAGE");
   });
 
+  it("auto-attaches the Code UX MCP gateway for agents with Code UX access enabled", async () => {
+    providerRunner.runProvider.mockResolvedValue(mockResult);
+    service = new ProviderExecutionService({
+      providerRunner,
+      executionRepository,
+      logger: logger as any,
+      getGithubToken: vi.fn(),
+      getMcpConnectionInfo: vi.fn().mockReturnValue({ url: "http://127.0.0.1:4444/mcp", authToken: "token" }),
+    });
+
+    await service.executeProvider({
+      ...defaultArgs,
+      agentMcpAccess: { codeUxEnabled: true, codeUxToolToggles: [], linkedServerIds: [] },
+      mcpAgentId: "agent-1",
+    });
+
+    expect(providerRunner.runProvider).toHaveBeenCalledWith(expect.objectContaining({
+      mcpConnection: { url: "http://127.0.0.1:4444/mcp", authToken: "token", agentId: "agent-1" },
+    }));
+  });
+
   it("logs provider subprocess crashes as invocation metadata without raw prompt, command payloads, or secrets", async () => {
     const rawPrompt = "implement the secret rollout transcript";
     const rawApiKey = "sk-provider-secret";
