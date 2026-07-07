@@ -156,7 +156,10 @@ This page lists every endpoint, grouped by domain. Path parameters use `:name` n
 | `PATCH` | `/api/agent-presets/:agentPresetId` | Update. |
 | `DELETE` | `/api/agent-presets/:agentPresetId` | Delete. |
 | `POST` | `/api/agent-presets/:agentPresetId/import-markdown` | Import from a single file. |
-| `POST` | `/api/projects/:projectId/agent-presets/sync-markdown` | Bulk-sync from `.code-ux/agents/`. |
+| `POST` | `/api/agent-presets/:agentPresetId/export-markdown` | Export one sqlite preset to the project `.code-ux/agents/` directory. |
+| `POST` | `/api/projects/:projectId/agent-presets/sync-markdown` | Backward-compatible bulk pull from `.code-ux/agents/`. |
+| `POST` | `/api/projects/:projectId/agent-presets/pull-markdown` | Explicitly discover/import project markdown into sqlite. |
+| `POST` | `/api/projects/:projectId/agent-presets/push-markdown` | Export sqlite presets to project markdown when mirroring is enabled. |
 
 ---
 

@@ -7,6 +7,7 @@ import { renderMarkdown } from "../../../lib/markdown.js";
 import { getChatWidgetData } from "../../lib/chat-widget-view-models.js";
 import { formatChatTime } from "../../lib/chat-time.js";
 import { PlanningRequestWidget } from "./widgets/PlanningRequestWidget.js";
+import { ExternalReferenceWidget } from "./widgets/ExternalReferenceWidget.js";
 import { ChatAvatar, type AvatarRole } from "./ChatAvatar.js";
 import { PromptSuggestionTags } from "./PromptSuggestionTags.js";
 import { resolveDisplayDeliveryStatus } from "../../hooks/use-chat-thread-data.js";
@@ -107,9 +108,11 @@ export const ChatMessageBubble: FunctionComponent<ChatMessageBubbleProps> = ({
           </div>
 
           {/* Message Body */}
-          <div className="prose prose-sm max-w-none text-[14px] leading-7 text-slate-800 dark:text-slate-200 prose-headings:text-inherit prose-p:text-inherit prose-strong:text-inherit prose-code:text-inherit prose-pre:overflow-x-auto break-words overflow-wrap-anywhere min-w-0"
-            dangerouslySetInnerHTML={{ __html: renderMarkdown(message.bodyMarkdown) }}
-          />
+          {!widgetData.suppressBodyMarkdown && (
+            <div className="prose prose-sm max-w-none text-[14px] leading-7 text-slate-800 dark:text-slate-200 prose-headings:text-inherit prose-p:text-inherit prose-strong:text-inherit prose-code:text-inherit prose-pre:overflow-x-auto break-words overflow-wrap-anywhere min-w-0"
+              dangerouslySetInnerHTML={{ __html: renderMarkdown(message.bodyMarkdown) }}
+            />
+          )}
 
           {promptSuggestions.length > 0 && (
             <PromptSuggestionTags
@@ -123,6 +126,11 @@ export const ChatMessageBubble: FunctionComponent<ChatMessageBubbleProps> = ({
           {widgetData.type === "planning" && (
             <div className="mt-4 border-t border-white/5 pt-4">
               <PlanningRequestWidget status={widgetData.status} planName={widgetData.planName} liveStatus={widgetData.liveStatus} />
+            </div>
+          )}
+          {widgetData.type === "external_reference" && widgetData.externalReference && (
+            <div className={widgetData.suppressBodyMarkdown ? "mt-0" : "mt-4 border-t border-white/5 pt-4"}>
+              <ExternalReferenceWidget status={widgetData.status} reference={widgetData.externalReference} />
             </div>
           )}
 

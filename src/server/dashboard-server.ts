@@ -54,6 +54,7 @@ import type {
 import type {
   AgentPresetRecord,
   CreateAgentPresetInput,
+  PushAgentPresetsToMarkdownOptions,
   UpdateAgentPresetInput,
 } from "../contracts/agent-preset-types.js";
 import type { AgentPresetRepository } from "../repositories/agent-preset-repository.js";
@@ -240,6 +241,9 @@ export interface DashboardServerOptions {
   deleteAgentPreset: (agentPresetId: string) => Promise<void> | void;
   importAgentPresetFromMarkdown?: (agentPresetId: string) => Promise<AgentPresetRecord> | AgentPresetRecord;
   syncAllAgentPresetsFromMarkdown?: (projectId: string) => Promise<AgentPresetRecord[]> | AgentPresetRecord[];
+  pullAgentPresetsFromMarkdown?: (projectId: string) => Promise<AgentPresetRecord[]> | AgentPresetRecord[];
+  pushAgentPresetsToMarkdown?: (projectId: string, options?: PushAgentPresetsToMarkdownOptions) => Promise<AgentPresetRecord[]> | AgentPresetRecord[];
+  exportAgentPresetToMarkdown?: (agentPresetId: string) => Promise<AgentPresetRecord> | AgentPresetRecord;
   pushAgentPresetsToRepository?: (projectId: string, options: {
     mode: "commit_only" | "commit_and_push" | "pull_request";
     branchName?: string;

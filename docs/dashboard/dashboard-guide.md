@@ -70,17 +70,23 @@ Project management:
 - `PATCH /api/connections/:connectionId`
   - Updates connection metadata such as role/status/instruction payload
 - `GET /api/projects/:projectId/agent-presets`
-  - Lists DB-backed project agents and auto-imports unseen markdown agents from `.code-ux/agents`
+  - Lists sqlite-backed project agents and auto-imports unseen markdown agents from `.code-ux/agents`
 - `POST /api/projects/:projectId/agent-presets`
-  - Creates a DB-backed agent and, when project markdown mirroring is enabled, also writes `.code-ux/agents/<name>.md`
+  - Creates a sqlite-backed agent and, when project markdown mirroring is enabled, also writes `.code-ux/agents/<name>.md`
 - `PATCH /api/agent-presets/:agentPresetId`
   - Updates agent metadata and instruction markdown, mirroring the markdown back into the project agent directory when enabled
 - `DELETE /api/agent-presets/:agentPresetId`
   - Deletes an agent record
 - `POST /api/agent-presets/:agentPresetId/import-markdown`
-  - Re-imports a linked markdown agent into sqlite
+  - Pulls one linked markdown source into sqlite
+- `POST /api/agent-presets/:agentPresetId/export-markdown`
+  - Pushes one sqlite agent preset to the selected project `.code-ux/agents` directory, links the preset to that project source, and refuses to overwrite a markdown file linked to a different agent
 - `POST /api/projects/:projectId/agent-presets/sync-markdown`
-  - Re-imports every out-of-sync linked markdown agent for the selected project
+  - Legacy/backward-compatible alias for the current **Pull from files** workflow; discovers `.code-ux/agents/*.md`, imports new files, and re-imports out-of-sync linked agents
+- `POST /api/projects/:projectId/agent-presets/pull-markdown`
+  - Explicitly pulls project markdown files into sqlite using the same precedence and default-agent discovery rules as normal agent sync
+- `POST /api/projects/:projectId/agent-presets/push-markdown`
+  - Pushes sqlite presets to project markdown files when `agents.saveToProjectDirectory` is enabled, exporting manual, missing-source, out-of-sync, home-backed, and default-backed agents as project-local files
 - `POST /api/projects/:projectId/agent-presets/push`
   - Commits `.code-ux/agents/*.md` changes from the selected project, optionally pushes the branch, and can open a pull request against the default branch when repository remotes are available
 - `POST /api/projects/:projectId/planning/improve-sprint-prompt`
@@ -135,7 +141,7 @@ Legacy runtime:
 - `GET /api/stats/header-throughput?projectId=<projectId>&window=20s|1h|24h|7d|30d|all`
   - Compact app-wide token throughput for the top dashboard header. The header polls the `20s` live activity window once per second and shows the active-duration token rate for invocations updated in that window; detailed charts, ledgers, and model/provider analysis remain on the Stats page.
 - `GET /api/live`
-  - Unified Live runtime snapshot for the selected project
+  - Unified Live runtime snapshot for the selected project, scoped to the selected sprint when the top-nav sprint selector has a persisted sprint
 - `PUT /api/projects/:projectId/preferred-worker`
   - Sets the preferred worker host for the selected project
 - `GET /api/realtime`
@@ -246,6 +252,8 @@ Legacy runtime:
 
 ### Overview
 - Overview metric cards use the restored `StatsCard` visual system from the operational command surface: four responsive cards with ambient bottom sparklines, stable card height, and compact detail rows for cost, invocations, active sprint, queue health, and active time.
+- Overview telemetry keeps the cross-project `Human Intervention Needed`, active sprint, and runtime timeline sections, and now adds a compact selected-sprint attention queue when the selected project live snapshot includes active attention items.
+- The Overview attention queue uses the same row labels, severity/status tones, markdown summary rendering, empty-state language, and bounded scrollbar treatment as the Live sidebar queue, but renders read-only so action handling stays centralized on the Live page.
 
 ### Navigation
 - Sidebar and dock navigation expose the primary routes in guided-tour order: Chat, Overview, Sprints, Tasks, Agents, Stats, Schedule (`/scheduler`), Memory, Knowledge (`/knowledge`), Browser, Files (`/files`, providing project and sprint File Browser capabilities), Live, and Settings/Config.
@@ -295,6 +303,7 @@ Legacy runtime:
 - The Agents page now includes a Push Agents header action with an inline destination picker, so users explicitly choose between a local commit, branch push, or pull request before dispatching the backend push request.
 - The Live Sprint Clock card in the Sprint Stats deck now shows a six-tile grid with Finished, Avg Finish, Accumulated, Input, Output, and Cached values, and the token tiles reuse the shared compact formatter from the Stats page.
 - Live runtime pages now use the persisted top-nav sprint selection as the page scope, so the Live view follows the selected sprint from the header menu
+- Overview telemetry reads the same selected-project live snapshot for its compact attention queue, so Overview and Live show the same selected-sprint queue items without client-side reconstruction from project-wide blockers.
 - That selection is view-only for the dashboard surface; it does not change which sprint run is actually executing in the backend
 - Live attention resolve/dismiss dialogs are portaled to a viewport-fixed overlay, preserve viewport position after confirmation, use action-specific tones, and return focus without scrolling the page when the originating queue row disappears.
 - The Live attention queue, Invocation Feed, and Execution Runtime panels share a compact sidebar feed language with smaller type, subtle row backgrounds, bounded scroll regions, explicit empty states, and narrow colored left rails for status/severity distinction.
@@ -489,7 +498,7 @@ Legacy runtime:
 - Agents page is DB-backed and manages project-scoped agents (`name`, `short routing description`, `instruction markdown`, `memory template markdown`)
 - Agents are auto-imported from project and home `.code-ux/agents/*.md` when first discovered
 - Project-local markdown mirroring is enabled by default through project settings, so dashboard edits create/update `.code-ux/agents/*.md` in the selected repo without touching shipped defaults
-- Markdown-backed agents now show sync state and support both manual single-agent re-import and bulk `Sync All`
+- Markdown-backed agents now show sync state and support single-agent `Import`, roster-level `Pull from files`, roster-level `Push to files`, and single-agent `Push to file`; sqlite remains the live authority, pull copies file content into sqlite, and push exports sqlite presets to project files
 - The first built-in role is `Planning agent`, which is editable under Agents like any other DB-backed agent
 - `Settings > Sprint & Git` now includes the QA controls immediately below `Merge Gates & Autofix`, with comparable max-run and exhaustion-policy controls plus per-trigger toggle-linked rows. Each task-completion, sprint-completion, and completed-task-without-PR row combines the enable switch with a shared multi-select agent roster, selected-count feedback, keyboard focus, disabled guidance, and the same project-scope behavior for local QA edits. The persisted settings path stays anchored at `agents.qualityAssurance`; leaving a trigger with no custom agents selected clearly uses the built-in QA fallback without saving placeholder preset ids.
 - Chat page is DB-backed and stores project conversation threads/messages in sqlite
@@ -559,6 +568,7 @@ Legacy runtime:
 - The execution runtime panel can now start or resume sprint orchestration, pause or cancel sprint runs, cancel queued dispatches, and retry terminal dispatches
 - The Live sidebar now renders `Invocation Feed`, `Runtime Timeline`, `Git / CI / PR`, `Attention Queue`, and `Execution Runtime` as separate standalone cards under the shared execution timeline context, with the invocation feed first and runtime timeline second while keeping the execution runtime card focused on runs and dispatches
 - The Live sidebar invocation feed is scoped to the selected sprint when a sprint is selected, while still falling back to project-wide recent invocations when no sprint context exists
+- The Live sidebar attention queue follows the same selected-sprint scope for active `open` and `claimed` items, including sprint-run-scoped blockers for that sprint; when no sprint is selected, the queue remains project-wide
 - The Live API includes all invocation records for the selected sprint plus all invocation records for expanded active/paused/queued sprint runs, so paused or stopped sprint feeds remain visible and concurrent live sprints do not evict each other from the feed
 - Jules task dispatches now appear in the Live invocation feed and Chat invocation tab immediately with a running placeholder row; Jules live/terminal sync later replaces the placeholder transcript with the real remote conversation and estimated usage
 - The Live page now keeps the Git/CI/PR card in a dedicated `GitCIStatusPanel` component so the page shell stays focused on wiring runtime state, controls, and layout

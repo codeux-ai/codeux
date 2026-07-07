@@ -1,8 +1,9 @@
 import * as fs from "fs/promises";
 import * as path from "path";
-import type { AgentMcpAccessConfig, AgentMemoryConfig, AgentPresetRecord, AgentSourceScope, AgentAvatarConfig } from "../contracts/agent-preset-types.js";
+import type { AgentMcpAccessConfig, AgentMemoryConfig, AgentPresetRecord, AgentSourceScope, AgentAvatarConfig, PushAgentPresetsToMarkdownOptions } from "../contracts/agent-preset-types.js";
 import type { ProjectManagementRepository } from "../repositories/project-management-repository.js";
 import { AgentPresetRepository } from "../repositories/agent-preset-repository.js";
+import { ValidationError } from "../repositories/repository-utils.js";
 import { parseAgentMarkdown, formatAgentMarkdown } from "./agent-preset-markdown.js";
 import type { SettingsRepository } from "../repositories/settings-repository.js";
 import { getHomeCodeUxPath, getRepoCodeUxPath } from "../shared/config/code-ux-paths.js";
@@ -388,6 +389,10 @@ export class AgentPresetSyncService {
   }
 
   async syncAllAgentPresetsFromMarkdown(projectId: string): Promise<AgentPresetRecord[]> {
+    return await this.pullAgentPresetsFromMarkdown(projectId);
+  }
+
+  async pullAgentPresetsFromMarkdown(projectId: string): Promise<AgentPresetRecord[]> {
     await this.syncProjectAgents(projectId);
     const presets = await this.decorateProjectAgentPresets(projectId);
 
@@ -398,6 +403,69 @@ export class AgentPresetSyncService {
     }
 
     return await this.decorateProjectAgentPresets(projectId);
+  }
+
+  async pushAgentPresetsToMarkdown(
+    projectId: string,
+    options: PushAgentPresetsToMarkdownOptions = {},
+  ): Promise<AgentPresetRecord[]> {
+    this.assertProjectMarkdownMirroringEnabled(projectId);
+    this.requireProject(projectId);
+
+    const requestedIds = new Set((options.agentPresetIds || [])
+      .map((id) => id.trim())
+      .filter(Boolean));
+    const decoratedPresets = await this.decorateProjectAgentPresets(projectId);
+    const candidates = decoratedPresets.filter((preset) => {
+      if (requestedIds.size > 0) {
+        return requestedIds.has(preset.id);
+      }
+      return preset.syncStatus === "manual"
+        || preset.syncStatus === "missing_source"
+        || preset.syncStatus === "out_of_sync"
+        || preset.sourceScope === "home"
+        || preset.sourceScope === "default";
+    });
+
+    const exported: AgentPresetRecord[] = [];
+    for (const preset of candidates) {
+      exported.push(await this.exportAgentPresetToMarkdown(preset.id));
+    }
+
+    return exported;
+  }
+
+  async exportAgentPresetToMarkdown(agentPresetId: string): Promise<AgentPresetRecord> {
+    const existing = this.deps.agentPresetRepository.getAgentPreset(agentPresetId);
+    if (!existing) {
+      throw new Error(`Agent not found: ${agentPresetId}`);
+    }
+    this.assertProjectMarkdownMirroringEnabled(existing.projectId);
+
+    const project = this.requireProject(existing.projectId);
+    const source = await this.writeProjectAgentFile({
+      projectId: existing.projectId,
+      agentPresetId: existing.id,
+      projectBaseDir: project.baseDir,
+      name: existing.name,
+      description: existing.description,
+      instructionMarkdown: existing.instructionMarkdown,
+      avatarConfig: existing.avatarConfig,
+      providerConfigId: existing.providerConfigId,
+      model: existing.model,
+      memoryTemplateOverrideEnabled: existing.memoryTemplateOverrideEnabled,
+      memoryTemplateMarkdown: existing.memoryTemplateMarkdown,
+      memoryConfig: existing.memoryConfig,
+      previousProjectSourcePath: existing.sourceScope === "project" ? existing.sourcePath : null,
+    });
+
+    const linked = this.deps.agentPresetRepository.linkAgentPresetToSource(agentPresetId, {
+      sourcePath: source.sourcePath,
+      sourceScope: source.sourceScope,
+      sourceUpdatedAt: source.sourceUpdatedAt,
+      sourceImportedAt: source.sourceUpdatedAt,
+    });
+    return await this.decorateAgentPreset(linked);
   }
 
   async pushAgentPresetsToRepository(projectId: string, options: {
@@ -816,6 +884,12 @@ export class AgentPresetSyncService {
     return this.deps.settingsRepository.getProjectResolvedSettings(projectId).agents.saveToProjectDirectory;
   }
 
+  private assertProjectMarkdownMirroringEnabled(projectId: string): void {
+    if (!this.shouldSaveToProjectDirectory(projectId)) {
+      throw new ValidationError("Project agent markdown mirroring is disabled. Enable agents.saveToProjectDirectory before pushing agent presets to project markdown.");
+    }
+  }
+
   private assertAgentNameAvailable(projectId: string, name: string, currentAgentId?: string): void {
     const existing = this.deps.agentPresetRepository.findAgentPresetByName(projectId, name);
     if (existing && existing.id !== currentAgentId) {
@@ -824,6 +898,8 @@ export class AgentPresetSyncService {
   }
 
   private async writeProjectAgentFile(args: {
+    projectId?: string;
+    agentPresetId?: string;
     projectBaseDir: string;
     name: string;
     description?: string;
@@ -841,12 +917,23 @@ export class AgentPresetSyncService {
     await fs.mkdir(directory, { recursive: true });
 
     const filePath = path.join(directory, `${this.toAgentFileStem(args.name)}.md`);
+    this.assertPathInsideDirectory(filePath, directory);
+    const fileAlreadyExists = await fs.stat(filePath)
+      .then(() => true)
+      .catch(() => false);
+    if (fileAlreadyExists && args.projectId && args.agentPresetId) {
+      this.assertProjectAgentFileWritable({
+        projectId: args.projectId,
+        agentPresetId: args.agentPresetId,
+        filePath,
+        agentName: args.name,
+      });
+    }
     if (!args.previousProjectSourcePath || args.previousProjectSourcePath !== filePath) {
-      const fileAlreadyExists = await fs.stat(filePath)
-        .then(() => true)
-        .catch(() => false);
       if (fileAlreadyExists) {
-        throw new Error(`Project agent file already exists: ${filePath}`);
+        if (!args.projectId || !args.agentPresetId) {
+          throw new Error(`Project agent file already exists: ${filePath}`);
+        }
       }
     }
 
@@ -873,6 +960,40 @@ export class AgentPresetSyncService {
     }
 
     return await this.readAgentSourceFile(filePath, "project");
+  }
+
+  private assertPathInsideDirectory(filePath: string, directory: string): void {
+    const resolvedFile = path.resolve(filePath);
+    const resolvedDirectory = path.resolve(directory);
+    const relative = path.relative(resolvedDirectory, resolvedFile);
+    if (relative.startsWith("..") || path.isAbsolute(relative)) {
+      throw new ValidationError(`Refusing to write agent markdown outside ${resolvedDirectory}.`);
+    }
+  }
+
+  private assertProjectAgentFileWritable(args: {
+    projectId: string;
+    agentPresetId: string;
+    filePath: string;
+    agentName: string;
+  }): void {
+    const resolvedFile = path.resolve(args.filePath);
+    const targetName = this.toDisplayNameFromStem(path.basename(args.filePath, path.extname(args.filePath)));
+    const normalizedTargetName = this.normalizeName(targetName);
+    const conflictingPreset = this.deps.agentPresetRepository.listAgentPresets(args.projectId)
+      .find((preset) => {
+        if (preset.id === args.agentPresetId) {
+          return false;
+        }
+        if (preset.sourcePath && path.resolve(preset.sourcePath) === resolvedFile) {
+          return true;
+        }
+        return this.normalizeName(preset.name) === normalizedTargetName;
+      });
+
+    if (conflictingPreset) {
+      throw new ValidationError(`Cannot export agent "${args.agentName}" to ${args.filePath} because that markdown file belongs to agent "${conflictingPreset.name}".`);
+    }
   }
 
   private toAgentFileStem(name: string): string {

@@ -45,6 +45,16 @@ The background is an animated Three.js scene ("Deep Ocean") that lazy-loads afte
 | `/stats` | [Stats](./stats.md) | Execution analytics, time-window filtering, trends |
 | `/config` | [Settings](./settings.md) | System / project / sprint settings hierarchy |
 
+## Overview telemetry
+
+The Overview telemetry rail combines cross-project runtime health with selected-project detail:
+
+- Cross-project intervention cards still show active projects that need human attention.
+- Active sprint cards and the runtime timeline continue to summarize work across active projects.
+- When the top bar has a project selected and that project's live snapshot contains active attention items, Overview shows a compact **Selected Sprint Attention Queue** inside the telemetry panel.
+
+The Overview queue follows the same selected sprint scope as the Live page. If a sprint is selected in the top navigation, the queue shows only the active attention items returned by the selected-sprint live snapshot; unrelated sprint blockers are not reconstructed in the browser. Overview renders the queue read-only, so claim, resolve, and dismiss actions remain on the Live page.
+
 ## Real-time data
 
 The dashboard maintains a live connection to the server using a custom WebSocket protocol via `GET /api/realtime` (e.g., `ws://localhost:4444/api/realtime` for local HTTP dashboards, and `wss://<host>/api/realtime` for HTTPS deployments). On the server side, `DashboardRealtimeService` in `src/services/dashboard-realtime-service.ts` coordinates events, and the websocket upgrade/transport is handled in `src/server/dashboard-realtime-websocket-server.ts`. The connection:
