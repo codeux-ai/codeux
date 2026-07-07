@@ -369,6 +369,11 @@ export class CustomDashboardRepository {
     return row ? this.mapValidationSessionRow(row) : null;
   }
 
+  deleteValidationSession(sessionId: string): void {
+    this.requireValidationSession(sessionId);
+    this.db.prepare(`DELETE FROM custom_dashboard_validation_sessions WHERE id = ?`).run(sessionId);
+  }
+
   markRevisionValidated(
     revisionId: string,
     validationReport: CustomDashboardValidationReport,
