@@ -703,7 +703,8 @@ export class ChatThreadRuntimeService {
     thread: ConversationThreadRecord,
     userMessage: ConversationMessageRecord,
   ): Promise<boolean> {
-    const quickactionState = thread.runtimeState?.createAppQuickaction ?? null;
+    const currentThread = this.deps.connectionChatRepository.getThread(thread.id) || thread;
+    const quickactionState = currentThread.runtimeState?.createAppQuickaction ?? null;
     if (!quickactionState?.activeSprintId) {
       return false;
     }
@@ -716,19 +717,33 @@ export class ChatThreadRuntimeService {
     const taskCount = this.deps.projectManagementRepository.listTasks(projectId, quickactionState.activeSprintId).length;
 
     if (quickactionState.planningStatus === "running" && taskCount === 0) {
-      const queuedFollowUps = [
-        ...quickactionState.queuedFollowUps.filter((entry) => entry.messageId !== followUp.messageId),
-        followUp,
-      ];
-      this.deps.connectionChatRepository.updateThread(thread.id, {
-        runtimeState: {
-          ...thread.runtimeState,
-          createAppQuickaction: {
-            ...quickactionState,
-            queuedFollowUps,
-          },
-        },
+      const queued = this.updateCreateAppQuickactionRuntimeState(thread.id, (latestQuickactionState) => {
+        if (
+          !latestQuickactionState
+          || latestQuickactionState.activeSprintId !== quickactionState.activeSprintId
+          || latestQuickactionState.planningStatus !== "running"
+        ) {
+          return null;
+        }
+        return {
+          ...latestQuickactionState,
+          queuedFollowUps: [
+            ...latestQuickactionState.queuedFollowUps.filter((entry) => entry.messageId !== followUp.messageId),
+            followUp,
+          ],
+        };
       });
+      if (!queued) {
+        this.appendCreateAppFollowUpsToSprint(projectId, quickactionState.activeSprintId, [followUp]);
+        this.deps.connectionChatRepository.markDashboardMessagesProcessed(thread.id, {
+          upToMessageId: userMessage.id,
+        });
+        this.deps.connectionChatRepository.postSystemMessage(projectId, {
+          threadId: thread.id,
+          bodyMarkdown: "Updated the app sprint direction with your latest note.",
+        });
+        return true;
+      }
       this.deps.connectionChatRepository.markDashboardMessagesProcessed(thread.id, {
         upToMessageId: userMessage.id,
       });
@@ -756,8 +771,8 @@ export class ChatThreadRuntimeService {
     launch: DetachedQuicksprintLaunchResult,
   ): void {
     void launch.planningPromise.then(
-      () => this.finalizeCreateAppPlanning(projectId, threadId, launch.sprint.id, "completed"),
-      (error: unknown) => this.finalizeCreateAppPlanning(projectId, threadId, launch.sprint.id, "failed", error),
+      () => this.finalizeCreateAppPlanning(projectId, threadId, launch.sprint.id, launch.planningRequest.clientRequestId, "completed"),
+      (error: unknown) => this.finalizeCreateAppPlanning(projectId, threadId, launch.sprint.id, launch.planningRequest.clientRequestId, "failed", error),
     );
   }
 
@@ -765,6 +780,7 @@ export class ChatThreadRuntimeService {
     projectId: string,
     threadId: string,
     sprintId: string,
+    planningRequestId: string,
     planningStatus: DashboardCreateAppQuickactionPlanningStatus,
     error?: unknown,
   ): Promise<void> {
@@ -775,11 +791,31 @@ export class ChatThreadRuntimeService {
         return;
       }
 
-      let queuedFollowUps = quickactionState.queuedFollowUps;
-      if (planningStatus === "completed" && queuedFollowUps.length > 0) {
+      const appendedFollowUpIds = new Set<string>();
+      if (planningStatus === "completed") {
         try {
-          this.appendCreateAppFollowUpsToSprint(projectId, sprintId, queuedFollowUps);
-          queuedFollowUps = [];
+          for (;;) {
+            const latestThread = this.deps.connectionChatRepository.getThread(threadId);
+            const latestQuickactionState = latestThread.runtimeState?.createAppQuickaction ?? null;
+            if (!latestQuickactionState || latestQuickactionState.activeSprintId !== sprintId) {
+              return;
+            }
+            if (
+              latestQuickactionState.activePlanningRequestId
+              && latestQuickactionState.activePlanningRequestId !== planningRequestId
+            ) {
+              return;
+            }
+            const followUpsToAppend = latestQuickactionState.queuedFollowUps
+              .filter((entry) => !appendedFollowUpIds.has(entry.messageId));
+            if (followUpsToAppend.length === 0) {
+              break;
+            }
+            this.appendCreateAppFollowUpsToSprint(projectId, sprintId, followUpsToAppend);
+            for (const followUp of followUpsToAppend) {
+              appendedFollowUpIds.add(followUp.messageId);
+            }
+          }
         } catch (appendError: unknown) {
           this.deps.logger?.error("Failed to append queued create-app follow-ups after planning completed", {
             projectId,
@@ -791,24 +827,33 @@ export class ChatThreadRuntimeService {
       }
 
       const now = new Date().toISOString();
-      const nextQuickactionState: DashboardCreateAppQuickactionRuntimeState = {
-        ...quickactionState,
-        planningStatus,
-        queuedFollowUps,
-        planningError: planningStatus === "failed"
-          ? (error instanceof Error ? error.message : String(error ?? "Planning failed"))
-          : null,
-        ...(planningStatus === "completed" ? { completedAt: now } : { failedAt: now }),
-      };
-      delete nextQuickactionState.activePlanningRequestId;
-
-      this.deps.connectionChatRepository.updateThread(thread.id, {
-        runtimeState: {
-          ...thread.runtimeState,
-          createAppQuickaction: nextQuickactionState,
-        },
+      const nextQuickactionState = this.updateCreateAppQuickactionRuntimeState(thread.id, (latestQuickactionState) => {
+        if (!latestQuickactionState || latestQuickactionState.activeSprintId !== sprintId) {
+          return null;
+        }
+        if (
+          latestQuickactionState.activePlanningRequestId
+          && latestQuickactionState.activePlanningRequestId !== planningRequestId
+        ) {
+          return null;
+        }
+        const nextState: DashboardCreateAppQuickactionRuntimeState = {
+          ...latestQuickactionState,
+          planningStatus,
+          queuedFollowUps: planningStatus === "completed"
+            ? latestQuickactionState.queuedFollowUps.filter((entry) => !appendedFollowUpIds.has(entry.messageId))
+            : latestQuickactionState.queuedFollowUps,
+          planningError: planningStatus === "failed"
+            ? (error instanceof Error ? error.message : String(error ?? "Planning failed"))
+            : null,
+          ...(planningStatus === "completed" ? { completedAt: now } : { failedAt: now }),
+        };
+        if (nextState.activePlanningRequestId === planningRequestId) {
+          delete nextState.activePlanningRequestId;
+        }
+        return nextState;
       });
-      this.updateCreateAppProgressWidgetStatus(nextQuickactionState.progressMessageId ?? null, planningStatus);
+      this.updateCreateAppProgressWidgetStatus(nextQuickactionState?.progressMessageId ?? quickactionState.progressMessageId ?? null, planningStatus);
     } catch (settleError: unknown) {
       this.deps.logger?.error("Failed to finalize dashboard create-app planning state", {
         projectId,
@@ -818,6 +863,29 @@ export class ChatThreadRuntimeService {
         error: settleError instanceof Error ? settleError.message : String(settleError),
       });
     }
+  }
+
+  private updateCreateAppQuickactionRuntimeState(
+    threadId: string,
+    updater: (
+      current: DashboardCreateAppQuickactionRuntimeState | null,
+      thread: ConversationThreadRecord,
+    ) => DashboardCreateAppQuickactionRuntimeState | null,
+  ): DashboardCreateAppQuickactionRuntimeState | null {
+    const latestThread = this.deps.connectionChatRepository.getThread(threadId);
+    const currentRuntimeState = latestThread.runtimeState ?? {};
+    const nextQuickactionState = updater(currentRuntimeState.createAppQuickaction ?? null, latestThread);
+    if (!nextQuickactionState) {
+      return null;
+    }
+
+    this.deps.connectionChatRepository.updateThread(threadId, {
+      runtimeState: {
+        ...currentRuntimeState,
+        createAppQuickaction: nextQuickactionState,
+      },
+    });
+    return nextQuickactionState;
   }
 
   private appendCreateAppFollowUpsToSprint(
