@@ -8,6 +8,22 @@ import {
 } from "../../../dashboard/src/v2/lib/onboarding-provider-settings.js";
 import type { OnboardingProviderCredentialStatus, SystemSettings, ProjectSettings } from "../../../dashboard/src/types.js";
 
+const createImporterSettings = () => ({
+  enabled: false,
+  apiToken: "",
+  apiSecret: "",
+  baseUrl: "",
+  workspaceId: "",
+  teamId: "",
+  teamKey: "",
+  projectId: "",
+  databaseId: "",
+  boardId: "",
+  documentId: "",
+  fileKey: "",
+  defaultSearchLimit: 25,
+});
+
 describe("onboarding-provider-settings", () => {
   it("getProviderInitialSelection returns jules, enabled providers, and detected providers", () => {
     const providers: OnboardingProviderCredentialStatus[] = [
@@ -41,6 +57,13 @@ describe("onboarding-provider-settings", () => {
       runtime: {},
       integrations: {
         jira: { host: "", email: "", apiToken: "", autoTransitionLinkedIssuesOnImport: true, importTransitionName: "In Work", autoCloseLinkedIssues: false, defaultProject: "", closeTransitionName: "Done" },
+        notion: createImporterSettings(),
+        asana: createImporterSettings(),
+        linear: createImporterSettings(),
+        miro: createImporterSettings(),
+        lucid: createImporterSettings(),
+        figma: createImporterSettings(),
+        mural: createImporterSettings(),
         providers: {
           "p1": { provider: "jules", name: "Jules", apiKey: "key", mountAuth: false, authPath: "" }
         }
@@ -95,6 +118,13 @@ describe("onboarding-provider-settings", () => {
             },
           },
         },
+        notion: createImporterSettings(),
+        asana: createImporterSettings(),
+        linear: createImporterSettings(),
+        miro: createImporterSettings(),
+        lucid: createImporterSettings(),
+        figma: createImporterSettings(),
+        mural: createImporterSettings(),
         guardrails: { onLimitAction: "WARN", defaultLimitOverrides: [], limitOverrides: [], jobConfigOverrides: [], jobs: { task_coding: {}, ci_fix: {}, merge_conflict: {}, clarification_reply: {}, planning: {}, remediation: {} } },
         skills: [],
         mcpTools: [],

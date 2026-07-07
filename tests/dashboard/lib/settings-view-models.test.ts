@@ -819,6 +819,22 @@ describe("settings cloning helpers", () => {
     completedTaskWithoutPr: { strategy: "CREATE_PR" as const, agentPresetIds: [], agentPresetId: null },
   });
 
+  const createMockImporterSettings = () => ({
+    enabled: false,
+    apiToken: "",
+    apiSecret: "",
+    baseUrl: "",
+    workspaceId: "",
+    teamId: "",
+    teamKey: "",
+    projectId: "",
+    databaseId: "",
+    boardId: "",
+    documentId: "",
+    fileKey: "",
+    defaultSearchLimit: 25,
+  });
+
   const createMockProjectSettings = (): ProjectSettings => ({
     appearance: { theme: "system" },
     automationLevel: "FULL",
@@ -831,6 +847,13 @@ describe("settings cloning helpers", () => {
     },
     git: { githubMode: "app", githubToken: "", defaultBranch: "main", autoCreatePr: false, autoCloseLinkedIssues: false, deleteMergedBranches: false, featureBranchPrefix: "", sprintBranchScheme: "FLAT", sprintKeyPrefix: "" },
     jira: { host: "h", email: "e", apiToken: "t", autoTransitionLinkedIssuesOnImport: true, importTransitionName: "In Work", autoCloseLinkedIssues: false, defaultProject: "P", closeTransitionName: "Done" },
+    notion: createMockImporterSettings(),
+    asana: createMockImporterSettings(),
+    linear: createMockImporterSettings(),
+    miro: createMockImporterSettings(),
+    lucid: createMockImporterSettings(),
+    figma: createMockImporterSettings(),
+    mural: createMockImporterSettings(),
     ciIntelligence: {},
     guardrails: { onLimitAction: "WARN", defaultLimitOverrides: [], limitOverrides: [], jobConfigOverrides: [], jobs: { task_coding: {}, ci_fix: {}, merge_conflict: {}, clarification_reply: {}, planning: {}, remediation: {} } as any },
     sprintLoopSteps: { apply: { type: "apply" }, pr: { type: "pr" }, runTests: { type: "test" } },
@@ -946,6 +969,13 @@ describe("settings cloning helpers", () => {
         githubToken: "gh",
         gitlabToken: "gl",
         jira: { host: "h", email: "e", apiToken: "t", autoTransitionLinkedIssuesOnImport: true, importTransitionName: "In Work", autoCloseLinkedIssues: false, defaultProject: "P", closeTransitionName: "Done" },
+        notion: createMockImporterSettings(),
+        asana: createMockImporterSettings(),
+        linear: createMockImporterSettings(),
+        miro: createMockImporterSettings(),
+        lucid: createMockImporterSettings(),
+        figma: createMockImporterSettings(),
+        mural: createMockImporterSettings(),
         providers: {
           "p1": { provider: "jules", name: "Jules", apiKey: "key", mountAuth: false, authPath: "" }
         }
