@@ -35,7 +35,7 @@ pnpm run build
 pnpm run test:e2e -- tests/e2e/product-smoke.spec.ts
 ```
 
-Playwright starts `node dist/index.js` on `http://127.0.0.1:4444` with an isolated temporary HOME/USERPROFILE/XDG home. The server receives `CODEUX_E2E_PROVIDER_CLI_SHIM`, which points at `scripts/e2e/mock-provider-cli.mjs`; provider command specs only use that fake provider when the explicit env var is present.
+Playwright starts `node dist/index.js` on `http://127.0.0.1:4464` by default with an isolated temporary HOME/USERPROFILE/XDG home. Set `CODEUX_E2E_DASHBOARD_PORT` before `pnpm run test:e2e` when that port is occupied. The server receives the resolved value as `DASHBOARD_PORT` plus `CODEUX_E2E_PROVIDER_CLI_SHIM`, which points at `scripts/e2e/mock-provider-cli.mjs`; provider command specs only use that fake provider when the explicit env var is present.
 `pnpm run test:e2e` is a wrapper around `pnpm exec playwright test`, so the documented entrypoint stays stable even though Playwright runs directly underneath it.
 
 Use `tests/e2e/helpers/e2e-fixtures.ts` for deterministic browser tests that need temporary git repositories, selected Code UX projects, public-API sprint/task seeding, local-git HOST execution, QA-disabled project settings, API polling, or onboarding/tour suppression. The fake provider supports prompt markers such as `[mock-provider:sleep=250]`, `[mock-provider:fail]`, `[mock-provider:exit=2]`, `[mock-provider:no-op]`, and `[mock-provider:write=relative/path.txt]`.
