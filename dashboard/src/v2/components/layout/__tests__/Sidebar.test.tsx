@@ -103,6 +103,8 @@ describe("Sidebar", () => {
     expect(expandButton).toHaveAttribute("aria-describedby", "nav-tooltip-sidebar-toggle");
     expect(within(settingsLink).getByText("Settings", { selector: "[aria-hidden='true']" })).toBeInTheDocument();
     expect(within(expandButton).getByText("Expand sidebar", { selector: "[aria-hidden='true']" })).toBeInTheDocument();
+    expect(within(settingsLink).getByText("Settings", { selector: "[aria-hidden='true']" })).toHaveClass("whitespace-nowrap");
+    expect(within(expandButton).getByText("Expand sidebar", { selector: "[aria-hidden='true']" })).toHaveClass("whitespace-nowrap");
     expect(expandButton).toHaveAttribute("aria-expanded", "false");
     expect(expandButton).toHaveAttribute("aria-controls", "primary-navigation");
   });

@@ -382,6 +382,12 @@ const docsRoute = createRoute({
   component: DocsWebPage,
 });
 
+const legacySettingsDocsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/docs/user/dashboard/settings",
+  component: DocsWebPage,
+});
+
 const docsDocumentRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/docs/$docId",
@@ -394,7 +400,7 @@ const notFoundRoute = createRoute({
   component: ErrorPage,
 });
 
-const routeTree = rootRoute.addChildren([indexRoute, sprintsRoute, tasksRoute, projectsRoute, chatRoute, agentsRoute, statsRoute, schedulerRoute, configRoute, memoryRoute, knowledgeRoute, browserRoute, fileBrowserRoute, docsRoute, docsDocumentRoute, liveRoute, notFoundRoute]);
+const routeTree = rootRoute.addChildren([indexRoute, sprintsRoute, tasksRoute, projectsRoute, chatRoute, agentsRoute, statsRoute, schedulerRoute, configRoute, memoryRoute, knowledgeRoute, browserRoute, fileBrowserRoute, docsRoute, legacySettingsDocsRoute, docsDocumentRoute, liveRoute, notFoundRoute]);
 // `defaultPreload: "intent"` warms route matching on hover/focus; the page chunks themselves are
 // prefetched explicitly by the nav components via prefetchRoute() since they are Preact-lazy.
 const router = createRouter({ routeTree, defaultPreload: "intent", defaultPreloadDelay: 50 });

@@ -16,7 +16,36 @@ const escapeHtml = (html: string): string => {
 
 function createRenderer(options?: RenderMarkdownOptions) {
   const renderer = new marked.Renderer();
+  const headingIds = new Map<string, number>();
   renderer.html = () => "";
+
+  const slugifyHeading = (value: string): string => {
+    const base = value
+      .replace(/`([^`]+)`/g, "$1")
+      .replace(/\*\*([^*]+)\*\*/g, "$1")
+      .replace(/\*([^*]+)\*/g, "$1")
+      .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+      .replace(/<[^>]+>/g, "")
+      .toLowerCase()
+      .trim()
+      .replace(/[^a-z0-9\s-]/g, "")
+      .replace(/\s+/g, "-")
+      .replace(/-+/g, "-")
+      .replace(/^-|-$/g, "");
+    return base || "section";
+  };
+
+  const uniqueHeadingId = (base: string): string => {
+    const current = headingIds.get(base) ?? 0;
+    headingIds.set(base, current + 1);
+    return current === 0 ? base : `${base}-${current + 1}`;
+  };
+
+  renderer.heading = function (token) {
+    const parsedText = this.parser.parseInline(token.tokens);
+    const id = uniqueHeadingId(slugifyHeading(token.text));
+    return `<h${token.depth} id="${escapeHtml(id)}">${parsedText}</h${token.depth}>\n`;
+  };
 
   renderer.link = function (token) {
     const { href, title, tokens } = token;
