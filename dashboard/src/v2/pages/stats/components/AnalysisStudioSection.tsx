@@ -6,21 +6,58 @@ import { TrendStudio } from "./TrendStudio.js";
 import { CompositionStudio } from "./CompositionStudio.js";
 import { ReliabilityStudio } from "./ReliabilityStudio.js";
 import {
+  CHIP_CLASS,
   PANEL_CLASS,
-  STATUS_TONE_CLASS,
   type StatsVisualMode,
 } from "./stats-ui-primitives.js";
 import { SystemStudio } from "./system/SystemStudio.js";
 import { ModelsStudio } from "./ModelsStudio.js";
 import { TelemetryLedgerTabs } from "./TelemetryLedgerTabs.js";
 
-const STUDIO_EMPTY_MESSAGES: Record<StatsVisualMode, string> = {
-  trend: "Select a time window to see Trend data.",
-  composition: "Select a time window to see Composition data.",
-  models: "Select a time window to see Models data.",
-  reliability: "Select a time window to see Reliability data.",
-  ledgers: "Select a time window to see Ledgers data.",
-  system: "Select a time window to see System data.",
+interface StudioMetadata {
+  label: string;
+  eyebrow: string;
+  description: string;
+  emptyMessage: string;
+}
+
+const STUDIO_METADATA: Record<StatsVisualMode, StudioMetadata> = {
+  trend: {
+    label: "Trend",
+    eyebrow: "Time-series lens",
+    description: "Token, invocation, and runtime movement across the selected range.",
+    emptyMessage: "Select a time window to see Trend data.",
+  },
+  composition: {
+    label: "Composition",
+    eyebrow: "Usage mix",
+    description: "Provider, token, purpose, and source mix for the current telemetry window.",
+    emptyMessage: "Select a time window to see Composition data.",
+  },
+  models: {
+    label: "Models",
+    eyebrow: "Model performance",
+    description: "Model activity, latency, cache behavior, and reliability signals.",
+    emptyMessage: "Select a time window to see Models data.",
+  },
+  reliability: {
+    label: "Providers",
+    eyebrow: "Reliability lens",
+    description: "Provider health, source confidence, failures, and integrity notes.",
+    emptyMessage: "Select a time window to see Provider data.",
+  },
+  ledgers: {
+    label: "Ledgers",
+    eyebrow: "Audit rows",
+    description: "Dense task, sprint, and git telemetry rows for audit-style review.",
+    emptyMessage: "Select a time window to see Ledger data.",
+  },
+  system: {
+    label: "System",
+    eyebrow: "Invocation workbench",
+    description: "Invocation health, filters, transcript detail, and debugging context.",
+    emptyMessage: "Select a time window to see System data.",
+  },
 };
 
 export interface AnalysisStudioSectionProps {
@@ -51,13 +88,32 @@ export const AnalysisStudioSection: FunctionComponent<AnalysisStudioSectionProps
   visualMode,
   chartState,
 }) => {
-  const renderEmptyState = (mode: StatsVisualMode) => (
-    <div role="status" aria-live="polite" className={`${PANEL_CLASS} flex flex-col items-center justify-center py-20 text-center`}>
-      <div className={`mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-[1.25rem] ${STATUS_TONE_CLASS.warning}`}>
-        <Layers3 className="h-8 w-8" strokeWidth={2} />
+  const activeMetadata = STUDIO_METADATA[visualMode];
+  const metadataDescriptionId = `stats-analysis-${visualMode}-description`;
+
+  const renderSectionMetadata = (metadata: StudioMetadata) => (
+    <div className={`mb-3 flex min-w-0 flex-col gap-2 px-3 py-2 sm:flex-row sm:items-center sm:justify-between ${CHIP_CLASS}`}>
+      <div className="min-w-0">
+        <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--stats-label-color)]">
+          {metadata.eyebrow}
+        </div>
+        <div className="mt-1 break-words text-sm font-semibold text-[color:var(--stats-value-color)]">
+          {metadata.label}
+        </div>
+      </div>
+      <p id={metadataDescriptionId} className="m-0 max-w-3xl text-xs leading-relaxed text-[color:var(--stats-detail-color)]">
+        {metadata.description}
+      </p>
+    </div>
+  );
+
+  const renderEmptyState = (metadata: StudioMetadata) => (
+    <div role="status" aria-live="polite" className={`${PANEL_CLASS} flex flex-col items-center justify-center py-16 text-center`}>
+      <div className={`mx-auto mb-4 flex h-12 w-12 items-center justify-center border border-[color:var(--stats-border-hairline)] text-[color:var(--stats-detail-color)] ${CHIP_CLASS}`}>
+        <Layers3 className="h-5 w-5" strokeWidth={2} aria-hidden="true" />
       </div>
       <div className="text-base font-bold text-[color:var(--stats-value-color)]">Waiting for Telemetry</div>
-      <div className="mt-2 text-sm text-[color:var(--stats-detail-color)]">{STUDIO_EMPTY_MESSAGES[mode]}</div>
+      <div className="mt-2 text-sm text-[color:var(--stats-detail-color)]">{metadata.emptyMessage}</div>
     </div>
   );
 
@@ -67,11 +123,13 @@ export const AnalysisStudioSection: FunctionComponent<AnalysisStudioSectionProps
       id="stats-analysis-panel"
       role="region"
       aria-label="Stats analysis panel"
+      aria-describedby={metadataDescriptionId}
       aria-busy={loading ? "true" : undefined}
       className="animate-in fade-in duration-200 motion-reduce:animate-none"
     >
+      {renderSectionMetadata(activeMetadata)}
       {loading && stats ? (
-        <div role="status" aria-live="polite" aria-atomic="true" className="mb-3 rounded-[var(--stats-chip-radius)] border border-[color:var(--stats-card-border)] bg-[color:var(--stats-surface-chip)] px-3 py-2 text-[11px] font-bold uppercase tracking-[0.14em] text-[color:var(--stats-detail-color)]">
+        <div role="status" aria-live="polite" aria-atomic="true" className={`mb-3 px-3 py-2 text-[11px] font-bold uppercase tracking-[0.14em] text-[color:var(--stats-detail-color)] ${CHIP_CLASS}`}>
           Updating analytics from cached data. Current values remain visible while the latest snapshot loads.
         </div>
       ) : null}
@@ -85,7 +143,7 @@ export const AnalysisStudioSection: FunctionComponent<AnalysisStudioSectionProps
             planningUsage={planningUsage}
             chartState={chartState}
           />
-        ) : renderEmptyState("trend")
+        ) : renderEmptyState(STUDIO_METADATA.trend)
       ) : null}
 
       {visualMode === "composition" ? (
@@ -93,7 +151,7 @@ export const AnalysisStudioSection: FunctionComponent<AnalysisStudioSectionProps
           <div className={loading ? "pointer-events-none opacity-60 transition-opacity motion-reduce:transition-none" : "transition-opacity motion-reduce:transition-none"}>
             <CompositionStudio stats={stats} providerSegments={providerSegments} tokenSegments={tokenSegments} />
           </div>
-        ) : renderEmptyState("composition")
+        ) : renderEmptyState(STUDIO_METADATA.composition)
       ) : null}
 
       {visualMode === "models" ? (
@@ -101,7 +159,7 @@ export const AnalysisStudioSection: FunctionComponent<AnalysisStudioSectionProps
           <div className={loading ? "pointer-events-none opacity-60 transition-opacity motion-reduce:transition-none" : "transition-opacity motion-reduce:transition-none"}>
             <ModelsStudio stats={stats} />
           </div>
-        ) : renderEmptyState("models")
+        ) : renderEmptyState(STUDIO_METADATA.models)
       ) : null}
 
       {visualMode === "reliability" ? (
@@ -109,7 +167,7 @@ export const AnalysisStudioSection: FunctionComponent<AnalysisStudioSectionProps
           <div className={loading ? "pointer-events-none opacity-60 transition-opacity motion-reduce:transition-none" : "transition-opacity motion-reduce:transition-none"}>
             <ReliabilityStudio stats={stats} providerSegments={providerSegments} sourceSegments={sourceSegments} />
           </div>
-        ) : renderEmptyState("reliability")
+        ) : renderEmptyState(STUDIO_METADATA.reliability)
       ) : null}
 
       {visualMode === "ledgers" ? (
@@ -117,13 +175,13 @@ export const AnalysisStudioSection: FunctionComponent<AnalysisStudioSectionProps
           <section className={`space-y-6 ${loading ? "pointer-events-none opacity-60 transition-opacity motion-reduce:transition-none" : "transition-opacity motion-reduce:transition-none"}`}>
             <TelemetryLedgerTabs stats={stats} />
           </section>
-        ) : renderEmptyState("ledgers")
+        ) : renderEmptyState(STUDIO_METADATA.ledgers)
       ) : null}
 
       {visualMode === "system" ? (
         stats ? (
           <SystemStudio projectId={projectId} />
-        ) : renderEmptyState("system")
+        ) : renderEmptyState(STUDIO_METADATA.system)
       ) : null}
     </div>
   );

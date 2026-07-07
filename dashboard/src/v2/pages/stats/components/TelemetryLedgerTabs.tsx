@@ -12,6 +12,7 @@ import {
   TAB_COUNT_ACTIVE_CLASS,
   TAB_COUNT_IDLE_CLASS,
   TAB_IDLE_CLASS,
+  SUBPANEL_CLASS,
   TEXT_DETAIL_CLASS,
 } from "./StatsShared.js";
 import { useReducedMotion } from "../../../hooks/use-reduced-motion.js";
@@ -96,7 +97,7 @@ export const TelemetryLedgerTabs: FunctionComponent<TelemetryLedgerTabsProps> = 
         role="tablist"
         aria-orientation="horizontal"
         aria-label="Telemetry ledgers"
-        className="sticky top-3 z-20 grid w-full max-w-full min-w-0 grid-cols-1 gap-1 rounded-[var(--stats-subpanel-radius)] border border-[color:var(--stats-border-hairline)] bg-[color:var(--stats-surface-subpanel)] p-1 shadow-[var(--stats-subpanel-shadow)] backdrop-blur-xl sm:grid-cols-2 xl:grid-cols-3"
+        className={`${SUBPANEL_CLASS} sticky top-3 z-20 grid w-full max-w-full min-w-0 grid-cols-1 gap-1 !p-1 sm:grid-cols-2 xl:grid-cols-3`}
         onKeyDown={(e) => {
           if (tabs.length === 0) {
             return;
@@ -139,7 +140,7 @@ export const TelemetryLedgerTabs: FunctionComponent<TelemetryLedgerTabsProps> = 
               tabIndex={isActive ? 0 : -1}
               onClick={() => setActiveTab(tab.id)}
               aria-label={`${tab.label}, ${tab.count.toLocaleString()} ${tab.count === 1 ? "entry" : "entries"}`}
-              className={`grid min-h-16 min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 rounded-[calc(var(--stats-subpanel-radius)-0.35rem)] px-3 py-2 text-left transition-[background-color,border-color,box-shadow,color] motion-reduce:transition-none ${CONTROL_FOCUS_CLASS} ${
+              className={`grid min-h-16 min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 rounded-[var(--stats-control-radius)] px-3 py-2 text-left transition-[background-color,border-color,color] motion-reduce:transition-none ${CONTROL_FOCUS_CLASS} ${
                 isActive ? TAB_ACTIVE_CLASS : TAB_IDLE_CLASS
               }`}
               style={{ transitionDuration: interactionTokens.selectionMovement.duration, transitionTimingFunction: interactionTokens.selectionMovement.ease }}
@@ -169,7 +170,7 @@ export const TelemetryLedgerTabs: FunctionComponent<TelemetryLedgerTabsProps> = 
         aria-labelledby={`tab-${activeTab}`}
         tabIndex={0}
         ref={contentRef}
-        className="min-w-0 rounded-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--stats-focus-ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-[color:var(--stats-focus-ring-offset)]"
+        className="min-w-0 rounded-[var(--stats-control-radius)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--stats-focus-ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-[color:var(--stats-focus-ring-offset)]"
       >
         {activeTab === "git" && stats.git ? (
           <GitTelemetryTab gitStats={stats.git} />

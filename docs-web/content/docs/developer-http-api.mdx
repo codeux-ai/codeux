@@ -15,9 +15,9 @@ This page lists every endpoint, grouped by domain. Path parameters use `:name` n
 | Method | Path | Returns |
 | --- | --- | --- |
 | `GET` | `/health` | `{ "status": "UP" }` — liveness. |
-| `GET` | `/ready` | `{ "components": { "settingsDb", "dashboardBind", "mcpService" } }` — readiness. |
+| `GET` | `/ready` | `{ "components": { "settingsDb", "dashboardBind", "mcpService", "startupRecovery" } }` — readiness. |
 | `GET` | `/api/status` | High-level system status snapshot. |
-| `GET` | `/api/execution` | Current execution state across all sprints. |
+| `GET` | `/api/execution` | Current selected-project execution state without heavy recent feeds. |
 | `GET` | `/api/live?projectId=` | Combined live snapshot. Optional project filter. |
 | `GET` | `/api/telemetry/overview` | Overview metrics for the home page. |
 | `GET` | `/api/live-activities` | Live agent activities (cached 10 s). |
@@ -36,7 +36,7 @@ This page lists every endpoint, grouped by domain. Path parameters use `:name` n
 | `DELETE` | `/api/projects/:projectId` | Delete. |
 | `PUT` | `/api/projects/:projectId/select` | Set active project. |
 | `PUT` | `/api/projects/:projectId/selected-sprint` | Set selected sprint for project. |
-| `GET` | `/api/projects/:projectId/execution` | Project execution state. |
+| `GET` | `/api/projects/:projectId/execution` | Project execution state with recent runtime events and invocation summaries. |
 | `GET` | `/api/projects/:projectId/stats?window=24h\|7d\|30d\|custom` | Stats. |
 | `PUT` | `/api/projects/:projectId/preferred-worker` | Set preferred worker connection. |
 | `POST` | `/api/projects/:projectId/attention-items/:id/claim` | Claim an attention item. |
@@ -61,7 +61,7 @@ This page lists every endpoint, grouped by domain. Path parameters use `:name` n
 
 | Method | Path | Description |
 | --- | --- | --- |
-| `GET` | `/api/projects/:projectId/tasks?sprintId=` | List. |
+| `GET` | `/api/projects/:projectId/tasks?sprintId=` | List tasks. Rated tasks include optional latest `selfReflectionRating`; unrated tasks omit it. |
 | `POST` | `/api/projects/:projectId/tasks` | Create. |
 | `PATCH` | `/api/tasks/:taskId` | Update. |
 | `DELETE` | `/api/tasks/:taskId` | Delete. |
@@ -156,10 +156,7 @@ This page lists every endpoint, grouped by domain. Path parameters use `:name` n
 | `PATCH` | `/api/agent-presets/:agentPresetId` | Update. |
 | `DELETE` | `/api/agent-presets/:agentPresetId` | Delete. |
 | `POST` | `/api/agent-presets/:agentPresetId/import-markdown` | Import from a single file. |
-| `POST` | `/api/agent-presets/:agentPresetId/export-markdown` | Export one sqlite preset to the project `.code-ux/agents/` directory. |
-| `POST` | `/api/projects/:projectId/agent-presets/sync-markdown` | Backward-compatible bulk pull from `.code-ux/agents/`. |
-| `POST` | `/api/projects/:projectId/agent-presets/pull-markdown` | Explicitly discover/import project markdown into sqlite. |
-| `POST` | `/api/projects/:projectId/agent-presets/push-markdown` | Export sqlite presets to project markdown when mirroring is enabled. |
+| `POST` | `/api/projects/:projectId/agent-presets/sync-markdown` | Bulk-sync from `.code-ux/agents/`. |
 
 ---
 

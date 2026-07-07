@@ -321,6 +321,7 @@ Both reflection loops are disabled by default. When enabled, planning and QA str
   { "name": "manage_quicksprints", "enabled": true, "isInternal": true },
   { "name": "manage_scheduler",    "enabled": true, "isInternal": true },
   { "name": "manage_agents",       "enabled": true, "isInternal": true },
+  { "name": "manage_node_flows",   "enabled": true, "isInternal": true },
   { "name": "manage_memory",       "enabled": true, "isInternal": true },
   { "name": "search_knowledge",    "enabled": true, "isInternal": true },
   { "name": "manage_settings",     "enabled": true, "isInternal": true },

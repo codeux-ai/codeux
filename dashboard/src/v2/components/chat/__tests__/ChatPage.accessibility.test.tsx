@@ -481,7 +481,7 @@ describe('ChatPage Accessibility', () => {
     const status = screen.getByRole("status");
     expect(status).toHaveAttribute("aria-live", "polite");
     expect(status).toHaveAttribute("aria-atomic", "true");
-    expect(status).toHaveTextContent("Codex is preparing a reply. Working on a reply.");
+    expect(status).not.toHaveTextContent("Codex is preparing a reply. Working on a reply.");
     expect(status).toHaveTextContent("Working");
   });
 });

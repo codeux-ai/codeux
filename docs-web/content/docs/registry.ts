@@ -21,6 +21,8 @@ export type DocsSlug =
   | 'user-dashboard-live-session'
   | 'user-dashboard-chat'
   | 'user-dashboard-agents'
+  | 'user-dashboard-nodes'
+  | 'user-dashboard-node-flows'
   | 'user-dashboard-scheduler'
   | 'user-dashboard-memory'
   | 'user-dashboard-knowledge'
@@ -180,7 +182,7 @@ export const docsRegistry: Record<DocsSlug, DocsRegistryEntry> = {
     path: '/docs/user-dashboard-chat',
     section: 'User Guide',
     title: "Chat",
-    description: "The Chat page (/chat) is a conversation surface that lets you talk to agents for project-backed Q&A, inspect MCP tool invocations, and get local onboarding help before any project exists.",
+    description: "The Chat page (/chat) is a thread-based conversation surface that lets you talk to agents for project-backed Q&A, inspect execution invocation transcripts and MCP tool invocations, and get local onboarding help before...",
   },
   'user-dashboard-agents': {
     id: 'user-dashboard-agents',
@@ -188,6 +190,20 @@ export const docsRegistry: Record<DocsSlug, DocsRegistryEntry> = {
     section: 'User Guide',
     title: "Agents",
     description: "The Agents page (/agents) manages the agent presets available to the active project.",
+  },
+  'user-dashboard-nodes': {
+    id: 'user-dashboard-nodes',
+    path: '/docs/user-dashboard-nodes',
+    section: 'User Guide',
+    title: "Nodes",
+    description: "The Nodes page (/nodes) manages project-scoped workflow graphs for editing, widget configuration, agent attachments, validation, and persisted run inspection.",
+  },
+  'user-dashboard-node-flows': {
+    id: 'user-dashboard-node-flows',
+    path: '/docs/user-dashboard-node-flows',
+    section: 'User Guide',
+    title: "Node Flows",
+    description: "Create and operate saved node-flow workflows for the active project, including dynamic widgets, validation, manual runs, scheduling, run inspection, and agent skill attachments.",
   },
   'user-dashboard-scheduler': {
     id: 'user-dashboard-scheduler',
@@ -257,14 +273,14 @@ export const docsRegistry: Record<DocsSlug, DocsRegistryEntry> = {
     path: '/docs/developer-mcp-tools',
     section: 'Developer Reference',
     title: "MCP tools",
-    description: "Code UX is also an MCP server. When connected, it advertises a set of management tools that an MCP client (or another agent) can call to drive projects, sprints, tasks, agents, memory, persistent skills, settings, pre...",
+    description: "Code UX is also an MCP server. When connected, it advertises a set of management tools that an MCP client (or another agent) can call to drive projects, sprints, tasks, agents, node flows, memory, persistent skills...",
   },
   'developer-management-actions': {
     id: 'developer-management-actions',
     path: '/docs/developer-management-actions',
     section: 'Developer Reference',
     title: "Management actions",
-    description: "Code UX exposes one MCP tool per management domain — manage_projects, manage_sprints, manage_tasks, manage_quicksprints, manage_scheduler, manage_agents, manage_memory, manage_settings, manage_preview, manage_chat_pro...",
+    description: "Code UX exposes one MCP tool per management domain — manage_projects, manage_sprints, manage_tasks, manage_quicksprints, manage_scheduler, manage_agents, manage_node_flows, manage_memory, manage_settings, manage_preview...",
   },
   'developer-http-api': {
     id: 'developer-http-api',
@@ -434,6 +450,8 @@ export const orderedDocs: DocsRegistryEntry[] = [
   docsRegistry['user-dashboard-live-session'],
   docsRegistry['user-dashboard-chat'],
   docsRegistry['user-dashboard-agents'],
+  docsRegistry['user-dashboard-nodes'],
+  docsRegistry['user-dashboard-node-flows'],
   docsRegistry['user-dashboard-scheduler'],
   docsRegistry['user-dashboard-memory'],
   docsRegistry['user-dashboard-knowledge'],

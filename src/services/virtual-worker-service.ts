@@ -425,6 +425,10 @@ export class VirtualWorkerService {
       repoPath: claim.executionContext.repoPath,
       featureBranch: claim.executionContext.featureBranch,
       sprintNumber: claim.sprint.number ?? 0,
+      settingsScope: {
+        projectId: claim.project.id,
+        sprintId: claim.sprint.id,
+      },
       dispatchId: claim.dispatch.id,
       taskRunId: taskRun.id,
     });

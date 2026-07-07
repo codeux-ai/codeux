@@ -80,6 +80,79 @@ export interface ConversationRuntimeState {
     approvalMessage: string;
     proposedAt: string;
   } | null;
+  createAppQuickaction?: DashboardCreateAppQuickactionRuntimeState | null;
+}
+
+export const DASHBOARD_CREATE_APP_QUICKACTION_KINDS = ["web_app", "desktop_app"] as const;
+export type DashboardCreateAppQuickactionKind = typeof DASHBOARD_CREATE_APP_QUICKACTION_KINDS[number];
+
+export const DASHBOARD_APP_PROGRESS_WIDGET_TYPE = "app_progress" as const;
+
+export interface DashboardCreateAppQuickactionStackSummary extends JsonObject {
+  techstackId?: string | null;
+  techstackName?: string | null;
+  applicationKind?: DashboardCreateAppQuickactionKind | null;
+  language?: string | null;
+  framework?: string | null;
+  runtime?: string | null;
+  packageManager?: string | null;
+  styling?: string | null;
+  testFramework?: string | null;
+}
+
+export interface DashboardCreateAppQuickactionPayload extends JsonObject {
+  type: "create_app";
+  kind: DashboardCreateAppQuickactionKind;
+  requestId: string;
+  templateId: string;
+  taskCount?: number;
+  stackSummary?: DashboardCreateAppQuickactionStackSummary | null;
+  suggestionTags?: string[];
+}
+
+export interface DashboardCreateAppQuickactionMetadata extends JsonObject {
+  quickaction: DashboardCreateAppQuickactionPayload;
+}
+
+export type DashboardCreateAppQuickactionPlanningStatus = "running" | "completed" | "failed";
+
+export interface DashboardCreateAppQueuedFollowUp {
+  messageId: string;
+  bodyMarkdown: string;
+  createdAt: string;
+}
+
+export interface DashboardCreateAppQuickactionRuntimeState {
+  activeSprintId: string;
+  appKind: DashboardCreateAppQuickactionKind;
+  planningStatus: DashboardCreateAppQuickactionPlanningStatus;
+  queuedFollowUps: DashboardCreateAppQueuedFollowUp[];
+  quickactionRequestId: string;
+  clientRequestId: string;
+  activePlanningRequestId?: string;
+  progressMessageId?: string | null;
+  planningError?: string | null;
+  completedAt?: string;
+  failedAt?: string;
+}
+
+export interface DashboardAppProgressPlanningStage extends JsonObject {
+  id: "planning" | "plan" | "start" | "finish";
+  label: "Planning" | "Plan" | "Start" | "Finish";
+  status: "running" | "pending" | "completed" | "failed";
+}
+
+export interface DashboardAppProgressWidgetMetadata extends JsonObject {
+  type: typeof DASHBOARD_APP_PROGRESS_WIDGET_TYPE;
+  status: "running" | "completed" | "failed";
+  appKind: DashboardCreateAppQuickactionKind;
+  sprintId: string;
+  sprintName: string;
+  stackSummary?: DashboardCreateAppQuickactionStackSummary | null;
+  planningStages: DashboardAppProgressPlanningStage[];
+  suggestionTags: string[];
+  quickactionRequestId: string;
+  clientRequestId: string;
 }
 
 export interface ConversationCompactionSummary {
@@ -187,7 +260,7 @@ export interface CreateDashboardConversationMessageInput {
   title?: string;
   connectionId?: string | null;
   bodyMarkdown: string;
-  metadata?: ConversationMessageMetadata | null;
+  metadata?: ConversationMessageMetadata | DashboardCreateAppQuickactionMetadata | null;
 }
 
 export interface UpdateConversationThreadInput {

@@ -187,6 +187,7 @@ export class CodeUxServer {
   private quicksprintService: import("../services/quicksprint-service.js").QuicksprintService;
   private projectSetupService: import("../services/project-setup-service.js").ProjectSetupService;
   private schedulerService: import("../services/scheduler-service.js").SchedulerService;
+  private nodeFlowService: import("../services/node-flow-service.js").NodeFlowService;
   private chatThreadRuntimeService: import("../services/chat-thread-runtime-service.js").ChatThreadRuntimeService;
   private chatProviderIngressService: ChatProviderIngressService;
   private runtimeCleanupService: RuntimeCleanupService;
@@ -206,6 +207,7 @@ export class CodeUxServer {
   private mcpHttpHandle: McpHttpTransportHandle | null = null;
   private dashboardHandle: DashboardServerHandle | null = null;
   private mcpServiceBound = false;
+  private startupRecoveryCompleted = false;
   private isClosing = false;
   private closePromise: Promise<void> | null = null;
   private readonly mcpApprovalTracker = new McpApprovalTracker();
@@ -267,6 +269,7 @@ export class CodeUxServer {
     this.quicksprintService = deps.quicksprintService;
     this.projectSetupService = deps.projectSetupService;
     this.schedulerService = deps.schedulerService;
+    this.nodeFlowService = deps.nodeFlowService;
     this.chatThreadRuntimeService = deps.chatThreadRuntimeService;
     this.chatProviderIngressService = deps.chatProviderIngressService;
     this.runtimeCleanupService = deps.runtimeCleanupService;
@@ -604,26 +607,11 @@ export class CodeUxServer {
   }
 
   private getConfiguredMcpConnectionInfo(): McpConnectionInfo | null {
-    if (!this.appConfig.mcpHttpEnabled || !this.appConfig.mcpHttpPort) {
+    if (!this.appConfig.mcpHttpEnabled || !this.appConfig.mcpHttpPort || !this.mcpHttpHandle) {
       return null;
     }
-    if (this.mcpHttpHandle) {
-      return {
-        url: `http://${this.mcpHttpClientHost()}:${this.mcpHttpHandle.port}${this.mcpHttpHandle.path}`,
-        authToken: this.appConfig.mcpHttpAuthToken,
-      };
-    }
-
-    const defaultMcpHttpPort = this.appConfig.dashboardPort + 1;
-    const port = this.appConfig.mcpHttpPort === defaultMcpHttpPort
-      ? this.getDashboardPort() + 1
-      : this.appConfig.mcpHttpPort;
-    const host = this.appConfig.mcpHttpHost.trim().toLowerCase();
-    const clientHost = host === "0.0.0.0" || host === "::"
-      ? "127.0.0.1"
-      : this.appConfig.mcpHttpHost;
     return {
-      url: `http://${clientHost}:${port}${this.appConfig.mcpHttpPath}`,
+      url: `http://${this.mcpHttpClientHost()}:${this.mcpHttpHandle.port}${this.mcpHttpHandle.path}`,
       authToken: this.appConfig.mcpHttpAuthToken,
     };
   }
@@ -827,8 +815,9 @@ export class CodeUxServer {
     const settingsDbUp = this.runtimeContext.settings !== undefined;
     const dashboardBindUp = !this.isDashboardEnabled() || this.runtimeContext.dashboardRuntimePort !== null;
     const mcpServiceUp = this.mcpServiceBound;
+    const startupRecoveryUp = this.startupRecoveryCompleted;
 
-    const isReady = settingsDbUp && dashboardBindUp && mcpServiceUp;
+    const isReady = settingsDbUp && dashboardBindUp && mcpServiceUp && startupRecoveryUp;
 
     return {
       status: isReady ? "READY" : "NOT_READY",
@@ -836,6 +825,7 @@ export class CodeUxServer {
         settingsDb: settingsDbUp ? "UP" : "DOWN",
         dashboardBind: dashboardBindUp ? "UP" : "DOWN",
         mcpService: mcpServiceUp ? "UP" : "DOWN",
+        startupRecovery: startupRecoveryUp ? "UP" : "DOWN",
       }
     };
   }
@@ -1196,6 +1186,8 @@ export class CodeUxServer {
       }
     } catch (error) {
       this.logger.error("Failed to recover runtime state on startup", { error });
+    } finally {
+      this.startupRecoveryCompleted = true;
     }
   }
 
@@ -1342,6 +1334,7 @@ export class CodeUxServer {
         quicksprintService: this.quicksprintService,
         projectSetupService: this.projectSetupService,
         schedulerService: this.schedulerService,
+        nodeFlowService: this.nodeFlowService,
         chatThreadRuntimeService: this.chatThreadRuntimeService,
         chatProviderIngressService: this.chatProviderIngressService,
         dashboardRealtimeService: this.dashboardRealtimeService,

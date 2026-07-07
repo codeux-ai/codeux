@@ -37,7 +37,8 @@ The background is an animated Three.js scene ("Deep Ocean") that lazy-loads afte
 | `/live` | [Live Session](/docs/user-dashboard-live-session) | Real-time view of the active sprint run |
 | `/chat` | [Chat](/docs/user-dashboard-chat) | Conversation threads with agents, plus invocation logs |
 | `/agents` | [Agents](/docs/user-dashboard-agents) | Agent presets — system instructions, avatars, memory templates |
-| `/scheduler` | [Scheduler](/docs/user-dashboard-scheduler) | Scheduled sprints, quicksprints, and messages with recurrence |
+| `/nodes` | [Node Flows](/docs/user-dashboard-node-flows) | Create, validate, run, schedule, and attach repeatable node workflows |
+| `/scheduler` | [Scheduler](/docs/user-dashboard-scheduler) | Scheduled sprints, quicksprints, node flows, messages, and memory remediation |
 | `/memory` | [Memory](/docs/user-dashboard-memory) | Short/long-term memory, embedding model management, semantic search |
 | `/knowledge` | [Knowledge](/docs/user-dashboard-knowledge) | Project knowledge base — documents, embeddings, semantic search |
 | `/files` | [File Browser](/docs/user-dashboard-file-browser) | Browse project files and review sprint Git changes |
@@ -45,6 +46,16 @@ The background is an animated Three.js scene ("Deep Ocean") that lazy-loads afte
 | `/stats` | [Stats](/docs/user-dashboard-stats) | Execution analytics, time-window filtering, trends |
 | `/config` | [Settings](/docs/user-dashboard-settings) | System / project / sprint settings hierarchy |
 | `/config?category=guidance#guidance` | [Styleguides and Tech Stacks](/docs/user-dashboard-styleguides-and-tech-stacks) | Tech-stack guidance, styleguide catalogs, and custom worker instructions |
+
+## Overview telemetry
+
+The Overview telemetry rail combines cross-project runtime health with selected-project detail:
+
+- Cross-project intervention cards still show active projects that need human attention.
+- Active sprint cards and the runtime timeline continue to summarize work across active projects.
+- When the top bar has a project selected and that project's live snapshot contains active attention items, Overview shows a compact **Selected Sprint Attention Queue** inside the telemetry panel.
+
+The Overview queue follows the same selected sprint scope as the Live page. If a sprint is selected in the top navigation, the queue shows only the active attention items returned by the selected-sprint live snapshot; unrelated sprint blockers are not reconstructed in the browser. Overview renders the queue read-only, so claim, resolve, and dismiss actions remain on the Live page.
 
 ## Real-time data
 

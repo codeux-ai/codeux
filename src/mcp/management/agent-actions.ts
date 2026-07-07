@@ -1,14 +1,19 @@
 import type { ManageCodeUxArgs, ManagementResponseEnvelope } from "../../contracts/internal-management-types.js";
 import type { AgentPresetSyncService } from "../../services/agent-preset-sync-service.js";
-import type { AgentAvatarConfig } from "../../contracts/agent-preset-types.js";
-import { parseRequiredString, parseOptionalString, parseOptionalStringArray, parseOptionalBoolean, parseOptionalObject } from "./payload-parsers.js";
+import type { AgentAvatarConfig, AgentMcpAccessConfig, AgentMemoryConfig } from "../../contracts/agent-preset-types.js";
+import { parseRequiredString, parseOptionalString, parseOptionalStringArray, parseOptionalBoolean, parseOptionalObject, parseOptionalNullableString } from "./payload-parsers.js";
 
 
 interface UpdateAgentInput {
   name?: string;
+  description?: string;
   instructionMarkdown?: string;
   labels?: string[];
   avatarConfig?: AgentAvatarConfig;
+  providerConfigId?: string | null;
+  model?: string | null;
+  memoryConfig?: AgentMemoryConfig;
+  mcpAccess?: AgentMcpAccessConfig;
   memoryTemplateOverrideEnabled?: boolean;
   memoryTemplateMarkdown?: string;
 }
@@ -83,9 +88,14 @@ export class AgentActions {
 
     const agent = await this.agentPresetSyncService.createAgentPreset(projectId, {
       name,
+      description: parseOptionalString(payload, "description"),
       instructionMarkdown,
       labels: parseOptionalStringArray(payload, "labels") ?? [],
       avatarConfig,
+      providerConfigId: parseOptionalNullableString(payload, "providerConfigId"),
+      model: parseOptionalNullableString(payload, "model"),
+      memoryConfig: parseOptionalObject<AgentMemoryConfig>(payload, "memoryConfig"),
+      mcpAccess: parseOptionalObject<AgentMcpAccessConfig>(payload, "mcpAccess"),
       memoryTemplateOverrideEnabled: parseOptionalBoolean(payload, "memoryTemplateOverrideEnabled"),
       memoryTemplateMarkdown: parseOptionalString(payload, "memoryTemplateMarkdown"),
     });
@@ -100,12 +110,22 @@ export class AgentActions {
     const updateInput: UpdateAgentInput = {};
     const name = parseOptionalString(payload, "name");
     if (name !== undefined) updateInput.name = name;
+    const description = parseOptionalString(payload, "description");
+    if (description !== undefined) updateInput.description = description;
     const instructionMarkdown = parseOptionalString(payload, "instructionMarkdown");
     if (instructionMarkdown !== undefined) updateInput.instructionMarkdown = instructionMarkdown;
     const labels = parseOptionalStringArray(payload, "labels");
     if (labels !== undefined) updateInput.labels = labels;
     const avatarConfig = parseOptionalObject<AgentAvatarConfig>(payload, "avatarConfig");
     if (avatarConfig !== undefined) updateInput.avatarConfig = avatarConfig;
+    const providerConfigId = parseOptionalNullableString(payload, "providerConfigId");
+    if (providerConfigId !== undefined) updateInput.providerConfigId = providerConfigId;
+    const model = parseOptionalNullableString(payload, "model");
+    if (model !== undefined) updateInput.model = model;
+    const memoryConfig = parseOptionalObject<AgentMemoryConfig>(payload, "memoryConfig");
+    if (memoryConfig !== undefined) updateInput.memoryConfig = memoryConfig;
+    const mcpAccess = parseOptionalObject<AgentMcpAccessConfig>(payload, "mcpAccess");
+    if (mcpAccess !== undefined) updateInput.mcpAccess = mcpAccess;
     const memoryTemplateOverrideEnabled = parseOptionalBoolean(payload, "memoryTemplateOverrideEnabled");
     if (memoryTemplateOverrideEnabled !== undefined) updateInput.memoryTemplateOverrideEnabled = memoryTemplateOverrideEnabled;
     const memoryTemplateMarkdown = parseOptionalString(payload, "memoryTemplateMarkdown");

@@ -430,6 +430,10 @@ export class ConnectionChatRepository {
     return getFirstReplyAfterMessageQuery(this.db, threadId, messageId, options);
   }
 
+  getMessage(messageId: string): ConversationMessageRecord {
+    return requireConversationMessageQuery(this.db, messageId);
+  }
+
   getThread(threadId: string): ConversationThreadRecord {
     return requireConversationThreadQuery(this.db, threadId);
   }
@@ -619,6 +623,28 @@ export class ConnectionChatRepository {
       this.publishMessageCreatedEvent(projectId, thread.id, message);
     }
     return message;
+  }
+
+  updateMessageMetadata(messageId: string, metadata: Record<string, unknown> | null): ConversationMessageRecord {
+    const message = requireConversationMessageQuery(this.db, messageId);
+    const thread = requireConversationThreadQuery(this.db, message.threadId);
+
+    this.db.prepare(`
+      UPDATE conversation_messages
+      SET metadata_json = ?
+      WHERE id = ?
+    `).run(
+      metadata ? JSON.stringify(metadata) : null,
+      messageId,
+    );
+
+    const updated = requireConversationMessageQuery(this.db, messageId);
+    this.notifyProjects([thread.projectId]);
+    if (!isHiddenConversationMessage(updated.metadata)) {
+      this.publishThreadUpdatedEvent(requireConversationThreadQuery(this.db, thread.id));
+      this.publishMessageUpdatedEvent(thread.projectId, thread.id, updated);
+    }
+    return updated;
   }
 
   markDashboardMessagesProcessed(threadId: string, options?: { upToMessageId?: string | null }): ConversationThreadRecord {
@@ -1245,6 +1271,37 @@ export class ConnectionChatRepository {
       scopeType: "thread",
       scopeId: threadId,
       eventType: "conversation.message.created",
+      entityType: "conversation_message",
+      entityId: message.id,
+      projectId,
+      threadId,
+      payload: message,
+    });
+  }
+
+  private publishMessageUpdatedEvent(
+    projectId: string,
+    threadId: string,
+    message: ConversationMessageRecord,
+  ): void {
+    if (!this.realtimeService) {
+      return;
+    }
+
+    this.realtimeService.publishRawEvent({
+      scopeType: "project",
+      scopeId: projectId,
+      eventType: "conversation.message.updated",
+      entityType: "conversation_message",
+      entityId: message.id,
+      projectId,
+      threadId,
+      payload: message,
+    });
+    this.realtimeService.publishRawEvent({
+      scopeType: "thread",
+      scopeId: threadId,
+      eventType: "conversation.message.updated",
       entityType: "conversation_message",
       entityId: message.id,
       projectId,

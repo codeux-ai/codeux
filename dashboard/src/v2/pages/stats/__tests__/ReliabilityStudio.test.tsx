@@ -255,13 +255,15 @@ describe("ReliabilityStudio", () => {
 
     const summary = screen.getByText("Provider confidence & failure risk");
     const telemetrySourceMix = screen.getByText("Telemetry Source Mix");
-    const sourceCountBoard = screen.getByText("Source Count Board");
+    const confidenceBoard = screen.getByText("Confidence Board");
+    const providerBreakdown = screen.getByText("Provider Breakdown");
     const providerCard = screen.getAllByTitle("Antigravity").at(-1)!;
-    const audit = screen.getByText("Fallback & Error Audit");
+    const audit = screen.getByText("Audit Notes");
 
     expect(summary.compareDocumentPosition(telemetrySourceMix) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(telemetrySourceMix.compareDocumentPosition(sourceCountBoard) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(sourceCountBoard.compareDocumentPosition(providerCard) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(telemetrySourceMix.compareDocumentPosition(confidenceBoard) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(confidenceBoard.compareDocumentPosition(providerBreakdown) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(providerBreakdown.compareDocumentPosition(providerCard) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(providerCard.compareDocumentPosition(audit) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 
     expect(screen.getByText("Telemetry Confidence")).toBeInTheDocument();
@@ -326,14 +328,14 @@ describe("ReliabilityStudio", () => {
       />,
     );
 
-    const board = screen.getByText("Source Count Board").closest(".stats-surface-panel") ?? document.body;
-    expect(within(board as HTMLElement).getByText("Reported")).toBeInTheDocument();
-    expect(within(board as HTMLElement).getByText("Estimated")).toBeInTheDocument();
-    expect(within(board as HTMLElement).getByText("Unavailable")).toBeInTheDocument();
-    expect(within(board as HTMLElement).getByText("Unsupported")).toBeInTheDocument();
-    expect(within(board as HTMLElement).getByText("Unknown")).toBeInTheDocument();
-    expect(within(board as HTMLElement).getByText("6")).toBeInTheDocument();
-    expect(within(board as HTMLElement).getAllByText("1").length).toBeGreaterThanOrEqual(4);
+    const board = screen.getByTestId("reliability-confidence-board");
+    expect(within(board).getByText("Reported")).toBeInTheDocument();
+    expect(within(board).getByText("Estimated")).toBeInTheDocument();
+    expect(within(board).getByText("Unavailable")).toBeInTheDocument();
+    expect(within(board).getByText("Unsupported")).toBeInTheDocument();
+    expect(within(board).getByText("Unknown")).toBeInTheDocument();
+    expect(within(board).getByText("6")).toBeInTheDocument();
+    expect(within(board).getAllByText("1").length).toBeGreaterThanOrEqual(4);
     expect(screen.getByText("7 invocations relied on estimated or unknown source counters. Estimates remain usable, but precision is lower than provider-reported counts.")).toBeInTheDocument();
   });
 
@@ -372,6 +374,12 @@ describe("ReliabilityStudio", () => {
         stats={
           {
             ...baseStats,
+            models: baseStats.models.map((model) => model.id === "model-open"
+              ? {
+                  ...model,
+                  statusCounts: { completed: 5, failed: 1, cancelled: 0, running: 0, paused: 0 },
+                }
+              : model),
             statusCounts: {
               ...baseStats.statusCounts,
               completed: 10,
@@ -386,10 +394,10 @@ describe("ReliabilityStudio", () => {
     );
 
     const fiftyPercent = screen.getByText("50%");
-    const eightyThreePercent = screen.getByText(/83%/);
+    const warningSuccessRate = screen.getAllByText(/83%/).find((element) => element.className.includes("--stats-warning-text"));
 
     expect(fiftyPercent.className).toContain("--stats-negative-text");
-    expect(eightyThreePercent.className).toContain("--stats-warning-text");
+    expect(warningSuccessRate).toBeDefined();
   });
 
   it("uses dedicated icons for the newer provider names", () => {

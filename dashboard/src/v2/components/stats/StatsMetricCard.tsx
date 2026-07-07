@@ -83,7 +83,7 @@ export const StatsMetricCard: FunctionComponent<StatsMetricCardProps> = ({
       title={label}
       value={value}
       trend={
-        <div className={`max-w-full whitespace-normal break-words px-3 py-1 text-center text-[10px] font-bold uppercase leading-tight tracking-[0.14em] text-[color:var(--stats-detail-color)] ${CHIP_CLASS}`}>
+        <div className={`max-w-full whitespace-normal break-words px-2.5 py-1 text-center text-[10px] font-bold uppercase leading-tight tracking-[0.12em] text-[color:var(--stats-detail-color)] ${CHIP_CLASS}`}>
           {signalLabel}
         </div>
       }
@@ -117,7 +117,7 @@ export const StatsMetricCard: FunctionComponent<StatsMetricCardProps> = ({
             <div className="flex min-w-0 flex-wrap items-center gap-2 text-[10px] font-medium leading-snug text-[color:var(--stats-detail-color)]">
               {secondaryDetail && <span className="min-w-0 max-w-full flex-1 basis-32 break-words">{secondaryDetail}</span>}
               {qualityHint && (
-                <span className="min-w-0 max-w-full rounded-full border border-[color:var(--stats-card-border)] bg-[color:var(--stats-surface-chip)] px-2 py-0.5 text-[9px] font-bold uppercase leading-tight tracking-[0.1em] text-[color:var(--stats-detail-color)]">
+                <span className={`min-w-0 max-w-full px-2 py-0.5 text-[9px] font-bold uppercase leading-tight tracking-[0.1em] text-[color:var(--stats-detail-color)] ${CHIP_CLASS}`}>
                   {qualityHint}
                 </span>
               )}

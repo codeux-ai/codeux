@@ -95,7 +95,7 @@ This allows all log lines emitted during a tool call to share a single `correlat
   - Defines strict argument interfaces for every MCP tool.
   - Provides `register` and `dispatch` APIs with compile-time tool/argument matching.
 - Management dispatch target: `ManagementToolHandler`
-  - Routes dedicated management tools such as `manage_projects`, `manage_memory`, and `manage_skills` to domain action classes.
+  - Routes dedicated management tools such as `manage_projects`, `manage_memory`, `manage_node_flows`, and `manage_skills` to domain action classes.
   - Routes retrieval tools such as `search_knowledge` and `search_skills` separately, so agents can receive retrieval without broader management authority.
   - Applies stateful approval fingerprints to destructive management actions before mutation.
 - Core dispatch target: `CoreToolHandler`
@@ -114,6 +114,17 @@ Runtime behavior:
 - `search_skills` is registered as a distinct retrieval tool in the same category. Per-agent MCP policy can disable `manage_skills` while leaving `search_skills` enabled.
 - Search scoping is project-owned. `storageId` limits retrieval to one storage; otherwise `agentPresetId` limits retrieval to the agent's attached storages; otherwise all project storages are eligible.
 - Search results return ranked summaries with IDs and metadata. Full markdown retrieval remains behind `manage_skills` (`export_markdown` or `get_skill` with `includeContent: true`).
+
+## Node Flow Tools
+
+`manage_node_flows` uses `NodeFlowService` as the MCP backend boundary. The action layer parses MCP payloads, applies optional widget schemas into the graph, masks secret-shaped response fields, and delegates graph validation, persistence, run inspection, runtime execution, and agent skill attachments to the service.
+
+Runtime behavior:
+
+- `create` and `update` validate graph specs before repository writes.
+- `run` calls the configured node-flow runtime through `NodeFlowService.runFlow`.
+- `delete` uses the same stateful approval handshake as other destructive management actions.
+- `attach_to_agent` and `detach_from_agent` manage flow-backed skill attachments for agent presets; the agent still needs explicit MCP access if it should call `manage_node_flows` itself.
 
 ## Custom MCP Defaults
 
@@ -173,7 +184,9 @@ That endpoint:
 The Settings > MCP panel explains both runtime connection modes in place:
 
 - Code UX exposes the built-in MCP server over stdio and authenticated Streamable HTTP.
-- The Local CLI HTTP setup section shows the active URL and bearer token, lets the user regenerate the token, and can install the Code UX MCP entry into local Claude Code, Gemini, Codex, Qwen Code, OpenCode, and Antigravity config files.
+- The Local CLI HTTP setup section shows the active URL and bearer token after the Streamable HTTP gateway has bound, lets the user regenerate the token, and can install the Code UX MCP entry into local Claude Code, Gemini, Codex, Qwen Code, OpenCode, and Antigravity config files.
+- Local CLI HTTP installs write a remote MCP entry for the currently running gateway. Clients such as Codex require Code UX to stay running; if Codex fails to initialize `http://127.0.0.1:4445/mcp`, verify `curl --fail http://127.0.0.1:4445/health` and reinstall after URL or token changes.
+- Reinstalling the local Codex config treats `[mcp_servers.code-ux]` as a managed block and replaces it with the current gateway URL and bearer token while preserving unrelated TOML settings and custom MCP server tables.
 - Custom remote MCP servers are added from system scope by choosing `HTTP / SSE`, pasting the server URL, and optionally entering auth headers as a JSON object of header names to string values.
 - HTTP custom server previews use `{ type: "http", url, headers }`; stdio custom server previews use command, args, and env.
 - Custom server changes are injected into MCP-capable CLI containers on the next CLI run. Project scope can enable, disable, or override inherited system servers, but new custom servers are created at system scope.

@@ -6,6 +6,16 @@ export interface PlanningFeedback {
   progress: number; // 0 to 1 (Zeno curve for stage text)
   shipProgress: number; // 0 to 1, loops continuously for ship position
   shipType: "container" | "wooden";
+  shipVisual: PlanningShipVisual;
+}
+
+export type PlanningShipVisualPhase = "entering" | "crossing" | "exiting" | "hidden";
+
+export interface PlanningShipVisual {
+  trackXPercent: number; // may be <0 or >100 while the ship is off the visible track
+  opacity: number;
+  visible: boolean;
+  phase: PlanningShipVisualPhase;
 }
 
 const STAGES: Record<PlanningActionType, Array<{ text: string; threshold: number }>> = {
@@ -50,7 +60,37 @@ const STAGES: Record<PlanningActionType, Array<{ text: string; threshold: number
   ],
 };
 
-const SHIP_LOOP_MS = 12_000; // ship crosses the track every 12 seconds
+export const SHIP_LOOP_MS = 12_000; // ship completes one travel/wrap loop every 12 seconds
+const SHIP_TRACK_START_X_PERCENT = -20;
+const SHIP_TRACK_END_X_PERCENT = 120;
+const SHIP_HIDDEN_WRAP_START_PROGRESS = 0.9;
+
+function getPlanningShipVisual(shipProgress: number): PlanningShipVisual {
+  if (shipProgress >= SHIP_HIDDEN_WRAP_START_PROGRESS) {
+    return {
+      trackXPercent: SHIP_TRACK_START_X_PERCENT,
+      opacity: 0,
+      visible: false,
+      phase: "hidden",
+    };
+  }
+
+  const travelProgress = shipProgress / SHIP_HIDDEN_WRAP_START_PROGRESS;
+  const trackXPercent = SHIP_TRACK_START_X_PERCENT
+    + travelProgress * (SHIP_TRACK_END_X_PERCENT - SHIP_TRACK_START_X_PERCENT);
+  const phase: PlanningShipVisualPhase = trackXPercent < 0
+    ? "entering"
+    : trackXPercent > 100
+      ? "exiting"
+      : "crossing";
+
+  return {
+    trackXPercent,
+    opacity: 1,
+    visible: true,
+    phase,
+  };
+}
 
 export const PLANNING_ACTION_LABELS: Record<PlanningActionType, string> = {
   improve: "Refining prompt...",
@@ -115,5 +155,6 @@ export function getPlanningFeedback(actionType: PlanningActionType, elapsedMs: n
     progress,
     shipProgress,
     shipType: actionType === "improve" ? "wooden" : "container",
+    shipVisual: getPlanningShipVisual(shipProgress),
   };
 }

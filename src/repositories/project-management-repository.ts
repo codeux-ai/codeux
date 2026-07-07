@@ -39,6 +39,7 @@ import { loadProjectSummaryAggregationMap, projectSummaryQuery, type ProjectSumm
 import { loadSprintSummaryAggregationMap, sprintSummaryQuery, type SprintSummaryAggregation } from "./project-management/sprint-summary-query.js";
 import { validateTaskDependencies } from "./project-management/task-dependency-graph.js";
 import { getHomeCodeUxPath } from "../shared/config/code-ux-paths.js";
+import { TaskSelfReflectionRatingRepository } from "./task-self-reflection-rating-repository.js";
 
 const SELECTED_PROJECT_KEY = "selected_project_id";
 const GENERATED_SPRINT_NAME_PREFIX = "Untitled sprint";
@@ -153,7 +154,8 @@ export class ProjectManagementRepository {
     private readonly realtimeNotifier?: DashboardRealtimeMutationNotifier,
     private readonly settingsRepository: SettingsRepository = new SettingsRepository(),
     private readonly projectWorkerAssignmentRepository: ProjectWorkerAssignmentRepository = new ProjectWorkerAssignmentRepository(storage),
-    private readonly logger: Logger = createLogger({ bindings: { component: "ProjectManagementRepository" } })
+    private readonly logger: Logger = createLogger({ bindings: { component: "ProjectManagementRepository" } }),
+    private readonly taskSelfReflectionRatingRepository: TaskSelfReflectionRatingRepository = new TaskSelfReflectionRatingRepository(storage)
   ) {
     this.db = storage.getDatabase();
   }
@@ -1105,7 +1107,9 @@ export class ProjectManagementRepository {
       dependencyMap.set(row.task_id, current);
     }
 
-    const reviewMap = this.getLatestTaskReviewSummaryMap(rows.map((row) => row.id));
+    const taskIds = rows.map((row) => row.id);
+    const reviewMap = this.getLatestTaskReviewSummaryMap(taskIds);
+    const selfReflectionRatingMap = this.taskSelfReflectionRatingRepository.getLatestByTaskIds(taskIds);
 
     return rows.map((row) => ({
       id: row.id,
@@ -1125,6 +1129,7 @@ export class ProjectManagementRepository {
       isIndependent: toBoolean(row.is_independent),
       isMerged: toBoolean(row.is_merged),
       latestReview: reviewMap.get(row.id),
+      selfReflectionRating: selfReflectionRatingMap.get(row.id),
       mergeIndicator: row.merge_indicator,
       sourceType: row.source_type,
       sourcePath: row.source_path,

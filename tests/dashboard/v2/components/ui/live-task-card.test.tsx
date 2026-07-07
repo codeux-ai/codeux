@@ -6,6 +6,7 @@ import { act, cleanup, fireEvent, render, screen, within } from "@testing-librar
 import { LiveTaskCard, QuotaCountdown, TaskDuration } from "../../../../../dashboard/src/v2/components/LiveTaskCard";
 import { LiveTaskInvocationRow } from "../../../../../dashboard/src/v2/components/live-session/LiveTaskInvocationRow.js";
 import type { ExecutionInvocationRecord, Subtask } from "../../../../../dashboard/src/types.js";
+import type { TaskSelfReflectionRating } from "../../../../../src/contracts/task-self-reflection-types.js";
 
 // Mock resize observer and match media
 window.ResizeObserver = vi.fn().mockImplementation(() => ({
@@ -55,6 +56,32 @@ describe("LiveTaskCard", () => {
     prompt: "Test prompt",
     depends_on: [],
     is_independent: true,
+  });
+
+  const getMockSelfReflectionRating = (): TaskSelfReflectionRating => ({
+    id: "rating-1",
+    projectId: "p1",
+    sprintId: "s1",
+    taskId: "test-task",
+    sourceTaskRunId: "task-run-1",
+    overallRating: 5,
+    sections: [
+      {
+        label: "Completeness",
+        normalizedLabel: "completeness",
+        rating: 5,
+        note: "All acceptance criteria covered.",
+      },
+      {
+        label: "Testing",
+        normalizedLabel: "testing",
+        rating: 4.5,
+        note: null,
+      },
+    ],
+    capturedAt: "2026-07-07T00:00:00.000Z",
+    createdAt: "2026-07-07T00:00:00.000Z",
+    updatedAt: "2026-07-07T00:00:00.000Z",
   });
 
   const getMockInvocation = (overrides: Partial<ExecutionInvocationRecord> = {}): ExecutionInvocationRecord => ({
@@ -196,6 +223,30 @@ describe("LiveTaskCard", () => {
     render(<LiveTaskCard task={task} allTasks={[task]} onRerun={vi.fn()} onEdit={vi.fn()} onForceComplete={vi.fn()} isRerunning={false} />);
     expect(screen.getByLabelText("QA review running")).toBeTruthy();
     expect(screen.getByText("QA")).toBeTruthy();
+  });
+
+  it.each([
+    "COMPLETED",
+    "CODING_COMPLETED",
+    "QA_REVIEW_FAILED",
+  ] satisfies Array<NonNullable<Subtask["status"]>>)("%s cards render self-reflection rating details for rated live tasks", async (status) => {
+    const task = {
+      ...getMockTask(status),
+      selfReflectionRating: getMockSelfReflectionRating(),
+    };
+
+    render(<LiveTaskCard task={task} allTasks={[task]} onRerun={vi.fn()} onEdit={vi.fn()} onForceComplete={vi.fn()} isRerunning={false} />);
+
+    const trigger = screen.getByLabelText("Self-reflection rating 5 out of 5");
+    expect(trigger.textContent).toContain("5/5");
+
+    fireEvent.focus(trigger);
+
+    const overlay = await screen.findByRole("tooltip");
+    expect(within(overlay).getByText("Self-reflection rating")).toBeTruthy();
+    expect(within(overlay).getByText("Completeness")).toBeTruthy();
+    expect(within(overlay).getByText("Testing")).toBeTruthy();
+    expect(within(overlay).getByText("All acceptance criteria covered.")).toBeTruthy();
   });
 
   it("shows a task-scoped invocation feed with transcript links", () => {

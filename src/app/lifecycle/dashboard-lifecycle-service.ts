@@ -56,6 +56,7 @@ import type { QuicksprintService } from "../../services/quicksprint-service.js";
 import type { ProjectSetupService } from "../../services/project-setup-service.js";
 import type { SchedulerService } from "../../services/scheduler-service.js";
 import type { ChatProviderIngressService } from "../../services/chat-provider-ingress-service.js";
+import type { NodeFlowService } from "../../services/node-flow-service.js";
 import type { MemoryService } from "../../services/memory-service.js";
 import type { KnowledgeService } from "../../services/knowledge-service.js";
 import type { MemoryPromotionService } from "../../services/memory-promotion-service.js";
@@ -122,6 +123,7 @@ export interface BootDashboardDeps {
   chatThreadRuntimeService: ChatThreadRuntimeService;
   chatProviderIngressService: ChatProviderIngressService;
   chatProviderOutboundService?: ChatProviderOutboundService;
+  nodeFlowService?: NodeFlowService;
   dashboardRealtimeService: DashboardRealtimeService;
   logger: Logger;
   getLiveActivitiesForActiveTasks: () => Promise<Record<string, JulesActivity[]>>;
@@ -402,6 +404,7 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<DashboardS
   });
 
   deps.projectSetupService.setRealtimeNotifier(deps.dashboardRealtimeService);
+  deps.chatThreadRuntimeService?.setQuicksprintLauncher?.(deps.quicksprintService);
 
   // Auto-restore previously active embedding model (fire-and-forget)
   deps.embeddingModelManager.restorePreviousModel().catch((error) => {
@@ -437,6 +440,7 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<DashboardS
     agentPresetRepository: deps.agentPresetRepository,
     chatProviderRepository: deps.chatProviderRepository,
     chatProviderIngressService: deps.chatProviderIngressService,
+    nodeFlowService: deps.nodeFlowService,
     projectManagementRepository: deps.projectManagementRepository,
     executionRepository: deps.executionRepository,
     getLiveSnapshot: (projectIdHint) => getProjectLiveSnapshot({
@@ -464,8 +468,9 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<DashboardS
         };
     },
     getOverviewTelemetrySnapshot: cache.getOverviewTelemetrySnapshot,
-    // `/api/projects/:id/execution` (sprints/overview/chat) — feed-less.
-    getProjectExecutionSnapshot: cache.getProjectExecutionSnapshotLean,
+    // `/api/projects/:id/execution` is the public REST snapshot and includes
+    // recent events/invocations; realtime execution pushes stay feed-less above.
+    getProjectExecutionSnapshot: cache.getProjectExecutionSnapshot,
     getProjectStatsSnapshot: cache.getProjectStatsSnapshot,
     getHeaderTokenThroughputSnapshot: cache.getHeaderTokenThroughputSnapshot,
     setPreferredWorker: (projectId, input) => {
