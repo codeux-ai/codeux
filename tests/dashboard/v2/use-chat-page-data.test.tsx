@@ -548,6 +548,29 @@ describe("useChatPageResources integration", () => {
 
   it("posts create-app quickactions with metadata without composer content or sent history", async () => {
     const onMessageSending = vi.fn(() => "optimistic-1");
+    const dashboardSettings = {
+      techstackCatalog: {
+        defaultTechstackId: "react-saas",
+        entries: [
+          {
+            id: "react-saas",
+            label: "React SaaS",
+            items: [
+              { id: "typescript", label: "TypeScript" },
+              { id: "react", label: "React" },
+              { id: "node", label: "Node.js" },
+              { id: "pnpm", label: "pnpm" },
+              { id: "tailwind", label: "Tailwind" },
+              { id: "vitest", label: "Vitest" },
+            ],
+          },
+        ],
+      },
+      techstack: {
+        selectedTechstackId: null,
+        applicationKind: null,
+      },
+    };
 
     const { result } = renderHook(() => {
       const cache = useMessageCache();
@@ -555,6 +578,7 @@ describe("useChatPageResources integration", () => {
         selectedProject: { id: "proj-1" },
         cache,
         execution: null,
+        dashboardSettings: dashboardSettings as any,
         onMessageSending,
       });
 
@@ -577,18 +601,25 @@ describe("useChatPageResources integration", () => {
           kind: "web_app",
           requestId: expect.stringMatching(/^dashboard-create-app-web_app-/),
           templateId: "qs-create-web-app",
+          stackSummary: {
+            techstackId: "react-saas",
+            techstackName: "React SaaS",
+            applicationKind: "web_app",
+            language: "TypeScript",
+            framework: "React",
+            runtime: "Node.js",
+            packageManager: "pnpm",
+            styling: "Tailwind",
+            testFramework: "Vitest",
+          },
+          suggestionTags: ["TypeScript", "React", "Node.js", "pnpm", "Tailwind", "Vitest"],
         }),
       },
     }));
+    const postedMetadata = vi.mocked(postConversationMessage).mock.calls[0]?.[1].metadata;
     expect(onMessageSending).not.toHaveBeenCalled();
     expect(result.current.threadData.input).toBe("");
-    expect(result.current.threadData.messages[0]?.metadata).toMatchObject({
-      quickaction: {
-        type: "create_app",
-        kind: "web_app",
-        templateId: "qs-create-web-app",
-      },
-    });
+    expect(result.current.threadData.messages[0]?.metadata).toEqual(postedMetadata);
 
     await act(async () => {
       expect(result.current.threadData.navigateHistory("up")).toBe(false);

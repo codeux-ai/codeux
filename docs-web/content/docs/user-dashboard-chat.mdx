@@ -31,6 +31,8 @@ Use **Create Web App** or **Create Desktop App** when you want Code UX to start 
 
 Clicking either quickaction starts immediately. You do not need to type composer text first, and Code UX does not show a confirmation step. If there is no active thread yet, the dashboard creates one, posts a short visible message such as `Create a web app`, and starts the matching quicksprint in detached `Plan & Start` mode while you stay in Chat.
 
+The quickaction carries the active project's effective techstack into planning: the selected catalog entry when assigned, or the catalog default when the project is unassigned. Stack item labels become suggestion tags, so the progress widget and planner begin from the same stack context visible in the dashboard.
+
 The transcript then shows an app progress widget instead of raw status data. The widget reports:
 
 - whether the sprint is for a web app or desktop app

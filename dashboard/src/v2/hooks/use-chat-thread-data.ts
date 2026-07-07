@@ -18,7 +18,8 @@ import { toChatTimestampMs } from "../lib/chat-time.js";
 import { useActionFeedback } from "./use-action-feedback.js";
 import { useConfirmDialog } from "./use-confirm-dialog.js";
 import type { RefObject } from "preact";
-import type { ExecutionDashboardSnapshot } from "../../types.js";
+import type { DashboardSettings, ExecutionDashboardSnapshot, TechstackCatalogEntrySettings } from "../../types.js";
+import { DEFAULT_DASHBOARD_SETTINGS } from "../../lib/settings.js";
 
 export const upsertMessage = (messages: ChatMessageRecord[], nextMessage: ChatMessageRecord): ChatMessageRecord[] => {
   if (messages.some((message) => message.id === nextMessage.id)) {
@@ -132,28 +133,96 @@ const createQuickactionRequestId = (kind: DashboardCreateAppQuickactionKind): st
   return `dashboard-create-app-${kind}-${randomId}`;
 };
 
+const normalizeStackToken = (value: string): string => value.toLowerCase().replace(/[^a-z0-9+#.]+/g, "");
+
+const findStackItemLabel = (
+  entry: TechstackCatalogEntrySettings,
+  matches: string[],
+): string | null => {
+  const normalizedMatches = new Set(matches.map(normalizeStackToken));
+  const item = entry.items.find((candidate) => {
+    const id = normalizeStackToken(candidate.id);
+    const label = normalizeStackToken(candidate.label);
+    return normalizedMatches.has(id) || normalizedMatches.has(label);
+  });
+  return item?.label || null;
+};
+
+const uniqueStackSuggestionTags = (entry: TechstackCatalogEntrySettings): string[] => {
+  const seen = new Set<string>();
+  const tags: string[] = [];
+  for (const label of entry.items.map((item) => item.label.trim()).filter(Boolean)) {
+    const key = label.toLowerCase();
+    if (!seen.has(key)) {
+      seen.add(key);
+      tags.push(label);
+    }
+  }
+  return tags;
+};
+
+const resolveCreateAppTechstackEntry = (
+  dashboardSettings: DashboardSettings | null | undefined,
+): { id: string; entry: TechstackCatalogEntrySettings } => {
+  const settings = dashboardSettings ?? DEFAULT_DASHBOARD_SETTINGS;
+  const catalog = settings.techstackCatalog.entries.length > 0
+    ? settings.techstackCatalog
+    : DEFAULT_DASHBOARD_SETTINGS.techstackCatalog;
+  const selectedTechstackId = settings.techstack.selectedTechstackId || catalog.defaultTechstackId;
+  const defaultEntry = catalog.entries.find((entry) => entry.id === catalog.defaultTechstackId)
+    ?? DEFAULT_DASHBOARD_SETTINGS.techstackCatalog.entries[0]!;
+  const entry = catalog.entries.find((candidate) => candidate.id === selectedTechstackId)
+    ?? defaultEntry;
+
+  return { id: entry.id, entry };
+};
+
+const buildCreateAppStackSummary = (
+  kind: DashboardCreateAppQuickactionKind,
+  techstackId: string,
+  entry: TechstackCatalogEntrySettings,
+): NonNullable<DashboardCreateAppQuickactionMetadata["quickaction"]["stackSummary"]> => ({
+  techstackId,
+  techstackName: entry.label,
+  applicationKind: kind,
+  language: findStackItemLabel(entry, ["typescript", "javascript", "python", "go", "rust", "java", "c#", "swift", "kotlin"]),
+  framework: findStackItemLabel(entry, ["preact", "react", "next.js", "nextjs", "vue", "svelte", "angular", "solid", "vite"]),
+  runtime: findStackItemLabel(entry, ["node.js", "nodejs", "node", "bun", "deno", "electron", "tauri"]),
+  packageManager: findStackItemLabel(entry, ["pnpm", "npm", "yarn", "bun"]),
+  styling: findStackItemLabel(entry, ["tailwind", "tailwindcss", "css", "sass", "scss", "styledcomponents", "vanillaextract"]),
+  testFramework: findStackItemLabel(entry, ["vitest", "jest", "playwright", "cypress"]),
+});
+
 const buildCreateAppQuickactionMetadata = (
   kind: DashboardCreateAppQuickactionKind,
-): DashboardCreateAppQuickactionMetadata => ({
-  quickaction: {
-    type: "create_app",
-    kind,
-    requestId: createQuickactionRequestId(kind),
-    templateId: CREATE_APP_QUICKACTION_TEMPLATE_IDS[kind],
-  },
-});
+  dashboardSettings?: DashboardSettings | null,
+): DashboardCreateAppQuickactionMetadata => {
+  const { id, entry } = resolveCreateAppTechstackEntry(dashboardSettings);
+
+  return {
+    quickaction: {
+      type: "create_app",
+      kind,
+      requestId: createQuickactionRequestId(kind),
+      templateId: CREATE_APP_QUICKACTION_TEMPLATE_IDS[kind],
+      stackSummary: buildCreateAppStackSummary(kind, id, entry),
+      suggestionTags: uniqueStackSuggestionTags(entry),
+    },
+  };
+};
 
 export const useChatThreadData = (options: {
   selectedProject: { id: string } | null;
   cache: ReturnType<typeof useMessageCache>;
   execution: ExecutionDashboardSnapshot | null;
+  dashboardSettings?: DashboardSettings | null;
   composerRef?: RefObject<HTMLTextAreaElement>;
   messagesRef?: RefObject<HTMLDivElement>;
   onMessageSending?: (message: { projectId: string; createdAt: string }) => string | null | void;
   onMessageSent?: (payload: { message: ChatMessageRecord; optimisticInvocationId?: string | null }) => void;
   onMessageSendFailed?: (optimisticInvocationId: string) => void;
 }) => {
-  const { selectedProject, cache, execution, composerRef, messagesRef, onMessageSending, onMessageSent, onMessageSendFailed } = options;
+  const { selectedProject, cache, execution, dashboardSettings, composerRef, messagesRef, onMessageSending, onMessageSent, onMessageSendFailed } = options;
 
   const [threads, setThreads] = useState<ChatThread[]>([]);
   const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
@@ -519,7 +588,7 @@ export const useChatThreadData = (options: {
       const created = await postConversationMessage(selectedProject.id, {
         threadId: thread.id,
         bodyMarkdown,
-        metadata: buildCreateAppQuickactionMetadata(kind),
+        metadata: buildCreateAppQuickactionMetadata(kind, dashboardSettings),
       });
       onMessageSent?.({ message: created, optimisticInvocationId: null });
       const nextMessages = upsertMessage(cache.getMessages(thread.id) || [], created);
@@ -536,7 +605,7 @@ export const useChatThreadData = (options: {
     } finally {
       setSending(false);
     }
-  }, [cache, composerRef, createThreadForCompose, onMessageSent, selectedProject, selectedThread, sending, setMessagesSnapshot]);
+  }, [cache, composerRef, createThreadForCompose, dashboardSettings, onMessageSent, selectedProject, selectedThread, sending, setMessagesSnapshot]);
 
   const handleDeleteThread = useCallback(async (threadId: string): Promise<void> => {
     const nextThreads = removeThread(cache.getThreads(selectedProject?.id || "") || threadsRef.current, threadId);

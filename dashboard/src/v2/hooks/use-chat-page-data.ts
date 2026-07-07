@@ -72,6 +72,7 @@ export const useChatPageData = (options?: { composerRef?: RefObject<HTMLTextArea
     selectedProject,
     cache,
     execution,
+    dashboardSettings: effectiveSettings?.settings ?? null,
     composerRef: options?.composerRef,
     messagesRef: options?.messagesRef,
     onMessageSending: ({ projectId, createdAt }) => invocationData.addOptimisticInvocation({
