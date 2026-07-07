@@ -24,7 +24,7 @@ The redesigned Stats page uses a stable top-to-bottom shell:
 
 1. Header command band
    - The hero names the Stats workspace with a Stats-native command masthead rather than the generic dashboard page header. It uses flat neutral panel, subpanel, chip, and input primitives, a compact current-state pill, active lens chips for the selected time window and mode, and context chips for selected project, generated snapshot time, and sprint lens.
-   - The command controls are flat administrative rows inside the subpanel surface. Avoid nested framed glass panels, decorative gradients, or extra wrappers around the preset, custom range, and mode controls.
+   - The command controls are flat administrative rows inside the subpanel surface. Avoid nested framed material panels, decorative gradients, or extra wrappers around the preset, custom range, and mode controls.
    - Keep only selected project, generated snapshot time, sprint lens, time window, and active visual mode controls visible in the command band.
    - Time presets are `1h`, `24h`, `7d`, `30d`, `All time`, and `Custom`.
    - Choosing `Custom` opens start and end date fields. The selected range changes only after `Apply` succeeds.
@@ -104,7 +104,7 @@ Providers is the reliability studio.
 - The visible mode label is `Providers`; the studio title may describe reliability.
 - Start with confidence, fallback usage, failure pressure, and provider coverage before detailed rows.
 - Source mix explicitly shows reported, estimated, unavailable, unsupported, and unknown invocation-source counts. Estimated data is usable but lower precision.
-- Telemetry Source Mix, Provider Share, Confidence Board, Provider Breakdown, and Audit Notes follow the same flat hierarchy as Composition: neutral compact metadata chips, small radii, hairline borders, and no hover lift or glow treatments.
+- Telemetry Source Mix, Provider Share, Confidence Board, Provider Breakdown, and Audit Notes follow the same flat hierarchy as Composition: neutral compact metadata chips, small radii, hairline borders, and no animated elevation or glow treatments.
 - Provider cards sort by computed risk first and token volume second, then show failure count, success-rate tone, token volume, pricing stats, active time, duration coverage, and source confidence.
 - Provider pricing stats use `usage.totalCostUsd` and should show total cost, cost per invocation, and blended cost per million tokens only when a positive cost signal exists.
 - Provider status and latency details may be derived from matching model summaries, but health must not be fabricated when model/status telemetry is absent.
@@ -115,7 +115,7 @@ Providers is the reliability studio.
 Ledgers contains operational records for tasks, sprints, and Git.
 
 - Task Telemetry, Sprint Telemetry, and Git Telemetry are real tabs with accessible tab semantics, stable labels, and count badges.
-- Ledger tablists, summary tiles, search/sort controls, progressive sentinels, empty states, task/sprint rows, and Git leaderboard rows use the flat Stats panel, subpanel, chip, input, and ledger-row primitives. Do not reintroduce backdrop blur, heavy shadows, hover lift, or oversized rounded shells in these dense scanning areas.
+- Ledger tablists, summary tiles, search/sort controls, progressive sentinels, empty states, task/sprint rows, and Git leaderboard rows use the flat Stats panel, subpanel, chip, input, and ledger-row primitives. Keep dense scanning areas compact, bordered, and stable instead of adding backdrop blur, heavy shadows, animated elevation, or oversized rounded shells.
 - Task and sprint rows expose status, provider, purpose, calls, active time, cost, recency, visible-total share, leader share, token-flow anatomy, and p50/p95 chips when percentile fields are present.
 - Git rows keep churn separate from token flow. Use `ChurnFlowBar` for insertions and deletions, and keep pull requests, merges, files, conflicts, visible share, and leader share readable.
 - Search, sort, and progressive rendering preserve the `useProgressiveList` flow: visible items, scroll container, and sentinel stay wired together.
@@ -136,12 +136,12 @@ System is the administrative invocation workbench. It is the place to inspect sp
 - External API Activity isolates classified Git, Code UX Agent, Jira, and other integration calls from model invocation records. Empty copy should say that no external API activity was classified, not that integrations never ran.
 - Error Categories show classified timeout, rate-limit, API, model, cancelled, and other failures with semantic warning/negative/neutral fills. Empty copy should describe no classified errors in the current data set.
 - The record view control is a connected, non-sticky segmented button group mounted inside the records work area for `All`, `Errors`, and `System Msgs`. Count slots stay visually quiet and width-stable; visible badges can be hidden from assistive technology only when each button's accessible name includes the exact count and record pluralization.
-- `SystemFilterBar` presents search and status as the primary row, then groups purpose, provider, and error-category chips below inside one composed Warm Void administrative control surface. Result count, active-filter count, clear-all, and invocation pagination metadata stay visible in the footer of that control surface.
+- `SystemFilterBar` presents search and status as the primary row, then groups purpose, provider, and error-category chips below inside one composed flat administrative control surface. Result count, active-filter count, clear-all, and invocation pagination metadata stay visible in the footer of that control surface.
 - Invocation tables are the System ledger. They preserve a semantic caption, sticky desktop header, `scope="col"` headers, active-column `aria-sort`, explicit sort button labels, and per-cell `headers` relationships. Mobile rows may collapse into block cards, but each cell keeps its visible label because the desktop header is hidden below large breakpoints.
 - Expand controls name the target invocation, set `aria-expanded`, point at the transcript panel with `aria-controls`, and remain keyboard-accessible.
-- Transcript detail surfaces invocation status, model, duration, token flow, cached tokens, message count, role, created time, optional message metadata, errors, and long content with safe wrapping. The expanded transcript panel uses shared Warm Void Stats primitives for its header, compact invocation summary row, status chips, role records, copy control, loading, empty, and error states.
+- Transcript detail surfaces invocation status, model, duration, token flow, cached tokens, message count, role, created time, optional message metadata, errors, and long content with safe wrapping. The expanded transcript panel uses shared flat Stats primitives for its header, compact invocation summary row, status chips, role records, copy control, loading, empty, and error states.
 - Transcript regions set `aria-busy` while messages load. Transcript loading and empty states use polite status semantics; transcript fetch failures use alert semantics and keep the expand control keyboard-accessible for recovery.
-- System feedback states use compact Warm Void subpanels with semantic Lucide icons, short operational copy, and named `status` or `alert` regions. Loading and empty/reduced-data states are polite and include visible text beyond motion, while blocking invocation and transcript failures use alert semantics. Copy must distinguish no classified activity or unavailable metrics from proven zero usage.
+- System feedback states use compact flat subpanels with semantic Lucide icons, short operational copy, and named `status` or `alert` regions. Loading and empty/reduced-data states are polite and include visible text beyond motion, while blocking invocation and transcript failures use alert semantics. Copy must distinguish no classified activity or unavailable metrics from proven zero usage.
 
 ## Telemetry Semantics
 
@@ -159,7 +159,7 @@ Cost displays use two fractional digits for scanability, rounding values such as
 
 ## Primitives And Styling
 
-Use page-scoped Stats primitives instead of one-off analytics chrome. The post-refactor Stats surface vocabulary is a flat neutral hierarchy, not the older glass material stack:
+Use page-scoped Stats primitives instead of one-off analytics chrome. The post-refactor Stats surface vocabulary is a flat neutral hierarchy:
 
 - `stats-theme.css` defines Stats-specific aliases for panel surfaces, subpanels, chips, inputs, focus rings, status fills, borders, minimal focus shadows, and motion.
 - `PANEL_CLASS`, `SUBPANEL_CLASS`, `CHIP_CLASS`, `INPUT_CLASS`, `LEDGER_ROW_CLASS`, `LEDGER_ROW_MODERN_CLASS`, `STATUS_TONE_CLASS`, `TAB_ACTIVE_CLASS`, `TAB_IDLE_CLASS`, `DASHED_EMPTY_CLASS`, and `TRACK_CLASS` provide the shell vocabulary.
@@ -168,10 +168,10 @@ Use page-scoped Stats primitives instead of one-off analytics chrome. The post-r
 - New or touched Stats surfaces should use semantic Stats variables for backgrounds, borders, text, status tones, focus rings, chart tracks, selection fills, and scrims instead of raw slate/white/black light-dark utility pairs.
 - Signal fills, chart strokes, metric sparklines, selected controls, and Stats card accents must resolve through `--stats-accent-signal`, `--stats-accent-signal-fill`, or `--signal-rgb`. Light mode uses the dashboard blue signal; dark mode keeps the existing dark signal without per-component overrides.
 - Stats typography follows the dashboard heading scale directly in Tailwind or component tokens: the page title is the only hero-scale heading, section and studio headings use `text-xl`/`text-2xl font-semibold`, row and card titles use `text-base`/`text-lg font-semibold`, and metric-card values use the restrained `--stats-card-value-size` tokens.
-- Panels are flat, grounded work surfaces with solid or lightly translucent neutral `--stats-surface-*` tokens, hairline borders, and no default depth shadow. They should feel administrative and durable, not translucent glass.
-- Chips, tabs, inputs, subpanels, summary rows, and table cells are non-glass primitives. Use quiet fills, fixed control geometry, compact labels, small radii, and neutral selected states instead of frosted capsules, glow, hover lift, or nested glass cards.
+- Panels are flat, grounded work surfaces with solid or lightly translucent neutral `--stats-surface-*` tokens, hairline borders, and no default depth shadow. They should feel administrative, compact, and durable.
+- Chips, tabs, inputs, subpanels, summary rows, and table cells are flat primitives. Use quiet fills, fixed control geometry, compact labels, small radii, and neutral selected states instead of decorative capsules, glow, animated elevation, or nested decorative cards.
 - Status fills are semantic. Signal, positive, warning, negative, neutral, and cyan tones should communicate running, success, warning, failure, informational, or data-accent meaning; avoid using them as ambient decoration.
-- Backdrop blur is not a primary Stats material. Do not add `backdrop-blur-*`, shared glass tokens, large glow washes, or translucent chrome to panels, chips, inactive legend controls, ledger rows, System filters, invocation tables, or transcript detail as the default treatment.
+- Backdrop blur is not a primary Stats material. Do not add `backdrop-blur-*`, shared translucent material tokens, large glow washes, or translucent chrome to panels, chips, inactive legend controls, ledger rows, System filters, invocation tables, or transcript detail as the default treatment.
 - Do not fix design drift with broad page-root `:global()` color or spacing overrides. Tokenize the owning component or extend the shared primitive vocabulary so Trend, Composition, Models, Providers, Ledgers, and System stay consistent without hidden CSS bridges.
 - Metric cards with sparkline micrographs use the standard card surface, not a separate muted graph background. The sparkline must fit its own stable slot so hover glow and line geometry are not cut off by card overflow. Populated sparklines expose a concise `role="img"` summary with point count and high/low values; empty sparkline slots show a static `No sparkline data` label and an explicit no-data `role="img"` description.
 
@@ -234,7 +234,7 @@ For documentation-only Stats changes without TypeScript or TSX examples, run rep
 
 ```bash
 pnpm run lint
-rg "Warm Void|System|stats" docs/dashboard/design-system-stats.md docs/index.md docs/SUMMARY.md
+rg "System|stats" docs/dashboard/design-system-stats.md docs/index.md docs/SUMMARY.md
 ```
 
 For Stats UI changes, run focused tests first. `pnpm run test:dashboard` covers `tests/dashboard`; source-adjacent Stats tests under `dashboard/src/v2/pages/stats/__tests__/` should be run directly when those components change:
@@ -245,6 +245,6 @@ pnpm run test:dashboard
 pnpm run typecheck:dashboard
 ```
 
-The source-adjacent Stats suite includes System workbench regressions for named regions, grouped command/filter controls, semantic invocation table headers, transcript feedback states, wrapping-safe operational copy, and Warm Void surfaces that avoid backdrop-blur glass utilities in touched System components.
+The source-adjacent Stats suite includes System workbench regressions for named regions, grouped command/filter controls, semantic invocation table headers, transcript feedback states, wrapping-safe operational copy, and flat surfaces that avoid backdrop-blur utilities in touched System components.
 
 Run `pnpm run build` when changes touch shared contracts, routing, CSS token boundaries, dashboard imports, or production bundling behavior. Do not record a check as passed unless it was run for the current change.
