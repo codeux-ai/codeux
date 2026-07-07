@@ -16,7 +16,9 @@ These cover:
 - `manage_scheduler`
 - `manage_agents`
 - `manage_memory`
+- `manage_skills`
 - `search_knowledge`
+- `search_skills`
 - `manage_settings`
 - `manage_preview`
 - `manage_telemetry`
@@ -46,7 +48,9 @@ These cover:
 - `manage_scheduler`
 - `manage_agents`
 - `manage_memory`
+- `manage_skills`
 - `search_knowledge`
+- `search_skills`
 - `manage_settings`
 - `manage_preview`
 - `manage_telemetry`
@@ -206,6 +210,134 @@ For payload normalization in management tools, Code UX centralizes parsing behav
 
 
 The dedicated management tools (`manage_sprints`, `manage_tasks`, `manage_quicksprints`, `manage_scheduler`, `manage_settings`) share the same action handlers.
+
+### `manage_skills` persistent skill actions
+
+`manage_skills` is the management surface for persistent project skill storage. It is available in the `agents_memory` category for project-manager clients and for agents with explicit Code UX tool access. It is separate from workspace files: callers save skill markdown through the MCP payload, and Code UX writes the durable skill rows and embeddings through `SkillService`.
+
+Available actions:
+- `authoring_prompt`: returns the comprehensive skill-authoring prompt, including markdown/frontmatter format and the workflow for saving skills through `manage_skills` instead of writing into the workspace.
+- `list_storages`: requires `projectId`; returns project-owned skill storages.
+- `get_storage`: requires `projectId` and `storageId`; returns one project-owned skill storage.
+- `create_storage`: requires `projectId` and `name`; accepts `description` and `storageKind` (`project` or `shared`).
+- `update_storage`: requires `projectId` and `storageId`; accepts `name`, `description`, and `storageKind`.
+- `delete_storage`: requires `projectId` and `storageId`; approval-gated. Deletes the storage, contained skills, embeddings, and agent attachments.
+- `reset_storage`: requires `projectId` and `storageId`; approval-gated. Deletes skills and embeddings in the storage while keeping the storage and attachments.
+- `list_agent_storages`: requires `projectId` and `agentPresetId`; returns the agent's enabled storage attachments and attached storages.
+- `attach_storage`: requires `projectId`, `agentPresetId`, and `storageId`; attaches a project-owned storage to a project-owned agent preset.
+- `detach_storage`: requires `projectId`, `agentPresetId`, and `storageId`; removes the attachment.
+- `list_skills`: requires `projectId` and `storageId`; accepts `limit`; returns concise skill summaries, not full markdown bodies.
+- `get_skill`: requires `projectId` and `skillId`; accepts `includeContent`. By default the response is concise; set `includeContent: true` only when the caller needs the full stored body.
+- `create_skill` and `import_markdown`: require `projectId`, `storageId`, and `markdown`; accept `sourceType` (`manual`, `imported`, or `generated`) and nullable `sourceRef`.
+- `update_skill`: requires `projectId`, `storageId`, `skillId`, and `markdown`; accepts `sourceType` and nullable `sourceRef`.
+- `delete_skill`: requires `projectId` and `skillId`; approval-gated. Deletes the stored markdown and embeddings.
+- `export_markdown`: requires `projectId` and `skillId`; returns the full reconstructed markdown with frontmatter.
+
+Skill markdown uses YAML-like frontmatter followed by the instruction body:
+
+```md
+---
+title: Review Discipline
+description: Keep review findings concrete.
+tags: ["review", "quality"]
+appliesTo: ["src/services", "tests/backend"]
+version: 1.0.0
+---
+
+Focus on bugs, regressions, missing tests, and rollback risk.
+```
+
+The parser supports scalar frontmatter fields and simple list forms for `tags` and `appliesTo`. The body is the authoritative instruction content. Metadata is stored in dedicated columns so `export_markdown` can reconstruct the markdown.
+
+Create or import example:
+
+```json
+{
+  "action": "import_markdown",
+  "projectId": "project-123",
+  "storageId": "skills-review",
+  "markdown": "---\ntitle: Review Discipline\ndescription: Keep review findings concrete.\ntags: [\"review\"]\n---\n\nFocus on bugs, regressions, and missing tests."
+}
+```
+
+Approval example for destructive skill deletion:
+
+```json
+{
+  "action": "delete_skill",
+  "projectId": "project-123",
+  "skillId": "skill-123"
+}
+```
+
+The first call returns `approvalRequired: true`. After human approval, repeat the same request with:
+
+```json
+{
+  "action": "delete_skill",
+  "projectId": "project-123",
+  "skillId": "skill-123",
+  "approval": { "confirmed": true }
+}
+```
+
+Project isolation is enforced below the MCP handler by `SkillService` and `SkillRepository`. Storage, skill, embedding, and agent-attachment operations verify the supplied `projectId`; IDs from another project are rejected instead of being read or mutated.
+
+### `search_skills` retrieval tool
+
+`search_skills` is the retrieval-focused skill surface. It can be exposed to agents independently from `manage_skills` through per-agent MCP tool filtering. This lets an agent retrieve durable skill guidance without granting it storage creation, mutation, attachment management, export, delete, or reset capabilities.
+
+Schema:
+
+```json
+{
+  "projectId": "project-123",
+  "query": "review pull request risk checklist",
+  "agentPresetId": "agent-123",
+  "storageId": "skills-review",
+  "limit": 5,
+  "minSimilarity": 0.3
+}
+```
+
+Fields:
+- `projectId` and non-blank `query` are required.
+- `agentPresetId` is optional. When supplied without `storageId`, only storages attached to that project-owned agent are searched.
+- `storageId` is optional. When supplied, search is limited to that project-owned storage.
+- `limit` defaults to 10 and is capped by the handler.
+- `minSimilarity` is optional and must be between 0 and 1 when supplied.
+
+Response shape:
+
+```json
+{
+  "result": {
+    "results": [
+      {
+        "similarity": 0.91,
+        "skill": {
+          "id": "skill-123",
+          "projectId": "project-123",
+          "storageId": "skills-review",
+          "name": "Review Discipline",
+          "description": "Keep review findings concrete.",
+          "sourceType": "manual",
+          "sourceRef": null,
+          "tags": ["review"],
+          "appliesTo": ["src/services"],
+          "version": "1.0.0",
+          "contentHash": "sha256...",
+          "createdAt": "2026-07-07T00:00:00.000Z",
+          "updatedAt": "2026-07-07T00:00:00.000Z",
+          "summary": "Focus on bugs, regressions, missing tests, and rollback risk."
+        }
+      }
+    ]
+  }
+}
+```
+
+Search responses intentionally return concise summaries. To retrieve a complete stored skill, call `manage_skills` with `export_markdown`, or call `get_skill` with `includeContent: true` when the caller has management access.
 
 ### `manage_memory` claim actions
 

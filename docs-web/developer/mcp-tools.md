@@ -1,9 +1,9 @@
 # MCP tools
 
 Code UX is also an MCP server. When connected, it advertises a set of **management tools** that an
-MCP client (or another agent) can call to drive projects, sprints, tasks, agents, memory, settings,
-previews, and telemetry. This page is the exact contract: the tool list, each tool's `action` enum,
-input shape, approval rules, and the error model.
+MCP client (or another agent) can call to drive projects, sprints, tasks, agents, memory, persistent
+skills, settings, previews, and telemetry. This page is the exact contract: the tool list, each
+tool's `action` enum, input shape, approval rules, and the error model.
 
 > **Server identity:** the server identifies as `code-ux`, with the version matching the installed
 > package. The package on npm is `@codeuxai/codeux`. Capabilities advertised at
@@ -17,15 +17,19 @@ Tools are filtered before being advertised on `ListTools`:
    (default and only functional role: `project_manager`).
 2. **Toggle** — each tool has an entry under `settings.mcpTools`. Disabled tools are not advertised
    and return `MethodNotFound` if called.
+3. **Per-agent Code UX policy** — HTTP worker clients can advertise an agent preset. Unknown,
+   malformed, or unconfigured agent identities fail closed and receive no built-in Code UX tools.
+   Known agents can receive tool-specific overrides; for example, `search_skills` can stay enabled
+   while `manage_skills` is disabled.
 
 All inputs are validated against their declared JSON Schema (AJV) before dispatch; validation
 failures return `InvalidParams` with the failing JSON path.
 
 ## The tools
 
-Code UX exposes **one tool per management domain**, plus `search_knowledge`. Each `manage_*` tool
-takes an `action` (from a fixed enum) plus action-specific fields, and an optional `approval` object
-for destructive actions.
+Code UX exposes **one tool per management domain**, plus retrieval tools such as `search_knowledge`
+and `search_skills`. Each `manage_*` tool takes an `action` (from a fixed enum) plus
+action-specific fields, and an optional `approval` object for destructive actions.
 
 | Tool | Category | Purpose |
 | --- | --- | --- |
@@ -36,7 +40,9 @@ for destructive actions.
 | `manage_scheduler` | orchestration | Create and run scheduled sprints, quicksprints, and messages. |
 | `manage_agents` | agents & memory | Manage agent presets and sync them to project markdown. |
 | `manage_memory` | agents & memory | Inspect, search, promote, and re-embed short/long-term memory. |
+| `manage_skills` | agents & memory | Manage persistent skill storages, skill markdown, and agent storage attachments. |
 | `search_knowledge` | agents & memory | Semantic search over the knowledge base subscribed to the caller. |
+| `search_skills` | agents & memory | Semantic retrieval over persistent project skills, optionally scoped to an agent or storage. |
 | `manage_settings` | platform | Get/resolve/patch/replace/reset system, project, and sprint settings. |
 | `manage_preview` | platform | Manage sprint preview containers (start/stop/rebuild, logs, scripts). |
 | `manage_telemetry` | platform | Read execution snapshots, invocations, sprint runs, and dispatches. |
@@ -54,6 +60,7 @@ Every tool requires `runtimeRoles: ["project_manager"]` and is enabled by defaul
 | `manage_scheduler` | `list`, `create`, `update`, `delete`, `run_due`, `schedule_sprint`, `schedule_quicksprint`, `schedule_chat` |
 | `manage_agents` | `list`, `get`, `create`, `update`, `delete`, `sync` |
 | `manage_memory` | `list`, `get`, `count`, `create`, `update`, `delete`, `search`, `promote`, `get_map`, `model_status`, `start_reembed` |
+| `manage_skills` | `authoring_prompt`, `list_storages`, `get_storage`, `create_storage`, `update_storage`, `delete_storage`, `reset_storage`, `list_agent_storages`, `attach_storage`, `detach_storage`, `list_skills`, `get_skill`, `create_skill`, `update_skill`, `delete_skill`, `import_markdown`, `export_markdown` |
 | `manage_settings` | `get_system`, `get_project_override`, `resolve_project_effective`, `get_sprint_override`, `resolve_sprint_effective`, `replace_system_settings`, `patch_system_setting`, `replace_project_settings`, `patch_project_setting`, `reset_project_settings`, `replace_sprint_settings`, `patch_sprint_setting`, `reset_sprint_settings` |
 | `manage_preview` | `list_sessions`, `start_session`, `stop_session`, `rebuild_session`, `remove_session`, `get_logs`, `get_url`, `get_script`, `update_script` |
 | `manage_telemetry` | `get_project_stats_snapshot`, `get_project_execution_snapshot`, `list_execution_invocations`, `list_execution_invocation_messages`, `list_sprint_runs`, `list_task_dispatches` |
@@ -91,6 +98,47 @@ subscriptions, so no project id is needed.
 
 Returns the most relevant passages with their source documents. See the
 [Knowledge](../user/dashboard/knowledge.md) page for managing the underlying documents.
+
+## Persistent skills
+
+`manage_skills` is the storage and authoring surface for durable project skills. It supports:
+
+- Storage CRUD: `list_storages`, `get_storage`, `create_storage`, `update_storage`, `delete_storage`.
+- Skill CRUD: `list_skills`, `get_skill`, `create_skill`, `update_skill`, `delete_skill`.
+- Agent attachment management: `list_agent_storages`, `attach_storage`, `detach_storage`.
+- Markdown import/export: `import_markdown`, `export_markdown`.
+- Authoring guidance: `authoring_prompt`.
+- Destructive cleanup: `delete_storage`, `reset_storage`, and `delete_skill` require the approval handshake.
+
+Skill markdown is saved through MCP payloads, not by writing files into the project workspace:
+
+```md
+---
+title: Review Discipline
+description: Keep review findings concrete.
+tags: ["review", "quality"]
+appliesTo: ["src/services", "tests/backend"]
+version: 1.0.0
+---
+
+Focus on bugs, regressions, missing tests, and rollback risk.
+```
+
+`search_skills` is the retrieval-only surface. It accepts:
+
+```jsonc
+{
+  "projectId": "project-123",      // required
+  "query": "review checklist",      // required
+  "agentPresetId": "agent-123",     // optional, searches attached storages
+  "storageId": "skills-review",     // optional, narrows to one storage
+  "limit": 5,                       // optional, capped by the handler
+  "minSimilarity": 0.3              // optional, 0-1
+}
+```
+
+Search results return concise ranked summaries with skill IDs and metadata. Full content retrieval
+requires `manage_skills` via `export_markdown` or `get_skill` with `includeContent: true`.
 
 ## Error model
 
