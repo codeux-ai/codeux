@@ -11,7 +11,7 @@ Startup sequence:
 3. `src/server/code-ux-server.ts` constructs repositories/services/handlers/orchestrator.
 4. `src/server/code-ux-server.ts` registers MCP request handlers.
 5. `src/server/code-ux-server.ts` loads settings and prunes disconnected MCP connection rows.
-6. `src/server/code-ux-server.ts` starts dashboard server.
+6. `src/server/code-ux-server.ts` starts the dashboard server unless startup config disables it.
    - Dashboard API routes (such as project, sprint, task, conversation, and planning endpoints) are broken out into modular route files for maintainability.
    - Route wrappers and body request parsers are maintained as separate server-layer boundaries.
 7. `src/server/code-ux-server.ts` connects MCP stdio transport only when stdin is an MCP pipe/socket or `CODE_UX_ENABLE_MCP_STDIO=1` is set. TTY stdin and daemon-style character-device stdin such as `/dev/null` leave stdio disabled so the dashboard/backend stays alive without an attached client.
@@ -29,12 +29,16 @@ This keeps `/health`, `/ready`, the dashboard, and MCP transports responsive bef
 
 ## Runtime Modes
 
-Code UX exposes these MCP runtime roles:
+Code UX exposes a single MCP runtime role:
 
 - `project_manager`: The default human-facing and remote-client surface.
-- `worker-host`: A headless execution role used by the local worker client.
 
-The legacy `worker_gateway` and `code-ux-worker` roles have been removed.
+Dashboard binding is controlled separately from the role:
+
+- `--headless` and `--no-dashboard` skip the dashboard while preserving legacy local-development MCP HTTP behavior, including unauthenticated loopback use.
+- `--server-mode`, `--server`, and `CODE_UX_SERVER_MODE=true` start an explicit dashboard-free server instance. Server mode requires the MCP HTTP transport to remain enabled and requires a bearer token for every bind host, including loopback.
+
+The legacy `worker-host`, `worker_gateway`, and `code-ux-worker` roles have been removed from the startup contract.
 
 ## MCP Request Handlers
 
@@ -108,6 +112,7 @@ That endpoint:
 - is configured through `MCP_HTTPS_*` env vars or `--mcp-https*` flags
 - exposes the same project-manager tool surface as stdio
 - no longer exposes a separate worker-control-plane runtime
+- is mandatory and always token-authenticated in server mode
 
 ## Dashboard Settings Path
 

@@ -37,6 +37,7 @@ describe("management CLI", () => {
     dashboardPort: 4444,
     apiKeyArg: null,
     runtimeRole: "project_manager" as const,
+    serverMode: false,
     dashboardEnabled: true,
     mcpHttpEnabled: false,
     mcpHttpHost: "127.0.0.1",

@@ -20,6 +20,7 @@ beforeEach(async () => {
   delete process.env.DASHBOARD_PORT;
   delete process.env.JULES_API_KEY;
   delete process.env.JULES_KEY;
+  delete process.env.CODE_UX_SERVER_MODE;
   delete process.env.MCP_HTTP_ENABLED;
   delete process.env.MCP_HTTP_PORT;
   delete process.env.MCP_HTTP_HOST;
@@ -146,6 +147,7 @@ describe("loadAppConfig", () => {
     expect(config.apiKeyArg).toBe("cli-key");
     expect(config.dashboardPort).toBe(4444);
     expect(config.runtimeRole).toBe("project_manager");
+    expect(config.serverMode).toBe(false);
     expect(config.dashboardEnabled).toBe(true);
     expect(config.mcpHttpEnabled).toBe(false);
     expect(config.mcpHttpPort).toBeNull();
@@ -197,7 +199,60 @@ describe("loadAppConfig", () => {
   it("supports explicit headless project-manager mode", () => {
     const config = loadAppConfig(["node", "index.js", "--headless", "--no-mcp-https"], tempDir);
     expect(config.runtimeRole).toBe("project_manager");
+    expect(config.serverMode).toBe(false);
     expect(config.dashboardEnabled).toBe(false);
+    expect(config.mcpHttpEnabled).toBe(false);
+  });
+
+  it.each(["--server-mode", "--server"])("enables authenticated dashboard-free server mode with %s", (flag) => {
+    const config = loadAppConfig([
+      "node",
+      "index.js",
+      flag,
+      "--mcp-https-host",
+      "127.0.0.1",
+      "--mcp-https-auth-token",
+      "present",
+    ], tempDir);
+
+    expect(config.serverMode).toBe(true);
+    expect(config.dashboardEnabled).toBe(false);
+    expect(config.mcpHttpEnabled).toBe(true);
+    expect(config.mcpHttpHost).toBe("127.0.0.1");
+    expect(config.mcpHttpAuthToken).toBe("present");
+  });
+
+  it("enables server mode from CODE_UX_SERVER_MODE=true", () => {
+    process.env.CODE_UX_SERVER_MODE = "true";
+    process.env.MCP_HTTPS_AUTH_TOKEN = "present";
+
+    const config = loadAppConfig(["node", "index.js"], tempDir);
+
+    expect(config.serverMode).toBe(true);
+    expect(config.dashboardEnabled).toBe(false);
+    expect(config.mcpHttpEnabled).toBe(true);
+    expect(config.mcpHttpAuthToken).toBe("present");
+  });
+
+  it("requires an MCP HTTPS auth token in server mode even on loopback", () => {
+    expect(() => loadAppConfig([
+      "node",
+      "index.js",
+      "--server-mode",
+      "--mcp-https-host",
+      "127.0.0.1",
+    ], tempDir)).toThrow("Server mode requires an MCP HTTPS auth token");
+  });
+
+  it("rejects disabled MCP HTTPS transport in server mode", () => {
+    expect(() => loadAppConfig([
+      "node",
+      "index.js",
+      "--server-mode",
+      "--no-mcp-https",
+      "--mcp-https-auth-token",
+      "present",
+    ], tempDir)).toThrow("Server mode requires the MCP HTTPS transport to be enabled");
   });
 
   it("enables MCP HTTP worker gateway from CLI flags", () => {
@@ -212,14 +267,14 @@ describe("loadAppConfig", () => {
       "--mcp-https-path",
       "remote-mcp",
       "--mcp-https-auth-token",
-      "secret-token",
+      "present",
     ], tempDir);
 
     expect(config.mcpHttpEnabled).toBe(true);
     expect(config.mcpHttpPort).toBe(5555);
     expect(config.mcpHttpHost).toBe("127.0.0.1");
     expect(config.mcpHttpPath).toBe("/remote-mcp");
-    expect(config.mcpHttpAuthToken).toBe("secret-token");
+    expect(config.mcpHttpAuthToken).toBe("present");
   });
 
   it("enables MCP HTTP worker gateway from env", () => {
@@ -227,14 +282,14 @@ describe("loadAppConfig", () => {
     process.env.MCP_HTTPS_PORT = "7777";
     process.env.MCP_HTTPS_HOST = "localhost";
     process.env.MCP_HTTPS_PATH = "/workers";
-    process.env.MCP_HTTPS_AUTH_TOKEN = "env-token";
+    process.env.MCP_HTTPS_AUTH_TOKEN = "present";
 
     const config = loadAppConfig(["node", "index.js"], tempDir);
     expect(config.mcpHttpEnabled).toBe(true);
     expect(config.mcpHttpPort).toBe(7777);
     expect(config.mcpHttpHost).toBe("localhost");
     expect(config.mcpHttpPath).toBe("/workers");
-    expect(config.mcpHttpAuthToken).toBe("env-token");
+    expect(config.mcpHttpAuthToken).toBe("present");
   });
 
   it.each(["0.0.0.0", "::", "192.168.1.10"])("requires MCP HTTP auth token for non-loopback binding %s", (host) => {
@@ -273,11 +328,11 @@ describe("loadAppConfig", () => {
       "--mcp-https-host",
       "0.0.0.0",
       "--mcp-https-auth-token",
-      "secret-token",
+      "present",
     ], tempDir);
 
     expect(config.mcpHttpEnabled).toBe(true);
     expect(config.mcpHttpHost).toBe("0.0.0.0");
-    expect(config.mcpHttpAuthToken).toBe("secret-token");
+    expect(config.mcpHttpAuthToken).toBe("present");
   });
 });

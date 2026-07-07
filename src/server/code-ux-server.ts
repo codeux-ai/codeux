@@ -775,7 +775,7 @@ export class CodeUxServer {
   }
 
   private isDashboardEnabled(): boolean {
-    return this.appConfig.dashboardEnabled;
+    return !this.appConfig.serverMode && this.appConfig.dashboardEnabled;
   }
 
   private isReady(): ReadinessProbeStatus {

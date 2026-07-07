@@ -6,7 +6,7 @@ Besides its dashboard, Code UX is also a Model Context Protocol (MCP) server. An
 
 By default, Code UX speaks MCP over **stdio**: the client launches the `codeux` process and exchanges JSON-RPC messages on its stdin/stdout. The server detects stdio mode automatically when stdin is not a TTY.
 
-Code UX also runs an **MCP HTTPS transport** (enabled by default; disable with `--no-mcp-https`). It listens on its own host/port/path — configurable via `--mcp-https-host`, `--mcp-https-port`, and `--mcp-https-path` (default path `/mcp`) — and is used by remote workers and clients that prefer an HTTP transport. On a non-loopback host it requires a bearer token (`--mcp-https-auth-token` or `MCP_HTTPS_AUTH_TOKEN`).
+Code UX also runs an **MCP HTTPS transport** (enabled by default; disable with `--no-mcp-https`). It listens on its own host/port/path — configurable via `--mcp-https-host`, `--mcp-https-port`, and `--mcp-https-path` (default path `/mcp`) — and is used by remote workers and clients that prefer an HTTP transport. On a non-loopback host it requires a bearer token (`--mcp-https-auth-token` or `MCP_HTTPS_AUTH_TOKEN`). In `--server-mode` (alias `--server`, or `CODE_UX_SERVER_MODE=true`), Code UX does not bind the dashboard and requires a bearer token for every MCP HTTPS bind host, including loopback.
 
 > The dashboard server (port `4444` by default) is **separate** from the MCP HTTPS gateway. The dashboard hosts the UI and REST API; the gateway hosts JSON-RPC. They run as two distinct listeners.
 
@@ -124,10 +124,11 @@ per-action payloads, see [Developer → Management actions](../developer/managem
 
 ## Remote MCP HTTP transport
 
-If you want external worker hosts to connect to Code UX over the network, use the MCP HTTPS transport:
+If you want external worker hosts to connect to Code UX over the network without serving the dashboard, use server mode with the MCP HTTPS transport:
 
 ```bash
 codeux \
+  --server-mode \
   --mcp-https \
   --mcp-https-host 0.0.0.0 \
   --mcp-https-port 4445 \
@@ -145,7 +146,7 @@ http://<host>:4445/mcp
 
 A `GET /health` endpoint returns `{ "status": "UP" }` and is the recommended liveness check.
 
-> **Security:** When `--mcp-https-host` is *not* loopback, an auth token is **required**. Loopback (`127.0.0.1`/`localhost`/`::1`) hosts may run unauthenticated for development. Always use HTTPS in production via a reverse proxy.
+> **Security:** When `--mcp-https-host` is *not* loopback, an auth token is **required**. Server mode always requires a token, including loopback. Plain loopback (`127.0.0.1`/`localhost`/`::1`) hosts may run unauthenticated only outside server mode for local development. Always use HTTPS in production via a reverse proxy.
 
 For the wire protocol, see [Architecture → MCP server](../architecture/mcp-server.md).
 

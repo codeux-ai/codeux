@@ -11,14 +11,15 @@ codeux [options]
 | Flag | Type | Default | Description |
 | --- | --- | --- | --- |
 | `--api-key VALUE` | string | – | Jules API key. Highest precedence. |
-| `--runtime-role VALUE` | string | `project_manager` | Role advertised to the MCP layer. (Currently only `project_manager` is functional; `worker-host` is reserved.) |
+| `--runtime-role VALUE` | string | `project_manager` | Role advertised to the MCP layer. Currently only `project_manager` is functional. |
 | `--headless` | flag | off | Start MCP server without binding the dashboard. |
 | `--no-dashboard` | flag | off | Alias for `--headless`. |
+| `--server-mode` / `--server` | flag | off | Start dashboard-free server mode. Requires enabled MCP HTTPS and a bearer token for every bind host. |
 | `--mcp-https` / `--no-mcp-https` | flag | on | MCP HTTPS worker gateway, enabled by default; use `--no-mcp-https` to disable. |
 | `--mcp-https-port N` | number | `dashboardPort + 1` | Port for the HTTP gateway. |
 | `--mcp-https-host H` | string | `127.0.0.1` | Host/interface for the HTTP gateway. |
 | `--mcp-https-path P` | string | `/mcp` | Path for the HTTP gateway. |
-| `--mcp-https-auth-token VALUE` | string | – | Bearer token. **Required** for non-loopback hosts. |
+| `--mcp-https-auth-token VALUE` | string | – | Bearer token. **Required** for server mode and for non-loopback hosts. |
 | `--help`, `-h` | flag | – | Show help. |
 
 Flags can be passed in any order. Anything after `--` is ignored.
@@ -33,7 +34,8 @@ Flags can be passed in any order. Anything after `--` is ignored.
 | `JULES_API_MAX_FAILS` | int | `5` | Emergency-stop threshold (`maxFailures`). |
 | `DASHBOARD_PORT` | int | `4444` | Dashboard HTTP port. |
 | `DASHBOARD_HOST` | string | `127.0.0.1` | Dashboard bind address. |
-| `MCP_HTTPS_ENABLED` | bool | `false` | Enable the MCP HTTP gateway. |
+| `CODE_UX_SERVER_MODE` | bool | `false` | Enable dashboard-free authenticated server mode. |
+| `MCP_HTTPS_ENABLED` | bool | `true` | Enable the MCP HTTP gateway. |
 | `MCP_HTTPS_PORT` | int | – | MCP HTTP port. |
 | `MCP_HTTPS_HOST` | string | `127.0.0.1` | MCP HTTP bind. |
 | `MCP_HTTPS_PATH` | string | `/mcp` | MCP HTTP path. |
@@ -100,6 +102,11 @@ If the chosen port is in use, Code UX increments and retries until it finds a fr
 --mcp-https-path  >  MCP_HTTPS_PATH env  >  /mcp
 --mcp-https-auth-token  >  MCP_HTTPS_AUTH_TOKEN env  >  unset (loopback only)
 ```
+
+Server mode can be enabled with `--server-mode`, `--server`, or `CODE_UX_SERVER_MODE=true`.
+It implies dashboard disabled, rejects disabled MCP HTTP, and rejects missing auth tokens even when
+the bind host is loopback. Outside server mode, `--headless` only skips the dashboard and keeps the
+legacy loopback development allowance.
 
 ## External settings hints
 

@@ -22,6 +22,15 @@ The direct domain form is the preferred shell interface. The generic `manage` fo
 - `--payload-json` can carry `domain`, `action`, `payload`, and `approval` for the `manage` passthrough.
 - Destructive actions require an approval retry. The first call returns an approval request, and the exact same action must be sent again with `approval.confirmed: true`.
 
+## Startup Flags
+
+Startup flags configure the long-running runtime before management commands dispatch:
+
+- `--headless` and `--no-dashboard` skip dashboard binding while keeping the existing MCP HTTP defaults. Loopback MCP HTTP can remain unauthenticated for local development outside server mode.
+- `--server-mode` and `--server` start a dashboard-free server instance for remote MCP clients. Server mode requires MCP HTTP to be enabled and requires a bearer token through `--mcp-https-auth-token` or `MCP_HTTPS_AUTH_TOKEN`, even on loopback.
+- `CODE_UX_SERVER_MODE=true` enables the same server-mode contract from the environment.
+- `--no-mcp-https` disables MCP HTTP outside server mode. In server mode it is rejected because there would be no remote endpoint.
+
 ## Common Aliases
 
 These aliases are accepted and normalized before dispatch:
