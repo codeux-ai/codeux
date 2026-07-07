@@ -11,6 +11,8 @@ import {
   getFieldSourceLabel,
   providerSupportsModelSelection,
   providerSupportsThinkingMode,
+  getProviderThinkingModeLabel,
+  getProviderThinkingModeOptions,
   isProviderAvailable,
   getProviderAuthLabel,
   getProviderInstanceAuthLabel,
@@ -18,6 +20,7 @@ import {
   sourceLabel,
   thinkingModeOptions,
   providerLabels,
+  createProjectProviderDraft,
   createSystemProviderDraft,
   sortProviderConfigEntries,
   getSystemIntegrationProviders,
@@ -127,8 +130,29 @@ describe("settings view model source helpers", () => {
   });
 
   it("provides thinking mode options", () => {
-    expect(thinkingModeOptions).toHaveLength(3);
-    expect(thinkingModeOptions[0]).toEqual({ value: "SMALL", label: "Small" });
+    expect(thinkingModeOptions).toEqual(expect.arrayContaining([
+      { value: "none", label: "None" },
+      { value: "minimal", label: "Minimal" },
+      { value: "xhigh", label: "Extra High" },
+      { value: "max", label: "Max" },
+    ]));
+    expect(thinkingModeOptions.some((option) => option.value === "SMALL")).toBe(false);
+  });
+
+  it("provides provider-specific thinking mode options and labels", () => {
+    expect(getProviderThinkingModeOptions("jules")).toEqual([]);
+    expect(getProviderThinkingModeOptions("codex")).toEqual([
+      { value: "low", label: "Low" },
+      { value: "medium", label: "Medium" },
+      { value: "high", label: "High" },
+      { value: "xhigh", label: "Extra High" },
+    ]);
+    expect(getProviderThinkingModeOptions("antigravity")).toEqual([
+      { value: "low", label: "Low" },
+      { value: "high", label: "High" },
+    ]);
+    expect(getProviderThinkingModeLabel("codex", "HIGH")).toBe("High");
+    expect(getProviderThinkingModeLabel("opencode", "none")).toBe("None");
   });
 
   it("provides provider labels", () => {
@@ -318,6 +342,13 @@ describe("settings view model source helpers", () => {
       openCodeBaseUrl: "http://127.0.0.1:11434/v1",
       openCodeEnvKey: "OLLAMA_API_KEY",
     });
+  });
+
+  it("defaults new provider instances to provider-supported thinking modes", () => {
+    expect(createProjectProviderDraft("codex", "Codex Staging").thinkingMode).toBe("high");
+    expect(createProjectProviderDraft("opencode", "OpenCode Staging").thinkingMode).toBe("high");
+    expect(createProjectProviderDraft("antigravity", "Antigravity Staging").thinkingMode).toBe("high");
+    expect(createProjectProviderDraft("jules", "Jules Primary").thinkingMode).toBe("MEDIUM");
   });
 
   it("defaults provider config files only for CLI providers that support them", () => {

@@ -1,4 +1,4 @@
-import type { DashboardSettings, DashboardSettingsScope, ProviderConfigMode, ProviderId, QwenModelProviderSettings, Subtask } from "../contracts/app-types.js";
+import type { DashboardSettings, DashboardSettingsScope, ProviderConfigMode, ProviderId, QwenModelProviderSettings, Subtask, ThinkingMode } from "../contracts/app-types.js";
 import * as fs from "fs/promises";
 import * as path from "path";
 import type { ConnectionChatRepository } from "../repositories/connection-chat-repository.js";
@@ -103,7 +103,7 @@ export interface ThreadRouteResolution {
   providerConfigPath?: string;
   customBaseUrl?: string;
   customModel?: string;
-  thinkingMode?: string;
+  thinkingMode?: ThinkingMode;
 }
 
 interface InFlightChatTurn {
@@ -1261,12 +1261,13 @@ export class ChatThreadRuntimeService {
       ? (this.deps.executionRepository.getLatestProviderInvocationUsageBySession(thread.id, "dashboard_reply")?.rawUsageJson ?? null)
       : null;
 
-    const finalPrompt = buildProviderPrompt(promptContent, thinkingMode as any);
+    const finalPrompt = buildProviderPrompt(promptContent, thinkingMode!, provider);
 
     const result = await this.deps.chatManagementActionService.processManagementAction({
       projectId,
       provider,
       model,
+      thinkingMode,
       apiKey,
       qwenAuthMode: route.qwenAuthMode,
       qwenRegion: route.qwenRegion,
@@ -1461,6 +1462,7 @@ export class ChatThreadRuntimeService {
         prompt: "Native CLI session operation: compact",
         cwd: repoPath,
         model,
+        thinkingMode: route.thinkingMode,
         apiKey,
         qwenAuthMode: route.qwenAuthMode,
         qwenRegion: route.qwenRegion,

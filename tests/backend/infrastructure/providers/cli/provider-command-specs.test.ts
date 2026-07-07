@@ -40,6 +40,12 @@ describe("Provider Command Specs", () => {
         command: "claude",
         args: ["--dangerously-skip-permissions", "--model", "claude-3-7-sonnet", "-p", "hello"]
       });
+
+      const thinkingSpec = providerSpecs["claude-code"]("default", "hello", "max");
+      expect(thinkingSpec).toEqual({
+        command: "claude",
+        args: ["--dangerously-skip-permissions", "--effort", "max", "-p", "hello"]
+      });
     });
 
     it("generates correct command for codex", () => {
@@ -53,6 +59,12 @@ describe("Provider Command Specs", () => {
       expect(explicitSpec).toEqual({
         command: "codex",
         args: ["exec", "--yolo", "--json", "--output-last-message", "codex-last-message.txt", "--model", "gpt-4o", "hello"]
+      });
+
+      const thinkingSpec = providerSpecs["codex"]("gpt-4o", "hello", "xhigh");
+      expect(thinkingSpec).toEqual({
+        command: "codex",
+        args: ["exec", "--yolo", "--json", "--output-last-message", "codex-last-message.txt", "-c", "model_reasoning_effort=\"xhigh\"", "--model", "gpt-4o", "hello"]
       });
     });
 
@@ -81,6 +93,12 @@ describe("Provider Command Specs", () => {
       expect(explicitSpec).toEqual({
         command: "opencode",
         args: ["run", "--format", "json", "--model", "deepseek-coder", "hello"]
+      });
+
+      const thinkingSpec = providerSpecs["opencode"]("deepseek-coder", "hello", "minimal");
+      expect(thinkingSpec).toEqual({
+        command: "opencode",
+        args: ["run", "--format", "json", "--model", "deepseek-coder", "--variant", "minimal", "hello"]
       });
     });
 
@@ -155,6 +173,17 @@ describe("Provider Command Specs", () => {
           "--provider", "gemini",
           "--model", "default",
           "--prompt", "hello",
+        ],
+      });
+
+      expect(providerSpecs["claude-code"]("default", "hello", "xhigh")).toEqual({
+        command: process.execPath,
+        args: [
+          "/tmp/codeux/mock-provider-cli.mjs",
+          "--provider", "claude-code",
+          "--model", "default",
+          "--prompt", "hello",
+          "--thinking-mode", "xhigh",
         ],
       });
 
