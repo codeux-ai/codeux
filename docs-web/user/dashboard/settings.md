@@ -35,6 +35,7 @@ The category rail on the left includes:
 | **MCP tools** | Per-tool enable / disable. |
 | **Memory** | Active embedding model selection. |
 | **Agents** | Agent routing, markdown mirroring, persistent skill storage, storage attachments, and self-reflection criteria. |
+| **Techstacks** | System catalog management, protected built-in stack, project stack assignment, and web/desktop application kind. |
 | **Appearance** | Theme, navigation mode override, dashboard density. |
 | **Limits** | `maxFailures` emergency stop threshold and other safety caps. |
 
@@ -484,6 +485,23 @@ Related docs:
 
 - [Browser Preview](./browser.md)
 - [Security Hardening](../troubleshooting.md)
+
+### Techstacks
+
+<a id="techstacks"></a>
+
+Manages the system techstack catalog and per-project techstack/application-kind assignment.
+
+**What it controls:** System scope owns stack ids, stack names, technology items, and the catalog default. Project scope stores only the selected stack id and application kind, with explicit `Unassigned` support.
+
+**Recommended defaults:** Keep imported projects unassigned until setup detection or an operator chooses a stack. Use the built-in Code UX internal stack only for Code UX-style Preact dashboards; create custom stacks for other project families.
+
+**Risks and gotchas:** The built-in `code-ux-internal` stack cannot be removed. Removing a custom stack also clears system-default references to it; project assignments should be reviewed before deleting stacks that are in active use.
+
+Related docs:
+
+- [Configuration and Storage](../../developer/settings-reference.md)
+- [Settings Reference](../../developer/settings-reference.md)
 
 ### Project Markdown Mirror
 

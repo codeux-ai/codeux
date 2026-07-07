@@ -9,7 +9,7 @@ import { NoticePanel } from "./SettingsSurface.js";
 import { SHARED_INTERACTION_CLASSES } from "../ui/Button.js";
 import { useInteractionTokens } from "../../lib/motion/tokens.js";
 
-import { AlertTriangle, Bot, BrainCircuit, ChevronDown, Compass, Cpu, Monitor, Plug, Server, Settings, SlidersHorizontal, Target } from "lucide-preact";
+import { AlertTriangle, Bot, BrainCircuit, ChevronDown, Compass, Cpu, Layers3, Monitor, Plug, Server, Settings, SlidersHorizontal, Target } from "lucide-preact";
 
 export const CATEGORIES: Category[] = [
   { id: "general", num: "01", label: "General", icon: SlidersHorizontal, description: "Scope, runtime, and automation posture" },
@@ -17,11 +17,12 @@ export const CATEGORIES: Category[] = [
   { id: "models", num: "03", label: "AI Models", icon: Cpu, description: "Provider routing, models, and weighting" },
   { id: "sprint", num: "04", label: "Sprint & Git", icon: Target, description: "Git flow, branch naming, merge rules, and execution runtime" },
   { id: "browser", num: "05", label: "Browser Preview", icon: Compass, description: "Preview runtime, browser visibility, and container policy" },
-  { id: "agents", num: "06", label: "Agents", icon: Bot, description: "Agent routing, skill storage, reflection, and authoring behavior" },
-  { id: "memory", num: "07", label: "Memory", icon: BrainCircuit, description: "Embedding models, auto-capture, and promotion policy" },
-  { id: "integrations", num: "08", label: "Integrations", icon: Plug, description: "Provider keys, Git hosts, and external connection policy" },
-  { id: "mcp", num: "09", label: "MCP", icon: Server, description: "MCP servers injected into CLIs and built-in tool access" },
-  { id: "danger", num: "10", label: "Danger Zone", icon: AlertTriangle, description: "Reset project overrides only when needed", danger: true },
+  { id: "techstacks", num: "06", label: "Techstacks", icon: Layers3, description: "Catalog stacks, application kind, and project assignment" },
+  { id: "agents", num: "07", label: "Agents", icon: Bot, description: "Agent routing, skill storage, reflection, and authoring behavior" },
+  { id: "memory", num: "08", label: "Memory", icon: BrainCircuit, description: "Embedding models, auto-capture, and promotion policy" },
+  { id: "integrations", num: "09", label: "Integrations", icon: Plug, description: "Provider keys, Git hosts, and external connection policy" },
+  { id: "mcp", num: "10", label: "MCP", icon: Server, description: "MCP servers injected into CLIs and built-in tool access" },
+  { id: "danger", num: "11", label: "Danger Zone", icon: AlertTriangle, description: "Reset project overrides only when needed", danger: true },
 ];
 
 export interface SettingsCategoryRailProps {

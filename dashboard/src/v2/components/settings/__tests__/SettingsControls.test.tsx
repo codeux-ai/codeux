@@ -2,6 +2,7 @@
  * @vitest-environment jsdom
  */
 import { h } from "preact";
+import { useState } from "preact/hooks";
 import { readFileSync } from "node:fs";
 import { describe, it, expect, afterEach, vi } from "vitest";
 import { render, screen, cleanup, fireEvent, waitFor } from "@testing-library/preact";
@@ -11,15 +12,19 @@ import { SprintKeyEditor } from "../SprintKeyEditor";
 import { TextInput, SecretInput, NumberInput, TextAreaInput, PillChoiceGroup, SelectInput } from "../SettingsFormFields";
 
 
-import { SettingsCategoryRail } from "../SettingsCategoryRail";
+import { CATEGORIES, SettingsCategoryRail } from "../SettingsCategoryRail";
 import { ActionButton, NoticePanel } from "../SettingsSurface";
 import { OverrideBadge } from "../panels/SharedPanelComponents";
+import { SettingsTechstacksPanel } from "../panels/SettingsTechstacksPanel";
 import { SlidersHorizontal } from "lucide-preact";
 import type { SettingsSearchMatches } from "../../../lib/settings-search-index";
 import userEvent from "@testing-library/user-event";
 import { SettingsContentPanels } from "../SettingsContentPanels";
 import { UnsavedChangesModal } from "../../ui/UnsavedChangesModal";
 import { ProviderInstanceCard } from "../ProviderInstanceCard";
+import { DEFAULT_DASHBOARD_SETTINGS } from "../../../../lib/settings";
+import { dashboardSettingsToProjectSettings } from "../../../lib/settings-view-models";
+import type { ProjectSettings, SystemSettings, TechstackCatalogEntrySettings } from "../../../../types";
 
 const defaultInnerHeight = window.innerHeight;
 
@@ -32,6 +37,44 @@ afterEach(() => {
 vi.mock("../panels/SettingsGeneralPanel", () => ({
   SettingsGeneralPanel: () => <div>General panel values stay mounted</div>,
 }));
+
+const customTechstack: TechstackCatalogEntrySettings = {
+  id: "custom-web",
+  label: "Custom Web",
+  items: [
+    { id: "vite", label: "Vite" },
+    { id: "tailwind", label: "Tailwind" },
+  ],
+};
+
+const createProjectSettings = (techstack?: ProjectSettings["techstack"]): ProjectSettings => ({
+  ...dashboardSettingsToProjectSettings(DEFAULT_DASHBOARD_SETTINGS),
+  ...(techstack ? { techstack } : {}),
+});
+
+const createCatalogEntries = (): TechstackCatalogEntrySettings[] => [
+  ...DEFAULT_DASHBOARD_SETTINGS.techstackCatalog.entries.map((entry) => ({
+    ...entry,
+    items: entry.items.map((item) => ({ ...item })),
+  })),
+  {
+    ...customTechstack,
+    items: customTechstack.items.map((item) => ({ ...item })),
+  },
+];
+
+const createSystemSettings = (projectSettings: ProjectSettings): SystemSettings => ({
+  runtime: {} as SystemSettings["runtime"],
+  integrations: {} as SystemSettings["integrations"],
+  defaults: projectSettings,
+  techstackCatalog: {
+    defaultTechstackId: DEFAULT_DASHBOARD_SETTINGS.techstackCatalog.defaultTechstackId,
+    entries: createCatalogEntries(),
+  },
+  mcpTools: [],
+  customMcpServers: [],
+  modelPricing: { overrides: {} },
+});
 
   it("SettingsCategoryRail renders categories with proper aria-current semantics", () => {
     const mockCategories = [
@@ -55,6 +98,26 @@ vi.mock("../panels/SettingsGeneralPanel", () => ({
     );
     expect(screen.queryByText("Categories")).not.toBeInTheDocument();
     expect(screen.queryByText("Jump directly into the area you need without digging through the full settings tree.")).not.toBeInTheDocument();
+  });
+
+  it("SettingsCategoryRail includes the Techstacks category without changing selection semantics", () => {
+    const techstacks = CATEGORIES.find((category) => category.id === "techstacks");
+
+    expect(techstacks?.label).toBe("Techstacks");
+
+    render(
+      <SettingsCategoryRail
+        filteredCategories={CATEGORIES}
+        activeCategory="techstacks"
+        settingsSearch=""
+        settingsSearchMatches={{}}
+        onSwitchCategory={() => {}}
+      />
+    );
+
+    const btn = screen.getByRole("button", { name: /Techstacks/ });
+    expect(btn).toHaveAttribute("aria-current", "page");
+    expect(btn).toHaveAttribute("aria-selected", "true");
   });
 
   it("SettingsCategoryRail subtracts the measured page-top margin from its desktop height", async () => {
@@ -590,6 +653,119 @@ describe("SettingsControls Accessibility", () => {
     );
 
     expect(screen.getByText("Active panel").parentElement).toHaveStyle("--settings-active-panel-top: 148px");
+  });
+
+  it("SettingsContentPanels routes the Techstacks category to the catalog panel", () => {
+    const projectSettings = createProjectSettings();
+    render(
+      <SettingsContentPanels
+        state={{
+          activeCategory: "techstacks",
+          activeScope: "system",
+          activeDirty: false,
+          activeSaving: false,
+          error: null,
+          saveMessage: null,
+          loading: false,
+          resettingProject: false,
+          systemSettings: createSystemSettings(projectSettings),
+          updateSystem: () => {},
+        } as any}
+      />
+    );
+
+    expect(screen.getByText("Techstacks Catalog")).toBeInTheDocument();
+    expect(screen.getAllByText("Code UX Internal").length).toBeGreaterThan(0);
+  });
+
+  it("SettingsTechstacksPanel protects the built-in internal stack from removal", () => {
+    const projectSettings = createProjectSettings();
+    render(
+      <SettingsTechstacksPanel
+        state={{
+          activeScope: "system",
+          activeSaving: false,
+          systemSettings: createSystemSettings(projectSettings),
+          updateSystem: () => {},
+        } as any}
+      />
+    );
+
+    expect(screen.getByText("Built-in stack protected")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Remove Code UX Internal" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Remove Custom Web" })).toBeInTheDocument();
+  });
+
+  it("SettingsTechstacksPanel lets project scope clear the selected stack to Unassigned", async () => {
+    const user = userEvent.setup();
+    let latestProjectSettings = createProjectSettings({
+      selectedTechstackId: "custom-web",
+      applicationKind: "web",
+    });
+    const systemSettings = createSystemSettings(latestProjectSettings);
+
+    const Harness = () => {
+      const [projectSettings, setProjectSettings] = useState(latestProjectSettings);
+      latestProjectSettings = projectSettings;
+      return (
+        <SettingsTechstacksPanel
+          state={{
+            activeScope: "project",
+            activeSaving: false,
+            projectSources: {},
+            selectedProject: { id: "project-1", name: "Test project" },
+            projectSettings,
+            systemSettings,
+            updateEditableSettings: (recipe: (current: ProjectSettings) => ProjectSettings) => setProjectSettings(recipe),
+            getFieldReset: () => undefined,
+          } as any}
+        />
+      );
+    };
+
+    render(<Harness />);
+
+    await user.click(screen.getByRole("radio", { name: /Unassigned/ }));
+
+    expect(latestProjectSettings.techstack.selectedTechstackId).toBeNull();
+  });
+
+  it("SettingsTechstacksPanel persists project stack and application kind through editable settings helpers", async () => {
+    const user = userEvent.setup();
+    let latestProjectSettings = createProjectSettings({
+      selectedTechstackId: null,
+      applicationKind: null,
+    });
+    const systemSettings = createSystemSettings(latestProjectSettings);
+
+    const Harness = () => {
+      const [projectSettings, setProjectSettings] = useState(latestProjectSettings);
+      latestProjectSettings = projectSettings;
+      return (
+        <SettingsTechstacksPanel
+          state={{
+            activeScope: "project",
+            activeSaving: false,
+            projectSources: {},
+            selectedProject: { id: "project-1", name: "Test project" },
+            projectSettings,
+            systemSettings,
+            updateEditableSettings: (recipe: (current: ProjectSettings) => ProjectSettings) => setProjectSettings(recipe),
+            getFieldReset: () => undefined,
+          } as any}
+        />
+      );
+    };
+
+    render(<Harness />);
+
+    await user.click(screen.getByRole("radio", { name: /Custom Web/ }));
+    await user.click(screen.getByRole("radio", { name: /Web app/ }));
+
+    expect(latestProjectSettings.techstack).toEqual({
+      selectedTechstackId: "custom-web",
+      applicationKind: "web",
+    });
   });
 
   it("SettingsPage keeps the scope controls in a sticky wrapping strip and passes its measured offset to the panel strip", () => {
