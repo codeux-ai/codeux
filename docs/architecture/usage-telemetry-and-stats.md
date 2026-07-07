@@ -273,7 +273,7 @@ The stats snapshot includes:
 - the trend workspace now presents a compact toolbar for selected range, bucket count, resolution, active zoom, reset, and graph filters, plus an interactive plot and persistent control rail with grouped series switches and an accessible live summary for the focused bucket
 - the usage chart summary surfaces selected-window peak tokens, peak active time, average tokens, peak invocations, invocation density, and total cost directly from bucket telemetry so the analysis surface reads like a telemetry panel instead of a single-scale line graph
 - the focused-bucket panel shows date, cost, tokens, active time, invocations, and enabled-series values in wrapping rows so compact viewports preserve exact values without clipping labels or pushing the chart edge
-- the graph filter reset action restores chart-series defaults from the snapshot and keeps at least one series enabled so the chart never collapses to an empty state
+- chart-series grouping and reset state are frontend view-model concerns: the full-width switch band and graph filter menu share ordered sections with active, total, and default-enabled counts, and the graph filter reset action restores chart-series defaults from the snapshot while keeping at least one series enabled so the chart never collapses to an empty state
 - the stats refactor did not change the snapshot contract or route shape; it only changed how the frontend composes the same project stats payload
 
 ## PR Description Rollups

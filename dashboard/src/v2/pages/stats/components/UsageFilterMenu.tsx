@@ -8,7 +8,7 @@ import type {
 } from '../../../types.js';
 import styles from './UsageFilterMenu.module.css';
 import { UsageGraphLegend } from './UsageGraphLegend.js';
-import { groupChartSeries } from '../chart-view-models.js';
+import type { GroupedChartSeriesSection } from '../chart-view-models.js';
 
 interface UsageFilterMenuProps {
   isOpen: boolean;
@@ -16,6 +16,9 @@ interface UsageFilterMenuProps {
   stats: ProjectExecutionStatsSnapshot | null;
   enabledSeries: Record<string, boolean>;
   setEnabledSeries: (val: Record<string, boolean> | ((curr: Record<string, boolean>) => Record<string, boolean>)) => void;
+  resetEnabledSeries: () => void;
+  activeSeriesCount: number;
+  seriesGroups: GroupedChartSeriesSection[];
   onStatusChange?: (message: string) => void;
 }
 
@@ -25,6 +28,9 @@ export const UsageFilterMenu: FunctionComponent<UsageFilterMenuProps> = ({
   stats,
   enabledSeries,
   setEnabledSeries,
+  resetEnabledSeries,
+  activeSeriesCount,
+  seriesGroups,
   onStatusChange,
 }) => {
   const menuRef = useRef<HTMLDivElement>(null);
@@ -90,24 +96,16 @@ export const UsageFilterMenu: FunctionComponent<UsageFilterMenuProps> = ({
 
   if (!isOpen && !menuRef.current) return null;
 
-  const activeSeriesCount = Object.values(enabledSeries).filter(Boolean).length;
   const handleResetFilters = () => {
-    const chartSeries = stats?.chartSeries ?? [];
-    const resetSeries = chartSeries.reduce((acc, series) => {
-      acc[series.id] = series.defaultEnabled;
-      return acc;
-    }, {} as Record<string, boolean>);
-
-    if (chartSeries.length > 0 && Object.values(resetSeries).every((enabled) => !enabled)) {
-      resetSeries[chartSeries[0]!.id] = true;
-    }
-
-    setEnabledSeries(resetSeries);
-    const enabledCount = Object.values(resetSeries).filter(Boolean).length;
+    resetEnabledSeries();
+    const defaultEnabledCount = seriesGroups.reduce((count, group) => count + group.defaultEnabledCount, 0);
+    const enabledCount = defaultEnabledCount > 0
+      ? defaultEnabledCount
+      : seriesGroups.some((group) => group.totalCount > 0)
+        ? 1
+        : 0;
     onStatusChange?.(`Graph filters reset. ${enabledCount} series active.`);
   };
-
-  const orderedSeriesGroups = groupChartSeries(stats?.chartSeries ?? []);
 
   return (
     <div
@@ -153,7 +151,7 @@ export const UsageFilterMenu: FunctionComponent<UsageFilterMenuProps> = ({
             <div className={styles.label}>Metric Series</div>
             <div className="flex max-h-[320px] flex-col gap-4 overflow-y-auto pr-1">
               <UsageGraphLegend
-                seriesGroups={orderedSeriesGroups}
+                seriesGroups={seriesGroups}
                 enabledSeries={enabledSeries}
                 activeSeriesCount={activeSeriesCount}
                 onToggleSeries={(id) => {

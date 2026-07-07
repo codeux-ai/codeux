@@ -5,6 +5,7 @@ import { afterEach, describe, it, expect, vi } from 'vitest';
 import { render, fireEvent, cleanup, screen } from '@testing-library/preact';
 import { useState } from 'preact/hooks';
 import gsap from 'gsap';
+import { groupChartSeries } from '../chart-view-models.js';
 
 vi.mock('gsap', () => ({
   default: {
@@ -36,7 +37,13 @@ describe('UsageFilterMenu', () => {
       ]
     } as any,
     enabledSeries: { tokens: true, active: true },
-    setEnabledSeries: vi.fn()
+    setEnabledSeries: vi.fn(),
+    resetEnabledSeries: vi.fn(),
+    activeSeriesCount: 2,
+    seriesGroups: groupChartSeries([
+      { id: 'tokens', label: 'Tokens', grouping: 'Usage', color: '#00E0A0', defaultEnabled: true, data: [] },
+      { id: 'active', label: 'Active Time', grouping: 'Usage', color: '#FFB800', defaultEnabled: true, data: [] }
+    ], { tokens: true, active: true })
   };
 
   it('should render when open', () => {
@@ -73,19 +80,28 @@ describe('UsageFilterMenu', () => {
         ]
       } as any,
       setEnabledSeries: setEnabledSeriesSpy,
+      resetEnabledSeries: setEnabledSeriesSpy,
+      activeSeriesCount: 2,
+      seriesGroups: groupChartSeries([
+        { id: 'tokens', label: 'Tokens', grouping: 'Usage', color: '#00E0A0', defaultEnabled: false, data: [] },
+        { id: 'active', label: 'Active Time', grouping: 'Usage', color: '#FFB800', defaultEnabled: false, data: [] }
+      ], { tokens: false, active: false }),
     };
 
     const { getByRole } = render(<UsageFilterMenu {...props} />);
     fireEvent.click(getByRole('button', { name: 'Reset filters' }));
 
-    expect(setEnabledSeriesSpy).toHaveBeenCalledWith({ tokens: true, active: false });
+    expect(setEnabledSeriesSpy).toHaveBeenCalled();
   });
 
   it('should not allow disabling the last enabled series', () => {
     const setEnabledSeriesSpy = vi.fn();
     const singleSeriesProps = {
       ...mockProps,
-      enabledSeries: { tokens: true, active: false }, setEnabledSeries: setEnabledSeriesSpy
+      enabledSeries: { tokens: true, active: false },
+      setEnabledSeries: setEnabledSeriesSpy,
+      activeSeriesCount: 1,
+      seriesGroups: groupChartSeries(mockProps.stats.chartSeries, { tokens: true, active: false })
     };
     const { getByRole, getByText } = render(<UsageFilterMenu {...singleSeriesProps} />);
     setEnabledSeriesSpy.mockClear();

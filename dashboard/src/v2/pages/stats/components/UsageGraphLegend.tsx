@@ -1,8 +1,8 @@
 import type { FunctionComponent } from 'preact';
-import type { ProjectExecutionStatsChartSeries } from '../../../../types.js';
+import type { GroupedChartSeriesSection } from '../chart-view-models.js';
 
 interface UsageGraphLegendProps {
-  seriesGroups: Record<string, ProjectExecutionStatsChartSeries[]>;
+  seriesGroups: GroupedChartSeriesSection[];
   enabledSeries: Record<string, boolean>;
   activeSeriesCount: number;
   onToggleSeries: (id: string) => void;
@@ -22,13 +22,13 @@ export const UsageGraphLegend: FunctionComponent<UsageGraphLegendProps> = ({
 }) => {
   return (
     <div className={`grid gap-4 ${className}`.trim()} role="group" aria-label="Usage chart series switches">
-      {Object.entries(seriesGroups).map(([grouping, groupSeries]) => (
-        <div key={grouping} className={`flex min-w-0 flex-col gap-3 ${groupClassName}`.trim()} role="group" aria-label={`${grouping} series`}>
+      {seriesGroups.map((group) => (
+        <div key={group.label} className={`flex min-w-0 flex-col gap-3 ${groupClassName}`.trim()} role="group" aria-label={`${group.label} series`}>
           <div className="text-[9px] font-bold uppercase tracking-[0.25em] text-[var(--stats-label-color)]">
-            {grouping}
+            {group.label}
           </div>
           <div className={seriesGridClassName}>
-            {groupSeries.map((s, idx) => {
+            {group.series.map((s, idx) => {
               const active = enabledSeries[s.id] || false;
               const disabled = activeSeriesCount === 1 && active;
               const fallbackColors = ['#F43F5E', '#8B5CF6', '#10B981', '#F59E0B', '#3B82F6', '#EC4899', '#14B8A6'];
