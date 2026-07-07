@@ -213,6 +213,7 @@ async function createServerHandle(): Promise<{
       attentionItems: mapAttentionItems(projectAttentionRepository, projectId),
     }),
     getProjectStatsSnapshot: (projectId, window) => executionRepository.getProjectStatsSnapshot(projectId, window),
+    getHeaderTokenThroughputSnapshot: (query) => executionRepository.getHeaderTokenThroughputSnapshot(query),
     setPreferredWorker: (projectId, input) => mapAssignedWorkers(
       projectWorkerAssignmentRepository,
       projectId,
