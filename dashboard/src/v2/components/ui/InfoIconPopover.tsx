@@ -12,10 +12,12 @@ interface InfoIconPopoverProps {
     className?: string;
     title?: string;
     items?: Array<{ key: string; desc: string }>;
+    sections?: Array<{ heading: string; body: string }>;
+    summary?: string;
     label?: string;
 }
 
-export const InfoIconPopover: FunctionComponent<InfoIconPopoverProps> = ({ className = "", title = "Placeholders", items = [], label }) => {
+export const InfoIconPopover: FunctionComponent<InfoIconPopoverProps> = ({ className = "", title = "Placeholders", items = [], sections = [], summary, label }) => {
     const isReducedMotion = useReducedMotion();
     const [isVisible, setIsVisible] = useState(false);
     const [isRendered, setIsRendered] = useState(false);
@@ -30,6 +32,7 @@ export const InfoIconPopover: FunctionComponent<InfoIconPopoverProps> = ({ class
     const [copiedKey, setCopiedKey] = useState<string | null>(null);
 
     const hasInteractiveContent = items && items.length > 0;
+    const hasRichContent = Boolean(summary) || sections.length > 0;
     const focusTrapRef = useFocusTrap(hasInteractiveContent && isVisible, { onClose: () => setIsVisible(false), restoreFocus: true });
 
     const handleMouseEnter = () => {
@@ -177,7 +180,7 @@ export const InfoIconPopover: FunctionComponent<InfoIconPopoverProps> = ({ class
                             focusTrapRef.current = node;
                         }
                     }}
-                    className="fixed z-[9999] p-4 bg-white/90 dark:bg-void-700/90 backdrop-blur-2xl rounded-xl shadow-[0_20px_40px_rgba(0,0,0,0.12)] dark:shadow-[0_20px_40px_rgba(0,0,0,0.4)] border border-black/[0.06] dark:border-white/[0.06] w-64"
+                    className={`fixed z-[9999] p-4 bg-white/90 dark:bg-void-700/90 backdrop-blur-2xl rounded-xl shadow-[0_20px_40px_rgba(0,0,0,0.12)] dark:shadow-[0_20px_40px_rgba(0,0,0,0.4)] border border-black/[0.06] dark:border-white/[0.06] ${hasRichContent ? "w-80" : "w-64"}`}
                     style={{ top: coords.top, left: coords.left }}
                     role={hasInteractiveContent ? "dialog" : "tooltip"}
                     tabIndex={-1}
@@ -190,28 +193,49 @@ export const InfoIconPopover: FunctionComponent<InfoIconPopoverProps> = ({ class
                             {title}
                         </div>
                     ) : null}
-                    <ul className="space-y-2">
-                        {items.map(p => (
-                            <li key={p.key} className="flex flex-col gap-0.5 group">
-                                <div className="flex items-center gap-2">
-                                    <span className="font-mono text-[11px] text-signal-500">{p.key}</span>
-                                    <button
-                                        type="button"
-                                        onClick={() => handleCopy(p.key)}
-                                        className="opacity-0 group-hover:opacity-100 transition-opacity focus:opacity-100 p-0.5 hover:bg-slate-100 dark:hover:bg-void-600 rounded"
-                                        title="Copy placeholder"
-                                    >
-                                        {copiedKey === p.key ? (
-                                            <Check className="w-3 h-3 text-green-500" strokeWidth={2} />
-                                        ) : (
-                                            <Copy className="w-3 h-3 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300" strokeWidth={1.5} />
-                                        )}
-                                    </button>
-                                </div>
-                                <span className="text-[11px] text-slate-600 dark:text-slate-300">{p.desc}</span>
-                            </li>
-                        ))}
-                    </ul>
+                    {summary ? (
+                        <p className="mb-3 text-xs leading-relaxed text-slate-600 dark:text-slate-300">
+                            {summary}
+                        </p>
+                    ) : null}
+                    {sections.length > 0 ? (
+                        <div className="space-y-3">
+                            {sections.map((section) => (
+                                <section key={section.heading} className="rounded-lg border border-black/[0.05] bg-black/[0.025] p-3 dark:border-white/[0.06] dark:bg-white/[0.035]">
+                                    <div className="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">
+                                        {section.heading}
+                                    </div>
+                                    <p className="mt-1 text-[11px] leading-relaxed text-slate-600 dark:text-slate-300">
+                                        {section.body}
+                                    </p>
+                                </section>
+                            ))}
+                        </div>
+                    ) : null}
+                    {items.length > 0 ? (
+                        <ul className="space-y-2">
+                            {items.map(p => (
+                                <li key={p.key} className="flex flex-col gap-0.5 group">
+                                    <div className="flex items-center gap-2">
+                                        <span className="font-mono text-[11px] text-signal-500">{p.key}</span>
+                                        <button
+                                            type="button"
+                                            onClick={() => handleCopy(p.key)}
+                                            className="opacity-0 group-hover:opacity-100 transition-opacity focus:opacity-100 p-0.5 hover:bg-slate-100 dark:hover:bg-void-600 rounded"
+                                            title="Copy placeholder"
+                                        >
+                                            {copiedKey === p.key ? (
+                                                <Check className="w-3 h-3 text-green-500" strokeWidth={2} />
+                                            ) : (
+                                                <Copy className="w-3 h-3 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300" strokeWidth={1.5} />
+                                            )}
+                                        </button>
+                                    </div>
+                                    <span className="text-[11px] text-slate-600 dark:text-slate-300">{p.desc}</span>
+                                </li>
+                            ))}
+                        </ul>
+                    ) : null}
                 </div>,
                 document.body
             )}
