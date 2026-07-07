@@ -2,6 +2,7 @@ import type { InstructionTemplateId } from "../instructions/instruction-template
 import type { ProviderInvocationPurpose, TokenUsageSource } from "./execution-types.js";
 import type { ExecutionInvocationRecord } from "./invocation-types.js";
 import type { MemorySettings } from "./memory-types.js";
+import type { TaskSelfReflectionRating } from "./task-self-reflection-types.js";
 
 export interface JulesSource {
   name: string;
@@ -130,6 +131,7 @@ export interface Subtask {
     reviewer: string | null;
     finishedAt: string | null;
   };
+  selfReflectionRating?: TaskSelfReflectionRating;
   is_merged?: boolean;
   merge_indicator?: SubtaskMergeIndicator;
   intervention_owner?: InterventionOwner;

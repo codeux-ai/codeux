@@ -126,7 +126,7 @@ export class TaskSelfReflectionRatingRepository {
               r.*,
               ROW_NUMBER() OVER (
                 PARTITION BY r.task_id
-                ORDER BY r.captured_at DESC, r.updated_at DESC, r.id DESC
+                ORDER BY r.captured_at DESC, r.rowid DESC
               ) AS row_number
             FROM task_self_reflection_ratings r
             WHERE r.task_id
