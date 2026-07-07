@@ -108,6 +108,9 @@ export function createDashboardDependencies(
     providerRunner,
     providerConcurrencyService: coreDeps.providerConcurrencyService,
     logger: logger.child({ component: "provider-execution-service" }),
+    getMcpConnectionInfo: () => context.getMcpConnectionInfo?.() ?? null,
+    skillService: coreDeps.skillService,
+    agentPresetRepository: coreDeps.agentPresetRepository,
   });
 
   const structuredProviderResponseService = new StructuredProviderResponseService({

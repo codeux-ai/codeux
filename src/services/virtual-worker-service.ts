@@ -33,6 +33,10 @@ import type { WorkerInboxReplyService } from "./worker-inbox-reply-service.js";
 import type { InstructionService } from "../instructions/instruction-template-service.js";
 import type { SprintExecutionStateService } from "./sprint-execution-state-service.js";
 import type { MemoryService } from "./memory-service.js";
+import type { SkillService } from "./skill-service.js";
+import type { AgentPresetRepository } from "../repositories/agent-preset-repository.js";
+import type { McpConnectionInfo } from "../contracts/mcp-connection-types.js";
+import type { AgentMcpAccessConfig } from "../contracts/agent-preset-types.js";
 import type { AgentPresetSyncService } from "./agent-preset-sync-service.js";
 import { resolveAgentMemoryInstructions } from "./agent-memory-instructions.js";
 import { LEARNINGS_FILENAME } from "../contracts/memory-types.js";
@@ -155,6 +159,9 @@ export interface VirtualWorkerServiceDependencies {
   sendSessionMessage: (sessionId: string, prompt: string) => Promise<unknown>;
   providerConcurrencyService: ProviderConcurrencyService;
   memoryService?: MemoryService;
+  skillService?: SkillService;
+  agentPresetRepository?: AgentPresetRepository;
+  getMcpConnectionInfo?: () => McpConnectionInfo | null;
   agentPresetSyncService?: Pick<AgentPresetSyncService, "getOptionalWorkerAgentForRepoPath" | "resolveTargetedCodingAgent">;
   logger?: Logger;
 }
@@ -182,6 +189,9 @@ export class VirtualWorkerService {
       providerConcurrencyService: deps.providerConcurrencyService,
       logger: deps.logger,
       sessionTracking: deps.sessionTracking,
+      getMcpConnectionInfo: deps.getMcpConnectionInfo,
+      skillService: deps.skillService,
+      agentPresetRepository: deps.agentPresetRepository,
     });
   }
 
@@ -798,6 +808,8 @@ export class VirtualWorkerService {
           customBaseUrl: providerSettings.customBaseUrl,
           customModel: providerSettings.customModel,
           githubToken: settings.git.githubToken,
+          agentMcpAccess: workerAgent?.mcpAccess ?? null,
+          mcpAgentId: workerAgent?.id ?? null,
         });
       }
       await this.ensureMergeConflictResolved(finalWorktreePath);
@@ -1170,6 +1182,8 @@ export class VirtualWorkerService {
         customBaseUrl: providerSettings.customBaseUrl,
         customModel: providerSettings.customModel,
         githubToken: settings.git.githubToken,
+        agentMcpAccess: workerAgent?.mcpAccess ?? null,
+        mcpAgentId: workerAgent?.id ?? null,
       });
 
       if (settings.memory?.enabled && settings.memory.autoCaptureSprint) {
@@ -1428,6 +1442,8 @@ export class VirtualWorkerService {
     customBaseUrl?: string;
     customModel?: string;
     githubToken: string;
+    agentMcpAccess?: AgentMcpAccessConfig | null;
+    mcpAgentId?: string | null;
   }): Promise<void> {
     const effectiveModel = resolveEffectiveModel({
       provider: args.provider,
@@ -1477,6 +1493,8 @@ export class VirtualWorkerService {
       workflowSettings: args.workflowSettings,
       repoPath: args.repoPath,
       githubToken: args.githubToken,
+      agentMcpAccess: args.agentMcpAccess,
+      mcpAgentId: args.mcpAgentId,
     });
 
     if (!result.ok) {

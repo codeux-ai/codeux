@@ -24,6 +24,10 @@ Code UX now separates:
 
 Provider runtime artifacts (such as host log paths, temporary output files, and Docker paths) are owned and managed by the `provider-runtime-artifacts` module. `ProviderRunner` delegates path resolution and artifact cleanup logic to this helper to ensure safer execution boundaries and testing.
 
+Persistent skill storage is a separate provider runtime input, not a workspace artifact. When an invoked agent preset has persistent skill storage enabled and at least one attached storage, `ProviderExecutionService` appends a dedicated prompt section and passes explicit read/write storage mounts to the provider runner. The host root is derived under `~/.code-ux/persistent-skill-storages/<project-id>/<agent-id>/<storage-id>/`; Docker mounts that directory at `/code-ux/persistent-skills/<storage-id>/`. Code UX never mounts arbitrary storage paths from settings and never uses the project workspace or `.worktrees` directory as the persistent skill root.
+
+Agents should call `search_skills` before creating a durable skill so they do not duplicate existing guidance. If they need to save a new reusable skill, they should use `manage_skills import_markdown` or another available MCP write action when the agent has that authority; otherwise they may write a markdown skill file into the mounted persistent storage path. The retrieval-only `search_skills` MCP surface can be exposed to skill-enabled agents without enabling unrelated Code UX management tools.
+
 ## Configuration Model
 
 Backend types:
@@ -90,6 +94,7 @@ Manual route selection is authoritative for that route. If a route sets `provide
 8. When a CLI instance is selected for Docker execution, Code UX forwards that instance's `mountAuth` and `authPath` into the runtime so the chosen route controls which local credential directory is copied.
 9. If a persisted task already has a concrete provider assignment, such as `gemini` on retry, Code UX resolves the matching provider instance settings for that provider instead of reusing settings from a newly resolved fallback route. This keeps model and auth-copy settings aligned with the actual CLI being launched.
 10. Legacy provider-id keyed payloads are normalized into the instance model so older settings rows and tests continue to resolve through the new routing engine.
+11. If the resolved invocation is associated with an agent preset that has persistent skill storage enabled and attached, Code UX augments the prompt and runtime mounts after routing is resolved. This applies to task coding, planning, QA review and follow-up, dashboard replies, clarification replies, CI fix, merge-conflict repair, and memory remediation flows whenever the agent preset is known.
 
 ## Credential Mutual Exclusion
 
