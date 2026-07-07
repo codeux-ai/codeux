@@ -18,6 +18,8 @@ Switch scope with the selector at the top:
 - **Project** — applies to the active project.
 - **Sprint** — applies to the selected sprint within the active project.
 
+The sticky scope row keeps the System/Project selector, project availability or inheritance context, and save state visible while you scroll. It shows the visible-category count only while Smart Find is active; when search is inactive, category-count context stays in the search/status announcements.
+
 ## Categories
 
 The category rail on the left includes:
