@@ -20,7 +20,7 @@ import { AutomationPanel } from "./panels/AutomationPanel.js";
 import { ProviderPanel } from "./panels/ProviderPanel.js";
 import { WorkerPanel } from "./panels/WorkerPanel.js";
 import { InfoIconPopover } from "../ui/InfoIconPopover.js";
-import { BranchNameSchemeEditor } from "./BranchNameSchemeEditor.js";
+import { BranchNameSchemeEditor, TaskPrTitleSchemeEditor } from "./BranchNameSchemeEditor.js";
 import { LocalFilePickerField } from "./LocalFilePickerField.js";
 
 
@@ -145,6 +145,17 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
                 git: {
                   ...settings.git,
                   sprintBranchScheme: value,
+                },
+              })}
+            />
+          </Row>
+          <Row label="Task PR title scheme" description="Template used when naming automatically-created task pull requests." badge={getBadge("git.taskPrTitleScheme")}>
+            <TaskPrTitleSchemeEditor
+              value={settings.git.taskPrTitleScheme}
+              onChange={(value) => update({
+                git: {
+                  ...settings.git,
+                  taskPrTitleScheme: value,
                 },
               })}
             />
