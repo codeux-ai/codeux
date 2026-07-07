@@ -257,21 +257,42 @@ Emergency stop threshold (consecutive task-start failures). Override via env: `J
 
 ```jsonc
 // Set the Codex model to gpt-5.4 system-wide
+// 1. First call (unconfirmed) - returns approvalRequired: true
+{ "domain": "settings", "action": "patch_system_setting",
+  "payload": { "path": "aiProvider.providers.codex.model", "value": "gpt-5.4" } }
+
+// 2. Second call (confirmed) - executes if within 15 minutes and exact same payload
 { "domain": "settings", "action": "patch_system_setting",
   "payload": { "path": "aiProvider.providers.codex.model", "value": "gpt-5.4" },
   "approval": { "confirmed": true } }
 
 // For one project, force WHEN_GREEN auto-merge
+// 1. First call (unconfirmed)
 { "domain": "settings", "action": "patch_project_setting",
   "payload": { "projectId": "proj-1", "path": "ciIntelligence.featurePrAutoMergeMode", "value": "WHEN_GREEN" } }
 
+// 2. Second call (confirmed)
+{ "domain": "settings", "action": "patch_project_setting",
+  "payload": { "projectId": "proj-1", "path": "ciIntelligence.featurePrAutoMergeMode", "value": "WHEN_GREEN" },
+  "approval": { "confirmed": true } }
+
 // For one sprint, route planning to Claude Opus
+// 1. First call (unconfirmed)
 { "domain": "settings", "action": "patch_sprint_setting",
   "payload": {
     "projectId": "proj-1", "sprintId": "spr-3",
     "path": "aiProvider.routing.planning",
     "value": { "providerConfigId": "claude-code", "profile": "GLOBAL" }
   } }
+
+// 2. Second call (confirmed)
+{ "domain": "settings", "action": "patch_sprint_setting",
+  "payload": {
+    "projectId": "proj-1", "sprintId": "spr-3",
+    "path": "aiProvider.routing.planning",
+    "value": { "providerConfigId": "claude-code", "profile": "GLOBAL" }
+  },
+  "approval": { "confirmed": true } }
 ```
 
 ## Validation

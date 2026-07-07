@@ -117,6 +117,7 @@ Runtime resolution:
 - `main` is only the final fallback when no sprint, project, or system base branch is configured. Normal sprint and task flows use the resolved `git.defaultBranch` value from scoped settings.
 - the old global `/api/settings` contract is removed in favor of explicit scoped endpoints
 - dashboard v2 settings queries clear both cached and in-flight effective-settings requests whenever system/project settings are saved or reset, which prevents stale AI model options immediately after integration updates.
+- Settings actions that mutate state (replace, patch, reset) require human confirmation. Mutating settings actions first return an approval-required response; only the exact same action and payload may execute once with `approval.confirmed: true` within 15 minutes. Get/resolve actions are read-only.
 
 ## Persisted Scoped Settings Model
 

@@ -126,13 +126,13 @@ Memory remediation schedules use `targetType: "memory_remediation"` but have the
 | `replace_system_settings` | ✅ | `settings` | Replace all system settings. |
 | `patch_system_setting` | ✅ | `path`, `value` | Patch one field by JSON path. |
 | `replace_project_settings` | ✅ | `projectId`, `settings` | Replace project settings. |
-| `patch_project_setting` | – | `projectId`, `path`, `value` | Patch a project setting. |
+| `patch_project_setting` | ✅ | `projectId`, `path`, `value` | Patch a project setting. |
 | `reset_project_settings` | ✅ | `projectId` | Reset project to defaults. |
 | `replace_sprint_settings` | ✅ | `projectId`, `sprintId`, `settings` | Replace sprint settings. |
-| `patch_sprint_setting` | – | `projectId`, `sprintId`, `path`, `value` | Patch a sprint setting. |
+| `patch_sprint_setting` | ✅ | `projectId`, `sprintId`, `path`, `value` | Patch a sprint setting. |
 | `reset_sprint_settings` | ✅ | `projectId`, `sprintId` | Reset sprint to defaults. |
 
-All mutating settings actions are human-confirmation gated, including patch actions. The first call records the exact action and payload for up to 15 minutes and returns `approvalRequired: true`; it does not mutate settings, even if `approval.confirmed: true` was sent. After the user explicitly confirms, repeat the same action with the same payload and `approval.confirmed: true`. The approval is one-use and cannot approve a different settings payload.
+All mutating settings actions (replace, patch, reset) require human confirmation. Get/resolve actions are read-only. Mutating settings actions first return an approval-required response; only the exact same action and payload may execute once with `approval.confirmed: true` within 15 minutes. The approval is one-use and cannot approve a different settings payload.
 
 JSON path examples for `patch_*`:
 - `aiProvider.providers.codex.model` → string
