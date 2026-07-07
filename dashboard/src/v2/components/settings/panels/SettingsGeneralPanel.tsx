@@ -10,7 +10,6 @@ import { SectionCard, getBadge as getBadgeHelper, getFieldBadge as getFieldBadge
 import { Bot, Cog, Database, FolderOpen, RotateCcw, Sparkles } from "lucide-preact";
 import { openOnboarding } from "../../../lib/onboarding-control.js";
 import { useProjectData } from "../../../context/project-data.js";
-import { shouldShowExpertSettings } from "../../../lib/settings-experience-mode.js";
 
 const toRestartSprintPolicy = (value: string) => (
   value === "pause" || value === "cancel" ? value : "continue"
@@ -276,7 +275,6 @@ export const SettingsGeneralPanel: FunctionComponent<{ state: SettingsPageState 
 
   const getBadge = (...prefixes: string[]) => getBadgeHelper(activeScope, projectSources, ...prefixes);
   const getFieldBadge = (path: string) => getFieldBadgeHelper(activeScope, projectSources, path);
-  const showExpertSettings = shouldShowExpertSettings(state.experienceMode);
     if (activeScope === "system") {
       return (
         <div className="flex flex-col gap-5">
@@ -288,8 +286,6 @@ export const SettingsGeneralPanel: FunctionComponent<{ state: SettingsPageState 
               getFieldBadge={getFieldBadge}
             />
           ) : null}
-          {showExpertSettings ? (
-          <>
           <SectionCard title="System Runtime" watermark="SYS" icon={<Cog strokeWidth={2.4} />}>
             <Row label="Dashboard port" description="System-wide HTTP port for the dashboard server.">
               <NumberInput
@@ -446,8 +442,6 @@ export const SettingsGeneralPanel: FunctionComponent<{ state: SettingsPageState 
               getBadge={getBadge}
               getFieldBadge={getFieldBadge}
             />
-          ) : null}
-          </>
           ) : null}
 
           <SectionCard title="Onboarding" watermark="ONB" icon={<Sparkles strokeWidth={2.4} />}>

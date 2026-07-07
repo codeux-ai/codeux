@@ -24,10 +24,6 @@ import {
   searchSettingsCategories,
 } from "../lib/settings-search-index.js";
 import {
-  filterSettingsCategoriesByExperienceMode,
-  getSettingsExperienceMode,
-} from "../lib/settings-experience-mode.js";
-import {
   providerDescriptions,
   providerLabels,
 } from "../lib/onboarding-provider-settings.js";
@@ -346,11 +342,7 @@ export const useSettingsPageState = (
   isDirtyRef.current = systemDirty || projectDirty;
 
   const editableSettings = activeScope === "system" ? systemSettings?.defaults ?? null : projectSettings;
-  const experienceMode = getSettingsExperienceMode(editableSettings?.appearance?.experienceMode);
-  const modeVisibleCategories = useMemo(
-    () => filterSettingsCategoriesByExperienceMode(categories, experienceMode),
-    [categories, experienceMode],
-  );
+  const activeCategoryConfig = categories.find((category) => category.id === activeCategory) ?? categories[0]!;
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -374,37 +366,24 @@ export const useSettingsPageState = (
 
   const normalizedSearch = settingsSearch.trim().toLowerCase();
   const settingsSearchIndex = useMemo(() => buildSettingsSearchIndex({
-    categories: modeVisibleCategories,
+    categories,
     providerLabels,
     integrations: INTEGRATIONS,
     invocationRouteDefinitions,
     agentInstructionTemplateOptions: AGENT_INSTRUCTION_TEMPLATE_OPTIONS,
     thinkingModeOptions,
-  }), [modeVisibleCategories]);
+  }), [categories]);
   const settingsSearchMatches = useMemo(
     () => searchSettingsCategories(settingsSearchIndex, normalizedSearch),
     [normalizedSearch, settingsSearchIndex],
   );
   const filteredCategories = useMemo(() => {
     if (!normalizedSearch) {
-      return modeVisibleCategories;
+      return categories;
     }
 
-    return modeVisibleCategories.filter((category) => Boolean(settingsSearchMatches[category.id]));
-  }, [modeVisibleCategories, normalizedSearch, settingsSearchMatches]);
-  const activeCategoryConfig = modeVisibleCategories.find((category) => category.id === activeCategory)
-    ?? filteredCategories[0]
-    ?? modeVisibleCategories[0]
-    ?? categories[0]!;
-
-  useEffect(() => {
-    if (modeVisibleCategories.length === 0) {
-      return;
-    }
-    if (!modeVisibleCategories.some((category) => category.id === activeCategory)) {
-      setActiveCategory(modeVisibleCategories[0]!.id);
-    }
-  }, [activeCategory, modeVisibleCategories]);
+    return categories.filter((category) => Boolean(settingsSearchMatches[category.id]));
+  }, [categories, normalizedSearch, settingsSearchMatches]);
 
   useEffect(() => {
     if (filteredCategories.length === 0) {
@@ -759,7 +738,6 @@ export const useSettingsPageState = (
     resettingProject, deletingProject, resettingDatabase, memoryClearBusy, importingHints,
     externalHints,
     activeCategoryConfig, filteredCategories, settingsSearchMatches,
-    experienceMode,
     categories: categories,
     providerLabels,
     thinkingModeOptions,

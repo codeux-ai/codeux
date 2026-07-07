@@ -22,6 +22,11 @@ import { LiveSessionPage } from "./v2/LiveSessionPage.js";
 import { OnboardingExperience } from "./v2/components/onboarding/OnboardingExperience.js";
 import { GuidedDashboardTour } from "./v2/components/onboarding/GuidedDashboardTour.js";
 import { TitleBar } from "./v2/components/TitleBar.js";
+import { DashboardAssistantWidget } from "./v2/components/chat/DashboardAssistantWidget.js";
+import { AddProjectModal, type AddProjectModalSubmission } from "./v2/components/ui/AddProjectModal.js";
+import { ASSISTANT_OPEN_ADD_PROJECT_EVENT } from "./v2/lib/no-project-chat-assistant.js";
+import { buildProjectCreationSettingsOverride } from "./lib/settings-updaters.js";
+import { DEFAULT_DASHBOARD_SETTINGS } from "./lib/settings.js";
 import "./styles.css";
 
 const isElectron = typeof window !== "undefined" && Boolean(window.codeUxDesktop);
@@ -47,10 +52,11 @@ const BackgroundManager = lazy(() => import("./v2/components/backgrounds/Backgro
 
 // 0. AppLayout extracted to use context hooks
 const AppLayout = () => {
-  const { selectedProject } = useProjectData();
+  const { selectedProject, createProject } = useProjectData();
   const { data: effectiveSettings } = useProjectEffectiveSettings(selectedProject?.id || null);
   const [systemSettings, setSystemSettings] = useState<SystemSettings | null>(null);
   const [appearancePreview, setAppearancePreview] = useState<DashboardSettings["appearance"] | null>(null);
+  const [assistantAddProjectOpen, setAssistantAddProjectOpen] = useState(false);
 
   const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' ? window.matchMedia('(max-width: 767px)').matches : false);
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
@@ -102,6 +108,44 @@ const AppLayout = () => {
       window.removeEventListener("codeux:settings-updated", handler);
     };
   }, []);
+
+  useEffect(() => {
+    const handler = () => setAssistantAddProjectOpen(true);
+    window.addEventListener(ASSISTANT_OPEN_ADD_PROJECT_EVENT, handler);
+    return () => window.removeEventListener(ASSISTANT_OPEN_ADD_PROJECT_EVENT, handler);
+  }, []);
+
+  const handleAssistantCreateProject = async (project: AddProjectModalSubmission): Promise<void> => {
+    if (project.type === "new_project") {
+      const isLocalProject = project.initMode === "new-local";
+      const sourceRef = project.initMode === "new-local"
+        ? (project.path || project.name)
+        : (project.repoSlug || project.name);
+
+      await createProject({
+        name: project.name,
+        sourceType: isLocalProject ? "local" : "git",
+        sourceRef,
+        initMode: project.initMode,
+        remoteProvider: project.remoteProvider,
+        isPrivate: project.isPrivate,
+        settingsOverrides: buildProjectCreationSettingsOverride({
+          ...(isLocalProject ? { githubMode: "LOCAL" as const } : {}),
+          selectedTechstackId: project.selectedTechstackId ?? DEFAULT_DASHBOARD_SETTINGS.techstackCatalog.defaultTechstackId,
+          applicationKind: project.applicationKind ?? null,
+        }),
+      });
+      return;
+    }
+
+    await createProject({
+      name: project.name,
+      sourceType: project.type,
+      sourceRef: project.path,
+      cloneDir: project.cloneDir,
+      ...(project.type === "local" ? { settingsOverrides: buildProjectCreationSettingsOverride({ githubMode: "LOCAL" }) } : {}),
+    });
+  };
 
   useEffect(() => {
     const handler = (event: Event) => {
@@ -251,8 +295,18 @@ const AppLayout = () => {
         </div>
 
         {!showSidebar && <KineticDock experienceMode={appearanceSettings?.experienceMode} />}
+        <DashboardAssistantWidget />
         <OnboardingExperience />
         <GuidedDashboardTour />
+        {assistantAddProjectOpen && (
+          <AddProjectModal
+            onClose={() => setAssistantAddProjectOpen(false)}
+            onAdd={(project) => {
+              void handleAssistantCreateProject(project);
+              setAssistantAddProjectOpen(false);
+            }}
+          />
+        )}
         <footer className="sr-only">Dashboard Footer</footer>
       </div>
       </div>

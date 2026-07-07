@@ -315,68 +315,6 @@ describe("useSettingsPageState", () => {
     expect(result.current.filteredCategories.length).toBe(CATEGORIES.length);
   });
 
-  it("filters mode-hidden categories before search and falls back when the active category is hidden", async () => {
-    const { result } = renderHook(() => useSettingsPageState(CATEGORIES));
-    await waitFor(() => expect(result.current.loading).toBe(false));
-
-    act(() => {
-      result.current.setActiveCategory("mcp");
-    });
-    expect(result.current.activeCategory).toBe("mcp");
-
-    act(() => {
-      result.current.updateEditableSettings((current) => ({
-        ...current,
-        appearance: {
-          ...current.appearance,
-          experienceMode: "STANDARD",
-        },
-      }));
-      result.current.setSettingsSearch("mcp");
-    });
-
-    await waitFor(() => expect(result.current.activeCategory).toBe("general"));
-    expect(result.current.filteredCategories.map((category) => category.id)).not.toContain("mcp");
-    expect(result.current.settingsSearchMatches.mcp).toBeUndefined();
-  });
-
-  it("saves experience mode changes without clearing hidden Expert settings", async () => {
-    const dashboardSettings = cloneDashboardSettings();
-    dashboardSettings.guardrails.jobs.task_coding.cap = 17;
-    mockFetchSystem.mockResolvedValue({
-      runtime: { dashboardPort: 4444, consoleLogLevel: "info", debugLogFileLevel: "error", consoleLogMode: "standard" },
-      integrations: {
-        providers: {
-          jules: { provider: "jules", name: "Jules Primary", apiKey: "" },
-          gemini: { provider: "gemini", name: "Gemini Primary", apiKey: "" },
-          codex: { provider: "codex", name: "Codex Primary", apiKey: "" },
-          "claude-code": { provider: "claude-code", name: "Claude Primary", apiKey: "" },
-        },
-        githubToken: "",
-      },
-      defaults: dashboardSettings,
-      mcpTools: [],
-    } as any);
-
-    render(<SettingsPage />);
-
-    await waitFor(() => {
-      expect(screen.getByRole("region", { name: "Settings category panel" })).not.toHaveAttribute("aria-busy");
-    });
-
-    fireEvent.click(screen.getAllByRole("button", { name: /Appearance/ }).at(-1)!);
-    await waitFor(() => expect(screen.getByText("Display Settings")).toBeInTheDocument());
-    fireEvent.click(screen.getByRole("radio", { name: /Standard/ }));
-    expect(screen.queryByText("Guardrails")).not.toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("button", { name: /Save Changes/ }));
-
-    await waitFor(() => expect(mockSaveSystem).toHaveBeenCalled());
-    const savedSystemSettings = mockSaveSystem.mock.calls[0][0];
-    expect(savedSystemSettings.defaults.appearance.experienceMode).toBe("STANDARD");
-    expect(savedSystemSettings.defaults.guardrails.jobs.task_coding.cap).toBe(17);
-  });
-
   it("renders self-reflection controls default off and supports criteria add/remove", async () => {
     render(<SettingsPage />);
 

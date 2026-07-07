@@ -89,10 +89,10 @@ export const SettingsSmartFindSearch: FunctionComponent<SettingsSmartFindSearchP
     ), 0)
   ), [settingsSearchMatches]);
   const quickCategories = useMemo(() => (
-    filteredCategories
+    (isSearchActive ? filteredCategories : CATEGORIES)
       .filter((category) => !["general", "models", "sprint", "browser"].includes(category.id))
       .slice(0, 4)
-  ), [filteredCategories]);
+  ), [filteredCategories, isSearchActive]);
   const activeSearchStatus = isSearchActive
     ? getSettingsSearchStatusText({
       searchTerm: normalizedSearch,

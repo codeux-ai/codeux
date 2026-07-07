@@ -167,22 +167,4 @@ describe("ProjectSettingsEditor", () => {
       cliWorkflow: expect.objectContaining({ containerSetupScriptPath: "/workspace/test-project/setup.sh" }),
     }));
   });
-
-  it("hides low-level worker limits outside Expert mode without removing saved values", () => {
-    const settings = cloneProjectSettings(DEFAULT_DASHBOARD_SETTINGS);
-    settings.appearance.experienceMode = "STANDARD";
-    settings.workers.maxConcurrency = 7;
-    settings.workers.timeoutSeconds = 900;
-    const mockOnChange = vi.fn();
-
-    render(
-      <ProjectSettingsEditor
-        settings={settings}
-        onChange={mockOnChange}
-      />
-    );
-
-    expect(screen.queryByText("Max concurrency")).not.toBeInTheDocument();
-    expect(screen.queryByText("Dispatch timeout")).not.toBeInTheDocument();
-  });
 });
