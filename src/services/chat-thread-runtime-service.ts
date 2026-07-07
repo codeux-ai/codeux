@@ -744,6 +744,18 @@ export class ChatThreadRuntimeService {
         });
         return true;
       }
+      const latestTaskCount = this.deps.projectManagementRepository.listTasks(projectId, quickactionState.activeSprintId).length;
+      if (latestTaskCount > 0) {
+        this.appendAndClearCreateAppQueuedFollowUps(projectId, thread.id, quickactionState.activeSprintId);
+        this.deps.connectionChatRepository.markDashboardMessagesProcessed(thread.id, {
+          upToMessageId: userMessage.id,
+        });
+        this.deps.connectionChatRepository.postSystemMessage(projectId, {
+          threadId: thread.id,
+          bodyMarkdown: "Updated the app sprint direction with your latest note.",
+        });
+        return true;
+      }
       this.deps.connectionChatRepository.markDashboardMessagesProcessed(thread.id, {
         upToMessageId: userMessage.id,
       });
@@ -754,7 +766,12 @@ export class ChatThreadRuntimeService {
       return true;
     }
 
-    this.appendCreateAppFollowUpsToSprint(projectId, quickactionState.activeSprintId, [followUp]);
+    const appendedQueuedFollowUps = this.appendAndClearCreateAppQueuedFollowUps(projectId, thread.id, quickactionState.activeSprintId);
+    const alreadyAppendedCurrentFollowUp = appendedQueuedFollowUps
+      .some((entry) => entry.messageId === followUp.messageId);
+    if (!alreadyAppendedCurrentFollowUp) {
+      this.appendCreateAppFollowUpsToSprint(projectId, quickactionState.activeSprintId, [followUp]);
+    }
     this.deps.connectionChatRepository.markDashboardMessagesProcessed(thread.id, {
       upToMessageId: userMessage.id,
     });
@@ -837,12 +854,29 @@ export class ChatThreadRuntimeService {
         ) {
           return null;
         }
+        let queuedFollowUps = planningStatus === "completed"
+          ? latestQuickactionState.queuedFollowUps.filter((entry) => !appendedFollowUpIds.has(entry.messageId))
+          : latestQuickactionState.queuedFollowUps;
+        if (planningStatus === "completed" && queuedFollowUps.length > 0) {
+          try {
+            this.appendCreateAppFollowUpsToSprint(projectId, sprintId, queuedFollowUps);
+            for (const followUp of queuedFollowUps) {
+              appendedFollowUpIds.add(followUp.messageId);
+            }
+            queuedFollowUps = [];
+          } catch (appendError: unknown) {
+            this.deps.logger?.error("Failed to append queued create-app follow-ups during final planning state merge", {
+              projectId,
+              threadId,
+              sprintId,
+              error: appendError instanceof Error ? appendError.message : String(appendError),
+            });
+          }
+        }
         const nextState: DashboardCreateAppQuickactionRuntimeState = {
           ...latestQuickactionState,
           planningStatus,
-          queuedFollowUps: planningStatus === "completed"
-            ? latestQuickactionState.queuedFollowUps.filter((entry) => !appendedFollowUpIds.has(entry.messageId))
-            : latestQuickactionState.queuedFollowUps,
+          queuedFollowUps,
           planningError: planningStatus === "failed"
             ? (error instanceof Error ? error.message : String(error ?? "Planning failed"))
             : null,
@@ -886,6 +920,36 @@ export class ChatThreadRuntimeService {
       },
     });
     return nextQuickactionState;
+  }
+
+  private appendAndClearCreateAppQueuedFollowUps(
+    projectId: string,
+    threadId: string,
+    sprintId: string,
+  ): DashboardCreateAppQueuedFollowUp[] {
+    const latestThread = this.deps.connectionChatRepository.getThread(threadId);
+    const latestQuickactionState = latestThread.runtimeState?.createAppQuickaction ?? null;
+    if (!latestQuickactionState || latestQuickactionState.activeSprintId !== sprintId) {
+      return [];
+    }
+    const queuedFollowUps = latestQuickactionState.queuedFollowUps;
+    if (queuedFollowUps.length === 0) {
+      return [];
+    }
+
+    this.appendCreateAppFollowUpsToSprint(projectId, sprintId, queuedFollowUps);
+    const appendedFollowUpIds = new Set(queuedFollowUps.map((entry) => entry.messageId));
+    this.updateCreateAppQuickactionRuntimeState(threadId, (currentQuickactionState) => {
+      if (!currentQuickactionState || currentQuickactionState.activeSprintId !== sprintId) {
+        return null;
+      }
+      return {
+        ...currentQuickactionState,
+        queuedFollowUps: currentQuickactionState.queuedFollowUps
+          .filter((entry) => !appendedFollowUpIds.has(entry.messageId)),
+      };
+    });
+    return queuedFollowUps;
   }
 
   private appendCreateAppFollowUpsToSprint(

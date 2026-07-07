@@ -274,6 +274,72 @@ describe("ChatThreadRuntimeService", () => {
     expect(deps.chatManagementActionService.processManagementAction).not.toHaveBeenCalled();
   });
 
+  it("appends queued create-app follow-ups when tasks appear during the queue write", async () => {
+    let tasksExist = false;
+    let runtimeState: any = {
+      createAppQuickaction: {
+        activeSprintId: "sprint-web-1",
+        appKind: "web_app",
+        planningStatus: "running",
+        queuedFollowUps: [],
+        quickactionRequestId: "quickaction-web-1",
+        clientRequestId: "quickaction-web-1",
+        activePlanningRequestId: "quickaction-web-1",
+        progressMessageId: "msg-progress",
+      },
+    };
+    deps.connectionChatRepository.postDashboardMessage.mockReturnValue({
+      id: "msg-follow-up",
+      threadId: "t-app",
+      bodyMarkdown: "Make setup import existing projects.",
+      deliveryStatus: "pending",
+      createdAt: "2026-07-07T00:01:30.000Z",
+      metadata: null,
+    });
+    deps.connectionChatRepository.getThread.mockImplementation(() => ({
+      id: "t-app",
+      projectId: "p1",
+      connectionId: null,
+      title: "Create a web app",
+      runtimeState,
+    }));
+    deps.connectionChatRepository.updateThread.mockImplementation((_threadId: string, input: any) => {
+      runtimeState = input.runtimeState;
+      tasksExist = true;
+      return { id: "t-app", projectId: "p1", title: "Create a web app", runtimeState };
+    });
+    deps.projectManagementRepository.listTasks.mockImplementation(() => (
+      tasksExist ? [{ id: "task-1" }] : []
+    ));
+    deps.projectManagementRepository.getSprint.mockReturnValue({
+      id: "sprint-web-1",
+      projectId: "p1",
+      goal: "Build the app.",
+      originalPrompt: null,
+    });
+
+    await service.postMessage("p1", {
+      threadId: "t-app",
+      bodyMarkdown: "Make setup import existing projects.",
+    });
+
+    expect(deps.projectManagementRepository.updateSprint).toHaveBeenCalledWith("sprint-web-1", {
+      goal: expect.stringContaining("Make setup import existing projects."),
+    });
+    expect(runtimeState.createAppQuickaction.queuedFollowUps).toEqual([]);
+    expect(deps.connectionChatRepository.markDashboardMessagesProcessed).toHaveBeenCalledWith("t-app", {
+      upToMessageId: "msg-follow-up",
+    });
+    expect(deps.connectionChatRepository.postSystemMessage).toHaveBeenCalledWith("p1", expect.objectContaining({
+      threadId: "t-app",
+      bodyMarkdown: "Updated the app sprint direction with your latest note.",
+    }));
+    expect(deps.connectionChatRepository.postSystemMessage).not.toHaveBeenCalledWith("p1", expect.objectContaining({
+      bodyMarkdown: "Got it. I'll apply that direction to the app sprint after planning finishes.",
+    }));
+    expect(deps.chatManagementActionService.processManagementAction).not.toHaveBeenCalled();
+  });
+
   it("appends normal chat follow-ups immediately after create-app tasks exist", async () => {
     const runtimeState = {
       createAppQuickaction: {
