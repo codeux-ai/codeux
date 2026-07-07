@@ -1,6 +1,7 @@
 import type { Express } from "express";
 import type { DashboardDependencies } from "./dashboard-server.js";
 import { asyncRoute, syncRoute } from "./route-utils.js";
+import type { OnboardingDependencyInstallMode } from "../contracts/app-types.js";
 import type { SystemSettings } from "../contracts/settings-scope-types.js";
 import { registerUserOnboardingRoutes } from "./routes/user/onboarding.js";
 import { getModelCatalog, getModelCatalogProviders } from "../domain/model-catalog/model-catalog-loader.js";
@@ -14,6 +15,21 @@ const LOCAL_MCP_PROVIDERS = new Set<LocalMcpCliProvider>([
   "opencode",
   "antigravity",
 ]);
+
+const ONBOARDING_DEPENDENCY_INSTALL_MODES = new Set<OnboardingDependencyInstallMode>([
+  "docker-desktop-git",
+  "docker-engine-git",
+]);
+
+const parseOnboardingDependencyInstallMode = (value: unknown): OnboardingDependencyInstallMode | null => {
+  if (typeof value !== "string") {
+    return null;
+  }
+  const mode = value.trim();
+  return ONBOARDING_DEPENDENCY_INSTALL_MODES.has(mode as OnboardingDependencyInstallMode)
+    ? mode as OnboardingDependencyInstallMode
+    : null;
+};
 
 // Note: liveActivityCacheMs is needed but excluded from DashboardDependencies,
 // so we pass it explicitly.
@@ -91,6 +107,37 @@ export function registerSettingsRoutes(router: Express, deps: DashboardDependenc
       return;
     }
     res.json(await deps.getOnboardingRuntimeReadiness());
+  }));
+
+  router.post("/api/onboarding/dependencies/install", asyncRoute(async (req, res) => {
+    if (!deps.installOnboardingDependencies) {
+      res.status(404).json({ error: "Onboarding dependency installation is not available." });
+      return;
+    }
+
+    const mode = parseOnboardingDependencyInstallMode(req.body?.mode);
+    if (!mode) {
+      res.status(400).json({ error: "Unsupported onboarding dependency installer mode." });
+      return;
+    }
+    if (req.body?.confirmInstall !== true) {
+      res.status(400).json({ error: "Dependency installation requires explicit confirmation." });
+      return;
+    }
+
+    deps.logger?.info("Onboarding dependency installation started", {
+      logPurpose: "settings",
+      mode,
+    });
+    const result = await deps.installOnboardingDependencies(mode);
+    deps.logger?.info("Onboarding dependency installation completed", {
+      logPurpose: "settings",
+      mode,
+      platform: result.platform,
+      outcome: result.status,
+      commandLabels: result.commands.map((command) => command.label),
+    });
+    res.json(result);
   }));
 
   router.get("/api/git-status", asyncRoute(async (req, res) => {

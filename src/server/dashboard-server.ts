@@ -10,6 +10,8 @@ import type {
   ExternalSettingsHints,
   GitTrackingStatus,
   JulesActivity,
+  OnboardingDependencyInstallerResult,
+  OnboardingDependencyInstallMode,
   OnboardingRuntimeReadiness,
   OverviewTelemetrySnapshot,
   ProjectExecutionStatsSnapshot,
@@ -285,6 +287,7 @@ export interface DashboardServerOptions {
   isHealthy?: () => ReadinessProbeStatus;
   listDockerContainers: () => Promise<DockerContainer[]>;
   getOnboardingRuntimeReadiness?: () => Promise<OnboardingRuntimeReadiness> | OnboardingRuntimeReadiness;
+  installOnboardingDependencies?: (mode: OnboardingDependencyInstallMode) => Promise<OnboardingDependencyInstallerResult> | OnboardingDependencyInstallerResult;
   getOnboardingState?: () => OnboardingStateRecord;
   markOnboardingCompleted?: () => OnboardingStateRecord;
   resetOnboardingState?: () => OnboardingStateRecord;

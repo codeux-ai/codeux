@@ -277,7 +277,7 @@ describe("SprintActions", () => {
       projectId: "p1",
       provider: "bitbucket",
       search: "bug",
-    }))).rejects.toThrow("Invalid value for provider. Must be one of: github, gitlab, jira");
+    }))).rejects.toThrow("Invalid value for provider. Must be one of: github, gitlab, jira, notion, asana, linear, miro, lucid, figma, mural");
     expect(sprintIssueService.searchIssues).not.toHaveBeenCalled();
   });
 
@@ -366,6 +366,65 @@ describe("SprintActions", () => {
     });
   });
 
+  it("searches Linear issues without requiring a sprint", async () => {
+    const mockIssues = [{
+      provider: "linear",
+      sourceProvider: "linear",
+      sourceKind: "issue",
+      externalId: "lin-id-1",
+      hostDomain: "linear.app",
+      repository: "LIN",
+      issueNumber: null,
+      issueKey: "LIN-42",
+      title: "Linear Issue",
+      url: "https://linear.app/acme/issue/LIN-42/linear-issue",
+      state: "In Progress",
+      labels: ["integration"],
+      assignees: ["alice"],
+      bodyPreview: "preview",
+      createdAt: null,
+      updatedAt: null,
+      issueAuthor: null,
+      issueReporter: null,
+      issueMilestone: null,
+      issueType: "Issue",
+      issuePriority: null,
+      issueCommentCount: null,
+    }];
+    vi.mocked(sprintIssueService.searchIssues).mockResolvedValue(mockIssues as any);
+
+    const result = await sprintActions.handleSprintAction(makeArgs("import_issues", {
+      projectId: "p1",
+      provider: "linear",
+      search: " import ",
+      state: "In Progress",
+      labels: [" integration "],
+      teamKey: " lin ",
+      externalProjectId: " project-1 ",
+      includeConversation: true,
+      limit: 5,
+    }));
+
+    expect(sprintIssueService.searchIssues).toHaveBeenCalledWith("p1", expect.objectContaining({
+      provider: "linear",
+      search: "import",
+      state: "In Progress",
+      labels: ["integration"],
+      teamKey: "lin",
+      providerProjectId: "project-1",
+      includeConversation: true,
+      limit: 5,
+    }));
+    expect(projectRepo.replaceSprintLinkedIssues).not.toHaveBeenCalled();
+    expect(result.result).toMatchObject({
+      mode: "search",
+      provider: "linear",
+      searchedIssues: mockIssues,
+      linkedIssues: [],
+      planning: null,
+    });
+  });
+
   it("imports explicit Jira issue keys into a sprint", async () => {
     const contexts = [{
       provider: "jira",
@@ -417,6 +476,130 @@ describe("SprintActions", () => {
       importedContexts: contexts,
       linkedIssues: linkedRecords,
       warnings: [],
+    });
+  });
+
+  it("imports explicit Notion external IDs into a sprint and appends prompt context", async () => {
+    const contexts = [{
+      provider: "notion",
+      sourceProvider: "notion",
+      sourceKind: "page",
+      externalId: "page-1",
+      hostDomain: "notion.so",
+      repository: "workspace",
+      issueNumber: null,
+      issueKey: "page:page-1",
+      title: "Notion roadmap",
+      url: "https://www.notion.so/page-1",
+      state: "open",
+      labels: ["page"],
+      assignees: [],
+      issueBodyMarkdown: "Notion acceptance criteria",
+      issueConversationMarkdown: "",
+      includeConversation: false,
+      issueAuthor: null,
+      issueCreatedAt: "2026-05-01T00:00:00.000Z",
+      issueUpdatedAt: "2026-05-02T00:00:00.000Z",
+    }];
+    const linkedRecords = [{ id: "link-1", externalId: "page-1" }];
+    vi.mocked(sprintIssueService.getIssuePromptContextsForReferences).mockResolvedValue(contexts as any);
+    vi.mocked(projectRepo.getSprint).mockReturnValue({ id: "s1", projectId: "p1", goal: "Existing goal" } as any);
+    vi.mocked(projectRepo.replaceSprintLinkedIssues).mockReturnValue(linkedRecords as any);
+    vi.mocked(projectRepo.updateSprint).mockReturnValue({ id: "s1", projectId: "p1", goal: "updated" } as any);
+
+    const result = await sprintActions.handleSprintAction(makeArgs("import_issues", {
+      projectId: "p1",
+      sprintId: "s1",
+      provider: "notion",
+      externalIds: [" page-1 "],
+    }));
+
+    expect(sprintIssueService.getIssuePromptContextsForReferences).toHaveBeenCalledWith("p1", expect.objectContaining({
+      provider: "notion",
+      externalIds: ["page-1"],
+    }));
+    expect(sprintIssueService.importLinkedIssues).toHaveBeenCalledWith("s1", "p1", [expect.objectContaining({
+      provider: "notion",
+      sourceKind: "page",
+      externalId: "page-1",
+      issueNumber: null,
+    })]);
+    expect(projectRepo.updateSprint).toHaveBeenCalledWith("s1", {
+      goal: expect.stringContaining("Notion acceptance criteria"),
+    });
+    expect(result.result).toMatchObject({
+      mode: "explicit",
+      provider: "notion",
+      importedContexts: contexts,
+      linkedIssues: linkedRecords,
+    });
+  });
+
+  it("parses canvas import fields and imports explicit Figma file context", async () => {
+    const contexts = [{
+      provider: "figma",
+      sourceProvider: "figma",
+      sourceKind: "file",
+      externalId: "file-1",
+      hostDomain: "figma.com",
+      repository: "files",
+      issueNumber: null,
+      issueKey: "file:file-1",
+      title: "Design spec",
+      url: "https://www.figma.com/file/file-1",
+      state: "open",
+      labels: ["file"],
+      assignees: [],
+      issueBodyMarkdown: "## Page 1",
+      issueConversationMarkdown: "##### Comment 1 - @Alice\n\nPlease preserve this layout",
+      includeConversation: true,
+      issueAuthor: null,
+      issueCreatedAt: null,
+      issueUpdatedAt: "2026-05-02T00:00:00.000Z",
+    }];
+    const linkedRecords = [{ id: "link-1", externalId: "file-1" }];
+    vi.mocked(sprintIssueService.getIssuePromptContextsForReferences).mockResolvedValue(contexts as any);
+    vi.mocked(projectRepo.getSprint).mockReturnValue({ id: "s1", projectId: "p1", goal: "Existing goal" } as any);
+    vi.mocked(projectRepo.replaceSprintLinkedIssues).mockReturnValue(linkedRecords as any);
+    vi.mocked(projectRepo.updateSprint).mockReturnValue({ id: "s1", projectId: "p1", goal: "updated" } as any);
+
+    const result = await sprintActions.handleSprintAction(makeArgs("import_issues", {
+      projectId: "p1",
+      sprintId: "s1",
+      provider: "figma",
+      fileKey: " file-1 ",
+      boardId: " board-1 ",
+      documentId: " doc-1 ",
+      workspaceId: " workspace-1 ",
+      muralId: " mural-1 ",
+      itemTypes: [" sticky_note ", "text"],
+      includeConversation: true,
+    }));
+
+    expect(sprintIssueService.getIssuePromptContextsForReferences).toHaveBeenCalledWith("p1", expect.objectContaining({
+      provider: "figma",
+      fileKey: "file-1",
+      boardId: "board-1",
+      documentId: "doc-1",
+      workspaceId: "workspace-1",
+      muralId: "mural-1",
+      itemTypes: ["sticky_note", "text"],
+      includeConversation: true,
+    }));
+    expect(sprintIssueService.importLinkedIssues).toHaveBeenCalledWith("s1", "p1", [expect.objectContaining({
+      provider: "figma",
+      sourceKind: "file",
+      externalId: "file-1",
+      issueNumber: null,
+    })]);
+    expect(projectRepo.updateSprint).toHaveBeenCalledWith("s1", {
+      goal: expect.stringContaining("Please preserve this layout"),
+    });
+    expect(result.result).toMatchObject({
+      mode: "explicit",
+      provider: "figma",
+      importedContexts: contexts,
+      linkedIssues: linkedRecords,
     });
   });
 
@@ -680,6 +863,17 @@ describe("SprintActions", () => {
       issueKeys: ["OPS-42"],
       issueNumbers: [42],
       issueRefs: ["#42", "OPS-42"],
+      externalIds: ["page-1", "LIN-42"],
+      workspaceId: "workspace-1",
+      providerProjectId: "provider-project-1",
+      teamId: "team-1",
+      teamKey: "LIN",
+      databaseId: "database-1",
+      boardId: "board-1",
+      documentId: "document-1",
+      fileKey: "file-1",
+      muralId: "mural-1",
+      itemTypes: ["sticky_note", "text"],
       includeConversation: true,
       attachToSprint: true,
       planAfterImport: true,

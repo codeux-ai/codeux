@@ -819,6 +819,22 @@ describe("settings cloning helpers", () => {
     completedTaskWithoutPr: { strategy: "CREATE_PR" as const, agentPresetIds: [], agentPresetId: null },
   });
 
+  const createMockImporterSettings = () => ({
+    enabled: false,
+    apiToken: "",
+    apiSecret: "",
+    baseUrl: "",
+    workspaceId: "",
+    teamId: "",
+    teamKey: "",
+    projectId: "",
+    databaseId: "",
+    boardId: "",
+    documentId: "",
+    fileKey: "",
+    defaultSearchLimit: 25,
+  });
+
   const createMockProjectSettings = (): ProjectSettings => ({
     appearance: { theme: "system" },
     automationLevel: "FULL",
@@ -829,8 +845,16 @@ describe("settings cloning helpers", () => {
       providers: {},
       invocationRouting: {},
     },
+    techstack: { applicationKind: null, selectedTechstackId: null },
     git: { githubMode: "app", githubToken: "", defaultBranch: "main", autoCreatePr: false, autoCloseLinkedIssues: false, deleteMergedBranches: false, featureBranchPrefix: "", sprintBranchScheme: "FLAT", sprintKeyPrefix: "" },
     jira: { host: "h", email: "e", apiToken: "t", autoTransitionLinkedIssuesOnImport: true, importTransitionName: "In Work", autoCloseLinkedIssues: false, defaultProject: "P", closeTransitionName: "Done" },
+    notion: createMockImporterSettings(),
+    asana: createMockImporterSettings(),
+    linear: createMockImporterSettings(),
+    miro: createMockImporterSettings(),
+    lucid: createMockImporterSettings(),
+    figma: createMockImporterSettings(),
+    mural: createMockImporterSettings(),
     ciIntelligence: {},
     guardrails: { onLimitAction: "WARN", defaultLimitOverrides: [], limitOverrides: [], jobConfigOverrides: [], jobs: { task_coding: {}, ci_fix: {}, merge_conflict: {}, clarification_reply: {}, planning: {}, remediation: {} } as any },
     sprintLoopSteps: { apply: { type: "apply" }, pr: { type: "pr" }, runTests: { type: "test" } },
@@ -889,6 +913,8 @@ describe("settings cloning helpers", () => {
     clone.memory.enabled = false;
     clone.memory.autoCaptureSprint = false;
     clone.jira.host = "new-host";
+    clone.notion.databaseId = "mutated-database";
+    clone.figma.fileKey = "mutated-file";
     clone.agents.qualityAssurance.enabled = false;
     clone.agents.qualityAssurance.taskCompletion.strategy = "NEVER";
     clone.agents.qualityAssurance.sprintCompletion.agentPresetIds.push("qa-extra");
@@ -903,6 +929,8 @@ describe("settings cloning helpers", () => {
     expect(original.memory.enabled).toBe(true);
     expect(original.memory.autoCaptureSprint).toBe(true);
     expect(original.jira.host).toBe("h");
+    expect(original.notion.databaseId).toBe("");
+    expect(original.figma.fileKey).toBe("");
     expect(original.agents.qualityAssurance.enabled).toBe(true);
     expect(original.agents.qualityAssurance.taskCompletion.strategy).toBe("ALWAYS");
     expect(original.agents.qualityAssurance.sprintCompletion.agentPresetIds).toEqual(["qa-sprint", "qa-peer"]);
@@ -923,6 +951,8 @@ describe("settings cloning helpers", () => {
     // Mutate clone
     clone.memory.enabled = false;
     clone.jira.host = "new-host";
+    clone.asana.workspaceId = "mutated-workspace";
+    clone.mural.boardId = "mutated-mural";
     clone.agents.qualityAssurance.enabled = false;
     clone.agents.qualityAssurance.sprintCompletion.agentPresetIds.push("qa-extra");
     clone.agents.selfReflection.qualityAssurance.criteria.push({ id: "scope_control", label: "Scope control", prompt: "Stay scoped.", threshold: 0.8 });
@@ -932,6 +962,8 @@ describe("settings cloning helpers", () => {
     // Verify original is untouched
     expect(original.memory.enabled).toBe(true);
     expect(original.jira.host).toBe("h");
+    expect(original.asana.workspaceId).toBe("");
+    expect(original.mural.boardId).toBe("");
     expect(original.agents.qualityAssurance.enabled).toBe(true);
     expect(original.agents.qualityAssurance.sprintCompletion.agentPresetIds).toEqual(["qa-sprint", "qa-peer"]);
     expect(original.agents.selfReflection.qualityAssurance.criteria).toHaveLength(1);
@@ -946,9 +978,32 @@ describe("settings cloning helpers", () => {
         githubToken: "gh",
         gitlabToken: "gl",
         jira: { host: "h", email: "e", apiToken: "t", autoTransitionLinkedIssuesOnImport: true, importTransitionName: "In Work", autoCloseLinkedIssues: false, defaultProject: "P", closeTransitionName: "Done" },
+        notion: createMockImporterSettings(),
+        asana: createMockImporterSettings(),
+        linear: createMockImporterSettings(),
+        miro: createMockImporterSettings(),
+        lucid: createMockImporterSettings(),
+        figma: createMockImporterSettings(),
+        mural: createMockImporterSettings(),
         providers: {
           "p1": { provider: "jules", name: "Jules", apiKey: "key", mountAuth: false, authPath: "" }
         }
+      },
+      techstackCatalog: {
+        defaultTechstackId: "code-ux-internal",
+        entries: [
+          {
+            id: "code-ux-internal",
+            label: "Code UX Stack",
+            items: [
+              { id: "preact", label: "Preact" },
+              { id: "tanstack-router", label: "TanStack Router" },
+              { id: "gsap", label: "GSAP" },
+              { id: "three-js", label: "Three.js" },
+              { id: "lucide-icons", label: "Lucide Icons" },
+            ],
+          },
+        ],
       },
       defaults: createMockProjectSettings(),
       mcpTools: [{ serverName: "s1", toolName: "t1", enabled: true }],
@@ -963,12 +1018,16 @@ describe("settings cloning helpers", () => {
 
     // Mutate clone
     clone.integrations.jira!.host = "mutated";
+    clone.integrations.notion.databaseId = "mutated-database";
+    clone.integrations.lucid.documentId = "mutated-document";
     clone.integrations.providers["p1"].apiKey = "mutated-key";
     clone.defaults.memory.enabled = false;
     clone.mcpTools[0].enabled = false;
 
     // Verify original is untouched
     expect(original.integrations.jira!.host).toBe("h");
+    expect(original.integrations.notion.databaseId).toBe("");
+    expect(original.integrations.lucid.documentId).toBe("");
     expect(original.integrations.providers["p1"].apiKey).toBe("key");
     expect(original.defaults.memory.enabled).toBe(true);
     expect(original.mcpTools[0].enabled).toBe(true);

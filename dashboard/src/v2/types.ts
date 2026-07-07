@@ -66,6 +66,8 @@ import type {
   SkillStorageKind,
   SkillStorageRecord,
   AgentSkillStorageAttachment,
+  ExternalImporterProvider,
+  ExternalImporterSettings,
 } from "../../../src/contracts/app-types.js";
 import type {
   CreateProjectInput,
@@ -74,6 +76,7 @@ import type {
   IssuePromptContext,
   IssuePromptContextInput,
   ImprovePromptInput,
+  LinkedIssueProvider,
   PlanningOverrides,
   PlanSprintOptions,
   ProjectCollectionResponse,
@@ -243,6 +246,8 @@ export type {
   LocalFileBrowserResponse,
   AgentAvatarConfig,
   AgentMcpAccessConfig,
+  ExternalImporterProvider,
+  ExternalImporterSettings,
   AgentPresetRecord,
   CreateProjectInput,
   CreateAgentPresetInput,
@@ -253,6 +258,7 @@ export type {
   IssuePromptContext,
   IssuePromptContextInput,
   ImprovePromptInput,
+  LinkedIssueProvider,
   PlanSprintOptions,
   PlanningOverrides,
   ConnectionInboxMessage,

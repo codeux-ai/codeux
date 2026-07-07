@@ -5,6 +5,8 @@ import type {
   ExecutionDashboardSnapshot,
   ExternalSettingsHints,
   GitTrackingStatus,
+  OnboardingDependencyInstallerResult,
+  OnboardingDependencyInstallMode,
   OnboardingRuntimeReadiness,
   OverviewTelemetrySnapshot,
   ProjectLiveDashboardSnapshot,
@@ -220,6 +222,17 @@ export const fetchOnboardingReadiness = async (): Promise<OnboardingRuntimeReadi
   return onboardingReadinessInflight;
 };
 
+export const installOnboardingDependencies = async (
+  mode: OnboardingDependencyInstallMode,
+): Promise<OnboardingDependencyInstallerResult> => {
+  const result = await fetchJson<OnboardingDependencyInstallerResult>("/api/onboarding/dependencies/install", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ mode, confirmInstall: true }),
+  });
+  onboardingReadinessInflight = null;
+  return result;
+};
 
 let externalSettingsHintsCache: ExternalSettingsHints | null = null;
 let externalSettingsHintsInflightRequest: Promise<ExternalSettingsHints> | null = null;

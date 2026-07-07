@@ -58,7 +58,7 @@ That means:
 - when project markdown mirroring is enabled, dashboard create/update writes the agent body into a project-local markdown file
 - mirrored project files use a filesystem-safe slug format such as `planning_agent.md`
 - editing a default or home-backed agent from the dashboard creates a project-local override file instead of modifying the default/home source
-- if the linked markdown file later differs from the DB copy, the agent is marked `out_of_sync`
+- if the linked markdown file later differs from the DB copy (including changes to memory settings, avatar config, or provider/model preferences), the agent is marked `out_of_sync`
 - the dashboard can re-import one agent or bulk-sync all out-of-sync project agents back into sqlite on demand
 - the dashboard can push `.code-ux/agents/*.md` back into git, either as a local commit, a commit plus branch push, or a feature-branch pull request into the default branch
 - when opening a pull request, Code UX resolves the effective dashboard GitHub/GitLab host tokens and forwards them to the PR service so repository-host authentication stays aligned with the current project settings
@@ -95,7 +95,7 @@ The API record also exposes derived sync state:
 
 - `manual`
 - `synced`
-- `out_of_sync`
+- `out_of_sync` (triggers when name, description, markdown, avatar config, provider, model, or memory config differs between the DB and the file)
 - `missing_source`
 
 When markdown does not include `avatarConfig`, Code UX still persists a resolved avatar before writing sqlite. Built-in base roles use curated defaults, while generated or custom project agents receive a deterministic random look seeded from project, agent, and label metadata. Project Setup Agent output goes through the same resolver, so generated specialist agents get a stable avatar that is mirrored into project markdown instead of being recalculated on every dashboard load.
@@ -237,7 +237,7 @@ When a retryable provider error occurs, Code UX appends an explicit system event
 - whether Code UX is waiting on quota reset or rate-limit backoff
 - which virtual model the planning agent actually used
 
-If `autoStart` is enabled, Code UX starts orchestration after the tasks are created.
+If `autoStart` is enabled, Code UX starts orchestration after the tasks are created unless planning self-reflection is enabled and the final reflection decision does not pass. In that case the valid planned tasks stay saved, and the operator can start the sprint manually after review.
 
 Provider slot recovery also runs before every provider claim, including providers configured with `maxConcurrentTasks = 0` (unlimited). If a Docker-backed planning invocation is still marked `running` but the container with its `code-ux.session-id` label has disappeared and the linked execution invocation has been idle long enough, Code UX marks the provider and execution invocation failed so the next planning request is not blocked by an orphaned runtime row. Startup recovery also closes stale `running` planning invocation audit rows that never linked to provider runtime or whose provider invocation is already terminal, keeping the dashboard invocation ledger from showing historical planning work as active.
 

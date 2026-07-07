@@ -262,18 +262,33 @@ export function registerSprintRoutes(router: Express, deps: DashboardDependencie
 }
 
 function parseRepositoryIssueSearchQuery(query: Record<string, unknown>): IssueSearchInput {
+  const provider = parseRepositoryProvider(query.provider);
   return {
-    provider: parseRepositoryProvider(query.provider),
+    provider,
     repository: parseTrimmedQueryString(query.repository, "repository"),
     hostDomain: parseTrimmedQueryString(query.hostDomain, "hostDomain"),
+    workspaceId: parseTrimmedQueryString(query.workspaceId, "workspaceId"),
+    providerProjectId: parseTrimmedQueryString(query.projectId, "projectId"),
+    teamId: parseTrimmedQueryString(query.teamId, "teamId"),
+    teamKey: parseTrimmedQueryString(query.teamKey, "teamKey"),
+    databaseId: parseTrimmedQueryString(query.databaseId, "databaseId"),
+    boardId: parseTrimmedQueryString(query.boardId, "boardId"),
+    documentId: parseTrimmedQueryString(query.documentId, "documentId"),
+    fileKey: parseTrimmedQueryString(query.fileKey, "fileKey"),
+    muralId: parseTrimmedQueryString(query.muralId, "muralId"),
+    itemTypes: parseIssueLabels(query.itemTypes),
+    projectKey: parseTrimmedQueryString(query.projectKey, "projectKey"),
     search: parseTrimmedQueryString(query.search, "search"),
-    state: parseRepositoryIssueState(query.state),
+    state: parseRepositoryIssueState(query.state, provider),
+    status: parseImportStatus(query.status, provider),
     labels: parseIssueLabels(query.labels),
     assignee: parseTrimmedQueryString(query.assignee, "assignee"),
     author: parseTrimmedQueryString(query.author, "author"),
     reporter: parseTrimmedQueryString(query.reporter, "reporter"),
     milestone: parseTrimmedQueryString(query.milestone, "milestone"),
     issueText: parseTrimmedQueryString(query.issueText, "issueText"),
+    externalIds: parseIssueLabels(query.externalIds),
+    includeConversation: parseQueryBoolean(query.includeConversation, "includeConversation"),
     createdAfter: parseDateLikeString(query.createdAfter, "createdAfter"),
     createdBefore: parseDateLikeString(query.createdBefore, "createdBefore"),
     updatedAfter: parseDateLikeString(query.updatedAfter, "updatedAfter"),
@@ -334,19 +349,36 @@ function parseRepositoryProvider(value: unknown): RepositoryIssueSearchInput["pr
   if (!trimmed) {
     return undefined;
   }
-  if (trimmed !== "github" && trimmed !== "gitlab") {
-    throw new Error("Invalid value for provider. Must be one of: github, gitlab");
+  if (trimmed !== "github" && trimmed !== "gitlab" && trimmed !== "jira" && trimmed !== "notion" && trimmed !== "asana" && trimmed !== "linear" && trimmed !== "miro" && trimmed !== "lucid" && trimmed !== "figma" && trimmed !== "mural") {
+    throw new Error("Invalid value for provider. Must be one of: github, gitlab, jira, notion, asana, linear, miro, lucid, figma, mural");
   }
   return trimmed;
 }
 
-function parseRepositoryIssueState(value: unknown): RepositoryIssueSearchState | undefined {
+function parseRepositoryIssueState(value: unknown, provider?: RepositoryIssueSearchInput["provider"]): IssueSearchInput["state"] {
   const trimmed = parseTrimmedQueryString(value, "state");
   if (!trimmed) {
     return undefined;
   }
+  if (provider === "notion" || provider === "asana" || provider === "linear" || provider === "miro" || provider === "lucid" || provider === "figma" || provider === "mural") {
+    return trimmed;
+  }
   if (trimmed !== "open" && trimmed !== "closed" && trimmed !== "all") {
     throw new Error("Invalid value for state. Must be one of: open, closed, all");
+  }
+  return trimmed;
+}
+
+function parseImportStatus(value: unknown, provider?: RepositoryIssueSearchInput["provider"]): IssueSearchInput["status"] {
+  const trimmed = parseTrimmedQueryString(value, "status");
+  if (!trimmed) {
+    return undefined;
+  }
+  if (provider === "notion" || provider === "asana" || provider === "linear" || provider === "miro" || provider === "lucid" || provider === "figma" || provider === "mural") {
+    return trimmed;
+  }
+  if (trimmed !== "open" && trimmed !== "in_progress" && trimmed !== "done" && trimmed !== "all") {
+    throw new Error("Invalid value for status. Must be one of: open, in_progress, done, all");
   }
   return trimmed;
 }
@@ -448,4 +480,24 @@ function parseClampedLimit(value: unknown, min: number, max: number, fieldName: 
     throw new Error(`Invalid value for ${fieldName}. Must be a number.`);
   }
   return Math.max(min, Math.min(max, Math.trunc(numeric)));
+}
+
+function parseQueryBoolean(value: unknown, fieldName: string): boolean | undefined {
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+  if (typeof value !== "string") {
+    throw new Error(`Invalid value for ${fieldName}. Must be a boolean.`);
+  }
+  const normalized = value.trim().toLowerCase();
+  if (!normalized) {
+    return undefined;
+  }
+  if (normalized === "true" || normalized === "1") {
+    return true;
+  }
+  if (normalized === "false" || normalized === "0") {
+    return false;
+  }
+  throw new Error(`Invalid value for ${fieldName}. Must be a boolean.`);
 }

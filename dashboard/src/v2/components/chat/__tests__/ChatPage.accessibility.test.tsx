@@ -264,6 +264,41 @@ describe('ChatPage Accessibility', () => {
     expect(liveError).toHaveAttribute('aria-live', 'polite');
   });
 
+  it('sends web and desktop setup as idle 3D chat quick actions for the active project', async () => {
+    const user = userEvent.setup();
+    mocks.reducedMotion.value = true;
+    const handleSend = vi.fn(() => Promise.resolve());
+    mocks.data = {
+      ...mocks.data,
+      chatMode: "stage",
+      sending: false,
+      input: "",
+      error: null,
+      hasWorkingReply: false,
+      runningInvocationCount: 0,
+      selectedThread: mocks.data.threads[0],
+      handleSend,
+    };
+
+    render(
+      <ProjectDataContext.Provider value={{ projects: [{ id: "p1", name: "P" } as any], selectedProject: { id: "p1", name: "P" } as any } as any}>
+        <ChatPage />
+      </ProjectDataContext.Provider>
+    );
+
+    const webAction = screen.getByRole("button", { name: "Web App" });
+    const desktopAction = screen.getByRole("button", { name: "Desktop App" });
+
+    expect(webAction).toBeInTheDocument();
+    expect(desktopAction).toBeInTheDocument();
+
+    await user.click(webAction);
+
+    expect(handleSend).toHaveBeenCalledWith(expect.stringContaining("Set up this existing project as a web app"));
+    expect(handleSend).toHaveBeenCalledWith(expect.stringContaining("Do not create or import a new Code UX project."));
+    expect(handleSend).toHaveBeenCalledWith(expect.stringContaining("current techstack setting"));
+  });
+
   it('keeps the active header and thread rail synchronized after rename', async () => {
     const user = userEvent.setup();
     const initialThread = { ...mocks.data.threads[0], title: "Thread 1" };

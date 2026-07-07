@@ -182,6 +182,11 @@ describe("MemoryPage destructive mode", () => {
         await waitFor(() => {
             expect(screen.getByText("1 nodes")).toBeInTheDocument();
         });
+        await waitFor(() => {
+            expect(screen.getByText("Long Term: showing 1 memory of 1 memory · Project-wide · All Agents")).toBeInTheDocument();
+        });
+        expect(screen.getByRole("group", { name: "Memory scope filters" })).toBeInTheDocument();
+        expect(screen.getByRole("button", { name: "Show embedding model catalog" })).toHaveAccessibleDescription("No active model");
 
         await userEvent.click(screen.getByRole("button", { name: "Enable danger delete mode" }));
 

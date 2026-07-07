@@ -26,6 +26,7 @@ import type {
   RestartInvocationPolicy,
   RestartSprintPolicy,
   JiraSettings,
+  ExternalImporterSettings,
   TechstackCatalogSettings,
   TechstackSelectionSettings,
 } from "./app-types.js";
@@ -81,6 +82,13 @@ export interface ProjectSettings {
   techstack: TechstackSelectionSettings;
   git: ProjectGitSettings;
   jira: JiraSettings;
+  notion: ExternalImporterSettings;
+  asana: ExternalImporterSettings;
+  linear: ExternalImporterSettings;
+  miro: ExternalImporterSettings;
+  lucid: ExternalImporterSettings;
+  figma: ExternalImporterSettings;
+  mural: ExternalImporterSettings;
   ciIntelligence: CiIntelligenceSettings;
   guardrails: GuardrailSettings;
   sprintLoopSteps: DashboardSettings["sprintLoopSteps"];
@@ -145,6 +153,13 @@ export interface SystemIntegrationSettings {
   githubToken: string;
   gitlabToken?: string;
   jira: JiraSettings;
+  notion: ExternalImporterSettings;
+  asana: ExternalImporterSettings;
+  linear: ExternalImporterSettings;
+  miro: ExternalImporterSettings;
+  lucid: ExternalImporterSettings;
+  figma: ExternalImporterSettings;
+  mural: ExternalImporterSettings;
 }
 
 export interface QwenModelProviderSettings {

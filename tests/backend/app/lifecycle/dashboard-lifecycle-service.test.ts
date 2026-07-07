@@ -5,8 +5,13 @@ import { createLogger } from "../../../../src/shared/logging/logger.js";
 import { DEFAULT_DASHBOARD_SETTINGS } from "../../../../src/repositories/settings-defaults.js";
 import * as path from "path";
 
+const commandRun = vi.hoisted(() => vi.fn());
+
 vi.mock("../../../../src/server/dashboard-server.js");
 vi.mock("../../../../src/shared/logging/logger.js");
+vi.mock("../../../../src/shared/subprocess/command-runner.js", () => ({
+  commandRunner: { run: (...a: unknown[]) => commandRun(...a) },
+}));
 vi.mock("../../../../src/server/memory-routes.js", () => ({
   registerMemoryRoutes: vi.fn(),
 }));
@@ -55,6 +60,7 @@ describe("dashboard-lifecycle-service", () => {
             codexApiKey: "",
             claudeCodeApiKey: "",
             githubToken: "",
+            providers: {},
           },
           defaults: {
             automationLevel: DEFAULT_DASHBOARD_SETTINGS.automationLevel,
@@ -523,6 +529,49 @@ describe("dashboard-lifecycle-service", () => {
 
       expect(setupArgs.isReady).toBe(mockDeps.isReady);
       expect(setupArgs.isHealthy).toBe(mockDeps.isHealthy);
+    });
+
+    it("passes detected Linux package manager availability into default readiness and installer execution", async () => {
+      commandRun.mockImplementation(async (command: string, args: string[]) => {
+        if (command === "apt-get" && args[0] === "--version") return { ok: true, code: 0, stdout: "apt 2", stderr: "" };
+        if (command === "systemctl" && args[0] === "--version") return { ok: true, code: 0, stdout: "systemd 255", stderr: "" };
+        if (command === "docker") return { ok: false, code: 127, stdout: "", stderr: "docker missing" };
+        if (command === "git") return { ok: false, code: 127, stdout: "", stderr: "git missing" };
+        if (command === "apt-get" && args[0] === "update") return { ok: true, code: 0, stdout: "updated", stderr: "" };
+        if (command === "apt-get" && args[0] === "install") return { ok: true, code: 0, stdout: "installed", stderr: "" };
+        if (command === "systemctl" && args[0] === "enable") return { ok: true, code: 0, stdout: "started", stderr: "" };
+        return { ok: false, code: 127, stdout: "", stderr: "missing" };
+      });
+      const getuidSpy = typeof process.getuid === "function"
+        ? vi.spyOn(process, "getuid").mockReturnValue(0)
+        : null;
+
+      try {
+        await bootDashboard(mockDeps);
+        const setupArgs = vi.mocked(setupDashboardServer).mock.calls[0][0];
+
+        const readiness = await setupArgs.getOnboardingRuntimeReadiness!();
+        const linuxEngineOption = readiness.installers.options.find((option) => option.mode === "docker-engine-git");
+
+        expect(readiness.installers.recommendedMode).toBe("docker-engine-git");
+        expect(linuxEngineOption).toMatchObject({
+          automation: "automated",
+          available: true,
+          requiresManualDownload: false,
+        });
+
+        const result = await setupArgs.installOnboardingDependencies!("docker-engine-git");
+
+        expect(result.status).toBe("success");
+        expect(result.commands.map((command) => command.id)).toEqual([
+          "apt-update",
+          "apt-install-docker-git",
+          "systemctl-enable-now-docker",
+        ]);
+        expect(commandRun).toHaveBeenCalledWith("apt-get", ["install", "-y", "docker.io", "docker-compose-plugin", "git"], expect.anything());
+      } finally {
+        getuidSpy?.mockRestore();
+      }
     });
 
     it("handles invocation API callbacks correctly", async () => {

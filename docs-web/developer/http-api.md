@@ -6,7 +6,7 @@ This page lists every endpoint, grouped by domain. Path parameters use `:name` n
 
 > **Authentication:** The dashboard REST API is intended for trusted local consumption. It is not authenticated. Bind only to loopback (default) or front it with a reverse proxy when exposing remotely.
 
-> **MCP HTTP gateway** (`--mcp-https`) is a *separate* listener for JSON-RPC and is documented in [MCP server](../architecture/mcp-server.md).
+> **MCP HTTP gateway** (`--mcp-http`) is a *separate* listener for JSON-RPC and is documented in [MCP server](../architecture/mcp-server.md).
 
 ---
 
@@ -108,6 +108,8 @@ This page lists every endpoint, grouped by domain. Path parameters use `:name` n
 | `DELETE` | `/api/sprints/:sprintId/settings` | Reset sprint settings. |
 | `GET` | `/api/projects/:projectId/sprints/:sprintId/settings/effective` | Merged effective. |
 | `GET` | `/api/settings/import-sources` | External settings hints (env, gh CLI). |
+| `GET` | `/api/onboarding/readiness` | First-run Docker/Git readiness checks and installer metadata. |
+| `POST` | `/api/onboarding/dependencies/install` | Body: `{ mode: "docker-desktop-git" \| "docker-engine-git", confirmInstall: true }`. Runs the constrained dependency installer and returns bounded command summaries. |
 | `POST` | `/api/system/reset-database` | **Destructive.** Wipe all state. |
 
 ---

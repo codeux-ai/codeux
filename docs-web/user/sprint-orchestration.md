@@ -26,9 +26,8 @@ A single orchestration *cycle* runs the following pipeline (each step is indepen
 4. **sessionSync** — Synchronize the latest state of every active provider invocation (hosted and CLI providers).
 5. **statusDerivation** — Apply state rules to derive each subtask's effective status (`PENDING`, `RUNNING`, `CODING_COMPLETED`, `COMPLETED`, etc.).
 6. **startReadyTasks** — Find subtasks whose dependencies are met and start a new worker session for each. Concurrency is capped per provider via `maxConcurrentTasks`.
-7. **mergeProtocol** — Run the [CI gate](./automation-and-ci.md): create PRs, watch CI, auto-merge per policy, surface attention items for conflicts and CI failures.
-8. **actionRequiredProtocol** — Auto-handle plan approvals, clarification answers, paused sessions per `automationInterventions` settings.
-9. **statusTable** — Render the cycle report.
+7. **protocol** — Run the [CI gate](./automation-and-ci.md): create PRs, watch CI, evaluate QA, auto-merge per policy, surface attention items for conflicts and CI failures. Also handles action-required automation for plan approvals, clarification answers, and paused sessions.
+8. **statusTable** — Render the cycle report.
 
 Each step is independently catchable; a failure in one step does not crash the cycle. Errors are logged and surface as attention items.
 
@@ -81,12 +80,14 @@ PENDING ──start──► RUNNING ──finish──► CODING_COMPLETED ─�
                           ├──fail──► FAILED ──retry┤
                           ├──quota──► QUOTA ──next cycle┤
                           ├──QA reject──► QA_REVIEW_FAILED
+                          ├──QA pass──► (proceeds to CI/merge gate)
                           └──blocked deps──► BLOCKED
 ```
 
 Detailed transitions:
 
-- **CODING_COMPLETED → COMPLETED** when the merge protocol confirms `is_merged: true` or a settled merge indicator (`MERGED`, `AUTOMERGE`, `PR_ONLY`).
+- **CODING_COMPLETED → COMPLETED** when the protocol confirms `is_merged: true` or a settled merge indicator (`MERGED`, `AUTOMERGE`, `PR_ONLY`) after any configured QA reviews pass.
+- **CODING_COMPLETED → QA_REVIEW_FAILED** if QA review finds issues and the retry budget is exhausted.
 - **COMPLETED → CODING_COMPLETED** if `is_merged` is false but there is merge evidence (an open PR or a worker branch). This is a temporary "awaiting merge" state.
 - **FAILED**: retried in a new session if `retryFailed: true` (default).
 - **QUOTA**: retried next cycle automatically.
@@ -181,8 +182,8 @@ Every UI action has an MCP equivalent:
 
 | UI action | MCP call |
 | --- | --- |
-| Plan a sprint | `manage_code_ux` → `domain: "sprints"` (planning is internal during start) or use planning REST API |
-| Orchestrate | `manage_code_ux` → `domain: "sprints", action: "start"` |
+| Plan a sprint | `manage_sprints` (planning is internal during start) or use planning REST API |
+| Orchestrate | `manage_sprints` → `action: "start"` |
 | Pause | `domain: "sprints", action: "pause"` |
 | Cancel | `domain: "sprints", action: "cancel"` (or `force_cancel`) |
 | Inspect run | `domain: "sprints", action: "inspect_run"` |

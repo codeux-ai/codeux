@@ -1,6 +1,6 @@
 /** @vitest-environment jsdom */
 import { h } from "preact";
-import { render, fireEvent } from "@testing-library/preact";
+import { render, fireEvent, within } from "@testing-library/preact";
 import * as matchers from "@testing-library/jest-dom/matchers";
 import { expect, test, describe, afterEach, vi } from "vitest";
 import { MemoryFilters } from "../MemoryFilters.js";
@@ -39,6 +39,10 @@ describe("MemoryFilters Accessibility", () => {
 
         expect(shortTermTab).toHaveAttribute("aria-selected", "true");
         expect(longTermTab).toHaveAttribute("aria-selected", "false");
+        expect(within(shortTermTab).getByText("7 memories")).toBeInTheDocument();
+        expect(within(longTermTab).getByText("10 memories")).toBeInTheDocument();
+        expect(getByRole("group", { name: "Memory scope filters" })).toBeInTheDocument();
+        expect(getByRole("group", { name: "Memory actions" })).toBeInTheDocument();
     });
 
     test("selects have proper aria labels", () => {
@@ -88,6 +92,7 @@ describe("MemoryFilters Accessibility", () => {
         await fireEvent.change(getByRole("combobox", { name: "Filter memory by Agent Preset" }), { target: { value: "agent2" } });
         expect(selectedAgentPresetIdSignal.value).toBe("agent2");
         expect(getByText("Agent filter set to Agent 2.")).toBeInTheDocument();
+        expect(getByText("Short Term: showing 7 memories of 17 memories · Sprint 2 · Agent 2")).toBeInTheDocument();
     });
 
     test("tab keyboard navigation works", async () => {
@@ -142,8 +147,9 @@ describe("MemoryFilters Accessibility", () => {
 
         const toggleBtn = getByRole("button", { name: "Hide embedding model catalog" });
         expect(toggleBtn).toHaveAttribute("aria-pressed", "true");
+        expect(toggleBtn).toHaveAccessibleDescription("Active: test");
         expect(getByText("Shown")).toBeInTheDocument();
-        expect(getByText("1 active")).toBeInTheDocument();
+        expect(getByText("Active: test")).toBeInTheDocument();
     });
 
     test("Danger mode toggle uses aria-pressed and persistent state copy", async () => {
@@ -200,7 +206,7 @@ describe("MemoryFilters Accessibility", () => {
             />
         );
 
-        expect(getByText("Short Term: showing 0 of 3 memories · No sprint selected · All Agents")).toBeInTheDocument();
+        expect(getByText("Short Term: showing 0 memories of 3 memories · No sprint selected · All Agents")).toBeInTheDocument();
         expect(getByRole("combobox", { name: "Filter memory by Sprint" })).toBeDisabled();
         expect(getByText("Sprint filter disabled because this project has no sprints with memory.")).toBeInTheDocument();
         expect(getByRole("combobox", { name: "Filter memory by Agent Preset" })).toBeDisabled();

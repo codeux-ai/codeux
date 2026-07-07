@@ -454,15 +454,23 @@ For sprint create/update calls:
 
 ### `manage_sprints import_issues`
 
-`manage_sprints` action `import_issues` is the MCP contract for Jira, GitHub, and GitLab issue importer access. Internal MCP clients use it for search-only discovery, assigned-work searches, explicit ticket imports, linked sprint issue attachment, and optional planning after import.
+`manage_sprints` action `import_issues` is the MCP contract for GitHub, GitLab, Jira, Notion, Asana, Linear, Miro, Lucid, Figma/FigJam, and Mural importer access. Internal MCP clients use it for search-only discovery, assigned-work searches, explicit ticket or external-object imports, linked sprint issue attachment, and optional planning after import.
 
 Provider requirements:
 - GitHub imports require a saved effective `git.githubToken` in system or project settings.
 - GitLab imports require a saved effective `git.gitlabToken` in system or project settings.
 - Jira imports require Jira integration settings: host/site URL, account email, API token, and usually a default project key.
+- Notion imports require a saved effective `notion.apiToken`. `databaseId` can narrow page search or explicitly import a database.
+- Asana imports require a saved effective `asana.apiToken` plus either `workspaceId` for workspace task search or `providerProjectId` / `asana.projectId` for project task fallback.
+- Linear imports require a saved effective `linear.apiToken`. `teamId`, `teamKey`, and `providerProjectId` can narrow issue search when configured or supplied.
+- Miro imports require a saved effective `miro.apiToken`. `boardId` identifies a board for board item imports, and `itemTypes` can narrow item types.
+- Lucid imports require a saved effective `lucid.apiToken`. `documentId` identifies a Lucidchart/Lucidspark document; `search` can discover documents.
+- Figma/FigJam imports require a saved effective `figma.apiToken` plus `fileKey` or explicit file keys in `externalIds`.
+- Mural imports require a saved effective `mural.apiToken` plus `workspaceId` for workspace mural search or `muralId` / `mural.boardId` for a specific mural. Mural API support is beta/limited and may return only metadata and readable content available to the token.
 - Importer workflows do not fall back to local CLI authentication. A locally authenticated `gh`, `glab`, or Git remote is not enough for MCP issue search, explicit import, sprint attachment, or planning import paths.
+- External imports are read/attach only. Code UX does not transition, complete, close, write back, comment on, or otherwise mutate imported work items, boards, documents, files, or murals.
 
-Search/import callers can provide `provider` (`github`, `gitlab`, or `jira`), `repository`, `hostDomain`, `projectKey`, `search`, `state`, `status`, `labels`, `assignee`, `assigneeText`, `issueKeys`, `issueNumbers`, `issueRefs`, `includeConversation`, `limit`, and optional sprint attachment fields. `sprintId` and `attachToSprint` represent sprint attachment intent. `planAfterImport`, `autoStart`, `planningAgentPresetId`, `replan`, and `overrides` represent optional planning intent after import.
+Search/import callers can provide `provider` (`github`, `gitlab`, `jira`, `notion`, `asana`, `linear`, `miro`, `lucid`, `figma`, or `mural`), `repository`, `hostDomain`, `workspaceId`, `providerProjectId`, `externalProjectId`, `asanaProjectId`, `linearProjectId`, `teamId`, `teamKey`, `databaseId`, `boardId`, `documentId`, `fileKey`, `muralId`, `itemTypes`, `projectKey`, `search`, `state`, `status`, `labels`, `assignee`, `assigneeText`, `issueKeys`, `issueNumbers`, `issueRefs`, `externalIds`, `includeConversation`, `limit`, and optional sprint attachment fields. `sprintId` and `attachToSprint` represent sprint attachment intent. `planAfterImport`, `autoStart`, `planningAgentPresetId`, `replan`, and `overrides` represent optional planning intent after import.
 
 Search-only GitHub example:
 
@@ -508,6 +516,100 @@ Assigned-to-me Jira example:
 }
 ```
 
+Search-only Notion example:
+
+```json
+{
+  "action": "import_issues",
+  "projectId": "project-123",
+  "provider": "notion",
+  "databaseId": "notion-database-id",
+  "search": "roadmap acceptance criteria",
+  "limit": 10
+}
+```
+
+Search-only Asana example:
+
+```json
+{
+  "action": "import_issues",
+  "projectId": "project-123",
+  "provider": "asana",
+  "workspaceId": "asana-workspace-gid",
+  "providerProjectId": "asana-project-gid",
+  "search": "checkout import",
+  "includeConversation": true,
+  "limit": 20
+}
+```
+
+Search-only Linear example:
+
+```json
+{
+  "action": "import_issues",
+  "projectId": "project-123",
+  "provider": "linear",
+  "teamKey": "ENG",
+  "state": "In Progress",
+  "labels": ["import"],
+  "search": "checkout",
+  "includeConversation": true,
+  "limit": 20
+}
+```
+
+Miro board item example:
+
+```json
+{
+  "action": "import_issues",
+  "projectId": "project-123",
+  "provider": "miro",
+  "boardId": "miro-board-id",
+  "itemTypes": ["sticky_note", "text"],
+  "limit": 25
+}
+```
+
+Lucid document search example:
+
+```json
+{
+  "action": "import_issues",
+  "projectId": "project-123",
+  "provider": "lucid",
+  "search": "architecture",
+  "limit": 10
+}
+```
+
+Figma/FigJam file example:
+
+```json
+{
+  "action": "import_issues",
+  "projectId": "project-123",
+  "provider": "figma",
+  "fileKey": "figma-file-key",
+  "includeConversation": true
+}
+```
+
+Mural workspace example:
+
+```json
+{
+  "action": "import_issues",
+  "projectId": "project-123",
+  "provider": "mural",
+  "workspaceId": "mural-workspace-id",
+  "search": "planning",
+  "limit": 10
+}
+```
+
 Explicit Jira key example:
 
 ```json
@@ -545,6 +647,30 @@ Explicit GitHub issue number example:
   "repository": "codeux-ai/codeux",
   "hostDomain": "github.com",
   "issueNumbers": [42],
+  "includeConversation": true
+}
+```
+
+Explicit external object example:
+
+```json
+{
+  "action": "import_issues",
+  "projectId": "project-123",
+  "provider": "notion",
+  "externalIds": ["notion-page-id"],
+  "includeConversation": false
+}
+```
+
+Explicit canvas object example:
+
+```json
+{
+  "action": "import_issues",
+  "projectId": "project-123",
+  "provider": "figma",
+  "fileKey": "figma-file-key",
   "includeConversation": true
 }
 ```
@@ -589,12 +715,13 @@ Attach imported issues and run planning after the sprint goal is enriched:
 
 Result shape:
 - Search mode returns `mode: "search"` and populates `searchedIssues` with lightweight normalized issue summaries.
-- Explicit-reference mode returns `mode: "explicit"` and populates `importedContexts` with prompt contexts that can include full issue body and conversation text.
+- Explicit-reference mode returns `mode: "explicit"` and populates `importedContexts` with prompt contexts that can include full issue body and conversation text. For Notion, Asana, Linear, and canvas providers, explicit imports use `externalIds` or provider-specific identifiers such as `databaseId`, `boardId`, `documentId`, `fileKey`, and `muralId`.
 - When `sprintId` is supplied and `attachToSprint` is not `false`, the response includes persisted `linkedIssues` metadata records and the updated `sprint`.
 - When `planAfterImport` is `true`, the response includes the optional `planning` result from sprint planning. `planAfterImport` requires `sprintId` because planning runs against an existing sprint.
 
 Persistence and prompt behavior:
 - `issueKeys` and Jira-style refs such as `OPS-123` resolve through Jira. `issueNumbers` and refs such as `#42` or `!42` resolve through GitHub/GitLab when `repository` and `hostDomain` are provided or inferable from the project.
+- `externalIds` resolve through Notion page/database fetches, Asana task fetches, Linear issue fetches, Miro board/item fetches, Lucid document content fetches, Figma/FigJam file fetches, or Mural metadata/content fetches. Search results and explicit contexts normalize to linked-source records with `externalId`, `sourceKind`, stable display keys, source URL, preview text, metadata, and prompt markdown when readable provider content is available.
 - Full issue body and comment/conversation text are merged into the sprint goal under `## Linked Issues` before planning so the Planning agent receives the complete context.
 - Linked issue persistence stores metadata only: provider, repository or project key, issue key/number, title, labels, assignees, status, source URL, and related tracking fields. Full remote issue bodies and comments remain prompt-only data and are not stored in linked issue rows.
 - Issue search and import are not destructive actions. Sprint deletion remains approval-gated.

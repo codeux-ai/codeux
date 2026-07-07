@@ -68,6 +68,11 @@ export const defaultReadiness: OnboardingRuntimeReadiness = {
   },
   dependencies: [],
   providers: [],
+  installers: {
+    platform: "unsupported",
+    recommendedMode: null,
+    options: [],
+  },
 };
 
 export const getProviderInitialSelection = (

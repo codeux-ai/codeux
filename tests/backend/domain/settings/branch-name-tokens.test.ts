@@ -6,6 +6,22 @@ import { validateSettingsPayload } from "../../../../src/domain/settings/setting
  * Uses DEFAULT_DASHBOARD_SETTINGS as a structural reference.
  */
 function makeBasePayload() {
+  const createImporterSettings = () => ({
+    enabled: false,
+    apiToken: "",
+    apiSecret: "",
+    baseUrl: "",
+    workspaceId: "",
+    teamId: "",
+    teamKey: "",
+    projectId: "",
+    databaseId: "",
+    boardId: "",
+    documentId: "",
+    fileKey: "",
+    defaultSearchLimit: 25,
+  });
+
   return {
     dashboardPort: 4444,
     consoleLogLevel: "info",
@@ -118,6 +134,13 @@ function makeBasePayload() {
       defaultProject: "PROJ",
       closeTransitionName: "Done",
     },
+    notion: createImporterSettings(),
+    asana: createImporterSettings(),
+    linear: createImporterSettings(),
+    miro: createImporterSettings(),
+    lucid: createImporterSettings(),
+    figma: createImporterSettings(),
+    mural: createImporterSettings(),
     ciIntelligence: {
       enabled: true,
       enableLivePrMonitoring: true,

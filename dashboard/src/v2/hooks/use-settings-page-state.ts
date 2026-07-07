@@ -107,7 +107,25 @@ const routingProfileOptions = [
   { value: "WORKER", label: "Worker defaults" },
 ];
 
-type IntegrationId = "jules" | "gemini" | "codex" | "claude-code" | "qwen-code" | "opencode" | "antigravity" | "github" | "gitlab" | "jira" | ChatProviderKind;
+type IntegrationId =
+  | "jules"
+  | "gemini"
+  | "codex"
+  | "claude-code"
+  | "qwen-code"
+  | "opencode"
+  | "antigravity"
+  | "github"
+  | "gitlab"
+  | "jira"
+  | "notion"
+  | "asana"
+  | "linear"
+  | "miro"
+  | "lucid"
+  | "figma"
+  | "mural"
+  | ChatProviderKind;
 
 interface IntegrationDefinition {
   id: IntegrationId;
@@ -132,6 +150,13 @@ const INTEGRATIONS: IntegrationDefinition[] = [
   { id: "slack", label: "Slack", description: "Slack Events or OpenClaw bridge with signed webhooks" },
   { id: "microsoft-teams", label: "Microsoft Teams", description: "Teams bot or OpenClaw bridge for tenant channels" },
   { id: "discord", label: "Discord", description: "Discord bot or gateway connection for project chat" },
+  { id: "notion", label: "Notion", description: "Read-only import from Notion workspace pages and databases" },
+  { id: "asana", label: "Asana", description: "Read-only import from Asana workspaces, teams, and projects" },
+  { id: "linear", label: "Linear", description: "Read-only import from Linear teams, projects, and issues" },
+  { id: "miro", label: "Miro", description: "Read-only import from Miro teams and boards" },
+  { id: "lucid", label: "Lucid", description: "Read-only import from Lucid or Lucidspark documents" },
+  { id: "figma", label: "Figma / FigJam", description: "Read-only import from Figma files and FigJam boards" },
+  { id: "mural", label: "Mural", description: "Read-only import from Mural workspaces and murals" },
 ];
 
 const AGENT_INSTRUCTION_TEMPLATE_OPTIONS: Array<{

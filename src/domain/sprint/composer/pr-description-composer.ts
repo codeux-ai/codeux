@@ -1,4 +1,5 @@
 import type { TaskPrTemplateSections, SprintPrTemplateSections, TaskPrSectionKey, SprintPrSectionKey } from "../../../contracts/app-types.js";
+import type { LinkedIssueProvider } from "../../../contracts/project-management-types.js";
 import { formatCostUsd, formatDurationMs, formatIsoTimestamp, formatTokenCount, providerDisplayName } from "./pr-description-format-utils.js";
 
 export type { TaskPrTemplateSections, SprintPrTemplateSections, TaskPrSectionKey, SprintPrSectionKey };
@@ -88,7 +89,7 @@ export interface SprintPrSubtaskSummary {
 }
 
 export interface SprintPrLinkedIssueSummary {
-  provider: "github" | "gitlab" | "jira";
+  provider: LinkedIssueProvider;
   issueKey?: string | null;
   issueNumber?: number | null;
   title: string;
@@ -179,6 +180,14 @@ function renderUsageBlock(usage: PrUsageStats | null, heading: string): string {
   return `${heading ? `${heading}\n\n` : ""}${parts.join("\n\n")}`;
 }
 
+function resolvePrDurationMs(startedAt: string | null, finishedAt: string | null): number | null {
+  if (!startedAt || !finishedAt) return null;
+  const startedMs = new Date(startedAt).getTime();
+  const finishedMs = new Date(finishedAt).getTime();
+  if (!Number.isFinite(startedMs) || !Number.isFinite(finishedMs)) return null;
+  return Math.max(0, finishedMs - startedMs);
+}
+
 /** Filters to known keys, dedupes, then appends any known keys missing from `order` (new sections, or a stale/partial saved order). */
 export function resolveSectionOrder<K extends string>(order: K[] | undefined, defaultOrder: K[]): K[] {
   const known = new Set(defaultOrder);
@@ -239,7 +248,8 @@ function sprintProviderStatsLine(subtasks: SprintPrSubtaskSummary[]): string {
 function linkedIssueProviderLabel(provider: SprintPrLinkedIssueSummary["provider"]): string {
   if (provider === "github") return "GitHub";
   if (provider === "gitlab") return "GitLab";
-  return "Jira";
+  if (provider === "jira") return "Jira";
+  return provider.charAt(0).toUpperCase() + provider.slice(1);
 }
 
 function linkedIssueReference(issue: SprintPrLinkedIssueSummary): string {
@@ -310,7 +320,7 @@ const SPRINT_SECTION_RENDERERS: Record<SprintPrSectionKey, (input: SprintPrCompo
   },
   timing: (input) => (
     `### ⏱️ Sprint Timing\n\n| | |\n|---|---|\n| Started | ${formatIsoTimestamp(input.startedAt)} |\n| Finished | ${formatIsoTimestamp(input.finishedAt)} |\n| Duration | ${formatDurationMs(
-      input.startedAt && input.finishedAt ? new Date(input.finishedAt).getTime() - new Date(input.startedAt).getTime() : null,
+      resolvePrDurationMs(input.startedAt, input.finishedAt),
     )} |`
   ),
   tokenUsage: (input) => renderUsageBlock(input.aggregateUsage, "### 📊 Aggregate CLI Token Usage"),

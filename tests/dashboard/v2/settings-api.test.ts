@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   clearSettingsApiCacheForTests,
   fetchProjectEffectiveSettings,
+  saveProjectTechstackSettings,
 } from "../../../dashboard/src/v2/lib/settings-api.js";
 
 const jsonResponse = (body: unknown): Response => (
@@ -63,5 +64,51 @@ describe("settings-api", () => {
       settings: { automationLevel: "LOW" },
     });
     expect(fetch).toHaveBeenCalledTimes(2);
+  });
+
+  it("preserves existing project override fields when saving only the techstack", async () => {
+    const existingOverride = {
+      jira: {
+        host: "https://jira.example.test",
+        email: "user@example.test",
+        apiToken: "secret-token",
+        defaultProject: "APP",
+      },
+      agents: {
+        qualityAssurance: {
+          taskCompletion: { enabled: false },
+          maxTaskReviewRuns: 5,
+        },
+      },
+      techstack: {
+        selectedTechstackId: null,
+        applicationKind: null,
+      },
+    };
+    const fetchMock = vi.fn((url: string, init?: RequestInit) => {
+      if (url === "/api/projects/project-1/settings" && !init?.method) {
+        return Promise.resolve(jsonResponse(existingOverride));
+      }
+      if (url === "/api/projects/project-1/settings" && init?.method === "PUT") {
+        return Promise.resolve(jsonResponse({ ok: true }));
+      }
+      return Promise.reject(new Error(`Unexpected request: ${url}`));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await saveProjectTechstackSettings("project-1", {
+      selectedTechstackId: "code-ux-internal",
+      applicationKind: "web",
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    const [, putInit] = fetchMock.mock.calls[1]!;
+    expect(JSON.parse(String(putInit?.body))).toEqual({
+      ...existingOverride,
+      techstack: {
+        selectedTechstackId: "code-ux-internal",
+        applicationKind: "web",
+      },
+    });
   });
 });

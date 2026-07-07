@@ -5,12 +5,14 @@ import { renderMarkdown } from "../../../lib/markdown.js";
 import {
   getInvocationWidgetData,
   getReasoningWidgetData,
+  getSelfReflectionWidgetData,
   sanitizeInvocationOutputText,
 } from "../../lib/chat-widget-view-models.js";
 import { formatChatTime } from "../../lib/chat-time.js";
 import { PlanningRequestWidget } from "./widgets/PlanningRequestWidget.js";
 import { ToolCallWidget } from "./widgets/ToolCallWidget.js";
 import { ReasoningWidget } from "./widgets/ReasoningWidget.js";
+import { SelfReflectionWidget } from "./widgets/SelfReflectionWidget.js";
 import { ChatAvatar, type AvatarRole } from "./ChatAvatar.js";
 import type { ChatWidgetLiveData, ParsedTurnTokens } from "../../lib/chat-widget-view-models.js";
 import type { AgentAvatarConfig } from "../../types.js";
@@ -53,6 +55,7 @@ export const InvocationMessageBubble: FunctionComponent<InvocationMessageBubbleP
   const widgetData = getInvocationWidgetData(message, widgetLiveData);
   const kind = asString(message.metadata?.kind);
   const reasoningWidgetData = getReasoningWidgetData(message);
+  const reflectionWidgetData = getSelfReflectionWidgetData(message);
 
   // Reasoning and tool turns render as compact, full-width activity cards
   // rather than chat bubbles, so the transcript reads like the real session.
@@ -83,6 +86,16 @@ export const InvocationMessageBubble: FunctionComponent<InvocationMessageBubbleP
             tokens={tokens}
             callId={asString(message.metadata?.toolCallId)}
           />
+        </div>
+      </div>
+    );
+  }
+
+  if (reflectionWidgetData) {
+    return (
+      <div class="flex justify-start">
+        <div class="w-full max-w-full lg:max-w-[760px] min-w-0 pl-11">
+          <SelfReflectionWidget reflection={reflectionWidgetData} />
         </div>
       </div>
     );

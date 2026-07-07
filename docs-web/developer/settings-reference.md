@@ -1,8 +1,8 @@
 # Settings schema reference
 
-This page enumerates every settings field, its type, default, range (if applicable), and the JSON path you would use with `manage_code_ux` → `settings` → `patch_*_setting`.
+This page enumerates every settings field, its type, default, range (if applicable), and the JSON path you would use with `manage_settings` → `patch_*_setting`.
 
-Settings are evaluated in cascade: **Defaults → System → Project → Sprint**. Higher-level fields override lower; unspecified fields inherit.
+Settings are evaluated in cascade: **System → Project → Sprint** (with built-in defaults folded into System). Higher-level fields override lower; unspecified fields inherit. Effective settings API responses include a `sources` object mapping JSON paths to their originating scope (`system`, `project`, or `sprint`).
 
 ## Top-level structure
 
@@ -93,7 +93,7 @@ System settings own the techstack catalog:
   "entries": [
     {
       "id": "code-ux-internal",
-      "label": "Code UX Internal",
+      "label": "Code UX Stack",
       "items": [
         { "id": "preact", "label": "Preact" },
         { "id": "tanstack-router", "label": "TanStack Router" },
@@ -119,7 +119,7 @@ Project and sprint settings own the selected techstack:
 }
 ```
 
-Default project settings intentionally keep `selectedTechstackId` and `applicationKind` as `null`. Existing and imported projects therefore do not automatically inherit the built-in Code UX internal stack; a project creation flow must set an explicit override when it wants to apply the catalog default.
+Default project settings intentionally keep `selectedTechstackId` and `applicationKind` as `null`. Existing and imported projects therefore do not automatically inherit the built-in Code UX Stack; a project creation flow must set an explicit override when it wants to apply the catalog default.
 
 ## `cliWorkflow`
 
@@ -222,9 +222,12 @@ Disabling a step is for debugging; in production, leave them all enabled.
 {
   "defaultBranch": "main",
   "featureBranchPrefix": "feature/codeux/",
-  "branchScheme": { /* DEFAULT_SPRINT_BRANCH_SCHEME */ },
+  "sprintBranchScheme": "feature/sprint{sprint_id}-implementation",
+  "sprintKeyPrefix": "SPR",
   "githubMode": "REMOTE" | "LOCAL",
-  "deleteMergedBranches": true
+  "deleteMergedBranches": true,
+  "autoCreatePr": true,
+  "prDescription": { /* task and sprint PR template toggles */ }
 }
 ```
 
@@ -327,21 +330,42 @@ Emergency stop threshold (consecutive task-start failures). Override via env: `J
 
 ```jsonc
 // Set the Codex model to gpt-5.4 system-wide
+// 1. First call (unconfirmed) - returns approvalRequired: true
+{ "domain": "settings", "action": "patch_system_setting",
+  "payload": { "path": "aiProvider.providers.codex.model", "value": "gpt-5.4" } }
+
+// 2. Second call (confirmed) - executes if within 15 minutes and exact same payload
 { "domain": "settings", "action": "patch_system_setting",
   "payload": { "path": "aiProvider.providers.codex.model", "value": "gpt-5.4" },
   "approval": { "confirmed": true } }
 
 // For one project, force WHEN_GREEN auto-merge
+// 1. First call (unconfirmed)
 { "domain": "settings", "action": "patch_project_setting",
   "payload": { "projectId": "proj-1", "path": "ciIntelligence.featurePrAutoMergeMode", "value": "WHEN_GREEN" } }
 
+// 2. Second call (confirmed)
+{ "domain": "settings", "action": "patch_project_setting",
+  "payload": { "projectId": "proj-1", "path": "ciIntelligence.featurePrAutoMergeMode", "value": "WHEN_GREEN" },
+  "approval": { "confirmed": true } }
+
 // For one sprint, route planning to Claude Opus
+// 1. First call (unconfirmed)
 { "domain": "settings", "action": "patch_sprint_setting",
   "payload": {
     "projectId": "proj-1", "sprintId": "spr-3",
     "path": "aiProvider.routing.planning",
     "value": { "providerConfigId": "claude-code", "profile": "GLOBAL" }
   } }
+
+// 2. Second call (confirmed)
+{ "domain": "settings", "action": "patch_sprint_setting",
+  "payload": {
+    "projectId": "proj-1", "sprintId": "spr-3",
+    "path": "aiProvider.routing.planning",
+    "value": { "providerConfigId": "claude-code", "profile": "GLOBAL" }
+  },
+  "approval": { "confirmed": true } }
 ```
 
 ## Validation

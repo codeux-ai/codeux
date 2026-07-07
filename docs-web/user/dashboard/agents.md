@@ -28,10 +28,12 @@ Each preset is a card with avatar, name, label tags, and a one-line description.
 Click **+ New agent**. The form collects:
 
 - **Name** — required, unique within the project.
-- **System instructions (markdown)** — the persona prompt. This is *appended* to a base preface that ensures the agent knows it operates inside Code UX.
-- **Memory template override** — checkbox. When enabled, you can write a custom template that controls how `<project_memory>` and `<sprint_memory>` blocks render. Otherwise the project default is used.
+- **System instructions (markdown)** — the persona prompt. This is *appended* to a base preface that ensures the agent knows it operates inside Code UX. You can also include reusable Instruction Files.
+- **Memory template override** — checkbox. When enabled, you can write a custom template that controls how `<project_memory>` and `<sprint_memory>` blocks render via `Manage Memory`. Otherwise the project default is used.
+- **Knowledge Base** — Subscribe the agent to documents from the shared library.
+- **MCP Access** — Manage the agent's MCP tools access.
 - **Labels** — comma-separated tags (e.g. `planner`, `reviewer`, `migrator`).
-- **Avatar** — auto-generated (geometric/colour seed). Click **Re-roll** to regenerate.
+- **Avatar** — auto-generated (geometric/colour seed). You can customize it deeply using the avatar customizer.
 
 Save creates the preset and broadcasts a real-time event so connected clients refresh.
 
@@ -60,6 +62,10 @@ This makes agent presets first-class repository content — you can check them i
 ## Deleting an agent
 
 Destructive. Requires confirmation. Threads and tasks that referenced the deleted preset fall back to the project default agent.
+
+## Instruction Files
+
+Instruction files are separate markdown documents that act as reusable prompt components. You can manage them with the Instruction Files editor and include them inside agent instructions.
 
 ## Routing presets to invocation types
 

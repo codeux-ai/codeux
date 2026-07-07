@@ -2,16 +2,16 @@
 
 The **Sprints** page (`/sprints`) is where you plan, manage, and launch sprint runs.
 
-## The sprint board
+## The sprint gallery and ledger
 
-Each sprint is rendered as a *bubble* showing:
+Sprints are viewed either in a visual organic cell gallery or a dense ledger format. Each sprint cell/row shows:
 
 - **Status pill** — `idle`, `running`, `paused`, `completed`, `failed`, `cancelled`.
 - **Task counters** — completed / total, plus failures.
 - **Goal** — first line of the sprint goal.
 - **Action buttons** — Plan / Orchestrate / Pause / Cancel as appropriate.
 
-Sprints can be **showcase-pinned** to surface them on the Overview page; toggle this from the bubble menu.
+Sprints can be **showcase-pinned** to surface them on the Overview page; toggle this from the cell menu or bulk actions.
 
 ## Creating a sprint
 
@@ -68,16 +68,17 @@ You can run any sprint multiple times. Each run has its own ID and its own row i
 - **Cancel** — The sprint enters `cancel_requested` and is cancelled gracefully. Active dispatches are signalled to stop.
 - **Force cancel** — Skips graceful steps. Use only if a normal cancel hangs.
 
-Pausing / cancelling are also exposed as MCP actions (`manage_code_ux` → domain `sprints` → actions `pause`, `cancel`, `force_cancel`).
+Pausing / cancelling are also exposed as MCP actions via the `manage_sprints` tool (actions `pause`, `cancel`, `force_cancel`).
 
 ## Importing & exporting sprints
 
-Sprints are portable as Markdown bundles:
+Sprints support importing issues directly from external providers, as well as being portable as Markdown bundles:
 
+- **Issue Import** — Click **+ → Import** and choose **GitHub Issues**, **GitLab Issues**, or **Jira Issues**. You can search by text, labels, status, assignees, or exact issue keys (e.g., `#42` or `OPS-42`). Imported issues are attached as linked contexts, and Jira issues can optionally be converted directly into security or quality tasks. Code UX attempts to auto-transition or auto-close linked issues when the sprint completes.
 - **Export** — Click **⋯ → Export markdown**. You receive a downloadable bundle: one file per subtask plus a `sprint.md` describing the sprint.
-- **Import** — Click **+ → Import**. Drop a previously exported bundle (or a hand-written one). Code UX validates and creates the sprint.
+- **Import Bundle** — Click **+ → Import**. Drop a previously exported bundle (or a hand-written one). Code UX validates and creates the sprint.
 
-Importing is the recommended way to template sprints across projects when [Quicksprints](../quicksprints.md) are not flexible enough.
+Importing bundles is the recommended way to template sprints across projects when [Quicksprints](../quicksprints.md) are not flexible enough.
 
 ## Sprint settings overrides
 
@@ -89,6 +90,8 @@ Each sprint can override project settings, which in turn override system setting
 
 Effective settings are inspectable at `GET /api/projects/:projectId/sprints/:sprintId/settings/effective`.
 
-## Sprint deletion
+## Sprint deletion and bulk actions
 
-Deleting a sprint requires explicit confirmation and removes its database state but leaves the on-disk markdown directory intact (so you can re-import later if you change your mind).
+The Sprints ledger supports multi-select for bulk starting, pinning, or deleting sprints.
+
+Deleting a sprint (single or bulk) requires explicit confirmation in a destructive dialog and removes its database state but leaves the on-disk markdown directory intact (so you can re-import later if you change your mind).

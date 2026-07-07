@@ -46,8 +46,9 @@ export interface SprintReviewSummary {
   finishedAt: string | null;
 }
 
-export type LinkedIssueProvider = "github" | "gitlab" | "jira";
+export type LinkedIssueProvider = "github" | "gitlab" | "jira" | "notion" | "asana" | "linear" | "miro" | "lucid" | "figma" | "mural";
 export type LinkedIssueCloseState = "open" | "closed" | "close_failed";
+export type LinkedIssueSourceKind = "issue" | "task" | "page" | "database" | "board" | "document" | "file" | "canvas";
 export type SprintImportedTaskKind = "security" | "quality" | "merge_conflict" | "failed_ci";
 export type RepositoryIssueSearchState = "open" | "closed" | "all";
 export type RepositoryIssueSearchSortField = "updated" | "created" | "comments";
@@ -59,8 +60,23 @@ export type JiraIssueSearchSortDirection = "asc" | "desc";
 
 export interface RepositoryIssueSearchInput {
   provider?: LinkedIssueProvider;
+  externalId?: string | null;
+  externalIds?: string[];
+  sourceKind?: LinkedIssueSourceKind;
+  sourceProvider?: LinkedIssueProvider;
   repository?: string;
   hostDomain?: string;
+  workspaceId?: string;
+  projectId?: string;
+  providerProjectId?: string;
+  teamId?: string;
+  teamKey?: string;
+  databaseId?: string;
+  boardId?: string;
+  documentId?: string;
+  fileKey?: string;
+  muralId?: string;
+  itemTypes?: string[];
   projectKey?: string;
   search?: string;
   state?: RepositoryIssueSearchState;
@@ -104,10 +120,13 @@ export interface SprintLinkedIssueRecord {
   projectId: string;
   sprintId: string;
   provider: LinkedIssueProvider;
+  sourceProvider?: LinkedIssueProvider;
+  sourceKind?: LinkedIssueSourceKind;
+  externalId?: string | null;
   hostDomain: string;
   projectKey?: string;
   repository: string;
-  issueNumber: number;
+  issueNumber: number | null;
   issueKey: string;
   title: string;
   url: string;
@@ -123,10 +142,13 @@ export interface SprintLinkedIssueRecord {
 
 export interface SprintLinkedIssueInput {
   provider: LinkedIssueProvider;
+  sourceProvider?: LinkedIssueProvider;
+  sourceKind?: LinkedIssueSourceKind;
+  externalId?: string | null;
   hostDomain: string;
   projectKey?: string;
   repository: string;
-  issueNumber: number;
+  issueNumber?: number | null;
   issueKey?: string;
   title: string;
   url: string;
@@ -139,6 +161,7 @@ export interface SprintLinkedIssueInput {
   issueAuthor?: string | null;
   issueCreatedAt?: string | null;
   issueUpdatedAt?: string | null;
+  metadata?: Record<string, unknown>;
 }
 
 export interface SprintImportedTaskInput {

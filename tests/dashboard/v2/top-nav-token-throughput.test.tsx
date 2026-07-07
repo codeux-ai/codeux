@@ -1,7 +1,7 @@
 /** @vitest-environment happy-dom */
 /** @jsx h */
 import { h } from "preact";
-import { cleanup, render, screen } from "@testing-library/preact";
+import { cleanup, render, screen, waitFor } from "@testing-library/preact";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as matchers from "@testing-library/jest-dom/matchers";
 import type {
@@ -42,15 +42,15 @@ const makeTotals = (overrides: Partial<HeaderTokenThroughputTotals> = {}): Heade
 
 const makeSnapshot = (overrides: Partial<HeaderTokenThroughputSnapshot> = {}): HeaderTokenThroughputSnapshot => ({
   generatedAt: "2026-07-07T12:00:00.000Z",
-  window: "1h",
+  window: "20s",
   range: {
-    window: "1h",
-    label: "Last 1 hour",
-    resolution: "5min",
-    resolutionLabel: "5-minute telemetry buckets",
-    from: "2026-07-07T11:00:00.000Z",
+    window: "20s",
+    label: "Last 20 seconds",
+    resolution: "5sec",
+    resolutionLabel: "5-second telemetry buckets",
+    from: "2026-07-07T11:59:40.000Z",
     to: "2026-07-07T12:00:00.000Z",
-    bucketCount: 12,
+    bucketCount: 4,
     isCustom: false,
   },
   app: makeTotals(),
@@ -98,6 +98,10 @@ function mockThroughput(overrides: {
   });
 }
 
+function countCurveSegments(path: string | null): number {
+  return path?.match(/\bC\b/g)?.length ?? 0;
+}
+
 describe("TelemetryStats token throughput", () => {
   beforeEach(() => {
     vi.mocked(useProjectTasks).mockReturnValue({
@@ -123,14 +127,60 @@ describe("TelemetryStats token throughput", () => {
     vi.clearAllMocks();
   });
 
-  it("renders app and selected-project throughput as the primary header signal", () => {
+  it("renders app throughput as the primary header signal", () => {
     render(<TelemetryStats projectId="project-1" sprints={sprints} />);
 
-    expect(screen.getByRole("group", { name: /2.4K tok\/min app, 450 tok\/min project/i })).toBeInTheDocument();
+    expect(screen.getByRole("group", { name: /2.4K tok\/min app throughput/i })).toBeInTheDocument();
     expect(screen.getByText("App")).toBeInTheDocument();
-    expect(screen.getByText("Project Alpha")).toBeInTheDocument();
     expect(screen.getByText("2.4K")).toBeInTheDocument();
-    expect(screen.getByText("450")).toBeInTheDocument();
+    expect(screen.queryByText("Project Alpha")).not.toBeInTheDocument();
+    expect(screen.queryByText("450")).not.toBeInTheDocument();
+    expect(screen.getByTestId("throughput-flux-app")).toHaveAttribute("data-direction", "flat");
+    expect(countCurveSegments(screen.getByTestId("throughput-line-app").getAttribute("d"))).toBe(19);
+    expect(screen.getByTestId("throughput-line-app")).toHaveAttribute("stroke-dashoffset", "0");
+    expect(useHeaderTokenThroughput).toHaveBeenCalledWith(null, "20s", 1000);
+  });
+
+  it("animates the throughput strip upward when the next snapshot increases", async () => {
+    const { rerender } = render(<TelemetryStats projectId="project-1" sprints={sprints} />);
+    expect(screen.getByTestId("throughput-flux-app")).toHaveAttribute("data-direction", "flat");
+
+    mockThroughput({
+      snapshot: makeSnapshot({
+        generatedAt: "2026-07-07T12:00:10.000Z",
+        app: makeTotals({ totalTokens: 72000, invocationCount: 13, tokensPerMinute: 3200 }),
+        project: {
+          projectId: "project-1",
+          projectName: "Project Alpha",
+          ...makeTotals({ totalTokens: 9400, invocationCount: 4, tokensPerMinute: 420 }),
+        },
+      }),
+    });
+
+    rerender(<TelemetryStats projectId="project-1" sprints={sprints} />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("throughput-flux-app")).toHaveAttribute("data-direction", "up");
+    });
+    expect(screen.getByTestId("throughput-line-app")).toHaveAttribute("stroke", "#00E0A0");
+  });
+
+  it("keeps the throughput line green while the shape moves downward", async () => {
+    const { rerender } = render(<TelemetryStats projectId="project-1" sprints={sprints} />);
+
+    mockThroughput({
+      snapshot: makeSnapshot({
+        generatedAt: "2026-07-07T12:00:10.000Z",
+        app: makeTotals({ totalTokens: 61000, invocationCount: 13, tokensPerMinute: 1400 }),
+      }),
+    });
+
+    rerender(<TelemetryStats projectId="project-1" sprints={sprints} />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("throughput-flux-app")).toHaveAttribute("data-direction", "down");
+    });
+    expect(screen.getByTestId("throughput-line-app")).toHaveAttribute("stroke", "#00E0A0");
   });
 
   it("preserves running and queued counts for active running sprints only", () => {
@@ -147,13 +197,13 @@ describe("TelemetryStats token throughput", () => {
     const { rerender } = render(<TelemetryStats projectId="project-1" sprints={sprints} />);
 
     expect(screen.getByRole("group", { name: /Loading token telemetry/i })).toHaveAttribute("aria-busy", "true");
-    expect(screen.getAllByText("0")).toHaveLength(2);
+    expect(screen.getAllByText("0").length).toBeGreaterThanOrEqual(2);
 
     mockThroughput({ snapshot: makeSnapshot(), loading: false });
     rerender(<TelemetryStats projectId="project-1" sprints={sprints} />);
 
-    expect(screen.getByRole("group", { name: /No token telemetry in this window/i })).toHaveAttribute("aria-busy", "false");
-    expect(screen.getByText("No project tokens in this window")).toBeInTheDocument();
+    expect(screen.getByRole("group", { name: /No app token telemetry in this window/i })).toHaveAttribute("aria-busy", "false");
+    expect(screen.queryByText("No project tokens in this window")).not.toBeInTheDocument();
   });
 
   it("renders an error state without hiding task counts", () => {

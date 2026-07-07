@@ -33,8 +33,7 @@ Controlled by `dashboardSettings.sprintLoopSteps`:
 - `sessionSync`
 - `statusDerivation`
 - `startReadyTasks`
-- `mergeProtocol`
-- `actionRequiredProtocol`
+- `protocol`
 - `statusTable`
 - `watchLoop`
 
@@ -59,12 +58,13 @@ flowchart TD
   M --> N[status-derivation-step]
   N --> O{startReadyTasks}
   O --> P[start-ready-tasks-step]
-  P --> Q[protocol-step]
-  Q --> R{statusTable}
-  R --> S[status-table-step]
-  S --> T{wait && watchLoop}
-  T -->|true| U[watch loop cycles]
-  T -->|false| V[single-cycle report]
+  P --> Q{protocol}
+  Q --> R[protocol-step]
+  R --> S{statusTable}
+  S --> T[status-table-step]
+  T --> U{wait && watchLoop}
+  U -->|true| V[watch loop cycles]
+  U -->|false| W[single-cycle report]
 ```
 
 ## Pull Request Content Rules
@@ -73,6 +73,7 @@ Automatically created PRs must provide sufficient human context:
 - **Worker Feature PRs** (`worker-branch -> sprint-feature-branch`): Must include both the current task description (from the prompt) and the sprint goal/description in the PR body.
 - Worker feature PR timing is rendered with the same completion timestamp later persisted to the task run, so PR bodies show `Finished` and `Duration` even though the PR is opened just before task-run finalization.
 - **Main Merge PRs** (`sprint-feature-branch -> default-branch`): Must include the sprint description alongside branch and sprint numbering metadata.
+- Main merge PR timing uses the sprint run's persisted `startedAt` plus the finalization timestamp captured at PR creation time until the sprint run completion row is persisted. Once `finishedAt` exists on the sprint run, that stored value remains authoritative for historical PR rendering.
 - If task or sprint descriptions are missing/empty, PR bodies will use a compact fallback text instead of omitting sections.
 - The `default-branch` target is the resolved scoped `git.defaultBranch` value (`system -> project -> sprint` settings). Legacy project metadata cannot override it during sprint completion, so inherited system defaults such as `dev` remain the final merge target.
 
@@ -100,6 +101,8 @@ If `action=plan`:
 - Planning may apply a provider-suggested sprint title only when the sprint was explicitly stored as generated/auto-named at creation time. Placeholder-looking custom titles such as `Untitled sprint 1` are treated as user titles and are not writable by planning.
 - Planning self-reflection is available under `agents.selfReflection.planning` and defaults to `enabled: false`. When enabled, the planning provider rates its parsed JSON output against configured `{ id, label, prompt, threshold }` criteria using JSON-only 1-10 scores. Below-threshold ratings can trigger same-session improvement prompts up to `maxImprovementAttempts`, but every improved plan is parsed through the existing planning JSON extractor and `PlanningPayloadValidator`, so DAG order, task keys, dependency references, and required prompt sections remain mandatory.
 - Planning reflection is optional and fail-open. Malformed reflection JSON, provider failures, or invalid improved planning JSON are logged and leave the last valid parsed plan in place rather than bypassing validation or corrupting the accepted output.
+- Planning reflection gates planning autostart when it is enabled. A request with `autoStart: true` starts orchestration only after the final planning reflection decision passes; if reflection fails, reaches the improvement-attempt limit without passing, or cannot parse an improvement, Code UX persists the valid planned tasks and leaves the sprint planned but not running.
+- Operators can manually start a planned sprint after reviewing or editing the tasks when planning reflection does not pass. When planning reflection is disabled, `autoStart: true` keeps the existing behavior and starts immediately after valid tasks are persisted.
 - Reflection audit records are appended to the planning execution invocation as message metadata. The metadata stores criteria, thresholds, scores, pass/fail state, attempt count, and final decision; it does not duplicate provider credentials.
 
 ### 4. Orchestration cycle
@@ -114,14 +117,17 @@ For `status` and `orchestrate`, each cycle follows the strict execution order de
    - Evaluates the readiness gate: a task must be `PENDING`, dependencies completed and merged, provider concurrency available, and emergency stop inactive.
    - Task dispatch creates DB task dispatch and task-run records, selects the provider based on settings (uses hosted provider for `jules` and CLI/Docker or host workflows for local providers).
    - Marks tasks `RUNNING`, records session id/name/provider, and resets consecutive failure count on success. Triggers emergency stop after repeated real dispatch failures.
-6. **Apply action-required automation**: Provider-agnostic handling of plan approval, clarification replies (via Project manager preset), and paused sessions, utilizing cooldown/dedupe rules and escalating attention items when necessary.
-7. **Collect CI status**: Gathers CI data for feature branches.
-8. **Backfill PR metadata**: Ensures PRs are tracked accurately.
-9. **Run task QA review**: Evaluates completed coding work (`CODING_COMPLETED`). QA is a formal part of the merge gate, evaluating the work rather than acting as a vague final-only review. This handles retry/review behavior, stale QA invocation reconciliation, QA follow-up reruns, and transitions tasks back to in-progress when PR/CI/QA is not merge-ready.
-10. **Evaluate feature PR CI/merge gate**: Evaluates completed coding work for PR/CI/merge readiness, review blockers, merge conflicts, missing PRs, and attention items. Does not automatically merge or apply fixes unless tied to configured auto-merge modes and intelligence settings.
-11. **Persist CI gate state changes**: Saves the result of the CI merge gates.
-12. **Rerun status derivation/start-ready**: Re-evaluates state and starts ready tasks if merges unblocked dependencies.
-13. **Build status/protocol/table output**: Compiles the final cycle report and separates action-required tasks into agent and human intervention categories.
+6. **Apply protocol step**:
+   - Provider-agnostic handling of plan approval, clarification replies (via Project manager preset), and paused sessions, utilizing cooldown/dedupe rules and escalating attention items when necessary.
+   - Gathers CI data for feature branches.
+   - Ensures PRs are tracked accurately.
+   - Evaluates completed coding work (`CODING_COMPLETED`). QA is a formal part of the merge gate, evaluating the work rather than acting as a vague final-only review. This handles retry/review behavior, stale QA invocation reconciliation, QA follow-up reruns, and transitions tasks back to in-progress when PR/CI/QA is not merge-ready.
+   - Evaluates completed coding work for PR/CI/merge readiness, review blockers, merge conflicts, missing PRs, and attention items. Does not automatically merge or apply fixes unless tied to configured auto-merge modes and intelligence settings.
+   - Saves the result of the CI merge gates.
+   - Re-evaluates state and starts ready tasks if merges unblocked dependencies.
+
+7. **Build status table output**:
+   - Compiles the final cycle report and separates action-required tasks into agent and human intervention categories.
 
 ## Watch Mode
 

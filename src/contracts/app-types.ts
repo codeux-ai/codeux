@@ -476,7 +476,8 @@ export interface ExecutionStatsEntitySummary {
 }
 
 export type ProjectStatsWindow = "1h" | "24h" | "7d" | "30d" | "all" | "custom";
-export type ProjectStatsResolution = "5min" | "hour" | "day" | "week";
+export type ProjectStatsRangeWindow = ProjectStatsWindow | "20s";
+export type ProjectStatsResolution = "5sec" | "5min" | "hour" | "day" | "week";
 
 export interface ProjectStatsQuery {
   window: ProjectStatsWindow;
@@ -486,7 +487,7 @@ export interface ProjectStatsQuery {
 }
 
 export interface ProjectStatsRangeSummary {
-  window: ProjectStatsWindow;
+  window: ProjectStatsRangeWindow;
   label: string;
   resolution: ProjectStatsResolution;
   resolutionLabel: string;
@@ -537,7 +538,7 @@ export interface ProjectExecutionStatsSnapshot {
   chartSeries: ProjectExecutionStatsChartSeries[];
 }
 
-export type HeaderTokenThroughputWindow = Exclude<ProjectStatsWindow, "custom">;
+export type HeaderTokenThroughputWindow = "20s" | Exclude<ProjectStatsWindow, "custom">;
 
 export interface HeaderTokenThroughputQuery {
   window: HeaderTokenThroughputWindow;
@@ -842,6 +843,24 @@ export interface JiraSettings {
   closeTransitionName: string; // transition name for closing, default "Done"
 }
 
+export type ExternalImporterProvider = "notion" | "asana" | "linear" | "miro" | "lucid" | "figma" | "mural";
+
+export interface ExternalImporterSettings {
+  enabled: boolean;
+  apiToken: string;
+  apiSecret: string;
+  baseUrl: string;
+  workspaceId: string;
+  teamId: string;
+  teamKey: string;
+  projectId: string;
+  databaseId: string;
+  boardId: string;
+  documentId: string;
+  fileKey: string;
+  defaultSearchLimit: number;
+}
+
 export interface CiIntelligenceSettings {
   enabled: boolean;
   enableLivePrMonitoring: boolean;
@@ -1020,6 +1039,31 @@ export interface AgentSelfReflectionSettings {
   qualityAssurance: AgentSelfReflectionLoopSettings;
 }
 
+export type AgentSelfReflectionFinalDecision =
+  | "disabled"
+  | "passed"
+  | "max_attempts_reached"
+  | "reflection_failed"
+  | "improvement_failed";
+
+export interface AgentSelfReflectionCriterionResult {
+  id: string;
+  label: string;
+  score: number;
+  rationale: string;
+  improvementInstructions: string;
+  threshold: number;
+  passed: boolean;
+}
+
+export interface AgentSelfReflectionOutcome {
+  enabled: boolean;
+  finalDecision: AgentSelfReflectionFinalDecision;
+  attemptCount: number;
+  passed: boolean;
+  scores: AgentSelfReflectionCriterionResult[];
+}
+
 export interface CodingAgentRoutingSettings {
   mode: AgentRoutingMode;
   agentPresetId: string | null;
@@ -1172,6 +1216,13 @@ export interface DashboardSettings {
   techstack: TechstackSelectionSettings;
   git: GitSettings;
   jira: JiraSettings;
+  notion: ExternalImporterSettings;
+  asana: ExternalImporterSettings;
+  linear: ExternalImporterSettings;
+  miro: ExternalImporterSettings;
+  lucid: ExternalImporterSettings;
+  figma: ExternalImporterSettings;
+  mural: ExternalImporterSettings;
   ciIntelligence: CiIntelligenceSettings;
   guardrails: GuardrailSettings;
   sprintLoopSteps: SprintLoopStepSettings;
@@ -1366,6 +1417,11 @@ export interface DockerContainer {
 
 export type OnboardingCheckStatus = "ready" | "warning" | "missing";
 export type OnboardingClusterStatus = "ready" | "not_ready";
+export type OnboardingDependencyInstallMode = "docker-desktop-git" | "docker-engine-git";
+export type OnboardingInstallerPlatform = "darwin" | "win32" | "linux" | "unsupported";
+export type OnboardingInstallerAutomationLevel = "automated" | "partial" | "manual" | "unsupported";
+export type OnboardingInstallerCommandStatus = "pending" | "running" | "success" | "failed" | "skipped";
+export type OnboardingDependencyInstallerStatus = "success" | "partial" | "failed" | "skipped" | "unsupported";
 
 export interface OnboardingDependencyCheck {
   id: string;
@@ -1387,6 +1443,62 @@ export interface OnboardingProviderCredentialStatus {
   description: string;
 }
 
+export interface OnboardingDependencyInstallerOption {
+  mode: OnboardingDependencyInstallMode;
+  label: string;
+  platform: OnboardingInstallerPlatform;
+  recommended: boolean;
+  automation: OnboardingInstallerAutomationLevel;
+  description: string;
+  dependencyIds: string[];
+  requiresPrivilege: boolean;
+  requiresManualDownload: boolean;
+  available: boolean;
+  guidance: string[];
+}
+
+export interface OnboardingDependencyInstallerMetadata {
+  platform: OnboardingInstallerPlatform;
+  recommendedMode: OnboardingDependencyInstallMode | null;
+  options: OnboardingDependencyInstallerOption[];
+}
+
+export interface OnboardingDependencyInstallerCommandResult {
+  id: string;
+  groupId: string;
+  label: string;
+  command: string;
+  args: string[];
+  displayCommand: string;
+  status: OnboardingInstallerCommandStatus;
+  timeoutMs: number;
+  maxStdoutChars: number;
+  maxStderrChars: number;
+  code: number | null;
+  stdoutSummary: string;
+  stderrSummary: string;
+  message?: string;
+}
+
+export interface OnboardingDependencyInstallerSkippedGroup {
+  groupId: string;
+  label: string;
+  dependencyIds: string[];
+  reason: string;
+}
+
+export interface OnboardingDependencyInstallerResult {
+  mode: OnboardingDependencyInstallMode;
+  platform: OnboardingInstallerPlatform;
+  status: OnboardingDependencyInstallerStatus;
+  commands: OnboardingDependencyInstallerCommandResult[];
+  skippedDependencyGroups: OnboardingDependencyInstallerSkippedGroup[];
+  requiresPrivilege: boolean;
+  requiresManualDownload: boolean;
+  postInstallGuidance: string[];
+  message: string;
+}
+
 export interface OnboardingRuntimeReadiness {
   checkedAt: string;
   cluster: {
@@ -1396,6 +1508,7 @@ export interface OnboardingRuntimeReadiness {
   };
   dependencies: OnboardingDependencyCheck[];
   providers: OnboardingProviderCredentialStatus[];
+  installers: OnboardingDependencyInstallerMetadata;
 }
 
 export interface UserOnboardingState {

@@ -101,7 +101,12 @@ describe("PlanningAgentService Integration", () => {
   function createPlanningProviderRunner(payload: unknown): IProviderRunner {
     return {
       runProvider: vi.fn(),
-      runProviderForText: vi.fn().mockResolvedValue({
+      runProviderForText: vi.fn().mockResolvedValue(providerTextResult(JSON.stringify(payload))),
+    };
+  }
+
+  function providerTextResult(text: string) {
+    return {
         ok: true,
         stdout: "",
         stderr: "",
@@ -119,9 +124,78 @@ describe("PlanningAgentService Integration", () => {
           transcriptText: "",
           nativeSessionId: null,
         },
-        text: JSON.stringify(payload),
-      }),
+        text,
+      };
+  }
+
+  function createPlanningTextProviderRunner(texts: string[]): IProviderRunner {
+    const runProviderForText = vi.fn();
+    for (const text of texts) {
+      runProviderForText.mockResolvedValueOnce(providerTextResult(text));
+    }
+    return {
+      runProvider: vi.fn(),
+      runProviderForText,
     };
+  }
+
+  function planningProviderPayload(title: string): Record<string, unknown> {
+    return {
+      goal: "Updated sprint goal",
+      tasks: [
+        {
+          key: "T01",
+          title,
+          description: `${title} description.`,
+          promptMarkdown: validPromptMarkdown,
+          priority: "high",
+          executorType: "auto",
+          dependsOn: [],
+        },
+      ],
+    };
+  }
+
+  function reflectionResult(score: number): string {
+    return JSON.stringify({
+      criteria: [
+        {
+          id: "autostart_gate",
+          score,
+          rationale: score >= 8 ? "The plan is ready to start." : "The plan needs more review before starting.",
+          improvementInstructions: score >= 8 ? "" : "Tighten the executable task definition.",
+        },
+      ],
+    });
+  }
+
+  function enablePlanningSelfReflection(
+    settingsRepository: SettingsRepository,
+    projectId: string,
+    maxImprovementAttempts: number,
+  ): void {
+    settingsRepository.saveProjectSettings(projectId, {
+      agents: {
+        selfReflection: {
+          planning: {
+            enabled: true,
+            criteria: [
+              {
+                id: "autostart_gate",
+                label: "Autostart gate",
+                prompt: "The plan is safe and complete enough to start automatically.",
+                threshold: 0.8,
+              },
+            ],
+            maxImprovementAttempts,
+          },
+        },
+      },
+      cliWorkflow: {
+        maxPlanningJsonRetries: 0,
+        maxParsingRetries: 0,
+      },
+    });
   }
 
   it("successfully plans a sprint, mapping dependencies and recording invocation lifecycle", async () => {
@@ -225,6 +299,127 @@ describe("PlanningAgentService Integration", () => {
     expect(messages.length).toBeGreaterThan(0);
     expect(messages[0].role).toBe("user");
     expect(messages[0].contentMarkdown).toContain("Turn sprint goals into concrete executable tasks.");
+  });
+
+  it("auto-starts after planning when self-reflection is disabled", async () => {
+    const {
+      projectRepository,
+      connectionRepository,
+      executionRepository,
+      settingsRepository,
+      syncService,
+      executionControlService,
+      project,
+      sprint,
+    } = await setupTestHarness();
+
+    const service = new PlanningAgentService({
+      projectManagementRepository: projectRepository,
+      connectionChatRepository: connectionRepository,
+      executionRepository,
+      settingsRepository,
+      agentPresetSyncService: syncService,
+      executionControlService: executionControlService as any,
+      providerRunner: createPlanningProviderRunner(planningProviderPayload("Autostart disabled reflection task")),
+    });
+
+    const result = await service.planSprint(project.id, sprint.id, { autoStart: true });
+
+    expect(result.started).toBe(true);
+    expect(projectRepository.listTasks(project.id, sprint.id)).toHaveLength(1);
+    expect(executionControlService.orchestrateSprint).toHaveBeenCalledTimes(1);
+    expect(executionControlService.orchestrateSprint).toHaveBeenCalledWith(project.id, sprint.id);
+  });
+
+  it("auto-starts after planning self-reflection passes", async () => {
+    const {
+      projectRepository,
+      connectionRepository,
+      executionRepository,
+      settingsRepository,
+      syncService,
+      executionControlService,
+      project,
+      sprint,
+    } = await setupTestHarness();
+    enablePlanningSelfReflection(settingsRepository, project.id, 0);
+
+    const service = new PlanningAgentService({
+      projectManagementRepository: projectRepository,
+      connectionChatRepository: connectionRepository,
+      executionRepository,
+      settingsRepository,
+      agentPresetSyncService: syncService,
+      executionControlService: executionControlService as any,
+      providerRunner: createPlanningTextProviderRunner([
+        JSON.stringify(planningProviderPayload("Passing reflected task")),
+        reflectionResult(9),
+      ]),
+    });
+
+    const result = await service.planSprint(project.id, sprint.id, { autoStart: true });
+
+    expect(result.started).toBe(true);
+    expect(projectRepository.listTasks(project.id, sprint.id)).toHaveLength(1);
+    expect(executionControlService.orchestrateSprint).toHaveBeenCalledTimes(1);
+    expect(executionControlService.orchestrateSprint).toHaveBeenCalledWith(project.id, sprint.id);
+    const invocation = executionRepository.listExecutionInvocations({ projectId: project.id })[0];
+    const messages = executionRepository.listExecutionInvocationMessages(invocation.id);
+    expect(messages).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        metadata: expect.objectContaining({
+          reflection: expect.objectContaining({
+            finalDecision: "passed",
+            passed: true,
+          }),
+        }),
+      }),
+    ]));
+  });
+
+  it("does not auto-start when planning self-reflection reaches max attempts without passing", async () => {
+    const {
+      projectRepository,
+      connectionRepository,
+      executionRepository,
+      settingsRepository,
+      syncService,
+      executionControlService,
+      project,
+      sprint,
+    } = await setupTestHarness();
+    enablePlanningSelfReflection(settingsRepository, project.id, 0);
+
+    const service = new PlanningAgentService({
+      projectManagementRepository: projectRepository,
+      connectionChatRepository: connectionRepository,
+      executionRepository,
+      settingsRepository,
+      agentPresetSyncService: syncService,
+      executionControlService: executionControlService as any,
+      providerRunner: createPlanningTextProviderRunner([
+        JSON.stringify(planningProviderPayload("Non-passing reflected task")),
+        reflectionResult(5),
+      ]),
+    });
+
+    const result = await service.planSprint(project.id, sprint.id, { autoStart: true });
+
+    expect(result.started).toBe(false);
+    expect(projectRepository.listTasks(project.id, sprint.id)).toHaveLength(1);
+    expect(executionControlService.orchestrateSprint).not.toHaveBeenCalled();
+    const invocation = executionRepository.listExecutionInvocations({ projectId: project.id })[0];
+    const messages = executionRepository.listExecutionInvocationMessages(invocation.id);
+    expect(messages).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        metadata: expect.objectContaining({
+          reflection: expect.objectContaining({
+            finalDecision: "max_attempts_reached",
+            passed: false,
+          }),
+        }),
+      }),
+    ]));
   });
 
   it("assigns a planning title to an untitled sprint", async () => {

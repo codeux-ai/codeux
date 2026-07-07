@@ -22,6 +22,13 @@ const integrations: IntegrationDefinition[] = [
   { id: "github", label: "GitHub", description: "Repository, pull request, branch, and CI integration" },
   { id: "gitlab", label: "GitLab", description: "GitLab repository, merge request, and CI token integration" },
   { id: "jira", label: "Jira", description: "Atlassian Jira issue search, sprint linking, and completion transitions" },
+  { id: "notion", label: "Notion", description: "Read-only import from Notion workspace pages and databases" },
+  { id: "asana", label: "Asana", description: "Read-only import from Asana workspaces, teams, and projects" },
+  { id: "linear", label: "Linear", description: "Read-only import from Linear teams, projects, and issues" },
+  { id: "miro", label: "Miro", description: "Read-only import from Miro teams and boards" },
+  { id: "lucid", label: "Lucid", description: "Read-only import from Lucid or Lucidspark documents" },
+  { id: "figma", label: "Figma / FigJam", description: "Read-only import from Figma files and FigJam boards" },
+  { id: "mural", label: "Mural", description: "Read-only import from Mural workspaces and murals" },
 ];
 
 const index = buildSettingsSearchIndex({
@@ -54,6 +61,12 @@ describe("settings search index", () => {
   it.each([
     ["provider", ["models", "integrations"]],
     ["jira", ["integrations"]],
+    ["notion database", ["integrations"]],
+    ["figjam", ["integrations"]],
+    ["lucidspark", ["integrations"]],
+    ["mural id", ["integrations"]],
+    ["api secret", ["integrations"]],
+    ["base url", ["integrations"]],
     ["github", ["integrations"]],
     ["whatsapp", ["integrations"]],
     ["telegram", ["integrations"]],
