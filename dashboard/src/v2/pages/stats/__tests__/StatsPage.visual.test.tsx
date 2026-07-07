@@ -452,4 +452,30 @@ describe('StatsPage visual tests', () => {
     expect(css).not.toContain('var(--elevation-base)');
     expect(css).not.toContain('translateY(-1px)');
   });
+
+  it('keeps shared stats shell sources free of old glass and lift tokens', () => {
+    const sourceByPath = {
+      'StatsPage.module.css': readFileSync(join(process.cwd(), 'dashboard/src/v2/pages/stats/StatsPage.module.css'), 'utf8'),
+      'stats-theme.css': readFileSync(join(process.cwd(), 'dashboard/src/v2/pages/stats/styles/stats-theme.css'), 'utf8'),
+      'stats-ui-primitives.tsx': readFileSync(join(process.cwd(), 'dashboard/src/v2/pages/stats/components/stats-ui-primitives.tsx'), 'utf8'),
+    };
+
+    const forbiddenPatterns = [
+      /backdrop-blur/,
+      /surface-glass/,
+      /linear-gradient/,
+      /drop-shadow/,
+      /hover:-?translate/,
+      /hover:scale/,
+      /translateY\(/,
+      /scale\(/,
+      /var\(--elevation-/,
+    ];
+
+    for (const [sourcePath, source] of Object.entries(sourceByPath)) {
+      for (const pattern of forbiddenPatterns) {
+        expect(source, `${sourcePath} should not include ${pattern}`).not.toMatch(pattern);
+      }
+    }
+  });
 });

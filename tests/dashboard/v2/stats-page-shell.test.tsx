@@ -456,6 +456,29 @@ describe("StatsPage Shell", () => {
     expect(screen.getByLabelText("Mock analysis studio")).toHaveTextContent("Task Telemetry");
   });
 
+  it("renders every primary analysis mode without old glass or depth copy", () => {
+    const modes = [
+      ["trend", "Trend metrics", "Trend analysis"],
+      ["composition", "Composition metrics", "Composition analysis"],
+      ["models", "Models metrics", "Model performance matrix"],
+      ["reliability", "Providers metrics", "Reliability analysis"],
+      ["ledgers", "Ledgers metrics", "Task Telemetry"],
+      ["system", "System metrics", "System invocation workbench"],
+    ] as const;
+
+    const { container, rerender } = render(<StatsPage />);
+
+    for (const [mode, metricsRegion, expectedContent] of modes) {
+      mockStatsPageData({ visualMode: mode });
+      rerender(<StatsPage />);
+
+      expect(screen.getByRole("region", { name: metricsRegion })).toBeInTheDocument();
+      expect(screen.getByLabelText("Mock analysis studio")).toHaveTextContent(expectedContent);
+    }
+
+    expect(container.textContent).not.toMatch(/glass[- ]panel|unified glass|frosted|depth-heavy|hover lift|elevated hover|Analysis workspace/i);
+  });
+
   it("moves analytics mode focus with arrow keys while preserving pressed-button semantics", () => {
     const setVisualMode = vi.fn();
     mockStatsPageData({ visualMode: "trend", setVisualMode });
