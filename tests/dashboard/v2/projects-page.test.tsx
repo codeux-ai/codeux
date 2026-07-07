@@ -386,4 +386,15 @@ describe("ProjectsPage", () => {
     const actionsContainer = cancelBtn.closest(".flex-col-reverse");
     expect(actionsContainer).toBeInTheDocument();
   });
+
+  it("shows a default-enabled keyboard-focusable techstack option in the setup dialog", () => {
+    render(<ProjectsPage />);
+
+    fireEvent.click(screen.getByRole("button", { name: /Setup project/i }));
+
+    const techstackOption = screen.getByRole("button", { name: /Techstack/i });
+    expect(techstackOption).toHaveAttribute("aria-pressed", "true");
+    techstackOption.focus();
+    expect(document.activeElement).toBe(techstackOption);
+  });
 });

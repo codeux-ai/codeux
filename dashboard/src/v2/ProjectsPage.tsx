@@ -458,6 +458,7 @@ export const ProjectsPage: FunctionComponent = () => {
         quicksprints: true,
         previewScript: true,
         ci: true,
+        techstack: true,
     });
     const [activeFilter, setActiveFilter] = useState<Filter>('All');
     const {
@@ -546,6 +547,7 @@ export const ProjectsPage: FunctionComponent = () => {
             quicksprints: boolean;
             previewScript: boolean;
             ci: boolean;
+            techstack: boolean;
         },
     ) => {
         setRunningSetupProjectIds(prev => new Set(prev).add(projectId));
@@ -808,7 +810,7 @@ export const ProjectsPage: FunctionComponent = () => {
                                         onDelete={() => { void deleteProject(source.id); }}
                                         onSetup={() => {
                                             setSetupProjectId(source.id);
-                                            setSetupOptions({ agents: true, quicksprints: true, previewScript: true, ci: true });
+                                            setSetupOptions({ agents: true, quicksprints: true, previewScript: true, ci: true, techstack: true });
                                             setSetupError(null);
                                         }}
                                         onOpenInvocation={() => {
@@ -869,6 +871,7 @@ export const ProjectsPage: FunctionComponent = () => {
                                     { key: "quicksprints", label: "Quicksprints", description: "Sprint templates." },
                                     { key: "previewScript", label: "Preview Script", description: "Container startup." },
                                     { key: "ci", label: "CI", description: "Basic checks." },
+                                    { key: "techstack", label: "Techstack", description: "Detect and assign from manifests." },
                                 ] as const).map((option) => (
                                     <button
                                         key={option.key}

@@ -6,7 +6,7 @@ Project Initialization runs a repository-specific setup pass through the `Projec
 
 - `Add Project` keeps the existing `Initialize with Project Setup Agent` flow for imported local and git source types.
 - Imported local projects save only a project-level `git.githubMode: LOCAL` override. The same dashboard git-mode updater synchronizes internal `git_manager`, `git_manager_local`, and `git_manager_remote` skills so local imports start with repo-local git behavior.
-- Imported Git URL projects do not receive git-mode or techstack overrides. They continue to inherit the remote git and unassigned techstack defaults unless the operator explicitly changes project or sprint settings.
+- Imported Git URL projects do not receive git-mode or techstack overrides. They continue to inherit the remote git and unassigned techstack defaults unless the operator explicitly changes project or sprint settings or runs setup techstack detection.
 - `New Project`, `Create Web App`, and `Create Desktop App` reuse the same Add Project modal with the `new_project` source selected. The modal exposes `Local Repo` / `Remote Repo` init modes instead of setup scope controls.
 - The navbar quickactions preselect Web App or Desktop App context and carry an explicit techstack override for the newly created project. They use the selected project's assigned techstack when one is set; otherwise they use the system catalog default built-in techstack.
 - All `new_project` submissions, local or remote, include an explicit project `techstack` override. New local projects also include `git.githubMode: LOCAL`; new remote projects do not.
@@ -23,6 +23,7 @@ Imported-project setup lets the operator choose which artifacts to create:
 - `Quicksprints`
 - `Preview Script`
 - `CI`
+- `Techstack`
 
 ## Backend Flow
 
@@ -41,7 +42,8 @@ Project creation can also include:
       "agents": true,
       "quicksprints": true,
       "previewScript": true,
-      "ci": true
+      "ci": true,
+      "techstack": true
     }
   }
 }
@@ -64,6 +66,7 @@ When selected, setup can create or update:
 - `.code-ux/browser/start-preview.sh`
 - `.github/workflows/code-ux-basic-checks.yml`
 - `.gitlab-ci.yml`
+- a detected system techstack catalog entry selected through the project's `techstack.selectedTechstackId`
 
 Agent setup also updates project agent routing:
 
@@ -71,8 +74,10 @@ Agent setup also updates project agent routing:
 - task coding switches to `ORCHESTRATOR` when specialist worker agents are created
 - created worker specialists are added to the orchestrator roster
 
+Techstack setup is non-destructive and best-effort. Imported projects start with `techstack.selectedTechstackId: null`; when the operator enables `Techstack`, the Project Setup Agent inspects dependency evidence, especially `package.json`, lockfiles, workspace manifests, and framework config files. A valid result includes a stack name, description, and detected frameworks/libraries. Code UX adds the detected stack to the system catalog when no matching entry exists, then selects it for the project. Empty, invalid, or contradictory detections are ignored with a warning and do not block other selected setup artifacts.
+
 ## Prompt Requirements
 
-The setup prompt requires the agent to inspect the real repository before proposing artifacts, including assistant instruction files such as `AGENTS.md`, `GEMINI.md`, `Gemini.md`, `CLAUDE.md`, `Claude.md`, project documentation, dependency manifests, package scripts, source layout, existing CI, and preview/runtime configuration.
+The setup prompt requires the agent to inspect the real repository before proposing artifacts, including assistant instruction files such as `AGENTS.md`, `GEMINI.md`, `Gemini.md`, `CLAUDE.md`, `Claude.md`, project documentation, dependency manifests, package scripts, source layout, existing CI, and preview/runtime configuration. When techstack detection is enabled, `package.json` dependency sections and related manifests are treated as primary evidence.
 
 The agent output must be repository-specific. Generic role names or stack assumptions are rejected by the prompt contract in favor of architecture-aware agents, quicksprints, preview startup commands, and CI checks.

@@ -139,7 +139,7 @@ export function parseCreateProjectInput(body: unknown): CreateProjectInput {
     sourceType,
     sourceRef,
     cloneDir: parseOptionalString(input.cloneDir),
-    setup: input.setup as ProjectSetupRequestInput | undefined,
+    setup: parseProjectSetupRequestInput(input.setup),
     defaultBranch: parseOptionalString(input.defaultBranch),
     featureBranchPrefix: parseOptionalString(input.featureBranchPrefix),
     status: parseEnum(input.status, ["running", "failed", "intervention", "idle"], "status"),
@@ -148,6 +148,32 @@ export function parseCreateProjectInput(body: unknown): CreateProjectInput {
     remoteProvider: parseEnum(input.remoteProvider, ["github", "gitlab"], "remoteProvider"),
     settingsOverrides: input.settingsOverrides && typeof input.settingsOverrides === "object"
       ? input.settingsOverrides as CreateProjectInput["settingsOverrides"]
+      : undefined,
+  };
+}
+
+export function parseProjectSetupRequestInput(body: unknown): ProjectSetupRequestInput | undefined {
+  if (body === undefined || body === null) return undefined;
+  if (typeof body !== "object") throw new Error("Invalid setup input: setup must be an object");
+  const input = body as Record<string, unknown>;
+  if (input.options !== undefined && input.options !== null && typeof input.options !== "object") {
+    throw new Error("Invalid setup input: setup.options must be an object");
+  }
+  const optionsInput = input.options && typeof input.options === "object"
+    ? input.options as Record<string, unknown>
+    : undefined;
+
+  return {
+    enabled: parseOptionalBoolean(input.enabled, "setup.enabled"),
+    clientRequestId: parseOptionalString(input.clientRequestId),
+    options: optionsInput
+      ? {
+        agents: parseOptionalBoolean(optionsInput.agents, "setup.options.agents"),
+        quicksprints: parseOptionalBoolean(optionsInput.quicksprints, "setup.options.quicksprints"),
+        previewScript: parseOptionalBoolean(optionsInput.previewScript, "setup.options.previewScript"),
+        ci: parseOptionalBoolean(optionsInput.ci, "setup.options.ci"),
+        techstack: parseOptionalBoolean(optionsInput.techstack, "setup.options.techstack"),
+      }
       : undefined,
   };
 }
