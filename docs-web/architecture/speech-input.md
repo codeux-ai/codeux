@@ -1,6 +1,6 @@
 # Speech Input Architecture
 
-Speech input turns dashboard audio uploads into prompt text through `POST /api/speech/transcriptions`. The endpoint accepts one multipart `audio` file plus optional metadata such as `projectId`, `sprintId`, `requestId`, `language`, `durationSeconds`, `maxAudioSeconds`, and `source`.
+Speech input turns dashboard microphone or uploaded audio into prompt text through `POST /api/speech/transcriptions`. The current implementation includes persisted settings, the backend transcription route and service, and reusable dashboard primitives for recorder-driven transcription.
 
 ## Settings Boundary
 
@@ -12,11 +12,21 @@ The default provider mode is `auto`, which is intended to prefer local ONNX tran
 
 Microphone audio must not enter runtime memory automatically. Capture flows must require an explicit user gesture and permission grant. Settings may store provider configuration, model ids, endpoint URL, and optional language, but defaults and examples must not include real API keys.
 
-Audio bytes remain request-scoped in the upload route and transcription service. They are not written to settings, project artifacts, logs, telemetry, or memory records.
+Audio bytes should remain request-scoped. They should not be written to settings, project artifacts, logs, telemetry, or memory records unless a separate retention feature is designed with user-visible consent and deletion controls.
 
 ## Upload Guardrails
 
 The transcription endpoint is handled by route-specific `multer` middleware, not the dashboard JSON parser. It stores the uploaded file in memory, accepts only supported audio MIME types, applies a 25MB upload limit, and rejects requests that exceed supplied route-level `maxAudioSeconds` metadata. The backend service also enforces the resolved speech setting's `maxAudioSeconds` before invoking a provider.
+
+## Dashboard Primitives
+
+Reusable v2 primitives keep microphone capture out of individual composers:
+
+- `speech-recorder.ts` requests microphone access, records mono audio, emits WAV/PCM with Web Audio when available, falls back to `MediaRecorder`, and cleans up tracks/audio nodes on stop, abort, error, and unmount paths.
+- `speech-api.ts` posts multipart audio to `POST /api/speech/transcriptions` and returns the shared typed transcription result.
+- `SpeechInputButton.tsx` presents permission, recording, transcribing, success, unsupported, and error states while delegating transcript insertion to parent composers.
+
+Composer integration remains separate so each composer can choose append/replace behavior and focus handling.
 
 ## Provider Fallback Behavior
 
