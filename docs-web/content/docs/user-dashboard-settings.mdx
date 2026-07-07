@@ -532,7 +532,7 @@ The top navigation shows the active project's effective tech stack guidance and 
 
 **Recommended defaults:** Keep both selections at `None` until a project needs explicit guidance beyond its repository instructions. Add custom entries for stable team or product guidance that should be reused.
 
-**Risks and gotchas:** `hideDefaultStyleguides` hides built-in styleguides from the dashboard selector while preserving `None`, custom styleguides, and the saved selected id. Deleting a selected custom entry clears that selection back to `None`. Design guidance also feeds the Planning and Project Setup prompts, which resolve the selected entries from effective project settings and omit `None` selections from guidance text.
+**Risks and gotchas:** `hideDefaultStyleguides` hides built-in styleguides from the dashboard selector while preserving `None`, custom styleguides, and the saved selected id. Deleting a selected custom entry clears that selection back to `None`. Design guidance also feeds the Planning and Project Setup prompts, which resolve selected entries from effective project settings. `None` catalog entries are not injected, but Project Setup still includes a setup-only styling investigation notice whenever the styleguide selection is `None`.
 
 Related docs:
 

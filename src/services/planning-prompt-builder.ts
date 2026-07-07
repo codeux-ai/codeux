@@ -90,7 +90,6 @@ export function buildProjectGuidanceSection(
   } else if (
     options.includeStyleguideInvestigationNotice
     && designGuidance.selectedStyleguideId === DESIGN_GUIDANCE_NONE_ID
-    && selectedTechStack
   ) {
     section.push(
       "### Styleguide Selection",

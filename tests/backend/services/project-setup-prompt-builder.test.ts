@@ -134,6 +134,7 @@ describe("buildProjectSetupPrompt", () => {
     expect(prompt).toContain("### Selected Styleguide");
     expect(prompt).toContain("Name: Setup Product Style");
     expect(prompt).toContain("Preserve existing design tokens, interaction states, and responsive behavior.");
+    expect(prompt).not.toContain("No active styleguide guidance is selected.");
     expect(prompt.indexOf("## Project Guidance")).toBeLessThan(prompt.indexOf("## Task"));
   });
 
@@ -154,7 +155,7 @@ describe("buildProjectSetupPrompt", () => {
     expect(prompt).toContain("investigate the repository's existing styling, brand assets, design tokens, components, layouts, and user-facing interaction patterns");
   });
 
-  it("omits project guidance when setup selections are none", () => {
+  it("tells setup to inspect existing styling when both setup selections are none", () => {
     const prompt = buildProjectSetupPrompt({
       project,
       setupAgent,
@@ -162,10 +163,12 @@ describe("buildProjectSetupPrompt", () => {
       options: options(false),
     });
 
-    expect(prompt).not.toContain("## Project Guidance");
+    expect(prompt).toContain("## Project Guidance");
+    expect(prompt).toContain("### Styleguide Selection");
     expect(prompt).not.toContain("Setup TypeScript Stack");
     expect(prompt).not.toContain("Setup Product Style");
-    expect(prompt).not.toContain("No active styleguide guidance is selected.");
+    expect(prompt).toContain("No active styleguide guidance is selected.");
+    expect(prompt).toContain("investigate the repository's existing styling, brand assets, design tokens, components, layouts, and user-facing interaction patterns");
     expect(prompt).not.toContain("No additional project guidance is selected.");
   });
 });
