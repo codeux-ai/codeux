@@ -1,12 +1,15 @@
 import type { FunctionComponent } from "preact";
 import { useEffect, useState } from "preact/hooks";
-import { Copy, ExternalLink, Minus, Square, X } from "lucide-preact";
+import { Copy, Download, Minus, Square, X } from "lucide-preact";
 import { RobotLogo } from "./brand/RobotLogo.js";
-import { fetchUpdateStatus } from "../lib/system-api.js";
+import { fetchUpdateStatus, type UpdateStatus } from "../lib/system-api.js";
 
 declare const __APP_VERSION__: string;
 
 type Platform = "darwin" | "win32" | "linux" | "other";
+type TitleBarUpdateStatus = Omit<UpdateStatus, "downloadTargets"> & {
+  downloadTargets?: UpdateStatus["downloadTargets"];
+};
 
 const resolvePlatform = (raw?: string): Platform => {
   if (raw === "darwin" || raw === "win32" || raw === "linux") return raw;
@@ -17,13 +20,41 @@ interface TitleBarProps {
   appearanceVariant?: "default" | "translucent";
 }
 
-type UpdateStatus = {
-  currentVersion: string;
-  latestVersion: string | null;
-  updateAvailable: boolean;
-  releaseUrl: string;
-  checkedAt: string;
-  error?: string;
+type UpdateDownloadAction = {
+  href: string;
+  ariaLabel: string;
+  title: string;
+};
+
+export const resolveUpdateDownloadAction = (
+  status: TitleBarUpdateStatus | null,
+  isDesktopSession: boolean,
+): UpdateDownloadAction | null => {
+  if (!status?.updateAvailable || status.error) {
+    return null;
+  }
+
+  const target = isDesktopSession
+    ? status.downloadTargets?.electron
+    : status.downloadTargets?.npm;
+  const href = target?.url || status.releaseUrl;
+  if (!href) {
+    return null;
+  }
+
+  const versionLabel = status.latestVersion ? `Code UX ${status.latestVersion}` : "Code UX";
+  const targetLabel = target?.kind === "electron"
+    ? "desktop release download page"
+    : target?.kind === "npm"
+      ? "npm package download page"
+      : "release download page";
+  const label = `Open ${versionLabel} ${targetLabel} in your browser`;
+
+  return {
+    href,
+    ariaLabel: label,
+    title: label,
+  };
 };
 
 export const TitleBar: FunctionComponent<TitleBarProps> = ({ appearanceVariant = "translucent" }) => {
@@ -31,7 +62,7 @@ export const TitleBar: FunctionComponent<TitleBarProps> = ({ appearanceVariant =
   const windowApi = desktop?.window;
   const [platform, setPlatform] = useState<Platform>(() => resolvePlatform(desktop?.platform));
   const [isMaximized, setIsMaximized] = useState(false);
-  const [updateStatus, setUpdateStatus] = useState<UpdateStatus | null>(null);
+  const [updateStatus, setUpdateStatus] = useState<TitleBarUpdateStatus | null>(null);
 
   useEffect(() => {
     if (!windowApi) return;
@@ -82,9 +113,7 @@ export const TitleBar: FunctionComponent<TitleBarProps> = ({ appearanceVariant =
   if (!windowApi) return null;
 
   const isMac = platform === "darwin";
-  const updateAction = updateStatus?.updateAvailable && !updateStatus.error && updateStatus.releaseUrl
-    ? updateStatus
-    : null;
+  const updateAction = resolveUpdateDownloadAction(updateStatus, Boolean(desktop));
 
   const controls = isMac ? null : (
     <div className="flex items-stretch h-full titlebar-no-drag">
@@ -147,14 +176,14 @@ export const TitleBar: FunctionComponent<TitleBarProps> = ({ appearanceVariant =
             v{__APP_VERSION__}
             {updateAction ? (
               <a
-                href={updateAction.releaseUrl}
+                href={updateAction.href}
                 target="_blank"
                 rel="noreferrer"
-                aria-label={updateAction.latestVersion ? `Open Code UX ${updateAction.latestVersion} release` : "Open Code UX releases"}
-                title={updateAction.latestVersion ? `Open Code UX ${updateAction.latestVersion} release` : "Open Code UX releases"}
+                aria-label={updateAction.ariaLabel}
+                title={updateAction.title}
                 className="titlebar-no-drag ml-2 inline-flex h-5 items-center gap-1 rounded-full border border-amber-500/20 bg-amber-500/10 px-1.5 text-[9px] font-bold uppercase tracking-wider text-amber-600 transition-colors hover:border-amber-500/35 hover:bg-amber-500/15 hover:text-amber-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500/45 dark:border-amber-400/20 dark:bg-amber-400/10 dark:text-amber-400 dark:hover:border-amber-300/35 dark:hover:bg-amber-400/15 dark:hover:text-amber-300"
               >
-                <ExternalLink aria-hidden="true" className="h-3 w-3" strokeWidth={2} />
+                <Download aria-hidden="true" className="h-3 w-3" strokeWidth={2} />
                 Update available
               </a>
             ) : null}

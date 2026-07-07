@@ -25,6 +25,8 @@ To start a new thread, click **+ New thread**. To change the responding agent, o
 
 Each post triggers a routed invocation: the dashboard records the request, dispatches it to the chosen provider via the worker assignment service (routed through the `dashboard_reply` invocation type), and streams the reply back into the thread.
 
+Planning messages can include a rich sprint status card. When Code UX can match the message to loaded live project data, the card is backed by the current task records and execution snapshot, so it updates as tasks move from queued to running, completed, failed, blocked, or quota-waiting. It shows the sprint key/name, request/task/run materialization, overall progress such as `0/7 · 0%`, queued task count, and a compact task list. If either task records or the execution snapshot are still loading, the chat keeps the generic planning status card until both live records are available for the active project.
+
 ## Compacting a thread
 
 Long threads accumulate context cost. Click **Compact** to:
@@ -43,6 +45,8 @@ The **Invocations** tab is a structured log of every `CallTool` MCP invocation r
 - **Linked task / sprint** — when an invocation arose from sprint orchestration.
 
 Use this for debugging your MCP client integrations — for example to see exactly what arguments your LLM is passing to tools like `manage_memory` or `manage_settings` (Note: The legacy unified `manage_code_ux` tool is deprecated).
+
+Invocation transcripts use the same live sprint status card as thread messages when planning metadata links them to a sprint. This means a planning invocation and its related chat message should show consistent task progress without a separate refresh control.
 
 ## Posting messages
 

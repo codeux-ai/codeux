@@ -59,12 +59,20 @@ describe("Electron dashboard network policy", () => {
     expect(classifyNavigationTarget("http://127.0.0.1:4444/tasks", origin)).toBe("allow-internal");
     expect(classifyNavigationTarget("http://example.test/docs", origin)).toBe("open-external");
     expect(classifyNavigationTarget("https://example.test/docs", origin)).toBe("open-external");
+    expect(classifyNavigationTarget("https://github.com/codeux-ai/codeux/releases/tag/v1.2.0", origin)).toBe(
+      "open-external",
+    );
+    expect(classifyNavigationTarget("https://www.npmjs.com/package/@codeuxai/codeux/v/1.2.0", origin)).toBe(
+      "open-external",
+    );
     expect(classifyNavigationTarget("mailto:support@example.test", origin)).toBe("open-external");
     expect(classifyNavigationTarget("file:///etc/passwd", origin)).toBe("deny");
     expect(classifyNavigationTarget("javascript:alert(1)", origin)).toBe("deny");
     expect(classifyNavigationTarget("not a url", origin)).toBe("deny");
 
     expect(isSafeExternalUrl("https://example.test")).toBe(true);
+    expect(isSafeExternalUrl("https://github.com/codeux-ai/codeux/releases")).toBe(true);
+    expect(isSafeExternalUrl("https://www.npmjs.com/package/@codeuxai/codeux")).toBe(true);
     expect(isSafeExternalUrl("mailto:support@example.test")).toBe(true);
     expect(isSafeExternalUrl("data:text/html,hello")).toBe(false);
   });

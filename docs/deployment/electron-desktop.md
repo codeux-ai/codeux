@@ -13,7 +13,7 @@ Code UX can run as an installable Electron desktop app while preserving the exis
 - Windows packaged builds keep the active WebGL context cap at 16 so the persistent shell canvas, avatar canvases, and route-scoped chart canvases have enough headroom during long navigation sessions while old Chromium contexts are waiting for garbage collection.
 - External links are opened through the host operating system. In-app dashboard and sprint-preview URLs remain inside the Electron app.
 - The desktop shell renders only the resolved dashboard origin and same-port sprint preview origins that match `preview-<session>.localhost:<dashboardPort>` internally. Other `http`, `https`, and `mailto` navigations are denied in the renderer and opened through the host operating system after scheme validation; all other schemes are blocked.
-- The compact title bar version label polls `/api/system/update-status` on startup and every 30 minutes. When the response reports a newer version without an error, the title bar shows a no-drag "Update available" release link with an external-link icon; activating it opens the GitHub release URL in the user's default browser. No update action is shown for failed checks or current installations.
+- The compact title bar version label polls `/api/system/update-status` on startup and every 30 minutes. When the response reports a newer version without an error, the title bar shows a no-drag "Update available" download link with a download icon; activating it opens the official GitHub desktop release download page in the user's default browser through Electron's external navigation handler. No update action is shown for failed checks or current installations.
 
 ## Native Desktop Integration
 
