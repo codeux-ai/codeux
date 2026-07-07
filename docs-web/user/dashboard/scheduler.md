@@ -27,6 +27,12 @@ entries are stored in the existing target JSON payload with `origin` and `source
 through the chat runtime with scheduler metadata, and task reruns reuse the normal task rerun
 service so workspaces, telemetry, and cancellation behavior stay consistent.
 
+Agent wakeups and task reruns may appear in the Scheduler calendar, day view, stats, and scheduled
+entry list after they are created by the secured MCP scheduler tool. They use their own target
+labels and compact summaries instead of appearing as chat messages. The dashboard create/edit form
+remains limited to Sprint, Quicksprint, Message, and Memory remediation entries; MCP-created
+agent wakeups and task reruns can still be paused, resumed, or deleted from the list.
+
 ## Recurrence
 
 An entry can run once at a specific time or repeat on a **recurrence rule** (for example daily or
@@ -37,9 +43,8 @@ weekly). The page previews the next occurrences so you can confirm the cadence b
 From the page you can:
 
 - **Create** an entry — pick a target, set the time, and choose a recurrence rule.
-- **Edit** an entry's target, time, or recurrence.
+- **Edit** a dashboard-created entry's target, time, or recurrence.
 - **Pause / resume** an entry without deleting it.
-- **Run now** to trigger an entry immediately.
 - **Delete** an entry.
 
 Scheduler changes broadcast over the dashboard's realtime channel, so the calendar stays in sync

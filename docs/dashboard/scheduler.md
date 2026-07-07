@@ -25,6 +25,10 @@ The runtime contract additionally accepts:
 
 Those agent-created target types are intentionally backend-only in this task. They provide the storage and execution model that later MCP security and dashboard notification surfaces can consume without changing the dashboard target picker.
 
+When `agent_wakeup` or `task` entries are created by the secured MCP scheduler tool, the Scheduler page can display them in the calendar, 24-hour view, stats, and scheduled-entry list. They use their own concise target labels, chips, and summaries, for example an agent wakeup thread or task rerun ID, instead of falling back to chat labels.
+
+The dashboard form remains limited to operator-created sprint, quicksprint, chat, and memory remediation targets. MCP-created `agent_wakeup` and `task` entries cannot be safely edited in that form, so their Edit action explains that dashboard editing is unavailable while Pause, Resume, and Delete remain available.
+
 The Sprint Composer also exposes a `Schedule` execution mode. That path saves the sprint definition first, including the sprint key override, name, goal, original prompt, planning route/model overrides, agent preset selections, linked issues, and imported tasks, then creates a scheduler entry targeting the saved sprint. It does not call planning or execution immediately.
 
 The Quicksprint configure view exposes the same scheduler timing model. Scheduling a quicksprint serializes the selected template, subtask count, `No limit` state, additional prompt, planning route/model override, and scheduled submit mode into `quicksprintTarget`, then creates a scheduler entry without launching the quicksprint immediately.
@@ -119,6 +123,8 @@ Operators can modify existing scheduler entries without deleting and recreating 
 - **Title Customization**: A customizable **Title** field is available. If left empty during creation or edit, a descriptive title will be automatically generated (e.g., `Run Morning Check`).
 - **Target Validation**: All target-specific validation rules apply when editing (e.g., sprint selection must be a non-completed sprint, chat message cannot be empty).
 - **Save and Cancel**: Submitting in edit mode sends a `PATCH` request to update the entry without triggering it immediately. The edit mode can be cancelled at any time to return to creation mode without mutating the entry.
+
+Agent-created `agent_wakeup` and `task` entries are display-only in the dashboard form. Operators can still pause, resume, or delete those entries from the scheduled-entry list, but editing their payload remains with the secured MCP scheduler flow so required target fields and agent-scheduler metadata are preserved.
 
 ### Due Entry Execution
 
