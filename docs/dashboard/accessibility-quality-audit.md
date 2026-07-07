@@ -19,6 +19,7 @@ The contracts below are implemented across `dashboard/src/v2/components/ui/*`, `
 ## Keyboard And Focus
 
 - Menus, listboxes, tabs, and browser/task/sprint selectors must support `Enter`, `Space`, arrow keys, `Home`, `End`, and `Escape` according to their role. `Escape` closes the surface and restores focus to the trigger.
+- Inline chat thread rename controls must be keyboard complete: focus enters the editable title field from the visible edit control, Enter saves, Escape cancels, save/cancel buttons remain reachable, empty titles are rejected before submit, and focus returns to a sensible title/header control after completion.
 - Dialogs, alert dialogs, popovers that act as dialogs, Add Project/Add Task modals, destructive confirmations, and unsaved-change prompts must trap focus while open and restore focus after close. If the trigger disappears, focus falls back to a sensible page landmark.
 - Route changes that originate from dashboard controls should not strand focus in removed DOM. When a control navigates to another route or switches a major workbench surface, the destination page must expose a named landmark that can receive programmatic or natural focus.
 - Destructive actions must require an explicit confirmation pattern. Hold-to-confirm and danger dialogs must expose the destructive target in the accessible name or description and keep progress descriptions stable rather than repeatedly announcing every animation frame.
@@ -44,8 +45,8 @@ The contracts below are implemented across `dashboard/src/v2/components/ui/*`, `
 
 ## Responsive And Motion
 
-- Narrow viewports must not gain page-level horizontal scroll. Rails, tables, logs, JSON previews, file paths, branch names, provider/model names, and preview controls must wrap or scroll inside their own bounded component.
-- Long labels must use `min-w-0` with `break-words`, `break-all`, or bounded internal overflow. Avoid truncating operational values when operators need the exact provider, model, branch, path, workflow, or connection id.
+- Narrow viewports must not gain page-level horizontal scroll. Rails, tables, logs, JSON previews, file paths, branch names, provider/model names, chat thread titles, and preview controls must wrap or scroll inside their own bounded component.
+- Long labels must use `min-w-0` with `break-words`, `break-all`, or bounded internal overflow. Chat thread titles may wrap or clamp within the header and rail, but avoid truncating operational values when operators need the exact provider, model, branch, path, workflow, or connection id.
 - Warm Void surfaces should stay visually restrained: use neutral glass surfaces for structure, Signal Jade for primary focus/selection/accent, and Ember/status tones only for warnings, errors, danger, and destructive actions.
 - Motion must use the shared motion tokens and reduced-motion hooks/classes. Reduced motion removes or snaps movement while preserving static state cues such as rings, halos, badges, progress values, highlighted active tabs, and visible chart summaries.
 - Mobile and text-zoom checks must include shell selectors, Settings forms, Browser rails, Tasks cards, Stats tables, and live telemetry panels at narrow widths with long provider/model names.
