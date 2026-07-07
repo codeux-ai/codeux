@@ -293,6 +293,9 @@ const validateGitSettings = (
   } else if (value.sprintKeyPrefix !== value.sprintKeyPrefix.toUpperCase()) {
     issues.push({ path: `${path}.sprintKeyPrefix`, message: "Expected an uppercase string" });
   }
+  if (typeof value.taskPrTitleScheme !== "string") {
+    issues.push({ path: `${path}.taskPrTitleScheme`, message: "Expected a string" });
+  }
   if (value.prDescription !== undefined) {
     validatePrDescriptionSettings(value.prDescription, `${path}.prDescription`, issues);
   }

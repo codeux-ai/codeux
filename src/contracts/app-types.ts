@@ -829,6 +829,7 @@ export interface GitSettings {
   featureBranchPrefix: string;
   sprintBranchScheme: string;
   sprintKeyPrefix: string;
+  taskPrTitleScheme: string;
   prDescription: PrDescriptionSettings;
 }
 

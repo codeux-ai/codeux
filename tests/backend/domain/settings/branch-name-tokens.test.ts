@@ -126,6 +126,7 @@ function makeBasePayload() {
       featureBranchPrefix: "feat/",
       sprintBranchScheme: "sprint-{sprint_id}",
       sprintKeyPrefix: "SPRINT",
+      taskPrTitleScheme: "({sprint_tag}) {task_title}",
     },
     jira: {
       host: "jira.com",

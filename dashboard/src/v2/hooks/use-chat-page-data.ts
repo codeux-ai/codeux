@@ -12,7 +12,7 @@ import { type RefObject } from "preact";
 import { useChatThreadData, isWorkingMessage } from "./use-chat-thread-data.js";
 import { useInvocationPaneData } from "./use-invocation-pane-data.js";
 import { useChatPageResources } from "./use-chat-page-resources.js";
-import type { AgentPresetRecord } from "../types.js";
+import type { AgentPresetRecord, ExecutionInvocationRecord } from "../types.js";
 import { useSprints } from "../../hooks/useSprints.js";
 import { useProjectTasks } from "./use-project-tasks.js";
 import { clearChatDraftFromUrl, readChatDraftFromLocation } from "../lib/no-project-chat-assistant.js";
@@ -24,6 +24,14 @@ const CHAT_MODE_STORAGE_KEY = "codeux.chat.mode";
 
 const isChatMode = (value: unknown): value is ChatMode =>
   value === "stage" || value === "threads" || value === "invocations";
+
+export const getActiveInvocationPollingKey = (
+  invocations: Pick<ExecutionInvocationRecord, "id" | "status">[],
+): string => invocations
+  .filter((invocation) => invocation.status === "running")
+  .map((invocation) => invocation.id)
+  .sort()
+  .join(",");
 
 const readStoredChatMode = (): ChatMode => {
   if (typeof window === "undefined") return "stage";
@@ -75,26 +83,6 @@ export const useChatPageData = (options?: { composerRef?: RefObject<HTMLTextArea
     execution,
     composerRef: options?.composerRef,
     messagesRef: options?.messagesRef,
-    onMessageSending: ({ projectId, createdAt }) => invocationData.addOptimisticInvocation({
-      projectId,
-      createdAt,
-    }),
-    onMessageSent: ({ message, optimisticInvocationId }) => {
-      if (!selectedProject) {
-        return;
-      }
-      if (!optimisticInvocationId) {
-        return;
-      }
-      void invocationData.reconcileOptimisticInvocation({
-        optimisticId: optimisticInvocationId,
-        projectId: selectedProject.id,
-        messageCreatedAt: message.createdAt,
-      });
-    },
-    onMessageSendFailed: (optimisticInvocationId) => {
-      invocationData.clearOptimisticInvocation(optimisticInvocationId);
-    },
   });
 
   const {
@@ -164,13 +152,10 @@ export const useChatPageData = (options?: { composerRef?: RefObject<HTMLTextArea
     }
   }, [threadData.messages, options?.messagesRef]);
 
-  const activeInvocationKey = useMemo(() => {
-    return invocationData.invocations
-      .filter((inv) => inv.status === "running" || inv.id.startsWith("optimistic:"))
-      .map((inv) => inv.id)
-      .sort()
-      .join(",");
-  }, [invocationData.invocations]);
+  const activeInvocationKey = useMemo(
+    () => getActiveInvocationPollingKey(invocationData.invocations),
+    [invocationData.invocations],
+  );
 
   const selectedInvocationRefreshKey = useMemo(() => {
     const selectedInvocation = invocationData.selectedInvocation;

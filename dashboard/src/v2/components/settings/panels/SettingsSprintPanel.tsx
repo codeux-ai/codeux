@@ -9,7 +9,7 @@ import { Eye, GitBranch, GitMerge, GitPullRequest, PlayCircle, ShieldAlert, Spar
 import { AgentSelectAvatarIcon } from "../../agents/AgentSelectAvatarIcon.js";
 import { SprintKeyEditor } from "../SprintKeyEditor.js";
 import { InfoIconPopover } from "../../ui/InfoIconPopover.js";
-import { BranchNameSchemeEditor } from "../BranchNameSchemeEditor.js";
+import { BranchNameSchemeEditor, TaskPrTitleSchemeEditor } from "../BranchNameSchemeEditor.js";
 import { PrTemplateEditorModal } from "../PrTemplateEditorModal.js";
 import { DEFAULT_DASHBOARD_SETTINGS } from "../../../../lib/settings.js";
 import { updateGitHubModeForSettings } from "../../../../lib/settings-updaters.js";
@@ -224,6 +224,22 @@ export const SettingsSprintPanel: FunctionComponent<{ state: SettingsPageState }
               git: {
                 ...current.git,
                 sprintBranchScheme: value,
+              },
+            }))}
+          />
+        </Row>
+        <Row
+          label="Task PR title scheme"
+          description="Template used when naming automatically-created task pull requests."
+          badge={getFieldBadge("git.taskPrTitleScheme")}
+        >
+          <TaskPrTitleSchemeEditor
+            value={editableSettings.git.taskPrTitleScheme}
+            onChange={(value) => updateEditableSettings((current) => ({
+              ...current,
+              git: {
+                ...current.git,
+                taskPrTitleScheme: value,
               },
             }))}
           />

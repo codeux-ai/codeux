@@ -7,7 +7,7 @@ import { readFileSync } from "node:fs";
 import { describe, it, expect, afterEach, vi } from "vitest";
 import { render, screen, cleanup, fireEvent, waitFor } from "@testing-library/preact";
 import "@testing-library/jest-dom/vitest";
-import { BranchNameSchemeEditor } from "../BranchNameSchemeEditor";
+import { BranchNameSchemeEditor, TaskPrTitleSchemeEditor } from "../BranchNameSchemeEditor";
 import { SprintKeyEditor } from "../SprintKeyEditor";
 import { TextInput, SecretInput, NumberInput, TextAreaInput, PillChoiceGroup, SelectInput, OptionCardChoiceGroup, ToggleLinkedControlRow } from "../SettingsFormFields";
 
@@ -23,6 +23,7 @@ import type { Source } from "../../../types";
 import userEvent from "@testing-library/user-event";
 import { SettingsActivePanelStatus } from "../SettingsActivePanelStatus";
 import { SettingsContentPanels } from "../SettingsContentPanels";
+import { SettingsSprintPanel } from "../panels/SettingsSprintPanel";
 import { UnsavedChangesModal } from "../../ui/UnsavedChangesModal";
 import { ProviderInstanceCard } from "../ProviderInstanceCard";
 import { DEFAULT_DASHBOARD_SETTINGS } from "../../../../lib/settings";
@@ -743,6 +744,65 @@ describe("SettingsControls Accessibility", () => {
     const input = screen.getByRole("textbox");
     expect(input).toHaveAttribute("aria-label", "Sprint branch scheme");
     expect(input).toHaveAttribute("aria-description", "Template used when naming sprint branches.");
+  });
+
+  it("TaskPrTitleSchemeEditor renders accessible task PR title placeholders", () => {
+    render(
+      <TaskPrTitleSchemeEditor
+        value="({sprint_tag}) {task_title}"
+        onChange={() => {}}
+      />
+    );
+
+    const input = screen.getByRole("textbox", { name: "Task PR title scheme" });
+    expect(input).toHaveAttribute("aria-description", "Template used when naming automatically-created task pull requests.");
+    expect(input).toHaveAttribute("placeholder", "e.g. ({sprint_tag}) {task_title}");
+    expect(screen.getByText("{sprint_tag}")).toBeInTheDocument();
+    expect(screen.getByText("{sprint_key}")).toBeInTheDocument();
+    expect(screen.getByText("{sprint_number}")).toBeInTheDocument();
+    expect(screen.getByText("{sprint_title}")).toBeInTheDocument();
+    expect(screen.getByText("{task_key}")).toBeInTheDocument();
+    expect(screen.getByText("{task_title}")).toBeInTheDocument();
+    expect(screen.getByText("{provider}")).toBeInTheDocument();
+  });
+
+  it("SettingsSprintPanel renders and updates the task PR title scheme row", () => {
+    const updateEditableSettings = vi.fn();
+
+    const Harness = () => {
+      const [settings, setSettings] = useState(() => createProjectSettings());
+      updateEditableSettings.mockImplementation((recipe: (current: ProjectSettings) => ProjectSettings) => {
+        setSettings((current) => recipe(current));
+      });
+
+      return (
+        <SettingsSprintPanel
+          state={{
+            activeScope: "project",
+            setActiveScope: () => {},
+            selectedProject: null,
+            editableSettings: settings,
+            projectSettings: null,
+            projectSources: { "git.taskPrTitleScheme": "project" },
+            projectAgentPresetOptions: [],
+            updateProject: () => {},
+            updateEditableSettings,
+          } as any}
+        />
+      );
+    };
+
+    render(<Harness />);
+
+    expect(screen.getByText("Task PR title scheme")).toBeInTheDocument();
+    expect(screen.getByText("Template used when naming automatically-created task pull requests.")).toBeInTheDocument();
+    expect(screen.getByText("Project override")).toBeInTheDocument();
+
+    const input = screen.getByRole("textbox", { name: "Task PR title scheme" });
+    fireEvent.input(input, { target: { value: "{task_key}: {task_title} - {provider}" } });
+
+    expect(updateEditableSettings).toHaveBeenCalled();
+    expect(screen.getByRole("textbox", { name: "Task PR title scheme" })).toHaveValue("{task_key}: {task_title} - {provider}");
   });
 
   it("SprintKeyEditor passes aria-label and aria-description", () => {
