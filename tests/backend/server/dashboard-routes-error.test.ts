@@ -283,6 +283,11 @@ describe("dashboard route handlers", () => {
           },
         ],
         providers: [],
+        installers: {
+          platform: "linux",
+          recommendedMode: "docker-engine-git",
+          options: [],
+        },
       }),
       listDockerContainers: async () => [],
       getLiveActivities: async () => ({}),

@@ -13,7 +13,7 @@ vi.mock("fs/promises", () => ({
   readdir: (...a: unknown[]) => readdir(...a),
 }));
 
-import { getOnboardingRuntimeReadiness } from "../../../src/services/onboarding-readiness-service.js";
+import { getOnboardingRuntimeReadiness, invalidateOnboardingRuntimeReadinessCache } from "../../../src/services/onboarding-readiness-service.js";
 import type { SystemSettings } from "../../../src/contracts/settings-scope-types.js";
 
 function makeSettings(overrides?: Partial<{ providers: Record<string, unknown>; cliWorkflow: Record<string, unknown> }>): SystemSettings {
@@ -34,6 +34,7 @@ beforeEach(() => {
   vi.useFakeTimers();
   clock += 1_000_000;
   vi.setSystemTime(clock);
+  invalidateOnboardingRuntimeReadinessCache();
   run.mockReset();
   stat.mockReset();
   readdir.mockReset();
@@ -60,6 +61,17 @@ describe("getOnboardingRuntimeReadiness", () => {
     const ids = result.dependencies.map((d) => d.id);
     expect(ids).toEqual(["docker-cli", "docker-daemon", "git-cli"]);
     expect(result.dependencies.every((d) => d.status === "ready")).toBe(true);
+    const expectedInstallerPlatform = process.platform === "linux" || process.platform === "darwin" || process.platform === "win32"
+      ? process.platform
+      : "unsupported";
+    const expectedRecommendedMode = expectedInstallerPlatform === "linux"
+      ? "docker-engine-git"
+      : expectedInstallerPlatform === "unsupported"
+        ? null
+        : "docker-desktop-git";
+    expect(result.installers.platform).toBe(expectedInstallerPlatform);
+    expect(result.installers.recommendedMode).toBe(expectedRecommendedMode);
+    expect(result.installers.options).toHaveLength(2);
     // The daemon check is only invoked when the CLI is present.
     expect(run).toHaveBeenCalledWith("docker", ["info", "--format", "{{json .ServerVersion}}"], expect.anything());
   });
@@ -164,5 +176,19 @@ describe("getOnboardingRuntimeReadiness", () => {
 
     expect(second).toBe(first);
     expect(run.mock.calls.length).toBe(callsAfterFirst);
+  });
+
+  it("can explicitly invalidate the readiness cache after installer runs", async () => {
+    run.mockResolvedValue(ok());
+    stat.mockRejectedValue(new Error("missing"));
+    readdir.mockRejectedValue(new Error("nope"));
+
+    await getOnboardingRuntimeReadiness(makeSettings());
+    const callsAfterFirst = run.mock.calls.length;
+
+    invalidateOnboardingRuntimeReadinessCache();
+    await getOnboardingRuntimeReadiness(makeSettings());
+
+    expect(run.mock.calls.length).toBeGreaterThan(callsAfterFirst);
   });
 });
