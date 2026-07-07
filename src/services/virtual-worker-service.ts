@@ -171,6 +171,8 @@ export class VirtualWorkerService {
 
   private readonly scheduledProjects = new Set<string>();
 
+  private readonly deferredProjectSchedules = new Map<string, ReturnType<typeof setTimeout>>();
+
   private reconcileTimer: ReturnType<typeof setInterval> | null = null;
 
   private readonly providerExecutionService: ProviderExecutionService;
@@ -207,10 +209,14 @@ export class VirtualWorkerService {
       clearInterval(this.reconcileTimer);
       this.reconcileTimer = null;
     }
+    for (const timer of this.deferredProjectSchedules.values()) {
+      clearTimeout(timer);
+    }
+    this.deferredProjectSchedules.clear();
   }
 
   scheduleProject(projectId: string, reason: string, resolver?: (pId: string, sId?: string | null) => DashboardSettings): void {
-    if (this.activeCycles.has(projectId) || this.scheduledProjects.has(projectId)) {
+    if (this.activeCycles.has(projectId) || this.scheduledProjects.has(projectId) || this.deferredProjectSchedules.has(projectId)) {
       return;
     }
     if (!this.projectNeedsVirtualWorker(projectId, resolver)) {
@@ -231,12 +237,28 @@ export class VirtualWorkerService {
         .finally(() => {
           this.activeCycles.delete(projectId);
           if (this.projectNeedsVirtualWorker(projectId, resolver)) {
-            this.scheduleProject(projectId, "remaining_worker_work", resolver);
+            this.scheduleProjectLater(projectId, "remaining_worker_work", resolver);
           }
         });
 
       this.activeCycles.set(projectId, cycle);
     });
+  }
+
+  private scheduleProjectLater(projectId: string, reason: string, resolver?: (pId: string, sId?: string | null) => DashboardSettings): void {
+    if (this.activeCycles.has(projectId) || this.scheduledProjects.has(projectId) || this.deferredProjectSchedules.has(projectId)) {
+      return;
+    }
+    if (!this.projectNeedsVirtualWorker(projectId, resolver)) {
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      this.deferredProjectSchedules.delete(projectId);
+      this.scheduleProject(projectId, reason, resolver);
+    }, VIRTUAL_WORKER_RECONCILE_MS);
+    timer.unref?.();
+    this.deferredProjectSchedules.set(projectId, timer);
   }
 
   async reconcile(): Promise<void> {
@@ -261,7 +283,7 @@ export class VirtualWorkerService {
     );
 
     for (const projectId of activeProjectIds) {
-      if (this.activeCycles.has(projectId) || this.scheduledProjects.has(projectId)) {
+      if (this.activeCycles.has(projectId) || this.scheduledProjects.has(projectId) || this.deferredProjectSchedules.has(projectId)) {
         continue;
       }
       if (this.projectNeedsVirtualWorker(projectId, resolver, pendingDispatchProjects.includes(projectId))) {

@@ -47,7 +47,7 @@ It exposes only the worker-local execution tools needed to:
 
 ### HTTP Transport
 
-The MCP HTTPS transport exposes the same `project_manager` tool surface.
+The MCP Streamable HTTP transport exposes the same `project_manager` tool surface.
 
 The gateway now enforces worker identity at the listener entrypoint:
 
@@ -116,9 +116,11 @@ Behavior:
 
 - enabled by default
 - can be disabled with `--no-mcp-https` or `MCP_HTTPS_ENABLED=false`
-- defaults to `dashboardPort + 1` when no explicit MCP HTTPS port is configured
-- fails startup when binding to any non-loopback host such as `0.0.0.0`, `::`, or a LAN address without a non-empty auth token
-- preserves unauthenticated loopback-only development binds on `127.0.0.1`, `localhost`, and `::1`
+- defaults to `dashboardPort + 1` when no explicit MCP HTTP port is configured
+- auto-generates a user-scoped bearer token in `~/.code-ux/security.json` on first startup when no explicit token is configured
+- requires bearer authentication for normal Code UX startup, including Docker Desktop/WSL defaults that bind the gateway to `0.0.0.0` for container reachability
+- keeps explicit `--mcp-https-auth-token` and `MCP_HTTPS_AUTH_TOKEN` values as the highest-precedence token sources
+- exposes an HTTP listener; HTTPS/TLS requires a reverse proxy or future native certificate configuration
 
 Default path:
 
@@ -160,7 +162,7 @@ The worker gateway supports bearer authentication:
 
 - `Authorization: Bearer <token>`
 
-If the gateway is exposed on anything other than loopback, Code UX requires a configured auth token at startup. Code UX does not generate a replacement token for non-loopback binds because operators need to know and distribute the bearer value to workers explicitly.
+If the gateway is exposed on anything other than loopback, Code UX requires an active bearer token at startup. If no explicit token is supplied, Code UX creates a user-scoped token in `~/.code-ux/security.json`; operators can read or regenerate it from Settings → MCP before distributing it to local CLIs or remote workers.
 
 The request preflight validates security-sensitive headers before any session lookup:
 

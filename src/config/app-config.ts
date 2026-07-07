@@ -1,9 +1,10 @@
 import * as fs from "fs";
 import * as path from "path";
 import os from "os";
+import { randomBytes } from "crypto";
 import { buildCandidatePaths } from "../shared/config/search-paths.js";
 import { readPort, readString } from "../shared/config/value-readers.js";
-import { getRelativeCodeUxPath } from "../shared/config/code-ux-paths.js";
+import { getHomeCodeUxPath, getRelativeCodeUxPath } from "../shared/config/code-ux-paths.js";
 
 export interface AppConfig {
   apiKey: string | null;
@@ -97,6 +98,75 @@ const shouldDefaultMcpHttpHostForDockerDesktop = (): boolean => (
 const defaultMcpHttpHost = (): string => (
   shouldDefaultMcpHttpHostForDockerDesktop() ? "0.0.0.0" : "127.0.0.1"
 );
+
+const generateMcpHttpAuthToken = (): string => `cux_mcp_${randomBytes(32).toString("base64url")}`;
+
+const getUserSecurityConfigPath = (): string => {
+  const overrideDir = process.env.CODE_UX_HOME?.trim();
+  return overrideDir
+    ? path.join(overrideDir, "security.json")
+    : getHomeCodeUxPath("security.json");
+};
+
+const readStoredMcpHttpAuthToken = (): string | null => {
+  const securityConfigPath = getUserSecurityConfigPath();
+  try {
+    if (!fs.existsSync(securityConfigPath)) {
+      return null;
+    }
+    const parsed = JSON.parse(fs.readFileSync(securityConfigPath, "utf-8")) as Record<string, unknown>;
+    const token = readString(parsed.mcpHttpAuthToken ?? parsed.mcpHttpsAuthToken, "");
+    return token.trim().length > 0 ? token.trim() : null;
+  } catch {
+    return null;
+  }
+};
+
+const writeStoredMcpHttpAuthToken = (token: string): void => {
+  const securityConfigPath = getUserSecurityConfigPath();
+  const directory = path.dirname(securityConfigPath);
+  fs.mkdirSync(directory, { recursive: true, mode: 0o700 });
+
+  let existing: Record<string, unknown> = {};
+  try {
+    if (fs.existsSync(securityConfigPath)) {
+      const parsed = JSON.parse(fs.readFileSync(securityConfigPath, "utf-8")) as unknown;
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        existing = parsed as Record<string, unknown>;
+      }
+    }
+  } catch {
+    existing = {};
+  }
+
+  const next = {
+    ...existing,
+    mcpHttpAuthToken: token,
+  };
+  fs.writeFileSync(securityConfigPath, `${JSON.stringify(next, null, 2)}\n`, { mode: 0o600 });
+  try {
+    fs.chmodSync(securityConfigPath, 0o600);
+  } catch {
+    // Some filesystems do not support chmod; the restrictive write mode is still applied where possible.
+  }
+};
+
+export const loadOrCreateUserMcpHttpAuthToken = (): string => {
+  const existing = readStoredMcpHttpAuthToken();
+  if (existing) {
+    return existing;
+  }
+
+  const token = generateMcpHttpAuthToken();
+  writeStoredMcpHttpAuthToken(token);
+  return token;
+};
+
+export const regenerateUserMcpHttpAuthToken = (): string => {
+  const token = generateMcpHttpAuthToken();
+  writeStoredMcpHttpAuthToken(token);
+  return token;
+};
 
 export const parseRuntimeRoleArg = (argv: string[]): AppConfig["runtimeRole"] => {
   void argv;
@@ -253,10 +323,10 @@ export const loadAppConfig = (argv: string[], projectRoot: string): AppConfig =>
     || process.env.MCP_HTTPS_AUTH_TOKEN?.trim()
     || process.env.MCP_HTTP_AUTH_TOKEN?.trim()
     || null;
-  const mcpHttpAuthToken = explicitMcpHttpAuthToken;
+  const mcpHttpAuthToken = explicitMcpHttpAuthToken || (mcpHttpEnabled ? loadOrCreateUserMcpHttpAuthToken() : null);
 
   if (mcpHttpEnabled && !isLoopbackHost(mcpHttpHost) && !mcpHttpAuthToken) {
-    throw new Error("MCP HTTPS auth token is required when binding the MCP HTTPS server to a non-loopback host.");
+    throw new Error("MCP HTTP auth token is required when binding the MCP HTTP server to a non-loopback host.");
   }
 
   return {

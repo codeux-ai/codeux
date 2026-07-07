@@ -26,7 +26,7 @@ Two listeners:
 | Listener | Default bind | Default auth |
 | --- | --- | --- |
 | Dashboard server (REST + WebSocket + UI) | `127.0.0.1:4444` | None |
-| MCP HTTPS worker gateway (on by default; `--no-mcp-https` to disable) | `127.0.0.1:<dashboardPort+1>` | Bearer token required on non-loopback hosts |
+| MCP Streamable HTTP gateway (on by default; `--no-mcp-https` to disable) | `127.0.0.1:<dashboardPort+1>` | Bearer token, explicit or auto-generated |
 
 ### Dashboard server
 
@@ -38,8 +38,8 @@ Two listeners:
 ### MCP HTTP gateway
 
 - Loopback-only by default.
-- Bearer token via `--mcp-https-auth-token` (or `MCP_HTTPS_AUTH_TOKEN`).
-- **Required** when binding non-loopback hosts. Code UX rejects unauthenticated requests with HTTP 401 + JSON-RPC error `-32001`.
+- Bearer token via `--mcp-https-auth-token` (or `MCP_HTTPS_AUTH_TOKEN`), falling back to an auto-generated user token in `~/.code-ux/security.json`.
+- Code UX normal startup always supplies a token; unauthenticated requests are rejected with HTTP 401 + JSON-RPC error `-32001`.
 - Does not perform TLS itself — front with a reverse proxy (nginx, Caddy, Traefik) for HTTPS in production.
 
 ### Stdio transport

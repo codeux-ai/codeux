@@ -30,7 +30,7 @@ Source: `src/app/lifecycle/mcp-lifecycle-service.ts:92-106`.
 
 ### Streamable HTTP
 
-By default (disable with `--no-mcp-https` or `MCP_HTTPS_ENABLED=false`), Code UX also binds an HTTP listener using `StreamableHTTPServerTransport` for the MCP HTTPS transport.
+By default (disable with `--no-mcp-https` or `MCP_HTTPS_ENABLED=false`), Code UX also binds an HTTP listener using `StreamableHTTPServerTransport`. The `mcp-https` flag/env names are retained for compatibility, but the Node listener itself is HTTP.
 
 | Default | Value |
 | --- | --- |
@@ -52,8 +52,10 @@ Bearer token via `Authorization: Bearer <token>` header.
 
 | Host class | Token required? |
 | --- | --- |
-| Loopback (`127.0.0.1`, `localhost`, `::1`) | Optional |
-| Non-loopback | **Required** — server rejects unauthenticated requests with HTTP 401 + JSON-RPC error `-32001`. |
+| Normal Code UX startup | Generated user token from `~/.code-ux/security.json` unless an explicit token is configured |
+| Embedded/low-level transport use | Loopback may be unauthenticated; non-loopback requires a token |
+
+Invalid or missing bearer credentials are rejected with HTTP 401 + JSON-RPC error `-32001`.
 
 The Express middleware uses `express.json({ limit: "1mb" })`. Larger payloads return HTTP 400.
 

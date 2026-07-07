@@ -57,13 +57,38 @@ const TestHarness = () => {
 describe("SettingsMcpPanel", () => {
   afterEach(() => {
     cleanup();
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
   });
 
   it("guides HTTP/SSE custom server setup and keeps the generated preview accurate", () => {
+    vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
+      if (url === "/api/settings/local-mcp" && !init?.method) {
+        return new Response(JSON.stringify({
+          enabled: true,
+          url: "http://127.0.0.1:4445/mcp",
+          authToken: "local-token",
+          providers: [
+            { id: "codex", label: "Codex", configPath: "/home/test/.codex/config.toml" },
+          ],
+        }), { status: 200, headers: { "content-type": "application/json" } });
+      }
+      if (url === "/api/settings/local-mcp/install") {
+        return new Response(JSON.stringify({
+          provider: "codex",
+          configPath: "/home/test/.codex/config.toml",
+          installed: true,
+        }), { status: 200, headers: { "content-type": "application/json" } });
+      }
+      return new Response(JSON.stringify({ error: "not found" }), { status: 404, headers: { "content-type": "application/json" } });
+    }));
+
     render(<TestHarness />);
 
-    expect(screen.getByText(/exposes its built-in MCP server over stdio by default/i)).toBeInTheDocument();
-    expect(screen.getByText(/MCP_HTTP_\* environment variables or --mcp-http\* flags/i)).toBeInTheDocument();
+    expect(screen.getByText(/Local CLI HTTP setup/i)).toBeInTheDocument();
+    expect(screen.getByText(/HTTPS needs a trusted certificate/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Project scope/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/MCP connection modes/i)).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /Add MCP server/i }));
 

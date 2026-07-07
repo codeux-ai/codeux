@@ -502,6 +502,7 @@ describe("DockerRunner custom MCP server injection", () => {
     ]);
     const json = JSON.parse(writtenFor("claude-mcp.json")!);
     expect(json.mcpServers.code_ux).toMatchObject({ type: "http", url: "http://127.0.0.1:3000/mcp" });
+    expect(json.mcpServers.code_ux.headers).toMatchObject({ Authorization: "Bearer secret" });
     expect(json.mcpServers.docs).toEqual({ type: "http", url: "https://docs.example/mcp", headers: { Authorization: "Bearer t" } });
   });
 
@@ -522,6 +523,7 @@ describe("DockerRunner custom MCP server injection", () => {
 
     const json = JSON.parse(writtenFor("claude-mcp.json")!);
     expect(json.mcpServers.code_ux.url).toBe("http://host.docker.internal:3000/mcp");
+    expect(json.mcpServers.code_ux.headers).toMatchObject({ Authorization: "Bearer secret" });
     expect(json.mcpServers.localdocs.url).toBe("http://host.docker.internal:8123/mcp");
   });
 
@@ -529,7 +531,7 @@ describe("DockerRunner custom MCP server injection", () => {
     const originalRewrite = process.env.CODE_UX_DOCKER_REWRITE_LOCALHOST;
     process.env.CODE_UX_DOCKER_REWRITE_LOCALHOST = "1";
     try {
-      await buildDocker("codex", { url: "http://0.0.0.0:3000/mcp", authToken: null }, [
+      await buildDocker("codex", { url: "http://0.0.0.0:3000/mcp", authToken: "secret" }, [
         { id: "1", name: "localdocs", transport: "http", url: "http://localhost:8123/mcp", enabled: true },
       ]);
     } finally {
@@ -542,6 +544,7 @@ describe("DockerRunner custom MCP server injection", () => {
 
     const toml = writtenFor("codex-config.toml")!;
     expect(toml).toContain('url = "http://host.docker.internal:3000/mcp"');
+    expect(toml).toContain('"Authorization" = "Bearer secret"');
     expect(toml).toContain('url = "http://host.docker.internal:8123/mcp"');
   });
 
@@ -619,6 +622,7 @@ describe("DockerRunner custom MCP server injection", () => {
     expect(json.enableOpenAILogging).toBeUndefined(); // It should strip this based on formatting logic
     expect(json.someOtherSetting).toBe("value");
     expect(json.mcpServers.code_ux).toMatchObject({ httpUrl: "http://127.0.0.1:3000/mcp" });
+    expect(json.mcpServers.code_ux.headers).toMatchObject({ Authorization: "Bearer secret" });
     expect(json.mcpServers.docs).toEqual({ httpUrl: "https://docs.example/mcp", headers: { Authorization: "Bearer t" } });
   });
 
@@ -629,6 +633,7 @@ describe("DockerRunner custom MCP server injection", () => {
     ]);
     const json = JSON.parse(writtenFor("antigravity-mcp.json")!);
     expect(json.mcpServers.code_ux).toMatchObject({ serverUrl: "http://127.0.0.1:3000/mcp" });
+    expect(json.mcpServers.code_ux.headers).toMatchObject({ Authorization: "Bearer secret" });
     expect(json.mcpServers.docs).toEqual({ serverUrl: "https://docs.example/mcp", headers: { Authorization: "Bearer t" } });
     expect(json.mcpServers.localtool).toEqual({ command: "python", args: ["script.py"] });
   });

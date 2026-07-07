@@ -51,7 +51,7 @@ See [Building from source](../developer/building-from-source.md) for the full de
 When Code UX starts it:
 
 1. Serves the dashboard at `http://localhost:4444`.
-2. Exposes an **MCP server** (over stdio, plus an optional HTTPS worker gateway).
+2. Exposes an **MCP server** (over stdio, plus an authenticated Streamable HTTP gateway).
 3. Loads any settings it finds, then waits for you to add a project and configure providers.
 
 Nothing is required to reach this point — no API keys, no environment variables. Configure providers
@@ -66,11 +66,11 @@ Run `codeux --help` for the authoritative list. The current flags are:
 | `--api-key VALUE` | Set the Jules API key (overrides env and settings). |
 | `--runtime-role VALUE` | Runtime role: `project_manager` (default) or `worker-host`. |
 | `--headless` (alias `--no-dashboard`) | Start MCP-only without binding the dashboard. |
-| `--mcp-https` / `--no-mcp-https` | Enable/disable the remote MCP HTTPS worker gateway (**enabled by default**). |
-| `--mcp-https-port N` | Port for the MCP HTTPS worker gateway. |
-| `--mcp-https-host H` | Host/interface for the MCP HTTPS worker gateway. |
-| `--mcp-https-path P` | Path for the MCP HTTPS worker gateway (default `/mcp`). |
-| `--mcp-https-auth-token VALUE` | Bearer token required for MCP HTTPS requests on a non-loopback host. |
+| `--mcp-https` / `--no-mcp-https` | Enable/disable the MCP Streamable HTTP gateway (**enabled by default**; legacy flag name). |
+| `--mcp-https-port N` | Port for the MCP HTTP gateway. |
+| `--mcp-https-host H` | Host/interface for the MCP HTTP gateway. |
+| `--mcp-https-path P` | Path for the MCP HTTP gateway (default `/mcp`). |
+| `--mcp-https-auth-token VALUE` | Bearer token for MCP HTTP requests; overrides the generated user token. |
 | `--help`, `-h` | Show help. |
 
 ## Environment variables
@@ -79,11 +79,11 @@ Run `codeux --help` for the authoritative list. The current flags are:
 | --- | --- |
 | `JULES_API_KEY` | Jules API key (also accepted as `JULES_KEY`). |
 | `DASHBOARD_PORT` | Dashboard port (default `4444`). |
-| `MCP_HTTPS_ENABLED` | Enable the MCP HTTPS worker gateway (default `true`). |
-| `MCP_HTTPS_PORT` | Port for the MCP HTTPS worker gateway. |
-| `MCP_HTTPS_HOST` | Host/interface for the MCP HTTPS worker gateway. |
-| `MCP_HTTPS_PATH` | Path for the MCP HTTPS worker gateway. |
-| `MCP_HTTPS_AUTH_TOKEN` | Bearer token for MCP HTTPS requests. |
+| `MCP_HTTPS_ENABLED` | Enable the MCP HTTP gateway (default `true`). |
+| `MCP_HTTPS_PORT` | Port for the MCP HTTP gateway. |
+| `MCP_HTTPS_HOST` | Host/interface for the MCP HTTP gateway. |
+| `MCP_HTTPS_PATH` | Path for the MCP HTTP gateway. |
+| `MCP_HTTPS_AUTH_TOKEN` | Bearer token for MCP HTTP requests; if unset, Code UX creates `~/.code-ux/security.json`. |
 
 A project-local `.env` file is read on startup, so you can keep settings per repository:
 

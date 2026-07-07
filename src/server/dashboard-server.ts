@@ -112,6 +112,7 @@ import type { EmbeddingModelManager } from "../services/embedding-model-manager.
 import type { EmbeddingService } from "../services/embedding-service.js";
 import type { KnowledgeService } from "../services/knowledge-service.js";
 import type { UpdateStatus } from "../services/update-checker-service.js";
+import type { LocalMcpCliProvider, LocalMcpInstallResult, LocalMcpSetupInfo } from "../services/local-mcp-cli-config-service.js";
 import {
   parsePreviewSessionIdFromHost,
   parseSelectedPreviewPortFromRequest,
@@ -129,6 +130,9 @@ export type DashboardDependencies = Omit<
   | "getUpdateStatus"
 > & {
   getUpdateStatus: () => Promise<UpdateStatus>;
+  getLocalMcpSetup: () => LocalMcpSetupInfo;
+  regenerateLocalMcpAuthToken: () => LocalMcpSetupInfo;
+  installLocalMcpProvider: (provider: LocalMcpCliProvider) => Promise<LocalMcpInstallResult> | LocalMcpInstallResult;
 };
 
 export interface DashboardServerOptions {
@@ -176,6 +180,9 @@ export interface DashboardServerOptions {
   getLiveActivities: () => Promise<Record<string, JulesActivity[]>>;
   getGitStatus: () => Promise<GitTrackingStatus>;
   getExternalSettingsHints: () => ExternalSettingsHints;
+  getLocalMcpSetup?: () => LocalMcpSetupInfo;
+  regenerateLocalMcpAuthToken?: () => LocalMcpSetupInfo;
+  installLocalMcpProvider?: (provider: LocalMcpCliProvider) => Promise<LocalMcpInstallResult> | LocalMcpInstallResult;
   getSystemSettings: () => SystemSettings;
   getUpdateStatus?: () => Promise<UpdateStatus>;
   saveSystemSettings: (settings: SystemSettings) => SystemSettings;

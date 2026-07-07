@@ -1,14 +1,27 @@
 # Connecting MCP clients
 
-Besides its dashboard, Code UX is also a Model Context Protocol (MCP) server. Any MCP-compatible client can connect to it and call its tools — so you can drive projects and sprints from the Gemini CLI, Codex, Claude Code, or your own client. This page shows the canonical setup for the clients we test against, and how to use the **MCP HTTPS transport** for remote workers.
+Besides its dashboard, Code UX is also a Model Context Protocol (MCP) server. Any MCP-compatible client can connect to it and call its tools — so you can drive projects and sprints from the Gemini CLI, Codex, Claude Code, or your own client. This page shows the canonical setup for the clients we test against, and how to use the authenticated **MCP Streamable HTTP transport** for local CLIs or remote workers.
 
 ## How the connection works
 
 By default, Code UX speaks MCP over **stdio**: the client launches the `codeux` process and exchanges JSON-RPC messages on its stdin/stdout. The server detects stdio mode automatically when stdin is not a TTY.
 
-Code UX also runs an **MCP HTTPS transport** (enabled by default; disable with `--no-mcp-https`). It listens on its own host/port/path — configurable via `--mcp-https-host`, `--mcp-https-port`, and `--mcp-https-path` (default path `/mcp`) — and is used by remote workers and clients that prefer an HTTP transport. On a non-loopback host it requires a bearer token (`--mcp-https-auth-token` or `MCP_HTTPS_AUTH_TOKEN`).
+Code UX also runs an authenticated **MCP Streamable HTTP transport** (enabled by default; disable with `--no-mcp-https`). It listens on its own host/port/path — configurable via `--mcp-https-host`, `--mcp-https-port`, and `--mcp-https-path` (default path `/mcp`) — and is used by remote workers and clients that prefer an HTTP transport. If no explicit token is configured, Code UX generates a user-scoped bearer token in `~/.code-ux/security.json` on first startup.
 
-> The dashboard server (port `4444` by default) is **separate** from the MCP HTTPS gateway. The dashboard hosts the UI and REST API; the gateway hosts JSON-RPC. They run as two distinct listeners.
+> The dashboard server (port `4444` by default) is **separate** from the MCP HTTP gateway. The dashboard hosts the UI and REST API; the gateway hosts JSON-RPC. They run as two distinct listeners. The gateway listener is HTTP today; use a trusted reverse proxy/certificate when you need remote HTTPS/TLS.
+
+## Local CLI HTTP setup
+
+Open **Settings → MCP** and use **Local CLI HTTP setup** to copy the active server URL and bearer token, regenerate the token, or install the `code_ux` MCP entry into supported local CLI config files automatically:
+
+- Claude Code: `~/.claude.json`
+- Gemini: `~/.gemini/settings.json`
+- Codex: `~/.codex/config.toml`
+- Qwen Code: `~/.qwen/settings.json`
+- OpenCode: `~/.config/opencode/opencode.json`
+- Antigravity: `~/.gemini/antigravity-cli/mcp_config.json`
+
+Regenerating the token immediately changes what the running MCP gateway accepts. Reinstall any local CLI configs that should keep connecting after regeneration.
 
 ## Gemini CLI
 
@@ -124,7 +137,7 @@ per-action payloads, see [Developer → Management actions](../developer/managem
 
 ## Remote MCP HTTP transport
 
-If you want external worker hosts to connect to Code UX over the network, use the MCP HTTPS transport:
+If you want external worker hosts to connect to Code UX over the network, use the authenticated MCP Streamable HTTP transport:
 
 ```bash
 codeux \
@@ -145,7 +158,7 @@ http://<host>:4445/mcp
 
 A `GET /health` endpoint returns `{ "status": "UP" }` and is the recommended liveness check.
 
-> **Security:** When `--mcp-https-host` is *not* loopback, an auth token is **required**. Loopback (`127.0.0.1`/`localhost`/`::1`) hosts may run unauthenticated for development. Always use HTTPS in production via a reverse proxy.
+> **Security:** Normal Code UX startup always has a bearer token for the MCP HTTP gateway, either explicit or generated in `~/.code-ux/security.json`. Always use HTTPS in production via a reverse proxy or another trusted TLS termination layer.
 
 For the wire protocol, see [Architecture → MCP server](../architecture/mcp-server.md).
 

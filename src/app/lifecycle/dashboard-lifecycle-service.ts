@@ -67,6 +67,13 @@ import { DashboardSnapshotCache, mapAssignedWorkers } from "./dashboard-snapshot
 import { prepareGitProjectCreateInput } from "../../services/project-git-clone-service.js";
 import { getOnboardingRuntimeReadiness } from "../../services/onboarding-readiness-service.js";
 import type { SprintImportedTaskInput } from "../../contracts/project-management-types.js";
+import type { McpConnectionInfo } from "../../contracts/mcp-connection-types.js";
+import type {
+  LocalMcpCliConfigService,
+  LocalMcpCliProvider,
+  LocalMcpInstallResult,
+  LocalMcpSetupInfo,
+} from "../../services/local-mcp-cli-config-service.js";
 
 const updateCheckerService = new UpdateCheckerService();
 
@@ -156,6 +163,9 @@ export interface BootDashboardDeps {
   embeddingService: EmbeddingService;
   memoryRepository: MemoryRepository;
   knowledgeService: KnowledgeService;
+  localMcpCliConfigService: LocalMcpCliConfigService;
+  getLocalMcpConnectionInfo: () => McpConnectionInfo | null;
+  regenerateMcpHttpAuthToken: () => string;
 }
 
 export function reinitializeLogger(deps: { projectRoot: string, runtimeContext: RuntimeContext }): Logger {
@@ -469,6 +479,13 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<DashboardS
     getLiveActivities: deps.getLiveActivitiesForActiveTasks,
     getGitStatus: deps.getGitStatus,
     getExternalSettingsHints: () => deps.externalSettingsHints,
+    getLocalMcpSetup: (): LocalMcpSetupInfo => deps.localMcpCliConfigService.getSetupInfo(deps.getLocalMcpConnectionInfo()),
+    regenerateLocalMcpAuthToken: (): LocalMcpSetupInfo => {
+      deps.regenerateMcpHttpAuthToken();
+      return deps.localMcpCliConfigService.getSetupInfo(deps.getLocalMcpConnectionInfo());
+    },
+    installLocalMcpProvider: (provider: LocalMcpCliProvider): Promise<LocalMcpInstallResult> =>
+      deps.localMcpCliConfigService.installProvider(provider, deps.getLocalMcpConnectionInfo()),
     getSystemSettings: () => deps.settingsRepository.getSystemSettings(),
     getUpdateStatus: () => updateCheckerService.checkForUpdate(),
     saveSystemSettings: (settings) => {

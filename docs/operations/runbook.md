@@ -338,7 +338,7 @@ Failure Modes & Rollback Notes:
   2. Verify the configuration `HOST` or bind settings to ensure it restricts to `127.0.0.1`.
   3. Review the `ExecutionInvocations` logs to identify any unauthorized commands executed.
   4. If exposing Code UX to the network is required, **front it with a reverse proxy** (e.g., Nginx, Traefik, Caddy) that enforces authentication (such as Basic Auth, mTLS, or an OAuth proxy).
-  5. For the MCP HTTP gateway, ensure `--mcp-http-auth-token` is configured when binding beyond loopback.
+  5. For the MCP HTTP gateway, ensure a bearer token is active when binding beyond loopback. Code UX auto-generates one in `~/.code-ux/security.json`; explicit deployments can still use `--mcp-http-auth-token` or the legacy `--mcp-https-auth-token` flag.
 
 ### Subprocess Execution Limits
 

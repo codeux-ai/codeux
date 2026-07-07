@@ -141,6 +141,19 @@ vi.mock("../../../dashboard/src/lib/api/dashboard-api.js", () => ({
   fetchExternalSettingsHints: vi.fn(),
 }));
 
+vi.mock("../../../dashboard/src/v2/lib/local-mcp-api.js", () => ({
+  fetchLocalMcpSetup: vi.fn(async () => ({
+    enabled: true,
+    url: "http://127.0.0.1:4445/mcp",
+    authToken: "local-token",
+    providers: [
+      { id: "codex", label: "Codex", configPath: "/home/test/.codex/config.toml" },
+    ],
+  })),
+  regenerateLocalMcpToken: vi.fn(),
+  installLocalMcpProvider: vi.fn(),
+}));
+
 const cloneDashboardSettings = () => JSON.parse(JSON.stringify(DEFAULT_DASHBOARD_SETTINGS));
 
 const createDashboardSettings = () => {
@@ -419,9 +432,9 @@ describe("SettingsPage data interactions", () => {
 
     fireEvent.click(screen.getAllByRole("button", { name: "MCP" }).at(-1)!);
 
-    expect(await screen.findByText("MCP connection modes")).toBeInTheDocument();
-    expect(screen.getByText(/built-in MCP server over stdio by default/i)).toBeInTheDocument();
-    expect(screen.getByText(/MCP_HTTP_\* environment variables or --mcp-http\* flags/i)).toBeInTheDocument();
+    expect(await screen.findByText("Local CLI HTTP setup")).toBeInTheDocument();
+    expect(screen.getByText(/HTTPS needs a trusted certificate/i)).toBeInTheDocument();
+    expect(screen.getByText("http://127.0.0.1:4445/mcp")).toBeInTheDocument();
     expect(screen.getByText("Remote Docs")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Manage" }));
