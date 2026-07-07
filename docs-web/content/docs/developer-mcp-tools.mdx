@@ -74,25 +74,27 @@ Every tool requires `runtimeRoles: ["project_manager"]` and is enabled by defaul
 | `manage_preview` | `list_sessions`, `start_session`, `stop_session`, `rebuild_session`, `remove_session`, `get_logs`, `get_url`, `get_script`, `update_script` |
 | `manage_telemetry` | `get_project_stats_snapshot`, `get_project_execution_snapshot`, `list_execution_invocations`, `list_execution_invocation_messages`, `list_sprint_runs`, `list_task_dispatches` |
 
-### Sprint issue imports
-
-`manage_sprints` action `import_issues` accepts `provider` values `github`, `gitlab`, `jira`, `notion`, `asana`, `linear`, `miro`, `lucid`, `figma`, and `mural`.
-
-- GitHub and GitLab require saved effective `git.githubToken` / `git.gitlabToken` settings.
-- Jira requires saved Jira host, email, API token, and usually a default project key.
-- Notion requires `notion.apiToken`; optional `databaseId` narrows page/database imports.
-- Asana requires `asana.apiToken` plus `workspaceId` for workspace search or `providerProjectId` for project task fallback.
-- Linear requires `linear.apiToken`; optional `teamId`, `teamKey`, and `providerProjectId` narrow issue search.
-- Miro requires `miro.apiToken`; `boardId` identifies the board and `itemTypes` can narrow readable item imports.
-- Lucid requires `lucid.apiToken`; `documentId` identifies a Lucidchart/Lucidspark document and `search` can discover documents.
-- Figma/FigJam requires `figma.apiToken` plus `fileKey` or explicit file keys in `externalIds`.
-- Mural requires `mural.apiToken` plus `workspaceId` for listing or `muralId` / the shared `mural.boardId` setting for a specific mural. Mural API support is beta/limited.
-
-Common import fields include `search`, `state`, `status`, `labels`, `assignee`, `issueKeys`, `issueNumbers`, `issueRefs`, `externalIds`, `boardId`, `documentId`, `fileKey`, `workspaceId`, `muralId`, `itemTypes`, `includeConversation`, `limit`, `sprintId`, `attachToSprint`, and `planAfterImport`. Use `externalIds` for explicit Notion page/database ids, Asana task gids, Linear issue ids or identifiers, Miro item ids, Lucid document ids, Figma file keys, and Mural ids.
-
-External imports are read-only: Code UX searches, fetches prompt context, attaches linked-source records, and can plan from imported scope, but it does not close, complete, archive, transition, write comments, or mutate provider items, boards, documents, files, or murals.
-
 For the full per-action payloads and return shapes, see [Management actions](/docs/developer-management-actions).
+
+## `scheduler`
+
+`scheduler` is the restricted agent scheduler surface. It is separate from `manage_scheduler`, which
+remains the broad project-manager scheduler management tool for sprints, quicksprints, chat entries,
+updates, deletion, and due-entry execution.
+
+Allowed actions:
+
+- `list` — requires `projectId`; returns only `agent_scheduler` wakeup/task entries created by the calling agent.
+- `schedule_wakeup` — requires `projectId`, `bodyMarkdown`, and either `scheduledFor`, `delaySeconds`, or `delayMinutes`; optional `title`, `timezone`, `threadId`, and `connectionId`.
+- `schedule_task` — requires `projectId`, `taskId`, and either `scheduledFor`, `delaySeconds`, or `delayMinutes`; optional `title`, `timezone`, and `provider`.
+- `cancel` — requires `entryId`; changes the entry status to `cancelled` only when the entry was created by the calling agent through `scheduler`.
+
+Security model: Code UX stamps restricted scheduler entries with `origin: "agent_scheduler"`,
+`source: "agent_scheduler"`, and `createdByAgentId` from the current MCP agent context. The server
+enforces this metadata on list and cancel, so an agent cannot cancel dashboard-created entries,
+entries created through `manage_scheduler`, or entries created by another agent. The restricted tool
+does not expose `run_due`, arbitrary updates, recurrence editing, sprint or quicksprint scheduling,
+memory remediation, or global scheduler destructive controls.
 
 ## Approval handshake (destructive actions)
 

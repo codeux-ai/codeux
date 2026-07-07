@@ -1,14 +1,16 @@
 # Settings schema reference
 
-This page enumerates every settings field, its type, default, range (if applicable), and the JSON path you would use with `manage_code_ux` → `settings` → `patch_*_setting`.
+This page enumerates every settings field, its type, default, range (if applicable), and the JSON path you would use with `manage_settings` → `patch_*_setting`.
 
-Settings are evaluated in cascade: **Defaults → System → Project → Sprint**. Higher-level fields override lower; unspecified fields inherit.
+Settings are evaluated in cascade: **System → Project → Sprint** (with built-in defaults folded into System). Higher-level fields override lower; unspecified fields inherit. Effective settings API responses include a `sources` object mapping JSON paths to their originating scope (`system`, `project`, or `sprint`).
 
 ## Top-level structure
 
 ```jsonc
 {
   "aiProvider": { /* providers + routing */ },
+  "techstackCatalog": { /* system catalog */ },
+  "techstack": { /* project selection */ },
   "workers":    { /* virtual worker config */ },
   "ciIntelligence": { /* CI gate */ },
   "automationLevel": "FULL" | "SEMI_AUTO" | "ALWAYS_ASK",
@@ -80,6 +82,44 @@ Settings are evaluated in cascade: **Defaults → System → Project → Sprint*
 | `qwen-code` | ❌ | `qwen3-coder-plus` | 0 | HIGH | 0 |
 | `opencode` | ❌ | `anthropic/claude-sonnet-4-5` | 0 | HIGH | 0 |
 | `antigravity` | ❌ | `default` | 0 | HIGH | 0 |
+
+## `techstackCatalog`
+
+System settings own the techstack catalog:
+
+```jsonc
+{
+  "defaultTechstackId": "code-ux-internal",
+  "entries": [
+    {
+      "id": "code-ux-internal",
+      "label": "Code UX Stack",
+      "items": [
+        { "id": "preact", "label": "Preact" },
+        { "id": "tanstack-router", "label": "TanStack Router" },
+        { "id": "gsap", "label": "GSAP" },
+        { "id": "three-js", "label": "Three.js" },
+        { "id": "lucide-icons", "label": "Lucide Icons" }
+      ]
+    }
+  ]
+}
+```
+
+Saved catalogs are normalized on load. Code UX trims ids and labels, drops malformed or duplicate ids, always preserves the built-in `code-ux-internal` entry, and falls back `defaultTechstackId` to `code-ux-internal` when the saved default is missing or invalid.
+
+## `techstack`
+
+Project and sprint settings own the selected techstack:
+
+```jsonc
+{
+  "selectedTechstackId": null,
+  "applicationKind": null // "web" | "desktop" | null
+}
+```
+
+Default project settings intentionally keep `selectedTechstackId` and `applicationKind` as `null`. Existing and imported projects therefore do not automatically inherit the built-in Code UX Stack; a project creation flow must set an explicit override when it wants to apply the catalog default.
 
 ## `cliWorkflow`
 
@@ -182,9 +222,12 @@ Disabling a step is for debugging; in production, leave them all enabled.
 {
   "defaultBranch": "main",
   "featureBranchPrefix": "feature/codeux/",
-  "branchScheme": { /* DEFAULT_SPRINT_BRANCH_SCHEME */ },
+  "sprintBranchScheme": "feature/sprint{sprint_id}-implementation",
+  "sprintKeyPrefix": "SPR",
   "githubMode": "REMOTE" | "LOCAL",
-  "deleteMergedBranches": true
+  "deleteMergedBranches": true,
+  "autoCreatePr": true,
+  "prDescription": { /* task and sprint PR template toggles */ }
 }
 ```
 
@@ -286,21 +329,42 @@ Emergency stop threshold (consecutive task-start failures). Override via env: `J
 
 ```jsonc
 // Set the Codex model to gpt-5.4 system-wide
+// 1. First call (unconfirmed) - returns approvalRequired: true
+{ "domain": "settings", "action": "patch_system_setting",
+  "payload": { "path": "aiProvider.providers.codex.model", "value": "gpt-5.4" } }
+
+// 2. Second call (confirmed) - executes if within 15 minutes and exact same payload
 { "domain": "settings", "action": "patch_system_setting",
   "payload": { "path": "aiProvider.providers.codex.model", "value": "gpt-5.4" },
   "approval": { "confirmed": true } }
 
 // For one project, force WHEN_GREEN auto-merge
+// 1. First call (unconfirmed)
 { "domain": "settings", "action": "patch_project_setting",
   "payload": { "projectId": "proj-1", "path": "ciIntelligence.featurePrAutoMergeMode", "value": "WHEN_GREEN" } }
 
+// 2. Second call (confirmed)
+{ "domain": "settings", "action": "patch_project_setting",
+  "payload": { "projectId": "proj-1", "path": "ciIntelligence.featurePrAutoMergeMode", "value": "WHEN_GREEN" },
+  "approval": { "confirmed": true } }
+
 // For one sprint, route planning to Claude Opus
+// 1. First call (unconfirmed)
 { "domain": "settings", "action": "patch_sprint_setting",
   "payload": {
     "projectId": "proj-1", "sprintId": "spr-3",
     "path": "aiProvider.routing.planning",
     "value": { "providerConfigId": "claude-code", "profile": "GLOBAL" }
   } }
+
+// 2. Second call (confirmed)
+{ "domain": "settings", "action": "patch_sprint_setting",
+  "payload": {
+    "projectId": "proj-1", "sprintId": "spr-3",
+    "path": "aiProvider.routing.planning",
+    "value": { "providerConfigId": "claude-code", "profile": "GLOBAL" }
+  },
+  "approval": { "confirmed": true } }
 ```
 
 ## Validation

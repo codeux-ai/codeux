@@ -1,0 +1,24 @@
+# Database Settings
+
+Manages local SQLite retention and maintenance for runtime activity data.
+
+## What It Controls
+
+Pruning removes old completed activity, retention sets the age window, and vacuum compacts storage on startup.
+
+## Recommended Defaults
+
+Keep pruning and vacuum enabled unless you are preserving local forensic history.
+
+## Risks And Gotchas
+
+Short retention can remove useful troubleshooting detail; disabling pruning can grow the local DB quickly.
+
+## Dashboard Link
+
+Open this subcategory from the dashboard docs route at `/docs/settings-subcategories-database-settings`. The Settings card header links directly to this published subpage.
+
+## Related Docs
+
+- [Configuration and Storage](/docs/settings-configuration-and-storage)
+- [Operations Runbook](../../operations/runbook.md)
