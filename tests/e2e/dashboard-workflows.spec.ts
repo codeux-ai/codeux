@@ -96,7 +96,13 @@ async function createDraftSprintFromUi(
   await composer
     .getByPlaceholder('Describe the outcome, affected systems, and what done looks like when this sprint lands.')
     .fill(goal);
-  await composer.getByRole('button', { name: /^Save Draft\b/ }).first().click();
+  const draftModeButton = composer
+    .locator('button[type="button"]')
+    .filter({ hasText: /^Save Draft/ })
+    .first();
+  await draftModeButton.click();
+  const submitButton = composer.locator('button[type="submit"]').filter({ hasText: 'Save Draft' });
+  await expect(submitButton).toBeVisible();
 
   const [response] = await Promise.all([
     page.waitForResponse((candidate) => (
@@ -104,7 +110,7 @@ async function createDraftSprintFromUi(
       && candidate.url().includes(`/api/projects/${encodeURIComponent(project.id)}/sprints`)
       && candidate.status() === 201
     )),
-    composer.getByRole('button', { name: 'Save Draft', exact: true }).click(),
+    submitButton.click(),
   ]);
 
   const sprint = await response.json() as SprintRecord;
