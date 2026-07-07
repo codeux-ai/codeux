@@ -16,9 +16,11 @@ describe("ChatThreadRuntimeService", () => {
         getThread: vi.fn(),
         updateThread: vi.fn(),
         listMessages: vi.fn().mockReturnValue([]),
+        getMessage: vi.fn(),
         markDashboardMessagesProcessed: vi.fn(),
         markDashboardMessagesFailed: vi.fn(),
         postSystemMessage: vi.fn(),
+        updateMessageMetadata: vi.fn(),
       },
       projectWorkerAssignmentRepository: {
         listAssignmentsForProject: vi.fn().mockReturnValue([]),
@@ -38,6 +40,9 @@ describe("ChatThreadRuntimeService", () => {
       },
       projectManagementRepository: {
         getProject: vi.fn(),
+        getSprint: vi.fn(),
+        listTasks: vi.fn().mockReturnValue([]),
+        updateSprint: vi.fn(),
       },
       providerRunner: {
         runProviderForText: vi.fn(),
@@ -143,6 +148,7 @@ describe("ChatThreadRuntimeService", () => {
             clientRequestId: "quickaction-web-1",
           },
         },
+        planningPromise: new Promise(() => undefined),
       }),
     };
     service.setQuicksprintLauncher(quicksprintLauncher);
@@ -210,6 +216,555 @@ describe("ChatThreadRuntimeService", () => {
       },
     });
     expect(deps.chatManagementActionService.processManagementAction).not.toHaveBeenCalled();
+  });
+
+  it("queues normal chat follow-ups while create-app planning has no tasks yet", async () => {
+    const runtimeState = {
+      createAppQuickaction: {
+        activeSprintId: "sprint-web-1",
+        appKind: "web_app",
+        planningStatus: "running",
+        queuedFollowUps: [],
+        quickactionRequestId: "quickaction-web-1",
+        clientRequestId: "quickaction-web-1",
+        activePlanningRequestId: "quickaction-web-1",
+        progressMessageId: "msg-progress",
+      },
+    };
+    deps.connectionChatRepository.postDashboardMessage.mockReturnValue({
+      id: "msg-follow-up",
+      threadId: "t-app",
+      bodyMarkdown: "Make it offline-first.",
+      deliveryStatus: "pending",
+      createdAt: "2026-07-07T00:01:00.000Z",
+      metadata: null,
+    });
+    deps.connectionChatRepository.getThread.mockReturnValue({
+      id: "t-app",
+      projectId: "p1",
+      connectionId: null,
+      title: "Create a web app",
+      runtimeState,
+    });
+    deps.projectManagementRepository.listTasks.mockReturnValue([]);
+
+    await service.postMessage("p1", { threadId: "t-app", bodyMarkdown: "Make it offline-first." });
+
+    expect(deps.connectionChatRepository.updateThread).toHaveBeenCalledWith("t-app", {
+      runtimeState: expect.objectContaining({
+        createAppQuickaction: expect.objectContaining({
+          activeSprintId: "sprint-web-1",
+          planningStatus: "running",
+          queuedFollowUps: [{
+            messageId: "msg-follow-up",
+            bodyMarkdown: "Make it offline-first.",
+            createdAt: "2026-07-07T00:01:00.000Z",
+          }],
+        }),
+      }),
+    });
+    expect(deps.connectionChatRepository.markDashboardMessagesProcessed).toHaveBeenCalledWith("t-app", {
+      upToMessageId: "msg-follow-up",
+    });
+    expect(deps.connectionChatRepository.postSystemMessage).toHaveBeenCalledWith("p1", expect.objectContaining({
+      threadId: "t-app",
+      bodyMarkdown: "Got it. I'll apply that direction to the app sprint after planning finishes.",
+    }));
+    expect(deps.projectManagementRepository.updateSprint).not.toHaveBeenCalled();
+    expect(deps.chatManagementActionService.processManagementAction).not.toHaveBeenCalled();
+  });
+
+  it("appends queued create-app follow-ups when tasks appear during the queue write", async () => {
+    let tasksExist = false;
+    let runtimeState: any = {
+      createAppQuickaction: {
+        activeSprintId: "sprint-web-1",
+        appKind: "web_app",
+        planningStatus: "running",
+        queuedFollowUps: [],
+        quickactionRequestId: "quickaction-web-1",
+        clientRequestId: "quickaction-web-1",
+        activePlanningRequestId: "quickaction-web-1",
+        progressMessageId: "msg-progress",
+      },
+    };
+    deps.connectionChatRepository.postDashboardMessage.mockReturnValue({
+      id: "msg-follow-up",
+      threadId: "t-app",
+      bodyMarkdown: "Make setup import existing projects.",
+      deliveryStatus: "pending",
+      createdAt: "2026-07-07T00:01:30.000Z",
+      metadata: null,
+    });
+    deps.connectionChatRepository.getThread.mockImplementation(() => ({
+      id: "t-app",
+      projectId: "p1",
+      connectionId: null,
+      title: "Create a web app",
+      runtimeState,
+    }));
+    deps.connectionChatRepository.updateThread.mockImplementation((_threadId: string, input: any) => {
+      runtimeState = input.runtimeState;
+      tasksExist = true;
+      return { id: "t-app", projectId: "p1", title: "Create a web app", runtimeState };
+    });
+    deps.projectManagementRepository.listTasks.mockImplementation(() => (
+      tasksExist ? [{ id: "task-1" }] : []
+    ));
+    deps.projectManagementRepository.getSprint.mockReturnValue({
+      id: "sprint-web-1",
+      projectId: "p1",
+      goal: "Build the app.",
+      originalPrompt: null,
+    });
+
+    await service.postMessage("p1", {
+      threadId: "t-app",
+      bodyMarkdown: "Make setup import existing projects.",
+    });
+
+    expect(deps.projectManagementRepository.updateSprint).toHaveBeenCalledWith("sprint-web-1", {
+      goal: expect.stringContaining("Make setup import existing projects."),
+    });
+    expect(runtimeState.createAppQuickaction.queuedFollowUps).toEqual([]);
+    expect(deps.connectionChatRepository.markDashboardMessagesProcessed).toHaveBeenCalledWith("t-app", {
+      upToMessageId: "msg-follow-up",
+    });
+    expect(deps.connectionChatRepository.postSystemMessage).toHaveBeenCalledWith("p1", expect.objectContaining({
+      threadId: "t-app",
+      bodyMarkdown: "Updated the app sprint direction with your latest note.",
+    }));
+    expect(deps.connectionChatRepository.postSystemMessage).not.toHaveBeenCalledWith("p1", expect.objectContaining({
+      bodyMarkdown: "Got it. I'll apply that direction to the app sprint after planning finishes.",
+    }));
+    expect(deps.chatManagementActionService.processManagementAction).not.toHaveBeenCalled();
+  });
+
+  it("appends normal chat follow-ups immediately after create-app tasks exist", async () => {
+    const runtimeState = {
+      createAppQuickaction: {
+        activeSprintId: "sprint-web-1",
+        appKind: "web_app",
+        planningStatus: "running",
+        queuedFollowUps: [],
+        quickactionRequestId: "quickaction-web-1",
+        clientRequestId: "quickaction-web-1",
+      },
+    };
+    deps.connectionChatRepository.postDashboardMessage.mockReturnValue({
+      id: "msg-follow-up",
+      threadId: "t-app",
+      bodyMarkdown: "Prioritize keyboard navigation.",
+      deliveryStatus: "pending",
+      createdAt: "2026-07-07T00:02:00.000Z",
+      metadata: null,
+    });
+    deps.connectionChatRepository.getThread.mockReturnValue({
+      id: "t-app",
+      projectId: "p1",
+      connectionId: null,
+      title: "Create a web app",
+      runtimeState,
+    });
+    deps.projectManagementRepository.listTasks.mockReturnValue([{ id: "task-1" }]);
+    deps.projectManagementRepository.getSprint.mockReturnValue({
+      id: "sprint-web-1",
+      projectId: "p1",
+      goal: "Build the app.",
+      originalPrompt: null,
+    });
+
+    await service.postMessage("p1", { threadId: "t-app", bodyMarkdown: "Prioritize keyboard navigation." });
+
+    expect(deps.projectManagementRepository.updateSprint).toHaveBeenCalledWith("sprint-web-1", {
+      goal: expect.stringContaining("## Additional direction from chat"),
+    });
+    expect(deps.projectManagementRepository.updateSprint).toHaveBeenCalledWith("sprint-web-1", {
+      goal: expect.stringContaining("Prioritize keyboard navigation."),
+    });
+    expect(deps.connectionChatRepository.markDashboardMessagesProcessed).toHaveBeenCalledWith("t-app", {
+      upToMessageId: "msg-follow-up",
+    });
+    expect(deps.connectionChatRepository.postSystemMessage).toHaveBeenCalledWith("p1", expect.objectContaining({
+      bodyMarkdown: "Updated the app sprint direction with your latest note.",
+    }));
+    expect(deps.chatManagementActionService.processManagementAction).not.toHaveBeenCalled();
+  });
+
+  it("does not mark failed create-app follow-up messages as processed", async () => {
+    const runtimeState = {
+      createAppQuickaction: {
+        activeSprintId: "sprint-web-1",
+        appKind: "web_app",
+        planningStatus: "completed",
+        queuedFollowUps: [],
+        quickactionRequestId: "quickaction-web-1",
+        clientRequestId: "quickaction-web-1",
+      },
+    };
+    deps.connectionChatRepository.postDashboardMessage.mockReturnValue({
+      id: "msg-follow-up",
+      threadId: "t-app",
+      bodyMarkdown: "Add an installable PWA mode.",
+      deliveryStatus: "pending",
+      createdAt: "2026-07-07T00:02:30.000Z",
+      metadata: null,
+    });
+    deps.connectionChatRepository.getThread.mockReturnValue({
+      id: "t-app",
+      projectId: "p1",
+      connectionId: null,
+      title: "Create a web app",
+      runtimeState,
+    });
+    deps.projectManagementRepository.listTasks.mockReturnValue([{ id: "task-1" }]);
+    deps.projectManagementRepository.getSprint.mockReturnValue(null);
+
+    const message = await service.postMessage("p1", {
+      threadId: "t-app",
+      bodyMarkdown: "Add an installable PWA mode.",
+    });
+
+    expect(message.deliveryStatus).toBe("failed");
+    expect(deps.connectionChatRepository.markDashboardMessagesFailed).toHaveBeenCalledWith("t-app", {
+      upToMessageId: "msg-follow-up",
+    });
+    expect(deps.connectionChatRepository.markDashboardMessagesProcessed).not.toHaveBeenCalled();
+    expect(deps.connectionChatRepository.postSystemMessage).toHaveBeenCalledWith("p1", expect.objectContaining({
+      bodyMarkdown: expect.stringContaining("Create-app follow-up failed"),
+    }));
+  });
+
+  it("appends queued create-app follow-ups when detached planning completes and marks the widget completed", async () => {
+    let runtimeState: any = {};
+    let resolvePlanning!: (value: unknown) => void;
+    const planningPromise = new Promise((resolve) => {
+      resolvePlanning = resolve;
+    });
+    const quickactionMetadata = {
+      quickaction: {
+        type: "create_app",
+        kind: "web_app",
+        requestId: "quickaction-web-1",
+        templateId: "qs-create-web-app",
+      },
+    };
+    service.setQuicksprintLauncher({
+      launchDetachedQuicksprint: vi.fn().mockResolvedValue({
+        sprint: { id: "sprint-web-1", name: "QS: Create Web App" },
+        planningRequest: {
+          projectId: "p1",
+          sprintId: "sprint-web-1",
+          templateId: "qs-create-web-app",
+          submitMode: "plan_and_start",
+          clientRequestId: "quickaction-web-1",
+          planOptions: { autoStart: true, replan: false, clientRequestId: "quickaction-web-1" },
+        },
+        planningPromise,
+      }),
+    });
+    deps.connectionChatRepository.postDashboardMessage.mockImplementation((_projectId: string, input: any) => ({
+      id: input.metadata ? "msg-app" : "msg-follow-up",
+      threadId: "t-app",
+      bodyMarkdown: input.bodyMarkdown,
+      deliveryStatus: "pending",
+      createdAt: input.metadata ? "2026-07-07T00:00:00.000Z" : "2026-07-07T00:03:00.000Z",
+      metadata: input.metadata ?? null,
+    }));
+    deps.connectionChatRepository.getThread.mockImplementation(() => ({
+      id: "t-app",
+      projectId: "p1",
+      connectionId: null,
+      title: "Create a web app",
+      runtimeState,
+    }));
+    deps.connectionChatRepository.updateThread.mockImplementation((_threadId: string, input: any) => {
+      runtimeState = input.runtimeState;
+      return { id: "t-app", projectId: "p1", title: "Create a web app", runtimeState };
+    });
+    deps.connectionChatRepository.postSystemMessage.mockImplementation((_projectId: string, input: any) => ({
+      id: input.metadata ? "msg-progress" : "msg-system",
+      threadId: input.threadId,
+      bodyMarkdown: input.bodyMarkdown,
+      metadata: input.metadata ?? null,
+    }));
+    deps.connectionChatRepository.getMessage.mockReturnValue({
+      id: "msg-progress",
+      threadId: "t-app",
+      metadata: {
+        widget_metadata: {
+          type: "app_progress",
+          status: "running",
+          planningStages: [
+            { id: "planning", label: "Planning", status: "running" },
+            { id: "plan", label: "Plan", status: "pending" },
+          ],
+        },
+      },
+    });
+    deps.projectManagementRepository.listTasks.mockReturnValue([]);
+    deps.projectManagementRepository.getSprint.mockReturnValue({
+      id: "sprint-web-1",
+      projectId: "p1",
+      goal: "Build the app.",
+      originalPrompt: null,
+    });
+
+    await service.postMessage("p1", {
+      bodyMarkdown: "Create a web app.",
+      metadata: quickactionMetadata,
+    });
+    await service.postMessage("p1", {
+      threadId: "t-app",
+      bodyMarkdown: "Use local-first storage.",
+    });
+    resolvePlanning({ ok: true });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(deps.projectManagementRepository.updateSprint).toHaveBeenCalledWith("sprint-web-1", {
+      goal: expect.stringContaining("## Additional direction from chat"),
+    });
+    expect(deps.projectManagementRepository.updateSprint).toHaveBeenCalledWith("sprint-web-1", {
+      goal: expect.stringContaining("Use local-first storage."),
+    });
+    expect(runtimeState.createAppQuickaction).toMatchObject({
+      activeSprintId: "sprint-web-1",
+      planningStatus: "completed",
+      queuedFollowUps: [],
+    });
+    expect(runtimeState.createAppQuickaction.activePlanningRequestId).toBeUndefined();
+    expect(deps.connectionChatRepository.updateMessageMetadata).toHaveBeenCalledWith("msg-progress", expect.objectContaining({
+      widget_metadata: expect.objectContaining({
+        status: "completed",
+        planningStages: [
+          { id: "planning", label: "Planning", status: "completed" },
+          { id: "plan", label: "Plan", status: "completed" },
+        ],
+      }),
+    }));
+  });
+
+  it("keeps follow-ups queued during detached planning completion and appends them before clearing state", async () => {
+    let runtimeState: any = {};
+    let followUpCounter = 0;
+    let queuedRaceFollowUp = false;
+    let resolvePlanning!: (value: unknown) => void;
+    const planningPromise = new Promise((resolve) => {
+      resolvePlanning = resolve;
+    });
+    const quickactionMetadata = {
+      quickaction: {
+        type: "create_app",
+        kind: "web_app",
+        requestId: "quickaction-web-1",
+        templateId: "qs-create-web-app",
+      },
+    };
+    service.setQuicksprintLauncher({
+      launchDetachedQuicksprint: vi.fn().mockResolvedValue({
+        sprint: { id: "sprint-web-1", name: "QS: Create Web App" },
+        planningRequest: {
+          projectId: "p1",
+          sprintId: "sprint-web-1",
+          templateId: "qs-create-web-app",
+          submitMode: "plan_and_start",
+          clientRequestId: "quickaction-web-1",
+          planOptions: { autoStart: true, replan: false, clientRequestId: "quickaction-web-1" },
+        },
+        planningPromise,
+      }),
+    });
+    deps.connectionChatRepository.postDashboardMessage.mockImplementation((_projectId: string, input: any) => {
+      const isQuickaction = Boolean(input.metadata);
+      if (!isQuickaction) {
+        followUpCounter += 1;
+      }
+      return {
+        id: isQuickaction ? "msg-app" : `msg-follow-up-${followUpCounter}`,
+        threadId: "t-app",
+        bodyMarkdown: input.bodyMarkdown,
+        deliveryStatus: "pending",
+        createdAt: isQuickaction ? "2026-07-07T00:00:00.000Z" : `2026-07-07T00:0${followUpCounter}:00.000Z`,
+        metadata: input.metadata ?? null,
+      };
+    });
+    deps.connectionChatRepository.getThread.mockImplementation(() => ({
+      id: "t-app",
+      projectId: "p1",
+      connectionId: null,
+      title: "Create a web app",
+      runtimeState,
+    }));
+    deps.connectionChatRepository.updateThread.mockImplementation((_threadId: string, input: any) => {
+      runtimeState = input.runtimeState;
+      return { id: "t-app", projectId: "p1", title: "Create a web app", runtimeState };
+    });
+    deps.connectionChatRepository.postSystemMessage.mockImplementation((_projectId: string, input: any) => ({
+      id: input.metadata ? "msg-progress" : "msg-system",
+      threadId: input.threadId,
+      bodyMarkdown: input.bodyMarkdown,
+      metadata: input.metadata ?? null,
+    }));
+    deps.connectionChatRepository.getMessage.mockReturnValue({
+      id: "msg-progress",
+      threadId: "t-app",
+      metadata: {
+        widget_metadata: {
+          type: "app_progress",
+          status: "running",
+          planningStages: [
+            { id: "planning", label: "Planning", status: "running" },
+            { id: "plan", label: "Plan", status: "pending" },
+          ],
+        },
+      },
+    });
+    deps.projectManagementRepository.listTasks.mockReturnValue([]);
+    deps.projectManagementRepository.getSprint.mockReturnValue({
+      id: "sprint-web-1",
+      projectId: "p1",
+      goal: "Build the app.",
+      originalPrompt: null,
+    });
+    deps.projectManagementRepository.updateSprint.mockImplementation(() => {
+      if (!queuedRaceFollowUp) {
+        queuedRaceFollowUp = true;
+        void service.postMessage("p1", {
+          threadId: "t-app",
+          bodyMarkdown: "Keep the setup wizard skippable.",
+        });
+      }
+    });
+
+    await service.postMessage("p1", {
+      bodyMarkdown: "Create a web app.",
+      metadata: quickactionMetadata,
+    });
+    await service.postMessage("p1", {
+      threadId: "t-app",
+      bodyMarkdown: "Use local-first storage.",
+    });
+    resolvePlanning({ ok: true });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(deps.projectManagementRepository.updateSprint).toHaveBeenCalledWith("sprint-web-1", {
+      goal: expect.stringContaining("Use local-first storage."),
+    });
+    expect(deps.projectManagementRepository.updateSprint).toHaveBeenCalledWith("sprint-web-1", {
+      goal: expect.stringContaining("Keep the setup wizard skippable."),
+    });
+    expect(runtimeState.createAppQuickaction).toMatchObject({
+      activeSprintId: "sprint-web-1",
+      planningStatus: "completed",
+      queuedFollowUps: [],
+    });
+    expect(runtimeState.createAppQuickaction.activePlanningRequestId).toBeUndefined();
+    expect(deps.connectionChatRepository.markDashboardMessagesProcessed).toHaveBeenCalledWith("t-app", {
+      upToMessageId: "msg-follow-up-2",
+    });
+  });
+
+  it("marks create-app planning failed without dropping queued follow-ups", async () => {
+    let runtimeState: any = {};
+    let rejectPlanning!: (error: unknown) => void;
+    const planningPromise = new Promise((_resolve, reject) => {
+      rejectPlanning = reject;
+    });
+    const quickactionMetadata = {
+      quickaction: {
+        type: "create_app",
+        kind: "desktop_app",
+        requestId: "quickaction-desktop-1",
+        templateId: "qs-create-desktop-app",
+      },
+    };
+    service.setQuicksprintLauncher({
+      launchDetachedQuicksprint: vi.fn().mockResolvedValue({
+        sprint: { id: "sprint-desktop-1", name: "QS: Create Desktop App" },
+        planningRequest: {
+          projectId: "p1",
+          sprintId: "sprint-desktop-1",
+          templateId: "qs-create-desktop-app",
+          submitMode: "plan_and_start",
+          clientRequestId: "quickaction-desktop-1",
+          planOptions: { autoStart: true, replan: false, clientRequestId: "quickaction-desktop-1" },
+        },
+        planningPromise,
+      }),
+    });
+    deps.connectionChatRepository.postDashboardMessage.mockImplementation((_projectId: string, input: any) => ({
+      id: input.metadata ? "msg-app" : "msg-follow-up",
+      threadId: "t-app",
+      bodyMarkdown: input.bodyMarkdown,
+      deliveryStatus: "pending",
+      createdAt: input.metadata ? "2026-07-07T00:00:00.000Z" : "2026-07-07T00:04:00.000Z",
+      metadata: input.metadata ?? null,
+    }));
+    deps.connectionChatRepository.getThread.mockImplementation(() => ({
+      id: "t-app",
+      projectId: "p1",
+      connectionId: null,
+      title: "Create a desktop app",
+      runtimeState,
+    }));
+    deps.connectionChatRepository.updateThread.mockImplementation((_threadId: string, input: any) => {
+      runtimeState = input.runtimeState;
+      return { id: "t-app", projectId: "p1", title: "Create a desktop app", runtimeState };
+    });
+    deps.connectionChatRepository.postSystemMessage.mockImplementation((_projectId: string, input: any) => ({
+      id: input.metadata ? "msg-progress" : "msg-system",
+      threadId: input.threadId,
+      bodyMarkdown: input.bodyMarkdown,
+      metadata: input.metadata ?? null,
+    }));
+    deps.connectionChatRepository.getMessage.mockReturnValue({
+      id: "msg-progress",
+      threadId: "t-app",
+      metadata: {
+        widget_metadata: {
+          type: "app_progress",
+          status: "running",
+          planningStages: [
+            { id: "planning", label: "Planning", status: "running" },
+            { id: "plan", label: "Plan", status: "pending" },
+          ],
+        },
+      },
+    });
+    deps.projectManagementRepository.listTasks.mockReturnValue([]);
+
+    await service.postMessage("p1", {
+      bodyMarkdown: "Create a desktop app.",
+      metadata: quickactionMetadata,
+    });
+    await service.postMessage("p1", {
+      threadId: "t-app",
+      bodyMarkdown: "Make tray behavior explicit.",
+    });
+    rejectPlanning(new Error("planner failed"));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(deps.projectManagementRepository.updateSprint).not.toHaveBeenCalled();
+    expect(runtimeState.createAppQuickaction).toMatchObject({
+      activeSprintId: "sprint-desktop-1",
+      planningStatus: "failed",
+      planningError: "planner failed",
+      queuedFollowUps: [{
+        messageId: "msg-follow-up",
+        bodyMarkdown: "Make tray behavior explicit.",
+        createdAt: "2026-07-07T00:04:00.000Z",
+      }],
+    });
+    expect(runtimeState.createAppQuickaction.activePlanningRequestId).toBeUndefined();
+    expect(deps.connectionChatRepository.updateMessageMetadata).toHaveBeenCalledWith("msg-progress", expect.objectContaining({
+      widget_metadata: expect.objectContaining({
+        status: "failed",
+        planningStages: [
+          { id: "planning", label: "Planning", status: "failed" },
+          { id: "plan", label: "Plan", status: "pending" },
+        ],
+      }),
+    }));
   });
 
   it("keeps non-create-app quickaction metadata on the normal chat path", async () => {

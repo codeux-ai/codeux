@@ -71,4 +71,5 @@ export interface DetachedQuicksprintPlanningRequest {
 export interface DetachedQuicksprintLaunchResult {
   sprint: SprintRecord;
   planningRequest: DetachedQuicksprintPlanningRequest;
+  planningPromise: Promise<unknown>;
 }
