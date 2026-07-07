@@ -52,8 +52,9 @@ const pinnedOrder = new Map([
   ["architecture-ci-integration", 550],
   ["architecture-dashboard-architecture", 560],
   ["architecture-data-model", 570],
-  ["architecture-configuration-resolution", 580],
-  ["architecture-security", 590],
+  ["architecture-external-chat-providers", 580],
+  ["architecture-configuration-resolution", 590],
+  ["architecture-security", 600],
 ]);
 
 function parseArgs(argv) {
