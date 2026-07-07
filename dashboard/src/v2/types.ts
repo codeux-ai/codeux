@@ -143,6 +143,16 @@ import type {
   UpdateChatProviderChannelBindingInput,
   UpdateChatProviderConnectionInput,
 } from "../../../src/contracts/chat-provider-types.js";
+import type {
+  ExternalTranscriptionSettings,
+  SpeechProviderMode,
+  SpeechSettings,
+  SpeechTranscriptionError,
+  SpeechTranscriptionErrorCode,
+  SpeechTranscriptionProvider,
+  SpeechTranscriptionRequestMetadata,
+  SpeechTranscriptionResult,
+} from "../../../src/contracts/speech-types.js";
 
 export interface SegmentDefinition {
   label: string;
@@ -365,6 +375,14 @@ export type {
   RedactedCredentialField,
   UpdateChatProviderChannelBindingInput,
   UpdateChatProviderConnectionInput,
+  ExternalTranscriptionSettings,
+  SpeechProviderMode,
+  SpeechSettings,
+  SpeechTranscriptionError,
+  SpeechTranscriptionErrorCode,
+  SpeechTranscriptionProvider,
+  SpeechTranscriptionRequestMetadata,
+  SpeechTranscriptionResult,
 };
 
 export type { SprintReviewSummary };

@@ -20,6 +20,8 @@ import type {
 } from "../../contracts/app-types.js";
 import { EMBEDDING_MODEL_IDS } from "../../contracts/memory-types.js";
 import type { EmbeddingModelId } from "../../contracts/memory-types.js";
+import { SPEECH_PROVIDER_MODES } from "../../contracts/speech-types.js";
+import type { SpeechProviderMode } from "../../contracts/speech-types.js";
 import {
   PROVIDER_IDS,
   THINKING_MODES,
@@ -860,6 +862,54 @@ const validateMemory = (
   if (typeof value.maxProjectMemories !== "number") issues.push({ path: `${path}.maxProjectMemories`, message: "Expected a number" });
 };
 
+const validateSpeech = (
+  value: unknown,
+  path: string,
+  issues: ValidationIssue[],
+) => {
+  if (!isRecord(value)) {
+    issues.push({ path, message: "Expected an object" });
+    return;
+  }
+  if (typeof value.enabled !== "boolean") {
+    issues.push({ path: `${path}.enabled`, message: "Expected a boolean" });
+  }
+  if (typeof value.providerMode !== "string" || !SPEECH_PROVIDER_MODES.includes(value.providerMode as SpeechProviderMode)) {
+    issues.push({ path: `${path}.providerMode`, message: `Expected one of: ${SPEECH_PROVIDER_MODES.join(", ")}` });
+  }
+  if (typeof value.localModelId !== "string" || value.localModelId.trim().length === 0) {
+    issues.push({ path: `${path}.localModelId`, message: "Expected a non-empty string" });
+  }
+  if (
+    typeof value.maxAudioSeconds !== "number"
+    || !Number.isFinite(value.maxAudioSeconds)
+    || value.maxAudioSeconds < 1
+    || value.maxAudioSeconds > 600
+  ) {
+    issues.push({ path: `${path}.maxAudioSeconds`, message: "Expected a finite number between 1 and 600" });
+  }
+  if (!isRecord(value.externalTranscription)) {
+    issues.push({ path: `${path}.externalTranscription`, message: "Expected an object" });
+    return;
+  }
+  if (typeof value.externalTranscription.baseUrl !== "string" || value.externalTranscription.baseUrl.trim().length === 0) {
+    issues.push({ path: `${path}.externalTranscription.baseUrl`, message: "Expected a non-empty string" });
+  }
+  if (typeof value.externalTranscription.apiKey !== "string") {
+    issues.push({ path: `${path}.externalTranscription.apiKey`, message: "Expected a string" });
+  }
+  if (typeof value.externalTranscription.model !== "string" || value.externalTranscription.model.trim().length === 0) {
+    issues.push({ path: `${path}.externalTranscription.model`, message: "Expected a non-empty string" });
+  }
+  if (
+    value.externalTranscription.language !== undefined
+    && value.externalTranscription.language !== null
+    && typeof value.externalTranscription.language !== "string"
+  ) {
+    issues.push({ path: `${path}.externalTranscription.language`, message: "Expected null or a string" });
+  }
+};
+
 export const validateSettingsPayload = (payload: unknown): ValidationResult<DashboardSettings> => {
   const issues: ValidationIssue[] = [];
 
@@ -922,6 +972,7 @@ export const validateSettingsPayload = (payload: unknown): ValidationResult<Dash
     validateCustomMcpServers(payload.customMcpServers, "customMcpServers", issues);
   }
   validateMemory(payload.memory, "memory", issues);
+  validateSpeech(payload.speech, "speech", issues);
 
   if (issues.length > 0) {
     return { success: false, issues };

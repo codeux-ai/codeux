@@ -36,6 +36,7 @@
 - [Agent Routing](./architecture/agent-routing.md)
 - [Agent Knowledge Base](./architecture/agent-knowledge-base.md)
 - [Memory Claims and Evidence](./architecture/memory-claims.md)
+- [Speech Input Architecture](./architecture/speech-input.md)
 - [Quality Assurance Agent](./architecture/quality-assurance-agent.md)
 - [Live Connections Runtime Surface](./architecture/live-connections-runtime-surface.md)
 - [Postgres Migration Plan](./architecture/postgres-migration-plan.md)
