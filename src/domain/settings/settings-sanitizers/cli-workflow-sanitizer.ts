@@ -11,9 +11,15 @@ export const sanitizeCliWorkflow = (
     ? input.cliWorkflow
     : {}) as Partial<DashboardSettings["cliWorkflow"]>;
 
-  // Execution is Docker-only. HOST persists only as a runtime fallback applied when
-  // Docker is unavailable (see virtual-worker-service), never as a user-selectable setting.
-  const normalizedExecutionMode: CliExecutionMode = "DOCKER";
+  // Execution is Docker-only in normal runtime. The Playwright E2E provider shim
+  // deliberately exercises local HOST dispatch without Docker or provider auth.
+  const requestedExecutionMode = readString(
+    cliInput.executionMode,
+    DEFAULT_DASHBOARD_SETTINGS.cliWorkflow.executionMode,
+  ) as CliExecutionMode;
+  const normalizedExecutionMode: CliExecutionMode = process.env.CODEUX_E2E_PROVIDER_CLI_SHIM && requestedExecutionMode === "HOST"
+    ? "HOST"
+    : "DOCKER";
 
   const containerImage = readString(
     cliInput.containerImage,
