@@ -319,6 +319,7 @@ function parseJiraIssueSearchQuery(query: Record<string, unknown>): JiraIssueSea
     search: parseTrimmedQueryString(query.search, "search"),
     issueKey: parseTrimmedQueryString(query.issueKey, "issueKey"),
     status: parseJiraStatus(query.status),
+    inProgressStatusName: parseTrimmedQueryString(query.inProgressStatusName, "inProgressStatusName"),
     statusNames: parseQueryStringList(query.statusNames, "statusNames", 50),
     assignee: parseJiraAssignee(query.assignee),
     assigneeText: parseTrimmedQueryString(query.assigneeText, "assigneeText"),
