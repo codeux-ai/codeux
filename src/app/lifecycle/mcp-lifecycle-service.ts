@@ -13,6 +13,7 @@ import { CODE_UX_DISPLAY_NAME, CODE_UX_VERSION } from "../../shared/config/code-
 import type { RuntimeStartupRecoveryService } from "../../services/runtime-startup-recovery-service.js";
 import { runWithMcpAgentContext } from "../../server/mcp-agent-context.js";
 import { createHttpRateLimiter } from "../../shared/http/rate-limit.js";
+import type { ReadinessProbeStatus } from "../../contracts/app-types.js";
 
 export interface BootMcpTransportDeps {
   server: McpServer;
@@ -31,6 +32,8 @@ export interface BootMcpHttpTransportDeps {
   path: string;
   authToken: string | null;
   getAuthToken?: () => string | null;
+  requireAuth?: boolean;
+  getReady?: () => ReadinessProbeStatus;
   maxSessions?: number;
   sessionTimeoutMs?: number;
   logger: Logger;
@@ -233,8 +236,10 @@ export async function bootMcpHttpTransport(deps: BootMcpHttpTransportDeps): Prom
 
   const readAuthToken = (): string | null => deps.getAuthToken?.() ?? deps.authToken;
 
-  if (!isLoopbackHost(deps.host) && !readAuthToken()?.trim()) {
-    throw new Error("MCP HTTP auth token is required when binding the MCP HTTP server to a non-loopback host.");
+  if ((deps.requireAuth || !isLoopbackHost(deps.host)) && !readAuthToken()?.trim()) {
+    throw new Error(deps.requireAuth
+      ? "MCP HTTP auth token is required for server mode."
+      : "MCP HTTP auth token is required when binding the MCP HTTP server to a non-loopback host.");
   }
 
   const app = express();
@@ -373,6 +378,15 @@ export async function bootMcpHttpTransport(deps: BootMcpHttpTransportDeps): Prom
     res.json({ status: "UP" });
   });
 
+  app.get("/ready", (req, res) => {
+    const ready = deps.getReady ? deps.getReady() : { status: "READY" as const };
+    if (ready.status === "READY" || ready.status === "UP") {
+      res.json(ready);
+    } else {
+      res.status(503).json(ready);
+    }
+  });
+
   const server = await new Promise<HttpServer>((resolve, reject) => {
     const httpServer = createServer(app);
     httpServer.listen(deps.port!, deps.host, () => resolve(httpServer));
@@ -399,6 +413,7 @@ export async function bootMcpHttpTransport(deps: BootMcpHttpTransportDeps): Prom
   }
 
   deps.logger.info(`${CODE_UX_DISPLAY_NAME} MCP HTTP server running`, {
+    mode: deps.requireAuth ? "server" : "standard",
     host: deps.host,
     port: resolvedPort,
     path: deps.path,

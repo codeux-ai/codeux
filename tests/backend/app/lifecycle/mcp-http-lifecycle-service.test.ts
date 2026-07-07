@@ -111,6 +111,75 @@ describe("bootMcpHttpTransport", () => {
     expect(handle).not.toBeNull();
   });
 
+  it("requires auth on loopback when explicit auth is required", async () => {
+    await expect(bootMcpHttpTransport({
+      enabled: true,
+      host: "127.0.0.1",
+      port: 0,
+      path: "/mcp",
+      authToken: null,
+      requireAuth: true,
+      logger: createLogger(),
+      createServer: createTestServer,
+      recoveryService: { recover: async () => ({ resumedSprintRunIds: [] }) } as any,
+      runStartupRecovery: false,
+    })).rejects.toThrow("MCP HTTP auth token is required for server mode");
+  });
+
+  it("serves headless health and readiness probes from the MCP HTTP transport", async () => {
+    const handle = await bootMcpHttpTransport({
+      enabled: true,
+      host: "127.0.0.1",
+      port: 0,
+      path: "/mcp",
+      authToken: "secret-token",
+      requireAuth: true,
+      getReady: () => ({
+        status: "READY",
+        components: {
+          settingsDb: "UP",
+          dashboardBind: "UP",
+          mcpService: "UP",
+        },
+      }),
+      logger: createLogger(),
+      createServer: createTestServer,
+      recoveryService: { recover: async () => ({ resumedSprintRunIds: [] }) } as any,
+      runStartupRecovery: false,
+    });
+    handles.push(handle!);
+
+    const health = await fetch(`http://127.0.0.1:${handle!.port}/health`);
+    const ready = await fetch(`http://127.0.0.1:${handle!.port}/ready`);
+
+    expect(health.status).toBe(200);
+    await expect(health.json()).resolves.toEqual({ status: "UP" });
+    expect(ready.status).toBe(200);
+    await expect(ready.json()).resolves.toMatchObject({ status: "READY" });
+  });
+
+  it("returns 503 when MCP HTTP readiness callback reports not ready", async () => {
+    const handle = await bootMcpHttpTransport({
+      enabled: true,
+      host: "127.0.0.1",
+      port: 0,
+      path: "/mcp",
+      authToken: "secret-token",
+      requireAuth: true,
+      getReady: () => ({ status: "NOT_READY" }),
+      logger: createLogger(),
+      createServer: createTestServer,
+      recoveryService: { recover: async () => ({ resumedSprintRunIds: [] }) } as any,
+      runStartupRecovery: false,
+    });
+    handles.push(handle!);
+
+    const ready = await fetch(`http://127.0.0.1:${handle!.port}/ready`);
+
+    expect(ready.status).toBe(503);
+    await expect(ready.json()).resolves.toEqual({ status: "NOT_READY" });
+  });
+
   it("can bind without awaiting startup recovery", async () => {
     const recover = vi.fn().mockResolvedValue({ resumedSprintRunIds: [] });
     const handle = await bootMcpHttpTransport({

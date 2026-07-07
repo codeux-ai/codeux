@@ -11,7 +11,7 @@ Startup sequence:
 3. `src/server/code-ux-server.ts` constructs repositories/services/handlers/orchestrator.
 4. `src/server/code-ux-server.ts` registers MCP request handlers.
 5. `src/server/code-ux-server.ts` loads settings and prunes disconnected MCP connection rows.
-6. `src/server/code-ux-server.ts` starts dashboard server.
+6. `src/server/code-ux-server.ts` starts the dashboard server unless headless or server mode disables it.
    - Dashboard API routes (such as project, sprint, task, conversation, and planning endpoints) are broken out into modular route files for maintainability.
    - Route wrappers and body request parsers are maintained as separate server-layer boundaries.
 7. `src/server/code-ux-server.ts` connects MCP stdio transport only when stdin is an MCP pipe/socket or `CODE_UX_ENABLE_MCP_STDIO=1` is set. TTY stdin and daemon-style character-device stdin such as `/dev/null` leave stdio disabled so the dashboard/backend stays alive without an attached client.
@@ -35,6 +35,12 @@ Code UX exposes these MCP runtime roles:
 - `worker-host`: A headless execution role used by the local worker client.
 
 The legacy `worker_gateway` and `code-ux-worker` roles have been removed.
+
+Startup mode is separate from runtime role:
+
+- Dashboard mode is the default. It binds the dashboard plus the MCP HTTP gateway.
+- Headless mode (`--headless` or `--no-dashboard`) skips the dashboard while preserving the existing local-development MCP behavior, including unauthenticated loopback when the gateway is explicitly started without a token.
+- Server mode (`--server-mode` or `CODE_UX_SERVER_MODE=true`) is the explicit remote MCP startup contract. It skips dashboard, dashboard realtime, terminal websocket, and static route registration; starts MCP HTTP by default; and requires a non-empty explicit bearer token from `MCP_HTTPS_AUTH_TOKEN`, `MCP_HTTP_AUTH_TOKEN`, `--mcp-https-auth-token`, or `--mcp-http-auth-token`, even on loopback. The MCP HTTP listener serves `/health` and `/ready` without the dashboard server.
 
 ## MCP Request Handlers
 

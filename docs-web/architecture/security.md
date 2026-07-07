@@ -39,6 +39,7 @@ Two listeners:
 
 - Loopback-only by default.
 - Bearer token via `--mcp-https-auth-token` (or `MCP_HTTPS_AUTH_TOKEN`), falling back to an auto-generated user token in `~/.code-ux/security.json`.
+- Server mode (`--server-mode` or `CODE_UX_SERVER_MODE=true`) requires an explicit non-empty bearer token even on loopback and does not bind dashboard routes or websockets.
 - Code UX normal startup always supplies a token; unauthenticated requests are rejected with HTTP 401 + JSON-RPC error `-32001`.
 - Does not perform TLS itself — front with a reverse proxy (nginx, Caddy, Traefik) for HTTPS in production.
 
