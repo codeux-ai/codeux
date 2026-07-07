@@ -213,6 +213,16 @@ branches — only branches fully contained in the default branch are removed.
 }
 ```
 
+Cluster sync is client-side and uses the configured remote server's MCP Streamable HTTP endpoint. The local runtime sends `Authorization: Bearer [REDACTED]`, lists remote tools, and mutates settings only through `manage_settings`; there is no separate unauthenticated HTTP settings API.
+
+Sync follows the normal `manage_settings` approval contract. An unconfirmed sync records approval-required responses for the exact remote `patch_system_setting` payloads. A confirmed sync retries those same payloads with `approval.confirmed: true`.
+
+Policy flags bound the payload:
+
+- `systemSettings`: syncs `runtime`, `defaults`, `mcpTools`, `customMcpServers`, and `modelPricing`; inherited Git/Jira tokens in defaults are blanked.
+- `providerSettings`: syncs `integrations.providers`; local auth paths, mounted auth flags, login timestamps, and token file contents are not uploaded by the initial client-side sync flow.
+- `localAuthArtifacts`: reserved for a future artifact-aware transfer flow; the current service does not read or upload local auth files.
+
 Default: `{ "connections": [] }`.
 
 Cluster connections are system-scoped only. The sanitizer trims ids, display names, and token references; accepts only valid `http`/`https` URLs; removes URL fragments; deduplicates by id; drops blank or invalid entries; and defaults all sync policy flags to `false`. `bearerTokenRef` is a storage reference, not a bearer token value, and provider login file contents must not be stored in this object.

@@ -80,7 +80,7 @@ A field unspecified at higher scopes inherits from lower scopes. The merge is **
 
 System settings on a fresh install are the merge of these defaults plus any external hints applied by the user during onboarding.
 
-System-scoped cluster settings live under `cluster.connections` and default to an empty array. Each connection stores a stable id, display name, normalized `http`/`https` URL, enabled flag, optional bearer-token storage reference, optional last-sync metadata, and explicit synchronization policy flags for system settings, provider settings, and local auth artifacts. Cluster connections are never project/sprint overrides, and the settings tree stores token references only, not raw bearer tokens or provider login file contents.
+System-scoped cluster settings live under `cluster.connections` and default to an empty array. Each connection stores a stable id, display name, normalized `http`/`https` URL, enabled flag, optional bearer-token storage reference, optional last-sync metadata, and explicit synchronization policy flags for system settings, provider settings, and local auth artifacts. Cluster connections are never project/sprint overrides, and the settings tree stores token references only, not raw bearer tokens or provider login file contents. The local cluster sync service connects to the remote Streamable HTTP MCP endpoint with bearer auth and applies settings through the existing `manage_settings` approval flow, so remote synchronization shares the same confirmation semantics as local MCP settings mutations.
 
 ### Live reload
 
