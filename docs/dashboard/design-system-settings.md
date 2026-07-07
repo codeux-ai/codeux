@@ -42,6 +42,7 @@ This document defines the visual patterns and rules for the Settings workspace. 
     *   Integrations matches provider credential terms, API keys, authentication, local auth-copy mounts, dashboard login, GitHub/GitLab/Jira style git-host connections, repository, pull request, issue, token language, and Code UX Agent-specific clarification/CI autofix controls.
     *   Sprint & Git matches routing terms for branch naming, default/feature branches, merge gates, CI/autofix, execution runtime, Docker cleanup, QA, and quality assurance.
     *   Browser Preview, Memory, Agents, and MCP must remain searchable through their user-facing terms: preview/container/port/proxy, memory/embedding/claims/remediation, prompt/template/instruction/markdown authoring, and MCP server/tool/stdio/http/SSE/built-in tool access.
+    *   Techstacks must remain searchable through catalog and project-assignment terms: techstack, stack, Preact, TanStack Router, GSAP, Three.js, Lucide, web app, desktop app, and package scan.
     *   Agents search terms also include persistent skills, skill storage, storage attachment, self-reflection, criteria, planning rating, and QA rating so users can find disabled-by-default configuration before enabling it.
     *   The Smart Find status text uses `role="status"` with `aria-live="polite"` and includes match previews so assistive technology users receive the same filtered-category context as sighted users.
 
