@@ -14,6 +14,8 @@ The dashboard uses a **dock-based navigation** by default:
 
 A choice of theme (Light / Dark / System) is in the top bar; navigation mode override is in **Settings → Appearance**.
 
+Primary navigation also follows the persisted experience mode in **Settings → Appearance**. Easy shows Chat, Browser, Stats, Settings, and external Docs; Standard keeps common workspace pages while hiding Schedule, Memory, Knowledge, Files, and Live; Expert shows the full navigation. Hidden pages remain registered routes, and Browser still follows the project sprint-preview visibility settings.
+
 When a project is active, the top bar also shows its techstack. Projects imported before classification can remain unassigned; in that state the selector displays **None**. Choosing a stack from the dropdown saves only the project techstack selection.
 
 The background is an animated Three.js scene ("Deep Ocean") that lazy-loads after the main UI is interactive, so it never blocks first paint.

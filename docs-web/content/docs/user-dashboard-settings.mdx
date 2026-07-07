@@ -239,11 +239,11 @@ Related docs:
 
 Controls the dashboard shell layout, experience mode, theme, motion preference, and desktop zoom when available.
 
-**What it controls:** Experience mode stores one persisted Easy, Standard, or Expert dashboard preference. Easy shows only user-essential Settings categories; Standard keeps common project and productivity settings while hiding specialist controls such as MCP, model pricing, guardrails, Docker/runtime internals, database maintenance, and worker concurrency limits; Expert shows the full settings surface. Navigation mode switches dock/sidebar, theme sets color mode, reduced motion limits animation, and zoom scales Electron windows.
+**What it controls:** Experience mode stores one persisted Easy, Standard, or Expert dashboard preference. Easy shows only user-essential Settings categories such as General, Appearance, Integrations, and Danger Zone, and it keeps primary dock/sidebar navigation small by showing Chat, Browser, Stats, Settings/Config, and Docs. Standard keeps common project and productivity settings while hiding specialist controls such as MCP, model pricing, guardrails, Docker/runtime internals, database maintenance, worker concurrency limits, and specialized navigation like Memory, Knowledge, Files, Schedule, and Live; Expert shows the full settings surface and primary navigation. Navigation mode switches dock/sidebar, theme sets color mode, reduced motion limits animation, and zoom scales Electron windows.
 
 **Recommended defaults:** New installs default to Expert experience mode. Use Easy for day-to-day operation, Standard for routine project administration, and Expert when editing low-level runtime, MCP, pricing, guardrail, or worker controls. Use System theme and Auto reduced motion unless you need a fixed accessibility preference.
 
-**Risks and gotchas:** Switching out of Expert mode only hides advanced controls from the current UI; it does not change provider routing, backend settings resolution, or saved hidden values. High zoom or dense sidebars can reduce visible workspace on small screens.
+**Risks and gotchas:** Switching out of Expert mode only hides advanced controls and primary navigation links from the current UI; it does not change provider routing, backend settings resolution, or saved hidden values. Browser navigation still depends on sprint preview and in-app browser visibility settings. High zoom or dense sidebars can reduce visible workspace on small screens.
 
 Related docs:
 
