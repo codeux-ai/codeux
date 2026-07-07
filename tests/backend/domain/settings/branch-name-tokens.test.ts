@@ -218,6 +218,8 @@ function makeBasePayload() {
       containerQwenCodeAuthPath: "",
       containerOpenCodeAuthPath: "",
       containerAntigravityAuthPath: "",
+      maxPlanningJsonRetries: 3,
+      maxQuotaRetriesWithoutTimer: 3,
     },
     sprintPreview: {
       enabled: false,
