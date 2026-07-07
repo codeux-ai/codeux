@@ -71,7 +71,7 @@ interface ReferenceContext {
   sprintName?: string | null;
 }
 
-const DASHBOARD_LINK_BASE = "http://codeux.local";
+const DASHBOARD_LINK_FALLBACK_ORIGIN = "http://codeux.local";
 const DEFAULT_SPRINT_KEY_PREFIX = "SPR";
 const COMPLETED_TASK_STATUSES = new Set<Task["status"]>(["completed"]);
 
@@ -471,11 +471,25 @@ function extractDashboardLinkCandidates(markdown: string): string[] {
 function parseDashboardUrl(href: string): URL | null {
   try {
     const isOriginQualified = /^[A-Za-z][A-Za-z\d+.-]*:\/\//.test(href) || href.startsWith("//");
-    const url = new URL(href, DASHBOARD_LINK_BASE);
-    if (isOriginQualified && url.origin !== DASHBOARD_LINK_BASE) {
+    const dashboardOrigin = getDashboardLinkOrigin();
+    const url = new URL(href, dashboardOrigin);
+    if (isOriginQualified && url.origin !== dashboardOrigin) {
       return null;
     }
     return url.pathname === "/sprints" || url.pathname === "/tasks" ? url : null;
+  } catch {
+    return null;
+  }
+}
+
+function getDashboardLinkOrigin(): string {
+  const runtimeOrigin = typeof globalThis.location?.origin === "string" ? globalThis.location.origin : "";
+  return normalizeOrigin(runtimeOrigin) ?? DASHBOARD_LINK_FALLBACK_ORIGIN;
+}
+
+function normalizeOrigin(origin: string): string | null {
+  try {
+    return new URL(origin).origin;
   } catch {
     return null;
   }

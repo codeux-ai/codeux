@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { resolveChatLiveEntities } from "../../../dashboard/src/v2/lib/chat-live-entities.js";
 import type {
   ChatMessageRecord,
@@ -54,6 +54,23 @@ const createTask = (overrides: Partial<Task> = {}): Task => ({
   mergeIndicator: null,
   ...overrides,
 });
+
+const originalLocationDescriptor = Object.getOwnPropertyDescriptor(globalThis, "location");
+
+afterEach(() => {
+  if (originalLocationDescriptor) {
+    Object.defineProperty(globalThis, "location", originalLocationDescriptor);
+  } else {
+    Reflect.deleteProperty(globalThis, "location");
+  }
+});
+
+function setDashboardOrigin(origin: string): void {
+  Object.defineProperty(globalThis, "location", {
+    configurable: true,
+    value: new URL(`${origin}/chat`),
+  });
+}
 
 const createInvocation = (overrides: Partial<ExecutionInvocationRecord> = {}): ExecutionInvocationRecord => ({
   id: "invocation-1",
@@ -197,10 +214,18 @@ describe("resolveChatLiveEntities", () => {
     expect(result.map((entity) => `${entity.kind}:${entity.recordId}`)).toEqual(["sprint:sprint-4", "task:task-4"]);
   });
 
-  it("ignores external absolute dashboard-shaped links while preserving relative dashboard links", () => {
+  it("resolves same-origin absolute dashboard links while rejecting external absolute links", () => {
+    setDashboardOrigin("http://localhost:4444");
+
     const sprints = [createSprint({ id: "sprint-8", number: 8, name: "Link Origin Sprint" })];
     const tasks = [createTask({ recordId: "task-8", id: "T08", sprintId: "sprint-8", title: "Link origin task" })];
 
+    const sameOriginResult = resolveChatLiveEntities({
+      sprints,
+      tasks,
+      sprintKeyPrefix: "SPR",
+      bodyMarkdown: "Same-origin link http://localhost:4444/tasks?sprintId=sprint-8&taskId=task-8 should resolve.",
+    });
     const externalResult = resolveChatLiveEntities({
       sprints,
       tasks,
@@ -214,6 +239,7 @@ describe("resolveChatLiveEntities", () => {
       bodyMarkdown: "Relative link /tasks?sprintId=sprint-8&taskId=task-8 should resolve.",
     });
 
+    expect(sameOriginResult.map((entity) => `${entity.kind}:${entity.recordId}`)).toEqual(["task:task-8"]);
     expect(externalResult).toEqual([]);
     expect(relativeResult.map((entity) => `${entity.kind}:${entity.recordId}`)).toEqual(["task:task-8"]);
   });
