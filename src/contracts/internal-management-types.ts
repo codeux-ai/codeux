@@ -1,4 +1,5 @@
 import type { ProviderId } from "./app-types.js";
+import type { AgentMcpAccessConfig } from "./agent-preset-types.js";
 import type {
   ChatProviderBridgeMode,
   ChatProviderConnectionStatus,
@@ -9,6 +10,7 @@ import type {
   ChatProviderRoutingHints,
   ExternalChannelMetadata,
 } from "./chat-provider-types.js";
+import type { NodeFlowGraph, NodeFlowJsonObject, NodeWidgetSchema } from "./node-flow-types.js";
 import type { CreateProjectInput } from "./project-management-types.js";
 
 export interface ManagementApproval {
@@ -164,11 +166,31 @@ export interface ManageAgentsArgs {
   projectId?: string;
   presetId?: string;
   name?: string;
+  description?: string;
   instructionMarkdown?: string;
   labels?: string[];
   avatarConfig?: Record<string, unknown>;
+  providerConfigId?: string | null;
+  model?: string | null;
+  memoryConfig?: Record<string, unknown>;
+  mcpAccess?: AgentMcpAccessConfig;
   memoryTemplateOverrideEnabled?: boolean;
   memoryTemplateMarkdown?: string;
+  approval?: ManagementApproval;
+}
+
+export interface ManageNodeFlowsArgs {
+  action: "list" | "get" | "create" | "update" | "delete" | "validate" | "run" | "list_runs" | "get_run" | "attach_to_agent" | "detach_from_agent";
+  projectId?: string;
+  flowId?: string;
+  runId?: string;
+  name?: string;
+  description?: string;
+  graph?: NodeFlowGraph;
+  widgets?: NodeWidgetSchema | Record<string, NodeWidgetSchema>;
+  input?: NodeFlowJsonObject;
+  agentPresetId?: string;
+  skillAlias?: string;
   approval?: ManagementApproval;
 }
 

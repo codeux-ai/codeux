@@ -77,6 +77,7 @@ describe("ManagementToolHandler", () => {
       },
       agentPresetSyncService: {
         syncPresets: vi.fn(),
+        updateAgentPreset: vi.fn(),
       },
       memoryService: {
         searchMemory: vi.fn(),
@@ -89,6 +90,9 @@ describe("ManagementToolHandler", () => {
       },
       skillService: {
         listStorages: vi.fn(),
+      },
+      nodeFlowService: {
+        list: vi.fn(),
       },
       planningAgentService: {
         planSprint: vi.fn(),
@@ -395,6 +399,89 @@ describe("ManagementToolHandler", () => {
 
     expect(deps.schedulerService.listProjectSchedule).toHaveBeenCalledWith("p1", "from", "to");
     expect(parsed.result).toEqual({ entries: [], occurrences: [], from: "from", to: "to" });
+  });
+
+  it("routes manage_node_flows through the node-flow action handler", async () => {
+    deps.nodeFlowService.list.mockReturnValue({ flows: [] });
+
+    const response = await handler.handleManageNodeFlows({ action: "list", projectId: "p1" });
+    const parsed = JSON.parse(response.content[0].text);
+
+    expect(deps.nodeFlowService.list).toHaveBeenCalledWith("p1");
+    expect(parsed.result).toEqual({ flows: [] });
+  });
+
+  it("updates agent MCP access without replacing unrelated agent fields", async () => {
+    deps.agentPresetSyncService.updateAgentPreset.mockResolvedValue({
+      id: "agent-1",
+      projectId: "p1",
+      name: "Specialist",
+      labels: ["review"],
+      avatarConfig: { body: "bot" },
+      providerConfigId: "codex-primary",
+      model: "gpt-5",
+      memoryConfig: { tier: "both", categories: [], minStrength: 0, minStrengthPerCategory: {}, maxShortTerm: 0, maxLongTerm: 0 },
+      mcpAccess: {
+        codeUxEnabled: true,
+        codeUxToolToggles: [{ name: "manage_node_flows", enabled: true, isInternal: true }],
+        linkedServerIds: ["playwright"],
+      },
+    });
+
+    const response = await handler.handleManageAgents({
+      action: "update",
+      projectId: "p1",
+      presetId: "agent-1",
+      mcpAccess: {
+        codeUxEnabled: true,
+        codeUxToolToggles: [{ name: "manage_node_flows", enabled: true, isInternal: true }],
+        linkedServerIds: ["playwright"],
+      },
+    });
+    const parsed = JSON.parse(response.content[0].text);
+
+    expect(deps.agentPresetSyncService.updateAgentPreset).toHaveBeenCalledWith("agent-1", {
+      mcpAccess: {
+        codeUxEnabled: true,
+        codeUxToolToggles: [{ name: "manage_node_flows", enabled: true, isInternal: true }],
+        linkedServerIds: ["playwright"],
+      },
+    });
+    expect(parsed.result.agent.mcpAccess.codeUxToolToggles).toEqual([
+      { name: "manage_node_flows", enabled: true, isInternal: true },
+    ]);
+    expect(parsed.result.agent.labels).toEqual(["review"]);
+    expect(parsed.result.agent.providerConfigId).toBe("codex-primary");
+    expect(parsed.result.agent.model).toBe("gpt-5");
+  });
+
+  it("exposes the manage_node_flows MCP schema", () => {
+    const tool = TOOL_DEFINITIONS.find((definition) => definition.name === "manage_node_flows");
+    expect(tool).toBeDefined();
+
+    const schema = tool?.inputSchema as { properties: Record<string, JsonSchemaProperty> } | undefined;
+    const properties = schema?.properties ?? {};
+
+    expect(properties.action?.enum).toEqual([
+      "list",
+      "get",
+      "create",
+      "update",
+      "delete",
+      "validate",
+      "run",
+      "list_runs",
+      "get_run",
+      "attach_to_agent",
+      "detach_from_agent",
+    ]);
+    expect(properties.graph).toMatchObject({ type: "object" });
+    expect(properties.widgets).toMatchObject({ type: "object" });
+    expect(properties.input).toMatchObject({ type: "object" });
+    expect(properties.agentPresetId).toMatchObject({ type: "string" });
+    expect(properties.skillAlias).toMatchObject({ type: "string" });
+    expect(tool?.description).toContain("Code UX-adapted flows");
+    expect(tool?.description).toContain("dynamic widget schemas");
   });
 
   it("exposes the expanded import_issues MCP schema on manage_sprints", () => {

@@ -1,7 +1,7 @@
 # Management actions
 
 Code UX exposes **one MCP tool per management domain** — `manage_projects`, `manage_sprints`,
-`manage_tasks`, `manage_quicksprints`, `manage_scheduler`, `manage_agents`, `manage_memory`,
+`manage_tasks`, `manage_quicksprints`, `manage_scheduler`, `manage_agents`, `manage_node_flows`, `manage_memory`,
 `manage_settings`, `manage_preview`, `manage_chat_providers`, and `manage_telemetry` — each with a set of
 **actions**. This page is the complete matrix. (See [MCP tools](/docs/developer-mcp-tools) for the tool list and
 schemas.)

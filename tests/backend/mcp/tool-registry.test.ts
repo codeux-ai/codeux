@@ -13,6 +13,7 @@ const createRouterHarness = (resolveAgentMcpToolAccess?: (agentId: string) => Ag
   const managementToolHandler = {
     handleManageProjects: vi.fn(async () => ({ content: [{ type: "text", text: "ok" }] })),
     handleManageChatProviders: vi.fn(async () => ({ content: [{ type: "text", text: "chat-providers" }] })),
+    handleManageNodeFlows: vi.fn(async () => ({ content: [{ type: "text", text: "node-flows" }] })),
     handleScheduler: vi.fn(async () => ({ content: [{ type: "text", text: "scheduled" }] })),
   };
 
@@ -63,6 +64,14 @@ const callManageChatProviders = async (handlers: RouterHandlers): Promise<unknow
     params: {
       name: "manage_chat_providers",
       arguments: { action: "list_provider_definitions" },
+    },
+  });
+
+const callManageNodeFlows = async (handlers: RouterHandlers): Promise<unknown> =>
+  handlers.callTool({
+    params: {
+      name: "manage_node_flows",
+      arguments: { action: "list", projectId: "project-1" },
     },
   });
 
@@ -169,6 +178,27 @@ describe("ToolRegistry", () => {
       providerKind: "slack",
     });
   });
+
+  it("can register and dispatch manage_node_flows", async () => {
+    const registry = new ToolRegistry<McpToolArgsByName, string>();
+    const handler = vi.fn(async (args: McpToolArgsByName["manage_node_flows"]) => `manage_node_flows:${args.action}`);
+
+    registry.register("manage_node_flows", handler);
+
+    const result = await registry.dispatch("manage_node_flows", {
+      action: "run",
+      projectId: "proj-1",
+      flowId: "flow-1",
+      input: { prompt: "Ship" },
+    });
+    expect(result).toBe("manage_node_flows:run");
+    expect(handler).toHaveBeenCalledWith({
+      action: "run",
+      projectId: "proj-1",
+      flowId: "flow-1",
+      input: { prompt: "Ship" },
+    });
+  });
 });
 
 describe("MCP router per-agent Code UX access", () => {
@@ -228,6 +258,17 @@ describe("MCP router per-agent Code UX access", () => {
     });
 
     expect(managementToolHandler.handleManageChatProviders).toHaveBeenCalledTimes(1);
+  });
+
+  it("lists and dispatches manage_node_flows when enabled by tool availability", async () => {
+    const { handlers, managementToolHandler } = createRouterHarness(() => null);
+
+    await runWithMcpAgentContext(null, async () => {
+      await expect(listToolNames(handlers)).resolves.toContain("manage_node_flows");
+      await expect(callManageNodeFlows(handlers)).resolves.toEqual({ content: [{ type: "text", text: "node-flows" }] });
+    });
+
+    expect(managementToolHandler.handleManageNodeFlows).toHaveBeenCalledTimes(1);
   });
 
   it("rejects scheduler calls when the tool is disabled", async () => {
@@ -297,6 +338,9 @@ const compileTimeTypeChecks = (): void => {
 
   // @ts-expect-error manage_chat_providers requires a valid action value
   registry.dispatch("manage_chat_providers", { action: "route_inbound_message" });
+
+  // @ts-expect-error manage_node_flows requires a valid action value
+  registry.dispatch("manage_node_flows", { action: "execute" });
 };
 
 void compileTimeTypeChecks;

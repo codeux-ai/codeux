@@ -248,14 +248,14 @@ export const docsRegistry: Record<DocsSlug, DocsRegistryEntry> = {
     path: '/docs/developer-mcp-tools',
     section: 'Developer Reference',
     title: "MCP tools",
-    description: "Code UX is also an MCP server. When connected, it advertises a set of management tools that an MCP client (or another agent) can call to drive projects, sprints, tasks, agents, memory, persistent skills, settings, pre...",
+    description: "Code UX is also an MCP server. When connected, it advertises a set of management tools that an MCP client (or another agent) can call to drive projects, sprints, tasks, agents, node flows, memory, persistent skills...",
   },
   'developer-management-actions': {
     id: 'developer-management-actions',
     path: '/docs/developer-management-actions',
     section: 'Developer Reference',
     title: "Management actions",
-    description: "Code UX exposes one MCP tool per management domain — manage_projects, manage_sprints, manage_tasks, manage_quicksprints, manage_scheduler, manage_agents, manage_memory, manage_settings, manage_preview, manage_chat_pro...",
+    description: "Code UX exposes one MCP tool per management domain — manage_projects, manage_sprints, manage_tasks, manage_quicksprints, manage_scheduler, manage_agents, manage_node_flows, manage_memory, manage_settings, manage_preview...",
   },
   'developer-http-api': {
     id: 'developer-http-api',

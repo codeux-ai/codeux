@@ -16,6 +16,7 @@ These cover:
 - `manage_scheduler`
 - `scheduler_code_ux`
 - `manage_agents`
+- `manage_node_flows`
 - `manage_memory`
 - `manage_skills`
 - `search_knowledge`
@@ -53,6 +54,7 @@ These cover:
 - `manage_scheduler`
 - `scheduler_code_ux`
 - `manage_agents`
+- `manage_node_flows`
 - `manage_memory`
 - `manage_skills`
 - `search_knowledge`
@@ -257,7 +259,40 @@ For payload normalization in management tools, Code UX centralizes parsing behav
 - **Validation Errors**: Parser failures throw `ManagementValidationError`, which the management tool handler serializes as the standardized `result.status: "error"` envelope with `errorType: "validation"` and `isError: true`.
 
 
-The dedicated management tools (`manage_sprints`, `manage_tasks`, `manage_quicksprints`, `manage_scheduler`, `manage_settings`) share the same action handlers.
+The dedicated management tools (`manage_sprints`, `manage_tasks`, `manage_quicksprints`, `manage_scheduler`, `manage_node_flows`, `manage_settings`) share the same action handlers.
+
+## Node Flow Tools
+
+`manage_node_flows` exposes project node workflows through the project-manager MCP surface. It supports `list`, `get`, `create`, `update`, `delete`, `validate`, `run`, `list_runs`, `get_run`, `attach_to_agent`, and `detach_from_agent`.
+
+Node-flow management always delegates graph validation and persistence to `NodeFlowService`; `run` delegates execution through the configured node-flow runtime service. Create and update calls reject malformed graph specs before repository writes. `delete` uses the standard stateful approval handshake.
+
+Agents should build Code UX-adapted flows from structured graph specs instead of cloning n8n workflows one-to-one. Graphs should include widget schemas for editable inputs and node fields; MCP callers can provide `widgets` as a graph-level `{ fields: [...] }` schema or as node-id keys mapped to each node's widget schema. Flow and run responses mask secret-shaped graph data, inputs, and outputs before returning them through MCP.
+
+Attach a flow as an agent skill:
+
+```json
+{
+  "action": "attach_to_agent",
+  "flowId": "flow-123",
+  "agentPresetId": "agent-123",
+  "skillAlias": "Review automation",
+  "description": "Runs the reusable review node flow."
+}
+```
+
+Run a flow:
+
+```json
+{
+  "action": "run",
+  "projectId": "project-123",
+  "flowId": "flow-123",
+  "input": {
+    "prompt": "Review the current diff"
+  }
+}
+```
 
 ### `manage_skills` persistent skill actions
 
