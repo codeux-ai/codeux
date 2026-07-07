@@ -161,7 +161,36 @@ Code UX exposes two scheduler MCP surfaces:
 
 The restricted `scheduler_code_ux` tool accepts either an absolute `scheduledFor` ISO timestamp or one positive relative delay field, `delaySeconds` or `delayMinutes`. `schedule_wakeup` requires `projectId` and `bodyMarkdown`, and may include `title`, `timezone`, `threadId`, and `connectionId`. `schedule_task` requires `projectId` and `taskId`, and may include `title`, `timezone`, and a provider override.
 
-The broad `manage_scheduler` tool also supports `schedule_wakeup`. It requires `projectId`, `bodyMarkdown`, and either an absolute `scheduledFor` or positive `delaySeconds`; it creates a one-time `targetType: "wakeup"` entry by default. Wakeups may include `threadId`, `connectionId`, `title`, `sourceInvocationId`, and `resumeAfterInvocationCompletion`. When an MCP caller has request-scoped invocation context and `resumeAfterInvocationCompletion` is not `false`, Code UX stamps that invocation id onto the stored `wakeupTarget` so the follow-up can be associated with the originating provider invocation.
+The broad `manage_scheduler` tool also supports `schedule_wakeup`. It requires `projectId`, `bodyMarkdown`, and either an absolute `scheduledFor` ISO timestamp or positive `delaySeconds`; it creates a one-time `targetType: "wakeup"` entry by default. Wakeups may include optional `threadId`, `connectionId`, and `title` fields, either flattened or inside `wakeupTarget`. They may also include `sourceInvocationId` and `resumeAfterInvocationCompletion`. When an MCP caller has request-scoped invocation context and `resumeAfterInvocationCompletion` is not `false`, Code UX stamps that invocation id onto the stored `wakeupTarget` so the follow-up waits for the originating provider invocation to reach `completed` before posting. Passing `resumeAfterInvocationCompletion: false` prevents automatic invocation stamping; passing an explicit `sourceInvocationId` uses that invocation id instead of the request context.
+
+Schedule an explicit wakeup after a relative delay:
+
+```json
+{
+  "action": "schedule_wakeup",
+  "projectId": "project-123",
+  "bodyMarkdown": "Check whether the migration finished and summarize any blocker.",
+  "delaySeconds": 300,
+  "threadId": "thread-456",
+  "title": "Migration follow-up"
+}
+```
+
+Schedule a wakeup for a specific ISO timestamp:
+
+```json
+{
+  "action": "schedule_wakeup",
+  "projectId": "project-123",
+  "scheduledFor": "2026-07-07T18:30:00.000Z",
+  "wakeupTarget": {
+    "bodyMarkdown": "Post the release readiness reminder.",
+    "connectionId": "connection-789",
+    "sourceInvocationId": "invocation-abc",
+    "resumeAfterInvocationCompletion": true
+  }
+}
+```
 
 Every `scheduler_code_ux` entry is persisted as an `agent_scheduler` target. The runtime stamps `origin: "agent_scheduler"`, `source: "agent_scheduler"`, and `createdByAgentId` from the current MCP agent context. `list` returns only entries created by the calling agent. `cancel` changes the matching entry status to `cancelled` only when the entry is an agent-scheduler wakeup or task entry created by that same agent. Dashboard-created entries, `manage_scheduler` entries, entries without agent-scheduler metadata, and entries created by another agent are rejected with the standard management validation envelope.
 
@@ -745,12 +774,13 @@ For quicksprint calls:
 
 For scheduler calls:
 - `manage_scheduler` supports `list`, `create`, `schedule_sprint`, `schedule_quicksprint`, `schedule_chat`, `schedule_wakeup`, `update`, `delete`, and `run_due`.
-- Generic `create` requires `targetType: "sprint" | "quicksprint" | "chat"`.
+- Generic `create` requires `targetType: "sprint" | "quicksprint" | "chat" | "wakeup"`.
 - The `schedule_*` aliases infer the target type and accept flattened target fields.
 - Recurrence `frequency` accepts `minutely`, `hourly`, `daily`, `weekly`, and `monthly`; the dashboard renders `minutely` as `Minutes` and the matching recurrence summaries use labels such as `Every minute` and `Every 15 minutes`.
 - Minute recurrence uses the same UTC scheduler math as longer intervals, so the normalized rule advances `nextRunAt` and expands occurrences exactly like other frequencies once the minute literal has been parsed.
 - Scheduled quicksprints use the same `taskCount` number or numeric-string normalization as direct quicksprints.
 - Scheduled chat messages use `bodyMarkdown`, optional `threadId`, optional `connectionId`, and optional `title`. When due, the scheduler posts through the same chat runtime used by dashboard conversations.
+- Scheduled wakeups use `bodyMarkdown`, either `delaySeconds` or `scheduledFor`, optional `threadId`, optional `connectionId`, optional `title`, optional `sourceInvocationId`, and optional `resumeAfterInvocationCompletion`. They are one-time follow-ups by default; recurrence is available only through the generic scheduler contract and is not required for delayed project-manager check-backs.
 - `update` supports pausing and resuming entries via the `status` field. Resuming a `paused` entry to `scheduled` recomputes the next run time to the next future occurrence, preventing immediate execution of missed runs. Pause/resume acts as automation gating and does not manually trigger the target.
 - `delete` requires approval confirmation.
 

@@ -1,6 +1,6 @@
 # Scheduler
 
-The Scheduler page provides project-scoped automation for future sprint starts, quicksprint launches, timed chat-agent messages, and long-term memory remediation. The backend contract also supports agent-created wakeups and scheduled task reruns for agent-facing surfaces that are not exposed in the dashboard form yet.
+The Scheduler page provides project-scoped automation for future sprint starts, quicksprint launches, timed chat-agent messages, and long-term memory remediation. The backend contract also supports project-manager wakeups, agent-created wakeups, and scheduled task reruns for MCP-driven surfaces that are not exposed in the dashboard form yet.
 
 ## Dashboard Behavior
 
@@ -20,12 +20,13 @@ Operators can create entries for:
 - Long-term memory remediation, either deterministic or AI-routed through the Remediation route.
 
 The runtime contract additionally accepts:
+- `wakeup` targets, which post a one-time project-manager follow-up message back into a chat thread with `bodyMarkdown`, optional `threadId`, optional `connectionId`, optional `title`, optional `sourceInvocationId`, and optional `resumeAfterInvocationCompletion`.
 - `agent_wakeup` targets, which post a scheduled wakeup message back into a chat thread with `bodyMarkdown`, optional `threadId`, optional `connectionId`, optional `title`, and agent-scheduler metadata.
 - `task` targets, which rerun an existing task by `taskId` and optional `provider`.
 
-Those agent-created target types are intentionally backend-only in this task. They provide the storage and execution model that later MCP security and dashboard notification surfaces can consume without changing the dashboard target picker.
+Those MCP-created target types are intentionally backend-only in this task. They provide the storage and execution model that later MCP security and dashboard notification surfaces can consume without changing the dashboard target picker.
 
-When `agent_wakeup` or `task` entries are created by the secured MCP scheduler tool, the Scheduler page can display them in the calendar, 24-hour view, stats, and scheduled-entry list. They use their own concise target labels, chips, and summaries, for example an agent wakeup thread or task rerun ID, instead of falling back to chat labels.
+When `wakeup`, `agent_wakeup`, or `task` entries are created by MCP scheduler tools, the Scheduler page can display them in the calendar, 24-hour view, stats, and scheduled-entry list. They use their own concise target labels, chips, and summaries, for example a wakeup thread or task rerun ID, instead of falling back to chat labels.
 
 The dashboard form remains limited to operator-created sprint, quicksprint, chat, and memory remediation targets. MCP-created `agent_wakeup` and `task` entries cannot be safely edited in that form, so their Edit action explains that dashboard editing is unavailable while Pause, Resume, and Delete remain available.
 
@@ -77,7 +78,7 @@ The target payload keys are:
 - `agentWakeupTarget`: `{ bodyMarkdown, threadId?, title?, connectionId?, origin: "agent_scheduler", source: "agent_scheduler", createdByAgentId? }`
 - `taskTarget`: `{ taskId, provider?, origin: "agent_scheduler", source: "agent_scheduler", createdByAgentId? }`
 
-`agent_wakeup` and `task` entries always normalize `origin` and `source` to `agent_scheduler` in `target_json`. When the creator supplies `createdByAgentId`, it is preserved with the target payload for later authorization, audit, and notification work. Existing sprint, quicksprint, chat, memory remediation, recurrence, pause/resume, and `after_sprint_end` anchor rows continue to hydrate from the same JSON payload without a schema migration.
+`wakeup` entries are created by the broad `manage_scheduler.schedule_wakeup` action and persist only the follow-up payload plus optional invocation-gating metadata. `agent_wakeup` and `task` entries always normalize `origin` and `source` to `agent_scheduler` in `target_json`. When the creator supplies `createdByAgentId`, it is preserved with the target payload for later authorization, audit, and notification work. Existing sprint, quicksprint, chat, memory remediation, recurrence, pause/resume, and `after_sprint_end` anchor rows continue to hydrate from the same JSON payload without a schema migration.
 
 The shared TypeScript contract lives in:
 - `src/contracts/scheduler-types.ts`
@@ -135,7 +136,7 @@ Due entries execute through existing production paths:
 - sprint entries call `ExecutionControlService.orchestrateSprint`
 - quicksprint entries call `QuicksprintService.executeQuicksprint`
 - chat entries call `ChatThreadRuntimeService.postMessage`
-- wakeup entries call `ChatThreadRuntimeService.postMessage` with scheduler metadata plus `sourceInvocationId` and `resumeAfterInvocationCompletion` when those values were stored
+- wakeup entries call `ChatThreadRuntimeService.postMessage` with scheduler metadata plus `sourceInvocationId` and `resumeAfterInvocationCompletion` when those values were stored; they are one-time entries by default
 - memory remediation entries call `MemoryRemediationService.remediateLongTermMemories`
 - agent wakeup entries call `ChatThreadRuntimeService.postMessage` with `metadata.source = "agent_scheduler"`, `metadata.origin = "agent_scheduler"`, `metadata.schedulerEntryId`, and `metadata.createdByAgentId` when present
 - task entries call `TaskRerunService.rerunTask`, passing the stored provider override when one was scheduled
@@ -143,7 +144,7 @@ Due entries execute through existing production paths:
 Project-manager `wakeup` entries can be gated on a source execution invocation. When
 `wakeupTarget.sourceInvocationId` is present and `resumeAfterInvocationCompletion` is not explicitly
 `false`, the scheduler waits until that invocation is `completed` before posting the wakeup message.
-Missing or still-running source invocations leave the entry `scheduled` with the same due time, so
+Missing or still-running source invocations leave the wakeup entry `scheduled` with the same due time, so
 the scheduler can retry on a later tick without creating duplicate entries or mutating `nextRunAt`.
 If the source invocation ends as `failed`, `cancelled`, or `paused`, the wakeup is marked `failed`
 with `lastError` instead of posting stale follow-up text. Once the source invocation is completed,
@@ -160,8 +161,8 @@ Anchored entries are evaluated separately from absolute `nextRunAt` polling:
 - Anchored entries are one-time entries. Recurrence is rejected for `after_sprint_end` because repeated execution would be ambiguous without a new recurrence anchor model.
 - When the scheduled target is also a sprint, the target sprint cannot be the same sprint used as the source anchor.
 - Project isolation is strict: source sprints from another project are rejected, sprint targets must belong to the selected project, and task targets must reference a task in the selected project.
-- Agent wakeups require non-empty `bodyMarkdown`.
+- Wakeup and agent wakeup entries require non-empty `bodyMarkdown`.
 
 The MCP `manage_scheduler` tool accepts the same model. Use `scheduleMode: "after_sprint_end"` or `anchorMode: "after_sprint_end"` with `sourceSprintId`/`anchorSourceSprintId` and optional `offsetMinutes`/`anchorOffsetMinutes`, or pass the nested `scheduleAnchor` object directly. Absolute schedules continue to use `scheduledFor`; `scheduleMode: "absolute"` on update clears an existing anchor.
 
-`manage_scheduler.schedule_wakeup` creates a one-time wakeup entry with `targetType: "wakeup"`. It requires `projectId`, `bodyMarkdown`, and either `scheduledFor` or a positive `delaySeconds`; nested `wakeupTarget` payloads are also accepted. When called from an MCP request with an invocation id, Code UX stores that id as `wakeupTarget.sourceInvocationId` unless `resumeAfterInvocationCompletion` is explicitly `false`; callers may also pass an explicit `sourceInvocationId`.
+`manage_scheduler.schedule_wakeup` creates a one-time wakeup entry with `targetType: "wakeup"`. It requires `projectId`, `bodyMarkdown`, and either `scheduledFor` or a positive `delaySeconds`; nested `wakeupTarget` payloads are also accepted. When called from an MCP request with an invocation id, Code UX stores that id as `wakeupTarget.sourceInvocationId` unless `resumeAfterInvocationCompletion` is explicitly `false`; callers may also pass an explicit `sourceInvocationId`. Recurrence is not required for the core wakeup use case.
