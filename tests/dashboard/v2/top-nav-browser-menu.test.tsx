@@ -647,6 +647,83 @@ describe("TopNav shell accessibility", () => {
         });
     });
 
+    it("bounds project and sprint dropdown option panes with fixed responsive scroll caps", async () => {
+        mockTopNavData({
+            projects: Array.from({ length: 24 }, (_, index) => makeProject(`proj-${index + 1}`, `Project ${index + 1}`)),
+            selectedProject: makeProject("proj-1", "Project 1"),
+            sprints: Array.from({ length: 24 }, (_, index) => makeSprint(`sprint-${index + 1}`, `Sprint ${index + 1}`)),
+            selectedSprintId: "sprint-1",
+        });
+
+        render(<TopNav />);
+
+        fireEvent.click(screen.getByRole("button", { name: /Project selector, selected project: Project 1/i }));
+
+        const projectListbox = await screen.findByRole("listbox", { name: "Project list" });
+        const projectScrollPane = projectListbox.querySelector(".dropdown-scrollbar");
+        expect(projectScrollPane).toHaveClass("max-h-64", "sm:max-h-72", "md:max-h-80", "overflow-y-auto");
+        expect(projectScrollPane?.className).not.toContain("100dvh");
+
+        fireEvent.click(screen.getByRole("button", { name: /Sprint selector, selected sprint: Sprint 1/i }));
+
+        const sprintListbox = await screen.findByRole("listbox", { name: "Sprint list" });
+        const sprintScrollPane = sprintListbox.querySelector(".dropdown-scrollbar");
+        expect(sprintScrollPane).toHaveClass("max-h-64", "sm:max-h-72", "md:max-h-80", "overflow-y-auto");
+        expect(sprintScrollPane?.className).not.toContain("100dvh");
+    });
+
+    it("renders only real sprint options and does not treat all as a special filter match", async () => {
+        mockTopNavData({ selectedSprintId: null });
+
+        render(<TopNav />);
+
+        const trigger = screen.getByRole("button", { name: /Sprint selector, selected sprint: All Sprints/i });
+        trigger.focus();
+        fireEvent.keyDown(trigger, { key: "ArrowDown" });
+
+        const listbox = await screen.findByRole("listbox", { name: "Sprint list" });
+        await waitFor(() => {
+            expect(document.activeElement).toHaveAttribute("id", "sprint-option-sprint-1");
+        });
+
+        expect(listbox.querySelector("#sprint-option-none")).not.toBeInTheDocument();
+        expect(listbox).not.toHaveTextContent("All Sprints");
+        expect(screen.getAllByRole("option").map((option) => option.id)).toEqual([
+            "sprint-option-sprint-1",
+            "sprint-option-sprint-2",
+        ]);
+
+        fireEvent.input(screen.getByLabelText("Filter sprints"), { target: { value: "all" } });
+
+        await waitFor(() => {
+            expect(listbox).toHaveTextContent("No sprints found.");
+        });
+        expect(listbox.querySelector("#sprint-option-none")).not.toBeInTheDocument();
+        expect(listbox).not.toHaveTextContent("All Sprints");
+    });
+
+    it("focuses the selected sprint option and restores sprint trigger focus on Escape", async () => {
+        mockTopNavData({ selectedSprintId: "sprint-2" });
+
+        render(<TopNav />);
+
+        const trigger = screen.getByRole("button", { name: /Sprint selector, selected sprint: Fix nav/i });
+        trigger.focus();
+        fireEvent.keyDown(trigger, { key: "ArrowDown" });
+
+        await waitFor(() => {
+            expect(screen.getByRole("listbox", { name: "Sprint list" })).toBeInTheDocument();
+            expect(document.activeElement).toHaveAttribute("id", "sprint-option-sprint-2");
+        });
+
+        fireEvent.keyDown(document.activeElement as Element, { key: "Escape" });
+
+        await waitFor(() => {
+            expect(screen.queryByRole("listbox", { name: "Sprint list" })).not.toBeInTheDocument();
+            expect(document.activeElement).toBe(trigger);
+        });
+    });
+
     it("announces selector empty states without opening a disabled sprint listbox", async () => {
         mockTopNavData({ sprints: [], selectedSprintId: null });
 

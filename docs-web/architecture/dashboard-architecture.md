@@ -87,7 +87,7 @@ const routes = [
 The root layout renders an `AppLayout` wrapper around every page. Layout features:
 
 - **Dock or Sidebar** navigation (chosen per `appearance.navigationMode`).
-- **Top bar** with project selector and theme toggle.
+- **Top bar** with bounded project and sprint selectors, search, runtime controls, notifications, and theme toggle.
 - **`ProjectDataProvider`** in context — supplies the active project + selected sprint to descendants.
 - Lazy-loaded **`DeepOceanBackground`** (Three.js scene) after first paint.
 
