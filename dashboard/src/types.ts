@@ -88,6 +88,10 @@ import type {
   ProjectSettingsOverride,
   SettingsValueSource,
   SprintSettingsOverride,
+  SystemClusterConnectionSettings,
+  SystemClusterLastSyncSettings,
+  SystemClusterSettings,
+  SystemClusterSyncPolicySettings,
   SystemProviderCredentialSettings,
   SystemSettings,
 } from "../../src/contracts/settings-scope-types.js";
@@ -184,6 +188,10 @@ export type {
   ProjectSettingsOverride,
   SettingsValueSource,
   SprintSettingsOverride,
+  SystemClusterConnectionSettings,
+  SystemClusterLastSyncSettings,
+  SystemClusterSettings,
+  SystemClusterSyncPolicySettings,
   SystemProviderCredentialSettings,
   SystemSettings,
 };

@@ -18,6 +18,7 @@ import type {
   WorkerExecutionMode,
   ThinkingMode,
 } from "../contracts/app-types.js";
+import type { SystemClusterSettings } from "../contracts/settings-scope-types.js";
 import { DEFAULT_SPRINT_BRANCH_SCHEME } from "../domain/sprint/branch-name-generator.js";
 import { DEFAULT_TASK_SECTION_ORDER, DEFAULT_SPRINT_SECTION_ORDER } from "../domain/sprint/composer/pr-description-composer.js";
 import { DEFAULT_INSTRUCTION_TEMPLATES } from "../instructions/instruction-template-catalog.js";
@@ -122,6 +123,10 @@ export const DEFAULT_PROVIDER_AUTH_PATHS: Record<ProviderId, string> = {
   "qwen-code": "~/.qwen",
   opencode: "~/.local/share/opencode",
   antigravity: "~/.antigravity",
+};
+
+export const DEFAULT_SYSTEM_CLUSTER_SETTINGS: SystemClusterSettings = {
+  connections: [],
 };
 
 // AI Models catalog — available model identifiers per virtual worker provider

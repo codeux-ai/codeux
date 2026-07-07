@@ -75,6 +75,8 @@ A field unspecified at higher scopes inherits from lower scopes. The merge is **
 
 System settings on a fresh install are the merge of these defaults plus any external hints applied by the user during onboarding.
 
+System-scoped cluster settings live under `cluster.connections` and default to an empty array. Each connection stores a stable id, display name, normalized `http`/`https` URL, enabled flag, optional bearer-token storage reference, optional last-sync metadata, and explicit synchronization policy flags for system settings, provider settings, and local auth artifacts. Cluster connections are never project/sprint overrides, and the settings tree stores token references only, not raw bearer tokens or provider login file contents.
+
 ### Live reload
 
 Settings changes via `manage_code_ux` → `settings` → `patch_*_setting` (or the corresponding REST endpoints) trigger:

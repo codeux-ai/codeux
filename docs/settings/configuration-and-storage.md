@@ -30,7 +30,7 @@ External hint env keys used for dashboard import:
 
 Code UX settings resolve through a scoped cascade: `system` → `project` → `sprint`.
 
-System settings hold global state, runtime behavior (e.g., ports, `consoleLogLevel`, `debugLogFileLevel`, `consoleLogMode`), and system integration credentials (Jira tokens, GitLab/GitHub tokens).
+System settings hold global state, runtime behavior (e.g., ports, `consoleLogLevel`, `debugLogFileLevel`, `consoleLogMode`), system integration credentials (Jira tokens, GitLab/GitHub tokens), and remote Code UX cluster connection metadata.
 
 Project and sprint scopes can override execution-specific settings, such as `aiProvider` routes (which now include provider instances and `invocationRouting` as first-class citizens instead of legacy top-level keys), `cliWorkflow` settings (like `gitMode`, `executionMode`, `containerImage`, `containerSetupScriptPath`), and preview defaults (like `sprintPreview.startupScriptPath` defaulting to `.code-ux/browser/start-preview.sh`). `git.defaultBranch` fallback is resolved based on scoped overrides too. Jira and GitLab integration configurations are also scoped and can be overridden.
 
@@ -133,6 +133,18 @@ Runtime resolution:
   - `claudeCodeApiKey`
   - `githubToken`
   - `gitlabToken`
+- `cluster`
+  - `connections` (default `[]`)
+    - `id` (stable local connection id)
+    - `displayName`
+    - `url` (normalized `http`/`https` URL)
+    - `enabled`
+    - `bearerTokenRef` (optional token storage reference only; bearer token values are not stored here)
+    - `lastSync` (optional sync timestamp/status/message metadata)
+    - `syncPolicy`
+      - `systemSettings` (default `false`)
+      - `providerSettings` (default `false`)
+      - `localAuthArtifacts` (default `false`)
 - `defaults`
   - full inheritable project settings baseline
 - `mcpTools`
@@ -155,6 +167,7 @@ Runtime resolution:
 - used only for sprint-local deviations from the resolved project baseline
 
 System-level integrations are injected into effective dashboard settings at resolution time:
+- remote Code UX cluster connections are system-scoped only and are not projected into project or sprint overrides. Loading sanitizes entries by trimming ids/names/token references, accepting only valid `http`/`https` URLs, deduplicating by id, dropping blank or invalid entries, and defaulting all synchronization policy flags to `false`. The cluster settings object may remember bearer-token storage references, but it must never contain provider login file contents or raw bearer-token secrets.
 - provider credentials are system-scoped under `integrations.providers`
   - each entry is a named provider instance with `{ provider, name, apiKey, mountAuth, authPath, authType }`
   - default instance ids intentionally match the base provider ids (`jules`, `gemini`, `codex`, `claude-code`) for compatibility with older settings payloads

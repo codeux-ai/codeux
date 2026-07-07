@@ -44,6 +44,7 @@ describe("SettingsRepository", () => {
     expect(system.runtime.consoleLogMode).toBe("standard");
     expect(system.runtime.restartSprintPolicy).toBe("continue");
     expect(system.runtime.restartInvocationPolicy).toBe("continue");
+    expect(system.cluster.connections).toEqual([]);
     expect(system.defaults.automationLevel).toBe("SEMI_AUTO");
     expect(system.defaults.aiProvider.provider).toBe("jules");
     expect(system.defaults.aiProvider.providers.codex.model).toBe("gpt-5.5");
@@ -96,6 +97,9 @@ describe("SettingsRepository", () => {
         codexApiKey: "sys-codex",
         claudeCodeApiKey: "sys-claude",
         githubToken: "sys-gh",
+      },
+      cluster: {
+        connections: [],
       },
       defaults: {
         automationLevel: "FULL",
@@ -256,6 +260,125 @@ describe("SettingsRepository", () => {
     expect(effectiveSprint.sources["aiProvider.strategy"]).toBe("sprint");
   });
 
+  it("sanitizes and persists system cluster connections", async () => {
+    const { repo, dbPath } = await createRepo();
+    const system = repo.getSystemSettings();
+
+    repo.saveSystemSettings({
+      ...system,
+      cluster: {
+        connections: [
+          {
+            id: " remote-primary ",
+            displayName: " Primary Remote ",
+            url: " HTTPS://Example.COM:4444/path?x=1#secret ",
+            enabled: true,
+            bearerTokenRef: " token-ref-primary ",
+            lastSync: {
+              syncedAt: " 2026-07-07T00:00:00.000Z ",
+              status: "success",
+              message: " ok ",
+            },
+            syncPolicy: {
+              systemSettings: true,
+              providerSettings: false,
+              localAuthArtifacts: true,
+            },
+          },
+          {
+            id: "remote-disabled",
+            displayName: "Disabled Remote",
+            url: "http://localhost:4444/",
+            enabled: false,
+            syncPolicy: {
+              systemSettings: true,
+              providerSettings: true,
+              localAuthArtifacts: true,
+            },
+          },
+          {
+            id: "remote-primary",
+            displayName: "Duplicate Remote",
+            url: "https://duplicate.example",
+            enabled: true,
+            bearerTokenRef: "should-not-win",
+            syncPolicy: {
+              systemSettings: true,
+              providerSettings: true,
+              localAuthArtifacts: true,
+            },
+          },
+          {
+            id: "blank-url",
+            displayName: "Blank URL",
+            url: " ",
+            enabled: true,
+            syncPolicy: {
+              systemSettings: true,
+              providerSettings: true,
+              localAuthArtifacts: true,
+            },
+          },
+          {
+            id: "bad-protocol",
+            displayName: "Bad Protocol",
+            url: "file:///tmp/server",
+            enabled: true,
+            syncPolicy: {
+              systemSettings: true,
+              providerSettings: true,
+              localAuthArtifacts: true,
+            },
+          },
+          {
+            id: "missing-name",
+            displayName: " ",
+            url: "https://missing-name.example",
+            enabled: true,
+            syncPolicy: {
+              systemSettings: true,
+              providerSettings: true,
+              localAuthArtifacts: true,
+            },
+          },
+        ],
+      },
+    });
+
+    const reloaded = new SettingsRepository(dbPath);
+    const connections = reloaded.getSystemSettings().cluster.connections;
+
+    expect(connections).toHaveLength(2);
+    expect(connections[0]).toEqual({
+      id: "remote-primary",
+      displayName: "Primary Remote",
+      url: "https://example.com:4444/path?x=1",
+      enabled: true,
+      bearerTokenRef: "token-ref-primary",
+      lastSync: {
+        syncedAt: "2026-07-07T00:00:00.000Z",
+        status: "success",
+        message: "ok",
+      },
+      syncPolicy: {
+        systemSettings: true,
+        providerSettings: false,
+        localAuthArtifacts: true,
+      },
+    });
+    expect(connections[1]).toEqual({
+      id: "remote-disabled",
+      displayName: "Disabled Remote",
+      url: "http://localhost:4444",
+      enabled: false,
+      syncPolicy: {
+        systemSettings: true,
+        providerSettings: true,
+        localAuthArtifacts: true,
+      },
+    });
+  });
+
   it("stores project overrides relative to current system defaults", async () => {
     const { repo } = await createRepo();
 
@@ -340,6 +463,7 @@ describe("SettingsRepository", () => {
     expect(effectiveProject.settings.git.featureBranchPrefix).toBe("work/");
     expect(effectiveProject.settings.agents.qualityAssurance.taskCompletion.enabled).toBe(false);
     expect(effectiveProject.settings.agents.qualityAssurance.maxTaskReviewRuns).toBe(3);
+    expect(repo.getSystemSettings().cluster.connections).toEqual([]);
     expect(effectiveProject.sources["git.featureBranchPrefix"]).toBe("project");
 
     const effectiveSprint = repo.resolveSprintDashboardSettings("project-partial", "sprint-partial");

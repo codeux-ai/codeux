@@ -16,6 +16,10 @@ import type {
   ProjectSettings,
   ProjectSettingsOverride,
   SprintSettingsOverride,
+  SystemClusterConnectionSettings,
+  SystemClusterLastSyncSettings,
+  SystemClusterSettings,
+  SystemClusterSyncPolicySettings,
   SystemSettings,
   SettingsValueSource,
 } from "../contracts/settings-scope-types.js";
@@ -36,7 +40,13 @@ import {
 } from "../domain/settings/provider-config-utils.js";
 import { sanitizeCustomMcpServersWithDefaults, sanitizeMcpToolToggles } from "../mcp/mcp-tool-availability.js";
 import { DEFAULT_INSTRUCTION_TEMPLATES, INSTRUCTION_TEMPLATE_IDS, type InstructionTemplateId } from "../instructions/instruction-template-catalog.js";
-import { DEFAULT_DASHBOARD_SETTINGS, DEFAULT_SKILLS, INTERNAL_SKILL_NAMES, INTERNAL_SKILL_SET } from "../repositories/settings-defaults.js";
+import {
+  DEFAULT_DASHBOARD_SETTINGS,
+  DEFAULT_SKILLS,
+  DEFAULT_SYSTEM_CLUSTER_SETTINGS,
+  INTERNAL_SKILL_NAMES,
+  INTERNAL_SKILL_SET,
+} from "../repositories/settings-defaults.js";
 
 function cloneSkills(skills: SkillToggle[]): SkillToggle[] {
   return skills.map((skill) => ({ ...skill }));
@@ -103,6 +113,111 @@ const sanitizeBackgroundPattern = (value: unknown): BackgroundPattern => {
 
 function cloneMcpTools(tools: McpToolToggle[]): McpToolToggle[] {
   return tools.map((tool) => ({ ...tool }));
+}
+
+function cloneClusterSettings(cluster: SystemClusterSettings): SystemClusterSettings {
+  return {
+    connections: cluster.connections.map((connection) => ({
+      ...connection,
+      ...(connection.bearerTokenRef ? { bearerTokenRef: connection.bearerTokenRef } : {}),
+      ...(connection.lastSync ? { lastSync: { ...connection.lastSync } } : {}),
+      syncPolicy: { ...connection.syncPolicy },
+    })),
+  };
+}
+
+function normalizeClusterUrl(value: unknown): string | null {
+  if (typeof value !== "string") {
+    return null;
+  }
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  try {
+    const parsed = new URL(trimmed);
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+      return null;
+    }
+    parsed.hash = "";
+    const normalized = parsed.toString();
+    return normalized.endsWith("/") && parsed.pathname === "/" ? normalized.slice(0, -1) : normalized;
+  } catch {
+    return null;
+  }
+}
+
+function sanitizeClusterSyncPolicy(value: unknown): SystemClusterSyncPolicySettings {
+  const input = toRecord(value);
+  return {
+    systemSettings: input.systemSettings === true,
+    providerSettings: input.providerSettings === true,
+    localAuthArtifacts: input.localAuthArtifacts === true,
+  };
+}
+
+function sanitizeClusterLastSync(value: unknown): SystemClusterLastSyncSettings | undefined {
+  const input = toRecord(value);
+  const syncedAt = typeof input.syncedAt === "string" ? input.syncedAt.trim() : "";
+  const status = input.status === "success" || input.status === "failed" || input.status === "partial"
+    ? input.status
+    : undefined;
+  const message = typeof input.message === "string" ? input.message.trim() : "";
+  const lastSync: SystemClusterLastSyncSettings = {};
+
+  if (syncedAt) {
+    lastSync.syncedAt = syncedAt;
+  }
+  if (status) {
+    lastSync.status = status;
+  }
+  if (message) {
+    lastSync.message = message;
+  }
+
+  return Object.keys(lastSync).length > 0 ? lastSync : undefined;
+}
+
+function sanitizeClusterConnection(value: unknown): SystemClusterConnectionSettings | null {
+  const input = toRecord(value);
+  const id = typeof input.id === "string" ? input.id.trim() : "";
+  const displayName = typeof input.displayName === "string" ? input.displayName.trim() : "";
+  const url = normalizeClusterUrl(input.url);
+
+  if (!id || !displayName || !url) {
+    return null;
+  }
+
+  const bearerTokenRef = typeof input.bearerTokenRef === "string" ? input.bearerTokenRef.trim() : "";
+  const lastSync = sanitizeClusterLastSync(input.lastSync);
+  return {
+    id,
+    displayName,
+    url,
+    enabled: input.enabled === true,
+    ...(bearerTokenRef ? { bearerTokenRef } : {}),
+    ...(lastSync ? { lastSync } : {}),
+    syncPolicy: sanitizeClusterSyncPolicy(input.syncPolicy),
+  };
+}
+
+export function sanitizeClusterSettings(value: unknown): SystemClusterSettings {
+  const input = toRecord(value);
+  const connections = Array.isArray(input.connections) ? input.connections : [];
+  const seenIds = new Set<string>();
+  const sanitizedConnections: SystemClusterConnectionSettings[] = [];
+
+  for (const connection of connections) {
+    const sanitized = sanitizeClusterConnection(connection);
+    if (!sanitized || seenIds.has(sanitized.id)) {
+      continue;
+    }
+    seenIds.add(sanitized.id);
+    sanitizedConnections.push(sanitized);
+  }
+
+  return { connections: sanitizedConnections };
 }
 
 function resolveEffectiveMcpTools(
@@ -582,6 +697,7 @@ export function buildDefaultSystemSettings(externalHints?: ExternalSettingsHints
         apiToken: externalHints?.resolved.jiraToken || "",
       },
     },
+    cluster: cloneClusterSettings(DEFAULT_SYSTEM_CLUSTER_SETTINGS),
     defaults: buildDefaultProjectSettings(externalHints),
     mcpTools: cloneMcpTools(DEFAULT_DASHBOARD_SETTINGS.mcpTools),
     customMcpServers: sanitizeCustomMcpServersWithDefaults(
@@ -801,6 +917,7 @@ export function sanitizeSystemSettings(value: unknown, externalHints?: ExternalS
       gitlabToken: systemGitlabToken,
       jira: jiraSettings,
     },
+    cluster: cloneClusterSettings(sanitizeClusterSettings(input.cluster ?? defaults.cluster)),
     defaults: defaultsInput,
     mcpTools: sanitizeMcpToolToggles(input.mcpTools ?? defaults.mcpTools).map((tool) => ({ ...tool })),
     customMcpServers: sanitizeCustomMcpServersWithDefaults(

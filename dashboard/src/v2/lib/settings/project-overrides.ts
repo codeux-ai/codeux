@@ -71,6 +71,14 @@ export const cloneIntegrationProviders = (
   )
 );
 
+const cloneClusterSettings = (cluster: SystemSettings["cluster"]): SystemSettings["cluster"] => ({
+  connections: cluster.connections.map((connection) => ({
+    ...connection,
+    ...(connection.lastSync ? { lastSync: { ...connection.lastSync } } : {}),
+    syncPolicy: { ...connection.syncPolicy },
+  })),
+});
+
 const cloneInvocationRouting = (
   routing: ProjectSettings["aiProvider"]["invocationRouting"],
 ): ProjectSettings["aiProvider"]["invocationRouting"] => (
@@ -219,6 +227,7 @@ export const cloneSystemSettings = (settings: SystemSettings): SystemSettings =>
     jira: settings.integrations.jira ? cloneJiraSettings(settings.integrations.jira) : defaultJiraSettings(),
     providers: cloneIntegrationProviders(settings.integrations.providers),
   },
+  cluster: cloneClusterSettings(settings.cluster ?? { connections: [] }),
   defaults: cloneProjectSettings(settings.defaults),
   mcpTools: cloneMcpTools(settings.mcpTools),
   customMcpServers: cloneCustomMcpServers(settings.customMcpServers),
