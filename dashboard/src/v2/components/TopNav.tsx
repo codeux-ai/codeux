@@ -1,9 +1,10 @@
 import type { FunctionComponent, RefObject } from "preact";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "preact/hooks";
 import gsap from "gsap";
-import { Bell, Moon, Sun, ChevronDown, FolderOpen, ArrowRight } from "lucide-preact";
+import { Bell, Moon, Sun, ChevronDown, FolderOpen, ArrowRight, Layers } from "lucide-preact";
 import { Link, useRouterState } from "@tanstack/react-router";
 import { StatusDot } from "./ui/StatusDot.js";
+import type { TechstackCatalogSettings } from "../../types.js";
 
 import { BrandSection } from "./top-nav/BrandSection.js";
 import { GlobalSearch } from "./top-nav/GlobalSearch.js";
@@ -11,10 +12,13 @@ import { TelemetryStats } from "./top-nav/TelemetryStats.js";
 
 import { AddProjectModal, type AddProjectModalSubmission } from "./ui/AddProjectModal.js";
 import { buildGitHubModeProjectSettingsOverride } from "../../lib/settings-updaters.js";
+import { DEFAULT_DASHBOARD_SETTINGS } from "../../lib/settings.js";
 import { useProjectData } from "../context/project-data.js";
 import { useSprints } from "../../hooks/useSprints.js";
 import { formatSprintDisplay } from "../lib/format-sprint.js";
-import { useProjectEffectiveSettings } from "../hooks/use-project-effective-settings.js";
+import { clearProjectEffectiveSettingsCache, useProjectEffectiveSettings } from "../hooks/use-project-effective-settings.js";
+import { fetchSystemSettings, saveProjectTechstackSettings } from "../lib/settings-api.js";
+import { buildTechstackSelectorViewModel } from "../lib/settings/techstack-view-models.js";
 import { DockerStatusMenu } from "./DockerStatusMenu.js";
 import { BrowserSessionsMenu } from "./browser/BrowserSessionsMenu.js";
 import { NotificationPanel } from "./NotificationPanel.js";
@@ -263,6 +267,11 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
     const [sprintDropdownOpen, setSprintDropdownOpen] = useState(false);
     const sprintDropdownRef = useRef<HTMLDivElement>(null);
     const [sprintDropdownWidth, setSprintDropdownWidth] = useState<number>(0);
+    const [techstackDropdownOpen, setTechstackDropdownOpen] = useState(false);
+    const [techstackSwitchBusy, setTechstackSwitchBusy] = useState(false);
+    const [systemTechstackCatalog, setSystemTechstackCatalog] = useState<TechstackCatalogSettings | null>(null);
+    const [systemSettingsLoading, setSystemSettingsLoading] = useState(true);
+    const techstackDropdownRef = useRef<HTMLDivElement>(null);
 
     const {
         projects,
@@ -272,7 +281,7 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
         loading,
     } = useProjectData();
     const projectId = selectedProject?.id || null;
-    const { data: effectiveSettings } = useProjectEffectiveSettings(projectId);
+    const { data: effectiveSettings, loading: effectiveSettingsLoading, refresh: refreshEffectiveSettings } = useProjectEffectiveSettings(projectId);
     const sprintKeyPrefix = effectiveSettings?.settings?.git?.sprintKeyPrefix || "SPR";
 
     const { data: sprints, selectedSprintId, selectedSprint, selectSprint, loading: sprintsLoading } = useSprints(selectedProject?.id || null);
@@ -283,9 +292,26 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
 
     const projectKb = useDropdownKeyboard(dropdownOpen, setDropdownOpen, dropdownRef, setProjectFilter);
     const sprintKb = useDropdownKeyboard(sprintDropdownOpen, setSprintDropdownOpen, sprintDropdownRef, setSprintFilter);
+    const techstackKb = useDropdownKeyboard(techstackDropdownOpen, setTechstackDropdownOpen, techstackDropdownRef);
 
     const filteredProjects = useMemo(() => projects.filter(p => p.name.toLowerCase().includes(projectFilter.toLowerCase())), [projects, projectFilter]);
     const filteredSprints = useMemo(() => sprints.filter(s => s.name.toLowerCase().includes(sprintFilter.toLowerCase())), [sprints, sprintFilter]);
+    const techstackCatalog = effectiveSettings?.settings.techstackCatalog
+        ?? systemTechstackCatalog
+        ?? DEFAULT_DASHBOARD_SETTINGS.techstackCatalog;
+    const techstackViewModel = useMemo(
+        () => buildTechstackSelectorViewModel(effectiveSettings?.settings.techstack, techstackCatalog),
+        [effectiveSettings?.settings.techstack, techstackCatalog],
+    );
+    const techstackSelectorLoading = !!selectedProject && (effectiveSettingsLoading || systemSettingsLoading);
+    const techstackSelectorDisabled = !selectedProject || techstackSelectorLoading || techstackSwitchBusy;
+    const techstackHelper = !selectedProject
+        ? "Select a project first"
+        : techstackSelectorLoading
+            ? "Loading settings"
+            : techstackViewModel.isUnassigned
+                ? `Unassigned; using ${techstackViewModel.defaultLabel}`
+                : "Assigned";
 
     useEffect(() => {
         if (previousPathRef.current !== currentPath) {
@@ -323,6 +349,31 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
         }
     }, [filteredSprints.length, sprintDropdownOpen, sprintFilter, sprintsLoading]);
 
+    useEffect(() => {
+        let cancelled = false;
+        setSystemSettingsLoading(true);
+        fetchSystemSettings()
+            .then((settings) => {
+                if (!cancelled) {
+                    setSystemTechstackCatalog(settings.techstackCatalog);
+                }
+            })
+            .catch((error: unknown) => {
+                if (!cancelled) {
+                    const message = error instanceof Error ? error.message : "Unknown error";
+                    setNavAnnouncement(`Could not load techstack catalog. ${message}`);
+                }
+            })
+            .finally(() => {
+                if (!cancelled) {
+                    setSystemSettingsLoading(false);
+                }
+            });
+        return () => {
+            cancelled = true;
+        };
+    }, []);
+
     useLayoutEffect(() => {
         if (sprintDropdownOpen && sprintDropdownRef.current) {
             setSprintDropdownWidth(sprintDropdownRef.current.offsetWidth);
@@ -343,10 +394,40 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
             if (sprintDropdownRef.current && !sprintDropdownRef.current.contains(e.target as Node)) {
                 setSprintDropdownOpen(false);
             }
+            if (techstackDropdownRef.current && !techstackDropdownRef.current.contains(e.target as Node)) {
+                setTechstackDropdownOpen(false);
+            }
         };
         document.addEventListener("mousedown", handler);
         return () => document.removeEventListener("mousedown", handler);
     }, []);
+
+    const handleTechstackSelection = async (nextTechstackId: string | null, label: string) => {
+        if (!projectId || techstackSwitchBusy || nextTechstackId === techstackViewModel.selectedTechstackId) {
+            setTechstackDropdownOpen(false);
+            return;
+        }
+
+        setTechstackSwitchBusy(true);
+        setNavAnnouncement(`Saving techstack ${label}...`);
+        try {
+            await saveProjectTechstackSettings(projectId, {
+                selectedTechstackId: nextTechstackId,
+                applicationKind: effectiveSettings?.settings.techstack.applicationKind ?? null,
+            });
+            clearProjectEffectiveSettingsCache(projectId);
+            await refreshEffectiveSettings();
+            setNavAnnouncement(nextTechstackId === null
+                ? `Techstack cleared. ${techstackViewModel.defaultLabel} remains the display fallback.`
+                : `Techstack switched to ${label.replace(" (default)", "")}`);
+            setTechstackDropdownOpen(false);
+        } catch (error) {
+            const message = error instanceof Error ? error.message : "Unknown error";
+            setNavAnnouncement(`Could not save techstack. ${message}`);
+        } finally {
+            setTechstackSwitchBusy(false);
+        }
+    };
 
     const handleCreateProject = async (project: AddProjectModalSubmission) => {
         if (project.type === 'new_project') {
@@ -491,6 +572,91 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
                                     <span>Manage Projects</span>
                                     <ArrowRight aria-hidden="true" className="w-3 h-3" strokeWidth={2} />
                                 </Link>
+                            </div>
+                        </div>
+                    )}
+                </div>
+
+                {/* Techstack Selector */}
+                <div className="relative min-w-0" ref={techstackDropdownRef} onKeyDown={techstackKb.onContainerKeyDown}>
+                    <button
+                        ref={techstackKb.toggleRef}
+                        onKeyDown={(e) => {
+                            if (techstackSelectorDisabled) {
+                                if (e.key === "Enter" || e.key === " " || e.key === "ArrowDown" || e.key === "ArrowUp" || e.key === "Home" || e.key === "End") {
+                                    e.preventDefault();
+                                    setNavAnnouncement(techstackHelper);
+                                }
+                                return;
+                            }
+                            techstackKb.onToggleKeyDown(e);
+                        }}
+                        onClick={(e) => {
+                            if (techstackSelectorDisabled) {
+                                e.preventDefault();
+                                setNavAnnouncement(techstackHelper);
+                                return;
+                            }
+                            setTechstackDropdownOpen(!techstackDropdownOpen);
+                        }}
+                        aria-haspopup="listbox"
+                        aria-expanded={techstackDropdownOpen}
+                        id="techstack-selector-button"
+                        aria-label={`Techstack selector, active techstack: ${techstackSelectorLoading ? "Loading settings" : techstackViewModel.activeLabel}${techstackViewModel.isUnassigned ? " (unassigned, using default)" : ""}`}
+                        aria-controls={techstackDropdownOpen ? "techstack-listbox" : undefined}
+                        aria-activedescendant={techstackDropdownOpen ? (techstackKb.activeDescendantId || (techstackViewModel.selectedTechstackId ? `techstack-option-${techstackViewModel.selectedTechstackId}` : "techstack-option-unassigned")) : undefined}
+                        aria-busy={techstackSwitchBusy || techstackSelectorLoading ? "true" : "false"}
+                        aria-disabled={techstackSelectorDisabled}
+                        disabled={techstackSelectorDisabled}
+                        className={`focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 flex h-9 min-w-0 max-w-[13rem] items-center gap-2 rounded-xl border border-transparent bg-black/[0.04] px-3 py-0 transition-all group dark:bg-white/[0.04] ${
+                            techstackSelectorDisabled
+                                ? "opacity-60 cursor-not-allowed"
+                                : "hover:border-black/[0.08] dark:hover:border-white/[0.08] cursor-pointer"
+                        }`}
+                    >
+                        <Layers aria-hidden="true" className="h-3.5 w-3.5 shrink-0 text-slate-400" strokeWidth={1.7} />
+                        <span className="flex min-w-0 flex-col items-start leading-none">
+                            <span className="max-w-[8rem] truncate text-sm font-semibold font-mono text-slate-700 dark:text-slate-200">
+                                {techstackSwitchBusy ? "Saving..." : techstackSelectorLoading ? "Loading..." : techstackViewModel.activeLabel}
+                            </span>
+                            <span className="max-w-[8rem] truncate text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-400">
+                                {techstackHelper}
+                            </span>
+                        </span>
+                        {!techstackSelectorDisabled && (
+                            <ChevronDown aria-hidden="true" className={`h-3.5 w-3.5 shrink-0 text-slate-400 transition-transform duration-300 ${techstackDropdownOpen ? "rotate-180" : ""}`} />
+                        )}
+                    </button>
+
+                    {techstackDropdownOpen && !techstackSelectorDisabled && (
+                        <div id="techstack-listbox" role="listbox" aria-label="Techstack list" className="absolute top-full right-0 mt-2 min-w-[14rem] w-64 max-w-[calc(100vw-2rem)] bg-white/95 dark:bg-void-800/95 backdrop-blur-2xl border border-black/[0.08] dark:border-white/[0.08] rounded-2xl shadow-2xl overflow-hidden z-50">
+                            <div className="px-3 pt-3 pb-1.5">
+                                <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Techstack</span>
+                            </div>
+                            <div className="max-h-64 sm:max-h-72 md:max-h-80 overflow-y-auto dropdown-scrollbar">
+                                {techstackViewModel.options.map((option) => {
+                                    const selected = option.techstackId === techstackViewModel.selectedTechstackId;
+                                    return (
+                                        <button
+                                            key={option.id}
+                                            id={option.kind === "unassigned" ? "techstack-option-unassigned" : `techstack-option-${option.id}`}
+                                            role="option"
+                                            aria-selected={selected}
+                                            onClick={() => void handleTechstackSelection(option.techstackId, option.label)}
+                                            className={`focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 w-full flex items-center gap-2.5 px-3 py-3 min-h-[44px] text-left hover:bg-signal-500/5 transition-colors group ${selected ? "bg-signal-500/8" : ""}`}
+                                        >
+                                            <span className={`text-sm font-medium font-mono truncate transition-colors ${selected ? "text-signal-600 dark:text-signal-400 font-semibold" : "text-slate-700 dark:text-slate-300"}`}>
+                                                {option.label}
+                                            </span>
+                                            {option.kind === "unassigned" && (
+                                                <span className="ml-auto text-[10px] font-bold uppercase tracking-[0.08em] text-slate-400">Fallback</span>
+                                            )}
+                                            {selected && option.kind !== "unassigned" && (
+                                                <span className="ml-auto h-1.5 w-1.5 rounded-full bg-signal-500" />
+                                            )}
+                                        </button>
+                                    );
+                                })}
                             </div>
                         </div>
                     )}
