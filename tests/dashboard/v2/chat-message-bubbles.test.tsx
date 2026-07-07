@@ -1531,8 +1531,9 @@ describe("Chat Message Bubbles", () => {
 
   describe("WorkingBubble", () => {
     it("renders the starting phase label when phase is starting", () => {
-      const { getByText, container } = render(<WorkingBubble displayName="TestWorker" runtimeState={null} phase="starting" />);
-      expect(container.textContent).toContain("TestWorker is preparing a reply"); // fallback assert
+      const { container } = render(<WorkingBubble displayName="TestWorker" runtimeState={null} phase="starting" />);
+      expect(container.textContent).toContain("Starting");
+      expect(container.textContent).not.toContain("TestWorker is preparing a reply");
       // Ensure starting phase doesn't pulse the dots
       const dots = container.querySelectorAll('.h-1\\.5.w-4');
       dots.forEach(dot => {
@@ -1568,8 +1569,9 @@ describe("Chat Message Bubbles", () => {
     });
 
     it("renders the default listener pulsing message when not planning", () => {
-      const { getByText } = render(<WorkingBubble displayName="TestWorker" runtimeState={null} />);
-      expect(container.textContent).toContain("TestWorker is preparing a reply");
+      const { container } = render(<WorkingBubble displayName="TestWorker" runtimeState={null} />);
+      expect(container.textContent).toContain("Working");
+      expect(container.textContent).not.toContain("TestWorker is preparing a reply");
     });
 
     it("renders the starting phase label when phase is starting", () => {

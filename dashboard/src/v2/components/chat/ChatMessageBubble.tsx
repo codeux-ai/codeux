@@ -9,6 +9,7 @@ import { formatChatTime } from "../../lib/chat-time.js";
 import { PlanningRequestWidget } from "./widgets/PlanningRequestWidget.js";
 import { AppCreationProgressWidget } from "./widgets/AppCreationProgressWidget.js";
 import { ExternalReferenceWidget } from "./widgets/ExternalReferenceWidget.js";
+import { AgentMoodAside, buildAgentMoodAsideSeed, resolveAgentMoodAsideText } from "./widgets/AgentMoodAside.js";
 import { ChatAvatar, type AvatarRole } from "./ChatAvatar.js";
 import { PromptSuggestionTags } from "./PromptSuggestionTags.js";
 import { resolveDisplayDeliveryStatus } from "../../hooks/use-chat-thread-data.js";
@@ -70,6 +71,12 @@ export const ChatMessageBubble: FunctionComponent<ChatMessageBubbleProps> = ({
     : agentName || (message.metadata?.agentName as string) || "Assistant";
   const providerLabel = message.metadata?.provider as string | undefined;
   const createdAtLabel = formatChatTime(message.createdAt);
+  const moodAsideText = (!fromDashboard && message.authorType === "connection")
+    ? resolveAgentMoodAsideText({
+        metadata: message.metadata,
+        seed: buildAgentMoodAsideSeed([message.id, message.bodyMarkdown, senderName]),
+      })
+    : null;
 
   const displayDeliveryStatus = resolveDisplayDeliveryStatus(message, allMessages);
 
@@ -114,6 +121,8 @@ export const ChatMessageBubble: FunctionComponent<ChatMessageBubbleProps> = ({
               dangerouslySetInnerHTML={{ __html: renderMarkdown(message.bodyMarkdown) }}
             />
           )}
+
+          <AgentMoodAside text={moodAsideText} />
 
           {promptSuggestions.length > 0 && (
             <PromptSuggestionTags

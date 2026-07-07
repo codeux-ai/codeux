@@ -40,6 +40,7 @@ import {
   mergeInvocationToolMessages
 } from "./lib/chat-widget-view-models.js";
 import { clearChatDraftFromUrl, readChatDraftFromLocation } from "./lib/no-project-chat-assistant.js";
+import { STATUS_MESSAGE_MIN_INTERVAL_MS } from "./lib/agent-humor-messages.js";
 
 
 const formatInvocationErrorCategory = (value: ExecutionInvocationRecord["lastErrorCategory"]): string | null => {
@@ -324,7 +325,7 @@ export const ChatPage: FunctionComponent = () => {
       setWorkingTimerPhase("starting");
       const timer = setTimeout(() => {
         setWorkingTimerPhase("working");
-      }, 4000);
+      }, STATUS_MESSAGE_MIN_INTERVAL_MS);
       return () => clearTimeout(timer);
     } else {
       setWorkingTimerPhase(null);
@@ -504,7 +505,8 @@ export const ChatPage: FunctionComponent = () => {
                 {hasWorkingReply && workingTimerPhase === "starting" ? (
                   <InvocationContainerWidget
                     containerPhase="starting"
-                    providerName={selectedThread?.runtimeState?.virtualProvider ?? null}
+                    providerName={selectedThread?.runtimeState?.providerLabel ?? selectedThread?.runtimeState?.virtualProvider ?? null}
+                    modelName={selectedThread?.runtimeState?.modelLabel ?? null}
                     agentName={activeConnection?.displayName || null}
                   />
                 ) : hasWorkingReply && workingTimerPhase === "working" ? (
@@ -840,6 +842,7 @@ export const ChatPage: FunctionComponent = () => {
               />
               <InvocationContainerWidget
                 providerName={selectedInvocation.provider}
+                modelName={selectedInvocation.model}
                 agentName={selectedAgentPreset?.name ?? null}
                 containerPhase={
                   selectedInvocation.status === "running" && selectedInvocation.messageCount === 0

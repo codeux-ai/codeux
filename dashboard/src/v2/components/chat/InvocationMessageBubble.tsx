@@ -14,6 +14,7 @@ import { ExternalReferenceWidget } from "./widgets/ExternalReferenceWidget.js";
 import { ToolCallWidget } from "./widgets/ToolCallWidget.js";
 import { ReasoningWidget } from "./widgets/ReasoningWidget.js";
 import { SelfReflectionWidget } from "./widgets/SelfReflectionWidget.js";
+import { AgentMoodAside, buildAgentMoodAsideSeed, resolveAgentMoodAsideText } from "./widgets/AgentMoodAside.js";
 import { ChatAvatar, type AvatarRole } from "./ChatAvatar.js";
 import type { ChatWidgetLiveData, ParsedTurnTokens } from "../../lib/chat-widget-view-models.js";
 import type { AgentAvatarConfig } from "../../types.js";
@@ -120,6 +121,12 @@ export const InvocationMessageBubble: FunctionComponent<InvocationMessageBubbleP
   const errorLabel = formatErrorCategory(message.metadata?.errorCategory);
   const createdAtLabel = formatChatTime(message.createdAt);
   const isExternalApi = Boolean(message.metadata?.isExternalApi);
+  const moodAsideText = message.role === "assistant"
+    ? resolveAgentMoodAsideText({
+        metadata: message.metadata,
+        seed: buildAgentMoodAsideSeed([message.id, message.contentMarkdown, senderName]),
+      })
+    : null;
 
   return (
     <div className={`flex ${fromUser || fromTool ? "justify-end" : "justify-start"}`}>
@@ -181,6 +188,8 @@ export const InvocationMessageBubble: FunctionComponent<InvocationMessageBubbleP
               }}
             />
           )}
+
+          <AgentMoodAside text={moodAsideText} />
 
           {message.toolCallsJson && !kind && (
             <div className="mt-4 rounded border border-slate-200 bg-slate-200/30 p-3 text-xs dark:border-white/10 dark:bg-black/20">
