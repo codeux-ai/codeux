@@ -29,6 +29,7 @@ vi.mock("gsap", () => {
 import { SchedulerPage } from "../../../dashboard/src/v2/SchedulerPage.js";
 import { ProjectDataContext } from "../../../dashboard/src/v2/context/project-data.js";
 import { fetchSprints } from "../../../dashboard/src/v2/lib/project-api.js";
+import { fetchNodeFlows } from "../../../dashboard/src/v2/lib/node-flow-api.js";
 import { fetchQuicksprintTemplates } from "../../../dashboard/src/v2/lib/quicksprint-api.js";
 import {
   fetchProjectSchedule,
@@ -41,6 +42,9 @@ import { subscribeToDashboardRealtime } from "../../../dashboard/src/lib/realtim
 // Mock API modules
 vi.mock("../../../dashboard/src/v2/lib/project-api.js", () => ({
   fetchSprints: vi.fn().mockResolvedValue({ sprints: [] }),
+}));
+vi.mock("../../../dashboard/src/v2/lib/node-flow-api.js", () => ({
+  fetchNodeFlows: vi.fn().mockResolvedValue({ flows: [] }),
 }));
 vi.mock("../../../dashboard/src/v2/lib/quicksprint-api.js", () => ({
   fetchQuicksprintTemplates: vi.fn().mockResolvedValue([]),
@@ -166,6 +170,20 @@ describe("SchedulerPage", () => {
   it("handles switching target types and scheduler submissions", async () => {
     vi.mocked(fetchSprints).mockResolvedValue({ sprints: [{ id: "sprint-1", name: "Sprint 1", status: "active" }] } as any);
     vi.mocked(fetchQuicksprintTemplates).mockResolvedValue([] as any);
+    vi.mocked(fetchNodeFlows).mockResolvedValue({
+      flows: [
+        {
+          id: "flow-1",
+          projectId: "proj-1",
+          title: "Data Sync Flow",
+          description: "",
+          graph: { nodes: [], edges: [] },
+          version: 1,
+          createdAt: "2026-06-01T00:00:00.000Z",
+          updatedAt: "2026-06-01T00:00:00.000Z",
+        },
+      ],
+    } as any);
     vi.mocked(fetchProjectSchedule).mockResolvedValue({ entries: [], occurrences: [] } as any);
 
     renderSchedulerPage();
@@ -188,6 +206,100 @@ describe("SchedulerPage", () => {
     expect(chatTab).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByText(/Selected schedule target: Chat/)).toBeInTheDocument();
     expect(screen.getByPlaceholderText(/Ask the chat agent to check status/i)).toBeInTheDocument();
+
+    const nodeFlowTab = screen.getByRole("button", { name: /node flow/i });
+    fireEvent.click(nodeFlowTab);
+
+    expect(nodeFlowTab).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByText(/Selected schedule target: Node flow/)).toBeInTheDocument();
+    expect(screen.getByText("Data Sync Flow")).toBeInTheDocument();
+    expect(screen.getByLabelText(/json input/i)).toBeInTheDocument();
+    expect(fetchNodeFlows).toHaveBeenCalledWith("proj-1", expect.any(AbortSignal));
+  });
+
+  it("blocks node-flow schedules with invalid JSON input", async () => {
+    vi.mocked(fetchSprints).mockResolvedValue({ sprints: [] } as any);
+    vi.mocked(fetchQuicksprintTemplates).mockResolvedValue([] as any);
+    vi.mocked(fetchNodeFlows).mockResolvedValue({
+      flows: [
+        {
+          id: "flow-1",
+          projectId: "proj-1",
+          title: "Data Sync Flow",
+          description: "",
+          graph: { nodes: [], edges: [] },
+          version: 1,
+          createdAt: "2026-06-01T00:00:00.000Z",
+          updatedAt: "2026-06-01T00:00:00.000Z",
+        },
+      ],
+    } as any);
+    vi.mocked(fetchProjectSchedule).mockResolvedValue({ entries: [], occurrences: [] } as any);
+
+    renderSchedulerPage();
+
+    await waitFor(() => {
+      expect(screen.getByText("Runtime Scheduler")).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /node flow/i }));
+    fireEvent.input(screen.getByLabelText(/json input/i), { target: { value: "{\"branch\":" } });
+    fireEvent.click(screen.getByRole("button", { name: /schedule/i }));
+
+    expect(await screen.findByText("Node flow input must be valid JSON.")).toBeInTheDocument();
+    expect(createSchedulerEntry).not.toHaveBeenCalled();
+  });
+
+  it("creates node-flow schedules with parsed JSON input", async () => {
+    vi.mocked(fetchSprints).mockResolvedValue({ sprints: [] } as any);
+    vi.mocked(fetchQuicksprintTemplates).mockResolvedValue([] as any);
+    vi.mocked(fetchNodeFlows).mockResolvedValue({
+      flows: [
+        {
+          id: "flow-1",
+          projectId: "proj-1",
+          title: "Data Sync Flow",
+          description: "",
+          graph: { nodes: [], edges: [] },
+          version: 3,
+          createdAt: "2026-06-01T00:00:00.000Z",
+          updatedAt: "2026-06-01T00:00:00.000Z",
+        },
+      ],
+    } as any);
+    vi.mocked(fetchProjectSchedule).mockResolvedValue({ entries: [], occurrences: [] } as any);
+
+    renderSchedulerPage();
+
+    await waitFor(() => {
+      expect(screen.getByText("Runtime Scheduler")).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /node flow/i }));
+    fireEvent.input(screen.getByLabelText(/json input/i), {
+      target: { value: "{\"branch\":\"dev\",\"dryRun\":true,\"count\":2}" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /schedule/i }));
+
+    await waitFor(() => {
+      expect(createSchedulerEntry).toHaveBeenCalledTimes(1);
+    });
+
+    const [, payload] = vi.mocked(createSchedulerEntry).mock.calls[0]!;
+    expect(payload).toEqual(expect.objectContaining({
+      title: "Run Data Sync Flow",
+      targetType: "node_flow",
+      nodeFlowTarget: {
+        flowId: "flow-1",
+        input: {
+          branch: "dev",
+          dryRun: true,
+          count: 2,
+        },
+      },
+      recurrence: { frequency: "none", interval: 1, endMode: "never" },
+    }));
+    expect(payload.nodeFlowTarget?.input).not.toBe("{\"branch\":\"dev\",\"dryRun\":true,\"count\":2}");
   });
 
   it("submits minute-based recurrence payloads from the form", async () => {
@@ -582,6 +694,74 @@ describe("SchedulerPage", () => {
     expect(screen.getByText(/Quicksprint: Template 1/)).toBeInTheDocument();
     expect(screen.getByText(/Chat thread: thread-1/)).toBeInTheDocument();
     expect(screen.getByText(/Memory remediation: AI review/)).toBeInTheDocument();
+  });
+
+  it("renders node-flow scheduled entries in the calendar and entry list", async () => {
+    const occurrenceTime = new Date();
+    occurrenceTime.setHours(11, 0, 0, 0);
+    vi.mocked(fetchNodeFlows).mockResolvedValue({
+      flows: [
+        {
+          id: "flow-1",
+          projectId: "proj-1",
+          title: "Data Sync Flow",
+          description: "",
+          graph: { nodes: [], edges: [] },
+          version: 3,
+          createdAt: "2026-06-01T00:00:00.000Z",
+          updatedAt: "2026-06-01T00:00:00.000Z",
+        },
+      ],
+    } as any);
+    vi.mocked(fetchProjectSchedule).mockResolvedValue({
+      entries: [
+        {
+          id: "entry-node-flow",
+          projectId: "proj-1",
+          title: "Run data sync",
+          targetType: "node_flow",
+          status: "scheduled",
+          scheduledFor: occurrenceTime.toISOString(),
+          timezone: "UTC",
+          nodeFlowTarget: {
+            flowId: "flow-1",
+            input: { branch: "dev" },
+          },
+          runCount: 0,
+          nextRunAt: occurrenceTime.toISOString(),
+          recurrence: { frequency: "none", interval: 1, endMode: "never" },
+        },
+      ],
+      occurrences: [
+        {
+          id: "occurrence-node-flow",
+          entryId: "entry-node-flow",
+          projectId: "proj-1",
+          title: "Run data sync",
+          targetType: "node_flow",
+          status: "scheduled",
+          startsAt: occurrenceTime.toISOString(),
+          occurrenceIndex: 0,
+          isNextRun: true,
+          isCompletedRun: false,
+        },
+      ],
+    } as any);
+
+    renderSchedulerPage();
+
+    await waitFor(() => {
+      expect(screen.getAllByText("Run data sync").length).toBeGreaterThan(0);
+    });
+
+    const row = screen.getByTestId("scheduler-entry-entry-node-flow");
+    expect(within(row).getByText("Node flow")).toBeInTheDocument();
+    expect(within(row).getByText(/Node flow: Data Sync Flow/)).toBeInTheDocument();
+    fireEvent.click(within(row).getByRole("button", { name: /^edit schedule entry$/i }));
+
+    const input = screen.getByLabelText(/json input/i) as HTMLTextAreaElement;
+    expect(input.value).toContain('"branch": "dev"');
+    expect(screen.getAllByText("Node flow").length).toBeGreaterThan(1);
   });
 
   it("opens edit mode, updates title and scheduled time, and saves the entry using PATCH", async () => {

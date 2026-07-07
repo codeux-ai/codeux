@@ -1,6 +1,6 @@
 # Scheduler
 
-The Scheduler page provides project-scoped automation for future sprint starts, quicksprint launches, timed chat-agent messages, and long-term memory remediation. The backend contract also supports scheduled node flows, agent-created wakeups, and scheduled task reruns for agent-facing surfaces that are not exposed in the dashboard form yet.
+The Scheduler page provides project-scoped automation for future sprint starts, quicksprint launches, scheduled node-flow runs, timed chat-agent messages, and long-term memory remediation. The backend contract also supports agent-created wakeups and scheduled task reruns for agent-facing surfaces that are not exposed in the dashboard form yet.
 
 ## Dashboard Behavior
 
@@ -16,11 +16,11 @@ The `Calendar` / `24 Hours` switcher is implemented as a two-tab control. It exp
 Operators can create entries for:
 - Sprints whose status is not `completed`.
 - Built-in or custom quicksprint templates available to the selected project.
+- Saved node flows owned by the selected project, with optional JSON object input.
 - Messages sent into `/chat` at the selected date and time.
 - Long-term memory remediation, either deterministic or AI-routed through the Remediation route.
 
 The runtime contract additionally accepts:
-- `node_flow` targets, which run a project-owned node flow by `flowId` with optional JSON `input` and optional persisted `flowVersion` metadata.
 - `agent_wakeup` targets, which post a scheduled wakeup message back into a chat thread with `bodyMarkdown`, optional `threadId`, optional `connectionId`, optional `title`, and agent-scheduler metadata.
 - `task` targets, which rerun an existing task by `taskId` and optional `provider`.
 
@@ -28,7 +28,7 @@ Those agent-created target types are intentionally backend-only in this task. Th
 
 When `agent_wakeup` or `task` entries are created by the secured MCP scheduler tool, the Scheduler page can display them in the calendar, 24-hour view, stats, and scheduled-entry list. They use their own concise target labels, chips, and summaries, for example an agent wakeup thread or task rerun ID, instead of falling back to chat labels.
 
-The dashboard form remains limited to operator-created sprint, quicksprint, chat, and memory remediation targets. MCP-created `agent_wakeup` and `task` entries cannot be safely edited in that form, so their Edit action explains that dashboard editing is unavailable while Pause, Resume, and Delete remain available.
+The dashboard form supports operator-created sprint, quicksprint, node-flow, chat, and memory remediation targets. Node-flow entries select a saved project flow and may include optional JSON input; blank input is omitted from the scheduler payload, and invalid JSON is rejected before submission. MCP-created `agent_wakeup` and `task` entries cannot be safely edited in that form, so their Edit action explains that dashboard editing is unavailable while Pause, Resume, and Delete remain available.
 
 The Sprint Composer also exposes a `Schedule` execution mode. That path saves the sprint definition first, including the sprint key override, name, goal, original prompt, planning route/model overrides, agent preset selections, linked issues, and imported tasks, then creates a scheduler entry targeting the saved sprint. It does not call planning or execution immediately.
 
@@ -121,7 +121,7 @@ The scheduler supports gating automation through status changes:
 ### Editing Scheduled Entries
 
 Operators can modify existing scheduler entries without deleting and recreating them:
-- **Hydration**: Clicking the **Edit** action next to a scheduled entry or any of its occurrences will populate the scheduler form with its current title, target type, target-specific values (sprint ID, template ID, task count, or chat message body), date/time, and recurrence settings.
+- **Hydration**: Clicking the **Edit** action next to a scheduled entry or any of its occurrences will populate the scheduler form with its current title, target type, target-specific values (sprint ID, template ID, task count, node-flow ID and JSON input, or chat message body), date/time, and recurrence settings.
 - **Title Customization**: A customizable **Title** field is available. If left empty during creation or edit, a descriptive title will be automatically generated (e.g., `Run Morning Check`).
 - **Target Validation**: All target-specific validation rules apply when editing (e.g., sprint selection must be a non-completed sprint, chat message cannot be empty).
 - **Save and Cancel**: Submitting in edit mode sends a `PATCH` request to update the entry without triggering it immediately. The edit mode can be cancelled at any time to return to creation mode without mutating the entry.
