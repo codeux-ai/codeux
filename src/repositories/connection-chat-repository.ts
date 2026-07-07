@@ -4,6 +4,7 @@ import { AppDbStorage } from "./app-db-storage.js";
 import { requireRecord, toNumber, toBoolean } from "./repository-utils.js";
 import type {
   ConnectionInboxMessage,
+  ConversationMessageMetadata,
   ConversationMessageRecord,
   ConversationThreadRecord,
   CreateConversationThreadInput,
@@ -88,11 +89,11 @@ export interface CreateSystemConversationMessageInput {
   title?: string;
   connectionId?: string | null;
   bodyMarkdown: string;
-  metadata?: Record<string, unknown> | null;
+  metadata?: ConversationMessageMetadata | null;
 }
 
 const SELECTED_PROJECT_KEY = "selected_project_id";
-function isHiddenConversationMessage(metadata?: Record<string, unknown> | null): boolean {
+function isHiddenConversationMessage(metadata?: ConversationMessageMetadata | null): boolean {
   return metadata?.internalVisibility === HIDDEN_INTERNAL_VISIBILITY;
 }
 
@@ -803,13 +804,13 @@ export class ConnectionChatRepository {
       threadTitle: row.title,
       projectId: row.project_id,
       bodyMarkdown: row.body_markdown,
-      metadata: row.metadata_json ? JSON.parse(row.metadata_json) as Record<string, unknown> : null,
+      metadata: row.metadata_json ? JSON.parse(row.metadata_json) as ConversationMessageMetadata : null,
       createdAt: row.created_at,
       deliveryStatus: "delivered" as const,
     }));
     this.notifyProjects(scopedProjectIds);
     for (const row of rows) {
-      const metadata = row.metadata_json ? JSON.parse(row.metadata_json) as Record<string, unknown> : null;
+      const metadata = row.metadata_json ? JSON.parse(row.metadata_json) as ConversationMessageMetadata : null;
       if (!isHiddenConversationMessage(metadata)) {
         this.publishThreadUpdatedEvent(requireConversationThreadQuery(this.db, row.thread_id));
       }

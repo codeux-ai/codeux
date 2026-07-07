@@ -9,6 +9,7 @@ import { Sidebar } from "../../../dashboard/src/v2/components/layout/Sidebar.js"
 import { PageContainer } from "../../../dashboard/src/v2/components/layout/PageContainer.js";
 import { KineticDock } from "../../../dashboard/src/v2/components/KineticDock.js";
 import { useRouterState } from "@tanstack/react-router";
+import { EXTERNAL_DOCS_URL } from "../../../dashboard/src/v2/lib/navigation-items.js";
 
 expect.extend(matchers);
 
@@ -124,7 +125,7 @@ describe("Knowledge Base Navigation", () => {
         ]);
         expect(screen.getByRole("link", { name: "Schedule" })).toHaveAttribute("href", "/scheduler");
         expect(screen.getByRole("link", { name: "Knowledge" })).toHaveAttribute("href", "/knowledge");
-        expect(screen.getByRole("link", { name: "Docs" })).toHaveAttribute("href", "/docs");
+        expect(screen.getByRole("link", { name: "Docs" })).toHaveAttribute("href", EXTERNAL_DOCS_URL);
     });
 
     it("renders Knowledge link in KineticDock", () => {
@@ -160,7 +161,7 @@ describe("Knowledge Base Navigation", () => {
         ]);
         expect(screen.getByRole("link", { name: "Schedule" })).toHaveAttribute("href", "/scheduler");
         expect(screen.getByRole("link", { name: "Knowledge" })).toHaveAttribute("href", "/knowledge");
-        expect(screen.getByRole("link", { name: "Docs" })).toHaveAttribute("href", "/docs");
+        expect(screen.getByRole("link", { name: "Docs" })).toHaveAttribute("href", EXTERNAL_DOCS_URL);
     });
 
     it("gives dock links stable names and current-page semantics", () => {

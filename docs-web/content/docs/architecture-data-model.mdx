@@ -65,29 +65,6 @@ Has-many: sprints, agent presets, memories, conversation threads, attention item
 
 Has-many: subtasks, sprint runs, preview sessions, settings overrides.
 
-## Sprint linked issues and external sources
-
-Linked sprint scope is stored in `sprint_linked_issues`.
-
-| Field | Type | Notes |
-| --- | --- | --- |
-| `id` | string | Primary key. |
-| `projectId`, `sprintId` | string | FK. |
-| `provider` | enum | `github`, `gitlab`, `jira`, `notion`, `asana`, `linear`, `miro`, `lucid`, `figma`, or `mural`. |
-| `hostDomain` | string | Normalized source host. |
-| `projectKey` | string | Optional Jira/project-management key. |
-| `repository` | string | Repository, workspace, team, or provider container identifier. |
-| `issueNumber` | int | Nullable. Used by GitHub, GitLab, and Jira compatibility paths. |
-| `externalId` | string | Nullable provider object id for non-numeric linked sources. |
-| `sourceKind` | enum | Optional object kind: `issue`, `task`, `page`, `database`, `board`, `document`, `file`, or `canvas`. |
-| `issueKey` | string | Display key, such as `#42`, `OPS-42`, or a provider object id. |
-| `title`, `url`, `state` | string | Imported display and source state. |
-| `labels`, `assignees` | string[] | JSON arrays. |
-| `closeState`, `closeError`, `closedAt` | string | Sprint-completion close/transition state. |
-| `importedAt`, `updatedAt` | datetime | – |
-
-Numeric imports are unique by sprint/provider/host/repository/issue number. External linked sources are unique by sprint/provider/host/repository/external id. Existing GitHub, GitLab, and Jira rows keep their numeric identity during migration; new non-numeric sources store `issueNumber = null` and rely on `externalId`.
-
 ## Subtask (Task)
 
 | Field | Type | Notes |
@@ -251,7 +228,7 @@ Memories with mismatched `embeddingModelId` are excluded from search; trigger re
 | `id` | string | – |
 | `endpointKey` | string | Stable client-supplied ID. |
 | `displayName` | string | – |
-| `role` | enum | `project_manager`/`worker`/`listener`. |
+| `role` | enum | `project_manager`/`worker-host`. |
 | `transport` | enum | `stdio`/`http`/`internal`. |
 | `capabilities` | json | – |
 | `status` | enum | `connected`/`disconnected`. |
@@ -278,8 +255,6 @@ Three tables: `system_settings` (singleton), `project_settings_overrides` (per p
 
 Each row is a sparse JSON document — only overridden fields are stored. Effective settings are computed by merging defaults → system → project → sprint at read time.
 
-Integration settings are part of the same JSON settings model. GitHub and GitLab tokens remain in `git.githubToken` and `git.gitlabToken`; Jira remains in the existing `jira` block. Additional project-management and canvas providers use typed blocks named `notion`, `asana`, `linear`, `miro`, `lucid`, `figma`, and `mural`. Each block stores `enabled`, `apiToken`, `apiSecret`, `baseUrl`, workspace/team/project identifiers, database/board/document/file identifiers, and `defaultSearchLimit`.
-
 ## Index summary
 
 Primary indexes (besides PKs):
@@ -289,8 +264,6 @@ Primary indexes (besides PKs):
 - `task_runs.taskId`
 - `task_dispatches.taskRunId, startedAt`
 - `execution_invocations.projectId, sprintRunId, at`
-- `sprint_linked_issues.sprintId, provider, hostDomain, repository, issueNumber` (unique numeric linked issues)
-- `sprint_linked_issues.sprintId, provider, hostDomain, repository, externalId` (unique external linked sources)
 - `memories.projectId, embeddingModelId`
 - `attention_items.projectId, resolvedAt`
 - `worker_endpoints.endpointKey` (unique)

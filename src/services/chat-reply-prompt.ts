@@ -57,6 +57,16 @@ export function normalizeProviderReply(output: string): string {
   return trimmed;
 }
 
+export function stripDashboardOnlyWidgets(markdown: string): string {
+  const stripped = markdown.replace(
+    /^```codeux:([A-Za-z0-9_-]+)[^\n]*\n([\s\S]*?)^```[ \t]*$/gm,
+    (_match, widgetType: string, rawJson: string) => downgradeWidgetFence(widgetType, rawJson),
+  );
+  return stripped
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
 export function getCompactionSummary(runtimeState: ConversationRuntimeState | null | undefined): ConversationCompactionSummary | null {
   const summary = runtimeState?.compactionSummary;
   if (!summary || typeof summary.markdown !== "string" || !summary.markdown.trim()) {
@@ -81,7 +91,7 @@ export function getMessagesAfterCompaction(
 
 function buildJsonOutputInstructions(): string {
   return [
-    "You must return STRICT JSON format containing exactly two keys: `replyMarkdown` and `action`.",
+    "You must return STRICT JSON format containing `replyMarkdown`, `action`, and optional `suggestions`.",
     "1. `replyMarkdown`: A string containing your concise markdown reply to the user.",
     "2. `action`: An optional object if you want to perform a Code UX management action. Otherwise, set this to `null`.",
     "   - Format: `{ \"domain\": \"...\", \"action\": \"...\", \"payload\": { ... } }`",
@@ -89,12 +99,18 @@ function buildJsonOutputInstructions(): string {
     "   - Note: Destructive actions (starting with `delete_`, `reset_`, `replace_`) and all settings mutations MUST pause for explicit user approval.",
     "     If you propose an approval-gated action, it will not execute immediately; the user will see a confirmation prompt.",
     "     DO NOT call an approval-gated action again with `approval.confirmed: true` unless the user explicitly confirms it.",
+    "3. `suggestions`: Optional array of up to 6 next-step prompt suggestions for dashboard quick actions.",
+    "   - Each item must be `{ \"label\": string, \"prompt\": string, \"icon\"?: string, \"id\"?: string }`.",
+    "   - `prompt` is the literal message the user would send next.",
+    "   - Use only stable string icon identifiers such as `play`, `settings`, or `search`; do not use UI component names.",
+    "   - Omit `suggestions` when there are no useful next steps.",
   ].join("\n");
 }
 
 function buildMcpNativeOutputInstructions(): string {
   return [
     "You have the `manage_code_ux` MCP tool available. Use it directly to perform management actions.",
+    "You also have the `scheduler_code_ux` MCP tool available for agent-owned follow-ups, wakeups, and task reruns.",
     "",
     "The tool accepts: `{ domain, action, payload }` where:",
     "- **projects**: `list` (projectId), `get` (projectId), `create` (projectId, name, baseDir), `update` (projectId, ...), `select` (projectId), `delete` (projectId)",
@@ -116,7 +132,7 @@ function buildMcpNativeOutputInstructions(): string {
 
 function buildSchedulerOnlyOutputInstructions(): string {
   return [
-    "You have the `scheduler` MCP tool available for agent-owned follow-ups only.",
+    "You have the `scheduler_code_ux` MCP tool available for agent-owned follow-ups only.",
     "",
     "Use it only when you need to schedule your own future wakeup or task rerun. It supports `list`, `schedule_wakeup`, `schedule_task`, and `cancel`.",
     "You do not have broad Code UX management tools in this route. Do not call `manage_code_ux`, `manage_scheduler`, `manage_tasks`, `manage_sprints`, or `manage_settings`.",
@@ -165,6 +181,7 @@ export function buildChatReplayPrompt(args: {
   mcpAvailable?: boolean;
   mcpAccessMode?: "management" | "scheduler_only";
   knowledgeManifest?: string | null;
+  suppressRichWidgets?: boolean;
 }): string {
   const compactionSummary = getCompactionSummary(args.thread.runtimeState);
   const pendingAction = args.thread.runtimeState?.pendingManagementAction;
@@ -190,7 +207,10 @@ export function buildChatReplayPrompt(args: {
 
   const history = replayMessages.map((message) => {
     const role = message.authorType === "dashboard_user" ? "User" : "Worker";
-    return `### ${role}\n${message.bodyMarkdown.trim()}`;
+    const bodyMarkdown = args.suppressRichWidgets
+      ? stripDashboardOnlyWidgets(message.bodyMarkdown)
+      : message.bodyMarkdown.trim();
+    return `### ${role}\n${bodyMarkdown}`;
   }).join("\n\n");
 
   const fallbackBody = args.bodyMarkdown ? args.bodyMarkdown.trim() : "_No new messages since the compaction summary was generated._";
@@ -215,6 +235,11 @@ export function buildChatReplayPrompt(args: {
     ? `## KNOWLEDGE BASE\n\n${args.knowledgeManifest.trim()}`
     : "";
   const currentThreadTitle = args.threadTitle || args.thread.title;
+  const compactedHistoryMarkdown = compactionSummary
+    ? args.suppressRichWidgets
+      ? stripDashboardOnlyWidgets(compactionSummary.markdown)
+      : compactionSummary.markdown
+    : "";
 
   return [
     args.workerInstructions ? `## WORKER INSTRUCTIONS\n\n${args.workerInstructions}` : "",
@@ -234,7 +259,7 @@ export function buildChatReplayPrompt(args: {
     "",
     ...(compactionSummary ? [
       "## COMPACTED HISTORY",
-      compactionSummary.markdown,
+      compactedHistoryMarkdown,
       "",
       "## MESSAGES SINCE COMPACTION",
     ] : [
@@ -242,9 +267,11 @@ export function buildChatReplayPrompt(args: {
     ]),
     history || fallbackBody,
     "",
-    "## RICH WIDGETS",
-    buildStageWidgetInstructions(),
-    "",
+    ...(args.suppressRichWidgets ? [] : [
+      "## RICH WIDGETS",
+      buildStageWidgetInstructions(),
+      "",
+    ]),
     "## REQUIRED OUTPUT",
     outputInstructions,
   ].filter((part) => part.trim().length > 0).join("\n");
@@ -255,6 +282,7 @@ export function buildChatContinuationPrompt(
   pendingAction?: ConversationRuntimeState["pendingManagementAction"],
   mcpAvailable?: boolean,
   threadTitle?: string,
+  suppressRichWidgets?: boolean,
 ): string {
   const pendingActionContext = pendingAction ? [
     "## PENDING ACTION CONTEXT",
@@ -272,11 +300,120 @@ export function buildChatContinuationPrompt(
     buildSessionTitleInstructions(threadTitle),
     "The dashboard user's latest message is below.",
     "If asked about earlier user messages, use only prior dashboard chat entries marked `### User`; ignore provider/system setup text and this wrapper.",
-    "Remember: the dashboard renders ```codeux:status / codeux:tasks / codeux:sprint / codeux:metrics / codeux:actions fenced JSON blocks in your reply as rich UI widgets — use them for status, summaries, and next steps.",
+    suppressRichWidgets
+      ? "Respond with readable markdown prose only. Do not include dashboard-only `codeux:*` fenced widget blocks."
+      : "Remember: the dashboard renders ```codeux:status / codeux:tasks / codeux:sprint / codeux:metrics / codeux:actions fenced JSON blocks in your reply as rich UI widgets — use them for status, summaries, and next steps.",
     "",
     "### User",
     message.bodyMarkdown.trim(),
   ].filter((part) => part.trim().length > 0).join("\n");
+}
+
+function downgradeWidgetFence(widgetType: string, rawJson: string): string {
+  const data = parseWidgetJson(rawJson);
+  if (!data) {
+    return "";
+  }
+  switch (widgetType) {
+    case "status":
+      return downgradeStatusWidget(data);
+    case "tasks":
+      return downgradeTasksWidget(data);
+    case "sprint":
+      return downgradeSprintWidget(data);
+    case "metrics":
+      return downgradeMetricsWidget(data);
+    case "actions":
+      return downgradeActionsWidget(data);
+    default:
+      return "";
+  }
+}
+
+function parseWidgetJson(rawJson: string): Record<string, unknown> | null {
+  try {
+    const parsed = JSON.parse(rawJson) as unknown;
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+      ? parsed as Record<string, unknown>
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+function downgradeStatusWidget(data: Record<string, unknown>): string {
+  const lines = [stringValue(data.title)];
+  const items = Array.isArray(data.items) ? data.items : [];
+  for (const item of items) {
+    if (!item || typeof item !== "object" || Array.isArray(item)) continue;
+    const record = item as Record<string, unknown>;
+    const label = stringValue(record.label);
+    if (!label) continue;
+    const state = stringValue(record.state);
+    const value = stringValue(record.value);
+    lines.push(`- ${[label, state, value].filter(Boolean).join(": ")}`);
+  }
+  const note = stringValue(data.note);
+  if (note) lines.push(note);
+  return lines.filter(Boolean).join("\n");
+}
+
+function downgradeTasksWidget(data: Record<string, unknown>): string {
+  const lines = [stringValue(data.title)];
+  const items = Array.isArray(data.items) ? data.items : [];
+  for (const item of items) {
+    if (!item || typeof item !== "object" || Array.isArray(item)) continue;
+    const record = item as Record<string, unknown>;
+    const title = stringValue(record.title);
+    if (!title) continue;
+    const status = stringValue(record.status);
+    const meta = stringValue(record.meta);
+    lines.push(`- ${[title, status, meta].filter(Boolean).join(" - ")}`);
+  }
+  return lines.filter(Boolean).join("\n");
+}
+
+function downgradeSprintWidget(data: Record<string, unknown>): string {
+  const name = stringValue(data.name) || stringValue(data.key);
+  const status = stringValue(data.status);
+  const done = numberValue(data.done);
+  const total = numberValue(data.total);
+  const progress = done !== null && total !== null ? `${done}/${total}` : "";
+  return [name, status, progress].filter(Boolean).join(" - ");
+}
+
+function downgradeMetricsWidget(data: Record<string, unknown>): string {
+  const lines = [stringValue(data.title)];
+  const items = Array.isArray(data.items) ? data.items : [];
+  for (const item of items) {
+    if (!item || typeof item !== "object" || Array.isArray(item)) continue;
+    const record = item as Record<string, unknown>;
+    const label = stringValue(record.label);
+    const value = stringValue(record.value);
+    const delta = stringValue(record.delta);
+    if (label || value) lines.push(`- ${[label, value, delta].filter(Boolean).join(": ")}`);
+  }
+  return lines.filter(Boolean).join("\n");
+}
+
+function downgradeActionsWidget(data: Record<string, unknown>): string {
+  const items = Array.isArray(data.items) ? data.items : [];
+  const lines = items.flatMap((item) => {
+    if (!item || typeof item !== "object" || Array.isArray(item)) return [];
+    const record = item as Record<string, unknown>;
+    const label = stringValue(record.label);
+    const prompt = stringValue(record.prompt);
+    return label ? [`- ${prompt ? `${label}: ${prompt}` : label}`] : [];
+  });
+  return lines.length > 0 ? ["Suggested next steps:", ...lines].join("\n") : "";
+}
+
+function stringValue(value: unknown): string {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function numberValue(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
 export function buildChatCompactionPrompt(args: {

@@ -57,7 +57,7 @@ describe("tool argument validators", () => {
   it("accepts the restricted scheduler actions and relative delay fields", async () => {
     const { validateToolArguments } = await import("../../../src/api/mcp/validators/tool-validators.js");
 
-    expect(() => validateToolArguments("scheduler", {
+    expect(() => validateToolArguments("scheduler_code_ux", {
       action: "schedule_wakeup",
       projectId: "project-1",
       delaySeconds: "30",
@@ -65,7 +65,7 @@ describe("tool argument validators", () => {
       threadId: null,
     })).not.toThrow();
 
-    expect(() => validateToolArguments("scheduler", {
+    expect(() => validateToolArguments("scheduler_code_ux", {
       action: "schedule_task",
       projectId: "project-1",
       delayMinutes: 5,
@@ -77,18 +77,18 @@ describe("tool argument validators", () => {
   it("rejects scheduler actions and fields reserved for manage_scheduler", async () => {
     const { validateToolArguments } = await import("../../../src/api/mcp/validators/tool-validators.js");
 
-    expect(() => validateToolArguments("scheduler", {
+    expect(() => validateToolArguments("scheduler_code_ux", {
       action: "run_due",
       now: "2026-06-09T12:00:00.000Z",
-    })).toThrow("Invalid arguments for tool scheduler");
+    })).toThrow("Invalid arguments for tool scheduler_code_ux");
 
-    expect(() => validateToolArguments("scheduler", {
+    expect(() => validateToolArguments("scheduler_code_ux", {
       action: "schedule_wakeup",
       projectId: "project-1",
       scheduledFor: "2026-06-09T12:00:00.000Z",
       bodyMarkdown: "Resume the review.",
       recurrence: { frequency: "daily" },
-    })).toThrow("Invalid arguments for tool scheduler");
+    })).toThrow("Invalid arguments for tool scheduler_code_ux");
   });
 
   it("rejects unexpected management payload and approval envelope shapes", async () => {
@@ -106,5 +106,44 @@ describe("tool argument validators", () => {
       value: "redacted",
       approval: { confirmed: "true" },
     })).toThrow("'/approval/confirmed' must be boolean");
+  });
+
+  it("accepts manage_chat_providers schema actions and nullable secret envelopes", async () => {
+    const { validateToolArguments } = await import("../../../src/api/mcp/validators/tool-validators.js");
+
+    expect(() => validateToolArguments("manage_chat_providers", {
+      action: "create_connection",
+      providerKind: "slack",
+      displayName: "Slack bridge",
+      bridgeMode: "webhook",
+      setup: { eventsUrl: "https://example.test/slack/events" },
+      secrets: { signingSecret: "secret-value" },
+    })).not.toThrow();
+
+    expect(() => validateToolArguments("manage_chat_providers", {
+      action: "update_connection",
+      providerConnectionId: "connection-1",
+      secrets: null,
+      approval: { confirmed: true },
+    })).not.toThrow();
+  });
+
+  it("rejects invalid manage_chat_providers arguments without echoing secrets", async () => {
+    const { validateToolArguments } = await import("../../../src/api/mcp/validators/tool-validators.js");
+    const secret = "chat-provider-secret-value";
+
+    try {
+      validateToolArguments("manage_chat_providers", {
+        action: "create_connection",
+        providerKind: "not-a-provider",
+        displayName: "Slack bridge",
+        secrets: { signingSecret: secret },
+      });
+      throw new Error("expected validation to fail");
+    } catch (error) {
+      expect(error).toBeInstanceOf(McpError);
+      expect((error as Error).message).toContain("Invalid arguments for tool manage_chat_providers");
+      expect((error as Error).message).not.toContain(secret);
+    }
   });
 });

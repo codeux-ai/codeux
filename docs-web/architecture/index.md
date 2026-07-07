@@ -15,8 +15,9 @@ It is for contributors and integrators who need to reason about *how* Code UX ma
 | 5 | [CI integration](./ci-integration.md) | Feature PR gate, merge protocol, autofix retries, conflict handling |
 | 6 | [Dashboard architecture](./dashboard-architecture.md) | Preact stack, real-time client, route map, state model |
 | 7 | [Data model](./data-model.md) | Projects, sprints, tasks, runs, dispatches, memory, conversations |
-| 8 | [Configuration resolution](./configuration-resolution.md) | Cascade order, search paths, settings hierarchy |
-| 9 | [Security model](./security.md) | Authentication, authorisation, secrets, network surface |
+| 8 | [External chat connectors](./external-chat-providers.md) | Provider setup, channel bindings, inbound dedupe, outbound delivery state |
+| 9 | [Configuration resolution](./configuration-resolution.md) | Cascade order, search paths, settings hierarchy |
+| 10 | [Security model](./security.md) | Authentication, authorisation, secrets, network surface |
 
 ## Runtime Notes
 

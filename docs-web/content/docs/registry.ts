@@ -46,8 +46,11 @@ export type DocsSlug =
   | 'architecture-ci-integration'
   | 'architecture-dashboard-architecture'
   | 'architecture-data-model'
+  | 'architecture-external-chat-providers'
   | 'architecture-configuration-resolution'
   | 'architecture-security'
+  | 'settings-subcategories-display-settings'
+  | 'settings-subcategories-onboarding'
 
 export interface DocsRegistryEntry extends Partial<Omit<PageMeta, 'title' | 'description'>> {
   id: DocsSlug
@@ -175,7 +178,7 @@ export const docsRegistry: Record<DocsSlug, DocsRegistryEntry> = {
     path: '/docs/user-dashboard-chat',
     section: 'User Guide',
     title: "Chat",
-    description: "The Chat page (/chat) is a thread-based conversation surface that lets you talk to agents — both for free-form Q&A and to inspect MCP tool invocations.",
+    description: "The Chat page (/chat) is a conversation surface that lets you talk to agents for project-backed Q&A, inspect MCP tool invocations, and get local onboarding help before any project exists.",
   },
   'user-dashboard-agents': {
     id: 'user-dashboard-agents',
@@ -252,7 +255,7 @@ export const docsRegistry: Record<DocsSlug, DocsRegistryEntry> = {
     path: '/docs/developer-management-actions',
     section: 'Developer Reference',
     title: "Management actions",
-    description: "Code UX exposes one MCP tool per management domain — manage_projects, manage_sprints, manage_tasks, manage_quicksprints, manage_scheduler, manage_agents, manage_memory, manage_settings, manage_preview, and manage_tele...",
+    description: "Code UX exposes one MCP tool per management domain — manage_projects, manage_sprints, manage_tasks, manage_quicksprints, manage_scheduler, manage_agents, manage_memory, manage_settings, manage_preview, manage_chat_pro...",
   },
   'developer-http-api': {
     id: 'developer-http-api',
@@ -280,7 +283,7 @@ export const docsRegistry: Record<DocsSlug, DocsRegistryEntry> = {
     path: '/docs/developer-settings-reference',
     section: 'Developer Reference',
     title: "Settings schema reference",
-    description: "This page enumerates every settings field, its type, default, range (if applicable), and the JSON path you would use with manage_code_ux → settings → patch_*_setting.",
+    description: "This page enumerates every settings field, its type, default, range (if applicable), and the JSON path you would use with manage_settings → patch_*_setting.",
   },
   'developer-sprint-format': {
     id: 'developer-sprint-format',
@@ -359,6 +362,13 @@ export const docsRegistry: Record<DocsSlug, DocsRegistryEntry> = {
     title: "Data model",
     description: "This page describes the entities Code UX persists and how they relate. The default backend is SQLite; a Postgres migration is planned but not yet shipped.",
   },
+  'architecture-external-chat-providers': {
+    id: 'architecture-external-chat-providers',
+    path: '/docs/architecture-external-chat-providers',
+    section: 'Architecture',
+    title: "External chat connectors",
+    description: "Code UX persists external chat provider configuration separately from MCP listener connections and dashboard conversation messages. The runtime stays adapter-neutral: it records provider setup, bridge mode, channel ro...",
+  },
   'architecture-configuration-resolution': {
     id: 'architecture-configuration-resolution',
     path: '/docs/architecture-configuration-resolution',
@@ -372,6 +382,20 @@ export const docsRegistry: Record<DocsSlug, DocsRegistryEntry> = {
     section: 'Architecture',
     title: "Security model",
     description: "Code UX is designed to run as a single-user trusted process on a developer's workstation or a dedicated server. This page documents what is and is not protected, the threat model, and the recommended deployment posture.",
+  },
+  'settings-subcategories-display-settings': {
+    id: 'settings-subcategories-display-settings',
+    path: '/docs/settings-subcategories-display-settings',
+    section: 'User Guide',
+    title: "Display Settings",
+    description: "Controls the dashboard shell layout, experience mode, theme, motion preference, and desktop zoom when available.",
+  },
+  'settings-subcategories-onboarding': {
+    id: 'settings-subcategories-onboarding',
+    path: '/docs/settings-subcategories-onboarding',
+    section: 'User Guide',
+    title: "Onboarding",
+    description: "Reopens the guided setup flow without changing saved settings by itself.",
   },
 }
 
@@ -419,8 +443,11 @@ export const orderedDocs: DocsRegistryEntry[] = [
   docsRegistry['architecture-ci-integration'],
   docsRegistry['architecture-dashboard-architecture'],
   docsRegistry['architecture-data-model'],
+  docsRegistry['architecture-external-chat-providers'],
   docsRegistry['architecture-configuration-resolution'],
   docsRegistry['architecture-security'],
+  docsRegistry['settings-subcategories-display-settings'],
+  docsRegistry['settings-subcategories-onboarding'],
 ]
 
 export const groupedDocs = orderedDocs.reduce<Record<DocsSection, DocsRegistryEntry[]>>(

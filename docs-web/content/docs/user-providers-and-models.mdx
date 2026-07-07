@@ -16,6 +16,22 @@ Code UX dispatches work across **seven providers**, each accepting one or more *
 
 All non-Jules providers are *virtual workers* — Code UX shells out to the provider's CLI, optionally inside a Docker container. Authentication is provided by the host CLI's normal login flow; Code UX merely detects and references it.
 
+## External chat connectors
+
+Settings -> Integrations -> Chat Connectors includes external chat connector connections for WhatsApp, iMessage, Telegram, Slack, Microsoft Teams, and Discord channels. These are not AI model providers and they do not affect invocation routing. They bind authenticated external chat bridges to Code UX projects so inbound messages can enter project chat threads and assistant replies can be delivered back through the same bridge.
+
+Supported bridge modes are:
+
+- `managed_bridge` — HTTP delivery to a configured managed bridge URL.
+- `webhook` — HTTP delivery to a configured generic bridge or bot gateway URL.
+- `native_bridge` — shell-free local command execution for native bridge scripts, with JSON on stdin and optional bridge token environment variables.
+
+Code UX does not call the official WhatsApp, iMessage, Telegram, Slack, Microsoft Teams, or Discord APIs directly. Provider-specific API interaction belongs to the managed bridge, webhook gateway, or native bridge you connect.
+
+Chat provider setup stores connection records, write-only secrets, channel bindings, routing hints, and outbound delivery state separately from AI provider credentials. Webhook ingress requires HMAC signatures when a signing secret is configured; Managed and native bridge ingress use bearer-style bridge tokens. Shared external channels can route to multiple projects only when a selector or routing hint chooses exactly one binding.
+
+For the full setup and routing contract in the published docs, see [External chat connectors](/docs/architecture-external-chat-providers).
+
 ## The models
 
 The full model catalog lives in `src/repositories/settings-defaults.ts`. The defaults below reflect the currently shipped release.

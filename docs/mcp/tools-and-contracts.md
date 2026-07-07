@@ -14,7 +14,7 @@ These cover:
 - `manage_tasks`
 - `manage_quicksprints`
 - `manage_scheduler`
-- `scheduler`
+- `scheduler_code_ux`
 - `manage_agents`
 - `manage_memory`
 - `manage_skills`
@@ -22,6 +22,7 @@ These cover:
 - `search_skills`
 - `manage_settings`
 - `manage_preview`
+- `manage_chat_providers`
 - `manage_telemetry`
 - `register_worker_endpoint`
 - `pull_task_dispatch`
@@ -50,7 +51,7 @@ These cover:
 - `manage_tasks`
 - `manage_quicksprints`
 - `manage_scheduler`
-- `scheduler`
+- `scheduler_code_ux`
 - `manage_agents`
 - `manage_memory`
 - `manage_skills`
@@ -58,6 +59,7 @@ These cover:
 - `search_skills`
 - `manage_settings`
 - `manage_preview`
+- `manage_chat_providers`
 - `manage_telemetry`
 
 ### Worker control plane
@@ -153,11 +155,11 @@ Tool arguments are validated against `src/contracts/mcp-tool-definitions.ts` bef
 Code UX exposes two scheduler MCP surfaces:
 
 - `manage_scheduler` is the project-manager management surface. It can list, create, schedule sprints, schedule quicksprints, schedule chat messages, update entries, delete entries with approval, and run due entries. It remains unchanged for project-manager clients.
-- `scheduler` is the restricted agent-owned surface. It supports only `list`, `schedule_wakeup`, `schedule_task`, and `cancel`.
+- `scheduler_code_ux` is the restricted agent-owned surface. It supports only `list`, `schedule_wakeup`, `schedule_task`, and `cancel`. The Code UX suffix intentionally avoids collisions with scheduler tools exposed by provider CLIs or other MCP servers.
 
-The restricted `scheduler` tool accepts either an absolute `scheduledFor` ISO timestamp or one positive relative delay field, `delaySeconds` or `delayMinutes`. `schedule_wakeup` requires `projectId` and `bodyMarkdown`, and may include `title`, `timezone`, `threadId`, and `connectionId`. `schedule_task` requires `projectId` and `taskId`, and may include `title`, `timezone`, and a provider override.
+The restricted `scheduler_code_ux` tool accepts either an absolute `scheduledFor` ISO timestamp or one positive relative delay field, `delaySeconds` or `delayMinutes`. `schedule_wakeup` requires `projectId` and `bodyMarkdown`, and may include `title`, `timezone`, `threadId`, and `connectionId`. `schedule_task` requires `projectId` and `taskId`, and may include `title`, `timezone`, and a provider override.
 
-Every `scheduler` entry is persisted as an `agent_scheduler` target. The runtime stamps `origin: "agent_scheduler"`, `source: "agent_scheduler"`, and `createdByAgentId` from the current MCP agent context. `list` returns only entries created by the calling agent. `cancel` changes the matching entry status to `cancelled` only when the entry is an agent-scheduler wakeup or task entry created by that same agent. Dashboard-created entries, `manage_scheduler` entries, entries without agent-scheduler metadata, and entries created by another agent are rejected with the standard management validation envelope.
+Every `scheduler_code_ux` entry is persisted as an `agent_scheduler` target. The runtime stamps `origin: "agent_scheduler"`, `source: "agent_scheduler"`, and `createdByAgentId` from the current MCP agent context. `list` returns only entries created by the calling agent. `cancel` changes the matching entry status to `cancelled` only when the entry is an agent-scheduler wakeup or task entry created by that same agent. Dashboard-created entries, `manage_scheduler` entries, entries without agent-scheduler metadata, and entries created by another agent are rejected with the standard management validation envelope.
 
 The restricted tool intentionally does not expose due-entry execution, arbitrary update, recurrence editing, sprint scheduling, quicksprint scheduling, memory remediation scheduling, or global scheduler destructive controls.
 
@@ -751,6 +753,68 @@ For scheduler calls:
 For preview calls:
 - `manage_preview` supports `list_sessions`, `start_session`, `rebuild_session`, `stop_session`, `remove_session`, `get_logs`, `get_url`, `get_script`, and `update_script`.
 - `remove_session` requires approval confirmation.
+
+For external chat provider calls:
+- `manage_chat_providers` supports `list_provider_definitions`, `list_connections`, `get_connection`, `create_connection`, `update_connection`, `delete_connection`, `list_channel_bindings`, `create_channel_binding`, `update_channel_binding`, `delete_channel_binding`, and `list_outbound_deliveries`.
+- Supported provider kinds are `whatsapp`, `imessage`, `telegram`, `slack`, `microsoft-teams`, and `discord`, delivered through the implemented `managed_bridge`, `webhook`, or `native_bridge` bridge contracts. The tool does not claim direct official API integration with those providers.
+- Connection responses return redacted credential metadata and generated ingress URL guidance; raw `secrets` are not exposed in success responses, validation errors, or approval envelopes.
+- `delete_connection` and `delete_channel_binding` require approval confirmation.
+- `update_connection` requires a one-use approval handshake before replacing a non-empty `secrets` payload. The preflight response is bound to a redacted payload plus secret hash and does not echo secret values.
+- Channel bindings attach an external channel to a project with optional routing hints, inbound/outbound flags, and `suppressRichWidgets`. Multiple projects may share one external channel; runtime ingress uses selectors and records `disambiguation_needed` instead of guessing when no selector chooses exactly one project.
+- `list_outbound_deliveries` is read-only delivery-state inspection. It can filter by provider connection, channel binding, external channel, delivery status, and limit. Delivery statuses include `pending`, `sending`, `delivered`, `retryable_failure`, `processed`, `failed`, `duplicate`, and `cancelled`.
+- The management surface only configures providers, bindings, setup definitions, ingress URL guidance, and outbound delivery inspection. Authenticated ingress and outbound sending remain runtime services outside this management contract.
+
+Create a webhook-backed connection:
+
+```json
+{
+  "action": "create_connection",
+  "providerKind": "slack",
+  "displayName": "Team chat bridge",
+  "bridgeMode": "webhook",
+  "status": "active",
+  "enabled": true,
+  "setup": {
+    "eventsUrl": "https://bridge.example.test/events",
+    "appId": "app-generic"
+  },
+  "secrets": {
+    "signingSecret": "replace-with-secret",
+    "botToken": "replace-with-token"
+  }
+}
+```
+
+Bind a shared channel to a project:
+
+```json
+{
+  "action": "create_channel_binding",
+  "providerConnectionId": "connection-generic",
+  "externalChannelId": "channel-shared",
+  "externalChannelName": "Shared engineering channel",
+  "projectId": "project-alpha",
+  "routingHints": {
+    "projectSelectorPrefix": "alpha",
+    "aliases": ["alpha", "project-alpha"]
+  },
+  "inboundEnabled": true,
+  "outboundEnabled": true,
+  "suppressRichWidgets": true
+}
+```
+
+Inspect retryable outbound delivery state:
+
+```json
+{
+  "action": "list_outbound_deliveries",
+  "providerConnectionId": "connection-generic",
+  "externalChannelId": "channel-shared",
+  "deliveryStatus": "retryable_failure",
+  "limit": 25
+}
+```
 
 For settings patch calls, `value` may be any JSON value, including strings, booleans, numbers, `null`, arrays, or objects.
 Settings patch and replacement calls still require the stateful human-confirmation gate described above.

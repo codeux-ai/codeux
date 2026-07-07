@@ -48,7 +48,7 @@ vi.mock("../AgentAvatarCustomizer.js", () => ({
 vi.mock("../AgentMcpManageModal.js", () => ({
   AgentMcpManagePanel: ({ isDashboardReplyAgent }: { isDashboardReplyAgent?: boolean }) => (
     <div data-testid="mcp-manage-panel">
-      {isDashboardReplyAgent ? "Dashboard reply scheduler-only recommendation" : "Non-chat Code UX risk gate"}
+      {isDashboardReplyAgent ? "Dashboard reply Code UX scheduler access" : "Non-chat Code UX risk gate"}
     </div>
   ),
 }));
@@ -359,7 +359,7 @@ describe("AgentPresetEditorPanel", () => {
       />
     );
 
-    const codeUxChip = screen.getByRole("button", { name: /Code UX Disabled/i });
+    const codeUxChip = screen.getByRole("button", { name: /Code UXDisabled/i });
     expect(codeUxChip).toHaveAttribute("aria-pressed", "false");
 
     fireEvent.click(codeUxChip);
@@ -379,10 +379,10 @@ describe("AgentPresetEditorPanel", () => {
       />
     );
 
-    fireEvent.click(screen.getByRole("button", { name: /Code UX Disabled/i }));
+    fireEvent.click(screen.getByRole("button", { name: /Code UXDisabled/i }));
 
-    expect(await screen.findByText("Review scheduler-only Code UX access before enabling it for the dashboard reply agent.")).toBeInTheDocument();
-    expect(await screen.findByTestId("mcp-manage-panel")).toHaveTextContent("Dashboard reply scheduler-only recommendation");
+    expect(await screen.findByText("Review Code UX MCP and scheduler access before enabling it for the dashboard reply agent.")).toBeInTheDocument();
+    expect(await screen.findByTestId("mcp-manage-panel")).toHaveTextContent("Dashboard reply Code UX scheduler access");
   });
 
   it("persists scheduler-only MCP access without dropping the explicit scheduler toggle", async () => {
@@ -404,8 +404,8 @@ describe("AgentPresetEditorPanel", () => {
     expect(payload.mcpAccess?.codeUxEnabled).toBe(true);
     expect(payload.mcpAccess?.linkedServerIds).toEqual(["playwright"]);
     expect(payload.mcpAccess?.codeUxToolToggles).toHaveLength(TOOL_DEFINITIONS.length);
-    expect(payload.mcpAccess?.codeUxToolToggles.find((toggle) => toggle.name === "scheduler")).toMatchObject({ enabled: true });
-    expect(payload.mcpAccess?.codeUxToolToggles.filter((toggle) => toggle.enabled).map((toggle) => toggle.name)).toEqual(["scheduler"]);
+    expect(payload.mcpAccess?.codeUxToolToggles.find((toggle) => toggle.name === "scheduler_code_ux")).toMatchObject({ enabled: true });
+    expect(payload.mcpAccess?.codeUxToolToggles.filter((toggle) => toggle.enabled).map((toggle) => toggle.name)).toEqual(["scheduler_code_ux"]);
   });
 
   it.each([

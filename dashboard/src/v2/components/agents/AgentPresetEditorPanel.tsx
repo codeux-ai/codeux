@@ -504,7 +504,7 @@ export const AgentPresetEditorPanel: FunctionComponent<{
       setActionStatus({
         tone: isDashboardReplyAgent ? "neutral" : "error",
         message: isDashboardReplyAgent
-          ? "Review scheduler-only Code UX access before enabling it for the dashboard reply agent."
+          ? "Review Code UX MCP and scheduler access before enabling it for the dashboard reply agent."
           : "Code UX access is risk-gated for non-chat agents. Review the MCP manager warning before enabling it.",
       });
       return;

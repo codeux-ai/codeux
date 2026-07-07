@@ -57,13 +57,17 @@ export function buildTaskPrComposerInput(args: BuildTaskPrComposerInputArgs): Ta
 
   return {
     taskId: args.task.id,
+    taskKey: args.task.id,
     taskTitle: args.task.title,
     taskPrompt: args.task.prompt,
     provider: args.provider,
     model: latestModel || args.task.model || null,
+    sprintId: args.sprint?.id ?? args.task.sprint_id ?? null,
+    sprintSlug: args.sprint?.slug ?? null,
     sprintGoal: args.sprint?.goal ?? null,
     sprintNumber: args.sprint?.number ?? null,
     sprintName: args.sprint?.name ?? null,
+    linkedIssues: (args.sprint?.linkedIssues || []).map((issue) => ({ issueKey: issue.issueKey })),
     featureBranch: args.featureBranch,
     workerBranch: args.workerBranch,
     startedAt: args.taskRun?.startedAt ?? null,

@@ -66,6 +66,8 @@ const createMockContext = (): PipelineContext => {
         defaultBranch: "main",
         featureBranchPrefix: "feature/",
         sprintBranchScheme: "sprint",
+        sprintKeyPrefix: "SPR",
+        taskPrTitleScheme: "({sprint_tag}) {task_title}",
         prDescription: {
           task: { summary: true, modelAndProvider: true, timing: true, fullPrompt: true, tokenUsage: true, qaFindings: true, branchInfo: true },
           sprint: { summary: true, taskChecklist: true, providerBreakdown: true, planningModel: true, mainPrompt: true, timing: true, tokenUsage: true, qaFindings: true, branchInfo: true },
@@ -177,7 +179,16 @@ const createMockContext = (): PipelineContext => {
     } as any,
     deps: {
       sessionTracking: { appendActivity: vi.fn(), updateSession: vi.fn() } as any,
-      projectManagementRepository: { getSprint: vi.fn().mockReturnValue({ goal: "Mock Sprint Goal" }) } as any,
+      projectManagementRepository: {
+        getSprint: vi.fn().mockReturnValue({
+          id: "sprint-1",
+          number: 1,
+          slug: "sprint-1",
+          name: "Mock Sprint",
+          goal: "Mock Sprint Goal",
+          linkedIssues: [],
+        }),
+      } as any,
       executionRepository: {
         createProviderInvocationUsage: vi.fn().mockReturnValue({ id: "usage-1" }),
         updateProviderInvocationUsage: vi.fn(),
@@ -618,6 +629,17 @@ describe("executePrFinalizeStage", () => {
   it("resolves PR and updates session state to COMPLETED", async () => {
     const ctx = createMockContext();
     ctx.settings.git.githubMode = "REMOTE";
+    ctx.settings.git.taskPrTitleScheme = "({sprint_tag}) {task_key}: {task_title}";
+    ctx.task.id = "Task 1";
+    ctx.task.title = "Wire task PR titles";
+    vi.mocked(ctx.deps.projectManagementRepository!.getSprint).mockReturnValue({
+      id: "sprint-40",
+      number: 40,
+      slug: "title-formatting",
+      name: "Title formatting",
+      goal: "Mock Sprint Goal",
+      linkedIssues: [{ issueKey: "CODUX-40" }],
+    });
     vi.mocked(ctx.prService.resolveOrCreateFeaturePr).mockResolvedValue("https://github.com/pr/1");
 
     await executePrFinalizeStage(ctx);
@@ -625,9 +647,9 @@ describe("executePrFinalizeStage", () => {
     expect(ctx.workflowSucceeded).toBe(true);
     expect(ctx.prService.resolveOrCreateFeaturePr).toHaveBeenCalledWith(
       expect.objectContaining({
-        taskId: "T1",
+        taskId: "Task 1",
         provider: "gemini",
-        title: "test task (gemini)",
+        title: "(CODUX-40) Task 1: Wire task PR titles",
         featureBranch: "feature-branch",
         workerBranch: "worker-branch",
         body: expect.stringContaining("test prompt"),
@@ -647,6 +669,31 @@ describe("executePrFinalizeStage", () => {
     expect(ctx.deps.sessionTracking.appendActivity).toHaveBeenCalledWith(ctx.sessionId, expect.objectContaining({
       description: "Workflow completed. PR: https://github.com/pr/1"
     }));
+  });
+
+  it("falls back to the sprint key when no linked issue exists", async () => {
+    const ctx = createMockContext();
+    ctx.settings.git.githubMode = "REMOTE";
+    ctx.settings.git.taskPrTitleScheme = "({sprint_tag}) {task_key}: {task_title}";
+    vi.mocked(ctx.deps.projectManagementRepository!.getSprint).mockReturnValue({
+      id: "sprint-40",
+      number: 40,
+      slug: "title-formatting",
+      name: "Title formatting",
+      goal: "Mock Sprint Goal",
+      linkedIssues: [],
+    });
+    vi.mocked(ctx.prService.resolveOrCreateFeaturePr).mockResolvedValue("https://github.com/pr/1");
+
+    await executePrFinalizeStage(ctx);
+
+    expect(ctx.prService.resolveOrCreateFeaturePr).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: "(SPR-40) T1: test task",
+      }),
+      ctx.repoPath,
+      expect.anything(),
+    );
   });
 
   it("renders completion timing in the task PR body while the task run row is still open", async () => {

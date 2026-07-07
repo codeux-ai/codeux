@@ -12,6 +12,7 @@ const createRouterHarness = (resolveAgentMcpToolAccess?: (agentId: string) => Ag
   const handlers = {} as RouterHandlers;
   const managementToolHandler = {
     handleManageProjects: vi.fn(async () => ({ content: [{ type: "text", text: "ok" }] })),
+    handleManageChatProviders: vi.fn(async () => ({ content: [{ type: "text", text: "chat-providers" }] })),
     handleScheduler: vi.fn(async () => ({ content: [{ type: "text", text: "scheduled" }] })),
   };
 
@@ -52,8 +53,16 @@ const callManageProjects = async (handlers: RouterHandlers): Promise<unknown> =>
 const callScheduler = async (handlers: RouterHandlers): Promise<unknown> =>
   handlers.callTool({
     params: {
-      name: "scheduler",
+      name: "scheduler_code_ux",
       arguments: { action: "list", projectId: "project-1" },
+    },
+  });
+
+const callManageChatProviders = async (handlers: RouterHandlers): Promise<unknown> =>
+  handlers.callTool({
+    params: {
+      name: "manage_chat_providers",
+      arguments: { action: "list_provider_definitions" },
     },
   });
 
@@ -125,11 +134,11 @@ describe("ToolRegistry", () => {
 
   it("can register and dispatch scheduler", async () => {
     const registry = new ToolRegistry<McpToolArgsByName, string>();
-    const handler = vi.fn(async (args: McpToolArgsByName["scheduler"]) => `scheduler:${args.action}`);
+    const handler = vi.fn(async (args: McpToolArgsByName["scheduler_code_ux"]) => `scheduler:${args.action}`);
 
-    registry.register("scheduler", handler);
+    registry.register("scheduler_code_ux", handler);
 
-    const result = await registry.dispatch("scheduler", {
+    const result = await registry.dispatch("scheduler_code_ux", {
       action: "schedule_wakeup",
       projectId: "proj-1",
       delaySeconds: 30,
@@ -141,6 +150,23 @@ describe("ToolRegistry", () => {
       projectId: "proj-1",
       delaySeconds: 30,
       bodyMarkdown: "Resume the review.",
+    });
+  });
+
+  it("can register and dispatch manage_chat_providers", async () => {
+    const registry = new ToolRegistry<McpToolArgsByName, string>();
+    const handler = vi.fn(async (args: McpToolArgsByName["manage_chat_providers"]) => `manage_chat_providers:${args.action}`);
+
+    registry.register("manage_chat_providers", handler);
+
+    const result = await registry.dispatch("manage_chat_providers", {
+      action: "list_provider_definitions",
+      providerKind: "slack",
+    });
+    expect(result).toBe("manage_chat_providers:list_provider_definitions");
+    expect(handler).toHaveBeenCalledWith({
+      action: "list_provider_definitions",
+      providerKind: "slack",
     });
   });
 });
@@ -180,17 +206,28 @@ describe("MCP router per-agent Code UX access", () => {
       agentId === "agent-scheduler"
         ? {
             codeUxEnabled: true,
-            codeUxToolToggles: [{ name: "scheduler", enabled: true, isInternal: true }],
+            codeUxToolToggles: [{ name: "scheduler_code_ux", enabled: true, isInternal: true }],
           }
         : null,
     );
 
     await runWithMcpAgentContext("agent-scheduler", async () => {
-      await expect(listToolNames(handlers)).resolves.toContain("scheduler");
+      await expect(listToolNames(handlers)).resolves.toContain("scheduler_code_ux");
       await expect(callScheduler(handlers)).resolves.toEqual({ content: [{ type: "text", text: "scheduled" }] });
     });
 
     expect(managementToolHandler.handleScheduler).toHaveBeenCalledTimes(1);
+  });
+
+  it("lists and dispatches manage_chat_providers when enabled by tool availability", async () => {
+    const { handlers, managementToolHandler } = createRouterHarness(() => null);
+
+    await runWithMcpAgentContext(null, async () => {
+      await expect(listToolNames(handlers)).resolves.toContain("manage_chat_providers");
+      await expect(callManageChatProviders(handlers)).resolves.toEqual({ content: [{ type: "text", text: "chat-providers" }] });
+    });
+
+    expect(managementToolHandler.handleManageChatProviders).toHaveBeenCalledTimes(1);
   });
 
   it("rejects scheduler calls when the tool is disabled", async () => {
@@ -198,13 +235,13 @@ describe("MCP router per-agent Code UX access", () => {
       agentId === "agent-no-scheduler"
         ? {
             codeUxEnabled: true,
-            codeUxToolToggles: [{ name: "scheduler", enabled: false, isInternal: true }],
+            codeUxToolToggles: [{ name: "scheduler_code_ux", enabled: false, isInternal: true }],
           }
         : null,
     );
 
     await runWithMcpAgentContext("agent-no-scheduler", async () => {
-      await expect(listToolNames(handlers)).resolves.not.toContain("scheduler");
+      await expect(listToolNames(handlers)).resolves.not.toContain("scheduler_code_ux");
       await expect(callScheduler(handlers)).rejects.toMatchObject({ code: ErrorCode.MethodNotFound });
     });
 
@@ -257,6 +294,9 @@ const compileTimeTypeChecks = (): void => {
 
   // @ts-expect-error manage_tasks action must be a string enum, not a number
   registry.dispatch("manage_tasks", { action: 123 });
+
+  // @ts-expect-error manage_chat_providers requires a valid action value
+  registry.dispatch("manage_chat_providers", { action: "route_inbound_message" });
 };
 
 void compileTimeTypeChecks;

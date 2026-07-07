@@ -91,6 +91,93 @@ describe("Chat Message Bubbles", () => {
       expect(container.innerHTML).toContain("Hello world");
     });
 
+    it("renders prompt suggestion tags for normal agent replies", () => {
+      const message: ChatMessageRecord = {
+        id: "msg_suggestions",
+        threadId: "thread_1",
+        direction: "connection_to_dashboard",
+        authorType: "connection",
+        authorConnectionId: "conn_1",
+        bodyMarkdown: "I can help with next steps.",
+        deliveryStatus: "delivered",
+        createdAt: new Date().toISOString(),
+        metadata: {
+          type: "none",
+          promptSuggestions: [
+            {
+              id: "focused-tests",
+              label: "Run focused tests",
+              prompt: "Run the focused chat bubble tests.",
+              icon: "play",
+            },
+          ],
+        },
+      };
+
+      const { getByRole } = render(<ChatMessageBubble message={message} onPromptSuggestionSelect={vi.fn()} />);
+
+      expect(getByRole("button", { name: "Use suggestion: Run focused tests" })).toBeInTheDocument();
+    });
+
+    it("passes the selected prompt to the suggestion callback", () => {
+      const onPromptSuggestionSelect = vi.fn();
+      const message: ChatMessageRecord = {
+        id: "msg_suggestion_click",
+        threadId: "thread_1",
+        direction: "connection_to_dashboard",
+        authorType: "connection",
+        authorConnectionId: "conn_1",
+        bodyMarkdown: "Choose a follow-up.",
+        deliveryStatus: "delivered",
+        createdAt: new Date().toISOString(),
+        metadata: {
+          promptSuggestions: [
+            {
+              label: "Inspect logs",
+              prompt: "Inspect the latest worker logs.",
+              icon: "search",
+            },
+          ],
+        },
+      };
+
+      const { getByRole } = render(
+        <ChatMessageBubble message={message} onPromptSuggestionSelect={onPromptSuggestionSelect} />
+      );
+
+      fireEvent.click(getByRole("button", { name: "Use suggestion: Inspect logs" }));
+
+      expect(onPromptSuggestionSelect).toHaveBeenCalledTimes(1);
+      expect(onPromptSuggestionSelect).toHaveBeenCalledWith("Inspect the latest worker logs.");
+    });
+
+    it("does not render prompt suggestion tags for dashboard-authored messages", () => {
+      const message: ChatMessageRecord = {
+        id: "msg_dashboard_suggestions",
+        threadId: "thread_1",
+        direction: "dashboard_to_connection",
+        authorType: "dashboard_user",
+        authorConnectionId: null,
+        bodyMarkdown: "User message with metadata",
+        deliveryStatus: "delivered",
+        createdAt: new Date().toISOString(),
+        metadata: {
+          promptSuggestions: [
+            {
+              label: "Should stay hidden",
+              prompt: "This prompt should not render.",
+              icon: "sparkles",
+            },
+          ],
+        },
+      };
+
+      const { queryByRole, queryByText } = render(<ChatMessageBubble message={message} />);
+
+      expect(queryByRole("button", { name: "Use suggestion: Should stay hidden" })).not.toBeInTheDocument();
+      expect(queryByText("Should stay hidden")).not.toBeInTheDocument();
+    });
+
     it("does not render Invalid Date when the timestamp is missing or malformed", () => {
       const message: ChatMessageRecord = {
         id: "msg_invalid",
@@ -128,6 +215,39 @@ describe("Chat Message Bubbles", () => {
       const { container, getByText } = render(<ChatMessageBubble message={message} />);
       expect(getByText("My special plan")).toBeInTheDocument();
       expect(getByText("Navigating solutions...")).toBeInTheDocument();
+    });
+
+    it("renders prompt suggestions alongside the planning widget for agent replies", () => {
+      const message: ChatMessageRecord = {
+        id: "msg_planning_suggestions",
+        threadId: "thread_1",
+        direction: "connection_to_dashboard",
+        authorType: "connection",
+        authorConnectionId: "conn_1",
+        bodyMarkdown: "Planning is ready.",
+        deliveryStatus: "delivered",
+        createdAt: new Date().toISOString(),
+        metadata: {
+          type: "planning",
+          status: "queued",
+          planName: "Suggestion-backed plan",
+          promptSuggestions: [
+            {
+              label: "Review plan",
+              prompt: "Review the proposed execution plan.",
+              icon: "list-checks",
+            },
+          ],
+        },
+      };
+
+      const { getByRole, getByText } = render(
+        <ChatMessageBubble message={message} onPromptSuggestionSelect={vi.fn()} />
+      );
+
+      expect(getByRole("button", { name: "Use suggestion: Review plan" })).toBeInTheDocument();
+      expect(getByText("Suggestion-backed plan")).toBeInTheDocument();
+      expect(getByText("Preparing to plan...")).toBeInTheDocument();
     });
 
     it("renders live sprint task progress when planning metadata can be matched to project state", () => {
@@ -816,34 +936,39 @@ describe("Chat Message Bubbles", () => {
   });
 
   describe("InvocationListCard", () => {
-    it("renders optimistic invocation status distinctly and announces it", () => {
-      const invocation = {
-        id: "optimistic:1",
+    it("renders the server invocation status verbatim and announces it", () => {
+      const invocation: ExecutionInvocationRecord = {
+        id: "inv-queued",
         projectId: "project-1",
+        sprintId: null,
+        taskId: null,
+        sprintRunId: null,
+        dispatchId: null,
+        taskRunId: null,
+        attentionItemId: null,
+        providerInvocationId: null,
         type: "planning",
         status: "queued",
+        provider: null,
+        model: null,
+        systemPrompt: null,
+        startedAt: new Date().toISOString(),
+        finishedAt: null,
+        errorMessage: null,
+        lastErrorCategory: null,
+        lastErrorMessage: null,
+        lastRetryAfterIso: null,
+        preservedAt: null,
+        messageCount: 0,
+        lastMessageAt: new Date().toISOString(),
+        invocationSource: "internal",
+        agentPresetId: null,
+        inputTokens: 0,
+        cachedInputTokens: 0,
+        outputTokens: 0,
+        totalTokens: 0,
         createdAt: new Date().toISOString(),
-      };
-      const { container } = render(
-        <InvocationListCard
-          invocations={[invocation as any]}
-          selectedInvocationId={null}
-          onSelect={vi.fn()}
-        />
-      );
-      const pendingSpan = container.querySelector('span[aria-live="polite"]');
-      expect(pendingSpan).not.toBeNull();
-      expect(pendingSpan?.textContent).toBe("Pending");
-      expect(pendingSpan?.className).toContain("opacity-70");
-    });
-
-    it("renders optimistic invocation status distinctly and announces it", () => {
-      const invocation = {
-        id: "optimistic:1",
-        projectId: "project-1",
-        type: "planning",
-        status: "queued",
-        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
       };
       const { container } = render(
         <InvocationListCard
@@ -852,52 +977,13 @@ describe("Chat Message Bubbles", () => {
           onSelect={vi.fn()}
         />
       );
-      const pendingSpan = container.querySelector('span[aria-live="polite"]');
-      expect(pendingSpan).not.toBeNull();
-      expect(pendingSpan?.textContent).toBe("Pending");
-      expect(pendingSpan?.className).toContain("opacity-70");
-    });
-
-    it("renders optimistic invocation status distinctly and announces it", () => {
-      const invocation = {
-        id: "optimistic:1",
-        projectId: "project-1",
-        type: "planning",
-        status: "queued",
-        createdAt: new Date().toISOString(),
-      };
-      const { container } = render(
-        <InvocationListCard
-          invocations={[invocation as any]}
-          selectedInvocationId={null}
-          onSelect={vi.fn()}
-        />
-      );
-      const pendingSpan = container.querySelector('span[aria-live="polite"]');
-      expect(pendingSpan).not.toBeNull();
-      expect(pendingSpan?.textContent).toBe("Pending");
-      expect(pendingSpan?.className).toContain("opacity-70");
-    });
-
-    it("renders optimistic invocation status distinctly and announces it", () => {
-      const invocation = {
-        id: "optimistic:1",
-        projectId: "project-1",
-        type: "planning",
-        status: "queued",
-        createdAt: new Date().toISOString(),
-      };
-      const { container } = render(
-        <InvocationListCard
-          invocations={[invocation as any]}
-          selectedInvocationId={null}
-          onSelect={vi.fn()}
-        />
-      );
-      const pendingSpan = container.querySelector('span[aria-live="polite"]');
-      expect(pendingSpan).not.toBeNull();
-      expect(pendingSpan?.textContent).toBe("Pending");
-      expect(pendingSpan?.className).toContain("opacity-70");
+      const statusSpan = container.querySelector('span[aria-live="polite"]');
+      const card = container.querySelector('[role="button"]');
+      expect(statusSpan).not.toBeNull();
+      expect(statusSpan?.textContent).toBe("queued");
+      expect(statusSpan?.className).not.toContain("opacity-70");
+      expect(card?.className).not.toContain("opacity-70");
+      expect(container.textContent).not.toContain("Pending");
     });
 
     it("shows the model and latest error tag on invocation cards", () => {

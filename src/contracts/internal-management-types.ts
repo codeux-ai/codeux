@@ -1,4 +1,14 @@
 import type { ProviderId } from "./app-types.js";
+import type {
+  ChatProviderBridgeMode,
+  ChatProviderConnectionStatus,
+  ChatProviderDeliveryStatus,
+  ChatProviderKind,
+  ChatProviderSetupConfig,
+  ChatProviderSecretConfig,
+  ChatProviderRoutingHints,
+  ExternalChannelMetadata,
+} from "./chat-provider-types.js";
 import type { CreateProjectInput } from "./project-management-types.js";
 
 export interface ManagementApproval {
@@ -255,6 +265,49 @@ export interface ManagePreviewArgs {
   sprintId?: string;
   sessionId?: string;
   path?: string;
+  approval?: ManagementApproval;
+}
+
+export type ManageChatProvidersAction =
+  | "list_provider_definitions"
+  | "list_connections"
+  | "get_connection"
+  | "create_connection"
+  | "update_connection"
+  | "delete_connection"
+  | "list_channel_bindings"
+  | "create_channel_binding"
+  | "update_channel_binding"
+  | "delete_channel_binding"
+  | "list_outbound_deliveries";
+
+export interface ManageChatProvidersArgs {
+  action: ManageChatProvidersAction;
+  providerKind?: ChatProviderKind;
+  providerConnectionId?: string;
+  connectionId?: string;
+  displayName?: string;
+  bridgeMode?: ChatProviderBridgeMode;
+  status?: ChatProviderConnectionStatus;
+  enabled?: boolean;
+  enabledOnly?: boolean;
+  setup?: ChatProviderSetupConfig;
+  secrets?: ChatProviderSecretConfig | null;
+  channelBindingId?: string;
+  bindingId?: string;
+  externalChannelId?: string;
+  externalChannelName?: string;
+  externalChannelMetadata?: ExternalChannelMetadata | null;
+  projectId?: string;
+  projectIds?: string[];
+  agentPresetId?: string | null;
+  routingHints?: ChatProviderRoutingHints | null;
+  inboundEnabled?: boolean;
+  outboundEnabled?: boolean;
+  suppressRichWidgets?: boolean;
+  deliveryStatus?: ChatProviderDeliveryStatus;
+  limit?: number | string;
+  baseUrl?: string;
   approval?: ManagementApproval;
 }
 

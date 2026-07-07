@@ -3,6 +3,8 @@ import { isUsableCustomMcpServer } from "../../../mcp/mcp-tool-availability.js";
 import { MOCKUP_CLI_NODE_SCRIPT } from "./mockup-cli-provider.js";
 
 export type CliProviderId = Extract<ProviderId, "gemini" | "codex" | "claude-code" | "qwen-code" | "opencode" | "antigravity" | "mockup-cli">;
+export type NativeSessionOperation = "compact";
+export type NativeSessionOperationProvider = Exclude<CliProviderId, "mockup-cli">;
 
 export type ProviderCommandSpec = (model: string, prompt: string) => { command: string; args: string[] };
 
@@ -60,3 +62,22 @@ export const enabledCustomServersFor = (servers: CustomMcpServer[] | undefined, 
 export const isOpenCodeNativeSessionId = (value: string | null | undefined): boolean => (
   typeof value === "string" && /^ses_[A-Za-z0-9]+$/.test(value)
 );
+
+export const nativeSessionOperationPrompts: Record<NativeSessionOperationProvider, Record<NativeSessionOperation, string>> = {
+  codex: { compact: "/compact" },
+  "claude-code": { compact: "/compact" },
+  gemini: { compact: "/compress" },
+  "qwen-code": { compact: "/compress" },
+  opencode: { compact: "/compact" },
+  antigravity: { compact: "/compact" },
+};
+
+export function getNativeSessionOperationPrompt(
+  provider: CliProviderId,
+  operation: NativeSessionOperation,
+): string | null {
+  if (provider === "mockup-cli") {
+    return null;
+  }
+  return nativeSessionOperationPrompts[provider][operation] ?? null;
+}

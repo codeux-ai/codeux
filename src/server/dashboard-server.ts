@@ -46,6 +46,7 @@ import type {
 import type { QuicksprintService } from "../services/quicksprint-service.js";
 import type { SchedulerService } from "../services/scheduler-service.js";
 import type { SprintIssueService } from "../services/sprint-issue-service.js";
+import type { JiraProjectStatus } from "../services/jira-api-client.js";
 import type {
   InstructionFileContent,
   InstructionFileSummary,
@@ -56,6 +57,7 @@ import type {
   UpdateAgentPresetInput,
 } from "../contracts/agent-preset-types.js";
 import type { AgentPresetRepository } from "../repositories/agent-preset-repository.js";
+import type { ChatProviderRepository } from "../repositories/chat-provider-repository.js";
 import type {
   ExecutionInvocationRecord,
   ExecutionInvocationMessageRecord,
@@ -118,6 +120,7 @@ import type { KnowledgeService } from "../services/knowledge-service.js";
 import type { UpdateStatus } from "../services/update-checker-service.js";
 import type { LocalMcpCliProvider, LocalMcpInstallResult, LocalMcpSetupInfo } from "../services/local-mcp-cli-config-service.js";
 import { resolveDashboardBindHost } from "../config/app-config.js";
+import type { ChatProviderIngressService } from "../services/chat-provider-ingress-service.js";
 import {
   parsePreviewSessionIdFromHost,
   parseSelectedPreviewPortFromRequest,
@@ -153,6 +156,8 @@ export interface DashboardServerOptions {
   settingsRepository?: SettingsRepository;
   knowledgeService?: KnowledgeService;
   agentPresetRepository?: AgentPresetRepository;
+  chatProviderRepository?: ChatProviderRepository;
+  chatProviderIngressService?: ChatProviderIngressService;
   projectManagementRepository?: ProjectManagementRepository;
   executionRepository?: ExecutionRepository;
   getStatus: () => unknown;
@@ -224,6 +229,7 @@ export interface DashboardServerOptions {
   updateTask: (taskId: string, input: UpdateTaskInput) => TaskRecord;
   deleteTask: (taskId: string) => void;
   searchJiraIssues: (projectId: string, input: JiraIssueSearchInput) => Promise<JiraIssueSearchResult[]>;
+  searchJiraProjectStatuses: (projectId: string, projectKey?: string) => Promise<JiraProjectStatus[]>;
   listSprintLinkedIssues: (sprintId: string) => SprintLinkedIssueRecord[];
   replaceSprintLinkedIssues: (sprintId: string, projectId: string, issues: SprintLinkedIssueInput[]) => SprintLinkedIssueRecord[];
   listConnections: (projectId: string) => McpConnectionRecord[];

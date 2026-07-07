@@ -18,9 +18,14 @@ import { ProviderExecutionService } from "../../services/provider-execution-serv
 import { SchedulerService } from "../../services/scheduler-service.js";
 import { ExecutionInvocationControlService } from "../../services/execution-invocation-control-service.js";
 import { createLateBoundDependency } from "../../shared/late-bound-dependency.js";
+import { ChatProviderIngressService } from "../../services/chat-provider-ingress-service.js";
+import { ChatProviderOutboundService } from "../../services/chat-provider-outbound-service.js";
 
 export interface DashboardDependencies {
   chatThreadRuntimeService: ChatThreadRuntimeService;
+  chatProviderRepository: CoreDependencies["chatProviderRepository"];
+  chatProviderIngressService: ChatProviderIngressService;
+  chatProviderOutboundService: ChatProviderOutboundService;
   activityCacheService: ActivityCacheService;
   taskRerunService: TaskRerunService;
   executionControlService: ExecutionControlService;
@@ -31,6 +36,7 @@ export interface DashboardDependencies {
   sprintIssueService: CoreDependencies["sprintIssueService"];
   schedulerService: SchedulerService;
   searchJiraIssues: CoreDependencies["sprintIssueService"]["searchJiraIssues"];
+  searchJiraProjectStatuses: CoreDependencies["sprintIssueService"]["searchJiraProjectStatuses"];
   replaceSprintLinkedIssues: CoreDependencies["projectManagementRepository"]["replaceSprintLinkedIssues"];
   listSprintLinkedIssues: CoreDependencies["projectManagementRepository"]["listSprintLinkedIssues"];
   closeSprintLinkedIssues: CoreDependencies["sprintIssueService"]["closeLinkedIssues"];
@@ -46,6 +52,7 @@ export function createDashboardDependencies(
     projectRuntimeRepository,
     projectManagementRepository,
     connectionChatRepository,
+    chatProviderRepository,
     projectWorkerAssignmentRepository,
     projectAttentionService,
     agentPresetSyncService,
@@ -89,6 +96,7 @@ export function createDashboardDependencies(
     executionControlService,
     taskRerunService: taskRerunServiceRef,
     settingsRepository: coreDeps.settingsRepository,
+    chatProviderRepository: coreDeps.chatProviderRepository,
     agentPresetSyncService: coreDeps.agentPresetSyncService,
     memoryService: coreDeps.memoryService,
     memoryPromotionService: coreDeps.memoryPromotionService,
@@ -126,6 +134,11 @@ export function createDashboardDependencies(
     executionRepository,
   });
 
+  const chatProviderOutboundService = new ChatProviderOutboundService({
+    chatProviderRepository,
+    logger: logger.child({ component: "chat-provider-outbound-service" }),
+  });
+
   const chatThreadRuntimeService = new ChatThreadRuntimeService({
     connectionChatRepository,
     projectWorkerAssignmentRepository,
@@ -137,10 +150,17 @@ export function createDashboardDependencies(
     projectManagementRepository,
     providerRunner,
     chatManagementActionService,
+    chatProviderOutboundService,
     knowledgeService: coreDeps.knowledgeService,
     getMcpConnectionInfo: context.getMcpConnectionInfo,
     getMcpApprovalTracker: context.getMcpApprovalTracker,
     logger: logger.child({ component: "chat-thread-runtime-service" }),
+  });
+
+  const chatProviderIngressService = new ChatProviderIngressService({
+    chatProviderRepository,
+    chatThreadRuntimeService,
+    logger: logger.child({ component: "chat-provider-ingress-service" }),
   });
 
   const activityCacheService = new ActivityCacheService(
@@ -449,7 +469,10 @@ export function createDashboardDependencies(
   schedulerServiceRef.set(schedulerService);
 
   return {
+    chatProviderRepository,
     chatThreadRuntimeService,
+    chatProviderIngressService,
+    chatProviderOutboundService,
     activityCacheService,
     taskRerunService,
     executionControlService,
@@ -460,6 +483,10 @@ export function createDashboardDependencies(
     sprintIssueService: coreDeps.sprintIssueService,
     schedulerService,
     searchJiraIssues: coreDeps.sprintIssueService.searchJiraIssues.bind(coreDeps.sprintIssueService),
+    searchJiraProjectStatuses: coreDeps.sprintIssueService.searchJiraProjectStatuses?.bind(coreDeps.sprintIssueService)
+      ?? (() => {
+        throw new Error("Jira project status search is not available.");
+      }),
     replaceSprintLinkedIssues: projectManagementRepository.replaceSprintLinkedIssues.bind(projectManagementRepository),
     listSprintLinkedIssues: projectManagementRepository.listSprintLinkedIssues.bind(projectManagementRepository),
     closeSprintLinkedIssues: coreDeps.sprintIssueService.closeLinkedIssues.bind(coreDeps.sprintIssueService),

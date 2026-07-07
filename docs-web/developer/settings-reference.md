@@ -228,12 +228,20 @@ Disabling a step is for debugging; in production, leave them all enabled.
   "featureBranchPrefix": "feature/codeux/",
   "sprintBranchScheme": "feature/sprint{sprint_id}-implementation",
   "sprintKeyPrefix": "SPR",
+  "taskPrTitleScheme": "({sprint_tag}) {task_title}",
   "githubMode": "REMOTE" | "LOCAL",
   "deleteMergedBranches": true,
   "autoCreatePr": true,
   "prDescription": { /* task and sprint PR template toggles */ }
 }
 ```
+
+`git.taskPrTitleScheme` controls automated task PR titles for initial task PR creation
+and QA follow-up PR resolution. Its default is `({sprint_tag}) {task_title}`. Supported tokens are
+`{sprint_tag}`, `{sprint_key}`, `{sprint_number}`, `{sprint_title}`, `{task_key}`,
+`{task_title}`, and `{provider}`. `{sprint_tag}` resolves in this order: first linked issue key
+when present, then `<sprintKeyPrefix>-<sprint number>`, then a stable sprint slug/id fallback.
+Provider text is included only when the template contains `{provider}`.
 
 `deleteMergedBranches` (default `true`) deletes a branch once its work has merged: worker
 branches after they merge into the sprint feature branch, and the feature branch after it merges
@@ -292,6 +300,7 @@ Both reflection loops are disabled by default. When enabled, planning and QA str
   { "name": "search_knowledge",    "enabled": true, "isInternal": true },
   { "name": "manage_settings",     "enabled": true, "isInternal": true },
   { "name": "manage_preview",      "enabled": true, "isInternal": true },
+  { "name": "manage_chat_providers", "enabled": true, "isInternal": true },
   { "name": "manage_telemetry",    "enabled": true, "isInternal": true },
   { "name": "manage_code_ux",      "enabled": true, "isInternal": true }   // deprecated
 ]
@@ -315,9 +324,9 @@ Disable a tool to hide it from `ListTools` and reject `CallTool` invocations.
 
 ```jsonc
 {
-  "theme": "system" | "light" | "dark",
-  "navigationMode": "auto" | "dock" | "sidebar",
-  "density": "comfortable" | "compact"
+  "experienceMode": "EASY" | "STANDARD" | "EXPERT",
+  "theme": "SYSTEM" | "LIGHT" | "DARK",
+  "navigationMode": "DOCK" | "SIDEBAR"
 }
 ```
 

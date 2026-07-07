@@ -16,6 +16,12 @@ export interface JiraTransition {
   name: string;
 }
 
+export interface JiraProjectStatus {
+  id: string;
+  name: string;
+  issueTypes: string[];
+}
+
 export class JiraApiError extends Error {
   status: number;
 
@@ -66,6 +72,19 @@ interface JiraIssueRaw {
 interface JiraTransitionRaw {
   id: string;
   name: string;
+  [key: string]: unknown;
+}
+
+interface JiraProjectStatusRaw {
+  id?: string;
+  name?: string;
+  [key: string]: unknown;
+}
+
+interface JiraProjectIssueTypeStatusRaw {
+  id?: string;
+  name?: string;
+  statuses?: JiraProjectStatusRaw[];
   [key: string]: unknown;
 }
 
@@ -173,13 +192,18 @@ export function buildJiraSearchJql(input: JiraIssueSearchInput, defaultProjectKe
     }
   }
 
-  const status = input.status || 'open';
-  if (status === 'open') {
-    clauses.push('statusCategory != Done');
-  } else if (status === 'in_progress') {
-    clauses.push('statusCategory = "In Progress"');
-  } else if (status === 'done') {
-    clauses.push('statusCategory = Done');
+  const statusNames = normalizeStringList(input.statusNames);
+  if (statusNames.length > 0) {
+    clauses.push(`status in (${statusNames.map(quoteJqlString).join(', ')})`);
+  } else {
+    const status = input.status || 'open';
+    if (status === 'open') {
+      clauses.push('statusCategory != Done');
+    } else if (status === 'in_progress') {
+      clauses.push('statusCategory = "In Progress"');
+    } else if (status === 'done') {
+      clauses.push('statusCategory = Done');
+    }
   }
 
   const assigneeText = input.assigneeText?.trim();
@@ -337,8 +361,74 @@ export async function getIssue(
   };
 }
 
+export async function listProjectStatuses(
+  host: string,
+  email: string,
+  apiToken: string,
+  projectIdOrKey: string
+): Promise<JiraProjectStatus[]> {
+  const normalizedHost = normalizeHost(host);
+  const projectPath = encodeURIComponent(projectIdOrKey.trim());
+  const data = await fetchJira(`${normalizedHost}/rest/api/3/project/${projectPath}/statuses`, 'GET', email, apiToken) as JiraProjectIssueTypeStatusRaw[];
+  const statuses: JiraProjectStatus[] = [];
+  const idToIndex = new Map<string, number>();
+  const nameToIndex = new Map<string, number>();
+
+  for (const issueType of Array.isArray(data) ? data : []) {
+    const issueTypeName = typeof issueType.name === 'string' ? issueType.name.trim() : '';
+    for (const status of Array.isArray(issueType.statuses) ? issueType.statuses : []) {
+      const name = typeof status.name === 'string' ? status.name.trim() : '';
+      if (!name) {
+        continue;
+      }
+
+      const id = typeof status.id === 'string' ? status.id.trim() : '';
+      const normalizedName = normalizeStatusName(name);
+      let existingIndex = id ? idToIndex.get(id) : undefined;
+      existingIndex ??= nameToIndex.get(normalizedName);
+
+      if (existingIndex === undefined) {
+        existingIndex = statuses.length;
+        statuses.push({
+          id: id || normalizedName,
+          name,
+          issueTypes: [],
+        });
+      }
+
+      const record = statuses[existingIndex];
+      if (issueTypeName && !record.issueTypes.includes(issueTypeName)) {
+        record.issueTypes.push(issueTypeName);
+      }
+      if (id) {
+        idToIndex.set(id, existingIndex);
+      }
+      nameToIndex.set(normalizedName, existingIndex);
+    }
+  }
+
+  return statuses
+    .map((status) => ({
+      ...status,
+      issueTypes: [...status.issueTypes].sort(compareDisplayName),
+    }))
+    .sort((left, right) => compareDisplayName(left.name, right.name) || compareDisplayName(left.id, right.id));
+}
+
 function normalizeProjectKey(projectKey: string): string {
   return projectKey.trim().toUpperCase().replace(/[^A-Z0-9_]/g, '');
+}
+
+function normalizeStatusName(value: string): string {
+  return value.trim().replace(/\s+/g, ' ').toLowerCase();
+}
+
+function normalizeStringList(values: string[] | undefined): string[] {
+  return Array.from(new Set((values || []).map((value) => value.trim()).filter(Boolean)));
+}
+
+function compareDisplayName(left: string, right: string): number {
+  return left.localeCompare(right, undefined, { sensitivity: 'base' });
 }
 
 function quoteJqlString(value: string): string {

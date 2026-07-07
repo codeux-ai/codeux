@@ -8,11 +8,11 @@ Tool-category and individual-tool toggles decide what trusted provider and proje
 
 ## Recommended Defaults
 
-Keep the global surface aligned with project-manager workflows. For individual agents, start with Code UX disabled and enable scheduler-only access only when the preset needs agent-owned wakeups or task reruns.
+Keep the global surface aligned with project-manager workflows. Dashboard chat receives Code UX MCP plus scheduler at runtime. For individual non-dashboard agents, start with Code UX disabled; if built-in tools are enabled, keep scheduler disabled unless the preset specifically needs agent-owned wakeups or task reruns.
 
 ## Risks And Gotchas
 
-Disabling required tools can make provider workflows fail; enabling broad tools increases capability exposure. The restricted `scheduler` tool is narrower than `manage_scheduler`, but it can still create runtime work, so non-chat agents should receive it only through an intentional per-agent opt-in.
+Disabling required tools can make provider workflows fail; enabling broad tools increases capability exposure. The restricted `scheduler_code_ux` tool is narrower than `manage_scheduler`, but it can still create runtime work, so non-chat agents should receive it only through an intentional per-agent opt-in.
 
 ## Dashboard Link
 

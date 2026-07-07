@@ -204,6 +204,61 @@ CREATE TABLE IF NOT EXISTS connection_project_bindings (
         FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
       );
 
+CREATE TABLE IF NOT EXISTS chat_provider_connections (
+        id TEXT PRIMARY KEY,
+        provider_kind TEXT NOT NULL,
+        display_name TEXT NOT NULL,
+        bridge_mode TEXT NOT NULL,
+        status TEXT NOT NULL,
+        enabled INTEGER NOT NULL DEFAULT 1,
+        setup_json TEXT NOT NULL DEFAULT '{}',
+        secret_json TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+
+CREATE TABLE IF NOT EXISTS chat_provider_channel_bindings (
+        id TEXT PRIMARY KEY,
+        provider_connection_id TEXT NOT NULL,
+        external_channel_id TEXT NOT NULL,
+        external_channel_name TEXT NOT NULL,
+        external_channel_metadata_json TEXT,
+        project_id TEXT NOT NULL,
+        agent_preset_id TEXT,
+        routing_hints_json TEXT,
+        enabled INTEGER NOT NULL DEFAULT 1,
+        inbound_enabled INTEGER NOT NULL DEFAULT 1,
+        outbound_enabled INTEGER NOT NULL DEFAULT 1,
+        suppress_rich_widgets INTEGER NOT NULL DEFAULT 1,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        FOREIGN KEY (provider_connection_id) REFERENCES chat_provider_connections(id) ON DELETE CASCADE,
+        FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+        FOREIGN KEY (agent_preset_id) REFERENCES agent_presets(id) ON DELETE SET NULL,
+        UNIQUE (provider_connection_id, external_channel_id, project_id)
+      );
+
+CREATE TABLE IF NOT EXISTS chat_provider_message_deliveries (
+        id TEXT PRIMARY KEY,
+        provider_connection_id TEXT NOT NULL,
+        channel_binding_id TEXT,
+        external_channel_id TEXT NOT NULL,
+        external_message_id TEXT,
+        direction TEXT NOT NULL,
+        status TEXT NOT NULL,
+        attempt_count INTEGER NOT NULL DEFAULT 0,
+        last_error TEXT,
+        conversation_thread_id TEXT,
+        conversation_message_id TEXT,
+        payload_json TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        FOREIGN KEY (provider_connection_id) REFERENCES chat_provider_connections(id) ON DELETE CASCADE,
+        FOREIGN KEY (channel_binding_id) REFERENCES chat_provider_channel_bindings(id) ON DELETE SET NULL,
+        FOREIGN KEY (conversation_thread_id) REFERENCES conversation_threads(id) ON DELETE SET NULL,
+        FOREIGN KEY (conversation_message_id) REFERENCES conversation_messages(id) ON DELETE SET NULL
+      );
+
 CREATE TABLE IF NOT EXISTS task_runs (
         id TEXT PRIMARY KEY,
         project_id TEXT NOT NULL,
@@ -790,4 +845,11 @@ CREATE INDEX IF NOT EXISTS idx_skill_embeddings_skill ON skill_embeddings (skill
 CREATE INDEX IF NOT EXISTS idx_skill_embeddings_storage ON skill_embeddings (project_id, storage_id, embedding_model);
 CREATE INDEX IF NOT EXISTS idx_agent_skill_storage_bindings_agent ON agent_skill_storage_bindings (agent_preset_id);
 CREATE INDEX IF NOT EXISTS idx_agent_skill_storage_bindings_storage ON agent_skill_storage_bindings (project_id, storage_id);
+CREATE INDEX IF NOT EXISTS idx_chat_provider_connections_kind ON chat_provider_connections (provider_kind, updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_chat_provider_connections_enabled ON chat_provider_connections (enabled, status, updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_chat_provider_channel_bindings_project ON chat_provider_channel_bindings (project_id, enabled, updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_chat_provider_channel_bindings_provider_channel ON chat_provider_channel_bindings (provider_connection_id, external_channel_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_chat_provider_message_deliveries_inbound_dedupe ON chat_provider_message_deliveries (provider_connection_id, external_message_id) WHERE direction = 'inbound' AND external_message_id IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_chat_provider_message_deliveries_outbound_message ON chat_provider_message_deliveries (provider_connection_id, conversation_message_id) WHERE direction = 'outbound' AND conversation_message_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_chat_provider_message_deliveries_pending_outbound ON chat_provider_message_deliveries (status, updated_at ASC) WHERE direction = 'outbound' AND status IN ('pending', 'sending', 'retryable_failure');
 `;

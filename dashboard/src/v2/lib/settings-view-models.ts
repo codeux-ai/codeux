@@ -5,3 +5,4 @@ export * from "./settings/model-pricing.js";
 export * from "./settings/project-overrides.js";
 export * from "./settings/provider-instances.js";
 export * from "./settings/route-display.js";
+export * from "./experience-mode.js";

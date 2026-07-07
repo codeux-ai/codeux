@@ -30,6 +30,9 @@ function makeBasePayload() {
     dbAutoVacuumOnStartup: true,
     dbPruningEnabled: true,
     dbRetentionDays: 14,
+    appearance: {
+      experienceMode: "EXPERT",
+    },
     automationLevel: "SEMI_AUTO",
     automationInterventions: {
       autoApprovePlan: true,
@@ -123,6 +126,7 @@ function makeBasePayload() {
       featureBranchPrefix: "feat/",
       sprintBranchScheme: "sprint-{sprint_id}",
       sprintKeyPrefix: "SPRINT",
+      taskPrTitleScheme: "({sprint_tag}) {task_title}",
     },
     jira: {
       host: "jira.com",
