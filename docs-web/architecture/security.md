@@ -39,7 +39,7 @@ Two listeners:
 
 - Loopback-only by default.
 - Bearer token via `--mcp-http-auth-token` / `--mcp-https-auth-token` or `MCP_HTTP_AUTH_TOKEN` / `MCP_HTTPS_AUTH_TOKEN`, falling back to an auto-generated user token in `~/.code-ux/security.json` during normal dashboard startup.
-- Server mode (`--server-mode` or `CODE_UX_SERVER_MODE=true`) requires an explicit non-empty bearer token even on loopback and does not bind dashboard routes or websockets.
+- Server mode (`--server-mode` or `CODE_UX_SERVER_MODE=true`) requires an explicit bearer token with at least 32 bearer-safe characters even on loopback and does not bind dashboard routes or websockets.
 - Code UX normal startup always supplies a token; unauthenticated requests are rejected with HTTP 401 + JSON-RPC error `-32001`.
 - The gateway defaults to 100 active Streamable HTTP sessions and a one-hour idle timeout. Operators can raise the cap for large worker clusters; this is transport protection, not a worker license limit.
 - Does not perform TLS itself — front with a reverse proxy (nginx, Caddy, Traefik) for HTTPS in production.

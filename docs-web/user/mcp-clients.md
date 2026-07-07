@@ -6,7 +6,7 @@ Besides its dashboard, Code UX is also a Model Context Protocol (MCP) server. An
 
 By default, Code UX speaks MCP over **stdio**: the client launches the `codeux` process and exchanges JSON-RPC messages on its stdin/stdout. The server detects stdio mode automatically when stdin is not a TTY.
 
-Code UX also runs an authenticated **MCP Streamable HTTP transport** (enabled by default; disable with `--no-mcp-https`). It listens on its own host/port/path — configurable via `--mcp-https-host`, `--mcp-https-port`, and `--mcp-https-path` (default path `/mcp`) — and is used by remote workers and clients that prefer an HTTP transport. If no explicit token is configured, Code UX generates a user-scoped bearer token in `~/.code-ux/security.json` on first startup.
+Code UX also runs an authenticated **MCP Streamable HTTP transport** (enabled by default; disable outside server mode with `--no-mcp-http` or the legacy-compatible `--no-mcp-https`). It listens on its own host/port/path — configurable via `--mcp-http-host`, `--mcp-http-port`, and `--mcp-http-path` (default path `/mcp`) with legacy `mcp-https` aliases still supported — and is used by remote workers and clients that prefer an HTTP transport. If no explicit token is configured during normal dashboard startup, Code UX generates a user-scoped bearer token in `~/.code-ux/security.json` on first startup.
 
 > The dashboard server (port `4444` by default) is **separate** from the MCP HTTP gateway. The dashboard hosts the UI and REST API; the gateway hosts JSON-RPC. They run as two distinct listeners. The gateway listener is HTTP today; use a trusted reverse proxy/certificate when you need remote HTTPS/TLS.
 
@@ -161,7 +161,7 @@ A `GET /health` endpoint returns `{ "status": "UP" }` and is the recommended liv
 
 External workers are enrolled as normal worker endpoints in the Code UX database. Reconnecting with the same connection key updates the existing endpoint rather than creating a new registered worker. Eligible live workers claim queued dispatches through the same `worker_endpoints`, `project_worker_assignments`, `task_dispatches`, and `execution_leases` tables used by local virtual workers, so active leases prevent duplicate task pickup and stale heartbeats prevent new claims.
 
-> **Security:** Normal Code UX startup always has a bearer token for the MCP HTTP gateway, either explicit or generated in `~/.code-ux/security.json`. Server mode (`--server-mode` or `CODE_UX_SERVER_MODE=true`) requires an explicit non-empty token and does not use the generated fallback. Always use HTTPS in production via a reverse proxy or another trusted TLS termination layer.
+> **Security:** Normal Code UX startup always has a bearer token for the MCP HTTP gateway, either explicit or generated in `~/.code-ux/security.json`. Server mode (`--server-mode` or `CODE_UX_SERVER_MODE=true`) requires an explicit bearer token with at least 32 bearer-safe characters and does not use the generated fallback. Always use HTTPS in production via a reverse proxy or another trusted TLS termination layer.
 
 For the wire protocol, see [Architecture → MCP server](../architecture/mcp-server.md).
 
@@ -179,7 +179,7 @@ export MCP_HTTP_PATH=/mcp
 codeux
 ```
 
-Server mode guarantees that the dashboard UI, dashboard REST routes, dashboard websocket, terminal websocket, and static dashboard assets are not bound by that process. The MCP listener still serves `/health` and `/ready`.
+Server mode guarantees that the dashboard UI, dashboard REST routes, dashboard websocket, terminal websocket, and static dashboard assets are not bound by that process. The MCP listener still serves `/health` and `/ready`, and startup rejects missing, short, or invalid explicit bearer tokens.
 
 To verify a connection without exposing the bearer token:
 
@@ -217,7 +217,7 @@ codeux-worker \
   --project-id project-id
 ```
 
-Repeat `--project-id` for multi-project workers. Use a stable `--connection-key` so reconnects update the same registered endpoint. Worker registration is not license-capped; the MCP HTTP active-session cap defaults to 100 and can be raised with `MCP_HTTP_MAX_SESSIONS` for large clusters.
+Repeat `--project-id` for multi-project workers. Use a stable `--connection-key` so reconnects update the same registered endpoint. Worker registration is not license-capped; the MCP HTTP active-session cap defaults to 100 and can be raised with `MCP_HTTP_MAX_SESSIONS` or `MCP_HTTPS_MAX_SESSIONS` for large clusters.
 
 Workers claim only assigned eligible project work. Stale or offline heartbeats exclude workers from new claims, and dispatch execution is protected by `task_dispatches` plus `execution_leases`; a worker should not start local execution unless the server returns a lease token.
 
@@ -239,13 +239,14 @@ You can rename connections, view their pending message backlog, and (for stale e
 | --- | --- |
 | Client never sees `code-ux` tools | The CLI command in the client config is wrong, or the server exited early. Check the client's MCP error log. |
 | A management action returns `approvalRequired` | Expected for destructive/mutating actions. Retry the same call with `approval: { "confirmed": true }`. |
-| HTTP gateway returns 401 | Missing `Authorization: Bearer <token>` header, or token mismatch. |
+| HTTP gateway returns 401 | Missing `Authorization: Bearer <token>` header, wrong token, duplicate authorization headers, or a client still using the old token after rotation. |
 | HTTP gateway returns 400 with "must be initialize" | First request on a new session must be a JSON-RPC `initialize` call. |
-| Server mode fails on startup | Missing, short, or invalid explicit bearer token. Set `MCP_HTTP_AUTH_TOKEN` or `MCP_HTTPS_AUTH_TOKEN`. |
+| Server mode fails on startup | Missing, short, or invalid explicit bearer token. Set `MCP_HTTP_AUTH_TOKEN` or `MCP_HTTPS_AUTH_TOKEN` with at least 32 bearer-safe characters. |
 | Non-loopback bind fails | MCP HTTP would be reachable beyond loopback without an active token. Set a token and put TLS/auth in front of it. |
 | `/health` passes but `/ready` fails | Listener is alive but runtime readiness has not completed. Gate traffic on `/ready`. |
-| Session cap errors | Too many active Streamable HTTP sessions. Stop stale clients or raise `MCP_HTTP_MAX_SESSIONS`. |
-| Worker is stale | Heartbeats stopped, the worker process changed connection keys, or network access failed. Restart with the same `--connection-key`. |
+| Session cap errors | Too many active Streamable HTTP sessions. Stop stale clients, shorten `MCP_HTTP_SESSION_TIMEOUT_MS`, or raise `MCP_HTTP_MAX_SESSIONS` within server capacity. |
+| Worker is stale | Heartbeats stopped, the worker process changed connection keys, or network access failed. Restart with the same `--connection-key` and verify `/ready`. |
+| Worker connects but does not claim work | No active project assignment, project not included in `--project-id` / `--active-project-id`, stale endpoint status, task executor mismatch, or no lease returned. |
 | "Tool not enabled" on `CallTool` | The tool is disabled in `Settings → MCP tools`. Re-enable it. |
 
 See the full [Troubleshooting](./troubleshooting.md) page for more.

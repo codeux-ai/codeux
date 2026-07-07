@@ -68,7 +68,7 @@ Run `codeux --help` for the authoritative list. The current flags are:
 | `--api-key VALUE` | Set the Jules API key (overrides env and settings). |
 | `--runtime-role VALUE` | Runtime role: `project_manager` (default) or `worker-host`. |
 | `--headless` (alias `--no-dashboard`) | Start MCP-only without binding the dashboard. |
-| `--server-mode` | Start authenticated MCP HTTP server mode without binding dashboard routes or websockets. Requires an explicit bearer token. |
+| `--server-mode` | Start authenticated MCP HTTP server mode without binding dashboard routes or websockets. Requires an explicit bearer token with at least 32 bearer-safe characters. |
 | `--no-mcp-http` | Preferred alias for disabling the MCP Streamable HTTP gateway outside server mode. |
 | `--mcp-https` / `--no-mcp-https` | Enable/disable the MCP Streamable HTTP gateway (**enabled by default**; legacy flag name). |
 | `--mcp-http-port N` | Preferred alias for the MCP HTTP gateway port. |
@@ -89,7 +89,7 @@ Run `codeux --help` for the authoritative list. The current flags are:
 | --- | --- |
 | `JULES_API_KEY` | Jules API key (also accepted as `JULES_KEY`). |
 | `DASHBOARD_PORT` | Dashboard port (default `4444`). |
-| `CODE_UX_SERVER_MODE` | Set to `true` for authenticated MCP HTTP server mode without dashboard binding. Requires an explicit bearer token. |
+| `CODE_UX_SERVER_MODE` | Set to `true` for authenticated MCP HTTP server mode without dashboard binding. Requires an explicit bearer token with at least 32 bearer-safe characters. |
 | `MCP_HTTP_ENABLED` | Preferred alias to enable the MCP HTTP gateway. |
 | `MCP_HTTPS_ENABLED` | Enable the MCP HTTP gateway (default `true`). |
 | `MCP_HTTP_PORT` | Preferred alias for the MCP HTTP gateway port. |
@@ -103,7 +103,7 @@ Run `codeux --help` for the authoritative list. The current flags are:
 | `MCP_HTTP_MAX_SESSIONS` | Preferred alias for the active Streamable HTTP session cap. |
 | `MCP_HTTP_SESSION_TIMEOUT_MS` | Preferred alias for the idle Streamable HTTP session timeout. |
 
-In server mode, `MCP_HTTPS_AUTH_TOKEN`, `MCP_HTTP_AUTH_TOKEN`, `--mcp-https-auth-token`, or `--mcp-http-auth-token` must be non-empty. Server mode does not fall back to the generated user token.
+In server mode, `MCP_HTTPS_AUTH_TOKEN`, `MCP_HTTP_AUTH_TOKEN`, `--mcp-https-auth-token`, or `--mcp-http-auth-token` must provide an explicit token with at least 32 bearer-safe characters. Server mode does not fall back to the generated user token.
 
 For server-mode startup commands, token handling, worker enrollment, settings synchronization, and troubleshooting, see [Connecting MCP clients](./mcp-clients.md#secure-headless-server-mode).
 
