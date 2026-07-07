@@ -985,4 +985,48 @@ describe("onboarding appearance step", () => {
     });
     window.removeEventListener(APPEARANCE_PREVIEW_EVENT, listener);
   });
+
+  it("does not publish a loaded appearance preview after onboarding unmounts", async () => {
+    const mockSystemSettings = createSystemSettings();
+    mockSystemSettings.defaults.appearance = {
+      ...mockSystemSettings.defaults.appearance,
+      theme: "LIGHT",
+    };
+    let resolveSettings: (settings: SystemSettings) => void = () => {};
+    const delayedSettings = new Promise<SystemSettings>((resolve) => {
+      resolveSettings = resolve;
+    });
+    const previews: Array<SystemSettings["defaults"]["appearance"] | null> = [];
+    const listener = (event: Event) => {
+      previews.push((event as CustomEvent<{ appearance: SystemSettings["defaults"]["appearance"] | null }>).detail.appearance);
+    };
+    window.addEventListener(APPEARANCE_PREVIEW_EVENT, listener);
+    vi.mocked(settingsApi.fetchSystemSettings).mockReturnValue(delayedSettings);
+
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = typeof input === "string" ? input : input.url;
+      if (url.endsWith("/api/user/onboarding")) {
+        return new Response(JSON.stringify({ completed: false, onboardingCompletedAt: null }), { status: 200 });
+      }
+      if (url.endsWith("/api/onboarding/readiness")) {
+        return new Response(JSON.stringify({
+          checkedAt: "2026-06-01T00:00:00.000Z",
+          cluster: { status: "ready" },
+          dependencies: [],
+          providers: [],
+        }), { status: 200 });
+      }
+      return new Response(JSON.stringify({}), { status: 404 });
+    });
+
+    const { unmount } = render(<OnboardingExperience />);
+
+    await waitFor(() => expect(settingsApi.fetchSystemSettings).toHaveBeenCalled());
+    unmount();
+    resolveSettings(mockSystemSettings);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(previews.every((appearance) => appearance === null)).toBe(true);
+    window.removeEventListener(APPEARANCE_PREVIEW_EVENT, listener);
+  });
 });

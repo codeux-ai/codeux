@@ -270,6 +270,8 @@ export const OnboardingExperience: FunctionComponent = () => {
   const interactionTokens = useInteractionTokens();
   const validationRef = useRef<HTMLDivElement>(null);
   const openRef = useRef(open);
+  const mountedRef = useRef(true);
+  const loadRequestRef = useRef(0);
   const {
     state: onboardingUserState,
     loading: onboardingStateLoading,
@@ -283,11 +285,16 @@ export const OnboardingExperience: FunctionComponent = () => {
 
   useEffect(() => {
     if (!open) {
+      loadRequestRef.current += 1;
       clearAppearancePreview();
     }
   }, [open]);
 
-  useEffect(() => clearAppearancePreview, []);
+  useEffect(() => () => {
+    mountedRef.current = false;
+    loadRequestRef.current += 1;
+    clearAppearancePreview();
+  }, []);
 
   const closeOnboarding = (): void => {
     clearAppearancePreview();
@@ -334,22 +341,30 @@ export const OnboardingExperience: FunctionComponent = () => {
     setIntroPhase("onboarding");
   };
 
-  const load = async () => {
+  const load = async (): Promise<void> => {
+    const requestId = loadRequestRef.current + 1;
+    loadRequestRef.current = requestId;
     setCheckingReadiness(true);
     try {
       const [nextReadiness, nextSettings] = await Promise.all([
         fetchOnboardingReadiness(),
         fetchSystemSettings(),
       ]);
-      dispatch({ type: "load-success", readiness: normalizeOnboardingReadiness(nextReadiness), settings: nextSettings });
-      if (openRef.current) {
-        applyAppearanceSettings(nextSettings.defaults.appearance);
-        publishAppearancePreview(nextSettings.defaults.appearance);
+      if (!mountedRef.current || requestId !== loadRequestRef.current || !openRef.current) {
+        return;
       }
+      dispatch({ type: "load-success", readiness: normalizeOnboardingReadiness(nextReadiness), settings: nextSettings });
+      applyAppearanceSettings(nextSettings.defaults.appearance);
+      publishAppearancePreview(nextSettings.defaults.appearance);
     } catch (loadError) {
+      if (!mountedRef.current || requestId !== loadRequestRef.current || !openRef.current) {
+        return;
+      }
       dispatch({ type: "load-failure", error: loadError instanceof Error ? loadError.message : String(loadError) });
     } finally {
-      setCheckingReadiness(false);
+      if (mountedRef.current && requestId === loadRequestRef.current && openRef.current) {
+        setCheckingReadiness(false);
+      }
     }
   };
 
@@ -802,13 +817,10 @@ export const OnboardingExperience: FunctionComponent = () => {
     if (draftAppearance?.theme === "LIGHT") {
       return false;
     }
-    if (typeof document !== "undefined" && document.documentElement.classList.contains("dark")) {
-      return true;
-    }
     if (typeof window !== "undefined" && typeof window.matchMedia === "function") {
       return window.matchMedia("(prefers-color-scheme: dark)").matches;
     }
-    return true;
+    return typeof document !== "undefined" && document.documentElement.classList.contains("dark");
   })();
   const onboardingBackgroundMode = draftAppearance?.backgroundMode ?? "ANIMATED";
   const onboardingStaticBackgroundColor = draftAppearance?.staticBackgroundColor ?? "#0d0f12";
