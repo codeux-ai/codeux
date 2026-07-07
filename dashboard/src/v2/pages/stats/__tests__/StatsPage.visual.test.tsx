@@ -29,6 +29,8 @@ import { join } from 'node:path';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { cleanup, render, screen, within } from '@testing-library/preact';
 import { StatsPage } from '../StatsPage.js';
+import { AnalysisStudioSection } from '../components/AnalysisStudioSection.js';
+import { calculateChartMetrics, groupChartSeries } from '../chart-view-models.js';
 import * as useProjectDataModule from '../../../context/project-data.js';
 import * as useStatsPageDataModule from '../use-stats-page-data.js';
 vi.mock('../components/system/SystemStudio.js', () => ({
@@ -138,9 +140,38 @@ function makeStats() {
   } as any;
 }
 
+function makeChartState(stats = makeStats()) {
+  const enabledSeries = stats.chartSeries.reduce((acc: Record<string, boolean>, series: { id: string; defaultEnabled: boolean }) => {
+    acc[series.id] = series.defaultEnabled;
+    return acc;
+  }, {});
+  const seriesGroups = groupChartSeries(stats.chartSeries, enabledSeries);
+
+  return {
+    visualMode: 'composition',
+    setVisualMode: vi.fn(),
+    zoomRange: null,
+    setZoomRange: vi.fn(),
+    hoveredIndex: null,
+    setHoveredIndex: vi.fn(),
+    dragStartIndex: null,
+    setDragStartIndex: vi.fn(),
+    dragCurrentIndex: null,
+    setDragCurrentIndex: vi.fn(),
+    enabledSeries,
+    setEnabledSeries: vi.fn(),
+    resetEnabledSeries: vi.fn(),
+    activeSeriesCount: seriesGroups.reduce((count, group) => count + group.activeCount, 0),
+    seriesGroups,
+    metrics: calculateChartMetrics(stats.buckets),
+  };
+}
+
 function mockStatsPageData(visualMode: 'trend' | 'composition' | 'models' | 'reliability' | 'ledgers' | 'system') {
+  const stats = makeStats();
+
   vi.spyOn(useStatsPageDataModule, 'useStatsPageData').mockReturnValue({
-    stats: makeStats(),
+    stats,
     loading: false,
     error: null,
     refresh: vi.fn(),
@@ -157,7 +188,7 @@ function mockStatsPageData(visualMode: 'trend' | 'composition' | 'models' | 'rel
     applyCustomWindow: vi.fn(),
     visualMode,
     setVisualMode: vi.fn(),
-    chartState: { enabledSeries: {} } as any,
+    chartState: makeChartState(stats) as any,
     providerSegments: [{ label: 'Codex', value: usage.totalTokens, color: '#D99A12', textClassName: 'text-amber-600' }],
     sourceSegments: [{ label: 'reported', value: 4, color: '#00E0A0', textClassName: 'text-signal-600' }],
     tokenSegments: [{ label: 'Input', value: usage.inputTokens, color: '#00E0A0', textClassName: 'text-signal-600' }],
@@ -207,6 +238,40 @@ describe('StatsPage visual tests', () => {
     expect(screen.getByRole('region', { name: `${studioTitle === 'Reliability' ? 'Providers' : studioTitle} metrics` })).toBeTruthy();
     expect(screen.queryByText('Analysis Studio')).toBeNull();
     expect(screen.queryByRole('heading', { name: 'Analysis workspace' })).toBeNull();
+  });
+
+  it('renders flat analysis metadata before the active studio content', () => {
+    mockStatsPageData('composition');
+
+    render(<StatsPage />);
+
+    const analysisPanel = screen.getByRole('region', { name: 'Stats analysis panel' });
+    expect(within(analysisPanel).getByText('Usage mix')).toBeTruthy();
+    expect(within(analysisPanel).getAllByText('Composition').length).toBeGreaterThan(0);
+    expect(within(analysisPanel).getByText('Provider, token, purpose, and source mix for the current telemetry window.')).toBeTruthy();
+  });
+
+  it('renders the Waiting for Telemetry empty state as a flat status panel', () => {
+    render(
+      <AnalysisStudioSection
+        stats={null}
+        loading={false}
+        error={null}
+        refresh={vi.fn()}
+        projectId="proj-1"
+        planningUsage={null}
+        providerSegments={[]}
+        tokenSegments={[]}
+        sourceSegments={[]}
+        visualMode="trend"
+        setVisualMode={vi.fn()}
+        chartState={makeChartState() as any}
+      />,
+    );
+
+    expect(screen.getByRole('region', { name: 'Stats analysis panel' })).toHaveTextContent('Time-series lens');
+    expect(screen.getByRole('status')).toHaveTextContent('Waiting for Telemetry');
+    expect(screen.getByRole('status')).toHaveTextContent('Select a time window to see Trend data.');
   });
 
   it('renders the no-project state in the stats shell hierarchy', () => {
@@ -365,18 +430,26 @@ describe('StatsPage visual tests', () => {
     }
   });
 
-  it('keeps the stats hero command band on Warm Void primitives without glass gradients', () => {
+  it('keeps the stats hero command band on flat primitives without depth or glass gradients', () => {
     const css = readFileSync(join(process.cwd(), 'dashboard/src/v2/pages/stats/StatsPage.module.css'), 'utf8');
     const heroPanelRule = css.match(/\.heroPanel\s*\{(?<body>[^}]*)\}/)?.groups?.body ?? '';
     const heroControlsRule = css.match(/\.heroControls\s*\{(?<body>[^}]*)\}/)?.groups?.body ?? '';
     const heroControlSectionRule = css.match(/\.heroControlSection\s*\{(?<body>[^}]*)\}/)?.groups?.body ?? '';
+    const heroPresetButtonActiveRule = css.match(/\.heroPresetButtonActive\s*\{(?<body>[^}]*)\}/)?.groups?.body ?? '';
+    const stateMessageIconRule = css.match(/\.stateMessageIcon\s*\{(?<body>[^}]*)\}/)?.groups?.body ?? '';
 
     expect(heroPanelRule).toContain('background: var(--stats-surface-panel)');
+    expect(heroPanelRule).not.toContain('box-shadow');
     expect(heroControlsRule).toContain('background: var(--stats-surface-subpanel)');
+    expect(heroPresetButtonActiveRule).toContain('background: var(--stats-surface-control-active-strong)');
+    expect(stateMessageIconRule).toContain('background: var(--stats-surface-chip)');
     expect(heroPanelRule).not.toContain('linear-gradient');
     expect(heroControlsRule).not.toContain('linear-gradient');
     expect(heroControlSectionRule).not.toMatch(/border:\s*1px/);
     expect(heroControlSectionRule).not.toMatch(/background:/);
     expect(css).not.toContain('backdrop-blur');
+    expect(css).not.toContain('var(--surface-glass)');
+    expect(css).not.toContain('var(--elevation-base)');
+    expect(css).not.toContain('translateY(-1px)');
   });
 });

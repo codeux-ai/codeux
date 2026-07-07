@@ -23,9 +23,9 @@ Do not document or render speculative metrics. Missing telemetry is a first-clas
 The redesigned Stats page uses a stable top-to-bottom shell:
 
 1. Header command band
-   - The hero names the Stats workspace with a Stats-native command masthead rather than the generic dashboard page header. It uses flat neutral panel, subpanel, chip, and input primitives, a compact current-state pill, and active lens chips for the selected time window and mode.
+   - The hero names the Stats workspace with a Stats-native command masthead rather than the generic dashboard page header. It uses flat neutral panel, subpanel, chip, and input primitives, a compact current-state pill, active lens chips for the selected time window and mode, and context chips for selected project, generated snapshot time, and sprint lens.
    - The command controls are flat administrative rows inside the subpanel surface. Avoid nested framed glass panels, decorative gradients, or extra wrappers around the preset, custom range, and mode controls.
-   - Keep only selected project, sprint lens, time window, and active visual mode controls visible in the command band.
+   - Keep only selected project, generated snapshot time, sprint lens, time window, and active visual mode controls visible in the command band.
    - Time presets are `1h`, `24h`, `7d`, `30d`, `All time`, and `Custom`.
    - Choosing `Custom` opens start and end date fields. The selected range changes only after `Apply` succeeds.
    - Invalid or incomplete custom ranges keep focusable controls visible, keep Apply keyboard-reachable, set `aria-invalid` on the first invalid field, connect `aria-errormessage`, move focus to that field on failed apply, and announce inline error text.
@@ -41,7 +41,7 @@ The redesigned Stats page uses a stable top-to-bottom shell:
    - Mode-specific top cards are the single primary metric deck for the selected analysis surface. They use `StatsCard` and should put the most actionable metric first for the selected mode.
    - Cards expose title, value, and string description as the analytics article name. Long values must wrap inside stable card slots.
 4. Workspace body
-   - Mode content starts directly after the metric deck without an extra studio header, readiness chip, duplicated KPI strip, summary-card deck, or duplicated workspace context card.
+   - Mode content starts directly after the metric deck with a compact flat metadata strip for the active mode, not a decorative studio header, readiness chip, duplicated KPI strip, summary-card deck, or duplicated workspace context card.
    - Workspace bodies may differ substantially, but each component must consume the shared Stats panel, chip, input, ledger row, status tone, chart track, focus, and motion tokens directly.
 5. Feedback states
    - No-project, first-load loading, first-load error, empty, refresh, and reduced-data states preserve the shell rhythm.
