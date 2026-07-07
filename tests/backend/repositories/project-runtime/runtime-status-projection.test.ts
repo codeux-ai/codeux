@@ -6,6 +6,7 @@ import { AppDbStorage } from "../../../../src/repositories/app-db-storage.js";
 import { RuntimeStatusProjection } from "../../../../src/repositories/project-runtime/runtime-status-projection.js";
 import { ProjectManagementRepository } from "../../../../src/repositories/project-management-repository.js";
 import { ExecutionRepository } from "../../../../src/repositories/execution-repository.js";
+import { TaskSelfReflectionRatingRepository } from "../../../../src/repositories/task-self-reflection-rating-repository.js";
 
 const tempDirs: string[] = [];
 
@@ -14,6 +15,7 @@ async function createProjection(): Promise<{
   projection: RuntimeStatusProjection;
   projectRepository: ProjectManagementRepository;
   executionRepository: ExecutionRepository;
+  ratingRepository: TaskSelfReflectionRatingRepository;
 }> {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), "runtime-status-projection-test-"));
   tempDirs.push(dir);
@@ -23,6 +25,7 @@ async function createProjection(): Promise<{
     projection: new RuntimeStatusProjection(storage, storage.getDatabase()),
     projectRepository: new ProjectManagementRepository(storage),
     executionRepository: new ExecutionRepository(storage),
+    ratingRepository: new TaskSelfReflectionRatingRepository(storage),
   };
 }
 
@@ -221,5 +224,77 @@ describe("RuntimeStatusProjection", () => {
     const refreshedStatus = projection.buildProjectStatus(project.id, sprint.id, null);
 
     expect(refreshedStatus.subtasks[0]?.activities?.map((activity) => activity.id)).toEqual(["act-1", "act-2"]);
+  });
+
+  it("projects latest task self-reflection ratings for live status and omits unrated tasks", async () => {
+    const { projection, projectRepository, executionRepository, ratingRepository } = await createProjection();
+
+    const project = projectRepository.createProject({ name: "Proj", sourceType: "local", sourceRef: "/path" });
+    const sprint = projectRepository.createSprint(project.id, { name: "Sprint 1", number: 1 });
+    const ratedTask = projectRepository.createTask(project.id, {
+      sprintId: sprint.id,
+      taskKey: "T1",
+      title: "Rated task",
+      status: "completed",
+    });
+    const unratedTask = projectRepository.createTask(project.id, {
+      sprintId: sprint.id,
+      taskKey: "T2",
+      title: "Unrated task",
+      status: "pending",
+    });
+    const olderRun = executionRepository.createTaskRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: ratedTask.id,
+      provider: "codex",
+      state: "COMPLETED",
+    });
+    const latestRun = executionRepository.createTaskRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: ratedTask.id,
+      provider: "codex",
+      state: "COMPLETED",
+    });
+
+    ratingRepository.upsertForTaskRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: ratedTask.id,
+      sourceTaskRunId: olderRun.id,
+      overallRating: 1,
+      sections: [
+        { label: "Quality", normalizedLabel: "quality", rating: 1, note: "Older" },
+      ],
+      capturedAt: "2026-06-01T10:00:00.000Z",
+    });
+    ratingRepository.upsertForTaskRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: ratedTask.id,
+      sourceTaskRunId: latestRun.id,
+      overallRating: 5,
+      sections: [
+        { label: "Quality", normalizedLabel: "quality", rating: 5, note: "Latest" },
+      ],
+      capturedAt: "2026-06-01T10:05:00.000Z",
+    });
+
+    const status = projection.buildProjectStatus(project.id, sprint.id, null);
+    const mappedRated = status.subtasks.find((task) => task.record_id === ratedTask.id);
+    const mappedUnrated = status.subtasks.find((task) => task.record_id === unratedTask.id);
+
+    expect(mappedUnrated?.selfReflectionRating).toBeUndefined();
+    expect(mappedRated?.selfReflectionRating).toMatchObject({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: ratedTask.id,
+      sourceTaskRunId: latestRun.id,
+      overallRating: 5,
+      sections: [
+        { label: "Quality", normalizedLabel: "quality", rating: 5, note: "Latest" },
+      ],
+    });
   });
 });
