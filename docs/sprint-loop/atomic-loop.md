@@ -33,8 +33,7 @@ Controlled by `dashboardSettings.sprintLoopSteps`:
 - `sessionSync`
 - `statusDerivation`
 - `startReadyTasks`
-- `mergeProtocol`
-- `actionRequiredProtocol`
+- `protocol`
 - `statusTable`
 - `watchLoop`
 
@@ -59,12 +58,13 @@ flowchart TD
   M --> N[status-derivation-step]
   N --> O{startReadyTasks}
   O --> P[start-ready-tasks-step]
-  P --> Q[protocol-step]
-  Q --> R{statusTable}
-  R --> S[status-table-step]
-  S --> T{wait && watchLoop}
-  T -->|true| U[watch loop cycles]
-  T -->|false| V[single-cycle report]
+  P --> Q{protocol}
+  Q --> R[protocol-step]
+  R --> S{statusTable}
+  S --> T[status-table-step]
+  T --> U{wait && watchLoop}
+  U -->|true| V[watch loop cycles]
+  U -->|false| W[single-cycle report]
 ```
 
 ## Pull Request Content Rules
@@ -111,14 +111,17 @@ For `status` and `orchestrate`, each cycle follows the strict execution order de
    - Evaluates the readiness gate: a task must be `PENDING`, dependencies completed and merged, provider concurrency available, and emergency stop inactive.
    - Task dispatch creates DB task dispatch and task-run records, selects the provider based on settings (uses hosted provider for `jules` and CLI/Docker or host workflows for local providers).
    - Marks tasks `RUNNING`, records session id/name/provider, and resets consecutive failure count on success. Triggers emergency stop after repeated real dispatch failures.
-6. **Apply action-required automation**: Provider-agnostic handling of plan approval, clarification replies (via Project manager preset), and paused sessions, utilizing cooldown/dedupe rules and escalating attention items when necessary.
-7. **Collect CI status**: Gathers CI data for feature branches.
-8. **Backfill PR metadata**: Ensures PRs are tracked accurately.
-9. **Run task QA review**: Evaluates completed coding work (`CODING_COMPLETED`). QA is a formal part of the merge gate, evaluating the work rather than acting as a vague final-only review. This handles retry/review behavior, stale QA invocation reconciliation, QA follow-up reruns, and transitions tasks back to in-progress when PR/CI/QA is not merge-ready.
-10. **Evaluate feature PR CI/merge gate**: Evaluates completed coding work for PR/CI/merge readiness, review blockers, merge conflicts, missing PRs, and attention items. Does not automatically merge or apply fixes unless tied to configured auto-merge modes and intelligence settings.
-11. **Persist CI gate state changes**: Saves the result of the CI merge gates.
-12. **Rerun status derivation/start-ready**: Re-evaluates state and starts ready tasks if merges unblocked dependencies.
-13. **Build status/protocol/table output**: Compiles the final cycle report and separates action-required tasks into agent and human intervention categories.
+6. **Apply protocol step**:
+   - Provider-agnostic handling of plan approval, clarification replies (via Project manager preset), and paused sessions, utilizing cooldown/dedupe rules and escalating attention items when necessary.
+   - Gathers CI data for feature branches.
+   - Ensures PRs are tracked accurately.
+   - Evaluates completed coding work (`CODING_COMPLETED`). QA is a formal part of the merge gate, evaluating the work rather than acting as a vague final-only review. This handles retry/review behavior, stale QA invocation reconciliation, QA follow-up reruns, and transitions tasks back to in-progress when PR/CI/QA is not merge-ready.
+   - Evaluates completed coding work for PR/CI/merge readiness, review blockers, merge conflicts, missing PRs, and attention items. Does not automatically merge or apply fixes unless tied to configured auto-merge modes and intelligence settings.
+   - Saves the result of the CI merge gates.
+   - Re-evaluates state and starts ready tasks if merges unblocked dependencies.
+
+7. **Build status table output**:
+   - Compiles the final cycle report and separates action-required tasks into agent and human intervention categories.
 
 ## Watch Mode
 
