@@ -26,6 +26,7 @@ import {
   resolveRouteDisplayProviderPool,
   sortProviderConfigEntries,
 } from "../../../lib/settings-view-models.js";
+import { shouldShowExpertSettings } from "../../../lib/settings-experience-mode.js";
 
 const INHERIT_VALUE = "__inherit__";
 const providerSelectIcon = (providerId: string, disabled = false) => () => (
@@ -159,6 +160,7 @@ export const SettingsModelsPanel: FunctionComponent<{ state: SettingsPageState }
   if (!editableSettings || !systemSettings) {
     return null;
   }
+  const showExpertSettings = shouldShowExpertSettings(state.experienceMode);
 
   const providerEntries = sortProviderConfigEntries(Object.entries(editableSettings.aiProvider.providers));
   const eligibleProviderConfigIds = getEligibleProviders(systemSettings, editableSettings, externalHints);
@@ -464,7 +466,7 @@ export const SettingsModelsPanel: FunctionComponent<{ state: SettingsPageState }
             }))}
           />
         </Row>
-        <Row label="Worker default model" description="Model used by inherited worker-profile routes. Default uses the selected worker instance’s base model." badge={getFieldBadge("workers.model")}>
+        <Row label="Worker default model" description="Model used by inherited worker-profile routes. Default uses the selected worker instance’s base model." badge={getFieldBadge("workers.model")} last={!showExpertSettings}>
           <SelectInput
             value={editableSettings.workers.model || "default"}
             onChange={(value) => updateEditableSettings((current) => ({
@@ -480,20 +482,26 @@ export const SettingsModelsPanel: FunctionComponent<{ state: SettingsPageState }
             ]}
           />
         </Row>
-        <Row label="Max concurrency" description="Maximum number of worker-dispatched tasks running at once." badge={getFieldBadge("workers.maxConcurrency")}>
-          <NumberInput value={editableSettings.workers.maxConcurrency} min={1} max={100} onChange={(value) => updateEditableSettings((current) => ({
-            ...current,
-            workers: { ...current.workers, maxConcurrency: value },
-          }))} />
-        </Row>
-        <Row label="Dispatch timeout" description="Seconds before a worker-dispatched task is considered timed out." badge={getFieldBadge("workers.timeoutSeconds")} last>
-          <NumberInput value={editableSettings.workers.timeoutSeconds} min={60} max={3600} onChange={(value) => updateEditableSettings((current) => ({
-            ...current,
-            workers: { ...current.workers, timeoutSeconds: value },
-          }))} />
-        </Row>
+        {showExpertSettings ? (
+          <>
+            <Row label="Max concurrency" description="Maximum number of worker-dispatched tasks running at once." badge={getFieldBadge("workers.maxConcurrency")}>
+              <NumberInput value={editableSettings.workers.maxConcurrency} min={1} max={100} onChange={(value) => updateEditableSettings((current) => ({
+                ...current,
+                workers: { ...current.workers, maxConcurrency: value },
+              }))} />
+            </Row>
+            <Row label="Dispatch timeout" description="Seconds before a worker-dispatched task is considered timed out." badge={getFieldBadge("workers.timeoutSeconds")} last>
+              <NumberInput value={editableSettings.workers.timeoutSeconds} min={60} max={3600} onChange={(value) => updateEditableSettings((current) => ({
+                ...current,
+                workers: { ...current.workers, timeoutSeconds: value },
+              }))} />
+            </Row>
+          </>
+        ) : null}
       </SectionCard>
 
+      {showExpertSettings ? (
+        <>
       <SectionCard title="Base Provider Configuration" watermark="BASE" badge={getBadge("aiProvider.providers")} icon={<Layers strokeWidth={2.4} />}>
         <div className="mb-4 rounded-[1.25rem] border border-black/[0.06] bg-black/[0.02] px-4 py-3 text-xs leading-relaxed text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-400">
           These values are the inheritance baseline for every route. Route mapping owns manual, weighted, or agent-based selection; this section defines each provider instance’s default model, reasoning depth, weight, and capacity.
@@ -970,6 +978,8 @@ export const SettingsModelsPanel: FunctionComponent<{ state: SettingsPageState }
         </div>
       </SectionCard>
       <SettingsModelPricingPanel state={state} />
+        </>
+      ) : null}
     </div>
   );
 };

@@ -13,6 +13,7 @@ import { BranchNameSchemeEditor } from "../BranchNameSchemeEditor.js";
 import { PrTemplateEditorModal } from "../PrTemplateEditorModal.js";
 import { DEFAULT_DASHBOARD_SETTINGS } from "../../../../lib/settings.js";
 import { updateGitHubModeForSettings } from "../../../../lib/settings-updaters.js";
+import { shouldShowExpertSettings } from "../../../lib/settings-experience-mode.js";
 
 const GUARDRAIL_JOB_META: Array<{ key: GuardrailJobType; label: string; description: string }> = [
   { key: "task_coding", label: "Coding attempts", description: "Max times a task is (re)dispatched for coding before it is blocked." },
@@ -45,6 +46,7 @@ export const SettingsSprintPanel: FunctionComponent<{ state: SettingsPageState }
   const getBadge = (...prefixes: string[]) => getBadgeHelper(activeScope, projectSources, ...prefixes);
   const getFieldBadge = (path: string) => getFieldBadgeHelper(activeScope, projectSources, path);
   const [editingPrTemplate, setEditingPrTemplate] = useState<"task" | "sprint" | null>(null);
+  const showExpertSettings = shouldShowExpertSettings(state.experienceMode);
 
   if (!editableSettings) {
     return null;
@@ -385,6 +387,8 @@ export const SettingsSprintPanel: FunctionComponent<{ state: SettingsPageState }
         updateSelfReflection={(settings) => updateQaSelfReflectionSettings(() => settings)}
       />
 
+      {showExpertSettings ? (
+        <>
       <SectionCard title="Guardrails" watermark="CAP" badge={getBadge("guardrails")} icon={<ShieldAlert strokeWidth={2.4} />}>
           <Row label="Guardrails enabled" description="Cap how many times each agent job type runs per task to stop runaway loops. Counts persist per task across restarts." badge={getFieldBadge("guardrails.enabled")}>
             <Toggle aria-label="Toggle setting"               value={editableSettings.guardrails.enabled}
@@ -581,6 +585,8 @@ export const SettingsSprintPanel: FunctionComponent<{ state: SettingsPageState }
             }))} />
           </Row>
         </SectionCard>
+        </>
+      ) : null}
 
         {editingPrTemplate ? (
           <PrTemplateEditorModal
