@@ -112,7 +112,7 @@ Subtask data is *also* persisted as markdown files for portability — see [Spri
 ## Data flow: a sprint cycle
 
 ```
-Dashboard click "Orchestrate"            MCP client calls manage_code_ux:start
+Dashboard click "Orchestrate"            MCP client calls grouped tools (e.g., manage_sprints:start) (manage_code_ux is deprecated)
             │                                            │
             ▼                                            ▼
       POST /api/sprints/.../orchestrate        ToolRegistry → sprint-actions.ts
