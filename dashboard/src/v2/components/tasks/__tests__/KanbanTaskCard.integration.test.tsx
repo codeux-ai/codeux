@@ -2,17 +2,45 @@
 /// <reference types="@testing-library/jest-dom" />
 import { readFileSync } from "node:fs";
 import { describe, it, expect, afterEach, vi } from "vitest";
-import { render, cleanup } from "@testing-library/preact";
+import { render, cleanup, fireEvent, within } from "@testing-library/preact";
 import * as matchers from "@testing-library/jest-dom/matchers";
 import userEvent from "@testing-library/user-event";
 import gsap from "gsap";
 import { KanbanTaskCard } from "../KanbanTaskCard.js";
 import type { TaskCardViewModel } from "../../../lib/tasks/task-card-view-model.js";
+import type { TaskSelfReflectionRating } from "../../../../../../src/contracts/task-self-reflection-types.js";
 
 expect.extend(matchers);
 
 const mockRequestConfirm = vi.fn().mockResolvedValue(true);
 const taskCardCss = readFileSync("dashboard/src/v2/components/tasks/kanban-task-card.css", "utf8");
+
+const createRating = (overrides: Partial<TaskSelfReflectionRating> = {}): TaskSelfReflectionRating => ({
+  id: "rating-1",
+  projectId: "project-1",
+  sprintId: "sprint-1",
+  taskId: "rec_1",
+  sourceTaskRunId: "run-1",
+  overallRating: 4.5,
+  sections: [
+    {
+      label: "Implementation",
+      normalizedLabel: "implementation",
+      rating: 4.5,
+      note: "Covered edge cases.",
+    },
+    {
+      label: "Scope control",
+      normalizedLabel: "scope_control",
+      rating: 4,
+      note: "Stayed focused.",
+    },
+  ],
+  capturedAt: "2026-07-07T00:00:00.000Z",
+  createdAt: "2026-07-07T00:00:00.000Z",
+  updatedAt: "2026-07-07T00:00:00.000Z",
+  ...overrides,
+});
 
 vi.mock("../../../hooks/use-confirm-dialog.js", () => ({
   useConfirmDialog: () => ({
@@ -140,6 +168,51 @@ describe("KanbanTaskCard Integration", () => {
     // Dependencies (based on DependencyStatusIndicators rendering)
     expect(getByText("TASK-124")).toBeInTheDocument();
     expect(getByText("TASK-125")).toBeInTheDocument();
+  });
+
+  it("renders self-reflection ratings with overall and section details", async () => {
+    const rating = createRating();
+    const ratedViewModel: TaskCardViewModel = {
+      ...mockViewModel,
+      task: {
+        ...mockViewModel.task,
+        selfReflectionRating: rating,
+      },
+      selfReflectionRating: rating,
+    };
+
+    const { getByLabelText, findByRole } = render(
+      <KanbanTaskCard
+        viewModel={ratedViewModel}
+        onEdit={onEdit}
+        onDelete={onDelete}
+      />
+    );
+
+    const badge = getByLabelText("Self-reflection rating 4.5 out of 5");
+    expect(badge).toHaveAttribute("role", "meter");
+    expect(badge).toHaveTextContent("4.5/5");
+
+    fireEvent.focus(badge);
+    const overlay = await findByRole("tooltip");
+    expect(within(overlay).getByText("Implementation")).toBeInTheDocument();
+    expect(within(overlay).getByText("4.5/5")).toBeInTheDocument();
+    expect(within(overlay).getByText("Covered edge cases.")).toBeInTheDocument();
+    expect(within(overlay).getByText("Scope control")).toBeInTheDocument();
+    expect(within(overlay).getByText("4/5")).toBeInTheDocument();
+    expect(within(overlay).getByText("Stayed focused.")).toBeInTheDocument();
+  });
+
+  it("does not render a self-reflection placeholder when no rating exists", () => {
+    const { queryByLabelText } = render(
+      <KanbanTaskCard
+        viewModel={{ ...mockViewModel, selfReflectionRating: undefined }}
+        onEdit={onEdit}
+        onDelete={onDelete}
+      />
+    );
+
+    expect(queryByLabelText(/Self-reflection rating/i)).not.toBeInTheDocument();
   });
 
   const mockCliViewModel: TaskCardViewModel = {

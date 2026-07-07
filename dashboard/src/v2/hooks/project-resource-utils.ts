@@ -68,6 +68,7 @@ export function areTaskRecordListsEqual(current: TaskRecord[], next: TaskRecord[
       left.isIndependent !== right.isIndependent ||
       left.isMerged !== right.isMerged ||
       !areReviewSummariesEqual(left.latestReview, right.latestReview) ||
+      !areSelfReflectionRatingsEqual(left.selfReflectionRating, right.selfReflectionRating) ||
       left.mergeIndicator !== right.mergeIndicator ||
       left.sourceType !== right.sourceType ||
       left.sourcePath !== right.sourcePath ||
@@ -108,4 +109,34 @@ function areReviewSummariesEqual(
     && left.finishedAt === right.finishedAt
     && left.findings.length === right.findings.length
     && left.findings.every((finding, index) => finding === right.findings[index]);
+}
+
+function areSelfReflectionRatingsEqual(
+  left: TaskRecord["selfReflectionRating"],
+  right: TaskRecord["selfReflectionRating"],
+): boolean {
+  if (!left && !right) {
+    return true;
+  }
+  if (!left || !right) {
+    return false;
+  }
+  return left.id === right.id
+    && left.projectId === right.projectId
+    && left.sprintId === right.sprintId
+    && left.taskId === right.taskId
+    && left.sourceTaskRunId === right.sourceTaskRunId
+    && left.overallRating === right.overallRating
+    && left.capturedAt === right.capturedAt
+    && left.createdAt === right.createdAt
+    && left.updatedAt === right.updatedAt
+    && left.sections.length === right.sections.length
+    && left.sections.every((section, index) => {
+      const other = right.sections[index];
+      return Boolean(other)
+        && section.label === other.label
+        && section.normalizedLabel === other.normalizedLabel
+        && section.rating === other.rating
+        && section.note === other.note;
+    });
 }
