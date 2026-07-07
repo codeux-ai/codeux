@@ -81,9 +81,11 @@ Importing is the recommended way to template sprints across projects when [Quick
 
 You can also import linked sprint scope from configured external systems. GitHub and GitLab imports use the saved effective `git.githubToken` and `git.gitlabToken` settings. Jira imports use the existing Jira settings block: site URL, email, API token, default project, import transition, close transition, and Jira auto-close behavior.
 
+Notion, Asana, and Linear imports are API-backed and read-only. Notion uses `notion.apiToken` plus an optional `databaseId`, Asana uses `asana.apiToken` plus `workspaceId` or project fallback, and Linear uses `linear.apiToken` plus optional `teamId`, `teamKey`, or project filters. These importers can search, fetch readable body/comment context, attach linked scope to a sprint, and plan from that imported scope; they do not archive Notion pages, complete Asana tasks, transition Linear issues, or close those external items.
+
 The shared settings model also supports Notion, Asana, Linear, Miro, Lucid, Figma, and Mural connection blocks. These provider blocks store enablement, token/secret, base URL, workspace/team/project identifiers, database/board/document/file identifiers, and a default search limit. They are saved and resolved through the same system → project → sprint settings hierarchy as other sprint integrations.
 
-Linked sprint records preserve numeric issue numbers for GitHub, GitLab, and Jira. Non-numeric external objects are stored with an `externalId`, `sourceKind`, and `sourceProvider`, so future importer flows can attach pages, boards, documents, files, tasks, and canvas objects without inventing fake issue numbers.
+Linked sprint records preserve numeric issue numbers for GitHub, GitLab, and Jira. Non-numeric external objects are stored with an `externalId`, `sourceKind`, and `sourceProvider`, so Notion pages/databases, Asana tasks, Linear issues, and future board/document/file/canvas importers can attach scope without inventing fake issue numbers.
 
 ## Sprint settings overrides
 

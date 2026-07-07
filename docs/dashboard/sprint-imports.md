@@ -1,8 +1,8 @@
 # Sprint Imports
 
-Sprint imports support three production paths from the Sprints page: structured markdown bundles, GitHub/GitLab issue imports, and Jira issue imports.
+Sprint imports support production paths from the Sprints page and MCP: structured markdown bundles, GitHub/GitLab issue imports, Jira issue imports, and read-only linked-scope imports from Notion, Asana, and Linear.
 
-Internal MCP clients use the same importer services through `manage_sprints` action `import_issues`. For payload examples covering search-only imports, assigned-work searches, explicit Jira keys, explicit GitHub/GitLab issue numbers, sprint attachment, and plan-after-import flows, see [MCP Tools and Contracts: `manage_sprints import_issues`](../mcp/tools-and-contracts.md#manage_sprints-import_issues).
+Internal MCP clients use the same importer services through `manage_sprints` action `import_issues`. For payload examples covering search-only imports, assigned-work searches, explicit Jira keys, explicit GitHub/GitLab issue numbers, explicit Notion/Asana/Linear external IDs, sprint attachment, and plan-after-import flows, see [MCP Tools and Contracts: `manage_sprints import_issues`](../mcp/tools-and-contracts.md#manage_sprints-import_issues).
 
 ## Markdown Import
 
@@ -71,12 +71,22 @@ Repository issues have two import modes. `Import as linked issues` creates linke
 Issue import uses the saved integration tokens:
 - GitHub: system/project effective `git.githubToken`, usually configured in Settings -> Integrations.
 - GitLab: system/project effective `git.gitlabToken`, usually configured in Settings -> Integrations or seeded from `GITLAB_TOKEN` / `GLAB_TOKEN` host hints.
+- Notion: system/project effective `notion.apiToken`; `databaseId` can narrow search or explicitly import a database.
+- Asana: system/project effective `asana.apiToken`; workspace search uses `workspaceId`, while project fallback uses `projectId`.
+- Linear: system/project effective `linear.apiToken`; `teamId`, `teamKey`, and `projectId` can narrow issue search.
 
 When the GitHub token is empty, GitHub issue search, issue context loading, and auto-close fail with a token-required error. Code UX does not fall back to local `gh` or `glab` CLI authentication for dashboard or MCP importer workflows; Docker auth-copy mount settings help worker containers, but issue search, explicit import, linked sprint attachment, planning imports, and close operations need saved GitHub/GitLab tokens.
 
+Notion, Asana, and Linear importer workflows use direct provider APIs through `fetch` and require saved tokens before any network request is made. They are read/attach only: Code UX searches, fetches readable context, persists local linked-source records, enriches sprint prompts, and can plan from that imported scope, but it does not archive Notion pages, complete Asana tasks, transition Linear issues, or close those external items.
+
+Provider-specific search behavior:
+- Notion uses `POST https://api.notion.com/v1/search` with `Authorization: Bearer` and `Notion-Version`, maps pages and databases, and reads page/database block children into prompt markdown when blocks are readable.
+- Asana uses `GET https://app.asana.com/api/1.0/workspaces/{workspace_gid}/tasks/search` for workspace task search and falls back to project tasks when a project id is supplied. When conversation context is requested, task stories/comments are appended to prompt markdown.
+- Linear uses `POST https://api.linear.app/graphql` for issue search/filter queries and explicit issue fetches. Results include description, labels, state, team/project, assignee, URL, and comments when conversation context is requested.
+
 ## Project-Management And Canvas Integration Settings
 
-Code UX now carries shared typed settings for additional importer providers: Notion, Asana, Linear, Miro, Lucid, Figma, and Mural. These settings are available at system scope, project scope, sprint effective-settings resolution, and the dashboard type contracts. Jira continues to use the existing `jira` settings block, and GitHub/GitLab continue to use `git.githubToken` and `git.gitlabToken`.
+Code UX carries shared typed settings for additional importer providers: Notion, Asana, Linear, Miro, Lucid, Figma, and Mural. Notion, Asana, and Linear have API-backed sprint importers today. Miro, Lucid, Figma, and Mural currently have settings and linked-source persistence contracts but no API-backed sprint importer in this flow yet. Jira continues to use the existing `jira` settings block, and GitHub/GitLab continue to use `git.githubToken` and `git.gitlabToken`.
 
 Each new provider settings block stores only strings and a bounded numeric search limit:
 
