@@ -378,7 +378,12 @@ export class ManagementToolHandler {
 
   async handleManageSettings(args: ManageSettingsArgs): Promise<{ content: Array<{ type: string; text: string }> }> {
     try {
-      const envelope = await this.settingsActions.handleSettingsAction({ domain: "settings", action: args.action, payload: args as unknown as Record<string, unknown>, approval: args.approval });
+      const rawArgs = args as unknown as Record<string, unknown>;
+      const nestedPayload = rawArgs.payload && typeof rawArgs.payload === "object" && !Array.isArray(rawArgs.payload)
+        ? rawArgs.payload as Record<string, unknown>
+        : null;
+      const payload = nestedPayload ? { ...nestedPayload, action: args.action } : rawArgs;
+      const envelope = await this.settingsActions.handleSettingsAction({ domain: "settings", action: args.action, payload, approval: args.approval });
       return { content: [{ type: "text", text: JSON.stringify(envelope, null, 2) }] };
     } catch (error) {
       return this.formatError("settings", args.action, error);

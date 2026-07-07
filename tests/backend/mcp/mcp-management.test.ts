@@ -68,7 +68,12 @@ describe("ManagementToolHandler", () => {
       settingsRepository: {
         getGlobalSettings: vi.fn(),
         getSystemSettings: vi.fn(() => ({ defaults: { automationLevel: "FULL" } })),
+        getProjectSettings: vi.fn(() => ({ automationLevel: "SEMI_AUTO" })),
+        getSprintSettings: vi.fn(() => ({ automationLevel: "MANUAL" })),
         saveSystemSettings: vi.fn((settings: unknown) => settings),
+        saveProjectSettings: vi.fn((projectId: string, settings: unknown) => settings),
+        saveSprintSettings: vi.fn((sprintId: string, base: unknown, settings: unknown) => settings),
+        getProjectResolvedSettings: vi.fn(() => ({})),
       },
       agentPresetSyncService: {
         syncPresets: vi.fn(),
@@ -351,6 +356,67 @@ describe("ManagementToolHandler", () => {
     ]) {
       expect(properties[field], field).toBeDefined();
     }
+  });
+
+  it("exposes settings bundle actions and fields on manage_settings", () => {
+    const tool = TOOL_DEFINITIONS.find((definition) => definition.name === "manage_settings");
+    expect(tool).toBeDefined();
+
+    const schema = tool?.inputSchema as { properties: Record<string, JsonSchemaProperty> } | undefined;
+    const properties = schema?.properties ?? {};
+
+    expect(properties.action?.enum).toContain("export_settings_bundle");
+    expect(properties.action?.enum).toContain("apply_settings_bundle");
+    expect(properties.bundle).toMatchObject({ type: "object" });
+    expect(properties.includeSecrets).toMatchObject({ type: "boolean" });
+    expect(properties.scopes).toMatchObject({ type: "array" });
+    expect(properties.projectIds).toMatchObject({ type: "array", items: { type: "string" } });
+    expect(properties.sprintIds).toMatchObject({ type: "array", items: { type: "string" } });
+  });
+
+  it("routes settings bundle apply through the one-use approval flow", async () => {
+    const bundle = {
+      metadata: {
+        schemaVersion: 1,
+        exportedAt: "2026-07-07T00:00:00.000Z",
+        includedScopes: ["system"],
+        fingerprint: "fp",
+        containsSecrets: true,
+      },
+      system: {
+        integrations: {
+          providers: { codex: { provider: "codex", name: "Codex", apiKey: "sk-imported" } },
+          githubToken: "",
+          jira: { apiToken: "" },
+        },
+      },
+    };
+
+    let response = await handler.handleManageSettings({ action: "apply_settings_bundle", bundle });
+    let parsed = JSON.parse(response.content[0].text);
+    expect(parsed.approvalRequired).toBe(true);
+    expect(deps.settingsRepository.saveSystemSettings).not.toHaveBeenCalled();
+
+    response = await handler.handleManageSettings({ action: "apply_settings_bundle", bundle, approval: { confirmed: true } });
+    parsed = JSON.parse(response.content[0].text);
+    expect(parsed.result.applied).toEqual({ system: 1, projects: 0, sprints: 0 });
+    expect(deps.settingsRepository.saveSystemSettings).toHaveBeenCalledWith(bundle.system);
+  });
+
+  it("redacts secret-bearing settings validation errors in management envelopes", async () => {
+    const secret = "ghp-never-print-this";
+    const response = await handler.handleManageSettings({
+      action: "apply_settings_bundle",
+      bundle: {
+        metadata: { schemaVersion: 1, includedScopes: ["projects"], fingerprint: "fp", containsSecrets: true },
+        projects: [{ projectId: "proj-1", settings: "bad", githubToken: secret }],
+      },
+    });
+
+    const text = response.content[0].text;
+    expect(response.isError).toBe(true);
+    expect(text).not.toContain(secret);
+    expect(JSON.parse(text).result.message).toContain("bundle.projects[0]");
   });
 
   it("should execute handleManageProjects delete action only after exact approval is pending", async () => {

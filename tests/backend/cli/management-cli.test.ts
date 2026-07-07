@@ -77,10 +77,27 @@ describe("management CLI", () => {
     expect(invocation.management?.payloadFlags.scheduledFor).toBe("2026-01-01T00:00:00Z");
   });
 
+  it("parses settings bundle aliases and bundle JSON flags", () => {
+    const invocation = parseCliInvocation([
+      "node",
+      "codeux",
+      "settings",
+      "apply-settings-bundle",
+      "--bundle-json",
+      "{\"metadata\":{\"schemaVersion\":1}}",
+      "--json",
+    ]);
+
+    expect(invocation.management?.domain).toBe("settings");
+    expect(invocation.management?.action).toBe("apply_settings_bundle");
+    expect(invocation.management?.payloadFlags.bundleJson).toBe("{\"metadata\":{\"schemaVersion\":1}}");
+  });
+
   it("includes the management command section in the top-level help text", () => {
     const helpText = buildHelpText(appConfig);
     expect(helpText).toContain("Management commands:");
     expect(helpText).toContain("codeux manage --payload-json");
+    expect(helpText).not.toContain("sk-");
   });
 
   it("rejects missing required flags in non-TTY mode", async () => {
@@ -219,5 +236,119 @@ describe("management CLI", () => {
     expect(handler.handleManageProjects).toHaveBeenCalledWith(expect.objectContaining({
       approval: undefined,
     }));
+  });
+
+  it("passes bundle JSON through codeux settings without printing secrets in readable output", async () => {
+    const streams = createStreamPair(false);
+    let stdoutText = "";
+    streams.stdout.on("data", (chunk) => {
+      stdoutText += chunk.toString("utf8");
+    });
+    const handler = {
+      handleManageProjects: vi.fn(),
+      handleManageSprints: vi.fn(),
+      handleManageTasks: vi.fn(),
+      handleManageQuicksprints: vi.fn(),
+      handleManageScheduler: vi.fn(),
+      handleManageSettings: vi.fn().mockResolvedValue(createEnvelopeResponse({
+        result: {
+          success: true,
+          applied: { system: 1, projects: 0, sprints: 0 },
+          metadata: { schemaVersion: 1, fingerprint: "abc", containsSecrets: true },
+        },
+      })),
+      handleManageAgents: vi.fn(),
+      handleManageMemory: vi.fn(),
+      handleManagePreview: vi.fn(),
+      handleManageTelemetry: vi.fn(),
+      handleManageCodeUx: vi.fn(),
+      handleSearchKnowledge: vi.fn(),
+    };
+    createRuntimeDependenciesMock.mockReturnValue({ managementToolHandler: handler });
+    const secret = "sk-cli-secret";
+    const bundleJson = JSON.stringify({
+      metadata: { schemaVersion: 1, exportedAt: "2026-07-07T00:00:00.000Z", includedScopes: ["system"], fingerprint: "fp", containsSecrets: true },
+      system: { integrations: { providers: { codex: { apiKey: secret } } } },
+    });
+    const invocation = parseCliInvocation(["node", "codeux", "settings", "apply-settings-bundle", "--bundle-json", bundleJson]);
+
+    await expect(runManagementCli({
+      invocation,
+      projectRoot: "/workspace",
+      appConfig,
+      io: streams,
+      createDependencies: createRuntimeDependenciesMock as never,
+    })).resolves.toBe(true);
+
+    expect(handler.handleManageSettings).toHaveBeenCalledWith(expect.objectContaining({
+      action: "apply_settings_bundle",
+      payload: expect.objectContaining({
+        bundle: expect.objectContaining({
+          system: expect.objectContaining({
+            integrations: expect.objectContaining({
+              providers: expect.objectContaining({
+                codex: expect.objectContaining({ apiKey: secret }),
+              }),
+            }),
+          }),
+        }),
+      }),
+    }));
+    expect(stdoutText).not.toContain(secret);
+    expect(stdoutText).toContain("success: true");
+    expect(stdoutText).toContain("containsSecrets: true");
+  });
+
+  it("supports settings bundle actions through generic manage payload JSON", async () => {
+    const streams = createStreamPair(false);
+    let stdoutText = "";
+    streams.stdout.on("data", (chunk) => {
+      stdoutText += chunk.toString("utf8");
+    });
+    const handler = {
+      handleManageProjects: vi.fn(),
+      handleManageSprints: vi.fn(),
+      handleManageTasks: vi.fn(),
+      handleManageQuicksprints: vi.fn(),
+      handleManageScheduler: vi.fn(),
+      handleManageSettings: vi.fn(),
+      handleManageAgents: vi.fn(),
+      handleManageMemory: vi.fn(),
+      handleManagePreview: vi.fn(),
+      handleManageTelemetry: vi.fn(),
+      handleManageCodeUx: vi.fn().mockResolvedValue(createEnvelopeResponse({
+        approvalRequired: true,
+        approvalMessage: "Settings bundle contains credentials.",
+      })),
+      handleSearchKnowledge: vi.fn(),
+    };
+    createRuntimeDependenciesMock.mockReturnValue({ managementToolHandler: handler });
+    const payloadJson = JSON.stringify({
+      domain: "settings",
+      action: "apply_settings_bundle",
+      payload: {
+        bundle: {
+          metadata: { schemaVersion: 1, includedScopes: ["system"], fingerprint: "fp", containsSecrets: true },
+          system: { integrations: { providers: { codex: { apiKey: "sk-generic-secret" } } } },
+        },
+      },
+    });
+    const invocation = parseCliInvocation(["node", "codeux", "manage", "--payload-json", payloadJson]);
+
+    await expect(runManagementCli({
+      invocation,
+      projectRoot: "/workspace",
+      appConfig,
+      io: streams,
+      createDependencies: createRuntimeDependenciesMock as never,
+    })).resolves.toBe(true);
+
+    expect(handler.handleManageCodeUx).toHaveBeenCalledWith(expect.objectContaining({
+      domain: "settings",
+      action: "apply_settings_bundle",
+      payload: expect.objectContaining({ bundle: expect.any(Object) }),
+    }));
+    expect(stdoutText).toContain("Approval required");
+    expect(stdoutText).not.toContain("sk-generic-secret");
   });
 });

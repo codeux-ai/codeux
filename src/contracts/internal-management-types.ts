@@ -175,12 +175,15 @@ export interface ManageMemoryArgs {
 }
 
 export interface ManageSettingsArgs {
-  action: "get_system" | "get_project_override" | "resolve_project_effective" | "get_sprint_override" | "resolve_sprint_effective" | "replace_system_settings" | "patch_system_setting" | "replace_project_settings" | "patch_project_setting" | "reset_project_settings" | "replace_sprint_settings" | "patch_sprint_setting" | "reset_sprint_settings";
+  action: "get_system" | "get_project_override" | "resolve_project_effective" | "get_sprint_override" | "resolve_sprint_effective" | "replace_system_settings" | "patch_system_setting" | "replace_project_settings" | "patch_project_setting" | "reset_project_settings" | "replace_sprint_settings" | "patch_sprint_setting" | "reset_sprint_settings" | "export_settings_bundle" | "apply_settings_bundle";
   projectId?: string;
   sprintId?: string;
   path?: string;
   value?: unknown;
   settings?: Record<string, unknown>;
+  bundle?: Record<string, unknown>;
+  includeSecrets?: boolean;
+  scopes?: string[];
   approval?: ManagementApproval;
 }
 
