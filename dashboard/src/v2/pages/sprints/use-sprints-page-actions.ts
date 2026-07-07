@@ -49,7 +49,8 @@ import {
 } from "../../lib/quicksprint-api.js";
 import { createSchedulerEntry } from "../../lib/scheduler-api.js";
 import { SprintPageActionRunner } from "../../lib/sprint-page-action-runner.js";
-import { buildGitHubModeProjectSettingsOverride } from "../../../lib/settings-updaters.js";
+import { DEFAULT_DASHBOARD_SETTINGS } from "../../../lib/settings.js";
+import { buildProjectCreationSettingsOverride } from "../../../lib/settings-updaters.js";
 
 export interface SprintsPageActionsDeps {
   selectedProject: any;
@@ -808,7 +809,11 @@ export function useSprintsPageActions({
           initMode: project.initMode,
           remoteProvider: project.remoteProvider,
           isPrivate: project.isPrivate,
-          ...(isLocalProject ? { settingsOverrides: buildGitHubModeProjectSettingsOverride("LOCAL") } : {}),
+          settingsOverrides: buildProjectCreationSettingsOverride({
+            ...(isLocalProject ? { githubMode: "LOCAL" as const } : {}),
+            selectedTechstackId: project.selectedTechstackId ?? DEFAULT_DASHBOARD_SETTINGS.techstackCatalog.defaultTechstackId,
+            applicationKind: project.applicationKind ?? null,
+          }),
         });
         return;
       }
@@ -818,7 +823,7 @@ export function useSprintsPageActions({
         sourceType: project.type,
         sourceRef: project.path,
         cloneDir: project.cloneDir,
-        ...(project.type === "local" ? { settingsOverrides: buildGitHubModeProjectSettingsOverride("LOCAL") } : {}),
+        ...(project.type === "local" ? { settingsOverrides: buildProjectCreationSettingsOverride({ githubMode: "LOCAL" }) } : {}),
       });
     },
     [createProject],

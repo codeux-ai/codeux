@@ -7,6 +7,8 @@ import { Modal } from "./Modal.js";
 import { ActionFeedbackRegion } from "./ActionFeedbackRegion.js";
 import { fetchLocalDirectories } from "../../lib/project-api.js";
 import type { LocalDirectoryBrowserResponse } from "../../types.js";
+import type { ApplicationKind } from "../../../types.js";
+import { DEFAULT_DASHBOARD_SETTINGS } from "../../../lib/settings.js";
 
 export type SourceType = 'local' | 'git' | 'new_project';
 
@@ -33,6 +35,8 @@ type NewProjectSubmission = {
     type: 'new_project';
     path: string;
     initMode: 'new-local' | 'new-remote';
+    applicationKind?: ApplicationKind | null;
+    selectedTechstackId?: string | null;
     remoteProvider?: 'github' | 'gitlab';
     isPrivate?: boolean;
     repoSlug?: string;
@@ -51,6 +55,10 @@ interface AddProjectModalProps {
     onClose: () => void;
     onAdd: (project: AddProjectModalSubmission) => void | Promise<void>;
     initialSourceType?: SourceType;
+    quickActionDefaults?: {
+        applicationKind: ApplicationKind;
+        selectedTechstackId: string;
+    };
 }
 
 type DirectoryPickerTarget = 'localPath' | 'cloneDir';
@@ -78,7 +86,7 @@ function focusFirstInvalidField(formId: string, scrollContainerId: string): void
     container.scrollTo({ top: Math.min(Math.max(targetTop, 0), maxTop), behavior: 'smooth' });
 }
 
-export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClose, onAdd, initialSourceType }) => {
+export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClose, onAdd, initialSourceType, quickActionDefaults }) => {
     const fieldsRef   = useRef<HTMLFormElement>(null);
 
     const [name, setName]           = useState('');
@@ -108,6 +116,14 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
     const [isSubmitting, setIsSubmitting] = useState(false);
     const nameInputRef = useRef<HTMLInputElement>(null);
     const [touched, setTouched] = useState({ name: false, path: false, slug: false });
+    const newProjectTechstackId = quickActionDefaults?.selectedTechstackId
+        ?? DEFAULT_DASHBOARD_SETTINGS.techstackCatalog.defaultTechstackId;
+    const newProjectApplicationKind = quickActionDefaults?.applicationKind ?? null;
+    const quickActionContextLabel = quickActionDefaults?.applicationKind === 'web'
+        ? 'Web App'
+        : quickActionDefaults?.applicationKind === 'desktop'
+            ? 'Desktop App'
+            : null;
 
     const validationErrors = useMemo(() => {
         const errors: Record<string, string> = {};
@@ -141,6 +157,8 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                     type: 'new_project',
                     path: newInitMode === 'new-local' ? localPath.trim() : '',
                     initMode: newInitMode,
+                    selectedTechstackId: newProjectTechstackId,
+                    applicationKind: newProjectApplicationKind,
                     ...(newInitMode === 'new-remote' && gitUrlSlug.trim()
                         ? { repoSlug: gitUrlSlug.trim() }
                         : {}),
@@ -390,6 +408,7 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                         <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-white/25 font-mono mb-1.5">Source</div>
                         <div className="text-base font-semibold text-white font-mono tracking-tight leading-snug">
                             {sourceType === 'new_project' ? 'New Project' : sourceType === 'git' ? 'Git Repo' : 'Local Project'}
+                            {quickActionContextLabel ? `: ${quickActionContextLabel}` : ''}
                         </div>
                         <div className="mt-3 w-8 h-[2px] bg-ember-500/50" />
                     </div>
@@ -401,14 +420,17 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                     <div className="flex items-start justify-between shrink-0 p-5 sm:p-7 lg:px-8 lg:pt-8 lg:pb-6 border-b border-black/[0.04] dark:border-white/[0.04]">
                         <div>
                             <h2 id="add-project-modal-title" className="text-2xl font-semibold text-slate-900 dark:text-white tracking-tight font-display leading-none">
-                                Add Project.
+                                {quickActionContextLabel ? `Create ${quickActionContextLabel}.` : 'Add Project.'}
                             </h2>
                             <p className="text-xs font-medium text-slate-400 mt-2 tracking-wide">
-                                Connect a local directory or remote repository
+                                {quickActionContextLabel
+                                    ? `Initialize a new ${quickActionContextLabel.toLowerCase()} repository with explicit project techstack settings`
+                                    : 'Connect a local directory or remote repository'}
                             </p>
                         </div>
                         <div className="sr-only" aria-live="polite" role="status">
                             {sourceType === 'new_project' ? 'New Project selected' : sourceType === 'git' ? 'Git Repo selected' : 'Local Project selected'}
+                            {quickActionContextLabel ? `. ${quickActionContextLabel} context selected.` : ''}
                             {showSetupOptions ? '. Setup Options step.' : ''}
                         </div>
                         <button

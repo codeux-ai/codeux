@@ -20,7 +20,8 @@ import {
 } from "lucide-preact";
 import type { Source, SourceStatus } from "./types.js";
 import { AddProjectModal, type AddProjectModalSubmission, type SourceType as AddProjectModalSourceType } from "./components/ui/AddProjectModal.js";
-import { buildGitHubModeProjectSettingsOverride } from "../lib/settings-updaters.js";
+import { buildProjectCreationSettingsOverride } from "../lib/settings-updaters.js";
+import { DEFAULT_DASHBOARD_SETTINGS } from "../lib/settings.js";
 import { StatusDot } from "./components/ui/StatusDot.js";
 import { WaveFluid } from "./components/ui/WaveFluid.js";
 import { BorderTrace } from "./components/ui/BorderTrace.js";
@@ -615,7 +616,11 @@ export const ProjectsPage: FunctionComponent = () => {
                 initMode: project.initMode,
                 remoteProvider: project.remoteProvider,
                 isPrivate: project.isPrivate,
-                ...(isLocalProject ? { settingsOverrides: buildGitHubModeProjectSettingsOverride("LOCAL") } : {}),
+                settingsOverrides: buildProjectCreationSettingsOverride({
+                    ...(isLocalProject ? { githubMode: "LOCAL" as const } : {}),
+                    selectedTechstackId: project.selectedTechstackId ?? DEFAULT_DASHBOARD_SETTINGS.techstackCatalog.defaultTechstackId,
+                    applicationKind: project.applicationKind ?? null,
+                }),
             });
             return;
         }
@@ -625,7 +630,7 @@ export const ProjectsPage: FunctionComponent = () => {
             sourceType: project.type,
             sourceRef: project.path,
             cloneDir: project.cloneDir,
-            ...(project.type === "local" ? { settingsOverrides: buildGitHubModeProjectSettingsOverride("LOCAL") } : {}),
+            ...(project.type === "local" ? { settingsOverrides: buildProjectCreationSettingsOverride({ githubMode: "LOCAL" }) } : {}),
         });
         if (project.setup?.enabled) {
             launchProjectSetup(createdProject.id, createdProject.name, project.setup.options);

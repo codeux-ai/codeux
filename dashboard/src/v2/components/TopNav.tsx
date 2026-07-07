@@ -1,17 +1,17 @@
 import type { FunctionComponent, RefObject } from "preact";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "preact/hooks";
 import gsap from "gsap";
-import { Bell, Moon, Sun, ChevronDown, FolderOpen, ArrowRight, Layers } from "lucide-preact";
+import { Bell, Moon, Sun, ChevronDown, FolderOpen, ArrowRight, Layers, Globe, Monitor } from "lucide-preact";
 import { Link, useRouterState } from "@tanstack/react-router";
 import { StatusDot } from "./ui/StatusDot.js";
-import type { TechstackCatalogSettings } from "../../types.js";
+import type { ApplicationKind, TechstackCatalogSettings } from "../../types.js";
 
 import { BrandSection } from "./top-nav/BrandSection.js";
 import { GlobalSearch } from "./top-nav/GlobalSearch.js";
 import { TelemetryStats } from "./top-nav/TelemetryStats.js";
 
 import { AddProjectModal, type AddProjectModalSubmission } from "./ui/AddProjectModal.js";
-import { buildGitHubModeProjectSettingsOverride } from "../../lib/settings-updaters.js";
+import { buildProjectCreationSettingsOverride } from "../../lib/settings-updaters.js";
 import { DEFAULT_DASHBOARD_SETTINGS } from "../../lib/settings.js";
 import { useProjectData } from "../context/project-data.js";
 import { useSprints } from "../../hooks/useSprints.js";
@@ -162,6 +162,11 @@ interface TopNavProps {
     isMobileMenuOpen?: boolean;
 }
 
+type AddProjectQuickActionDefaults = {
+    applicationKind: ApplicationKind;
+    selectedTechstackId: string;
+};
+
 export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile, hideLogo, isMobileMenuOpen }) => {
     const navRef = useRef<HTMLElement>(null);
 
@@ -169,6 +174,7 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
 
     const [dropdownOpen, setDropdownOpen] = useState(false);
     const [showAddProject, setShowAddProject] = useState(false);
+    const [addProjectQuickActionDefaults, setAddProjectQuickActionDefaults] = useState<AddProjectQuickActionDefaults | undefined>(undefined);
     const notifications = useNotifications();
     const isDark = useIsDark();
     const { setTheme } = useThemeSetting();
@@ -305,6 +311,8 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
     );
     const techstackSelectorLoading = !!selectedProject && (effectiveSettingsLoading || systemSettingsLoading);
     const techstackSelectorDisabled = !selectedProject || techstackSelectorLoading || techstackSwitchBusy;
+    const quickActionTechstackId = effectiveSettings?.settings.techstack?.selectedTechstackId
+        ?? techstackCatalog.defaultTechstackId;
     const techstackHelper = !selectedProject
         ? "Select a project first"
         : techstackSelectorLoading
@@ -429,6 +437,18 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
         }
     };
 
+    const openAddProjectModal = (defaults?: AddProjectQuickActionDefaults) => {
+        setAddProjectQuickActionDefaults(defaults);
+        setShowAddProject(true);
+    };
+
+    const openAppQuickAction = (applicationKind: ApplicationKind) => {
+        openAddProjectModal({
+            applicationKind,
+            selectedTechstackId: quickActionTechstackId,
+        });
+    };
+
     const handleCreateProject = async (project: AddProjectModalSubmission) => {
         if (project.type === 'new_project') {
             const isLocalProject = project.initMode === 'new-local';
@@ -443,7 +463,11 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
                 initMode: project.initMode,
                 remoteProvider: project.remoteProvider,
                 isPrivate: project.isPrivate,
-                ...(isLocalProject ? { settingsOverrides: buildGitHubModeProjectSettingsOverride("LOCAL") } : {}),
+                settingsOverrides: buildProjectCreationSettingsOverride({
+                    ...(isLocalProject ? { githubMode: "LOCAL" as const } : {}),
+                    selectedTechstackId: project.selectedTechstackId ?? DEFAULT_DASHBOARD_SETTINGS.techstackCatalog.defaultTechstackId,
+                    applicationKind: project.applicationKind ?? null,
+                }),
             });
             return;
         }
@@ -453,7 +477,7 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
             sourceType: project.type,
             sourceRef: project.path,
             cloneDir: project.cloneDir,
-            ...(project.type === "local" ? { settingsOverrides: buildGitHubModeProjectSettingsOverride("LOCAL") } : {}),
+            ...(project.type === "local" ? { settingsOverrides: buildProjectCreationSettingsOverride({ githubMode: "LOCAL" }) } : {}),
         });
     };
 
@@ -558,7 +582,7 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
                             )}
                             <div className="p-2 border-t border-black/[0.04] dark:border-white/[0.04] mt-1 flex flex-col gap-1">
                                 <button
-                                    onClick={() => { setDropdownOpen(false); setShowAddProject(true); }}
+                                    onClick={() => { setDropdownOpen(false); openAddProjectModal(); }}
                                     className="focus-visible:ring-2 focus-visible:ring-signal-500/50 w-full flex items-center gap-2 px-3 py-2 text-xs font-semibold text-ember-600 dark:text-ember-400 hover:bg-ember-500/[0.06] rounded-xl transition-colors"
                                 >
                                     <FolderOpen aria-hidden="true" className="w-3.5 h-3.5" strokeWidth={2} />
@@ -575,6 +599,31 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
                             </div>
                         </div>
                     )}
+                </div>
+
+                <div className="flex items-center gap-1">
+                    <Tooltip content="Create Web App">
+                        <button
+                            type="button"
+                            onClick={() => openAppQuickAction("web")}
+                            aria-label="Create Web App"
+                            className="flex h-9 min-w-0 items-center justify-center gap-2 rounded-xl border border-ember-500/20 bg-ember-500/[0.1] px-3 text-xs font-bold text-ember-700 transition-colors hover:border-ember-500/35 hover:bg-ember-500/[0.16] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 dark:text-ember-200"
+                        >
+                            <Globe aria-hidden="true" className="h-3.5 w-3.5 shrink-0" strokeWidth={1.8} />
+                            <span className="hidden xl:inline">Web App</span>
+                        </button>
+                    </Tooltip>
+                    <Tooltip content="Create Desktop App">
+                        <button
+                            type="button"
+                            onClick={() => openAppQuickAction("desktop")}
+                            aria-label="Create Desktop App"
+                            className="flex h-9 min-w-0 items-center justify-center gap-2 rounded-xl border border-signal-500/20 bg-signal-500/[0.1] px-3 text-xs font-bold text-signal-700 transition-colors hover:border-signal-500/35 hover:bg-signal-500/[0.16] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 dark:text-signal-200"
+                        >
+                            <Monitor aria-hidden="true" className="h-3.5 w-3.5 shrink-0" strokeWidth={1.8} />
+                            <span className="hidden xl:inline">Desktop App</span>
+                        </button>
+                    </Tooltip>
                 </div>
 
                 {/* Techstack Selector */}
@@ -840,8 +889,13 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
 
             {showAddProject && (
                 <AddProjectModal
-                    onClose={() => setShowAddProject(false)}
+                    onClose={() => {
+                        setShowAddProject(false);
+                        setAddProjectQuickActionDefaults(undefined);
+                    }}
                     onAdd={(project) => { void handleCreateProject(project); }}
+                    initialSourceType={addProjectQuickActionDefaults ? "new_project" : undefined}
+                    quickActionDefaults={addProjectQuickActionDefaults}
                 />
             )}
         </>

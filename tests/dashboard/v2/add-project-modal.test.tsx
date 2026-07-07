@@ -144,6 +144,37 @@ describe("AddProjectModal", () => {
       type: "new_project",
       path: "/tmp/alpha",
       initMode: "new-local",
+      selectedTechstackId: "code-ux-internal",
+      applicationKind: null,
+    });
+  });
+
+  it("passes quickaction application kind and selected techstack through new project submissions", async () => {
+    const onAdd = vi.fn().mockResolvedValue(undefined);
+    render(
+      <AddProjectModal
+        onClose={vi.fn()}
+        onAdd={onAdd}
+        initialSourceType="new_project"
+        quickActionDefaults={{ applicationKind: "desktop", selectedTechstackId: "react-saas" }}
+      />,
+    );
+
+    expect(screen.getByRole("heading", { name: /Create Desktop App/i })).toBeInTheDocument();
+
+    const nameInput = screen.getByLabelText(/Project Name/i);
+    fireEvent.input(nameInput, { target: { value: "Desk App" } });
+    await waitFor(() => expect(nameInput).toHaveValue("Desk App"));
+    fireEvent.submit(nameInput.closest("form")!);
+
+    await waitFor(() => expect(onAdd).toHaveBeenCalledTimes(1));
+    expect(onAdd).toHaveBeenCalledWith({
+      name: "Desk App",
+      type: "new_project",
+      path: "",
+      initMode: "new-local",
+      selectedTechstackId: "react-saas",
+      applicationKind: "desktop",
     });
   });
 
@@ -169,6 +200,8 @@ describe("AddProjectModal", () => {
       type: "new_project",
       path: "",
       initMode: "new-remote",
+      selectedTechstackId: "code-ux-internal",
+      applicationKind: null,
       repoSlug: "alpha-beta",
       remoteProvider: "github",
       isPrivate: true,

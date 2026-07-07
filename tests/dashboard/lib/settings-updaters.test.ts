@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   buildGitHubModeProjectSettingsOverride,
+  buildProjectCreationSettingsOverride,
   updateAiProvider,
   updateCiIntelligence,
   updateCliWorkflow,
@@ -94,6 +95,46 @@ describe("dashboard settings updater helpers", () => {
     expect(getSkillEnabled(override.skills || [], "git_manager_remote")).toBe(true);
     expect(getSkillEnabled(override.skills || [], "git_manager_local")).toBe(false);
     expect(getSkillEnabled(override.skills || [], "git_manager")).toBe(true);
+  });
+
+  it("builds a new local project override with local git mode and explicit techstack", () => {
+    const override = buildProjectCreationSettingsOverride({
+      githubMode: "LOCAL",
+      selectedTechstackId: "react-saas",
+      applicationKind: "web",
+    });
+
+    expect(override.git?.githubMode).toBe("LOCAL");
+    expect(override.techstack).toEqual({
+      selectedTechstackId: "react-saas",
+      applicationKind: "web",
+    });
+    expect(getSkillEnabled(override.skills || [], "git_manager_remote")).toBe(false);
+    expect(getSkillEnabled(override.skills || [], "git_manager_local")).toBe(true);
+    expect(getSkillEnabled(override.skills || [], "git_manager")).toBe(true);
+  });
+
+  it("builds a new remote project override with explicit techstack and no git mode override", () => {
+    const override = buildProjectCreationSettingsOverride({
+      selectedTechstackId: "code-ux-internal",
+      applicationKind: "desktop",
+    });
+
+    expect(override.git).toBeUndefined();
+    expect(override.skills).toBeUndefined();
+    expect(override.techstack).toEqual({
+      selectedTechstackId: "code-ux-internal",
+      applicationKind: "desktop",
+    });
+  });
+
+  it("builds an existing local import override without assigning a techstack", () => {
+    const override = buildProjectCreationSettingsOverride({ githubMode: "LOCAL" });
+
+    expect(override.git?.githubMode).toBe("LOCAL");
+    expect(override.techstack).toBeUndefined();
+    expect(getSkillEnabled(override.skills || [], "git_manager_remote")).toBe(false);
+    expect(getSkillEnabled(override.skills || [], "git_manager_local")).toBe(true);
   });
 
   it("updates ci, sprint loop, and cli workflow sections immutably", () => {

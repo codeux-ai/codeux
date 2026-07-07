@@ -129,6 +129,7 @@ const mockTopNavData = ({
   selectedTechstackId = null as string | null,
   applicationKind = null as "web" | "desktop" | null,
   effectiveLoading = false,
+  createProject = vi.fn(),
 } = {}) => {
   vi.mocked(useProjectData).mockReturnValue({
     projects: selectedProject ? [selectedProject] : [],
@@ -138,7 +139,7 @@ const mockTopNavData = ({
     error: null,
     refreshProjects: vi.fn(),
     selectProject: vi.fn(),
-    createProject: vi.fn(),
+    createProject,
     updateProject: vi.fn(),
     deleteProject: vi.fn(),
   } as any);
@@ -284,5 +285,63 @@ describe("TopNav techstack selector", () => {
     trigger = screen.getByRole("button", { name: /Techstack selector/i });
     expect(trigger).toBeDisabled();
     expect(trigger).toHaveTextContent("Loading settings");
+  });
+
+  it("opens Create Web App with the selected project techstack and submits explicit overrides", async () => {
+    const createProject = vi.fn().mockResolvedValue({});
+    mockTopNavData({ selectedTechstackId: "react-saas", createProject });
+
+    render(<TopNav />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Create Web App" }));
+
+    expect(await screen.findByRole("heading", { name: /Create Web App/i })).toBeInTheDocument();
+    const nameInput = screen.getByLabelText(/Project Name/i);
+    fireEvent.input(nameInput, { target: { value: "Web Portal" } });
+    await waitFor(() => expect(nameInput).toHaveValue("Web Portal"));
+    fireEvent.submit(nameInput.closest("form")!);
+
+    await waitFor(() => {
+      expect(createProject).toHaveBeenCalledWith(expect.objectContaining({
+        name: "Web Portal",
+        sourceType: "local",
+        sourceRef: "Web Portal",
+        initMode: "new-local",
+        settingsOverrides: expect.objectContaining({
+          git: { githubMode: "LOCAL" },
+          techstack: {
+            selectedTechstackId: "react-saas",
+            applicationKind: "web",
+          },
+        }),
+      }));
+    });
+  });
+
+  it("opens Create Desktop App with the catalog default techstack when the project is unassigned", async () => {
+    const createProject = vi.fn().mockResolvedValue({});
+    mockTopNavData({ selectedTechstackId: null, createProject });
+
+    render(<TopNav />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Create Desktop App" }));
+
+    expect(await screen.findByRole("heading", { name: /Create Desktop App/i })).toBeInTheDocument();
+    const nameInput = screen.getByLabelText(/Project Name/i);
+    fireEvent.input(nameInput, { target: { value: "Desktop Shell" } });
+    await waitFor(() => expect(nameInput).toHaveValue("Desktop Shell"));
+    fireEvent.submit(nameInput.closest("form")!);
+
+    await waitFor(() => {
+      expect(createProject).toHaveBeenCalledWith(expect.objectContaining({
+        name: "Desktop Shell",
+        settingsOverrides: expect.objectContaining({
+          techstack: {
+            selectedTechstackId: "code-ux-internal",
+            applicationKind: "desktop",
+          },
+        }),
+      }));
+    });
   });
 });
