@@ -105,6 +105,7 @@ Project management:
   - Lists stored messages for one thread
 - `POST /api/projects/:projectId/conversations/messages`
 - Stores a dashboard-authored message and queues it for a listener
+- Chat message posts update the selected thread message cache from the returned `ConversationMessageRecord`; the Chat invocation rail remains backed by `GET /api/projects/:projectId/execution/invocations` snapshots and realtime refreshes, so it does not create client-only invocation rows while the backend record is still being persisted.
 - Threads now remain explicitly `unassigned` until the dashboard targets a connection or a real listener claims them
 - The active thread header now supports explicit assignment and reassignment to a project-bound connection
 - Reassigning a thread re-queues any unprocessed dashboard messages so the newly assigned listener can receive them

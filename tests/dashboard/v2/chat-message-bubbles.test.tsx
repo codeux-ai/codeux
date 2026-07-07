@@ -816,34 +816,39 @@ describe("Chat Message Bubbles", () => {
   });
 
   describe("InvocationListCard", () => {
-    it("renders optimistic invocation status distinctly and announces it", () => {
-      const invocation = {
-        id: "optimistic:1",
+    it("renders the server invocation status verbatim and announces it", () => {
+      const invocation: ExecutionInvocationRecord = {
+        id: "inv-queued",
         projectId: "project-1",
+        sprintId: null,
+        taskId: null,
+        sprintRunId: null,
+        dispatchId: null,
+        taskRunId: null,
+        attentionItemId: null,
+        providerInvocationId: null,
         type: "planning",
         status: "queued",
+        provider: null,
+        model: null,
+        systemPrompt: null,
+        startedAt: new Date().toISOString(),
+        finishedAt: null,
+        errorMessage: null,
+        lastErrorCategory: null,
+        lastErrorMessage: null,
+        lastRetryAfterIso: null,
+        preservedAt: null,
+        messageCount: 0,
+        lastMessageAt: new Date().toISOString(),
+        invocationSource: "internal",
+        agentPresetId: null,
+        inputTokens: 0,
+        cachedInputTokens: 0,
+        outputTokens: 0,
+        totalTokens: 0,
         createdAt: new Date().toISOString(),
-      };
-      const { container } = render(
-        <InvocationListCard
-          invocations={[invocation as any]}
-          selectedInvocationId={null}
-          onSelect={vi.fn()}
-        />
-      );
-      const pendingSpan = container.querySelector('span[aria-live="polite"]');
-      expect(pendingSpan).not.toBeNull();
-      expect(pendingSpan?.textContent).toBe("Pending");
-      expect(pendingSpan?.className).toContain("opacity-70");
-    });
-
-    it("renders optimistic invocation status distinctly and announces it", () => {
-      const invocation = {
-        id: "optimistic:1",
-        projectId: "project-1",
-        type: "planning",
-        status: "queued",
-        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
       };
       const { container } = render(
         <InvocationListCard
@@ -852,52 +857,13 @@ describe("Chat Message Bubbles", () => {
           onSelect={vi.fn()}
         />
       );
-      const pendingSpan = container.querySelector('span[aria-live="polite"]');
-      expect(pendingSpan).not.toBeNull();
-      expect(pendingSpan?.textContent).toBe("Pending");
-      expect(pendingSpan?.className).toContain("opacity-70");
-    });
-
-    it("renders optimistic invocation status distinctly and announces it", () => {
-      const invocation = {
-        id: "optimistic:1",
-        projectId: "project-1",
-        type: "planning",
-        status: "queued",
-        createdAt: new Date().toISOString(),
-      };
-      const { container } = render(
-        <InvocationListCard
-          invocations={[invocation as any]}
-          selectedInvocationId={null}
-          onSelect={vi.fn()}
-        />
-      );
-      const pendingSpan = container.querySelector('span[aria-live="polite"]');
-      expect(pendingSpan).not.toBeNull();
-      expect(pendingSpan?.textContent).toBe("Pending");
-      expect(pendingSpan?.className).toContain("opacity-70");
-    });
-
-    it("renders optimistic invocation status distinctly and announces it", () => {
-      const invocation = {
-        id: "optimistic:1",
-        projectId: "project-1",
-        type: "planning",
-        status: "queued",
-        createdAt: new Date().toISOString(),
-      };
-      const { container } = render(
-        <InvocationListCard
-          invocations={[invocation as any]}
-          selectedInvocationId={null}
-          onSelect={vi.fn()}
-        />
-      );
-      const pendingSpan = container.querySelector('span[aria-live="polite"]');
-      expect(pendingSpan).not.toBeNull();
-      expect(pendingSpan?.textContent).toBe("Pending");
-      expect(pendingSpan?.className).toContain("opacity-70");
+      const statusSpan = container.querySelector('span[aria-live="polite"]');
+      const card = container.querySelector('[role="button"]');
+      expect(statusSpan).not.toBeNull();
+      expect(statusSpan?.textContent).toBe("queued");
+      expect(statusSpan?.className).not.toContain("opacity-70");
+      expect(card?.className).not.toContain("opacity-70");
+      expect(container.textContent).not.toContain("Pending");
     });
 
     it("shows the model and latest error tag on invocation cards", () => {
