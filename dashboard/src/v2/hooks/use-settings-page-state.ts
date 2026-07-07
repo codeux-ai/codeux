@@ -11,6 +11,20 @@ import {
 } from "../lib/settings-api.js";
 import { fetchAgentPresets } from "../lib/agent-preset-api.js";
 import { clearProjectMemories, clearSystemMemories, type MemoryClearTier } from "../lib/memory-api.js";
+import {
+  createChatProviderChannelBinding,
+  createChatProviderConnection,
+  deleteChatProviderChannelBinding,
+  deleteChatProviderConnection,
+  fetchChatProviderChannelBindings,
+  fetchChatProviderConnectionDeliveries,
+  fetchChatProviderConnections,
+  fetchChatProviderSetupDefinitions,
+  updateChatProviderChannelBinding,
+  updateChatProviderConnection,
+  type DashboardChatProviderConnectionRecord,
+  type DashboardChatProviderSetupDefinition,
+} from "../lib/chat-provider-api.js";
 import { registerNavigationBlocker } from "../router/navigation-blocker.js";
 import {
   applyExternalHintsToSystemSettings,
@@ -30,10 +44,17 @@ import {
 import type {
   InvocationRoutingId,
   ProviderConfigId,
+  ChatProviderChannelBindingRecord,
+  ChatProviderKind,
+  ChatProviderMessageDeliveryRecord,
+  CreateChatProviderChannelBindingInput,
+  CreateChatProviderConnectionInput,
   ProjectSettings,
   SettingsValueSource,
   SystemSettings,
   ThinkingMode,
+  UpdateChatProviderChannelBindingInput,
+  UpdateChatProviderConnectionInput,
 } from "../../types.js";
 import type { AgentAvatarConfig, AgentPreset } from "../types.js";
 import { AlertTriangle, Bot, BrainCircuit, Cpu, Plug, Settings, SlidersHorizontal, Target } from "lucide-preact";
@@ -86,7 +107,7 @@ const routingProfileOptions = [
   { value: "WORKER", label: "Worker defaults" },
 ];
 
-type IntegrationId = "jules" | "gemini" | "codex" | "claude-code" | "qwen-code" | "opencode" | "antigravity" | "github" | "gitlab" | "jira";
+type IntegrationId = "jules" | "gemini" | "codex" | "claude-code" | "qwen-code" | "opencode" | "antigravity" | "github" | "gitlab" | "jira" | ChatProviderKind;
 
 interface IntegrationDefinition {
   id: IntegrationId;
@@ -105,6 +126,12 @@ const INTEGRATIONS: IntegrationDefinition[] = [
   { id: "github", label: "GitHub", description: "Repository, pull request, branch, and CI integration" },
   { id: "gitlab", label: "GitLab", description: "GitLab repository, merge request, and CI token integration" },
   { id: "jira", label: "Jira", description: "Atlassian Jira issue search, sprint linking, and completion transitions" },
+  { id: "whatsapp", label: "WhatsApp", description: "OpenClaw or webhook bridge for WhatsApp groups and business conversations" },
+  { id: "imessage", label: "iMessage", description: "OpenClaw or native macOS bridge for iMessage routing" },
+  { id: "telegram", label: "Telegram", description: "Telegram bot or OpenClaw bridge for channel ingress and replies" },
+  { id: "slack", label: "Slack", description: "Slack Events or OpenClaw bridge with signed webhooks" },
+  { id: "microsoft-teams", label: "Microsoft Teams", description: "Teams bot or OpenClaw bridge for tenant channels" },
+  { id: "discord", label: "Discord", description: "Discord bot or gateway connection for project chat" },
 ];
 
 const AGENT_INSTRUCTION_TEMPLATE_OPTIONS: Array<{
@@ -156,7 +183,7 @@ const sortAgentPresetOptions = (
 export const useSettingsPageState = (
   categories: Category[],
 ) => {
-  const { deleteProject, selectedProject, selectedProjectId } = useProjectData();
+  const { deleteProject, projects, selectedProject, selectedProjectId } = useProjectData();
 
   const isDirtyRef = useRef(false);
 
@@ -212,6 +239,13 @@ export const useSettingsPageState = (
   const [externalHints, setExternalHints] = useState<import("../../types.js").ExternalSettingsHints | null>(null);
   const [projectAgentPresets, setProjectAgentPresets] = useState<AgentPreset[]>([]);
   const [projectAgentPresetOptions, setProjectAgentPresetOptions] = useState<Array<{ value: string; label: string; avatarConfig?: AgentAvatarConfig }>>([]);
+  const [chatProviderDefinitions, setChatProviderDefinitions] = useState<DashboardChatProviderSetupDefinition[]>([]);
+  const [chatProviderConnections, setChatProviderConnections] = useState<DashboardChatProviderConnectionRecord[]>([]);
+  const [chatProviderBindings, setChatProviderBindings] = useState<ChatProviderChannelBindingRecord[]>([]);
+  const [chatProviderDeliveriesByConnection, setChatProviderDeliveriesByConnection] = useState<Record<string, ChatProviderMessageDeliveryRecord[]>>({});
+  const [chatProvidersLoading, setChatProvidersLoading] = useState(false);
+  const [chatProvidersSavingId, setChatProvidersSavingId] = useState<string | null>(null);
+  const [chatProvidersError, setChatProvidersError] = useState<string | null>(null);
   const previousCategoryRef = useRef<CategoryId>("general");
 
   const loadSettings = useCallback(async (): Promise<void> => {
@@ -272,6 +306,40 @@ export const useSettingsPageState = (
   useEffect(() => {
     void loadSettings();
   }, [loadSettings]);
+
+  const loadChatProviders = useCallback(async (): Promise<void> => {
+    setChatProvidersLoading(true);
+    try {
+      const [definitions, connections, bindings] = await Promise.all([
+        fetchChatProviderSetupDefinitions(),
+        fetchChatProviderConnections(),
+        fetchChatProviderChannelBindings(),
+      ]);
+      const deliveryEntries = await Promise.all(
+        connections.map(async (connection) => [
+          connection.id,
+          await fetchChatProviderConnectionDeliveries(connection.id, 25).catch(() => []),
+        ] as const),
+      );
+
+      setChatProviderDefinitions(definitions);
+      setChatProviderConnections(connections);
+      setChatProviderBindings(bindings);
+      setChatProviderDeliveriesByConnection(Object.fromEntries(deliveryEntries));
+      setChatProvidersError(null);
+    } catch (loadError) {
+      setChatProvidersError(loadError instanceof Error ? loadError.message : String(loadError));
+    } finally {
+      setChatProvidersLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (activeCategory !== "integrations") {
+      return;
+    }
+    void loadChatProviders();
+  }, [activeCategory, loadChatProviders]);
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -573,6 +641,100 @@ export const useSettingsPageState = (
     }
   }, [selectedProject]);
 
+  const createChatProviderConnectionRecord = useCallback(async (
+    input: CreateChatProviderConnectionInput,
+  ): Promise<DashboardChatProviderConnectionRecord | null> => {
+    setChatProvidersSavingId(`connection:${input.providerKind}:create`);
+    try {
+      const created = await createChatProviderConnection(input);
+      await loadChatProviders();
+      return created;
+    } catch (createError) {
+      setChatProvidersError(createError instanceof Error ? createError.message : String(createError));
+      return null;
+    } finally {
+      setChatProvidersSavingId(null);
+    }
+  }, [loadChatProviders]);
+
+  const updateChatProviderConnectionRecord = useCallback(async (
+    connectionId: string,
+    input: UpdateChatProviderConnectionInput,
+  ): Promise<DashboardChatProviderConnectionRecord | null> => {
+    setChatProvidersSavingId(`connection:${connectionId}`);
+    try {
+      const updated = await updateChatProviderConnection(connectionId, input);
+      await loadChatProviders();
+      return updated;
+    } catch (updateError) {
+      setChatProvidersError(updateError instanceof Error ? updateError.message : String(updateError));
+      return null;
+    } finally {
+      setChatProvidersSavingId(null);
+    }
+  }, [loadChatProviders]);
+
+  const deleteChatProviderConnectionRecord = useCallback(async (connectionId: string): Promise<boolean> => {
+    setChatProvidersSavingId(`connection:${connectionId}:delete`);
+    try {
+      await deleteChatProviderConnection(connectionId);
+      await loadChatProviders();
+      return true;
+    } catch (deleteError) {
+      setChatProvidersError(deleteError instanceof Error ? deleteError.message : String(deleteError));
+      return false;
+    } finally {
+      setChatProvidersSavingId(null);
+    }
+  }, [loadChatProviders]);
+
+  const createChatProviderBindingRecord = useCallback(async (
+    input: CreateChatProviderChannelBindingInput,
+  ): Promise<ChatProviderChannelBindingRecord | null> => {
+    setChatProvidersSavingId(`binding:${input.providerConnectionId}:create`);
+    try {
+      const created = await createChatProviderChannelBinding(input);
+      await loadChatProviders();
+      return created;
+    } catch (createError) {
+      setChatProvidersError(createError instanceof Error ? createError.message : String(createError));
+      return null;
+    } finally {
+      setChatProvidersSavingId(null);
+    }
+  }, [loadChatProviders]);
+
+  const updateChatProviderBindingRecord = useCallback(async (
+    bindingId: string,
+    input: UpdateChatProviderChannelBindingInput,
+  ): Promise<ChatProviderChannelBindingRecord | null> => {
+    setChatProvidersSavingId(`binding:${bindingId}`);
+    try {
+      const updated = await updateChatProviderChannelBinding(bindingId, input);
+      await loadChatProviders();
+      return updated;
+    } catch (updateError) {
+      setChatProvidersError(updateError instanceof Error ? updateError.message : String(updateError));
+      return null;
+    } finally {
+      setChatProvidersSavingId(null);
+    }
+  }, [loadChatProviders]);
+
+  const deleteChatProviderBindingRecord = useCallback(async (bindingId: string): Promise<boolean> => {
+    setChatProvidersSavingId(`binding:${bindingId}:delete`);
+    try {
+      await deleteChatProviderChannelBinding(bindingId);
+      await loadChatProviders();
+      return true;
+    } catch (deleteError) {
+      setChatProvidersError(deleteError instanceof Error ? deleteError.message : String(deleteError));
+      return false;
+    } finally {
+      setChatProvidersSavingId(null);
+    }
+  }, [loadChatProviders]);
+
   const getValueByPath = useCallback((obj: any, path: string): any => {
     return path.split(".").reduce((acc, part) => acc && acc[part], obj);
   }, []);
@@ -740,7 +902,24 @@ export const useSettingsPageState = (
     agentInstructionTemplateOptions: AGENT_INSTRUCTION_TEMPLATE_OPTIONS,
     projectAgentPresets,
     projectAgentPresetOptions,
+    chatProviders: {
+      definitions: chatProviderDefinitions,
+      connections: chatProviderConnections,
+      bindings: chatProviderBindings,
+      deliveriesByConnection: chatProviderDeliveriesByConnection,
+      loading: chatProvidersLoading,
+      savingId: chatProvidersSavingId,
+      error: chatProvidersError,
+      load: loadChatProviders,
+      createConnection: createChatProviderConnectionRecord,
+      updateConnection: updateChatProviderConnectionRecord,
+      deleteConnection: deleteChatProviderConnectionRecord,
+      createBinding: createChatProviderBindingRecord,
+      updateBinding: updateChatProviderBindingRecord,
+      deleteBinding: deleteChatProviderBindingRecord,
+    },
     selectedProject,
+    projects,
     updateSystem, updateProject, updateEditableSettings,
     handleImportHints, handleSave, handleResetProject,
     handleDeleteProject, handleResetDatabase, handleClearMemory,
