@@ -231,6 +231,10 @@ describe("dashboard-lifecycle-service", () => {
       embeddingService: {} as any,
       memoryRepository: {} as any,
       knowledgeService: {} as any,
+      chatProviderOutboundService: {
+        start: vi.fn(),
+        stop: vi.fn(),
+      } as any,
     };
 
     updateCheckerServiceMock.checkForUpdate.mockResolvedValue({
@@ -278,6 +282,21 @@ describe("dashboard-lifecycle-service", () => {
       );
       expect(mockDeps.dashboardRealtimeService.setSnapshotLoaders).toHaveBeenCalled();
       expect(mockDeps.runtimeContext.dashboardRuntimePort).toBe(3000);
+      expect(mockDeps.chatProviderOutboundService?.start).toHaveBeenCalled();
+    });
+
+    it("stops chat provider outbound retries before closing the dashboard server", async () => {
+      const close = vi.fn().mockResolvedValue(undefined);
+      vi.mocked(setupDashboardServer).mockResolvedValue({ port: 3000, close } as any);
+
+      const handle = await bootDashboard(mockDeps);
+      await handle.close?.();
+
+      expect(mockDeps.chatProviderOutboundService?.stop).toHaveBeenCalledTimes(1);
+      expect(close).toHaveBeenCalledTimes(1);
+      expect(
+        vi.mocked(mockDeps.chatProviderOutboundService!.stop).mock.invocationCallOrder[0],
+      ).toBeLessThan(close.mock.invocationCallOrder[0]);
     });
 
     it("checks for updates once at startup and logs when a newer version exists", async () => {

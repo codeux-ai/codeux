@@ -805,5 +805,11 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<DashboardS
       error: error instanceof Error ? error.message : String(error),
     });
   });
-  return handle;
+  return {
+    ...handle,
+    close: async () => {
+      deps.chatProviderOutboundService?.stop();
+      await handle.close?.();
+    },
+  };
 }

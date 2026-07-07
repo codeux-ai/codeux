@@ -51,6 +51,7 @@ export class ChatProviderOutboundService {
   private readonly maxAttempts: number;
   private readonly now: () => Date;
   private timer: NodeJS.Timeout | null = null;
+  private retryProcessingPromise: Promise<ChatProviderMessageDeliveryRecord[]> | null = null;
 
   constructor(private readonly deps: ChatProviderOutboundServiceDependencies) {
     this.adapter = deps.adapter ?? createDefaultChatProviderOutboundAdapter();
@@ -134,6 +135,20 @@ export class ChatProviderOutboundService {
   }
 
   async processDueRetries(limit = 100): Promise<ChatProviderMessageDeliveryRecord[]> {
+    if (this.retryProcessingPromise) {
+      return this.retryProcessingPromise;
+    }
+    let processingPromise: Promise<ChatProviderMessageDeliveryRecord[]>;
+    processingPromise = this.processDueRetriesOnce(limit).finally(() => {
+      if (this.retryProcessingPromise === processingPromise) {
+        this.retryProcessingPromise = null;
+      }
+    });
+    this.retryProcessingPromise = processingPromise;
+    return processingPromise;
+  }
+
+  private async processDueRetriesOnce(limit: number): Promise<ChatProviderMessageDeliveryRecord[]> {
     const now = this.now().toISOString();
     const due = this.deps.chatProviderRepository.listPendingOutboundDeliveries(limit)
       .filter((delivery) => delivery.status !== "retryable_failure" || getNextAttemptAt(delivery) <= now);

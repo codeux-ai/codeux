@@ -217,6 +217,53 @@ describe("ChatProviderOutboundService", () => {
       externalMessageId: "discord-out-1",
     });
   });
+
+  it("processes due retries as a single flight when calls overlap", async () => {
+    let now = new Date("2026-07-07T00:00:00.000Z");
+    const context = await createContext();
+    const fixture = await createOutboundFixture(context, {
+      bridgeMode: "webhook",
+      providerKind: "discord",
+      setup: { gatewayUrl: "https://bridge.example.test/send" },
+      secrets: { botToken: "bot-secret" },
+    });
+    let resolveRetry: ((value: { externalMessageId: string }) => void) | null = null;
+    const retryPromise = new Promise<{ externalMessageId: string }>((resolve) => {
+      resolveRetry = resolve;
+    });
+    const adapter: ChatProviderOutboundAdapter = {
+      send: vi.fn()
+        .mockRejectedValueOnce(new ChatProviderOutboundAdapterError("HTTP 503", true, 503))
+        .mockImplementationOnce(() => retryPromise),
+    };
+    const service = new ChatProviderOutboundService({
+      chatProviderRepository: context.providerRepository,
+      adapter,
+      initialBackoffMs: 1_000,
+      now: () => now,
+    });
+
+    await service.deliverReply(fixture);
+    now = new Date("2026-07-07T00:00:02.000Z");
+
+    const first = service.processDueRetries();
+    const second = service.processDueRetries();
+    await Promise.resolve();
+
+    expect(adapter.send).toHaveBeenCalledTimes(2);
+    resolveRetry?.({ externalMessageId: "discord-single-flight" });
+    const [firstResult, secondResult] = await Promise.all([first, second]);
+
+    expect(adapter.send).toHaveBeenCalledTimes(2);
+    expect(firstResult).toHaveLength(1);
+    expect(secondResult).toHaveLength(1);
+    expect(firstResult[0]).toMatchObject({
+      status: "delivered",
+      attemptCount: 2,
+      externalMessageId: "discord-single-flight",
+    });
+    expect(secondResult[0].id).toBe(firstResult[0].id);
+  });
 });
 
 async function createContext(): Promise<{
