@@ -131,6 +131,8 @@ Legacy runtime:
   - Selected-project execution control-plane snapshot (`sprintRuns`, `taskDispatches`, `recentEvents`, lease ownership)
 - `GET /api/telemetry/overview`
   - Cross-project overview telemetry snapshot for all currently active project runs
+- `GET /api/stats/header-throughput?projectId=<projectId>&window=1h|24h|7d|30d|all`
+  - Compact app-wide and selected-project token throughput for the top dashboard header. The header uses it as a live summary near the runtime controls; detailed charts, ledgers, and model/provider analysis remain on the Stats page.
 - `GET /api/live`
   - Unified Live runtime snapshot for the selected project
 - `PUT /api/projects/:projectId/preferred-worker`
