@@ -1020,6 +1020,31 @@ export interface AgentSelfReflectionSettings {
   qualityAssurance: AgentSelfReflectionLoopSettings;
 }
 
+export type AgentSelfReflectionFinalDecision =
+  | "disabled"
+  | "passed"
+  | "max_attempts_reached"
+  | "reflection_failed"
+  | "improvement_failed";
+
+export interface AgentSelfReflectionCriterionResult {
+  id: string;
+  label: string;
+  score: number;
+  rationale: string;
+  improvementInstructions: string;
+  threshold: number;
+  passed: boolean;
+}
+
+export interface AgentSelfReflectionOutcome {
+  enabled: boolean;
+  finalDecision: AgentSelfReflectionFinalDecision;
+  attemptCount: number;
+  passed: boolean;
+  scores: AgentSelfReflectionCriterionResult[];
+}
+
 export interface CodingAgentRoutingSettings {
   mode: AgentRoutingMode;
   agentPresetId: string | null;
