@@ -835,6 +835,7 @@ export const DEFAULT_DASHBOARD_SETTINGS: DashboardSettings = {
     enabled: true,
     embeddingProvider: "in_app",
     embeddingModel: null,
+    customEmbeddingModels: [],
     externalEmbedding: {
       baseUrl: "https://api.openai.com/v1/embeddings",
       apiKey: "",

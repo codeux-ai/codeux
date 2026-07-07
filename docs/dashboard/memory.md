@@ -12,9 +12,12 @@ Memory embeddings can run through either backend:
   - `bge-base-en-v1.5`
   - `bge-large-en-v1.5`
   - `multilingual-e5-large`
+- Custom in-app entries are stored in memory settings under `customEmbeddingModels`. The backend accepts only Hugging Face model repositories or `https://huggingface.co/...` file URLs, normalizes them to `owner/repo` plus repository-relative ONNX/tokenizer paths, and downloads through Hugging Face `resolve/main` URLs. Custom entries keep their own display name, ONNX model path, tokenizer files, dimension, approximate size, language, and validation status.
 - `external_api`: an OpenAI-compatible embeddings endpoint configured in Settings → Memory with `baseUrl`, `apiKey`, `model`, and optional `dimensions`.
 
 `MemoryService` resolves the effective project settings before capture, search, map generation, stale-count checks, and re-embedding. External API dimensions can be inferred from the returned vector, so models with custom vector sizes can be stored safely in `embeddingDimension`.
+
+Custom in-app models appear beside built-ins in `GET /api/embedding-models`. `POST /api/embedding-models/custom` creates or updates a sanitized Hugging Face catalog entry, while the existing download, cancel, select, delete, and status routes accept custom IDs after the entry exists. Selection still requires the local ONNX file and required tokenizer files to be present, so a custom model cannot become active before its download completes.
 
 ## Memory Search Behavior
 

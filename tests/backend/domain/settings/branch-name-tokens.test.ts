@@ -289,6 +289,7 @@ function makeBasePayload() {
       enabled: false,
       embeddingProvider: "in_app",
       embeddingModel: null,
+      customEmbeddingModels: [],
       externalEmbedding: {
         baseUrl: "https://api.openai.com/v1/embeddings",
         apiKey: "",

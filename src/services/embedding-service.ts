@@ -3,7 +3,7 @@ import * as path from "path";
 import { getHomeCodeUxPath } from "../shared/config/code-ux-paths.js";
 import { EMBEDDING_MODEL_CATALOG } from "./embedding-model-catalog.js";
 import { EmbeddingTokenizer } from "./embedding-tokenizer.js";
-import type { EmbeddingModelId, ExternalEmbeddingSettings, InAppEmbeddingModelId } from "../contracts/memory-types.js";
+import type { EmbeddingModelId, EmbeddingModelInfo, ExternalEmbeddingSettings, InAppEmbeddingModelId } from "../contracts/memory-types.js";
 import type { InferenceSession } from "onnxruntime-node";
 
 const MODELS_DIR = getHomeCodeUxPath("models");
@@ -23,6 +23,7 @@ export class EmbeddingService {
   private session: TypedInferenceSession | null = null;
   private tokenizer: EmbeddingTokenizer | null = null;
   private currentModelId: EmbeddingModelId | null = null;
+  private currentModelDimension: number | null = null;
   private externalSettings: ExternalEmbeddingSettings | null = null;
   private externalDimension: number | null = null;
 
@@ -49,6 +50,7 @@ export class EmbeddingService {
     };
     this.externalDimension = this.externalSettings.dimensions;
     this.currentModelId = model;
+    this.currentModelDimension = this.externalSettings.dimensions;
   }
 
   useInAppEmbeddings(): void {
@@ -56,7 +58,7 @@ export class EmbeddingService {
     this.externalDimension = null;
   }
 
-  async loadModel(modelId: InAppEmbeddingModelId): Promise<void> {
+  async loadModel(modelId: EmbeddingModelId, modelInfo?: EmbeddingModelInfo): Promise<void> {
     if (this.currentModelId === modelId && this.session) {
       return;
     }
@@ -79,6 +81,7 @@ export class EmbeddingService {
 
     this.tokenizer = new EmbeddingTokenizer(tokenizerPath);
     this.currentModelId = modelId;
+    this.currentModelDimension = modelInfo?.dimension ?? EMBEDDING_MODEL_CATALOG[modelId as InAppEmbeddingModelId]?.dimension ?? null;
   }
 
   async unloadModel(): Promise<void> {
@@ -90,6 +93,7 @@ export class EmbeddingService {
     this.session = null;
     this.tokenizer = null;
     this.currentModelId = null;
+    this.currentModelDimension = null;
   }
 
   isLoaded(): boolean {
@@ -105,7 +109,7 @@ export class EmbeddingService {
     if (this.externalSettings) {
       return this.externalDimension;
     }
-    return EMBEDDING_MODEL_CATALOG[this.currentModelId as InAppEmbeddingModelId]?.dimension ?? null;
+    return this.currentModelDimension ?? EMBEDDING_MODEL_CATALOG[this.currentModelId as InAppEmbeddingModelId]?.dimension ?? null;
   }
 
   async embed(text: string): Promise<Float32Array> {
@@ -160,7 +164,10 @@ export class EmbeddingService {
     const data = output.data as Float32Array;
 
     // Mean pooling over sequence dimension
-    const dimension = EMBEDDING_MODEL_CATALOG[this.currentModelId as InAppEmbeddingModelId].dimension;
+    const dimension = this.currentModelDimension ?? EMBEDDING_MODEL_CATALOG[this.currentModelId as InAppEmbeddingModelId]?.dimension;
+    if (!dimension) {
+      throw new Error(`No embedding dimension configured for ${this.currentModelId}`);
+    }
     const embedding = this.meanPool(data, seqLength, dimension, attentionMask);
 
     // L2 normalize
@@ -175,21 +182,21 @@ export class EmbeddingService {
     return results;
   }
 
-  isModelDownloaded(modelId: InAppEmbeddingModelId): boolean {
+  isModelDownloaded(modelId: EmbeddingModelId): boolean {
     const modelPath = this.getModelFilePath(modelId, "model.onnx");
     const tokenizerPath = this.getModelFilePath(modelId, "tokenizer.json");
     return fs.existsSync(modelPath) && fs.existsSync(tokenizerPath);
   }
 
-  getModelPath(modelId: InAppEmbeddingModelId): string {
+  getModelPath(modelId: EmbeddingModelId): string {
     return path.join(MODELS_DIR, modelId);
   }
 
-  getModelFilePath(modelId: InAppEmbeddingModelId, fileName: string): string {
+  getModelFilePath(modelId: EmbeddingModelId, fileName: string): string {
     return path.join(MODELS_DIR, modelId, fileName);
   }
 
-  deleteModelFiles(modelId: InAppEmbeddingModelId): void {
+  deleteModelFiles(modelId: EmbeddingModelId): void {
     const modelDir = this.getModelPath(modelId);
     if (fs.existsSync(modelDir)) {
       fs.rmSync(modelDir, { recursive: true, force: true });

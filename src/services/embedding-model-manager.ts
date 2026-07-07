@@ -2,37 +2,46 @@ import * as fs from "fs";
 import * as path from "path";
 import { pipeline } from "stream/promises";
 import { Writable } from "stream";
-import type { EmbeddingModelStatus, InAppEmbeddingModelId } from "../contracts/memory-types.js";
-import { EMBEDDING_MODEL_CATALOG, getModelDownloadUrl } from "./embedding-model-catalog.js";
+import type { CustomEmbeddingModelDefinition, EmbeddingModelId, EmbeddingModelInfo, EmbeddingModelStatus } from "../contracts/memory-types.js";
+import {
+  getEmbeddingModelCatalog,
+  getEmbeddingModelInfo,
+  getModelDownloadUrl,
+} from "./embedding-model-catalog.js";
 import { EmbeddingService } from "./embedding-service.js";
 import { MemoryRepository } from "../repositories/memory-repository.js";
+import type { SettingsRepository } from "../repositories/settings-repository.js";
 import type { Logger } from "../shared/logging/logger.js";
 
 export class EmbeddingModelManager {
   private readonly activeDownloads = new Map<string, AbortController>();
   private readonly embeddingService: EmbeddingService;
   private readonly memoryRepository: MemoryRepository;
+  private readonly settingsRepository: SettingsRepository | null;
   private readonly logger: Logger;
 
   constructor(
     embeddingService: EmbeddingService,
     memoryRepository: MemoryRepository,
     logger: Logger,
+    settingsRepository?: SettingsRepository,
   ) {
     this.embeddingService = embeddingService;
     this.memoryRepository = memoryRepository;
     this.logger = logger;
+    this.settingsRepository = settingsRepository ?? null;
   }
 
   async downloadModel(
-    modelId: InAppEmbeddingModelId,
+    modelId: EmbeddingModelId,
     onProgress?: (progress: number) => void,
   ): Promise<void> {
     if (this.activeDownloads.has(modelId)) {
       throw new Error(`Download already in progress for ${modelId}`);
     }
 
-    const catalog = EMBEDDING_MODEL_CATALOG[modelId];
+    const customModels = this.getCustomModels();
+    const catalog = getEmbeddingModelInfo(modelId, customModels);
     if (!catalog) {
       throw new Error(`Unknown model: ${modelId}`);
     }
@@ -55,7 +64,7 @@ export class EmbeddingModelManager {
 
       for (let i = 0; i < totalFiles; i++) {
         const fileName = catalog.files[i];
-        const url = getModelDownloadUrl(modelId, fileName);
+        const url = getModelDownloadUrl(modelId, fileName, customModels);
         const destPath = path.join(modelDir, fileName);
 
         this.logger.info(`Downloading ${fileName} for ${modelId}...`);
@@ -103,7 +112,7 @@ export class EmbeddingModelManager {
     }
   }
 
-  cancelDownload(modelId: InAppEmbeddingModelId): void {
+  cancelDownload(modelId: EmbeddingModelId): void {
     const controller = this.activeDownloads.get(modelId);
     if (controller) {
       controller.abort();
@@ -116,16 +125,21 @@ export class EmbeddingModelManager {
     }
   }
 
-  async selectModel(modelId: InAppEmbeddingModelId): Promise<void> {
+  async selectModel(modelId: EmbeddingModelId): Promise<void> {
+    const catalog = this.requireModel(modelId);
+    if (catalog.source === "custom" && !this.areCatalogFilesDownloaded(modelId, catalog)) {
+      throw new Error(`Model ${modelId} is not downloaded. Download it first.`);
+    }
     if (!this.embeddingService.isModelDownloaded(modelId)) {
       throw new Error(`Model ${modelId} is not downloaded. Download it first.`);
     }
 
-    await this.embeddingService.loadModel(modelId);
+    await this.embeddingService.loadModel(modelId, catalog);
     this.logger.info(`Embedding model switched to ${modelId}`);
   }
 
-  async deleteModel(modelId: InAppEmbeddingModelId): Promise<void> {
+  async deleteModel(modelId: EmbeddingModelId): Promise<void> {
+    const catalog = this.requireModel(modelId);
     if (this.embeddingService.getLoadedModelId() === modelId) {
       await this.embeddingService.unloadModel();
     }
@@ -140,18 +154,24 @@ export class EmbeddingModelManager {
     });
 
     this.logger.info(`Model ${modelId} deleted`);
+
+    if (catalog.source === "custom") {
+      this.deleteCustomModelDefinition(modelId);
+    }
   }
 
   async restorePreviousModel(): Promise<void> {
     const statuses = this.memoryRepository.listModelStatuses();
-    const downloaded = statuses.filter((s): s is typeof s & { id: InAppEmbeddingModelId } => (
-      s.downloaded && !!s.localPath && Object.prototype.hasOwnProperty.call(EMBEDDING_MODEL_CATALOG, s.id)
+    const customModels = this.getCustomModels();
+    const downloaded = statuses.filter((s) => (
+      s.downloaded && !!s.localPath && getEmbeddingModelInfo(s.id, customModels) !== null
     ));
 
     for (const status of downloaded) {
       if (this.embeddingService.isModelDownloaded(status.id)) {
         try {
-          await this.embeddingService.loadModel(status.id);
+          const catalog = this.requireModel(status.id);
+          await this.embeddingService.loadModel(status.id, catalog);
           this.logger.info(`Auto-restored embedding model: ${status.id}`);
           return;
         } catch (error) {
@@ -162,11 +182,12 @@ export class EmbeddingModelManager {
   }
 
   getStatuses(): EmbeddingModelStatus[] {
+    const catalog = this.getCatalog();
     const dbStatuses = this.memoryRepository.listModelStatuses();
     const dbMap = new Map(dbStatuses.map((s) => [s.id, s]));
 
-    return Object.keys(EMBEDDING_MODEL_CATALOG).map((id) => {
-      const modelId = id as InAppEmbeddingModelId;
+    return Object.keys(catalog).map((id) => {
+      const modelId = id as EmbeddingModelId;
       const dbStatus = dbMap.get(modelId);
       if (dbStatus) return dbStatus;
 
@@ -180,6 +201,56 @@ export class EmbeddingModelManager {
         error: null,
       };
     });
+  }
+
+  getCatalog(): Record<EmbeddingModelId, EmbeddingModelInfo> {
+    return getEmbeddingModelCatalog(this.getCustomModels());
+  }
+
+  hasModel(modelId: EmbeddingModelId): boolean {
+    return getEmbeddingModelInfo(modelId, this.getCustomModels()) !== null;
+  }
+
+  getModelInfo(modelId: EmbeddingModelId): EmbeddingModelInfo | null {
+    return getEmbeddingModelInfo(modelId, this.getCustomModels());
+  }
+
+  private requireModel(modelId: EmbeddingModelId): EmbeddingModelInfo {
+    const catalog = this.getModelInfo(modelId);
+    if (!catalog) {
+      throw new Error(`Unknown model: ${modelId}`);
+    }
+    return catalog;
+  }
+
+  private getCustomModels(): CustomEmbeddingModelDefinition[] {
+    return this.settingsRepository?.getSystemSettings().defaults.memory.customEmbeddingModels ?? [];
+  }
+
+  private deleteCustomModelDefinition(modelId: EmbeddingModelId): void {
+    if (!this.settingsRepository) {
+      return;
+    }
+
+    const systemSettings = this.settingsRepository.getSystemSettings();
+    const customEmbeddingModels = systemSettings.defaults.memory.customEmbeddingModels.filter((model) => model.id !== modelId);
+    this.settingsRepository.saveSystemSettings({
+      ...systemSettings,
+      defaults: {
+        ...systemSettings.defaults,
+        memory: {
+          ...systemSettings.defaults.memory,
+          customEmbeddingModels,
+          embeddingModel: systemSettings.defaults.memory.embeddingModel === modelId
+            ? null
+            : systemSettings.defaults.memory.embeddingModel,
+        },
+      },
+    });
+  }
+
+  private areCatalogFilesDownloaded(modelId: EmbeddingModelId, catalog: EmbeddingModelInfo): boolean {
+    return catalog.files.every((fileName) => fs.existsSync(path.join(this.embeddingService.getModelPath(modelId), fileName)));
   }
 
   private async downloadFile(
