@@ -20,6 +20,15 @@ All live fields rendered in the dashboard originate from the SQLite database, ar
 
 The v2 Live Session route keeps runtime data wiring in `LiveSessionPage.tsx`, pure projection/filter derivation in `dashboard/src/v2/lib/live-session-view-model.ts`, and repeated panel markup under `dashboard/src/v2/components/live-session/`. Keep sprint-scoped arrays such as dispatches, events, invocations, and projected task card items memoized from stabilized runtime snapshots so reconnects, stale banners, filters, and pending runtime actions do not force avoidable recomputation or change accessibility semantics.
 
+## Sprint Navigation Scope
+
+Sprint ledger rows and showcase sprint cards expose separate **Tasks** and **Live** actions. Both actions include the owning `projectId` and target `sprintId` in the route query:
+
+- `/tasks?projectId=<projectId>&sprintId=<sprintId>`
+- `/live?projectId=<projectId>&sprintId=<sprintId>`
+
+Destination pages must switch the selected project first, then apply the sprint scope through the selected project's sprint API. The Tasks page still accepts legacy same-project links such as `/tasks?sprint=<sprintId>` and `/tasks?sprintId=<sprintId>`, but project-aware links are required when navigation originates from sprint rows or cards so a sprint is never applied to the previously selected project.
+
 ## API Endpoints
 
 Implemented in `src/server/dashboard-server.ts`.

@@ -13,6 +13,8 @@ Sprints are viewed either in a visual organic cell gallery or a dense ledger for
 
 Sprints can be **showcase-pinned** to surface them on the Overview page; toggle this from the cell menu or bulk actions.
 
+Each sprint row and showcase card has separate **Tasks** and **Live** actions. These links carry both `projectId` and `sprintId`, so opening a sprint from the ledger switches the dashboard to that sprint's project before loading the task board or live view.
+
 ## Creating a sprint
 
 1. Click **+ New sprint**.

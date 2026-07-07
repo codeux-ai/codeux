@@ -374,6 +374,105 @@ describe("TasksPage.cards Integration", () => {
     expect(screen.getByRole("button", { name: /Task sprint scope: SPR-2: Sprint Two/i })).toBeInTheDocument();
   });
 
+  it("defers sprint selection and task loading while a route project switch is in flight", async () => {
+    routerState.searchStr = "?projectId=proj_2&sprintId=sprint_2";
+    const selectProject = vi.fn(() => new Promise<void>(() => {}));
+    const selectSprint = vi.fn();
+    (useProjectData as unknown as any).mockReturnValue({
+      projects: [
+        { id: "proj_1", name: "Project Alpha" },
+        { id: "proj_2", name: "Project Beta" },
+      ],
+      selectedProject: { id: "proj_1", name: "Project Alpha" },
+      selectProject,
+    });
+    (useSprints as unknown as any).mockReturnValue({
+      data: [],
+      loading: false,
+      selectedSprintId: "sprint_1",
+      selectSprint,
+      refetch: vi.fn(),
+    });
+    (useProjectTasks as any).mockReturnValue({
+      tasks: [],
+      loading: false,
+      error: null,
+      refresh: vi.fn(),
+    });
+
+    render(
+      <ProjectDataContext.Provider value={{ projects: [], selectedProject: null } as any}>
+        <TasksPage />
+      </ProjectDataContext.Provider>
+    );
+
+    await waitFor(() => expect(selectProject).toHaveBeenCalledWith("proj_2"));
+    expect(selectSprint).not.toHaveBeenCalled();
+    expect(useSprints).toHaveBeenCalledWith(null);
+    expect(useProjectTasks).toHaveBeenCalledWith(
+      null,
+      expect.any(Array),
+      [],
+      null,
+    );
+  });
+
+  it("applies a project-aware sprint route after the route project is selected", () => {
+    routerState.searchStr = "?projectId=proj_2&sprintId=sprint_2";
+    const selectProject = vi.fn();
+    const selectSprint = vi.fn();
+    const projectBeta = { id: "proj_2", name: "Project Beta" };
+    (useProjectData as unknown as any).mockReturnValue({
+      projects: [{ id: "proj_1", name: "Project Alpha" }, projectBeta],
+      selectedProject: projectBeta,
+      selectProject,
+    });
+    (useSprints as unknown as any).mockReturnValue({
+      data: [
+        { id: "sprint_2", projectId: "proj_2", number: 2, name: "Sprint Two", status: "running", date: "Jan 2", tasksCount: 1, completion: 0, active: true },
+      ],
+      loading: false,
+      selectedSprintId: null,
+      selectSprint,
+      refetch: vi.fn(),
+    });
+    (useProjectTasks as any).mockReturnValue({
+      tasks: [
+        createMockTask({
+          recordId: "task_rec_2",
+          id: "T-200",
+          title: "Project Scoped Task",
+          status: "pending",
+          priority: "medium",
+          assignee: "Bob",
+          sprintId: "sprint_2",
+          dependsOnTaskIds: [],
+          executorType: "jules",
+        }),
+      ],
+      loading: false,
+      error: null,
+      refresh: vi.fn(),
+    });
+
+    render(
+      <ProjectDataContext.Provider value={{ projects: [projectBeta] as any, selectedProject: projectBeta as any } as any}>
+        <TasksPage />
+      </ProjectDataContext.Provider>
+    );
+
+    expect(selectProject).not.toHaveBeenCalled();
+    expect(selectSprint).toHaveBeenCalledWith("sprint_2");
+    expect(useProjectTasks).toHaveBeenCalledWith(
+      "proj_2",
+      expect.any(Array),
+      expect.any(Array),
+      "sprint_2",
+    );
+    expect(screen.getByText("Project Scoped Task")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Task sprint scope: SPR-2: Sprint Two/i })).toBeInTheDocument();
+  });
+
   it("supports keyboard operation in the sprint scope selector", async () => {
     const user = userEvent.setup();
     const selectSprint = vi.fn();

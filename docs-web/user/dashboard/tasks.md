@@ -8,7 +8,7 @@ Use it when you want to review planned work, create or edit a task, check depend
 
 The global project selector in the navbar owns the active project. Changing projects while you are on `/tasks` keeps the newly selected project active and resets any stale sprint filter that belonged to the previous project.
 
-The sprint selector inside the Tasks page only scopes the board for the current project. Choosing a sprint updates the URL to `/tasks?sprintId=<id>` and stores that sprint selection for the active project. Links from the Sprints page still use the same deep link, but the Tasks page applies it only when the sprint belongs to the currently selected project.
+The sprint selector inside the Tasks page only scopes the board for the current project. Choosing a sprint updates the URL to `/tasks?sprintId=<id>` and stores that sprint selection for the active project. Sprint links from the Sprints page use `/tasks?projectId=<projectId>&sprintId=<sprintId>`; the Tasks page switches to the route project first, then stores and loads the route sprint after that project is active. Legacy same-project links such as `/tasks?sprint=<id>` and `/tasks?sprintId=<id>` remain supported.
 
 ## Board workflow
 
