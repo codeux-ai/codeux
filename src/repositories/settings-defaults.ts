@@ -4,6 +4,8 @@ import type {
   FeaturePrAutoMergeMode,
   GuardrailJobType,
   GuardrailOnLimitAction,
+  ExternalImporterProvider,
+  ExternalImporterSettings,
   QaExhaustionPolicy,
   InvocationRoutingId,
   InvocationRoutingProfile,
@@ -116,6 +118,8 @@ export const VIRTUAL_WORKER_PROVIDERS: VirtualWorkerProvider[] = ["gemini", "cod
 export const PUBLIC_VIRTUAL_WORKER_PROVIDERS: VirtualWorkerProvider[] = ["gemini", "codex", "claude-code", "qwen-code", "opencode", "antigravity"];
 export const RUNTIME_LOG_LEVELS = ["off", "debug", "info", "warn", "error"] as const;
 export const CONSOLE_LOG_MODES = ["standard", "full"] as const;
+export const EXTERNAL_IMPORTER_PROVIDERS: ExternalImporterProvider[] = ["notion", "asana", "linear", "miro", "lucid", "figma", "mural"];
+export const DEFAULT_IMPORTER_SEARCH_LIMIT = 25;
 export const DEFAULT_PROVIDER_CONFIG_IDS: Record<ProviderId, ProviderConfigId> = {
   jules: "jules",
   gemini: "gemini",
@@ -378,6 +382,22 @@ export const DEFAULT_AGENT_SELF_REFLECTION: DashboardSettings["agents"]["selfRef
 export const LEGACY_CLARIFICATION_RETRY_CAP = 3;
 
 export const DEFAULT_PROVIDER_WEIGHT = 50;
+
+export const createDefaultExternalImporterSettings = (): ExternalImporterSettings => ({
+  enabled: false,
+  apiToken: "",
+  apiSecret: "",
+  baseUrl: "",
+  workspaceId: "",
+  teamId: "",
+  teamKey: "",
+  projectId: "",
+  databaseId: "",
+  boardId: "",
+  documentId: "",
+  fileKey: "",
+  defaultSearchLimit: DEFAULT_IMPORTER_SEARCH_LIMIT,
+});
 
 export const DEFAULT_PROVIDER_SETTINGS: Record<ProviderId, ProviderSettings> = {
   jules: {
@@ -648,6 +668,13 @@ export const DEFAULT_DASHBOARD_SETTINGS: DashboardSettings = {
     defaultProject: "",
     closeTransitionName: "Done",
   },
+  notion: createDefaultExternalImporterSettings(),
+  asana: createDefaultExternalImporterSettings(),
+  linear: createDefaultExternalImporterSettings(),
+  miro: createDefaultExternalImporterSettings(),
+  lucid: createDefaultExternalImporterSettings(),
+  figma: createDefaultExternalImporterSettings(),
+  mural: createDefaultExternalImporterSettings(),
   ciIntelligence: {
     enabled: true,
     enableLivePrMonitoring: true,

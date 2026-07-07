@@ -256,6 +256,69 @@ const BASE_CATEGORY_TERMS: Record<CategoryId, string[]> = {
   ],
 };
 
+const INTEGRATION_FIELD_TERMS: Record<string, string[]> = {
+  notion: [
+    "notion workspace",
+    "notion database",
+    "notion api token",
+    "database id",
+  ],
+  asana: [
+    "asana workspace",
+    "asana team",
+    "asana project",
+    "workspace gid",
+    "team gid",
+    "project gid",
+  ],
+  linear: [
+    "linear workspace",
+    "linear team",
+    "linear project",
+    "team key",
+    "workspace url key",
+  ],
+  miro: [
+    "miro board",
+    "miro team",
+    "board id",
+  ],
+  lucid: [
+    "lucid",
+    "lucidspark",
+    "lucid document",
+    "lucidspark document",
+    "document id",
+  ],
+  figma: [
+    "figma",
+    "figjam",
+    "figma file",
+    "figjam board",
+    "file key",
+  ],
+  mural: [
+    "mural",
+    "mural workspace",
+    "mural id",
+  ],
+};
+
+const IMPORTER_COMMON_TERMS = [
+  "read-only import",
+  "importer",
+  "api token",
+  "api secret",
+  "base url",
+  "default workspace",
+  "default team",
+  "default project",
+  "default board",
+  "default document",
+  "default file",
+  "search limit",
+];
+
 const normalizeSearchText = (value: string): string => value.trim().toLowerCase();
 
 const unique = (values: string[]): string[] => Array.from(new Set(values.filter((value) => value.trim().length > 0)));
@@ -306,6 +369,14 @@ export const buildSettingsSearchIndex = ({
 
   addTerms(index.integrations, integrations.map((integration) => integration.label), "label");
   addTerms(index.integrations, integrations.map((integration) => integration.description), "description");
+  addTerms(
+    index.integrations,
+    integrations.flatMap((integration) => [
+      ...(INTEGRATION_FIELD_TERMS[integration.id] || []),
+      ...(INTEGRATION_FIELD_TERMS[integration.id] ? IMPORTER_COMMON_TERMS : []),
+    ]),
+    "term",
+  );
 
   addTerms(index.agents, agentInstructionTemplateOptions.map((template) => template.label), "label");
   addTerms(index.agents, agentInstructionTemplateOptions.map((template) => template.description), "description");

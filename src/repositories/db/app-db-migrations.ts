@@ -17,6 +17,101 @@ export function ensureUniqueIndex(db: DatabaseAdapter, indexName: string, tableN
   db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS ${indexName} ON ${tableName} (${columns})`);
 }
 
+interface TableColumnInfo {
+  name?: string;
+  notnull?: number;
+}
+
+function getTableColumns(db: DatabaseAdapter, tableName: string): Map<string, TableColumnInfo> {
+  const rows = db.prepare(`PRAGMA table_info(${tableName})`).all() as TableColumnInfo[];
+  return new Map(rows.filter((row) => row.name).map((row) => [row.name!, row]));
+}
+
+function columnSelectExpression(columns: Map<string, TableColumnInfo>, columnName: string, fallbackSql: string): string {
+  return columns.has(columnName) ? columnName : `${fallbackSql} AS ${columnName}`;
+}
+
+export function migrateSprintLinkedIssuesExternalSources(db: DatabaseAdapter): void {
+  ensureColumn(db, "sprint_linked_issues", "project_key", "TEXT");
+  ensureColumn(db, "sprint_linked_issues", "external_id", "TEXT");
+  ensureColumn(db, "sprint_linked_issues", "source_kind", "TEXT");
+
+  const columns = getTableColumns(db, "sprint_linked_issues");
+  if (columns.get("issue_number")?.notnull !== 1) {
+    return;
+  }
+
+  db.exec("PRAGMA foreign_keys = OFF");
+  try {
+    db.exec("BEGIN");
+    db.exec(`
+      CREATE TABLE sprint_linked_issues_new (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL,
+        sprint_id TEXT NOT NULL,
+        provider TEXT NOT NULL,
+        host_domain TEXT NOT NULL,
+        project_key TEXT,
+        repository TEXT NOT NULL,
+        issue_number INTEGER,
+        external_id TEXT,
+        source_kind TEXT,
+        issue_key TEXT NOT NULL,
+        title TEXT NOT NULL,
+        url TEXT NOT NULL,
+        state TEXT NOT NULL DEFAULT 'open',
+        labels_json TEXT NOT NULL DEFAULT '[]',
+        assignees_json TEXT NOT NULL DEFAULT '[]',
+        imported_at TEXT NOT NULL,
+        closed_at TEXT,
+        close_state TEXT NOT NULL DEFAULT 'open',
+        close_error TEXT,
+        updated_at TEXT NOT NULL,
+        FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+        FOREIGN KEY (sprint_id) REFERENCES sprints(id) ON DELETE CASCADE
+      )
+    `);
+    db.exec(`
+      INSERT INTO sprint_linked_issues_new (
+        id, project_id, sprint_id, provider, host_domain, project_key, repository,
+        issue_number, external_id, source_kind, issue_key, title, url, state,
+        labels_json, assignees_json, imported_at, closed_at, close_state, close_error, updated_at
+      )
+      SELECT
+        id,
+        project_id,
+        sprint_id,
+        provider,
+        host_domain,
+        ${columnSelectExpression(columns, "project_key", "NULL")},
+        repository,
+        issue_number,
+        ${columnSelectExpression(columns, "external_id", "NULL")},
+        ${columnSelectExpression(columns, "source_kind", "NULL")},
+        issue_key,
+        title,
+        url,
+        state,
+        labels_json,
+        assignees_json,
+        imported_at,
+        closed_at,
+        close_state,
+        close_error,
+        updated_at
+      FROM sprint_linked_issues
+    `);
+    db.exec("DROP TABLE sprint_linked_issues");
+    db.exec("ALTER TABLE sprint_linked_issues_new RENAME TO sprint_linked_issues");
+    db.exec("COMMIT");
+  } catch (error) {
+    db.exec("ROLLBACK");
+    throw error;
+  } finally {
+    db.exec("PRAGMA foreign_keys = ON");
+  }
+}
+
 export function backfillEstimatedDockerCliUsage(db: DatabaseAdapter): void {
   db.prepare(`
     UPDATE provider_invocations
@@ -159,8 +254,11 @@ export function runMigrations(db: DatabaseAdapter): void {
       sprint_id TEXT NOT NULL,
       provider TEXT NOT NULL,
       host_domain TEXT NOT NULL,
+      project_key TEXT,
       repository TEXT NOT NULL,
-      issue_number INTEGER NOT NULL,
+      issue_number INTEGER,
+      external_id TEXT,
+      source_kind TEXT,
       issue_key TEXT NOT NULL,
       title TEXT NOT NULL,
       url TEXT NOT NULL,
@@ -176,6 +274,7 @@ export function runMigrations(db: DatabaseAdapter): void {
       FOREIGN KEY (sprint_id) REFERENCES sprints(id) ON DELETE CASCADE
     )
   `);
+  migrateSprintLinkedIssuesExternalSources(db);
 
   ensureColumn(db, "task_runs", "sprint_run_id", "TEXT");
   ensureColumn(db, "task_runs", "dispatch_id", "TEXT");
@@ -215,6 +314,7 @@ export function runMigrations(db: DatabaseAdapter): void {
 
   ensureUniqueIndex(db, "idx_tasks_sprint_key", "tasks", "sprint_id, task_key");
   ensureUniqueIndex(db, "idx_sprint_linked_issues_unique", "sprint_linked_issues", "sprint_id, provider, host_domain, repository, issue_number");
+  ensureUniqueIndex(db, "idx_sprint_linked_issues_external_unique", "sprint_linked_issues", "sprint_id, provider, host_domain, repository, external_id");
   ensureIndex(db, "idx_sprint_linked_issues_sprint", "sprint_linked_issues", "project_id, sprint_id, close_state");
   ensureIndex(db, "idx_sprint_runs_project_sprint", "sprint_runs", "project_id, sprint_id, created_at DESC");
   ensureIndex(db, "idx_sprint_runs_project_status_recency", "sprint_runs", "project_id, status, last_heartbeat_at DESC, updated_at DESC, created_at DESC");

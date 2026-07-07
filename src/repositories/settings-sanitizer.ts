@@ -5,6 +5,7 @@ import type {
   McpToolToggle,
   RuntimeLogLevel,
   ConsoleLogMode,
+  ExternalImporterSettings,
   RestartInvocationPolicy,
   RestartSprintPolicy,
   SkillToggle,
@@ -34,6 +35,7 @@ import {
   BUILTIN_CODE_UX_TECHSTACK_ID,
   DEFAULT_DASHBOARD_SETTINGS,
   DEFAULT_AGENT_SELF_REFLECTION,
+  DEFAULT_IMPORTER_SEARCH_LIMIT,
   DEFAULT_PROJECT_TECHSTACK,
   DEFAULT_SKILLS,
   INTERNAL_SKILL_NAMES,
@@ -127,6 +129,32 @@ const sanitizeSkills = (value: unknown): SkillToggle[] => {
 
 const sanitizeMcpTools = (value: unknown): McpToolToggle[] => {
   return sanitizeMcpToolToggles(value).map((tool) => ({ ...tool }));
+};
+
+export const sanitizeExternalImporterSettings = (
+  value: unknown,
+  defaults: ExternalImporterSettings,
+): ExternalImporterSettings => {
+  const input = value && typeof value === "object" ? value as Partial<ExternalImporterSettings> : {};
+  const rawLimit = typeof input.defaultSearchLimit === "number" && Number.isFinite(input.defaultSearchLimit)
+    ? Math.round(input.defaultSearchLimit)
+    : defaults.defaultSearchLimit;
+
+  return {
+    enabled: readBoolean(input.enabled, defaults.enabled),
+    apiToken: readString(input.apiToken, defaults.apiToken).trim(),
+    apiSecret: readString(input.apiSecret, defaults.apiSecret).trim(),
+    baseUrl: readString(input.baseUrl, defaults.baseUrl).trim().replace(/\/+$/, ""),
+    workspaceId: readString(input.workspaceId, defaults.workspaceId).trim(),
+    teamId: readString(input.teamId, defaults.teamId).trim(),
+    teamKey: readString(input.teamKey, defaults.teamKey).trim(),
+    projectId: readString(input.projectId, defaults.projectId).trim(),
+    databaseId: readString(input.databaseId, defaults.databaseId).trim(),
+    boardId: readString(input.boardId, defaults.boardId).trim(),
+    documentId: readString(input.documentId, defaults.documentId).trim(),
+    fileKey: readString(input.fileKey, defaults.fileKey).trim(),
+    defaultSearchLimit: Math.max(1, Math.min(250, rawLimit || DEFAULT_IMPORTER_SEARCH_LIMIT)),
+  };
 };
 
 const cloneTechstackEntry = (entry: TechstackCatalogEntrySettings): TechstackCatalogEntrySettings => ({
@@ -448,6 +476,13 @@ export const cloneDefaults = (externalHints?: ExternalSettingsHints): DashboardS
     ...DEFAULT_DASHBOARD_SETTINGS.jira,
     apiToken: externalHints?.resolved?.jiraToken || DEFAULT_DASHBOARD_SETTINGS.jira.apiToken,
   },
+  notion: { ...DEFAULT_DASHBOARD_SETTINGS.notion },
+  asana: { ...DEFAULT_DASHBOARD_SETTINGS.asana },
+  linear: { ...DEFAULT_DASHBOARD_SETTINGS.linear },
+  miro: { ...DEFAULT_DASHBOARD_SETTINGS.miro },
+  lucid: { ...DEFAULT_DASHBOARD_SETTINGS.lucid },
+  figma: { ...DEFAULT_DASHBOARD_SETTINGS.figma },
+  mural: { ...DEFAULT_DASHBOARD_SETTINGS.mural },
   ciIntelligence: {
     ...DEFAULT_DASHBOARD_SETTINGS.ciIntelligence,
   },
@@ -589,6 +624,13 @@ export const sanitizeSettings = (value: unknown, externalHints?: ExternalSetting
   if (externalHints?.resolved?.jiraToken) {
     jira.apiToken = externalHints.resolved.jiraToken;
   }
+  const notion = sanitizeExternalImporterSettings(input.notion, DEFAULT_DASHBOARD_SETTINGS.notion);
+  const asana = sanitizeExternalImporterSettings(input.asana, DEFAULT_DASHBOARD_SETTINGS.asana);
+  const linear = sanitizeExternalImporterSettings(input.linear, DEFAULT_DASHBOARD_SETTINGS.linear);
+  const miro = sanitizeExternalImporterSettings(input.miro, DEFAULT_DASHBOARD_SETTINGS.miro);
+  const lucid = sanitizeExternalImporterSettings(input.lucid, DEFAULT_DASHBOARD_SETTINGS.lucid);
+  const figma = sanitizeExternalImporterSettings(input.figma, DEFAULT_DASHBOARD_SETTINGS.figma);
+  const mural = sanitizeExternalImporterSettings(input.mural, DEFAULT_DASHBOARD_SETTINGS.mural);
   const ciIntelligence = sanitizeCiIntelligence(input, git.githubMode);
   const guardrails = sanitizeGuardrails(input);
   const sprintLoopSteps = sanitizeSprintLoopSteps(input);
@@ -715,6 +757,13 @@ export const sanitizeSettings = (value: unknown, externalHints?: ExternalSetting
     techstack,
     git,
     jira,
+    notion,
+    asana,
+    linear,
+    miro,
+    lucid,
+    figma,
+    mural,
     ciIntelligence,
     guardrails,
     sprintLoopSteps,

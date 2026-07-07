@@ -8,6 +8,8 @@ import type {
   CreateProjectInput,
   CreateSprintInput,
   CreateTaskInput,
+  LinkedIssueProvider,
+  LinkedIssueSourceKind,
   ProjectCollectionResponse,
   ProjectSourceType,
   ProjectSummary,
@@ -125,8 +127,11 @@ interface LinkedIssueRow {
   sprint_id: string;
   provider: SprintLinkedIssueRecord["provider"];
   host_domain: string;
+  project_key: string | null;
   repository: string;
-  issue_number: number | string;
+  issue_number: number | string | null;
+  external_id: string | null;
+  source_kind: string | null;
   issue_key: string;
   title: string;
   url: string;
@@ -596,9 +601,9 @@ export class ProjectManagementRepository {
       this.db.prepare(`DELETE FROM sprint_linked_issues WHERE project_id = ? AND sprint_id = ?`).run(projectId, sprintId);
       const insert = this.db.prepare(`
         INSERT INTO sprint_linked_issues (
-          id, project_id, sprint_id, provider, host_domain, repository, issue_number, issue_key,
+          id, project_id, sprint_id, provider, host_domain, project_key, repository, issue_number, external_id, source_kind, issue_key,
           title, url, state, labels_json, assignees_json, imported_at, closed_at, close_state, close_error, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `);
 
       for (const issue of normalized) {
@@ -608,9 +613,12 @@ export class ProjectManagementRepository {
           sprintId,
           issue.provider,
           issue.hostDomain,
+          issue.projectKey || null,
           issue.repository,
-          issue.issueNumber,
-          issue.issueKey || `${issue.provider === "github" ? "#" : "!"}${issue.issueNumber}`,
+          issue.issueNumber ?? null,
+          issue.externalId ?? null,
+          issue.sourceKind || "issue",
+          issue.issueKey || defaultLinkedIssueKey(issue),
           issue.title,
           issue.url,
           issue.state || "open",
@@ -1314,9 +1322,13 @@ export class ProjectManagementRepository {
       projectId: row.project_id,
       sprintId: row.sprint_id,
       provider: row.provider,
+      sourceProvider: row.provider,
+      sourceKind: normalizeLinkedIssueSourceKind(row.source_kind),
+      externalId: row.external_id,
       hostDomain: row.host_domain,
+      projectKey: row.project_key || undefined,
       repository: row.repository,
-      issueNumber: toNumber(row.issue_number),
+      issueNumber: row.issue_number === null ? null : toNumber(row.issue_number),
       issueKey: row.issue_key,
       title: row.title,
       url: row.url,
@@ -1832,29 +1844,89 @@ function parseJsonStringArray(value: string | null | undefined): string[] {
   }
 }
 
+const LINKED_ISSUE_PROVIDERS = new Set<LinkedIssueProvider>([
+  "github",
+  "gitlab",
+  "jira",
+  "notion",
+  "asana",
+  "linear",
+  "miro",
+  "lucid",
+  "figma",
+  "mural",
+]);
+
+const NUMERIC_LINKED_ISSUE_PROVIDERS = new Set<LinkedIssueProvider>(["github", "gitlab", "jira"]);
+
+const LINKED_ISSUE_SOURCE_KINDS = new Set<LinkedIssueSourceKind>([
+  "issue",
+  "task",
+  "page",
+  "database",
+  "board",
+  "document",
+  "file",
+  "canvas",
+]);
+
+function normalizeLinkedIssueSourceKind(value: string | null | undefined): LinkedIssueSourceKind {
+  return typeof value === "string" && LINKED_ISSUE_SOURCE_KINDS.has(value as LinkedIssueSourceKind)
+    ? value as LinkedIssueSourceKind
+    : "issue";
+}
+
+function defaultLinkedIssueKey(issue: Pick<SprintLinkedIssueInput, "provider" | "issueNumber" | "externalId">): string {
+  if (typeof issue.issueNumber === "number" && Number.isFinite(issue.issueNumber) && issue.issueNumber > 0) {
+    if (issue.provider === "github") return `#${issue.issueNumber}`;
+    if (issue.provider === "gitlab") return `!${issue.issueNumber}`;
+    return String(issue.issueNumber);
+  }
+  return issue.externalId || "external";
+}
+
 function normalizeLinkedIssueInputs(issues: SprintLinkedIssueInput[]): SprintLinkedIssueInput[] {
   const seen = new Set<string>();
   const normalized: SprintLinkedIssueInput[] = [];
   for (const issue of issues) {
-    const hostDomain = issue.hostDomain.trim().toLowerCase();
-    const repository = issue.repository.trim().replace(/^\/+|\/+$/g, "");
-    const issueNumber = Math.trunc(issue.issueNumber);
-    const title = issue.title.trim();
-    const url = issue.url.trim();
-    if (!hostDomain || !repository || !title || !url || !Number.isFinite(issueNumber) || issueNumber < 1) {
+    if (!LINKED_ISSUE_PROVIDERS.has(issue.provider)) {
       continue;
     }
-    const key = `${issue.provider}:${hostDomain}:${repository}:${issueNumber}`;
+    const hostDomain = issue.hostDomain.trim().toLowerCase();
+    const repository = issue.repository.trim().replace(/^\/+|\/+$/g, "");
+    const rawIssueNumber = typeof issue.issueNumber === "number" && Number.isFinite(issue.issueNumber)
+      ? Math.trunc(issue.issueNumber)
+      : null;
+    const issueNumber = rawIssueNumber !== null && rawIssueNumber > 0 ? rawIssueNumber : null;
+    const externalId = issue.externalId?.trim() || null;
+    const sourceKind = normalizeLinkedIssueSourceKind(issue.sourceKind);
+    const title = issue.title.trim();
+    const url = issue.url.trim();
+    if (!hostDomain || !repository || !title || !url) {
+      continue;
+    }
+    if (NUMERIC_LINKED_ISSUE_PROVIDERS.has(issue.provider) && issueNumber === null) {
+      continue;
+    }
+    if (!NUMERIC_LINKED_ISSUE_PROVIDERS.has(issue.provider) && !externalId) {
+      continue;
+    }
+    const keySource = externalId ? `external:${externalId}` : `number:${issueNumber}`;
+    const key = `${issue.provider}:${hostDomain}:${repository}:${keySource}`;
     if (seen.has(key)) {
       continue;
     }
     seen.add(key);
     normalized.push({
       provider: issue.provider,
+      sourceProvider: issue.sourceProvider || issue.provider,
+      sourceKind,
+      externalId: externalId ?? undefined,
       hostDomain,
+      projectKey: issue.projectKey?.trim() || undefined,
       repository,
-      issueNumber,
-      issueKey: issue.issueKey?.trim() || `${issue.provider === "github" ? "#" : "!"}${issueNumber}`,
+      issueNumber: issueNumber ?? undefined,
+      issueKey: issue.issueKey?.trim() || defaultLinkedIssueKey({ provider: issue.provider, issueNumber: issueNumber ?? undefined, externalId: externalId ?? undefined }),
       title,
       url,
       state: issue.state?.trim() || "open",

@@ -18,6 +18,9 @@ const cloneMemorySettings = (memory: ProjectSettings["memory"]): ProjectSettings
 });
 
 const cloneJiraSettings = (jira: SystemSettings["integrations"]["jira"]): SystemSettings["integrations"]["jira"] => ({ ...jira });
+const cloneImporterSettings = (
+  settings: SystemSettings["integrations"]["notion"],
+): SystemSettings["integrations"]["notion"] => ({ ...settings });
 
 const cloneQualityAssuranceTrigger = (
   trigger: ProjectSettings["agents"]["qualityAssurance"]["taskCompletion"],
@@ -145,125 +148,134 @@ const defaultJiraSettings = (): SystemSettings["integrations"]["jira"] => ({
   closeTransitionName: "Done",
 });
 
-export const dashboardSettingsToProjectSettings = (settings: DashboardSettings): ProjectSettings => {
-  const techstack = cloneTechstackSelection(settings.techstack);
+export const dashboardSettingsToProjectSettings = (settings: DashboardSettings): ProjectSettings => ({
+  appearance: { ...settings.appearance },
+  automationLevel: settings.automationLevel,
+  automationInterventions: {
+    ...settings.automationInterventions,
+  },
+  aiProvider: cloneProjectAiProviderSettings(settings.aiProvider),
+  techstack: cloneTechstackSelection(settings.techstack) ?? { ...DEFAULT_DASHBOARD_SETTINGS.techstack },
+  git: {
+    githubMode: settings.git.githubMode,
+    githubToken: settings.git.githubToken,
+    gitlabToken: settings.git.gitlabToken ?? "",
+    defaultBranch: settings.git.defaultBranch,
+    autoCreatePr: settings.git.autoCreatePr,
+    autoCloseLinkedIssues: settings.git.autoCloseLinkedIssues,
+    deleteMergedBranches: settings.git.deleteMergedBranches,
+    featureBranchPrefix: settings.git.featureBranchPrefix,
+    sprintBranchScheme: settings.git.sprintBranchScheme,
+    sprintKeyPrefix: settings.git.sprintKeyPrefix,
+    prDescription: settings.git.prDescription,
+  },
+  jira: cloneJiraSettings(settings.jira),
+  notion: cloneImporterSettings(settings.notion),
+  asana: cloneImporterSettings(settings.asana),
+  linear: cloneImporterSettings(settings.linear),
+  miro: cloneImporterSettings(settings.miro),
+  lucid: cloneImporterSettings(settings.lucid),
+  figma: cloneImporterSettings(settings.figma),
+  mural: cloneImporterSettings(settings.mural),
+  ciIntelligence: {
+    ...settings.ciIntelligence,
+  },
+  guardrails: cloneGuardrails(settings.guardrails),
+  sprintLoopSteps: {
+    ...settings.sprintLoopSteps,
+  },
+  cliWorkflow: {
+    ...settings.cliWorkflow,
+  },
+  sprintPreview: {
+    ...settings.sprintPreview,
+  },
+  workers: {
+    ...settings.workers,
+  },
+  agents: {
+    saveToProjectDirectory: settings.agents.saveToProjectDirectory,
+    routing: cloneAgentRouting(settings.agents.routing),
+    instructionTemplates: { ...settings.agents.instructionTemplates },
+    qualityAssurance: cloneQualityAssuranceSettings(settings.agents.qualityAssurance),
+    selfReflection: cloneSelfReflectionSettings(settings.agents.selfReflection),
+  },
+  skills: cloneSkills(settings.skills),
+  mcpTools: cloneMcpTools(settings.mcpTools),
+  customMcpServers: cloneCustomMcpServers(settings.customMcpServers),
+  memory: cloneMemorySettings(settings.memory),
+});
 
-  return {
-    appearance: { ...settings.appearance },
-    automationLevel: settings.automationLevel,
-    automationInterventions: {
-      ...settings.automationInterventions,
-    },
-    aiProvider: cloneProjectAiProviderSettings(settings.aiProvider),
-    git: {
-      githubMode: settings.git.githubMode,
-      githubToken: settings.git.githubToken,
-      gitlabToken: settings.git.gitlabToken ?? "",
-      defaultBranch: settings.git.defaultBranch,
-      autoCreatePr: settings.git.autoCreatePr,
-      autoCloseLinkedIssues: settings.git.autoCloseLinkedIssues,
-      deleteMergedBranches: settings.git.deleteMergedBranches,
-      featureBranchPrefix: settings.git.featureBranchPrefix,
-      sprintBranchScheme: settings.git.sprintBranchScheme,
-      sprintKeyPrefix: settings.git.sprintKeyPrefix,
-      prDescription: settings.git.prDescription,
-    },
-    jira: cloneJiraSettings(settings.jira),
-    ciIntelligence: {
-      ...settings.ciIntelligence,
-    },
-    guardrails: cloneGuardrails(settings.guardrails),
-    sprintLoopSteps: {
-      ...settings.sprintLoopSteps,
-    },
-    cliWorkflow: {
-      ...settings.cliWorkflow,
-    },
-    sprintPreview: {
-      ...settings.sprintPreview,
-    },
-    workers: {
-      ...settings.workers,
-    },
-    agents: {
-      saveToProjectDirectory: settings.agents.saveToProjectDirectory,
-      routing: cloneAgentRouting(settings.agents.routing),
-      instructionTemplates: { ...settings.agents.instructionTemplates },
-      qualityAssurance: cloneQualityAssuranceSettings(settings.agents.qualityAssurance),
-      selfReflection: cloneSelfReflectionSettings(settings.agents.selfReflection),
-    },
-    skills: cloneSkills(settings.skills),
-    mcpTools: cloneMcpTools(settings.mcpTools),
-    customMcpServers: cloneCustomMcpServers(settings.customMcpServers),
-    memory: cloneMemorySettings(settings.memory),
-    ...(techstack ? { techstack } : {}),
-  } as ProjectSettings;
-};
+export const cloneProjectSettings = (settings: ProjectSettings): ProjectSettings => ({
+  appearance: { ...settings.appearance },
+  automationLevel: settings.automationLevel,
+  automationInterventions: {
+    ...settings.automationInterventions,
+  },
+  aiProvider: cloneProjectAiProviderSettings(settings.aiProvider),
+  techstack: cloneTechstackSelection(settings.techstack) ?? { ...DEFAULT_DASHBOARD_SETTINGS.techstack },
+  git: {
+    ...settings.git,
+  },
+  jira: cloneJiraSettings(settings.jira),
+  notion: cloneImporterSettings(settings.notion),
+  asana: cloneImporterSettings(settings.asana),
+  linear: cloneImporterSettings(settings.linear),
+  miro: cloneImporterSettings(settings.miro),
+  lucid: cloneImporterSettings(settings.lucid),
+  figma: cloneImporterSettings(settings.figma),
+  mural: cloneImporterSettings(settings.mural),
+  ciIntelligence: {
+    ...settings.ciIntelligence,
+  },
+  guardrails: cloneGuardrails(settings.guardrails),
+  sprintLoopSteps: {
+    ...settings.sprintLoopSteps,
+  },
+  cliWorkflow: {
+    ...settings.cliWorkflow,
+  },
+  sprintPreview: {
+    ...settings.sprintPreview,
+  },
+  workers: {
+    ...settings.workers,
+  },
+  agents: {
+    saveToProjectDirectory: settings.agents.saveToProjectDirectory,
+    routing: cloneAgentRouting(settings.agents.routing),
+    instructionTemplates: { ...settings.agents.instructionTemplates },
+    qualityAssurance: cloneQualityAssuranceSettings(settings.agents.qualityAssurance),
+    selfReflection: cloneSelfReflectionSettings(settings.agents.selfReflection),
+  },
+  skills: cloneSkills(settings.skills),
+  mcpTools: settings.mcpTools ? cloneMcpTools(settings.mcpTools) : undefined,
+  customMcpServers: settings.customMcpServers ? cloneCustomMcpServers(settings.customMcpServers) : undefined,
+  memory: cloneMemorySettings(settings.memory),
+});
 
-export const cloneProjectSettings = (settings: ProjectSettings): ProjectSettings => {
-  const techstack = cloneTechstackSelection(settings.techstack);
-
-  return {
-    appearance: { ...settings.appearance },
-    automationLevel: settings.automationLevel,
-    automationInterventions: {
-      ...settings.automationInterventions,
-    },
-    aiProvider: cloneProjectAiProviderSettings(settings.aiProvider),
-    git: {
-      ...settings.git,
-    },
-    jira: cloneJiraSettings(settings.jira),
-    ciIntelligence: {
-      ...settings.ciIntelligence,
-    },
-    guardrails: cloneGuardrails(settings.guardrails),
-    sprintLoopSteps: {
-      ...settings.sprintLoopSteps,
-    },
-    cliWorkflow: {
-      ...settings.cliWorkflow,
-    },
-    sprintPreview: {
-      ...settings.sprintPreview,
-    },
-    workers: {
-      ...settings.workers,
-    },
-    agents: {
-      saveToProjectDirectory: settings.agents.saveToProjectDirectory,
-      routing: cloneAgentRouting(settings.agents.routing),
-      instructionTemplates: { ...settings.agents.instructionTemplates },
-      qualityAssurance: cloneQualityAssuranceSettings(settings.agents.qualityAssurance),
-      selfReflection: cloneSelfReflectionSettings(settings.agents.selfReflection),
-    },
-    skills: cloneSkills(settings.skills),
-    mcpTools: settings.mcpTools ? cloneMcpTools(settings.mcpTools) : undefined,
-    customMcpServers: settings.customMcpServers ? cloneCustomMcpServers(settings.customMcpServers) : undefined,
-    memory: cloneMemorySettings(settings.memory),
-    ...(techstack ? { techstack } : {}),
-  } as ProjectSettings;
-};
-
-export const cloneSystemSettings = (settings: SystemSettings): SystemSettings => {
-  const techstackCatalog = settings.techstackCatalog ? cloneTechstackCatalog(settings.techstackCatalog) : undefined;
-
-  return {
-    runtime: {
-      ...settings.runtime,
-    },
-    integrations: {
-      ...settings.integrations,
-      jira: settings.integrations.jira ? cloneJiraSettings(settings.integrations.jira) : defaultJiraSettings(),
-      providers: cloneIntegrationProviders(settings.integrations.providers),
-    },
-    defaults: cloneProjectSettings(settings.defaults),
-    mcpTools: cloneMcpTools(settings.mcpTools),
-    customMcpServers: cloneCustomMcpServers(settings.customMcpServers),
-    modelPricing: { overrides: { ...settings.modelPricing?.overrides } },
-    ...(techstackCatalog ? { techstackCatalog } : {}),
-  } as SystemSettings;
-};
+export const cloneSystemSettings = (settings: SystemSettings): SystemSettings => ({
+  runtime: {
+    ...settings.runtime,
+  },
+  integrations: {
+    ...settings.integrations,
+    jira: settings.integrations.jira ? cloneJiraSettings(settings.integrations.jira) : defaultJiraSettings(),
+    notion: cloneImporterSettings(settings.integrations.notion),
+    asana: cloneImporterSettings(settings.integrations.asana),
+    linear: cloneImporterSettings(settings.integrations.linear),
+    miro: cloneImporterSettings(settings.integrations.miro),
+    lucid: cloneImporterSettings(settings.integrations.lucid),
+    figma: cloneImporterSettings(settings.integrations.figma),
+    mural: cloneImporterSettings(settings.integrations.mural),
+    providers: cloneIntegrationProviders(settings.integrations.providers),
+  },
+  techstackCatalog: cloneTechstackCatalog(settings.techstackCatalog ?? DEFAULT_DASHBOARD_SETTINGS.techstackCatalog),
+  defaults: cloneProjectSettings(settings.defaults),
+  mcpTools: cloneMcpTools(settings.mcpTools),
+  customMcpServers: cloneCustomMcpServers(settings.customMcpServers),
+  modelPricing: { overrides: { ...settings.modelPricing?.overrides } },
+});
 
 export const applyEffectiveProjectSettings = (effectiveProject: EffectiveSettingsResponse): { settings: ProjectSettings; sources: Record<string, SettingsValueSource> } => {
   const nextProject = dashboardSettingsToProjectSettings(effectiveProject.settings);
@@ -288,10 +300,12 @@ export const applyExternalHintsToSystemSettings = (
   }
 
   const currentJira = settings.integrations.jira || defaultJiraSettings();
+  const clonedSettings = cloneSystemSettings(settings);
 
   return {
-    ...cloneSystemSettings(settings),
+    ...clonedSettings,
     integrations: {
+      ...clonedSettings.integrations,
       providers: nextProviders,
       githubToken: settings.integrations.githubToken || hints.resolved.githubToken || "",
       gitlabToken: settings.integrations.gitlabToken || hints.resolved.gitlabToken || "",

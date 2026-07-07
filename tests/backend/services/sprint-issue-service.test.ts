@@ -651,6 +651,633 @@ describe("SprintIssueService", () => {
     expect(jiraApiClient.searchIssues).not.toHaveBeenCalled();
   });
 
+  it("requires a Notion token before searching Notion sources", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    const service = new SprintIssueService({
+      projectManagementRepository: {
+        getProject: () => project,
+      } as any,
+      getDashboardSettings: () => ({
+        ...DEFAULT_DASHBOARD_SETTINGS,
+        notion: {
+          ...DEFAULT_DASHBOARD_SETTINGS.notion,
+          apiToken: "",
+        },
+      }),
+    });
+
+    await expect(service.searchIssues(project.id, {
+      provider: "notion",
+      search: "roadmap",
+    })).rejects.toThrow("Notion API token must be configured in Settings -> Integrations.");
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("searches Notion pages and maps readable block context", async () => {
+    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+      if (url === "https://api.notion.com/v1/search") {
+        expect(init?.method).toBe("POST");
+        expect((init?.headers as Record<string, string>).Authorization).toBe("Bearer notion-token");
+        expect((init?.headers as Record<string, string>)["Notion-Version"]).toBeTruthy();
+        expect(JSON.parse(String(init?.body))).toEqual(expect.objectContaining({
+          query: "roadmap",
+          page_size: 25,
+        }));
+        return new Response(JSON.stringify({
+          results: [{
+            id: "page-1",
+            object: "page",
+            url: "https://www.notion.so/page-1",
+            archived: false,
+            created_time: "2026-05-01T00:00:00.000Z",
+            last_edited_time: "2026-05-02T00:00:00.000Z",
+            properties: {
+              Name: { title: [{ plain_text: "Roadmap page" }] },
+            },
+          }],
+        }), { status: 200, headers: { "content-type": "application/json" } });
+      }
+      if (url === "https://api.notion.com/v1/blocks/page-1/children?page_size=100") {
+        return new Response(JSON.stringify({
+          results: [{
+            id: "block-1",
+            type: "paragraph",
+            paragraph: { rich_text: [{ plain_text: "Acceptance criteria from Notion." }] },
+          }],
+          has_more: false,
+        }), { status: 200, headers: { "content-type": "application/json" } });
+      }
+      return new Response("not found", { status: 404 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const service = new SprintIssueService({
+      projectManagementRepository: {
+        getProject: () => project,
+      } as any,
+      getDashboardSettings: () => ({
+        ...DEFAULT_DASHBOARD_SETTINGS,
+        notion: {
+          ...DEFAULT_DASHBOARD_SETTINGS.notion,
+          apiToken: "notion-token",
+        },
+      }),
+    });
+
+    const issues = await service.searchIssues(project.id, {
+      provider: "notion",
+      search: "roadmap",
+      limit: 25,
+    });
+
+    expect(issues).toEqual([
+      expect.objectContaining({
+        provider: "notion",
+        sourceProvider: "notion",
+        sourceKind: "page",
+        externalId: "page-1",
+        hostDomain: "notion.so",
+        repository: "page",
+        issueNumber: null,
+        issueKey: "page:page-1",
+        title: "Roadmap page",
+        issueBodyMarkdown: "Acceptance criteria from Notion.",
+        bodyPreview: "Acceptance criteria from Notion.",
+      }),
+    ]);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("uses Asana project task fallback and includes task stories when requested", async () => {
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url.startsWith("https://app.asana.com/api/1.0/projects/proj-1/tasks")) {
+        const parsed = new URL(url);
+        expect(parsed.searchParams.get("limit")).toBe("10");
+        return new Response(JSON.stringify({
+          data: [{
+            gid: "task-1",
+            name: "Ship Asana import",
+            notes: "Asana task notes",
+            permalink_url: "https://app.asana.com/0/proj-1/task-1",
+            completed: false,
+            created_at: "2026-05-01T00:00:00.000Z",
+            modified_at: "2026-05-02T00:00:00.000Z",
+            assignee: { name: "Alice" },
+            created_by: { name: "Bob" },
+            tags: [{ name: "integration" }],
+            projects: [{ gid: "proj-1", name: "Imports" }],
+          }],
+        }), { status: 200, headers: { "content-type": "application/json" } });
+      }
+      if (url.startsWith("https://app.asana.com/api/1.0/tasks/task-1/stories")) {
+        return new Response(JSON.stringify({
+          data: [{
+            gid: "story-1",
+            type: "comment",
+            text: "Asana comment",
+            created_at: "2026-05-03T00:00:00.000Z",
+            created_by: { name: "Carol" },
+          }],
+        }), { status: 200, headers: { "content-type": "application/json" } });
+      }
+      return new Response("not found", { status: 404 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const service = new SprintIssueService({
+      projectManagementRepository: {
+        getProject: () => project,
+      } as any,
+      getDashboardSettings: () => ({
+        ...DEFAULT_DASHBOARD_SETTINGS,
+        asana: {
+          ...DEFAULT_DASHBOARD_SETTINGS.asana,
+          apiToken: "asana-token",
+          projectId: "proj-1",
+        },
+      }),
+    });
+
+    const issues = await service.searchIssues(project.id, {
+      provider: "asana",
+      includeConversation: true,
+      limit: 10,
+    });
+
+    expect(issues[0]).toEqual(expect.objectContaining({
+      provider: "asana",
+      sourceKind: "task",
+      externalId: "task-1",
+      issueKey: "task:task-1",
+      issueBodyMarkdown: "Asana task notes",
+      issueConversationMarkdown: expect.stringContaining("Asana comment"),
+      issueAuthor: "Bob",
+      assignees: ["Alice"],
+      labels: ["integration"],
+    }));
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("requires Asana token and workspace or project configuration before searching", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    const service = new SprintIssueService({
+      projectManagementRepository: {
+        getProject: () => project,
+      } as any,
+      getDashboardSettings: () => ({
+        ...DEFAULT_DASHBOARD_SETTINGS,
+        asana: {
+          ...DEFAULT_DASHBOARD_SETTINGS.asana,
+          apiToken: "asana-token",
+        },
+      }),
+    });
+
+    await expect(service.searchIssues(project.id, {
+      provider: "asana",
+      search: "import",
+    })).rejects.toThrow("Asana workspace ID or project ID must be configured in Settings -> Integrations.");
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("searches Linear issues and includes comments when requested", async () => {
+    const fetchMock = vi.fn(async (_url: string, init?: RequestInit) => {
+      const payload = JSON.parse(String(init?.body));
+      if (String(payload.query).includes("CodeUxIssueSearch")) {
+        expect(payload.variables.first).toBe(5);
+        expect(payload.variables.filter).toEqual(expect.objectContaining({
+          and: expect.any(Array),
+        }));
+        return new Response(JSON.stringify({
+          data: {
+            issues: {
+              nodes: [{
+                id: "lin-id-1",
+                identifier: "LIN-42",
+                title: "Ship Linear import",
+                description: "Linear description",
+                url: "https://linear.app/acme/issue/LIN-42/ship-linear-import",
+                createdAt: "2026-05-01T00:00:00.000Z",
+                updatedAt: "2026-05-02T00:00:00.000Z",
+                state: { name: "In Progress", type: "started" },
+                labels: { nodes: [{ name: "integration" }] },
+                assignee: { displayName: "Alice" },
+                creator: { displayName: "Bob" },
+                team: { id: "team-1", key: "LIN", name: "Linear Team" },
+                project: { id: "project-1", name: "Imports", url: "https://linear.app/acme/project/imports" },
+              }],
+            },
+          },
+        }), { status: 200, headers: { "content-type": "application/json" } });
+      }
+      if (String(payload.query).includes("CodeUxIssueComments")) {
+        return new Response(JSON.stringify({
+          data: {
+            issue: {
+              comments: {
+                nodes: [{
+                  body: "Linear comment",
+                  createdAt: "2026-05-03T00:00:00.000Z",
+                  user: { displayName: "Carol" },
+                  url: "https://linear.app/comment/1",
+                }],
+              },
+            },
+          },
+        }), { status: 200, headers: { "content-type": "application/json" } });
+      }
+      return new Response(JSON.stringify({ errors: [{ message: "unexpected query" }] }), { status: 200 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const service = new SprintIssueService({
+      projectManagementRepository: {
+        getProject: () => project,
+      } as any,
+      getDashboardSettings: () => ({
+        ...DEFAULT_DASHBOARD_SETTINGS,
+        linear: {
+          ...DEFAULT_DASHBOARD_SETTINGS.linear,
+          apiToken: "linear-token",
+          teamKey: "LIN",
+        },
+      }),
+    });
+
+    const issues = await service.searchIssues(project.id, {
+      provider: "linear",
+      search: "import",
+      labels: ["integration"],
+      state: "In Progress",
+      includeConversation: true,
+      limit: 5,
+    });
+
+    expect(issues[0]).toEqual(expect.objectContaining({
+      provider: "linear",
+      sourceKind: "issue",
+      externalId: "lin-id-1",
+      repository: "LIN",
+      issueKey: "LIN-42",
+      issueBodyMarkdown: "Linear description",
+      issueConversationMarkdown: expect.stringContaining("Linear comment"),
+      issueMilestone: "Imports",
+      assignees: ["Alice"],
+    }));
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("requires a Linear token before searching Linear issues", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    const service = new SprintIssueService({
+      projectManagementRepository: {
+        getProject: () => project,
+      } as any,
+      getDashboardSettings: () => ({
+        ...DEFAULT_DASHBOARD_SETTINGS,
+        linear: {
+          ...DEFAULT_DASHBOARD_SETTINGS.linear,
+          apiToken: "",
+        },
+      }),
+    });
+
+    await expect(service.searchIssues(project.id, {
+      provider: "linear",
+      search: "import",
+    })).rejects.toThrow("Linear API token must be configured in Settings -> Integrations.");
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("searches Miro board items with item type filters and normalized board scope", async () => {
+    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+      const parsed = new URL(url);
+      expect(parsed.origin).toBe("https://api.miro.com");
+      expect(parsed.pathname).toBe("/v2/boards/board-1/items");
+      expect(parsed.searchParams.get("type")).toBe("sticky_note,text");
+      expect((init?.headers as Record<string, string>).Authorization).toBe("Bearer miro-token");
+      return new Response(JSON.stringify({
+        data: [{
+          id: "item-1",
+          type: "sticky_note",
+          data: { title: "Note title", content: "<p>Build this flow</p>" },
+          links: { self: "https://miro.com/app/board/board-1/?moveToWidget=item-1" },
+          modifiedAt: "2026-05-02T00:00:00.000Z",
+        }],
+      }), { status: 200, headers: { "content-type": "application/json" } });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const service = new SprintIssueService({
+      projectManagementRepository: {
+        getProject: () => project,
+      } as any,
+      getDashboardSettings: () => ({
+        ...DEFAULT_DASHBOARD_SETTINGS,
+        miro: {
+          ...DEFAULT_DASHBOARD_SETTINGS.miro,
+          apiToken: "miro-token",
+          boardId: "board-1",
+        },
+      }),
+    });
+
+    const issues = await service.searchIssues(project.id, {
+      provider: "miro",
+      itemTypes: ["sticky_note", "text"],
+      limit: 10,
+    });
+
+    expect(issues).toEqual([
+      expect.objectContaining({
+        provider: "miro",
+        sourceKind: "board",
+        externalId: "board-1",
+        issueKey: "board:board-1",
+        repository: "board-1",
+      }),
+      expect.objectContaining({
+        provider: "miro",
+        sourceKind: "canvas",
+        externalId: "item-1",
+        issueKey: "item:item-1",
+        title: "Note title",
+        issueBodyMarkdown: "Note title\n\nBuild this flow",
+        updatedAt: "2026-05-02T00:00:00.000Z",
+      }),
+    ]);
+  });
+
+  it("requires Miro token and board/search configuration before searching", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    const withoutToken = new SprintIssueService({
+      projectManagementRepository: { getProject: () => project } as any,
+      getDashboardSettings: () => ({
+        ...DEFAULT_DASHBOARD_SETTINGS,
+        miro: { ...DEFAULT_DASHBOARD_SETTINGS.miro, apiToken: "" },
+      }),
+    });
+    await expect(withoutToken.searchIssues(project.id, { provider: "miro", boardId: "board-1" }))
+      .rejects.toThrow("Miro API token must be configured in Settings -> Integrations.");
+
+    const withoutBoard = new SprintIssueService({
+      projectManagementRepository: { getProject: () => project } as any,
+      getDashboardSettings: () => ({
+        ...DEFAULT_DASHBOARD_SETTINGS,
+        miro: { ...DEFAULT_DASHBOARD_SETTINGS.miro, apiToken: "miro-token" },
+      }),
+    });
+    await expect(withoutBoard.searchIssues(project.id, { provider: "miro" }))
+      .rejects.toThrow("Miro board ID or search query must be configured in Settings -> Integrations.");
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("searches Lucid documents and loads readable document contents", async () => {
+    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+      if (url === "https://api.lucid.co/documents/search") {
+        expect(init?.method).toBe("POST");
+        expect((init?.headers as Record<string, string>).Authorization).toBe("Bearer lucid-token");
+        expect((init?.headers as Record<string, string>)["Lucid-Api-Version"]).toBe("1");
+        return new Response(JSON.stringify({
+          documents: [{
+            id: "doc-1",
+            title: "Architecture diagram",
+            editUrl: "https://lucid.app/documents/edit/doc-1",
+            lastModified: "2026-05-02T00:00:00.000Z",
+            product: "lucidchart",
+          }],
+        }), { status: 200, headers: { "content-type": "application/json" } });
+      }
+      if (url === "https://api.lucid.co/v1/documents/doc-1/contents") {
+        return new Response(JSON.stringify({
+          title: "Architecture diagram",
+          pages: [{ title: "System", shapes: [{ type: "process", text: "Import canvas context" }] }],
+          modified: "2026-05-03T00:00:00.000Z",
+        }), { status: 200, headers: { "content-type": "application/json" } });
+      }
+      return new Response("not found", { status: 404 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const service = new SprintIssueService({
+      projectManagementRepository: { getProject: () => project } as any,
+      getDashboardSettings: () => ({
+        ...DEFAULT_DASHBOARD_SETTINGS,
+        lucid: { ...DEFAULT_DASHBOARD_SETTINGS.lucid, apiToken: "lucid-token" },
+      }),
+    });
+
+    const searchResults = await service.searchIssues(project.id, {
+      provider: "lucid",
+      search: "architecture",
+      limit: 5,
+    });
+    expect(searchResults[0]).toEqual(expect.objectContaining({
+      provider: "lucid",
+      sourceKind: "document",
+      externalId: "doc-1",
+      issueKey: "document:doc-1",
+      title: "Architecture diagram",
+    }));
+
+    const contexts = await service.getIssuePromptContextsForReferences(project.id, {
+      provider: "lucid",
+      documentId: "doc-1",
+    });
+    expect(contexts[0]).toEqual(expect.objectContaining({
+      provider: "lucid",
+      issueBodyMarkdown: expect.stringContaining("Import canvas context"),
+      issueUpdatedAt: "2026-05-03T00:00:00.000Z",
+    }));
+  });
+
+  it("requires Lucid token and document/search configuration before searching", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    const service = new SprintIssueService({
+      projectManagementRepository: { getProject: () => project } as any,
+      getDashboardSettings: () => ({
+        ...DEFAULT_DASHBOARD_SETTINGS,
+        lucid: { ...DEFAULT_DASHBOARD_SETTINGS.lucid, apiToken: "" },
+      }),
+    });
+    await expect(service.searchIssues(project.id, { provider: "lucid", search: "diagram" }))
+      .rejects.toThrow("Lucid API token must be configured in Settings -> Integrations.");
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("imports Figma files with top-level pages and comments when requested", async () => {
+    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+      expect((init?.headers as Record<string, string>)["X-Figma-Token"]).toBe("figma-token");
+      if (url === "https://api.figma.com/v1/files/file-1") {
+        return new Response(JSON.stringify({
+          name: "Design spec",
+          lastModified: "2026-05-02T00:00:00.000Z",
+          document: {
+            children: [{
+              id: "0:1",
+              name: "Page 1",
+              type: "CANVAS",
+              children: [{ id: "1:2", name: "Hero", type: "FRAME" }],
+            }],
+          },
+        }), { status: 200, headers: { "content-type": "application/json" } });
+      }
+      if (url === "https://api.figma.com/v1/files/file-1/comments") {
+        return new Response(JSON.stringify({
+          comments: [{
+            id: "comment-1",
+            message: "Please preserve this layout",
+            created_at: "2026-05-03T00:00:00.000Z",
+            user: { handle: "Alice" },
+          }],
+        }), { status: 200, headers: { "content-type": "application/json" } });
+      }
+      return new Response("not found", { status: 404 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const service = new SprintIssueService({
+      projectManagementRepository: { getProject: () => project } as any,
+      getDashboardSettings: () => ({
+        ...DEFAULT_DASHBOARD_SETTINGS,
+        figma: { ...DEFAULT_DASHBOARD_SETTINGS.figma, apiToken: "figma-token", fileKey: "file-1" },
+      }),
+    });
+
+    const issues = await service.searchIssues(project.id, {
+      provider: "figma",
+      includeConversation: true,
+    });
+
+    expect(issues[0]).toEqual(expect.objectContaining({
+      provider: "figma",
+      sourceKind: "file",
+      externalId: "file-1",
+      issueKey: "file:file-1",
+      title: "Design spec",
+      issueBodyMarkdown: expect.stringContaining("## Page 1"),
+      issueConversationMarkdown: expect.stringContaining("Please preserve this layout"),
+      updatedAt: "2026-05-02T00:00:00.000Z",
+    }));
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("requires Figma token and file key before importing", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    const withoutToken = new SprintIssueService({
+      projectManagementRepository: { getProject: () => project } as any,
+      getDashboardSettings: () => ({
+        ...DEFAULT_DASHBOARD_SETTINGS,
+        figma: { ...DEFAULT_DASHBOARD_SETTINGS.figma, apiToken: "" },
+      }),
+    });
+    await expect(withoutToken.searchIssues(project.id, { provider: "figma", fileKey: "file-1" }))
+      .rejects.toThrow("Figma API token must be configured in Settings -> Integrations.");
+
+    const withoutFile = new SprintIssueService({
+      projectManagementRepository: { getProject: () => project } as any,
+      getDashboardSettings: () => ({
+        ...DEFAULT_DASHBOARD_SETTINGS,
+        figma: { ...DEFAULT_DASHBOARD_SETTINGS.figma, apiToken: "figma-token" },
+      }),
+    });
+    await expect(withoutFile.searchIssues(project.id, { provider: "figma" }))
+      .rejects.toThrow("Figma file key must be configured in Settings -> Integrations.");
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("searches Mural workspace murals and marks beta limited metadata", async () => {
+    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+      expect((init?.headers as Record<string, string>).Authorization).toBe("Bearer mural-token");
+      if (url === "https://app.mural.co/api/public/v1/workspaces/workspace-1/murals") {
+        return new Response(JSON.stringify({
+          value: [{
+            id: "mural-1",
+            title: "Planning mural",
+            url: "https://app.mural.co/t/team/m/mural-1",
+            workspaceId: "workspace-1",
+            updatedOn: "2026-05-02T00:00:00.000Z",
+            description: "Mural metadata only",
+          }],
+        }), { status: 200, headers: { "content-type": "application/json" } });
+      }
+      if (url === "https://app.mural.co/api/public/v1/murals/mural-1") {
+        return new Response(JSON.stringify({
+          id: "mural-1",
+          title: "Planning mural",
+          workspaceId: "workspace-1",
+          description: "Limited content available to token",
+          content: { widgets: [{ text: "Mural note" }] },
+        }), { status: 200, headers: { "content-type": "application/json" } });
+      }
+      return new Response("not found", { status: 404 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const service = new SprintIssueService({
+      projectManagementRepository: { getProject: () => project } as any,
+      getDashboardSettings: () => ({
+        ...DEFAULT_DASHBOARD_SETTINGS,
+        mural: { ...DEFAULT_DASHBOARD_SETTINGS.mural, apiToken: "mural-token", workspaceId: "workspace-1" },
+      }),
+    });
+
+    const issues = await service.searchIssues(project.id, {
+      provider: "mural",
+      search: "planning",
+    });
+    expect(issues[0]).toEqual(expect.objectContaining({
+      provider: "mural",
+      sourceKind: "canvas",
+      externalId: "mural-1",
+      labels: ["mural", "beta-limited"],
+      metadata: expect.objectContaining({ limitedMetadata: true }),
+    }));
+
+    const contexts = await service.getIssuePromptContextsForReferences(project.id, {
+      provider: "mural",
+      muralId: "mural-1",
+      workspaceId: "workspace-1",
+    });
+    expect(contexts[0]?.issueBodyMarkdown).toContain("Limited content available to token");
+    expect(contexts[0]?.issueBodyMarkdown).toContain("Mural note");
+  });
+
+  it("requires Mural token and workspace or mural ID before searching", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    const withoutToken = new SprintIssueService({
+      projectManagementRepository: { getProject: () => project } as any,
+      getDashboardSettings: () => ({
+        ...DEFAULT_DASHBOARD_SETTINGS,
+        mural: { ...DEFAULT_DASHBOARD_SETTINGS.mural, apiToken: "" },
+      }),
+    });
+    await expect(withoutToken.searchIssues(project.id, { provider: "mural", workspaceId: "workspace-1" }))
+      .rejects.toThrow("Mural API token must be configured in Settings -> Integrations.");
+
+    const withoutIds = new SprintIssueService({
+      projectManagementRepository: { getProject: () => project } as any,
+      getDashboardSettings: () => ({
+        ...DEFAULT_DASHBOARD_SETTINGS,
+        mural: { ...DEFAULT_DASHBOARD_SETTINGS.mural, apiToken: "mural-token" },
+      }),
+    });
+    await expect(withoutIds.searchIssues(project.id, { provider: "mural" }))
+      .rejects.toThrow("Mural workspace ID or mural ID must be configured in Settings -> Integrations.");
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it("searches Jira issues through the generic issue service and clamps limits", async () => {
     const jiraApiClient = {
       searchIssues: vi.fn(async () => [{

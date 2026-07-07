@@ -42,6 +42,138 @@ const DEFAULT_JIRA_SETTINGS: SystemSettings["integrations"]["jira"] = {
   closeTransitionName: "Done",
 };
 
+type ImporterIntegrationId = Extract<IntegrationId, "notion" | "asana" | "linear" | "miro" | "lucid" | "figma" | "mural">;
+type ImporterSettings = SystemSettings["integrations"]["notion"];
+type ImporterTextField = Exclude<keyof ImporterSettings, "enabled" | "defaultSearchLimit">;
+
+const DEFAULT_IMPORTER_SETTINGS: ImporterSettings = {
+  enabled: false,
+  apiToken: "",
+  apiSecret: "",
+  baseUrl: "",
+  workspaceId: "",
+  teamId: "",
+  teamKey: "",
+  projectId: "",
+  databaseId: "",
+  boardId: "",
+  documentId: "",
+  fileKey: "",
+  defaultSearchLimit: 25,
+};
+
+const IMPORTER_IDS: readonly ImporterIntegrationId[] = ["notion", "asana", "linear", "miro", "lucid", "figma", "mural"];
+
+const isImporterIntegrationId = (value: unknown): value is ImporterIntegrationId => (
+  typeof value === "string" && (IMPORTER_IDS as readonly string[]).includes(value)
+);
+
+interface ImporterFieldDefinition {
+  key: ImporterTextField;
+  label: string;
+  description: string;
+  placeholder?: string;
+  secret?: boolean;
+}
+
+interface ImporterDefinition {
+  label: string;
+  mark: string;
+  accentClassName: string;
+  fields: ImporterFieldDefinition[];
+  requiredFields: ImporterTextField[];
+}
+
+const IMPORTER_DEFINITIONS: Record<ImporterIntegrationId, ImporterDefinition> = {
+  notion: {
+    label: "Notion",
+    mark: "NO",
+    accentClassName: "border-[#000000]/12 bg-black/[0.06] text-slate-900 dark:border-white/[0.16] dark:bg-white/[0.08] dark:text-white",
+    requiredFields: ["apiToken", "databaseId"],
+    fields: [
+      { key: "workspaceId", label: "Workspace ID", description: "Default Notion workspace used for guided imports.", placeholder: "workspace-id" },
+      { key: "databaseId", label: "Database ID", description: "Default Notion database searched by sprint imports.", placeholder: "database-id" },
+    ],
+  },
+  asana: {
+    label: "Asana",
+    mark: "AS",
+    accentClassName: "border-[#F06A6A]/20 bg-[#F06A6A]/10 text-[#B83A3A] dark:border-[#F06A6A]/24 dark:bg-[#F06A6A]/12 dark:text-[#FFB0B0]",
+    requiredFields: ["apiToken", "workspaceId"],
+    fields: [
+      { key: "workspaceId", label: "Workspace GID", description: "Default Asana workspace for task searches.", placeholder: "workspace-gid" },
+      { key: "teamId", label: "Team GID", description: "Optional team used to narrow Asana imports.", placeholder: "team-gid" },
+      { key: "projectId", label: "Project GID", description: "Default Asana project for issue import searches.", placeholder: "project-gid" },
+    ],
+  },
+  linear: {
+    label: "Linear",
+    mark: "LN",
+    accentClassName: "border-[#5E6AD2]/22 bg-[#5E6AD2]/10 text-[#4B55B8] dark:border-[#9EA5FF]/22 dark:bg-[#9EA5FF]/12 dark:text-[#C7CBFF]",
+    requiredFields: ["apiToken", "teamKey"],
+    fields: [
+      { key: "workspaceId", label: "Workspace URL key", description: "Linear workspace slug or identifier for imports.", placeholder: "company" },
+      { key: "teamKey", label: "Team key", description: "Default Linear team key used in guided searches.", placeholder: "ENG" },
+      { key: "projectId", label: "Project ID", description: "Optional default Linear project identifier.", placeholder: "project-id" },
+    ],
+  },
+  miro: {
+    label: "Miro",
+    mark: "MI",
+    accentClassName: "border-[#FFD02F]/28 bg-[#FFD02F]/16 text-[#7A5B00] dark:border-[#FFD02F]/28 dark:bg-[#FFD02F]/14 dark:text-[#FFE58A]",
+    requiredFields: ["apiToken", "boardId"],
+    fields: [
+      { key: "teamId", label: "Team ID", description: "Default Miro team used to scope board imports.", placeholder: "team-id" },
+      { key: "boardId", label: "Board ID", description: "Default Miro board for read-only import.", placeholder: "board-id" },
+    ],
+  },
+  lucid: {
+    label: "Lucid",
+    mark: "LC",
+    accentClassName: "border-[#FF7A00]/22 bg-[#FF7A00]/10 text-[#A64C00] dark:border-[#FFB36B]/24 dark:bg-[#FFB36B]/12 dark:text-[#FFD2AA]",
+    requiredFields: ["apiToken", "documentId"],
+    fields: [
+      { key: "workspaceId", label: "Workspace ID", description: "Optional Lucid workspace identifier.", placeholder: "workspace-id" },
+      { key: "documentId", label: "Document ID", description: "Default Lucid or Lucidspark document to import.", placeholder: "document-id" },
+    ],
+  },
+  figma: {
+    label: "Figma / FigJam",
+    mark: "FG",
+    accentClassName: "border-[#A259FF]/22 bg-[#A259FF]/10 text-[#7A35C5] dark:border-[#C9A4FF]/24 dark:bg-[#C9A4FF]/12 dark:text-[#E0C7FF]",
+    requiredFields: ["apiToken", "fileKey"],
+    fields: [
+      { key: "teamId", label: "Team ID", description: "Optional Figma team used for import searches.", placeholder: "team-id" },
+      { key: "projectId", label: "Project ID", description: "Optional Figma project for default file discovery.", placeholder: "project-id" },
+      { key: "fileKey", label: "File key", description: "Default Figma or FigJam file key.", placeholder: "file-key" },
+    ],
+  },
+  mural: {
+    label: "Mural",
+    mark: "MU",
+    accentClassName: "border-[#FF4F8B]/22 bg-[#FF4F8B]/10 text-[#B82D5D] dark:border-[#FF9ABC]/24 dark:bg-[#FF9ABC]/12 dark:text-[#FFC6D8]",
+    requiredFields: ["apiToken", "boardId"],
+    fields: [
+      { key: "workspaceId", label: "Workspace ID", description: "Default Mural workspace for imports.", placeholder: "workspace-id" },
+      { key: "boardId", label: "Mural ID", description: "Default mural used by read-only imports.", placeholder: "mural-id" },
+    ],
+  },
+};
+
+const getImporterWatermark = (providerId: ImporterIntegrationId): string => IMPORTER_DEFINITIONS[providerId].mark;
+
+const getImporterSettings = (
+  providerId: ImporterIntegrationId,
+  settings: Partial<Record<ImporterIntegrationId, ImporterSettings>>,
+): ImporterSettings => ({
+  ...DEFAULT_IMPORTER_SETTINGS,
+  ...(settings[providerId] || {}),
+});
+
+const isImporterConfigured = (providerId: ImporterIntegrationId, settings: ImporterSettings): boolean => (
+  IMPORTER_DEFINITIONS[providerId].requiredFields.every((field) => String(settings[field] || "").trim().length > 0)
+);
+
 const getProviderWatermark = (providerId: ProviderId): string => (
   providerId === "jules" ? "JLS"
     : providerId === "gemini" ? "GMN"
@@ -292,7 +424,13 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
       id: "pm",
       label: "PM",
       purpose: "Project management and issue tracker connections",
-      items: integrations.filter((integration) => integration.id === "jira"),
+      items: integrations.filter((integration) => integration.id === "jira" || integration.id === "notion" || integration.id === "asana" || integration.id === "linear"),
+    },
+    {
+      id: "canvas",
+      label: "CANVAS",
+      purpose: "Whiteboard, diagram, and design imports",
+      items: integrations.filter((integration) => integration.id === "miro" || integration.id === "lucid" || integration.id === "figma" || integration.id === "mural"),
     },
   ].filter((group) => group.items.length > 0);
 
@@ -649,6 +787,131 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
       );
     }
 
+    if (isImporterIntegrationId(integrationId)) {
+      const definition = IMPORTER_DEFINITIONS[integrationId];
+      const importerSettings = activeScope === "system"
+        ? getImporterSettings(integrationId, systemSettings.integrations)
+        : getImporterSettings(integrationId, editableSettings);
+      const configured = isImporterConfigured(integrationId, importerSettings);
+      const active = importerSettings.enabled && configured;
+      const updateImporter = (updates: Partial<ImporterSettings>): void => {
+        if (activeScope === "system") {
+          updateSystem((current) => ({
+            ...current,
+            integrations: {
+              ...current.integrations,
+              [integrationId]: {
+                ...getImporterSettings(integrationId, current.integrations),
+                ...updates,
+              },
+            },
+          }));
+          return;
+        }
+        updateEditableSettings((current) => ({
+          ...current,
+          [integrationId]: {
+            ...getImporterSettings(integrationId, current),
+            ...updates,
+          },
+        }));
+      };
+      const fieldBadge = (field: keyof ImporterSettings) => activeScope === "system" ? undefined : getFieldBadge(`${integrationId}.${field}`);
+
+      return (
+        <>
+          {backButton}
+          <SectionCard
+            title={`${definition.label} Configuration`}
+            watermark={getImporterWatermark(integrationId)}
+            icon={<Settings2 strokeWidth={2.4} />}
+            helpId="importer-configuration"
+            actions={
+              <>
+                {active ? <IntegrationPill label="Active" tone="active" /> : null}
+                {configured ? <IntegrationPill label="Configured" /> : <IntegrationPill label="Not configured" tone="muted" />}
+                <IntegrationPill label="Read-only import" />
+              </>
+            }
+          >
+            {activeScope === "system" ? (
+              <NoticePanel title="System-owned importer credentials">
+                Store shared read-only importer credentials here. Projects inherit these values unless they save an override.
+              </NoticePanel>
+            ) : (
+              <NoticePanel title="Project-scope importer override">
+                These fields override the system {definition.label} importer for this project. Cleared fields fall back after reset.
+              </NoticePanel>
+            )}
+            <NoticePanel title="Read-only importer support">
+              Code UX uses these settings to find and attach external context to sprints. It does not write back to this provider.
+            </NoticePanel>
+            <Row label={`Enable ${definition.label}`} description="Allow this importer to appear in sprint import flows once required fields are configured." badge={fieldBadge("enabled")}>
+              <Toggle
+                aria-label={`Enable ${definition.label} importer`}
+                value={importerSettings.enabled}
+                onChange={() => updateImporter({ enabled: !importerSettings.enabled })}
+              />
+            </Row>
+            <Row label="API token" description={`Token used for read-only ${definition.label} API requests.`} badge={fieldBadge("apiToken")}>
+              <SecretInput
+                value={importerSettings.apiToken}
+                onChange={(value) => updateImporter({ apiToken: value })}
+                aria-label={`${definition.label} API token`}
+                mono
+              />
+            </Row>
+            <Row label="API secret" description="Optional secondary secret for deployments that require one." badge={fieldBadge("apiSecret")}>
+              <SecretInput
+                value={importerSettings.apiSecret}
+                onChange={(value) => updateImporter({ apiSecret: value })}
+                aria-label={`${definition.label} API secret`}
+                mono
+              />
+            </Row>
+            <Row label="Base URL" description="Optional custom API base URL for enterprise or regional deployments." badge={fieldBadge("baseUrl")}>
+              <TextInput
+                value={importerSettings.baseUrl}
+                onChange={(value) => updateImporter({ baseUrl: value })}
+                placeholder="https://api.example.com"
+                mono
+              />
+            </Row>
+            {definition.fields.map((field) => (
+              <Row key={field.key} label={field.label} description={field.description} badge={fieldBadge(field.key)}>
+                {field.secret ? (
+                  <SecretInput
+                    value={importerSettings[field.key]}
+                    onChange={(value) => updateImporter({ [field.key]: value })}
+                    placeholder={field.placeholder}
+                    aria-label={`${definition.label} ${field.label}`}
+                    mono
+                  />
+                ) : (
+                  <TextInput
+                    value={importerSettings[field.key]}
+                    onChange={(value) => updateImporter({ [field.key]: value })}
+                    placeholder={field.placeholder}
+                    aria-label={`${definition.label} ${field.label}`}
+                    mono
+                  />
+                )}
+              </Row>
+            ))}
+            <Row label="Search limit" description="Maximum matching external items shown in import search." badge={fieldBadge("defaultSearchLimit")} last>
+              <NumberInput
+                value={importerSettings.defaultSearchLimit}
+                min={1}
+                max={250}
+                onChange={(value) => updateImporter({ defaultSearchLimit: value })}
+                aria-label={`${definition.label} search limit`}
+              />
+            </Row>
+          </SectionCard>
+        </>
+      );
+    }
+
     if (!isPublicProviderId(integrationId)) {
       return null;
     }
@@ -791,6 +1054,46 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
                                 label={isJira ? (jiraConfigured ? "Search + transitions" : "Not configured") : isGitLab ? "Token + CI" : "Token + auth mount"}
                                 tone={isJira && jiraConfigured ? "neutral" : "muted"}
                               />
+                            </div>
+                            <CatalogActionButton label="Manage" icon={Settings2} onClick={() => setSelectedIntegration(integration.id)} />
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  }
+
+                  if (isImporterIntegrationId(integration.id)) {
+                    const definition = IMPORTER_DEFINITIONS[integration.id];
+                    const importerSettings = activeScope === "system"
+                      ? getImporterSettings(integration.id, systemSettings.integrations)
+                      : getImporterSettings(integration.id, editableSettings);
+                    const configured = isImporterConfigured(integration.id, importerSettings);
+                    const active = importerSettings.enabled && configured;
+                    return (
+                      <div key={integration.id} className={`group relative min-h-[156px] overflow-hidden rounded-[1.35rem] border p-5 shadow-[0_12px_30px_rgba(15,23,42,0.035)] transition-[border-color,background-color,transform,box-shadow] duration-200 hover:-translate-y-0.5 hover:shadow-[0_18px_42px_rgba(15,23,42,0.07)] ${
+                        active
+                          ? "border-signal-500/24 bg-white/90 hover:border-signal-500/34 dark:border-signal-400/24 dark:bg-void-800/82 dark:hover:border-signal-400/34 dark:hover:bg-void-800/92"
+                          : "border-black/[0.06] bg-white/88 hover:border-black/[0.12] hover:bg-white dark:border-white/[0.08] dark:bg-void-800/78 dark:hover:border-white/[0.14] dark:hover:bg-void-800/88"
+                      }`}>
+                        <div aria-hidden className={`absolute left-0 top-5 bottom-5 w-1 rounded-r-full transition-opacity ${active ? "bg-signal-500 opacity-100 dark:bg-signal-400" : "bg-slate-300 opacity-0 group-hover:opacity-100 dark:bg-slate-600"}`} />
+                        <div aria-hidden className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-black/[0.08] to-transparent dark:via-white/[0.12]" />
+                        <div className="flex h-full flex-col gap-4">
+                          <div className="flex items-start gap-3">
+                            <span className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-[1rem] border text-[11px] font-black uppercase tracking-[0.12em] ${definition.accentClassName}`} aria-hidden title={definition.label}>
+                              {definition.mark}
+                            </span>
+                            <div className="min-w-0">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <div className="text-sm font-semibold text-slate-900 dark:text-white">{integration.label}</div>
+                                {active ? <IntegrationPill label="Active" tone="active" /> : null}
+                              </div>
+                              <div className="mt-1 text-xs leading-relaxed text-slate-500 dark:text-slate-400">{integration.description}</div>
+                            </div>
+                          </div>
+                          <div className="mt-auto flex flex-wrap items-center justify-between gap-3 pl-14">
+                            <div className="flex flex-wrap gap-2">
+                              <IntegrationPill label="Read-only import" />
+                              <IntegrationPill label={configured ? "Configured" : "Not configured"} tone={configured ? "neutral" : "muted"} />
                             </div>
                             <CatalogActionButton label="Manage" icon={Settings2} onClick={() => setSelectedIntegration(integration.id)} />
                           </div>

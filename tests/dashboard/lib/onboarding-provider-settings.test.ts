@@ -8,6 +8,22 @@ import {
 } from "../../../dashboard/src/v2/lib/onboarding-provider-settings.js";
 import type { OnboardingProviderCredentialStatus, SystemSettings, ProjectSettings } from "../../../dashboard/src/types.js";
 
+const createImporterSettings = () => ({
+  enabled: false,
+  apiToken: "",
+  apiSecret: "",
+  baseUrl: "",
+  workspaceId: "",
+  teamId: "",
+  teamKey: "",
+  projectId: "",
+  databaseId: "",
+  boardId: "",
+  documentId: "",
+  fileKey: "",
+  defaultSearchLimit: 25,
+});
+
 describe("onboarding-provider-settings", () => {
   it("getProviderInitialSelection returns jules, enabled providers, and detected providers", () => {
     const providers: OnboardingProviderCredentialStatus[] = [
@@ -41,9 +57,34 @@ describe("onboarding-provider-settings", () => {
       runtime: {},
       integrations: {
         jira: { host: "", email: "", apiToken: "", autoTransitionLinkedIssuesOnImport: true, importTransitionName: "In Work", autoCloseLinkedIssues: false, defaultProject: "", closeTransitionName: "Done" },
+        notion: createImporterSettings(),
+        asana: createImporterSettings(),
+        linear: createImporterSettings(),
+        miro: createImporterSettings(),
+        lucid: createImporterSettings(),
+        figma: createImporterSettings(),
+        mural: createImporterSettings(),
         providers: {
           "p1": { provider: "jules", name: "Jules", apiKey: "key", mountAuth: false, authPath: "" }
-        }
+        },
+        githubToken: "",
+        gitlabToken: "",
+      },
+      techstackCatalog: {
+        defaultTechstackId: "code-ux-internal",
+        entries: [
+          {
+            id: "code-ux-internal",
+            label: "Code UX Stack",
+            items: [
+              { id: "preact", label: "Preact" },
+              { id: "tanstack-router", label: "TanStack Router" },
+              { id: "gsap", label: "GSAP" },
+              { id: "three-js", label: "Three.js" },
+              { id: "lucide-icons", label: "Lucide Icons" },
+            ],
+          },
+        ],
       },
       defaults: {
         appearance: { theme: "system" },
@@ -55,6 +96,7 @@ describe("onboarding-provider-settings", () => {
         sprintLoopSteps: { apply: { type: "apply" }, pr: { type: "pr" }, runTests: { type: "test" } },
         cliWorkflow: { executionMode: "HOST" },
         sprintPreview: { enabled: false },
+        techstack: { applicationKind: null, selectedTechstackId: null },
         aiProvider: {
           provider: "jules",
           strategy: "MANUAL",
@@ -95,6 +137,13 @@ describe("onboarding-provider-settings", () => {
             },
           },
         },
+        notion: createImporterSettings(),
+        asana: createImporterSettings(),
+        linear: createImporterSettings(),
+        miro: createImporterSettings(),
+        lucid: createImporterSettings(),
+        figma: createImporterSettings(),
+        mural: createImporterSettings(),
         guardrails: { onLimitAction: "WARN", defaultLimitOverrides: [], limitOverrides: [], jobConfigOverrides: [], jobs: { task_coding: {}, ci_fix: {}, merge_conflict: {}, clarification_reply: {}, planning: {}, remediation: {} } },
         skills: [],
         mcpTools: [],

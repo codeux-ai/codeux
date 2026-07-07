@@ -3,6 +3,8 @@ import * as fs from "fs/promises";
 import * as os from "os";
 import * as path from "path";
 import { AppDbStorage } from "../../../src/repositories/app-db-storage.js";
+import { migrateSprintLinkedIssuesExternalSources } from "../../../src/repositories/db/app-db-migrations.js";
+import { SqliteDatabaseAdapter } from "../../../src/repositories/db/sqlite-database-adapter.js";
 import {
   createGeneratedSprintName,
   isGeneratedSprintName,
@@ -1212,6 +1214,249 @@ describe("ProjectManagementRepository", () => {
     expect(closed.closeState).toBe("closed");
     expect(closed.state).toBe("closed");
     expect(repository.listSprintLinkedIssues(project.id, sprint.id)[0]?.closedAt).toBe("2026-05-17T00:00:00.000Z");
+  });
+
+  it("persists non-numeric external linked sources by external id", async () => {
+    const { repository } = await createRepository();
+    const project = repository.createProject({
+      name: "External Source Project",
+      sourceType: "local",
+      sourceRef: "/workspace/external-source-project",
+    });
+    const sprint = repository.createSprint(project.id, {
+      name: "External Source Sprint",
+    });
+
+    const linked = repository.replaceSprintLinkedIssues(project.id, sprint.id, [
+      {
+        provider: "notion",
+        sourceProvider: "notion",
+        sourceKind: "page",
+        externalId: "page-123",
+        hostDomain: "api.notion.com",
+        repository: "workspace-alpha",
+        title: "Document onboarding flow",
+        url: "https://notion.test/page-123",
+        labels: ["docs", " docs "],
+      },
+      {
+        provider: "notion",
+        sourceKind: "page",
+        externalId: "page-123",
+        hostDomain: "API.NOTION.COM",
+        repository: "/workspace-alpha/",
+        title: "Duplicate should be ignored",
+        url: "https://notion.test/page-123",
+      },
+      {
+        provider: "figma",
+        sourceKind: "file",
+        externalId: "figma-file-1",
+        hostDomain: "api.figma.com",
+        repository: "design-team",
+        title: "Canvas annotations",
+        url: "https://figma.test/file/figma-file-1",
+        issueKey: "FIGMA-file-1",
+      },
+    ]);
+
+    expect(linked).toHaveLength(2);
+    expect(linked[0]).toMatchObject({
+      provider: "figma",
+      sourceProvider: "figma",
+      sourceKind: "file",
+      externalId: "figma-file-1",
+      issueNumber: null,
+      issueKey: "FIGMA-file-1",
+    });
+    expect(linked[1]).toMatchObject({
+      provider: "notion",
+      sourceProvider: "notion",
+      sourceKind: "page",
+      externalId: "page-123",
+      hostDomain: "api.notion.com",
+      repository: "workspace-alpha",
+      issueNumber: null,
+      issueKey: "page-123",
+      labels: ["docs"],
+    });
+
+    expect(repository.getSprint(sprint.id)?.linkedIssues.map((issue) => issue.externalId)).toEqual([
+      "figma-file-1",
+      "page-123",
+    ]);
+  });
+
+  it("keeps backward-compatible numeric linked issue storage", async () => {
+    const { repository, storage } = await createRepository();
+    const project = repository.createProject({
+      name: "Numeric Issue Project",
+      sourceType: "git",
+      sourceRef: "https://github.com/acme/widgets.git",
+    });
+    const sprint = repository.createSprint(project.id, {
+      name: "Numeric Issue Sprint",
+    });
+
+    const [issue] = repository.replaceSprintLinkedIssues(project.id, sprint.id, [
+      {
+        provider: "github",
+        hostDomain: "github.com",
+        repository: "acme/widgets",
+        issueNumber: 7,
+        title: "Keep issue number",
+        url: "https://github.com/acme/widgets/issues/7",
+      },
+    ]);
+
+    expect(issue).toMatchObject({
+      provider: "github",
+      sourceProvider: "github",
+      sourceKind: "issue",
+      externalId: null,
+      issueNumber: 7,
+      issueKey: "#7",
+    });
+
+    const dbRow = storage.getDatabase().prepare(`
+      SELECT issue_number, external_id, source_kind
+      FROM sprint_linked_issues
+      WHERE id = ?
+    `).get(issue.id) as { issue_number: number | null; external_id: string | null; source_kind: string | null };
+    expect(dbRow).toEqual({
+      issue_number: 7,
+      external_id: null,
+      source_kind: "issue",
+    });
+  });
+
+  it("migrates old linked issue tables to nullable external source columns", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-linked-issue-migration-"));
+    tempDirs.push(dir);
+    const db = new SqliteDatabaseAdapter(path.join(dir, "app.db"));
+    try {
+      db.exec(`
+        CREATE TABLE projects (
+          id TEXT PRIMARY KEY,
+          slug TEXT NOT NULL UNIQUE,
+          name TEXT NOT NULL,
+          base_dir TEXT NOT NULL,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        );
+        CREATE TABLE sprints (
+          id TEXT PRIMARY KEY,
+          project_id TEXT NOT NULL,
+          slug TEXT NOT NULL,
+          name TEXT NOT NULL,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        );
+        CREATE TABLE sprint_linked_issues (
+          id TEXT PRIMARY KEY,
+          project_id TEXT NOT NULL,
+          sprint_id TEXT NOT NULL,
+          provider TEXT NOT NULL,
+          host_domain TEXT NOT NULL,
+          repository TEXT NOT NULL,
+          issue_number INTEGER NOT NULL,
+          issue_key TEXT NOT NULL,
+          title TEXT NOT NULL,
+          url TEXT NOT NULL,
+          state TEXT NOT NULL DEFAULT 'open',
+          labels_json TEXT NOT NULL DEFAULT '[]',
+          assignees_json TEXT NOT NULL DEFAULT '[]',
+          imported_at TEXT NOT NULL,
+          closed_at TEXT,
+          close_state TEXT NOT NULL DEFAULT 'open',
+          close_error TEXT,
+          updated_at TEXT NOT NULL
+        );
+      `);
+      db.prepare(`
+        INSERT INTO projects (id, slug, name, base_dir, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?)
+      `).run(
+        "project-1",
+        "project-1",
+        "Migration Project",
+        "/workspace/migration-project",
+        "2026-05-17T00:00:00.000Z",
+        "2026-05-17T00:00:00.000Z",
+      );
+      db.prepare(`
+        INSERT INTO sprints (id, project_id, slug, name, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?)
+      `).run(
+        "sprint-1",
+        "project-1",
+        "sprint-1",
+        "Migration Sprint",
+        "2026-05-17T00:00:00.000Z",
+        "2026-05-17T00:00:00.000Z",
+      );
+      db.prepare(`
+        INSERT INTO sprint_linked_issues (
+          id, project_id, sprint_id, provider, host_domain, repository, issue_number,
+          issue_key, title, url, state, labels_json, assignees_json, imported_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        "issue-1",
+        "project-1",
+        "sprint-1",
+        "github",
+        "github.com",
+        "acme/widgets",
+        42,
+        "#42",
+        "Existing issue",
+        "https://github.com/acme/widgets/issues/42",
+        "open",
+        "[]",
+        "[]",
+        "2026-05-17T00:00:00.000Z",
+        "2026-05-17T00:00:00.000Z",
+      );
+
+      migrateSprintLinkedIssuesExternalSources(db);
+
+      const columns = db.prepare("PRAGMA table_info(sprint_linked_issues)").all() as Array<{ name: string; notnull: number }>;
+      expect(columns.find((column) => column.name === "issue_number")?.notnull).toBe(0);
+      expect(columns.map((column) => column.name)).toEqual(expect.arrayContaining(["project_key", "external_id", "source_kind"]));
+
+      db.prepare(`
+        INSERT INTO sprint_linked_issues (
+          id, project_id, sprint_id, provider, host_domain, repository, issue_number, external_id,
+          source_kind, issue_key, title, url, state, labels_json, assignees_json, imported_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        "external-1",
+        "project-1",
+        "sprint-1",
+        "notion",
+        "api.notion.com",
+        "workspace-alpha",
+        null,
+        "page-1",
+        "page",
+        "page-1",
+        "Migrated external page",
+        "https://notion.test/page-1",
+        "open",
+        "[]",
+        "[]",
+        "2026-05-17T00:00:00.000Z",
+        "2026-05-17T00:00:00.000Z",
+      );
+
+      const rows = db.prepare("SELECT id, issue_number, external_id, source_kind FROM sprint_linked_issues ORDER BY id").all();
+      expect(rows).toEqual([
+        { id: "external-1", issue_number: null, external_id: "page-1", source_kind: "page" },
+        { id: "issue-1", issue_number: 42, external_id: null, source_kind: null },
+      ]);
+    } finally {
+      db.close();
+    }
   });
 
   it("rejects self-dependencies during creation and update", async () => {

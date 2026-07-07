@@ -71,6 +71,28 @@ describe("validateSettingsPayload", () => {
     ]));
   });
 
+  it("rejects malformed external importer settings", () => {
+    const payload = cloneDefaults({
+      env: {},
+      settingsJson: {},
+      resolved: {},
+    });
+    payload.notion.enabled = "yes" as any;
+    payload.notion.apiToken = 42 as any;
+    payload.notion.defaultSearchLimit = 0;
+    payload.miro = "invalid" as any;
+
+    const result = validateSettingsPayload(payload);
+
+    expect(result.success).toBe(false);
+    expect(result.issues).toEqual(expect.arrayContaining([
+      { path: "notion.enabled", message: "Expected a boolean" },
+      { path: "notion.apiToken", message: "Expected a string" },
+      { path: "notion.defaultSearchLimit", message: "Expected a finite number between 1 and 250" },
+      { path: "miro", message: "Expected an object" },
+    ]));
+  });
+
   it("rejects Docker memory limits outside the supported MiB range", () => {
     const payload = cloneDefaults({
       env: {},

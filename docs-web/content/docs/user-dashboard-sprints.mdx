@@ -79,6 +79,27 @@ Sprints are portable as Markdown bundles:
 
 Importing is the recommended way to template sprints across projects when [Quicksprints](/docs/user-quicksprints) are not flexible enough.
 
+You can also import linked sprint scope from configured external systems. GitHub and GitLab imports use the saved effective `git.githubToken` and `git.gitlabToken` settings. Jira imports use the existing Jira settings block: site URL, email, API token, default project, import transition, close transition, and Jira auto-close behavior.
+
+The Import menu also exposes **Notion**, **Asana**, **Linear**, **Miro**, **Lucid**, **Figma/FigJam**, and **Mural**. The menu groups issue/work-item imports separately from canvas and whiteboard imports. Each entry opens a provider-specific search modal, then imports selected results through the shared linked issue composer flow. Selected items appear as linked cards below the sprint prompt and are merged into the prompt markdown when the sprint is submitted.
+
+Notion, Asana, Linear, Miro, Lucid, Figma/FigJam, and Mural imports are API-backed and read-only. Notion uses `notion.apiToken` plus an optional `databaseId`, Asana uses `asana.apiToken` plus `workspaceId` or project fallback, Linear uses `linear.apiToken` plus optional `teamId`, `teamKey`, or project filters, Miro uses `miro.apiToken` plus `boardId`, Lucid uses `lucid.apiToken` plus `documentId` or document search, Figma/FigJam uses `figma.apiToken` plus `fileKey`, and Mural uses `mural.apiToken` plus `workspaceId` or `muralId`. These importers can search, fetch readable body/comment context where providers expose it, attach linked scope to a sprint, and plan from that imported scope; they do not archive pages, complete tasks, transition issues, close external items, write comments, or mutate boards, documents, files, or murals. Mural public API support is beta/limited, so imported Mural scope may contain only metadata and readable content available to the token.
+
+Notion, Asana, and Linear imports keep the shared linked issue composer flow. Each result card has an **Append conversation** toggle, and the footer can apply that setting to all selected results. When enabled, Asana task stories and Linear comments are included in the sprint prompt context.
+
+Canvas imports are also linked-scope only and never render live canvas previews or mutate external boards, documents, files, or murals. Expected identifiers are:
+
+- **Miro**: paste a `boardId` or use search text; optional `itemTypes` narrows readable board items.
+- **Lucid**: paste a `documentId`, use document search, or provide exact external document IDs.
+- **Figma/FigJam**: paste a `fileKey` from the file URL or provide exact file keys. General file search is not available.
+- **Mural**: paste a `workspaceId` to list murals or a `muralId` for an exact import. Mural API support is limited, so some imports contain metadata only.
+
+Figma/FigJam can append file comments when the token can read them; use the modal-level **Append comments** option before search and the per-card or footer toggles before import. Miro, Lucid, and Mural currently import compact readable body/metadata only. Missing settings and provider API errors are shown in the import modal error panel with the backend message so you can fix the integration configuration directly.
+
+The shared settings model also supports Notion, Asana, Linear, Miro, Lucid, Figma, and Mural connection blocks. These provider blocks store enablement, token/secret, base URL, workspace/team/project identifiers, database/board/document/file identifiers, and a default search limit. They are saved and resolved through the same system → project → sprint settings hierarchy as other sprint integrations.
+
+Linked sprint records preserve numeric issue numbers for GitHub, GitLab, and Jira. Non-numeric external objects are stored with an `externalId`, `sourceKind`, and `sourceProvider`, so Notion pages/databases, Asana tasks, Linear issues, Miro boards/items, Lucid documents, Figma/FigJam files, and Mural canvases can attach scope without inventing fake issue numbers.
+
 ## Sprint settings overrides
 
 Each sprint can override project settings, which in turn override system settings. Open the **⚙ Sprint settings** panel from the sprint detail view to edit. Common overrides:
