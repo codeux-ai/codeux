@@ -8,6 +8,10 @@ The flow library lists project-owned flows. Selecting one opens an editable grap
 
 New editable canvas surfaces use a pure dashboard state module for typed nodes, ports, edges, config fields, selection, deterministic layout, validation issues, JSON serialization, and malformed-draft recovery. Its starter graph lays out trigger, agent, task, condition, and output nodes so workflows begin from a useful Code UX shape.
 
+Side panels stay controlled by the page shell: the palette emits typed create-node actions, the inspector
+emits field/config/metadata changes for the selected node, edge details are read-only, and validation
+issues expose select/focus callbacks for the affected node or edge.
+
 ## Dynamic Widgets
 
 The inspector renders widget schemas attached to the selected node. Supported field types are text, textarea, number, boolean, select, JSON, secret reference, and key-value entries. Graph-level input widgets describe manual or scheduled run input.

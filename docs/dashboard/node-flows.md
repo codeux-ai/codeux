@@ -22,6 +22,13 @@ The editor manages the draft graph in the dashboard before saving:
 
 Editable node-canvas work that has not yet been persisted through the node-flow API should use the pure state helpers in `dashboard/src/v2/lib/nodes-canvas-state.ts`. That module defines typed canvas nodes, input and output ports, port-connected edges, config fields, selection state, reducer actions, deterministic layout, JSON serialization recovery, and the starter trigger -> agent -> task -> condition -> output graph. It is UI-free so canvas, inspector, and import surfaces can share one deterministic graph foundation.
 
+The `/nodes` side-panel components use that same state contract without owning global state. `NodePalette`
+emits typed `add_node` actions for trigger, agent, task, condition, and output templates. `NodeInspector`
+renders node and edge selection details, controlled edits for label, description, metadata intents, config
+fields, and enabled state, plus `NodePortList` wiring hints. `NodeValidationPanel` runs
+`validateNodeCanvasGraph`, groups issues by affected entity, and exposes select/focus callbacks for the
+canvas shell.
+
 The canvas is intentionally Code UX-specific. It should not present imported n8n workflows as if every external node type can run locally.
 
 ## Dynamic Widget Inspector
