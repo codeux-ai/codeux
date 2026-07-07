@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { createConnection } from "node:net";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
@@ -6,6 +7,7 @@ import { ListToolsRequestSchema, ListToolsResultSchema } from "@modelcontextprot
 import { bootMcpHttpTransport, type McpHttpTransportHandle } from "../../../../src/app/lifecycle/mcp-lifecycle-service.js";
 
 const handles: McpHttpTransportHandle[] = [];
+const STRONG_TOKEN = "cux_test_abcdefghijklmnopqrstuvwxyz123456";
 
 afterEach(async () => {
   vi.restoreAllMocks();
@@ -79,6 +81,41 @@ function createAuthClient(handle: McpHttpTransportHandle, authToken?: string): {
   return { client, transport };
 }
 
+function rawHttpRequest(options: {
+  port: number;
+  path: string;
+  method: string;
+  headers: string[];
+  body?: string;
+}): Promise<{ status: number; body: string }> {
+  return new Promise((resolve, reject) => {
+    const body = options.body ?? "";
+    const socket = createConnection({ host: "127.0.0.1", port: options.port }, () => {
+      const headerLines: string[] = [
+        `${options.method} ${options.path} HTTP/1.1`,
+        "Host: 127.0.0.1",
+        "Connection: close",
+        `Content-Length: ${Buffer.byteLength(body)}`,
+      ];
+      for (let index = 0; index < options.headers.length; index += 2) {
+        headerLines.push(`${options.headers[index]}: ${options.headers[index + 1]}`);
+      }
+      socket.write(`${headerLines.join("\r\n")}\r\n\r\n${body}`);
+    });
+    let raw = "";
+    socket.setEncoding("utf8");
+    socket.on("data", (chunk) => {
+      raw += chunk;
+    });
+    socket.on("error", reject);
+    socket.on("end", () => {
+      const status = Number.parseInt(raw.match(/^HTTP\/1\.1 (\d+)/)?.[1] ?? "0", 10);
+      const [, responseBody = ""] = raw.split("\r\n\r\n");
+      resolve({ status, body: responseBody });
+    });
+  });
+}
+
 describe("bootMcpHttpTransport", () => {
   it.each(["0.0.0.0", "::", "192.168.1.10"])("fails startup on non-loopback host %s without auth", async (host) => {
     await expect(bootMcpHttpTransport({
@@ -126,13 +163,28 @@ describe("bootMcpHttpTransport", () => {
     })).rejects.toThrow("MCP HTTP auth token is required for server mode");
   });
 
+  it("rejects weak server-mode auth tokens at startup", async () => {
+    await expect(bootMcpHttpTransport({
+      enabled: true,
+      host: "127.0.0.1",
+      port: 0,
+      path: "/mcp",
+      authToken: "short-token",
+      requireAuth: true,
+      logger: createLogger(),
+      createServer: createTestServer,
+      recoveryService: { recover: async () => ({ resumedSprintRunIds: [] }) } as any,
+      runStartupRecovery: false,
+    })).rejects.toThrow("at least 32 bearer-safe characters");
+  });
+
   it("serves headless health and readiness probes from the MCP HTTP transport", async () => {
     const handle = await bootMcpHttpTransport({
       enabled: true,
       host: "127.0.0.1",
       port: 0,
       path: "/mcp",
-      authToken: "secret-token",
+      authToken: STRONG_TOKEN,
       requireAuth: true,
       getReady: () => ({
         status: "READY",
@@ -164,7 +216,7 @@ describe("bootMcpHttpTransport", () => {
       host: "127.0.0.1",
       port: 0,
       path: "/mcp",
-      authToken: "secret-token",
+      authToken: STRONG_TOKEN,
       requireAuth: true,
       getReady: () => ({ status: "NOT_READY" }),
       logger: createLogger(),
@@ -217,7 +269,7 @@ describe("bootMcpHttpTransport", () => {
       host: "127.0.0.1",
       port: 0,
       path: "/mcp",
-      authToken: "secret-token",
+      authToken: STRONG_TOKEN,
       logger: {
         info: () => undefined,
         warn: () => undefined,
@@ -308,7 +360,7 @@ describe("bootMcpHttpTransport", () => {
       host: "127.0.0.1",
       port: 0,
       path: "/mcp",
-      authToken: "secret-token",
+      authToken: STRONG_TOKEN,
       logger: {
         info: () => undefined,
         warn: () => undefined,
@@ -355,7 +407,7 @@ describe("bootMcpHttpTransport", () => {
       host: "127.0.0.1",
       port: 0,
       path: "/mcp",
-      authToken: "secret-token",
+      authToken: STRONG_TOKEN,
       maxSessions: 2,
       logger: createLogger({ warn }),
       createServer: createTestServer,
@@ -365,15 +417,15 @@ describe("bootMcpHttpTransport", () => {
 
     const clients = [];
     for (let i = 0; i < 2; i++) {
-      const { client, transport } = createAuthClient(handle!, "secret-token");
+      const { client, transport } = createAuthClient(handle!, STRONG_TOKEN);
       await client.connect(transport);
       clients.push({ client, transport });
     }
 
-    const { client: clientOver, transport: transportOver } = createAuthClient(handle!, "secret-token");
+    const { client: clientOver, transport: transportOver } = createAuthClient(handle!, STRONG_TOKEN);
     await expect(clientOver.connect(transportOver)).rejects.toThrow();
     expect(JSON.stringify(warn.mock.calls)).toContain("MCP HTTP session cap reached");
-    expect(JSON.stringify(warn.mock.calls)).not.toContain("secret-token");
+    expect(JSON.stringify(warn.mock.calls)).not.toContain(STRONG_TOKEN);
     expect(JSON.stringify(warn.mock.calls)).not.toContain("Bearer");
 
     for (const c of clients) {
@@ -392,7 +444,7 @@ describe("bootMcpHttpTransport", () => {
       authToken: null,
       maxSessions: 2,
       sessionTimeoutMs: 1_000,
-      logger: createLogger(),
+      logger: createLogger({ info: vi.fn() }),
       createServer: createTestServer,
       recoveryService: { recover: async () => ({ resumedSprintRunIds: [] }) } as any,
     });
@@ -481,7 +533,7 @@ describe("bootMcpHttpTransport", () => {
       host: "127.0.0.1",
       port: 0,
       path: "/mcp",
-      authToken: "secret-token",
+      authToken: STRONG_TOKEN,
       logger: createLogger({ warn }),
       createServer: createTestServer,
       recoveryService: { recover: async () => ({ resumedSprintRunIds: [] }) } as any,
@@ -507,7 +559,7 @@ describe("bootMcpHttpTransport", () => {
     const logs = JSON.stringify(warn.mock.calls);
     expect(logs).toContain("Unauthorized MCP HTTP request");
     expect(logs).not.toContain("wrong-token");
-    expect(logs).not.toContain("secret-token");
+    expect(logs).not.toContain(STRONG_TOKEN);
     expect(logs).not.toContain("session-that-must-not-be-probed");
     expect(logs).not.toContain("Unknown MCP session id");
   });
@@ -547,12 +599,13 @@ describe("bootMcpHttpTransport", () => {
   });
 
   it("rejects unauthorized requests before MCP session setup", async () => {
+    const createServer = vi.fn(createTestServer);
     const handle = await bootMcpHttpTransport({
       enabled: true,
       host: "127.0.0.1",
       port: 0,
       path: "/mcp",
-      authToken: "secret-token",
+      authToken: STRONG_TOKEN,
       logger: {
         info: () => undefined,
         warn: () => undefined,
@@ -566,7 +619,7 @@ describe("bootMcpHttpTransport", () => {
           child: () => undefined as never,
         }),
       } as any,
-      createServer: createTestServer,
+      createServer,
       recoveryService: { recover: async () => ({ resumedSprintRunIds: [] }) } as any,
     });
     expect(handle).not.toBeNull();
@@ -590,6 +643,91 @@ describe("bootMcpHttpTransport", () => {
     });
 
     expect(response.status).toBe(401);
+    expect(createServer).not.toHaveBeenCalled();
+  });
+
+  it("rejects duplicate security headers before session lookup", async () => {
+    const warn = vi.fn();
+    const createServer = vi.fn(createTestServer);
+    const handle = await bootMcpHttpTransport({
+      enabled: true,
+      host: "127.0.0.1",
+      port: 0,
+      path: "/mcp",
+      authToken: STRONG_TOKEN,
+      logger: createLogger({ warn }),
+      createServer,
+      recoveryService: { recover: async () => ({ resumedSprintRunIds: [] }) } as any,
+      runStartupRecovery: false,
+    });
+    handles.push(handle!);
+
+    const response = await rawHttpRequest({
+      port: handle!.port,
+      path: handle!.path,
+      method: "POST",
+      headers: [
+        "Content-Type", "application/json",
+        "Authorization", `Bearer ${STRONG_TOKEN}`,
+        "Authorization", `Bearer ${STRONG_TOKEN}`,
+        "mcp-session-id", "session-that-must-not-be-probed",
+      ],
+      body: "{}",
+    });
+
+    expect(response.status).toBe(401);
+    expect(JSON.parse(response.body)).toMatchObject({ error: { message: "Unauthorized" } });
+    expect(createServer).not.toHaveBeenCalled();
+    const logs = JSON.stringify(warn.mock.calls);
+    expect(logs).toContain("invalid security headers");
+    expect(logs).not.toContain(STRONG_TOKEN);
+    expect(logs).not.toContain("session-that-must-not-be-probed");
+  });
+
+  it("rate limits before JSON parsing and never creates sessions for oversized unauthenticated traffic", async () => {
+    const warn = vi.fn();
+    const createServer = vi.fn(createTestServer);
+    const handle = await bootMcpHttpTransport({
+      enabled: true,
+      host: "127.0.0.1",
+      port: 0,
+      path: "/mcp",
+      authToken: STRONG_TOKEN,
+      rateLimit: { windowMs: 60_000, max: 1 },
+      logger: createLogger({ warn }),
+      createServer,
+      recoveryService: { recover: async () => ({ resumedSprintRunIds: [] }) } as any,
+      runStartupRecovery: false,
+    });
+    handles.push(handle!);
+
+    const oversizedBody = JSON.stringify({
+      jsonrpc: "2.0",
+      id: 1,
+      method: "initialize",
+      params: {
+        protocolVersion: "2025-03-26",
+        capabilities: {},
+        clientInfo: { name: "oversized-client", version: "1.0.0" },
+        padding: "x".repeat(1024 * 1024),
+      },
+    });
+    const first = await fetch(`http://127.0.0.1:${handle!.port}${handle!.path}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: oversizedBody,
+    });
+    const second = await fetch(`http://127.0.0.1:${handle!.port}${handle!.path}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: oversizedBody,
+    });
+
+    expect(first.status).toBe(413);
+    expect(second.status).toBe(429);
+    await expect(second.json()).resolves.toMatchObject({ error: { message: "Too many requests" } });
+    expect(createServer).not.toHaveBeenCalled();
+    expect(JSON.stringify(warn.mock.calls)).toContain("Rate limited MCP HTTP request");
   });
 
   it("accepts authorized streamable HTTP MCP clients", async () => {
@@ -598,7 +736,7 @@ describe("bootMcpHttpTransport", () => {
       host: "127.0.0.1",
       port: 0,
       path: "/mcp",
-      authToken: "secret-token",
+      authToken: STRONG_TOKEN,
       logger: {
         info: () => undefined,
         warn: () => undefined,
@@ -623,7 +761,7 @@ describe("bootMcpHttpTransport", () => {
       {
         requestInit: {
           headers: {
-            Authorization: "Bearer secret-token",
+            Authorization: `Bearer ${STRONG_TOKEN}`,
           },
         },
       },

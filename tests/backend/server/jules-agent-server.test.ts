@@ -85,7 +85,7 @@ describe("CodeUxServer", () => {
       "index.js",
       "--server-mode",
       "--mcp-https-auth-token",
-      "server-token",
+      "cux_test_abcdefghijklmnopqrstuvwxyz123456",
     ], projectRoot);
     const serverModeServer = new CodeUxServer({ projectRoot, appConfig: serverModeConfig });
 
@@ -95,7 +95,7 @@ describe("CodeUxServer", () => {
       expect(bootDashboard).not.toHaveBeenCalled();
       expect(bootMcpHttpTransport).toHaveBeenCalledWith(expect.objectContaining({
         enabled: true,
-        authToken: "server-token",
+        authToken: "cux_test_abcdefghijklmnopqrstuvwxyz123456",
         requireAuth: true,
         getReady: expect.any(Function),
       }));

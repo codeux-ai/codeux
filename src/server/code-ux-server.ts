@@ -1394,6 +1394,8 @@ export class CodeUxServer {
       authToken: this.appConfig.mcpHttpAuthToken,
       getAuthToken: () => this.appConfig.mcpHttpAuthToken,
       requireAuth: this.appConfig.serverMode,
+      maxSessions: this.appConfig.mcpHttpMaxSessions,
+      sessionTimeoutMs: this.appConfig.mcpHttpSessionTimeoutMs,
       getReady: () => this.isReady(),
       logger: this.logger.child({ component: "mcp-http-transport" }),
       createServer: () => this.createMcpServerInstance("project_manager"),

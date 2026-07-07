@@ -44,6 +44,8 @@ describe("management CLI", () => {
     mcpHttpPort: null,
     mcpHttpPath: "/mcp",
     mcpHttpAuthToken: null,
+    mcpHttpMaxSessions: 100,
+    mcpHttpSessionTimeoutMs: 3_600_000,
   };
 
   beforeEach(() => {
