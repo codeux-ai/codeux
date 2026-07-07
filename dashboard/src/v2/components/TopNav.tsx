@@ -318,7 +318,7 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
     }, [dropdownOpen, filteredProjects.length, loading, projectFilter]);
 
     useEffect(() => {
-        if (sprintDropdownOpen && !sprintsLoading && filteredSprints.length === 0 && !sprintFilter.toLowerCase().includes("all")) {
+        if (sprintDropdownOpen && !sprintsLoading && filteredSprints.length === 0) {
             setNavAnnouncement(sprintFilter ? `No sprints match ${sprintFilter}` : "No sprints available");
         }
     }, [filteredSprints.length, sprintDropdownOpen, sprintFilter, sprintsLoading]);
@@ -435,7 +435,7 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
                                 />
                                 <span id="project-filter-desc" className="sr-only">Use arrow keys to navigate options.</span>
                             </div>
-                            <div className="max-h-[calc(100dvh-5rem)] overflow-y-auto dropdown-scrollbar">
+                            <div className="max-h-64 sm:max-h-72 md:max-h-80 overflow-y-auto dropdown-scrollbar">
                             {filteredProjects.length === 0 && (
                                 <div className="px-3 py-4 text-center text-sm text-slate-500 dark:text-slate-400">
                                     No projects found.
@@ -514,7 +514,7 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
                             id="sprint-selector-button"
                             aria-label={`Sprint selector, selected sprint: ${sprintsLoading ? "Loading..." : selectedSprint ? formatSprintDisplay(selectedSprint, sprintKeyPrefix) : "All Sprints"}`}
                             aria-controls={sprintDropdownOpen && sprints.length > 0 ? "sprint-listbox" : undefined}
-                            aria-activedescendant={sprintDropdownOpen && sprints.length > 0 ? (sprintKb.activeDescendantId || `sprint-option-${selectedSprintId || 'none'}`) : undefined}
+                            aria-activedescendant={sprintDropdownOpen && sprints.length > 0 ? (sprintKb.activeDescendantId || (selectedSprintId ? `sprint-option-${selectedSprintId}` : undefined)) : undefined}
                             aria-busy={sprintSwitchBusy || sprintsLoading ? "true" : "false"}
                             onClick={(e) => {
                                 if (sprints.length === 0) {
@@ -563,37 +563,11 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
                                     />
                                     <span id="sprint-filter-desc" className="sr-only">Use arrow keys to navigate options.</span>
                                 </div>
-                                <div className="max-h-[calc(100dvh-5rem)] overflow-y-auto dropdown-scrollbar">
-                                {filteredSprints.length === 0 && !sprintFilter.toLowerCase().includes('all') && (
+                                <div className="max-h-64 sm:max-h-72 md:max-h-80 overflow-y-auto dropdown-scrollbar">
+                                {filteredSprints.length === 0 && (
                                     <div className="px-3 py-4 text-center text-sm text-slate-500 dark:text-slate-400">
                                         No sprints found.
                                     </div>
-                                )}
-                                {(sprintFilter === '' || 'all sprints'.includes(sprintFilter.toLowerCase())) && (
-                                <button
-                                    id="sprint-option-none"
-                                    role="option"
-                                    aria-selected={selectedSprintId === null}
-                                    onClick={async () => {
-                                        setSprintSwitchBusy(true);
-                                        setNavAnnouncement('Switching sprint to All Sprints...');
-                                        try {
-                                            await selectSprint(null);
-                                            setNavAnnouncement('Sprint switched to All Sprints');
-                                            setSprintDropdownOpen(false);
-                                        } finally {
-                                            setSprintSwitchBusy(false);
-                                        }
-                                    }}
-                                    className={`focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 w-full flex items-center gap-2.5 px-3 py-3 min-h-[44px] text-left hover:bg-signal-500/5 transition-colors group ${selectedSprintId === null ? 'bg-signal-500/8' : ''}`}
-                                >
-                                    <span className={`text-sm font-medium font-mono truncate transition-colors ${selectedSprintId === null ? 'text-signal-600 dark:text-signal-400 font-semibold' : 'text-slate-700 dark:text-slate-300'}`}>
-                                        All Sprints
-                                    </span>
-                                    {selectedSprintId === null && (
-                                        <span className="ml-auto w-1.5 h-1.5 rounded-full bg-signal-500" />
-                                    )}
-                                </button>
                                 )}
                                 {filteredSprints.map((sprint) => (
                                     <button
