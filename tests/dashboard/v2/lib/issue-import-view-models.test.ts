@@ -37,6 +37,21 @@ describe("issue import view models", () => {
     });
   });
 
+  it("returns display metadata for canvas providers", () => {
+    expect(getIssueImportProviderMetadata("miro")).toMatchObject({
+      provider: "miro",
+      label: "Miro",
+      importLabel: "Miro canvas import",
+      icon: "miro",
+      aliases: expect.arrayContaining(["miro boards"]),
+    });
+    expect(getIssueImportProviderMetadata("figma")).toMatchObject({
+      provider: "figma",
+      label: "Figma / FigJam",
+      aliases: expect.arrayContaining(["figjam boards"]),
+    });
+  });
+
   it("falls back to GitHub metadata for invalid or empty provider values", () => {
     expect(getIssueImportProviderMetadata("unknown")).toMatchObject({
       provider: "github",
@@ -219,6 +234,27 @@ describe("issue import view models", () => {
     ]);
     expect(rows).toContainEqual({ id: "comments", label: "Comments", value: "0" });
     expect(rows.find((row) => row.id === "updated")?.value).toMatch(/\d{4}|May/);
+  });
+
+  it("builds canvas metadata rows with source-kind display", () => {
+    const rows = buildIssueImportMetadataRows({
+      provider: "miro",
+      sourceKind: "canvas",
+      externalId: "item-1",
+      repository: "board-1",
+      issueKey: "MIRO-item-1",
+      issueType: "sticky_note",
+    });
+
+    expect(rows).toEqual([
+      { id: "provider", label: "Provider", value: "Miro" },
+      { id: "sourceKind", label: "Kind", value: "Canvas item" },
+      { id: "externalId", label: "External ID", value: "item-1" },
+      { id: "repository", label: "Board", value: "board-1" },
+      { id: "issue", label: "Issue", value: "MIRO-item-1" },
+      { id: "state", label: "State", value: "Unknown" },
+      { id: "type", label: "Type", value: "sticky_note" },
+    ]);
   });
 
   it("uses safe metadata fallbacks for missing values", () => {

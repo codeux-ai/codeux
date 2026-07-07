@@ -236,6 +236,11 @@ export const searchProjectIssues = async (
   if (input.teamId?.trim()) url.searchParams.set("teamId", input.teamId.trim());
   if (input.teamKey?.trim()) url.searchParams.set("teamKey", input.teamKey.trim());
   if (input.databaseId?.trim()) url.searchParams.set("databaseId", input.databaseId.trim());
+  if (input.boardId?.trim()) url.searchParams.set("boardId", input.boardId.trim());
+  if (input.documentId?.trim()) url.searchParams.set("documentId", input.documentId.trim());
+  if (input.fileKey?.trim()) url.searchParams.set("fileKey", input.fileKey.trim());
+  if (input.muralId?.trim()) url.searchParams.set("muralId", input.muralId.trim());
+  if (input.itemTypes?.length) url.searchParams.set("itemTypes", input.itemTypes.join(","));
   if (input.projectKey?.trim()) url.searchParams.set("projectKey", input.projectKey.trim());
   if (input.search?.trim()) url.searchParams.set("search", input.search.trim());
   if (input.issueText?.trim()) url.searchParams.set("issueText", input.issueText.trim());

@@ -2,6 +2,7 @@ import { useState } from "preact/hooks";
 import type { Sprint, Task } from "../../types.js";
 
 export type ProjectManagementImportProvider = "notion" | "asana" | "linear";
+export type CanvasImportProvider = "miro" | "lucid" | "figma" | "mural";
 
 export function useSprintsPageModals() {
   const [showCreateComposer, setShowCreateComposer] = useState(false);
@@ -17,6 +18,7 @@ export function useSprintsPageModals() {
   const [addTaskSprintTasks, setAddTaskSprintTasks] = useState<Task[]>([]);
   const [showQuicksprint, setShowQuicksprint] = useState(false);
   const [projectManagementImportProvider, setProjectManagementImportProvider] = useState<ProjectManagementImportProvider | null>(null);
+  const [canvasImportProvider, setCanvasImportProvider] = useState<CanvasImportProvider | null>(null);
 
   return {
     showCreateComposer,
@@ -37,5 +39,7 @@ export function useSprintsPageModals() {
     setShowQuicksprint,
     projectManagementImportProvider,
     setProjectManagementImportProvider,
+    canvasImportProvider,
+    setCanvasImportProvider,
   };
 }
