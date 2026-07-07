@@ -117,3 +117,92 @@ export const WoodenShip: FunctionComponent<ShipProps> = (props) => {
     </g>
   );
 };
+
+export const CoffeeCup: FunctionComponent<ShipProps> = ({ accentColor, isMoving, isDark }) => {
+  const isReducedMotion = useReducedMotion();
+  const shouldAnimate = isMoving && !isReducedMotion;
+  const cupFill = isDark ? "#162337" : "#f8fafc";
+  const cupStroke = isDark ? "#6b7fa0" : "#94a3b8";
+  const coffeeFill = isDark ? "#c0842f" : "#7c3f16";
+  const saucerFill = isDark ? "#0f1a2c" : "#e2e8f0";
+  const steamColor = isDark ? "#e0f2fe" : "#64748b";
+  const highlightFill = isDark ? "#ffffff" : "#ffffff";
+
+  const steamPaths = [
+    { d: "M-20 -18 C-30 -31 -12 -36 -22 -49", delay: "0s" },
+    { d: "M0 -17 C-10 -30 10 -36 0 -50", delay: "0.22s" },
+    { d: "M20 -18 C10 -31 30 -36 18 -49", delay: "0.44s" },
+  ];
+
+  return (
+    <g transform="scale(0.86)" data-testid="planning-coffee-cup">
+      <ellipse cx={0} cy={27} rx={48} ry={8} fill="#0f172a" opacity={isDark ? 0.3 : 0.12} />
+      <ellipse cx={0} cy={23} rx={39} ry={7} fill={accentColor} opacity={0.16}>
+        {shouldAnimate && <animate attributeName="rx" values="37;41;37" dur="2.8s" repeatCount="indefinite" />}
+      </ellipse>
+      <ellipse cx={0} cy={21} rx={50} ry={8} fill={saucerFill} stroke={cupStroke} strokeWidth={1.1} opacity={0.95} />
+      <ellipse cx={0} cy={20} rx={29} ry={3.8} fill={accentColor} opacity={0.18} />
+      <path
+        d="M-38 -8 C-36 3 -32 17 -24 22 H20 C29 19 35 3 37 -8 Z"
+        fill={cupFill}
+        stroke={cupStroke}
+        strokeWidth={1.5}
+      />
+      <path
+        d="M-35 -8 C-31 0 -23 5 -12 5 H16 C25 5 32 0 35 -8"
+        fill="none"
+        stroke={accentColor}
+        strokeWidth={2}
+        strokeLinecap="round"
+        opacity={0.76}
+      />
+      <ellipse cx={0} cy={-9} rx={38} ry={10} fill={cupFill} stroke={cupStroke} strokeWidth={1.4} />
+      <ellipse cx={0} cy={-9} rx={29} ry={6.5} fill={coffeeFill} opacity={0.92} />
+      <path d="M-18 -11 C-8 -15 7 -15 19 -11" stroke="#fed7aa" strokeWidth={1.4} strokeLinecap="round" opacity={0.56} />
+      <path
+        d="M37 -4 C55 -5 60 9 51 18 C44 25 32 21 31 13"
+        fill="none"
+        stroke={cupStroke}
+        strokeWidth={6}
+        strokeLinecap="round"
+        opacity={0.86}
+      />
+      <path
+        d="M39 -3 C51 -3 54 8 48 14 C44 18 37 17 35 11"
+        fill="none"
+        stroke={isDark ? "#111827" : "#ffffff"}
+        strokeWidth={2.8}
+        strokeLinecap="round"
+        opacity={0.8}
+      />
+      <path d="M-25 -2 C-24 9 -20 15 -13 17" stroke={highlightFill} strokeWidth={2.2} strokeLinecap="round" opacity={isDark ? 0.16 : 0.58} />
+      <g fill="none" stroke={steamColor} strokeWidth={2.2} strokeLinecap="round" opacity={isDark ? 0.66 : 0.44}>
+        {steamPaths.map((path) => (
+          <path key={path.d} d={path.d}>
+            {shouldAnimate && (
+              <>
+                <animateTransform
+                  attributeName="transform"
+                  type="translate"
+                  values="0 2;0 -5;0 2"
+                  dur="3.4s"
+                  begin={path.delay}
+                  repeatCount="indefinite"
+                />
+                <animate
+                  attributeName="opacity"
+                  values="0.24;0.78;0.24"
+                  dur="3.4s"
+                  begin={path.delay}
+                  repeatCount="indefinite"
+                />
+              </>
+            )}
+          </path>
+        ))}
+      </g>
+      <circle cx={-30} cy={10} r={3} fill={accentColor} opacity={0.72} />
+      <circle cx={-19} cy={14} r={2} fill={accentColor} opacity={0.38} />
+    </g>
+  );
+};

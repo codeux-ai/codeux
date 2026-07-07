@@ -326,6 +326,128 @@ describe("UI Components Coverage", () => {
     expect(document.body.textContent).toContain("New Sprint");
   });
 
+  it("activates the planning vessel coffee reminder accessibly without breaking overlay controls", async () => {
+    const user = userEvent.setup();
+    const onDismiss = vi.fn();
+    const onCancel = vi.fn();
+    const onSecondaryAction = vi.fn();
+    const feedback = { ...getPlanningFeedback("plan_only", SHIP_LOOP_MS * 0.45), text: "Coffee Test" };
+    const { rerender } = render(
+      <PlanningProgressOverlay
+        isBusy
+        feedback={feedback}
+        planningEta={60000}
+        elapsedMs={1000}
+        isDark={false}
+        actionType="plan_only"
+        onDismiss={onDismiss}
+        onCancel={onCancel}
+        secondaryActionLabel="New Sprint"
+        onSecondaryAction={onSecondaryAction}
+      />
+    );
+
+    const vesselButton = screen.getByRole("button", { name: /turn planning vessel into a coffee break reminder/i });
+    expect(vesselButton).toHaveAttribute("aria-pressed", "false");
+
+    await user.click(vesselButton);
+
+    expect(onDismiss).not.toHaveBeenCalled();
+    expect(screen.getByTestId("planning-coffee-cup")).toBeInTheDocument();
+    expect(screen.getByText("Coffee break unlocked. Grab a fresh cup while planning keeps moving.")).toBeInTheDocument();
+    expect(screen.getByText("ETA")).toBeInTheDocument();
+    expect(screen.getByText("Elapsed")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Minimize" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "New Sprint" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Cancel Active Request" })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "New Sprint" }));
+    expect(onSecondaryAction).toHaveBeenCalledTimes(1);
+    await user.click(screen.getByRole("button", { name: "Cancel Active Request" }));
+    expect(onCancel).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole("dialog"));
+    expect(onDismiss).toHaveBeenCalledTimes(1);
+
+    rerender(
+      <PlanningProgressOverlay
+        isBusy
+        feedback={{ ...getPlanningFeedback("improve", SHIP_LOOP_MS * 0.45), text: "Improve Test" }}
+        planningEta={60000}
+        elapsedMs={1000}
+        isDark={false}
+        actionType="improve"
+        onDismiss={onDismiss}
+        onCancel={onCancel}
+      />
+    );
+
+    await waitFor(() => {
+      expect(screen.queryByText("Coffee break unlocked. Grab a fresh cup while planning keeps moving.")).not.toBeInTheDocument();
+    });
+
+    const resetVesselButton = screen.getByRole("button", { name: /turn planning vessel into a coffee break reminder/i });
+    resetVesselButton.focus();
+    await user.keyboard("{Enter}");
+    expect(screen.getByTestId("planning-coffee-cup")).toBeInTheDocument();
+    expect(screen.getByText("Coffee break unlocked. Grab a fresh cup while planning keeps moving.")).toBeInTheDocument();
+
+    rerender(
+      <PlanningProgressOverlay
+        isBusy={false}
+        feedback={null}
+        planningEta={60000}
+        elapsedMs={0}
+        isDark={false}
+        actionType="improve"
+        onDismiss={onDismiss}
+      />
+    );
+    rerender(
+      <PlanningProgressOverlay
+        isBusy
+        feedback={{ ...getPlanningFeedback("improve", SHIP_LOOP_MS * 0.45), text: "Fresh Improve Test" }}
+        planningEta={60000}
+        elapsedMs={1000}
+        isDark={false}
+        actionType="improve"
+        onDismiss={onDismiss}
+      />
+    );
+
+    await waitFor(() => {
+      expect(screen.queryByText("Coffee break unlocked. Grab a fresh cup while planning keeps moving.")).not.toBeInTheDocument();
+    });
+
+    const freshVesselButton = screen.getByRole("button", { name: /turn planning vessel into a coffee break reminder/i });
+    freshVesselButton.focus();
+    fireEvent.keyDown(freshVesselButton, { key: " ", code: "Space" });
+    expect(screen.getByTestId("planning-coffee-cup")).toBeInTheDocument();
+    expect(screen.getByText("Coffee break unlocked. Grab a fresh cup while planning keeps moving.")).toBeInTheDocument();
+  });
+
+  it("renders static coffee steam when reduced motion is enabled", async () => {
+    vi.mocked(useReducedMotion).mockReturnValue(true);
+    const user = userEvent.setup();
+    const feedback = { ...getPlanningFeedback("plan_only", SHIP_LOOP_MS * 0.45), text: "Static Coffee Test" };
+    const { container } = render(
+      <PlanningProgressOverlay
+        isBusy
+        feedback={feedback}
+        planningEta={60000}
+        elapsedMs={1000}
+        isDark={false}
+        actionType="plan_only"
+        onDismiss={() => {}}
+      />
+    );
+
+    await user.click(screen.getByRole("button", { name: /turn planning vessel into a coffee break reminder/i }));
+
+    expect(screen.getByTestId("planning-coffee-cup")).toBeInTheDocument();
+    expect(container.querySelector("animate")).toBeNull();
+    expect(container.querySelector("animateTransform")).toBeNull();
+  });
+
   it("handles keyboard navigation in FilterStrip", () => {
     const options = [{ value: "1", label: "Opt 1" }, { value: "2", label: "Opt 2" }];
     const onChange = vi.fn();
