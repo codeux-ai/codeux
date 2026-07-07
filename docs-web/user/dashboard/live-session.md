@@ -13,6 +13,7 @@ The page is composed of stacked panels:
    - Title, dependency badges, current provider.
    - Live activity preview (the latest line of agent output).
    - Duration and ETA.
+   - Optional self-reflection rating badge with the overall 5-star score and a hover/focus details panel for per-section ratings.
    - Buttons to stop, retry, or open the detail panel.
 3. **Live Session Runtime Sidebar** — Contains the following collapsible panels:
    - **Invocation feed panel** — A real-time log of individual provider invocations with restart and cancel controls.
