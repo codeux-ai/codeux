@@ -52,7 +52,7 @@ The `ciIntelligence` block (Settings → CI & Merge) controls how Code UX intera
 | Field | Default | Notes |
 | --- | --- | --- |
 | `waitForJulesCiAutofix` | `false` | If true, dispatch a `VirtualWorkerService` doing `ci_fix` tasks on failing CI. |
-| `julesCiAutofixMaxRetries` | `3` (max `20`) | Max attempts before escalating. |
+| `julesCiAutofixMaxRetries` | `3` (max `20`) | Max CI autofix attempts before escalation to human intervention. |
 
 ### Auto-merge modes
 

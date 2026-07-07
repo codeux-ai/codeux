@@ -46,7 +46,7 @@ The server emits `ping` periodically (default 30 s); the client should reply wit
 | `project:<id>` | Project metadata, settings effective values, attention items. |
 | `project:<id>:sprints` | Sprint list and status changes. |
 | `project:<id>:tasks` | Task status changes. |
-| `project:<id>:execution` | Live cycle events for the active sprint run. |
+| `project:<id>:execution` | Live cycle events (lean execution snapshots without heavy invocation feeds) for the active sprint run. |
 | `project:<id>:memory` | Memory adds / updates / promotions. |
 | `project:<id>:connections` | MCP connection list and presence. |
 | `project:<id>:conversations` | Chat thread updates. |

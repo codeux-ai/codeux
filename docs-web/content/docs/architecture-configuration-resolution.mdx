@@ -65,10 +65,10 @@ After bootstrap, Code UX loads the settings tree from the database. Three tables
 For any field, the effective value at sprint scope is:
 
 ```
-defaults  →  system  →  project  →  sprint
+system  →  project  →  sprint
 ```
 
-A field unspecified at higher scopes inherits from lower scopes. The merge is **deep** for object-valued fields (e.g. `aiProvider.providers.codex` only overrides the keys you set, not the whole object).
+System settings act as the base (with built-in defaults folded into them). A field unspecified at higher scopes inherits from lower scopes. The merge is **deep** for object-valued fields (e.g. `aiProvider.providers.codex` only overrides the keys you set, not the whole object).
 
 ### Where defaults live
 
@@ -83,7 +83,7 @@ System settings on a fresh install are the merge of these defaults plus any exte
 
 ### Live reload
 
-Settings changes via `manage_code_ux` → `settings` → `patch_*_setting` (or the corresponding REST endpoints) trigger:
+Settings changes via `manage_settings` → `patch_*_setting` (or the corresponding REST endpoints) trigger:
 
 - A WebSocket event broadcasting the change.
 - Hot-reload of the relevant subscribers (e.g. the orchestrator picks up new `watchLoopIntervalSeconds` on the next cycle).
@@ -96,9 +96,9 @@ There is no need to restart the process for settings changes.
 
 - `GET /api/projects/:projectId/settings/effective` — merged at project scope.
 - `GET /api/projects/:projectId/sprints/:sprintId/settings/effective` — merged at sprint scope.
-- `manage_code_ux` → `settings` → `resolve_project_effective` / `resolve_sprint_effective`.
+- `manage_settings` → `resolve_project_effective` / `resolve_sprint_effective`.
 
-These return the full merged tree, useful for debugging "why is this setting taking that value?".
+These endpoints return an `EffectiveSettingsResponse` which includes both the merged tree (`settings`) and field-level provenance metadata (`sources` mapping each path to `system`, `project`, or `sprint`), useful for debugging "why is this setting taking that value?".
 
 ## External hints
 
@@ -132,7 +132,7 @@ The default backend is **SQLite** at `~/.code-ux/database.sqlite`. A migration p
 
 ## Reset semantics
 
-- **Per-project reset** (`reset_project_settings`) clears the project's override row; effective values revert to `system → defaults`.
-- **Per-sprint reset** (`reset_sprint_settings`) clears the sprint's override; effective values revert to `project → system → defaults`.
+- **Per-project reset** (`DELETE /api/projects/:projectId/settings` or `reset_project_settings`) clears the project's override row; effective values revert to `system`.
+- **Per-sprint reset** (`DELETE /api/sprints/:sprintId/settings` or `reset_sprint_settings`) clears the sprint's override; effective values revert to `project → system`.
 - **System reset** (no dedicated action; use `replace_system_settings` with a default tree) requires explicit replacement.
 - **Database reset** (`POST /api/system/reset-database`) wipes everything; use only as a last resort.
