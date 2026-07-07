@@ -9,7 +9,7 @@ import type {
   SkillToggle,
   SystemSettings,
 } from "../../../types.js";
-import { cloneGuardrails } from "../../../lib/settings.js";
+import { cloneGuardrails, DEFAULT_DASHBOARD_SETTINGS } from "../../../lib/settings.js";
 import { getHintApiKey } from "./provider-instances.js";
 
 const cloneMemorySettings = (memory: ProjectSettings["memory"]): ProjectSettings["memory"] => ({
@@ -44,6 +44,23 @@ const cloneQualityAssuranceSettings = (qa: ProjectSettings["agents"]["qualityAss
   taskCompletion: cloneQualityAssuranceTrigger(qa.taskCompletion),
   sprintCompletion: cloneQualityAssuranceTrigger(qa.sprintCompletion),
   completedTaskWithoutPr: cloneQualityAssuranceTrigger(qa.completedTaskWithoutPr),
+});
+
+const cloneSelfReflectionSettings = (
+  settings: ProjectSettings["agents"]["selfReflection"] | undefined,
+): ProjectSettings["agents"]["selfReflection"] => ({
+  planning: {
+    ...(settings?.planning ?? DEFAULT_DASHBOARD_SETTINGS.agents.selfReflection.planning),
+    criteria: (settings?.planning.criteria ?? DEFAULT_DASHBOARD_SETTINGS.agents.selfReflection.planning.criteria)
+      .map((criterion) => ({ ...criterion })),
+  },
+  qualityAssurance: {
+    ...(settings?.qualityAssurance ?? DEFAULT_DASHBOARD_SETTINGS.agents.selfReflection.qualityAssurance),
+    criteria: (
+      settings?.qualityAssurance.criteria
+      ?? DEFAULT_DASHBOARD_SETTINGS.agents.selfReflection.qualityAssurance.criteria
+    ).map((criterion) => ({ ...criterion })),
+  },
 });
 
 const cloneSkills = (skills: SkillToggle[]): SkillToggle[] => skills.map((skill) => ({ ...skill }));
@@ -164,6 +181,7 @@ export const dashboardSettingsToProjectSettings = (settings: DashboardSettings):
     routing: cloneAgentRouting(settings.agents.routing),
     instructionTemplates: { ...settings.agents.instructionTemplates },
     qualityAssurance: cloneQualityAssuranceSettings(settings.agents.qualityAssurance),
+    selfReflection: cloneSelfReflectionSettings(settings.agents.selfReflection),
   },
   skills: cloneSkills(settings.skills),
   mcpTools: cloneMcpTools(settings.mcpTools),
@@ -203,6 +221,7 @@ export const cloneProjectSettings = (settings: ProjectSettings): ProjectSettings
     routing: cloneAgentRouting(settings.agents.routing),
     instructionTemplates: { ...settings.agents.instructionTemplates },
     qualityAssurance: cloneQualityAssuranceSettings(settings.agents.qualityAssurance),
+    selfReflection: cloneSelfReflectionSettings(settings.agents.selfReflection),
   },
   skills: cloneSkills(settings.skills),
   mcpTools: settings.mcpTools ? cloneMcpTools(settings.mcpTools) : undefined,

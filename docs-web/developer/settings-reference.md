@@ -17,6 +17,12 @@ Settings are evaluated in cascade: **Defaults → System → Project → Sprint*
   "cliWorkflow": { /* CLI workflow behavior */ },
   "sprintPreview": { /* preview container settings */ },
   "git": { /* branches, schemes, GitHub mode */ },
+  "agents": {
+    "selfReflection": {
+      "planning": { /* default-off reflection loop */ },
+      "qualityAssurance": { /* default-off reflection loop */ }
+    }
+  },
   "skills": [ /* internal skill toggles */ ],
   "mcpTools": [ /* per-tool enabled flags */ ],
   "memory": { /* embedding model */ },
@@ -198,6 +204,30 @@ branches — only branches fully contained in the default branch are removed.
 ```
 
 These are internal skills toggleable for advanced workflows. Most users should not touch them.
+
+## `agents.selfReflection`
+
+```jsonc
+{
+  "planning": {
+    "enabled": false,
+    "criteria": [
+      { "id": "correctness", "label": "Correctness", "prompt": "...", "threshold": 0.85 },
+      { "id": "scope_control", "label": "Scope control", "prompt": "...", "threshold": 0.85 }
+    ],
+    "maxImprovementAttempts": 1
+  },
+  "qualityAssurance": {
+    "enabled": false,
+    "criteria": [
+      { "id": "correctness", "label": "Correctness", "prompt": "...", "threshold": 0.85 }
+    ],
+    "maxImprovementAttempts": 1
+  }
+}
+```
+
+Both reflection loops are disabled by default and are contracts only until runtime reflection calls and dashboard controls are wired. Criteria are senior engineering checks such as correctness, completeness, decomposition quality, risk handling, testability, maintainability, security, and scope control. Sanitization dedupes criteria by `id`, clamps thresholds to `0..1`, clamps `maxImprovementAttempts` to `0..10`, and falls back to defaults for malformed legacy payloads.
 
 ## `mcpTools`
 

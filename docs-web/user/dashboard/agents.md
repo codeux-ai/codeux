@@ -7,6 +7,7 @@ An *agent preset* is a reusable persona consisting of:
 - A **name** and **avatar** (avatar config is auto-generated; you can re-roll it).
 - A markdown **system instruction** that prepends every session this agent runs.
 - An optional **memory template** — controls how project / sprint memory is injected into prompts.
+- Optional persistent skill storage attachments, stored as shared project skill storage IDs for future retrieval.
 - A set of **labels** for tagging and filtering.
 
 Agent presets show up wherever a chat thread or planning request needs to choose an agent.
@@ -76,3 +77,9 @@ A common pattern: have a "Planner" agent (Claude Opus, sober and structured) for
 ## Memory templates
 
 When `memoryTemplateOverrideEnabled` is set, the preset's `memoryTemplateMarkdown` controls how project / sprint memories are formatted into prompts. The template uses simple `{{ }}` placeholders for memory blocks. See [Memory](./memory.md) for available placeholders.
+
+## Persistent skill storage
+
+The underlying agent preset contract can now attach an agent to one or more named persistent skill storage records. These records live in dedicated skill tables and are separate from project workspaces, memories, knowledge documents, and provider model attachments.
+
+This is storage groundwork only: the dashboard does not yet expose controls for editing these attachments, and runtime provider calls do not yet retrieve or mount skills from the stores.

@@ -36,7 +36,7 @@ import {
 } from "../domain/settings/provider-config-utils.js";
 import { sanitizeCustomMcpServersWithDefaults, sanitizeMcpToolToggles } from "../mcp/mcp-tool-availability.js";
 import { DEFAULT_INSTRUCTION_TEMPLATES, INSTRUCTION_TEMPLATE_IDS, type InstructionTemplateId } from "../instructions/instruction-template-catalog.js";
-import { DEFAULT_DASHBOARD_SETTINGS, DEFAULT_SKILLS, INTERNAL_SKILL_NAMES, INTERNAL_SKILL_SET } from "../repositories/settings-defaults.js";
+import { DEFAULT_AGENT_SELF_REFLECTION, DEFAULT_DASHBOARD_SETTINGS, DEFAULT_SKILLS, INTERNAL_SKILL_NAMES, INTERNAL_SKILL_SET } from "../repositories/settings-defaults.js";
 
 function cloneSkills(skills: SkillToggle[]): SkillToggle[] {
   return skills.map((skill) => ({ ...skill }));
@@ -165,6 +165,23 @@ function cloneQualityAssuranceSettings(
     taskCompletion: cloneQualityAssuranceTrigger(settings.taskCompletion),
     sprintCompletion: cloneQualityAssuranceTrigger(settings.sprintCompletion),
     completedTaskWithoutPr: cloneQualityAssuranceTrigger(settings.completedTaskWithoutPr),
+  };
+}
+
+function cloneSelfReflectionSettings(
+  settings: ProjectSettings["agents"]["selfReflection"],
+): ProjectSettings["agents"]["selfReflection"] {
+  return {
+    planning: {
+      enabled: settings.planning.enabled,
+      criteria: settings.planning.criteria.map((criterion) => ({ ...criterion })),
+      maxImprovementAttempts: settings.planning.maxImprovementAttempts,
+    },
+    qualityAssurance: {
+      enabled: settings.qualityAssurance.enabled,
+      criteria: settings.qualityAssurance.criteria.map((criterion) => ({ ...criterion })),
+      maxImprovementAttempts: settings.qualityAssurance.maxImprovementAttempts,
+    },
   };
 }
 
@@ -428,6 +445,65 @@ function sanitizeQualityAssuranceSettings(
   };
 }
 
+const SELF_REFLECTION_MAX_ATTEMPTS_CEILING = 10;
+
+function sanitizeSelfReflectionCriteria(
+  value: unknown,
+  defaults: ProjectSettings["agents"]["selfReflection"]["planning"]["criteria"],
+): ProjectSettings["agents"]["selfReflection"]["planning"]["criteria"] {
+  if (!Array.isArray(value)) {
+    return defaults.map((criterion) => ({ ...criterion }));
+  }
+
+  const criteria: ProjectSettings["agents"]["selfReflection"]["planning"]["criteria"] = [];
+  const seen = new Set<string>();
+  for (const entry of value) {
+    const input = toRecord(entry);
+    const id = typeof input.id === "string" ? input.id.trim() : "";
+    const label = typeof input.label === "string" ? input.label.trim() : "";
+    const prompt = typeof input.prompt === "string" ? input.prompt.trim() : "";
+    if (!id || !label || !prompt || seen.has(id)) {
+      continue;
+    }
+    const rawThreshold = typeof input.threshold === "number" && Number.isFinite(input.threshold)
+      ? input.threshold
+      : defaults.find((criterion) => criterion.id === id)?.threshold ?? 0.8;
+    criteria.push({
+      id,
+      label,
+      prompt,
+      threshold: Math.max(0, Math.min(1, rawThreshold)),
+    });
+    seen.add(id);
+  }
+
+  return criteria.length > 0 ? criteria : defaults.map((criterion) => ({ ...criterion }));
+}
+
+function sanitizeSelfReflectionLoop(
+  value: unknown,
+  defaults: ProjectSettings["agents"]["selfReflection"]["planning"],
+): ProjectSettings["agents"]["selfReflection"]["planning"] {
+  const input = toRecord(value);
+  return {
+    enabled: typeof input.enabled === "boolean" ? input.enabled : defaults.enabled,
+    criteria: sanitizeSelfReflectionCriteria(input.criteria, defaults.criteria),
+    maxImprovementAttempts: typeof input.maxImprovementAttempts === "number" && Number.isFinite(input.maxImprovementAttempts)
+      ? Math.max(0, Math.min(SELF_REFLECTION_MAX_ATTEMPTS_CEILING, Math.round(input.maxImprovementAttempts)))
+      : defaults.maxImprovementAttempts,
+  };
+}
+
+function sanitizeSelfReflectionSettings(
+  value: unknown,
+): ProjectSettings["agents"]["selfReflection"] {
+  const input = toRecord(value);
+  return {
+    planning: sanitizeSelfReflectionLoop(input.planning, DEFAULT_AGENT_SELF_REFLECTION.planning),
+    qualityAssurance: sanitizeSelfReflectionLoop(input.qualityAssurance, DEFAULT_AGENT_SELF_REFLECTION.qualityAssurance),
+  };
+}
+
 function sanitizeSprintPreviewSettings(value: unknown): ProjectSettings["sprintPreview"] {
   const input = toRecord(value);
   const defaults = DEFAULT_DASHBOARD_SETTINGS.sprintPreview;
@@ -550,6 +626,7 @@ export function buildDefaultProjectSettings(externalHints?: ExternalSettingsHint
       routing: cloneAgentRoutingSettings(DEFAULT_DASHBOARD_SETTINGS.agents.routing),
       instructionTemplates: cloneInstructionTemplates(DEFAULT_DASHBOARD_SETTINGS.agents.instructionTemplates),
       qualityAssurance: cloneQualityAssuranceSettings(DEFAULT_DASHBOARD_SETTINGS.agents.qualityAssurance),
+      selfReflection: cloneSelfReflectionSettings(DEFAULT_DASHBOARD_SETTINGS.agents.selfReflection),
     },
     skills: cloneSkills(DEFAULT_SKILLS),
     memory: {
@@ -704,6 +781,7 @@ export function sanitizeProjectSettings(value: unknown, externalHints?: External
       routing: sanitizeAgentRoutingSettings(toRecord(input.agents).routing),
       instructionTemplates: sanitizeInstructionTemplates(toRecord(input.agents).instructionTemplates),
       qualityAssurance: sanitizeQualityAssuranceSettings(toRecord(input.agents).qualityAssurance),
+      selfReflection: sanitizeSelfReflectionSettings(toRecord(input.agents).selfReflection),
     },
     skills: sanitizeSkills(input.skills, git.githubMode),
     ...(Array.isArray(input.mcpTools) ? { mcpTools: sanitizeMcpToolToggles(input.mcpTools) } : {}),
@@ -1072,6 +1150,7 @@ export function resolveDashboardSettings(args: {
       routing: cloneAgentRoutingSettings(sprintSettings.agents.routing),
       instructionTemplates: cloneInstructionTemplates(sprintSettings.agents.instructionTemplates),
       qualityAssurance: cloneQualityAssuranceSettings(sprintSettings.agents.qualityAssurance),
+      selfReflection: cloneSelfReflectionSettings(sprintSettings.agents.selfReflection),
     },
     skills: cloneSkills(sprintSettings.skills),
     mcpTools: resolveEffectiveMcpTools(args.systemSettings.mcpTools, sprintSettings.mcpTools),
