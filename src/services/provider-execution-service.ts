@@ -428,12 +428,12 @@ export class ProviderExecutionService {
             && this.deps.executionRepository
             && this.isExecutionInvocationStillRunning(execInvocationId)
           ) {
-            if (args.trackAssistantInInvocation !== false) {
+            if (args.trackAssistantInInvocation !== false && telemetry.conversation && telemetry.conversation.length > 0) {
               // Record the full parsed agent session for every invocation type —
               // including text-output (QA / planning / setup) runs, which are
               // just as agentic but were previously collapsed to prompt + final
-              // answer. The structured callers parse their result from the
-              // returned text, not from these messages, so this is display-only.
+              // answer. Raw text-only telemetry is left for completion fallback
+              // so live rewrites do not remove retry/error audit messages.
               const messages = buildPersistedInvocationMessages(
                 args.provider,
                 effectiveModel,
