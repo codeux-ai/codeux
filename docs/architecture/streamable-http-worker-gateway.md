@@ -59,8 +59,8 @@ The worker connects to the main Code UX server over Streamable HTTP.
 
 That connection is used for:
 
-- `listen`
-- `post_listen_reply`
+- `register_worker_endpoint`
+- `pull_task_dispatch`
 - `update_task_dispatch`
 
 This is the remote, project-scoped control plane.
@@ -163,6 +163,7 @@ Important detail:
 - `--server-url` points at the main Code UX worker gateway
 - the worker still starts its own local `worker_host` runtime unless explicitly customized
 - repeat `--project-id` to enroll a multi-project worker
+- repeat `--active-project-id` to narrow the current polling focus while preserving full enrollment for every `--project-id`
 - use a stable `--connection-key` so reconnects update the same endpoint
 
 The local worker-host runtime is configured with:
@@ -175,7 +176,7 @@ Those flags configure the worker machine's local execution process, not the remo
 
 ## Cluster Operation
 
-External worker endpoints are registered in `worker_endpoints` with heartbeat-derived status. Project eligibility lives in `project_worker_assignments`, where a project can have one primary worker and any number of overflow workers. There is no product cap on registered workers; the Streamable HTTP active-session cap is a transport protection default that operators can raise for large clusters.
+External worker endpoints are registered in `worker_endpoints` with heartbeat-derived status. Project eligibility lives in both the connection binding table and `project_worker_assignments`: `projectIds` is the full eligible set, while `activeProjectIds` is only the current polling/focus subset on the connection. A project can have one primary worker and any number of overflow workers. There is no product cap on registered workers; the Streamable HTTP active-session cap is a transport protection default that operators can raise for large clusters.
 
 Task pickup is protected by both `task_dispatches` and `execution_leases`. A claim must return a lease token before the worker starts local execution. Worker heartbeats renew the lease while work runs, and stale or offline endpoints are excluded from new claims. If a primary worker goes stale, eligible overflow workers can claim new work for the project.
 

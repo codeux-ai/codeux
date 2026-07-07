@@ -77,6 +77,13 @@ describe("WorkerTaskDispatchService", () => {
           projectIds: ["project-1"],
           activeProjectIds: ["project-1"],
         })),
+        upsertConnection: vi.fn(() => ({
+          id: "conn-1",
+          connectionKey: "worker-1",
+          role: "worker",
+          projectIds: ["project-1"],
+          activeProjectIds: ["project-1"],
+        })),
         touchConnectionHeartbeat: vi.fn(),
       },
       workerEndpointRepository: {
@@ -408,6 +415,21 @@ describe("WorkerTaskDispatchService", () => {
       status: "connected",
       capabilities: { canExecuteTasks: true, canSuperviseProjects: true },
     });
+    deps.connectionChatRepository.upsertConnection.mockReturnValue({
+      id: "conn-cluster-worker",
+      connectionKey: "cluster-worker",
+      role: "worker",
+      projectIds: ["project-1", "project-2"],
+      activeProjectIds: ["project-2"],
+    });
+    deps.workerEndpointRepository.getWorkerEndpointByConnectionId.mockReturnValue({
+      id: "external-worker-1",
+      endpointKey: "mcp:cluster-worker",
+      endpointType: "mcp_connection",
+      status: "connected",
+      connectionId: "conn-cluster-worker",
+      capabilities: { canExecuteTasks: true, canSuperviseProjects: true },
+    });
 
     const endpoint = service.registerExternalWorkerEndpoint({
       connectionKey: "cluster-worker",
@@ -424,7 +446,51 @@ describe("WorkerTaskDispatchService", () => {
       displayName: "Cluster Worker",
       transport: "streamable-http",
     }));
+    expect(deps.connectionChatRepository.upsertConnection).toHaveBeenCalledWith(expect.objectContaining({
+      connectionKey: "cluster-worker",
+      displayName: "Cluster Worker",
+      role: "worker",
+      transport: "streamable-http",
+      projectIds: ["project-1", "project-2"],
+      activeProjectIds: ["project-2"],
+    }));
+    expect(deps.projectWorkerAssignmentService.ensureWorkerAssignment).toHaveBeenCalledWith("project-1", "external-worker-1");
     expect(deps.projectWorkerAssignmentService.ensureWorkerAssignment).toHaveBeenCalledWith("project-2", "external-worker-1");
+  });
+
+  it("persists full enrollment while keeping active projects as the polling focus", () => {
+    deps.connectionChatRepository.upsertConnection.mockReturnValue({
+      id: "conn-cluster-worker",
+      connectionKey: "cluster-worker",
+      role: "worker",
+      projectIds: ["project-A", "project-B"],
+      activeProjectIds: ["project-B"],
+    });
+    deps.workerEndpointRepository.getWorkerEndpointByConnectionId.mockReturnValue({
+      id: "external-worker-1",
+      endpointKey: "mcp:cluster-worker",
+      endpointType: "mcp_connection",
+      status: "connected",
+      connectionId: "conn-cluster-worker",
+      capabilities: { canExecuteTasks: true, canSuperviseProjects: true },
+    });
+
+    service.registerExternalWorkerEndpoint({
+      connectionKey: "cluster-worker",
+      displayName: "Cluster Worker",
+      transport: "streamable-http",
+      projectIds: ["project-A", "project-B"],
+      activeProjectIds: ["project-B"],
+      capabilities: { canExecuteTasks: true, canSuperviseProjects: true },
+    });
+
+    expect(deps.connectionChatRepository.upsertConnection).toHaveBeenCalledWith(expect.objectContaining({
+      projectIds: ["project-A", "project-B"],
+      activeProjectIds: ["project-B"],
+    }));
+    expect(deps.projectWorkerAssignmentService.ensureWorkerAssignment).toHaveBeenCalledTimes(2);
+    expect(deps.projectWorkerAssignmentService.ensureWorkerAssignment).toHaveBeenCalledWith("project-A", "external-worker-1");
+    expect(deps.projectWorkerAssignmentService.ensureWorkerAssignment).toHaveBeenCalledWith("project-B", "external-worker-1");
   });
 
   it("captures a sprint memory on completion when auto-capture is enabled", async () => {

@@ -379,6 +379,70 @@ export const TOOL_DEFINITIONS = [
       required: ["action"],
     },
   },
+  {
+    name: "register_worker_endpoint",
+    runtimeRoles: ["project_manager"],
+    category: "platform",
+    description: "Register or refresh an external Code UX worker endpoint and its eligible project scope.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        connectionKey: { type: "string", description: "Stable worker connection key." },
+        displayName: { type: "string", description: "Human-readable worker name." },
+        transport: { type: "string", description: "Worker control-plane transport, usually streamable-http." },
+        projectIds: { type: "array", items: { type: "string" }, description: "Full project eligibility set for this worker." },
+        activeProjectIds: { type: "array", items: { type: "string" }, description: "Current polling/focus subset. Must be within projectIds when projectIds are provided." },
+        capabilities: {
+          type: "object",
+          properties: {
+            canSuperviseProjects: { type: "boolean" },
+            canExecuteTasks: { type: "boolean" },
+          },
+          additionalProperties: false,
+        },
+        metadata: { type: "object", additionalProperties: true, description: "Bounded non-secret worker runtime metadata." },
+      },
+      required: ["connectionKey", "displayName", "transport"],
+    },
+  },
+  {
+    name: "pull_task_dispatch",
+    runtimeRoles: ["project_manager"],
+    category: "platform",
+    description: "Claim the next eligible worker task dispatch for a registered external worker.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        connectionKey: { type: "string", description: "Registered worker connection key." },
+        projectId: { type: "string", description: "Optional project to poll. Must be enrolled for the worker." },
+        sprintId: { type: "string", description: "Optional sprint filter." },
+      },
+      required: ["connectionKey"],
+    },
+  },
+  {
+    name: "update_task_dispatch",
+    runtimeRoles: ["project_manager"],
+    category: "platform",
+    description: "Refresh worker dispatch heartbeat/state and return any control-plane action such as cancellation.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        connectionKey: { type: "string", description: "Registered worker connection key." },
+        dispatchId: { type: "string", description: "Claimed task dispatch id." },
+        leaseToken: { type: "string", description: "Lease token returned by pull_task_dispatch." },
+        state: { type: "string", enum: ["RUNNING", "COMPLETED", "FAILED", "BLOCKED", "QUOTA"], description: "Current worker task run state." },
+        provider: { type: "string", description: "Optional provider id/name reported by the worker host." },
+        sessionId: { type: "string", description: "Optional local worker-host session id." },
+        sessionName: { type: "string", description: "Optional local worker-host session name." },
+        workerBranch: { type: "string", description: "Optional branch used by the worker run." },
+        prUrl: { type: "string", description: "Optional pull request URL produced by the worker run." },
+        summaryMarkdown: { type: "string", description: "Optional completion or blocked summary." },
+        errorMessage: { type: "string", description: "Optional error text for failed or blocked states." },
+      },
+      required: ["connectionKey", "dispatchId", "leaseToken", "state"],
+    },
+  },
 ] as const;
 
 export type ToolName = (typeof TOOL_DEFINITIONS)[number]["name"];

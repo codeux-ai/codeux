@@ -1,8 +1,33 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
+import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import type { WorkerConfig } from "../../../src/worker/worker-config.js";
 import type { WorkerControlPlaneClient, LocalWorkerExecutionClient } from "../../../src/worker/index.js";
 import { McpWorkerControlPlaneClient, runWorkerClient } from "../../../src/worker/index.js";
 import type { WorkerTaskDispatchClaim } from "../../../src/contracts/execution-types.js";
+import { bootMcpHttpTransport, type McpHttpTransportHandle } from "../../../src/app/lifecycle/mcp-lifecycle-service.js";
+import { registerMcpRequestHandlers } from "../../../src/server/mcp-request-router.js";
+import { DEFAULT_DASHBOARD_SETTINGS } from "../../../src/repositories/settings-repository.js";
+
+const handles: McpHttpTransportHandle[] = [];
+const testLogger = {
+  info: vi.fn(),
+  warn: vi.fn(),
+  error: vi.fn(),
+  debug: vi.fn(),
+  child: () => testLogger,
+};
+
+afterEach(async () => {
+  vi.restoreAllMocks();
+  while (handles.length > 0) {
+    const handle = handles.pop();
+    if (handle) {
+      await handle.close();
+    }
+  }
+});
 
 function createConfig(overrides: Partial<WorkerConfig> = {}): WorkerConfig {
   return {
@@ -142,6 +167,104 @@ describe("McpWorkerControlPlaneClient", () => {
       leaseToken: "lease-1",
       state: "RUNNING",
     })).resolves.toEqual({ controlAction: "cancel", dispatch: undefined });
+  });
+
+  it("interoperates with the server MCP HTTP worker control-plane tools", async () => {
+    const claim = createClaim();
+    const managementToolHandler = {
+      handleManageCodeUx: vi.fn(),
+      handleManageProjects: vi.fn(),
+      handleManageSprints: vi.fn(),
+      handleManageTasks: vi.fn(),
+      handleManageQuicksprints: vi.fn(),
+      handleManageScheduler: vi.fn(),
+      handleManageAgents: vi.fn(),
+      handleManageMemory: vi.fn(),
+      handleManageSettings: vi.fn(),
+      handleManagePreview: vi.fn(),
+      handleManageTelemetry: vi.fn(),
+      handleSearchKnowledge: vi.fn(),
+      handleRegisterWorkerEndpoint: vi.fn(async () => ({
+        content: [{ type: "text", text: JSON.stringify({ endpoint: { id: "endpoint-1" } }) }],
+      })),
+      handlePullTaskDispatch: vi.fn(async () => ({
+        content: [{ type: "text", text: JSON.stringify(claim) }],
+      })),
+      handleUpdateTaskDispatch: vi.fn(async () => ({
+        content: [{ type: "text", text: JSON.stringify({ controlAction: "cancel", dispatch: claim.dispatch }) }],
+      })),
+    };
+    const server = new Server(
+      { name: "worker-control-plane-test", version: "1.0.0" },
+      { capabilities: { tools: {}, resources: {}, prompts: {} } },
+    );
+    registerMcpRequestHandlers({
+      server,
+      managementToolHandler: managementToolHandler as any,
+      getDashboardSettings: () => DEFAULT_DASHBOARD_SETTINGS,
+      getRuntimeRole: () => "project_manager",
+      formatError: (error) => ({
+        content: [{ type: "text", text: error instanceof Error ? error.message : String(error) }],
+        isError: true,
+      }),
+    });
+    const handle = await bootMcpHttpTransport({
+      enabled: true,
+      host: "127.0.0.1",
+      port: 0,
+      path: "/mcp",
+      authToken: null,
+      logger: testLogger as any,
+      createServer: () => server,
+      recoveryService: { recover: async () => ({ resumedSprintRunIds: [] }) } as any,
+      runStartupRecovery: false,
+    });
+    expect(handle).not.toBeNull();
+    if (!handle) {
+      throw new Error("MCP HTTP transport did not start.");
+    }
+    handles.push(handle);
+    const transport = new StreamableHTTPClientTransport(new URL(`http://127.0.0.1:${handle.port}${handle.path}`));
+    const sdkClient = new Client({ name: "worker-control-plane-client-test", version: "1.0.0" });
+    await sdkClient.connect(transport);
+    const client = new McpWorkerControlPlaneClient({
+      callTool: (args) => sdkClient.callTool(args),
+      close: async () => {
+        await transport.close();
+      },
+    });
+
+    await expect(client.registerWorker(createConfig({
+      projectIds: ["project-A", "project-B"],
+      activeProjectIds: ["project-B"],
+    }))).resolves.toMatchObject({ endpoint: { id: "endpoint-1" } });
+    await expect(client.pullTaskDispatch({
+      connectionKey: "worker-1",
+      projectId: "project-B",
+    })).resolves.toMatchObject({ leaseToken: "lease-1" });
+    await expect(client.updateTaskDispatch({
+      connectionKey: "worker-1",
+      dispatchId: "dispatch-1",
+      leaseToken: "lease-1",
+      state: "RUNNING",
+    })).resolves.toMatchObject({ controlAction: "cancel", dispatch: { id: "dispatch-1" } });
+
+    expect(managementToolHandler.handleRegisterWorkerEndpoint).toHaveBeenCalledWith(expect.objectContaining({
+      connectionKey: "worker-1",
+      projectIds: ["project-A", "project-B"],
+      activeProjectIds: ["project-B"],
+    }));
+    expect(managementToolHandler.handlePullTaskDispatch).toHaveBeenCalledWith(expect.objectContaining({
+      connectionKey: "worker-1",
+      projectId: "project-B",
+    }));
+    expect(managementToolHandler.handleUpdateTaskDispatch).toHaveBeenCalledWith(expect.objectContaining({
+      dispatchId: "dispatch-1",
+      leaseToken: "lease-1",
+      state: "RUNNING",
+    }));
+
+    await client.close?.();
   });
 });
 
