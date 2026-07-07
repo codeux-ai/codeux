@@ -22,9 +22,9 @@ Implemented in `src/server/dashboard-server.ts`.
 Endpoints:
 
 - `GET /api/execution`
-  - returns the selected project's execution snapshot
+  - returns the selected project's lean execution snapshot without heavy recent feeds
 - `GET /api/projects/:projectId/execution`
-  - returns the execution snapshot for a specific project
+  - returns the full execution snapshot for a specific project, including bounded `recentEvents` and `recentInvocations`
 - `GET /api/projects/:projectId/stats?window=24h|7d|30d|all|custom&from=YYYY-MM-DD&to=YYYY-MM-DD`
   - returns the project statistics snapshot used by the Stats page
   - `custom` requires both `from` and `to`
@@ -42,6 +42,7 @@ The payload includes:
 - `taskDispatches`
 - `connections`
 - `recentEvents`
+- `recentInvocations`
 
 ### `sprintRuns`
 

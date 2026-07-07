@@ -5,6 +5,8 @@ import path from 'path';
 
 const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'codeux-e2e-home-'));
 const mockProviderCliPath = path.resolve(process.cwd(), 'scripts/e2e/mock-provider-cli.mjs');
+const e2eDashboardPort = Number.parseInt(process.env.CODEUX_E2E_DASHBOARD_PORT ?? '4544', 10);
+const e2eBaseUrl = `http://127.0.0.1:${e2eDashboardPort}`;
 
 /**
  * Read environment variables from file.
@@ -36,7 +38,7 @@ export default defineConfig({
   /* Shared settings for all the projects below. See https://playwright.dev/docs/api/class-testoptions. */
   use: {
     /* Base URL to use in actions like `await page.goto('')`. */
-    baseURL: 'http://127.0.0.1:4444',
+    baseURL: e2eBaseUrl,
 
     /* Preserve failure artifacts without producing heavy output for passing runs. */
     trace: 'retain-on-failure',
@@ -60,10 +62,7 @@ export default defineConfig({
   /* Run your local dev server before starting the tests */
   webServer: {
     command: 'node dist/index.js',
-    // Poll the liveness probe (/health) rather than the readiness probe (/ready).
-    // /ready only returns 200 once a project has a live-status timestamp, which
-    // never happens in a clean CI checkout, so it would hang until timeout.
-    url: 'http://127.0.0.1:4444/health',
+    url: `${e2eBaseUrl}/ready`,
     reuseExistingServer: false,
     timeout: 60000,
     stdout: 'pipe',
@@ -74,6 +73,10 @@ export default defineConfig({
       XDG_CONFIG_HOME: path.join(tempHome, '.config'),
       XDG_DATA_HOME: path.join(tempHome, '.local', 'share'),
       CODEUX_E2E_PROVIDER_CLI_SHIM: mockProviderCliPath,
+      DASHBOARD_PORT: String(e2eDashboardPort),
+      MCP_HTTP_PORT: String(e2eDashboardPort + 1),
+      CODE_UX_CONTAINERIZED_GIT: '0',
+      CODE_UX_GIT_CONTAINER_MODE: 'host',
     },
   },
 });

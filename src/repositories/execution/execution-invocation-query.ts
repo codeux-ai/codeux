@@ -19,6 +19,9 @@ export function queryExecutionInvocation(
   const row = db.prepare(`
     SELECT
       execution_invocations.*,
+      provider_invocations.execution_mode AS execution_mode,
+      provider_invocations.prompt_chars AS prompt_chars,
+      provider_invocations.transcript_chars AS transcript_chars,
       provider_invocations.input_tokens AS input_tokens,
       provider_invocations.cached_input_tokens AS cached_input_tokens,
       provider_invocations.output_tokens AS output_tokens,
