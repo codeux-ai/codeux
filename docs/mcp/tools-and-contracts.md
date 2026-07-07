@@ -92,6 +92,8 @@ Typed tool argument contracts and registry dispatch are defined in `src/api/mcp/
 
 Worker MCP clients can advertise their agent preset with the `X-Code-Ux-Agent` header on the Code UX MCP connection. When the header is absent, Code UX treats the request as a project-manager or stdio-style client and applies the system MCP tool toggles for the current runtime role.
 
+Native provider MCP calls can also advertise `X-Code-Ux-Invocation` with the execution invocation id that originated the call. Code UX validates it with the same single-header, length, and identifier-character rules as `X-Code-Ux-Agent`, then stores it as request-scoped context for management handlers that need to associate actions with the originating provider invocation. The invocation id is not added to public MCP response payloads.
+
 When the header is present, Code UX must resolve it to an explicit agent MCP access policy before exposing built-in Code UX management tools. Malformed HTTP header values are rejected before MCP routing; if an advertised agent identity reaches the router but is unknown or resolves to an agent without an explicit MCP access policy, `list_tools` returns no Code UX tools and `call_tool` rejects every Code UX management tool with MCP `MethodNotFound`. This fail-closed behavior prevents an unrecognized agent from inheriting broad system-level management access.
 
 For a resolved agent policy:

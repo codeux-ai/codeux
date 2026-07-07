@@ -890,43 +890,74 @@ describe("DockerRunner custom MCP server injection", () => {
     expect(toml).toContain('env = { "TOKEN" = "x" }');
   });
 
-  it("advertises the agent id to code_ux via the X-Code-Ux-Agent header (claude JSON)", async () => {
-    await build("claude-code", { url: "http://127.0.0.1:3000/mcp", authToken: "secret", agentId: "agent-9" }, []);
+  it("advertises the agent and invocation ids to code_ux via headers (claude JSON)", async () => {
+    await build("claude-code", {
+      url: "http://127.0.0.1:3000/mcp",
+      authToken: "secret",
+      agentId: "agent-9",
+      invocationId: "invocation-9",
+    }, []);
     const json = JSON.parse(writtenFor("claude-mcp.json")!);
     expect(json.mcpServers.code_ux.headers).toMatchObject({
       Authorization: "Bearer secret",
       "X-Code-Ux-Agent": "agent-9",
+      "X-Code-Ux-Invocation": "invocation-9",
     });
   });
 
-  it("advertises the agent id to code_ux via http_headers (codex TOML)", async () => {
-    await build("codex", { url: "http://127.0.0.1:3000/mcp", authToken: "secret", agentId: "agent-9" }, []);
+  it("advertises the agent and invocation ids to code_ux via http_headers (codex TOML)", async () => {
+    await build("codex", {
+      url: "http://127.0.0.1:3000/mcp",
+      authToken: "secret",
+      agentId: "agent-9",
+      invocationId: "invocation-9",
+    }, []);
     const toml = writtenFor("codex-config.toml")!;
     expect(toml).toContain('"X-Code-Ux-Agent" = "agent-9"');
+    expect(toml).toContain('"X-Code-Ux-Invocation" = "invocation-9"');
     expect(toml).toContain('"Authorization" = "Bearer secret"');
+  });
+
+  it("advertises the invocation id to code_ux in gemini JSON config", async () => {
+    await build("gemini", {
+      url: "http://127.0.0.1:3000/mcp",
+      authToken: "secret",
+      invocationId: "invocation-9",
+    }, []);
+    const json = JSON.parse(writtenFor("gemini-settings.json")!);
+    expect(json.mcpServers.code_ux.headers).toMatchObject({
+      Authorization: "Bearer secret",
+      "X-Code-Ux-Invocation": "invocation-9",
+    });
   });
 
 
   it("injects custom servers alongside code_ux for qwen-code and merges with existing settings", async () => {
-    await build("qwen-code", { url: "http://127.0.0.1:3000/mcp", authToken: "secret" }, [
+    await build("qwen-code", { url: "http://127.0.0.1:3000/mcp", authToken: "secret", invocationId: "invocation-9" }, [
       { id: "1", name: "docs", url: "https://docs.example/mcp", enabled: true, headers: { Authorization: "Bearer t" } },
     ], { QWEN_SETTINGS_CONTENT: JSON.stringify({ enableOpenAILogging: true, someOtherSetting: "value" }) });
     const json = JSON.parse(writtenFor("qwen-settings.json")!);
     expect(json.enableOpenAILogging).toBeUndefined(); // It should strip this based on formatting logic
     expect(json.someOtherSetting).toBe("value");
     expect(json.mcpServers.code_ux).toMatchObject({ httpUrl: "http://127.0.0.1:3000/mcp" });
-    expect(json.mcpServers.code_ux.headers).toMatchObject({ Authorization: "Bearer secret" });
+    expect(json.mcpServers.code_ux.headers).toMatchObject({
+      Authorization: "Bearer secret",
+      "X-Code-Ux-Invocation": "invocation-9",
+    });
     expect(json.mcpServers.docs).toEqual({ httpUrl: "https://docs.example/mcp", headers: { Authorization: "Bearer t" } });
   });
 
   it("injects custom servers alongside code_ux for antigravity", async () => {
-    await build("antigravity", { url: "http://127.0.0.1:3000/mcp", authToken: "secret" }, [
+    await build("antigravity", { url: "http://127.0.0.1:3000/mcp", authToken: "secret", invocationId: "invocation-9" }, [
       { id: "1", name: "docs", url: "https://docs.example/mcp", enabled: true, headers: { Authorization: "Bearer t" } },
       { id: "2", name: "localtool", transport: "stdio", command: "python", args: ["script.py"], enabled: true }
     ]);
     const json = JSON.parse(writtenFor("antigravity-mcp.json")!);
     expect(json.mcpServers.code_ux).toMatchObject({ serverUrl: "http://127.0.0.1:3000/mcp" });
-    expect(json.mcpServers.code_ux.headers).toMatchObject({ Authorization: "Bearer secret" });
+    expect(json.mcpServers.code_ux.headers).toMatchObject({
+      Authorization: "Bearer secret",
+      "X-Code-Ux-Invocation": "invocation-9",
+    });
     expect(json.mcpServers.docs).toEqual({ serverUrl: "https://docs.example/mcp", headers: { Authorization: "Bearer t" } });
     expect(json.mcpServers.localtool).toEqual({ command: "python", args: ["script.py"] });
   });
