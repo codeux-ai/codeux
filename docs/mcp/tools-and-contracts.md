@@ -441,7 +441,7 @@ For scheduler calls:
 
 For preview calls:
 - `manage_preview` supports `list_sessions`, `start_session`, `rebuild_session`, `stop_session`, `remove_session`, `get_logs`, `get_url`, `get_script`, and `update_script`.
-- `remove_session` requires approval confirmation.
+- `remove_session` requires approval confirmation. These actions apply per project and sprint, and `start_session`/`rebuild_session` can handle multiple container port mappings mapped to loopback host ports.
 
 For settings patch calls, `value` may be any JSON value, including strings, booleans, numbers, `null`, arrays, or objects.
 Settings patch and replacement calls still require the stateful human-confirmation gate described above.

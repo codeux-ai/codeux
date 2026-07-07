@@ -199,11 +199,15 @@ Preview endpoints are implemented in `src/server/dashboard-server.ts`.
 
 - `GET /api/projects/:projectId/preview/sessions`
 - `POST /api/projects/:projectId/sprints/:sprintId/preview/start`
+- `POST /api/projects/:projectId/sprints/:sprintId/preview/sessions/:sessionId/rebuild`
 - `POST /api/browser/sessions/:sessionId/rebuild`
+- `POST /api/projects/:projectId/sprints/:sprintId/preview/sessions/:sessionId/stop`
 - `POST /api/browser/sessions/:sessionId/stop`
+- `DELETE /api/projects/:projectId/sprints/:sprintId/preview/sessions/:sessionId`
 - `DELETE /api/browser/sessions/:sessionId`
 - `GET /api/projects/:projectId/sprints/:sprintId/preview/script`
 - `PUT /api/projects/:projectId/sprints/:sprintId/preview/script`
+- `GET /api/projects/:projectId/sprints/:sprintId/preview/sessions/:sessionId/logs`
 - `GET /api/browser/sessions/:sessionId/logs`
 - `ALL /api/browser/sessions/:sessionId/proxy/*`
 
