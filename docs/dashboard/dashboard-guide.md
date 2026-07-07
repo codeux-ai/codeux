@@ -507,7 +507,7 @@ Legacy runtime:
 - Chat page invocation navigation keeps the rail and transcript height-bounded, so clicking through long invocation records scrolls only the internal panes and does not add page-level blank space.
 - Chat page now force-refreshes the selected thread when realtime thread updates arrive, so virtual replies clear stale `pending` delivery badges and sidebar counts as soon as the reply lands
 - Chat message and thread timestamp chrome now suppresses malformed timestamps instead of rendering `Invalid Date`
-- Thread compaction now works on both virtual and connected chat routes: virtual routes invoke the selected CLI chat worker directly, while connected routes send a hidden control request to the selected live worker, store its compaction summary, and use that saved handoff for the next fresh reply prompt
+- Thread compaction works on virtual chat routes by resuming the selected CLI provider session and sending its native compact command, while connected routes send a hidden control request to the selected live worker, store the compaction output, and use that saved handoff when a fresh reply prompt is required
 - Hidden compaction control messages are excluded from visible thread history, previews, pending badges, and connection inbox counts so the chat UI stays clean while compaction runs
 - Chat threads can now be deleted directly from the history rail; deletion is realtime-aware and removes the thread across open dashboard views
 - New thread creation now deduplicates optimistic UI insertion against realtime thread updates, so the sidebar count no longer briefly overstates the number of chats

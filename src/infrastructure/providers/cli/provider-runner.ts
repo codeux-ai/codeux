@@ -4,7 +4,7 @@ import { CliWorkflowSettings, ProviderId, type ProviderConfigMode } from "../../
 import type { CustomMcpServer, QwenModelProviderSettings } from "../../../contracts/app-types.js";
 import { buildProviderMcpConfigArtifact, buildClaudeMcpServerEntry, buildCodexMcpServerTomlLines, buildGeminiMcpServerEntry, escapeTomlString } from "./mcp-config-format.js";
 import type { McpConnectionInfo } from "../../../contracts/mcp-connection-types.js";
-import { CliProviderId, enabledCustomServersFor, isOpenCodeNativeSessionId, ProviderCommandSpec, providerSpecs } from "./provider-command-specs.js";
+import { CliProviderId, enabledCustomServersFor, getNativeSessionOperationPrompt, isOpenCodeNativeSessionId, type NativeSessionOperation, ProviderCommandSpec, providerSpecs } from "./provider-command-specs.js";
 import { CommandResult, runStreamingCommand } from "../../../services/cli-process-runner.js";
 import type { IDockerRunner } from "./docker-runner.js";
 import type { SnapshotCheckout } from "./workspace-manager.js";
@@ -100,6 +100,11 @@ export interface ProviderRunInput {
   invocationId?: string | null;
   providerInvocationId?: string | null;
   purpose?: string | null;
+  /** Native in-session operation to run against an existing CLI provider session.
+   *  Only valid for CLI providers when `continueSessionId` points at an existing
+   *  provider session, or at a logical session supported by that provider's
+   *  continue/resume mode. */
+  nativeSessionOperation?: NativeSessionOperation;
   /** Pass a previous nativeSessionId to continue an existing CLI session.
    *  Claude Code: uses --resume. Gemini: adds --resume. Codex: uses exec resume --last.
    *  Qwen Code uses project-scoped --continue because Code UX logical ids are not Qwen saved-session ids. */
@@ -232,6 +237,7 @@ export class ProviderRunner implements IProviderRunner {
     invocationId?: string | null;
     providerInvocationId?: string | null;
     purpose?: string | null;
+    nativeSessionOperation?: NativeSessionOperation;
     codexOutputPath?: string | null;
     continueSessionId?: string | null;
     openCodeBaselineUsage?: Record<string, unknown> | null;
@@ -239,7 +245,8 @@ export class ProviderRunner implements IProviderRunner {
     customMcpServers?: CustomMcpServer[];
     persistentSkillStorageMounts?: PersistentSkillStorageRuntimeMount[];
   }): Promise<ProviderRunResult> {
-    const { provider, prompt, cwd, model, apiKey, providerMountAuth, providerAuthPath, sessionId, workflowSettings, repoPath, githubToken, gitlabToken, signal, onActivity, onTelemetry } = input;
+    const { provider, cwd, model, apiKey, providerMountAuth, providerAuthPath, sessionId, workflowSettings, repoPath, githubToken, gitlabToken, signal, onActivity, onTelemetry } = input;
+    const prompt = this.resolveNativeSessionOperationPrompt(provider, input.prompt, input.nativeSessionOperation, input.continueSessionId);
     const startedMs = Date.now();
     const runModel = model;
     // Resolve where qwen-code should write its OpenAI request/response logs, as seen
@@ -606,6 +613,25 @@ export class ProviderRunner implements IProviderRunner {
       stdout: sanitizeInvocationOutputText(result.stdout || ""),
       stderr: sanitizeInvocationOutputText(result.stderr || ""),
     };
+  }
+
+  private resolveNativeSessionOperationPrompt(
+    provider: CliProviderId,
+    prompt: string,
+    operation: NativeSessionOperation | undefined,
+    continueSessionId: string | null | undefined,
+  ): string {
+    if (!operation) {
+      return prompt;
+    }
+    if (!continueSessionId) {
+      throw new Error(`Native session operation '${operation}' requires continueSessionId for provider ${provider}.`);
+    }
+    const nativePrompt = getNativeSessionOperationPrompt(provider, operation);
+    if (!nativePrompt) {
+      throw new Error(`Provider ${provider} does not support native session operation '${operation}'.`);
+    }
+    return nativePrompt;
   }
 
   private sanitizeUsageTelemetry(usageTelemetry: ProviderUsageTelemetry): ProviderUsageTelemetry {

@@ -460,7 +460,7 @@ describe("ChatThreadRuntimeService", () => {
     expect(deps.chatManagementActionService.processManagementAction).not.toHaveBeenCalled();
   });
 
-  it("compacts a virtual thread into a stored summary and clears the active session", async () => {
+  it("compacts a virtual thread natively and preserves the active session", async () => {
     deps.connectionChatRepository.getThread.mockReturnValue({
       id: "t1",
       projectId: "p1",
@@ -483,7 +483,7 @@ describe("ChatThreadRuntimeService", () => {
     });
     deps.agentPresetSyncService.getWorkerAgent.mockResolvedValue({ instructionMarkdown: "" });
     deps.executionRepository.createExecutionInvocation.mockReturnValue({ id: "exec-compact" });
-    deps.providerRunner.runProviderForText.mockResolvedValue({ text: "## Current Objective\nKeep context", nativeSessionId: "ignored" });
+    deps.providerRunner.runProviderForText.mockResolvedValue({ text: "## Current Objective\nKeep context", nativeSessionId: "session-1" });
     deps.connectionChatRepository.updateThread.mockImplementation((threadId: string, input: any) => ({
       id: threadId,
       projectId: "p1",
@@ -501,20 +501,23 @@ describe("ChatThreadRuntimeService", () => {
     }));
     expect(deps.providerRunner.runProviderForText).toHaveBeenCalledWith(expect.objectContaining({
       provider: "claude-code",
-      continueSessionId: null,
-      sessionId: "t1:compaction",
+      continueSessionId: "session-1",
+      nativeSessionOperation: "compact",
+      sessionId: "t1",
+      workspaceSessionId: "t1",
       providerMountAuth: true,
       providerAuthPath: "~/.claude",
     }));
     expect(updated.runtimeState).toMatchObject({
-      replayRequired: true,
-      sessionIds: [],
+      replayRequired: false,
+      sessionIds: ["session-1"],
       compactionSummary: {
         markdown: "## Current Objective\nKeep context",
         provider: "claude-code",
         model: "claude-3",
         sourceMessageId: "m2",
         sourceMessageCount: 2,
+        nativeSessionId: "session-1",
       },
     });
   });
