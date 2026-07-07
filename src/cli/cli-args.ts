@@ -125,6 +125,7 @@ const FLAG_KEY_ALIASES: Record<string, string> = {
   "sort-order": "sortOrder",
   "payload-json": "payloadJson",
   "settings-json": "settingsJson",
+  "bundle-json": "bundleJson",
   "labels-json": "labelsJson",
   "depends-on-task-ids": "dependsOnTaskIds",
   "memory-ids": "memoryIds",
@@ -188,6 +189,8 @@ const DOMAIN_ACTION_ALIASES: Record<string, string> = {
   "replace-sprint-settings": "replace_sprint_settings",
   "patch-sprint-setting": "patch_sprint_setting",
   "reset-sprint-settings": "reset_sprint_settings",
+  "export-settings-bundle": "export_settings_bundle",
+  "apply-settings-bundle": "apply_settings_bundle",
   "start-session": "start_session",
   "rebuild-session": "rebuild_session",
   "stop-session": "stop_session",
@@ -278,6 +281,8 @@ const DOMAIN_ACTION_SPECS: Record<string, Record<string, ActionSpec>> = {
     replace_sprint_settings: { display: "Replace sprint settings", requiredFlags: ["--project", "--sprint", "--settings-json"] },
     patch_sprint_setting: { display: "Patch a sprint setting", requiredFlags: ["--project", "--sprint", "--path", "--value"] },
     reset_sprint_settings: { display: "Reset sprint settings", requiredFlags: ["--sprint"] },
+    export_settings_bundle: { display: "Export a settings synchronization bundle", requiredFlags: [] },
+    apply_settings_bundle: { display: "Apply a settings synchronization bundle", requiredFlags: ["--bundle-json"] },
   },
   agents: {
     list: { display: "List agents", requiredFlags: ["--project"] },
@@ -388,7 +393,7 @@ function coercePayloadValue(key: string, value: unknown): unknown {
     }
   }
 
-  if (key === "payloadJson" || key === "settingsJson") {
+  if (key === "payloadJson" || key === "settingsJson" || key === "bundleJson") {
     return trimmed;
   }
 
@@ -670,6 +675,8 @@ function getExampleLines(domain: Exclude<ManagementDomain, "manage">): string[] 
       return [
         "  codeux settings get_system",
         "  codeux settings patch_project_setting --project <id> --path git.defaultBranch --value main",
+        "  codeux settings export-settings-bundle --json",
+        "  codeux settings apply-settings-bundle --bundle-json '<bundle-json>'",
       ];
     case "agents":
       return [

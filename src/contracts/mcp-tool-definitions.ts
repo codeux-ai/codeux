@@ -313,16 +313,21 @@ export const TOOL_DEFINITIONS = [
     name: "manage_settings",
     runtimeRoles: ["project_manager"],
     category: "platform",
-    description: "Manage Code UX settings. Used to get, resolve, patch, replace, and reset system, project, and sprint settings. Mutating settings actions always require a first human-confirmation response; only the same action and payload may execute once with approval.confirmed: true within 15 minutes.",
+    description: "Manage Code UX settings. Used to get, resolve, patch, replace, reset, export, and apply system, project, and sprint settings. Mutating settings actions and secret-bearing bundles require a first human-confirmation response; only the same action and payload may execute once with approval.confirmed: true within 15 minutes.",
     inputSchema: {
       type: "object",
       properties: {
-        action: { type: "string", enum: ["get_system", "get_project_override", "resolve_project_effective", "get_sprint_override", "resolve_sprint_effective", "replace_system_settings", "patch_system_setting", "replace_project_settings", "patch_project_setting", "reset_project_settings", "replace_sprint_settings", "patch_sprint_setting", "reset_sprint_settings"], description: "The settings action to perform." },
+        action: { type: "string", enum: ["get_system", "get_project_override", "resolve_project_effective", "get_sprint_override", "resolve_sprint_effective", "replace_system_settings", "patch_system_setting", "replace_project_settings", "patch_project_setting", "reset_project_settings", "replace_sprint_settings", "patch_sprint_setting", "reset_sprint_settings", "export_settings_bundle", "apply_settings_bundle"], description: "The settings action to perform." },
         projectId: { type: "string", description: "Required for project and sprint actions." },
         sprintId: { type: "string", description: "Required for sprint actions." },
+        projectIds: { type: "array", items: { type: "string" }, description: "Optional project ids for export_settings_bundle." },
+        sprintIds: { type: "array", items: { type: "string" }, description: "Optional sprint ids for export_settings_bundle." },
+        scopes: { type: "array", items: { type: "string", enum: ["system", "projects", "sprints"] }, description: "Optional bundle scopes for export_settings_bundle or apply_settings_bundle." },
         path: { type: "string", description: "Required for patch actions." },
         value: { description: "Required for patch actions. May be any JSON value." },
         settings: { type: "object", additionalProperties: true, description: "Required for replace actions." },
+        bundle: { type: "object", additionalProperties: true, description: "Required for apply_settings_bundle." },
+        includeSecrets: { type: "boolean", description: "When true, export_settings_bundle may include configured secret fields after approval." },
         approval: {
           type: "object",
           properties: {

@@ -54,7 +54,7 @@ Every tool requires `runtimeRoles: ["project_manager"]` and is enabled by defaul
 | `manage_scheduler` | `list`, `create`, `update`, `delete`, `run_due`, `schedule_sprint`, `schedule_quicksprint`, `schedule_chat` |
 | `manage_agents` | `list`, `get`, `create`, `update`, `delete`, `sync` |
 | `manage_memory` | `list`, `get`, `count`, `create`, `update`, `delete`, `search`, `promote`, `get_map`, `model_status`, `start_reembed` |
-| `manage_settings` | `get_system`, `get_project_override`, `resolve_project_effective`, `get_sprint_override`, `resolve_sprint_effective`, `replace_system_settings`, `patch_system_setting`, `replace_project_settings`, `patch_project_setting`, `reset_project_settings`, `replace_sprint_settings`, `patch_sprint_setting`, `reset_sprint_settings` |
+| `manage_settings` | `get_system`, `get_project_override`, `resolve_project_effective`, `get_sprint_override`, `resolve_sprint_effective`, `replace_system_settings`, `patch_system_setting`, `replace_project_settings`, `patch_project_setting`, `reset_project_settings`, `replace_sprint_settings`, `patch_sprint_setting`, `reset_sprint_settings`, `export_settings_bundle`, `apply_settings_bundle` |
 | `manage_preview` | `list_sessions`, `start_session`, `stop_session`, `rebuild_session`, `remove_session`, `get_logs`, `get_url`, `get_script`, `update_script` |
 | `manage_telemetry` | `get_project_stats_snapshot`, `get_project_execution_snapshot`, `list_execution_invocations`, `list_execution_invocation_messages`, `list_sprint_runs`, `list_task_dispatches` |
 
@@ -75,6 +75,17 @@ requirement; you then retry the *same* action and payload with `approval: { "con
 
 Settings mutations are stricter: only the same action and payload may execute once with
 `approval.confirmed: true`, within a 15-minute window.
+
+Secret-bearing settings synchronization also uses that one-use approval handshake:
+
+- `export_settings_bundle` returns a schema-versioned bundle with `exportedAt`, `includedScopes`,
+  a secret-redacted SHA-256 `fingerprint`, and `containsSecrets`. Export redacts provider API keys,
+  git tokens, issue-tracker tokens, and login credential markers unless `includeSecrets: true` is
+  approved for the exact export payload.
+- `apply_settings_bundle` accepts a `bundle` and optional `scopes` for partial import. It persists
+  through the same system, project, and sprint settings repository APIs used by the dashboard, so
+  imported values are normalized before storage. Any bundle marked as containing secrets, or whose
+  payload includes secret-bearing fields, requires approval before it is applied.
 
 ## `search_knowledge`
 
