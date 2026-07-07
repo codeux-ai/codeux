@@ -17,13 +17,13 @@ The Vitest config is at `vitest.config.ts`. Test environment is **Node** (not js
 ## Running tests
 
 ```bash
-pnpm test                       # full suite, single run
+pnpm run test                   # full suite, single run
 pnpm run test:watch             # watch mode
 pnpm run test:backend           # backend only
 pnpm run test:dashboard         # dashboard only
 pnpm run test:coverage          # full coverage with thresholds
 pnpm run test:backend:coverage  # backend coverage with thresholds
-pnpm test -- tests/backend/smoke.test.ts   # single file
+npx vitest run tests/backend/smoke.test.ts # single file
 ```
 
 ## Coverage thresholds

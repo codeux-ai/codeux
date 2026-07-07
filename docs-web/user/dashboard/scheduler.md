@@ -18,11 +18,14 @@ Each scheduler entry has a **target** — the thing that runs when it fires:
 | **Sprint** | Starts an existing sprint in the project. |
 | **Quicksprint** | Spawns and runs a [quicksprint template](../quicksprints.md), substituting its variables. |
 | **Message** | Posts a project message (for example, a recurring planning or status prompt). |
+| **Memory Remediation** | Long-term memory remediation, either deterministic or AI-routed. |
 
-## Recurrence
+## Recurrence and Timing
 
-An entry can run once at a specific time or repeat on a **recurrence rule** (for example daily or
-weekly). The page previews the next occurrences so you can confirm the cadence before saving.
+An entry can run once at a specific absolute time, or "after another sprint ends" anchored to a source sprint with an optional non-negative offset in minutes.
+
+Entries can also repeat on a **recurrence rule** (for example minutely, daily, or
+weekly, with optional fixed-count or end-date limits). The page previews the next occurrences so you can confirm the cadence before saving.
 
 ## Managing entries
 

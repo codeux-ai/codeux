@@ -86,7 +86,7 @@ Use this page as the main entrypoint.
 5. [Operations Runbook](./operations/runbook.md)
 6. [Security Hardening](./operations/security-hardening.md)
 7. [Logging and Correlation IDs](./operations/logging-and-correlation.md)
-8. [CLI Commands Reference](./reference/cli-commands.md) - `codeux` management syntax, aliases, prompting, JSON payloads, and approvals
+8. [CLI Commands Reference](./reference/cli-commands.md) - `codeux` management syntax, aliases, flag coercions, startup behaviors, prompting, JSON payloads, and approvals
 9. [CLI Management Surface](./operations/management-cli.md)
 
 ### Path 4: Development and validation
@@ -171,7 +171,7 @@ Use this page as the main entrypoint.
 - [Operations Runbook](./operations/runbook.md)
 - [Security Hardening](./operations/security-hardening.md)
 - [Logging and Correlation IDs](./operations/logging-and-correlation.md)
-- [CLI Commands Reference](./reference/cli-commands.md) - `codeux` management syntax, aliases, prompting, JSON payloads, and approvals
+- [CLI Commands Reference](./reference/cli-commands.md) - `codeux` management syntax, aliases, flag coercions, startup behaviors, prompting, JSON payloads, and approvals
 - [CLI Management Surface](./operations/management-cli.md)
 - [Testing and Quality](./development/testing-and-quality.md)
 - [OpenRouter Sprint Validation](./development/openrouter-sprint-validation.md)
