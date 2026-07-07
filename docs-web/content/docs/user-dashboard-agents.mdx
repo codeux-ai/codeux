@@ -23,6 +23,12 @@ project` when writing reusable instructions, screenshots, docs, or review notes.
 
 Each preset is a card with avatar, name, label tags, and a one-line description. Click a card to open the **detail panel**.
 
+## Avatar preview behavior
+
+The 3D avatar preview uses lightweight WebGL presentation effects only. Its flashlight is a translucent beam mesh with accent-aware scene lighting and material glow, not real ray tracing or post-processing.
+
+When motion is allowed, the flashlight tracks pointer hover and slowly scans while idle. Rare low-battery flickers can briefly show a `battery` humor line inside the avatar frame. Reduced-motion settings and WebGL fallback mode use the static SVG avatar instead, so the Agents page remains usable without animation or a WebGL context.
+
 ## Creating an agent
 
 Click **+ New agent**. The form collects:
