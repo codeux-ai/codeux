@@ -8,7 +8,18 @@ import { describe, it, expect, vi, afterEach } from "vitest";
 import * as matchers from "@testing-library/jest-dom/matchers";
 import { render, screen, cleanup, fireEvent, within } from "@testing-library/preact";
 import { StatsCard } from "../../components/StatsCard.js";
-import { CHART_SERIES, SeriesLegendButton, SortButton, ViewToggle } from "../../components/stats-ui-primitives.js";
+import {
+  CHART_SERIES,
+  CHIP_CLASS,
+  INPUT_CLASS,
+  LEDGER_ROW_CLASS,
+  LEDGER_ROW_MODERN_CLASS,
+  PANEL_CLASS,
+  SUBPANEL_CLASS,
+  SeriesLegendButton,
+  SortButton,
+  ViewToggle,
+} from "../../components/stats-ui-primitives.js";
 import { Activity } from "lucide-preact";
 
 expect.extend(matchers);
@@ -34,7 +45,10 @@ describe("StatsCard", () => {
     
     expect(screen.getByText("Daily Active")).toBeDefined();
     expect(screen.getByText("4.2k")).toBeDefined();
-    expect(screen.getByRole("article", { name: "Daily Active: 4.2k" })).toBeDefined();
+    const card = screen.getByRole("article", { name: "Daily Active: 4.2k" });
+    expect(card).toBeDefined();
+    expect(card).toHaveClass("stats-card-flat");
+    expect(card).toHaveAttribute("data-accent", "default");
   });
 
   it("renders icon component when provided", () => {
@@ -60,7 +74,10 @@ describe("StatsCard", () => {
 
   it("keeps the accessible card contract across accent variants", () => {
     render(<StatsCard title="Cost" value="$4.20" accent="amber" description="Projected usage" />);
-    expect(screen.getByRole("article", { name: "Cost: $4.20: Projected usage" })).toBeDefined();
+    const card = screen.getByRole("article", { name: "Cost: $4.20: Projected usage" });
+    expect(card).toBeDefined();
+    expect(card).toHaveClass("stats-card-flat");
+    expect(card).toHaveAttribute("data-accent", "amber");
     expect(screen.getByText("Projected usage")).toBeDefined();
   });
 
@@ -159,14 +176,26 @@ describe("StatsCard", () => {
     expect(onToggle).toHaveBeenCalledTimes(1);
   });
 
-  it("keeps shared stats surfaces on solid Warm Void tokens instead of glass blur", () => {
+  it("keeps shared stats surfaces on flat neutral tokens instead of glass blur or hover lift", () => {
     const themeCss = readFileSync(resolve(statsRoot, "styles/stats-theme.css"), "utf8");
     const cardCss = readFileSync(resolve(statsRoot, "components/StatsCard.module.css"), "utf8");
+    const primitiveClasses = [
+      PANEL_CLASS,
+      SUBPANEL_CLASS,
+      CHIP_CLASS,
+      INPUT_CLASS,
+      LEDGER_ROW_CLASS,
+      LEDGER_ROW_MODERN_CLASS,
+    ].join(" ");
 
-    expect(themeCss).toContain("--stats-surface-panel: #fffdfa");
-    expect(themeCss).toContain("--stats-surface-chip: #f4ede4");
+    expect(themeCss).toContain("--stats-surface-panel: rgba(255, 255, 255, 0.96)");
+    expect(themeCss).toContain("--stats-surface-chip: rgba(241, 245, 249, 0.92)");
+    expect(themeCss).toContain("--stats-card-shadow: none");
+    expect(themeCss).toContain("--stats-panel-shadow: none");
     expect(themeCss).not.toContain("surface-glass");
-    expect(`${themeCss}\n${cardCss}`).not.toMatch(/backdrop-filter|-webkit-backdrop-filter/);
+    expect(`${themeCss}\n${cardCss}\n${primitiveClasses}`).not.toMatch(/backdrop-filter|-webkit-backdrop-filter|backdrop-blur|translateY|hover:-translate|linear-gradient/);
+    expect(primitiveClasses).not.toContain("shadow-[var(--stats-card-shadow-hover)]");
+    expect(primitiveClasses).not.toContain("shadow-[var(--stats-control-shadow");
 
     render(<SeriesLegendButton series={CHART_SERIES[0]} active={false} currentValue={0} onToggle={vi.fn()} />);
 
