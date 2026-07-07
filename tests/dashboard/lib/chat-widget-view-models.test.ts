@@ -522,6 +522,79 @@ describe("Chat Widget View Models", () => {
       expect(result).toEqual({ type: "planning", status: "queued", planName: "Execution Plan" });
     });
 
+    it("uses execution plan metadata for sprint-specific invocation planning widgets", () => {
+      const message = {
+        metadata: {
+          routeKind: "virtual",
+          status: "completed",
+          executionPlan: {
+            sprintId: "sprint-14",
+            sprintNumber: 14,
+            sprintName: "Stabilize chat transcripts",
+            goal: "Render persisted execution plans in invocation transcripts.",
+            taskCount: 2,
+            createdTaskIds: ["task-1", "task-2"],
+            taskSummaries: [
+              { key: "T01", title: "Parse execution plan metadata", summary: "Build a safe view model from the selected message." },
+              { key: "T02", title: "Render compact task summaries", summary: "Show enough task context to distinguish sprint plans." },
+            ],
+          },
+        },
+      } as unknown as ExecutionInvocationMessageRecord;
+
+      const result = getInvocationWidgetData(message, {
+        projectId: "project-1",
+        projectTasks: [createTask({ sprintId: "sprint-live", sprint: "Live Sprint", title: "Live task" })],
+        projectTasksLoading: false,
+        projectTasksLoaded: true,
+        execution: createExecution({
+          sprintRuns: [{ ...createExecution().sprintRuns[0]!, sprintId: "sprint-live", sprintName: "Live Sprint", sprintNumber: 99 }],
+        }),
+        executionLoading: false,
+        executionLoaded: true,
+      });
+
+      expect(result.type).toBe("planning");
+      expect(result.status).toBe("completed");
+      expect(result.planName).toBe("SPR-14: Stabilize chat transcripts");
+      expect(result.executionPlan).toEqual(expect.objectContaining({
+        sprintId: "sprint-14",
+        sprintNumber: 14,
+        sprintKey: "SPR-14",
+        sprintName: "Stabilize chat transcripts",
+        goal: "Render persisted execution plans in invocation transcripts.",
+        taskCount: 2,
+        createdTaskIds: ["task-1", "task-2"],
+        taskSummaryLabel: "2 planned tasks",
+      }));
+      expect(result.executionPlan?.tasks).toEqual([
+        {
+          id: "T01",
+          title: "Parse execution plan metadata",
+          summary: "Build a safe view model from the selected message.",
+        },
+        {
+          id: "T02",
+          title: "Render compact task summaries",
+          summary: "Show enough task context to distinguish sprint plans.",
+        },
+      ]);
+      expect(result.liveStatus).toBeUndefined();
+    });
+
+    it("keeps legacy virtual route fallback when execution plan metadata is absent or malformed", () => {
+      const message = {
+        metadata: {
+          routeKind: "virtual",
+          status: "queued",
+          executionPlan: "legacy-route-without-plan-details",
+        },
+      } as unknown as ExecutionInvocationMessageRecord;
+
+      const result = getInvocationWidgetData(message);
+      expect(result).toEqual({ type: "planning", status: "queued", planName: "Execution Plan" });
+    });
+
     it("returns planning if metadata.routeKind is worker", () => {
       const message = {
         metadata: {

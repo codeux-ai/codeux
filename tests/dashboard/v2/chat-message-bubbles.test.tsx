@@ -778,6 +778,91 @@ describe("Chat Message Bubbles", () => {
       expect(container.textContent).toContain("Preparing to plan...");
     });
 
+    it("renders distinct persisted execution plans for different invocation planning messages", () => {
+      const firstMessage = createInvocationMessage({
+        id: "msg_plan_alpha",
+        contentMarkdown: "Planning transcript for alpha sprint",
+        metadata: {
+          routeKind: "virtual",
+          status: "completed",
+          executionPlan: {
+            sprintId: "sprint-alpha",
+            sprintNumber: 31,
+            sprintName: "Runtime Planning",
+            goal: "Make invocation planning cards sprint-specific.",
+            taskCount: 2,
+            createdTaskIds: ["task-alpha-1", "task-alpha-2"],
+            taskSummaries: [
+              { key: "T01", title: "Parse metadata execution plan", summary: "Use the selected invocation message metadata." },
+              { key: "T02", title: "Render alpha task summary", summary: "Expose alpha-specific task context." },
+            ],
+          },
+        },
+      });
+      const secondMessage = createInvocationMessage({
+        id: "msg_plan_beta",
+        contentMarkdown: "Planning transcript for beta sprint",
+        metadata: {
+          routeKind: "virtual",
+          status: "completed",
+          executionPlan: {
+            sprintId: "sprint-beta",
+            sprintNumber: 32,
+            sprintName: "Provider Recovery",
+            goal: "Make adjacent planning cards visually distinguishable.",
+            taskCount: 3,
+            createdTaskIds: ["task-beta-1", "task-beta-2", "task-beta-3"],
+            taskSummaries: [
+              { key: "T01", title: "Render beta task summary", summary: "Expose beta-specific task context." },
+              { key: "T02", title: "Keep markdown visible", summary: "Do not suppress invocation message content." },
+              { key: "T03", title: "Preserve fallback behavior", summary: "Legacy virtual routes still render safely." },
+            ],
+          },
+        },
+      });
+
+      const { container } = render(
+        <div>
+          <InvocationMessageBubble message={firstMessage} />
+          <InvocationMessageBubble message={secondMessage} />
+        </div>
+      );
+      const view = within(container);
+
+      expect(view.getByText("SPR-31")).toBeInTheDocument();
+      expect(view.getByText("Runtime Planning")).toBeInTheDocument();
+      expect(view.getByText("2 planned tasks")).toBeInTheDocument();
+      expect(view.getByText("Render alpha task summary")).toBeInTheDocument();
+      expect(view.getByText("Expose alpha-specific task context.")).toBeInTheDocument();
+
+      expect(view.getByText("SPR-32")).toBeInTheDocument();
+      expect(view.getByText("Provider Recovery")).toBeInTheDocument();
+      expect(view.getByText("3 planned tasks")).toBeInTheDocument();
+      expect(view.getByText("Render beta task summary")).toBeInTheDocument();
+      expect(view.getByText("Expose beta-specific task context.")).toBeInTheDocument();
+
+      expect(container.textContent).toContain("Planning transcript for alpha sprint");
+      expect(container.textContent).toContain("Planning transcript for beta sprint");
+    });
+
+    it("keeps legacy virtual route invocation planning fallback safe without execution plan metadata", () => {
+      const message = createInvocationMessage({
+        id: "msg_legacy_virtual",
+        contentMarkdown: "Legacy virtual route transcript",
+        metadata: {
+          routeKind: "virtual",
+          status: "queued",
+          executionPlan: "not-an-object",
+        },
+      });
+
+      const { container } = render(<InvocationMessageBubble message={message} />);
+
+      expect(container.textContent).toContain("Legacy virtual route transcript");
+      expect(container.textContent).toContain("Execution Plan");
+      expect(container.textContent).toContain("Preparing to plan...");
+    });
+
     it("renders passing planning self-reflection as a rich widget", () => {
       const message: ExecutionInvocationMessageRecord = {
         id: "msg_reflection_pass",
