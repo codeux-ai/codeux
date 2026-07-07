@@ -1,5 +1,6 @@
 import type { CustomMcpServer, ProviderId } from "../../../contracts/app-types.js";
 import { isUsableCustomMcpServer } from "../../../mcp/mcp-tool-availability.js";
+import { MOCKUP_CLI_NODE_SCRIPT } from "./mockup-cli-provider.js";
 
 export type CliProviderId = Extract<ProviderId, "gemini" | "codex" | "claude-code" | "qwen-code" | "opencode" | "antigravity" | "mockup-cli">;
 
@@ -43,7 +44,7 @@ export const providerSpecs: Record<CliProviderId, ProviderCommandSpec> = {
     command: "node",
     args: [
       "-e",
-      "const prompt = process.argv[1] || ''; console.log(JSON.stringify({ provider: 'mockup-cli', model: 'default', ok: true, promptLength: prompt.length }));",
+      MOCKUP_CLI_NODE_SCRIPT,
       prompt,
     ],
   }),

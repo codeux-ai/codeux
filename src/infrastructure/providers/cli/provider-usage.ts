@@ -117,6 +117,17 @@ function parseJsonObject(value: string): Record<string, unknown> | null {
   }
 }
 
+function parseLastJsonObjectLine(value: string): Record<string, unknown> | null {
+  const lines = value.split(/\r?\n/).map((line) => line.trim()).filter(Boolean).reverse();
+  for (const line of lines) {
+    const parsed = parseJsonObject(line);
+    if (parsed) {
+      return parsed;
+    }
+  }
+  return null;
+}
+
 interface NormalizedUsageCounts {
   promptTokens: number;
   completionTokens: number;
@@ -582,6 +593,26 @@ export async function collectProviderUsageTelemetry(args: {
   opencodeBaselineUsage?: Record<string, unknown> | null;
 }): Promise<ProviderUsageTelemetry> {
   const fallbackOutput = [args.capturedText || "", args.stdout || "", args.stderr || ""].filter(Boolean).join("\n").trim();
+
+  if (args.provider === "mockup-cli") {
+    const parsed = parseLastJsonObjectLine(args.stdout) || parseLastJsonObjectLine(args.capturedText || "");
+    const transcriptText = typeof parsed?.response === "string" ? parsed.response : fallbackOutput;
+    const nativeSessionId = typeof parsed?.nativeSessionId === "string" ? parsed.nativeSessionId : args.nativeSessionId || null;
+    const conversation = withLeadingUserTurn(
+      transcriptText
+        ? [{ kind: "assistant", text: transcriptText }]
+        : [],
+      args.prompt,
+    );
+    return {
+      ...emptyTelemetry(),
+      usageSource: "unsupported",
+      rawUsageJson: parsed ? { provider: "mockup-cli", mock: true } : { provider: "mockup-cli", mock: true },
+      transcriptText,
+      nativeSessionId,
+      conversation,
+    };
+  }
 
   if (args.provider === "gemini") {
     const parsed = parseJsonObject(args.stdout);
