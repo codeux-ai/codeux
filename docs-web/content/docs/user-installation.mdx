@@ -126,6 +126,8 @@ Run `codeux --help` for the authoritative list. The current flags are:
 | --- | --- |
 | `JULES_API_KEY` | Jules API key (also accepted as `JULES_KEY`). |
 | `DASHBOARD_PORT` | Dashboard port (default `4444`). |
+| `DASHBOARD_HOST` | Dashboard bind address (default `127.0.0.1`). Non-loopback values require `CODE_UX_ALLOW_PUBLIC_DASHBOARD=1`. |
+| `CODE_UX_ALLOW_PUBLIC_DASHBOARD` | Set to `1` to explicitly allow unauthenticated dashboard binding outside loopback. |
 | `CODE_UX_SERVER_MODE` | Set to `true` for authenticated MCP HTTP server mode without dashboard binding. Requires an explicit bearer token with at least 32 bearer-safe characters. |
 | `MCP_HTTP_ENABLED` | Preferred alias to enable the MCP HTTP gateway. |
 | `MCP_HTTPS_ENABLED` | Enable the MCP HTTP gateway (default `true`). |

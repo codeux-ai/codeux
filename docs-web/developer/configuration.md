@@ -42,7 +42,8 @@ Flags can be passed in any order. Anything after `--` is ignored.
 | `JULES_API_BASE_URL` | URL | `https://jules.googleapis.com/v1alpha` | Override the Jules API endpoint. |
 | `JULES_API_MAX_FAILS` | int | `5` | Emergency-stop threshold (`maxFailures`). |
 | `DASHBOARD_PORT` | int | `4444` | Dashboard HTTP port. |
-| `DASHBOARD_HOST` | string | `127.0.0.1` | Dashboard bind address. |
+| `DASHBOARD_HOST` | string | `127.0.0.1` | Dashboard bind address. Non-loopback values require `CODE_UX_ALLOW_PUBLIC_DASHBOARD=1`. |
+| `CODE_UX_ALLOW_PUBLIC_DASHBOARD` | string | – | Set to `1` to explicitly allow unauthenticated dashboard binding outside loopback. |
 | `CODE_UX_SERVER_MODE` | bool | `false` | Enable authenticated MCP HTTP server mode and disable dashboard binding. |
 | `MCP_HTTP_ENABLED` | bool | `true` | Preferred MCP HTTP gateway enablement variable. |
 | `MCP_HTTPS_ENABLED` | bool | `true` | Enable the MCP HTTP gateway. |

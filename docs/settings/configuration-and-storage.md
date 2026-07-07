@@ -410,8 +410,8 @@ QA merge-gate notes:
   - `containerCacheSetupScriptImage` (default `true`)
     - when enabled, Docker runtime builds and reuses a derived image keyed by the base image plus setup script contents
     - cache misses fall back to the current per-run setup script path if the image build fails
-  - `containerInstallPlaywrightBrowsers` (default `true`): provider coding containers set `CODE_UX_INSTALL_PLAYWRIGHT=1`, so the shared setup script installs Playwright Chromium plus OS dependencies for agent browser checks. Disable it to skip the browser download during setup; preview containers keep this disabled unless they opt into the provider setup path explicitly.
   - `containerRunAsRoot` (default `false`): persisted opt-in contract for Docker provider containers that must run as root. Invalid or missing values sanitize back to `false`; runtime argument changes are handled separately from this storage contract.
+  - `containerInstallPlaywrightBrowsers` (default `true`): provider coding containers set `CODE_UX_INSTALL_PLAYWRIGHT=1`, so the shared setup script installs Playwright Chromium plus OS dependencies for agent browser checks. With setup-image caching enabled, the setup-cache build also exports `PLAYWRIGHT_BROWSERS_PATH=/ms-playwright`, bakes Chromium into that image, and leaves the directory readable for non-root provider runs. Disable this setting to skip the browser download during setup; preview containers keep it disabled unless they opt into the provider setup path explicitly.
   - `containerMountGitConfig` (default `false`): copy the host `.gitconfig` into Docker. When disabled, Docker provider runs configure Git with `containerGitUserName` and `containerGitUserEmail` instead.
   - `containerGitUserName` (default `Code UX`)
   - `containerGitUserEmail` (default `agents@codeux.ai`)
@@ -529,7 +529,7 @@ Repository demo script:
 - Packaged desktop installs also ship this script as a default asset. On first use, Code UX copies it to `~/.code-ux/container/setup.sh` when that file does not already exist, so Docker can mount a normal user-directory script instead of relying on a repo checkout.
 - It verifies `npm`, ensures `git` + `gh`, installs `pnpm` when needed, and leaves provider CLI installation to the runtime's provider-specific fallback.
 - `npm` refresh is now opt-in via `CODE_UX_REFRESH_NPM=1` instead of happening on every container start.
-- Playwright bootstrap is controlled by the Docker Runtime `containerInstallPlaywrightBrowsers` setting. Provider coding containers enable it by default through `CODE_UX_INSTALL_PLAYWRIGHT=1`, while preview containers keep it disabled by default.
+- Playwright bootstrap is controlled by the Docker Runtime `containerInstallPlaywrightBrowsers` setting. Provider coding containers enable it by default through `CODE_UX_INSTALL_PLAYWRIGHT=1`, while preview containers keep it disabled by default. Cached setup images install Chromium and OS dependencies once during image build under `/ms-playwright`; later provider containers inherit `PLAYWRIGHT_BROWSERS_PATH=/ms-playwright` and skip browser installation unless the cache is disabled or rebuilt.
 - Docker CLI execution now uses isolated Docker volumes as the workspace backing store instead of repo-local worktrees or persistent host-side runtime homes.
   - container `/workspace` contains only the Git checkout used for the coding task
   - provider `HOME` lives in a sibling runtime volume mounted at `/code-ux-runtime-home`, so CLI auth/config/cache/session state does not appear inside the Git worktree

@@ -157,6 +157,8 @@ Defines the default container environment used by Docker-backed provider CLIs.
 
 **Recommended defaults:** Keep the default image unless your repo needs a custom toolchain; enable Playwright preinstall for browser-heavy QA.
 
+With setup-image caching enabled, Playwright preinstall is baked into the derived image at `/ms-playwright` and reused by later non-root provider runs without rerunning the browser download.
+
 **Risks and gotchas:** Broken setup scripts or overly tight memory limits can fail every provider invocation in the scope.
 
 Related docs:

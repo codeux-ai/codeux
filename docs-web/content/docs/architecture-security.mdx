@@ -31,7 +31,7 @@ Two listeners:
 ### Dashboard server
 
 - **Unauthenticated.** Designed for trusted local consumption.
-- Bind only to loopback in production (the default).
+- Bind only to loopback in production (the default). Non-loopback `DASHBOARD_HOST` values are rejected unless `CODE_UX_ALLOW_PUBLIC_DASHBOARD=1` is set for that startup.
 - If exposing remotely, **front with a reverse proxy** that handles auth (basic auth, OAuth proxy, mTLS, …).
 - The WebSocket inherits the same security posture.
 
