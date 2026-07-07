@@ -54,6 +54,7 @@ Code UX is a container-first multi-provider runtime with an integrated dashboard
 - API host: `src/server/dashboard-server.ts`
 - Frontend app: `dashboard/src/v2/*`
 - Settings view-models: `dashboard/src/v2/lib/settings-view-models.ts` is a compatibility barrel over focused helpers in `dashboard/src/v2/lib/settings/`. Provider instance/auth helpers, model option catalogs, model pricing refs, project override/source helpers, display metadata, and branch naming helpers are kept in separate typed modules so dashboard components can share behavior without changing settings API contracts or saved settings shapes.
+- Custom dashboard management uses `src/server/custom-dashboard-routes.ts`, `src/repositories/custom-dashboard-repository.ts`, and `src/services/custom-dashboard-validation-service.ts` to store drafts/revisions, validate generated bundles in detached Docker sessions, and publish only revisions with passed validation reports. See [Custom Dashboards](../dashboard/custom-dashboards.md) and [Custom Dashboard Foundation](./custom-dashboard-foundation.md).
 
 ### 6. Data and settings repositories
 - Persistence uses SQLite via `node:sqlite`.
@@ -94,6 +95,9 @@ flowchart TD
   O --> P[(~/.code-ux/settings.db)]
   R --> Q[MCP stdio/HTTP gateway]
   F --> S[Docker/host CLI providers]
+  L --> T[Custom dashboard validation service]
+  T --> U[Detached Docker validation runtime]
+  T --> O
 ```
 
 ## High-Level Data Flow
@@ -104,6 +108,7 @@ flowchart TD
 4. Orchestrator runs atomic steps and updates `lastStatus`.
 5. Dashboard polls `/api/live` for one combined runtime snapshot, while websocket updates and the execution event log keep task feeds fresh between polls.
 6. UI renders task pipeline, protocol instructions, and git/CI state.
+7. Custom dashboard drafts and revisions are persisted in SQLite; validation materializes an immutable revision in a project runtime directory, starts a detached Docker preview, records the validation report/log metadata, and leaves publication as a separate gated repository operation.
 
 ## Configuration Priority Model
 

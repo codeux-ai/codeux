@@ -2,7 +2,7 @@
 
 Code UX exposes **one MCP tool per management domain** — `manage_projects`, `manage_sprints`,
 `manage_tasks`, `manage_quicksprints`, `manage_scheduler`, `manage_agents`, `manage_node_flows`, `manage_memory`,
-`manage_settings`, `manage_preview`, `manage_chat_providers`, and `manage_telemetry` — each with a set of
+`manage_settings`, `manage_preview`, `manage_custom_dashboards`, `manage_chat_providers`, and `manage_telemetry` — each with a set of
 **actions**. This page is the complete matrix. (See [MCP tools](/docs/developer-mcp-tools) for the tool list and
 schemas.)
 
@@ -207,6 +207,28 @@ Sprint preview browser sessions.
 | `get_url` | – | `sessionId` | Get the session's proxied preview URL. |
 | `get_script` | – | `projectId`, `sprintId` | Get the preview startup script content. |
 | `update_script` | – | `projectId`, `sprintId`, script body | Update the per-sprint preview startup script. |
+
+---
+
+## `custom_dashboards`
+
+Project-scoped generated dashboards, immutable revisions, detached validation sessions, and publication state.
+
+| Action | Destructive | Required payload | Description |
+| --- | --- | --- | --- |
+| `list` | – | `projectId` | List project custom dashboards. |
+| `get` | – | `dashboardId` | Get one dashboard with revisions. |
+| `create` | – | `projectId`, `title`, `manifest`, `fileBundle` | Create a mutable draft. Optional `description`, `sourceNodeGraph`, `styleguide`, and `runtimeMetadata`. |
+| `update` | – | `dashboardId`, update fields | Update mutable draft fields without mutating existing revisions. |
+| `create_revision` | – | `dashboardId` | Create an immutable revision from the draft or supplied bundle overrides. |
+| `validate_revision` | – | `projectId`, `dashboardId`, `revisionId` | Start detached Docker validation for a revision. |
+| `validation_status` | – | `sessionId` | Read validation session status and report metadata. |
+| `validation_logs` | – | `sessionId`, optional `tail` | Read validation logs. |
+| `publish_revision` | – | `dashboardId`, `revisionId`, optional `validationSessionId` | Publish only a passed revision with a valid report. |
+| `archive` | ✅ | `dashboardId` | Clear active publication and mark the dashboard archived. |
+| `data_catalog` | – | `projectId` | Return dashboard summaries and declared source nodes. |
+
+Publication rejects failed, queued, running, cancelled, missing, or cross-revision validation sessions before the active publication pointer changes.
 
 ---
 

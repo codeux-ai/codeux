@@ -69,6 +69,7 @@
 - [Project Initialization](./dashboard/project-initialization.md)
 - [Sprint Imports](./dashboard/sprint-imports.md)
 - [Quicksprint Templates](./dashboard/quicksprint-templates.md)
+- [Custom Dashboards](./dashboard/custom-dashboards.md)
 - [Nodes](./dashboard/nodes.md)
 - [Node Flows Dashboard](./dashboard/node-flows.md)
 - [Scheduler](./dashboard/scheduler.md)
