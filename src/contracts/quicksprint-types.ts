@@ -1,3 +1,5 @@
+import type { PlanSprintOptions, SprintRecord } from "./project-management-types.js";
+
 export interface QuicksprintTemplateRecord {
   id: string;
   projectId: string | null;
@@ -45,9 +47,28 @@ export interface QuicksprintExecutionInput {
   taskCount: number;
   noTaskLimit?: boolean;
   submitMode: "plan_only" | "plan_and_start";
+  clientRequestId?: string;
   routeOverride?: string;
   modelOverride?: string;
   planningOverrides?: import("./project-management-types.js").PlanningOverrides;
   agentPresetId?: string;
   additionalPrompt?: string;
+}
+
+export interface DetachedQuicksprintLaunchInput extends QuicksprintExecutionInput {
+  clientRequestId?: string;
+}
+
+export interface DetachedQuicksprintPlanningRequest {
+  projectId: string;
+  sprintId: string;
+  templateId: string;
+  submitMode: QuicksprintExecutionInput["submitMode"];
+  clientRequestId: string;
+  planOptions: PlanSprintOptions;
+}
+
+export interface DetachedQuicksprintLaunchResult {
+  sprint: SprintRecord;
+  planningRequest: DetachedQuicksprintPlanningRequest;
 }
