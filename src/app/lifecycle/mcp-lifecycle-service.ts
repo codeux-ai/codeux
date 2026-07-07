@@ -13,6 +13,7 @@ import { CODE_UX_DISPLAY_NAME, CODE_UX_VERSION } from "../../shared/config/code-
 import type { RuntimeStartupRecoveryService } from "../../services/runtime-startup-recovery-service.js";
 import { runWithMcpAgentContext } from "../../server/mcp-agent-context.js";
 import { createHttpRateLimiter } from "../../shared/http/rate-limit.js";
+import type { ReadinessProbeStatus } from "../../contracts/app-types.js";
 
 export interface BootMcpTransportDeps {
   server: McpServer;
@@ -37,6 +38,8 @@ export interface BootMcpHttpTransportDeps {
   recoveryService: RuntimeStartupRecoveryService;
   onRecovered?: (recoveredSprintRunIds: string[]) => void;
   runStartupRecovery?: boolean;
+  isReady?: () => ReadinessProbeStatus;
+  isHealthy?: () => ReadinessProbeStatus;
 }
 
 export interface McpHttpTransportHandle {
@@ -122,7 +125,7 @@ function readAuthorizationHeader(req: IncomingMessage): string | null {
   return value;
 }
 
-function isAuthorizedRequest(req: IncomingMessage, authToken: string | null): boolean {
+export function isAuthorizedRequest(req: IncomingMessage, authToken: string | null): boolean {
   const header = readAuthorizationHeader(req);
   if (!authToken) {
     return true;
@@ -145,7 +148,7 @@ interface ValidatedMcpHttpRequestHeaders {
   agentId: string | null;
 }
 
-function respondUnauthorized(res: ServerResponse): void {
+export function respondUnauthorized(res: ServerResponse): void {
   res.statusCode = 401;
   res.setHeader("Content-Type", "application/json");
   res.end(JSON.stringify({
@@ -169,6 +172,18 @@ function respondBadRequest(res: ServerResponse, message: string): void {
     },
     id: null,
   }));
+}
+
+function respondProbe(
+  res: express.Response,
+  probe: ReadinessProbeStatus,
+  readyStatuses: ReadinessProbeStatus["status"][],
+): void {
+  if (readyStatuses.includes(probe.status)) {
+    res.json(probe);
+    return;
+  }
+  res.status(503).json(probe);
 }
 
 export async function bootMcpTransport(deps: BootMcpTransportDeps): Promise<void> {
@@ -261,6 +276,16 @@ export async function bootMcpHttpTransport(deps: BootMcpHttpTransportDeps): Prom
       .map(([id]) => id);
     await Promise.all(staleSessionIds.map((sessionId) => closeSession(sessionId)));
   };
+
+  app.get("/health", (req, res) => {
+    const healthy = deps.isHealthy ? deps.isHealthy() : { status: "UP" as const };
+    respondProbe(res, healthy, ["UP"]);
+  });
+
+  app.get("/ready", (req, res) => {
+    const ready = deps.isReady ? deps.isReady() : { status: "READY" as const };
+    respondProbe(res, ready, ["READY", "UP"]);
+  });
 
   app.all(deps.path, async (req, res) => {
     let headers: ValidatedMcpHttpRequestHeaders;
@@ -363,10 +388,6 @@ export async function bootMcpHttpTransport(deps: BootMcpHttpTransportDeps): Prom
         });
       }
     }
-  });
-
-  app.get("/health", (req, res) => {
-    res.json({ status: "UP" });
   });
 
   const server = await new Promise<HttpServer>((resolve, reject) => {

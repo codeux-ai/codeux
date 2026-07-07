@@ -113,6 +113,8 @@ That endpoint:
 - exposes the same project-manager tool surface as stdio
 - no longer exposes a separate worker-control-plane runtime
 - is mandatory and always token-authenticated in server mode
+- serves unauthenticated `GET /health` and `GET /ready` probes on the MCP HTTP listener, with the same readiness payload shape used by the dashboard listener
+- evaluates bearer authorization before MCP session lookup for every request to the MCP JSON-RPC path
 
 ## Dashboard Settings Path
 

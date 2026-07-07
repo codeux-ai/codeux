@@ -941,6 +941,9 @@ describe("CodeUxServer", () => {
 
       expect(bootMcpTransport).toHaveBeenCalled();
       expect(bootMcpHttpTransport).toHaveBeenCalled();
+      const bootMcpHttpArgs = (bootMcpHttpTransport as any).mock.calls.at(-1)?.[0];
+      expect(bootMcpHttpArgs.isReady()).toEqual(bootDashboardArgs.isReady());
+      expect(bootMcpHttpArgs.isHealthy()).toEqual(bootDashboardArgs.isHealthy());
       const bootMcpArgs = (bootMcpTransport as any).mock.calls[0][0];
       expect(bootMcpArgs.server).toBeDefined();
       expect(bootMcpArgs.logger).toBeDefined();
