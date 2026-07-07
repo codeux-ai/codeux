@@ -1,9 +1,9 @@
 import type { FunctionComponent } from "preact";
 import { X } from "lucide-preact";
-import { useRef, useLayoutEffect, useEffect } from "preact/hooks";
+import { useRef, useLayoutEffect, useEffect, useState } from "preact/hooks";
 import gsap from "gsap";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
-import { ContainerShip, WoodenShip } from "./PlanningShip.js";
+import { CoffeeCup, ContainerShip, WoodenShip } from "./PlanningShip.js";
 import { type PlanningActionType, type PlanningFeedback, PLANNING_ACTION_LABELS } from "../../lib/sprint-planning-feedback.js";
 import { MODAL_MOTION } from "../../lib/motion/modal-motion.js";
 
@@ -38,7 +38,19 @@ export const PlanningProgressOverlay: FunctionComponent<PlanningProgressOverlayP
 }) => {
   const textContainerRef = useRef<HTMLDivElement>(null);
   const prevTextRef = useRef(feedback?.text);
+  const prevBusyStateRef = useRef<{ isBusy: boolean; actionType: PlanningProgressOverlayProps["actionType"] }>({ isBusy, actionType });
+  const [isCoffeeBreak, setIsCoffeeBreak] = useState(false);
   const reducedMotion = useReducedMotion();
+
+  useEffect(() => {
+    const previous = prevBusyStateRef.current;
+    if (!isBusy) {
+      setIsCoffeeBreak(false);
+    } else if (!previous.isBusy || previous.actionType !== actionType) {
+      setIsCoffeeBreak(false);
+    }
+    prevBusyStateRef.current = { isBusy, actionType };
+  }, [actionType, isBusy]);
 
   useEffect(() => {
     if (!isBusy || isDismissed) {
@@ -79,6 +91,10 @@ export const PlanningProgressOverlay: FunctionComponent<PlanningProgressOverlayP
       badgeText: "text-signal-600 dark:text-signal-300",
       pingBg1: "bg-signal-400",
       pingBg2: "bg-signal-500",
+      coffeeFocusRing: "focus-visible:ring-signal-400 dark:focus-visible:ring-signal-300",
+      coffeeReminderBorder: "border-signal-500/20 dark:border-signal-400/20",
+      coffeeReminderBg: "bg-signal-500/[0.08] dark:bg-signal-400/[0.09]",
+      coffeeReminderShadow: "shadow-[0_10px_24px_rgba(0,224,160,0.08)]",
     },
     ember: {
       shipContainer: "#FF6B00",
@@ -88,6 +104,10 @@ export const PlanningProgressOverlay: FunctionComponent<PlanningProgressOverlayP
       badgeText: "text-ember-600 dark:text-ember-400",
       pingBg1: "bg-ember-400",
       pingBg2: "bg-ember-500",
+      coffeeFocusRing: "focus-visible:ring-ember-400 dark:focus-visible:ring-ember-400",
+      coffeeReminderBorder: "border-ember-500/20 dark:border-ember-400/20",
+      coffeeReminderBg: "bg-ember-500/[0.08] dark:bg-ember-400/[0.09]",
+      coffeeReminderShadow: "shadow-[0_10px_24px_rgba(255,107,0,0.08)]",
     },
   };
 
@@ -183,6 +203,7 @@ export const PlanningProgressOverlay: FunctionComponent<PlanningProgressOverlayP
         <div
           className="absolute inset-y-8 left-0 w-full transform-gpu transition-[transform,opacity,visibility] ease-linear motion-reduce:transition-none"
           data-testid="planning-ship-traveler"
+          data-coffee-break={isCoffeeBreak ? "true" : "false"}
           data-ship-phase={shipVisual.phase}
           data-ship-visible={shipVisual.visible ? "true" : "false"}
           style={{
@@ -193,14 +214,41 @@ export const PlanningProgressOverlay: FunctionComponent<PlanningProgressOverlayP
           }}
         >
           <div className="absolute left-0 top-1/2 -translate-x-1/2 -translate-y-1/2">
-            <div className="absolute left-[-74px] top-[30px] h-3 w-24 rounded-full bg-gradient-to-l from-transparent via-white/55 to-transparent blur-[2px] motion-safe:animate-pulse motion-reduce:animate-none dark:via-signal-300/22" />
-            <svg width="132" height="72" viewBox="-66 -38 132 72" className="drop-shadow-[0_12px_16px_rgba(15,23,42,0.18)] dark:drop-shadow-[0_14px_18px_rgba(0,0,0,0.45)]">
-            {feedback.shipType === "container" ? (
-              <ContainerShip accentColor={theme.shipContainer} isMoving={!reducedMotion} isDark={isDark} />
-            ) : (
-              <WoodenShip accentColor={theme.shipWooden} isMoving={!reducedMotion} isDark={isDark} />
-            )}
-            </svg>
+            <button
+              type="button"
+              aria-label={isCoffeeBreak ? "Coffee break reminder is visible" : "Turn planning vessel into a coffee break reminder"}
+              aria-pressed={isCoffeeBreak ? "true" : "false"}
+              data-testid="planning-vessel-button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setIsCoffeeBreak(true);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " " || e.key === "Spacebar" || e.code === "Space") {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setIsCoffeeBreak(true);
+                }
+              }}
+              className={`pointer-events-auto relative block h-[72px] w-[132px] cursor-pointer rounded-[1.5rem] border-0 bg-transparent p-0 text-left outline-none transition-transform hover:scale-[1.03] focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-white active:scale-[0.99] motion-reduce:transition-none dark:focus-visible:ring-offset-void-800 ${theme.coffeeFocusRing}`}
+            >
+              <span className="absolute left-[-74px] top-[30px] h-3 w-24 rounded-full bg-gradient-to-l from-transparent via-white/55 to-transparent blur-[2px] motion-safe:animate-pulse motion-reduce:animate-none dark:via-signal-300/22" aria-hidden="true" />
+              <svg
+                width="132"
+                height="72"
+                viewBox="-66 -38 132 72"
+                aria-hidden="true"
+                className="drop-shadow-[0_12px_16px_rgba(15,23,42,0.18)] dark:drop-shadow-[0_14px_18px_rgba(0,0,0,0.45)]"
+              >
+                {isCoffeeBreak ? (
+                  <CoffeeCup accentColor={theme.shipContainer} isMoving={!reducedMotion} isDark={isDark} />
+                ) : feedback.shipType === "container" ? (
+                  <ContainerShip accentColor={theme.shipContainer} isMoving={!reducedMotion} isDark={isDark} />
+                ) : (
+                  <WoodenShip accentColor={theme.shipWooden} isMoving={!reducedMotion} isDark={isDark} />
+                )}
+              </svg>
+            </button>
           </div>
         </div>
       </div>
@@ -245,6 +293,15 @@ export const PlanningProgressOverlay: FunctionComponent<PlanningProgressOverlayP
         <p className="mx-auto max-w-xs text-sm leading-relaxed text-slate-500 dark:text-slate-400">
           {getDescriptionText()}
         </p>
+        {isCoffeeBreak && (
+          <p
+            className={`mx-auto max-w-sm rounded-full border px-4 py-2 text-sm font-medium leading-relaxed text-slate-600 dark:text-slate-200 ${theme.coffeeReminderBorder} ${theme.coffeeReminderBg} ${theme.coffeeReminderShadow}`}
+            role="status"
+            aria-live="polite"
+          >
+            Coffee break unlocked. Grab a fresh cup while planning keeps moving.
+          </p>
+        )}
         <p className="mx-auto max-w-sm text-xs leading-relaxed text-slate-400 dark:text-slate-500">
           You can minimize this panel and keep the request running, or cancel it from here.
         </p>
