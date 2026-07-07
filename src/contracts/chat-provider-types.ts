@@ -20,6 +20,7 @@ export type ChatProviderDeliveryStatus =
   | "pending"
   | "sending"
   | "delivered"
+  | "retryable_failure"
   | "processed"
   | "failed"
   | "duplicate"

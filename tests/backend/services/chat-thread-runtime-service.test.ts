@@ -15,7 +15,7 @@ describe("ChatThreadRuntimeService", () => {
         postDashboardMessage: vi.fn(),
         getThread: vi.fn(),
         updateThread: vi.fn(),
-        listMessages: vi.fn(),
+        listMessages: vi.fn().mockReturnValue([]),
         markDashboardMessagesProcessed: vi.fn(),
         markDashboardMessagesFailed: vi.fn(),
         postSystemMessage: vi.fn(),
@@ -45,6 +45,9 @@ describe("ChatThreadRuntimeService", () => {
       chatManagementActionService: {
         processManagementAction: vi.fn(),
         executeApprovedAction: vi.fn(),
+      },
+      chatProviderOutboundService: {
+        deliverReply: vi.fn().mockResolvedValue(null),
       },
     };
     service = new ChatThreadRuntimeService(deps);
@@ -139,6 +142,68 @@ describe("ChatThreadRuntimeService", () => {
     }));
     expect(deps.connectionChatRepository.markDashboardMessagesProcessed).toHaveBeenCalledWith("t1", {
       upToMessageId: "msg-2",
+    });
+  });
+
+  it("suppresses rich widget prompt instructions and delivers persisted replies for chat-provider messages", async () => {
+    const inboundMessage = {
+      id: "msg-provider",
+      threadId: "t-provider",
+      bodyMarkdown: "status please",
+      metadata: {
+        source: "chat_provider",
+        inboundDeliveryId: "delivery-in",
+        suppressRichWidgets: true,
+      },
+    };
+    const thread = {
+      id: "t-provider",
+      projectId: "p1",
+      title: "External support",
+      connectionId: null,
+      runtimeState: {},
+    };
+    const replyMessage = {
+      id: "reply-provider",
+      threadId: "t-provider",
+      bodyMarkdown: "Plain reply",
+      metadata: null,
+    };
+    deps.connectionChatRepository.postDashboardMessage.mockReturnValue(inboundMessage);
+    deps.connectionChatRepository.getThread.mockReturnValue(thread);
+    deps.projectManagementRepository.getProject.mockReturnValue({ id: "p1", name: "proj", baseDir: "/tmp" });
+    deps.taskService.resolveInvocationProvider.mockReturnValue({
+      provider: "codex",
+      providers: { codex: { model: "gpt-5.3-codex", apiKey: "codex-key" } },
+    });
+    deps.connectionChatRepository.listMessages.mockReturnValue([inboundMessage]);
+    deps.connectionChatRepository.postSystemMessage.mockReturnValue(replyMessage);
+    deps.chatManagementActionService.processManagementAction.mockResolvedValue({
+      replyMarkdown: "Plain reply",
+      action: null,
+      approvalRequired: false,
+    });
+
+    await service.postMessage("p1", {
+      bodyMarkdown: "status please",
+      metadata: inboundMessage.metadata,
+    });
+
+    expect(deps.chatManagementActionService.processManagementAction).toHaveBeenCalledWith(
+      expect.objectContaining({
+        prompt: expect.not.stringContaining("## RICH WIDGETS"),
+      }),
+    );
+    expect(deps.chatManagementActionService.processManagementAction).toHaveBeenCalledWith(
+      expect.objectContaining({
+        prompt: expect.not.stringContaining("codeux:status"),
+      }),
+    );
+    expect(deps.chatProviderOutboundService.deliverReply).toHaveBeenCalledWith({
+      projectId: "p1",
+      thread,
+      triggeringMessage: inboundMessage,
+      replyMessage,
     });
   });
 

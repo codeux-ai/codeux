@@ -845,5 +845,5 @@ CREATE INDEX IF NOT EXISTS idx_chat_provider_channel_bindings_project ON chat_pr
 CREATE INDEX IF NOT EXISTS idx_chat_provider_channel_bindings_provider_channel ON chat_provider_channel_bindings (provider_connection_id, external_channel_id);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_chat_provider_message_deliveries_inbound_dedupe ON chat_provider_message_deliveries (provider_connection_id, external_message_id) WHERE direction = 'inbound' AND external_message_id IS NOT NULL;
 CREATE UNIQUE INDEX IF NOT EXISTS idx_chat_provider_message_deliveries_outbound_message ON chat_provider_message_deliveries (provider_connection_id, conversation_message_id) WHERE direction = 'outbound' AND conversation_message_id IS NOT NULL;
-CREATE INDEX IF NOT EXISTS idx_chat_provider_message_deliveries_pending_outbound ON chat_provider_message_deliveries (status, updated_at ASC) WHERE direction = 'outbound' AND status IN ('pending', 'sending');
+CREATE INDEX IF NOT EXISTS idx_chat_provider_message_deliveries_pending_outbound ON chat_provider_message_deliveries (status, updated_at ASC) WHERE direction = 'outbound' AND status IN ('pending', 'sending', 'retryable_failure');
 `;

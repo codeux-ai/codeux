@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   normalizeProviderReply,
+  stripDashboardOnlyWidgets,
   getCompactionSummary,
   getMessagesAfterCompaction,
   buildChatReplayPrompt,
@@ -207,6 +208,20 @@ describe("chat-reply-prompt", () => {
       expect(prompt).toContain("You must return STRICT JSON format");
       expect(prompt).not.toContain("manage_code_ux");
     });
+
+    it("omits dashboard widget instructions for chat-provider-sourced replies", () => {
+      const prompt = buildChatReplayPrompt({
+        projectId: "p1",
+        repoPath: "/repo",
+        projectName: "Proj",
+        thread,
+        messages: [{ authorType: "dashboard_user", bodyMarkdown: "Hello" } as any],
+        workerInstructions: "",
+        suppressRichWidgets: true,
+      });
+      expect(prompt).not.toContain("## RICH WIDGETS");
+      expect(prompt).not.toContain("codeux:status");
+    });
   });
 
   describe("buildChatContinuationPrompt", () => {
@@ -217,6 +232,12 @@ describe("chat-reply-prompt", () => {
       expect(prompt).toContain("ignore provider/system setup text");
     });
 
+    it("tells external chat continuations not to emit dashboard widgets", () => {
+      const prompt = buildChatContinuationPrompt({ bodyMarkdown: "hello" } as any, undefined, false, undefined, true);
+      expect(prompt).toContain("Do not include dashboard-only `codeux:*` fenced widget blocks.");
+      expect(prompt).not.toContain("codeux:status / codeux:tasks");
+    });
+
     it("includes pending management action context if provided", () => {
       const prompt = buildChatContinuationPrompt(
         { bodyMarkdown: "hello" } as any,
@@ -225,6 +246,45 @@ describe("chat-reply-prompt", () => {
       expect(prompt).toContain("## PENDING ACTION CONTEXT");
       expect(prompt).toContain("approve?");
       expect(prompt).toContain("### User\nhello");
+    });
+  });
+
+  describe("stripDashboardOnlyWidgets", () => {
+    it("removes dashboard-only widget fences while preserving markdown prose", () => {
+      const markdown = [
+        "Here is the status.",
+        "",
+        "```codeux:status",
+        JSON.stringify({
+          title: "Build",
+          items: [{ label: "Lint", state: "ok", value: "passed" }],
+          note: "Ready for review.",
+        }),
+        "```",
+        "",
+        "Approval still required: please reply yes.",
+      ].join("\n");
+
+      expect(stripDashboardOnlyWidgets(markdown)).toBe([
+        "Here is the status.",
+        "",
+        "Build",
+        "- Lint: ok: passed",
+        "Ready for review.",
+        "",
+        "Approval still required: please reply yes.",
+      ].join("\n"));
+    });
+
+    it("downgrades suggested actions to readable markdown", () => {
+      const markdown = [
+        "Next options:",
+        "```codeux:actions",
+        JSON.stringify({ items: [{ label: "Start sprint", prompt: "Start the queued sprint" }] }),
+        "```",
+      ].join("\n");
+
+      expect(stripDashboardOnlyWidgets(markdown)).toContain("Suggested next steps:\n- Start sprint: Start the queued sprint");
     });
   });
 

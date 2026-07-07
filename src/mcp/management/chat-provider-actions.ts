@@ -51,6 +51,7 @@ const DELIVERY_STATUSES: readonly ChatProviderDeliveryStatus[] = [
   "pending",
   "sending",
   "delivered",
+  "retryable_failure",
   "processed",
   "failed",
   "duplicate",

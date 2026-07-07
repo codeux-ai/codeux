@@ -91,10 +91,11 @@ export function ensureChatProviderTables(db: DatabaseAdapter): void {
     ON chat_provider_message_deliveries (provider_connection_id, conversation_message_id)
     WHERE direction = 'outbound' AND conversation_message_id IS NOT NULL
   `);
+  db.exec("DROP INDEX IF EXISTS idx_chat_provider_message_deliveries_pending_outbound");
   db.exec(`
     CREATE INDEX IF NOT EXISTS idx_chat_provider_message_deliveries_pending_outbound
     ON chat_provider_message_deliveries (status, updated_at ASC)
-    WHERE direction = 'outbound' AND status IN ('pending', 'sending')
+    WHERE direction = 'outbound' AND status IN ('pending', 'sending', 'retryable_failure')
   `);
 }
 
