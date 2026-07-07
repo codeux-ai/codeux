@@ -108,7 +108,9 @@ describe("chat-reply-prompt", () => {
       });
       expect(prompt).not.toContain("## WORKER INSTRUCTIONS");
       expect(prompt).toContain("### User\nHello");
-      expect(prompt).toContain("You must return STRICT JSON format containing exactly two keys: `replyMarkdown` and `action`");
+      expect(prompt).toContain("You must return STRICT JSON format containing `replyMarkdown`, `action`, and optional `suggestions`.");
+      expect(prompt).toContain("Each item must be `{ \"label\": string, \"prompt\": string, \"icon\"?: string, \"id\"?: string }`.");
+      expect(prompt).toContain("Use only stable string icon identifiers");
     });
 
     it("includes pending management action context if it exists in runtime state", () => {
@@ -162,6 +164,7 @@ describe("chat-reply-prompt", () => {
         mcpAvailable: false,
       });
       expect(prompt).toContain("You must return STRICT JSON format");
+      expect(prompt).toContain("optional `suggestions`");
       expect(prompt).not.toContain("manage_code_ux");
     });
 

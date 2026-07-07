@@ -9,7 +9,7 @@ import type { AgentPresetSyncService } from "./agent-preset-sync-service.js";
 import type { ProjectManagementRepository } from "../repositories/project-management-repository.js";
 import type { IProviderRunner } from "../infrastructure/providers/cli/provider-runner.js";
 import type { Logger } from "../shared/logging/logger.js";
-import type { ConversationCompactionSummary, CreateDashboardConversationMessageInput, ConversationThreadRecord, ConversationMessageRecord, ConversationRuntimeState, UpdateConversationThreadInput, UpdateConversationThreadRouteInput } from "../contracts/connection-chat-types.js";
+import type { ConversationCompactionSummary, CreateDashboardConversationMessageInput, ConversationThreadRecord, ConversationMessageRecord, ConversationRuntimeState, PromptSuggestionsMetadata, UpdateConversationThreadInput, UpdateConversationThreadRouteInput } from "../contracts/connection-chat-types.js";
 import { buildProviderPrompt } from "./cli-workflow-utils.js";
 import { resolveEffectiveModel } from "./provider-execution-service.js";
 import { getRepoCodeUxDir, getRepoCodeUxPath } from "../shared/config/code-ux-paths.js";
@@ -640,9 +640,14 @@ export class ChatThreadRuntimeService {
       }
     }
 
+    const promptSuggestionsMetadata: PromptSuggestionsMetadata | undefined = result.promptSuggestions?.length
+      ? { promptSuggestions: result.promptSuggestions }
+      : undefined;
+
     const replyMessage = this.deps.connectionChatRepository.postSystemMessage(projectId, {
       threadId: thread.id,
       bodyMarkdown: systemReply.trim(),
+      ...(promptSuggestionsMetadata ? { metadata: promptSuggestionsMetadata } : {}),
     });
     await this.deliverChatProviderReplyIfNeeded(projectId, thread, latestMessage, replyMessage);
 
