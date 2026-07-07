@@ -70,6 +70,7 @@
 - [Sprint Imports](./dashboard/sprint-imports.md)
 - [Quicksprint Templates](./dashboard/quicksprint-templates.md)
 - [Nodes](./dashboard/nodes.md)
+- [Nodes Canvas](./dashboard/nodes-canvas.md)
 - [Node Flows Dashboard](./dashboard/node-flows.md)
 - [Scheduler](./dashboard/scheduler.md)
 - [Memory Architecture and Search](./dashboard/memory.md)
