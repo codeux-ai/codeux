@@ -40,6 +40,8 @@ Playwright starts `node dist/index.js` on `http://127.0.0.1:4444` with an isolat
 
 Use `tests/e2e/helpers/e2e-fixtures.ts` for deterministic browser tests that need temporary git repositories, selected Code UX projects, public-API sprint/task seeding, local-git HOST execution, QA-disabled project settings, API polling, or onboarding/tour suppression. The fake provider supports prompt markers such as `[mock-provider:sleep=250]`, `[mock-provider:fail]`, `[mock-provider:exit=2]`, `[mock-provider:no-op]`, and `[mock-provider:write=relative/path.txt]`.
 
+`tests/e2e/dashboard-workflows.spec.ts` covers the pre-orchestration product path: isolated local-git project selection, UI draft sprint creation, UI task creation with dependencies, core route landmarks, collection API visibility, and unhandled browser error capture without starting planning or provider execution.
+
 ## Coverage thresholds
 
 Enforced in CI:
