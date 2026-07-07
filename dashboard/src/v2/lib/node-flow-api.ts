@@ -6,6 +6,7 @@ import type {
   NodeFlowRecord,
   NodeFlowRunListResponse,
   NodeFlowRunRecord,
+  NodeFlowRunSummaryResponse,
   NodeFlowSkillAttachment,
   NodeFlowValidationResponse,
   NodeFlowJsonObject,
@@ -14,6 +15,7 @@ import type {
 import { fetchJson } from "../../lib/api/fetch-json.js";
 
 export interface RunNodeFlowInput {
+  projectId: string;
   input?: NodeFlowJsonObject;
   triggerPayload?: NodeFlowJsonObject;
 }
@@ -71,8 +73,8 @@ export const validateNodeFlow = async (
 export const runNodeFlow = async (
   flowId: string,
   input: RunNodeFlowInput,
-): Promise<NodeFlowRunRecord> => {
-  return fetchJson<NodeFlowRunRecord>(`/api/node-flows/${encodeURIComponent(flowId)}/run`, {
+): Promise<NodeFlowRunSummaryResponse> => {
+  return fetchJson<NodeFlowRunSummaryResponse>(`/api/node-flows/${encodeURIComponent(flowId)}/run`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),

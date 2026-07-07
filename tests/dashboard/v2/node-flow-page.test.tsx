@@ -10,6 +10,7 @@ import { ProjectDataContext } from "../../../dashboard/src/v2/context/project-da
 import type { NodeFlowRecord } from "../../../dashboard/src/v2/types.js";
 import {
   attachNodeFlowToAgent,
+  createNodeFlow,
   fetchNodeFlowAgentSkills,
   fetchNodeFlowNodeRuns,
   fetchNodeFlowRuns,
@@ -58,8 +59,8 @@ const flow: NodeFlowRecord = {
     nodes: [
       {
         id: "trigger",
-        type: "manual",
-        title: "Manual Trigger",
+        type: "input",
+        title: "Run Input",
         description: "Start here",
         position: { x: 32, y: 64 },
         widgetSchema: {
@@ -125,21 +126,68 @@ describe("NodesPage", () => {
       createdAt: "2026-01-02T00:00:00.000Z",
       updatedAt: "2026-01-02T00:00:00.000Z",
     });
+    vi.mocked(createNodeFlow).mockResolvedValue({
+      ...flow,
+      id: "flow-created",
+      title: "Untitled Node Flow",
+      version: 1,
+      graph: {
+        nodes: [
+          {
+            id: "trigger",
+            type: "input",
+            title: "Run Input",
+            description: "Receives dashboard input.",
+            position: { x: 56, y: 96 },
+            widgetSchema: {
+              fields: [{ id: "label", type: "text", label: "Run label", defaultValue: "Manual run" }],
+            },
+            data: { label: "Manual run" },
+          },
+        ],
+        edges: [],
+        inputSchema: {
+          fields: [{ id: "payload", type: "json", label: "Payload", defaultValue: {} }],
+        },
+      },
+    });
     vi.mocked(runNodeFlow).mockResolvedValue({
-      id: "run-1",
-      flowId: "flow-1",
-      projectId: "project-1",
-      version: 2,
-      status: "queued",
-      triggerType: "manual",
-      triggerPayload: null,
-      input: { payload: { release: true } },
-      output: null,
-      errorMessage: null,
-      startedAt: null,
-      finishedAt: null,
-      createdAt: "2026-01-02T00:00:00.000Z",
-      updatedAt: "2026-01-02T00:00:00.000Z",
+      run: {
+        id: "run-1",
+        flowId: "flow-1",
+        projectId: "project-1",
+        version: 2,
+        status: "succeeded",
+        executionInvocationId: "flow-invocation-1",
+        triggerType: "manual",
+        triggerPayload: null,
+        input: { payload: { release: true } },
+        output: null,
+        errorMessage: null,
+        startedAt: "2026-01-02T00:00:00.000Z",
+        finishedAt: "2026-01-02T00:00:01.000Z",
+        createdAt: "2026-01-02T00:00:00.000Z",
+        updatedAt: "2026-01-02T00:00:01.000Z",
+      },
+      nodeRuns: [
+        {
+          id: "node-run-local-1",
+          runId: "run-1",
+          flowId: "flow-1",
+          projectId: "project-1",
+          nodeId: "trigger",
+          status: "succeeded",
+          executionInvocationId: "external-invocation-1",
+          input: { payload: { release: true } },
+          output: { accepted: true },
+          errorMessage: null,
+          startedAt: "2026-01-02T00:00:00.000Z",
+          finishedAt: "2026-01-02T00:00:01.000Z",
+          createdAt: "2026-01-02T00:00:00.000Z",
+          updatedAt: "2026-01-02T00:00:01.000Z",
+        },
+      ],
+      output: { accepted: true },
     });
   });
 
@@ -155,7 +203,7 @@ describe("NodesPage", () => {
 
     expect(await screen.findByText("Workflow Nodes")).toBeInTheDocument();
     expect(screen.getByText("Release Gate")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Select node Manual Trigger/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Select node Run Input/i })).toBeInTheDocument();
     expect(await screen.findByLabelText("Branch")).toHaveValue("dev");
     expect(screen.getByRole("button", { name: /Run Flow/i })).toBeInTheDocument();
   });
@@ -176,7 +224,25 @@ describe("NodesPage", () => {
 
     await waitFor(() => {
       expect(updateNodeFlow).toHaveBeenCalledWith("flow-1", expect.objectContaining({
-        graph: expect.objectContaining({ nodes: expect.any(Array) }),
+        graph: expect.objectContaining({
+          nodes: expect.arrayContaining([expect.objectContaining({ type: "set_fields" })]),
+        }),
+      }));
+    });
+  });
+
+  it("creates executable starter graphs for new flows", async () => {
+    vi.mocked(fetchNodeFlows).mockResolvedValueOnce({ flows: [] });
+    renderPage();
+
+    await screen.findByText("No Node Flows");
+    fireEvent.click(screen.getAllByRole("button", { name: /Create Node Flow/i })[0]!);
+
+    await waitFor(() => {
+      expect(createNodeFlow).toHaveBeenCalledWith("project-1", expect.objectContaining({
+        graph: expect.objectContaining({
+          nodes: [expect.objectContaining({ id: "trigger", type: "input" })],
+        }),
       }));
     });
   });
@@ -200,13 +266,17 @@ describe("NodesPage", () => {
 
     await waitFor(() => {
       expect(runNodeFlow).toHaveBeenCalledWith("flow-1", {
+        projectId: "project-1",
         input: expect.objectContaining({ payload: { release: true } }),
       });
     });
-    const history = screen.getAllByText(/queued/i)
+    const history = screen.getAllByText(/succeeded/i)
       .map((entry) => entry.closest("button"))
       .find(Boolean);
     expect(history).toBeInTheDocument();
+    expect(screen.getByText("Invocation external-invocation-1")).toBeInTheDocument();
+    expect(screen.queryByText("Invocation node-run-local-1")).not.toBeInTheDocument();
+    expect(screen.getByText(/"accepted": true/)).toBeInTheDocument();
   });
 
   it("renders validation errors from the backend", async () => {

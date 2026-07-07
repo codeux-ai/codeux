@@ -273,17 +273,17 @@ export const NodesPage = () => {
     const nodeId = `node-${nextIndex}`;
     const nextNode: NodeFlowNode = {
       id: nodeId,
-      type: "action",
-      title: `Action ${nextIndex}`,
+      type: "set_fields",
+      title: `Set Fields ${nextIndex}`,
       description: "",
       position: { x: 80 + nextIndex * 36, y: 120 + nextIndex * 24 },
       widgetSchema: {
         fields: [
-          { id: "prompt", type: "textarea", label: "Prompt", defaultValue: "" },
+          { id: "fields", type: "json", label: "Fields", defaultValue: {} },
           { id: "enabled", type: "boolean", label: "Enabled", defaultValue: true },
         ],
       },
-      data: { prompt: "", enabled: true },
+      data: { fields: {}, enabled: true },
     };
     setDraftGraph((current) => ({ ...current, nodes: [...current.nodes, nextNode] }));
     setSelectedNodeId(nodeId);
@@ -344,10 +344,12 @@ export const NodesPage = () => {
     setRunning(true);
     setRunError(null);
     try {
-      const run = await runNodeFlow(selectedFlow.id, { input });
+      const result = await runNodeFlow(selectedFlow.id, { projectId: selectedFlow.projectId, input });
+      const run = { ...result.run, output: result.output ?? result.run.output };
       setRuns((current) => [run, ...current.filter((entry) => entry.id !== run.id)]);
       setSelectedRunId(run.id);
-      setFeedback({ tone: "success", message: "Node flow run queued." });
+      setNodeRuns(result.nodeRuns);
+      setFeedback({ tone: "success", message: `Node flow run ${run.status}.` });
     } catch (error) {
       setRunError(error instanceof Error ? error.message : "Failed to run node flow.");
     } finally {
