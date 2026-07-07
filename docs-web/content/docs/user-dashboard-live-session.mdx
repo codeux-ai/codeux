@@ -44,7 +44,9 @@ When the engine cannot proceed without input, an attention item is created. It a
 
 A virtual worker can claim an attention item too. If you have configured `virtualWorkerProvider` in settings, the engine will offer eligible items to a worker before showing them to you.
 
-When a sprint is selected in the dashboard, the attention ledger shows active `open` and `claimed` items for that sprint, including items tied only to one of its sprint runs. With no selected sprint, the ledger keeps the project-wide active queue.
+When a sprint is selected in the dashboard top bar, the attention ledger follows that selected sprint scope and shows active `open` and `claimed` items for that sprint, including items tied only to one of its sprint runs. With no selected sprint, the ledger keeps the project-wide active queue.
+
+The Overview telemetry panel uses the same selected-project live snapshot for its compact read-only attention queue, so Overview and Live agree on which sprint's blockers are visible.
 
 ## Pause / Cancel from the live view
 
