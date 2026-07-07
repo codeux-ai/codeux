@@ -178,6 +178,30 @@ describe("getOnboardingRuntimeReadiness", () => {
     expect(run.mock.calls.length).toBe(callsAfterFirst);
   });
 
+  it("does not reuse cached readiness when installer environment metadata changes", async () => {
+    run.mockResolvedValue(ok());
+    stat.mockRejectedValue(new Error("missing"));
+    readdir.mockRejectedValue(new Error("nope"));
+
+    const first = await getOnboardingRuntimeReadiness(makeSettings());
+    const callsAfterFirst = run.mock.calls.length;
+    const second = await getOnboardingRuntimeReadiness(makeSettings(), {
+      platform: "linux",
+      linuxPackageManager: "apt",
+      systemctlAvailable: true,
+      isRoot: true,
+      passwordlessSudoAvailable: true,
+    });
+
+    expect(second).not.toBe(first);
+    expect(run.mock.calls.length).toBeGreaterThan(callsAfterFirst);
+    expect(second.installers.platform).toBe("linux");
+    expect(second.installers.options.find((option) => option.mode === "docker-engine-git")).toMatchObject({
+      automation: "automated",
+      available: true,
+    });
+  });
+
   it("can explicitly invalidate the readiness cache after installer runs", async () => {
     run.mockResolvedValue(ok());
     stat.mockRejectedValue(new Error("missing"));

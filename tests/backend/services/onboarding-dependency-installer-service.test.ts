@@ -8,6 +8,7 @@ vi.mock("../../../src/shared/subprocess/command-runner.js", () => ({
 }));
 
 import {
+  detectOnboardingInstallerEnvironment,
   executeOnboardingDependencyInstall,
   planOnboardingDependencyInstallCommands,
   planOnboardingDependencyInstallerOptions,
@@ -68,6 +69,50 @@ describe("planOnboardingDependencyInstallerOptions", () => {
     expect(result.recommendedMode).toBeNull();
     expect(result.options.every((option) => option.automation === "unsupported")).toBe(true);
     expect(result.options.every((option) => option.requiresManualDownload)).toBe(true);
+  });
+});
+
+describe("detectOnboardingInstallerEnvironment", () => {
+  it("detects Linux package manager and systemctl availability for installer metadata and execution", async () => {
+    run.mockImplementation(async (command: string, args: string[]) => {
+      if (command === "apt-get" && args[0] === "--version") return ok("apt 2");
+      if (command === "systemctl" && args[0] === "--version") return ok("systemd 255");
+      if (command === "sudo" && args.join(" ") === "-n true") return ok();
+      return fail("missing");
+    });
+
+    const environment = await detectOnboardingInstallerEnvironment("linux");
+    const metadata = planOnboardingDependencyInstallerOptions(environment);
+
+    expect(environment).toMatchObject({
+      platform: "linux",
+      linuxPackageManager: "apt",
+      systemctlAvailable: true,
+    });
+    expect(metadata.recommendedMode).toBe("docker-engine-git");
+    expect(metadata.options.find((option) => option.mode === "docker-engine-git")).toMatchObject({
+      automation: "automated",
+      available: true,
+      requiresManualDownload: false,
+    });
+  });
+
+  it("marks macOS and Windows package-manager automation unavailable when tools are absent", async () => {
+    run.mockResolvedValue(fail("missing"));
+
+    const mac = planOnboardingDependencyInstallerOptions(await detectOnboardingInstallerEnvironment("darwin"));
+    const windows = planOnboardingDependencyInstallerOptions(await detectOnboardingInstallerEnvironment("win32"));
+
+    expect(mac.options.find((option) => option.mode === "docker-desktop-git")).toMatchObject({
+      automation: "manual",
+      available: false,
+      requiresManualDownload: true,
+    });
+    expect(windows.options.find((option) => option.mode === "docker-desktop-git")).toMatchObject({
+      automation: "manual",
+      available: false,
+      requiresManualDownload: true,
+    });
   });
 });
 
@@ -228,6 +273,8 @@ describe("executeOnboardingDependencyInstall", () => {
     expect(result.commands[0].stdoutSummary.length).toBeLessThanOrEqual(1_203);
     expect(result.commands[0].stderrSummary.length).toBeLessThanOrEqual(1_203);
     expect(result.commands[0].stderrSummary.startsWith("...")).toBe(true);
+    expect(result.commands[0].message).toBe("Command failed with exit code 1. Review bounded command summaries for details.");
+    expect(result.commands[0].message).not.toContain(longOutput);
     expect(run).toHaveBeenCalledWith("brew", ["install", "git"], expect.objectContaining({
       timeout: 120_000,
       maxStdoutChars: 4_000,

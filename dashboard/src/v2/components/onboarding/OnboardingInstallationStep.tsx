@@ -32,6 +32,8 @@ const INSTALLER_MODE_LABELS: Record<OnboardingDependencyInstallMode, string> = {
   "docker-engine-git": "Docker Engine + Git",
 };
 
+const COMMAND_MESSAGE_LIMIT = 500;
+
 const platformLabel = (platform: OnboardingDependencyInstallerOption["platform"]): string => {
   if (platform === "darwin") return "macOS";
   if (platform === "win32") return "Windows";
@@ -47,6 +49,12 @@ const automationLabel = (option: OnboardingDependencyInstallerOption): string =>
 };
 
 const modeLabel = (mode: OnboardingDependencyInstallMode): string => INSTALLER_MODE_LABELS[mode];
+
+const boundCommandMessage = (message: string): string => (
+  message.length <= COMMAND_MESSAGE_LIMIT
+    ? message
+    : `...${message.slice(message.length - COMMAND_MESSAGE_LIMIT)}`
+);
 
 const isDockerDependency = (dependencyId: string): boolean => dependencyId === "docker" || dependencyId.startsWith("docker-");
 const isGitDependency = (dependencyId: string): boolean => dependencyId === "git" || dependencyId.startsWith("git-");
@@ -414,7 +422,7 @@ export const OnboardingInstallationStep: FunctionComponent<OnboardingInstallatio
                     <div className="font-mono">{command.displayCommand}</div>
                     {command.stderrSummary ? <div>stderr: {command.stderrSummary}</div> : null}
                     {command.stdoutSummary ? <div>stdout: {command.stdoutSummary}</div> : null}
-                    {command.message ? <div>{command.message}</div> : null}
+                    {command.message ? <div>{boundCommandMessage(command.message)}</div> : null}
                   </li>
                 ))}
               </ul>

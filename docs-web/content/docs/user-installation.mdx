@@ -17,9 +17,10 @@ install and start Code UX with **no configuration**; providers are set up later 
 ## Onboarding dependency installers
 
 First-run readiness checks report Docker CLI, Docker daemon, and Git CLI status. The backend also
-advertises safe installer options for Docker/Git setup. These options are structured metadata only
-until an installer action is invoked, and installer execution is limited to hardcoded command and
-argument arrays with bounded output capture. Onboarding invokes installation through
+probes installer prerequisites before advertising safe Docker/Git setup options: supported Linux
+package managers plus `systemctl`, Homebrew on macOS, and winget on Windows. These options are
+structured metadata only until an installer action is invoked, and installer execution is limited
+to hardcoded command and argument arrays with bounded output capture. Onboarding invokes installation through
 `POST /api/onboarding/dependencies/install` only after sending the selected `mode` with
 `confirmInstall: true`; unsupported modes and unconfirmed requests are rejected.
 
@@ -44,8 +45,8 @@ Installer attempts do not mark onboarding complete. After any completed installe
 permission-limited or manual-download outcomes, onboarding shows the structured result and rechecks
 readiness so Docker CLI, Docker daemon, and Git status refresh. You may still need to refresh your
 terminal PATH, start Docker Desktop or the Docker Engine daemon, add your user to the Docker group, or
-rerun from an elevated shell. Permission failures are shown as guidance with bounded command summaries,
-not as raw full command output.
+rerun from an elevated shell. Permission failures are shown as guidance with bounded command summaries
+and short command messages, not as raw full command output.
 
 ## Option 1 — Desktop app (recommended)
 

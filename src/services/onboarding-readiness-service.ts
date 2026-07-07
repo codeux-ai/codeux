@@ -9,7 +9,7 @@ import type {
 import type { SystemSettings } from "../contracts/settings-scope-types.js";
 import { commandRunner } from "../shared/subprocess/command-runner.js";
 import { expandHomePath } from "../shared/config/home-path.js";
-import { planOnboardingDependencyInstallerOptions } from "./onboarding-dependency-installer-service.js";
+import { planOnboardingDependencyInstallerOptions, type OnboardingInstallerEnvironment } from "./onboarding-dependency-installer-service.js";
 
 const providerLabels: Record<ProviderId, string> = {
   jules: "Jules",
@@ -137,17 +137,33 @@ const getProviderCredentialStatuses = async (settings: SystemSettings): Promise<
 };
 
 let cachedReadiness: OnboardingRuntimeReadiness | null = null;
+let cachedInstallerEnvironmentKey: string | null = null;
 let lastCheckTime = 0;
 const CACHE_TTL_MS = 6000;
 
+const installerEnvironmentCacheKey = (environment: OnboardingInstallerEnvironment | undefined): string => JSON.stringify({
+  platform: environment?.platform ?? null,
+  linuxPackageManager: environment?.linuxPackageManager ?? null,
+  homebrewAvailable: environment?.homebrewAvailable ?? null,
+  wingetAvailable: environment?.wingetAvailable ?? null,
+  systemctlAvailable: environment?.systemctlAvailable ?? null,
+  isRoot: environment?.isRoot ?? null,
+  passwordlessSudoAvailable: environment?.passwordlessSudoAvailable ?? null,
+});
+
 export const invalidateOnboardingRuntimeReadinessCache = (): void => {
   cachedReadiness = null;
+  cachedInstallerEnvironmentKey = null;
   lastCheckTime = 0;
 };
 
-export const getOnboardingRuntimeReadiness = async (settings: SystemSettings): Promise<OnboardingRuntimeReadiness> => {
+export const getOnboardingRuntimeReadiness = async (
+  settings: SystemSettings,
+  installerEnvironment?: OnboardingInstallerEnvironment,
+): Promise<OnboardingRuntimeReadiness> => {
   const now = Date.now();
-  if (cachedReadiness && (now - lastCheckTime < CACHE_TTL_MS)) {
+  const cacheKey = installerEnvironmentCacheKey(installerEnvironment);
+  if (cachedReadiness && cachedInstallerEnvironmentKey === cacheKey && (now - lastCheckTime < CACHE_TTL_MS)) {
     return cachedReadiness;
   }
 
@@ -207,8 +223,9 @@ export const getOnboardingRuntimeReadiness = async (settings: SystemSettings): P
     },
     dependencies,
     providers: providerStatuses,
-    installers: planOnboardingDependencyInstallerOptions(),
+    installers: planOnboardingDependencyInstallerOptions(installerEnvironment),
   };
+  cachedInstallerEnvironmentKey = cacheKey;
   lastCheckTime = Date.now();
 
   return cachedReadiness;
