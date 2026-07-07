@@ -115,6 +115,14 @@ export interface ListChatProviderChannelBindingsOptions {
   enabledOnly?: boolean;
 }
 
+export interface ListChatProviderOutboundDeliveriesOptions {
+  providerConnectionId?: string;
+  channelBindingId?: string;
+  externalChannelId?: string;
+  status?: ChatProviderDeliveryStatus;
+  limit?: number;
+}
+
 export interface RecordInboundChatProviderMessageResult {
   delivery: ChatProviderMessageDeliveryRecord;
   duplicate: boolean;
@@ -544,6 +552,37 @@ export class ChatProviderRepository {
       ORDER BY d.updated_at ASC
       LIMIT ${boundedLimit}
     `).all() as unknown as ChatProviderMessageDeliveryRow[];
+    return rows.map((row) => this.mapDelivery(row));
+  }
+
+  listOutboundDeliveries(options: ListChatProviderOutboundDeliveriesOptions = {}): ChatProviderMessageDeliveryRecord[] {
+    const clauses = ["d.direction = 'outbound'"];
+    const params: Array<string | number> = [];
+    if (options.providerConnectionId) {
+      clauses.push("d.provider_connection_id = ?");
+      params.push(options.providerConnectionId);
+    }
+    if (options.channelBindingId) {
+      clauses.push("d.channel_binding_id = ?");
+      params.push(options.channelBindingId);
+    }
+    if (options.externalChannelId) {
+      clauses.push("d.external_channel_id = ?");
+      params.push(this.requireNonEmpty(options.externalChannelId, "externalChannelId"));
+    }
+    if (options.status) {
+      clauses.push("d.status = ?");
+      params.push(this.requireDeliveryStatus(options.status));
+    }
+    const boundedLimit = Math.max(1, Math.min(Math.trunc(options.limit ?? 100), 500));
+    const rows = this.db.prepare(`
+      SELECT d.*, c.provider_kind
+      FROM chat_provider_message_deliveries d
+      INNER JOIN chat_provider_connections c ON c.id = d.provider_connection_id
+      WHERE ${clauses.join(" AND ")}
+      ORDER BY d.updated_at DESC, d.created_at DESC
+      LIMIT ${boundedLimit}
+    `).all(...params) as unknown as ChatProviderMessageDeliveryRow[];
     return rows.map((row) => this.mapDelivery(row));
   }
 

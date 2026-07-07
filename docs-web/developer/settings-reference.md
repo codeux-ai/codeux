@@ -285,6 +285,7 @@ Both reflection loops are disabled by default. When enabled, planning and QA str
   { "name": "search_knowledge",    "enabled": true, "isInternal": true },
   { "name": "manage_settings",     "enabled": true, "isInternal": true },
   { "name": "manage_preview",      "enabled": true, "isInternal": true },
+  { "name": "manage_chat_providers", "enabled": true, "isInternal": true },
   { "name": "manage_telemetry",    "enabled": true, "isInternal": true },
   { "name": "manage_code_ux",      "enabled": true, "isInternal": true }   // deprecated
 ]

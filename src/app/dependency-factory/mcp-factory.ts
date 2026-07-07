@@ -39,6 +39,7 @@ export function createMcpDependencies(
     executionControlService: dashboardDeps.executionControlService,
     taskRerunService: dashboardDeps.taskRerunService,
     settingsRepository: coreDeps.settingsRepository,
+    chatProviderRepository: coreDeps.chatProviderRepository,
     agentPresetSyncService: coreDeps.agentPresetSyncService,
     memoryService: coreDeps.memoryService,
     memoryPromotionService: coreDeps.memoryPromotionService,
