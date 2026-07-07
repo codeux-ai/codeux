@@ -128,7 +128,7 @@ Legacy runtime:
 - `GET /api/status`
   - Selected-project runtime payload (`sprint_number`, `subtasks`, `instructions`, etc.) projected from sqlite, explicitly scoped to the newly persisted active sprint when one is set
 - `GET /api/execution`
-  - Selected-project execution control-plane snapshot (`sprintRuns`, `taskDispatches`, `recentEvents`, lease ownership)
+  - Selected-project execution control-plane snapshot (`sprintRuns`, `taskDispatches`, lease ownership) without heavy recent feeds
 - `GET /api/telemetry/overview`
   - Cross-project overview telemetry snapshot for all currently active project runs
 - `GET /api/stats/header-throughput?projectId=<projectId>&window=20s|1h|24h|7d|30d|all`
@@ -140,7 +140,7 @@ Legacy runtime:
 - `GET /api/realtime`
   - websocket upgrade endpoint for dashboard realtime subscriptions (`projects`, `overview`, `project:<projectId>`, `thread:<threadId>`)
 - `GET /api/projects/:projectId/execution`
-  - Project-scoped execution control-plane snapshot for the v2 runtime
+  - Project-scoped execution control-plane snapshot for the v2 runtime, including recent runtime events and invocation summaries
 - `GET /api/projects/:projectId/stats?window=1h|24h|7d|30d|all|custom&from=YYYY-MM-DD&to=YYYY-MM-DD`
   - Project-scoped token/time statistics snapshot with adaptive hourly/daily/weekly buckets, task/sprint/provider/purpose rollups, and telemetry-source mix
   - `custom` requires both `from` and `to`; presets ignore them

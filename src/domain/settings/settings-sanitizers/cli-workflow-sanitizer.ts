@@ -11,9 +11,11 @@ export const sanitizeCliWorkflow = (
     ? input.cliWorkflow
     : {}) as Partial<DashboardSettings["cliWorkflow"]>;
 
-  // Execution is Docker-only. HOST persists only as a runtime fallback applied when
-  // Docker is unavailable (see virtual-worker-service), never as a user-selectable setting.
-  const normalizedExecutionMode: CliExecutionMode = "DOCKER";
+  const executionMode = readString(
+    cliInput.executionMode,
+    DEFAULT_DASHBOARD_SETTINGS.cliWorkflow.executionMode
+  ) as CliExecutionMode;
+  const normalizedExecutionMode: CliExecutionMode = executionMode === "HOST" ? "HOST" : "DOCKER";
 
   const containerImage = readString(
     cliInput.containerImage,

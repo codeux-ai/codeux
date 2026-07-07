@@ -56,7 +56,7 @@
     "smoketest:codex": "node --import ./scripts/tsnode-register.mjs tests/smoketest/codex.smoketest.ts",
     "test:backend": "vitest run tests/backend",
     "test:dashboard": "vitest run tests/dashboard",
-    "test:e2e": "pnpm exec playwright test",
+    "test:e2e": "node scripts/e2e/run-playwright.mjs",
     "test:e2e:mockup-sprint-pentest": "node scripts/e2e/run-mockup-sprint-pentest.mjs",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
