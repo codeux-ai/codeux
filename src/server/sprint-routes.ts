@@ -37,6 +37,18 @@ export function registerSprintRoutes(router: Express, deps: DashboardDependencie
     }
   }));
 
+  router.get("/api/projects/:projectId/jira/statuses", asyncRoute(async (req, res) => {
+    try {
+      const projectId = requireTrimmedString(req.params.projectId, "projectId");
+      res.json(await deps.searchJiraProjectStatuses(
+        projectId,
+        parseTrimmedQueryString(req.query.projectKey, "projectKey"),
+      ));
+    } catch (error) {
+      res.status(400).json(toErrorResponse(error, "Failed to list Jira statuses"));
+    }
+  }));
+
   router.get("/api/sprints/:sprintId/linked-issues", syncRoute((req, res) => {
     try {
       res.json(deps.listSprintLinkedIssues(requireTrimmedString(req.params.sprintId, "sprintId")));
@@ -281,6 +293,7 @@ function parseRepositoryIssueSearchQuery(query: Record<string, unknown>): IssueS
     search: parseTrimmedQueryString(query.search, "search"),
     state: parseRepositoryIssueState(query.state, provider),
     status: parseImportStatus(query.status, provider),
+    statusNames: parseQueryStringList(query.statusNames, "statusNames", 50),
     labels: parseIssueLabels(query.labels),
     assignee: parseTrimmedQueryString(query.assignee, "assignee"),
     author: parseTrimmedQueryString(query.author, "author"),
@@ -306,6 +319,7 @@ function parseJiraIssueSearchQuery(query: Record<string, unknown>): JiraIssueSea
     search: parseTrimmedQueryString(query.search, "search"),
     issueKey: parseTrimmedQueryString(query.issueKey, "issueKey"),
     status: parseJiraStatus(query.status),
+    statusNames: parseQueryStringList(query.statusNames, "statusNames", 50),
     assignee: parseJiraAssignee(query.assignee),
     assigneeText: parseTrimmedQueryString(query.assigneeText, "assigneeText"),
     reporterText: parseTrimmedQueryString(query.reporterText, "reporterText"),
@@ -322,16 +336,20 @@ function parseJiraIssueSearchQuery(query: Record<string, unknown>): JiraIssueSea
 }
 
 function parseIssueLabels(value: unknown): string[] {
+  return parseQueryStringList(value, "labels", 12);
+}
+
+function parseQueryStringList(value: unknown, fieldName: string, maxItems: number): string[] {
   const rawValues = Array.isArray(value) ? value : value === undefined || value === null ? [] : [value];
   return Array.from(new Set(rawValues
     .flatMap((entry) => {
       if (typeof entry !== "string") {
-        throw new Error("Invalid value for labels. Must be a comma-separated string.");
+        throw new Error(`Invalid value for ${fieldName}. Must be a comma-separated string.`);
       }
       return entry.split(",");
     })
     .map((label) => label.trim())
-    .filter(Boolean))).slice(0, 12);
+    .filter(Boolean))).slice(0, maxItems);
 }
 
 function parseTrimmedQueryString(value: unknown, fieldName: string): string | undefined {
