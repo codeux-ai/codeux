@@ -357,6 +357,7 @@ describe("QuicksprintService", () => {
           overrides: undefined,
         },
       });
+      expect(result.planningPromise).toBeInstanceOf(Promise);
       expect(planSprintMock).toHaveBeenCalledWith(projectId, "mocked-sprint-id", {
         autoStart: false,
         replan: false,

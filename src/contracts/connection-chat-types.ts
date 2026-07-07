@@ -61,6 +61,7 @@ export interface ConversationRuntimeState {
     approvalMessage: string;
     proposedAt: string;
   } | null;
+  createAppQuickaction?: DashboardCreateAppQuickactionRuntimeState | null;
 }
 
 export const DASHBOARD_CREATE_APP_QUICKACTION_KINDS = ["web_app", "desktop_app"] as const;
@@ -90,6 +91,28 @@ export interface DashboardCreateAppQuickactionMetadata {
     stackSummary?: DashboardCreateAppQuickactionStackSummary | null;
     suggestionTags?: string[];
   };
+}
+
+export type DashboardCreateAppQuickactionPlanningStatus = "running" | "completed" | "failed";
+
+export interface DashboardCreateAppQueuedFollowUp {
+  messageId: string;
+  bodyMarkdown: string;
+  createdAt: string;
+}
+
+export interface DashboardCreateAppQuickactionRuntimeState {
+  activeSprintId: string;
+  appKind: DashboardCreateAppQuickactionKind;
+  planningStatus: DashboardCreateAppQuickactionPlanningStatus;
+  queuedFollowUps: DashboardCreateAppQueuedFollowUp[];
+  quickactionRequestId: string;
+  clientRequestId: string;
+  activePlanningRequestId?: string;
+  progressMessageId?: string | null;
+  planningError?: string | null;
+  completedAt?: string;
+  failedAt?: string;
 }
 
 export interface DashboardAppProgressPlanningStage {
