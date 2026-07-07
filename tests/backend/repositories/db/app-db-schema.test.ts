@@ -30,6 +30,12 @@ const liveSnapshotIndexNames = [
   "idx_execution_invocations_project_sprint_started",
   "idx_execution_invocations_project_sprint_run_started",
   "idx_execution_invocations_status_started",
+  "idx_node_flows_project_updated",
+  "idx_node_flow_versions_flow_version",
+  "idx_node_flow_agent_skills_agent",
+  "idx_node_flow_runs_flow_created",
+  "idx_node_flow_runs_project_created",
+  "idx_node_flow_node_runs_run_created",
 ] as const;
 
 const liveSnapshotIndexColumns: Record<(typeof liveSnapshotIndexNames)[number], string[]> = {
@@ -55,6 +61,12 @@ const liveSnapshotIndexColumns: Record<(typeof liveSnapshotIndexNames)[number], 
   idx_execution_invocations_project_sprint_started: ["project_id", "sprint_id", "started_at"],
   idx_execution_invocations_project_sprint_run_started: ["project_id", "sprint_run_id", "started_at"],
   idx_execution_invocations_status_started: ["status", "started_at"],
+  idx_node_flows_project_updated: ["project_id", "updated_at"],
+  idx_node_flow_versions_flow_version: ["flow_id", "version"],
+  idx_node_flow_agent_skills_agent: ["project_id", "agent_preset_id"],
+  idx_node_flow_runs_flow_created: ["flow_id", "created_at"],
+  idx_node_flow_runs_project_created: ["project_id", "created_at"],
+  idx_node_flow_node_runs_run_created: ["run_id", "created_at"],
 };
 
 function getSchemaSignature(adapter: SqliteDatabaseAdapter): {
@@ -163,6 +175,11 @@ describe("AppDbSchema", () => {
       expect(getTable("memory_claims")).toBeDefined();
       expect(getTable("knowledge_documents")).toBeDefined();
       expect(getTable("sprint_file_browser_sessions")).toBeDefined();
+      expect(getTable("node_flows")).toBeDefined();
+      expect(getTable("node_flow_versions")).toBeDefined();
+      expect(getTable("node_flow_agent_skills")).toBeDefined();
+      expect(getTable("node_flow_runs")).toBeDefined();
+      expect(getTable("node_flow_node_runs")).toBeDefined();
       expect(getColumnNames("provider_invocations")).toEqual(expect.arrayContaining([
         "tool_call_count",
         "execution_mode",
@@ -174,6 +191,7 @@ describe("AppDbSchema", () => {
       expect(getIndexCount("idx_task_run_events_project_created")).toBe(1);
       expect(getIndexCount("idx_guardrail_ledger_task_purpose")).toBe(1);
       expect(getIndexCount("idx_memory_claims_project_fingerprint_active")).toBe(1);
+      expect(getIndexCount("idx_node_flows_project_updated")).toBe(1);
     } finally {
       storage.close();
     }

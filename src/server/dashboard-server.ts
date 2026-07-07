@@ -120,6 +120,7 @@ import type { KnowledgeService } from "../services/knowledge-service.js";
 import type { UpdateStatus } from "../services/update-checker-service.js";
 import type { LocalMcpCliProvider, LocalMcpInstallResult, LocalMcpSetupInfo } from "../services/local-mcp-cli-config-service.js";
 import type { ChatProviderIngressService } from "../services/chat-provider-ingress-service.js";
+import type { NodeFlowService } from "../services/node-flow-service.js";
 import {
   parsePreviewSessionIdFromHost,
   parseSelectedPreviewPortFromRequest,
@@ -157,6 +158,7 @@ export interface DashboardServerOptions {
   agentPresetRepository?: AgentPresetRepository;
   chatProviderRepository?: ChatProviderRepository;
   chatProviderIngressService?: ChatProviderIngressService;
+  nodeFlowService?: NodeFlowService;
   projectManagementRepository?: ProjectManagementRepository;
   executionRepository?: ExecutionRepository;
   getStatus: () => unknown;

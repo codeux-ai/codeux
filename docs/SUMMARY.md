@@ -35,6 +35,7 @@
 - [Agent Sync And Planning Agent](./architecture/agent-sync-and-planning-agent.md)
 - [Agent Routing](./architecture/agent-routing.md)
 - [Agent Knowledge Base](./architecture/agent-knowledge-base.md)
+- [Node Flow Foundation](./architecture/node-flow-foundation.md)
 - [Memory Claims and Evidence](./architecture/memory-claims.md)
 - [Quality Assurance Agent](./architecture/quality-assurance-agent.md)
 - [Live Connections Runtime Surface](./architecture/live-connections-runtime-surface.md)
