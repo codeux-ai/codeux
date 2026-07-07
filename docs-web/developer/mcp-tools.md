@@ -38,6 +38,7 @@ action-specific fields, and an optional `approval` object for destructive action
 | `manage_tasks` | orchestration | Create, edit, start, stop, pause, and inspect tasks. |
 | `manage_quicksprints` | orchestration | Manage quicksprint templates and execute them. |
 | `manage_scheduler` | orchestration | Create and run scheduled sprints, quicksprints, and messages. |
+| `scheduler` | orchestration | Agent-owned wakeups and task reruns with restricted list/schedule/cancel actions. |
 | `manage_agents` | agents & memory | Manage agent presets and sync them to project markdown. |
 | `manage_memory` | agents & memory | Inspect, search, promote, and re-embed short/long-term memory. |
 | `manage_skills` | agents & memory | Manage persistent skill storages, skill markdown, and agent storage attachments. |
@@ -58,6 +59,7 @@ Every tool requires `runtimeRoles: ["project_manager"]` and is enabled by defaul
 | `manage_tasks` | `list`, `get`, `create`, `update`, `delete`, `start`, `stop`, `force_stop`, `pause`, `inspect_run` |
 | `manage_quicksprints` | `list_templates`, `get_template`, `create_template`, `update_template`, `delete_template`, `execute`, `start` |
 | `manage_scheduler` | `list`, `create`, `update`, `delete`, `run_due`, `schedule_sprint`, `schedule_quicksprint`, `schedule_chat` |
+| `scheduler` | `list`, `schedule_wakeup`, `schedule_task`, `cancel` |
 | `manage_agents` | `list`, `get`, `create`, `update`, `delete`, `sync` |
 | `manage_memory` | `list`, `get`, `count`, `create`, `update`, `delete`, `search`, `promote`, `get_map`, `model_status`, `start_reembed` |
 | `manage_skills` | `authoring_prompt`, `list_storages`, `get_storage`, `create_storage`, `update_storage`, `delete_storage`, `reset_storage`, `list_agent_storages`, `attach_storage`, `detach_storage`, `list_skills`, `get_skill`, `create_skill`, `update_skill`, `delete_skill`, `import_markdown`, `export_markdown` |
@@ -66,6 +68,26 @@ Every tool requires `runtimeRoles: ["project_manager"]` and is enabled by defaul
 | `manage_telemetry` | `get_project_stats_snapshot`, `get_project_execution_snapshot`, `list_execution_invocations`, `list_execution_invocation_messages`, `list_sprint_runs`, `list_task_dispatches` |
 
 For the full per-action payloads and return shapes, see [Management actions](./management-actions.md).
+
+## `scheduler`
+
+`scheduler` is the restricted agent scheduler surface. It is separate from `manage_scheduler`, which
+remains the broad project-manager scheduler management tool for sprints, quicksprints, chat entries,
+updates, deletion, and due-entry execution.
+
+Allowed actions:
+
+- `list` — requires `projectId`; returns only `agent_scheduler` wakeup/task entries created by the calling agent.
+- `schedule_wakeup` — requires `projectId`, `bodyMarkdown`, and either `scheduledFor`, `delaySeconds`, or `delayMinutes`; optional `title`, `timezone`, `threadId`, and `connectionId`.
+- `schedule_task` — requires `projectId`, `taskId`, and either `scheduledFor`, `delaySeconds`, or `delayMinutes`; optional `title`, `timezone`, and `provider`.
+- `cancel` — requires `entryId`; changes the entry status to `cancelled` only when the entry was created by the calling agent through `scheduler`.
+
+Security model: Code UX stamps restricted scheduler entries with `origin: "agent_scheduler"`,
+`source: "agent_scheduler"`, and `createdByAgentId` from the current MCP agent context. The server
+enforces this metadata on list and cancel, so an agent cannot cancel dashboard-created entries,
+entries created through `manage_scheduler`, or entries created by another agent. The restricted tool
+does not expose `run_due`, arbitrary updates, recurrence editing, sprint or quicksprint scheduling,
+memory remediation, or global scheduler destructive controls.
 
 ## Approval handshake (destructive actions)
 
