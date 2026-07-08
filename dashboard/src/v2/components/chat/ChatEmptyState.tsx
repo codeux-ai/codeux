@@ -151,18 +151,24 @@ export const ChatRailPlaceholder: FunctionComponent<{
   );
 };
 
-export const LoadingChat: FunctionComponent<{ label: string }> = ({ label }) => (
-  <div className="flex h-full min-h-0 items-center justify-center rounded-3xl border border-dashed border-black/[0.06] bg-white/70 p-8 text-center shadow-[0_2px_20px_rgba(0,0,0,0.04)] dark:border-white/[0.06] dark:bg-void-800/60 dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]">
-    <div className="space-y-4">
-      <div className="mx-auto flex items-center justify-center gap-1.5">
-        <span className="h-2.5 w-2.5 animate-pulse rounded-full bg-signal-500" />
-        <span className="h-2.5 w-2.5 animate-pulse rounded-full bg-signal-500 [animation-delay:140ms]" />
-        <span className="h-2.5 w-2.5 animate-pulse rounded-full bg-signal-500 [animation-delay:280ms]" />
+export const LoadingChat: FunctionComponent<{ label: string }> = ({ label }) => {
+  const isInvocationTranscript = label.toLowerCase().includes("invocation transcript");
+
+  return (
+    <div className="flex h-full min-h-0 items-center justify-center rounded-3xl border border-dashed border-black/[0.06] bg-white/70 p-8 text-center shadow-[0_2px_20px_rgba(0,0,0,0.04)] dark:border-white/[0.06] dark:bg-void-800/60 dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]">
+      <div className="space-y-4">
+        <div className="mx-auto flex items-center justify-center gap-1.5">
+          <span className="h-2.5 w-2.5 animate-pulse rounded-full bg-signal-500 motion-reduce:animate-none" />
+          <span className="h-2.5 w-2.5 animate-pulse rounded-full bg-signal-500 [animation-delay:140ms] motion-reduce:animate-none" />
+          <span className="h-2.5 w-2.5 animate-pulse rounded-full bg-signal-500 [animation-delay:280ms] motion-reduce:animate-none" />
+        </div>
+        <div className="text-[11px] font-bold uppercase tracking-[0.2em] text-signal-500">{label}</div>
+        <p className="max-w-md text-sm leading-relaxed text-slate-500 dark:text-slate-400">
+          {isInvocationTranscript
+            ? "Code UX is loading the stored read-only provider transcript for this invocation."
+            : "Code UX is loading the latest stored conversation state."}
+        </p>
       </div>
-      <div className="text-[11px] font-bold uppercase tracking-[0.2em] text-signal-500">{label}</div>
-      <p className="max-w-md text-sm leading-relaxed text-slate-500 dark:text-slate-400">
-        Code UX is loading the latest stored conversation state.
-      </p>
     </div>
-  </div>
-);
+  );
+};

@@ -33,7 +33,7 @@ import { ProviderLogo } from "./components/ui/ProviderLogo.js";
 import { AgentAvatarSvg } from "./components/agents/AgentAvatarSvg.js";
 import { generateRandomAgentAvatar } from "./lib/agent-avatar.js";
 import { formatInvocationRetryAt } from "./lib/invocation-retry-time.js";
-import type { ExecutionInvocationRecord, Sprint, Task } from "./types.js";
+import type { ChatMessageRecord, ExecutionInvocationRecord, Sprint, Task } from "./types.js";
 import { cancelExecutionInvocation, resetInvocationUsageLimitTimer, restartExecutionInvocation, type InvocationRestartMode } from "./lib/invocation-api.js";
 import { useActionFeedback } from "./hooks/use-action-feedback.js";
 import {
@@ -80,6 +80,143 @@ const getTranscriptJoiner = (before: string, after: string): string => {
     return "";
   }
   return /\s$/.test(before) || /^\s/.test(after) ? "" : " ";
+};
+
+type ComposerStatusTone = "disabled" | "ready" | "sending" | "queued" | "sent" | "failed";
+
+interface ComposerStatusViewModel {
+  tone: ComposerStatusTone;
+  visibleText: string;
+  liveText: string;
+  disabledReason: string | null;
+}
+
+const getLatestDashboardMessage = (messages: readonly ChatMessageRecord[]): ChatMessageRecord | null => {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index];
+    if (message.direction === "dashboard_to_connection") {
+      return message;
+    }
+  }
+  return null;
+};
+
+const buildComposerStatus = (input: {
+  activeConnectionName: string | null;
+  error: string | null;
+  latestDashboardMessage: ChatMessageRecord | null;
+  pendingDashboardMessages: number;
+  selectedProject: boolean;
+  sending: boolean;
+  trimmedInput: string;
+}): ComposerStatusViewModel => {
+  const disabledReason = !input.selectedProject
+    ? "Select a project before sending a message."
+    : input.sending
+      ? "Message is already sending."
+      : !input.trimmedInput
+        ? "Write a message before sending."
+        : null;
+
+  if (!input.selectedProject) {
+    const noProjectReason = "Select a project before sending a message.";
+    return {
+      tone: "disabled",
+      visibleText: noProjectReason,
+      liveText: noProjectReason,
+      disabledReason,
+    };
+  }
+
+  if (input.sending) {
+    return {
+      tone: "sending",
+      visibleText: "Sending message to Code UX...",
+      liveText: "Sending message.",
+      disabledReason,
+    };
+  }
+
+  if (input.error) {
+    return {
+      tone: "failed",
+      visibleText: `Send failed: ${input.error}`,
+      liveText: `Failed: ${input.error}`,
+      disabledReason,
+    };
+  }
+
+  if (input.pendingDashboardMessages > 0) {
+    const queuedLabel = `${input.pendingDashboardMessages} message${input.pendingDashboardMessages === 1 ? "" : "s"} queued for delivery.`;
+    return {
+      tone: "queued",
+      visibleText: `${queuedLabel} A worker or listener will claim the next turn.`,
+      liveText: queuedLabel,
+      disabledReason,
+    };
+  }
+
+  if (input.latestDashboardMessage?.deliveryStatus === "failed") {
+    return {
+      tone: "failed",
+      visibleText: "The latest dashboard message failed. Review the draft or try again.",
+      liveText: "Latest message failed.",
+      disabledReason,
+    };
+  }
+
+  if (input.latestDashboardMessage?.deliveryStatus === "pending") {
+    return {
+      tone: "queued",
+      visibleText: "Latest message is queued and waiting for a worker route.",
+      liveText: "Latest message queued.",
+      disabledReason,
+    };
+  }
+
+  if (input.latestDashboardMessage?.deliveryStatus === "delivered") {
+    return {
+      tone: "sent",
+      visibleText: "Message sent to Code UX and waiting for the worker response.",
+      liveText: "Message sent.",
+      disabledReason,
+    };
+  }
+
+  if (input.latestDashboardMessage?.deliveryStatus === "processed") {
+    return {
+      tone: "sent",
+      visibleText: "Latest message was processed by the worker route.",
+      liveText: "Latest message processed.",
+      disabledReason,
+    };
+  }
+
+  if (input.trimmedInput) {
+    const target = input.activeConnectionName ? ` to ${input.activeConnectionName}` : "";
+    return {
+      tone: "ready",
+      visibleText: `Ready to send${target}. Enter sends; Shift+Enter adds a newline.`,
+      liveText: "Composer ready.",
+      disabledReason,
+    };
+  }
+
+  return {
+    tone: "disabled",
+    visibleText: "Write a message to enable send. Queued delivery will be shown here.",
+    liveText: "Composer disabled until a message is entered.",
+    disabledReason,
+  };
+};
+
+const COMPOSER_STATUS_TONE_CLASS: Record<ComposerStatusTone, string> = {
+  disabled: "border-black/[0.06] bg-black/[0.025] text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.025] dark:text-slate-400",
+  ready: "border-signal-500/20 bg-signal-500/[0.08] text-signal-700 dark:text-signal-300",
+  sending: "border-signal-500/25 bg-signal-500/[0.10] text-signal-700 dark:text-signal-300",
+  queued: "border-status-amber/25 bg-status-amber/[0.10] text-status-amber",
+  sent: "border-signal-500/20 bg-signal-500/[0.08] text-signal-700 dark:text-signal-300",
+  failed: "border-status-red/25 bg-status-red/[0.08] text-status-red",
 };
 
 export const ChatPage: FunctionComponent = () => {
@@ -211,6 +348,31 @@ export const ChatPage: FunctionComponent = () => {
     () => mergeInvocationToolMessages(invocationMessages),
     [invocationMessages],
   );
+  const trimmedComposerInput = input.trim();
+  const latestDashboardMessage = useMemo(() => getLatestDashboardMessage(messages), [messages]);
+  const composerStatus = useMemo(() => buildComposerStatus({
+    activeConnectionName: activeConnection?.displayName ?? null,
+    error,
+    latestDashboardMessage,
+    pendingDashboardMessages,
+    selectedProject: Boolean(selectedProject),
+    sending,
+    trimmedInput: trimmedComposerInput,
+  }), [
+    activeConnection?.displayName,
+    error,
+    latestDashboardMessage,
+    pendingDashboardMessages,
+    selectedProject,
+    sending,
+    trimmedComposerInput,
+  ]);
+  const sendDisabled = Boolean(composerStatus.disabledReason);
+  const sendButtonLabel = sending
+    ? "Sending message"
+    : composerStatus.disabledReason
+      ? `Send message unavailable: ${composerStatus.disabledReason}`
+      : "Send message";
   const invocationLiveEntitiesByMessageId = useMemo(() => {
     const entitiesByMessageId = new Map<string, readonly ChatLiveEntityWidget[]>();
     if (liveEntitySprints.length === 0 && liveEntityTasks.length === 0) {
@@ -293,6 +455,16 @@ export const ChatPage: FunctionComponent = () => {
       composerSelectionRef.current = { start: nextCaret, end: nextCaret };
     });
   }, [input, setInput]);
+
+  const submitComposerMessage = useCallback(async (): Promise<void> => {
+    if (sendDisabled) {
+      return;
+    }
+    await handleSend();
+    requestAnimationFrame(() => {
+      composerRef.current?.focus({ preventScroll: true });
+    });
+  }, [handleSend, sendDisabled]);
 
   const handleRestartInvocation = useCallback(async (mode: InvocationRestartMode = "retry_full_prompt") => {
     if (!selectedInvocation || selectedInvocation.status !== "failed" || restartingInvocation || cancellingInvocationId || resettingUsageLimitInvocationId) {
@@ -573,6 +745,9 @@ export const ChatPage: FunctionComponent = () => {
             onRename={handleRenameThread}
             isCompacting={compacting}
             isCancelling={isCancelling}
+            actionFeedbackStatus={feedback.status}
+            actionFeedbackMessage={feedback.message}
+            error={error}
           />
 
           <div id="chat-panel" role="tabpanel" aria-labelledby="tab-threads" className="flex-1 min-h-0 flex flex-col overflow-y-auto">
@@ -635,7 +810,7 @@ export const ChatPage: FunctionComponent = () => {
               <label htmlFor="message-composer" className="sr-only">Message</label>
               <textarea
                 id="message-composer"
-                aria-describedby="composer-help"
+                aria-describedby="composer-help composer-status"
                 ref={composerRef}
                 value={input}
                 rows={1}
@@ -658,7 +833,7 @@ export const ChatPage: FunctionComponent = () => {
                   }
                   if (event.key === "Enter" && !event.shiftKey) {
                     event.preventDefault();
-                    void handleSend();
+                    void submitComposerMessage();
                     return;
                   }
                   if (event.key === "ArrowUp" || event.key === "ArrowDown") {
@@ -687,14 +862,24 @@ export const ChatPage: FunctionComponent = () => {
                 }}
               />
               <div className="mt-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div id="composer-help" className="text-[10px] font-mono text-slate-400">
-                  {activeConnection
-                    ? `${activeConnection.displayName} · ${activeConnection.status} · Enter sends`
-                    : "Messages will stay queued until a listener claims or is assigned to this thread · Enter sends · Shift+Enter newline"}
+                <div className="min-w-0 flex-1 space-y-2">
+                  <div id="composer-help" className="text-[10px] font-mono text-slate-400">
+                    {activeConnection
+                      ? `${activeConnection.displayName} · ${activeConnection.status} · Enter sends`
+                      : "Messages will stay queued until a listener claims or is assigned to this thread · Enter sends · Shift+Enter newline"}
+                  </div>
+                  <div
+                    id="composer-status"
+                    role={composerStatus.tone === "failed" ? "alert" : "status"}
+                    aria-live={composerStatus.tone === "failed" ? "assertive" : "polite"}
+                    aria-atomic="true"
+                    className={`rounded-xl border px-3 py-2 text-xs font-semibold leading-relaxed ${COMPOSER_STATUS_TONE_CLASS[composerStatus.tone]}`}
+                  >
+                    {composerStatus.visibleText}
+                  </div>
                 </div>
-                <div className="sr-only" aria-live="polite">
-                  {sending ? "Sending message..." : ""}
-                  {error ? `Failed: ${error}` : ""}
+                <div className="sr-only" aria-live={composerStatus.tone === "failed" ? "assertive" : "polite"} aria-atomic="true">
+                  {composerStatus.liveText}
                 </div>
                 <div className="flex w-full flex-wrap items-center justify-end gap-2 sm:w-auto">
                   <SpeechInputButton
@@ -704,17 +889,18 @@ export const ChatPage: FunctionComponent = () => {
                     className="h-11 min-w-[7.5rem] sm:min-w-[8.75rem]"
                   />
                   <button
-                    aria-label={sending ? "Sending message" : "Send message"}
-                    aria-busy={sending}
+                    aria-label={sendButtonLabel}
+                    aria-busy={sending ? "true" : "false"}
+                    aria-describedby="composer-help composer-status"
                     type="button"
-                    onClick={() => void handleSend()}
-                    disabled={!selectedProject || !input.trim() || sending}
+                    onClick={() => void submitComposerMessage()}
+                    disabled={sendDisabled}
                     className={`inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-[1rem] transition-all ${
-                      !selectedProject || (!input.trim() && !sending)
+                      sendDisabled && !sending
                         ? "cursor-not-allowed bg-black/[0.06] text-slate-400 shadow-none dark:bg-white/[0.06]"
                         : sending
-                          ? "cursor-wait bg-signal-500/50 text-white dark:text-void-900 shadow-none scale-95"
-                          : "bg-signal-500 text-white dark:text-void-900 shadow-[0_0_24px_rgba(0,224,160,0.28)] hover:bg-signal-400 hover:scale-105 active:scale-95"
+                          ? "cursor-wait bg-signal-500/50 text-white dark:text-void-900 shadow-none motion-safe:scale-95"
+                          : "bg-signal-500 text-white dark:text-void-900 shadow-[0_0_24px_rgba(0,224,160,0.28)] hover:bg-signal-400 motion-safe:hover:scale-105 motion-safe:active:scale-95"
                     }`}
                   >
                     {sending ? <RefreshCw className="h-4 w-4 animate-spin text-void-900/70 motion-reduce:animate-none" /> : <ArrowUp className="h-5 w-5" strokeWidth={2.5} />}
@@ -932,7 +1118,7 @@ export const ChatPage: FunctionComponent = () => {
         </div>
 
         <div id="chat-panel" role="tabpanel" aria-labelledby="tab-invocations" className="flex-1 min-h-0 flex flex-col overflow-y-auto">
-          <div role="log" aria-label="Message history" aria-live={messages.length > 0 && !threadsLoading && !threadMessagesLoading ? "polite" : "off"} aria-atomic="false" aria-relevant="additions" ref={messagesRef} className="flex-1 min-h-0 space-y-6 px-6 py-6">
+          <div role="log" aria-label="Message history" aria-live={visibleInvocationMessages.length > 0 && selectedInvocation && !invocationsLoading && !invocationMessagesLoading ? "polite" : "off"} aria-atomic="false" aria-relevant="additions" ref={messagesRef} className="flex-1 min-h-0 space-y-6 px-6 py-6">
           {invocationsLoading && !selectedInvocation ? (
             <LoadingChat label="Loading invocations" />
           ) : !selectedInvocation ? (
@@ -941,9 +1127,14 @@ export const ChatPage: FunctionComponent = () => {
               message="Select an execution invocation to inspect the exact runtime transcript, retry state, and provider response trail."
             />
           ) : invocationMessagesLoading && invocationMessages.length === 0 ? (
-            <LoadingChat label="Loading messages" />
+            <LoadingChat label="Loading invocation transcript" />
           ) : (
             <>
+              {error && (
+                <div role="alert" aria-live="assertive" className="rounded-xl border border-status-red/25 bg-status-red/[0.08] px-3 py-2 text-xs font-semibold leading-relaxed text-status-red">
+                  Transcript could not update: {error}. Use the invocation actions above when available, or switch to Threads to continue the conversation.
+                </div>
+              )}
               {invocationMessagesLoading && invocationMessages.length > 0 && (
                 <div role="status" aria-live="polite" className="rounded-xl border border-black/[0.06] bg-white/75 px-3 py-2 text-xs font-medium text-slate-500 shadow-sm dark:border-white/[0.06] dark:bg-white/[0.04] dark:text-slate-300">
                   Refreshing transcript while keeping the current messages visible.
@@ -976,7 +1167,7 @@ export const ChatPage: FunctionComponent = () => {
                 <EmptyChat
                   tone="invocations"
                   title="Transcript Is Empty"
-                  message="This invocation has no stored messages yet. New provider activity will appear here as the runtime records it."
+                  message="This read-only invocation has no stored messages yet. Wait for provider activity to be recorded, choose another invocation, or switch to Threads to send a message."
                 />
               ) : (
                 visibleInvocationMessages.map((message) => {
@@ -1002,8 +1193,8 @@ export const ChatPage: FunctionComponent = () => {
 
         <div className="shrink-0 border-t border-black/[0.05] p-5 dark:border-white/[0.05]">
           <div className="rounded-[1.5rem] border border-black/[0.06] bg-black/[0.03] p-3 dark:border-white/[0.06] dark:bg-white/[0.03]">
-            <div className="min-h-[38px] w-full px-2 py-2 text-[15px] leading-relaxed text-slate-400 dark:text-slate-600">
-              Invocation execution logs are read-only. Switch to Threads to communicate.
+            <div role="note" aria-label="Invocation transcript is read-only" className="min-h-[38px] w-full px-2 py-2 text-[15px] leading-relaxed text-slate-500 dark:text-slate-400">
+              Invocation execution logs are read-only. Switch to Threads to communicate. Wait for this run to update or use available retry/cancel actions above.
             </div>
           </div>
         </div>

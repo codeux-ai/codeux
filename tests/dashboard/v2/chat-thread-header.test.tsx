@@ -105,6 +105,44 @@ describe("ChatThreadHeader", () => {
     expect(compactButton).toHaveClass("cursor-wait");
     expect(compactButton).toHaveClass("opacity-70");
     expect(compactButton).toHaveAttribute("aria-busy", "true");
+    expect(screen.getByText(/Compacting conversation/i)).toBeInTheDocument();
+  });
+
+  it("announces compaction success and errors without changing the action layout", () => {
+    const { rerender } = render(
+      <ChatThreadHeader
+        thread={baseThread}
+        onCompact={() => {}}
+        onCancelActiveTurn={() => {}}
+        onRename={noopRename}
+        isCompacting={false}
+        isCancelling={false}
+        actionFeedbackStatus="success"
+        actionFeedbackMessage="Thread compacted."
+      />
+    );
+
+    const successStatus = screen.getByText(/Thread compacted/i);
+    expect(successStatus).toHaveAttribute("aria-live", "polite");
+    expect(successStatus).toHaveClass("min-h-[2rem]");
+    expect(screen.getByRole("button", { name: "Compact" })).toHaveAttribute("aria-describedby");
+
+    rerender(
+      <ChatThreadHeader
+        thread={baseThread}
+        onCompact={() => {}}
+        onCancelActiveTurn={() => {}}
+        onRename={noopRename}
+        isCompacting={false}
+        isCancelling={false}
+        actionFeedbackStatus="idle"
+        actionFeedbackMessage={null}
+        error="Provider summary failed"
+      />
+    );
+
+    expect(screen.getByRole("alert")).toHaveTextContent("Provider summary failed");
+    expect(screen.getByRole("alert")).toHaveClass("min-h-[2rem]");
   });
 
   it("calls onCompact when compact button is clicked", () => {

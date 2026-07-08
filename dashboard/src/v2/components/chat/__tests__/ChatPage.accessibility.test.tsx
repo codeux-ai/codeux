@@ -7,6 +7,8 @@ expect.extend(matchers);
 
 import { ChatPageShell } from '../ChatPageShell.js';
 import { ChatRail } from '../ChatRail.js';
+import { ThreadListCard } from '../ThreadListCard.js';
+import { InvocationListCard } from '../InvocationListCard.js';
 import { ChatPage } from '../../../ChatPage.js';
 import { WorkingBubble } from '../WorkingBubble.js';
 import { ProjectDataContext } from '../../../context/project-data.js';
@@ -257,7 +259,7 @@ describe('ChatPage Accessibility', () => {
 
     const textbox = screen.getByRole('textbox', { name: "Message" });
     expect(textbox).toBeInTheDocument();
-    expect(textbox).toHaveAttribute('aria-describedby', 'composer-help');
+    expect(textbox).toHaveAttribute('aria-describedby', 'composer-help composer-status');
 
     const helpText = screen.getByText(/Enter sends/i);
     expect(helpText).toHaveAttribute('id', 'composer-help');
@@ -267,12 +269,196 @@ describe('ChatPage Accessibility', () => {
     expect(sendBtn).toHaveAttribute('aria-busy', 'true');
 
     // We mocked sending: true, so the "Sending message..." text should exist
-    const liveRegion = screen.getByText(/Sending message\.\.\./);
-    expect(liveRegion).toHaveAttribute('aria-live', 'polite');
+    const statusText = screen.getByText(/Sending message to Code UX/i);
+    expect(statusText).toHaveAttribute('id', 'composer-status');
+    expect(statusText).toHaveAttribute('aria-live', 'polite');
+    expect(sendBtn).toHaveAttribute('aria-describedby', 'composer-help composer-status');
+  });
 
-    // Check if error is correctly displayed as well
-    const liveError = screen.getByText(/Failed: Test error/);
-    expect(liveError).toHaveAttribute('aria-live', 'polite');
+  it('explains disabled and ready send states without hiding the composer', () => {
+    mocks.data = {
+      ...mocks.data,
+      sending: false,
+      input: "",
+      error: null,
+      pendingDashboardMessages: 0,
+      messages: [],
+    };
+
+    const renderPage = () => (
+      <ProjectDataContext.Provider value={{ projects: [{ id: "p1", name: "P" } as any], selectedProject: { id: "p1", name: "P" } as any } as any}>
+        <ChatPage />
+      </ProjectDataContext.Provider>
+    );
+    const { rerender } = render(renderPage());
+
+    expect(screen.getByText(/Write a message to enable send/i)).toHaveAttribute("id", "composer-status");
+    expect(screen.getByRole("button", { name: /Write a message before sending/i })).toBeDisabled();
+
+    mocks.data = {
+      ...mocks.data,
+      input: "Ready now",
+    };
+    rerender(renderPage());
+
+    expect(screen.getByText(/Ready to send/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Send message" })).toBeEnabled();
+  });
+
+  it('uses invocation message loading state for invocation transcript announcements', () => {
+    const invocation = {
+      id: "inv-1",
+      projectId: "p1",
+      sprintId: null,
+      taskId: null,
+      sprintRunId: null,
+      dispatchId: null,
+      taskRunId: null,
+      attentionItemId: null,
+      providerInvocationId: null,
+      type: "planning",
+      status: "running",
+      provider: "mock",
+      model: "mock",
+      systemPrompt: null,
+      startedAt: "2026-03-10T12:00:00.000Z",
+      finishedAt: null,
+      errorMessage: null,
+      lastErrorCategory: null,
+      lastErrorMessage: null,
+      lastRetryAfterIso: null,
+      messageCount: 1,
+      lastMessageAt: "2026-03-10T12:01:00.000Z",
+      createdAt: "2026-03-10T12:00:00.000Z",
+      updatedAt: "2026-03-10T12:00:00.000Z",
+    } as any;
+
+    mocks.data = {
+      ...mocks.data,
+      chatMode: "invocations",
+      sending: false,
+      input: "",
+      error: null,
+      messages: [{
+        id: "thread-msg-1",
+        threadId: "thread1",
+        direction: "dashboard_to_connection",
+        authorType: "dashboard_user",
+        authorConnectionId: null,
+        bodyMarkdown: "Thread message should not drive invocation live state.",
+        deliveryStatus: "delivered",
+        metadata: null,
+        createdAt: "2026-03-10T12:00:00.000Z",
+      }],
+      invocations: [invocation],
+      selectedInvocationId: "inv-1",
+      selectedInvocation: invocation,
+      invocationMessages: [],
+      invocationMessagesLoading: true,
+      threadsLoading: false,
+      threadMessagesLoading: false,
+    };
+
+    const renderPage = () => (
+      <ProjectDataContext.Provider value={{ projects: [{ id: "p1", name: "P" } as any], selectedProject: { id: "p1", name: "P" } as any } as any}>
+        <ChatPage />
+      </ProjectDataContext.Provider>
+    );
+    const { rerender } = render(renderPage());
+
+    expect(screen.getByRole("log", { name: "Message history" })).toHaveAttribute("aria-live", "off");
+    expect(screen.getByText("Loading invocation transcript")).toBeInTheDocument();
+
+    mocks.data = {
+      ...mocks.data,
+      invocationMessagesLoading: false,
+      invocationMessages: [{
+        id: "inv-msg-1",
+        invocationId: "inv-1",
+        role: "assistant",
+        contentMarkdown: "Invocation message loaded.",
+        toolCallsJson: null,
+        metadata: null,
+        createdAt: "2026-03-10T12:01:00.000Z",
+      }],
+    };
+    rerender(renderPage());
+
+    expect(screen.getByRole("log", { name: "Message history" })).toHaveAttribute("aria-live", "polite");
+    expect(screen.getByText("Invocation message loaded.")).toBeInTheDocument();
+    expect(screen.getByRole("note", { name: "Invocation transcript is read-only" })).toHaveTextContent(/Switch to Threads to communicate/i);
+    expect(screen.getByRole("note", { name: "Invocation transcript is read-only" })).toHaveTextContent(/use available retry\/cancel actions/i);
+  });
+
+  it('marks selected rail cards and pending or failed runtime state distinctly', () => {
+    const thread = {
+      id: "thread-selected",
+      projectId: "p1",
+      connectionId: null,
+      scope: "project",
+      title: "Selected Thread",
+      status: "open",
+      createdAt: "2026-03-10T12:00:00.000Z",
+      updatedAt: "2026-03-10T12:00:00.000Z",
+      messageCount: 2,
+      pendingMessageCount: 1,
+      lastMessageAt: "2026-03-10T12:00:00.000Z",
+      lastMessagePreview: "Queued work",
+      runtimeState: null,
+    } as any;
+    const invocation = {
+      id: "inv-failed",
+      projectId: "p1",
+      sprintId: null,
+      taskId: null,
+      sprintRunId: null,
+      dispatchId: null,
+      taskRunId: null,
+      attentionItemId: null,
+      providerInvocationId: null,
+      type: "planning",
+      status: "failed",
+      provider: "mock",
+      model: "mock",
+      systemPrompt: null,
+      startedAt: "2026-03-10T12:00:00.000Z",
+      finishedAt: "2026-03-10T12:02:00.000Z",
+      errorMessage: null,
+      lastErrorCategory: "UNKNOWN",
+      lastErrorMessage: "Provider failed.",
+      lastRetryAfterIso: null,
+      messageCount: 1,
+      lastMessageAt: "2026-03-10T12:02:00.000Z",
+      createdAt: "2026-03-10T12:00:00.000Z",
+      updatedAt: "2026-03-10T12:02:00.000Z",
+    } as any;
+
+    const { container, unmount } = render(
+      <ThreadListCard
+        threads={[thread]}
+        selectedThreadId="thread-selected"
+        onSelect={vi.fn()}
+        onDelete={vi.fn()}
+        deletingThreadId={null}
+      />
+    );
+    const threadCard = screen.getByRole("button", { name: /Selected Thread.*Selected.*1 queued message/i });
+    expect(threadCard).toHaveAttribute("data-selected", "true");
+    expect(threadCard).toHaveAttribute("data-pending", "true");
+    expect(container.textContent).toContain("Selected");
+    unmount();
+
+    render(
+      <InvocationListCard
+        invocations={[invocation]}
+        selectedInvocationId="inv-failed"
+        onSelect={vi.fn()}
+      />
+    );
+    const invocationCard = screen.getByRole("button", { name: /Planning.*Selected.*Failed/i });
+    expect(invocationCard).toHaveAttribute("data-selected", "true");
+    expect(invocationCard).toHaveAttribute("data-status", "failed");
+    expect(screen.getAllByText("Failed").length).toBeGreaterThan(0);
   });
 
   it('renders local no-project onboarding assistant without the project composer', async () => {
