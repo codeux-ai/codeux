@@ -4,6 +4,8 @@ import { AppDbStorage } from "./app-db-storage.js";
 import { requireRecord, toNumber, toBoolean } from "./repository-utils.js";
 import type {
   ConnectionInboxMessage,
+  ConversationDraftRecord,
+  ConversationMessageHistoryRecord,
   ConversationMessageMetadata,
   ConversationMessageRecord,
   ConversationThreadRecord,
@@ -13,10 +15,12 @@ import type {
   McpConnectionRecord,
   PostListenReplyInput,
   PullInboxInput,
+  RecordConversationMessageHistoryInput,
   StartListenInput,
   StartListenResponse,
   UpdateConversationThreadInput,
   UpdateMcpConnectionInput,
+  UpsertConversationDraftInput,
   UpsertMcpConnectionInput,
 } from "../contracts/connection-chat-types.js";
 import type { DashboardRealtimeService } from "../services/dashboard-realtime-service.js";
@@ -49,6 +53,7 @@ const HEARTBEAT_WRITE_INTERVAL_MS = 5 * 1000;
 const OFFLINE_CONNECTION_THRESHOLD_MS = 3 * 60 * 1000;
 const PRUNE_CONNECTION_THRESHOLD_MS = 3 * 60 * 1000;
 const STALE_CONNECTION_THRESHOLD_MS = 90 * 1000;
+const MESSAGE_HISTORY_LIMIT = 50;
 
 interface ConnectionRow {
   id: string;
@@ -77,6 +82,24 @@ interface BindingRow {
   created_at?: string | null;
 }
 
+interface ConversationDraftRow {
+  user_id: string;
+  project_id: string;
+  context_key: string;
+  body_markdown: string;
+  created_at: string;
+  updated_at: string;
+}
+
+interface ConversationMessageHistoryRow {
+  id: string;
+  user_id: string;
+  project_id: string;
+  body_markdown: string;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface ConnectionProjectBindingState {
   projectId: string;
   isActive: boolean;
@@ -92,6 +115,7 @@ export interface CreateSystemConversationMessageInput {
   metadata?: ConversationMessageMetadata | null;
 }
 
+const THREAD_DRAFT_CONTEXT_PREFIX = "thread:";
 const SELECTED_PROJECT_KEY = "selected_project_id";
 function isHiddenConversationMessage(metadata?: ConversationMessageMetadata | null): boolean {
   return metadata?.internalVisibility === HIDDEN_INTERNAL_VISIBILITY;
@@ -436,6 +460,116 @@ export class ConnectionChatRepository {
 
   getThread(threadId: string): ConversationThreadRecord {
     return requireConversationThreadQuery(this.db, threadId);
+  }
+
+  getDraft(projectId: string, input: { userId: string; contextKey: string }): ConversationDraftRecord | null {
+    const normalized = this.normalizeDraftInput(projectId, input);
+    const row = this.db.prepare(`
+      SELECT user_id, project_id, context_key, body_markdown, created_at, updated_at
+      FROM conversation_drafts
+      WHERE user_id = ? AND project_id = ? AND context_key = ?
+    `).get(normalized.userId, normalized.projectId, normalized.contextKey) as ConversationDraftRow | undefined;
+
+    return row ? this.mapDraft(row) : null;
+  }
+
+  upsertDraft(projectId: string, input: UpsertConversationDraftInput): ConversationDraftRecord | null {
+    const normalized = this.normalizeDraftInput(projectId, input);
+    const now = new Date().toISOString();
+
+    if (!input.bodyMarkdown) {
+      this.db.prepare(`
+        DELETE FROM conversation_drafts
+        WHERE user_id = ? AND project_id = ? AND context_key = ?
+      `).run(normalized.userId, normalized.projectId, normalized.contextKey);
+      return null;
+    }
+
+    this.db.prepare(`
+      INSERT INTO conversation_drafts (
+        user_id, project_id, context_key, body_markdown, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?)
+      ON CONFLICT(user_id, project_id, context_key) DO UPDATE SET
+        body_markdown = excluded.body_markdown,
+        updated_at = excluded.updated_at
+    `).run(
+      normalized.userId,
+      normalized.projectId,
+      normalized.contextKey,
+      input.bodyMarkdown,
+      now,
+      now
+    );
+
+    return this.getDraft(projectId, {
+      userId: normalized.userId,
+      contextKey: normalized.contextKey,
+    });
+  }
+
+  listMessageHistory(projectId: string, input: { userId: string; limit?: number }): ConversationMessageHistoryRecord[] {
+    const normalized = this.normalizeMessageHistoryInput(projectId, { userId: input.userId });
+    const limit = Math.max(1, Math.min(input.limit ?? MESSAGE_HISTORY_LIMIT, MESSAGE_HISTORY_LIMIT));
+    const rows = this.db.prepare(`
+      SELECT id, user_id, project_id, body_markdown, created_at, updated_at
+      FROM (
+        SELECT id, user_id, project_id, body_markdown, created_at, updated_at
+        FROM conversation_message_history
+        WHERE user_id = ? AND project_id = ?
+        ORDER BY updated_at DESC, created_at DESC, id DESC
+        LIMIT ?
+      )
+      ORDER BY updated_at ASC, created_at ASC, id ASC
+    `).all(normalized.userId, normalized.projectId, limit) as ConversationMessageHistoryRow[];
+
+    return rows.map((row) => this.mapMessageHistory(row));
+  }
+
+  recordMessageHistory(projectId: string, input: RecordConversationMessageHistoryInput): ConversationMessageHistoryRecord {
+    const normalized = this.normalizeMessageHistoryInput(projectId, input);
+    const now = new Date().toISOString();
+    const id = randomUUID();
+
+    this.db.prepare(`
+      INSERT INTO conversation_message_history (
+        id, user_id, project_id, body_markdown, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?)
+      ON CONFLICT(user_id, project_id, body_markdown) DO UPDATE SET
+        updated_at = excluded.updated_at
+    `).run(
+      id,
+      normalized.userId,
+      normalized.projectId,
+      normalized.bodyMarkdown,
+      now,
+      now,
+    );
+
+    this.db.prepare(`
+      DELETE FROM conversation_message_history
+      WHERE user_id = ? AND project_id = ?
+        AND id NOT IN (
+          SELECT id
+          FROM conversation_message_history
+          WHERE user_id = ? AND project_id = ?
+          ORDER BY updated_at DESC, created_at DESC, id DESC
+          LIMIT ?
+        )
+    `).run(
+      normalized.userId,
+      normalized.projectId,
+      normalized.userId,
+      normalized.projectId,
+      MESSAGE_HISTORY_LIMIT,
+    );
+
+    const row = this.db.prepare(`
+      SELECT id, user_id, project_id, body_markdown, created_at, updated_at
+      FROM conversation_message_history
+      WHERE user_id = ? AND project_id = ? AND body_markdown = ?
+    `).get(normalized.userId, normalized.projectId, normalized.bodyMarkdown) as ConversationMessageHistoryRow | undefined;
+
+    return this.mapMessageHistory(requireRecord(row, "Conversation message history", normalized.bodyMarkdown));
   }
 
   updateThread(threadId: string, input: UpdateConversationThreadInput): ConversationThreadRecord {
@@ -1402,6 +1536,79 @@ export class ConnectionChatRepository {
     return projectIds.filter((projectId) => activeSet.has(projectId));
   }
 
+  private normalizeDraftInput(
+    projectId: string,
+    input: { userId: string; contextKey: string },
+  ): { projectId: string; userId: string; contextKey: string } {
+    const normalizedProjectId = projectId.trim();
+    const userId = input.userId.trim();
+    const contextKey = input.contextKey.trim();
+    if (!normalizedProjectId) {
+      throw new Error("Missing or empty required field: projectId");
+    }
+    if (!userId) {
+      throw new Error("Missing or empty required field: userId");
+    }
+    if (!contextKey) {
+      throw new Error("Missing or empty required field: contextKey");
+    }
+
+    requireRecord(this.db.prepare("SELECT id FROM projects WHERE id = ?").get(normalizedProjectId), "Project", normalizedProjectId);
+
+    if (contextKey.startsWith(THREAD_DRAFT_CONTEXT_PREFIX)) {
+      const threadId = contextKey.slice(THREAD_DRAFT_CONTEXT_PREFIX.length).trim();
+      const thread = requireConversationThreadQuery(this.db, threadId);
+      if (thread.projectId !== normalizedProjectId) {
+        throw new Error(`Thread ${threadId} does not belong to project ${normalizedProjectId}`);
+      }
+    }
+
+    return { projectId: normalizedProjectId, userId, contextKey };
+  }
+
+  private normalizeMessageHistoryInput(
+    projectId: string,
+    input: { userId: string; bodyMarkdown?: string },
+  ): { projectId: string; userId: string; bodyMarkdown: string } {
+    const normalizedProjectId = projectId.trim();
+    const userId = input.userId.trim();
+    const bodyMarkdown = input.bodyMarkdown?.trim() ?? "";
+    if (!normalizedProjectId) {
+      throw new Error("Missing or empty required field: projectId");
+    }
+    if (!userId) {
+      throw new Error("Missing or empty required field: userId");
+    }
+    if (input.bodyMarkdown !== undefined && !bodyMarkdown) {
+      throw new Error("Missing or empty required field: bodyMarkdown");
+    }
+
+    requireRecord(this.db.prepare("SELECT id FROM projects WHERE id = ?").get(normalizedProjectId), "Project", normalizedProjectId);
+
+    return { projectId: normalizedProjectId, userId, bodyMarkdown };
+  }
+
+  private mapDraft(row: ConversationDraftRow): ConversationDraftRecord {
+    return {
+      userId: row.user_id,
+      projectId: row.project_id,
+      contextKey: row.context_key,
+      bodyMarkdown: row.body_markdown,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    };
+  }
+
+  private mapMessageHistory(row: ConversationMessageHistoryRow): ConversationMessageHistoryRecord {
+    return {
+      id: row.id,
+      userId: row.user_id,
+      projectId: row.project_id,
+      bodyMarkdown: row.body_markdown,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    };
+  }
 
   private getActiveProjectIds(connectionId: string): string[] {
     const rows = this.db.prepare(`

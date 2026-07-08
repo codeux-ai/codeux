@@ -67,9 +67,13 @@ import type {
 import type { PlanningInvocationRestartMode } from "../services/planning-agent-service.js";
 import type {
   ConversationMessageRecord,
+  ConversationDraftRecord,
+  ConversationMessageHistoryRecord,
   ConversationThreadRecord,
   CreateConversationThreadInput,
   CreateDashboardConversationMessageInput,
+  RecordConversationMessageHistoryInput,
+  UpsertConversationDraftInput,
   McpConnectionRecord,
   UpdateConversationThreadInput,
   UpdateConversationThreadRouteInput,
@@ -273,6 +277,10 @@ export interface DashboardServerOptions {
   deleteConversationThread: (threadId: string) => void;
   listConversationMessages: (threadId: string) => ConversationMessageRecord[];
   postConversationMessage: (projectId: string, input: CreateDashboardConversationMessageInput) => Promise<ConversationMessageRecord> | ConversationMessageRecord;
+  getConversationDraft?: (projectId: string, input: { userId: string; contextKey: string }) => ConversationDraftRecord | null;
+  upsertConversationDraft?: (projectId: string, input: UpsertConversationDraftInput) => ConversationDraftRecord | null;
+  listConversationMessageHistory?: (projectId: string, input: { userId: string; limit?: number }) => ConversationMessageHistoryRecord[];
+  recordConversationMessageHistory?: (projectId: string, input: RecordConversationMessageHistoryInput) => ConversationMessageHistoryRecord;
 
   listProjectInvocations: (projectId: string) => ExecutionInvocationRecord[];
   listInvocationMessages: (invocationId: string) => ExecutionInvocationMessageRecord[];

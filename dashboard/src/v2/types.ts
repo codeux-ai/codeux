@@ -14,6 +14,8 @@ import type {
 } from "../../../src/contracts/invocation-types.js";
 import type {
   ConnectionInboxMessage,
+  ConversationDraftRecord,
+  ConversationMessageHistoryRecord,
   ConversationMessageRecord,
   ConversationThreadRecord,
   ConversationRuntimeState,
@@ -21,12 +23,14 @@ import type {
   DashboardCreateAppQuickactionMetadata,
   CreateConversationThreadInput,
   CreateDashboardConversationMessageInput,
+  UpsertConversationDraftInput,
   McpConnectionCapabilities,
   McpConnectionRecord,
   McpConnectionRole,
   McpConnectionStatus,
   PostListenReplyInput,
   PullInboxInput,
+  RecordConversationMessageHistoryInput,
   StartListenInput,
   StartListenResponse,
   UpdateConversationThreadInput,
@@ -215,6 +219,7 @@ export type AgentConnection = McpConnectionRecord;
 export type AgentPreset = AgentPresetRecord;
 export type ChatThread = ConversationThreadRecord;
 export type ChatMessageRecord = ConversationMessageRecord;
+export type ChatDraftRecord = ConversationDraftRecord;
 export type {
   CreateCustomDashboardDraftInput,
   CreateCustomDashboardRevisionInput,
@@ -340,6 +345,8 @@ export type {
   PlanSprintOptions,
   PlanningOverrides,
   ConnectionInboxMessage,
+  ConversationDraftRecord,
+  ConversationMessageHistoryRecord,
   ConversationMessageRecord,
   ConversationThreadRecord,
   ConversationRuntimeState,
@@ -351,6 +358,7 @@ export type {
   McpConnectionStatus,
   PostListenReplyInput,
   PullInboxInput,
+  RecordConversationMessageHistoryInput,
   ProjectCollectionResponse,
   ProjectSetupOptions,
   ProjectSetupRequestInput,
@@ -391,6 +399,7 @@ export type {
   ProjectExecutionStatsSnapshot,
   ProjectStatsQuery,
   ProjectStatsWindow,
+  UpsertConversationDraftInput,
   UpdateConversationThreadInput,
   UpdateConversationThreadRouteInput,
   TaskExecutorType,

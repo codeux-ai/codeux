@@ -32,6 +32,8 @@ Project
 │   └── long-term (project-scoped)
 ├── ConversationThread
 │   └── ConversationMessage
+├── ConversationDraft
+├── ConversationMessageHistory
 ├── QuicksprintTemplate
 ├── AttentionItem
 └── WorkerEndpoint / Connection
@@ -53,6 +55,30 @@ Project
 | `createdAt`, `updatedAt` | datetime | – |
 
 Has-many: sprints, agent presets, memories, conversation threads, attention items, settings overrides.
+
+## ConversationDraft
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| `userId` | string | Browser-scoped dashboard user key. |
+| `projectId` | string | FK. |
+| `contextKey` | string | `new-thread` or `thread:<thread-id>`. |
+| `bodyMarkdown` | text | Latest unsent composer draft. |
+| `createdAt`, `updatedAt` | datetime | – |
+
+Primary key: `(userId, projectId, contextKey)`. Blank drafts delete the row, and thread-scoped context keys are validated against the owning project.
+
+## ConversationMessageHistory
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| `id` | string | Primary key. |
+| `userId` | string | Browser-scoped dashboard user key. |
+| `projectId` | string | FK. |
+| `bodyMarkdown` | text | Submitted composer text. |
+| `createdAt`, `updatedAt` | datetime | `updatedAt` moves duplicate text to the recent end. |
+
+Unique key: `(userId, projectId, bodyMarkdown)`. The dashboard keeps only the newest capped set per user/project for ArrowUp/ArrowDown composer recall.
 
 ## Sprint
 

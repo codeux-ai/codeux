@@ -397,19 +397,12 @@ export const ChatPage: FunctionComponent = () => {
   ]);
 
   const handlePromptSuggestionSelect = useCallback((prompt: string) => {
-    setInput(prompt);
-    composerRef.current?.focus();
-    requestAnimationFrame(() => {
-      const composer = composerRef.current;
-      if (!composer) {
-        return;
-      }
-      composer.style.height = "auto";
-      composer.style.height = `${composer.scrollHeight}px`;
-      composer.setSelectionRange(composer.value.length, composer.value.length);
-      composerSelectionRef.current = { start: composer.value.length, end: composer.value.length };
+    void handleSend(prompt).finally(() => {
+      requestAnimationFrame(() => {
+        composerRef.current?.focus({ preventScroll: true });
+      });
     });
-  }, [setInput]);
+  }, [handleSend]);
 
   const rememberComposerSelection = useCallback((element: HTMLTextAreaElement): void => {
     composerSelectionRef.current = {

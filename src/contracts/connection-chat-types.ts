@@ -192,6 +192,24 @@ export interface ConversationMessageRecord {
   createdAt: string;
 }
 
+export interface ConversationDraftRecord {
+  userId: string;
+  projectId: string;
+  contextKey: string;
+  bodyMarkdown: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ConversationMessageHistoryRecord {
+  id: string;
+  userId: string;
+  projectId: string;
+  bodyMarkdown: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface ConnectionInboxMessage {
   id: string;
   threadId: string;
@@ -261,6 +279,17 @@ export interface CreateDashboardConversationMessageInput {
   connectionId?: string | null;
   bodyMarkdown: string;
   metadata?: ConversationMessageMetadata | DashboardCreateAppQuickactionMetadata | null;
+}
+
+export interface UpsertConversationDraftInput {
+  userId: string;
+  contextKey: string;
+  bodyMarkdown: string;
+}
+
+export interface RecordConversationMessageHistoryInput {
+  userId: string;
+  bodyMarkdown: string;
 }
 
 export interface UpdateConversationThreadInput {

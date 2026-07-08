@@ -407,8 +407,11 @@ export const CinematicStage: FunctionComponent<CinematicStageProps> = ({
   }, [reducedMotion]);
 
   const applySuggestion = (prompt: string): void => {
-    setInput(prompt);
-    composerRef.current?.focus();
+    void handleSend(prompt).finally(() => {
+      requestAnimationFrame(() => {
+        composerRef.current?.focus({ preventScroll: true });
+      });
+    });
   };
 
   const showGreeting = !threadMessagesLoading && visibleMessages.length === 0;

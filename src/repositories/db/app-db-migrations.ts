@@ -137,6 +137,36 @@ export function ensureTaskSelfReflectionRatingTables(db: DatabaseAdapter): void 
   ensureIndex(db, "idx_task_self_reflection_ratings_project_task_latest", "task_self_reflection_ratings", "project_id, task_id, captured_at DESC");
 }
 
+export function ensureConversationDraftTables(db: DatabaseAdapter): void {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS conversation_drafts (
+      user_id TEXT NOT NULL,
+      project_id TEXT NOT NULL,
+      context_key TEXT NOT NULL,
+      body_markdown TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      PRIMARY KEY (user_id, project_id, context_key),
+      FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+    )
+  `);
+  ensureIndex(db, "idx_conversation_drafts_project_updated", "conversation_drafts", "project_id, updated_at DESC");
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS conversation_message_history (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      project_id TEXT NOT NULL,
+      body_markdown TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      UNIQUE(user_id, project_id, body_markdown),
+      FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+    )
+  `);
+  ensureIndex(db, "idx_conversation_message_history_user_project_updated", "conversation_message_history", "user_id, project_id, updated_at DESC");
+}
+
 export function ensureNodeFlowTables(db: DatabaseAdapter): void {
   db.exec(`
     CREATE TABLE IF NOT EXISTS node_flows (
@@ -525,6 +555,7 @@ export function runMigrations(db: DatabaseAdapter): void {
   // helpers allow progressive column additions safely.
   ensureChatProviderTables(db);
   ensureTaskSelfReflectionRatingTables(db);
+  ensureConversationDraftTables(db);
   ensureNodeFlowTables(db);
   ensureCustomDashboardTables(db);
 
@@ -698,6 +729,8 @@ export function runMigrations(db: DatabaseAdapter): void {
   db.exec("DELETE FROM dashboard_realtime_events WHERE is_replayable = 0");
   ensureIndex(db, "idx_conversation_threads_project_updated", "conversation_threads", "project_id, updated_at DESC");
   ensureIndex(db, "idx_conversation_messages_thread_created", "conversation_messages", "thread_id, created_at ASC");
+  ensureIndex(db, "idx_conversation_drafts_project_updated", "conversation_drafts", "project_id, updated_at DESC");
+  ensureIndex(db, "idx_conversation_message_history_user_project_updated", "conversation_message_history", "user_id, project_id, updated_at DESC");
   ensureIndex(db, "idx_memories_project_scope", "memories", "project_id, scope, updated_at DESC");
   ensureIndex(db, "idx_memories_project_sprint", "memories", "project_id, sprint_id, created_at DESC");
   ensureIndex(db, "idx_memories_project_agent", "memories", "project_id, agent_preset_id, created_at DESC");

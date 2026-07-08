@@ -563,6 +563,217 @@ describe('ChatPage Accessibility', () => {
     expect(handleSend).toHaveBeenCalledWith(expect.stringContaining("current techstack setting"));
   });
 
+  it('sends prompt suggestions directly without changing the thread composer', async () => {
+    const user = userEvent.setup();
+    const handleSend = vi.fn(() => Promise.resolve());
+    const setInput = vi.fn();
+    const assistantMessage = {
+      id: "message-suggestion",
+      threadId: "thread1",
+      projectId: "p1",
+      connectionId: null,
+      direction: "connection_to_dashboard",
+      authorType: "connection",
+      authorName: "Assistant",
+      bodyMarkdown: "Pick a follow-up.",
+      metadata: {
+        promptSuggestions: [{
+          id: "audit",
+          label: "Run audit",
+          prompt: "Run pnpm audit and summarize the result.",
+          icon: "terminal",
+        }],
+      },
+      deliveryStatus: "delivered",
+      createdAt: "2026-03-10T12:02:00.000Z",
+      updatedAt: "2026-03-10T12:02:00.000Z",
+    };
+    mocks.data = {
+      ...mocks.data,
+      chatMode: "threads",
+      sending: false,
+      input: "Keep this draft",
+      setInput,
+      error: null,
+      messages: [assistantMessage],
+      selectedThread: mocks.data.threads[0],
+      handleSend,
+    };
+
+    render(
+      <ProjectDataContext.Provider value={{ projects: [{ id: "p1", name: "P" } as any], selectedProject: { id: "p1", name: "P" } as any } as any}>
+        <ChatPage />
+      </ProjectDataContext.Provider>
+    );
+
+    const suggestion = screen.getByRole("button", { name: "Use suggestion: Run audit" });
+    await user.click(suggestion);
+
+    expect(handleSend).toHaveBeenCalledWith("Run pnpm audit and summarize the result.");
+    expect(setInput).not.toHaveBeenCalled();
+    const composer = screen.getByRole("textbox", { name: "Message" });
+    expect(composer).toHaveValue("Keep this draft");
+    await waitFor(() => expect(composer).toHaveFocus());
+  });
+
+  it('sends prompt suggestions from keyboard activation like pointer activation', async () => {
+    const user = userEvent.setup();
+    const handleSend = vi.fn(() => Promise.resolve());
+    const setInput = vi.fn();
+    const assistantMessage = {
+      id: "message-keyboard-suggestion",
+      threadId: "thread1",
+      projectId: "p1",
+      connectionId: null,
+      direction: "connection_to_dashboard",
+      authorType: "connection",
+      authorName: "Assistant",
+      bodyMarkdown: "Pick a keyboard follow-up.",
+      metadata: {
+        promptSuggestions: [{
+          id: "status",
+          label: "Status report",
+          prompt: "Give me the current project status.",
+          icon: "search",
+        }],
+      },
+      deliveryStatus: "delivered",
+      createdAt: "2026-03-10T12:03:00.000Z",
+      updatedAt: "2026-03-10T12:03:00.000Z",
+    };
+    mocks.data = {
+      ...mocks.data,
+      chatMode: "threads",
+      sending: false,
+      input: "Draft stays",
+      setInput,
+      error: null,
+      messages: [assistantMessage],
+      selectedThread: mocks.data.threads[0],
+      handleSend,
+    };
+
+    render(
+      <ProjectDataContext.Provider value={{ projects: [{ id: "p1", name: "P" } as any], selectedProject: { id: "p1", name: "P" } as any } as any}>
+        <ChatPage />
+      </ProjectDataContext.Provider>
+    );
+
+    const suggestion = screen.getByRole("button", { name: "Use suggestion: Status report" });
+    suggestion.focus();
+    await user.keyboard("{Enter}");
+
+    expect(handleSend).toHaveBeenCalledWith("Give me the current project status.");
+    expect(setInput).not.toHaveBeenCalled();
+    expect(screen.getByRole("textbox", { name: "Message" })).toHaveValue("Draft stays");
+  });
+
+  it('sends cinematic stage action widgets directly without changing the composer', async () => {
+    const user = userEvent.setup();
+    mocks.reducedMotion.value = true;
+    const handleSend = vi.fn(() => Promise.resolve());
+    const setInput = vi.fn();
+    const assistantMessage = {
+      id: "message-stage-action",
+      threadId: "thread1",
+      projectId: "p1",
+      connectionId: null,
+      direction: "connection_to_dashboard",
+      authorType: "connection",
+      authorName: "Assistant",
+      bodyMarkdown: [
+        "Choose a next step.",
+        "```codeux:actions",
+        JSON.stringify({ items: [{ label: "Widget next step", prompt: "Plan the next sprint tasks." }] }),
+        "```",
+      ].join("\n"),
+      metadata: {},
+      deliveryStatus: "delivered",
+      createdAt: "2026-03-10T12:04:00.000Z",
+      updatedAt: "2026-03-10T12:04:00.000Z",
+    };
+    mocks.data = {
+      ...mocks.data,
+      chatMode: "stage",
+      sending: false,
+      input: "Stage draft",
+      setInput,
+      error: null,
+      hasWorkingReply: false,
+      runningInvocationCount: 0,
+      messages: [assistantMessage],
+      selectedThread: mocks.data.threads[0],
+      handleSend,
+    };
+
+    render(
+      <ProjectDataContext.Provider value={{ projects: [{ id: "p1", name: "P" } as any], selectedProject: { id: "p1", name: "P" } as any } as any}>
+        <ChatPage />
+      </ProjectDataContext.Provider>
+    );
+
+    await user.click(screen.getByRole("button", { name: "Widget next step" }));
+
+    expect(handleSend).toHaveBeenCalledWith("Plan the next sprint tasks.");
+    expect(setInput).not.toHaveBeenCalled();
+    expect(screen.getByRole("textbox", { name: "Message the project manager" })).toHaveValue("Stage draft");
+  });
+
+  it('sends cinematic stage action widgets from keyboard activation without changing the composer', async () => {
+    const user = userEvent.setup();
+    mocks.reducedMotion.value = true;
+    const handleSend = vi.fn(() => Promise.resolve());
+    const setInput = vi.fn();
+    const assistantMessage = {
+      id: "message-stage-keyboard-action",
+      threadId: "thread1",
+      projectId: "p1",
+      connectionId: null,
+      direction: "connection_to_dashboard",
+      authorType: "connection",
+      authorName: "Assistant",
+      bodyMarkdown: [
+        "Choose a keyboard next step.",
+        "```codeux:actions",
+        JSON.stringify({ items: [{ label: "Keyboard widget next step", prompt: "Inspect the test failures." }] }),
+        "```",
+      ].join("\n"),
+      metadata: {},
+      deliveryStatus: "delivered",
+      createdAt: "2026-03-10T12:05:00.000Z",
+      updatedAt: "2026-03-10T12:05:00.000Z",
+    };
+    mocks.data = {
+      ...mocks.data,
+      chatMode: "stage",
+      sending: false,
+      input: "Keyboard stage draft",
+      setInput,
+      error: null,
+      hasWorkingReply: false,
+      runningInvocationCount: 0,
+      messages: [assistantMessage],
+      selectedThread: mocks.data.threads[0],
+      handleSend,
+    };
+
+    render(
+      <ProjectDataContext.Provider value={{ projects: [{ id: "p1", name: "P" } as any], selectedProject: { id: "p1", name: "P" } as any } as any}>
+        <ChatPage />
+      </ProjectDataContext.Provider>
+    );
+
+    const action = screen.getByRole("button", { name: "Keyboard widget next step" });
+    action.focus();
+    await user.keyboard("{Enter}");
+
+    expect(handleSend).toHaveBeenCalledWith("Inspect the test failures.");
+    expect(setInput).not.toHaveBeenCalled();
+    const composer = screen.getByRole("textbox", { name: "Message the project manager" });
+    expect(composer).toHaveValue("Keyboard stage draft");
+    await waitFor(() => expect(composer).toHaveFocus());
+  });
+
   it('keeps the active header and thread rail synchronized after rename', async () => {
     const user = userEvent.setup();
     const initialThread = { ...mocks.data.threads[0], title: "Thread 1" };

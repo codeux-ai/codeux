@@ -1,14 +1,48 @@
 import type {
   AgentConnection,
+  ChatDraftRecord,
+  ConversationMessageHistoryRecord,
   ChatMessageRecord,
   ChatThread,
   CreateConversationThreadInput,
   CreateDashboardConversationMessageInput,
+  UpsertConversationDraftInput,
   UpdateConversationThreadInput,
   UpdateConversationThreadRouteInput,
   UpdateMcpConnectionInput,
 } from "../types.js";
 import { fetchJson } from "../../lib/api/fetch-json.js";
+
+const CHAT_DRAFT_USER_STORAGE_KEY = "codeux.chat.draftUserId";
+const CHAT_DRAFT_USER_HEADER = "X-CodeUX-Dashboard-User-Id";
+
+const createDraftUserId = (): string => {
+  const randomId = typeof globalThis.crypto?.randomUUID === "function"
+    ? globalThis.crypto.randomUUID()
+    : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+  return `dashboard-user-${randomId}`;
+};
+
+export const getOrCreateDashboardDraftUserId = (): string => {
+  if (typeof window === "undefined") {
+    return "dashboard-user-server";
+  }
+  try {
+    const stored = window.localStorage.getItem(CHAT_DRAFT_USER_STORAGE_KEY)?.trim();
+    if (stored) {
+      return stored;
+    }
+    const next = createDraftUserId();
+    window.localStorage.setItem(CHAT_DRAFT_USER_STORAGE_KEY, next);
+    return next;
+  } catch {
+    return createDraftUserId();
+  }
+};
+
+const chatDraftHeaders = (userId: string): Record<string, string> => ({
+  [CHAT_DRAFT_USER_HEADER]: userId,
+});
 
 export const fetchProjectConnections = async (projectId: string): Promise<AgentConnection[]> => {
   return fetchJson<AgentConnection[]>(`/api/projects/${encodeURIComponent(projectId)}/connections`);
@@ -42,6 +76,60 @@ export const createConversationThread = async (
 
 export const fetchConversationMessages = async (threadId: string): Promise<ChatMessageRecord[]> => {
   return fetchJson<ChatMessageRecord[]>(`/api/conversations/threads/${encodeURIComponent(threadId)}/messages`);
+};
+
+export const fetchConversationDraft = async (
+  projectId: string,
+  input: { userId: string; contextKey: string },
+): Promise<ChatDraftRecord | null> => {
+  const params = new URLSearchParams({ contextKey: input.contextKey });
+  return fetchJson<ChatDraftRecord | null>(
+    `/api/projects/${encodeURIComponent(projectId)}/conversations/draft?${params.toString()}`,
+    { headers: chatDraftHeaders(input.userId) },
+  );
+};
+
+export const upsertConversationDraft = async (
+  projectId: string,
+  input: UpsertConversationDraftInput,
+): Promise<ChatDraftRecord | null> => {
+  return fetchJson<ChatDraftRecord | null>(`/api/projects/${encodeURIComponent(projectId)}/conversations/draft`, {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+      ...chatDraftHeaders(input.userId),
+    },
+    body: JSON.stringify({
+      contextKey: input.contextKey,
+      bodyMarkdown: input.bodyMarkdown,
+    }),
+  });
+};
+
+export const fetchConversationMessageHistory = async (
+  projectId: string,
+  input: { userId: string },
+): Promise<ConversationMessageHistoryRecord[]> => {
+  return fetchJson<ConversationMessageHistoryRecord[]>(
+    `/api/projects/${encodeURIComponent(projectId)}/conversations/message-history`,
+    { headers: chatDraftHeaders(input.userId) },
+  );
+};
+
+export const recordConversationMessageHistory = async (
+  projectId: string,
+  input: { userId: string; bodyMarkdown: string },
+): Promise<ConversationMessageHistoryRecord> => {
+  return fetchJson<ConversationMessageHistoryRecord>(`/api/projects/${encodeURIComponent(projectId)}/conversations/message-history`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...chatDraftHeaders(input.userId),
+    },
+    body: JSON.stringify({
+      bodyMarkdown: input.bodyMarkdown,
+    }),
+  });
 };
 
 export const updateConversationThread = async (

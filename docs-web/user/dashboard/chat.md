@@ -43,6 +43,10 @@ To start a new thread, click **+ New thread**. To change the responding agent, o
 
 Each post is a runtime operation that honors the explicit route chosen (worker route, virtual provider route, automatic live-worker pickup, or fallback). The dashboard exposes in-flight state locally, allowing you to cancel active thread turns or invocations. Failed invocation restarts preserve the failed invocation transcript and expose the existing sanitized error message with a retry action.
 
+The project chat composer saves your latest draft in SQLite per dashboard user, project, and active chat context. Leaving `/chat`, switching away and back, or reloading restores the matching draft for the current new-thread composer or selected thread without reusing drafts from another project or browser user. Blank drafts remove the saved row, and sending still clears the composer after the message is accepted.
+
+The composer also keeps a recent-message history for successful project chat sends. Press ArrowUp or ArrowDown while composing to preview messages submitted by the current dashboard user in the current project; a fresh dashboard user starts with no recalled messages. Single-line drafts can recall history directly, while multi-line drafts keep normal textarea cursor movement unless the caret is at the true start or end. Code UX preserves the current draft while you cycle through history and restores it when you move back past the newest recalled entry.
+
 ## Create app quickactions
 
 Use **Create Web App** or **Create Desktop App** when you want Code UX to start an app-building sprint in the selected project from chat. In Threads mode, the buttons sit beside the composer and are also available in an empty thread. In 3D Chat, the idle Web App and Desktop App quickactions send the same kind of request through the active thread.
@@ -70,7 +74,7 @@ Planning messages can include a rich sprint status card. When Code UX can match 
 
 Chat messages and invocation transcripts can also turn sprint and task references into live cards when they match real records in the active project. Sprint cards show the sprint status and completion progress, then link to the matching Sprint page. Task cards show the task status, priority, executor, and sprint context, then link to the matching Tasks page. Code UX only enriches references it can resolve in the active project; stale references stay as normal text, and ambiguous task keys are not guessed. Dashboard links can be relative `/sprints` or `/tasks` links, or absolute links on the current dashboard origin; external-origin links are left as normal transcript text. The cards refresh through the existing project-structure updates used by the dashboard, not through a separate chat stream.
 
-Virtual chat replies can persist structured prompt suggestions for quick next steps. JSON-mode providers may return optional `suggestions` alongside `replyMarkdown` and `action`; Code UX stores valid entries on the assistant/system message as `metadata.promptSuggestions` after trimming strings, dropping malformed entries, and capping the list at six. Suggestions appear as clickable tags below the normal markdown reply, so the transcript remains visible. Clicking a tag fills and focuses the composer with that prompt for review or editing; it does not auto-send. Invocation transcripts remain read-only and do not become composer actions.
+Virtual chat replies can persist structured prompt suggestions for quick next steps. JSON-mode providers may return optional `suggestions` alongside `replyMarkdown` and `action`; Code UX stores valid entries on the assistant/system message as `metadata.promptSuggestions` after trimming strings, dropping malformed entries, and capping the list at six. Suggestions appear as clickable tags below the normal markdown reply, so the transcript remains visible. Clicking a tag sends that prompt immediately without inserting it into or clearing the composer. Invocation transcripts remain read-only and do not become composer actions.
 
 Assistant prose bubbles can also show a short italic project-manager thought below the provider text. The dashboard uses safe explicit metadata (`metadata.moodComment`, `metadata.thinkingLine`, or `metadata.pmAside`) when present, otherwise it chooses a deterministic line from the shared `mood` catalog. These asides are visual adjuncts only: they do not replace provider markdown, do not change stored chat contracts, and do not appear on user, system, tool, reasoning, tool-call, or tool-result cards.
 
@@ -127,6 +131,7 @@ Planning and QA self-reflection messages appear as structured cards instead of r
 The composer at the bottom supports:
 
 - **Multi-line input** with Enter to send, Shift+Enter for newline.
+- **Recent message recall** with ArrowUp and ArrowDown when native textarea cursor movement is not taking precedence.
 - **Speech input** with the microphone control beside Send in project Threads mode.
 - **Slash commands** that invoke management actions inline.
 - **Attachments** *(planned)*.
