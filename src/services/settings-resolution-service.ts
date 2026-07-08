@@ -323,11 +323,6 @@ function mergeSettingsPatch<T>(base: T, patch: unknown): T {
   const mergedAiProvider = toRecord(merged.aiProvider);
   const mergedInvocationRouting = toRecord(mergedAiProvider.invocationRouting);
 
-  if (Object.prototype.hasOwnProperty.call(patchAiProvider, "providers")) {
-    mergedAiProvider.providers = cloneUnknown(patchAiProvider.providers);
-    merged.aiProvider = mergedAiProvider;
-  }
-
   for (const [routeId, rawRoutePatch] of Object.entries(patchInvocationRouting)) {
     const routePatch = toRecord(rawRoutePatch);
     if (!Object.prototype.hasOwnProperty.call(routePatch, "providers")) {

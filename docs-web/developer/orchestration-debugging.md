@@ -1,6 +1,6 @@
 # Rapid orchestration debugging suite
 
-Use this suite when a sprint stalls, local merges fail, worker-owned attention items churn, or memory usage needs extended observation after a fix.
+Use this suite when a sprint stalls, local merges fail, worker-owned attention items churn, or memory usage needs extended observation after a fix. CI uses the rapid lane by default; full mockup pentest lanes are manual escalation tools for targeted investigations.
 
 ## Commands
 
@@ -8,7 +8,7 @@ Use this suite when a sprint stalls, local merges fail, worker-owned attention i
 | --- | --- | --- |
 | Fast regressions | `pnpm run test:orchestration:rapid` | Watch-loop, feature merge, and local final-merge regressions without Docker or provider CLIs. |
 | Mockup merge E2E | `pnpm run test:orchestration:merge-e2e` | Compiled runtime plus `mockup-cli` through a deterministic local merge-conflict DAG. |
-| Full mockup orchestration | `pnpm run test:orchestration:full` | All deterministic mockup scenarios: smoke, CI repair, merge conflict, parallel DAG, dirty checkout, multi-project overrides. |
+| Full mockup pentest | `pnpm run test:orchestration:full` | Manual escalation for all deterministic mockup scenarios: smoke, CI repair, merge conflict, parallel DAG, dirty checkout, multi-project overrides. |
 | Large DAG stress | `pnpm run test:orchestration:large-dag` | Heavy 129-task mockup DAG with wide fan-out and layered joins. |
 | Full heavy pentest | `pnpm run test:orchestration:pentest` | Default mockup catalog plus heavy stress scenarios. |
 | Backend broadening | `pnpm run test:backend` | Full backend suite after focused fixes. |
@@ -20,7 +20,7 @@ Start with `pnpm run test:orchestration:rapid`. It covers provider routing, watc
 
 Run `pnpm run test:orchestration:merge-e2e` after a unit-level merge fix passes. It builds the compiled runtime and exercises the `merge-conflict-dag` mockup scenario through the local project runtime.
 
-Run `pnpm run test:orchestration:full` before calling a scheduler, provider, CI, QA, or multi-project orchestration issue fixed. It executes every deterministic mockup scenario and writes artifacts under `.cache/e2e-mockup-sprint-pentest/<run-id>/`.
+Run `pnpm run test:orchestration:full` manually when a scheduler, provider, CI, QA, or multi-project orchestration issue needs broader compiled-runtime evidence. It executes every deterministic mockup scenario and writes artifacts under `.cache/e2e-mockup-sprint-pentest/<run-id>/`.
 
 Run `pnpm run test:orchestration:large-dag` for a heavy 129-task DAG with 96 leaf tasks, 24 batch joins, 6 group joins, one final manifest, and one validation task. Use `pnpm run test:orchestration:pentest` for the default catalog plus heavy stress scenarios.
 

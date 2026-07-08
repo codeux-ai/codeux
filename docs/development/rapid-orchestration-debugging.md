@@ -2,7 +2,7 @@
 
 This suite is the escalation ladder for sprint orchestration failures. Use it when a sprint stalls, local merges fail, worker-owned attention items churn, or memory usage needs extended observation after a fix.
 
-The suite is intentionally split into fast deterministic lanes and slower compiled-runtime lanes. Start with the smallest lane that can reproduce the issue, then broaden only after it passes.
+The suite is intentionally split into fast deterministic lanes and slower compiled-runtime lanes. CI uses the rapid lane by default; full mockup pentest lanes are manual escalation tools for targeted investigations. Start with the smallest lane that can reproduce the issue, then broaden only after it passes.
 
 ## Lane Summary
 
@@ -11,7 +11,7 @@ The suite is intentionally split into fast deterministic lanes and slower compil
 | Fast regressions | `pnpm run test:orchestration:rapid` | Watch-loop, feature merge, and local final-merge regressions without Docker or provider CLIs. | Seconds to a few minutes |
 | Mockup merge E2E | `pnpm run test:orchestration:merge-e2e` | Compiled runtime plus `mockup-cli` through a deterministic local merge-conflict DAG. | Up to 15 minutes |
 | Completion conflict E2E | `pnpm run test:orchestration:completion-conflict` | Compiled runtime final LOCAL merge conflict repair after default-branch mutation during orchestration. | Up to 20 minutes |
-| Full mockup orchestration | `pnpm run test:orchestration:full` | All deterministic mockup scenarios: smoke, CI repair, merge conflict, parallel DAG, multi-project overrides. | Longer-running |
+| Full mockup pentest | `pnpm run test:orchestration:full` | Manual escalation for all deterministic mockup scenarios: smoke, CI repair, merge conflict, parallel DAG, multi-project overrides. | Longer-running |
 | Large DAG stress | `pnpm run test:orchestration:large-dag` | Heavy 129-task mockup DAG with wide fan-out and layered joins. | Long-running |
 | Full heavy pentest | `pnpm run test:orchestration:pentest` | Default mockup catalog plus heavy stress scenarios. | Long-running |
 | Backend broadening | `pnpm run test:backend` | Full backend suite after focused fixes. | Medium |
@@ -108,7 +108,7 @@ pnpm run test:orchestration:full
 
 This builds the runtime and runs every `mockup-cli` scenario through `scripts/e2e/run-mockup-sprint-pentest.mjs`.
 
-Run this lane before calling a merge/orchestration incident fixed. It covers:
+Run this lane manually when a merge/orchestration incident needs broader compiled-runtime evidence beyond the rapid lane or a targeted E2E lane. It covers:
 
 - `smoke-completion`: dependency-chain completion and final local repository assertions.
 - `ci-repair`: deterministic failing validation repaired by a worker.
@@ -303,7 +303,7 @@ Treat an orchestration fix as ready only when:
 
 - `pnpm run test:orchestration:rapid` passes.
 - `pnpm run test:orchestration:merge-e2e` passes for merge-related fixes.
-- `pnpm run test:orchestration:full` passes for scheduler, provider, CI, QA, or multi-project changes.
+- `pnpm run test:orchestration:full` is run only when the change specifically needs full mockup catalog coverage.
 - The approved local test project reaches terminal `completed` after the relevant dirty-checkout or conflict scenario.
 - The local default branch contains the expected final merge commit.
 - No stale open attention remains for a completed run.

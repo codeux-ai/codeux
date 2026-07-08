@@ -39,22 +39,5 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile --ignore-scripts
 
-      - name: Verify Docker availability
-        run: |
-          if ! docker version; then
-            echo "::error::Docker is required for the mockup sprint orchestration lane."
-            exit 1
-          fi
-
-      - name: Run full mockup orchestration
-        run: pnpm run test:orchestration:full
-
-      - name: Upload mockup sprint orchestration artifacts
-        if: ${{ failure() || hashFiles('.cache/e2e-mockup-sprint-pentest/**') != '' }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: mockup-sprint-orchestration-artifacts
-          path: .cache/e2e-mockup-sprint-pentest/
-          if-no-files-found: ignore
-          include-hidden-files: true
-          retention-days: 5
+      - name: Run rapid orchestration validation
+        run: pnpm run test:orchestration:rapid

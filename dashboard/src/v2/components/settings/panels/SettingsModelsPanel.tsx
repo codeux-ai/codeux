@@ -277,6 +277,43 @@ export const SettingsModelsPanel: FunctionComponent<{ state: SettingsPageState }
     }));
   };
 
+  const clearRouteProviderOverrideField = (
+    routeId: InvocationRoutingId,
+    providerConfigId: ProviderConfigId,
+    field: keyof ProjectSettings["aiProvider"]["invocationRouting"][InvocationRoutingId]["providers"][ProviderConfigId],
+  ): void => {
+    updateEditableSettings((current) => {
+      const route = current.aiProvider.invocationRouting[routeId];
+      const currentOverride = route.providers[providerConfigId];
+      if (!currentOverride || !(field in currentOverride)) {
+        return current;
+      }
+
+      const nextOverride = { ...currentOverride };
+      delete nextOverride[field];
+      const nextProviders = { ...route.providers };
+      if (Object.keys(nextOverride).length > 0) {
+        nextProviders[providerConfigId] = nextOverride;
+      } else {
+        delete nextProviders[providerConfigId];
+      }
+
+      return {
+        ...current,
+        aiProvider: {
+          ...current.aiProvider,
+          invocationRouting: {
+            ...current.aiProvider.invocationRouting,
+            [routeId]: {
+              ...route,
+              providers: nextProviders,
+            },
+          },
+        },
+      };
+    });
+  };
+
   const clearRouteProviderOverride = (
     routeId: InvocationRoutingId,
     providerConfigId: ProviderConfigId,
@@ -863,6 +900,8 @@ export const SettingsModelsPanel: FunctionComponent<{ state: SettingsPageState }
                 const effectiveModel = getEffectiveProviderDisplayModel(providerConfigId, provider, override.model || provider.model);
                 const inheritedModel = getEffectiveProviderDisplayModel(providerConfigId, provider);
                 const effectiveThinking = getThinkingSelectValue(provider, override.thinkingMode);
+                const inheritedThinkingLabel = getProviderThinkingModeLabel(provider.provider, provider.thinkingMode);
+                const hasThinkingOverride = typeof override.thinkingMode === "string";
                 const effectiveWeight = override.weight ?? provider.weight;
                 const supportsModel = providerSupportsModelSelection(provider.provider);
                 return (
@@ -956,12 +995,21 @@ export const SettingsModelsPanel: FunctionComponent<{ state: SettingsPageState }
                           </Row>
                         ) : null}
                         {providerSupportsThinkingMode(provider.provider) ? (
-                          <Row label="Thinking override" description={`Inherited: ${getProviderThinkingModeLabel(provider.provider, provider.thinkingMode)}`}>
+                          <Row label="Thinking override" description={`Inherited: ${inheritedThinkingLabel}`}>
                               <SelectInput
-                                value={effectiveThinking}
+                                value={hasThinkingOverride ? effectiveThinking : INHERIT_VALUE}
                                 aria-label={`${provider.name} thinking override for ${activeRouteDefinition.label}`}
-                                onChange={(value) => updateRouteProviderOverride(activeRouteDefinition.id, providerConfigId, { thinkingMode: value as ThinkingMode })}
-                              options={getProviderThinkingModeOptions(provider.provider)}
+                                onChange={(value) => {
+                                  if (value === INHERIT_VALUE) {
+                                    clearRouteProviderOverrideField(activeRouteDefinition.id, providerConfigId, "thinkingMode");
+                                    return;
+                                  }
+                                  updateRouteProviderOverride(activeRouteDefinition.id, providerConfigId, { thinkingMode: value as ThinkingMode });
+                                }}
+                              options={[
+                                { value: INHERIT_VALUE, label: `Inherit base thinking (${inheritedThinkingLabel})` },
+                                ...getProviderThinkingModeOptions(provider.provider),
+                              ]}
                             />
                           </Row>
                         ) : null}
