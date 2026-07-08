@@ -4,6 +4,7 @@ import { AlertTriangle, CheckCircle, Info, XCircle, X } from "lucide-preact";
 import gsap from "gsap";
 import { useGsapInteractionTokens } from "../../lib/motion/constants.js";
 import { useInteractionTokens } from "../../lib/motion/tokens.js";
+import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 
 export type ToastType = "success" | "error" | "warning" | "info";
 
@@ -64,6 +65,7 @@ export const Toast: FunctionComponent<ToastProps> = ({
     retryStatusIdRef.current = `toast-retry-status-${Math.random().toString(36).slice(2)}`;
   }
   const [retryPending, setRetryPending] = useState(false);
+  const reducedMotion = useReducedMotion();
   const motionTokens = useGsapInteractionTokens();
   const cssTokens = useInteractionTokens();
   const Icon = icons[type];
@@ -76,7 +78,7 @@ export const Toast: FunctionComponent<ToastProps> = ({
     const ctx = gsap.context(() => {
       gsap.fromTo(
         containerRef.current,
-        { y: 20, opacity: 0, scale: 0.95 },
+        { y: reducedMotion ? 0 : 20, opacity: 0, scale: reducedMotion ? 1 : 0.95 },
         {
           y: 0,
           opacity: 1,
@@ -90,7 +92,7 @@ export const Toast: FunctionComponent<ToastProps> = ({
     });
 
     return () => ctx.revert();
-  }, [motionTokens.asyncFeedback.duration, motionTokens.asyncFeedback.ease, type]);
+  }, [motionTokens.asyncFeedback.duration, motionTokens.asyncFeedback.ease, reducedMotion, type]);
 
   useEffect(() => {
     if (autoDismissMs === 0 || type === "error") return; // errors may require manual dismissal or action
@@ -102,10 +104,24 @@ export const Toast: FunctionComponent<ToastProps> = ({
     return () => clearTimeout(timer);
   }, [autoDismissMs, type]);
 
+  const focusWithoutScroll = (element: HTMLElement) => {
+    try {
+      element.focus({ preventScroll: true });
+    } catch {
+      element.focus();
+    }
+  };
+
   const moveFocusToFallback = () => {
     const fallback = document.querySelector<HTMLElement>('[data-feedback-focus-fallback], [data-focus-fallback], [role="main"], main, #root') || document.body;
     if (fallback.tabIndex < 0) fallback.tabIndex = -1;
-    fallback.focus();
+    if (fallback === document.body) {
+      if (document.activeElement instanceof HTMLElement) {
+        document.activeElement.blur();
+      }
+      return;
+    }
+    focusWithoutScroll(fallback);
     if (
       document.activeElement === dismissButtonRef.current ||
       document.activeElement === actionButtonRef.current ||
@@ -115,6 +131,17 @@ export const Toast: FunctionComponent<ToastProps> = ({
     }
   };
 
+  const moveFocusToFallbackIfRemoved = (previousActive: Element | null) => {
+    queueMicrotask(() => {
+      const activeElement = document.activeElement;
+      const activeWasRemoved = previousActive instanceof HTMLElement && !previousActive.isConnected;
+      const focusWasLost = activeElement === document.body || activeElement === null;
+      if (activeWasRemoved || focusWasLost) {
+        moveFocusToFallback();
+      }
+    });
+  };
+
   const handleDismiss = () => {
     if (dismissingRef.current) return;
     dismissingRef.current = true;
@@ -122,19 +149,13 @@ export const Toast: FunctionComponent<ToastProps> = ({
     if (!containerRef.current) return;
 
     gsap.to(containerRef.current, {
-      x: '110%',
+      x: reducedMotion ? '0%' : '110%',
       opacity: 0,
       duration: motionTokens.enterExit.duration,
       ease: motionTokens.enterExit.ease,
       onComplete: () => {
         onDismiss(id);
-        queueMicrotask(() => {
-          const activeWasRemoved = previousActive instanceof HTMLElement && !previousActive.isConnected;
-          const focusWasLost = document.activeElement === document.body || document.activeElement === null;
-          if (activeWasRemoved || focusWasLost) {
-            moveFocusToFallback();
-          }
-        });
+        moveFocusToFallbackIfRemoved(previousActive);
       },
     });
   };
@@ -144,6 +165,7 @@ export const Toast: FunctionComponent<ToastProps> = ({
       return;
     }
 
+    const previousActive = document.activeElement === retryButtonRef.current ? document.activeElement : null;
     retryPendingRef.current = true;
     setRetryPending(true);
     try {
@@ -151,6 +173,7 @@ export const Toast: FunctionComponent<ToastProps> = ({
     } finally {
       retryPendingRef.current = false;
       setRetryPending(false);
+      if (previousActive) moveFocusToFallbackIfRemoved(previousActive);
     }
   };
 

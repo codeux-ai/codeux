@@ -697,6 +697,34 @@ describe("UI Components Coverage", () => {
     expect(onConfirm).not.toHaveBeenCalled();
   });
 
+  it("DestructiveConfirmButton exposes textual progress and resets immediately when reduced-motion hold is canceled", async () => {
+    vi.mocked(useReducedMotion).mockReturnValue(true);
+    const onConfirm = vi.fn();
+    render(
+      <ConfirmDialog
+        isOpen={true}
+        options={{ title: "Delete workspace", body: "Body", destructive: true, confirmLabel: "Delete" }}
+        onConfirm={onConfirm}
+        onCancel={vi.fn()}
+      />
+    );
+
+    const confirmBtn = screen.getByRole("button", { name: "Hold to Delete" });
+    fireEvent.pointerDown(confirmBtn, { button: 0, pointerId: 1 });
+
+    expect(screen.getByRole("progressbar", { name: "Hold confirmation progress" })).toHaveAttribute("aria-valuenow", "0");
+    expect(screen.getByText("Hold confirmation progress is 0 percent.")).toBeInTheDocument();
+
+    fireEvent.pointerCancel(confirmBtn, { pointerId: 1 });
+
+    await waitFor(() => {
+      expect(screen.queryByRole("progressbar", { name: "Hold confirmation progress" })).not.toBeInTheDocument();
+    });
+    expect(confirmBtn).toHaveTextContent("Delete");
+    expect(screen.getByText("Hold confirmation progress is not started.")).toBeInTheDocument();
+    expect(onConfirm).not.toHaveBeenCalled();
+  });
+
   it("ConfirmDialog handles Escape key properly", async () => {
     const onCancel = vi.fn();
 

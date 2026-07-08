@@ -18,6 +18,10 @@ function tokenSecondsToMs(seconds: number): number {
   return seconds * 1000;
 }
 
+const DESTRUCTIVE_CONFIRM_HOLD_DURATION_MS = tokenSecondsToMs(
+  GSAP_INTERACTION_TOKENS.asyncFeedback.duration * 2 + GSAP_INTERACTION_TOKENS.enterExit.duration * 2
+);
+
 function DestructiveConfirmButton({
   onConfirm,
   label,
@@ -35,9 +39,10 @@ function DestructiveConfirmButton({
   const gsapTokens = useGsapInteractionTokens();
   const cssTokens = useInteractionTokens();
   const progressId = "destructive-confirm-progress";
+  const progressTextId = "destructive-confirm-progress-text";
   const progressBarId = "destructive-confirm-progressbar";
 
-  const holdDuration = 1000;
+  const holdDuration = DESTRUCTIVE_CONFIRM_HOLD_DURATION_MS;
   const holdTimerRef = useRef<number | null>(null);
   const cancelResetTimerRef = useRef<number | null>(null);
   const holdButtonRef = useRef<HTMLButtonElement>(null);
@@ -111,18 +116,18 @@ function DestructiveConfirmButton({
   const cancelHold = () => {
     clearTimers();
     if (confirmState === "holding") {
-      setConfirmState("cancelled");
-      if (!reducedMotion && holdButtonRef.current) {
-        gsap.fromTo(
-          holdButtonRef.current,
-          { x: -4 },
-          { x: 0, duration: gsapTokens.inlineValidation.duration, ease: gsapTokens.inlineValidation.ease }
-        );
-      }
-      const resetDelay = tokenSecondsToMs(gsapTokens.controlFeedback.duration || GSAP_INTERACTION_TOKENS.controlFeedback.duration);
-      if (resetDelay === 0) {
+      if (reducedMotion) {
         setConfirmState("idle");
       } else {
+        setConfirmState("cancelled");
+        if (holdButtonRef.current) {
+          gsap.fromTo(
+            holdButtonRef.current,
+            { x: -4 },
+            { x: 0, duration: gsapTokens.inlineValidation.duration, ease: gsapTokens.inlineValidation.ease }
+          );
+        }
+        const resetDelay = tokenSecondsToMs(gsapTokens.controlFeedback.duration || GSAP_INTERACTION_TOKENS.controlFeedback.duration);
         cancelResetTimerRef.current = window.setTimeout(() => {
           setConfirmState("idle");
           cancelResetTimerRef.current = null;
@@ -229,6 +234,13 @@ function DestructiveConfirmButton({
             : confirmState === "complete"
               ? "Confirmation completed."
               : "Hold until complete. Release before completion to cancel."}
+      </span>
+      <span id={progressTextId} className="sr-only">
+        {confirmState === "holding"
+          ? `Hold confirmation progress is ${Math.round(progress)} percent.`
+          : confirmState === "complete"
+            ? "Hold confirmation progress is complete."
+            : "Hold confirmation progress is not started."}
       </span>
     </button>
   );
