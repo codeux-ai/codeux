@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "preact/hooks";
 import { AlertCircle, Zap, Activity, XCircle, PencilLine, Check, X, RefreshCw } from "lucide-preact";
 import type { ChatThread } from "../../types.js";
 import { useInteractionTokens } from "../../lib/motion/tokens.js";
+import type { ActionFeedbackStatus } from "../../hooks/use-action-feedback.js";
 
 const resolveAssignedLabel = (thread: ChatThread | null): string => {
   if (!thread) {
@@ -36,7 +37,26 @@ interface ChatThreadHeaderProps {
   onRename: (title: string) => Promise<unknown>;
   isCompacting: boolean;
   isCancelling: boolean;
+  actionFeedbackStatus?: ActionFeedbackStatus;
+  actionFeedbackMessage?: string | null;
+  error?: string | null;
 }
+
+type ThreadSessionTone = "active" | "replay" | "new";
+
+const SESSION_BADGE_CLASS: Record<ThreadSessionTone, string> = {
+  active: "border-signal-500/30 bg-signal-500/20 text-signal-600 dark:text-signal-400",
+  replay: "border-status-amber/30 bg-status-amber/20 text-status-amber",
+  new: "border-slate-500/30 bg-slate-500/20 text-slate-600 dark:border-slate-400/30 dark:text-slate-300",
+};
+
+type CompactFeedbackTone = "pending" | "success" | "error";
+
+const COMPACT_FEEDBACK_CLASS: Record<CompactFeedbackTone, string> = {
+  pending: "border-signal-500/25 bg-signal-500/[0.08] text-signal-700 dark:text-signal-300",
+  success: "border-signal-500/20 bg-signal-500/[0.08] text-signal-700 dark:text-signal-300",
+  error: "border-status-red/25 bg-status-red/[0.08] text-status-red",
+};
 
 export const ChatThreadHeader: FunctionComponent<ChatThreadHeaderProps> = ({
   thread,
@@ -45,6 +65,9 @@ export const ChatThreadHeader: FunctionComponent<ChatThreadHeaderProps> = ({
   onRename,
   isCompacting,
   isCancelling,
+  actionFeedbackStatus = "idle",
+  actionFeedbackMessage = null,
+  error = null,
 }) => {
   const assignedLabel = resolveAssignedLabel(thread);
   const interactionTokens = useInteractionTokens();
@@ -56,8 +79,18 @@ export const ChatThreadHeader: FunctionComponent<ChatThreadHeaderProps> = ({
 
   const isReplayRequired = thread?.runtimeState?.replayRequired;
   const hasActiveSession = thread?.runtimeState?.sessionIds && thread.runtimeState.sessionIds.length > 0;
-  const isNewOrCompacted = !hasActiveSession || isReplayRequired;
   const titleErrorId = thread ? `thread-title-error-${thread.id}` : undefined;
+  const compactFeedbackId = thread ? `thread-compact-feedback-${thread.id}` : undefined;
+  const sessionTone: ThreadSessionTone = isReplayRequired ? "replay" : hasActiveSession ? "active" : "new";
+  const sessionLabel = isReplayRequired ? "Replay Required" : hasActiveSession ? "Active Session" : "New/Compacted";
+  const SessionIcon = isReplayRequired ? AlertCircle : hasActiveSession ? Activity : Check;
+  const compactFeedback = isCompacting
+    ? { tone: "pending" as const, message: "Compacting conversation. The transcript stays available while Code UX writes the compacted session." }
+    : actionFeedbackStatus === "success" && actionFeedbackMessage === "Thread compacted."
+      ? { tone: "success" as const, message: "Thread compacted. Future replies will start from the compacted session." }
+      : error
+        ? { tone: "error" as const, message: `Compaction or thread action failed: ${error}` }
+        : null;
 
   useEffect(() => {
     if (!isEditingTitle) {
@@ -114,23 +147,15 @@ export const ChatThreadHeader: FunctionComponent<ChatThreadHeaderProps> = ({
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-signal-500">Active Thread</div>
-            {isReplayRequired && (
-              <span className="inline-flex items-center gap-1 rounded-sm border border-status-amber/30 bg-status-amber/20 shadow-sm px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-status-amber">
-                <AlertCircle className="h-3 w-3" />
-                <span className="sr-only">Status: </span>Replay Required
-              </span>
-            )}
-            {!isReplayRequired && hasActiveSession && (
-              <span className="inline-flex items-center gap-1 rounded-sm border border-signal-500/30 bg-signal-500/20 shadow-sm px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-signal-500">
-                <Activity className="h-3 w-3" />
-                <span className="sr-only">Status: </span>Active Session
-              </span>
-            )}
-            {isNewOrCompacted && !isReplayRequired && (
-              <span className="inline-flex items-center gap-1 rounded-sm border border-slate-500/30 bg-slate-500/20 shadow-sm px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-slate-600 dark:border-slate-400/30 dark:text-slate-300">
-                <span className="sr-only">Status: </span>New/Compacted
-              </span>
-            )}
+            <span
+              role="status"
+              aria-live="polite"
+              aria-atomic="true"
+              className={`inline-flex min-w-[9.5rem] items-center justify-center gap-1 rounded-sm border px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider shadow-sm ${SESSION_BADGE_CLASS[sessionTone]}`}
+            >
+              <SessionIcon className="h-3 w-3" />
+              <span className="sr-only">Status: </span>{sessionLabel}
+            </span>
           </div>
           {isEditingTitle && thread ? (
             <div className="mt-2 min-w-0">
@@ -246,6 +271,7 @@ export const ChatThreadHeader: FunctionComponent<ChatThreadHeaderProps> = ({
                 onClick={onCompact}
                 disabled={isCompacting}
                 aria-busy={isCompacting}
+                aria-describedby={compactFeedbackId}
                 aria-label={isCompacting ? "Compacting conversation" : "Compact"}
                 style={{
                   transitionProperty: "color, background-color, border-color, text-decoration-color, fill, stroke",
@@ -265,6 +291,19 @@ export const ChatThreadHeader: FunctionComponent<ChatThreadHeaderProps> = ({
                 {assignedLabel}
               </span>
             </div>
+          </div>
+          <div
+            id={compactFeedbackId}
+            role={compactFeedback?.tone === "error" ? "alert" : "status"}
+            aria-live={compactFeedback?.tone === "error" ? "assertive" : "polite"}
+            aria-atomic="true"
+            className={`mt-2 min-h-[2rem] rounded-xl border px-3 py-2 text-xs font-semibold leading-relaxed transition-colors ${
+              compactFeedback
+                ? COMPACT_FEEDBACK_CLASS[compactFeedback.tone]
+                : "border-transparent bg-transparent text-slate-400"
+            }`}
+          >
+            {compactFeedback?.message ?? <span className="sr-only">No compaction in progress.</span>}
           </div>
         </div>
       </div>

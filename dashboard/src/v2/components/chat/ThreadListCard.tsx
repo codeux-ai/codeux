@@ -40,12 +40,23 @@ export const ThreadListCard: FunctionComponent<{
         const isSelected = selectedThreadId === thread.id;
         const isActive = !!(thread.runtimeState?.sessionIds && thread.runtimeState.sessionIds.length > 0 && !thread.runtimeState?.replayRequired);
         const isReplay = !!thread.runtimeState?.replayRequired;
+        const isPending = thread.pendingMessageCount > 0;
+        const stateDescriptionId = `thread-card-state-${thread.id}`;
+        const selectionCopy = isSelected ? "Selected" : "Not selected";
+        const deliveryCopy = isPending
+          ? `${thread.pendingMessageCount} queued ${thread.pendingMessageCount === 1 ? "message" : "messages"}`
+          : "Synced";
+        const routeCopy = isReplay ? "Replay required" : isActive ? "Active session" : "New or compacted session";
 
         return (
           <div key={thread.id} className="group relative overflow-hidden rounded-[1.75rem]">
             <button
               type="button"
               aria-selected={isSelected ? "true" : "false"}
+              aria-describedby={stateDescriptionId}
+              aria-label={`${thread.title}. ${selectionCopy}. ${deliveryCopy}. ${routeCopy}.`}
+              data-selected={isSelected ? "true" : "false"}
+              data-pending={isPending ? "true" : "false"}
               onClick={() => onSelect(thread.id)}
               style={{
                 transitionProperty: "all",
@@ -57,8 +68,10 @@ export const ThreadListCard: FunctionComponent<{
                 shadow-[0_2px_20px_rgba(0,0,0,0.04)] dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]
                 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-900
                 ${isSelected
-                  ? "border border-signal-500 shadow-[0_0_24px_rgba(0,224,160,0.12)]"
-                  : "border border-black/[0.06] dark:border-white/[0.06] hover:border-slate-400 dark:hover:border-white/[0.2]"
+                  ? "border border-signal-500 bg-signal-500/[0.06] shadow-[0_0_24px_rgba(0,224,160,0.12)] ring-2 ring-signal-500/25"
+                  : isPending
+                    ? "border border-status-amber/40 bg-status-amber/[0.055] dark:border-status-amber/35"
+                    : "border border-black/[0.06] dark:border-white/[0.06] hover:border-slate-400 dark:hover:border-white/[0.2]"
                 }`}
             >
             {/* Ghost ID watermark */}
@@ -83,6 +96,13 @@ export const ThreadListCard: FunctionComponent<{
                   <div className="min-w-0 flex-1">
                     {/* Badges row */}
                     <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+                      <span className={`inline-flex min-w-[4.75rem] justify-center rounded-full border px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.14em] ${
+                        isSelected
+                          ? "border-signal-500/25 bg-signal-500/[0.10] text-signal-700 dark:text-signal-300"
+                          : "border-black/[0.06] bg-black/[0.025] text-slate-400 dark:border-white/[0.06] dark:bg-white/[0.025]"
+                      }`}>
+                        {selectionCopy}
+                      </span>
                       <span className="font-mono text-[10px] font-bold px-2 py-0.5 rounded-lg bg-black/[0.04] dark:bg-white/[0.04] text-slate-400">
                         {thread.id.slice(0, 8)}
                       </span>
@@ -117,7 +137,7 @@ export const ThreadListCard: FunctionComponent<{
                 {/* Right column */}
                 <div className="shrink-0 flex flex-col items-end gap-1.5 pt-0.5">
                   <div className={`text-[10px] font-bold uppercase tracking-[0.14em] ${statusTone(thread.pendingMessageCount)}`}>
-                    {thread.pendingMessageCount > 0 ? (
+                    {isPending ? (
                       <span className="flex items-center gap-1.5"><span className="h-1.5 w-1.5 rounded-full bg-signal-500 animate-pulse motion-reduce:animate-none" /> pending</span>
                     ) : (
                       "synced"
@@ -136,6 +156,9 @@ export const ThreadListCard: FunctionComponent<{
               </div>
             </div>
           </button>
+            <span id={stateDescriptionId} className="sr-only">
+              {selectionCopy}. {deliveryCopy}. {routeCopy}.
+            </span>
 
             {/* Delete slide-out */}
             <button
