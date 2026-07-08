@@ -11,6 +11,7 @@ import {
   createConversationThread,
   fetchConversationDraft,
   fetchConversationMessageHistory,
+  getOrCreateDashboardDraftUserId,
   postConversationMessage,
   recordConversationMessageHistory,
   upsertConversationDraft,
@@ -73,6 +74,33 @@ describe("useChatPageResources integration", () => {
     vi.useRealTimers();
     vi.clearAllMocks();
     mockRealtimeCallback = null;
+    vi.mocked(fetchConversationDraft).mockResolvedValue(null);
+    vi.mocked(fetchConversationMessageHistory).mockResolvedValue([]);
+    vi.mocked(getOrCreateDashboardDraftUserId).mockReturnValue("dashboard-user-test");
+    vi.mocked(upsertConversationDraft).mockResolvedValue(null);
+    vi.mocked(recordConversationMessageHistory).mockResolvedValue({
+      id: "history-new",
+      userId: "dashboard-user-test",
+      projectId: "proj-1",
+      bodyMarkdown: "Hello",
+      createdAt: "2026-03-10T12:00:00.000Z",
+      updatedAt: "2026-03-10T12:00:00.000Z",
+    });
+    vi.mocked(postConversationMessage).mockImplementation((projectId, data) => Promise.resolve({
+      id: "msg-new",
+      threadId: data.threadId,
+      direction: "dashboard_to_connection",
+      authorType: "dashboard_user",
+      authorConnectionId: null,
+      bodyMarkdown: data.bodyMarkdown,
+      deliveryStatus: "delivered",
+      metadata: data.metadata ?? null,
+      createdAt: "2026-03-10T12:00:00.000Z"
+    }));
+    vi.mocked(createConversationThread).mockResolvedValue({
+      id: "thread-new", messageCount: 0, projectId: "project-1", scope: "project"
+    } as any);
+    vi.mocked(cancelThreadTurn).mockResolvedValue({ cancelled: true });
   });
 
   it("treats invocation messages as changed when reasoning content or metadata mutates in place", () => {
@@ -186,6 +214,139 @@ describe("useChatPageResources integration", () => {
       contextKey: "new-thread",
       bodyMarkdown: "Edited draft",
     }));
+  });
+
+  it("restores a saved draft after the composer remounts", async () => {
+    const persistedDrafts = new Map<string, string>();
+    vi.mocked(fetchConversationDraft).mockImplementation(async (projectId, input) => {
+      const bodyMarkdown = persistedDrafts.get(`${projectId}:${input.userId}:${input.contextKey}`);
+      return bodyMarkdown === undefined
+        ? null
+        : {
+          userId: input.userId,
+          projectId,
+          contextKey: input.contextKey,
+          bodyMarkdown,
+          createdAt: "2026-03-10T12:00:00.000Z",
+          updatedAt: "2026-03-10T12:00:00.000Z",
+        };
+    });
+    vi.mocked(upsertConversationDraft).mockImplementation(async (projectId, input) => {
+      persistedDrafts.set(`${projectId}:${input.userId}:${input.contextKey}`, input.bodyMarkdown);
+      return {
+        userId: input.userId,
+        projectId,
+        contextKey: input.contextKey,
+        bodyMarkdown: input.bodyMarkdown,
+        createdAt: "2026-03-10T12:00:00.000Z",
+        updatedAt: "2026-03-10T12:00:00.000Z",
+      };
+    });
+
+    const firstRender = renderHook(() => {
+      const cache = useMessageCache();
+      return useChatThreadData({
+        selectedProject: { id: "proj-1" },
+        cache,
+        execution: null,
+        workerRouting: null,
+      });
+    });
+
+    await waitFor(() => expect(fetchConversationDraft).toHaveBeenCalledWith("proj-1", {
+      userId: "dashboard-user-test",
+      contextKey: "new-thread",
+    }));
+
+    await act(async () => {
+      firstRender.result.current.setInput("Draft that survives remount");
+    });
+
+    firstRender.unmount();
+
+    expect(upsertConversationDraft).toHaveBeenCalledWith("proj-1", {
+      userId: "dashboard-user-test",
+      contextKey: "new-thread",
+      bodyMarkdown: "Draft that survives remount",
+    });
+
+    const secondRender = renderHook(() => {
+      const cache = useMessageCache();
+      return useChatThreadData({
+        selectedProject: { id: "proj-1" },
+        cache,
+        execution: null,
+        workerRouting: null,
+      });
+    });
+
+    await waitFor(() => expect(secondRender.result.current.input).toBe("Draft that survives remount"));
+    secondRender.unmount();
+  });
+
+  it("restores drafts and recent history from the current dashboard user only", async () => {
+    let currentUserId = "dashboard-user-a";
+    vi.mocked(getOrCreateDashboardDraftUserId).mockImplementation(() => currentUserId);
+    vi.mocked(fetchConversationDraft).mockImplementation(async (projectId, input) => ({
+      userId: input.userId,
+      projectId,
+      contextKey: input.contextKey,
+      bodyMarkdown: input.userId === "dashboard-user-a" ? "User A draft" : "User B draft",
+      createdAt: "2026-03-10T12:00:00.000Z",
+      updatedAt: "2026-03-10T12:00:00.000Z",
+    }));
+    vi.mocked(fetchConversationMessageHistory).mockImplementation(async (projectId, input) => [
+      {
+        id: `${input.userId}-history`,
+        userId: input.userId,
+        projectId,
+        bodyMarkdown: input.userId === "dashboard-user-a" ? "User A previous send" : "User B previous send",
+        createdAt: "2026-03-10T12:00:00.000Z",
+        updatedAt: "2026-03-10T12:00:00.000Z",
+      },
+    ]);
+
+    const firstRender = renderHook(() => {
+      const cache = useMessageCache();
+      return useChatThreadData({
+        selectedProject: { id: "proj-1" },
+        cache,
+        execution: null,
+        workerRouting: null,
+      });
+    });
+
+    await waitFor(() => expect(firstRender.result.current.input).toBe("User A draft"));
+    await act(async () => {
+      expect(firstRender.result.current.navigateHistory("up")).toBe(true);
+    });
+    expect(firstRender.result.current.input).toBe("User A previous send");
+    firstRender.unmount();
+
+    currentUserId = "dashboard-user-b";
+    const secondRender = renderHook(() => {
+      const cache = useMessageCache();
+      return useChatThreadData({
+        selectedProject: { id: "proj-1" },
+        cache,
+        execution: null,
+        workerRouting: null,
+      });
+    });
+
+    await waitFor(() => expect(secondRender.result.current.input).toBe("User B draft"));
+    await act(async () => {
+      expect(secondRender.result.current.navigateHistory("up")).toBe(true);
+    });
+    expect(secondRender.result.current.input).toBe("User B previous send");
+    expect(fetchConversationDraft).toHaveBeenCalledWith("proj-1", {
+      userId: "dashboard-user-b",
+      contextKey: "new-thread",
+    });
+    expect(fetchConversationMessageHistory).toHaveBeenCalledWith("proj-1", {
+      userId: "dashboard-user-b",
+    });
+    secondRender.unmount();
   });
 
   it("hydrates recent message history and preserves the current draft while previewing entries", async () => {
