@@ -611,7 +611,9 @@ describe('ChatPage Accessibility', () => {
 
     expect(handleSend).toHaveBeenCalledWith("Run pnpm audit and summarize the result.");
     expect(setInput).not.toHaveBeenCalled();
-    expect(screen.getByRole("textbox", { name: "Message" })).toHaveValue("Keep this draft");
+    const composer = screen.getByRole("textbox", { name: "Message" });
+    expect(composer).toHaveValue("Keep this draft");
+    await waitFor(() => expect(composer).toHaveFocus());
   });
 
   it('sends prompt suggestions from keyboard activation like pointer activation', async () => {
@@ -767,7 +769,9 @@ describe('ChatPage Accessibility', () => {
 
     expect(handleSend).toHaveBeenCalledWith("Inspect the test failures.");
     expect(setInput).not.toHaveBeenCalled();
-    expect(screen.getByRole("textbox", { name: "Message the project manager" })).toHaveValue("Keyboard stage draft");
+    const composer = screen.getByRole("textbox", { name: "Message the project manager" });
+    expect(composer).toHaveValue("Keyboard stage draft");
+    await waitFor(() => expect(composer).toHaveFocus());
   });
 
   it('keeps the active header and thread rail synchronized after rename', async () => {
